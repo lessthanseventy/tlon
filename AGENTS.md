@@ -31,6 +31,11 @@ never to copy a shape. Nothing here needs to be backwards compatible with it.
   from a wrong key reads exactly like a real zero, and one of those got into the spec.
 - **Rank and cut every surface.** Complete is not the same as useful; the count of what was set aside
   is the honest way to omit it.
+- **No provider, model or vendor is part of the design.** They are configuration. A role states a
+  capability requirement — "not the weights that wrote this", "long context", "cheap per turn" — and the
+  mapping to an endpoint is local. Local models are first-class, and anything that assumes a frontier
+  model must degrade honestly rather than break. The same goes for credentials: how this machine
+  authenticates is local configuration and no code here may know which mechanism it is.
 - **In production, Andrew presses Enter.** Prefill the exact reviewed text in a visible pane and stop.
   Typing is only inert where `herdr pane process-info` proves a shell is in the foreground.
 
