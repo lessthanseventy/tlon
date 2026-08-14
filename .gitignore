@@ -16,3 +16,7 @@ node_modules/
 # file today that was invisible to git while every status looked clean -- the spec (swallowed by
 # /.config/* in workbench-env), its review, and this. Ask check-ignore, not status.
 !AGENTS.md
+
+# nix build output symlinks
+result
+result-*
