@@ -7,3 +7,12 @@ node_modules/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# AGENTS.md is in ~/.gitignore_global, which is right for most repos and wrong for this one: here it is
+# part of the deliverable, because the spec's §7 leans on it to make "knows nothing" safe. Re-included
+# explicitly rather than force-added, so the exception is visible in the tree rather than remembered.
+#
+# Found the way the other two were: `git add` reported nothing and committed nothing. That is the third
+# file today that was invisible to git while every status looked clean -- the spec (swallowed by
+# /.config/* in workbench-env), its review, and this. Ask check-ignore, not status.
+!AGENTS.md
