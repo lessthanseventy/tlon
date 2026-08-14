@@ -1,0 +1,42 @@
+# mise.toml — the shared dev-loop API for ficciones.
+#
+# One vocabulary for the human and any agent: everything is driven through
+# `mise run <task>` (`mise tasks` lists them), and the AGENTS.md files point here
+# so there is no second source of truth for "how do I test / check / run this."
+# mise owns the dev runtime; Nix owns packaging and the system (they don't fight —
+# funes has zero runtime deps, so mise's node and Nix's node behave identically).
+
+[tools]
+node = "24"
+
+[tasks."funes:test"]
+description = "funes: run the test suite (the TDD loop) — zero deps, instant"
+dir = "modules/funes"
+run = "node --no-warnings=ExperimentalWarning --test"
+
+[tasks."funes:watch"]
+description = "funes: re-run tests on every change — the hot loop"
+dir = "modules/funes"
+run = "node --no-warnings=ExperimentalWarning --test --watch"
+
+[tasks."funes:check"]
+description = "funes: type-check with tsc (the type gate); installs dev deps if needed"
+dir = "modules/funes"
+run = "npm install --silent --no-audit --no-fund >/dev/null && npx tsc --noEmit"
+
+[tasks."funes:doctor"]
+description = "funes: run doctor against a repo-local scratch db (never the real one)"
+dir = "modules/funes"
+run = "FUNES_DB=.dev/funes.db node --no-warnings=ExperimentalWarning src/cli.ts doctor"
+
+[tasks.check]
+description = "Everything green: funes tests + types"
+depends = ["funes:test", "funes:check"]
+
+[tasks."flake:check"]
+description = "machine: nix flake check — the machine-level gate"
+run = "nix flake check"
+
+[tasks."home:switch"]
+description = "machine: install/update funes into your profile via home-manager"
+run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox"

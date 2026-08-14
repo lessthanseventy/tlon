@@ -3,6 +3,7 @@
 # a second source of truth the moment it appeared.
 
 node_modules/
+.dev/
 .DS_Store
 *.sqlite
 *.sqlite-wal
