@@ -11,8 +11,8 @@ here — it is the design and every decision behind it.
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — funes tests + type gate; the green-before-commit gate.
-- `mise run funes:test` / `funes:watch` / `funes:check` / `funes:doctor` — the funes loop.
+- `mise run check` — funes compile-clean + tests; the green-before-commit gate.
+- `mise run funes:test` / `funes:check` / `funes:setup` / `funes:doctor` — the funes loop (Elixir/mix).
 - `mise run flake:check` — the machine-level Nix gate.
 - `mise run home:switch` — install/update this machine into the user profile via home-manager.
 

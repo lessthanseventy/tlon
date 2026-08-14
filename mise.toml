@@ -3,40 +3,42 @@
 # One vocabulary for the human and any agent: everything is driven through
 # `mise run <task>` (`mise tasks` lists them), and the AGENTS.md files point here
 # so there is no second source of truth for "how do I test / check / run this."
-# mise owns the dev runtime; Nix owns packaging and the system (they don't fight —
-# funes has zero runtime deps, so mise's node and Nix's node behave identically).
+# mise owns the dev runtime; Nix owns packaging and the system.
 
 [tools]
-node = "24"
+# The combined build (precompiled for this OTP) — pairing a bare "1.19" with a
+# separate erlang picks an incompatible OTP and fails to boot.
+erlang = "27"
+elixir = "1.19.4-otp-27"
 
 [tasks."funes:test"]
-description = "funes: run the test suite (the TDD loop) — zero deps, instant"
+description = "funes: run the test suite (the TDD loop)"
 dir = "modules/funes"
-run = "node --no-warnings=ExperimentalWarning --test"
-
-[tasks."funes:watch"]
-description = "funes: re-run tests on every change — the hot loop"
-dir = "modules/funes"
-run = "node --no-warnings=ExperimentalWarning --test --watch"
+run = "mix test"
 
 [tasks."funes:check"]
-description = "funes: type-check with tsc (the type gate); installs dev deps if needed"
+description = "funes: compile warnings-as-errors + format check (the gate)"
 dir = "modules/funes"
-run = "npm install --silent --no-audit --no-fund >/dev/null && npx tsc --noEmit"
+run = "mix compile --warnings-as-errors && mix format --check-formatted"
+
+[tasks."funes:setup"]
+description = "funes: fetch deps, create + migrate a repo-local scratch db"
+dir = "modules/funes"
+run = "mix deps.get && FUNES_DB=.dev/funes.db mix ecto.create --quiet && FUNES_DB=.dev/funes.db mix ecto.migrate"
 
 [tasks."funes:doctor"]
-description = "funes: run doctor against a repo-local scratch db (never the real one)"
+description = "funes: the 2am report against the scratch db"
 dir = "modules/funes"
-run = "FUNES_DB=.dev/funes.db node --no-warnings=ExperimentalWarning src/cli.ts doctor"
+run = "FUNES_DB=.dev/funes.db mix funes.doctor"
 
 [tasks.check]
-description = "Everything green: funes tests + types"
-depends = ["funes:test", "funes:check"]
+description = "Everything green: compile clean + tests"
+depends = ["funes:check", "funes:test"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
 run = "nix flake check"
 
 [tasks."home:switch"]
-description = "machine: install/update funes into your profile via home-manager"
+description = "machine: apply the home-manager profile"
 run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox"

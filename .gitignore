@@ -5,6 +5,14 @@
 node_modules/
 .dev/
 .DS_Store
+
+# elixir / mix
+_build/
+deps/
+*.beam
+*.ez
+erl_crash.dump
+.elixir_ls/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
