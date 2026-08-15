@@ -8,8 +8,10 @@
 [tools]
 # The combined build (precompiled for this OTP) — pairing a bare "1.19" with a
 # separate erlang picks an incompatible OTP and fails to boot.
-erlang = "27"
-elixir = "1.19.4-otp-27"
+# OTP 28: the aleph line needs it (ghostty_ex/libghostty-vt), and aleph boots
+# funes, so the whole repo runs on one OTP. funes' green gate re-proves the bump.
+erlang = "28"
+elixir = "1.19.5-otp-28"
 
 [tasks."funes:test"]
 description = "funes: run the test suite (the TDD loop)"
@@ -31,9 +33,19 @@ description = "funes: the 2am report against the scratch db"
 dir = "modules/funes"
 run = "FUNES_DB=.dev/funes.db mix funes.doctor"
 
+[tasks."aleph:test"]
+description = "aleph: run the test suite (the render path, headless)"
+dir = "modules/aleph"
+run = "mix test"
+
+[tasks."aleph:check"]
+description = "aleph: the precommit gate — format + warnings-as-errors + tests"
+dir = "modules/aleph"
+run = "mix precommit"
+
 [tasks.check]
-description = "Everything green: the funes precommit gate (format + warnings + credo + tests)"
-depends = ["funes:check"]
+description = "Everything green: the funes + aleph precommit gates (format + warnings + credo + tests)"
+depends = ["funes:check", "aleph:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
