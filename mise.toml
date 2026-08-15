@@ -43,6 +43,11 @@ description = "aleph: the precommit gate — format + warnings-as-errors + tests
 dir = "modules/aleph"
 run = "mix precommit"
 
+[tasks."aleph:run"]
+description = "aleph: eye-test — paint the cockpit board to THIS terminal (run in ghostty)"
+dir = "modules/aleph"
+run = "mix aleph.run"
+
 [tasks.check]
 description = "Everything green: the funes + aleph precommit gates (format + warnings + credo + tests)"
 depends = ["funes:check", "aleph:check"]
