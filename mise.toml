@@ -17,9 +17,9 @@ dir = "modules/funes"
 run = "mix test"
 
 [tasks."funes:check"]
-description = "funes: compile warnings-as-errors + format check (the gate)"
+description = "funes: the precommit gate — format + warnings-as-errors + credo + tests"
 dir = "modules/funes"
-run = "mix compile --warnings-as-errors && mix format --check-formatted"
+run = "mix precommit"
 
 [tasks."funes:setup"]
 description = "funes: fetch deps, create + migrate a repo-local scratch db"
@@ -32,8 +32,8 @@ dir = "modules/funes"
 run = "FUNES_DB=.dev/funes.db mix funes.doctor"
 
 [tasks.check]
-description = "Everything green: compile clean + tests"
-depends = ["funes:check", "funes:test"]
+description = "Everything green: the funes precommit gate (format + warnings + credo + tests)"
+depends = ["funes:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
