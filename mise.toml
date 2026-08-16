@@ -197,7 +197,7 @@ run = "nix flake check"
 
 [tasks."home:switch"]
 description = "machine: apply the home-manager profile"
-run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox"
+run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox -b backup"
 
 # ── pi the agent — model launchers ("which model when", as tasks) ──────────────────────────
 # These launch the pi AI harness (~/.nix-profile/bin/pi) pinned to a model + thinking level.
