@@ -32,3 +32,6 @@ result-*
 
 # cap.sh capture logs — transient, read-then-discard
 .logs/
+
+# Live session handoff (not repo content) — see the memory files for durable state
+HANDOFF.md

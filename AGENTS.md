@@ -40,6 +40,12 @@ alternate, and in-session `Ctrl+P` cycles the same ring. Pass a one-shot with `-
 | `mise run pi:fast`     | deepseek-v4-flash `thinking:low` | Quick/cheap throwaway; 1M ctx, fast tier. |
 | `mise run pi:local`    | qwen3-coder (local daemon) | Free/offline grunt, tight iteration loops — zero cloud budget. |
 
+Every launcher also makes the harness a **funes citizen**: it opens a fresh funes thread (or JOINs one
+with a trailing id — `mise run pi:code -- 42`) and hands the session its identity, so the model shows up
+in `funes:roster` and briefs from the thread. `mise run funes:claude [thread-id]` does the same for
+Claude Code (its own MCP adapter, `headersHelper`-authed). If the funes channel is down, the harness
+still launches — just not as a citizen.
+
 Two things that bite: **glm-5.2 is a reasoning model** (separate `reasoning` + `content` fields) — give
 it token headroom or `content` comes back empty while thinking eats the budget; and **`kimi-k3` is
 deliberately absent** — ollama.com serves it as *extra* usage (HTTP 402), billed per-token on top of the
