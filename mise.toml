@@ -160,6 +160,11 @@ description = "manos/consult: the precommit gate — install (frozen), typecheck
 dir = "modules/manos/consult"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
+[tasks."manos:fmt:check"]
+description = "manos/fmt: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/manos/fmt"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
 [tasks."aleph:test"]
 description = "aleph: run the test suite (the render path, headless)"
 dir = "modules/aleph"
@@ -188,8 +193,8 @@ dir = "modules/aleph"
 run = "FUNES_DB=../funes/.dev/funes.db mix aleph.run"
 
 [tasks.check]
-description = "Everything green: the funes + aleph + manos (pi + consult) precommit gates (format + warnings + credo + types + tests)"
-depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check"]
+description = "Everything green: the funes + aleph + manos (pi + consult + fmt) precommit gates (format + warnings + credo + types + tests)"
+depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
