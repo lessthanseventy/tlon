@@ -43,10 +43,22 @@ description = "aleph: the precommit gate — format + warnings-as-errors + tests
 dir = "modules/aleph"
 run = "mix precommit"
 
-[tasks."aleph:run"]
-description = "aleph: eye-test — paint the cockpit board to THIS terminal (run in ghostty)"
+[tasks."aleph:setup"]
+description = "aleph: fetch deps, create + migrate the shared funes db (via Funes.Repo)"
 dir = "modules/aleph"
-run = "mix aleph.run"
+run = "mix deps.get && FUNES_DB=../funes/.dev/funes.db mix ecto.create -r Funes.Repo --quiet && FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo"
+
+[tasks."aleph:seed"]
+description = "aleph: seed the shared db with sample threads/agents/sessions for the cockpit"
+dir = "modules/aleph"
+run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
+
+# The cockpit reads the SAME db funes' own tasks use (../funes/.dev/funes.db), so posting from
+# another shell (mise run funes:doctor, an iex) shows up live. Run in ghostty.
+[tasks."aleph:run"]
+description = "aleph: launch the live cockpit in THIS terminal (run in ghostty)"
+dir = "modules/aleph"
+run = "FUNES_DB=../funes/.dev/funes.db mix aleph.run"
 
 [tasks.check]
 description = "Everything green: the funes + aleph precommit gates (format + warnings + credo + tests)"
