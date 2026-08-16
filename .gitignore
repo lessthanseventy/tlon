@@ -26,6 +26,15 @@ erl_crash.dump
 # /.config/* in workbench-env), its review, and this. Ask check-ignore, not status.
 !AGENTS.md
 
+# .claude/ is ignored by ~/.gitignore_global (right for most repos, wrong here): this repo's
+# sandbox + permission posture is a declared, version-controlled part of the machine, so
+# settings.json travels with the tree. Re-include the directory (the global rule excludes it
+# whole), re-ignore its contents, then re-include only settings.json — settings.local.json and
+# anything else transient stays out. Same "visible exception, not remembered" rule as AGENTS.md.
+!.claude/
+.claude/*
+!.claude/settings.json
+
 # nix build output symlinks
 result
 result-*
