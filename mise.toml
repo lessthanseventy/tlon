@@ -111,6 +111,20 @@ run = "rm -rf .logs && echo 'swept .logs/'"
 description = "Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md)"
 run = "scripts/watch.sh"
 
+# Stop any ficciones watchers you left running (a backgrounded `watch`/`funes:watch`/`manos:pi:watch`).
+# The `[w]atchexec` bracket is the whole trick: `pkill -f`/`pgrep -f` match a process's ENTIRE argv,
+# and the pattern sits in the running shell's own argv — so a naive `pkill -f watchexec` signals
+# ITSELF (exit 143/144) and can even catch a test BEAM mid-run. `[w]atchexec` is a regex that never
+# appears literally in its own command line, so it only ever matches real watchexec processes;
+# `--project-origin $root` scopes it to THIS repo, leaving other projects' watchers alone.
+[tasks."watch:stop"]
+description = "Stop ficciones file-watchers left running in the background (safe: never signals its own shell)"
+run = '''
+root="$(git rev-parse --show-toplevel)"
+pids="$(pgrep -f "[w]atchexec.*--project-origin $root" || true)"
+if [ -n "$pids" ]; then echo "stopping watchexec: $pids"; kill $pids; else echo "no ficciones watchers running"; fi
+'''
+
 [tasks."funes:watch"]
 description = "funes: re-run the suite on every change under modules/funes (cap signal)"
 dir = "modules/funes"
