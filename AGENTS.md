@@ -14,6 +14,7 @@ control loop, not two, and no second way to run anything:
 - `mise run check` — funes compile-clean + tests; the green-before-commit gate.
 - `mise run funes:test` / `funes:check` / `funes:setup` / `funes:doctor` — the funes loop (Elixir/mix).
 - `mise run flake:check` — the machine-level Nix gate.
+- `mise run funes:release` / `funes:restart` / `funes:console` / `funes:logs` — the always-up funes channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
 - `mise run home:switch` — install/update this machine into the user profile via home-manager.
 
 mise owns dev runtimes; Nix owns packaging and the system. **If a command belongs in the loop, it becomes

@@ -45,6 +45,30 @@ description = "funes: boot the sovereign MCP channel (loopback) against the scra
 dir = "modules/funes"
 run = "FUNES_DB=.dev/funes.db FUNES_START_MCP=1 iex -S mix"
 
+# The always-up channel (capability-map move #1). `funes:serve` above is the DEV path —
+# a hand-run iex on the scratch db; these run the same funes as a self-contained
+# release, headless, on the REAL db, kept up by the home-manager systemd --user service
+# (flake.nix). A release bundles ERTS, so the unit runs one absolute path with nothing
+# on PATH, and `remote`/`rpc` reach the LIVE node (where a minted token survives).
+[tasks."funes:release"]
+description = "funes: build the self-contained release the always-up service runs (prod)"
+dir = "modules/funes"
+run = "MIX_ENV=prod mix release --overwrite"
+
+[tasks."funes:restart"]
+description = "funes: rebuild the release + restart the always-up service (redeploy a funes change)"
+depends = ["funes:release"]
+run = "systemctl --user restart funes && systemctl --user --no-pager status funes | head -12"
+
+[tasks."funes:console"]
+description = "funes: remote iex INTO the running service node — inspect/mint against the live channel"
+dir = "modules/funes"
+run = "_build/prod/rel/funes/bin/funes remote"
+
+[tasks."funes:logs"]
+description = "funes: follow the always-up service's logs"
+run = "journalctl --user -u funes -n 80 -f"
+
 [tasks.cap]
 description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
 run = "scripts/cap.sh"
