@@ -69,6 +69,27 @@ run = "_build/prod/rel/funes/bin/funes remote"
 description = "funes: follow the always-up service's logs"
 run = "journalctl --user -u funes -n 80 -f"
 
+# The mise parity pack (capability-map move #2): operate/script access to the LIVE
+# channel from the shell, the human+Claude-Code peer to the agents' MCP tools. All go
+# through `bin/funes rpc` INTO the running service node — a token minted anywhere else
+# dies with its node, and roster/presence is in-memory there. Thin and deliberate: this
+# is operate access, NOT a second cockpit (aleph is the human's rich surface).
+[tasks."funes:spawn"]
+description = "funes: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
+run = "scripts/funes-cli.sh spawn"
+
+[tasks."funes:roster"]
+description = "funes: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service"
+run = "scripts/funes-cli.sh roster"
+
+[tasks."funes:dossier"]
+description = "funes: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool"
+run = "scripts/funes-cli.sh dossier"
+
+[tasks."funes:post"]
+description = "funes: post to a thread as the operator from the shell — parity with the agents' post_message"
+run = "scripts/funes-cli.sh post"
+
 [tasks.cap]
 description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
 run = "scripts/cap.sh"
