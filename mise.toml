@@ -12,6 +12,9 @@
 # funes, so the whole repo runs on one OTP. funes' green gate re-proves the bump.
 erlang = "28"
 elixir = "1.19.5-otp-28"
+# manos' pi adapter is TypeScript; bun runs it natively (no build step) and is the test
+# runner. mise owns the dev runtime, so the JS toolchain is pinned here too, not assumed.
+bun = "1.3.14"
 
 [tasks."funes:test"]
 description = "funes: run the test suite (the TDD loop)"
@@ -32,6 +35,25 @@ run = "mix deps.get && FUNES_DB=.dev/funes.db mix ecto.create --quiet && FUNES_D
 description = "funes: the 2am report against the scratch db"
 dir = "modules/funes"
 run = "FUNES_DB=.dev/funes.db mix funes.doctor"
+
+# Boot funes with its sovereign channel on (pi doc §2a), loopback-only, against the
+# scratch db — so a hand-spawned pi pane has something to register with. In the iex it
+# drops you into, `Funes.MCP.Spawn.env("title", "Agent")` prints the export FUNES_* block
+# to paste into the pane. This is the human-as-arbiter path (§2d) until slice 5 automates it.
+[tasks."funes:serve"]
+description = "funes: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
+dir = "modules/funes"
+run = "FUNES_DB=.dev/funes.db FUNES_START_MCP=1 iex -S mix"
+
+[tasks."pi:test"]
+description = "manos/pi: the brief renderer unit suite (bun test) — the TDD loop"
+dir = "modules/manos/pi"
+run = "bun test"
+
+[tasks."pi:check"]
+description = "manos/pi: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/manos/pi"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
 [tasks."aleph:test"]
 description = "aleph: run the test suite (the render path, headless)"
@@ -61,8 +83,8 @@ dir = "modules/aleph"
 run = "FUNES_DB=../funes/.dev/funes.db mix aleph.run"
 
 [tasks.check]
-description = "Everything green: the funes + aleph precommit gates (format + warnings + credo + tests)"
-depends = ["funes:check", "aleph:check"]
+description = "Everything green: the funes + aleph + pi precommit gates (format + warnings + credo + types + tests)"
+depends = ["funes:check", "aleph:check", "pi:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
