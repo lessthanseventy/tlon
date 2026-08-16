@@ -20,6 +20,31 @@ control loop, not two, and no second way to run anything:
 mise owns dev runtimes; Nix owns packaging and the system. **If a command belongs in the loop, it becomes
 a task in `mise.toml`** — never a prose instruction that drifts out of sync with what actually runs.
 
+### Picking a pi model — the routing, as tasks ("litellm but not")
+
+Two subscriptions, two buckets. The **$100 Claude plan** is the scarce, high-value bucket (5-hour +
+weekly caps); the **$20 ollama.com plan** is the flat all-night workhorse. Neither charges per token —
+"cost" means *which rate-limited bucket am I draining*, so the rule is: **push work down to the cheapest
+bucket that can still do it well.** pi (the harness) rides the ollama bucket; Claude Code is the Claude
+bucket — kept as two tools so a switch never drains the wrong one.
+
+Inside the ollama bucket the routing is not a proxy — it's five mise tasks, each a named model profile
+(the loop *is* the aliasing layer). Bare `pi` already starts on `ollama-cloud/glm-5.2`; these pin an
+alternate, and in-session `Ctrl+P` cycles the same ring. Pass a one-shot with `-- -p "…"`.
+
+| Task | Model | Reach for it when |
+|---|---|---|
+| `mise run pi:balanced` | glm-5.2 (default) | Everything. The everyday driver — Claude/GPT-alike, 976K ctx. |
+| `mise run pi:deep`     | deepseek-v4-pro `thinking:high` | Hard reasoning/logic — the escalate-before-you'd-miss-Claude tier. |
+| `mise run pi:code`     | kimi-k2.7-code | Coding-heavy work; code-specialized, fewer thinking tokens. |
+| `mise run pi:fast`     | deepseek-v4-flash `thinking:low` | Quick/cheap throwaway; 1M ctx, fast tier. |
+| `mise run pi:local`    | qwen3-coder (local daemon) | Free/offline grunt, tight iteration loops — zero cloud budget. |
+
+Two things that bite: **glm-5.2 is a reasoning model** (separate `reasoning` + `content` fields) — give
+it token headroom or `content` comes back empty while thinking eats the budget; and **`kimi-k3` is
+deliberately absent** — ollama.com serves it as *extra* usage (HTTP 402), billed per-token on top of the
+$20 plan, so it's out of both `flake.nix` and the live Ctrl+P ring. Every model above is plan-covered.
+
 ### Run once, read the log — never re-run to see more
 
 When you run a command whose output you'll inspect — a test suite, a build, a `scratchpad`
@@ -44,7 +69,7 @@ cap:clean` sweeps the logs (they self-cap at 40 anyway).
 
 When you're iterating on a change, **register a watcher instead of re-running tests yourself**:
 
-- `mise run funes:watch` / `mise run pi:watch` — re-run that module's suite on every change.
+- `mise run funes:watch` / `mise run manos:pi:watch` — re-run that module's suite on every change.
 - `scripts/watch.sh <cmd>` (or `mise run watch -- <cmd>`) — watch-and-run anything, any scope
   (one test file, a folder, the whole suite). New test files under a watched dir are picked up.
 

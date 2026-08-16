@@ -107,18 +107,18 @@ description = "funes: re-run the suite on every change under modules/funes (cap 
 dir = "modules/funes"
 run = "../../scripts/watch.sh mise exec -- mix test"
 
-[tasks."pi:watch"]
-description = "manos/pi: re-run the renderer suite on every change (cap signal)"
+[tasks."manos:pi:watch"]
+description = "manos/pi renderer: re-run the suite on every change (cap signal)"
 dir = "modules/manos/pi"
 run = "../../scripts/watch.sh bun test"
 
-[tasks."pi:test"]
-description = "manos/pi: the brief renderer unit suite (bun test) — the TDD loop"
+[tasks."manos:pi:test"]
+description = "manos/pi renderer: the brief renderer unit suite (bun test) — the TDD loop"
 dir = "modules/manos/pi"
 run = "bun test"
 
-[tasks."pi:check"]
-description = "manos/pi: the precommit gate — install (frozen), typecheck, tests"
+[tasks."manos:pi:check"]
+description = "manos/pi renderer: the precommit gate — install (frozen), typecheck, tests"
 dir = "modules/manos/pi"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
@@ -151,7 +151,7 @@ run = "FUNES_DB=../funes/.dev/funes.db mix aleph.run"
 
 [tasks.check]
 description = "Everything green: the funes + aleph + pi precommit gates (format + warnings + credo + types + tests)"
-depends = ["funes:check", "aleph:check", "pi:check"]
+depends = ["funes:check", "aleph:check", "manos:pi:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
@@ -160,3 +160,32 @@ run = "nix flake check"
 [tasks."home:switch"]
 description = "machine: apply the home-manager profile"
 run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox"
+
+# ── pi the agent — model launchers ("which model when", as tasks) ──────────────────────────
+# These launch the pi AI harness (~/.nix-profile/bin/pi) pinned to a model + thinking level.
+# NOT the manos/pi renderer (that's manos:pi:test / manos:pi:check / manos:pi:watch above) —
+# distinct namespace. Read them as named model profiles: "litellm but not" — the loop IS the routing
+# layer, no proxy. All five draw on the flat $20 ollama.com plan (kimi-k3 was pulled: it bills
+# as EXTRA usage on top). Bare `pi` already starts on ollama-cloud/glm-5.2; these are the
+# one-command alternates, and in-session Ctrl+P still cycles the same ring. Args pass through:
+# `mise run pi:deep -- -p "one-shot prompt"`. Full when-to-reach-for-each: AGENTS.md.
+
+[tasks."pi:balanced"]
+description = "pi agent: balanced everyday driver — glm-5.2 (Claude/GPT-alike, 976K ctx)"
+run = "pi --provider ollama-cloud --model glm-5.2"
+
+[tasks."pi:deep"]
+description = "pi agent: deep reasoning — deepseek-v4-pro, thinking:high (the hard 10%, before you'd reach for Claude)"
+run = "pi --provider ollama-cloud --model deepseek-v4-pro --thinking high"
+
+[tasks."pi:code"]
+description = "pi agent: coding-heavy — kimi-k2.7-code (code-specialized, ~30% fewer thinking tokens)"
+run = "pi --provider ollama-cloud --model kimi-k2.7-code"
+
+[tasks."pi:fast"]
+description = "pi agent: quick/cheap throwaway — deepseek-v4-flash, thinking:low (1M ctx, fast tier)"
+run = "pi --provider ollama-cloud --model deepseek-v4-flash --thinking low"
+
+[tasks."pi:local"]
+description = "pi agent: free/offline grunt — qwen3-coder on the local ollama daemon (no cloud budget)"
+run = "pi --provider ollama --model qwen3-coder"
