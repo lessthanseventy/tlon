@@ -43,11 +43,23 @@ if [ "$rc" -eq 0 ]; then
   [ -n "${CAP_TAIL:-}" ] || tail_n=6
 else
   printf '  ✗ exit %s\n' "$rc"
-  # Surface likely failure lines so a failure needs no second run to locate.
-  hits="$(grep -nEi 'fail|error|✗|assert|exception|traceback|undefined|panic|refused' "$log" | head -15)"
-  if [ -n "$hits" ]; then
-    printf '  ── failure lines (grep) ──\n'
-    printf '%s\n' "$hits" | sed 's/^/    /'
+  [ -n "${CAP_TAIL:-}" ] || tail_n=20
+
+  # Framework-aware "what failed and why" — the real failure blocks, not lines that merely
+  # contain the word "error". Falls back to a generic grep for anything unrecognized.
+  if grep -qE '^[[:space:]]+[0-9]+\) (test|doctest|property)' "$log"; then
+    label="ExUnit failures"
+    fails="$(awk '/^[[:space:]]+[0-9]+\) (test|doctest|property)/{p=1} p' "$log" | head -80)"
+  elif grep -qiE '\(fail\)|✗ ' "$log"; then
+    label="bun failures"
+    fails="$(grep -nEiA2 '\(fail\)|✗ |expected:|received:' "$log" | head -50)"
+  else
+    label="failure lines (grep)"
+    fails="$(grep -nEi 'fail|error|✗|assert|exception|traceback|undefined|panic|refused' "$log" | head -15)"
+  fi
+  if [ -n "$fails" ]; then
+    printf '  ── %s ──\n' "$label"
+    printf '%s\n' "$fails" | sed 's/^/    /'
   fi
 fi
 

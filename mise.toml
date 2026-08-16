@@ -49,6 +49,10 @@ run = "FUNES_DB=.dev/funes.db FUNES_START_MCP=1 iex -S mix"
 description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
 run = "scripts/cap.sh"
 
+[tasks."cap:clean"]
+description = "Sweep all captured run logs (.logs/) — they self-cap at CAP_KEEP (40), this clears them now"
+run = "rm -rf .logs && echo 'swept .logs/'"
+
 [tasks."pi:test"]
 description = "manos/pi: the brief renderer unit suite (bun test) — the TDD loop"
 dir = "modules/manos/pi"
