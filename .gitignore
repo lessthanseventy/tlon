@@ -39,6 +39,9 @@ erl_crash.dump
 result
 result-*
 
+# the per-world MCP token signing key (Funes.MCP.Secret) — a local credential, never committed
+*.token_secret
+
 # cap.sh capture logs — transient, read-then-discard
 .logs/
 
