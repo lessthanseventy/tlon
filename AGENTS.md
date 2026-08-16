@@ -34,6 +34,25 @@ Catching yourself about to run the same command a second time with a different f
 signal to read the log, not repeat the call — the same escape hatch any SWE reaches for when a
 loop starts repeating itself.
 
+`cap` prints a distilled **signal** view (results, errors, warnings, counts) and drops the
+install/compile/debug noise; a green suite collapses to a couple of lines. Knobs when you need
+them: `CAP_TAIL=all` (the whole log inline, once), `CAP_TAIL=<n>`, `CAP_SIGNAL=<n>`. `mise run
+cap:clean` sweeps the logs (they self-cap at 40 anyway).
+
+### Let the watcher run the tests — don't spend a turn doing it by hand
+
+When you're iterating on a change, **register a watcher instead of re-running tests yourself**:
+
+- `mise run funes:watch` / `mise run pi:watch` — re-run that module's suite on every change.
+- `scripts/watch.sh <cmd>` (or `mise run watch -- <cmd>`) — watch-and-run anything, any scope
+  (one test file, a folder, the whole suite). New test files under a watched dir are picked up.
+
+Run it **in the background** (this harness: `Bash` with `run_in_background` — you're re-invoked
+with the result when the suite settles; pi: a pane). Then just edit: you're pinged **red/green
+automatically**, and you only spend a turn when something actually breaks. Kill the watcher when
+the change is done. This is the intended inner loop here — not "edit, then manually run tests,
+then read 1800 lines," every time.
+
 ## The rules most likely to be broken by accident
 
 - **Working inside `modules/funes/`? That module has its own law.** Read `modules/funes/AGENTS.md` and

@@ -53,6 +53,20 @@ run = "scripts/cap.sh"
 description = "Sweep all captured run logs (.logs/) — they self-cap at CAP_KEEP (40), this clears them now"
 run = "rm -rf .logs && echo 'swept .logs/'"
 
+[tasks.watch]
+description = "Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md)"
+run = "scripts/watch.sh"
+
+[tasks."funes:watch"]
+description = "funes: re-run the suite on every change under modules/funes (cap signal)"
+dir = "modules/funes"
+run = "../../scripts/watch.sh mise exec -- mix test"
+
+[tasks."pi:watch"]
+description = "manos/pi: re-run the renderer suite on every change (cap signal)"
+dir = "modules/manos/pi"
+run = "../../scripts/watch.sh bun test"
+
 [tasks."pi:test"]
 description = "manos/pi: the brief renderer unit suite (bun test) — the TDD loop"
 dir = "modules/manos/pi"
