@@ -29,3 +29,6 @@ erl_crash.dump
 # nix build output symlinks
 result
 result-*
+
+# cap.sh capture logs — transient, read-then-discard
+.logs/

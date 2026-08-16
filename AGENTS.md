@@ -19,6 +19,21 @@ control loop, not two, and no second way to run anything:
 mise owns dev runtimes; Nix owns packaging and the system. **If a command belongs in the loop, it becomes
 a task in `mise.toml`** — never a prose instruction that drifts out of sync with what actually runs.
 
+### Run once, read the log — never re-run to see more
+
+When you run a command whose output you'll inspect — a test suite, a build, a `scratchpad`
+script — run it through **`scripts/cap.sh`** (or `mise run cap -- <cmd>`). It runs the command
+**once**, captures all output to a log under `.logs/`, and prints a lean summary: the exit code,
+a test/build-summary line, failure lines on a non-zero exit, and a short tail — plus the exact
+`tail`/`grep` to read more **from the saved log**.
+
+The rule this enforces: **do not re-run a command with an escalating `grep … | tail -N` to see
+more of its output.** The full output is already on disk — `grep`/`tail` the log. Re-running
+burns tokens, re-streams noise into context, and risks a slightly-different invocation each time.
+Catching yourself about to run the same command a second time with a different filter is the
+signal to read the log, not repeat the call — the same escape hatch any SWE reaches for when a
+loop starts repeating itself.
+
 ## The rules most likely to be broken by accident
 
 - **Working inside `modules/funes/`? That module has its own law.** Read `modules/funes/AGENTS.md` and

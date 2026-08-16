@@ -45,6 +45,10 @@ description = "funes: boot the sovereign MCP channel (loopback) against the scra
 dir = "modules/funes"
 run = "FUNES_DB=.dev/funes.db FUNES_START_MCP=1 iex -S mix"
 
+[tasks.cap]
+description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
+run = "scripts/cap.sh"
+
 [tasks."pi:test"]
 description = "manos/pi: the brief renderer unit suite (bun test) — the TDD loop"
 dir = "modules/manos/pi"
