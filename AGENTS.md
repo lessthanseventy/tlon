@@ -103,6 +103,11 @@ then read 1800 lines," every time.
   structure that does not exist yet. The tree should not lie about what is built.
 - **Adopt Nix gradually.** home-manager on Arch first, a disposable NixOS VM (`nixos-rebuild build-vm`)
   as the testbed, metal last. Do not propose replacing the OS as a first step.
+- **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
+  that wrote it — e.g. `Co-Authored-By: GLM-5.2 (pi) <noreply@ollama.com>` or
+  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. `git log` is part of the machine's memory;
+  a commit that hides its author lies to it. (The first dogfood branch shipped 7 unattributed
+  machine commits — that's the incident this rule comes from.)
 
 ## Verify
 
