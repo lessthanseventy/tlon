@@ -215,11 +215,22 @@ run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
 [tasks."aleph:run"]
 description = "aleph: launch the live cockpit in THIS terminal (run in ghostty)"
 dir = "modules/aleph"
-# Reap any stale cockpit holding port 4041 BEFORE we try to bind — a previous
-# aleph:run that lost its TTY keeps the port and the next launch dies with
-# :eaddrinuse. The guard targets the listener (not tmux clients w/ inherited fds)
-# and never kills the invoking mise. See scripts/aleph-reap.sh.
-run = "../../scripts/aleph-reap.sh && FUNES_DB=../funes/.dev/funes.db mix aleph.run"
+# Idempotent startup — two self-heals before the launch, so the common Tlön breakage fixes itself:
+#   1. Reap a stale cockpit holding port 4041 (a previous run that lost its TTY keeps the port and
+#      the next launch dies :eaddrinuse). Targets the listener, not tmux clients with inherited fds,
+#      and never kills the invoking mise (scripts/aleph-reap.sh). A still-held port aborts the launch.
+#   2. Drop an UNWIRED tlon session — one restored by tmux continuum, or created before a wiring fix,
+#      carries no FUNES_* — so aleph recreates it WIRED. A HEALTHY (wired) session is PRESERVED: an
+#      aleph restart re-attaches to the running pi and keeps its work. That's the whole point of not
+#      dropping unconditionally (that's what `aleph:reset` is for — the deliberate full nuke).
+run = """
+../../scripts/aleph-reap.sh || exit $?
+if tmux has-session -t tlon 2>/dev/null && ! tmux show-environment -t tlon 2>/dev/null | grep -q '^FUNES_MCP_URL='; then
+  echo "aleph:run — dropping an unwired tlon session (recreating it wired)"
+  tmux kill-session -t tlon 2>/dev/null || true
+fi
+FUNES_DB=../funes/.dev/funes.db mix aleph.run
+"""
 
 # When Tlön behaves like STALE CODE — a not-wired pane after a fix, a "crash" with no trace in the
 # logs, an old cockpit still bound to 4041 — the cause is almost always a lingering process or
