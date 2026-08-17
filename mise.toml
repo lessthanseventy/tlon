@@ -195,7 +195,11 @@ run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
 [tasks."aleph:run"]
 description = "aleph: launch the live cockpit in THIS terminal (run in ghostty)"
 dir = "modules/aleph"
-run = "FUNES_DB=../funes/.dev/funes.db mix aleph.run"
+# Reap any stale cockpit holding port 4041 BEFORE we try to bind — a previous
+# aleph:run that lost its TTY keeps the port and the next launch dies with
+# :eaddrinuse. The guard targets the listener (not tmux clients w/ inherited fds)
+# and never kills the invoking mise. See scripts/aleph-reap.sh.
+run = "../../scripts/aleph-reap.sh && FUNES_DB=../funes/.dev/funes.db mix aleph.run"
 
 [tasks.check]
 description = "Everything green: the funes + aleph + manos (pi + consult + fmt + lsp) precommit gates (format + warnings + credo + types + tests)"
