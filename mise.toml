@@ -16,6 +16,18 @@ elixir = "1.19.5-otp-28"
 # runner. mise owns the dev runtime, so the JS toolchain is pinned here too, not assumed.
 bun = "1.3.14"
 
+# Repo-scoped secrets — fetched from Bitwarden via rbw (flake: programs.rbw), never stored in
+# plaintext or the nix store. Scoped to THIS repo (not machine-global), but at the file level, not
+# per-task: pi is launched many ways — `mise run pi:*`, bare `mise exec -- pi`, and aleph's Tlön
+# spawn (`mise exec -- pi`) — and all of them need the key, so per-task env would leave the Tlön
+# coworker unauthenticated. The lookup is GUARDED two ways: `2>/dev/null || printf %s "$OLLAMA_API_KEY"`
+# means a missing/locked rbw falls back to whatever's already in the env (so the dev loop never
+# breaks, and the migration off the old plaintext is seamless — rbw wins once it's set up). Run
+# `rbw unlock` once per session so the agent is warm; a locked vault + no fallback yields an empty
+# key and ollama.com calls fail (clear 401), but mise itself keeps working.
+[env]
+OLLAMA_API_KEY = "{{ exec(command='rbw get ollama-api-key 2>/dev/null || printf %s \"$OLLAMA_API_KEY\"') }}"
+
 [tasks."funes:test"]
 description = "funes: run the test suite (the TDD loop)"
 dir = "modules/funes"
