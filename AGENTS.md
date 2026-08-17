@@ -123,10 +123,12 @@ then read 1800 lines," every time.
 - **Adopt Nix gradually.** home-manager on Arch first, a disposable NixOS VM (`nixos-rebuild build-vm`)
   as the testbed, metal last. Do not propose replacing the OS as a first step.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
-  that wrote it — e.g. `Co-Authored-By: GLM-5.2 (pi) <noreply@ollama.com>` or
-  `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. `git log` is part of the machine's memory;
-  a commit that hides its author lies to it. (The first dogfood branch shipped 7 unattributed
-  machine commits — that's the incident this rule comes from.)
+  that wrote it — YOUR model, read from the brief's `You are … (pi)` line (or `$PI_MODEL`), never a
+  name copied from an example or another model's commit. Format: `Co-Authored-By: <your model> (pi)
+  <noreply@ollama.com>` (pi) or `Co-Authored-By: <your model> <noreply@anthropic.com>` (Claude Code).
+  `git log` is part of the machine's memory; a commit that hides its author — or names the wrong one —
+  lies to it. (The first dogfood branch shipped 7 unattributed machine commits — that's the incident
+  this rule comes from.)
 - **Comments earn their place — load-bearing only.** A comment survives only if it states a non-obvious
   *why* or a real gotcha the code can't. Narrative, lore, dated incident references, decorative
   `# --- section ---` dividers, and restatements of what the next line plainly does are noise — don't
