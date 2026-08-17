@@ -113,6 +113,13 @@ then read 1800 lines," every time.
   weaker model keeps getting wrong; until then that guidance lives in the module's file. Keep every one
   terse and actionable to the same standard as comments: orientation, the exact commands, the law, the
   gotchas, a pointer to the one deeper doc — no lore. Skeleton: **what it is → Law → dev loop → Verify.**
+  The tree: `AGENTS.md` (here) · `modules/funes/AGENTS.md` · `modules/aleph/AGENTS.md` ·
+  `modules/manos/AGENTS.md` (+ `consult`/`fmt`/`lsp`).
+- **Keep docs in sync with the code, in the same commit.** A change that makes a module's `AGENTS.md`
+  or a load-bearing comment stale updates it in that change — stale guidance is worse than none,
+  because a weaker model trusts it. Nothing mechanical can catch this (staleness is semantic, invisible
+  to compile/tests), so it's on you. (The `programs.rbw` comment that survived the rbw→agenix switch
+  still describing the old design is the incident this comes from.)
 - **Adopt Nix gradually.** home-manager on Arch first, a disposable NixOS VM (`nixos-rebuild build-vm`)
   as the testbed, metal last. Do not propose replacing the OS as a first step.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
