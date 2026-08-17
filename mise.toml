@@ -221,6 +221,26 @@ dir = "modules/aleph"
 # and never kills the invoking mise. See scripts/aleph-reap.sh.
 run = "../../scripts/aleph-reap.sh && FUNES_DB=../funes/.dev/funes.db mix aleph.run"
 
+# When Tlön behaves like STALE CODE — a not-wired pane after a fix, a "crash" with no trace in the
+# logs, an old cockpit still bound to 4041 — the cause is almost always a lingering process or
+# session, not a real bug: the BEAM doesn't hot-reload (an aleph started before a code change keeps
+# running the old code), and tmux continuum can restore an UNWIRED `tlon` session that the next
+# aleph just attaches to. This resets Tlön to a known-good shape and then prints the resulting env
+# so you can confirm it's what you think. DESTRUCTIVE: it kills the running cockpit + the Tlön
+# pi/claude panes. Follow with `aleph:run` for a fresh, wired cockpit.
+[tasks."aleph:reset"]
+description = "aleph: reset Tlön to known-good — reap the stale cockpit + port 4041, drop the tlon tmux session (re-wires on next run), mix clean (no stale beam/NIF), then report the env. DESTRUCTIVE: kills the cockpit + panes."
+dir = "modules/aleph"
+run = """
+../../scripts/aleph-reap.sh || true
+if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:reset — dropped the tlon tmux session (next entry re-wires it)"; else echo "aleph:reset — no tlon tmux session"; fi
+mix clean >/dev/null 2>&1 && echo "aleph:reset — mix clean (fresh compile on next aleph:run)"
+echo "--- env now ---"
+for p in 4040 4041; do if ss -tlnH "sport = :$p" 2>/dev/null | grep -q .; then echo "  port $p: LISTENING"; else echo "  port $p: free"; fi; done
+if tmux has-session -t tlon 2>/dev/null; then echo "  tlon session: present"; else echo "  tlon session: gone (clean)"; fi
+echo "aleph:reset — done. Run 'mise run aleph:run' for a fresh, wired cockpit."
+"""
+
 [tasks.check]
 description = "Everything green: the funes + aleph + manos (pi + consult + fmt + lsp) precommit gates (format + warnings + credo + types + tests)"
 depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check"]
