@@ -209,14 +209,22 @@ if tmux has-session -t tlon 2>/dev/null && ! tmux show-environment -t tlon 2>/de
   echo "aleph:run — dropping an unwired tlon session (recreating it wired)"
   tmux kill-session -t tlon 2>/dev/null || true
 fi
+# Apply any pending migrations to the dev scratch db BEFORE launch. A fresh funes slice
+# (e.g. the consult migration) would otherwise trip the behind-DB guard and refuse to boot,
+# forcing a manual `aleph:setup`. Safe to auto-apply here: this is the throwaway dev db and
+# migrations are additive — it never touches the always-up service db (that's home:switch's).
+# No deps.get, so no network. The Elixir guard stays as a backstop for a bare `mix aleph.run`.
+FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
 FUNES_DB=../funes/.dev/funes.db mix aleph.run
 """
 
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
 # hot-reload; tmux continuum can restore an unwired tlon session), not a real bug.
-# DESTRUCTIVE: kills the cockpit + Tlön panes. Follow with `aleph:run` for a fresh cockpit.
+# Resets the RUNTIME only (cockpit + Tlön panes + compiled artifacts) — it NEVER touches
+# the db, so threads/messages/consults survive. To wipe data, use `aleph:reset:db`.
+# Follow with `aleph:run` for a fresh cockpit.
 [tasks."aleph:reset"]
-description = "aleph: reset Tlön to known-good — reap the stale cockpit + port 4041, drop the tlon tmux session (re-wires on next run), mix clean (no stale beam/NIF), then report the env. DESTRUCTIVE: kills the cockpit + panes."
+description = "aleph: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, drop the tlon tmux session (re-wires on next run), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use aleph:reset:db to wipe data."
 dir = "modules/aleph"
 run = """
 ../../scripts/aleph-reap.sh || true
@@ -226,6 +234,24 @@ echo "--- env now ---"
 for p in 4040 4041; do if ss -tlnH "sport = :$p" 2>/dev/null | grep -q .; then echo "  port $p: LISTENING"; else echo "  port $p: free"; fi; done
 if tmux has-session -t tlon 2>/dev/null; then echo "  tlon session: present"; else echo "  tlon session: gone (clean)"; fi
 echo "aleph:reset — done. Run 'mise run aleph:run' for a fresh, wired cockpit."
+"""
+
+# The DATA wipe `aleph:reset` deliberately is NOT — separate + explicitly named so a fresh
+# db is never a reflex. Drops → recreates → migrates the dev scratch db, destroying every
+# dogfood thread/message/consult in it. Only the dev db (../funes/.dev/funes.db); the
+# always-up service db is untouched. Use when the schema state is wedged or you want a clean
+# slate, not for "stale code" symptoms (that's `aleph:reset`).
+[tasks."aleph:reset:db"]
+description = "aleph: WIPE the dev scratch db (drop → recreate → migrate) — DESTROYS all dogfood threads/messages/consults. The data reset aleph:reset deliberately does NOT do; only the dev db, never the service db."
+dir = "modules/aleph"
+run = """
+printf 'This WIPES the dev db — every dogfood thread/message/consult is gone.\\nType RESET to confirm: '
+read -r confirm
+if [ "$confirm" != "RESET" ]; then echo "aleph:reset:db — aborted (nothing wiped)."; exit 1; fi
+FUNES_DB=../funes/.dev/funes.db mix ecto.drop -r Funes.Repo || exit $?
+FUNES_DB=../funes/.dev/funes.db mix ecto.create -r Funes.Repo --quiet || exit $?
+FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
+echo "aleph:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
 """
 
 [tasks.check]
