@@ -113,6 +113,19 @@ then read 1800 lines," every time.
   `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`. `git log` is part of the machine's memory;
   a commit that hides its author lies to it. (The first dogfood branch shipped 7 unattributed
   machine commits — that's the incident this rule comes from.)
+- **Comments earn their place — load-bearing only.** A comment survives only if it states a non-obvious
+  *why* or a real gotcha the code can't. Narrative, lore, dated incident references, decorative
+  `# --- section ---` dividers, and restatements of what the next line plainly does are noise — don't
+  write them, and trim them when you touch a file. Prose belongs in docstrings (`@moduledoc`/`@doc`/
+  `@spec`, JSDoc) and the `*.md` files; inline comments are load-bearing only. (A repo-wide pass cut
+  ~320 comment lines to this standard — don't grow them back.)
+- **Secrets: agenix for the machine, rbw for you.** A secret a non-interactive process needs — a
+  service, a spawned pane (e.g. `OLLAMA_API_KEY` for the Tlön pi) — lives age-encrypted in
+  `secrets/*.age` (agenix), decrypted at `home:switch` to `$XDG_RUNTIME_DIR/agenix/<name>` with *no*
+  runtime unlock. Human/interactive passwords live in Bitwarden via `rbw`. Never a plaintext key in the
+  repo, a dotfile, or the nix store. To add a machine secret: recipient pubkey → `secrets/secrets.nix`,
+  `agenix -e secrets/<name>.age`, `git add` it (nix can't see untracked files), reference it via
+  `age.secrets` in `flake.nix`.
 
 ## Verify
 
