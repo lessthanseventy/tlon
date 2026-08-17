@@ -193,6 +193,11 @@ description = "manos/reload: the precommit gate — install (frozen), typecheck,
 dir = "modules/manos/reload"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
+[tasks."manos:footer:check"]
+description = "manos/footer: the statusline's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/manos/footer"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
 # The safety gate the `reload` tool runs before respawning pi: every manos pi extension must
 # typecheck (a syntax error would respawn pi into code it can't load). Fast — tsc only, no tests
 # or install; runs from the repo root, one package at a time.
@@ -200,7 +205,7 @@ run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 description = "manos: typecheck every pi extension (fast — the `reload` safety gate)"
 run = """
 set -e
-for d in pi consult fmt lsp lspd reload; do
+for d in pi consult fmt lsp lspd reload footer; do
   ( cd "modules/manos/$d" && bun run typecheck )
 done
 """
@@ -285,8 +290,8 @@ echo "aleph:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
 """
 
 [tasks.check]
-description = "Everything green: the funes + aleph + manos (pi + consult + fmt + lsp + reload) precommit gates (format + warnings + credo + types + tests)"
-depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:lspd:check", "manos:reload:check"]
+description = "Everything green: the funes + aleph + manos (pi + consult + fmt + lsp + reload + footer) precommit gates (format + warnings + credo + types + tests)"
+depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:lspd:check", "manos:reload:check", "manos:footer:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
