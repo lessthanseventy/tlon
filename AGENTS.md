@@ -106,6 +106,13 @@ then read 1800 lines," every time.
   works without having run it is the one thing this repo cannot afford.
 - **A module is born when it has content.** Do not create empty placeholder directories to imply a
   structure that does not exist yet. The tree should not lie about what is built.
+- **An `AGENTS.md` is born the same way a comment is — when a scope needs context its parent doesn't
+  give.** Root holds repo-wide invariants; a module or subapp gets its own when it has distinct law, a
+  distinct dev loop, or gotchas that bite (`funes`, `manos` + its adapters, `aleph`). Don't add one per
+  folder by reflex — `lib/schemas/`, `test/`, etc. earn a file only once they accumulate a rule a
+  weaker model keeps getting wrong; until then that guidance lives in the module's file. Keep every one
+  terse and actionable to the same standard as comments: orientation, the exact commands, the law, the
+  gotchas, a pointer to the one deeper doc — no lore. Skeleton: **what it is → Law → dev loop → Verify.**
 - **Adopt Nix gradually.** home-manager on Arch first, a disposable NixOS VM (`nixos-rebuild build-vm`)
   as the testbed, metal last. Do not propose replacing the OS as a first step.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
