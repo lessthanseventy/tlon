@@ -123,6 +123,10 @@ run = "scripts/cap.sh"
 description = "Sweep all captured run logs (.logs/) — they self-cap at CAP_KEEP (40), this clears them now"
 run = "rm -rf .logs && echo 'swept .logs/'"
 
+[tasks."ollama:usage"]
+description = "ollama.com: read the plan/rate-limit dashboard (session + weekly caps, per-model request counts) via /api/usage — the insight layer for model choice"
+run = "scripts/ollama-usage.sh"
+
 [tasks.watch]
 description = "Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md)"
 run = "scripts/watch.sh"
