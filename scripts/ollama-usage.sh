@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
-# ollama-usage — read the ollama.com plan/rate-limit dashboard.
+# ollama-usage — read the ollama.com plan/rate-limit dashboard via GET /api/usage.
 #
-# The one insight door the OLLAMA_API_KEY opens besides /v1 chat: GET /api/usage
-# returns two windows that bound the $20 plan, plus paid/per-token activity:
-#   session — a SHORT rolling rate-limit window. This is the one that *feels* like
-#             "blowing through budget fast": a reasoning model (glm-5.2) emits enough
-#             thinking tokens per request to trip it mid-session and get throttled.
+# Two windows bound the $20 plan, plus paid/per-token activity:
+#   session — a SHORT rolling rate-limit window: a reasoning model (glm-5.2) emits
+#             enough thinking tokens per request to trip it mid-session and throttle.
 #   weekly  — the rolling plan cap (the actual "run out of plan" ceiling).
-# `usage` is a 0–1 fraction of the window's cap; `activity.cost` is per-token usage
-# (kimi-k3 and other extra-billed models) over the last 4 weeks — should stay 0.00
-# on a plan-only diet.
-#
-# Per-model request_count is printed so you can see WHICH model is draining a window
-# — the insight layer for model choice. This is the "look at my usage" half of the
-# routing decision in AGENTS.md (§ Picking a pi model); the other half is the
-# `pi:*` mise task ring. Run before/after a heavy session to see what a model cost.
+# `usage` is a 0-1 fraction of the window's cap; `activity.cost` is per-token usage
+# (kimi-k3 and other extra-billed models) over the last 4 weeks — should stay 0.00 on
+# a plan-only diet. Per-model request_count shows WHICH model is draining a window —
+# the insight layer for model choice (see AGENTS.md § Picking a pi model).
 set -euo pipefail
 
 : "${OLLAMA_API_KEY:?OLLAMA_API_KEY is required (mise.toml [env] sets it from the agenix secret)}"

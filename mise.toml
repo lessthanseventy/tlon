@@ -1,25 +1,22 @@
 # mise.toml — the shared dev-loop API for ficciones.
 #
-# One vocabulary for the human and any agent: everything is driven through
-# `mise run <task>` (`mise tasks` lists them), and the AGENTS.md files point here
-# so there is no second source of truth for "how do I test / check / run this."
-# mise owns the dev runtime; Nix owns packaging and the system.
+# Everything runs through `mise run <task>` (`mise tasks` lists them) — one vocabulary
+# for human and agent, no second source of truth. mise owns the dev runtime; Nix owns
+# packaging and the system.
 
 [tools]
-# The combined build (precompiled for this OTP) — pairing a bare "1.19" with a
-# separate erlang picks an incompatible OTP and fails to boot.
-# OTP 28: the aleph line needs it (ghostty_ex/libghostty-vt), and aleph boots
-# funes, so the whole repo runs on one OTP. funes' green gate re-proves the bump.
+# Combined build (precompiled for this OTP) — pairing a bare "1.19" with a separate
+# erlang picks an incompatible OTP and fails to boot. OTP 28: aleph needs it
+# (ghostty_ex/libghostty-vt) and boots funes, so the whole repo runs on one OTP.
 erlang = "28"
 elixir = "1.19.5-otp-28"
 # manos' pi adapter is TypeScript; bun runs it natively (no build step) and is the test
 # runner. mise owns the dev runtime, so the JS toolchain is pinned here too, not assumed.
 bun = "1.3.14"
 
-# Secrets read from the agenix-decrypted file (age.secrets.ollama-api-key in flake.nix), decrypted
-# at home:switch — no runtime unlock needed. File-level, not per-task: pi is launched many ways
-# (mise run pi:*, bare `mise exec -- pi`, aleph's Tlön spawn) and all need the key. Falls back to
-# $OLLAMA_API_KEY from the env if the secret file isn't there yet, so the dev loop never breaks.
+# Secrets from the agenix-decrypted file (flake.nix age.secrets), no runtime unlock needed.
+# File-level, not per-task: pi launches many ways and all need the key. Falls back to
+# $OLLAMA_API_KEY from the env if the secret file isn't there yet.
 [env]
 # `$(cat …)` strips a trailing newline that would otherwise break the Authorization header.
 # if/else, not `&&…||`: mise runs exec under `sh -o errexit`, so `&&…||` exits non-zero on the
@@ -46,20 +43,18 @@ description = "funes: the 2am report against the scratch db"
 dir = "modules/funes"
 run = "FUNES_DB=.dev/funes.db mix funes.doctor"
 
-# Boot funes with its sovereign channel on (pi doc §2a), loopback-only, against the
-# scratch db — so a hand-spawned pi pane has something to register with. In the iex it
-# drops you into, `Funes.MCP.Spawn.env("title", "Agent")` prints the export FUNES_* block
-# to paste into the pane. This is the human-as-arbiter path (§2d) until slice 5 automates it.
+# Boot funes with its sovereign channel on, loopback-only, against the scratch db — so
+# a hand-spawned pi pane has something to register with. `Funes.MCP.Spawn.env("title",
+# "Agent")` in the iex it drops you into prints the export FUNES_* block to paste into the pane.
 [tasks."funes:serve"]
 description = "funes: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
 dir = "modules/funes"
 run = "FUNES_DB=.dev/funes.db FUNES_START_MCP=1 iex -S mix"
 
-# The always-up channel (capability-map move #1). `funes:serve` above is the DEV path —
-# a hand-run iex on the scratch db; these run the same funes as a self-contained
-# release, headless, on the REAL db, kept up by the home-manager systemd --user service
-# (flake.nix). A release bundles ERTS, so the unit runs one absolute path with nothing
-# on PATH, and `remote`/`rpc` reach the LIVE node (where a minted token survives).
+# `funes:serve` above is the DEV path (hand-run iex on the scratch db); these run the
+# same funes as a self-contained release, headless, on the REAL db, kept up by the
+# home-manager systemd --user service. A release bundles ERTS, so the unit runs one
+# absolute path with nothing on PATH, and `remote`/`rpc` reach the LIVE node.
 [tasks."funes:release"]
 description = "funes: build the self-contained release the always-up service runs (prod)"
 dir = "modules/funes"
@@ -79,11 +74,10 @@ run = "_build/prod/rel/funes/bin/funes remote"
 description = "funes: follow the always-up service's logs"
 run = "journalctl --user -u funes -n 80 -f"
 
-# The mise parity pack (capability-map move #2): operate/script access to the LIVE
-# channel from the shell, the human+Claude-Code peer to the agents' MCP tools. All go
-# through `bin/funes rpc` INTO the running service node — a token minted anywhere else
-# dies with its node, and roster/presence is in-memory there. Thin and deliberate: this
-# is operate access, NOT a second cockpit (aleph is the human's rich surface).
+# Operate/script access to the LIVE channel from the shell — the human+Claude-Code peer
+# to the agents' MCP tools. Goes through `bin/funes rpc` INTO the running service node:
+# a token minted anywhere else dies with its node, and roster/presence is in-memory
+# there. Thin and deliberate — operate access, NOT a second cockpit (aleph is the rich surface).
 [tasks."funes:spawn"]
 description = "funes: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
 run = "scripts/funes-cli.sh spawn"
@@ -100,11 +94,10 @@ run = "scripts/funes-cli.sh dossier"
 description = "funes: post to a thread as the operator from the shell — parity with the agents' post_message"
 run = "scripts/funes-cli.sh post"
 
-# Launch Claude Code as a funes citizen (capability-map move #3, the claude-code manos
-# adapter). No arg → a fresh thread; a numeric thread-id → JOIN it (resume across a
-# /clear). Scopes the funes MCP server (headersHelper: fresh token per connect) + the
-# SessionStart brief hook to THIS session via --mcp-config/--settings — no ~/.claude
-# mutation, so a plain `claude` is untouched.
+# Launch Claude Code as a funes citizen. No arg → a fresh thread; a numeric thread-id →
+# JOIN it (resume across a /clear). Scopes the funes MCP server (fresh token per
+# connect) + the SessionStart brief hook to THIS session via --mcp-config/--settings —
+# no ~/.claude mutation, so a plain `claude` stays untouched.
 [tasks."funes:claude"]
 description = "launch Claude Code as a funes citizen — `funes:claude` (fresh thread) or `funes:claude -- <id>` (join)"
 run = "modules/manos/claude-code/launch.sh"
@@ -125,12 +118,10 @@ run = "scripts/ollama-usage.sh"
 description = "Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md)"
 run = "scripts/watch.sh"
 
-# Stop any ficciones watchers you left running (a backgrounded `watch`/`funes:watch`/`manos:pi:watch`).
-# The `[w]atchexec` bracket is the whole trick: `pkill -f`/`pgrep -f` match a process's ENTIRE argv,
-# and the pattern sits in the running shell's own argv — so a naive `pkill -f watchexec` signals
-# ITSELF (exit 143/144) and can even catch a test BEAM mid-run. `[w]atchexec` is a regex that never
-# appears literally in its own command line, so it only ever matches real watchexec processes;
-# `--project-origin $root` scopes it to THIS repo, leaving other projects' watchers alone.
+# The `[w]atchexec` bracket is the trick: `pkill -f`/`pgrep -f` match a process's ENTIRE
+# argv, so a naive `pkill -f watchexec` would match its own argv and signal ITSELF.
+# `[w]atchexec` never appears literally in its own command line, so it only matches real
+# watchexec processes; `--project-origin $root` scopes it to this repo.
 [tasks."watch:stop"]
 description = "Stop ficciones file-watchers left running in the background (safe: never signals its own shell)"
 run = '''
@@ -204,14 +195,14 @@ description = "aleph: seed the shared db with sample threads/agents/sessions for
 dir = "modules/aleph"
 run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
 
-# The cockpit reads the SAME db funes' own tasks use (../funes/.dev/funes.db), so posting from
-# another shell (mise run funes:doctor, an iex) shows up live. Run in ghostty.
+# The cockpit reads the SAME db funes' own tasks use, so posting from another shell
+# shows up live. Run in ghostty.
 [tasks."aleph:run"]
 description = "aleph: launch the live cockpit in THIS terminal (run in ghostty)"
 dir = "modules/aleph"
-# Self-heals before launch: reaps a stale cockpit holding port 4041 (a previous run that lost its
-# TTY), then drops the tlon tmux session only if it's UNWIRED (no FUNES_*) — a healthy (wired)
-# session is preserved across restarts. Full nuke is `aleph:reset`.
+# Self-heals before launch: reaps a stale cockpit holding port 4041, then drops the tlon
+# tmux session only if UNWIRED (no FUNES_*) — a wired session survives restarts. Full
+# nuke is `aleph:reset`.
 run = """
 ../../scripts/aleph-reap.sh || exit $?
 if tmux has-session -t tlon 2>/dev/null && ! tmux show-environment -t tlon 2>/dev/null | grep -q '^FUNES_MCP_URL='; then
@@ -221,9 +212,9 @@ fi
 FUNES_DB=../funes/.dev/funes.db mix aleph.run
 """
 
-# Fixes "stale code" symptoms — almost always a lingering process/session, not a real bug (the
-# BEAM doesn't hot-reload; tmux continuum can restore an unwired tlon session). DESTRUCTIVE: kills
-# the running cockpit + the Tlön pi/claude panes. Follow with `aleph:run` for a fresh, wired cockpit.
+# Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
+# hot-reload; tmux continuum can restore an unwired tlon session), not a real bug.
+# DESTRUCTIVE: kills the cockpit + Tlön panes. Follow with `aleph:run` for a fresh cockpit.
 [tasks."aleph:reset"]
 description = "aleph: reset Tlön to known-good — reap the stale cockpit + port 4041, drop the tlon tmux session (re-wires on next run), mix clean (no stale beam/NIF), then report the env. DESTRUCTIVE: kills the cockpit + panes."
 dir = "modules/aleph"
@@ -249,13 +240,11 @@ run = "nix flake check"
 description = "machine: apply the home-manager profile"
 run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox -b backup"
 
-# ── pi the agent — model launchers ("which model when", as tasks) ──────────────────────────
-# These launch the pi AI harness (~/.nix-profile/bin/pi) pinned to a model + thinking level.
-# NOT the manos/pi renderer (that's manos:pi:test / manos:pi:check / manos:pi:watch above) —
-# distinct namespace. Read them as named model profiles: "litellm but not" — the loop IS the routing
-# layer, no proxy. All five draw on the flat $20 ollama.com plan (kimi-k3 was pulled: it bills
-# as EXTRA usage on top). Bare `pi` already starts on ollama-cloud/glm-5.2; these are the
-# one-command alternates, and in-session Ctrl+P still cycles the same ring. Args pass through:
+# pi the agent — model launchers, pinned to a model + thinking level. NOT the manos/pi
+# renderer (that's manos:pi:test/check/watch above) — distinct namespace. All draw on
+# the flat $20 ollama.com plan (kimi-k3 excluded: bills as EXTRA usage on top). Bare
+# `pi` already starts on ollama-cloud/glm-5.2; these are one-command alternates —
+# in-session Ctrl+P still cycles the same ring. Args pass through:
 # `mise run pi:deep -- -p "one-shot prompt"`. Full when-to-reach-for-each: AGENTS.md.
 
 [tasks."pi:balanced"]

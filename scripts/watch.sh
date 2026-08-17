@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 # watch — re-run a command every time watched files change, printing cap's signal each run.
-# Register it once, then just edit: you get pass/fail automatically, with no turn spent
-# re-running tests by hand. The point (root AGENTS.md): stop manually re-running after every
-# change — let the watcher tell you when something goes red.
+# Register it once, then just edit: pass/fail comes automatically, no turn spent
+# re-running tests by hand.
 #
 #   scripts/watch.sh mise exec -- mix test              # watch cwd, run the suite on change
 #   scripts/watch.sh -w modules/funes -- mise exec -- mix test
 #   scripts/watch.sh bun test path/to/thing.test.ts     # a narrower scope
 #
-# For an AGENT: run it in the background (Claude Code: Bash run_in_background — the harness
-# re-invokes you when it emits a result; pi: run it in a pane). Edit, and you're pinged
-# red/green. Kill it when you're done. Knobs pass through to cap (CAP_TAIL, CAP_SIGNAL).
+# For an AGENT: run it in the background (Claude Code: Bash run_in_background; pi: run it
+# in a pane). Edit, and you're pinged red/green. Kill it when done. Knobs pass through to
+# cap (CAP_TAIL, CAP_SIGNAL).
 #
-# Uses watchexec when present (declared in the flake): it runs once at start, re-runs on
-# change, debounces, restarts a run superseded by a newer change, and respects .gitignore —
-# so _build/, deps/, node_modules/, .logs/ and result/ self-exclude with no hand-kept list.
-# Falls back to a portable mtime poll where watchexec is absent.
+# Uses watchexec when present (declared in the flake): debounces, restarts a run
+# superseded by a newer change, and respects .gitignore — so _build/, deps/,
+# node_modules/, .logs/ and result/ self-exclude with no hand-kept list. Falls back to a
+# portable mtime poll where watchexec is absent.
 set -uo pipefail
 
 dirs=()
