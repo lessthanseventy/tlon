@@ -171,9 +171,22 @@ dir = "modules/manos/fmt"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
 [tasks."manos:lsp:check"]
-description = "manos/lsp: the precommit gate — install (frozen), typecheck, tests"
+description = "manos/lsp: the pi shim's precommit gate — install (frozen), typecheck, tests"
 dir = "modules/manos/lsp"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+[tasks."manos:lspd:check"]
+description = "manos/lspd: the sidecar daemon's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/manos/lspd"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+# Run the LSP sidecar in the foreground (dev). --watch reloads daemon code on edit (restarts the
+# daemon, not pi — Expert cold-starts once). Normal use needs no task: the pi shim auto-spawns the
+# daemon on first tool call. A systemd --user unit for real supervision is the remaining design step.
+[tasks."lspd"]
+description = "manos/lspd: run the LSP sidecar daemon in the foreground (bun --watch, dev)"
+dir = "modules/manos/lspd"
+run = "bun --watch run src/server.ts"
 
 [tasks."manos:reload:check"]
 description = "manos/reload: the precommit gate — install (frozen), typecheck, tests"
@@ -187,7 +200,7 @@ run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 description = "manos: typecheck every pi extension (fast — the `reload` safety gate)"
 run = """
 set -e
-for d in pi consult fmt lsp reload; do
+for d in pi consult fmt lsp lspd reload; do
   ( cd "modules/manos/$d" && bun run typecheck )
 done
 """
@@ -273,7 +286,7 @@ echo "aleph:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
 
 [tasks.check]
 description = "Everything green: the funes + aleph + manos (pi + consult + fmt + lsp + reload) precommit gates (format + warnings + credo + types + tests)"
-depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:reload:check"]
+depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:lspd:check", "manos:reload:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check — the machine-level gate"
