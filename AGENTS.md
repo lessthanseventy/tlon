@@ -129,6 +129,13 @@ then read 1800 lines," every time.
   `git log` is part of the machine's memory; a commit that hides its author — or names the wrong one —
   lies to it. (The first dogfood branch shipped 7 unattributed machine commits — that's the incident
   this rule comes from.)
+- **Claude Code only — phantom untracked dotfiles in `git status` are a sandbox mask, not real files.**
+  Sandboxed Bash bind-mounts `/dev/null` over shell-rc / `.gitconfig` / editor paths, so `git status`
+  run *inside* the sandbox reports `.bashrc`, `.zshrc`, `.gitconfig`, `.gitmodules`, `.mcp.json`, `.idea`,
+  `.vscode`, … as untracked at the repo root. The tell: `ls -la` shows them as `crw-rw-rw- 1,3` — a char
+  device (`/dev/null`), not a file. They don't exist on disk. Never `git add`/`rm` them or try to "clean
+  them up"; to read true git state, run `git status` with the sandbox disabled. (pi doesn't run in this
+  sandbox and never sees them — this is a Claude-Code-harness quirk, not a repo fact.)
 - **Comments earn their place — load-bearing only.** A comment survives only if it states a non-obvious
   *why* or a real gotcha the code can't. Narrative, lore, dated incident references, decorative
   `# --- section ---` dividers, and restatements of what the next line plainly does are noise — don't
