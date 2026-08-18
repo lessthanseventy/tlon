@@ -129,13 +129,27 @@ then read 1800 lines," every time.
   `git log` is part of the machine's memory; a commit that hides its author — or names the wrong one —
   lies to it. (The first dogfood branch shipped 7 unattributed machine commits — that's the incident
   this rule comes from.)
-- **Claude Code only — phantom untracked dotfiles in `git status` are a sandbox mask, not real files.**
-  Sandboxed Bash bind-mounts `/dev/null` over shell-rc / `.gitconfig` / editor paths, so `git status`
-  run *inside* the sandbox reports `.bashrc`, `.zshrc`, `.gitconfig`, `.gitmodules`, `.mcp.json`, `.idea`,
-  `.vscode`, … as untracked at the repo root. The tell: `ls -la` shows them as `crw-rw-rw- 1,3` — a char
-  device (`/dev/null`), not a file. They don't exist on disk. Never `git add`/`rm` them or try to "clean
-  them up"; to read true git state, run `git status` with the sandbox disabled. (pi doesn't run in this
-  sandbox and never sees them — this is a Claude-Code-harness quirk, not a repo fact.)
+- **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Both
+  harnesses are affected: pi via the `pi-sandbox` extension (`~/.pi/agent/sandbox.json`, seeded at
+  `flake.nix`'s `piSandboxSeed`) and Claude Code via its own. pi-sandbox delegates to
+  `@carderne/sandbox-runtime`, a fork of Anthropic's, so **the `CLAUDE_CODE_*` and proxy env vars
+  inside a pi bash call come from the fork — they are not evidence you're in Claude Code.** Two
+  symptoms follow, and neither is a bug to chase:
+  - *Phantom untracked dotfiles.* The wrapper bind-mounts over shell-rc / `.gitconfig` / editor paths,
+    so `git status` **run inside a bash call** reports `.bashrc`, `.zshrc`, `.gitconfig`, `.env`,
+    `.mcp.json`, `.idea`, `.vscode`, … as untracked at the repo root. The tell: `ls -la` shows them
+    0-byte `-r--r--r--` (or `crw-rw-rw- 1,3`, a `/dev/null` char device). They don't exist on disk.
+    Never `git add`/`rm` them or try to "clean them up".
+  - *`127.0.0.1` is not the host's loopback.* bash runs under `bwrap --unshare-net` in a private netns,
+    so `curl 127.0.0.1:4041`, `ss -tlnp`, and `systemctl --user` can never see the funes channel —
+    **regardless of whether it is up.** `allowLocalBinding` only permits binding *within* that netns.
+    External traffic escapes via a socat→unix-socket proxy, but that proxy refuses loopback targets
+    with a `403`, so there is no route. Do not conclude "funes is down" from a bash probe; a bash
+    probe cannot answer the question. **funes MCP tools still work** — pi makes those calls from its
+    own process, outside bubblewrap — so use them, or ask the human to check from the host.
+
+  To get true git state or real host network, disable the sandbox: `Alt+S`, `/sandbox-disable`, or
+  relaunch `pi --no-sandbox`.
 - **Comments earn their place — load-bearing only.** A comment survives only if it states a non-obvious
   *why* or a real gotcha the code can't. Narrative, lore, dated incident references, decorative
   `# --- section ---` dividers, and restatements of what the next line plainly does are noise — don't
