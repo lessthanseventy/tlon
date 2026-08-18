@@ -237,12 +237,19 @@ description = "aleph: launch the live cockpit in THIS terminal (run in ghostty)"
 dir = "modules/aleph"
 # Self-heals before launch: reaps a stale cockpit holding port 4041, then drops the tlon
 # tmux session only if UNWIRED (no FUNES_*) — a wired session survives restarts. Full
-# nuke is `aleph:reset`.
+# nuke is `aleph:reset`. The coworker lives on its OWN tmux server (-L aleph-tlon, a
+# persistence-free config from the profile dir) — never the default server, where
+# resurrect/continuum would restore it stale.
 run = """
 ../../scripts/aleph-reap.sh || exit $?
-if tmux has-session -t tlon 2>/dev/null && ! tmux show-environment -t tlon 2>/dev/null | grep -q '^FUNES_MCP_URL='; then
+if tmux -L aleph-tlon has-session -t tlon 2>/dev/null && ! tmux -L aleph-tlon show-environment -t tlon 2>/dev/null | grep -q '^FUNES_MCP_URL='; then
   echo "aleph:run — dropping an unwired tlon session (recreating it wired)"
-  tmux kill-session -t tlon 2>/dev/null || true
+  tmux -L aleph-tlon kill-session -t tlon 2>/dev/null || true
+fi
+# Pre-socket-isolation leftover: a `tlon` session on the DEFAULT server is a zombie coworker
+# that resurrect would keep restoring — surface it; `aleph:reset` removes it.
+if tmux has-session -t tlon 2>/dev/null; then
+  echo "aleph:run — note: a legacy tlon session exists on the DEFAULT tmux server (unused now); mise run aleph:reset removes it"
 fi
 # Apply any pending migrations to the dev scratch db BEFORE launch. A fresh funes slice
 # (e.g. the consult migration) would otherwise trip the behind-DB guard and refuse to boot,
@@ -259,15 +266,16 @@ FUNES_DB=../funes/.dev/funes.db mix aleph.run
 # the db, so threads/messages/consults survive. To wipe data, use `aleph:reset:db`.
 # Follow with `aleph:run` for a fresh cockpit.
 [tasks."aleph:reset"]
-description = "aleph: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, drop the tlon tmux session (re-wires on next run), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use aleph:reset:db to wipe data."
+description = "aleph: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, kill the aleph-tlon tmux server (+ any legacy default-server tlon session), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use aleph:reset:db to wipe data."
 dir = "modules/aleph"
 run = """
 ../../scripts/aleph-reap.sh || true
-if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:reset — dropped the tlon tmux session (next entry re-wires it)"; else echo "aleph:reset — no tlon tmux session"; fi
+if tmux -L aleph-tlon kill-server 2>/dev/null; then echo "aleph:reset — killed the aleph-tlon tmux server (next entry recreates it fresh)"; else echo "aleph:reset — no aleph-tlon tmux server"; fi
+if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:reset — dropped a LEGACY tlon session from the default tmux server"; fi
 mix clean >/dev/null 2>&1 && echo "aleph:reset — mix clean (fresh compile on next aleph:run)"
 echo "--- env now ---"
 for p in 4040 4041; do if ss -tlnH "sport = :$p" 2>/dev/null | grep -q .; then echo "  port $p: LISTENING"; else echo "  port $p: free"; fi; done
-if tmux has-session -t tlon 2>/dev/null; then echo "  tlon session: present"; else echo "  tlon session: gone (clean)"; fi
+if tmux -L aleph-tlon has-session -t tlon 2>/dev/null; then echo "  tlon session (aleph-tlon server): present"; else echo "  tlon session: gone (clean)"; fi
 echo "aleph:reset — done. Run 'mise run aleph:run' for a fresh, wired cockpit."
 """
 
