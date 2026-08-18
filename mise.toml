@@ -335,3 +335,18 @@ run = "modules/manos/pi/launch.sh --provider ollama-cloud --model deepseek-v4-fl
 [tasks."pi:local"]
 description = "pi agent: free/offline grunt — qwen3-coder on the local ollama daemon (no cloud budget)"
 run = "modules/manos/pi/launch.sh --provider ollama --model qwen3-coder"
+
+# The flake pins WHICH extensions (manosWiring's `packages` list), but pi owns the mutable npm
+# install (~/.pi/agent/npm) and its VERSIONS — that dir is not nix-managed. So `home:switch` never
+# bumps an extension; this task is the update path, keeping it in the one control loop instead of an
+# ad-hoc `pi update` off the startup nag. Also updates the Tlön coworker profile (its own npm/ under
+# ~/.pi/profiles/tlon) when aleph has materialised it. See [[pi-automode-guardrail]].
+[tasks."pi:update"]
+description = "pi agent: update installed npm extensions to the latest the flake's package list allows (pi owns the mutable npm/ install, not nix — this is the update path, NOT home:switch). Also updates the Tlön coworker profile if present."
+run = """
+pi update --extensions
+if [ -d "$HOME/.pi/profiles/tlon" ]; then
+  echo "pi:update — updating the Tlön coworker profile too"
+  PI_CODING_AGENT_DIR="$HOME/.pi/profiles/tlon" pi update --extensions
+fi
+"""
