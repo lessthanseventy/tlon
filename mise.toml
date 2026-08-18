@@ -298,8 +298,14 @@ description = "Everything green: the funes + aleph + manos (pi + consult + fmt +
 depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:lspd:check", "manos:reload:check", "manos:footer:check"]
 
 [tasks."flake:check"]
-description = "machine: nix flake check — the machine-level gate"
-run = "nix flake check"
+description = "machine: nix flake check + build the activation script — the machine-level gate"
+# `nix flake check` only EVALUATES homeConfigurations; it never builds the activation script, so a
+# bash syntax error in a home.activation block sails through it and only explodes at home:switch.
+# Building activationPackage runs home-manager's syntax check, which is what actually catches it.
+run = [
+  "nix flake check",
+  "nix build --no-link .#homeConfigurations.personalbox.activationPackage",
+]
 
 [tasks."home:switch"]
 description = "machine: apply the home-manager profile"
