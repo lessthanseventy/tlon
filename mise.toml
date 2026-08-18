@@ -235,22 +235,18 @@ run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
 [tasks."aleph:run"]
 description = "aleph: launch the live cockpit in THIS terminal (run in ghostty)"
 dir = "modules/aleph"
-# Self-heals before launch: reaps a stale cockpit holding port 4041, then drops the tlon
-# tmux session only if UNWIRED (no FUNES_*) — a wired session survives restarts. Full
-# nuke is `aleph:reset`. The coworker lives on its OWN tmux server (-L aleph-tlon, a
-# persistence-free config from the profile dir) — never the default server, where
-# resurrect/continuum would restore it stale.
+# Self-heals before launch, fully: Tlön sessions are NOT meant to survive teardown, so kill the
+# aleph-tlon tmux server up front. A crashed cockpit leaves that server squatting port 4041 via an
+# inherited fd (the reaper leaves tmux alone by design), so killing it is what actually frees the
+# port — then aleph-reap.sh clears any beam still holding it. A fresh coworker spawns on entry.
+# The coworker lives on its OWN tmux server (-L aleph-tlon, persistence-free config from the
+# profile dir) — never the default server, where resurrect/continuum would restore it stale.
 run = """
+# Kill the coworker's tmux server first (releases the inherited port-4041 fd), then reap.
+if tmux -L aleph-tlon kill-server 2>/dev/null; then echo "aleph:run — killed the aleph-tlon tmux server (fresh coworker on entry)"; fi
+# Pre-socket-isolation leftover: a zombie `tlon` session on the DEFAULT server.
+if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:run — dropped a legacy tlon session from the default tmux server"; fi
 ../../scripts/aleph-reap.sh || exit $?
-if tmux -L aleph-tlon has-session -t tlon 2>/dev/null && ! tmux -L aleph-tlon show-environment -t tlon 2>/dev/null | grep -q '^FUNES_MCP_URL='; then
-  echo "aleph:run — dropping an unwired tlon session (recreating it wired)"
-  tmux -L aleph-tlon kill-session -t tlon 2>/dev/null || true
-fi
-# Pre-socket-isolation leftover: a `tlon` session on the DEFAULT server is a zombie coworker
-# that resurrect would keep restoring — surface it; `aleph:reset` removes it.
-if tmux has-session -t tlon 2>/dev/null; then
-  echo "aleph:run — note: a legacy tlon session exists on the DEFAULT tmux server (unused now); mise run aleph:reset removes it"
-fi
 # Apply any pending migrations to the dev scratch db BEFORE launch. A fresh funes slice
 # (e.g. the consult migration) would otherwise trip the behind-DB guard and refuse to boot,
 # forcing a manual `aleph:setup`. Safe to auto-apply here: this is the throwaway dev db and
