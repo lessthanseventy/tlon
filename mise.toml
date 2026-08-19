@@ -230,6 +230,14 @@ description = "aleph: seed the shared db with sample threads/agents/sessions for
 dir = "modules/aleph"
 run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
 
+# B1.4's clean-slate step: the old machine threads under the staffing experiment are disposable —
+# clear them once, by hand, before ensure_thread_sessions starts spawning per-thread windows.
+# Never touches project-scope threads; the always-up service db is untouched (dev db only).
+[tasks."aleph:clear-machine-threads"]
+description = "aleph: B1.4 clean-slate — delete every MACHINE-scope thread + its messages from the dev db (project threads untouched)"
+dir = "modules/aleph"
+run = "FUNES_DB=../funes/.dev/funes.db mix aleph.clear_machine_threads"
+
 # The cockpit reads the SAME db funes' own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
 [tasks."aleph:run"]
