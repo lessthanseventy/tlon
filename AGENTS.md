@@ -156,6 +156,11 @@ then read 1800 lines," every time.
   write them, and trim them when you touch a file. Prose belongs in docstrings (`@moduledoc`/`@doc`/
   `@spec`, JSDoc) and the `*.md` files; inline comments are load-bearing only. (A repo-wide pass cut
   ~320 comment lines to this standard — don't grow them back.)
+  - **No devlog.** A comment describes what IS, never how it got here. Cut the evolution storytelling:
+    *"used to X / now Y instead"*, *"supersedes / replaces / reverses the old…"*, *"the bug this
+    replaces was…"*, *"before the fix / pre-B1.4"*, rename & migration history, "we tried X then…".
+    Keep the current-state constraint even when it grew out of a past bug — just state the constraint,
+    drop the incident. The git history holds the story; the code holds the present.
 - **Secrets: agenix for the machine, rbw for you.** A secret a non-interactive process needs — a
   service, a spawned pane (e.g. `OLLAMA_API_KEY` for the Tlön pi) — lives age-encrypted in
   `secrets/*.age` (agenix), decrypted at `home:switch` to `$XDG_RUNTIME_DIR/agenix/<name>` with *no*
