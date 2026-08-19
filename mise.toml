@@ -252,9 +252,7 @@ dir = "modules/aleph"
 run = """
 # Kill the coworker's tmux server first (releases the inherited port-4041 fd), then reap.
 if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "aleph:run — killed the aleph-tertius tmux server (fresh coworker on entry)"; fi
-# Legacy: the coworker socket used to be aleph-tlon (before the tertius rename).
-if tmux -L aleph-tlon kill-server 2>/dev/null; then echo "aleph:run — killed a legacy aleph-tlon tmux server"; fi
-# Pre-socket-isolation leftover: a zombie `tlon` session on the DEFAULT server.
+# A zombie `tlon` session on the DEFAULT server (no socket isolation).
 if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:run — dropped a legacy tlon session from the default tmux server"; fi
 ../../scripts/aleph-reap.sh || exit $?
 # Apply any pending migrations to the dev scratch db BEFORE launch. A fresh funes slice
@@ -277,9 +275,7 @@ dir = "modules/aleph"
 run = """
 ../../scripts/aleph-reap.sh || true
 if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "aleph:reset — killed the aleph-tertius tmux server (next entry recreates it fresh)"; else echo "aleph:reset — no aleph-tertius tmux server"; fi
-# Legacy: the coworker socket used to be aleph-tlon (before the tertius rename).
-if tmux -L aleph-tlon kill-server 2>/dev/null; then echo "aleph:reset — killed a legacy aleph-tlon tmux server"; fi
-if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:reset — dropped a LEGACY tlon session from the default tmux server"; fi
+if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:reset — dropped a stray tlon session from the default tmux server"; fi
 mix clean >/dev/null 2>&1 && echo "aleph:reset — mix clean (fresh compile on next aleph:run)"
 echo "--- env now ---"
 for p in 4040 4041; do if ss -tlnH "sport = :$p" 2>/dev/null | grep -q .; then echo "  port $p: LISTENING"; else echo "  port $p: free"; fi; done
