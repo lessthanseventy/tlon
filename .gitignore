@@ -47,3 +47,6 @@ result-*
 
 # Live session handoff (not repo content) — see the memory files for durable state
 HANDOFF.md
+
+# git worktrees (superpowers isolated workspaces)
+.worktrees/
