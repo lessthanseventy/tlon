@@ -283,6 +283,24 @@ if tmux -L aleph-tertius has-session -t tlon 2>/dev/null; then echo "  tlon sess
 echo "aleph:reset — done. Run 'mise run aleph:run' for a fresh, wired cockpit."
 """
 
+# The escape hatch: one gesture = guaranteed-fresh cockpit. `aleph:reset` (mix clean + nuke every
+# stale tmux server/session + reap the zombie cockpit/port) THEN `aleph:run` (migrate + launch), so
+# you never have to remember the two-step or wonder whether continuum restored something stale. This
+# is the "I don't trust what's live" button — slower than a bare `aleph:run` (it forces a full
+# recompile), so it's the deliberate reach, not the default. `aleph:run` stays the fast daily launch.
+[tasks."aleph:fresh"]
+description = "aleph: NUKE + launch — full clean (mix clean, kill every stale tmux server/session, reap the cockpit + port 4041) then a fresh compile-and-boot. The 'guarantee I'm running the latest code' escape hatch; slower than aleph:run (full recompile). Data (threads/messages) is UNTOUCHED — use aleph:reset:db to wipe."
+dir = "modules/aleph"
+run = """
+../../scripts/aleph-reap.sh || true
+if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "aleph:fresh — killed the aleph-tertius tmux server"; fi
+if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:fresh — dropped a stray tlon session from the default tmux server"; fi
+mix clean >/dev/null 2>&1 && echo "aleph:fresh — mix clean (forcing a full recompile)"
+FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
+echo "aleph:fresh — compiling + booting the latest code…"
+FUNES_DB=../funes/.dev/funes.db mix aleph.run
+"""
+
 # The DATA wipe `aleph:reset` deliberately is NOT — separate + explicitly named so a fresh
 # db is never a reflex. Drops → recreates → migrates the dev scratch db, destroying every
 # dogfood thread/message/consult in it. Only the dev db (../funes/.dev/funes.db); the
