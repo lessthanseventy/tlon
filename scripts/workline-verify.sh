@@ -14,6 +14,11 @@ slug="${2:?usage: workline-verify.sh <thread-id> <slug>}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cli="$root/scripts/funes-cli.sh"
 
+# One verifier per workline at a time: a duplicate dispatch (bus redelivery, a manual re-run
+# racing the auto one) exits quietly instead of double-running gates and double-advancing.
+exec 9>"$root/.git/workline-verify-$slug.lock"
+flock -n 9 || { echo "verify already running for $slug — skipping"; exit 0; }
+
 # Run one gate, record its REAL exit + tail — evidence, never a self-report.
 run_gate() {
   local name="$1"; shift
