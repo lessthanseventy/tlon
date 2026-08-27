@@ -29,9 +29,16 @@ dir = "modules/funes"
 run = "mix test"
 
 [tasks."funes:check"]
-description = "funes: the precommit gate — format + warnings-as-errors + credo + tests"
+description = "funes: the precommit gate — format + warnings-as-errors + credo + tests + deterministic steering evals"
 dir = "modules/funes"
-run = "mix precommit"
+# Two invocations: precommit runs in :test (start_repo off), the eval needs the dev boot +
+# its own ephemeral db — the deterministic set is offline/fast, judged mode is funes:eval.
+run = "mix precommit && mix funes.eval --deterministic"
+
+[tasks."funes:eval"]
+description = "funes: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes"
+dir = "modules/funes"
+run = "mix funes.eval"
 
 [tasks."funes:setup"]
 description = "funes: fetch deps, create + migrate a repo-local scratch db"
@@ -216,9 +223,14 @@ dir = "modules/aleph"
 run = "mix test"
 
 [tasks."aleph:check"]
-description = "aleph: the precommit gate — format + warnings-as-errors + tests"
+description = "aleph: the precommit gate — format + warnings-as-errors + tests + deterministic steering evals"
 dir = "modules/aleph"
-run = "mix precommit"
+run = "mix precommit && mix aleph.eval --deterministic"
+
+[tasks."aleph:eval"]
+description = "aleph: the FULL steering evals (routing corpus; judged scenarios land with later slices)"
+dir = "modules/aleph"
+run = "mix aleph.eval"
 
 [tasks."aleph:setup"]
 description = "aleph: fetch deps, create + migrate the shared funes db (via Funes.Repo)"
