@@ -89,6 +89,10 @@ run = "journalctl --user -u funes -n 80 -f"
 description = "funes: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
 run = "scripts/funes-cli.sh spawn"
 
+[tasks."funes:cli"]
+description = "funes: the CLI passthrough — mise run funes:cli -- <subcommand> [args] (workline/approve/post/…)"
+run = "scripts/funes-cli.sh"
+
 [tasks."funes:roster"]
 description = "funes: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service"
 run = "scripts/funes-cli.sh roster"
