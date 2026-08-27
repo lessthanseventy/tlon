@@ -286,7 +286,7 @@ if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:run — dropped a leg
 # migrations are additive — it never touches the always-up service db (that's home:switch's).
 # No deps.get, so no network. The Elixir guard stays as a backstop for a bare `mix aleph.run`.
 FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
-FUNES_DB=../funes/.dev/funes.db mix aleph.run
+FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix aleph.run
 """
 
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
@@ -323,7 +323,7 @@ if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:fresh — dropped a s
 mix clean >/dev/null 2>&1 && echo "aleph:fresh — mix clean (forcing a full recompile)"
 FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
 echo "aleph:fresh — compiling + booting the latest code…"
-FUNES_DB=../funes/.dev/funes.db mix aleph.run
+FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix aleph.run
 """
 
 # The DATA wipe `aleph:reset` deliberately is NOT — separate + explicitly named so a fresh
