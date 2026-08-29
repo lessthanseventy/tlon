@@ -43,20 +43,20 @@ run = "mix server.eval"
 [tasks."funes:setup"]
 description = "funes: fetch deps, create + migrate a repo-local scratch db"
 dir = "modules/funes"
-run = "mix deps.get && FUNES_DB=.dev/funes.db mix ecto.create --quiet && FUNES_DB=.dev/funes.db mix ecto.migrate"
+run = "mix deps.get && TLON_DB=.dev/tlon.db mix ecto.create --quiet && TLON_DB=.dev/tlon.db mix ecto.migrate"
 
 [tasks."funes:doctor"]
 description = "funes: the 2am report against the scratch db"
 dir = "modules/funes"
-run = "FUNES_DB=.dev/funes.db mix server.doctor"
+run = "TLON_DB=.dev/tlon.db mix server.doctor"
 
 # Boot funes with its sovereign channel on, loopback-only, against the scratch db — so
 # a hand-spawned pi pane has something to register with. `Funes.MCP.Spawn.env("title",
-# "Agent")` in the iex it drops you into prints the export FUNES_* block to paste into the pane.
+# "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
 [tasks."funes:serve"]
 description = "funes: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
 dir = "modules/funes"
-run = "FUNES_DB=.dev/funes.db FUNES_START_MCP=1 iex -S mix"
+run = "TLON_DB=.dev/tlon.db TLON_START_MCP=1 iex -S mix"
 
 # `funes:serve` above is the DEV path (hand-run iex on the scratch db); these run the
 # same funes as a self-contained release, headless, on the REAL db, kept up by the
@@ -92,7 +92,7 @@ run = "scripts/funes-cli.sh spawn"
 [tasks."funes:ledger"]
 description = "funes: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
 dir = "modules/funes"
-run = "FUNES_DB=.dev/funes.db mix server.ledger"
+run = "TLON_DB=.dev/tlon.db mix server.ledger"
 
 [tasks."workline:verify"]
 description = "workline: the deterministic verifier — run check + flake:check, record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
@@ -246,14 +246,14 @@ dir = "modules/aleph"
 run = "mix console.eval"
 
 [tasks."aleph:setup"]
-description = "aleph: fetch deps, create + migrate the shared funes db (via Funes.Repo)"
+description = "aleph: fetch deps, create + migrate the shared funes db (via Server.Repo)"
 dir = "modules/aleph"
-run = "mix deps.get && FUNES_DB=../funes/.dev/funes.db mix ecto.create -r Funes.Repo --quiet && FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo"
+run = "mix deps.get && TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet && TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo"
 
 [tasks."aleph:seed"]
 description = "aleph: seed the shared db with sample threads/agents/sessions for the cockpit"
 dir = "modules/aleph"
-run = "FUNES_DB=../funes/.dev/funes.db mix console.seed"
+run = "TLON_DB=../server/.dev/tlon.db mix console.seed"
 
 # B1.4's clean-slate step: the old machine threads under the staffing experiment are disposable —
 # clear them once, by hand, before ensure_thread_sessions starts spawning per-thread windows.
@@ -261,7 +261,7 @@ run = "FUNES_DB=../funes/.dev/funes.db mix console.seed"
 [tasks."aleph:clear-machine-threads"]
 description = "aleph: B1.4 clean-slate — delete every MACHINE-scope thread + its messages from the dev db (project threads untouched)"
 dir = "modules/aleph"
-run = "FUNES_DB=../funes/.dev/funes.db mix console.clear_machine_threads"
+run = "TLON_DB=../server/.dev/tlon.db mix console.clear_machine_threads"
 
 # The cockpit reads the SAME db funes' own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
@@ -285,8 +285,8 @@ if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:run — dropped a leg
 # forcing a manual `aleph:setup`. Safe to auto-apply here: this is the throwaway dev db and
 # migrations are additive — it never touches the always-up service db (that's home:switch's).
 # No deps.get, so no network. The Elixir guard stays as a backstop for a bare `mix console.run`.
-FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
-FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix console.run
+TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
+TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT=/home/andrew/projects/ficciones TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run
 """
 
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
@@ -321,14 +321,14 @@ run = """
 if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "aleph:fresh — killed the aleph-tertius tmux server"; fi
 if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:fresh — dropped a stray tlon session from the default tmux server"; fi
 mix clean >/dev/null 2>&1 && echo "aleph:fresh — mix clean (forcing a full recompile)"
-FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
 echo "aleph:fresh — compiling + booting the latest code…"
-FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix console.run
+TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT=/home/andrew/projects/ficciones TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run
 """
 
 # The DATA wipe `aleph:reset` deliberately is NOT — separate + explicitly named so a fresh
 # db is never a reflex. Drops → recreates → migrates the dev scratch db, destroying every
-# dogfood thread/message/consult in it. Only the dev db (../funes/.dev/funes.db); the
+# dogfood thread/message/consult in it. Only the dev db (../server/.dev/tlon.db); the
 # always-up service db is untouched. Use when the schema state is wedged or you want a clean
 # slate, not for "stale code" symptoms (that's `aleph:reset`).
 [tasks."aleph:reset:db"]
@@ -338,9 +338,9 @@ run = """
 printf 'This WIPES the dev db — every dogfood thread/message/consult is gone.\\nType RESET to confirm: '
 read -r confirm
 if [ "$confirm" != "RESET" ]; then echo "aleph:reset:db — aborted (nothing wiped)."; exit 1; fi
-FUNES_DB=../funes/.dev/funes.db mix ecto.drop -r Funes.Repo || exit $?
-FUNES_DB=../funes/.dev/funes.db mix ecto.create -r Funes.Repo --quiet || exit $?
-FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.drop -r Server.Repo || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
 echo "aleph:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
 """
 
