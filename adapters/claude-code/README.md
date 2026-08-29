@@ -23,7 +23,7 @@ Both reach the **live** funes service node (loopback MCP on :4040); the service 
 (`systemd --user` unit).
 
 - **Door 1 — the MCP tools.** Claude Code's `mcpServers.funes` entry is `type: http`
-  pointing at the channel, with a **`headersHelper`** (`scripts/funes-cli.sh token`) instead
+  pointing at the channel, with a **`headersHelper`** (`scripts/tlon-cli.sh token`) instead
   of a static bearer. Claude Code runs the helper on every connect and reconnect; it mints a
   **fresh** funes token for `(TLON_THREAD, TLON_AUTHOR)` each time, so auth survives a funes
   restart and a 401 auto-refreshes. No token is ever written to disk. pi's adapters adapter

@@ -22,7 +22,7 @@ a thin bridge from that harness's lifecycle to funes' one sovereign channel:
   model/context/session surface, not funes.
 - **`claude-code/`** — the Claude Code adapter (built). Same two doors, adapted to Claude Code's own
   mechanisms: the MCP tools via `mcpServers.funes` `type:http` with a **`headersHelper`**
-  (`scripts/funes-cli.sh token`) that mints a FRESH token per connect — so unlike pi's static bearer,
+  (`scripts/tlon-cli.sh token`) that mints a FRESH token per connect — so unlike pi's static bearer,
   auth survives a funes restart — and the brief via a `SessionStart` hook (`brief-hook.sh`). Both are
   scoped to the session by `funes:claude`'s `--mcp-config`/`--settings` launch flags, so a plain
   `claude` is untouched and nothing is merged into `~/.claude`. See `claude-code/README.md`.
@@ -74,7 +74,7 @@ Paste it into a fresh pi pane, then point pi at adapters:
   `"skills": [".../modules/adapters/skills/*"]`.
 - an `mcp.json` (see `pi/mcp.json.example`) points `pi-mcp-adapter` at
   `http://127.0.0.1:${TLON_MCP_PORT}/mcp` with `Authorization` set to a `!command`
-  (`scripts/funes-cli.sh bearer`) that mints a fresh token per connect.
+  (`scripts/tlon-cli.sh bearer`) that mints a fresh token per connect.
 
 The env contract is identity-only (`TLON_MCP_URL`, `TLON_THREAD`, `TLON_AUTHOR`). The token
 is NEVER frozen in env — both doors mint per connect against the URL's `/mint` endpoint, so a

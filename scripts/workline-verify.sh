@@ -12,7 +12,7 @@ tid="${1:?usage: workline-verify.sh <thread-id> <slug>}"
 slug="${2:?usage: workline-verify.sh <thread-id> <slug>}"
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-cli="$root/scripts/funes-cli.sh"
+cli="$root/scripts/tlon-cli.sh"
 
 # One verifier per workline at a time: a duplicate dispatch (bus redelivery, a manual re-run
 # racing the auto one) exits quietly instead of double-running gates and double-advancing.

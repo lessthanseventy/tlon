@@ -80,8 +80,8 @@ defmodule Console.Profiles do
   (`tertius-machine`), glm-5.2, on the root machine thread. Design:
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`.
 
-  - **Machine-scope funes citizen.** Its MCP (`@tertius_funes_mcp`) binds every token to scope
-    `machine` (via `funes-cli.sh bearer`), so its posts/facts/dones stay on machine threads, off
+  - **Machine-scope tlon citizen.** Its MCP (`@tertius_mcp`) binds every token to scope
+    `machine` (via `tlon-cli.sh bearer`), so its posts/facts/dones stay on machine threads, off
     project threads (DB scope CHECK). `directTools` are the record/read verbs + `machine_overview`
     (the cross-leaf read); `excludeTools` cuts the cross-thread verbs (`consult_peer`, `open_thread`,
     `close_thread`) for self-containment. Model-to-model consultation is `/consult`+`/fresh`.
@@ -133,7 +133,7 @@ defmodule Console.Profiles do
   # `curl`ing it, `ss -tlnp`, and `mise run funes:doctor|logs` ALWAYS fail here regardless of whether
   # funes is up — `allowLocalBinding` only permits binding within that netns, and the socat proxy that
   # carries external traffic refuses loopback targets with a 403. There is no bash route, by design.
-  # The @tlon_funes_mcp tools are unaffected: pi opens that connection from its own process, outside
+  # The @tlon_mcp tools are unaffected: pi opens that connection from its own process, outside
   # bubblewrap (same reason model API calls work). This matters more for Tlön than for the
   # interactive agent — it runs autonomously, so a bash probe returning 000 with nobody to correct it
   # is how a coworker talks itself into "funes is down" and stops posting. Use the funes tools; a
@@ -317,12 +317,12 @@ defmodule Console.Profiles do
   # restart even before the flake registers it into the base config (which needs a home:switch).
   @footer_extension "#{@repo}/modules/adapters/footer/src/footer.ts"
 
-  # The machine-scope funes surface (see § "The tertius coworker" in the moduledoc for why the tools
-  # are cut this way). Base tool set; `@tertius_funes_mcp` adds the cross-leaf read on top.
-  @tlon_funes_mcp %{
-    "funes" => %{
+  # The machine-scope tlon surface (see § "The tertius coworker" in the moduledoc for why the tools
+  # are cut this way). Base tool set; `@tertius_mcp` adds the cross-leaf read on top.
+  @tlon_mcp %{
+    "tlon" => %{
       "url" => "${TLON_MCP_URL}",
-      "headers" => %{"Authorization" => "!#{@repo}/scripts/funes-cli.sh bearer"},
+      "headers" => %{"Authorization" => "!#{@repo}/scripts/tlon-cli.sh bearer"},
       "directTools" => [
         "post_message",
         "bank_fact",
@@ -341,11 +341,11 @@ defmodule Console.Profiles do
   # self-contained worker — and `staff_leaf`, the sanctioned kick-off verb (open+assign+brief; the
   # cockpit's leaf sweep stands up the terminal). Workers don't get it direct: staffing new leaves
   # is the vantage's move, same cut as spawn_crew staying a leader verb.
-  @tertius_funes_mcp update_in(
-                       @tlon_funes_mcp,
-                       ["funes", "directTools"],
-                       &(&1 ++ ["machine_overview", "staff_leaf"])
-                     )
+  @tertius_mcp update_in(
+                 @tlon_mcp,
+                 ["tlon", "directTools"],
+                 &(&1 ++ ["machine_overview", "staff_leaf"])
+               )
 
   # The tertius persona → `system_prompt.md` (`--append-system-prompt`). The vantage-not-worker role.
   @tertius_role """
@@ -456,7 +456,7 @@ defmodule Console.Profiles do
   @archetypes %{
     surveyor: %{
       model: @glm,
-      mcp: @tertius_funes_mcp,
+      mcp: @tertius_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @tertius_role,
@@ -464,7 +464,7 @@ defmodule Console.Profiles do
     },
     reviewer: %{
       model: @sonnet,
-      mcp: @tlon_funes_mcp,
+      mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
       system_prompt: @reviewer_role,
@@ -472,7 +472,7 @@ defmodule Console.Profiles do
     },
     builder: %{
       model: @sonnet,
-      mcp: @tlon_funes_mcp,
+      mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @builder_role,
@@ -480,7 +480,7 @@ defmodule Console.Profiles do
     },
     planner: %{
       model: @sonnet,
-      mcp: @tlon_funes_mcp,
+      mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @planner_role,
@@ -490,7 +490,7 @@ defmodule Console.Profiles do
     # own paths (journal/notes vs the ficciones repo). Tunable, not final.
     researcher: %{
       model: @sonnet,
-      mcp: @tlon_funes_mcp,
+      mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @researcher_role,
@@ -498,7 +498,7 @@ defmodule Console.Profiles do
     },
     assistant: %{
       model: @sonnet,
-      mcp: @tlon_funes_mcp,
+      mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @assistant_role,

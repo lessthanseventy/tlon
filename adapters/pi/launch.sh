@@ -9,7 +9,7 @@ set -euo pipefail
 
 adapter="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$adapter/../../.." && pwd)"
-cli="$repo/scripts/funes-cli.sh"
+cli="$repo/scripts/tlon-cli.sh"
 
 provider="" model="" thinking=""
 while [ $# -gt 0 ]; do

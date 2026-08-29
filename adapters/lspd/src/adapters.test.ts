@@ -37,7 +37,7 @@ describe("adapterForFile — route a file to its language server", () => {
     ["/x/src/extension.ts", "typescript"],
     ["/x/src/component.tsx", "typescript"],
     ["/x/flake.nix", "nix"],
-    ["/x/scripts/funes-cli.sh", "bash"],
+    ["/x/scripts/tlon-cli.sh", "bash"],
     ["/x/package.json", "json"],
     ["/x/README.md", null], // markdown — no adapter (yet)
     ["/x/no-extension", null],

@@ -159,7 +159,7 @@ defmodule Server.Workline do
   end
 
   @doc """
-  Complete a parked gate — the operator's verb (funes-cli `approve`). RE-VERIFIES the owed
+  Complete a parked gate — the operator's verb (tlon-cli `approve`). RE-VERIFIES the owed
   artifact before flipping: a flag-parked intent (or an artifact that vanished since the
   park) cannot ride approval past the invariant. `{:ok, thread}`,
   `{:error, {:artifact_missing, why}}` (still parked), or `{:error, :nothing_awaiting}`.

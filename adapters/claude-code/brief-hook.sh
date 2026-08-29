@@ -12,7 +12,7 @@ thread="${TLON_THREAD:-}"
 [ -n "$thread" ] || exit 0
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-brief="$("$here/../../../scripts/funes-cli.sh" dossier "$thread" 2>/dev/null || true)"
+brief="$("$here/../../../scripts/tlon-cli.sh" dossier "$thread" 2>/dev/null || true)"
 [ -n "$brief" ] || exit 0
 
 printf '# funes — your thread #%s\n\n%s\n' "$thread" "$brief"

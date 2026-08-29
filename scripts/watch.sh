@@ -4,7 +4,7 @@
 # re-running tests by hand.
 #
 #   scripts/watch.sh mise exec -- mix test              # watch cwd, run the suite on change
-#   scripts/watch.sh -w modules/funes -- mise exec -- mix test
+#   scripts/watch.sh -w modules/server -- mise exec -- mix test
 #   scripts/watch.sh bun test path/to/thing.test.ts     # a narrower scope
 #
 # For an AGENT: run it in the background (Claude Code: Bash run_in_background; pi: run it

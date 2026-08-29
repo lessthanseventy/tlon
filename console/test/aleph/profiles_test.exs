@@ -16,7 +16,7 @@ defmodule Console.ProfilesTest do
     "defaultModel" => "deepseek-v4-flash",
     "skills" => ["/repo/modules/adapters/skills/*"]
   }
-  @base_mcp %{"mcpServers" => %{"funes" => %{"url" => "http://x/mcp"}}}
+  @base_mcp %{"mcpServers" => %{"tlon" => %{"url" => "http://x/mcp"}}}
 
   describe "render/3 — a profile is a diff over the base config" do
     test "drops the named extensions, keeps the rest" do
@@ -109,22 +109,22 @@ defmodule Console.ProfilesTest do
     test "wires funes on the machine scope, keeps the adapters/pi adapter, sockets allowed in the sandbox" do
       p = Profiles.fetch("tertius")
       # Not severed: a funes server whose token binds to the machine thread (via the env
-      # funes-cli.sh mints from), so Tlön gets its OWN dossier/logbook without a project bleed.
-      assert %{"funes" => funes} = p.mcp
-      assert funes["url"] == "${TLON_MCP_URL}"
-      assert funes["headers"]["Authorization"] =~ "funes-cli.sh bearer"
+      # tlon-cli.sh mints from), so Tlön gets its OWN dossier/logbook without a project bleed.
+      assert %{"tlon" => tlon} = p.mcp
+      assert tlon["url"] == "${TLON_MCP_URL}"
+      assert tlon["headers"]["Authorization"] =~ "tlon-cli.sh bearer"
       # The adapters/pi funes adapter (brief + auto-capture) is KEPT now that it points at the machine thread.
       assert p.drop_extensions == []
       assert p.sandbox["network"]["allowAllUnixSockets"] == true
     end
 
     test "cuts the boundary-crossing funes tools (self-containment) but keeps the record/read verbs" do
-      funes = Profiles.fetch("tertius").mcp["funes"]
+      tlon = Profiles.fetch("tertius").mcp["tlon"]
       # consult_peer (ask other local coworkers) + open/close_thread (cross-thread) break isolation.
-      for cut <- ["consult_peer", "open_thread", "close_thread"], do: assert(cut in funes["excludeTools"])
+      for cut <- ["consult_peer", "open_thread", "close_thread"], do: assert(cut in tlon["excludeTools"])
       # its own machine-work loop stays: post/bank/record/brief/habit.
       for kept <- ["post_message", "bank_fact", "record_done", "get_brief", "propose_habit"],
-          do: assert(kept in funes["directTools"])
+          do: assert(kept in tlon["directTools"])
     end
 
     test "adds the generic footer back (its own package, not swept up by the adapters/pi drop)" do
@@ -245,7 +245,7 @@ defmodule Console.ProfilesTest do
     end
 
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
-      assert "machine_overview" in Profiles.fetch("tertius").mcp["funes"]["directTools"]
+      assert "machine_overview" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
     end
   end
 
@@ -287,8 +287,8 @@ defmodule Console.ProfilesTest do
       # the adapters/pi funes adapter is KEPT now (brief + auto-capture pointed at the machine thread)
       assert Enum.any?(settings["extensions"], &String.contains?(&1, "/adapters/pi/"))
       mcp = Jason.decode!(File.read!(Path.join(dir, "mcp.json")))
-      assert mcp["mcpServers"]["funes"]["url"] == "${TLON_MCP_URL}"
-      assert "consult_peer" in mcp["mcpServers"]["funes"]["excludeTools"]
+      assert mcp["mcpServers"]["tlon"]["url"] == "${TLON_MCP_URL}"
+      assert "consult_peer" in mcp["mcpServers"]["tlon"]["excludeTools"]
       assert Jason.decode!(File.read!(Path.join(dir, "sandbox.json")))["enabled"] == true
       # permission-system fail-closes to "ask" without a config in PI_CODING_AGENT_DIR, so the
       # coworker gets its own config in the nested extension dir
@@ -517,7 +517,7 @@ defmodule Console.ProfilesTest do
       assert r.settings["defaultModel"] == "glm-5.2"
       assert r.settings["defaultProvider"] == "ollama-cloud"
       assert r.settings["defaultThinkingLevel"] == "medium"
-      assert "machine_overview" in r.mcp["mcpServers"]["funes"]["directTools"]
+      assert "machine_overview" in r.mcp["mcpServers"]["tlon"]["directTools"]
     end
 
     test "fetch('reviewer') INTENTIONALLY flips glm-5.2 → claude-sonnet-5 (A2: reviewer is not live-spawned)" do

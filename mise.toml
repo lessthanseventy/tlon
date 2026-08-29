@@ -87,7 +87,7 @@ run = "journalctl --user -u funes -n 80 -f"
 # there. Thin and deliberate — operate access, NOT a second cockpit (aleph is the rich surface).
 [tasks."server:spawn"]
 description = "server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
-run = "scripts/funes-cli.sh spawn"
+run = "scripts/tlon-cli.sh spawn"
 
 [tasks."server:ledger"]
 description = "server: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
@@ -100,19 +100,19 @@ run = "scripts/workline-verify.sh"
 
 [tasks."server:cli"]
 description = "server: the CLI passthrough — mise run server:cli -- <subcommand> [args] (workline/approve/post/…)"
-run = "scripts/funes-cli.sh"
+run = "scripts/tlon-cli.sh"
 
 [tasks."server:roster"]
 description = "server: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service"
-run = "scripts/funes-cli.sh roster"
+run = "scripts/tlon-cli.sh roster"
 
 [tasks."server:dossier"]
 description = "server: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool"
-run = "scripts/funes-cli.sh dossier"
+run = "scripts/tlon-cli.sh dossier"
 
 [tasks."server:post"]
 description = "server: post to a thread as the operator from the shell — parity with the agents' post_message"
-run = "scripts/funes-cli.sh post"
+run = "scripts/tlon-cli.sh post"
 
 # Launch Claude Code as a funes citizen. No arg → a fresh thread; a numeric thread-id →
 # JOIN it (resume across a /clear). Scopes the funes MCP server (fresh token per
@@ -271,7 +271,7 @@ dir = "modules/console"
 # Self-heals before launch, fully: Tlön sessions are NOT meant to survive teardown, so kill the
 # aleph-tertius tmux server up front. A crashed cockpit leaves that server squatting port 4041 via an
 # inherited fd (the reaper leaves tmux alone by design), so killing it is what actually frees the
-# port — then aleph-reap.sh clears any beam still holding it. A fresh coworker spawns on entry.
+# port — then console-reap.sh clears any beam still holding it. A fresh coworker spawns on entry.
 # The coworker lives on its OWN tmux server (-L aleph-tertius, persistence-free config from the
 # profile dir) — never the default server, where resurrect/continuum would restore it stale.
 run = """
@@ -279,7 +279,7 @@ run = """
 if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "console:run — killed the aleph-tertius tmux server (fresh coworker on entry)"; fi
 # A zombie `tlon` session on the DEFAULT server (no socket isolation).
 if tmux kill-session -t tlon 2>/dev/null; then echo "console:run — dropped a legacy tlon session from the default tmux server"; fi
-../../scripts/aleph-reap.sh || exit $?
+../../scripts/console-reap.sh || exit $?
 # Apply any pending migrations to the dev scratch db BEFORE launch. A fresh funes slice
 # (e.g. the consult migration) would otherwise trip the behind-DB guard and refuse to boot,
 # forcing a manual `console:setup`. Safe to auto-apply here: this is the throwaway dev db and
@@ -298,7 +298,7 @@ TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT=/home/andrew/projects/ficcione
 description = "console: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, kill the aleph-tertius tmux server (+ any legacy default-server tlon session), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use console:reset:db to wipe data."
 dir = "modules/console"
 run = """
-../../scripts/aleph-reap.sh || true
+../../scripts/console-reap.sh || true
 if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "console:reset — killed the aleph-tertius tmux server (next entry recreates it fresh)"; else echo "console:reset — no aleph-tertius tmux server"; fi
 if tmux kill-session -t tlon 2>/dev/null; then echo "console:reset — dropped a stray tlon session from the default tmux server"; fi
 mix clean >/dev/null 2>&1 && echo "console:reset — mix clean (fresh compile on next console:run)"
@@ -317,7 +317,7 @@ echo "console:reset — done. Run 'mise run console:run' for a fresh, wired cock
 description = "console: NUKE + launch — full clean (mix clean, kill every stale tmux server/session, reap the cockpit + port 4041) then a fresh compile-and-boot. The 'guarantee I'm running the latest code' escape hatch; slower than console:run (full recompile). Data (threads/messages) is UNTOUCHED — use console:reset:db to wipe."
 dir = "modules/console"
 run = """
-../../scripts/aleph-reap.sh || true
+../../scripts/console-reap.sh || true
 if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "console:fresh — killed the aleph-tertius tmux server"; fi
 if tmux kill-session -t tlon 2>/dev/null; then echo "console:fresh — dropped a stray tlon session from the default tmux server"; fi
 mix clean >/dev/null 2>&1 && echo "console:fresh — mix clean (forcing a full recompile)"

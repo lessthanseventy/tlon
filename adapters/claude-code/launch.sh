@@ -15,7 +15,7 @@ set -euo pipefail
 
 adapter="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$adapter/../../.." && pwd)"
-cli="$repo/scripts/funes-cli.sh"
+cli="$repo/scripts/tlon-cli.sh"
 
 # If the environment already carries a funes identity (e.g. aleph's Tlön pane exported it
 # before exec'ing this launcher), keep it as-is — per-connect minting targets TLON_MCP_URL's

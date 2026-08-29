@@ -127,7 +127,7 @@ the same commands, which is the one control loop §3 asks for:
 The **always-up channel** is a headless service, distinct from the `funes:serve` dev iex:
 a self-contained local `mix release` run by `systemd.user.services.funes` (flake.nix) —
 loopback, the **real XDG db**, migrate-on-boot (`Funes.Release.migrate/0` via
-`bin/funes eval`, so funes never serves on a schema it can't repair), and a named node +
+`bin/server eval`, so funes never serves on a schema it can't repair), and a named node +
 cookie (the release's `rel/env.sh.eex`) so the operator can reach the live node:
 
 - `mise run funes:release` — build the release the service runs.
@@ -137,7 +137,7 @@ cookie (the release's `rel/env.sh.eex`) so the operator can reach the live node:
 - `mise run funes:logs` — follow the service's journal.
 
 The **mise parity pack** — operate the live channel from the shell, our peer to the
-agents' MCP tools (all via `scripts/funes-cli.sh` → `bin/funes rpc` into the running node,
+agents' MCP tools (all via `scripts/tlon-cli.sh` → `bin/server rpc` into the running node,
 so the service must be up):
 
 - `mise run funes:spawn -- "<title>" <agent>` — open a thread, staff+register the agent,

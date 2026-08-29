@@ -28,7 +28,7 @@ defmodule Server.Workline.Brief do
   @doc "The parked-gate notice — what's waiting and the operator's completion verb."
   def gate_message(%Thread{} = t) do
     "⏸ workline #{t.slug} is parked at #{t.stage} — this transition is the operator's. " <>
-      "Approve with: mise run funes:cli -- approve #{t.id} (funes-cli approve #{t.id})."
+      "Approve with: mise run server:cli -- approve #{t.id} (tlon-cli approve #{t.id})."
   end
 
   defp playbook(%{stage: "spec"}),
