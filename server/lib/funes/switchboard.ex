@@ -1,6 +1,6 @@
 defmodule Server.Switchboard do
   @moduledoc """
-  The switchboard — **liveness over the durable bus** (§10, §5b.2, aleph §6). A
+  The switchboard — **liveness over the durable bus** (§10, §5b.2, console §6). A
   message is already a row when it is posted (`Server.Channel`); the switchboard's
   only job is to make delivery *live*: decide who to wake and poke their pane
   through the arbiter. It must never be what makes a message *exist* — kill the
@@ -141,7 +141,7 @@ defmodule Server.Switchboard do
     count
   end
 
-  # Who a message wakes (the addressed-delivery model, aleph §2):
+  # Who a message wakes (the addressed-delivery model, console §2):
   #   * a REPLY  -> the author of the message it replies to
   #   * @mentions -> the named coworkers
   #   * neither (a plain top-level post) -> the thread's LEAD (its assigned agent)

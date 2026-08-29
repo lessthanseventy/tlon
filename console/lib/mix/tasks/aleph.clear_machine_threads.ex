@@ -3,9 +3,9 @@ defmodule Mix.Tasks.Console.ClearMachineThreads do
   @moduledoc """
   A clean-slate reset: machine threads are disposable, so clear them ONCE, by hand, so the only
   pre-existing machine thread the cockpit finds afterward is the standing coworker's (opened fresh on
-  the next `aleph:run`) — not stale leaves that `ensure_thread_sessions` would spawn windows for.
+  the next `console:run`) — not stale leaves that `ensure_thread_sessions` would spawn windows for.
 
-  Boots funes as a READER (no MCP, no switchboard — this is a one-shot script, not a live
+  Boots server as a READER (no MCP, no switchboard — this is a one-shot script, not a live
   service), against `TLON_DB`, then deletes every `scope == "machine"` thread and its messages via
   `Server.Channel.clear_machine_threads/0`. Project-scope threads are never touched. Prints how
   many threads/messages it cleared.
@@ -27,10 +27,10 @@ defmodule Mix.Tasks.Console.ClearMachineThreads do
       {:ok, _apps} ->
         {:ok, %{threads: threads, messages: messages}} = Channel.clear_machine_threads()
 
-        Mix.shell().info("aleph:clear-machine-threads — cleared #{threads} machine thread(s), #{messages} message(s).")
+        Mix.shell().info("console:clear-machine-threads — cleared #{threads} machine thread(s), #{messages} message(s).")
 
       {:error, reason} ->
-        Mix.shell().error("aleph:clear-machine-threads could not boot funes: #{inspect(reason)}")
+        Mix.shell().error("console:clear-machine-threads could not boot server: #{inspect(reason)}")
     end
   end
 end

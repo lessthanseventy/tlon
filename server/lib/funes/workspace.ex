@@ -1,7 +1,7 @@
 defmodule Server.Workspace do
   @moduledoc """
   A workspace (workspaces/orbis Slice 1): a first-class composition — a git-tracked scope
-  (`paths`), a `roster` of archetype instances, and free-form `knobs` — that aleph
+  (`paths`), a `roster` of archetype instances, and free-form `knobs` — that console
   reads to drive its picker/survey/spawn. Compositions are DATA (this table),
   capabilities are nix (the archetype templates); disjoint, so the two never conflict.
 

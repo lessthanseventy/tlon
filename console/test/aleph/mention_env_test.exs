@@ -21,14 +21,14 @@ defmodule Console.MentionEnvTest do
       System.put_env("TLON_MENTION_LABEL", "anon")
 
       assert Mention.route(%{author: "tertius-machine", body: "@hronir-machine who are you", thread_id: 1}, [], @roster) ==
-               [{"hronir", "[funes thread #1] someone: @hronir-machine who are you"}]
+               [{"hronir", "[tlon thread #1] someone: @hronir-machine who are you"}]
     end
 
     test "any other value keeps the real label" do
       System.put_env("TLON_MENTION_LABEL", "real")
 
       assert Mention.route(%{author: "tertius-machine", body: "@hronir-machine hi", thread_id: 1}, [], @roster) ==
-               [{"hronir", "[funes thread #1] tertius-machine: @hronir-machine hi"}]
+               [{"hronir", "[tlon thread #1] tertius-machine: @hronir-machine hi"}]
     end
   end
 end

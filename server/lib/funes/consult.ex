@@ -6,7 +6,7 @@ defmodule Server.Consult do
   sides for the life of the consult.
 
   The invariants the design review pinned: the caller never names a thread — only a peer
-  agent name, resolved by funes; funes mediates every write through `Server.Channel.post`
+  agent name, resolved by server; server mediates every write through `Server.Channel.post`
   (the single writer); authors are always real identities; and the mirror is a
   bidirectional bridge keyed on `consult_id` with an echo guard (`mirrored`), so a
   mirrored copy is never re-mirrored.
@@ -119,7 +119,7 @@ defmodule Server.Consult do
   end
 
   # The ask: a message on the peer's thread, authored by the caller's real identity, carrying
-  # the caller's thread as origin. funes mediates the write through Channel.post — the caller
+  # the caller's thread as origin. server mediates the write through Channel.post — the caller
   # never writes cross-thread directly. The ask IS the consult root: its own id becomes the
   # consult_id (guaranteed unique, and within SQLite's signed-integer range — a random 64-bit
   # id overflows it).

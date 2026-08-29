@@ -335,7 +335,7 @@ defmodule Console.Stack do
   # matters when the port is black-holed, where it bounds how long the cockpit's probe blocks.
   @funes_probe_timeout_ms 150
 
-  @doc "Whether the funes always-up service is reachable on :4040 (the systemd service, NOT aleph's own 4041 workspace)."
+  @doc "Whether the server always-up service is reachable on :4040 (the systemd service, NOT console's own 4041 workspace)."
   def funes_up? do
     case :gen_tcp.connect(~c"127.0.0.1", 4040, [], @funes_probe_timeout_ms) do
       {:ok, socket} ->
@@ -353,7 +353,7 @@ defmodule Console.Stack do
   """
   def tlon_up? do
     case Console.Space.first_workspace() do
-      # No workspace at all (funes down; the fallback Workspace is gone, reshape slice A) — nothing is up.
+      # No workspace at all (server down; the fallback Workspace is gone, reshape slice A) — nothing is up.
       nil ->
         false
 

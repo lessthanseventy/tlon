@@ -40,7 +40,7 @@ defmodule Server.Presence.Engine.Manual do
   A HAND toggle — the concrete backend the dogfood hub runs. An engine is clocked out iff the
   operator has marked it so: it is in `Server.Presence.clocked_out_engines/0` (the app-env set,
   flipped by `Server.Presence.clock_out/1` / `clock_in/1`). No vendor is named or polled (§8) —
-  when the scarce Claude window is spent, the operator flips it from `funes:console` and the
+  when the scarce Claude window is spent, the operator flips it from `server:console` and the
   switchboard stops poking Claude sessions; a real rate-limit reader is a later, local backend
   swapped in the same seam. Tests drive it the same way (`put_env :clocked_out_engines`).
   """

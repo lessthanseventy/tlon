@@ -13,7 +13,7 @@ defmodule Console.Panel.Leaves do
   workspace_id, stage, awaiting, blocking}], selected, attached}` (the last four nil on a plain chat
   thread) — `selected` (cursor) and `attached` (the leaf whose own window IS the
   center, persistent) both injected by the View, either `nil`; either washes the row :selected — or
-  `nil` when funes is down / there are no machine threads. Pure over `Console.Orbis.rollup/0`.
+  `nil` when server is down / there are no machine threads. Pure over `Console.Orbis.rollup/0`.
   """
   @behaviour Console.Panel
 

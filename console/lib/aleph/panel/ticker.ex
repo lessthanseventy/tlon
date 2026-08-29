@@ -1,6 +1,6 @@
 defmodule Console.Panel.Ticker do
   @moduledoc """
-  The bottom band framing the Tlön center: a one-line, always-visible pulse of the LATEST funes
+  The bottom band framing the Tlön center: a one-line, always-visible pulse of the LATEST server
   activity event, directly under the terminal (`Console.Panel.Activity` is the full newest-first
   feed in the right sidebar; this is the footer-style summary). Shares `Activity.summarize/1` so
   the pulse and the feed never drift on how an event reads.
@@ -20,8 +20,8 @@ defmodule Console.Panel.Ticker do
   @impl Console.Panel
   def render(%{events: [latest | _]}, rect) do
     {icon, style, text} = Activity.summarize(latest)
-    Console.Panel.clip([[{"funes  ", :header}, {icon, style}, {text, style}]], rect)
+    Console.Panel.clip([[{"tlon  ", :header}, {icon, style}, {text, style}]], rect)
   end
 
-  def render(_data, rect), do: Console.Panel.clip([line("funes · idle", :dim)], rect)
+  def render(_data, rect), do: Console.Panel.clip([line("tlon · idle", :dim)], rect)
 end

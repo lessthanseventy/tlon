@@ -1,7 +1,7 @@
 defmodule Console.MachineChat.Host do
   @moduledoc """
-  The machine-chat interaction state and its pure reducers — the brain the `aleph.machine_chat`
-  termbox loop wraps. Kept free of IO so it's headlessly testable (aleph's law: unit-test the
+  The machine-chat interaction state and its pure reducers — the brain the `console.machine_chat`
+  termbox loop wraps. Kept free of IO so it's headlessly testable (console's law: unit-test the
   pure seams, never the TTY loop).
 
   Slack-shaped (the 2026-08 reshape): the surface is a THREADS rail + ONE open conversation, so

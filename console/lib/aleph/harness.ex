@@ -21,7 +21,7 @@ defmodule Console.Harness do
   @moduledoc """
   Environment-resolved harness binding (per-thread-agents Slice D). A coworker is
   archetype × harness-binding × model; the archetype no longer hardcodes *how* it runs — the
-  binding is resolved from the model + where aleph is running (`Console.Config.environment/0`):
+  binding is resolved from the model + where console is running (`Console.Config.environment/0`):
 
     * **home** (personal Anthropic subscription): an anthropic-provider model binds to
       `:claude_code` — the official harness. Driving a personal Claude subscription through a

@@ -8,7 +8,7 @@ defmodule Server.MCP.Gateway do
 
   A pane's `TLON_TOKEN` is never frozen into its env at spawn time — a frozen token
   would strand the pane the moment the token model changes or the world secret
-  regenerates, since a long-lived pane can outlive either even across an aleph
+  regenerates, since a long-lived pane can outlive either even across an console
   restart. Instead, an adapter mints a fresh token on every connect against the SAME
   origin as its `TLON_MCP_URL` (so it always hits the right world — aleph's `.dev`
   world on 4041, or the always-up service's XDG world on 4040), and identity travels
@@ -22,7 +22,7 @@ defmodule Server.MCP.Gateway do
 
   Unauthenticated, by design. This is a single-human loopback machine (§8: how a
   machine authenticates is local configuration), Bandit binds 127.0.0.1 only, and
-  the mint is the same operation `bin/funes rpc` already exposes to any local shell.
+  the mint is the same operation `bin/server rpc` already exposes to any local shell.
   Minting a token grants no access by itself — the bearer still has to connect to
   `/mcp` and `register` to bind a session, and `register` supersedes zombies. A
   remote attacker can't reach loopback; a local process already has richer attack

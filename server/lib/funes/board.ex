@@ -1,6 +1,6 @@
 defmodule Server.Board do
   @moduledoc """
-  The board's read models (aleph §4): pure aggregates a TUI (later a LiveView)
+  The board's read models (console §4): pure aggregates a TUI (later a LiveView)
   renders, composed from the contexts. §7 — the board holds no truth of its own, it
   reads the public context functions. `brief/1` is the focused thread's brief,
   and is deliberately the SAME one-call read that catches a re-entering session up

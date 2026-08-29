@@ -3,10 +3,10 @@ defmodule Console.Cockpit do
   The live loop and the cockpit's one brain (design §8). It *is* the dispatcher: termbox2 paints
   (output-only), `Raxol.Terminal.Driver` feeds it `:key`/`:resize` events as GenServer casts, and
   `Server.Bus` events arrive as plain messages. Every input, resize, Bus event, and tick reloads
-  the funes reads and repaints. Holds the only shared state — the active space and the focused
+  the server reads and repaints. Holds the only shared state — the active space and the focused
   thread (§8) — and caches nothing about tmux past the paint (§5).
 
-  Not supervised at app boot: it grabs the TTY, so it runs only under `mix aleph.run` in a real
+  Not supervised at app boot: it grabs the TTY, so it runs only under `mix console.run` in a real
   terminal, never during `mix test`.
   """
   use GenServer
@@ -62,7 +62,7 @@ defmodule Console.Cockpit do
   # orchestrator) as DATA, not constants.
 
   # tmux is a first-class stack citizen here: each Workspace's center is a real `tmux attach`, so the
-  # workspace gets mouse, windows, and copy-mode, and it SURVIVES aleph restarts. Session/socket are
+  # workspace gets mouse, windows, and copy-mode, and it SURVIVES console restarts. Session/socket are
   # id-derived (workspace_session/1, workspace_socket/1, near tlon_tmux/2) — not name-derived — so a workspace
   # rename can't orphan the running session and two workspaces never collide.
 
@@ -78,7 +78,7 @@ defmodule Console.Cockpit do
   @machine_spawn_backoff_ms 5_000
 
   # Same backoff, per-thread: a staffed machine thread whose `tmux new-window`/`Spawn.join`
-  # keeps failing (funes hiccup, a stale agent) must not retry on every render either — see
+  # keeps failing (server hiccup, a stale agent) must not retry on every render either — see
   # `ensure_thread_sessions`.
   @thread_spawn_backoff_ms 5_000
 
@@ -94,7 +94,7 @@ defmodule Console.Cockpit do
   @resurrect_max_fails 3
   @resurrect_healthy_ms 5_000
 
-  # The funes identity the Tlön pi needs to wire its MCP client (`${TLON_MCP_URL}` in the profile's
+  # The server identity the Tlön pi needs to wire its MCP client (`${TLON_MCP_URL}` in the profile's
   # mcp.json + the bearer minted for TLON_THREAD/TLON_AUTHOR). Carried into the tmux SESSION env so
   # it survives a respawn — see funes_identity_flags/0.
   @funes_identity_env ~w(TLON_MCP_URL TLON_THREAD TLON_AUTHOR TLON_DB)
@@ -119,13 +119,13 @@ defmodule Console.Cockpit do
   # (additive to the Driver's modes, written after it starts); teardown's reset already clears 1002.
   @mouse_motion_enable "\e[?1002h"
 
-  @doc "Start the cockpit and block until the operator quits — the entry point `mix aleph.run` calls."
+  @doc "Start the cockpit and block until the operator quits — the entry point `mix console.run` calls."
   @spec run() :: :ok
   def run, do: run(0)
 
   # `strikes` = consecutive rapid crashes so far. The cockpit is an unlinked, monitored GenServer —
   # its crash surfaces here as a clean DOWN (a linked exit would kill this task before it restored
-  # the terminal). funes (Repo/Bus) and the session terminals are supervised and keep running, so a
+  # the terminal). server (Repo/Bus) and the session terminals are supervised and keep running, so a
   # crash relaunches a FRESH cockpit in place — a reconnect, not a cold boot — unless it's looping.
   defp run(strikes) do
     case GenServer.start(__MODULE__, %{}) do
@@ -143,11 +143,11 @@ defmodule Console.Cockpit do
         end
 
       {:error, {:tb_init_failed, code}} ->
-        note("aleph needs a real terminal (tb_init returned #{code}) — run this in ghostty.")
+        note("console needs a real terminal (tb_init returned #{code}) — run this in ghostty.")
         :ok
 
       {:error, reason} ->
-        note("aleph failed to start: #{inspect(reason)}")
+        note("console failed to start: #{inspect(reason)}")
         :ok
     end
   end
@@ -158,7 +158,7 @@ defmodule Console.Cockpit do
   #   {:resurrect, n}    — a crash; relaunch, now on strike n.
   #   {:stop, n}         — the nth crash in a row hit the ceiling; stay down.
   #   :dead_io           — a crash, but :standard_io died with it; a relaunch would raise on
-  #                        init's alt-screen writes ("aleph failed to start"), so stay down.
+  #                        init's alt-screen writes ("console failed to start"), so stay down.
   # `crash_report/1` is the clean-vs-crash oracle (nil = normal/shutdown). A run that lasted at
   # least @resurrect_healthy_ms resets the strike count, so an isolated crash always heals.
   def resurrect_decision(reason, prev_strikes, alive_ms, io_alive? \\ true) do
@@ -193,17 +193,17 @@ defmodule Console.Cockpit do
 
   defp act_on(:dead_io) do
     Console.CrashLog.append("resurrect skipped", "stdio died with the cockpit — staying down")
-    note("aleph crashed and its terminal is gone — staying down. Trace: #{Console.CrashLog.path()}")
+    note("console crashed and its terminal is gone — staying down. Trace: #{Console.CrashLog.path()}")
     :ok
   end
 
   defp act_on({:stop, n}) do
-    note("aleph crashed #{n}× in a row — staying down. Trace: #{Console.CrashLog.path()}")
+    note("console crashed #{n}× in a row — staying down. Trace: #{Console.CrashLog.path()}")
     :ok
   end
 
   defp act_on({:resurrect, n}) do
-    note("aleph crashed — recovering in place… (#{n}/#{@resurrect_max_fails})")
+    note("console crashed — recovering in place… (#{n}/#{@resurrect_max_fails})")
     run(n)
   end
 
@@ -212,7 +212,7 @@ defmodule Console.Cockpit do
     # Subscribe before the first read so nothing posted mid-boot is missed.
     Bus.subscribe_sessions()
     Bus.subscribe_threads()
-    # Explicit thinking/idle declarations (funes:presence) — the "typing" indicator's rich half.
+    # Explicit thinking/idle declarations (server:presence) — the "typing" indicator's rich half.
     Bus.subscribe_presence()
     # The global activity topic is a strict superset of messages_topic for `:message_posted`
     # (Bus.broadcast always publishes a message to both) — subscribing to messages_topic too
@@ -263,7 +263,7 @@ defmodule Console.Cockpit do
             # time (Console.Keymap) — `Enter`/click resolve it to that row's workspace id.
             survey_cursor: 0,
             # Orbis' second face (D2.1): `:survey` (Overview, the default) or `:author` (Panel.Author
-            # — create/delete funes workspaces). `a` toggles; Esc in `:author` steps back.
+            # — create/delete server workspaces). `a` toggles; Esc in `:author` steps back.
             orbis_face: :survey,
             # The author face's own per-row cursor (j/k), clamped to `Console.Workspaces.all/0`'s length
             # at keypress time — mirrors `survey_cursor`.
@@ -282,7 +282,7 @@ defmodule Console.Cockpit do
             # or the attached thread's conversation (:chat). The `v` verb flips it.
             center_view: :terminal,
             # The field editor's own state (D2.4 Chunk 2a): `%{id, field, sub, mode}` while `e` has
-            # opened it, else nil. VIEW cursors only — the workspace's data lives in funes and is
+            # opened it, else nil. VIEW cursors only — the workspace's data lives in server and is
             # re-read from `Console.Workspaces.all/0` every render (Console.Keymap).
             author_edit: nil,
             subscribed_thread: nil,
@@ -324,7 +324,7 @@ defmodule Console.Cockpit do
             # (View.focused_lead) — leaves_data/1 injects it for the render read AND yank/attach/
             # preview, so cursor indexing always matches the row order on screen.
             focused_lead: nil,
-            # The funes activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
+            # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
             # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`.
             activity: [],
             # Recently-seen `{tag, id}` keys (capped ~100) — the first-sight gate. A tagged event on
@@ -349,7 +349,7 @@ defmodule Console.Cockpit do
             # Threads already told "parked: leaf cap reached" — the note posts once, not per render.
             parked_noted: MapSet.new(),
             # Explicit thinking presence: thread_id => %{agent => started_at}. Seeded from the
-            # store (reconcile-on-connect), then maintained by the funes:presence Bus events.
+            # store (reconcile-on-connect), then maintained by the server:presence Bus events.
             thinking: thinking_snapshot(),
             # Transmitted kitty-graphics ids (design 2026-08-23 §Images) — the sync/2 cache so a
             # placement already on the tty isn't re-transmitted every frame.
@@ -428,7 +428,7 @@ defmodule Console.Cockpit do
     # above, and dropped on the way back — the keymap reads it to navigate, the cockpit never stores it.
     # `author_workspaces` (D2.2): the author face's own workspace list, derived per keypress like
     # `composer_thread_id` — `Console.Workspaces.all/0` is a cached GenServer call (no DB hit), so this
-    # keeps `Console.Keymap` a pure reducer with no funes call of its own.
+    # keeps `Console.Keymap` a pure reducer with no server call of its own.
     keymap_state =
       %{state | flash: nil}
       |> Map.put(:center_live?, center_terminal(state) != nil)
@@ -471,7 +471,7 @@ defmodule Console.Cockpit do
 
   # A left drag/release over the terminal body: forwarded to the PTY so tmux does the selecting (and
   # copies on release). Routed per-event by position — no drag state — so a motion that leaves the
-  # terminal simply stops forwarding. Anywhere else, a drag/release is not a gesture aleph acts on.
+  # terminal simply stops forwarding. Anywhere else, a drag/release is not a gesture console acts on.
   # `:move` is the atom raxol's InputParser emits for a button-motion SGR report; `:motion` is
   # accepted too so a raxol rename can't silently kill the live-drag forwarding.
   def handle_cast({:dispatch, %Event{type: :mouse, data: %{x: sx, y: sy, button: :left, action: action}}}, state)
@@ -551,7 +551,7 @@ defmodule Console.Cockpit do
 
   # Entering verify dispatches the DETERMINISTIC verifier (scripts/workline-verify.sh):
   # gates run + evidence recorded + advance-on-green, independent of the builder by
-  # construction. Fire-and-forget — the script reports through funes, not this process.
+  # construction. Fire-and-forget — the script reports through server, not this process.
   def handle_info({:workline_advanced, %{stage: "verify"} = thread}, state) do
     {:ok, _pid} =
       Task.start(fn ->
@@ -570,7 +570,7 @@ defmodule Console.Cockpit do
   end
 
   # Explicit presence: idempotent updates, so the double delivery on the focused thread
-  # (funes:presence + its thread topic) just re-writes the same entry.
+  # (server:presence + its thread topic) just re-writes the same entry.
   def handle_info({:presence_thinking, %{thread_id: tid, agent: agent, started_at: at}}, state) do
     # Server sends a DateTime; cockpit state holds unix seconds (Crew/presence subtract).
     at = Console.Presence.started_s(at)
@@ -618,7 +618,7 @@ defmodule Console.Cockpit do
   def handle_info(_msg, state), do: {:noreply, state}
 
   # Single source of truth for the cockpit's size. termbox only re-learns size in its poll path
-  # (which aleph never calls), so tb_resize/0 (mix.exs defect #3) must sync it first or
+  # (which console never calls), so tb_resize/0 (mix.exs defect #3) must sync it first or
   # tb_width()/tb_height() stay frozen at tb_init size.
   defp refresh_size(state) do
     :termbox2_nif.tb_resize()
@@ -760,8 +760,8 @@ defmodule Console.Cockpit do
     end
   end
 
-  # The funes handle of the coworker staffed on this message's thread (its lead), or nil.
-  # Read in-process (aleph boots funes); never crash the hub if the lookup fails.
+  # The server handle of the coworker staffed on this message's thread (its lead), or nil.
+  # Read in-process (console boots server); never crash the hub if the lookup fails.
   defp thread_lead(%{thread_id: tid}) when not is_nil(tid) do
     Server.thread_lead(tid)
   rescue
@@ -774,7 +774,7 @@ defmodule Console.Cockpit do
 
   # The tmux target workspace id for a call site that only has `state` (not a `Space.workspace?`-guarded
   # `active_key`) in scope — a background Bus handler, or a click that landed on a Workspace-only panel.
-  # `state.active_key` when it names a Workspace, else the funes-down/no-active-workspace fallback
+  # `state.active_key` when it names a Workspace, else the server-down/no-active-workspace fallback
   # (`Space.first_workspace/0`) — nil when no workspace exists at all; `tlon_run/2` no-ops on nil.
   defp active_workspace_id(%{active_key: key}) when Space.workspace?(key), do: key
 
@@ -786,7 +786,7 @@ defmodule Console.Cockpit do
   end
 
   # The active roster's LEAD window name (the center's tab label) for `workspace_id`, or nil (no roster
-  # / funes down).
+  # / server down).
   defp lead_window_name(workspace_id) do
     case Space.fetch(workspace_id) do
       %Space{roster: [lead | _]} -> Profiles.roster_entry(lead).name
@@ -1011,7 +1011,7 @@ defmodule Console.Cockpit do
 
   # The `m` verb landed: advance the coworker's driver model one step round the ring and persist
   # it (Console.Config). Honest about scope: the RUNNING coworker keeps its model — the override
-  # applies wherever Profiles.fetch flows on the next spawn (aleph:reset, or kill the pi window).
+  # applies wherever Profiles.fetch flows on the next spawn (console:reset, or kill the pi window).
   defp apply_effect({:cycle_coworker_model, profile_name}, state) do
     {:noreply, render(%{state | flash: cycle_model!(profile_name)})}
   rescue
@@ -1066,7 +1066,7 @@ defmodule Console.Cockpit do
   defp apply_effect({:coworker_knob, name, knob}, state), do: {:noreply, render(apply_coworker_knob!(state, name, knob))}
 
   # a/r on Memory's habits section: resolve the selected pending habit from the focus + cached read,
-  # act via funes, then null the memory cache so the pane reflects the shrunk queue on next render.
+  # act via server, then null the memory cache so the pane reflects the shrunk queue on next render.
   # A no-op (flash only) if the focus isn't on a selectable habit.
   defp apply_effect({:habit_action, action}, state) do
     case selected_habit(state) do
@@ -1169,9 +1169,9 @@ defmodule Console.Cockpit do
   @doc false
   # Register a workspace from `template` + the operator-typed `name` (D2.3's `n` verb). `{:ok, _}`
   # clears the input and flashes; `{:error, changeset}` (a blank OR duplicate name — both are the
-  # funes changeset's job, not re-validated here) flashes the reason and REOPENS the input with
+  # server changeset's job, not re-validated here) flashes the reason and REOPENS the input with
   # what was typed, so a rejected name can be edited and resubmitted rather than retyped from
-  # scratch. Wrapped like `create_thread`/`post_message` — a funes hiccup flashes, never crashes
+  # scratch. Wrapped like `create_thread`/`post_message` — a server hiccup flashes, never crashes
   # the cockpit.
   def register_workspace!(state, template, name) do
     case Workspaces.register(WorkspaceTemplates.new_workspace_attrs(template, name)) do
@@ -1194,7 +1194,7 @@ defmodule Console.Cockpit do
   @doc false
   # Remove workspace `id` (D2.5's second `d`). Guards against stranding the cockpit on a deleted
   # active workspace (falls back to `:orbis`) and clamps `author_cursor` to the shrunk list. A missing
-  # workspace (already gone) or a funes hiccup flashes, never crashes.
+  # workspace (already gone) or a server hiccup flashes, never crashes.
   def remove_workspace!(state, id) do
     case Workspaces.get(id) do
       nil ->
@@ -1229,7 +1229,7 @@ defmodule Console.Cockpit do
   @doc false
   # Apply one field edit (D2.4 Chunk 2a: the editor's type/scope rings, and the paths/roster
   # sub-list's add/remove) immediately — no draft/commit step, mirroring how Settings applies each
-  # change on the spot. `name` is immutable (`Workspace.edit_changeset` drops it — see funes/workspace.ex);
+  # change on the spot. `name` is immutable (`Workspace.edit_changeset` drops it — see server/workspace.ex);
   # nothing here special-cases it. Same missing/error/rescue shape as `register_workspace!`/
   # `remove_workspace!`. On success, re-clamps `author_edit.sub` against the POST-edit paths/roster
   # length (a removal can strand `sub` past the shrunk list, same reasoning as
@@ -1300,7 +1300,7 @@ defmodule Console.Cockpit do
     norm = Profiles.roster_entry(entry)
     next = Profiles.next_model(Profiles.instantiate(norm).model)
     Console.Config.put_coworker_model(norm.name, next)
-    "#{norm.name} driver → #{next.provider}/#{next.model} — applies on next spawn (aleph:reset)"
+    "#{norm.name} driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
   end
 
   defp apply_knob(entry, :yolo) do
@@ -1308,7 +1308,7 @@ defmodule Console.Cockpit do
     next = Console.Config.coworker_yolo(name) != true
     Console.Config.put_coworker_yolo(name, next)
     policy = if next, do: "yolo (auto-approve)", else: "ask"
-    "#{name} permissions → #{policy} — applies on next spawn (aleph:reset)"
+    "#{name} permissions → #{policy} — applies on next spawn (console:reset)"
   end
 
   # A short "field message, message" sentence from an Ecto changeset — surfaces e.g. a duplicate
@@ -1366,7 +1366,7 @@ defmodule Console.Cockpit do
 
   defp selected_leaf(_state), do: nil
 
-  # Kill the leaf's live `t<id>` window (if any), then hard-delete its thread through the funes
+  # Kill the leaf's live `t<id>` window (if any), then hard-delete its thread through the server
   # facade — it refuses the root machine thread, which flashes instead of half-deleting.
   defp delete_leaf!(state, id) do
     workspace_id = active_workspace_id(state)
@@ -1489,13 +1489,13 @@ defmodule Console.Cockpit do
   # `n`/new-thread path still calls spawn_onto/2 directly. Kept intact, teardown TBD.
   defp enter_or_spawn(thread_id, state) do
     case safe_terminal(thread_id) do
-      pid when is_pid(pid) -> "already live — type to use it, Ctrl+Space for aleph"
+      pid when is_pid(pid) -> "already live — type to use it, Ctrl+Space for console"
       nil -> spawn_onto(thread_id, state)
     end
   end
 
   # Spawn a harness as an embedded terminal on this thread: mint identity IN-PROCESS
-  # (Server.MCP.Spawn.join — aleph is the serving node) and start an Console.Terminal that runs the
+  # (Server.MCP.Spawn.join — console is the serving node) and start an Console.Terminal that runs the
   # launcher with the TLON_* env sourced (and TERM set, so the harness produces colour). One
   # native PTY per thread, rendered in the center. A raise/exit becomes a flash, never a crash.
   defp spawn_onto(thread_id, state) do
@@ -1505,7 +1505,7 @@ defmodule Console.Cockpit do
     case Spawn.join(thread_id, agent) do
       {:ok, %{exports: exports}} ->
         case safe_spawn_harness(thread_id, exports, cols: cols, rows: rows) do
-          {:ok, _pid} -> "session live — type to use it, Ctrl+Space for aleph"
+          {:ok, _pid} -> "session live — type to use it, Ctrl+Space for console"
           {:error, reason} -> "spawn failed: #{inspect(reason)}"
         end
 
@@ -1518,7 +1518,7 @@ defmodule Console.Cockpit do
     :exit, reason -> "spawn crashed: #{inspect(reason)}"
   end
 
-  # aleph key event → Ghostty.KeyEvent (public + tested: a missing mapping silently drops a key).
+  # console key event → Ghostty.KeyEvent (public + tested: a missing mapping silently drops a key).
   @doc false
   def ghostty_key(%{key: :char, char: c} = ev),
     do: %KeyEvent{key: char_key(c), utf8: c, mods: mods(ev), unshifted_codepoint: unshifted_codepoint(c)}
@@ -1569,7 +1569,7 @@ defmodule Console.Cockpit do
     %{state | render_scheduled?: true}
   end
 
-  # The frame is guarded at two grains. Each funes/tmux READ below degrades individually through
+  # The frame is guarded at two grains. Each server/tmux READ below degrades individually through
   # Board.safe_read — one bad read renders as that panel's quiet state while the rest of the frame
   # stays live — and this wrapper is the backstop for anything left (View.compose, the paint): log
   # and keep the previous frame's state instead of dying. The read seam is exactly where the
@@ -1590,7 +1590,7 @@ defmodule Console.Cockpit do
   defp do_render(state) do
     # Fill the probe cache (Tlön only) and find-or-spawn the Workspace's roster — both stateful,
     # both rate-limited, both OUT of the per-frame hot path. Each step degrades to the state it
-    # was handed, so a tmux/funes hiccup skips that step this frame instead of losing the frame.
+    # was handed, so a tmux/server hiccup skips that step this frame instead of losing the frame.
     state = Board.safe_read(:probes, state, fn -> ensure_probes(state) end)
     state = Board.safe_read(:workspace_roster, state, fn -> ensure_workspace_roster(state) end)
     state = Board.safe_read(:log_window, state, fn -> ensure_log_window(state) end)
@@ -1656,7 +1656,7 @@ defmodule Console.Cockpit do
       focused_session: state.focused_session,
       # The right rail's pinned BRIEF (slice D): the ATTACHED leaf's brief — only read while a
       # leaf holds the center (thread context), so no per-frame DB read in workspace context. nil
-      # (leaf gone, funes down) leaves the Brief placeholder up — the layout never jumps.
+      # (leaf gone, server down) leaves the Brief placeholder up — the layout never jumps.
       brief:
         Board.safe_read(:brief, nil, fn ->
           with {:leaf, id} <- state.focused_session,
@@ -1762,7 +1762,7 @@ defmodule Console.Cockpit do
 
   # The CREW sidebar's read: the active Workspace's roster joined with the tmux snapshot, the leaf
   # leads, and the thinking declarations (Console.Panel.Crew.coworkers/6). Lead lookups go one
-  # funes query per live leaf window — at most the leaf cap.
+  # server query per live leaf window — at most the leaf cap.
   defp crew_read(state, %{tabs: tabs}) do
     led_by =
       tabs
@@ -1846,7 +1846,7 @@ defmodule Console.Cockpit do
 
   # The chat face's read: the center's CURRENT thread — the attached leaf's, else the machine
   # thread — with its message tail and declared-thinking presence (same normalization as
-  # presence_read). nil (no thread / funes down via safe_read) degrades the View back to the PTY.
+  # presence_read). nil (no thread / server down via safe_read) degrades the View back to the PTY.
   defp chat_read(%{focused_session: {:leaf, id}} = state), do: chat_read_thread(Channel.thread(id), state)
   defp chat_read(state), do: chat_read_thread(Channel.machine_thread(), state)
 
@@ -2042,7 +2042,7 @@ defmodule Console.Cockpit do
   end
 
   # Fill the probe cache when a Workspace space is active and the cache is cold. Elsewhere the probes
-  # stay nil — git/nix/df/tmux forks and funes reads are wasted on spaces that never show them.
+  # stay nil — git/nix/df/tmux forks and server reads are wasted on spaces that never show them.
   defp ensure_probes(%{active_key: key, stack: nil} = state) when Space.workspace?(key) do
     %{
       state
@@ -2055,7 +2055,7 @@ defmodule Console.Cockpit do
   end
 
   # Orbis' survey only needs the rollup, not the git/nix/df battery — fill just the cached leaves
-  # rollup on the SAME @probe_ms throttle so `orbis_workspaces/1` reads the cache, never gathers funes
+  # rollup on the SAME @probe_ms throttle so `orbis_workspaces/1` reads the cache, never gathers server
   # per-frame.
   defp ensure_probes(%{active_key: :orbis, leaves: nil} = state) do
     %{state | leaves: orbis_read(:orbis), probed_at: System.monotonic_time(:millisecond)}
@@ -2108,7 +2108,7 @@ defmodule Console.Cockpit do
     current = Profiles.fetch(profile_name)
     next = Profiles.next_model(current && current.model)
     Console.Config.put_coworker_model(profile_name, next)
-    "coworker driver → #{next.provider}/#{next.model} — applies on next spawn (aleph:reset)"
+    "coworker driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
   end
 
   # ORBIS rollup (Orbis Tertius slice 2) — the machine-scoped vantage, gathered on the spaces that
@@ -2121,7 +2121,7 @@ defmodule Console.Cockpit do
 
   # The Orbis survey (Overview center): the per-WORKSPACE rollup grouping (Slice 0: one hardcoded workspace).
   # Reads the SAME cached `state.leaves` rollup the @probe_ms throttle fills — its `workspaces` key — so
-  # the survey and the Tlön LEAVES sidebar share one gather. Empty list when funes is down / the
+  # the survey and the Tlön LEAVES sidebar share one gather. Empty list when server is down / the
   # cache is cold / there are no workspaces. Public: a pure read seam (unit-tested against a known cache).
   def orbis_workspaces(state) do
     case state.leaves do
@@ -2131,7 +2131,7 @@ defmodule Console.Cockpit do
   end
 
   # TRIAGE reads: cross-thread blockers, failed checks, and unassigned threads.
-  # Gathers from all open threads — a funes Board aggregate.
+  # Gathers from all open threads — a server Board aggregate.
   # Each section is `%{shown: [...], more: count}` so the panel can render "+N more".
   defp triage_read(threads) do
     scopes = for thread <- threads, do: {thread, Server.Board.brief(thread)}
@@ -2169,9 +2169,9 @@ defmodule Console.Cockpit do
   # The Workspace's cast, spawned lazily on entry from its roster (C2.3 — replaces the old hardcoded
   # ensure_machine_coworker/ensure_claude_coworker/ensure_third_coworker trio): head = the CENTER
   # (embedded terminal, `new-session`), tail = tmux windows (`new-window`), each launcher chosen by
-  # its archetype's harness. An empty roster / funes-down space is a no-op. `spaces` defaults to the
+  # its archetype's harness. An empty roster / server-down space is a no-op. `spaces` defaults to the
   # live cache (`Space.all/0`, `render`'s call) but is overridable — mirrors `Space.fetch/1` vs
-  # `/2` — so a test drives a roster without a live workspace in the funes DB.
+  # `/2` — so a test drives a roster without a live workspace in the server DB.
   @doc false
   def ensure_workspace_roster(state, spaces \\ Space.all())
 
@@ -2222,7 +2222,7 @@ defmodule Console.Cockpit do
   defp capture_standing_thread_id(state), do: state
 
   # The roster TAIL: one tmux window per entry, each a second window in the SAME session as the
-  # center, joined to the SAME root thread, so the cast coordinates over funes messages like any
+  # center, joined to the SAME root thread, so the cast coordinates over server messages like any
   # two agents. Gated on the center up (its spawn opens/finds the root thread these join) and on
   # the window not already being there (tmux `new-window` isn't idempotent like `new-session -A` —
   # a naive re-run every render would spawn a fresh coworker every tick).
@@ -2253,7 +2253,7 @@ defmodule Console.Cockpit do
 
   # The `chat` tab (the third Tlön window): the INTERACTIVE machine-chat — machine-scope threads as
   # foldable blocks with author-turn grouping (fold/zoom/scroll), so the tertius/hronir tabs can stay
-  # their raw harness selves. NOT a coworker — no funes identity, no wake-loop entry (Console.Mention
+  # their raw harness selves. NOT a coworker — no server identity, no wake-loop entry (Console.Mention
   # doesn't know it); it just polls the db the cockpit writes. Gated like the claude window: pi up
   # (so a machine thread exists to read), window absent (`new-window` isn't idempotent), retried each
   # render — a failed open just leaves the tab missing.
@@ -2313,7 +2313,7 @@ defmodule Console.Cockpit do
   defp leaf_window?(%{name: name}), do: Regex.match?(~r/\At\d+\z/, name)
 
   # Convergent teardown: a leaf window whose thread is no longer open+staffed — closed while
-  # aleph was down, or wholesale-cleared — dies here, not only on the `:thread_closed` Bus event
+  # console was down, or wholesale-cleared — dies here, not only on the `:thread_closed` Bus event
   # the cockpit may never have seen. Matches ONLY leaf windows (the `@funes_thread` tag, or the
   # legacy `t<id>` name); the center/tail/console windows are never candidates. Runs off the same
   # tabs snapshot as the spawn pass, so a leaf spawned this pass (absent from the snapshot) can't
@@ -2366,7 +2366,7 @@ defmodule Console.Cockpit do
         try do
           Channel.post(%{
             thread_id: id,
-            author: "aleph",
+            author: "console",
             body:
               "⏸ parked — the leaf cap (#{Console.Config.max_leaves()}) is reached. This thread keeps its lead " <>
                 "and starts automatically when a seat frees (close an idle leaf, or raise \"max_leaves\")."
@@ -2432,7 +2432,7 @@ defmodule Console.Cockpit do
   # so routing and spawning can never disagree about who owns a thread's turns.
   defp leaf_staffed?(lead, workspace_id), do: lead in Profiles.leaf_handles(active_roster(workspace_id))
 
-  # This Workspace's roster (`Console.Mention.route/3`'s resolution fixture) — funes-down / no roster
+  # This Workspace's roster (`Console.Mention.route/3`'s resolution fixture) — server-down / no roster
   # degrades to `[]` (nobody resolves, nobody wakes).
   defp active_roster(workspace_id) do
     case Space.fetch(workspace_id) do
@@ -2518,7 +2518,7 @@ defmodule Console.Cockpit do
 
     if message do
       operator = Application.get_env(:server, :operator, "andrew")
-      inject_text(workspace_id, index, "[funes thread ##{id}] #{operator}: #{one_line(message.body)}")
+      inject_text(workspace_id, index, "[server thread ##{id}] #{operator}: #{one_line(message.body)}")
     end
 
     :ok
@@ -2526,13 +2526,13 @@ defmodule Console.Cockpit do
 
   defp one_line(body), do: String.replace(body || "", "\n", " ")
 
-  # Open the `general` window (the operator's console) running `mix aleph.machine_chat` from the aleph
+  # Open the `general` window (the operator's console) running `mix console.machine_chat` from the console
   # project (where mise/mix resolve). It inherits the tlon session's `TLON_DB`, so it reads the SAME
   # db the cockpit writes — the whole point of the poll-the-db design (a separate process can't share
   # the in-node Bus). Fire-and-forget: a failed spawn leaves the tab absent and the next render retries.
   defp spawn_log_window(workspace_id) do
     dir = Path.join(Profiles.repo(), "modules/aleph")
-    script = "export TERM=xterm-256color\ncd #{dir}\nexec mise exec -- mix aleph.machine_chat"
+    script = "export TERM=xterm-256color\ncd #{dir}\nexec mise exec -- mix console.machine_chat"
     session = workspace_session(workspace_id)
 
     System.cmd("tmux", tlon_tmux(workspace_id, ["new-window", "-t", session, "-n", "general", script]),
@@ -2550,11 +2550,11 @@ defmodule Console.Cockpit do
 
   # `tmux new-window`, not Sessions.spawn_harness: a roster tail entry rides as a window of the
   # ALREADY-embedded tlon tmux session (the center is window 0), not a separate Console.Terminal/PTY
-  # of its own. Fire-and-forget: a failed spawn (funes down, no thread yet) just leaves the window
+  # of its own. Fire-and-forget: a failed spawn (server down, no thread yet) just leaves the window
   # absent, and `ensure_windows` retries it on the next render — no backoff needed, `new-window` is
   # cheap and idempotent-by-absence-check above.
 
-  # Open a harness window named `window` on `thread_id` as funes handle `handle`, running
+  # Open a harness window named `window` on `thread_id` as server handle `handle`, running
   # `command` (the profile's `Console.Harness.Driver.launch_command/1`) in workspace `workspace_id`. The
   # roster tail windows AND the per-thread leaf windows all ride this ONE spawn: identity join +
   # tmux plumbing are harness-agnostic (Slice D); only the exec differs, and that came from the
@@ -2569,7 +2569,7 @@ defmodule Console.Cockpit do
     end
   end
 
-  # The identity minter for a tail-window spawn — defaults to the live funes join (mints in-node
+  # The identity minter for a tail-window spawn — defaults to the live server join (mints in-node
   # against the Repo/tokens), overridable via `:console, :tlon_join` so a test drives `ensure_windows`
   # against the SAME injected `:tlon_cmd` tmux runner without a live DB (mirrors `Console.Crew`'s
   # `:crew_join`/`:crew_cmd` pair).
@@ -2585,7 +2585,7 @@ defmodule Console.Cockpit do
 
   # Materialise the Workspace's LEAD roster entry into a profile, find-or-create the machine identity,
   # then spawn the center: an embedded tmux client attached to the standing session (pi as window 0
-  # if absent) — an aleph restart re-attaches to the running pi instead of spawning another.
+  # if absent) — an console restart re-attaches to the running pi instead of spawning another.
   defp spawn_center(workspace_id, lead) do
     %{archetype: arch, name: name} = Profiles.roster_entry(lead)
 
@@ -2633,9 +2633,9 @@ defmodule Console.Cockpit do
   # (profile mcp.json) and mints a bearer for TLON_THREAD/TLON_AUTHOR — but spawn_harness only
   # `export`s those in pi's ONE-SHOT launch shell, so they live in pi's PROCESS env alone. A
   # continuum/`--continue` restore, a `respawn-pane`, or a reload in a clean shell then boots with
-  # `${TLON_MCP_URL}` empty → the funes server never registers ("Tool not found", never the 404 the
+  # `${TLON_MCP_URL}` empty → the server server never registers ("Tool not found", never the 404 the
   # adapter self-heals). Putting them in the tmux SESSION env via `-e` makes the identity durable
-  # across respawns; `-e` also refreshes on `new-session -A`, so an aleph restart re-freshes a stale
+  # across respawns; `-e` also refreshes on `new-session -A`, so an console restart re-freshes a stale
   # identity instead of stranding it. bash sourced the exports first, so it expands the values here
   # into the current literal ones.
   def funes_identity_flags do
@@ -2651,7 +2651,7 @@ defmodule Console.Cockpit do
   defp workspace_session(id), do: "w#{id}"
   defp workspace_socket(id), do: "console-workspace-#{id}"
 
-  # A Workspace's windows as tabs — aleph draws them itself (tmux's own status bar is off), so it asks
+  # A Workspace's windows as tabs — console draws them itself (tmux's own status bar is off), so it asks
   # tmux for the live truth rather than tracking cockpit state (can't drift). Best-effort: the
   # session not being up yet is an empty strip, not a crash.
   defp tlon_tabs(workspace_id) do
@@ -2672,7 +2672,7 @@ defmodule Console.Cockpit do
   # Every Workspace tmux call — queries, re-points, AND the send-keys injects — routes through here:
   # one seam over the coworker's private server, so a test can inject a fake runner
   # (`:console, :tlon_cmd`) and assert argv without a live tmux.
-  # No workspace id (funes genuinely down — the fallback Workspace is gone, reshape slice A): there is
+  # No workspace id (server genuinely down — the fallback Workspace is gone, reshape slice A): there is
   # no coworker server to target, and dropping the `-L` flag would aim kill-window/send-keys at
   # the user's PERSONAL tmux server. No-op with a nonzero "exit" so callers read it as a miss.
   defp tlon_run(nil, _args), do: {"no active workspace", 1}
@@ -2854,8 +2854,8 @@ defmodule Console.Cockpit do
         :ok
 
       report ->
-        Console.CrashLog.append("aleph crash", report)
-        IO.puts(:stderr, "aleph crashed (logged to #{Console.CrashLog.path()}):\n#{report}")
+        Console.CrashLog.append("console crash", report)
+        IO.puts(:stderr, "console crashed (logged to #{Console.CrashLog.path()}):\n#{report}")
         file_crash_issue(report)
     end
   rescue
@@ -2868,16 +2868,16 @@ defmodule Console.Cockpit do
     report |> String.split("\n", trim: true) |> List.first("a cockpit crash") |> String.slice(0, 120)
   end
 
-  # A crashed cockpit files a funes issue on the machine thread — its own failures become tracked,
+  # A crashed cockpit files a server issue on the machine thread — its own failures become tracked,
   # triageable work in the system it renders, not just a log line. Deduped against the thread's open
-  # issues so a crash loop files one, not a hundred. Best-effort: no funes (down, or the crash took
+  # issues so a crash loop files one, not a hundred. Best-effort: no server (down, or the crash took
   # it too) just means the crash log is the only record.
   defp file_crash_issue(report) do
-    summary = "aleph crashed: " <> crash_summary(report)
+    summary = "console crashed: " <> crash_summary(report)
 
     with %{id: id} = thread <- Channel.machine_thread(),
          false <- crash_issue_open?(Dossier.open_issues_for_thread(thread), summary) do
-      Dossier.raise_issue(%{thread_id: id, summary: summary, evidence: report, found_by: "aleph"})
+      Dossier.raise_issue(%{thread_id: id, summary: summary, evidence: report, found_by: "console"})
     end
   rescue
     _ -> :ok

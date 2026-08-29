@@ -2,8 +2,8 @@
 
 This repository is one person's whole machine: an installer, dotfiles, a desktop, and an AI stack, as
 Nix-shaped modules under `modules/`. It is named *ficciones* after the Borges collection that contains
-the "Funes" story — the repo contains the `funes` module as the book contains the story, and each module
-is another story. Read `docs/plans/2026-08-14-machine-v2-and-funes-design.md` before reshaping anything
+the "Funes" story — the repo contains the `server` module as the book contains the story, and each module
+is another story. Read `docs/plans/2026-08-14-machine-v2-and-server-design.md` before reshaping anything
 here — it is the design and every decision behind it.
 
 ## The dev loop — one shared API
@@ -11,10 +11,10 @@ here — it is the design and every decision behind it.
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — funes compile-clean + tests; the green-before-commit gate.
-- `mise run funes:test` / `funes:check` / `funes:setup` / `funes:doctor` — the funes loop (Elixir/mix).
+- `mise run check` — server compile-clean + tests; the green-before-commit gate.
+- `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run flake:check` — the machine-level Nix gate.
-- `mise run funes:release` / `funes:restart` / `funes:console` / `funes:logs` — the always-up funes channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
+- `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
 - `mise run home:switch` — install/update this machine into the user profile via home-manager.
 
 mise owns dev runtimes; Nix owns packaging and the system. **If a command belongs in the loop, it becomes
@@ -42,10 +42,10 @@ alternate, and in-session `Ctrl+P` cycles the same ring. Pass a one-shot with `-
 | `mise run pi:fast`     | deepseek-v4-flash `thinking:low` | The same model as the bare default but `thinking:low` — quick/cheap throwaway, 1M ctx, fast tier. |
 | `mise run pi:local`    | qwen3-coder (local daemon) | Free/offline grunt, tight iteration loops — zero cloud budget. |
 
-Every launcher also makes the harness a **funes citizen**: it opens a fresh funes thread (or JOINs one
+Every launcher also makes the harness a **server citizen**: it opens a fresh server thread (or JOINs one
 with a trailing id — `mise run pi:code -- 42`) and hands the session its identity, so the model shows up
-in `funes:roster` and briefs from the thread. `mise run funes:claude [thread-id]` does the same for
-Claude Code (its own MCP adapter, `headersHelper`-authed). If the funes channel is down, the harness
+in `server:roster` and briefs from the thread. `mise run server:claude [thread-id]` does the same for
+Claude Code (its own MCP adapter, `headersHelper`-authed). If the server channel is down, the harness
 still launches — just not as a citizen.
 
 The bare default is `deepseek-v4-flash`, not glm-5.2, precisely because glm-5.2 is a reasoning model
@@ -80,7 +80,7 @@ cap:clean` sweeps the logs (they self-cap at 40 anyway).
 
 When you're iterating on a change, **register a watcher instead of re-running tests yourself**:
 
-- `mise run funes:watch` / `mise run manos:pi:watch` — re-run that module's suite on every change.
+- `mise run server:watch` / `mise run adapters:pi:watch` — re-run that module's suite on every change.
 - `scripts/watch.sh <cmd>` (or `mise run watch -- <cmd>`) — watch-and-run anything, any scope
   (one test file, a folder, the whole suite). New test files under a watched dir are picked up.
 
@@ -92,15 +92,15 @@ then read 1800 lines," every time.
 
 ## The rules most likely to be broken by accident
 
-- **Working inside `modules/funes/`? That module has its own law.** Read `modules/funes/AGENTS.md` and
-  `modules/funes/docs/spec.md` first, and let them win. This root file governs the layer *around* the
+- **Working inside `modules/server/`? That module has its own law.** Read `modules/server/AGENTS.md` and
+  `modules/server/docs/spec.md` first, and let them win. This root file governs the layer *around* the
   modules, not the modules' insides.
-- **`funes` is a bounded module and the boundary is load-bearing.** It must never import up into machine
+- **`server` is a bounded module and the boundary is load-bearing.** It must never import up into machine
   config — no reading a `theme` variable, no assuming `desktop`, no path into `hosts/`. The reason is the
-  cohesion model: the *same* `funes` runs on other machines, sovereign on each, talking only over its
-  channel. A reach upward welds it to this box and breaks that. The unit that travels is `modules/funes/`.
+  cohesion model: the *same* `server` runs on other machines, sovereign on each, talking only over its
+  channel. A reach upward welds it to this box and breaks that. The unit that travels is `modules/server/`.
 - **`nix` runs from the agent tools now** (Arch's nix, not Determinate — see the Nix machine-truth
-  memory). So `nix flake check`, `nix eval`, and `nix build .#funes` are fair to run and verify directly.
+  memory). So `nix flake check`, `nix eval`, and `nix build .#server` are fair to run and verify directly.
   What stays the human's are the **system-mutating** commands — `home-manager switch`, `nixos-rebuild
   switch` on the host — because building the machine is a change the human owns. A claim that a build
   works without having run it is the one thing this repo cannot afford.
@@ -108,13 +108,13 @@ then read 1800 lines," every time.
   structure that does not exist yet. The tree should not lie about what is built.
 - **An `AGENTS.md` is born the same way a comment is — when a scope needs context its parent doesn't
   give.** Root holds repo-wide invariants; a module or subapp gets its own when it has distinct law, a
-  distinct dev loop, or gotchas that bite (`funes`, `manos` + its adapters, `aleph`). Don't add one per
+  distinct dev loop, or gotchas that bite (`server`, `adapters` + its adapters, `console`). Don't add one per
   folder by reflex — `lib/schemas/`, `test/`, etc. earn a file only once they accumulate a rule a
   weaker model keeps getting wrong; until then that guidance lives in the module's file. Keep every one
   terse and actionable to the same standard as comments: orientation, the exact commands, the law, the
   gotchas, a pointer to the one deeper doc — no lore. Skeleton: **what it is → Law → dev loop → Verify.**
-  The tree: `AGENTS.md` (here) · `modules/funes/AGENTS.md` · `modules/aleph/AGENTS.md` ·
-  `modules/manos/AGENTS.md` (+ `consult`/`fmt`/`lsp`).
+  The tree: `AGENTS.md` (here) · `modules/server/AGENTS.md` · `modules/console/AGENTS.md` ·
+  `modules/adapters/AGENTS.md` (+ `consult`/`fmt`/`lsp`).
 - **Keep docs in sync with the code, in the same commit.** A change that makes a module's `AGENTS.md`
   or a load-bearing comment stale updates it in that change — stale guidance is worse than none,
   because a weaker model trusts it. Nothing mechanical can catch this (staleness is semantic, invisible
@@ -141,11 +141,11 @@ then read 1800 lines," every time.
     0-byte `-r--r--r--` (or `crw-rw-rw- 1,3`, a `/dev/null` char device). They don't exist on disk.
     Never `git add`/`rm` them or try to "clean them up".
   - *`127.0.0.1` is not the host's loopback.* bash runs under `bwrap --unshare-net` in a private netns,
-    so `curl 127.0.0.1:4041`, `ss -tlnp`, and `systemctl --user` can never see the funes channel —
+    so `curl 127.0.0.1:4041`, `ss -tlnp`, and `systemctl --user` can never see the server channel —
     **regardless of whether it is up.** `allowLocalBinding` only permits binding *within* that netns.
     External traffic escapes via a socat→unix-socket proxy, but that proxy refuses loopback targets
-    with a `403`, so there is no route. Do not conclude "funes is down" from a bash probe; a bash
-    probe cannot answer the question. **funes MCP tools still work** — pi makes those calls from its
+    with a `403`, so there is no route. Do not conclude "server is down" from a bash probe; a bash
+    probe cannot answer the question. **server MCP tools still work** — pi makes those calls from its
     own process, outside bubblewrap — so use them, or ask the human to check from the host.
 
   To get true git state or real host network, disable the sandbox: `Alt+S`, `/sandbox-disable`, or
@@ -171,6 +171,6 @@ then read 1800 lines," every time.
 
 ## Verify
 
-`funes` day-one step 1 exists and runs; verify with `mise run check` (tests + types) and `mise run
+`server` day-one step 1 exists and runs; verify with `mise run check` (tests + types) and `mise run
 flake:check` (Nix). A claim that something works is backed by the command that proved it — and the agent
 and human run the *same* `mise` tasks, so "it works" means the shared task passed, not two private ones.

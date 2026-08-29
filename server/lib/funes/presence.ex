@@ -1,6 +1,6 @@
 defmodule Server.Presence do
   @moduledoc """
-  Warmth — presence's concrete half (aleph §3b), in one home so the switchboard and
+  Warmth — presence's concrete half (console §3b), in one home so the switchboard and
   the roster share one definition instead of drifting. A session is **warm** (cheap
   to resume) only while its context is still in the prompt cache (~1h,
   `:warmth_window_seconds`); past that it is **cold** and must not be woken, or a

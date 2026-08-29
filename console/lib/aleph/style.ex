@@ -54,7 +54,7 @@ defmodule Console.Style do
     diff_add: {@green, @bg},
     diff_del: {0xFF5555, @bg},
     diff_hunk: {0x33C7FF, @bg},
-    # Semantic event styles (the funes activity feed + footer pulse): a fact banked or a check
+    # Semantic event styles (the server activity feed + footer pulse): a fact banked or a check
     # passing reads body-green, a failure diff-red, a posted message diff-cyan; work landed and
     # an issue/question raised both read chrome amber — icon carries the done/warn distinction,
     # not color.

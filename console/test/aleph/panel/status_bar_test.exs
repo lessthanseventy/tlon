@@ -45,7 +45,7 @@ defmodule Console.Panel.StatusBarTest do
     [info, _hints] = StatusBar.render(base(%{health: health}), rect())
     line = Enum.map_join(info, fn {t, _} -> t end)
 
-    assert line =~ "funes"
+    assert line =~ "server"
     assert line =~ "tlon"
     assert line =~ "d68%"
     assert line =~ "m28%"
@@ -55,7 +55,7 @@ defmodule Console.Panel.StatusBarTest do
   test "a nil health read (probe not run) leaves the footer clean" do
     [info, _hints] = StatusBar.render(base(%{health: nil}), rect())
     line = Enum.map_join(info, fn {t, _} -> t end)
-    refute line =~ "funes"
+    refute line =~ "server"
   end
 
   test "TERM mode: the mode segment names the Alt door and the nav toggle" do

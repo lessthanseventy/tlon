@@ -28,12 +28,12 @@ defmodule Console.Panel.Sidebar do
       |> rows_of()
       |> Enum.map(&row(&1, active_key, cursor, rect.w))
 
-    note = if groups == [], do: [line("no workspaces — is funes up?", :dim)], else: []
+    note = if groups == [], do: [line("no workspaces — is server up?", :dim)], else: []
 
     Console.Panel.clip(body ++ note, rect)
   end
 
-  def render(_data, rect), do: Console.Panel.clip([line("no workspaces — is funes up?", :dim)], rect)
+  def render(_data, rect), do: Console.Panel.clip([line("no workspaces — is server up?", :dim)], rect)
 
   # Click → the row under local_y, same list render walked. Workspace headers (and Home) switch
   # the space; a thread row focuses its thread; crew rows and spacers are inert.

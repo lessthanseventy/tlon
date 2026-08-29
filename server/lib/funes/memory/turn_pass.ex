@@ -93,8 +93,8 @@ defmodule Server.Memory.TurnPass do
   end
 
   # Machine-authored process text (stage briefs, gate notices, nags) is NOT conversation:
-  # extracting it would bank funes' own playbook back into the dossier as fake decisions.
-  @machine_authors ~w(funes aleph)
+  # extracting it would bank server' own playbook back into the dossier as fake decisions.
+  @machine_authors ~w(tlon console)
 
   defp new_messages(tid, last_id) do
     from(m in Message,

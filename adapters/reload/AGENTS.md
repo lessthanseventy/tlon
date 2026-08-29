@@ -9,12 +9,12 @@ code → call `reload` → wake up in the same thread running the new code.
 ## When to use it
 
 - After you change a adapters extension's source and want it live **now**.
-- NOT for config that pi reads per-run, and NOT a substitute for `aleph:reset` — this restarts
+- NOT for config that pi reads per-run, and NOT a substitute for `console:reset` — this restarts
   *pi*, not the cockpit BEAM or the tmux session.
 
 ## How it works
 
-- The tlön launcher (`aleph` `Cockpit.tlon_launcher`) exports two things into the session:
+- The tlön launcher (`console` `Cockpit.tlon_launcher`) exports two things into the session:
   `TMUX_PANE` (pi's own pane, tmux-provided) and **`ADAPTERS_RELOAD_CMD`** — the command that
   re-launches pi with `--continue` (resume the most-recent session = this one).
 - `reload` fires a **detached** helper that, after ~0.4s, runs `tmux respawn-pane -k` on pi's pane.
@@ -26,7 +26,7 @@ code → call `reload` → wake up in the same thread running the new code.
   returns the errors.
 
 If `ADAPTERS_RELOAD_CMD` or `TMUX_PANE` is unset, `reload` refuses with a message pointing at the
-launcher — reboot the cockpit after updating aleph so the session carries the export.
+launcher — reboot the cockpit after updating console so the session carries the export.
 
 ## The seam
 

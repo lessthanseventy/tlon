@@ -1,8 +1,8 @@
 defmodule Console.Panel.Activity do
   @moduledoc """
-  The machine-wide funes activity feed (Tlön right sidebar): every durable write — a fact
+  The machine-wide server activity feed (Tlön right sidebar): every durable write — a fact
   banked, a check passed/failed, work landed, a message posted, an issue/question raised —
-  as one colored, newest-first stream (design: replace the opaque "funes · calling funes (2
+  as one colored, newest-first stream (design: replace the opaque "server · calling server (2
   tools)" with real visibility). Fed by `Server.Bus`'s global `activity` topic (cross-thread,
   unlike `Overview`'s per-thread blocks); the Cockpit keeps the bounded buffer, this panel is a
   pure render over it.

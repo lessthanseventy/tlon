@@ -1,6 +1,6 @@
 defmodule Server.Channel do
   @moduledoc """
-  The coordination spine (spec §5b, aleph §2/§9.2): threads and the messages on
+  The coordination spine (spec §5b, console §2/§9.2): threads and the messages on
   them. The channel is also §4's capture path — a message a participant posts is
   already a durable row, so intent becomes permanent as a side effect of talking.
 
@@ -113,7 +113,7 @@ defmodule Server.Channel do
   The ROOT machine thread — the OLDEST open machine-scope thread, or nil. The founding machine
   thread: the standing coworkers' permanent home and the Orbis Tertius meta thread (design:
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`). Also the find-or-create lookup for
-  the Tlön machine coworker, so it reuses a persistent thread across aleph restarts.
+  the Tlön machine coworker, so it reuses a persistent thread across console restarts.
 
   Oldest, NOT newest: every staffed leaf thread is machine-scope too, so a `[desc: t.id]`
   "latest machine thread" would return a leaf, not the root. Leaves are always newer
@@ -147,7 +147,7 @@ defmodule Server.Channel do
   end
 
   @doc """
-  STAFFED, OPEN machine-scope threads — the `ensure_thread_sessions` candidate list (aleph
+  STAFFED, OPEN machine-scope threads — the `ensure_thread_sessions` candidate list (console
   cockpit.ex): every open machine-scope thread with a lead, `%{id, lead, title}` per thread
   (`lead` is the staffed agent's name; the join makes it never nil). Open-only (Slice F): the
   cockpit tears a leaf's window down when its thread closes, so a closed thread in this list
@@ -166,7 +166,7 @@ defmodule Server.Channel do
 
   @doc """
   Delete every MACHINE-scope thread and everything hanging off it — the clean-slate reset behind
-  `mise run aleph:clear-machine-threads` (old machine threads are disposable).
+  `mise run console:clear-machine-threads` (old machine threads are disposable).
 
   Every table with a `thread_id` FK must be cleared before the threads themselves: SQLite's FKs
   are `NO ACTION`, so a single surviving child row rejects the whole thread delete. Two wrinkles
@@ -200,7 +200,7 @@ defmodule Server.Channel do
   end
 
   @doc """
-  ALL machine-scope threads as THREAD BLOCKS — aleph's Tlön machine-chat surface.
+  ALL machine-scope threads as THREAD BLOCKS — console's Tlön machine-chat surface.
   Like `chorus/1` but scoped to `machine` and WITHOUT the open-only filter: a rotated (closed)
   machine thread must still surface as history, so the chat can fold it below the current one.
   Each block carries the thread's recent messages (chat order within), most-recent-activity FIRST.
@@ -329,7 +329,7 @@ defmodule Server.Channel do
   defp sort_key(%{messages: messages}), do: {1, List.last(messages).id}
 
   @doc """
-  Staff `thread_id` with the agent named `handle` — the aleph machine-chat staffing call, a single
+  Staff `thread_id` with the agent named `handle` — the console machine-chat staffing call, a single
   clean boundary crossing over a resolve-then-assign. `{:ok, thread}` on success; `{:error,
   :no_agent}` when the handle has never registered (a coworker not yet staffed — a no-op, not a
   crash); `{:error, :no_thread}` when the thread id doesn't resolve.

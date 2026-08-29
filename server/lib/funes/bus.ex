@@ -1,6 +1,6 @@
 defmodule Server.Bus do
   @moduledoc """
-  The reactive substrate over the durable bus (aleph §5). `Phoenix.PubSub` fans
+  The reactive substrate over the durable bus (console §5). `Phoenix.PubSub` fans
   **typed events** out to **focused topics**, so a consumer subscribes to exactly
   what it needs — the switchboard to the message firehose, the board to one thread
   (IN SCOPE) or the roster (IN FLIGHT) — instead of filtering everything.
@@ -10,15 +10,15 @@ defmodule Server.Bus do
   nothing is lost; readers recover from the DB.
 
   ## Topics
-    * `funes:messages`      — every posted message (the switchboard's stream)
-    * `funes:thread:{id}`   — everything on one thread: messages, facts, events,
+    * `server:messages`      — every posted message (the switchboard's stream)
+    * `server:thread:{id}`   — everything on one thread: messages, facts, events,
                               issues, assignment/close (feeds IN SCOPE)
-    * `funes:threads`       — thread lifecycle: opened, closed, assigned (the list)
-    * `funes:sessions`      — session start/end (feeds the IN FLIGHT roster)
-    * `funes:presence`      — explicit thinking/idle declarations (`Server.Presence.Thinking`)
-    * `funes:habits`        — habit proposed/approved/rejected (the operator's review queue)
-    * `funes:workspaces`        — workspace registered/edited/removed (aleph's picker/survey follow this)
-    * `funes:activity`      — every durable write, cross-thread (the machine-wide activity feed)
+    * `server:threads`       — thread lifecycle: opened, closed, assigned (the list)
+    * `server:sessions`      — session start/end (feeds the IN FLIGHT roster)
+    * `server:presence`      — explicit thinking/idle declarations (`Server.Presence.Thinking`)
+    * `server:habits`        — habit proposed/approved/rejected (the operator's review queue)
+    * `server:workspaces`        — workspace registered/edited/removed (console's picker/survey follow this)
+    * `server:activity`      — every durable write, cross-thread (the machine-wide activity feed)
 
   ## Events (the envelope every subscriber matches)
     `{:message_posted, message}` · `{:fact_banked, fact}` · `{:event_recorded, event}`

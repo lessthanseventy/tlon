@@ -1,9 +1,9 @@
 defmodule Console do
   @moduledoc """
-  The boundary of the cockpit (enforced by the `:boundary` compiler, same as funes'). One
-  coarse boundary: aleph's internal layering is house-rule territory (pure decisions, thin
-  edges), but its reach INTO funes is load-bearing — `deps: [Server]` means aleph may call only
-  what `Server` exports, and a new reach into funes internals fails `mise run check` instead of
+  The boundary of the cockpit (enforced by the `:boundary` compiler, same as server'). One
+  coarse boundary: console's internal layering is house-rule territory (pure decisions, thin
+  edges), but its reach INTO server is load-bearing — `deps: [Server]` means console may call only
+  what `Server` exports, and a new reach into server internals fails `mise run check` instead of
   silently widening the surface.
   """
 

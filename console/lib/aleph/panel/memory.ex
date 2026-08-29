@@ -1,6 +1,6 @@
 defmodule Console.Panel.Memory do
   @moduledoc """
-  MEMORY — what funes knows, closing the loop with the forgetting engine (design §Memory). A header
+  MEMORY — what server knows, closing the loop with the forgetting engine (design §Memory). A header
   of coverage stats over two navigable sections the focus cycles with `Tab`:
 
     * **PINNED** — the always-loaded constraint facts (`Server.pinned/0`). `Enter` opens a
@@ -10,7 +10,7 @@ defmodule Console.Panel.Memory do
 
   Data is `%{coverage, pinned: [fact], habits: [habit], section, selected}` — `section` (0=pinned,
   1=habits) and `selected` (the j/k cursor) are injected by the View only when this pane is focused,
-  so an unfocused Memory shows the pinned with no cursor. A thin view: no funes calls here.
+  so an unfocused Memory shows the pinned with no cursor. A thin view: no server calls here.
   """
   @behaviour Console.Panel
 

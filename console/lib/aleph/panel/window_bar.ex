@@ -1,6 +1,6 @@
 defmodule Console.Panel.WindowBar do
   @moduledoc """
-  The top band framing the Tlön center: aleph's own window strip — tmux's status bar is off, so
+  The top band framing the Tlön center: console's own window strip — tmux's status bar is off, so
   this is the only window chrome — moved OUT of the terminal into a standalone bordered panel (the
   terminal renders edge-to-edge now). Left: each tmux window as a tab, a presence dot for its live
   agent, the active window highlighted. Right: the Claude-engine clock state + the focused thread.
@@ -8,7 +8,7 @@ defmodule Console.Panel.WindowBar do
   Data is `%{tabs: [%{name, active?, index, agent, warm?}], engine: :on | :off, thread: id | nil}`
   — tabs pre-joined to roster presence by `Console.View.data_for/2` (window → agent handle via
   `Console.Mention.coworkers/0`, warmth via `Server.Staff.roster/0`), so this panel stays a pure
-  render with no funes reads of its own.
+  render with no server reads of its own.
   """
   @behaviour Console.Panel
 

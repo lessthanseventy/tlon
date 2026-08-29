@@ -171,7 +171,7 @@ defmodule Console.BoardTest do
 
       rows = Health.render(data, rect)
       joined = Enum.map_join(rows, "\n", &text/1)
-      assert joined =~ "funes"
+      assert joined =~ "server"
       assert joined =~ "tlon"
       assert joined =~ "SYS"
       assert joined =~ "nix gen 21"

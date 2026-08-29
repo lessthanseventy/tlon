@@ -12,13 +12,13 @@ defmodule Console.Orbis do
   rows: [%{id, title, lead, status, conflicts, workspace_id, stage, awaiting, blocking}]
   (the last three nil on an untracked thread — chat and tracked are ONE list since slice C),
   workspaces: [%{id, name, summary, leaves}]}` (status
-  `:open | :stalled | :done`), or `nil` when funes is down / there are no machine threads. `summary`
+  `:open | :stalled | :done`), or `nil` when server is down / there are no machine threads. `summary`
   and `rows` are the per-thread lens the LEAVES sidebar + chat-tab strip read; `workspaces` is the
-  survey's per-workspace rollup — grouped under the live funes workspaces (`Console.Workspaces`, Slice 1), each
+  survey's per-workspace rollup — grouped under the live server workspaces (`Console.Workspaces`, Slice 1), each
   row carrying its workspace `id` (D0.3) — the face Orbis' Overview renders as one row per workspace, and the
   survey's `Enter`/click resolve back to. Status derives from `Server.Board.brief/1` (the
   same per-thread brief Triage reads) so it reflects real blockers/failed checks, never a
-  self-report. The gather is guarded: a funes hiccup degrades to `nil`, never a crash.
+  self-report. The gather is guarded: a server hiccup degrades to `nil`, never a crash.
   """
 
   alias Server.Channel
@@ -43,7 +43,7 @@ defmodule Console.Orbis do
   end
 
   # Keyed by thread id; through the Server facade (the Ledger module is boundary-private).
-  # Guarded like every funes gather here.
+  # Guarded like every server gather here.
   defp blocking_by_thread do
     Map.new(Server.workline_statuses(), &{&1.id, %{awaiting: &1.awaiting, blocking: &1.blocking}})
   rescue
@@ -53,7 +53,7 @@ defmodule Console.Orbis do
   end
 
   @doc """
-  Group the rollup rows under the live funes workspaces (`Console.Workspaces.all/0`, Slice 1 Task B3). With
+  Group the rollup rows under the live server workspaces (`Console.Workspaces.all/0`, Slice 1 Task B3). With
   the single seeded Tlön workspace this is one row — identical to Slice 0. Reads the cached workspace list;
   `workspaces/2` is the pure grouping over explicit `%{id, name}` refs (tested without the live cache).
   """
@@ -61,11 +61,11 @@ defmodule Console.Orbis do
   def workspaces(rows), do: workspaces(rows, workspace_refs())
 
   @doc """
-  Group `rows` under explicit `%{id, name}` workspace refs — every row carries its funes **id** (D0.3)
+  Group `rows` under explicit `%{id, name}` workspace refs — every row carries its server **id** (D0.3)
   and, since reshape slice C, its `workspace_id`: membership is REAL (slice A made `thread.workspace_id`
   enforced), so each workspace's survey row carries exactly its own threads. A row matching no ref
   lands in the first workspace — belt over the boot repair, never a dropped thread. No workspace refs
-  (funes genuinely down — the app self-seeds at boot) yields no rows; the survey renders empty
+  (server genuinely down — the app self-seeds at boot) yields no rows; the survey renders empty
   rather than fabricating a workspace (reshape slice A).
   """
   @spec workspaces([map()], [%{id: term(), name: String.t()}]) :: [
@@ -92,7 +92,7 @@ defmodule Console.Orbis do
     end)
   end
 
-  # The funes workspace refs, guarded: a cache hiccup degrades to [] (→ empty survey).
+  # The server workspace refs, guarded: a cache hiccup degrades to [] (→ empty survey).
   defp workspace_refs do
     Enum.map(Console.Workspaces.all(), &%{id: &1.id, name: &1.name})
   rescue

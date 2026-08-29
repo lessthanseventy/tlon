@@ -1,7 +1,7 @@
 defmodule Server.Workline.Scribe do
   @moduledoc """
   Server' own git hand: write + commit ONE file under `work/<slug>/` in the workline root.
-  The single door for artifacts funes materializes itself — the reviewer's review.md
+  The single door for artifacts server materializes itself — the reviewer's review.md
   (`Server.Workline.Review`) and a machine-born workline's intent.md at approval. Identical
   content is `:ok` without a commit: already-committed is the point.
   """
@@ -33,7 +33,7 @@ defmodule Server.Workline.Scribe do
 
   @doc """
   Materialize a MACHINE-BORN workline's intent.md from its breach evidence (the first
-  funes-authored message) at operator approval — the approve verb must be one keypress,
+  server-authored message) at operator approval — the approve verb must be one keypress,
   never "hand-author a file the machine owed". Committed-already → `:ok` untouched.
   """
   def materialize_intent(%Thread{slug: slug} = thread) do
@@ -52,7 +52,7 @@ defmodule Server.Workline.Scribe do
   end
 
   # The breach evidence is the flag's plain message — stage briefs/gates/notes are
-  # glyph-prefixed by convention, so the first UNPREFIXED funes message is the evidence.
+  # glyph-prefixed by convention, so the first UNPREFIXED server message is the evidence.
   @process_glyphs ["▶", "⏸", "→", "⚠", "✅"]
 
   defp evidence(%Thread{id: id, title: title}) do

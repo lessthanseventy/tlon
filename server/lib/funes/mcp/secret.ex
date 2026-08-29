@@ -49,7 +49,7 @@ defmodule Server.MCP.Secret do
   defp secret_path do
     case Application.get_env(:server, Server.Repo)[:database] do
       db when is_binary(db) and db not in [":memory:", ""] -> db <> ".token_secret"
-      _ -> Path.join(System.tmp_dir!(), "funes.token_secret")
+      _ -> Path.join(System.tmp_dir!(), "tlon.token_secret")
     end
   end
 end

@@ -1,6 +1,6 @@
 defmodule Server.Thread do
   @moduledoc """
-  The atom of work (aleph §2). A subject promoted to a first-class row; `message`
+  The atom of work (console §2). A subject promoted to a first-class row; `message`
   and, later, the dossier tables (`fact`/`event`/`issue`) hang off it. Its `state`
   is a closed set the database enforces.
   """
@@ -13,7 +13,7 @@ defmodule Server.Thread do
     field :state, :string, default: "open"
     field :scope, :string, default: "project"
     field :created_at, :utc_datetime
-    # A thread has 0..1 agent (aleph §3), staffed via Server.Staff. Nullable FK;
+    # A thread has 0..1 agent (console §3), staffed via Server.Staff. Nullable FK;
     # the assignment reference lives on the thread.
     belongs_to :agent, Server.Agent
     # Workline state (slice 1) — all nil on a plain thread. `stage` is the machine's position,

@@ -1,6 +1,6 @@
 defmodule Server.Search do
   @moduledoc """
-  Total recall (design: funes-total-recall, slice A): FTS5 search over the message channel
+  Total recall (design: server-total-recall, slice A): FTS5 search over the message channel
   (`history/2` — episodic recall of past sessions) and the fact corpus (`facts/2` — the ledger
   past the brief's cap). The curated brief answers "what should I inherit"; search answers "did we
   ever touch X." Both rank by bm25, return a `%{shown, more}` cut-with-its-count (a cut without a

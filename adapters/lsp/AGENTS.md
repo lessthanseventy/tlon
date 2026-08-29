@@ -50,6 +50,6 @@ not left to mason or `~/.local/bin`. If a binary is missing, the tool surfaces a
 `mise run adapters:lsp:check` (typecheck + tests). The tests pin the pure seam — adapter
 routing, root-finding, the adapter registry's shape — without spawning servers. The
 LSP stdio client (`src/client.ts`) is integration: live proof is running a tool against
-a real file after `home:switch` (e.g. `hover` on a funes `.ex`). The framing
+a real file after `home:switch` (e.g. `hover` on a server `.ex`). The framing
 (Content-Length) and request/response correlation are straightforward but only
 proven by a live server; a malformed frame is dropped, a timeout fails the request.

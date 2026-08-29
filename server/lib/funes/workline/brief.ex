@@ -1,7 +1,7 @@
 defmodule Server.Workline.Brief do
   @moduledoc """
   The stage brief — the message that IS the wake (worklines slice 2). When a workline flips,
-  funes posts the entered stage's brief on the thread; delivery rides the lead-wake path —
+  server posts the entered stage's brief on the thread; delivery rides the lead-wake path —
   live in the node that runs the switchboard, and via the switchboard DRAIN (undelivered
   rows, oldest first) when the flip happened in another node (a CLI advance into the
   service). Pure text here: playbook + read-list + owed exit artifact + the advance verb.

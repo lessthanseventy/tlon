@@ -49,8 +49,8 @@ defmodule Console.Board do
   defp panel_name(panel), do: inspect(panel)
 
   @doc """
-  `safe_rows/3`'s twin, one layer up: guard a cockpit READ (the per-frame funes/tmux assembly —
-  crew, presence, logbook…) so a raise OR an exit (a down funes GenServer) degrades that one read
+  `safe_rows/3`'s twin, one layer up: guard a cockpit READ (the per-frame server/tmux assembly —
+  crew, presence, logbook…) so a raise OR an exit (a down server GenServer) degrades that one read
   to `fallback` and a crash-log entry instead of taking the whole cockpit down. Panels already
   tolerate their read's empty shape, so a degraded read renders as that panel's quiet state.
   """

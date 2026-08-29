@@ -9,7 +9,7 @@ defmodule Server.Presence.Thinking do
   Entries are `{thread_id, agent} => started_at`. A periodic sweep clears entries
   older than `:thinking_max_seconds` (default 600s) and announces them idle —
   the stuck-harness guard: a crashed harness that never sent `idle` must not read
-  as thinking forever. Every transition broadcasts on `funes:presence` and the
+  as thinking forever. Every transition broadcasts on `server:presence` and the
   thread topic (`Server.Bus`).
   """
   use GenServer

@@ -5,9 +5,9 @@ defmodule Mix.Tasks.Server.SeedFromMemory do
   #{@shortdoc}.
 
   The dogfood corpus for forget-at-recall: import a directory of Claude auto-memory files (each a
-  markdown doc with `name` / `description` / `metadata.type` frontmatter and a body) as funes FACTS,
+  markdown doc with `name` / `description` / `metadata.type` frontmatter and a body) as server FACTS,
   so the recall read path has a real, meaningful, over-budget corpus to rank and forget — the memory
-  ABOUT building funes, living inside funes.
+  ABOUT building server, living inside server.
 
   Exercises every axis the engine reads:
 
@@ -27,15 +27,15 @@ defmodule Mix.Tasks.Server.SeedFromMemory do
 
   Usage:
 
-      mix funes.seed_from_memory <memory-dir> [--thread ID] [--reset] [--drop-threads 2,3]
+      mix server.seed_from_memory <memory-dir> [--thread ID] [--reset] [--drop-threads 2,3]
 
   `--reset` deletes every habit and (with `--drop-threads`) the listed threads + their
   messages/events/facts, keeping the target thread — the "selective clear". The memory dir may also
   come from `$TLON_SEED_MEMORY_DIR`. Idempotent per run only in that it always REPLACES the target
   thread's imported facts first, so a re-run reflects the current files rather than duplicating.
 
-  Dev-only: hits the live DB and live ollama, writes raw `created_at` (why it lives in funes, not
-  aleph — aleph's boundary allows only the public API). A fact the embedder can't reach is left
+  Dev-only: hits the live DB and live ollama, writes raw `created_at` (why it lives in server, not
+  console — console's boundary allows only the public API). A fact the embedder can't reach is left
   NULL (recall falls back to keyword), counted, never fatal.
   """
   use Mix.Task

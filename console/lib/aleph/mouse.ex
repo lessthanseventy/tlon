@@ -1,7 +1,7 @@
 defmodule Console.Mouse do
   @moduledoc """
   The pure half of the cockpit's mouse routing (design §8, in the `Keymap`/`View` tradition: the
-  decision is a value, the Cockpit interprets it). No TTY, no funes, no PTY — testable headlessly.
+  decision is a value, the Cockpit interprets it). No TTY, no server, no PTY — testable headlessly.
 
     * `hit_panel/3` — which content panel a screen cell lands on (skipping borders + the status
       bar), or `nil`. The Cockpit already has the composed placements (it paints them), so a wheel

@@ -1,6 +1,6 @@
 defmodule Server.Dossier do
   @moduledoc """
-  The dossier (aleph §9.4, spec §4/§5): `fact`, `event`, and `issue` scoped to a
+  The dossier (console §9.4, spec §4/§5): `fact`, `event`, and `issue` scoped to a
   thread — the thread's accumulated state, and the source of LEARNINGS, SHIPPED and
   BLOCKERS. These are the judgement and the record a system cannot re-derive from a
   transcript; the channel (`Server.Channel`) and the staff (`Server.Staff`) own the
@@ -241,7 +241,7 @@ defmodule Server.Dossier do
   Record a MEASURED check (roadmap #5): the command run, its real `exit` code, and a
   `tail` of output. exit 0 lands a `check_passed` event, anything else a `check_failed` —
   the outcome is keyed on the number, never on a self-report. `{:ok, event}` or
-  `{:error, changeset}`. The agent runs the command (via `cap`); funes only records.
+  `{:error, changeset}`. The agent runs the command (via `cap`); server only records.
   """
   def record_check(%{exit: exit} = attrs) do
     kind = if exit == 0, do: "check_passed", else: "check_failed"
@@ -321,7 +321,7 @@ defmodule Server.Dossier do
   Approve a pending habit — state approved, `approved_at` stamped, and it joins the always-
   loaded set (`approved_habits/0`). This is the OPERATOR's act: it is deliberately NOT an
   agent-facing MCP tool (only `propose_habit` is), so an agent cannot approve its own
-  proposal — the gate is architectural, not a runtime author check. Called from aleph /
+  proposal — the gate is architectural, not a runtime author check. Called from console /
   iex. `{:ok, habit}` or `{:error, changeset}`.
   """
   def approve_habit(%Habit{} = habit) do
@@ -342,7 +342,7 @@ defmodule Server.Dossier do
     Repo.all(from h in Habit, where: h.state == "approved", order_by: [desc: h.id])
   end
 
-  @doc "Habits awaiting review — the operator's queue, newest first (the aleph/iex review read)."
+  @doc "Habits awaiting review — the operator's queue, newest first (the console/iex review read)."
   def pending_habits do
     Repo.all(from h in Habit, where: h.state == "pending", order_by: [desc: h.id])
   end

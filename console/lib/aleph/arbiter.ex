@@ -1,9 +1,9 @@
 defmodule Console.Arbiter do
   @moduledoc """
-  The arbiter backend for the aleph hub — how funes' switchboard actuates a wake now that sessions
-  are embedded ghostty terminals aleph owns, not tmux panes. Configured as `config :server, :arbiter,
-  Console.Arbiter`: funes calls it through the behaviour seam (§8), never importing aleph — the
-  dependency stays one-directional, funes → nothing.
+  The arbiter backend for the console hub — how server' switchboard actuates a wake now that sessions
+  are embedded ghostty terminals console owns, not tmux panes. Configured as `config :server, :arbiter,
+  Console.Arbiter`: server calls it through the behaviour seam (§8), never importing console — the
+  dependency stays one-directional, server → nothing.
 
   - `wake(session, prompt)` — write the prompt into the session's terminal (keyed by its thread) so
     the harness takes a turn. Poking an agent is not a production write (§8): it SANITIZES the

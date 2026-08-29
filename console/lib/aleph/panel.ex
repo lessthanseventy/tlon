@@ -1,15 +1,15 @@
 defmodule Console.Panel do
   @moduledoc """
   A panel is a component; a view is a composition of panels; nothing is a prebaked
-  full-screen template (design §3). A panel is a **thin view over a funes read model**
+  full-screen template (design §3). A panel is a **thin view over a server read model**
   and holds no logic of its own:
 
-    - `topics/1` — the funes Bus topics whose events should re-render this panel.
+    - `topics/1` — the server Bus topics whose events should re-render this panel.
     - `render/2` — turn the panel's data into styled rows, clipped to its rect.
 
   A panel renders **styled rows**: `render/2` returns `[row]`, where a `row` is a list of
   `{text, style}` runs (`style` a semantic atom resolved by `Console.Style`). Rows are plain
-  data — a panel is a pure function `(funes read, rect) → rows`, so the whole render path is
+  data — a panel is a pure function `(server read, rect) → rows`, so the whole render path is
   headlessly testable and the same panel can later paint in a LiveView (§7).
   """
 
@@ -18,7 +18,7 @@ defmodule Console.Panel do
   @type row :: [run()]
   @type rect :: %{x: non_neg_integer(), y: non_neg_integer(), w: pos_integer(), h: pos_integer()}
 
-  @doc "The funes Bus topics whose events should re-render this panel (may depend on assigns like the focused thread)."
+  @doc "The server Bus topics whose events should re-render this panel (may depend on assigns like the focused thread)."
   @callback topics(assigns :: map()) :: [String.t()]
 
   @doc "Render the panel's data into styled rows, clipped to the rect."

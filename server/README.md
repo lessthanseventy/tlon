@@ -1,4 +1,4 @@
-# funes
+# server
 
 > "He knew the forms of the clouds in the southern sky on the morning of April 30th, 1882, and he could
 > compare them in his memory with the veins in the marbled binding of a book he had seen only once…
@@ -23,8 +23,8 @@ wins.
 
 ## A module, with a boundary
 
-`funes` lives inside a larger `machine` repository (`../../README.md`) but does not belong to it. It
-never reaches up into machine config — no theme, no desktop, no host paths — because the *same* `funes`
+`server` lives inside a larger `machine` repository (`../../README.md`) but does not belong to it. It
+never reaches up into machine config — no theme, no desktop, no host paths — because the *same* `server`
 is meant to run on other machines, sovereign on each, and the machines "know about each other" only by
 talking over its channel, never by sharing state. The unit that travels to another machine is this
 directory. That boundary is the spec's §8c, redrawn one level in; the 2026-08-14 amendment at the top of

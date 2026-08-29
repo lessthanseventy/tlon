@@ -1,14 +1,14 @@
 defmodule Server.Crew do
   @moduledoc """
   The crew backend — a **capability, not a product**, the same seam as `Server.Arbiter`. Staffing a
-  reviewer (or any role) onto a thread means minting its funes identity and standing up a terminal
-  for it to run in; *how* that terminal is created is a local backend the design never names. funes
+  reviewer (or any role) onto a thread means minting its server identity and standing up a terminal
+  for it to run in; *how* that terminal is created is a local backend the design never names. server
   decides a role belongs on a thread; the backend *actuates*.
 
   The backend is chosen by config — `config :server, :crew, SomeModule` (a `Server.Crew` behaviour).
-  On the aleph hub that is `Console.Crew`, which spawns the role's window on the standing tlon tmux
-  server in the SAME live node — so no second BEAM boots and no port is re-bound. funes never
-  imports aleph; it calls through this behaviour and dispatches with `apply/3`.
+  On the console hub that is `Console.Crew`, which spawns the role's window on the standing tlon tmux
+  server in the SAME live node — so no second BEAM boots and no port is re-bound. server never
+  imports console; it calls through this behaviour and dispatches with `apply/3`.
 
   **No backend configured is a valid state** (the always-up service runs the durable channel with no
   terminals to spawn): `spawn_role`/`kill_role` return `{:error, :no_crew}` — degrade honestly, no
@@ -39,7 +39,7 @@ defmodule Server.Crew.Test do
   @moduledoc """
   A capturing crew backend for tests: sends `{:crew_spawn, role, thread_id, task}` /
   `{:crew_kill, role, thread_id}` to the pid in `config :server, :test_pid`, so a test asserts what
-  funes decided to staff — without a real terminal.
+  server decided to staff — without a real terminal.
   """
   @behaviour Server.Crew
 

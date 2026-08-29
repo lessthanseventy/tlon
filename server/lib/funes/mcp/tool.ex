@@ -470,7 +470,7 @@ end
 defmodule Server.MCP.Tool.RecordCheck do
   @moduledoc """
   Record a MEASURED check (roadmap #5): the command you ran, its real `exit` code, and a
-  `tail` of output. funes lands a `check_passed` (exit 0) or `check_failed` event —
+  `tail` of output. server lands a `check_passed` (exit 0) or `check_failed` event —
   evidence keyed on the NUMBER, never a self-report. Run the command yourself (via `cap`);
   this only records the outcome. Distinct from `record_done` (a judgement-worthy shipped
   outcome) — record_check is the honest "I ran it and here is what happened".
@@ -510,7 +510,7 @@ defmodule Server.MCP.Tool.RecheckFact do
   @moduledoc """
   Re-verify a fact by re-running its OWN `check_cmd` — is the claim you are about to
   build on STILL true? Run the fact's command yourself (via `cap`) and report the real
-  `exit` code; funes lands a check keyed on that number and correlated to the fact, so a
+  `exit` code; server lands a check keyed on that number and correlated to the fact, so a
   `check_failed` is the drift signal that a "checked" fact has gone stale. You give the
   fact `id` and the result, never a command — the command is the fact's own, pinned, so a
   re-verification cannot quietly prove a DIFFERENT claim. A fact with no `check_cmd` is
@@ -595,7 +595,7 @@ defmodule Server.MCP.Tool.StaffLeaf do
   (authored by the CALLER's bound identity) as its opening message. Staffing, not spawning: no
   terminal starts here — the cockpit's convergent leaf sweep sees a worker-led thread without a
   window and stands one up (human-named, `@funes_thread`-tagged, leaf-cap-accounted, its harness
-  funes-bound). An agent never launches a harness by hand — a bare spawn is not a funes citizen
+  server-bound). An agent never launches a harness by hand — a bare spawn is not a server citizen
   and is invisible to the board; it staffs the thread and lets the board actuate.
 
   The lead resolves BEFORE the thread opens, so a bad handle refuses cleanly instead of leaving an
@@ -711,7 +711,7 @@ end
 defmodule Server.MCP.Tool.ConsultPeer do
   @moduledoc """
   Ask a peer agent a question — the third DELIBERATE cross-thread verb (after
-  open_thread/close_thread). The caller names a peer AGENT, never a thread id; funes
+  open_thread/close_thread). The caller names a peer AGENT, never a thread id; server
   resolves the peer's target thread (agent-filtered, with a defined tie-break) and
   delivers the ask there. The peer's answer is mirrored back to the caller's own thread
   (see `Server.Consult`), so the caller reads it in its own dossier. A missing or
@@ -750,7 +750,7 @@ defmodule Server.MCP.Tool.ProposeHabit do
   @moduledoc """
   Propose a HABIT — how you should WORK with the operator (a durable working preference,
   not a fact about the world and not a task step). It lands PENDING: the operator approves
-  it in aleph before it joins the always-loaded set every session reads. Distinct from a
+  it in console before it joins the always-loaded set every session reads. Distinct from a
   `stated` constraint (his verbatim words, which you cannot author) — a habit is YOUR
   proposal, promoted only by his approval. There is deliberately no `approve_habit` tool:
   an agent cannot approve its own suggestion.
@@ -869,12 +869,12 @@ end
 
 defmodule Server.MCP.Tool.SpawnCrew do
   @moduledoc """
-  Staff a crew role onto THIS thread — the leader's spawn verb (funes crew MVP). Mints the role's
-  funes identity on your thread and stands up its terminal, then hands it `task` as its opening
+  Staff a crew role onto THIS thread — the leader's spawn verb (server crew MVP). Mints the role's
+  server identity on your thread and stands up its terminal, then hands it `task` as its opening
   assignment. MVP role is `reviewer`. Like every self-thread tool it takes no thread parameter: the
   role joins the connection's own thread, so a leader spawns a reviewer onto the work it is leading.
 
-  Actuated by the configured crew backend (`Server.Crew`) — on the aleph hub that spawns the window
+  Actuated by the configured crew backend (`Server.Crew`) — on the console hub that spawns the window
   in the live node. With no backend (the standalone service) it reports unavailable rather than
   faking a spawn.
   """
@@ -911,7 +911,7 @@ end
 
 defmodule Server.MCP.Tool.KillCrew do
   @moduledoc """
-  Tear down a crew role's terminal on THIS thread — the leader's teardown verb (funes crew MVP).
+  Tear down a crew role's terminal on THIS thread — the leader's teardown verb (server crew MVP).
   Thread-scoped by the connection's identity; role defaults to `reviewer`. Best-effort: a role that
   is already gone is not an error.
   """
@@ -947,7 +947,7 @@ end
 defmodule Server.MCP.Tool.RegisterWorkspace do
   @moduledoc """
   Register a WORKSPACE — a first-class composition (workspaces/orbis Slice 1): a git-tracked
-  scope (`paths`), a `roster` of archetype instances, and free-form `knobs` that aleph
+  scope (`paths`), a `roster` of archetype instances, and free-form `knobs` that console
   reads to drive its picker/survey/spawn. Unlike the thread-scoped tools this is
   machine-GLOBAL — it takes no identity, it writes the shared `workspace` table via
   `Server.Workspaces`. `name` is unique; a duplicate is a graceful error, not a crash.
@@ -981,7 +981,7 @@ end
 
 defmodule Server.MCP.Tool.ListWorkspaces do
   @moduledoc """
-  Every WORKSPACE, newest-first — the machine-global read aleph's Orbis survey/picker maps
+  Every WORKSPACE, newest-first — the machine-global read console's Orbis survey/picker maps
   over. Takes no identity: workspaces are not thread-scoped.
   """
   use Anubis.Server.Component, type: :tool
@@ -1217,7 +1217,7 @@ end
 
 defmodule Server.MCP.Tool.SubmitReview do
   @moduledoc """
-  The write-fenced reviewer's ONE door (worklines slice 3): funes writes and commits
+  The write-fenced reviewer's ONE door (worklines slice 3): server writes and commits
   work/<slug>/review.md itself — the reviewer profile structurally cannot (write/edit
   denied). Identity-bound to THIS thread, refused outside the review stage. Verdict at
   the top of the body; then call advance_stage to hand the merge gate to the operator.

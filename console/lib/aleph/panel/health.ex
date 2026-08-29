@@ -29,13 +29,13 @@ defmodule Console.Panel.Health do
   # The build stamp: what code is actually running (git describe). Top of the panel so "is my fix
   # live?" is answerable at a glance. Absent (nil) → no line, never a crash.
   defp version_rows(nil), do: []
-  defp version_rows(version), do: [[{"aleph ", :label}, {version, :normal}], blank()]
+  defp version_rows(version), do: [[{"console ", :label}, {version, :normal}], blank()]
 
   # -- Services (up/down dots) --
 
   defp service_rows(data) do
     [
-      row("funes :4040", data.funes_up),
+      row("server :4040", data.funes_up),
       row("tlon tmux", data.tlon_up)
     ]
   end

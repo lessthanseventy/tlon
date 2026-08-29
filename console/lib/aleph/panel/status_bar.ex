@@ -14,10 +14,10 @@ defmodule Console.Panel.StatusBar do
   alias Console.Panel
 
   # {keycap, label} pairs — keycaps lit in amber, labels dim. The tmux-style model: the center
-  # owns the keys by default, so aleph's commands are reached through the ^B leader. (In a
+  # owns the keys by default, so console's commands are reached through the ^B leader. (In a
   # nav-default space — no live terminal — these are also bare; the hints name the universal path.)
   @hints [
-    {"^␣", "aleph"},
+    {"^␣", "console"},
     {"^␣n", "new"},
     {"^␣c", "post"},
     {"^␣⏎", "spawn"},
@@ -185,7 +185,7 @@ defmodule Console.Panel.StatusBar do
   end
 
   # The prefix is armed (Ctrl+Space was pressed, awaiting the next key) — show the prefix state
-  # instead of the command hints, so the operator knows the next key is aleph's, not the terminal's.
+  # instead of the command hints, so the operator knows the next key is console's, not the terminal's.
   @impl Panel
   def render(%{leader_pending?: true}, rect) do
     info = [{" ", :normal}, {"▸ ^␣ ", :accent}, {"prefix armed", :normal}]
@@ -221,10 +221,10 @@ defmodule Console.Panel.StatusBar do
   # HEALTH demoted to a one-line footer segment (reshape slice D): service dots + disk/mem/load,
   # dim so it frames rather than shouts. The full readout is `/status` in the composer. nil
   # (probe not run — Orbis, boot frame) renders nothing.
-  defp health_seg(%{funes_up: funes, tlon_up: tlon} = h) do
+  defp health_seg(%{funes_up: server, tlon_up: tlon} = h) do
     [
-      {"#{service_dot(funes)} ", service_style(funes)},
-      {"funes ", :dim},
+      {"#{service_dot(server)} ", service_style(server)},
+      {"server ", :dim},
       {"#{service_dot(tlon)} ", service_style(tlon)},
       {"tlon ", :dim},
       {"· d#{h[:disk_pct]}% m#{h[:mem_pct]}% l#{short_load(h[:load_avg])} ", :dim},

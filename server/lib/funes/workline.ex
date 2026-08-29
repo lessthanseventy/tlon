@@ -169,9 +169,9 @@ defmodule Server.Workline do
   def approve(%Thread{awaiting: awaiting} = thread, opts) when not is_nil(awaiting) do
     checker = Keyword.get(opts, :artifacts, Git)
 
-    # A machine-born intent's approval IS its acceptance: funes materializes intent.md from
+    # A machine-born intent's approval IS its acceptance: server materializes intent.md from
     # the breach evidence so the chain stays intact and approve stays one verb. Only against
-    # the REAL checker — a test stub must never make funes commit into the live repo.
+    # the REAL checker — a test stub must never make server commit into the live repo.
     if thread.stage == "intent" and thread.born == "machine" and checker == Git do
       Scribe.materialize_intent(thread)
     end
@@ -297,7 +297,7 @@ defmodule Server.Workline do
     thread
   end
 
-  # The brief IS the wake: a funes-authored message rides the lead-wake path (slice 2).
+  # The brief IS the wake: a server-authored message rides the lead-wake path (slice 2).
   # Best-effort — a post failure never blocks the (already durable) transition.
   defp post_brief(thread, body) do
     Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: body})

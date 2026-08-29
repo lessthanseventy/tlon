@@ -1,6 +1,6 @@
 defmodule Server.MCP.Endpoint do
   @moduledoc """
-  The sovereign channel (pi doc §2a): funes' MCP server. Every tool and resource
+  The sovereign channel (pi doc §2a): server' MCP server. Every tool and resource
   is a thin caller of the contexts — never a second writer to the DB (§10) — and
   identity rides the CONNECTION: the bearer token (minted in-node by
   `Server.MCP.Tokens`) resolves to a (thread, agent, session) binding on every

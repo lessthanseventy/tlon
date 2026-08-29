@@ -5,7 +5,7 @@ defmodule Server.Secrets do
   feed it — never becomes a place a leaked key lives.
 
   Deliberately PATTERN-based, not entropy-based: a generic high-entropy detector would flag commit
-  SHAs, base64 blobs, and hex hashes — legitimate technical facts funes exists to remember. So only
+  SHAs, base64 blobs, and hex hashes — legitimate technical facts server exists to remember. So only
   well-known, prefixed credential shapes match, keeping false positives near zero. `scan/1` returns
   `:ok` or `{:secret, label}`.
   """

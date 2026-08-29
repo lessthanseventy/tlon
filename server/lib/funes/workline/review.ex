@@ -2,7 +2,7 @@ defmodule Server.Workline.Review do
   @moduledoc """
   The reviewer's ONE door (worklines slice 3). The reviewer profile is structurally
   write-fenced (@reviewer_permissions denies write/edit + bash redirects), so review.md
-  cannot be hand-written — `submit/3` is the single sanctioned path: funes writes
+  cannot be hand-written — `submit/3` is the single sanctioned path: server writes
   `work/<slug>/review.md` in the workline root and commits it. The fence stays airtight;
   a hook, not an advisory.
   """

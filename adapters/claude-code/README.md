@@ -1,6 +1,6 @@
 # adapters · claude-code adapter
 
-The hands for **Claude Code** — what makes a `claude` session a funes citizen, the peer of
+The hands for **Claude Code** — what makes a `claude` session a server citizen, the peer of
 the [pi adapter](../pi). Same **two-doors-one-identity** shape as pi, adapted to Claude
 Code's own mechanisms.
 
@@ -11,28 +11,28 @@ A session's identity is `(thread, agent="claude-code")`, carried in the environm
 the loop, never by hand:
 
 ```
-mise run funes:claude              # opens a fresh thread, launches claude on it
-mise run funes:claude -- 42        # JOINS thread 42 (resume a task across a /clear)
+mise run server:claude              # opens a fresh thread, launches claude on it
+mise run server:claude -- 42        # JOINS thread 42 (resume a task across a /clear)
 ```
 
-The launcher `eval`s the export block from `funes:spawn` and `exec`s `claude`.
+The launcher `eval`s the export block from `server:spawn` and `exec`s `claude`.
 
 ## The two doors
 
-Both reach the **live** funes service node (loopback MCP on :4040); the service must be up
+Both reach the **live** server service node (loopback MCP on :4040); the service must be up
 (`systemd --user` unit).
 
-- **Door 1 — the MCP tools.** Claude Code's `mcpServers.funes` entry is `type: http`
+- **Door 1 — the MCP tools.** Claude Code's `mcpServers.server` entry is `type: http`
   pointing at the channel, with a **`headersHelper`** (`scripts/tlon-cli.sh token`) instead
   of a static bearer. Claude Code runs the helper on every connect and reconnect; it mints a
-  **fresh** funes token for `(TLON_THREAD, TLON_AUTHOR)` each time, so auth survives a funes
+  **fresh** server token for `(TLON_THREAD, TLON_AUTHOR)` each time, so auth survives a server
   restart and a 401 auto-refreshes. No token is ever written to disk. pi's adapters adapter
   does the same (mints per connect against `/mint`), so both doors are frozen-token-free —
   Claude Code's `headersHelper` and pi's in-adapter mint are the same idea in two shapes.
 - **Door 2 — the brief.** [`brief-hook.sh`](brief-hook.sh) is a `SessionStart` hook. Claude
   Code adds its plain stdout to the session context, so on start / resume / clear it renders
   the thread's dossier (the same `Board.in_scope → Brief` as `get_dossier`) and Claude
-  re-orients from funes. No identity, a down channel, or a missing thread → a silent no-op;
+  re-orients from server. No identity, a down channel, or a missing thread → a silent no-op;
   it never blocks the session.
 
 ## The capture reflex (one-ledger Cut 1)
@@ -42,7 +42,7 @@ Both reach the **live** funes service node (loopback MCP on :4040); the service 
 (delta-slicing, secret redaction, the extraction prompt, tolerant parse) and `mcp.ts`'s
 `FunesClient` verbatim — the same reflex pi's `extension.ts` runs on a cadence, adapted to
 Claude Code's stateless-per-turn hook model: a per-session watermark is persisted to
-`${XDG_STATE_HOME:-~/.local/state}/funes-cc-capture/<session_id>` instead of living in a
+`${XDG_STATE_HOME:-~/.local/state}/server-cc-capture/<session_id>` instead of living in a
 long-lived closure. Extracted facts are banked `derived`, with `intent`, unbidden. Same
 failure discipline as everything else here: no identity, a down channel, a bad completion,
 or an unparseable transcript is a silent no-op — a Stop hook must never be why a session
@@ -58,7 +58,7 @@ never banked. Claude Code exposes a `SessionEnd` hook (fires on session terminat
 zero-floor "flush" mode to capture that tail. `SessionEnd` is the cleaner fit (it fires after
 all turns complete). Deferred — not wired yet; the per-turn Stop reflex covers the common case.
 
-## The heartbeat (funes thread #3, 2026-08-27)
+## The heartbeat (server thread #3, 2026-08-27)
 
 [`heartbeat-hook.sh`](heartbeat-hook.sh) is a `PostToolUse` hook — it fires after every tool
 call. It execs [`cc-heartbeat.ts`](../pi/src/cc-heartbeat.ts) (bun), which mirrors pi's
@@ -69,7 +69,7 @@ which reads as frozen on one long turn; the heartbeat is the fix.
 
 Since Claude Code gives each hook fire a fresh process (no long-lived closure to hold an interval
 in, unlike pi), the cadence lives in a state file
-(`${XDG_STATE_HOME:-~/.local/state}/funes-cc-heartbeat/<session_id>`) instead: every `PostToolUse`
+(`${XDG_STATE_HOME:-~/.local/state}/server-cc-heartbeat/<session_id>`) instead: every `PostToolUse`
 call asks "has it been ≥45s since the last post (or since the turn started)?" — `activity.ts`'s
 `nextHeartbeatState`/`heartbeatDue` answer that, shared verbatim with pi's side so the two
 harnesses' cadence never drifts apart.
@@ -84,12 +84,12 @@ reflex, a heartbeat is never silently dropped, since the message IS the delivera
 ## Install
 
 Declarative, via home-manager (`flake.nix`), the same merge-not-own pattern as the pi
-adapter's `manosWiring`: the `mcpServers.funes` entry and the `SessionStart` hook are merged
+adapter's `manosWiring`: the `mcpServers.server` entry and the `SessionStart` hook are merged
 into `~/.claude` settings idempotently. `home:switch` is the human's.
 
 ## Why not a static token / a SessionStart env-mint
 
-A funes token is ephemeral (in-memory registry, dies on service restart) and bound to a
+A server token is ephemeral (in-memory registry, dies on service restart) and bound to a
 `(thread, agent)`. Claude Code expands `${VAR}` in `.mcp.json` only **once at startup** from
 the launch environment, and a `SessionStart` hook fires **before** MCP servers connect and
 can't set env for them — so neither can carry a refreshing token. `headersHelper` is the only

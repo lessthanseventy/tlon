@@ -12,7 +12,7 @@ Two slash commands, one spawn path. The v1 `/consult` pattern, repo-native.
   screen" question.
 
 Both spawn a transient `pi -p --no-session --provider ollama-cloud --model <id>` — a
-one-shot that writes no session file and registers no funes thread (the adapters adapter
+one-shot that writes no session file and registers no server thread (the adapters adapter
 stays quiet: the spawn passes no `TLON_*` env). The delegate's stdout is injected back via
 `pi.sendUserMessage`, so it lands in the transcript and triggers the main agent to react.
 

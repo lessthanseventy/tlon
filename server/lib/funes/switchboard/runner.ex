@@ -1,6 +1,6 @@
 defmodule Server.Switchboard.Runner do
   @moduledoc """
-  The switchboard as a supervised process (aleph §6): subscribes to the bus and
+  The switchboard as a supervised process (console §6): subscribes to the bus and
   wakes recipients as messages are posted. Its liveness never makes a message
   *exist* (§10) — on start it `drain/0`s the DB, so anything posted while it was
   down is still delivered; while up, it reacts to PubSub for low latency.

@@ -43,7 +43,7 @@ defmodule Console.Terminal do
   # Kitty keyboard push, flag 1 (disambiguate) — the emulator-side half of the shifted-key
   # round-trip; Console.Cockpit pushes the same bytes on the host tty.
   @kitty_enable "\e[>1u"
-  # Theme options passed straight to Ghostty.Terminal so the embedded screen matches aleph.
+  # Theme options passed straight to Ghostty.Terminal so the embedded screen matches console.
   @theme_opts [:foreground, :background, :cursor_color, :palette, :max_scrollback]
 
   @doc """
@@ -241,7 +241,7 @@ defmodule Console.Terminal do
 
   # SGR mouse: `\e[<Cb;col;row <M|m>` — capital M for press/motion, lowercase m for release;
   # col,row are 1-indexed cells. Cb: left 0 / middle 1 / right 2, +64 wheel-up / +65 wheel-down,
-  # +4 shift +8 alt +16 ctrl. aleph's x,y are 0-indexed cells (clamped by the cockpit), so +1.
+  # +4 shift +8 alt +16 ctrl. console's x,y are 0-indexed cells (clamped by the cockpit), so +1.
   @doc false
   def sgr_mouse_bytes(action, button, mods, x, y) do
     # +32 is the SGR motion bit — a drag (button held while moving) vs a plain press. tmux needs it

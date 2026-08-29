@@ -1,17 +1,17 @@
 defmodule Console.Notify do
   @moduledoc """
   Native desktop notifications, the pure half (design: the operator can be on another
-  workspace and still learn that an agent finished or is WAITING on them). aleph holds the
+  workspace and still learn that an agent finished or is WAITING on them). console holds the
   host tty, and modern terminals (ghostty, on Linux AND macOS) turn an OSC 777 escape into a
   real desktop notification — platform-agnostic with zero per-OS dependencies, and it rides
   SSH for free. The host terminal also owns focus policy (notify only when unfocused), which
-  aleph can't know from inside.
+  console can't know from inside.
 
   This module only DECIDES and FORMATS: `for_event/2` maps an operator-relevant Bus event to
   `{title, body}` (nil for noise), `osc/2` builds the escape. The one-line tty write lives in
   the Cockpit (thin edge). `question_raised`/`issue_raised` now reach the cockpit cross-thread:
   the Cockpit subscribes to `Server.Bus`'s global `activity` topic, so these fire for ANY thread,
-  not just the focused one (the meta-topic that was once outstanding funes work).
+  not just the focused one (the meta-topic that was once outstanding server work).
   """
 
   @doc """

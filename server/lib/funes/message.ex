@@ -15,7 +15,7 @@ defmodule Server.Message do
     field :body, :string
     field :created_at, :utc_datetime
     field :delivered_at, :utc_datetime
-    # Optional: the message this one replies to (aleph §2). A reply is addressed to
+    # Optional: the message this one replies to (console §2). A reply is addressed to
     # the replied-to message's author — one of the three ways delivery is targeted.
     field :reply_to, :id
     # The agent-to-agent consult correlation (Server.Consult): `consult_id` links the

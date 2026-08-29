@@ -1,7 +1,7 @@
 defmodule Console.Panel.Triage do
   @moduledoc """
   TRIAGE — the cross-thread view of what needs attention RIGHT NOW: open blockers across
-  all threads, failed checks, and unassigned threads. A thin view over the funes Board;
+  all threads, failed checks, and unassigned threads. A thin view over the server Board;
   re-renders on threads and sessions topics (any thread's state may have changed).
 
   Where DOSSIER shows one thread's brief in depth, TRIAGE shows ALL threads' trouble spots

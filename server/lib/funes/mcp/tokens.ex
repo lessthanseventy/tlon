@@ -7,7 +7,7 @@ defmodule Server.MCP.Tokens do
   **STATELESS and restart-surviving.** A token IS its claims: an HMAC over
   `(thread_id, agent_id, agent)` signed with the per-world key (`Server.MCP.Secret`). `resolve/1`
   verifies the signature and decodes — no in-memory registry, so a token stays valid across a node
-  restart, which matters on the **aleph dogfood hub**: it restarts constantly during development,
+  restart, which matters on the **console dogfood hub**: it restarts constantly during development,
   and a registry-backed token would 401 every spawned session on each restart.
 
   A stale grant that outlives its session is the zombie problem wearing a lanyard — handled by the

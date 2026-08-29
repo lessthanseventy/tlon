@@ -2,7 +2,7 @@ defmodule Mix.Tasks.Server.Ledger do
   @shortdoc "The workline value ledger — stages, gates, advances, tallies (worklines slice 6)"
   @moduledoc """
   #{@shortdoc}. A read-model over rows the stage machine already writes; run against the
-  db the caller points TLON_DB at (the mise task uses the dev scratch db, like funes:doctor).
+  db the caller points TLON_DB at (the mise task uses the dev scratch db, like server:doctor).
   """
   use Mix.Task
   use Boundary, classify_to: Server

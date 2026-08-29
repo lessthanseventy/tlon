@@ -2,8 +2,8 @@ defmodule Server.Bootstrap do
   @moduledoc """
   Boot-time integrity (reshape slice A). Two invariants, restored on every start:
   a default workspace exists, and every thread points at a workspace that is real.
-  Replaces the flake's ExecStartPre seed AND aleph's hardcoded fallback workspace —
-  any node that boots the funes app self-heals, including the dev scratch db.
+  Replaces the flake's ExecStartPre seed AND console's hardcoded fallback workspace —
+  any node that boots the server app self-heals, including the dev scratch db.
 
   Repair targets drift the FK pragma can't catch after the fact: table-rebuild
   migrations and pre-integrity `remove_workspace` both left threads pointing at dead
@@ -46,7 +46,7 @@ defmodule Server.Bootstrap do
   `ensure/0` for the supervision tree: any raise/exit (schema not yet migrated on
   a first boot, repo briefly down) is absorbed to `:skipped` — bootstrap must
   never take the app down with it. Every non-ok outcome is LOGGED: a broken
-  bootstrap would otherwise present exactly like honest funes-down (Orbis-only
+  bootstrap would otherwise present exactly like honest server-down (Orbis-only
   picker) with no diagnostic anywhere.
   """
   @spec ensure_safe() :: {:ok, Workspace.t()} | {:error, Ecto.Changeset.t()} | :skipped

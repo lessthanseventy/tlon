@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Console.MachineChat do
   @moduledoc """
   The interactive Tlön machine-chat — "Overview for the Tlön space": the machine-scope threads
   (`Server.Channel.machine_threads/1`) rendered as **foldable blocks** with author-turn grouping
-  inside each, plus `z`-zoom to full-pane. aleph opens this as the `chat` window (a tmux tab in the
+  inside each, plus `z`-zoom to full-pane. console opens this as the `chat` window (a tmux tab in the
   Tlön strip, next to `pi`/`claude`); run it by hand from `modules/aleph` for the same view anywhere.
 
   Keys: `↑↓`/`jk` move the selected block · `Enter`/`Space` fold↔unfold · `z` zoom · `Esc` back ·
@@ -28,7 +28,7 @@ defmodule Mix.Tasks.Console.MachineChat do
     Application.put_env(:server, :start_mcp, false)
     Application.put_env(:server, :start_switchboard, false)
 
-    # A human-facing TUI, not a service log: silence Ecto's per-query lines and funes boot chatter.
+    # A human-facing TUI, not a service log: silence Ecto's per-query lines and server boot chatter.
     Application.put_env(:server, Server.Repo, Keyword.put(Application.get_env(:server, Server.Repo, []), :log, false))
     Logger.configure(level: :warning)
 
@@ -37,7 +37,7 @@ defmodule Mix.Tasks.Console.MachineChat do
         Console.MachineChat.Loop.run()
 
       {:error, reason} ->
-        Mix.shell().error("aleph.machine_chat could not boot funes: #{inspect(reason)}")
+        Mix.shell().error("console.machine_chat could not boot server: #{inspect(reason)}")
     end
   end
 end

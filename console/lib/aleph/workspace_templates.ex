@@ -2,9 +2,9 @@ defmodule Console.WorkspaceTemplates do
   @moduledoc """
   The **workspace-archetype registry** — nix-owned *capabilities* (compiled, like `Console.Profiles`'
   coworker archetypes, not runtime-editable). A template is the STARTER shape the author face's
-  "new workspace" composes a funes `workspace` row from: a `type`, default `paths`, a starter `roster` of
+  "new workspace" composes a server `workspace` row from: a `type`, default `paths`, a starter `roster` of
   coworker-archetype entries, and `knobs`. The operator names it and edits from there; the created
-  row is a *composition* (funes-owned, runtime-editable) — the config seam the reshape settled.
+  row is a *composition* (server-owned, runtime-editable) — the config seam the reshape settled.
 
   Distinct from `Console.Profiles.@archetypes`: those template a single COWORKER; these template a
   whole WORKSPACE (which references coworker archetypes by atom in its `roster`).
@@ -47,7 +47,7 @@ defmodule Console.WorkspaceTemplates do
 
   @doc """
   A `Server.Workspaces.register/1` attrs map from a template + an operator-given `name`. The roster is
-  emitted in the funes WIRE shape (string-keyed maps, matching the seed roster) so it round-trips
+  emitted in the server WIRE shape (string-keyed maps, matching the seed roster) so it round-trips
   through the changeset unchanged.
   """
   @spec new_workspace_attrs(atom(), String.t()) :: %{

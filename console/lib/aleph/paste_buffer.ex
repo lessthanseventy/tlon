@@ -1,7 +1,7 @@
 defmodule Console.PasteBuffer do
   @moduledoc """
   The bracketed-paste buffer state machine (pure — the cockpit holds the buffer in its state, this
-  module owns the transitions). aleph enables `\\e[?2004h` on the host tty, so ghostty wraps a paste
+  module owns the transitions). console enables `\\e[?2004h` on the host tty, so ghostty wraps a paste
   in `\\e[200~…\\e[201~`; raxol's self-healed InputParser surfaces the markers as paste-start /
   paste-end events and the content between them as ordinary `:key` events. On paste-start the
   cockpit starts a buffer; while pasting, content keys accumulate here (a newline stays `\\n`, NOT

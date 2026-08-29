@@ -1,7 +1,7 @@
 defmodule Server.Workspaces do
   @moduledoc """
   The workspaces context (workspaces/orbis Slice 1): the write pipe and reads over the
-  `workspace` table. Compositions are DATA here; aleph reads `all/0` to drive its
+  `workspace` table. Compositions are DATA here; console reads `all/0` to drive its
   picker/survey/spawn, and every write announces on `Server.Bus`'s workspaces topic so
   those live surfaces refresh. A workspace is machine-global — no thread scope.
   """
@@ -16,7 +16,7 @@ defmodule Server.Workspaces do
     attrs |> Workspace.register_changeset() |> Repo.insert() |> Bus.announce(:workspace_registered)
   end
 
-  @doc "Every workspace, newest-first (by id) — the read aleph's Orbis survey/picker maps over."
+  @doc "Every workspace, newest-first (by id) — the read console's Orbis survey/picker maps over."
   def all do
     Repo.all(from w in Workspace, order_by: [desc: w.id])
   end

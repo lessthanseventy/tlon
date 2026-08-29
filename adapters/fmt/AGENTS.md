@@ -9,7 +9,7 @@ styler-compliant, so the format gate is a formality, not a blocker.
 ## Law
 
 - **Elixir only.** `mix format --check-formatted` is the only formatter in any gate
-  (`funes:check`, `aleph:check`). TypeScript has no formatter in its gate
+  (`server:check`, `console:check`). TypeScript has no formatter in its gate
   (`adapters:consult:check` is typecheck + tests), so `.ts` is left alone here.
   Diagnostics/typecheck for `.ts` is the LSP stack's job, not this extension's.
 - **No typecheck on save.** A project-wide `mix compile --warnings-as-errors` or

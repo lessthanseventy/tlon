@@ -7,10 +7,10 @@ defmodule Console.Keymap do
 
   **Input model — tmux-style** (see `docs/plans/2026-08-16-aleph-tmux-style-input.md`): the center
   surface owns the keys by default. A **live terminal** in the center forwards every key to its PTY
-  (the terminal is "normal mode"); aleph's own commands are reached through a `Ctrl+Space` **leader**
-  that arms the *next* key as an aleph command. NOT Ctrl+B: that's tmux's prefix, and the Tlön
+  (the terminal is "normal mode"); console's own commands are reached through a `Ctrl+Space` **leader**
+  that arms the *next* key as an console command. NOT Ctrl+B: that's tmux's prefix, and the Tlön
   center is literal tmux — Ctrl+B forwards like any other key so `C-b 2` reaches the real thing.
-  When there's no live terminal (Orbis' chorus, or a placeholder before a session spawns), aleph's
+  When there's no live terminal (Orbis' chorus, or a placeholder before a session spawns), console's
   nav bindings are **bare** — the same command table, reached without the prefix. One command
   table, two doors. (Ctrl+Space arrives as Kitty CSI-u `\\e[32;5u` → `%{key: :space, ctrl: true}`
   under the disambiguate mode the cockpit arms on the host.)
@@ -27,7 +27,7 @@ defmodule Console.Keymap do
 
   Effects:
 
-    * `:repaint` — state changed; reload funes reads and paint.
+    * `:repaint` — state changed; reload server reads and paint.
     * `:quit` — tear down and stop.
     * `{:forward, key}` — send this key to the focused session's embedded terminal.
     * `{:create_thread, title}` — open a new thread AND spawn a session onto it (the `n` verb).
@@ -68,7 +68,7 @@ defmodule Console.Keymap do
   which center panel `Console.View` renders — `a` toggles it on, Esc steps back off. `author_cursor`
   is the author list's own per-row cursor (mirrors `survey_cursor`), clamped against
   `author_workspaces` — the live `Console.Workspaces.all/0` list, threaded in per keypress (like
-  `composer_thread_id`) so this module stays a pure reducer with no funes call of its own.
+  `composer_thread_id`) so this module stays a pure reducer with no server call of its own.
   `pending_delete` (id | nil) is the two-key delete confirm's arm.
 
   The field editor (D2.4 Chunk 2a): `author_edit :: nil | %{id, field, sub, mode}` — `e` on the
@@ -133,7 +133,7 @@ defmodule Console.Keymap do
   @doc "Map a key event against the current state to the next state and the effect to run."
   @spec handle(map(), map()) :: {map(), effect()}
 
-  # --- LOCK mode (design 2026-08-23): total passthrough. Alt+g alone is aleph's; every other
+  # --- LOCK mode (design 2026-08-23): total passthrough. Alt+g alone is console's; every other
   # key — Alt chords, the leader, Esc — forwards raw so readline/emacs keep their Alt bindings.
   # These LOCKED-state clauses precede everything; the ARM clause sits BELOW the input modal by
   # design (modal-blocked) — locking mid-compose is never intended, and no modal can open while
@@ -305,13 +305,13 @@ defmodule Console.Keymap do
 
   # --- Tlön: the lazygit focus model (design 2026-08-20). The center is a live tmux client, so
   # `Ctrl+Space` is a STICKY toggle in/out of it — NOT the arm-next-key leader other spaces use.
-  # In the terminal every key forwards to tmux; out of it aleph owns the keys and drives the pure
+  # In the terminal every key forwards to tmux; out of it console owns the keys and drives the pure
   # `Console.Tlon.Focus` SM over `tlon_layout` (h/l pane · H/L column · s section · Esc→terminal).
   # `focus` (persistent) and `tlon_layout` (derived per keypress, like center_live?) are supplied by
   # the cockpit only for this space; the guard keeps every other space on the leader path below. ---
   def handle(key, %{active_key: k, focus: %Focus{}} = state) when Space.workspace?(k), do: handle_tlon(key, state)
 
-  # --- leader pending: Ctrl+Space was pressed; the next key is an aleph command. ---
+  # --- leader pending: Ctrl+Space was pressed; the next key is an console command. ---
   # Ctrl+Space again → send a LITERAL Ctrl+Space through (the prefix-twice convention), so an
   # app that binds it (emacs set-mark!) still gets it. Only with a live terminal to receive it.
   def handle(%{key: :space, ctrl: true}, %{leader_pending?: true, center_live?: true} = state),
@@ -323,13 +323,13 @@ defmodule Console.Keymap do
   def handle(%{key: :escape}, %{leader_pending?: true} = state), do: {%{state | leader_pending?: false}, :repaint}
 
   # Any other key while the prefix is armed → run the command, then clear the prefix. The command
-  # table (`command/2`) is the single source of aleph's bindings, shared with the bare-key path.
+  # table (`command/2`) is the single source of console's bindings, shared with the bare-key path.
   def handle(key, %{leader_pending?: true} = state) do
     {next, effect} = command(key, state)
     {%{next | leader_pending?: false}, effect}
   end
 
-  # --- the leader: Ctrl+Space arms the next key as an aleph command. ---
+  # --- the leader: Ctrl+Space arms the next key as an console command. ---
   def handle(%{key: :space, ctrl: true}, state), do: {%{state | leader_pending?: true}, :repaint}
 
   # --- default: the center surface owns the keys. ---
@@ -337,11 +337,11 @@ defmodule Console.Keymap do
   # you type into it immediately. (Ctrl+C lands here too → forwards as an interrupt, never a quit.)
   def handle(key, %{center_live?: true} = state), do: {state, {:forward, key}}
 
-  # No live terminal (Orbis, or a placeholder before a session spawns) → aleph's nav bindings are
+  # No live terminal (Orbis, or a placeholder before a session spawns) → console's nav bindings are
   # bare — the same command table the leader reaches, just without the prefix.
   def handle(key, state), do: command(key, state)
 
-  # --- aleph's command table — one source of bindings, reached two ways: bare in a nav-default
+  # --- console's command table — one source of bindings, reached two ways: bare in a nav-default
   # space, or via the Ctrl+Space leader from inside a running terminal. ---
 
   # --- Orbis' delete confirm (author face, D2.5): a `d` on the cursor row arms; the SECOND `d`
@@ -865,7 +865,7 @@ defmodule Console.Keymap do
   end
 
   # The author face's own workspace list — `Console.Workspaces.all/0`, threaded in per keypress by the
-  # cockpit (like `composer_thread_id`) so this stays a pure reducer with no funes call of its
+  # cockpit (like `composer_thread_id`) so this stays a pure reducer with no server call of its
   # own. Distinct from `survey_workspaces/1` (the Orbis rollup, which is `nil` whenever there are no
   # MACHINE THREADS yet — a freshly-created, thread-less workspace would vanish from that list even
   # though it's a real row here).

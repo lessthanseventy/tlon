@@ -1,6 +1,6 @@
 defmodule Console.Panel.Author do
   @moduledoc """
-  ORBIS' AUTHOR face: the editable funes-workspace list — create (`n`) and delete (`d`) from the LIST
+  ORBIS' AUTHOR face: the editable server-workspace list — create (`n`) and delete (`d`) from the LIST
   view (D2, Chunk 1); `e` on the cursor workspace opens the in-place FIELD EDITOR (D2.4 Chunk 2a),
   `data[:edit]` present. List: one row per `Console.Workspaces.all/0` workspace (name · type · path/roster
   counts), the `author_cursor` row washed `:selected` — same wash idiom as
@@ -111,7 +111,7 @@ defmodule Console.Panel.Author do
     [gutter, {text, style}]
   end
 
-  # Field 3's sub-list (D2.4 Chunk 2b/2c): one row per roster entry (`archetype · name`, the funes
+  # Field 3's sub-list (D2.4 Chunk 2b/2c): one row per roster entry (`archetype · name`, the server
   # WIRE shape — string-keyed) plus its effective model/yolo (Chunk 2b), the `sub` cursor washed
   # :selected.
   defp render_roster_sub(workspace, edit, rect) do

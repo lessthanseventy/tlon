@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Console.Eval do
-  @shortdoc "Run aleph's steering evals (routing) — --deterministic for the offline gate set"
+  @shortdoc "Run console's steering evals (routing) — --deterministic for the offline gate set"
   @moduledoc """
   #{@shortdoc}.
 
@@ -18,6 +18,6 @@ defmodule Mix.Tasks.Console.Eval do
 
     report = "evals" |> Server.Eval.load() |> Server.Eval.run(mode: mode)
     Mix.shell().info(Server.Eval.scorecard(report))
-    if !report.ok?, do: Mix.raise("aleph.eval failed")
+    if !report.ok?, do: Mix.raise("console.eval failed")
   end
 end

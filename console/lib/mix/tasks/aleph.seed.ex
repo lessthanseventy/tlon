@@ -1,9 +1,9 @@
 defmodule Mix.Tasks.Console.Seed do
-  @shortdoc "Seed the funes DB with sample threads/agents/sessions/messages for the cockpit"
+  @shortdoc "Seed the server DB with sample threads/agents/sessions/messages for the cockpit"
   @moduledoc """
   Populate `TLON_DB` with a small, believable workspace so the cockpit has something to render and
   react to. Idempotent: re-running won't duplicate agents, threads, or a thread's opening messages.
-  Writes only through funes' public API (never raw rows) — the same path agents and the human use.
+  Writes only through server' public API (never raw rows) — the same path agents and the human use.
   """
   use Mix.Task
   use Boundary, classify_to: Console
@@ -40,7 +40,7 @@ defmodule Mix.Tasks.Console.Seed do
       seed_brief(thread, lead)
     end)
 
-    Mix.shell().info("aleph: seeded #{length(@agents)} agents and #{length(@threads)} threads.")
+    Mix.shell().info("console: seeded #{length(@agents)} agents and #{length(@threads)} threads.")
   end
 
   defp ensure_agent(%{name: name} = attrs) do

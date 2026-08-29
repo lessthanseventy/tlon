@@ -1,6 +1,6 @@
 defmodule Server.Staff do
   @moduledoc """
-  The staff (aleph §3b): the durable `agent` roster and the ephemeral `session`s
+  The staff (console §3b): the durable `agent` roster and the ephemeral `session`s
   that run them, plus staffing a thread with an agent. This context owns the
   agent/session data model and assignment; `Server.Channel` keeps owning
   thread/message.
@@ -28,7 +28,7 @@ defmodule Server.Staff do
   end
 
   @doc """
-  The IN FLIGHT roster (aleph §4): every live session across all threads with its
+  The IN FLIGHT roster (console §4): every live session across all threads with its
   agent, thread, and a warm/cold flag (`Server.Presence`). Ended sessions omitted,
   newest first — the read the board renders as "who's on the clock."
   """

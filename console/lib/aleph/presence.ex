@@ -90,7 +90,7 @@ defmodule Console.Presence do
   end
 
   @doc """
-  A thinking declaration's `started_at` as UNIX SECONDS — the one seam where funes time
+  A thinking declaration's `started_at` as UNIX SECONDS — the one seam where server time
   (idiomatic DateTimes, on the Bus event and in `thinking_all/0`) becomes cockpit time
   (the integers `Crew.seat`/`presence_read` subtract). The live 2026-08-28 crash was this
   conversion missing: `now_s - ~U[...]` is an ArithmeticError, and every fixture had been

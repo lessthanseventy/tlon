@@ -5,7 +5,7 @@ defmodule Console.Panel.Overview do
   opens on. `Enter` (keymap, `orbis_focus == :survey`) or a click zooms to the row's OWN workspace id
   (D0.2 — no more a single hardcoded lens). Data is `%{workspaces: [%{id, name, summary, leaves}],
   survey_cursor, orbis_focus}` — `workspaces` from `Console.Orbis.rollup/0`'s `workspaces` key (an empty list
-  when funes is down / there are no workspaces); `survey_cursor`/`orbis_focus` (View-injected, D0.3)
+  when server is down / there are no workspaces); `survey_cursor`/`orbis_focus` (View-injected, D0.3)
   wash the cursor row `:selected`, only while the survey (not the thread list) has focus.
 
   Was a per-thread message feed (`Server.Channel.chorus/1`); re-pointed to workspaces in the Slice 0

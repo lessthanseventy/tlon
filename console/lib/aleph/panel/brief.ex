@@ -38,7 +38,7 @@ defmodule Console.Panel.Brief do
   defp lead_section(nil, w), do: section("LEAD", ["unassigned"], w)
   defp lead_section(name, w), do: section("LEAD", [name], w)
 
-  # A capped section (%{shown, more}, funes Board): the cut is always rendered
+  # A capped section (%{shown, more}, server Board): the cut is always rendered
   # WITH its count — a cut without a count lies.
   defp capped_lines(%{shown: [], more: _}, _fmt), do: []
 

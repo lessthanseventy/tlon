@@ -99,7 +99,7 @@ defmodule Server.MemoryTurnPassTest do
     {:ok, thread} = Channel.open_thread(%{title: "briefs only"})
 
     for n <- 1..3 do
-      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "funes", body: "▶ STAGE #{n} — workline x"})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "▶ STAGE #{n} — workline x"})
     end
 
     pass = start_pass(extractor: StubExtractor, min_messages: 3)

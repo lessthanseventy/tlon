@@ -1,13 +1,13 @@
 defmodule Console.Workspaces do
   @moduledoc """
-  An event-driven cache of funes' workspaces (workspaces/orbis Slice 1, Task B1).
+  An event-driven cache of server' workspaces (workspaces/orbis Slice 1, Task B1).
 
   `Space.all/0` and the Orbis survey are per-render hot paths — reading
-  `Server.Workspaces.all/0` there would be a funes DB hit every frame, the same
+  `Server.Workspaces.all/0` there would be a server DB hit every frame, the same
   per-frame-gather regression the survey already caught. So this GenServer loads the
-  workspace list once, subscribes to the funes workspaces Bus topic, and reloads only when a
+  workspace list once, subscribes to the server workspaces Bus topic, and reloads only when a
   workspace is registered/edited/removed. `all/0` then serves the cached list — no DB per
-  render. funes runs in-process in aleph (the cockpit already reads `Server.Board`/
+  render. server runs in-process in console (the cockpit already reads `Server.Board`/
   `Server.Channel` directly), so `Server.Workspaces`/`Server.Bus` work like any local call.
 
   `all/0` is a `GenServer.call`, not a `:persistent_term` read: the caller is the single
@@ -16,7 +16,7 @@ defmodule Console.Workspaces do
   keeps the state per-instance (testable) rather than global.
 
   Server-down at boot or an empty table both yield `[]`; callers (B2/B3) decide the
-  hardcoded-Tlön fallback. The load is guarded so a funes hiccup can never crash aleph
+  hardcoded-Tlön fallback. The load is guarded so a server hiccup can never crash console
   boot — a failed reload keeps the previous cache.
   """
   use GenServer
@@ -26,8 +26,8 @@ defmodule Console.Workspaces do
   require Logger
 
   @workspace_events [:workspace_registered, :workspace_edited, :workspace_removed]
-  # The aleph-shaped subset lifted off each `Server.Workspace` — dropping `knobs`/`created_at`.
-  # Taken by key (not a struct match) so aleph needn't reference funes' unexported struct.
+  # The console-shaped subset lifted off each `Server.Workspace` — dropping `knobs`/`created_at`.
+  # Taken by key (not a struct match) so console needn't reference server' unexported struct.
   @fields [:id, :name, :type, :paths, :roster, :scope]
 
   def start_link(opts \\ []) do
@@ -35,7 +35,7 @@ defmodule Console.Workspaces do
   end
 
   @doc """
-  The cached workspaces as aleph-shaped `%{id, name, type, paths, roster, scope}` maps.
+  The cached workspaces as console-shaped `%{id, name, type, paths, roster, scope}` maps.
 
   Cache down (boot race, or the test env where this GenServer never runs) degrades to
   the caller-process fixture `Process.get(:aleph_workspaces, [])` — the seam tests push a
@@ -54,7 +54,7 @@ defmodule Console.Workspaces do
     {:ok, load([])}
   end
 
-  # Guarded like `load/1`: if funes' PubSub is down at boot, degrade to an unsubscribed
+  # Guarded like `load/1`: if server' PubSub is down at boot, degrade to an unsubscribed
   # empty cache instead of crash-looping the supervisor. Happy path is a plain subscribe.
   defp subscribe do
     Bus.subscribe_workspaces()
@@ -75,7 +75,7 @@ defmodule Console.Workspaces do
 
   def handle_info(_msg, workspaces), do: {:noreply, workspaces}
 
-  # Load + shape the workspace list; on any funes error keep `fallback` (init: `[]`; a
+  # Load + shape the workspace list; on any server error keep `fallback` (init: `[]`; a
   # reload: the prior cache) so a DB blip never takes the cockpit down.
   defp load(fallback) do
     Enum.map(Server.Workspaces.all(), &shape/1)

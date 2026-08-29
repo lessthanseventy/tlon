@@ -28,7 +28,7 @@ defmodule Console.Panel.Crew do
   @doc """
   Pure crew assembly — one row per recognized roster entry (unknown archetypes drop), the join
   of a Workspace roster with a tmux window snapshot, the leaf leads, and the explicit thinking
-  declarations. `led_by` maps a funes handle (`<name>-machine`) to the thread ids it leads;
+  declarations. `led_by` maps a server handle (`<name>-machine`) to the thread ids it leads;
   `titles` thread id → title; `thinking` the `thread_id => %{agent => started_at}` declarations
   map (`%{}` where unavailable). Status precedence: declared thinking > tmux-inferred working >
   live > none. Pure (`now_s` is an argument) so it tests headless; each surface — the cockpit
@@ -56,7 +56,7 @@ defmodule Console.Panel.Crew do
 
   # A declared thinking wins outright (the explicit signal never re-lists as merely inferred);
   # else the busiest of the standing window and any led leaf. `elapsed_s` (now - started_at) is
-  # the trust signal (funes thread #3): a coworker "thinking" a long single turn must visibly
+  # the trust signal (server thread #3): a coworker "thinking" a long single turn must visibly
   # count up, not sit on a static word — only meaningful for the declared-thinking branch, since
   # tmux-inferred presence carries no start timestamp.
   defp seat(windows, name, handle, led_by, thinking, now_s) do
@@ -85,7 +85,7 @@ defmodule Console.Panel.Crew do
     Console.Panel.clip(header ++ Enum.flat_map(coworkers, &entry(&1, rect.w)), rect)
   end
 
-  # nil data (funes down / not a Workspace) renders nothing rather than crashing the paint.
+  # nil data (server down / not a Workspace) renders nothing rather than crashing the paint.
   def render(_data, _rect), do: []
 
   defp entry(cw, w) do

@@ -1,11 +1,11 @@
 defmodule Console.Space do
   @moduledoc """
-  A **space** is a named lens over funes — *what's in the middle* and the panels around it — the
+  A **space** is a named lens over server — *what's in the middle* and the panels around it — the
   unit the top-left switcher picks (design Addendum §B). **Orbis** (the god-view survey — tertius'
-  per-workspace rollup, the default) leads, then one **Workspace** space per funes workspace (`Console.Workspaces`,
-  Slice 1) — the machine/stack as a live embedded terminal. Workspace spaces are keyed by the funes
+  per-workspace rollup, the default) leads, then one **Workspace** space per server workspace (`Console.Workspaces`,
+  Slice 1) — the machine/stack as a live embedded terminal. Workspace spaces are keyed by the server
   workspace id (Phase C1, not a name slug), so `[:orbis, 1]` with the single seeded workspace;
-  funes-down degrades to Orbis alone — funes self-seeds a default workspace at boot
+  server-down degrades to Orbis alone — server self-seeds a default workspace at boot
   (Server.Bootstrap), so no fallback Workspace is fabricated here (reshape slice A).
   Sessions is gone (its per-thread native-PTY center folded into the tmux center).
   The
@@ -39,7 +39,7 @@ defmodule Console.Space do
           key: :orbis | non_neg_integer(),
           label: String.t(),
           surface: surface(),
-          # The funes workspace id (Phase C1), nil for Orbis. Mirrors `key` for a Workspace space.
+          # The server workspace id (Phase C1), nil for Orbis. Mirrors `key` for a Workspace space.
           id: non_neg_integer() | nil,
           left: [module()],
           right: [module()],
@@ -53,7 +53,7 @@ defmodule Console.Space do
 
   @doc """
   The spaces the switcher offers, in picker order — **Orbis first (the default)**, then one Workspace
-  space per funes workspace (`Console.Workspaces.all/0`, Slice 1 Task B2). `surface` is the center;
+  space per server workspace (`Console.Workspaces.all/0`, Slice 1 Task B2). `surface` is the center;
   `left`/`right` the situational sidebars. Reads the cached workspace list; `all/1` is the pure
   derivation over an explicit list (tests inject workspaces without the live cache).
   """
@@ -77,13 +77,13 @@ defmodule Console.Space do
     }
   end
 
-  # One Workspace space per funes workspace. An empty list means funes is genuinely down — the app
+  # One Workspace space per server workspace. An empty list means server is genuinely down — the app
   # self-seeds a default workspace at boot (Server.Bootstrap), so no fake Workspace is fabricated
   # here (reshape slice A); the picker degrades to Orbis alone.
   defp workspace_spaces(workspaces), do: Enum.map(workspaces, &space_from_workspace/1)
 
-  # A Workspace space built from a funes workspace (aleph-shaped `%{id, name, roster, ...}`). Keyed by the
-  # funes workspace id (Phase C1) — not a name slug — so a rename can't break the active session and
+  # A Workspace space built from a server workspace (console-shaped `%{id, name, roster, ...}`). Keyed by the
+  # server workspace id (Phase C1) — not a name slug — so a rename can't break the active session and
   # two workspaces can never collide on key. surface/left/right/coworker reproduce the Slice-0 Tlön
   # struct exactly; the coworker is the roster lead's name.
   defp space_from_workspace(workspace) do
@@ -118,8 +118,8 @@ defmodule Console.Space do
 
   @doc """
   The mode predicate: is `key` a Workspace space (as opposed to `:orbis`)? Replaces the ~40
-  `active_key == :tlon` guards the cockpit carried pre-Phase-C1 (Task C1.3) — any funes id,
-  including the funes-down fallback sentinel `0`, is a Workspace. A `defguard` (not a plain function)
+  `active_key == :tlon` guards the cockpit carried pre-Phase-C1 (Task C1.3) — any server id,
+  including the server-down fallback sentinel `0`, is a Workspace. A `defguard` (not a plain function)
   so cockpit/keymap clause heads can gate directly on it (`when Space.workspace?(key)`) — callers must
   `require Console.Space` (a macro, unlike an ordinary `def`).
   """
@@ -130,7 +130,7 @@ defmodule Console.Space do
   @doc """
   The single Workspace space in Slice 1 — the C1 bridge for call sites that used to hardcode
   `fetch(:tlon)`/`:tlon`, before multiplicity. Returns the first workspace-keyed space, or `nil`
-  when funes yields no workspace (even the fallback keys a workspace, so `nil` is funes-genuinely-empty).
+  when server yields no workspace (even the fallback keys a workspace, so `nil` is server-genuinely-empty).
   C2 replaces these call sites with the ACTIVE workspace once there can be more than one.
   """
   @spec first_workspace() :: t() | nil

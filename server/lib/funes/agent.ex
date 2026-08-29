@@ -1,6 +1,6 @@
 defmodule Server.Agent do
   @moduledoc """
-  The durable identity (aleph §3): a named role — Sandra, Robert — that outlives
+  The durable identity (console §3): a named role — Sandra, Robert — that outlives
   every workspace and session. Its profile lives inline: a `mandate`, an `engine`
   strength requirement (never a model name, §8), and the five orthogonal axes
   (`context`, `sight`, `hands`, `trust`, `sandbox`, §3). A session is the ephemeral

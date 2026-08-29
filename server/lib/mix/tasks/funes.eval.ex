@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Server.Eval do
-  @shortdoc "Run funes' steering evals (worklines slice 0) — --deterministic for the offline gate set"
+  @shortdoc "Run server' steering evals (worklines slice 0) — --deterministic for the offline gate set"
   @moduledoc """
   #{@shortdoc}.
 
@@ -27,6 +27,6 @@ defmodule Mix.Tasks.Server.Eval do
 
     report = "evals" |> Server.Eval.load() |> Server.Eval.run(mode: mode)
     Mix.shell().info(Server.Eval.scorecard(report))
-    if !report.ok?, do: Mix.raise("funes.eval failed")
+    if !report.ok?, do: Mix.raise("server.eval failed")
   end
 end

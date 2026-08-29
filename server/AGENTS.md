@@ -1,4 +1,4 @@
-# funes
+# server
 
 **Read `docs/spec.md` before writing anything.** It is the specification this repository exists to
 implement, every rule in it names the failure that paid for it, and it was reviewed adversarially twice
@@ -7,22 +7,22 @@ the spec is wrong, say so and change it in the same commit as the code that prov
 
 ## What to build, in order
 
-The build order is the aleph doc's **re-laid §9** (`../../docs/plans/2026-08-14-aleph-cockpit-and-elixir-spine.md`),
+The build order is the console doc's **re-laid §9** (`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`),
 which supersedes `docs/spec.md` §9's ordering: the thread/channel is the spine and moves up, so it is
 db+doctor → thread+message → agent → the dossier → the board → collectors. Step one is still the database
-plus `funes doctor`: **nothing ships that cannot be repaired at 2am** — schema, migrations,
+plus `server doctor`: **nothing ships that cannot be repaired at 2am** — schema, migrations,
 `integrity_check`, JSONL export. Do not skip ahead to a later step because it is more interesting.
 **Steps 1–3 are built and green in Elixir:**
 
 - **Step 1** — Ecto over `ecto_sqlite3`, the `collection` migration, `Funes.Doctor` (integrity_check,
-  tables, pending migrations, JSONL export), and `mix funes.doctor`. The §4 write contract is re-verified
+  tables, pending migrations, JSONL export), and `mix server.doctor`. The §4 write contract is re-verified
   on `exqlite`: WAL and foreign keys via PRAGMA, and a **bounded busy_timeout proven by a contention test**
   (exqlite sets it through a NIF, not `PRAGMA busy_timeout`, so a held-lock timing test is the only honest
   probe).
 - **Step 2** — `thread` + `message` (`Funes.Channel`): the atom of work and the channel/§4 capture path,
   with `delivered` a separate column from `read` and a sender who cannot fake delivery (§5b.3).
 - **Step 3** — `agent` + `session` and staffing (`Funes.Staff`): the durable named identity and its
-  ephemeral instance (aleph §3), a thread's `agent_id`, and the opaque `pane_ref` the arbiter jumps
+  ephemeral instance (console §3), a thread's `agent_id`, and the opaque `pane_ref` the arbiter jumps
   into. This is the recipient model step 2 deferred its PubSub wake to await.
 - **Step 4** — the dossier: `fact`/`event`/`issue` scoped to threads (`Funes.Dossier`) →
   `LEARNINGS`/`SHIPPED`/`BLOCKERS`. `fact` is the ledger's successor with `provenance` (stated | derived,
@@ -41,7 +41,7 @@ plus `funes doctor`: **nothing ships that cannot be repaired at 2am** — schema
   never poked, the "resumed a thread and burned my allotment" footgun; and the default arbiter is **inert**,
   so nothing real is poked until a backend is deliberately wired.
 
-- **The MCP channel** (`Funes.MCP.*` — Track B slice 1, pi doc §2a/§5.1): funes' sovereign channel to
+- **The MCP channel** (`Funes.MCP.*` — Track B slice 1, pi doc §2a/§5.1): server' sovereign channel to
   any agent, over `anubis_mcp` + Bandit (loopback-only, opt-in via `:start_mcp`). Identity rides the
   CONNECTION — an in-node token (`Funes.MCP.Tokens`) resolves to (thread, agent, session) claims on
   every request, so no tool takes a thread parameter and every authenticated call bumps warmth through
@@ -55,7 +55,7 @@ plus `funes doctor`: **nothing ships that cannot be repaired at 2am** — schema
 
 Change the build-order status line above as each step lands — do not leave it asserting a step that is
 already built (the trap the step-2 handoff caught here). Track B slices 1–2 (the MCP channel, the pi
-adapter) and capability-map moves #1–#3 (funes-as-a-service, the mise parity pack, the claude-code
+adapter) and capability-map moves #1–#3 (server-as-a-service, the mise parity pack, the claude-code
 adapter) are built. **The `todo` slice (pi doc §5 slice 3) is built**: `todo` (thread-scoped, `done_at`
 from birth), `add_todo`/`complete_todo` (complete refuses another thread's step), and the dossier's
 TODOS / NEXT (derived, first open) / DONE (a MERGED view — completed todos + `work_landed`, replacing the
@@ -66,8 +66,8 @@ optional, a durable answer is `bank_fact`'d), and the dossier's UNKNOWNS beside 
 three surfaces. **Measured verification (capability-map #5) is built too**: `record_check(cmd, exit, tail)`
 → a `check_passed`/`check_failed` event keyed on the real exit code, a CHECKS dossier pane, and the
 `verify-with-evidence` skill — "it works" is measured, not self-reported. **Next is the arbiter bootstrap
-(pi doc slice 5)** — env-in-spawn automated (§2d). The aleph board (step 5) has its first live cockpit; its
-build order lives in the aleph docs. Deferred
+(pi doc slice 5)** — env-in-spawn automated (§2d). The console board (step 5) has its first live cockpit; its
+build order lives in the console docs. Deferred
 still: the **engine-credit half of presence** (clocked-out from spent credits/rate-limit — combine into
 `recipients/1` before an auto-poking backend replaces `Inert`), the human-notification path + re-deliver
 on session-join, cross-thread **mentions**, and the `Sense` collectors. SQLite is the truth — a real db
@@ -82,7 +82,7 @@ backwards compatible with it.
 funes' public API *is* its boundary: the `exports:` list in `lib/funes.ex` (`use Boundary`). That
 annotated list — `Channel` (threads/messages/chorus), `Board`/`Staff`/`Dossier`/`Presence` (read
 models), `Doctor`, `MCP.Spawn`, `Arbiter`, `Thread`/`Message` (structs) — is the whole surface a
-consumer (aleph, an MCP adapter) may call, machine-enforced: reach a non-exported module and the
+consumer (console, an MCP adapter) may call, machine-enforced: reach a non-exported module and the
 `:boundary` compiler fails the build. Each export is a context whose functions carry `@doc`s — call
 `Funes.<Context>.<fun>` (e.g. `Funes.Dossier.raise_issue/1`, `Funes.Channel.machine_thread/0`). To
 find one, read the context module or `h Funes.Dossier.raise_issue` in `iex -S mix` — the `@doc`s are
@@ -117,37 +117,37 @@ the reference. Don't grep for it, and don't copy it into a hand-maintained doc t
 Drive everything through the shared mise tasks (`mise tasks` lists them) — the human and any agent use
 the same commands, which is the one control loop §3 asks for:
 
-- `mise run funes:test` — the ExUnit suite (`mix test`).
-- `mise run funes:check` — the **precommit gate**: `mix precommit` = format-check + warnings-as-errors +
+- `mise run server:test` — the ExUnit suite (`mix test`).
+- `mise run server:check` — the **precommit gate**: `mix precommit` = format-check + warnings-as-errors +
   `credo --strict` + the suite (runs in `:test`). Same alias a git pre-commit hook would call.
-- `mise run funes:setup` — deps + create/migrate the repo-local scratch db (run once).
-- `mise run funes:doctor` — `mix funes.doctor` against the scratch db, never the real one.
-- `mise run check` — the funes precommit gate, the green-before-commit gate.
+- `mise run server:setup` — deps + create/migrate the repo-local scratch db (run once).
+- `mise run server:doctor` — `mix server.doctor` against the scratch db, never the real one.
+- `mise run check` — the server precommit gate, the green-before-commit gate.
 
-The **always-up channel** is a headless service, distinct from the `funes:serve` dev iex:
-a self-contained local `mix release` run by `systemd.user.services.funes` (flake.nix) —
+The **always-up channel** is a headless service, distinct from the `server:serve` dev iex:
+a self-contained local `mix release` run by `systemd.user.services.server` (flake.nix) —
 loopback, the **real XDG db**, migrate-on-boot (`Funes.Release.migrate/0` via
-`bin/server eval`, so funes never serves on a schema it can't repair), and a named node +
+`bin/server eval`, so server never serves on a schema it can't repair), and a named node +
 cookie (the release's `rel/env.sh.eex`) so the operator can reach the live node:
 
-- `mise run funes:release` — build the release the service runs.
-- `mise run funes:restart` — rebuild + restart the service (redeploy a funes change).
-- `mise run funes:console` — remote iex INTO the running service node; the only place a
+- `mise run server:release` — build the release the service runs.
+- `mise run server:restart` — rebuild + restart the service (redeploy a server change).
+- `mise run server:console` — remote iex INTO the running service node; the only place a
   token minted by `Funes.MCP.Spawn.env` survives (the `Tokens` registry dies with its node).
-- `mise run funes:logs` — follow the service's journal.
+- `mise run server:logs` — follow the service's journal.
 
 The **mise parity pack** — operate the live channel from the shell, our peer to the
 agents' MCP tools (all via `scripts/tlon-cli.sh` → `bin/server rpc` into the running node,
 so the service must be up):
 
-- `mise run funes:spawn -- "<title>" <agent>` — open a thread, staff+register the agent,
+- `mise run server:spawn -- "<title>" <agent>` — open a thread, staff+register the agent,
   mint a token, print the `export FUNES_*` block for a pi pane (the human-arbiter path).
-- `mise run funes:roster` — who's on the clock (live sessions, warm/cold).
-- `mise run funes:dossier -- <thread-id>` — render a thread's brief (parity with get_dossier).
-- `mise run funes:post -- <thread-id> <text…>` — post as the operator (parity with post_message).
+- `mise run server:roster` — who's on the clock (live sessions, warm/cold).
+- `mise run server:dossier -- <thread-id>` — render a thread's brief (parity with get_dossier).
+- `mise run server:post -- <thread-id> <text…>` — post as the operator (parity with post_message).
 
 The `home:switch` that installs the service is the human's (system-mutating); build + verify
-the release with `funes:release` and `nix build .#homeConfigurations.personalbox.activationPackage`.
+the release with `server:release` and `nix build .#homeConfigurations.personalbox.activationPackage`.
 
 If a command belongs in the loop, it becomes a task in the root `mise.toml`. Do not invent a second way
 to run these.
@@ -156,4 +156,4 @@ to run these.
 
 Built test-first (RED before GREEN), and a claim that something works is backed by having run it — the
 spec exists because "it works" without running it happened repeatedly in version one. `mise run check`
-is the gate; `funes doctor` against a real db, read back with `sqlite3`, is the 2am proof.
+is the gate; `server doctor` against a real db, read back with `sqlite3`, is the 2am proof.

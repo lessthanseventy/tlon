@@ -229,7 +229,7 @@ defmodule Server.Recall do
   end
 
   @doc """
-  The recall corpus at a glance — the observability read behind aleph's Memory pane: total facts,
+  The recall corpus at a glance — the observability read behind console's Memory pane: total facts,
   how many carry an embedding (semantic-recall coverage), and the always-loaded floor's size in
   facts and estimated tokens against the working-set budget. Cheap: two counts + the floor query.
   """

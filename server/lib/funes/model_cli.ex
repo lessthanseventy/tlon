@@ -1,7 +1,7 @@
 defmodule Server.ModelCli do
   @moduledoc """
   One headless model-CLI invocation shape for every adapter (eval judge, memory extractor,
-  whatever's next): command + model come from config keys (vendor is never design — funes
+  whatever's next): command + model come from config keys (vendor is never design — server
   AGENTS.md), errors normalize to typed tuples, and a fix to the invocation (timeouts,
   flags) lands once.
   """

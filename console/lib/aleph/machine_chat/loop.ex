@@ -6,7 +6,7 @@ defmodule Console.MachineChat.Loop do
   showing the coworker pool with live working/typing indicators (tmux window activity). Pure
   logical state lives in `Console.MachineChat.Host`; geometry in `Layout`; the rails render in
   `Rail`/`Crew`; presence derives in `Presence`. This module owns the TTY, the poll timer, the
-  center scroll, and the tmux/db edges. Not unit-tested — it grabs the TTY (aleph's law: test the
+  center scroll, and the tmux/db edges. Not unit-tested — it grabs the TTY (console's law: test the
   pure seams, run the loop live).
 
   It's a READER for the feed (polls `Server.Channel.machine_threads/1` off the shared `TLON_DB`,
@@ -195,7 +195,7 @@ defmodule Console.MachineChat.Loop do
     %{state | view: Host.after_submit(state.view), follow?: true}
   end
 
-  # Kick off a new thread/task: open a machine-scope funes thread titled by the text, post it as
+  # Kick off a new thread/task: open a machine-scope server thread titled by the text, post it as
   # the operator, staff a lead, then OPEN the new thread in the center.
   defp submit_new(state, text) do
     author = operator()
@@ -264,7 +264,7 @@ defmodule Console.MachineChat.Loop do
         :default -> "default lead"
       end
 
-    Channel.post(%{thread_id: thread_id, author: "aleph", body: "→ #{handle} leads (#{why})"})
+    Channel.post(%{thread_id: thread_id, author: "console", body: "→ #{handle} leads (#{why})"})
     :ok
   rescue
     _ -> :ok
@@ -277,7 +277,7 @@ defmodule Console.MachineChat.Loop do
   defp note_no_lead(thread_id, reason) do
     Channel.post(%{
       thread_id: thread_id,
-      author: "aleph",
+      author: "console",
       body: "⚠ no coworker staffed (#{inspect(reason)}) — nobody is listening on this thread yet." <> no_lead_hint(reason)
     })
 
@@ -299,8 +299,8 @@ defmodule Console.MachineChat.Loop do
   # roster-unknown lead is still woken from here.
   defp cockpit_staffs?(lead), do: lead in Profiles.leaf_handles(active_roster())
 
-  # The active Workspace's roster, read STRAIGHT from funes (not via `Space`/`Console.Workspaces`): this is
-  # the machine-chat reader beam — it never starts aleph's supervision tree, so the `Console.Workspaces`
+  # The active Workspace's roster, read STRAIGHT from server (not via `Space`/`Console.Workspaces`): this is
+  # the machine-chat reader beam — it never starts console's supervision tree, so the `Console.Workspaces`
   # cache GenServer isn't here. Server-down / no workspace → `[]` (nobody wakes).
   defp active_roster do
     case live_workspace() do
@@ -309,8 +309,8 @@ defmodule Console.MachineChat.Loop do
     end
   end
 
-  # The first live funes workspace (Slice 1: the single machine Workspace). A plain `Repo.all` under the
-  # hood — works in any beam funes booted in, unlike the cockpit-only `Console.Workspaces` cache.
+  # The first live server workspace (Slice 1: the single machine Workspace). A plain `Repo.all` under the
+  # hood — works in any beam server booted in, unlike the cockpit-only `Console.Workspaces` cache.
   defp live_workspace do
     case Server.Workspaces.all() do
       [workspace | _] -> workspace
@@ -395,7 +395,7 @@ defmodule Console.MachineChat.Loop do
   end
 
   # thread_id → lead handle for every polled thread (per-thread Repo reads; the poll is 700ms and
-  # the thread count small). A funes hiccup degrades to the last known leads.
+  # the thread count small). A server hiccup degrades to the last known leads.
   # ── painting ─────────────────────────────────────────────────────────────────────────────────
   defp poll_leads(blocks, state) do
     Map.new(blocks, fn %{thread: %{id: id}} -> {id, safe_thread_lead(id)} end)

@@ -2,7 +2,7 @@ defmodule Server.Workline.Ledger do
   @moduledoc """
   The value ledger (worklines slice 6): a READ-MODEL over rows the stage machine already
   writes — stage_advanced events + workline threads. The playbook's indicators come out of
-  coordination as a side effect, never a second telemetry system. `mise run funes:ledger`.
+  coordination as a side effect, never a second telemetry system. `mise run server:ledger`.
   """
 
   import Ecto.Query
@@ -49,7 +49,7 @@ defmodule Server.Workline.Ledger do
   end
 
   @doc "The human-readable ledger."
-  def render(%{worklines: []}), do: ~s(no worklines yet — open one: mise run funes:cli -- workline "<title>" <slug>)
+  def render(%{worklines: []}), do: ~s(no worklines yet — open one: mise run server:cli -- workline "<title>" <slug>)
 
   def render(%{worklines: worklines, summary: s}) do
     lines =
@@ -65,7 +65,7 @@ defmodule Server.Workline.Ledger do
   defp date(%DateTime{} = at), do: Calendar.strftime(at, "%Y-%m-%d")
   defp date(_at), do: "?"
 
-  @doc "Every open workline's live status (aleph panel read-model), in id order — see `status_for/1`."
+  @doc "Every open workline's live status (console panel read-model), in id order — see `status_for/1`."
   def statuses do
     Thread
     |> where([t], not is_nil(t.stage))
@@ -75,7 +75,7 @@ defmodule Server.Workline.Ledger do
   end
 
   @doc """
-  One workline's live status (aleph panel read-model): stage, gate, and `blocking` — the
+  One workline's live status (console panel read-model): stage, gate, and `blocking` — the
   cmd/tail of the LATEST verify-stage check when it's a `check_failed`, `nil` when the
   latest is a pass or no verify check has run yet. Read fresh, not cached — the check state
   can flip between panel renders.

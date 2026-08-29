@@ -1,8 +1,8 @@
 defmodule Console.Panel.Conversation do
   @moduledoc """
-  CHAT — the slack-style conversation on a thread (the coordination spine, funes `Channel`).
+  CHAT — the slack-style conversation on a thread (the coordination spine, server `Channel`).
   This is not a tmux session: agents and the human posting to a thread *is* the chat, already
-  durable in funes. Serves double duty — the compact left "CHATTER" box and the full-screen
+  durable in server. Serves double duty — the compact left "CHATTER" box and the full-screen
   chat view (Tab) — the only difference is the rect it's handed. Re-renders on the thread topic.
 
   Data is `%{title: String.t() | nil, messages: [%Server.Message{}]}`, optionally with
@@ -10,11 +10,11 @@ defmodule Console.Panel.Conversation do
   thinking counts as working, so the explicit declare (accent) outranks the tmux-activity
   inference (dim). `thinking` is `[{agent, elapsed_s}]` — `⋯ <agent> is thinking… (3m12s)` —
   so a long single turn visibly counts up instead of sitting on a static word that reads as
-  frozen (funes thread #3); `working` stays a bare name list (no start timestamp to show).
+  frozen (server thread #3); `working` stays a bare name list (no start timestamp to show).
 
   A message carrying `attachment: %{w, h}` renders `Console.Graphics.placeholder/2` after its
   body (design 2026-08-23 §Images) — the seam's proof, not a feature. Server doesn't emit
-  attachments yet; real thumbnails (`images/2` on this panel + the funes write-path) land with
+  attachments yet; real thumbnails (`images/2` on this panel + the server write-path) land with
   the coming Spaces work.
   """
   @behaviour Console.Panel
@@ -58,7 +58,7 @@ defmodule Console.Panel.Conversation do
     end
   end
 
-  # `elapsed_s` (now - the declare's started_at) is the trust signal (funes thread #3): a
+  # `elapsed_s` (now - the declare's started_at) is the trust signal (server thread #3): a
   # coworker stuck on "thinking" through a long single turn must visibly count up, not sit on
   # a static word that reads as frozen.
   defp thinking_row({agent, elapsed_s}),

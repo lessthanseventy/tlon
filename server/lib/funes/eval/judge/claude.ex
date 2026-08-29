@@ -1,7 +1,7 @@
 defmodule Server.Eval.Judge.Claude do
   @moduledoc """
   LLM-as-judge over a headless CLI. The command and model are CONFIGURATION, not design
-  (funes AGENTS.md): `config :server, eval_judge_cmd: ..., eval_judge_model: ...` — defaults
+  (server AGENTS.md): `config :server, eval_judge_cmd: ..., eval_judge_model: ...` — defaults
   to Claude Code's `claude -p` on the cheap alias (the plan bucket judges; fan-out stays off
   the expensive tier per the subagent routing rule). The scenario's prompt states the
   dimensions; this adapter only adds the strict-JSON reply contract and parses it.

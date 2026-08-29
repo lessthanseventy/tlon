@@ -1,6 +1,6 @@
 defmodule Server.Session do
   @moduledoc """
-  The ephemeral instance of an agent (aleph §3): it runs in a pane, on an engine,
+  The ephemeral instance of an agent (console §3): it runs in a pane, on an engine,
   on one thread, and it compacts and dies (§10). It references an `agent` and a
   `thread`. `pane_ref` is §2's one seam — an OPAQUE handle to the pane, never
   a cached copy of the pane's properties; liveness is asked of the arbiter
@@ -15,7 +15,7 @@ defmodule Server.Session do
     field :pane_ref, :string
     field :started_at, :utc_datetime
     field :ended_at, :utc_datetime
-    # When the session last ran a turn (aleph §3b). Drives warmth: idle past the
+    # When the session last ran a turn (console §3b). Drives warmth: idle past the
     # cache window (~1h) is cold, and the switchboard must not wake a cold session.
     # The switchboard bumps this as the session acts; a fresh session starts warm.
     field :last_active_at, :utc_datetime

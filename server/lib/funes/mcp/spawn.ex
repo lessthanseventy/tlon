@@ -1,12 +1,12 @@
 defmodule Server.MCP.Spawn do
   @moduledoc """
-  Handing a harness its funes identity (pi doc §2d). A launcher — `funes:spawn`,
-  `funes:claude`, the `pi:*` model tasks — opens a fresh thread or JOINS an existing
+  Handing a harness its server identity (pi doc §2d). A launcher — `server:spawn`,
+  `server:claude`, the `pi:*` model tasks — opens a fresh thread or JOINS an existing
   one, staffs an agent, and lets the harness authenticate to the sovereign channel.
 
   Run in the SERVING node (the one holding the `Server.MCP.Tokens` registry and Bandit):
   a token minted anywhere else dies with its node and 401s. So the launchers reach this
-  through `bin/funes rpc` into the LIVE service node, OR through the loopback `POST /mint`
+  through `bin/server rpc` into the LIVE service node, OR through the loopback `POST /mint`
   endpoint (`Server.MCP.Gateway`) that any adapter on the same box hits per connect.
 
   Three doors onto the same core (`ensure/3`, which mints nothing):
@@ -20,7 +20,7 @@ defmodule Server.MCP.Spawn do
       any pane's env.
     * `mint_for/2` — a FRESH token for an already-ensured (thread, agent), minted on
       demand. This is what `POST /mint` calls and what Claude Code's `headersHelper` calls
-      directly — so the token stays current across a funes restart, a model change, or
+      directly — so the token stays current across a server restart, a model change, or
       a secret regeneration.
 
   The launchers call `ensure` once (identity), and the adapter mints per connect.
@@ -43,7 +43,7 @@ defmodule Server.MCP.Spawn do
   silently opens a new one, so a typo'd id fails loud instead of forking work.
 
   Options for a freshly-registered agent: `:mandate` (default "general"), `:engine`
-  (default "local"). An existing agent keeps its own — funes has no vendor in the
+  (default "local"). An existing agent keeps its own — server has no vendor in the
   design (§8), so `engine` is just a capability handle resolved elsewhere.
 
   `:assign` (default `true`) staffs the thread with `agent_name` (`Staff.assign/2`

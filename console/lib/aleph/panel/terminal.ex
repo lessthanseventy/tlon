@@ -24,11 +24,11 @@ defmodule Console.Panel.Terminal do
   @inverse_bit 32
 
   # Claude Code paints its theme `background` token — a pale cyan, observed as rgb(155,208,204) — as
-  # the EXPLICIT per-cell bg on queued/injected message rows (your own input, cross-thread funes
+  # the EXPLICIT per-cell bg on queued/injected message rows (your own input, cross-thread server
   # messages). The VT stores it faithfully, so without neutralising it those rows blit as cyan under
   # a phosphor theme. Remap the sentinel to the panel's own default so they read like the rest of the
   # screen. It's not a real background choice any harness means to show — matching the value is the
-  # only signal aleph gets. (Value captured live via the probe below, 2026-08-21; earlier guesses of
+  # only signal console gets. (Value captured live via the probe below, 2026-08-21; earlier guesses of
   # 0x00CCCC/0x009999 never fired.)
   @bg_sentinels [0x9BD0CC]
 

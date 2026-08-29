@@ -105,7 +105,7 @@ defmodule Console.CockpitTest do
 
       assert %{title: "status", lines: lines} = Cockpit.status_detail_content(health)
       joined = Enum.map_join(lines, "\n", fn {t, _style} -> t end)
-      assert joined =~ "funes"
+      assert joined =~ "server"
       assert joined =~ "disk 68%"
       assert joined =~ "pi"
     end

@@ -38,21 +38,21 @@ defmodule Console.MentionTest do
 
   test "route wakes every mentioned coworker EXCEPT the author's own window (loop guard)" do
     assert Mention.route(%{author: "tertius-machine", body: "@hronir-machine check MCP", thread_id: 1}, [], @roster) ==
-             [{"hronir", "[funes thread #1] tertius-machine: @hronir-machine check MCP"}]
+             [{"hronir", "[tlon thread #1] tertius-machine: @hronir-machine check MCP"}]
 
     assert Mention.route(%{author: "hronir-machine", body: "@tertius-machine your turn", thread_id: 1}, [], @roster) ==
-             [{"tertius", "[funes thread #1] hronir-machine: @tertius-machine your turn"}]
+             [{"tertius", "[tlon thread #1] hronir-machine: @tertius-machine your turn"}]
   end
 
   test "the operator (not a coworker) mentioning the builder wakes it" do
     assert Mention.route(%{author: "andrew", body: "@hronir-machine do the thing", thread_id: 7}, [], @roster) ==
-             [{"hronir", "[funes thread #7] andrew: @hronir-machine do the thing"}]
+             [{"hronir", "[tlon thread #7] andrew: @hronir-machine do the thing"}]
   end
 
   test "a multiline body is flattened to one line (tmux send-keys is line-based)" do
     routed = Mention.route(%{author: "andrew", body: "@hronir-machine line one\nline two", thread_id: 1}, [], @roster)
     assert [{_window, text}] = routed
-    assert text == "[funes thread #1] andrew: @hronir-machine line one line two"
+    assert text == "[tlon thread #1] andrew: @hronir-machine line one line two"
   end
 
   test "a message with no mention routes nowhere" do
@@ -61,7 +61,7 @@ defmodule Console.MentionTest do
 
   test "a message missing thread_id still routes (with '?' for the id)" do
     assert Mention.route(%{author: "andrew", body: "@hronir-machine hi", thread_id: nil}, [], @roster) ==
-             [{"hronir", "[funes thread ?] andrew: @hronir-machine hi"}]
+             [{"hronir", "[tlon thread ?] andrew: @hronir-machine hi"}]
   end
 
   describe "route/3 with a thread lead (bare-reply wake)" do
@@ -70,7 +70,7 @@ defmodule Console.MentionTest do
                %{author: "andrew", body: "who am i talking to?", thread_id: 9},
                [lead: "hronir-machine"],
                @roster
-             ) == [{"hronir", "[funes thread #9] andrew: who am i talking to?"}]
+             ) == [{"hronir", "[tlon thread #9] andrew: who am i talking to?"}]
     end
 
     test "an explicit @-mention overrides the lead (directed, not the lead)" do
@@ -78,7 +78,7 @@ defmodule Console.MentionTest do
                %{author: "andrew", body: "@tertius-machine you take this", thread_id: 9},
                [lead: "hronir-machine"],
                @roster
-             ) == [{"tertius", "[funes thread #9] andrew: @tertius-machine you take this"}]
+             ) == [{"tertius", "[tlon thread #9] andrew: @tertius-machine you take this"}]
     end
 
     test "the lead is not woken by its own post (loop guard still holds)" do
@@ -101,7 +101,7 @@ defmodule Console.MentionTest do
       assert Mention.route(%{author: "andrew", body: "just talking", thread_id: 1}) == []
 
       assert Mention.route(%{author: "andrew", body: "@hronir-machine hi", thread_id: 7}, [], @roster) ==
-               [{"hronir", "[funes thread #7] andrew: @hronir-machine hi"}]
+               [{"hronir", "[tlon thread #7] andrew: @hronir-machine hi"}]
     end
   end
 
@@ -111,7 +111,7 @@ defmodule Console.MentionTest do
                %{author: "andrew", body: "tell me a joke", thread_id: 2},
                [lead: "hronir-machine", staffed_window: "t2"],
                @roster
-             ) == [{"t2", "[funes thread #2] andrew: tell me a joke"}]
+             ) == [{"t2", "[tlon thread #2] andrew: tell me a joke"}]
     end
 
     test "an explicit @-mention of the lead on a staffed thread also lands on t<id>" do
@@ -119,7 +119,7 @@ defmodule Console.MentionTest do
                %{author: "andrew", body: "@hronir-machine ping", thread_id: 2},
                [lead: "hronir-machine", staffed_window: "t2"],
                @roster
-             ) == [{"t2", "[funes thread #2] andrew: @hronir-machine ping"}]
+             ) == [{"t2", "[tlon thread #2] andrew: @hronir-machine ping"}]
     end
 
     test "the staffed lead's own post wakes nobody (loop guard survives the redirect)" do
@@ -135,7 +135,7 @@ defmodule Console.MentionTest do
                %{author: "andrew", body: "@tertius-machine you take it", thread_id: 2},
                [lead: "hronir-machine", staffed_window: "t2"],
                @roster
-             ) == [{"tertius", "[funes thread #2] andrew: @tertius-machine you take it"}]
+             ) == [{"tertius", "[tlon thread #2] andrew: @tertius-machine you take it"}]
     end
 
     test "nil staffed_window is the standing-thread path (no redirect)" do
@@ -143,7 +143,7 @@ defmodule Console.MentionTest do
                %{author: "andrew", body: "tell me a joke", thread_id: 1},
                [lead: "hronir-machine", staffed_window: nil],
                @roster
-             ) == [{"hronir", "[funes thread #1] andrew: tell me a joke"}]
+             ) == [{"hronir", "[tlon thread #1] andrew: tell me a joke"}]
     end
   end
 
@@ -152,7 +152,7 @@ defmodule Console.MentionTest do
       row = %{author: "hronir-machine", body: "@reviewer-machine review the diff in HEAD~1", thread_id: 42}
 
       assert Mention.route(row, [lead: "hronir-machine", staffed_window: "t42"], @roster) ==
-               [{"r42", "[funes thread #42] hronir-machine: @reviewer-machine review the diff in HEAD~1"}]
+               [{"r42", "[tlon thread #42] hronir-machine: @reviewer-machine review the diff in HEAD~1"}]
     end
 
     test "a reviewer's own post never wakes its own r<id> window (loop guard)" do
@@ -164,7 +164,7 @@ defmodule Console.MentionTest do
       row = %{author: "reviewer-machine", body: "@hronir-machine ESCALATE apply: <patch>", thread_id: 42}
 
       assert Mention.route(row, [lead: "hronir-machine", staffed_window: "t42"], @roster) ==
-               [{"t42", "[funes thread #42] reviewer-machine: @hronir-machine ESCALATE apply: <patch>"}]
+               [{"t42", "[tlon thread #42] reviewer-machine: @hronir-machine ESCALATE apply: <patch>"}]
     end
 
     test "a crew handle without a thread id does not resolve (no tid → no per-thread window)" do

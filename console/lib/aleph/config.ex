@@ -2,7 +2,7 @@ defmodule Console.Config do
   @moduledoc """
   The operator's **runtime settings file** — the knobs the cockpit exposes in-app (the SETTINGS
   panel + verbs) so changing them never means editing Elixir source or re-running `home:switch`.
-  A plain JSON map at `~/.config/aleph/config.json` (override with `config :console, :config_path`,
+  A plain JSON map at `~/.config/console/config.json` (override with `config :console, :config_path`,
   which the test env points away from the real home).
 
   Shape (all keys optional — absent means "the compiled default wins"):
@@ -19,11 +19,11 @@ defmodule Console.Config do
   is just "no overrides"); writes are atomic (tmp + rename) so a crash mid-write can't truncate it.
   """
 
-  @doc "The settings file path (`config :console, :config_path` override, else ~/.config/aleph/config.json)."
+  @doc "The settings file path (`config :console, :config_path` override, else ~/.config/console/config.json)."
   @spec path() :: String.t()
   def path do
     Application.get_env(:console, :config_path) ||
-      Path.join([xdg_config_home(), "aleph", "config.json"])
+      Path.join([xdg_config_home(), "console", "config.json"])
   end
 
   @doc "The whole settings map — `%{}` when the file is absent or unreadable (defaults win)."
@@ -76,7 +76,7 @@ defmodule Console.Config do
   end
 
   @doc """
-  Where aleph is running — the harness-binding signal (per-thread-agents Slice D): `"home"`
+  Where console is running — the harness-binding signal (per-thread-agents Slice D): `"home"`
   (personal Anthropic subscription; anthropic-model coworkers must ride the official
   `claude_code` harness — the ToS rule) or `"work"` (API-billed; pi may drive any provider).
   Precedence: `TLON_ENV` env var > the config file's `"environment"` key > `"home"`.

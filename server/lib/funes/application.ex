@@ -10,7 +10,7 @@ defmodule Server.Application do
     # opt-in (off by default): its presence-gating prerequisite exists (BOTH
     # warmth and engine-credit, see Server.Switchboard), but the wake only pokes for
     # real once a deployment ALSO sets a non-Inert arbiter — so the dogfood hub
-    # (aleph, topology A) flips :start_switchboard on, the prod service stays inert
+    # (console, topology A) flips :start_switchboard on, the prod service stays inert
     # until the service→tmux path is proven (see the tlön design doc). The MCP
     # channel is opt-in the same way: a node that serves agents flips :start_mcp on.
     # The consult mirror is on by default (it only writes DB rows, never pokes a pane, so it

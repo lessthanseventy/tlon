@@ -1,10 +1,10 @@
 defmodule Server do
   @moduledoc """
-  The boundary of the funes system (enforced by the `:boundary` compiler — a violation is a
+  The boundary of the server system (enforced by the `:boundary` compiler — a violation is a
   compile warning, and the gate runs `--warnings-as-errors`, so reaching into a non-exported
   module fails `mise run check`).
 
-  The exports below ARE funes' public surface — what a consumer (aleph, an MCP adapter) may
+  The exports below ARE server' public surface — what a consumer (console, an MCP adapter) may
   call. Everything else (`Repo`, the schemas' changesets, `Switchboard`, `Agent`, `Session`,
   the event/fact/issue internals) is this module's own business: reach for it from outside and
   the build says no. Widening the surface is a one-line diff HERE, which is the point — the
@@ -16,31 +16,31 @@ defmodule Server do
     exports: [
       # The channel: threads, messages, the chorus — the one conversational API.
       Channel,
-      # Pub/sub topics for live surfaces (aleph subscribes; announce stays internal callers').
+      # Pub/sub topics for live surfaces (console subscribes; announce stays internal callers').
       Bus,
       # Read models a cockpit renders: who's working, what's known, what's in scope.
       Staff,
       Board,
       Dossier,
-      # Compositions: the workspaces context aleph reads to drive its picker/survey/spawn.
+      # Compositions: the workspaces context console reads to drive its picker/survey/spawn.
       Workspaces,
       Presence,
-      # Explicit thinking/idle presence (aleph renders it; harnesses declare via MCP).
+      # Explicit thinking/idle presence (console renders it; harnesses declare via MCP).
       Presence.Thinking,
       # The agent-to-agent consult (ask a peer; the answer is mirrored back).
       Consult,
-      # Migration pre-flight (aleph.run refuses to boot a behind db).
+      # Migration pre-flight (console.run refuses to boot a behind db).
       Doctor,
-      # The steering-config eval harness (worklines slice 0) — aleph's scenarios use the
+      # The steering-config eval harness (worklines slice 0) — console's scenarios use the
       # same runner/judge, so each module gates its own steering.
       Eval,
       Eval.Scenario,
       Eval.Judge,
-      # Identity minting for spawned harnesses (the funes-citizen handshake).
+      # Identity minting for spawned harnesses (the server-citizen handshake).
       MCP.Spawn,
-      # The arbiter behaviour a host implements (aleph's terminal-writing arbiter).
+      # The arbiter behaviour a host implements (console's terminal-writing arbiter).
       Arbiter,
-      # The crew behaviour a host implements (aleph spawns a role's window in-node).
+      # The crew behaviour a host implements (console spawns a role's window in-node).
       Crew,
       # Structs read by consumers (pattern-matched, never changeset-built from outside).
       Thread,
@@ -59,10 +59,10 @@ defmodule Server do
   @doc "The most recent operator-authored message on a thread, or nil — the opening-turn source."
   defdelegate latest_operator_message(thread_id), to: Server.Channel
 
-  @doc "Recall corpus at a glance (facts/embedded/pinned vs budget) — aleph's Memory pane read."
+  @doc "Recall corpus at a glance (facts/embedded/pinned vs budget) — console's Memory pane read."
   defdelegate recall_coverage(), to: Server.Recall, as: :coverage
 
-  @doc "The always-loaded constraint facts (the pinned set) — aleph's Memory pane shows these."
+  @doc "The always-loaded constraint facts (the pinned set) — console's Memory pane shows these."
   defdelegate pinned(), to: Server.Dossier, as: :always_loaded_constraints
 
   @doc "Habits awaiting the operator's review — the Memory pane's approval queue, newest first."

@@ -1,10 +1,10 @@
 defmodule Console.View do
   @moduledoc """
   Composition: turn the cockpit's state into placed panels (design §3, "a view is plain data").
-  Given the assembled funes `reads` and the terminal size, `compose/3` lays out the fixed frame —
+  Given the assembled server `reads` and the terminal size, `compose/3` lays out the fixed frame —
   left sidebar (space picker + the active space's situational panels), the center surface, the
   right sidebar — each section in its own bordered box — and the status footer, as a list of
-  `{panel, data, rect}` placements the `Console.Board` paints. Pure and testable: no TTY, no funes.
+  `{panel, data, rect}` placements the `Console.Board` paints. Pure and testable: no TTY, no server.
 
   `reads` is the map the Cockpit assembles:
     `%{active_key, focused_id, focused_title, roster, threads, scope, chatter, session}`
@@ -121,7 +121,7 @@ defmodule Console.View do
 
   # The center's chat face (reshape slice D): `v` flipped center_view to :chat — swap the Terminal
   # section for the attached thread's conversation, keeping the WindowBar/Ticker frame around it.
-  # Only when the chat read resolved: a failed/empty read (no thread, funes down) degrades to the
+  # Only when the chat read resolved: a failed/empty read (no thread, server down) degrades to the
   # PTY, never a blank center.
   defp chat_center(surface, %{center_view: :chat} = reads) do
     if is_map(reads[:center_chat]) do
@@ -338,7 +338,7 @@ defmodule Console.View do
   defp scroll_data(_panel, data, _reads), do: data
 
   # `Console.Workspaces` isn't started under `mix test` (config/test.exs `start_workspaces: false` — it
-  # would subscribe to the funes workspaces Bus and pollute the pure-render tests), so a call here
+  # would subscribe to the server workspaces Bus and pollute the pure-render tests), so a call here
   # degrades to `[]` instead of crashing the paint — same guard as `Console.Space.fetch_workspaces/0`.
   defp author_workspaces do
     Workspaces.all()
@@ -478,7 +478,7 @@ defmodule Console.View do
   # once per render by the Cockpit) each get their agent handle (window → agent via
   # `Console.Mention.coworkers/1`, inverted, sourced from the active space's roster) and warmth
   # (`reads.roster`, already fetched for the sidebar) — so WindowBar stays a pure render with no
-  # funes reads of its own.
+  # server reads of its own.
   # C3.1: the strip is LEADERS only — `t<id>` leaf windows (spawned by ensure_thread_sessions) move
   # to the Leaves panel. Reject by the leaf-name shape, not a roster allowlist, so an unexpected
   # leader window (roster not yet loaded, a hand-made window) still shows rather than vanishing.
@@ -510,7 +510,7 @@ defmodule Console.View do
   def focused_lead(r), do: r |> window_tabs() |> Enum.find_value(fn t -> if t.active?, do: t.agent end)
 
   # The Claude-engine clock readout: `:off` only once the operator has manually clocked "claude"
-  # out (`Server.Presence.clock_out/1`, e.g. from `funes:console`) — nothing calls that today, so
+  # out (`Server.Presence.clock_out/1`, e.g. from `server:console`) — nothing calls that today, so
   # this reads `:on` until that console verb exists. A real per-agent engine reader (§3b,
   # `Server.Presence.Engine`) is a later, local backend swapped into the same seam.
   defp engine_state, do: if("claude" in Presence.clocked_out_engines(), do: :off, else: :on)

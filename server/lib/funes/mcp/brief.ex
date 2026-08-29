@@ -167,7 +167,7 @@ defmodule Server.MCP.Brief do
   end
 
   @doc """
-  A WORLD — a composition aleph reads to drive its picker/survey/spawn. Machine-
+  A WORLD — a composition console reads to drive its picker/survey/spawn. Machine-
   global (no thread scope): `paths`/`roster`/`knobs` round-trip as the JSON the
   columns hold — a list of globs, a list of `{archetype,name,model?,knobs}` maps,
   and a free-form map.

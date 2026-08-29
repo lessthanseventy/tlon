@@ -14,7 +14,7 @@ defmodule Console.Panel.TickerTest do
     [row] = Ticker.render(%{events: [{:fact_banked, fact}]}, @rect)
     text = Enum.map_join(row, fn {t, _} -> t end)
 
-    assert text =~ "funes"
+    assert text =~ "tlon"
     assert text =~ "fact #35"
     assert Enum.any?(row, fn {_t, s} -> s == :event_ok end)
   end
@@ -23,7 +23,7 @@ defmodule Console.Panel.TickerTest do
     [row] = Ticker.render(%{events: []}, @rect)
     text = Enum.map_join(row, fn {t, _} -> t end)
 
-    assert text =~ "funes"
+    assert text =~ "tlon"
     assert text =~ "idle"
     assert Enum.any?(row, fn {_t, s} -> s == :dim end)
   end

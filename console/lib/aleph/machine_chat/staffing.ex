@@ -46,7 +46,7 @@ defmodule Console.MachineChat.Staffing do
   tertius is the vantage, not a leaf lead; a worker-less roster is a misconfiguration the caller
   surfaces as a leaderless thread, not one tertius should absorb). `nil` when no worker resolves.
   Deliberately never invents a stand-in handle: a guessed `-machine` that was never registered as
-  a funes agent gives `Server.assign_lead/2` nothing to bind, and the thread ends up leaderless
+  a server agent gives `Server.assign_lead/2` nothing to bind, and the thread ends up leaderless
   with nobody listening (the machine-chat silence bug).
   """
   @spec default_coworker([map()]) :: String.t() | nil
@@ -64,7 +64,7 @@ defmodule Console.MachineChat.Staffing do
   # and drops meta/unknown entries.
   defp worker_handle(roster), do: List.first(Console.Profiles.leaf_handles(roster))
 
-  # The funes handle convention: profile name + "-machine". Tolerates string (JSON) or atom keys.
+  # The server handle convention: profile name + "-machine". Tolerates string (JSON) or atom keys.
   defp handle(entry), do: "#{entry["name"] || entry[:name]}-machine"
   defp archetype_of(entry), do: entry["archetype"] || entry[:archetype]
 end

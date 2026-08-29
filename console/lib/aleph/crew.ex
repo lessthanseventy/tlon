@@ -1,14 +1,14 @@
 defmodule Console.Crew do
   @moduledoc """
-  The funes crew — roles the leader spawns onto a task thread and tears down when done.
+  The server crew — roles the leader spawns onto a task thread and tears down when done.
 
-  This is the aleph-side crew backend: funes' `spawn_crew`/`kill_crew` tools dispatch through the
+  This is the console-side crew backend: server' `spawn_crew`/`kill_crew` tools dispatch through the
   `Server.Crew` behaviour (`config :server, :crew, Console.Crew`) into `spawn_role/3` / `kill_role/2`,
-  which run IN the live cockpit node — the same node holding funes' Repo, tokens, and the `tlon`
+  which run IN the live cockpit node — the same node holding server' Repo, tokens, and the `tlon`
   tmux server. No second BEAM boots and no port is re-bound; the leader staffs a reviewer from the
   thread it is leading and the window lands beside it.
 
-  A **role** is a seat, not an identity: a `%{handle, window_prefix, profile}` naming the funes
+  A **role** is a seat, not an identity: a `%{handle, window_prefix, profile}` naming the server
   author the seat posts as, the tmux window it runs in, and the `Console.Profile` that materialises
   its pi config. MVP staffs one role, `reviewer`.
 
@@ -23,8 +23,8 @@ defmodule Console.Crew do
   `:spawn_launcher`.
   """
 
-  # The crew backend funes dispatches to (`config :server, :crew, Console.Crew`) — the same seam as
-  # Console.Arbiter. funes' `spawn_crew`/`kill_crew` tools call through `Server.Crew` and land in
+  # The crew backend server dispatches to (`config :server, :crew, Console.Crew`) — the same seam as
+  # Console.Arbiter. server' `spawn_crew`/`kill_crew` tools call through `Server.Crew` and land in
   # `spawn_role/3` / `kill_role/2` below, run IN this live node, so no second BEAM boots.
   @behaviour Server.Crew
 
@@ -43,7 +43,7 @@ defmodule Console.Crew do
   @spec role(String.t()) :: map() | nil
   def role(key), do: Map.get(@roles, key)
 
-  @doc "The funes handle → role key (reverse of `role/1`'s handle), or nil for a non-crew handle."
+  @doc "The server handle → role key (reverse of `role/1`'s handle), or nil for a non-crew handle."
   @spec handle_role(String.t()) :: String.t() | nil
   def handle_role(handle) do
     Enum.find_value(@roles, fn {key, %{handle: h}} -> if h == handle, do: key end)
@@ -97,7 +97,7 @@ defmodule Console.Crew do
   end
 
   @doc """
-  The window's boot script: set TERM, source the funes `exports` block (so `${TLON_MCP_URL}` etc.
+  The window's boot script: set TERM, source the server `exports` block (so `${TLON_MCP_URL}` etc.
   reach pi's env), then `exec` the bare pi launcher. Mirrors `Cockpit.spawn_agent_window/3` — a
   role's window rides the ALREADY-created `r<tid>` window on the shared tlon server, so it must
   exec the bare `Cockpit.pi_command/1`, never `profile_launcher/1` (a `tmux new-session` wrapper
@@ -108,7 +108,7 @@ defmodule Console.Crew do
     "export TERM=xterm-256color\n" <> exports <> "\nexec " <> launcher
   end
 
-  # The reviewer runs on the SAME funes the cockpit uses — the injected minter defaults to
+  # The reviewer runs on the SAME server the cockpit uses — the injected minter defaults to
   # Server.MCP.Spawn.join, which mints in-node against the live Repo/tokens (this backend runs inside
   # the cockpit BEAM), so the identity is valid the instant the reviewer's pi connects to :4041.
   defp cmd_runner, do: Application.get_env(:console, :crew_cmd, &System.cmd/3)
@@ -121,9 +121,9 @@ defmodule Console.Crew do
   defp opening_settle_ms, do: Application.get_env(:console, :crew_settle_ms, @opening_settle_ms)
 
   # Readiness gate for the opening inject: a fresh-profile pi boots for several seconds (npm
-  # bootstrap of its extensions, MCP refresh, funes register) — far longer than a fixed settle — so
-  # we POLL the pane for pi's funes-registered footer before sending Enter, or a booting TUI swallows
-  # it and the turn sits unsubmitted. `@ready_marker` is the aleph footer's own text (our UI). Poll
+  # bootstrap of its extensions, MCP refresh, server register) — far longer than a fixed settle — so
+  # we POLL the pane for pi's server-registered footer before sending Enter, or a booting TUI swallows
+  # it and the turn sits unsubmitted. `@ready_marker` is the console footer's own text (our UI). Poll
   # cadence + budget are app-env overridable so tests don't pay the real wait, same as crew_settle_ms.
   @ready_marker "registered"
   @ready_poll_ms 500
@@ -132,7 +132,7 @@ defmodule Console.Crew do
   defp ready_timeout_ms, do: Application.get_env(:console, :crew_ready_timeout_ms, @ready_timeout_ms)
 
   @doc """
-  Spawn `role_key` onto task `thread_id` as a funes citizen, then inject the leader's `task` as its
+  Spawn `role_key` onto task `thread_id` as a server citizen, then inject the leader's `task` as its
   opening turn. Returns `{:ok, window}`. `opts[:inject]` (default true) can be set false in tests to
   skip the timed send-keys.
   """
@@ -151,7 +151,7 @@ defmodule Console.Crew do
       if Keyword.get(opts, :inject, true), do: inject_opening(window, opening_turn(thread_id, task))
       {:ok, window}
     else
-      # No workspace at all (funes down — the fallback Workspace is gone, reshape slice A):
+      # No workspace at all (server down — the fallback Workspace is gone, reshape slice A):
       # there is no tmux server to target, refuse rather than nil-crash.
       {:workspace, nil} -> {:error, :no_workspace}
       :unknown_role -> {:error, {:unknown_role, role_key}}
@@ -182,7 +182,7 @@ defmodule Console.Crew do
     :ok
   end
 
-  # `Server.Crew` behaviour — the doors funes' spawn_crew/kill_crew tools land in. Thin delegates to
+  # `Server.Crew` behaviour — the doors server' spawn_crew/kill_crew tools land in. Thin delegates to
   # the IO wrappers above; the leader's handle in `opening_turn/2` is claude-machine (MVP lead).
   # spawn/4 (not spawn/3) — a local spawn/3 call is ambiguous with Kernel.spawn/3.
   @impl Server.Crew
@@ -194,7 +194,7 @@ defmodule Console.Crew do
   # The opening assignment the leader hands the reviewer. Names the leader handle so the reviewer's
   # @<leader> ESCALATE resolves — MVP leader is claude-machine (the task thread's staffed lead).
   defp opening_turn(thread_id, task) do
-    "You are reviewing on funes thread ##{thread_id}. Leader handle: claude-machine. " <>
+    "You are reviewing on server thread ##{thread_id}. Leader handle: claude-machine. " <>
       "Task: #{task}. Read the diff (git diff/show), post findings, and escalate any fix per your protocol."
   end
 
