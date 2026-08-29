@@ -68,7 +68,7 @@ end
 
 defmodule Console.Harness.ClaudeCode do
   @moduledoc """
-  The Claude Code driver: launches through `modules/manos/claude-code/launch.sh` (funes MCP +
+  The Claude Code driver: launches through `modules/adapters/claude-code/launch.sh` (funes MCP +
   brief/capture hooks + the citizen protocol prompt). A profile's persona rides as
   `TLON_ROLE_PROMPT_FILE` (the launcher appends it to its citizen prompt — a second
   `--append-system-prompt` flag would *replace* the citizen protocol, not add to it); an
@@ -81,7 +81,7 @@ defmodule Console.Harness.ClaudeCode do
 
   @impl true
   def launch_command(%Profile{} = p) do
-    launcher = Path.join(Profiles.repo(), "modules/manos/claude-code/launch.sh")
+    launcher = Path.join(Profiles.repo(), "modules/adapters/claude-code/launch.sh")
 
     envs = role_env(p) <> deny_env(p)
 

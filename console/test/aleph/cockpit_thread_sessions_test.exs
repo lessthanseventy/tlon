@@ -116,7 +116,7 @@ defmodule Console.CockpitThreadSessionsTest do
     window = "planner-task-for-borges-machine"
     assert_receive {:tmux, ["-L", "console-workspace-99", "new-window", "-d", "-t", "w99", "-n", ^window, script]}
     assert script =~ "PI_CODING_AGENT_DIR"
-    refute script =~ "modules/manos/claude-code/launch.sh"
+    refute script =~ "modules/adapters/claude-code/launch.sh"
 
     # … with the thread id stamped as the `@funes_thread` routing key, so nothing parses the name.
     thread_tag = "#{thread.id}"
@@ -135,7 +135,7 @@ defmodule Console.CockpitThreadSessionsTest do
 
     window = "builder-task-for-hronir-machine"
     assert_receive {:tmux, ["-L", "console-workspace-99", "new-window", "-d", "-t", "w99", "-n", ^window, script]}
-    assert script =~ "modules/manos/claude-code/launch.sh"
+    assert script =~ "modules/adapters/claude-code/launch.sh"
     refute script =~ "PI_CODING_AGENT_DIR"
 
     thread_tag = "#{thread.id}"

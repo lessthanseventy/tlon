@@ -1,0 +1,21 @@
+{
+  "name": "@adapters/lsp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "adapters/lsp — LSP-backed tools for the agent: hover/definition/references/symbols/diagnostics over Expert (Elixir), tsserver (TS), nil (Nix), bash-ls, json-ls.",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "typescript": "^5.6.3"
+  },
+  "peerDependencies": {
+    "typebox": "^1.3.14"
+  },
+  "pi": {
+    "extensions": ["./src/extension.ts"]
+  }
+}

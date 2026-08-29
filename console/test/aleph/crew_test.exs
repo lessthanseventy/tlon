@@ -122,7 +122,7 @@ defmodule Console.CrewTest do
       # a bare harness launch via the profile's driver (Slice D: the anthropic-model reviewer at
       # home rides the official claude launcher), NOT profile_launcher's tmux new-session wrapper —
       # execing new-session here would nest a second tmux server on the shared console-workspace-<id> socket
-      assert script =~ "modules/manos/claude-code/launch.sh"
+      assert script =~ "modules/adapters/claude-code/launch.sh"
       refute script =~ "new-session"
     end
 

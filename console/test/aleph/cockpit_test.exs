@@ -166,7 +166,7 @@ defmodule Console.CockpitTest do
       assert cmd =~ "ADAPTERS_RELOAD_CMD="
     end
 
-    test "ADAPTERS_RELOAD_CMD carries the config dir so a manos/reload respawn stays on-profile" do
+    test "ADAPTERS_RELOAD_CMD carries the config dir so a adapters/reload respawn stays on-profile" do
       cmd = Cockpit.profile_launcher(1, "tertius", @profile)
 
       assert cmd =~

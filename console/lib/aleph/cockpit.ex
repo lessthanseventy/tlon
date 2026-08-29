@@ -2616,7 +2616,7 @@ defmodule Console.Cockpit do
   # The center coworker's launcher: pi on its OWN tmux server (`-L console-workspace-<id>`, id-derived —
   # not name-derived, so a workspace rename can't orphan it — + the profile's persistence-free
   # tmux.conf), window 0 named `lead_name` (the roster lead's name — the tab-strip label).
-  # ADAPTERS_RELOAD_CMD lets manos/reload respawn in place with --continue, keeping the thread across
+  # ADAPTERS_RELOAD_CMD lets adapters/reload respawn in place with --continue, keeping the thread across
   # the restart.
   def profile_launcher(workspace_id, lead_name, %Profile{} = profile) do
     pi = pi_command(profile)

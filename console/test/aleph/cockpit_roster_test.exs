@@ -88,7 +88,7 @@ defmodule Console.CockpitRosterTest do
     assert opts[:mandate] == "machine"
 
     assert_receive {:tmux, ["-L", "console-workspace-0", "new-window", "-d", "-t", "w0", "-n", "hronir", script]}
-    assert script =~ "modules/manos/claude-code/launch.sh"
+    assert script =~ "modules/adapters/claude-code/launch.sh"
     refute script =~ "PI_CODING_AGENT_DIR"
   end
 
@@ -121,6 +121,6 @@ defmodule Console.CockpitRosterTest do
 
     assert_receive {:tmux, ["-L", "console-workspace-99", "new-window", "-d", "-t", "w99", "-n", "borges", script]}
     assert script =~ "PI_CODING_AGENT_DIR"
-    refute script =~ "modules/manos/claude-code/launch.sh"
+    refute script =~ "modules/adapters/claude-code/launch.sh"
   end
 end

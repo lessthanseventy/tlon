@@ -7,23 +7,23 @@ defmodule Console.ProfilesTest do
 
   @base_settings %{
     "extensions" => [
-      "/repo/modules/manos/pi/src/extension.ts",
-      "/repo/modules/manos/consult/src/extension.ts",
-      "/repo/modules/manos/lsp/src/extension.ts",
-      "/repo/modules/manos/reload/src/extension.ts"
+      "/repo/modules/adapters/pi/src/extension.ts",
+      "/repo/modules/adapters/consult/src/extension.ts",
+      "/repo/modules/adapters/lsp/src/extension.ts",
+      "/repo/modules/adapters/reload/src/extension.ts"
     ],
     "defaultProvider" => "ollama-cloud",
     "defaultModel" => "deepseek-v4-flash",
-    "skills" => ["/repo/modules/manos/skills/*"]
+    "skills" => ["/repo/modules/adapters/skills/*"]
   }
   @base_mcp %{"mcpServers" => %{"funes" => %{"url" => "http://x/mcp"}}}
 
   describe "render/3 — a profile is a diff over the base config" do
     test "drops the named extensions, keeps the rest" do
-      r = Profiles.render(%Profile{name: "t", drop_extensions: ["/manos/pi/"]}, @base_settings, @base_mcp)
-      refute Enum.any?(r.settings["extensions"], &String.contains?(&1, "/manos/pi/"))
-      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/manos/lsp/"))
-      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/manos/consult/"))
+      r = Profiles.render(%Profile{name: "t", drop_extensions: ["/adapters/pi/"]}, @base_settings, @base_mcp)
+      refute Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/pi/"))
+      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/lsp/"))
+      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/consult/"))
     end
 
     test "mcp :none → empty mcpServers (self-contained); :base → inherits the base" do
@@ -65,14 +65,14 @@ defmodule Console.ProfilesTest do
     test "add_extensions appends on top of the base (a coworker-specific / not-yet-flake-registered extension)" do
       r =
         Profiles.render(
-          %Profile{name: "t", add_extensions: ["/repo/modules/manos/footer/src/footer.ts"]},
+          %Profile{name: "t", add_extensions: ["/repo/modules/adapters/footer/src/footer.ts"]},
           @base_settings,
           @base_mcp
         )
 
-      assert "/repo/modules/manos/footer/src/footer.ts" in r.settings["extensions"]
+      assert "/repo/modules/adapters/footer/src/footer.ts" in r.settings["extensions"]
       # the base ones are still there
-      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/manos/lsp/"))
+      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/lsp/"))
     end
 
     test "add wins over drop, and a doubly-present extension appears once" do
@@ -81,38 +81,39 @@ defmodule Console.ProfilesTest do
         Profiles.render(
           %Profile{
             name: "t",
-            drop_extensions: ["/manos/pi/"],
-            add_extensions: ["/repo/modules/manos/pi/src/extension.ts"]
+            drop_extensions: ["/adapters/pi/"],
+            add_extensions: ["/repo/modules/adapters/pi/src/extension.ts"]
           },
           @base_settings,
           @base_mcp
         )
 
-      assert "/repo/modules/manos/pi/src/extension.ts" in r.settings["extensions"]
+      assert "/repo/modules/adapters/pi/src/extension.ts" in r.settings["extensions"]
 
       # ...and once the base already lists an add, it isn't duplicated (idempotent post-home:switch).
-      base_with_footer = Map.update!(@base_settings, "extensions", &(&1 ++ ["/repo/modules/manos/footer/src/footer.ts"]))
+      base_with_footer =
+        Map.update!(@base_settings, "extensions", &(&1 ++ ["/repo/modules/adapters/footer/src/footer.ts"]))
 
       r2 =
         Profiles.render(
-          %Profile{name: "t", add_extensions: ["/repo/modules/manos/footer/src/footer.ts"]},
+          %Profile{name: "t", add_extensions: ["/repo/modules/adapters/footer/src/footer.ts"]},
           base_with_footer,
           @base_mcp
         )
 
-      assert Enum.count(r2.settings["extensions"], &(&1 == "/repo/modules/manos/footer/src/footer.ts")) == 1
+      assert Enum.count(r2.settings["extensions"], &(&1 == "/repo/modules/adapters/footer/src/footer.ts")) == 1
     end
   end
 
   describe "the tertius (center) profile — machine-scope funes citizen + sandboxed" do
-    test "wires funes on the machine scope, keeps the manos/pi adapter, sockets allowed in the sandbox" do
+    test "wires funes on the machine scope, keeps the adapters/pi adapter, sockets allowed in the sandbox" do
       p = Profiles.fetch("tertius")
       # Not severed: a funes server whose token binds to the machine thread (via the env
       # funes-cli.sh mints from), so Tlön gets its OWN dossier/logbook without a project bleed.
       assert %{"funes" => funes} = p.mcp
       assert funes["url"] == "${TLON_MCP_URL}"
       assert funes["headers"]["Authorization"] =~ "funes-cli.sh bearer"
-      # The manos/pi funes adapter (brief + auto-capture) is KEPT now that it points at the machine thread.
+      # The adapters/pi funes adapter (brief + auto-capture) is KEPT now that it points at the machine thread.
       assert p.drop_extensions == []
       assert p.sandbox["network"]["allowAllUnixSockets"] == true
     end
@@ -126,11 +127,11 @@ defmodule Console.ProfilesTest do
           do: assert(kept in funes["directTools"])
     end
 
-    test "adds the generic footer back (its own package, not swept up by the manos/pi drop)" do
+    test "adds the generic footer back (its own package, not swept up by the adapters/pi drop)" do
       p = Profiles.fetch("tertius")
-      assert Enum.any?(p.add_extensions, &String.ends_with?(&1, "/modules/manos/footer/src/footer.ts"))
+      assert Enum.any?(p.add_extensions, &String.ends_with?(&1, "/modules/adapters/footer/src/footer.ts"))
       # and the footer path does NOT match the funes-adapter drop, so it isn't a fight
-      refute Enum.any?(p.add_extensions, &String.contains?(&1, "/manos/pi/"))
+      refute Enum.any?(p.add_extensions, &String.contains?(&1, "/adapters/pi/"))
     end
 
     test "carries a per-coworker permission policy — yolo (autonomous), but sudo + secrets stay denied" do
@@ -283,8 +284,8 @@ defmodule Console.ProfilesTest do
       assert dir == Path.join(root, "tertius")
 
       settings = Jason.decode!(File.read!(Path.join(dir, "settings.json")))
-      # the manos/pi funes adapter is KEPT now (brief + auto-capture pointed at the machine thread)
-      assert Enum.any?(settings["extensions"], &String.contains?(&1, "/manos/pi/"))
+      # the adapters/pi funes adapter is KEPT now (brief + auto-capture pointed at the machine thread)
+      assert Enum.any?(settings["extensions"], &String.contains?(&1, "/adapters/pi/"))
       mcp = Jason.decode!(File.read!(Path.join(dir, "mcp.json")))
       assert mcp["mcpServers"]["funes"]["url"] == "${TLON_MCP_URL}"
       assert "consult_peer" in mcp["mcpServers"]["funes"]["excludeTools"]

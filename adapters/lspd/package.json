@@ -1,0 +1,16 @@
+{
+  "name": "@adapters/lspd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "adapters-lspd — the supervised LSP sidecar daemon: owns the warm LspClient pool (Expert/tsserver/nil/bash-ls/json-ls) behind a Unix socket, so a pi restart leaves servers warm.",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "start": "bun run src/server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "typescript": "^5.6.3"
+  }
+}

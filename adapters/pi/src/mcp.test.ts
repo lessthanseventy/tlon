@@ -1,0 +1,142 @@
+import { test, expect, mock, afterEach } from "bun:test";
+import { FunesClient, FunesRejected } from "./mcp";
+
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
+
+// A mock fetch that scripts the MCP handshake and then 404s the first tool call — exactly what
+// anubis does when aleph restarts and loses the session the token was minted into.
+function scriptedFetch() {
+  let mints = 0;
+  const fn = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const body = typeof init?.body === "string" ? init.body : "";
+    if (url.endsWith("/mint")) {
+      mints += 1;
+      return new Response(JSON.stringify({ token: "tok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (body.includes('"initialize"')) {
+      return new Response('event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}\n', {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "mcp-session-id": "sess-1" },
+      });
+    }
+    if (body.includes('"notifications/initialized"')) {
+      return new Response("", { status: 202 });
+    }
+    if (body.includes('"tools/call"')) {
+      return new Response(JSON.stringify({ error: "no such session" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  });
+  return { fn, mints: () => mints };
+}
+
+test("a 404 (lost session) drops the connection so the next connect() re-handshakes", async () => {
+  const { fn, mints } = scriptedFetch();
+  globalThis.fetch = fn as unknown as typeof fetch;
+
+  const c = new FunesClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
+
+  await c.connect();
+  expect(mints()).toBe(1);
+
+  // A tool call 404s — anubis lost the session (the node restarted).
+  await expect(c.register(undefined)).rejects.toBeInstanceOf(FunesRejected);
+
+  // Without a #drop() on 404, #connected stays true → this connect() no-ops and the dead session
+  // id is reused forever (the Tlön 404 loop). The fix drops on 404, so connect() re-mints.
+  await c.connect();
+  expect(mints()).toBe(2);
+});
+
+// The presence declares are self-thread and argless: the tool NAME is the whole contract, so
+// pin that presence_thinking / presence_idle go out exactly as named.
+test("presenceThinking / presenceIdle call their argless self-thread tools", async () => {
+  const called: string[] = [];
+  const fn = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const body = typeof init?.body === "string" ? init.body : "";
+    if (url.endsWith("/mint")) {
+      return new Response(JSON.stringify({ token: "tok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (body.includes('"initialize"')) {
+      return new Response('event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}\n', {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "mcp-session-id": "sess-1" },
+      });
+    }
+    if (body.includes('"notifications/initialized"')) {
+      return new Response("", { status: 202 });
+    }
+    if (body.includes('"tools/call"')) {
+      const name = (JSON.parse(body) as { params: { name: string } }).params.name;
+      called.push(name);
+      return new Response(
+        'event: message\ndata: {"jsonrpc":"2.0","id":2,"result":{"content":[],"isError":false}}\n',
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    }
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  });
+  globalThis.fetch = fn as unknown as typeof fetch;
+
+  const c = new FunesClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
+  await c.connect();
+  await c.presenceThinking();
+  await c.presenceIdle();
+
+  expect(called).toEqual(["presence_thinking", "presence_idle"]);
+});
+
+// postMessage backs the heartbeat check-in (funes thread #3): pin the tool name + body arg go
+// out exactly as the PostMessage tool expects.
+test("postMessage calls post_message with the body", async () => {
+  const calls: Array<{ name: string; args: unknown }> = [];
+  const fn = mock(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    const body = typeof init?.body === "string" ? init.body : "";
+    if (url.endsWith("/mint")) {
+      return new Response(JSON.stringify({ token: "tok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (body.includes('"initialize"')) {
+      return new Response('event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}\n', {
+        status: 200,
+        headers: { "content-type": "text/event-stream", "mcp-session-id": "sess-1" },
+      });
+    }
+    if (body.includes('"notifications/initialized"')) {
+      return new Response("", { status: 202 });
+    }
+    if (body.includes('"tools/call"')) {
+      const parsed = JSON.parse(body) as { params: { name: string; arguments: unknown } };
+      calls.push({ name: parsed.params.name, args: parsed.params.arguments });
+      return new Response(
+        'event: message\ndata: {"jsonrpc":"2.0","id":2,"result":{"content":[],"isError":false}}\n',
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    }
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  });
+  globalThis.fetch = fn as unknown as typeof fetch;
+
+  const c = new FunesClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
+  await c.connect();
+  await c.postMessage("still on it — running mix test");
+
+  expect(calls).toEqual([{ name: "post_message", args: { body: "still on it — running mix test" } }]);
+});

@@ -84,7 +84,7 @@ defmodule Console.HarnessTest do
       p = %Profile{name: "vera", archetype: :reviewer, model: @sonnet, system_prompt: "You review."}
       cmd = Harness.driver(:claude_code).launch_command(p)
 
-      assert cmd =~ "modules/manos/claude-code/launch.sh"
+      assert cmd =~ "modules/adapters/claude-code/launch.sh"
       assert cmd =~ "TLON_ROLE_PROMPT_FILE="
       assert cmd =~ "profiles/vera/system_prompt.md"
       assert cmd =~ "--model claude-sonnet-5"

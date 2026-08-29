@@ -120,13 +120,13 @@ defmodule Console.Profiles do
   set -g mode-style 'bg=#3b4261,fg=#c0caf5'
   """
 
-  # The Tlön coworker's sandbox (pi-sandbox `sandbox.json`). Permissive enough that the manos tooling
+  # The Tlön coworker's sandbox (pi-sandbox `sandbox.json`). Permissive enough that the adapters tooling
   # keeps working under bubblewrap — the footgun class this session kept hitting:
-  #   * allowAllUnixSockets — the lsp shim binds/connects manos-lspd.sock; reload/tmux use sockets too
+  #   * allowAllUnixSockets — the lsp shim binds/connects adapters-lspd.sock; reload/tmux use sockets too
   #   * allowWrite the repo + /tmp + the socket dir + caches — the daemon writes the socket file, Expert
   #     writes its .expert index, edits land in the repo
   #   * allowedDomains — the hosts this repo's bash tasks reach (mirrors the machine sandbox allowlist)
-  # See [[pi-sandbox-manos-allowlist]]. NOT model API calls (pi's own process, not bash).
+  # See [[pi-sandbox-adapters-allowlist]]. NOT model API calls (pi's own process, not bash).
   #
   # bash runs under `bwrap --unshare-net`, so `127.0.0.1` inside a bash call is the coworker's OWN
   # empty netns, NOT the host's. Tlön's funes is at `TLON_MCP_URL` = http://127.0.0.1:4041/mcp, so
@@ -207,7 +207,7 @@ defmodule Console.Profiles do
       ]
     },
     "filesystem" => %{
-      # Writes: the repo (edits), /tmp + the socket dir (manos-lspd), caches. Never the nix store.
+      # Writes: the repo (edits), /tmp + the socket dir (adapters-lspd), caches. Never the nix store.
       "allowWrite" => [
         @repo,
         "/tmp",
@@ -251,7 +251,7 @@ defmodule Console.Profiles do
       # bash: routine runs; sudo + the catastrophic-and-never-legitimate commands are DENY (terminal,
       # so they hold even under yolo — deny is the one thing yolo can't re-permit). This deterministic
       # floor is intentionally NARROW: it is the last line, not the whole defense. The nuanced middle
-      # (novel/ambiguous bash) is the manos bash-judge authorizer-link's job. See [[pi-bash-judge]].
+      # (novel/ambiguous bash) is the adapters bash-judge authorizer-link's job. See [[pi-bash-judge]].
       "bash" => %{
         "*" => "allow",
         "sudo *" => "deny",
@@ -312,10 +312,10 @@ defmodule Console.Profiles do
                           })
                         )
 
-  # The dense statusline (manos/footer) — its OWN package, not manos/pi, so dropping the funes
+  # The dense statusline (adapters/footer) — its OWN package, not adapters/pi, so dropping the funes
   # adapter doesn't take the footer with it. Added explicitly so Tlön shows it at the next cockpit
   # restart even before the flake registers it into the base config (which needs a home:switch).
-  @footer_extension "#{@repo}/modules/manos/footer/src/footer.ts"
+  @footer_extension "#{@repo}/modules/adapters/footer/src/footer.ts"
 
   # The machine-scope funes surface (see § "The tertius coworker" in the moduledoc for why the tools
   # are cut this way). Base tool set; `@tertius_funes_mcp` adds the cross-leaf read on top.

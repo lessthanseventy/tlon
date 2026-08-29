@@ -10,7 +10,7 @@
 # (ghostty_ex/libghostty-vt) and boots funes, so the whole repo runs on one OTP.
 erlang = "28"
 elixir = "1.19.5-otp-28"
-# manos' pi adapter is TypeScript; bun runs it natively (no build step) and is the test
+# adapters' pi adapter is TypeScript; bun runs it natively (no build step) and is the test
 # runner. mise owns the dev runtime, so the JS toolchain is pinned here too, not assumed.
 bun = "1.3.14"
 
@@ -120,7 +120,7 @@ run = "scripts/funes-cli.sh post"
 # no ~/.claude mutation, so a plain `claude` stays untouched.
 [tasks."server:claude"]
 description = "launch Claude Code as a funes citizen — `server:claude` (fresh thread) or `server:claude -- <id>` (join)"
-run = "modules/manos/claude-code/launch.sh"
+run = "modules/adapters/claude-code/launch.sh"
 
 [tasks.cap]
 description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
@@ -155,78 +155,78 @@ description = "server: re-run the suite on every change under modules/server (ca
 dir = "modules/server"
 run = "../../scripts/watch.sh mise exec -- mix test"
 
-[tasks."manos:pi:watch"]
-description = "manos/pi renderer: re-run the suite on every change (cap signal)"
-dir = "modules/manos/pi"
+[tasks."adapters:pi:watch"]
+description = "adapters/pi renderer: re-run the suite on every change (cap signal)"
+dir = "modules/adapters/pi"
 run = "../../scripts/watch.sh bun test"
 
-[tasks."manos:pi:test"]
-description = "manos/pi renderer: the brief renderer unit suite (bun test) — the TDD loop"
-dir = "modules/manos/pi"
+[tasks."adapters:pi:test"]
+description = "adapters/pi renderer: the brief renderer unit suite (bun test) — the TDD loop"
+dir = "modules/adapters/pi"
 run = "bun test"
 
-[tasks."manos:pi:check"]
-description = "manos/pi renderer: the precommit gate — install (frozen), typecheck, tests"
-dir = "modules/manos/pi"
+[tasks."adapters:pi:check"]
+description = "adapters/pi renderer: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/pi"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
-[tasks."manos:consult:watch"]
-description = "manos/consult: re-run the suite on every change (cap signal)"
-dir = "modules/manos/consult"
+[tasks."adapters:consult:watch"]
+description = "adapters/consult: re-run the suite on every change (cap signal)"
+dir = "modules/adapters/consult"
 run = "../../scripts/watch.sh bun test"
 
-[tasks."manos:consult:test"]
-description = "manos/consult: the delegation unit suite (bun test) — the TDD loop"
-dir = "modules/manos/consult"
+[tasks."adapters:consult:test"]
+description = "adapters/consult: the delegation unit suite (bun test) — the TDD loop"
+dir = "modules/adapters/consult"
 run = "bun test"
 
-[tasks."manos:consult:check"]
-description = "manos/consult: the precommit gate — install (frozen), typecheck, tests"
-dir = "modules/manos/consult"
+[tasks."adapters:consult:check"]
+description = "adapters/consult: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/consult"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
-[tasks."manos:fmt:check"]
-description = "manos/fmt: the precommit gate — install (frozen), typecheck, tests"
-dir = "modules/manos/fmt"
+[tasks."adapters:fmt:check"]
+description = "adapters/fmt: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/fmt"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
-[tasks."manos:lsp:check"]
-description = "manos/lsp: the pi shim's precommit gate — install (frozen), typecheck, tests"
-dir = "modules/manos/lsp"
+[tasks."adapters:lsp:check"]
+description = "adapters/lsp: the pi shim's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/lsp"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
-[tasks."manos:lspd:check"]
-description = "manos/lspd: the sidecar daemon's precommit gate — install (frozen), typecheck, tests"
-dir = "modules/manos/lspd"
+[tasks."adapters:lspd:check"]
+description = "adapters/lspd: the sidecar daemon's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/lspd"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
 # Run the LSP sidecar in the foreground (dev). --watch reloads daemon code on edit (restarts the
 # daemon, not pi — Expert cold-starts once). Normal use needs no task: the pi shim auto-spawns the
 # daemon on first tool call. A systemd --user unit for real supervision is the remaining design step.
 [tasks."lspd"]
-description = "manos/lspd: run the LSP sidecar daemon in the foreground (bun --watch, dev)"
-dir = "modules/manos/lspd"
+description = "adapters/lspd: run the LSP sidecar daemon in the foreground (bun --watch, dev)"
+dir = "modules/adapters/lspd"
 run = "bun --watch run src/server.ts"
 
-[tasks."manos:reload:check"]
-description = "manos/reload: the precommit gate — install (frozen), typecheck, tests"
-dir = "modules/manos/reload"
+[tasks."adapters:reload:check"]
+description = "adapters/reload: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/reload"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
-[tasks."manos:footer:check"]
-description = "manos/footer: the statusline's precommit gate — install (frozen), typecheck, tests"
-dir = "modules/manos/footer"
+[tasks."adapters:footer:check"]
+description = "adapters/footer: the statusline's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/footer"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
-# The safety gate the `reload` tool runs before respawning pi: every manos pi extension must
+# The safety gate the `reload` tool runs before respawning pi: every adapters pi extension must
 # typecheck (a syntax error would respawn pi into code it can't load). Fast — tsc only, no tests
 # or install; runs from the repo root, one package at a time.
-[tasks."manos:typecheck"]
-description = "manos: typecheck every pi extension (fast — the `reload` safety gate)"
+[tasks."adapters:typecheck"]
+description = "adapters: typecheck every pi extension (fast — the `reload` safety gate)"
 run = """
 set -e
 for d in pi consult fmt lsp lspd reload footer; do
-  ( cd "modules/manos/$d" && bun run typecheck )
+  ( cd "modules/adapters/$d" && bun run typecheck )
 done
 """
 
@@ -345,8 +345,8 @@ echo "console:reset:db — dev db wiped, recreated, and migrated (fresh + empty)
 """
 
 [tasks.check]
-description = "Everything green: the funes + aleph + manos (pi + consult + fmt + lsp + reload + footer) precommit gates (format + warnings + credo + types + tests)"
-depends = ["server:check", "console:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:lspd:check", "manos:reload:check", "manos:footer:check"]
+description = "Everything green: the funes + aleph + adapters (pi + consult + fmt + lsp + reload + footer) precommit gates (format + warnings + credo + types + tests)"
+depends = ["server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:fmt:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check + build the activation script — the machine-level gate"
@@ -362,8 +362,8 @@ run = [
 description = "machine: apply the home-manager profile"
 run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox -b backup"
 
-# pi the agent — model launchers, pinned to a model + thinking level. NOT the manos/pi
-# renderer (that's manos:pi:test/check/watch above) — distinct namespace. All draw on
+# pi the agent — model launchers, pinned to a model + thinking level. NOT the adapters/pi
+# renderer (that's adapters:pi:test/check/watch above) — distinct namespace. All draw on
 # the flat $20 ollama.com plan (kimi-k3 excluded: bills as EXTRA usage on top). Bare
 # `pi` already starts on ollama-cloud/glm-5.2; these are one-command alternates —
 # in-session Ctrl+P still cycles the same ring. Args pass through:
@@ -371,23 +371,23 @@ run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox
 
 [tasks."pi:balanced"]
 description = "pi agent: balanced everyday driver — glm-5.2 (Claude/GPT-alike, 976K ctx)"
-run = "modules/manos/pi/launch.sh --provider ollama-cloud --model glm-5.2"
+run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model glm-5.2"
 
 [tasks."pi:deep"]
 description = "pi agent: deep reasoning — deepseek-v4-pro, thinking:high (the hard 10%, before you'd reach for Claude)"
-run = "modules/manos/pi/launch.sh --provider ollama-cloud --model deepseek-v4-pro --thinking high"
+run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model deepseek-v4-pro --thinking high"
 
 [tasks."pi:code"]
 description = "pi agent: coding-heavy — kimi-k2.7-code (code-specialized, ~30% fewer thinking tokens)"
-run = "modules/manos/pi/launch.sh --provider ollama-cloud --model kimi-k2.7-code"
+run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model kimi-k2.7-code"
 
 [tasks."pi:fast"]
 description = "pi agent: quick/cheap throwaway — deepseek-v4-flash, thinking:low (1M ctx, fast tier)"
-run = "modules/manos/pi/launch.sh --provider ollama-cloud --model deepseek-v4-flash --thinking low"
+run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model deepseek-v4-flash --thinking low"
 
 [tasks."pi:local"]
 description = "pi agent: free/offline grunt — qwen3-coder on the local ollama daemon (no cloud budget)"
-run = "modules/manos/pi/launch.sh --provider ollama --model qwen3-coder"
+run = "modules/adapters/pi/launch.sh --provider ollama --model qwen3-coder"
 
 # The flake pins WHICH extensions (manosWiring's `packages` list), but pi owns the mutable npm
 # install (~/.pi/agent/npm) and its VERSIONS — that dir is not nix-managed. So `home:switch` never

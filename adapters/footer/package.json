@@ -1,0 +1,22 @@
+{
+  "name": "@adapters/footer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "adapters/footer — a dense 2-line pi statusline (model, context bar, I/O, branch, statuses). A generic footer, NOT a funes concern, so it loads for every pi (self-contained coworkers included).",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "typescript": "^5.6.3"
+  },
+  "pi": {
+    "extensions": ["./src/footer.ts"]
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.84.2",
+    "@earendil-works/pi-tui": "^0.84.2"
+  }
+}
