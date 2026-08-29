@@ -33,12 +33,12 @@ description = "funes: the precommit gate — format + warnings-as-errors + credo
 dir = "modules/funes"
 # Two invocations: precommit runs in :test (start_repo off), the eval needs the dev boot +
 # its own ephemeral db — the deterministic set is offline/fast, judged mode is funes:eval.
-run = "mix precommit && mix funes.eval --deterministic"
+run = "mix precommit && mix server.eval --deterministic"
 
 [tasks."funes:eval"]
 description = "funes: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes"
 dir = "modules/funes"
-run = "mix funes.eval"
+run = "mix server.eval"
 
 [tasks."funes:setup"]
 description = "funes: fetch deps, create + migrate a repo-local scratch db"
@@ -48,7 +48,7 @@ run = "mix deps.get && FUNES_DB=.dev/funes.db mix ecto.create --quiet && FUNES_D
 [tasks."funes:doctor"]
 description = "funes: the 2am report against the scratch db"
 dir = "modules/funes"
-run = "FUNES_DB=.dev/funes.db mix funes.doctor"
+run = "FUNES_DB=.dev/funes.db mix server.doctor"
 
 # Boot funes with its sovereign channel on, loopback-only, against the scratch db — so
 # a hand-spawned pi pane has something to register with. `Funes.MCP.Spawn.env("title",
@@ -92,7 +92,7 @@ run = "scripts/funes-cli.sh spawn"
 [tasks."funes:ledger"]
 description = "funes: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
 dir = "modules/funes"
-run = "FUNES_DB=.dev/funes.db mix funes.ledger"
+run = "FUNES_DB=.dev/funes.db mix server.ledger"
 
 [tasks."workline:verify"]
 description = "workline: the deterministic verifier — run check + flake:check, record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
@@ -238,12 +238,12 @@ run = "mix test"
 [tasks."aleph:check"]
 description = "aleph: the precommit gate — format + warnings-as-errors + tests + deterministic steering evals"
 dir = "modules/aleph"
-run = "mix precommit && mix aleph.eval --deterministic"
+run = "mix precommit && mix console.eval --deterministic"
 
 [tasks."aleph:eval"]
 description = "aleph: the FULL steering evals (routing corpus; judged scenarios land with later slices)"
 dir = "modules/aleph"
-run = "mix aleph.eval"
+run = "mix console.eval"
 
 [tasks."aleph:setup"]
 description = "aleph: fetch deps, create + migrate the shared funes db (via Funes.Repo)"
@@ -253,7 +253,7 @@ run = "mix deps.get && FUNES_DB=../funes/.dev/funes.db mix ecto.create -r Funes.
 [tasks."aleph:seed"]
 description = "aleph: seed the shared db with sample threads/agents/sessions for the cockpit"
 dir = "modules/aleph"
-run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
+run = "FUNES_DB=../funes/.dev/funes.db mix console.seed"
 
 # B1.4's clean-slate step: the old machine threads under the staffing experiment are disposable —
 # clear them once, by hand, before ensure_thread_sessions starts spawning per-thread windows.
@@ -261,7 +261,7 @@ run = "FUNES_DB=../funes/.dev/funes.db mix aleph.seed"
 [tasks."aleph:clear-machine-threads"]
 description = "aleph: B1.4 clean-slate — delete every MACHINE-scope thread + its messages from the dev db (project threads untouched)"
 dir = "modules/aleph"
-run = "FUNES_DB=../funes/.dev/funes.db mix aleph.clear_machine_threads"
+run = "FUNES_DB=../funes/.dev/funes.db mix console.clear_machine_threads"
 
 # The cockpit reads the SAME db funes' own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
@@ -284,9 +284,9 @@ if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:run — dropped a leg
 # (e.g. the consult migration) would otherwise trip the behind-DB guard and refuse to boot,
 # forcing a manual `aleph:setup`. Safe to auto-apply here: this is the throwaway dev db and
 # migrations are additive — it never touches the always-up service db (that's home:switch's).
-# No deps.get, so no network. The Elixir guard stays as a backstop for a bare `mix aleph.run`.
+# No deps.get, so no network. The Elixir guard stays as a backstop for a bare `mix console.run`.
 FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
-FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix aleph.run
+FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix console.run
 """
 
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
@@ -323,7 +323,7 @@ if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:fresh — dropped a s
 mix clean >/dev/null 2>&1 && echo "aleph:fresh — mix clean (forcing a full recompile)"
 FUNES_DB=../funes/.dev/funes.db mix ecto.migrate -r Funes.Repo || exit $?
 echo "aleph:fresh — compiling + booting the latest code…"
-FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix aleph.run
+FUNES_DB=../funes/.dev/funes.db FUNES_WORKLINE_ROOT=/home/andrew/projects/ficciones FUNES_MEMORY_PASS=1 FUNES_MAINTAIN=1 mix console.run
 """
 
 # The DATA wipe `aleph:reset` deliberately is NOT — separate + explicitly named so a fresh
