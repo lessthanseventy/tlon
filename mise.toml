@@ -23,103 +23,103 @@ bun = "1.3.14"
 # empty-file case and fails the render.
 OLLAMA_API_KEY = "{{ exec(command='p=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agenix/ollama-api-key\"; v=\"$(cat \"$p\" 2>/dev/null)\" || true; if [ -n \"$v\" ]; then printf %s \"$v\"; else printf %s \"$OLLAMA_API_KEY\"; fi') }}"
 
-[tasks."funes:test"]
-description = "funes: run the test suite (the TDD loop)"
-dir = "modules/funes"
+[tasks."server:test"]
+description = "server: run the test suite (the TDD loop)"
+dir = "modules/server"
 run = "mix test"
 
-[tasks."funes:check"]
-description = "funes: the precommit gate — format + warnings-as-errors + credo + tests + deterministic steering evals"
-dir = "modules/funes"
+[tasks."server:check"]
+description = "server: the precommit gate — format + warnings-as-errors + credo + tests + deterministic steering evals"
+dir = "modules/server"
 # Two invocations: precommit runs in :test (start_repo off), the eval needs the dev boot +
 # its own ephemeral db — the deterministic set is offline/fast, judged mode is funes:eval.
 run = "mix precommit && mix server.eval --deterministic"
 
-[tasks."funes:eval"]
-description = "funes: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes"
-dir = "modules/funes"
+[tasks."server:eval"]
+description = "server: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes"
+dir = "modules/server"
 run = "mix server.eval"
 
-[tasks."funes:setup"]
-description = "funes: fetch deps, create + migrate a repo-local scratch db"
-dir = "modules/funes"
+[tasks."server:setup"]
+description = "server: fetch deps, create + migrate a repo-local scratch db"
+dir = "modules/server"
 run = "mix deps.get && TLON_DB=.dev/tlon.db mix ecto.create --quiet && TLON_DB=.dev/tlon.db mix ecto.migrate"
 
-[tasks."funes:doctor"]
-description = "funes: the 2am report against the scratch db"
-dir = "modules/funes"
+[tasks."server:doctor"]
+description = "server: the 2am report against the scratch db"
+dir = "modules/server"
 run = "TLON_DB=.dev/tlon.db mix server.doctor"
 
 # Boot funes with its sovereign channel on, loopback-only, against the scratch db — so
 # a hand-spawned pi pane has something to register with. `Funes.MCP.Spawn.env("title",
 # "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
-[tasks."funes:serve"]
-description = "funes: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
-dir = "modules/funes"
+[tasks."server:serve"]
+description = "server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
+dir = "modules/server"
 run = "TLON_DB=.dev/tlon.db TLON_START_MCP=1 iex -S mix"
 
 # `funes:serve` above is the DEV path (hand-run iex on the scratch db); these run the
 # same funes as a self-contained release, headless, on the REAL db, kept up by the
 # home-manager systemd --user service. A release bundles ERTS, so the unit runs one
 # absolute path with nothing on PATH, and `remote`/`rpc` reach the LIVE node.
-[tasks."funes:release"]
-description = "funes: build the self-contained release the always-up service runs (prod)"
-dir = "modules/funes"
+[tasks."server:release"]
+description = "server: build the self-contained release the always-up service runs (prod)"
+dir = "modules/server"
 run = "MIX_ENV=prod mix release --overwrite"
 
-[tasks."funes:restart"]
-description = "funes: rebuild the release + restart the always-up service (redeploy a funes change)"
-depends = ["funes:release"]
+[tasks."server:restart"]
+description = "server: rebuild the release + restart the always-up service (redeploy a funes change)"
+depends = ["server:release"]
 run = "systemctl --user restart funes && systemctl --user --no-pager status funes | head -12"
 
-[tasks."funes:console"]
-description = "funes: remote iex INTO the running service node — inspect/mint against the live channel"
-dir = "modules/funes"
+[tasks."server:console"]
+description = "server: remote iex INTO the running service node — inspect/mint against the live channel"
+dir = "modules/server"
 run = "_build/prod/rel/funes/bin/funes remote"
 
-[tasks."funes:logs"]
-description = "funes: follow the always-up service's logs"
+[tasks."server:logs"]
+description = "server: follow the always-up service's logs"
 run = "journalctl --user -u funes -n 80 -f"
 
 # Operate/script access to the LIVE channel from the shell — the human+Claude-Code peer
 # to the agents' MCP tools. Goes through `bin/funes rpc` INTO the running service node:
 # a token minted anywhere else dies with its node, and roster/presence is in-memory
 # there. Thin and deliberate — operate access, NOT a second cockpit (aleph is the rich surface).
-[tasks."funes:spawn"]
-description = "funes: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
+[tasks."server:spawn"]
+description = "server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
 run = "scripts/funes-cli.sh spawn"
 
-[tasks."funes:ledger"]
-description = "funes: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
-dir = "modules/funes"
+[tasks."server:ledger"]
+description = "server: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
+dir = "modules/server"
 run = "TLON_DB=.dev/tlon.db mix server.ledger"
 
 [tasks."workline:verify"]
 description = "workline: the deterministic verifier — run check + flake:check, record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
 run = "scripts/workline-verify.sh"
 
-[tasks."funes:cli"]
-description = "funes: the CLI passthrough — mise run funes:cli -- <subcommand> [args] (workline/approve/post/…)"
+[tasks."server:cli"]
+description = "server: the CLI passthrough — mise run server:cli -- <subcommand> [args] (workline/approve/post/…)"
 run = "scripts/funes-cli.sh"
 
-[tasks."funes:roster"]
-description = "funes: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service"
+[tasks."server:roster"]
+description = "server: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service"
 run = "scripts/funes-cli.sh roster"
 
-[tasks."funes:dossier"]
-description = "funes: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool"
+[tasks."server:dossier"]
+description = "server: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool"
 run = "scripts/funes-cli.sh dossier"
 
-[tasks."funes:post"]
-description = "funes: post to a thread as the operator from the shell — parity with the agents' post_message"
+[tasks."server:post"]
+description = "server: post to a thread as the operator from the shell — parity with the agents' post_message"
 run = "scripts/funes-cli.sh post"
 
 # Launch Claude Code as a funes citizen. No arg → a fresh thread; a numeric thread-id →
 # JOIN it (resume across a /clear). Scopes the funes MCP server (fresh token per
 # connect) + the SessionStart brief hook to THIS session via --mcp-config/--settings —
 # no ~/.claude mutation, so a plain `claude` stays untouched.
-[tasks."funes:claude"]
-description = "launch Claude Code as a funes citizen — `funes:claude` (fresh thread) or `funes:claude -- <id>` (join)"
+[tasks."server:claude"]
+description = "launch Claude Code as a funes citizen — `server:claude` (fresh thread) or `server:claude -- <id>` (join)"
 run = "modules/manos/claude-code/launch.sh"
 
 [tasks.cap]
@@ -150,9 +150,9 @@ pids="$(pgrep -f "[w]atchexec.*--project-origin $root" || true)"
 if [ -n "$pids" ]; then echo "stopping watchexec: $pids"; kill $pids; else echo "no ficciones watchers running"; fi
 '''
 
-[tasks."funes:watch"]
-description = "funes: re-run the suite on every change under modules/funes (cap signal)"
-dir = "modules/funes"
+[tasks."server:watch"]
+description = "server: re-run the suite on every change under modules/server (cap signal)"
+dir = "modules/server"
 run = "../../scripts/watch.sh mise exec -- mix test"
 
 [tasks."manos:pi:watch"]
@@ -230,44 +230,44 @@ for d in pi consult fmt lsp lspd reload footer; do
 done
 """
 
-[tasks."aleph:test"]
-description = "aleph: run the test suite (the render path, headless)"
-dir = "modules/aleph"
+[tasks."console:test"]
+description = "console: run the test suite (the render path, headless)"
+dir = "modules/console"
 run = "mix test"
 
-[tasks."aleph:check"]
-description = "aleph: the precommit gate — format + warnings-as-errors + tests + deterministic steering evals"
-dir = "modules/aleph"
+[tasks."console:check"]
+description = "console: the precommit gate — format + warnings-as-errors + tests + deterministic steering evals"
+dir = "modules/console"
 run = "mix precommit && mix console.eval --deterministic"
 
-[tasks."aleph:eval"]
-description = "aleph: the FULL steering evals (routing corpus; judged scenarios land with later slices)"
-dir = "modules/aleph"
+[tasks."console:eval"]
+description = "console: the FULL steering evals (routing corpus; judged scenarios land with later slices)"
+dir = "modules/console"
 run = "mix console.eval"
 
-[tasks."aleph:setup"]
-description = "aleph: fetch deps, create + migrate the shared funes db (via Server.Repo)"
-dir = "modules/aleph"
+[tasks."console:setup"]
+description = "console: fetch deps, create + migrate the shared funes db (via Server.Repo)"
+dir = "modules/console"
 run = "mix deps.get && TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet && TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo"
 
-[tasks."aleph:seed"]
-description = "aleph: seed the shared db with sample threads/agents/sessions for the cockpit"
-dir = "modules/aleph"
+[tasks."console:seed"]
+description = "console: seed the shared db with sample threads/agents/sessions for the cockpit"
+dir = "modules/console"
 run = "TLON_DB=../server/.dev/tlon.db mix console.seed"
 
 # B1.4's clean-slate step: the old machine threads under the staffing experiment are disposable —
 # clear them once, by hand, before ensure_thread_sessions starts spawning per-thread windows.
 # Never touches project-scope threads; the always-up service db is untouched (dev db only).
-[tasks."aleph:clear-machine-threads"]
-description = "aleph: B1.4 clean-slate — delete every MACHINE-scope thread + its messages from the dev db (project threads untouched)"
-dir = "modules/aleph"
+[tasks."console:clear-machine-threads"]
+description = "console: B1.4 clean-slate — delete every MACHINE-scope thread + its messages from the dev db (project threads untouched)"
+dir = "modules/console"
 run = "TLON_DB=../server/.dev/tlon.db mix console.clear_machine_threads"
 
 # The cockpit reads the SAME db funes' own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
-[tasks."aleph:run"]
-description = "aleph: launch the live cockpit in THIS terminal (run in ghostty)"
-dir = "modules/aleph"
+[tasks."console:run"]
+description = "console: launch the live cockpit in THIS terminal (run in ghostty)"
+dir = "modules/console"
 # Self-heals before launch, fully: Tlön sessions are NOT meant to survive teardown, so kill the
 # aleph-tertius tmux server up front. A crashed cockpit leaves that server squatting port 4041 via an
 # inherited fd (the reaper leaves tmux alone by design), so killing it is what actually frees the
@@ -276,13 +276,13 @@ dir = "modules/aleph"
 # profile dir) — never the default server, where resurrect/continuum would restore it stale.
 run = """
 # Kill the coworker's tmux server first (releases the inherited port-4041 fd), then reap.
-if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "aleph:run — killed the aleph-tertius tmux server (fresh coworker on entry)"; fi
+if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "console:run — killed the aleph-tertius tmux server (fresh coworker on entry)"; fi
 # A zombie `tlon` session on the DEFAULT server (no socket isolation).
-if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:run — dropped a legacy tlon session from the default tmux server"; fi
+if tmux kill-session -t tlon 2>/dev/null; then echo "console:run — dropped a legacy tlon session from the default tmux server"; fi
 ../../scripts/aleph-reap.sh || exit $?
 # Apply any pending migrations to the dev scratch db BEFORE launch. A fresh funes slice
 # (e.g. the consult migration) would otherwise trip the behind-DB guard and refuse to boot,
-# forcing a manual `aleph:setup`. Safe to auto-apply here: this is the throwaway dev db and
+# forcing a manual `console:setup`. Safe to auto-apply here: this is the throwaway dev db and
 # migrations are additive — it never touches the always-up service db (that's home:switch's).
 # No deps.get, so no network. The Elixir guard stays as a backstop for a bare `mix console.run`.
 TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
@@ -292,61 +292,61 @@ TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT=/home/andrew/projects/ficcione
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
 # hot-reload; tmux continuum can restore an unwired tlon session), not a real bug.
 # Resets the RUNTIME only (cockpit + Tlön panes + compiled artifacts) — it NEVER touches
-# the db, so threads/messages/consults survive. To wipe data, use `aleph:reset:db`.
-# Follow with `aleph:run` for a fresh cockpit.
-[tasks."aleph:reset"]
-description = "aleph: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, kill the aleph-tertius tmux server (+ any legacy default-server tlon session), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use aleph:reset:db to wipe data."
-dir = "modules/aleph"
+# the db, so threads/messages/consults survive. To wipe data, use `console:reset:db`.
+# Follow with `console:run` for a fresh cockpit.
+[tasks."console:reset"]
+description = "console: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, kill the aleph-tertius tmux server (+ any legacy default-server tlon session), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use console:reset:db to wipe data."
+dir = "modules/console"
 run = """
 ../../scripts/aleph-reap.sh || true
-if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "aleph:reset — killed the aleph-tertius tmux server (next entry recreates it fresh)"; else echo "aleph:reset — no aleph-tertius tmux server"; fi
-if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:reset — dropped a stray tlon session from the default tmux server"; fi
-mix clean >/dev/null 2>&1 && echo "aleph:reset — mix clean (fresh compile on next aleph:run)"
+if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "console:reset — killed the aleph-tertius tmux server (next entry recreates it fresh)"; else echo "console:reset — no aleph-tertius tmux server"; fi
+if tmux kill-session -t tlon 2>/dev/null; then echo "console:reset — dropped a stray tlon session from the default tmux server"; fi
+mix clean >/dev/null 2>&1 && echo "console:reset — mix clean (fresh compile on next console:run)"
 echo "--- env now ---"
 for p in 4040 4041; do if ss -tlnH "sport = :$p" 2>/dev/null | grep -q .; then echo "  port $p: LISTENING"; else echo "  port $p: free"; fi; done
 if tmux -L aleph-tertius has-session -t tlon 2>/dev/null; then echo "  tlon session (aleph-tertius server): present"; else echo "  tlon session: gone (clean)"; fi
-echo "aleph:reset — done. Run 'mise run aleph:run' for a fresh, wired cockpit."
+echo "console:reset — done. Run 'mise run console:run' for a fresh, wired cockpit."
 """
 
-# The escape hatch: one gesture = guaranteed-fresh cockpit. `aleph:reset` (mix clean + nuke every
-# stale tmux server/session + reap the zombie cockpit/port) THEN `aleph:run` (migrate + launch), so
+# The escape hatch: one gesture = guaranteed-fresh cockpit. `console:reset` (mix clean + nuke every
+# stale tmux server/session + reap the zombie cockpit/port) THEN `console:run` (migrate + launch), so
 # you never have to remember the two-step or wonder whether continuum restored something stale. This
-# is the "I don't trust what's live" button — slower than a bare `aleph:run` (it forces a full
-# recompile), so it's the deliberate reach, not the default. `aleph:run` stays the fast daily launch.
-[tasks."aleph:fresh"]
-description = "aleph: NUKE + launch — full clean (mix clean, kill every stale tmux server/session, reap the cockpit + port 4041) then a fresh compile-and-boot. The 'guarantee I'm running the latest code' escape hatch; slower than aleph:run (full recompile). Data (threads/messages) is UNTOUCHED — use aleph:reset:db to wipe."
-dir = "modules/aleph"
+# is the "I don't trust what's live" button — slower than a bare `console:run` (it forces a full
+# recompile), so it's the deliberate reach, not the default. `console:run` stays the fast daily launch.
+[tasks."console:fresh"]
+description = "console: NUKE + launch — full clean (mix clean, kill every stale tmux server/session, reap the cockpit + port 4041) then a fresh compile-and-boot. The 'guarantee I'm running the latest code' escape hatch; slower than console:run (full recompile). Data (threads/messages) is UNTOUCHED — use console:reset:db to wipe."
+dir = "modules/console"
 run = """
 ../../scripts/aleph-reap.sh || true
-if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "aleph:fresh — killed the aleph-tertius tmux server"; fi
-if tmux kill-session -t tlon 2>/dev/null; then echo "aleph:fresh — dropped a stray tlon session from the default tmux server"; fi
-mix clean >/dev/null 2>&1 && echo "aleph:fresh — mix clean (forcing a full recompile)"
+if tmux -L aleph-tertius kill-server 2>/dev/null; then echo "console:fresh — killed the aleph-tertius tmux server"; fi
+if tmux kill-session -t tlon 2>/dev/null; then echo "console:fresh — dropped a stray tlon session from the default tmux server"; fi
+mix clean >/dev/null 2>&1 && echo "console:fresh — mix clean (forcing a full recompile)"
 TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
-echo "aleph:fresh — compiling + booting the latest code…"
+echo "console:fresh — compiling + booting the latest code…"
 TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT=/home/andrew/projects/ficciones TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run
 """
 
-# The DATA wipe `aleph:reset` deliberately is NOT — separate + explicitly named so a fresh
+# The DATA wipe `console:reset` deliberately is NOT — separate + explicitly named so a fresh
 # db is never a reflex. Drops → recreates → migrates the dev scratch db, destroying every
 # dogfood thread/message/consult in it. Only the dev db (../server/.dev/tlon.db); the
 # always-up service db is untouched. Use when the schema state is wedged or you want a clean
-# slate, not for "stale code" symptoms (that's `aleph:reset`).
-[tasks."aleph:reset:db"]
-description = "aleph: WIPE the dev scratch db (drop → recreate → migrate) — DESTROYS all dogfood threads/messages/consults. The data reset aleph:reset deliberately does NOT do; only the dev db, never the service db."
-dir = "modules/aleph"
+# slate, not for "stale code" symptoms (that's `console:reset`).
+[tasks."console:reset:db"]
+description = "console: WIPE the dev scratch db (drop → recreate → migrate) — DESTROYS all dogfood threads/messages/consults. The data reset console:reset deliberately does NOT do; only the dev db, never the service db."
+dir = "modules/console"
 run = """
 printf 'This WIPES the dev db — every dogfood thread/message/consult is gone.\\nType RESET to confirm: '
 read -r confirm
-if [ "$confirm" != "RESET" ]; then echo "aleph:reset:db — aborted (nothing wiped)."; exit 1; fi
+if [ "$confirm" != "RESET" ]; then echo "console:reset:db — aborted (nothing wiped)."; exit 1; fi
 TLON_DB=../server/.dev/tlon.db mix ecto.drop -r Server.Repo || exit $?
 TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet || exit $?
 TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
-echo "aleph:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
+echo "console:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
 """
 
 [tasks.check]
 description = "Everything green: the funes + aleph + manos (pi + consult + fmt + lsp + reload + footer) precommit gates (format + warnings + credo + types + tests)"
-depends = ["funes:check", "aleph:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:lspd:check", "manos:reload:check", "manos:footer:check"]
+depends = ["server:check", "console:check", "manos:pi:check", "manos:consult:check", "manos:fmt:check", "manos:lsp:check", "manos:lspd:check", "manos:reload:check", "manos:footer:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check + build the activation script — the machine-level gate"

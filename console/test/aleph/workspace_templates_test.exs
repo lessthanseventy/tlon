@@ -1,0 +1,47 @@
+defmodule Console.WorkspaceTemplatesTest do
+  # The nix-owned workspace-archetype registry (capabilities): starter type/paths/roster the author
+  # face's "new workspace" composes a funes row from. Distinct from Console.Profiles' coworker archetypes.
+  use ExUnit.Case, async: true
+
+  alias Console.WorkspaceTemplates
+
+  test "the three workspace archetypes exist" do
+    assert MapSet.new(WorkspaceTemplates.names()) == MapSet.new([:code, :life, :blank])
+  end
+
+  test "the code template carries a surveyor+builder starter roster over modules/*" do
+    t = WorkspaceTemplates.template(:code)
+    assert t.type == "code"
+    assert t.paths == ["modules/*"]
+    assert Enum.map(t.roster, & &1.archetype) == [:surveyor, :builder]
+  end
+
+  test "the blank template is empty (no roster, no paths)" do
+    t = WorkspaceTemplates.template(:blank)
+    assert t.type == "blank"
+    assert t.roster == []
+    assert t.paths == []
+  end
+
+  test "template/1 raises on an unknown key" do
+    assert_raise KeyError, fn -> WorkspaceTemplates.template(:nope) end
+  end
+
+  test "new_workspace_attrs builds register_workspace attrs from a template + name (string-keyed roster)" do
+    attrs = WorkspaceTemplates.new_workspace_attrs(:code, "Ficciones2")
+
+    assert attrs.name == "Ficciones2"
+    assert attrs.type == "code"
+    assert attrs.scope == "machine"
+    assert attrs.paths == ["modules/*"]
+    # roster is the funes wire shape: string-keyed maps, matching the seed roster
+    assert attrs.roster == [
+             %{"archetype" => "surveyor", "name" => "surveyor"},
+             %{"archetype" => "builder", "name" => "builder"}
+           ]
+  end
+
+  test "new_workspace_attrs from :blank yields an empty roster" do
+    assert WorkspaceTemplates.new_workspace_attrs(:blank, "Scratch").roster == []
+  end
+end
