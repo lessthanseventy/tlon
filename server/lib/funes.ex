@@ -24,6 +24,11 @@ defmodule Server do
       Dossier,
       # Compositions: the workspaces context console reads to drive its picker/survey/spawn.
       Workspaces,
+      # The container tier (2026-08-30): projects, the lightweight ticket tracker, notes —
+      # peer contexts to Workspaces the console reads/writes for the god line + CRUD screens.
+      Projects,
+      Tickets,
+      Notes,
       Presence,
       # Explicit thinking/idle presence (console renders it; harnesses declare via MCP).
       Presence.Thinking,
