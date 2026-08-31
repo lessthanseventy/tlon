@@ -101,6 +101,14 @@ defmodule Console.OrchestratorTest do
       assert {:error, msg} = Orchestrator.dispatch({:post, "ghost", "hi"}, ctx)
       assert msg =~ "no coworker @ghost"
     end
+
+    test "an unmatched line passes through — posts to the machine (root) thread", %{ctx: ctx, workspace_id: ws} do
+      {:ok, root} = Channel.open_thread(%{title: "general", workspace_id: ws, scope: "machine"})
+
+      assert {:ok, receipt} = Orchestrator.dispatch({:chat, "just testing stuff"}, ctx)
+      assert receipt =~ "posted to general"
+      assert [%{body: "just testing stuff", author: "andrew"}] = Repo.all(from m in Server.Message, where: m.thread_id == ^root.id)
+    end
   end
 
   describe "dispatch — consequential verbs confirm first" do

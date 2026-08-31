@@ -60,8 +60,19 @@ defmodule Console.Orchestrator do
   def dispatch({:open, stage, title}, _ctx), do: {:confirm, "open #{stage_label(stage)} “#{title}”"}
   def dispatch({:approve, n}, _ctx), do: {:confirm, "approve ##{n}"}
 
-  # v2 hands an open-ended line to the tertius agent; v1 acknowledges without inventing an action.
-  def dispatch({:chat, _text}, _ctx), do: {:ok, "(no verb matched — nothing dispatched)"}
+  # No verb matched → passthrough: post the line to the machine (root) thread, so the tertius line is
+  # a real conversation with the crew, not a strict command parser. (v2 hands it to the tertius agent
+  # for smarter, LLM-interpreted intent — but a plain message is the honest default now.)
+  def dispatch({:chat, text}, ctx) do
+    case Channel.machine_thread() do
+      %{id: id, title: title} ->
+        {:ok, _} = Channel.post(%{thread_id: id, author: ctx.operator, body: text})
+        {:ok, "→ posted to #{title} ✓"}
+
+      _ ->
+        {:error, "no machine thread to post to yet"}
+    end
+  end
 
   @doc "Fire a consequential action after the operator confirms."
   def confirm({:open, stage, title}, ctx) do
