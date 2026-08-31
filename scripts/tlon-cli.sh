@@ -27,7 +27,14 @@
 set -euo pipefail
 
 FUNES="$(dirname "$0")/../modules/server/_build/prod/rel/server/bin/server"
-[ -x "$FUNES" ] || { echo "no release at $FUNES — run 'mise run server:release' first" >&2; exit 1; }
+# Every rpc subcommand shells into `bin/server rpc` and needs the release. `token`/`bearer`
+# do NOT — they mint purely over HTTP (/mint at TLON_MCP_URL's origin), so they must work
+# without a local release (that's the whole point of per-connect minting: any node, any
+# world). Gating them on the release strands every MCP headersHelper when no release is built.
+case "${1:-}" in
+  token | bearer) ;;
+  *) [ -x "$FUNES" ] || { echo "no release at $FUNES — run 'mise run server:release' first" >&2; exit 1; } ;;
+esac
 
 # Escape a string for embedding as an Elixir "..." literal: backslash first, then quote,
 # then `#{` — gate output routinely contains interpolation syntax (compiler errors, test
