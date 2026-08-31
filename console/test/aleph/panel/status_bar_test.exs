@@ -58,6 +58,15 @@ defmodule Console.Panel.StatusBarTest do
     refute line =~ "server"
   end
 
+  test "the tertius command line renders a TERTIUS prompt over the typed buffer (Slice 1)" do
+    input = %{kind: :orchestrate, buffer: "file a ticket x", cursor: 15}
+    [info, hints] = StatusBar.render(base(%{input: input}), rect())
+
+    assert Enum.map_join(info, fn {t, _} -> t end) =~ "TERTIUS"
+    assert Enum.map_join(info, fn {t, _} -> t end) =~ "file a ticket x"
+    assert Enum.map_join(hints, fn {t, _} -> t end) =~ "dispatch"
+  end
+
   test "TERM mode: the mode segment names the Alt door and the nav toggle" do
     [_info, hints] = StatusBar.render(base(%{mode: :term, workspace?: true}), rect())
     line = Enum.map_join(hints, fn {t, _} -> t end)

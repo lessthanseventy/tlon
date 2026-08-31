@@ -972,6 +972,37 @@ defmodule Console.Cockpit do
     end
   end
 
+  # The tertius command line (Slice 1): route the typed meta-intent and flash a RECEIPT — a line you
+  # talk into with no confirmation is the exact bug this repo opened on 2026-08-30. SAFE verbs
+  # (post/note/ticket/query) fire straight; CONSEQUENTIAL ones (open work, approve) show what they
+  # WOULD do without firing — the interactive y/n confirm lands with the Slice 3 cockpit reshape.
+  defp apply_effect({:orchestrate, text}, state) do
+    action = Console.Orchestrator.Router.route(text)
+    ctx = %{workspace_id: active_workspace_id(state), operator: Application.get_env(:server, :operator, "andrew")}
+
+    flash =
+      case Console.Orchestrator.classify(action) do
+        :consequential ->
+          case Console.Orchestrator.dispatch(action, ctx) do
+            {:confirm, summary} -> "⏸ would #{summary} — confirm from the board (cockpit reshape)"
+            {:ok, receipt} -> receipt
+            {:error, msg} -> "✗ #{msg}"
+          end
+
+        :safe ->
+          case Console.Orchestrator.dispatch(action, ctx) do
+            {:ok, receipt} -> receipt
+            {:error, msg} -> "✗ #{msg}"
+          end
+      end
+
+    {:noreply, render(%{state | flash: flash})}
+  rescue
+    e -> {:noreply, render(%{state | flash: "orchestrate failed: #{Exception.message(e)}"})}
+  catch
+    :exit, reason -> {:noreply, render(%{state | flash: "orchestrate failed: #{inspect(reason)}"})}
+  end
+
   # The `c` verb landed: post the composer's body to the focused thread AS THE OPERATOR (config
   # `:server, :operator`), so a posted message is the human's voice, not an agent's. The Bus
   # announce repaints the chorus live, so the message lands visibly; a failure flashes in the footer.

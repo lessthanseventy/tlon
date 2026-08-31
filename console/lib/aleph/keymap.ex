@@ -114,6 +114,7 @@ defmodule Console.Keymap do
           | :quit
           | {:forward, map()}
           | {:create_thread, String.t()}
+          | {:orchestrate, String.t()}
           | {:post_message, term(), String.t()}
           | {:cycle_coworker_model, String.t()}
           | {:habit_action, :approve | :reject}
@@ -166,6 +167,11 @@ defmodule Console.Keymap do
 
   def handle(%{key: :enter}, %{input: %{kind: :new_thread, buffer: buffer}} = state),
     do: {%{state | input: nil}, {:create_thread, buffer}}
+
+  # The tertius command line (Slice 1): Enter dispatches the typed meta-intent to the orchestrator,
+  # which routes + executes it and hands back a receipt (the cockpit flashes it).
+  def handle(%{key: :enter}, %{input: %{kind: :orchestrate, buffer: buffer}} = state),
+    do: {%{state | input: nil}, {:orchestrate, buffer}}
 
   # A non-blank name registers a workspace from the armed template. Blank already fell into the
   # empty-buffer clause above, same cancel-not-create precedent as :new_thread.
@@ -502,6 +508,12 @@ defmodule Console.Keymap do
 
   defp command(%{key: :char, char: "n"}, state),
     do: {%{state | input: %{kind: :new_thread, buffer: "", cursor: 0}}, :repaint}
+
+  # `:` opens the tertius command line from any panel (Slice 1) — a vim-style command prompt for
+  # meta-intent ("tell @x …", "file a ticket …", "remember …"). The generic input machinery below
+  # handles the typing/cursor; Enter (above) dispatches to the orchestrator.
+  defp command(%{key: :char, char: ":"}, state),
+    do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
 
   # `a` (bare) toggles Orbis' author face on; Esc (below, no input open) toggles it back off.
   # Modifier-guarded like `c`/`m` — Ctrl/Shift/Alt+A never fires this.

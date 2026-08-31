@@ -822,6 +822,37 @@ defmodule Console.KeymapTest do
     end
   end
 
+  describe "the tertius command line — the `:` verb + orchestrate mode (Slice 1)" do
+    test ": (bare, nav context) opens the orchestrate line (empty buffer) and repaints" do
+      assert {%{input: %{kind: :orchestrate, buffer: ""}}, :repaint} = Keymap.handle(char(":"), state())
+    end
+
+    test ": forwards to the terminal when one is live (reach it via the leader)" do
+      s = state(%{center_live?: true})
+      assert {^s, {:forward, %{key: :char, char: ":"}}} = Keymap.handle(char(":"), s)
+    end
+
+    test "printable keys accumulate into the orchestrate buffer" do
+      s = state(%{input: %{kind: :orchestrate, buffer: "file "}})
+      assert {%{input: %{buffer: "file a"}}, :repaint} = Keymap.handle(char("a"), s)
+    end
+
+    test "Enter on a non-empty buffer submits {:orchestrate, text} and leaves input mode" do
+      s = state(%{input: %{kind: :orchestrate, buffer: "file a ticket auth is broken"}})
+      assert {%{input: nil}, {:orchestrate, "file a ticket auth is broken"}} = Keymap.handle(key(:enter), s)
+    end
+
+    test "Enter on an empty buffer cancels (dispatches nothing)" do
+      s = state(%{input: %{kind: :orchestrate, buffer: ""}})
+      assert {%{input: nil}, :repaint} = Keymap.handle(key(:enter), s)
+    end
+
+    test "Esc cancels the orchestrate line" do
+      s = state(%{input: %{kind: :orchestrate, buffer: "half typed"}})
+      assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
+    end
+  end
+
   describe "composing a message — the `c` verb + composer mode" do
     test "c (bare, nav context) opens a composer on the focused thread" do
       assert {%{input: %{kind: :compose, thread_id: 2, buffer: ""}}, :repaint} =
