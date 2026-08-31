@@ -69,6 +69,13 @@ defmodule Server.MCP.Endpoint do
   component(ListWorkspaces, name: "list_worlds")
   component(EditWorkspace, name: "edit_world")
   component(RemoveWorkspace, name: "remove_world")
+  # Container tier (2026-08-30): projects, the lightweight ticket tracker, and notes.
+  component(Server.MCP.Tool.RegisterProject, name: "register_project")
+  component(Server.MCP.Tool.FileTicket, name: "file_ticket")
+  component(Server.MCP.Tool.ListTickets, name: "list_tickets")
+  component(Server.MCP.Tool.UpdateTicket, name: "update_ticket")
+  component(Server.MCP.Tool.WriteNote, name: "write_note")
+  component(Server.MCP.Tool.GetNotes, name: "get_notes")
   component(Server.MCP.Resource.Brief, name: "brief")
   component(Server.MCP.Resource.Constraints, name: "constraints")
   component(Server.MCP.Resource.Habits, name: "habits")

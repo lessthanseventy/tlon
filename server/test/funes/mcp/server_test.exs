@@ -106,7 +106,13 @@ defmodule Server.MCP.ServerTest do
                "register_world",
                "list_worlds",
                "edit_world",
-               "remove_world"
+               "remove_world",
+               "register_project",
+               "file_ticket",
+               "list_tickets",
+               "update_ticket",
+               "write_note",
+               "get_notes"
              ])
 
     # -- register: claims a session for the token's OWN (thread, agent) — no
@@ -627,6 +633,34 @@ defmodule Server.MCP.ServerTest do
     assert r["isError"]
     %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
     assert text =~ "unavailable"
+  end
+
+  test "file_ticket lands in the bound thread's workspace; list_tickets reads it back" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "TicketWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Filer", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    filed = call(token, session, 2, "file_ticket", %{"title" => "auth is fucked", "priority" => "high"}) |> decode_tool_json()
+    assert %{"id" => id, "status" => "backlog", "priority" => "high"} = filed
+    assert is_integer(id)
+
+    listed = call(token, session, 3, "list_tickets", %{}) |> decode_tool_json()
+    assert Enum.any?(listed, &(&1["id"] == id and &1["title"] == "auth is fucked"))
+  end
+
+  test "write_note defaults to the bound thread; get_notes reads it back" do
+    {:ok, thread} = Channel.open_thread(%{title: "notes thread"})
+    {:ok, agent} = Staff.register_agent(%{name: "Noter", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    call(token, session, 2, "write_note", %{"body" => "leads are managers"})
+    [note] = call(token, session, 3, "get_notes", %{}) |> decode_tool_json()
+    assert note["body"] == "leads are managers"
+    assert note["scope"] == "thread"
+    assert note["scope_id"] == thread.id
   end
 
   defp handshake(token) do

@@ -7,6 +7,18 @@ defmodule Server.MCP.Tool do
   groups its backends — one seam, several small faces.
   """
 
+  @doc """
+  The `workspace_id` of the connection's bound thread — the "current workspace" the
+  workspace-scoped container tools (tickets/notes/projects) write into, since identity
+  carries a thread, not a workspace. `nil` if the thread is gone.
+  """
+  def workspace_of(%{thread_id: thread_id}) do
+    case Server.Repo.get(Server.Thread, thread_id) do
+      %Server.Thread{workspace_id: wid} -> wid
+      _ -> nil
+    end
+  end
+
   @doc "A changeset's errors as one tool-error sentence."
   def changeset_error(%Ecto.Changeset{} = changeset) do
     changeset
