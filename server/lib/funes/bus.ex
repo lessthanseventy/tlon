@@ -41,6 +41,7 @@ defmodule Server.Bus do
   def presence_topic, do: "tlon:presence"
   def habits_topic, do: "tlon:habits"
   def workspaces_topic, do: "tlon:workspaces"
+  def projects_topic, do: "tlon:projects"
   def activity_topic, do: "tlon:activity"
 
   def subscribe_messages, do: sub(messages_topic())
@@ -50,6 +51,7 @@ defmodule Server.Bus do
   def subscribe_presence, do: sub(presence_topic())
   def subscribe_habits, do: sub(habits_topic())
   def subscribe_workspaces, do: sub(workspaces_topic())
+  def subscribe_projects, do: sub(projects_topic())
   def subscribe_activity, do: sub(activity_topic())
 
   # A consumer that follows the *focused* thread drops the old topic on a switch.
@@ -92,6 +94,13 @@ defmodule Server.Bus do
   def broadcast({tag, %Server.Workspace{}} = event)
       when tag in [:workspace_registered, :workspace_edited, :workspace_removed] do
     publish([workspaces_topic(), activity_topic()], event)
+  end
+
+  # Projects are workspace-scoped (no thread_id of their own): their own topic + the
+  # cross-thread activity feed, like workspaces.
+  def broadcast({tag, %Server.Project{}} = event)
+      when tag in [:project_registered, :project_edited, :project_removed] do
+    publish([projects_topic(), activity_topic()], event)
   end
 
   @thread_tags [:thread_opened, :thread_closed, :thread_deleted, :thread_assigned, :workline_advanced, :workline_gated]

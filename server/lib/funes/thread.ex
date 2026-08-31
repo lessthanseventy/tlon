@@ -23,6 +23,9 @@ defmodule Server.Thread do
     field :born, :string
     field :awaiting, :string
     belongs_to :workspace, Server.Workspace
+    # The middle tier (Workspace ▸ Project ▸ Thread, 2026-08-30). Optional/additive for now:
+    # existing threads still route by `workspace_id`; new threads carry a project.
+    belongs_to :project, Server.Project
   end
 
   @doc ~s{A new thread, opened now. Title is required; state is not caller-settable. `scope`
@@ -30,7 +33,7 @@ defmodule Server.Thread do
   project surfaces (chorus / open_threads) can filter it out — see the thread_scope migration.}
   def open_changeset(attrs) do
     %__MODULE__{}
-    |> cast(attrs, [:title, :scope, :workspace_id])
+    |> cast(attrs, [:title, :scope, :workspace_id, :project_id])
     |> validate_required([:title])
     |> put_change(:state, "open")
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))

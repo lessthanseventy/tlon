@@ -10,8 +10,8 @@ defmodule Server.TestDB do
   alias Server.Repo
 
   # fact → thread+session, event/issue/message/habit → thread, session → agent+thread,
-  # thread → agent AND workspace (workline slice 1: thread.workspace_id). So: the leaf rows,
-  # then message/session, then thread, then its parents agent + workspace.
+  # thread → agent AND workspace AND project (2026-08-30). project → workspace. So: the leaf
+  # rows, then message/session, then thread, then project, then its parents agent + workspace.
   # habit.source_thread_id → thread, so it clears with the other thread-children.
   @ordered [
     Server.Fact,
@@ -24,6 +24,7 @@ defmodule Server.TestDB do
     Server.Session,
     Server.Thread,
     Server.Agent,
+    Server.Project,
     Server.Workspace
   ]
 

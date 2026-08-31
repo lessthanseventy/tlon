@@ -18,6 +18,7 @@ defmodule Server.DoctorTest do
                "habit",
                "issue",
                "message",
+               "project",
                "question",
                "session",
                "thread",
