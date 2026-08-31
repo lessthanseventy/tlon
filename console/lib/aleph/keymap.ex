@@ -517,15 +517,19 @@ defmodule Console.Keymap do
   defp command(%{key: :char, char: ":"}, state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
 
-  # Space (bare in nav, or the `Ctrl+Space Space` chord over a live terminal) also focuses the
-  # tertius line — the permanent bottom band. Same as `:`, but no reach for the colon.
-  defp command(%{key: :space}, state),
-    do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
+  # Space toggles the fold on the focused card (the standard fold-nav paradigm: z/Enter/Space).
+  # Tertius is focused by click or `:`.
+  defp command(%{key: :space}, state), do: {state, {:toggle_fold}}
 
   # `z` folds/unfolds the active thread card in the stack; `Z` zooms one thread full-screen (a real
   # zoom over the stack), `Z` again to go back (Slice 3).
   defp command(%{key: :char, char: "z"}, state), do: {state, {:toggle_fold}}
   defp command(%{key: :char, char: "Z"}, state), do: {state, {:zoom_thread}}
+  defp command(%{key: :char, char: "+"}, state), do: {state, {:zoom_thread}}
+
+  # `g`/`G` jump the stack cursor to the top/bottom thread (vim/less convention).
+  defp command(%{key: :char, char: "g"}, %{active_key: key} = state) when key != :orbis, do: jump(state, :first)
+  defp command(%{key: :char, char: "G"}, %{active_key: key} = state) when key != :orbis, do: jump(state, :last)
 
   # `a` (bare) toggles Orbis' author face on; Esc (below, no input open) toggles it back off.
   # Modifier-guarded like `c`/`m` — Ctrl/Shift/Alt+A never fires this.
@@ -761,6 +765,11 @@ defmodule Console.Keymap do
     new_id = Enum.at(ids, min(max(i + dir, 0), length(ids) - 1))
     {%{state | focused_id: new_id}, :repaint}
   end
+
+  # `g`/`G`: jump the cursor to the first/last thread (top/bottom of the stack).
+  defp jump(%{threads: []} = state, _), do: {state, :none}
+  defp jump(state, :first), do: {%{state | focused_id: hd(state.threads).id}, :repaint}
+  defp jump(state, :last), do: {%{state | focused_id: List.last(state.threads).id}, :repaint}
 
   # Dispatch Orbis' j/k/↑/↓: the author face's own cursor takes priority over `orbis_focus`
   # (survey/threads is meaningless while the author face is showing — Panel.Author, not Overview);

@@ -444,7 +444,9 @@ defmodule Console.Cockpit do
     # keeps `Console.Keymap` a pure reducer with no server call of its own.
     keymap_state =
       %{state | flash: nil}
-      |> Map.put(:center_live?, center_terminal(state) != nil)
+      # A live PTY only "owns" the keys when it's the shown center — with the thread stack up
+      # (center_view :chat, Slice 3) keys drive the stack (j/k/z/Z), never a hidden terminal.
+      |> Map.put(:center_live?, state.center_view != :chat and center_terminal(state) != nil)
       |> Map.put(:composer_thread_id, composer_thread_id(state))
       |> Map.put(:tlon_layout, tlon_layout(state))
       |> Map.put(:author_workspaces, Console.Workspaces.all())
@@ -1712,19 +1714,16 @@ defmodule Console.Cockpit do
     state = Board.safe_read(:log_window, state, fn -> ensure_log_window(state) end)
     state = Board.safe_read(:thread_sessions, state, fn -> ensure_thread_sessions(state) end)
 
-    # The chorus (thread blocks, most-recent-activity first) is the ONE ordering the whole cockpit
-    # navigates by, so ↑/↓ move the highlight down the feed and every open thread is reachable.
-    chorus = Board.safe_read(:chorus, [], fn -> Channel.chorus() end)
-    threads = Enum.map(chorus, & &1.thread)
+    # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
+    # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
+    # order by this, not the project-scope `chorus`. This is the ONE ordering the cockpit navigates.
+    stack_blocks = Board.safe_read(:stack, [], fn -> Channel.machine_threads() end)
+    threads = Enum.map(stack_blocks, & &1.thread)
     focused = focused_thread(threads, state.focused_id)
     state = %{state | threads: threads, focused_id: focused && focused.id}
+    state = %{state | stack_focus: stack_focus(stack_blocks, state.focused_id)}
     state = Board.safe_read(:resubscribe, state, fn -> resubscribe(state, focused) end)
     machine = Board.safe_read(:machine, :no_session, fn -> machine_read(state) end)
-    # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
-    # threads are machine-scope, NOT the project-scope `chorus`, so the stack reads this.
-    stack_blocks = Board.safe_read(:stack, [], fn -> Channel.machine_threads() end)
-    # Stash the stack's active thread so the `Z`/`z` effects (which run between renders) can target it.
-    state = %{state | stack_focus: stack_focus(stack_blocks, state.focused_id)}
     roster = Board.safe_read(:roster, [], fn -> Staff.roster() end)
     # The Leaves reorder context, derived ONCE per paint and cached — leaves_data/1 hands the same
     # value to the render read below and to yank/attach/preview between paints.

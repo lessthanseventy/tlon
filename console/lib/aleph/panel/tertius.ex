@@ -13,7 +13,7 @@ defmodule Console.Panel.Tertius do
 
   import Console.Panel, only: [line: 2]
 
-  @placeholder "‹file a ticket · tell @x · remember… — Space or click to focus›"
+  @placeholder "‹file a ticket · tell @x · remember… — click or : to focus›"
 
   @impl Console.Panel
   def topics(_assigns), do: []

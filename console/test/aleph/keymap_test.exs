@@ -860,8 +860,18 @@ defmodule Console.KeymapTest do
       assert {_s, {:zoom_thread}} = Keymap.handle(char("Z"), state())
     end
 
-    test "Space (nav / Ctrl+Space Space chord) focuses the tertius line, like ':'" do
-      assert {%{input: %{kind: :orchestrate, buffer: ""}}, :repaint} = Keymap.handle(key(:space), state())
+    test "Space toggles the fold on the focused card (standard z/Enter/Space fold nav)" do
+      assert {_s, {:toggle_fold}} = Keymap.handle(key(:space), state())
+    end
+
+    test "+ zooms one thread (alias of Z)" do
+      assert {_s, {:zoom_thread}} = Keymap.handle(char("+"), state())
+    end
+
+    test "g/G jump the cursor to the first/last thread (workspace context)" do
+      s = state(%{active_key: 0, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2})
+      assert {%{focused_id: 1}, :repaint} = Keymap.handle(char("g"), s)
+      assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("G"), s)
     end
 
     test "z forwards to the terminal when one is live (reach fold via the leader)" do
