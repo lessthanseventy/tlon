@@ -18,7 +18,6 @@ defmodule Console.Cockpit do
   alias Console.Mouse
   alias Console.Osc
   alias Console.Panel
-  alias Console.Panel.WindowBar
   alias Console.Profile
   alias Console.Profiles
   alias Console.Sessions
@@ -1074,16 +1073,6 @@ defmodule Console.Cockpit do
     end
 
     {:noreply, state}
-  end
-
-  # Clicking a WindowBar tab selects that tmux window — never forwarded to the PTY (WindowBar is a
-  # standalone panel, not part of the terminal it frames). WindowBar tabs are leader windows only,
-  # so a hit resets focused_session to that leader (clears a stale {:leaf, id} — C3.3).
-  defp dispatch_click({WindowBar, data, rect}, x, _y, state) do
-    tab = WindowBar.tab_at_x(data[:tabs] || [], x - rect.x)
-    select_tlon_window(active_workspace_id(state), tab)
-    state = if tab, do: %{state | focused_session: {:leader, tab[:name]}}, else: state
-    {:noreply, render(state)}
   end
 
   # Clicking the tertius band focuses its input (Slice 3) — same as Space / `:`. If it's already

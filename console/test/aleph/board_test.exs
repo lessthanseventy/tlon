@@ -41,7 +41,6 @@ defmodule Console.BoardTest do
   alias Console.Panel.StatusBar
   alias Console.Panel.Terminal
   alias Console.Panel.Tertius
-  alias Console.Panel.WindowBar
   alias Console.View
 
   # Workspace fixture: the hardcoded fallback Workspace is gone (reshape slice A); suites
@@ -428,9 +427,10 @@ defmodule Console.BoardTest do
 
       assert Sidebar in mods
       assert Overview in mods
-      assert Brief in mods
       assert StatusBar in mods
-      # every section gets its own bordered box (switcher, roster/triage, chorus, dossier)
+      # Slice 3.4: the right rail (BRIEF) is retired — orbis is spine + rail (roster/triage) + survey.
+      refute Brief in mods
+      # every section gets its own bordered box (spine switcher, roster, triage, survey)
       content_panels = Enum.reject(mods, &(&1 in [Border, StatusBar]))
       assert Enum.count(mods, &(&1 == Border)) == length(content_panels)
       assert length(content_panels) >= 4
@@ -469,15 +469,13 @@ defmodule Console.BoardTest do
 
       placements = View.compose(tlon, 120, 40)
 
-      # the terminal is framed: WindowBar above, Ticker below, each its own bordered box — no
-      # longer the full-height center column a single-section surface would give it.
+      # the WindowBar leader-strip is retired; the terminal is framed by the tertius band below it —
+      # no longer the full-height center column a single-section surface would give it.
       assert [{Terminal, :no_session, term_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == Terminal end)
-      assert [{WindowBar, _wb_data, wb_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == WindowBar end)
       assert [{Tertius, _data, pulse_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == Tertius end)
 
-      assert wb_rect.y < term_rect.y
       assert pulse_rect.y > term_rect.y
-      assert term_rect.h < 36
+      assert term_rect.h < 38
     end
 
     test "the PTY sizes to the placed Terminal rect — no overflow past the frame" do

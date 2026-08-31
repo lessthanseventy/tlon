@@ -10,14 +10,11 @@ defmodule Console.SpaceTest do
   use ExUnit.Case, async: true
 
   alias Console.Panel.Activity
-  alias Console.Panel.Brief
   alias Console.Panel.Crew
-  alias Console.Panel.Leaves
   alias Console.Panel.Memory
   alias Console.Panel.Stack
   alias Console.Panel.Terminal
   alias Console.Panel.Tertius
-  alias Console.Panel.WindowBar
   alias Console.Space
 
   # `Space.workspace?/1` is a `defguard` (Phase C1.3), which requires the module, not just an alias.
@@ -55,11 +52,12 @@ defmodule Console.SpaceTest do
 
       assert tlon.id == 1
       assert tlon.label == "Tlön"
-      assert tlon.surface == [WindowBar, {Terminal, :machine}, Tertius]
-      # Slice D: the left column is the Sidebar alone; STACK/MEMORY moved to the right rail,
-      # whose pinned head is contextual (workspace → Stack, attached thread → the brief).
-      assert tlon.left == []
-      assert tlon.right == [Stack, Memory, Crew, Activity, Leaves]
+      # The top WindowBar leader-strip is retired (2026-08-31) — center = Terminal/stack + Tertius band.
+      assert tlon.surface == [{Terminal, :machine}, Tertius]
+      # Slice 3.4: the funes panels stack in the left RAIL (NOW·CREW·MEMORY·STACK); the Sidebar
+      # renders as the thin spine (split out in View.compose); the right rail is retired.
+      assert tlon.left == [Activity, Crew, Memory, Stack]
+      assert tlon.right == []
       # The roster lead's name (string-keyed JSON) becomes the center coworker.
       assert tlon.coworker == "tertius"
       # The full roster rides along too (C2/C3 read it), not just the derived coworker name.
@@ -131,25 +129,15 @@ defmodule Console.SpaceTest do
     end
   end
 
-  describe "visible_right/2 (clarity slice 2)" do
-    test "workspace right column = contextual pinned head + the view-indexed carousel panel" do
+  describe "the retired right rail (Slice 3.4)" do
+    test "every space has an empty right column" do
       space = Enum.find(Space.all([@tlon]), &Space.workspace?(&1.key))
-      assert Space.carousel(space) == [Memory, Crew, Activity, Leaves]
-      # workspace context (the default): branch/commits pinned
-      assert Space.visible_right(space, 0) == [Stack, Memory]
-      assert Space.visible_right(space, 1) == [Stack, Crew]
-      assert Space.visible_right(space, 4) == [Stack, Memory]
-      # negative-safe wrap: the public contract must not nil out on a negative view
-      assert Space.visible_right(space, -1) == [Stack, Leaves]
-      # thread context (a leaf holds the center): the pinned head becomes the BRIEF
-      assert Space.visible_right(space, 0, :thread) == [{Brief, :brief}, Memory]
-      assert Space.visible_right(space, 1, :thread) == [{Brief, :brief}, Crew]
-    end
+      [orbis | _] = Space.all([@tlon])
 
-    test "a single-panel right column (Orbis) is just the pinned panel" do
-      [orbis | _] = Space.all([])
-      assert Space.visible_right(orbis, 5) == [Brief]
-      assert Space.carousel(orbis) == []
+      # The right rail is gone: `right` is [] for both the workspace and the Orbis god-view — the
+      # funes panels moved to the left rail (`left`) and the carousel machinery is retired.
+      assert space.right == []
+      assert orbis.right == []
     end
   end
 end

@@ -19,9 +19,7 @@ defmodule Console.Space do
   """
 
   alias Console.Panel.Activity
-  alias Console.Panel.Brief
   alias Console.Panel.Crew
-  alias Console.Panel.Leaves
   alias Console.Panel.Memory
   alias Console.Panel.Overview
   alias Console.Panel.Roster
@@ -29,7 +27,6 @@ defmodule Console.Space do
   alias Console.Panel.Terminal
   alias Console.Panel.Tertius
   alias Console.Panel.Triage
-  alias Console.Panel.WindowBar
 
   @enforce_keys [:key, :label, :surface]
   defstruct [:key, :label, :surface, :id, left: [], right: [], coworker: nil, roster: []]
@@ -73,7 +70,9 @@ defmodule Console.Space do
       # list the middle already shows. TRIAGE below IN FLIGHT shows cross-thread trouble.
       surface: [Overview],
       left: [Roster, Triage],
-      right: [Brief]
+      # Slice 3.4: the right rail is retired — the god-view is spine + rail + center. The focused
+      # thread's scope now reads in the center feed (its highlighted block), not a pinned Brief.
+      right: []
     }
   end
 
@@ -91,13 +90,18 @@ defmodule Console.Space do
       key: workspace.id,
       id: workspace.id,
       label: workspace.name,
-      surface: [WindowBar, {Terminal, :machine}, Tertius],
-      # Slice D: the left column is the Sidebar alone (Slack's rail) — STACK/MEMORY moved to the
-      # right-rail carousel. The pinned head is contextual (visible_right/3): workspace → STACK,
-      # attached thread → the BRIEF. Leaves IS the unified thread list (slice C); HEALTH lives in
-      # the footer + /status.
-      left: [],
-      right: [Stack, Memory, Crew, Activity, Leaves],
+      # The top WindowBar leader-strip is RETIRED (2026-08-31): the center thread-stack is the thread
+      # surface, and a thread's live lead session shows in the toggleable right session pane — the
+      # strip was the decoupled tmux-window switcher (Alt+digit still switches windows). Center =
+      # the Terminal/thread-stack + the permanent Tertius band below.
+      surface: [{Terminal, :machine}, Tertius],
+      # Slice 3.4: the funes panels move OFF the (now-retired) right rail into the left rail, stacked
+      # top-down — NOW (attention/activity) · CREW · MEMORY · STACK — no more `[`/`]` carousel. The
+      # Sidebar renders as the thin far-left SPINE (workspace switcher + global tools), split out of
+      # this list in `View.compose`. THREADS/Leaves is gone from the rail — the center thread-stack IS
+      # the thread list now; HEALTH stays in the footer + /status.
+      left: [Activity, Crew, Memory, Stack],
+      right: [],
       coworker: lead_coworker(workspace.roster),
       roster: workspace.roster
     }
@@ -161,37 +165,4 @@ defmodule Console.Space do
     Enum.at(spaces, rem(i + delta + length(spaces), length(spaces)))
   end
 
-  @doc """
-  The right column actually on screen (design 2026-08-23, contextual since slice D): the pinned
-  head plus the `view`-indexed carousel panel. The head follows the center's `context` —
-  `:workspace` (a leader in the center) pins the FIRST right panel (STACK); `:thread` (an
-  attached leaf) swaps it for the BRIEF (`{Brief, :brief}`, reading the cockpit's brief read).
-  Also the exact shape the Focus SM navigates, so View/keymap/cockpit can never disagree.
-  """
-  @spec visible_right(t(), integer(), :workspace | :thread) :: [module() | {module(), atom()}]
-  def visible_right(space, view, context \\ :workspace)
-  def visible_right(%__MODULE__{right: []}, _view, _context), do: []
-  def visible_right(%__MODULE__{right: [pinned]}, _view, context), do: [pinned_head(pinned, context)]
-
-  # Integer.mod, not rem: the public contract wraps negative views too.
-  def visible_right(%__MODULE__{right: [pinned | carousel]}, view, context),
-    do: [pinned_head(pinned, context), Enum.at(carousel, Integer.mod(view, length(carousel)))]
-
-  defp pinned_head(_pinned, :thread), do: {Brief, :brief}
-  defp pinned_head(pinned, _workspace), do: pinned
-
-  @doc """
-  The right rail's context from the center's occupant: an attached leaf (`{:leaf, id}`) is thread
-  context — the BRIEF pins; anything else (a leader, nil) is workspace context. The ONE derivation
-  the cockpit (`tlon_layout`) and the View both call, so the focus SM and the paint can't disagree
-  on which head is up.
-  """
-  @spec rail_context({:leaf, term()} | {:leader, term()} | nil) :: :workspace | :thread
-  def rail_context({:leaf, _id}), do: :thread
-  def rail_context(_focused_session), do: :workspace
-
-  @doc "The carousel members (everything after the pinned head) — the tab strip's panels."
-  @spec carousel(t()) :: [module() | {module(), atom()}]
-  def carousel(%__MODULE__{right: [_pinned | rest]}), do: rest
-  def carousel(_space), do: []
 end

@@ -48,11 +48,16 @@ defmodule Console.ViewTest do
     )
   end
 
-  # A Tlön layout with commits count, so Focus.cursor/2 clamps and the Commits pane is navigable.
-  # Mirrors production `tlon_layout` since slice D: the Sidebar alone on the left; the right rail
-  # is the pinned STACK + the carousel panel (MEMORY at view 0).
+  # A Tlön layout with a commits count, so Focus.cursor/2 clamps and the Stack pane is navigable.
+  # Mirrors production `tlon_layout` since nav v2: the RAIL is the focus nav (`left`), the spine is
+  # not navigable (`right` empty). STACK is rail (left) pane 3.
   defp layout(counts \\ %{Panel.Stack => 3}),
-    do: %{left: [Panel.Sidebar], right: [Panel.Stack, Panel.Memory], sections: %{}, counts: counts}
+    do: %{
+      left: [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack],
+      right: [],
+      sections: %{},
+      counts: counts
+    }
 
   # The rects of every border flagged as focused.
   defp focused_borders(placements), do: for({Panel.Border, %{focused: true}, rect} <- placements, do: rect)
@@ -86,8 +91,8 @@ defmodule Console.ViewTest do
       assert {Panel.ThreadStack, data, _rect} = Enum.find(placements, &match?({Panel.ThreadStack, _, _}, &1))
       assert [%{id: 1}] = data.cards
       refute placed?(placements, Panel.Terminal)
-      # the WindowBar tab strip and the Ticker frame the stack exactly as they frame the PTY
-      assert placed?(placements, Panel.WindowBar)
+      # the WindowBar leader-strip is retired; the tertius band still frames the stack below
+      refute placed?(placements, Panel.WindowBar)
       assert placed?(placements, Panel.Tertius)
     end
 
@@ -119,64 +124,48 @@ defmodule Console.ViewTest do
     end
   end
 
-  describe "the contextual right rail (reshape slice D)" do
-    test "workspace context (leader in the center): STACK pins the right column" do
+  describe "the funes rail (Slice 3.4)" do
+    test "the rail stacks NOW·CREW·MEMORY·STACK to the right of the spine; no right rail, no Brief" do
       placements = View.compose(reads(%{focused_session: {:leader, "tertius"}}), 120, 40)
 
-      assert {_p, _d, stack_rect} = Enum.find(placements, &match?({Panel.Stack, _, _}, &1))
-      assert stack_rect.x > 0
+      # Every funes panel is placed, stacked in a single rail column (all at the same x, past the spine).
+      rail_rects =
+        for mod <- [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack] do
+          assert {_p, _d, rect} = Enum.find(placements, &match?({^mod, _, _}, &1)), "#{inspect(mod)} not placed"
+          rect
+        end
+
+      assert Enum.all?(rail_rects, &(&1.x > 0))
+      assert rail_rects |> Enum.map(& &1.x) |> Enum.uniq() |> length() == 1
+      # The retired right rail: no pinned Brief, in either center context.
       refute Enum.any?(placements, &match?({Panel.Brief, _, _}, &1))
     end
 
-    test "thread context (a leaf holds the center): the BRIEF pins the right column instead" do
-      # A full brief-shaped fixture — the pinned head is MEASURED (intrinsic height = a real
-      # render), so the fixture carries every section Panel.Brief renders.
-      brief = %{
-        thread: nil,
-        goal: "fix the tick",
-        lead: "hronir",
-        todos: %{shown: [], more: 0},
-        next: nil,
-        done: %{shown: [], more: 0},
-        learnings: %{shown: [], more: 0},
-        unknowns: %{shown: [], more: 0},
-        blockers: %{shown: [], more: 0},
-        checks: %{shown: [], more: 0},
-        recent: []
-      }
-
-      placements =
-        View.compose(reads(%{focused_session: {:leaf, 5}, brief: brief}), 120, 40)
-
-      assert {Panel.Brief, data, rect} = Enum.find(placements, &match?({Panel.Brief, _, _}, &1))
-      assert rect.x > 0
-      assert data.goal == "fix the tick"
-      refute Enum.any?(placements, &match?({Panel.Stack, _, _}, &1))
-    end
-
-    test "thread context with a failed brief read still pins the Brief placeholder (layout agreement)" do
-      placements = View.compose(reads(%{focused_session: {:leaf, 5}, brief: nil}), 120, 40)
-      assert Enum.any?(placements, &match?({Panel.Brief, _, _}, &1))
+    test "a leaf holding the center no longer pins a Brief — thread context reads in the center feed" do
+      placements = View.compose(reads(%{focused_session: {:leaf, 5}}), 120, 40)
+      refute Enum.any?(placements, &match?({Panel.Brief, _, _}, &1))
+      assert Enum.any?(placements, &match?({Panel.Stack, _, _}, &1))
     end
   end
 
   describe "Tlön focus highlight" do
-    test "in nav mode, exactly one sidebar border lights — the focused pane, in the left column" do
+    test "in nav mode, exactly one RAIL border lights — the focused pane (nav v2)" do
+      # Nav v2: the focus nav is the rail (Focus `left` column); the spine is not navigable.
       focus = %Focus{in_terminal?: false, column: :left, pane: 0}
       placements = View.compose(reads(%{focus: focus}), 120, 40)
 
       assert [rect] = focused_borders(placements)
-      # The left column sits at x = 0 (wide layout); the focused pane must be there.
-      assert rect.x == 0
+      # The rail sits to the RIGHT of the thin spine — the lit pane is past x = 0.
+      assert rect.x > 0
     end
 
-    test "focusing the right column moves the highlight to a right-column border" do
-      focus = %Focus{in_terminal?: false, column: :right, pane: 0}
-      placements = View.compose(reads(%{focus: focus}), 120, 40)
+    test "moving down the rail lights a different rail border" do
+      p0 = View.compose(reads(%{focus: %Focus{in_terminal?: false, column: :left, pane: 0}}), 120, 40)
+      p1 = View.compose(reads(%{focus: %Focus{in_terminal?: false, column: :left, pane: 1}}), 120, 40)
 
-      assert [rect] = focused_borders(placements)
-      # The right column is offset well past the left — not at x = 0.
-      assert rect.x > 0
+      assert [r0] = focused_borders(p0)
+      assert [r1] = focused_borders(p1)
+      assert r0.y != r1.y
     end
 
     test "in the terminal (default focus), no border is highlighted — the terminal is the active pane" do
@@ -256,11 +245,11 @@ defmodule Console.ViewTest do
     end
 
     test "the focused pane gets its cursor + section as a slice; other panes don't" do
-      # right pane 0 = the pinned STACK (slice D: Stack lives in the right rail now).
+      # Nav v2: the rail is the focus `left` column — STACK is left pane 3 (NOW·CREW·MEMORY·STACK).
       focus = %Focus{
         in_terminal?: false,
-        column: :right,
-        pane: 0,
+        column: :left,
+        pane: 3,
         cursors: %{Panel.Stack => 2},
         section: 0,
         detail?: false
@@ -286,107 +275,43 @@ defmodule Console.ViewTest do
         )
 
       assert {:ok, %{selected: 2, section: 0}} = panel_data(placements, Panel.Stack)
-      # the carousel pane below (Memory at view 0, not focused) gets no slice merged in
+      # Memory (rail pane 2, not focused) gets no slice merged in.
       assert {:ok, mem} = panel_data(placements, Panel.Memory)
       refute Map.has_key?(mem, :selected)
     end
   end
 
-  # The right column is STACK pinned (workspace context) + ONE carousel panel (`[`/`]` cycle
-  # right_pane_view among Memory/Crew/Activity/Leaves) — the pinned head never cycles away;
-  # HEALTH demoted to the footer + /status (reshape slice D).
-  describe "right-pane view (clarity slice 2)" do
+  # The funes rail (Slice 3.4): NOW·CREW·MEMORY·STACK all stack in one column — no carousel, no
+  # cycling. HEALTH stays in the footer + /status; THREADS/Leaves is the center thread-stack.
+  describe "the funes rail stacks (Slice 3.4)" do
     defp right_placed?(placements, mod), do: Enum.any?(placements, &match?({^mod, _, _}, &1))
 
-    test "right_pane_view: 0 (default) shows Stack pinned + Memory (the carousel default)" do
-      r = reads(%{active_key: 0, tlon_layout: layout(), right_pane_view: 0})
-      placements = View.compose(r, 120, 40)
+    test "all four funes panels are placed; HEALTH and Leaves-as-a-panel are not" do
+      placements = View.compose(reads(%{active_key: 0, tlon_layout: layout()}), 120, 40)
 
-      assert right_placed?(placements, Panel.Stack)
+      assert right_placed?(placements, Panel.Activity)
+      assert right_placed?(placements, Panel.Crew)
       assert right_placed?(placements, Panel.Memory)
+      assert right_placed?(placements, Panel.Stack)
       refute right_placed?(placements, Panel.Health)
-      refute right_placed?(placements, Panel.Crew)
       refute right_placed?(placements, Panel.Leaves)
     end
 
-    test "right_pane_view: 1 shows Stack pinned + Crew (Stack never cycles away)" do
-      # The Workspace space's right column is [Stack, Memory, Crew, Activity, Leaves] (Console.Space).
-      r = reads(%{active_key: 0, tlon_layout: layout(), right_pane_view: 1})
-      placements = View.compose(r, 120, 40)
-
-      assert right_placed?(placements, Panel.Stack)
-      assert right_placed?(placements, Panel.Crew)
-      refute right_placed?(placements, Panel.Memory)
-      refute right_placed?(placements, Panel.Health)
-    end
-
-    test "a missing right_pane_view (key absent from reads) defaults to 0 (Stack + Memory)" do
-      r = Map.delete(reads(%{active_key: 0, tlon_layout: layout()}), :right_pane_view)
-      placements = View.compose(r, 120, 40)
-
-      assert right_placed?(placements, Panel.Stack)
-      assert right_placed?(placements, Panel.Memory)
-      refute right_placed?(placements, Panel.Crew)
-    end
-
-    test "a 1-panel right column (Orbis' [Brief]) degrades cleanly — rem clamps to index 0" do
-      r = reads(%{active_key: :orbis, focus: nil, right_pane_view: 7})
-      placements = View.compose(r, 120, 40)
-      assert right_placed?(placements, Panel.Brief)
-    end
-
-    test "narrow layout applies the same pinned + carousel selection to the right portion" do
-      r = reads(%{active_key: 0, tlon_layout: layout(), right_pane_view: 1})
-      placements = View.compose(r, 60, 40)
-
-      assert right_placed?(placements, Panel.Stack)
-      assert right_placed?(placements, Panel.Crew)
-      refute right_placed?(placements, Panel.Memory)
-      refute right_placed?(placements, Panel.Health)
-    end
-  end
-
-  describe "right column: pinned Stack + carousel (clarity slice 2)" do
-    test "MEMORY is the default carousel view, below a pinned STACK" do
+    test "the rail panels stack top-down in NOW·CREW·MEMORY·STACK order" do
       placements = View.compose(reads(%{}), 120, 40)
 
-      assert {_p, _d, stack_rect} = Enum.find(placements, &match?({Panel.Stack, _, _}, &1))
-      assert {_p, _d, memory_rect} = Enum.find(placements, &match?({Panel.Memory, _, _}, &1))
-      refute Enum.any?(placements, &match?({Panel.Leaves, _, _}, &1))
-      assert memory_rect.y > stack_rect.y
-      # pinned: Stack's box hugs its content instead of splitting the column evenly
-      assert stack_rect.h < memory_rect.h
+      ys =
+        for mod <- [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack] do
+          {_p, _d, rect} = Enum.find(placements, &match?({^mod, _, _}, &1))
+          rect.y
+        end
+
+      assert ys == Enum.sort(ys)
     end
 
-    test "right_pane_view picks the carousel panel" do
-      placements = View.compose(reads(%{right_pane_view: 3}), 120, 40)
-      assert Enum.any?(placements, &match?({Panel.Leaves, _, _}, &1))
-      refute Enum.any?(placements, &match?({Panel.Memory, _, _}, &1))
-    end
-
-    test "the carousel border is a tab strip with the active tab, digit 3" do
-      placements = View.compose(reads(%{}), 120, 40)
-
-      assert Enum.any?(placements, fn
-               {Panel.Border,
-                %{
-                  digit: 3,
-                  tabs: [{"MEMORY", true}, {"CREW", false}, {"ACTIVITY", false}, {"THREADS", false}]
-                }, _r} ->
-                 true
-
-               _ ->
-                 false
-             end)
-    end
-
-    test "the carousel border carries the [ ] cycle corner hint" do
-      placements = View.compose(reads(%{}), 120, 40)
-
-      assert Enum.any?(placements, fn
-               {Panel.Border, %{tabs: tabs, hint: "[ ] cycle"}, _r} when is_list(tabs) -> true
-               _ -> false
-             end)
+    test "the Orbis god-view carries no right rail (no Brief, no funes rail)" do
+      placements = View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40)
+      refute right_placed?(placements, Panel.Brief)
     end
 
     test "a short frame never places a box (or its content) past the body — the status rows stay clean" do
@@ -402,49 +327,6 @@ defmodule Console.ViewTest do
           assert rect.y + rect.h <= body_h,
                  "#{inspect(panel)} ends past the body at 120x#{h}: #{inspect(rect)} (body_h #{body_h})"
         end
-      end
-    end
-  end
-
-  describe "digit-numbering agreement: View borders ⇄ Focus.jump (clarity slice 4)" do
-    # The title (or, for the carousel box, the active tab's label) View painted at `digit` — the
-    # one drift that would make Alt+N lie: the number on the frame must be the pane Focus.jump/3
-    # actually reaches at that same digit.
-    defp digit_title(placements, digit) do
-      Enum.find_value(placements, fn
-        {Panel.Border, %{digit: ^digit, title: title}, _r} when not is_nil(title) ->
-          title
-
-        {Panel.Border, %{digit: ^digit, tabs: tabs}, _r} when is_list(tabs) ->
-          case Enum.find(tabs, fn {_label, active?} -> active? end) do
-            {label, true} -> label
-            _ -> nil
-          end
-
-        _ ->
-          nil
-      end)
-    end
-
-    test "border digits agree with Focus.jump over the same layout (Alt+N reaches pane N)" do
-      placements = View.compose(reads(%{}), 120, 40)
-      space = Console.Space.fetch(0)
-
-      layout = %{
-        left: [Panel.Sidebar | space.left],
-        right: Console.Space.visible_right(space, 0),
-        sections: %{},
-        counts: %{}
-      }
-
-      # Slice D: Sidebar alone on the left (1); the right rail is pinned STACK (2) + the carousel
-      # box (3) — whose "title" is its active tab (MEMORY at view 0).
-      expected = %{1 => Panel.Sidebar, 2 => Panel.Stack, 3 => Panel.Memory}
-      titles = %{1 => "WORKSPACES", 2 => "STACK", 3 => "MEMORY"}
-
-      for d <- 1..3 do
-        assert %Focus{} |> Focus.jump(layout, d) |> Focus.focused_pane(layout) == expected[d]
-        assert digit_title(placements, d) == titles[d]
       end
     end
   end
@@ -512,29 +394,23 @@ defmodule Console.ViewTest do
       end)
     end
 
-    test "workspace sidebar boxes carry digit-first titles derived from layout order" do
+    test "boxes carry plain titles, NO pane digits (nav v2)" do
       placements = View.compose(reads(%{}), 120, 40)
 
-      assert %{digit: 1} = border_of(placements, "WORKSPACES")
-      assert %{digit: 2} = border_of(placements, "STACK")
-      # MEMORY is the carousel box now — a tab strip, not a plain title (covered by the
-      # digit-agreement test).
-      refute border_of(placements, "MEMORY")
-    end
-
-    test "the center terminal box carries digit 0 and no title" do
-      placements = View.compose(reads(%{}), 120, 40)
-
-      assert Enum.any?(placements, fn
-               {Panel.Border, %{digit: 0, title: nil}, _rect} -> true
-               _ -> false
-             end)
+      # The spine + rail borders show their title only — no leading number (digit is nil).
+      assert %{digit: nil} = border_of(placements, "WS")
+      assert %{digit: nil} = border_of(placements, "NOW")
+      assert %{digit: nil} = border_of(placements, "CREW")
+      assert %{digit: nil} = border_of(placements, "MEMORY")
+      assert %{digit: nil} = border_of(placements, "STACK")
     end
 
     test "orbis boxes are titled too (shared pieces inherit)" do
       placements = View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40)
+      # Orbis' rail is [Roster (ACTIVE), Triage (TRIAGE)] now — the retired BRIEF is gone.
       assert border_of(placements, "ACTIVE")
-      assert border_of(placements, "BRIEF")
+      assert border_of(placements, "TRIAGE")
+      refute border_of(placements, "BRIEF")
     end
   end
 
@@ -546,14 +422,14 @@ defmodule Console.ViewTest do
           _ -> nil
         end)
 
-    test "workspace + nav: mode :nav, workspace? true, and the focused pane's hints (carousel appends [/])" do
+    test "workspace + nav: mode :nav, workspace? true, and no retired carousel [/] hint" do
       focus = %Focus{in_terminal?: false, column: :right, pane: 1}
       data = status_of(View.compose(reads(%{focus: focus}), 120, 40))
 
       assert data.mode == :nav
       assert data.workspace? == true
-      # right pane 1 is the carousel slot (MEMORY by default — no verbs of its own) → just [/]
-      assert {"[/]", "view"} in data.pane_hints
+      # The carousel is retired — no `[/]` view-cycle hint is appended to any rail pane.
+      refute {"[/]", "view"} in data.pane_hints
     end
 
     test "workspace + terminal: mode :term, no pane hints" do
@@ -569,8 +445,8 @@ defmodule Console.ViewTest do
     end
 
     test "a focused Stack pane's own verbs ride through" do
-      # Slice D: Stack is the right rail's pinned head (right pane 0), not a left pane.
-      focus = %Focus{in_terminal?: false, column: :right, pane: 0}
+      # Nav v2: STACK is the last RAIL pane (left pane 3: NOW·CREW·MEMORY·STACK).
+      focus = %Focus{in_terminal?: false, column: :left, pane: 3}
       data = status_of(View.compose(reads(%{focus: focus}), 120, 40))
       assert {"⏎", "diff"} in data.pane_hints
     end
