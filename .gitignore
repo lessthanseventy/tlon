@@ -50,3 +50,7 @@ HANDOFF.md
 
 # git worktrees (superpowers isolated workspaces)
 .worktrees/
+
+# local statusline / powerline configs (not repo artifacts)
+/cfg.json
+/cfg-*.json
