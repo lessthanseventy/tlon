@@ -28,7 +28,24 @@ defmodule Console.Panel.ThreadStack do
   end
 
   @impl Console.Panel
-  def hints(_data), do: [{"z", "fold"}, {"j/k", "move"}, {"c", "reply"}]
+  def hints(_data), do: [{"z", "fold"}, {"Z", "zoom"}, {"j/k", "move"}, {"c", "reply"}]
+
+  # Click → the card under `local_y` (walking the same row layout render produces) → fold/focus it.
+  @impl Console.Panel
+  def pick(%{cards: cards}, rect, local_y) do
+    {_offset, hit} =
+      Enum.reduce_while(cards, {0, nil}, fn card, {offset, _} ->
+        height = length(card_rows(card, rect.w))
+
+        if local_y >= offset and local_y < offset + height,
+          do: {:halt, {offset, {:fold_thread, card.id}}},
+          else: {:cont, {offset + height, nil}}
+      end)
+
+    hit
+  end
+
+  def pick(_data, _rect, _local_y), do: nil
 
   # A folded card is just its header; an unfolded one adds its messages + a reply input, then a gap.
   defp card_rows(%{folded?: true} = card, _w), do: [header_row(card)]

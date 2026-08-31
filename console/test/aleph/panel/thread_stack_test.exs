@@ -50,4 +50,28 @@ defmodule Console.Panel.ThreadStackTest do
     assert out =~ "x: hello"
     assert out =~ "▸ #2 b"
   end
+
+  describe "pick (click → fold/focus a card)" do
+    test "a click resolves to the card under that row" do
+      cards = [
+        %{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []},
+        %{id: 2, title: "b", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []}
+      ]
+
+      assert ThreadStack.pick(%{cards: cards}, rect(), 0) == {:fold_thread, 1}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 1) == {:fold_thread, 2}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 9) == nil
+    end
+
+    test "clicks inside an unfolded card's body still resolve to that card" do
+      cards = [
+        %{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: [%{author: "x", body: "hi"}]},
+        %{id: 2, title: "b", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []}
+      ]
+
+      # card 1 unfolded spans header+message+reply+blank (4 rows); row 2 (the reply line) is still card 1
+      assert ThreadStack.pick(%{cards: cards}, rect(), 2) == {:fold_thread, 1}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 4) == {:fold_thread, 2}
+    end
+  end
 end

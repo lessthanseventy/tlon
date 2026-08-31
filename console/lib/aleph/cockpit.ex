@@ -994,6 +994,15 @@ defmodule Console.Cockpit do
     {:noreply, render(next)}
   end
 
+  # Clicking a thread card focuses it AND toggles its fold — the collapse/expand button (Slice 3).
+  # Toggle against the CURRENTLY-VISIBLE fold state (resolve the nil default) so a click matches
+  # what's on screen.
+  defp apply_pick({:fold_thread, id}, state) do
+    set = resolve_unfolded(state.unfolded, state.stack_focus)
+    next = if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
+    {:noreply, render(%{state | focused_id: id, unfolded: next})}
+  end
+
   # Reset scroll offsets when the context they're relative to changes. A space switch swaps every
   # panel, so all offsets go; a focus change only swaps the thread-specific panels (Brief,
   # Conversation), so just those. Function-head dispatch on what changed — house rule.
