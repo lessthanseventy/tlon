@@ -55,12 +55,33 @@ defmodule Server.Channel do
     end
   end
 
-  @doc "Close a thread. Its messages are untouched — history outlives the close."
+  @doc ~s{Close a thread. Its messages are untouched — history outlives the close. A CHILD thread
+  (one with a `parent_thread_id`, Slice 4D) reports up on close: funes posts a system summary into
+  the parent thread, `@mentioning` its lead so the console's mention router wakes them.}
   def close_thread(%Thread{} = thread) do
-    thread
-    |> Thread.state_changeset("closed")
-    |> Repo.update()
-    |> Server.Bus.announce(:thread_closed)
+    result =
+      thread
+      |> Thread.state_changeset("closed")
+      |> Repo.update()
+      |> Server.Bus.announce(:thread_closed)
+
+    with {:ok, _closed} <- result, do: report_to_parent(thread)
+    result
+  end
+
+  # The report-up wake: a closed child posts `✅ child #N “title” closed` into its parent, prefixed
+  # with `@<lead>` when the parent has one (the mention wakes the manager). Best-effort — a report
+  # failure never blocks the close. Top-level threads (no parent) report nothing.
+  defp report_to_parent(%Thread{parent_thread_id: nil}), do: :ok
+
+  defp report_to_parent(%Thread{parent_thread_id: parent_id} = child) do
+    mention = if lead = thread_lead(parent_id), do: "@#{lead} ", else: ""
+    post(%{thread_id: parent_id, author: "tlon", body: "#{mention}✅ child ##{child.id} “#{child.title}” closed"})
+    :ok
+  rescue
+    _ -> :ok
+  catch
+    :exit, _ -> :ok
   end
 
   @doc """
@@ -94,7 +115,10 @@ defmodule Server.Channel do
   @doc "Whether `thread` IS the root machine thread — the standing coworkers' permanent home.
   Public: delete_thread refuses it here, and Workline.promote refuses to track it (slice B)."
   def root_machine_thread?(%Thread{scope: @machine_scope} = thread) do
-    case machine_thread() do
+    # Root-ness is per-workspace (each workspace has its own root): a thread is THE root only if it
+    # is the oldest open stage-less machine thread in ITS OWN workspace. A nil workspace_id
+    # (pre-bootstrap threads) falls through to the global oldest — the old single-root behaviour.
+    case machine_thread(thread.workspace_id) do
       %Thread{id: root_id} -> root_id == thread.id
       nil -> false
     end
@@ -115,27 +139,33 @@ defmodule Server.Channel do
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`). Also the find-or-create lookup for
   the Tlön machine coworker, so it reuses a persistent thread across console restarts.
 
-  Oldest, NOT newest: every staffed leaf thread is machine-scope too, so a `[desc: t.id]`
-  "latest machine thread" would return a leaf, not the root. Leaves are always newer
+  Oldest, NOT newest: every staffed child thread is machine-scope too, so a `[desc: t.id]`
+  "latest machine thread" would return a child, not the root. Child threads are always newer
   than the root, so `[asc: t.id]` returns the root and only the root (until it is closed, which
   rotation/`clear-machine-threads` must not do).
   """
-  def machine_thread do
-    Repo.one(
-      from t in Thread,
-        where: t.state == "open" and t.scope == ^@machine_scope and is_nil(t.stage),
-        order_by: [asc: t.id],
-        limit: 1
+  def machine_thread(workspace_id \\ nil) do
+    from(t in Thread,
+      where: t.state == "open" and t.scope == ^@machine_scope and is_nil(t.stage),
+      order_by: [asc: t.id],
+      limit: 1
     )
+    |> scope_workspace(workspace_id)
+    |> Repo.one()
   end
 
+  # Optionally narrow a machine-thread query to one workspace. `nil` = every workspace (the
+  # pre-multiplicity global behaviour, kept for callers with no workspace in hand).
+  defp scope_workspace(query, nil), do: query
+  defp scope_workspace(query, workspace_id), do: from(t in query, where: t.workspace_id == ^workspace_id)
+
   @doc """
-  Every OPEN machine-scope thread, oldest-first (the root leads) — the leaf set the Orbis Tertius
+  Every OPEN machine-scope thread, oldest-first (the root leads) — the child set the Orbis Tertius
   meta agent reads across (`Server.Board.machine_overview/0`). Open-only: the synthesis is over work
   in flight, not the closed history.
   """
   def open_machine_threads do
-    # TRACKED leaves stay in (reshape slice C): auto-promote gives a working leaf a stage on
+    # TRACKED child threads stay in (reshape slice C): auto-promote gives a working child a stage on
     # its first commit — filtering on `is_nil(stage)` here made exactly the leaves doing real
     # work vanish from the meta agent's overview. Only ROOT resolution (machine_thread/0)
     # still excludes staged threads: the root is never a work item.
@@ -150,7 +180,7 @@ defmodule Server.Channel do
   STAFFED, OPEN machine-scope threads — the `ensure_thread_sessions` candidate list (console
   cockpit.ex): every open machine-scope thread with a lead, `%{id, lead, title}` per thread
   (`lead` is the staffed agent's name; the join makes it never nil). Open-only (Slice F): the
-  cockpit tears a leaf's window down when its thread closes, so a closed thread in this list
+  cockpit tears a child's window down when its thread closes, so a closed thread in this list
   would be killed and respawned every render. No ordering guarantee — the cockpit does its own
   dedup against live tmux windows and its own retry backoff.
   """
@@ -206,12 +236,14 @@ defmodule Server.Channel do
   Each block carries the thread's recent messages (chat order within), most-recent-activity FIRST.
   `[%{thread, messages}]`.
   """
-  def machine_threads(per_thread \\ 20) do
+  def machine_threads(workspace_id \\ nil, per_thread \\ 20) do
     by_thread = 300 |> recent_across() |> Enum.group_by(& &1.thread_id)
 
     # Worklines stay IN the chat surface — the spec interview happens on the workline thread.
-    # Only ROOT resolution (machine_thread/0) and the surveyor's leaf set exclude them.
+    # Only ROOT resolution (machine_thread/1) and the surveyor's child set exclude them.
+    # `workspace_id` scopes the stack to the active workspace (nil = every workspace).
     from(t in Thread, where: t.scope == ^@machine_scope)
+    |> scope_workspace(workspace_id)
     |> Repo.all()
     |> Enum.map(fn t ->
       messages = by_thread |> Map.get(t.id, []) |> Enum.take(-per_thread)

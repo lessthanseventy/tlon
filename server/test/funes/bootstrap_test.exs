@@ -126,8 +126,41 @@ defmodule Server.BootstrapTest do
 
     test "idempotent — a second ensure does not create a second general project" do
       {:ok, workspace} = Bootstrap.ensure()
+      after_first = length(Server.Projects.in_workspace(workspace.id))
       {:ok, _} = Bootstrap.ensure()
-      assert length(Server.Projects.in_workspace(workspace.id)) == 1
+      after_second = length(Server.Projects.in_workspace(workspace.id))
+
+      # `general` plus the seeded baseline projects (Server.Seed) — the exact count isn't the point;
+      # the invariant is that a second ensure adds nothing.
+      assert after_first == after_second
+      assert Server.Projects.by_name(workspace.id, "general")
+    end
+  end
+
+  describe "machine root per workspace (the cockpit re-scope invariant)" do
+    test "every workspace gets exactly one open, stage-less machine root" do
+      {:ok, default} = Bootstrap.ensure()
+      {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, _} = Bootstrap.ensure()
+
+      for ws <- [default, other] do
+        root = Channel.machine_thread(ws.id)
+        assert root, "workspace #{ws.name} has no machine root"
+        assert root.scope == "machine"
+        assert root.state == "open"
+        assert root.stage == nil
+        assert root.workspace_id == ws.id
+      end
+    end
+
+    test "idempotent — a second ensure does not mint a second root" do
+      {:ok, workspace} = Bootstrap.ensure()
+      root = Channel.machine_thread(workspace.id)
+      {:ok, _} = Bootstrap.ensure()
+
+      assert Channel.machine_thread(workspace.id).id == root.id
+      count = workspace.id |> Channel.machine_threads() |> Enum.count(&(&1.thread.stage == nil))
+      assert count == 1
     end
 
     test "the default project's repos come from the workspace paths" do

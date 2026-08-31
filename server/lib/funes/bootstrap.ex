@@ -11,6 +11,7 @@ defmodule Server.Bootstrap do
   """
   import Ecto.Query
 
+  alias Server.Channel
   alias Server.Project
   alias Server.Projects
   alias Server.Repo
@@ -45,6 +46,10 @@ defmodule Server.Bootstrap do
     with {:ok, workspace} <- default_workspace() do
       repair(workspace)
       repair_projects()
+      repair_machine_roots()
+      # Base self-knowledge + baseline projects (2026-08-31) — idempotent, so a reset/fresh scratch
+      # DB heals to "funes already knows the basics" on the next boot. Absorbs its own failures.
+      Server.Seed.ensure_safe()
       {:ok, workspace}
     end
   end
@@ -129,6 +134,23 @@ defmodule Server.Bootstrap do
     for {workspace_id, project_id} <- defaults do
       unhoused = from(t in Thread, where: t.workspace_id == ^workspace_id and is_nil(t.project_id))
       Repo.update_all(unhoused, set: [project_id: project_id])
+    end
+  end
+
+  # Every workspace gets exactly one open, stage-less machine root — the coordination "general" chat
+  # the cockpit's center thread-stack scopes to (per-workspace re-scope, 2026-08-31). Runs AFTER
+  # repair_projects so the root can carry the default project. Idempotent: a workspace that already
+  # has a machine root is left untouched.
+  defp repair_machine_roots do
+    for ws <- Repo.all(Workspace), is_nil(Channel.machine_thread(ws.id)) do
+      project = ensure_default_project(ws)
+
+      Channel.open_thread(%{
+        title: @default_project,
+        scope: "machine",
+        workspace_id: ws.id,
+        project_id: project.id
+      })
     end
   end
 

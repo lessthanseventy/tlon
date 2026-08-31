@@ -10,6 +10,7 @@ defmodule Server.ChannelTest do
   alias Server.Repo
   alias Server.Staff
   alias Server.Thread
+  alias Server.Workspaces
 
   setup do
     Server.TestDB.clean!()
@@ -258,6 +259,49 @@ defmodule Server.ChannelTest do
     end
   end
 
+  describe "workspace-scoped machine threads (the cockpit re-scope)" do
+    setup do
+      {:ok, wsa} = Workspaces.register(%{name: "wsa", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, wsb} = Workspaces.register(%{name: "wsb", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, wsa: wsa, wsb: wsb}
+    end
+
+    test "machine_thread/1 returns the oldest open stage-less root for THAT workspace", %{wsa: wsa, wsb: wsb} do
+      {:ok, root_a} = Channel.open_thread(%{title: "a-root", scope: "machine", workspace_id: wsa.id})
+      # A newer machine thread in the SAME workspace is a child, not the root.
+      {:ok, _child_a} = Channel.open_thread(%{title: "a-child", scope: "machine", workspace_id: wsa.id})
+      {:ok, root_b} = Channel.open_thread(%{title: "b-root", scope: "machine", workspace_id: wsb.id})
+
+      assert Channel.machine_thread(wsa.id).id == root_a.id
+      assert Channel.machine_thread(wsb.id).id == root_b.id
+      # A workspace with no machine thread yet resolves to nil (Bootstrap fills this).
+      {:ok, wsc} = Workspaces.register(%{name: "wsc", type: "code", scope: "machine", paths: [], roster: []})
+      assert Channel.machine_thread(wsc.id) == nil
+    end
+
+    test "machine_threads/1 filters to one workspace; the other's threads are absent", %{wsa: wsa, wsb: wsb} do
+      {:ok, _ta} = Channel.open_thread(%{title: "a-thread", scope: "machine", workspace_id: wsa.id})
+      {:ok, _tb} = Channel.open_thread(%{title: "b-thread", scope: "machine", workspace_id: wsb.id})
+
+      a_titles = wsa.id |> Channel.machine_threads() |> Enum.map(& &1.thread.title)
+      assert "a-thread" in a_titles
+      refute "b-thread" in a_titles
+
+      b_titles = wsb.id |> Channel.machine_threads() |> Enum.map(& &1.thread.title)
+      assert "b-thread" in b_titles
+      refute "a-thread" in b_titles
+    end
+
+    test "machine_threads/0 (nil workspace) stays global — both workspaces' threads", %{wsa: wsa, wsb: wsb} do
+      {:ok, _ta} = Channel.open_thread(%{title: "a-thread", scope: "machine", workspace_id: wsa.id})
+      {:ok, _tb} = Channel.open_thread(%{title: "b-thread", scope: "machine", workspace_id: wsb.id})
+
+      titles = Channel.machine_threads() |> Enum.map(& &1.thread.title)
+      assert "a-thread" in titles
+      assert "b-thread" in titles
+    end
+  end
+
   describe "the state CHECK is the DB's own guard" do
     test "a thread state outside the closed set is refused by SQLite itself" do
       {:ok, thread} = Channel.open_thread(%{title: "a subject"})
@@ -294,6 +338,47 @@ defmodule Server.ChannelTest do
 
       # The messages survive the close.
       assert thread |> Channel.thread_messages() |> Enum.map(& &1.body) == ["done"]
+    end
+  end
+
+  describe "parent/child threads + report-up on close (lead-as-manager, Slice 4D)" do
+    test "open_thread accepts a parent_thread_id and reads it back" do
+      {:ok, parent} = Channel.open_thread(%{title: "the epic"})
+      {:ok, child} = Channel.open_thread(%{title: "a sub-task", parent_thread_id: parent.id})
+      assert child.parent_thread_id == parent.id
+      assert Repo.get!(Thread, child.id).parent_thread_id == parent.id
+    end
+
+    test "closing a child posts a report into the PARENT that @mentions the parent's lead" do
+      {:ok, _agent} = Staff.register_agent(%{name: "menard-machine", mandate: "build", engine: "fresh"})
+      {:ok, parent} = Channel.open_thread(%{title: "the epic", scope: "machine"})
+      {:ok, _} = Channel.assign_lead(parent.id, "menard-machine")
+      {:ok, child} = Channel.open_thread(%{title: "the redis cache", parent_thread_id: parent.id})
+
+      {:ok, _} = Channel.close_thread(child)
+
+      [report] = Channel.thread_messages(parent)
+      assert report.author == "tlon"
+      assert report.body =~ "@menard-machine"
+      assert report.body =~ "the redis cache"
+      assert report.body =~ "##{child.id}"
+    end
+
+    test "closing a child whose parent has NO lead still reports (no @mention, no crash)" do
+      {:ok, parent} = Channel.open_thread(%{title: "leaderless epic"})
+      {:ok, child} = Channel.open_thread(%{title: "orphan task", parent_thread_id: parent.id})
+
+      {:ok, _} = Channel.close_thread(child)
+
+      [report] = Channel.thread_messages(parent)
+      assert report.body =~ "orphan task"
+      refute report.body =~ "@"
+    end
+
+    test "closing a TOP-LEVEL thread (no parent) posts no report" do
+      {:ok, thread} = Channel.open_thread(%{title: "standalone"})
+      {:ok, _} = Channel.close_thread(thread)
+      assert Channel.thread_messages(thread) == []
     end
   end
 

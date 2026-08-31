@@ -32,10 +32,11 @@ defmodule Server.BoardSidebarTest do
   end
 
   test "the root machine thread sorts first and is flagged" do
-    {:ok, _workspace} = Bootstrap.ensure()
+    # Bootstrap now guarantees a per-workspace machine root — no need to hand-open one.
+    {:ok, workspace} = Bootstrap.ensure()
     {:ok, _chat} = Channel.open_thread(%{title: "newer chat"})
-    {:ok, root} = Channel.open_thread(%{title: "machine root", scope: "machine"})
-    assert Channel.machine_thread().id == root.id
+    root = Channel.machine_thread(workspace.id)
+    assert root
 
     [%{threads: [first | _]}] = Board.sidebar()
     assert first.id == root.id
@@ -62,13 +63,15 @@ defmodule Server.BoardSidebarTest do
   end
 
   test "threads order by newest activity after the root" do
-    {:ok, _workspace} = Bootstrap.ensure()
+    {:ok, workspace} = Bootstrap.ensure()
+    root = Channel.machine_thread(workspace.id)
     {:ok, older} = Channel.open_thread(%{title: "older but recently active"})
     {:ok, newer} = Channel.open_thread(%{title: "newer but quiet"})
     {:ok, _} = Channel.post(%{thread_id: older.id, author: "andrew", body: "still on this one"})
 
     [%{threads: threads}] = Board.sidebar()
-    assert Enum.map(threads, & &1.id) == [older.id, newer.id]
+    # The root leads (it's flagged root), then the rest by newest activity.
+    assert Enum.map(threads, & &1.id) == [root.id, older.id, newer.id]
   end
 
   test "a thread whose workspace is GONE lands in the default group — never dropped" do
