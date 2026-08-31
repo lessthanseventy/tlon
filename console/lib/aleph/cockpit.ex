@@ -322,6 +322,10 @@ defmodule Console.Cockpit do
             flash: nil,
             # The tertius band's receipt log (Slice 3): the last few dispatches, newest-first.
             receipts: [],
+            # Hot-reload trigger tracking: `console:reload` (a separate process) recompiles + touches
+            # `.reload`; the cockpit reloads Console.* modules on the next tick. `:unset` until the
+            # first tick records the baseline (so boot never reloads). Edit → reload without restart.
+            reload_seen: :unset,
             scrolls: %{},
             placements: [],
             render_scheduled?: false,
@@ -603,6 +607,8 @@ defmodule Console.Cockpit do
     Process.send_after(self(), :tick, @tick_ms)
     # A pending coalesced :render is now redundant (this tick paints); drop the flag so it no-ops.
     state = %{state | render_scheduled?: false}
+    # Hot-reload: pick up code recompiled by `console:reload` without a restart (dev loop).
+    state = maybe_hot_reload(state)
     # Expire the cached Tlön probes on the probe cadence — render refills them lazily (and only
     # when Tlön is the active space), so the subprocess battery runs at @probe_ms, never per frame.
     state = maybe_expire_probes(state)
@@ -643,6 +649,10 @@ defmodule Console.Cockpit do
   @activity_cap 50
   # The tertius band keeps only the last few receipts (the band shows 2; a couple more for scrollback).
   @receipt_cap 6
+  # Hot-reload trigger: `mise run console:reload` recompiles (in its own process — no TUI corruption)
+  # then touches this file; the cockpit reloads Console.* modules on the next tick. Relative to the
+  # cockpit's cwd (modules/console), which the console:reload task shares.
+  @reload_trigger ".reload"
   @seen_cap 100
 
   # Prepend `{tag, row}` to the activity buffer (newest-first, capped at @activity_cap). Tagged
@@ -797,6 +807,44 @@ defmodule Console.Cockpit do
   # "unfold the focused thread" (the default-active-open rule). When `zoomed` names a thread, the
   # stack collapses to just that one card, always unfolded (`Z` — the real zoom). An unfolded card
   # carries the block's messages (already fetched); a folded one drops them.
+  # Hot code reload (dev loop) — INTENTIONAL + compile-gated, never automatic on save (which would
+  # inevitably swap in mid-edit / broken code). `mise run console:reload` runs `mix compile && touch
+  # .reload`: the touch only happens if the compile SUCCEEDS, so the trigger only ever points at
+  # good code. The first tick records the baseline; a later mtime change reloads every loaded
+  # Console.* module from its fresh .beam — edits land without a cockpit restart, state (folds,
+  # focus) persists. A state-SHAPE change still needs `console:run`. Fully guarded.
+  defp maybe_hot_reload(%{reload_seen: :unset} = state), do: %{state | reload_seen: trigger_mtime()}
+
+  defp maybe_hot_reload(state) do
+    case trigger_mtime() do
+      m when m != nil and m != state.reload_seen ->
+        n = reload_console_modules()
+        %{state | reload_seen: m, flash: "↻ reloaded #{n} modules"}
+
+      m ->
+        %{state | reload_seen: m}
+    end
+  rescue
+    e -> %{state | flash: "reload failed: #{Exception.message(e)}"}
+  end
+
+  defp trigger_mtime do
+    case File.stat(@reload_trigger, time: :posix) do
+      {:ok, %{mtime: mtime}} -> mtime
+      _ -> nil
+    end
+  end
+
+  defp reload_console_modules do
+    :code.all_loaded()
+    |> Enum.filter(fn {mod, _} -> mod |> Atom.to_string() |> String.starts_with?("Elixir.Console.") end)
+    |> Enum.map(fn {mod, _} ->
+      :code.purge(mod)
+      :code.load_file(mod)
+    end)
+    |> length()
+  end
+
   # The stack's own focus: the cockpit's focused thread if it's IN the stack, else the first card —
   # so a card is always active/unfolded even when the cockpit's focus tracks a non-stack thread.
   defp stack_focus(blocks, focused_id) do
@@ -1951,17 +1999,25 @@ defmodule Console.Cockpit do
   defp center_terminal(_state), do: nil
 
   # The thread `c` composes onto, derived per keypress (like center_live?): the focused project
-  # thread in Orbis; in a Workspace space the ATTACHED leaf's thread when one holds the center, else
-  # the MACHINE thread — you post to whoever you're looking at (reshape slice D: the thread is
-  # the address, fixing the "who am I talking to" decoupling). nil (no thread) makes `c` a no-op.
-  defp composer_thread_id(%{active_key: key} = state) when Space.workspace?(key) do
+  # thread in Orbis; in a Workspace space, whoever you're actually LOOKING at (reshape slice D:
+  # the thread is the address, fixing the "who am I talking to" decoupling) — in chat view
+  # (Slice 3.3) that's the stack-focused card (the unfolded thread on screen), which can diverge
+  # from a background-attached leaf; in terminal view it's the ATTACHED leaf's thread, else the
+  # MACHINE thread. nil (no thread) makes `c` a no-op.
+  @doc false
+  def composer_thread_id(%{active_key: key, center_view: :chat, stack_focus: focus})
+      when Space.workspace?(key) and not is_nil(focus) do
+    focus
+  end
+
+  def composer_thread_id(%{active_key: key} = state) when Space.workspace?(key) do
     case state.focused_session do
       {:leaf, id} -> id
       _leader -> machine_thread_id()
     end
   end
 
-  defp composer_thread_id(state), do: state.focused_id
+  def composer_thread_id(state), do: state.focused_id
 
   @doc false
   # The pure flip behind the `v` verb — exposed (like cycle_pane_view/2) for TTY-less tests.

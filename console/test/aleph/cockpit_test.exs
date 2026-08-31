@@ -88,6 +88,23 @@ defmodule Console.CockpitTest do
     end
   end
 
+  # `c` targets the thread you're actually LOOKING at (Slice 3.3): in chat view (the thread
+  # stack is the center) that's the stack-focused card, not whatever leaf happens attached —
+  # they can diverge (e.g. after a background attach) and posting to the attached leaf silently
+  # replies to the wrong thread. In terminal view there is no stack card on screen, so the
+  # attached leaf/leader is still the right target.
+  describe "composer_thread_id/1 — which thread `c` posts to" do
+    test "in chat view, targets the stack-focused card over a divergent attached leaf" do
+      state = %{active_key: 0, center_view: :chat, stack_focus: 7, focused_session: {:leaf, 99}}
+      assert Cockpit.composer_thread_id(state) == 7
+    end
+
+    test "in terminal view, still targets the attached leaf" do
+      state = %{active_key: 0, center_view: :terminal, stack_focus: 7, focused_session: {:leaf, 99}}
+      assert Cockpit.composer_thread_id(state) == 99
+    end
+  end
+
   # /status (reshape slice D): HEALTH's full readout as a MAIN detail, built from the same
   # health read the footer condenses. Pure so the composer command is testable without a TTY.
   describe "status_detail_content/1 — the /status readout" do

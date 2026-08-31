@@ -235,6 +235,11 @@ description = "console: run the test suite (the render path, headless)"
 dir = "modules/console"
 run = "mix test"
 
+[tasks."console:reload"]
+description = "console: HOT-RELOAD — recompile + signal the running cockpit to swap in new code (no restart, state kept). Run in a SECOND terminal after editing; render/keymap/panel edits land on the next tick. A state-shape change still needs console:run."
+dir = "modules/console"
+run = "mix compile && touch .reload && echo 'console:reload — recompiled + signaled; the cockpit swaps in the new code on its next tick (~0.5s)'"
+
 [tasks."console:check"]
 description = "console: the precommit gate — format + warnings-as-errors + tests + deterministic steering evals"
 dir = "modules/console"
