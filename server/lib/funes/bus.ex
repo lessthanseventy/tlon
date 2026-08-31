@@ -42,6 +42,8 @@ defmodule Server.Bus do
   def habits_topic, do: "tlon:habits"
   def workspaces_topic, do: "tlon:workspaces"
   def projects_topic, do: "tlon:projects"
+  def notes_topic, do: "tlon:notes"
+  def tickets_topic, do: "tlon:tickets"
   def activity_topic, do: "tlon:activity"
 
   def subscribe_messages, do: sub(messages_topic())
@@ -52,6 +54,8 @@ defmodule Server.Bus do
   def subscribe_habits, do: sub(habits_topic())
   def subscribe_workspaces, do: sub(workspaces_topic())
   def subscribe_projects, do: sub(projects_topic())
+  def subscribe_notes, do: sub(notes_topic())
+  def subscribe_tickets, do: sub(tickets_topic())
   def subscribe_activity, do: sub(activity_topic())
 
   # A consumer that follows the *focused* thread drops the old topic on a switch.
@@ -101,6 +105,18 @@ defmodule Server.Bus do
   def broadcast({tag, %Server.Project{}} = event)
       when tag in [:project_registered, :project_edited, :project_removed] do
     publish([projects_topic(), activity_topic()], event)
+  end
+
+  # Notes carry a polymorphic scope (no single thread_id): their own topic + the activity feed.
+  def broadcast({tag, %Server.Note{}} = event)
+      when tag in [:note_written, :note_edited, :note_removed] do
+    publish([notes_topic(), activity_topic()], event)
+  end
+
+  # Tickets are workspace-scoped (the lightweight tracker): their own topic + the activity feed.
+  def broadcast({tag, %Server.Ticket{}} = event)
+      when tag in [:ticket_filed, :ticket_updated, :ticket_removed] do
+    publish([tickets_topic(), activity_topic()], event)
   end
 
   @thread_tags [:thread_opened, :thread_closed, :thread_deleted, :thread_assigned, :workline_advanced, :workline_gated]

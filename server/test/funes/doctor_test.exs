@@ -18,10 +18,12 @@ defmodule Server.DoctorTest do
                "habit",
                "issue",
                "message",
+               "note",
                "project",
                "question",
                "session",
                "thread",
+               "ticket",
                "todo",
                "workspace"
              ]

@@ -14,6 +14,10 @@ defmodule Server.TestDB do
   # rows, then message/session, then thread, then project, then its parents agent + workspace.
   # habit.source_thread_id → thread, so it clears with the other thread-children.
   @ordered [
+    # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
+    # tickets clear before all of them; note has no FK.
+    Server.Ticket,
+    Server.Note,
     Server.Fact,
     Server.Event,
     Server.Issue,
