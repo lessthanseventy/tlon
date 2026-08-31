@@ -465,6 +465,16 @@ defmodule Console.ViewTest do
       assert "general" in names
       refute "t42" in names
     end
+
+    test "a thread-tagged leaf is excluded even when named descriptively (not t<id>)" do
+      leaf = Map.put(tab("builder-hola-who-is-this-what"), :thread_id, 2)
+      r = reads(%{active_key: 0, machine: %{tabs: [tab("hronir"), leaf]}})
+
+      names = View.data_for(Panel.WindowBar, r).tabs |> Enum.map(& &1.name)
+
+      assert "hronir" in names
+      refute "builder-hola-who-is-this-what" in names
+    end
   end
 
   describe "compose box" do

@@ -479,10 +479,17 @@ defmodule Console.View do
   # `Console.Mention.coworkers/1`, inverted, sourced from the active space's roster) and warmth
   # (`reads.roster`, already fetched for the sidebar) — so WindowBar stays a pure render with no
   # server reads of its own.
-  # C3.1: the strip is LEADERS only — `t<id>` leaf windows (spawned by ensure_thread_sessions) move
-  # to the Leaves panel. Reject by the leaf-name shape, not a roster allowlist, so an unexpected
-  # leader window (roster not yet loaded, a hand-made window) still shows rather than vanishing.
+  # C3.1: the strip is LEADERS only — leaf windows (spawned by ensure_thread_sessions) move to the
+  # Leaves panel. A leaf is any window carrying a thread tag (`@funes_thread` → `thread_id`); the
+  # `t<id>` name is only the legacy fallback (Slice 0: descriptive names like `builder-…` dodged a
+  # name-only reject and leaked onto the strip). Reject by the leaf SHAPE, not a roster allowlist, so
+  # an unexpected leader window (roster not yet loaded, a hand-made window) still shows.
   @leaf_window ~r/^t\d+$/
+
+  # Mirrors Cockpit.leaf_window?/1 (that one is a private seam over the same tab shape) — retire the
+  # duplication when leaf/leader is renamed out (Slice 4).
+  defp leaf_tab?(%{thread_id: tid}) when is_integer(tid), do: true
+  defp leaf_tab?(%{name: name}), do: Regex.match?(@leaf_window, name)
 
   defp window_tabs(r) do
     agents = Map.new(Mention.coworkers(fetch_space(r.active_key).roster), fn {agent, window} -> {window, agent} end)
@@ -491,7 +498,7 @@ defmodule Console.View do
     r
     |> Map.get(:machine, %{})
     |> tabs_of()
-    |> Enum.reject(&Regex.match?(@leaf_window, &1.name))
+    |> Enum.reject(&leaf_tab?/1)
     |> Enum.map(fn tab ->
       agent = agents[tab.name]
       Map.merge(tab, %{agent: agent, warm?: agent != nil and MapSet.member?(warm_agents, agent)})
