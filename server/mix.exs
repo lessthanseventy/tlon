@@ -22,15 +22,15 @@ defmodule Server.MixProject do
 
   # The always-up channel ships as a self-contained release: it bundles ERTS, so a
   # systemd --user unit runs one absolute path with no toolchain on PATH, and it
-  # hands us `bin/funes eval` (migrate before boot) plus `bin/funes remote`/`rpc`
+  # hands us `bin/server eval` (migrate before boot) plus `bin/server remote`/`rpc`
   # (into the LIVE node — the only place a token minted by Server.MCP.Spawn survives,
   # since the Tokens registry dies with its node). Built locally today
   # (`mix release`); nix packages the same release later (capability-map move A).
   defp releases do
     [
-      funes: [
+      server: [
         include_executables_for: [:unix],
-        applications: [funes: :permanent]
+        applications: [server: :permanent]
       ]
     ]
   end

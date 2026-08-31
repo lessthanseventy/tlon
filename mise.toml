@@ -70,16 +70,16 @@ run = "MIX_ENV=prod mix release --overwrite"
 [tasks."server:restart"]
 description = "server: rebuild the release + restart the always-up service (redeploy a funes change)"
 depends = ["server:release"]
-run = "systemctl --user restart funes && systemctl --user --no-pager status funes | head -12"
+run = "systemctl --user restart tlon && systemctl --user --no-pager status tlon | head -12"
 
 [tasks."server:console"]
 description = "server: remote iex INTO the running service node — inspect/mint against the live channel"
 dir = "modules/server"
-run = "_build/prod/rel/funes/bin/funes remote"
+run = "_build/prod/rel/server/bin/server remote"
 
 [tasks."server:logs"]
 description = "server: follow the always-up service's logs"
-run = "journalctl --user -u funes -n 80 -f"
+run = "journalctl --user -u tlon -n 80 -f"
 
 # Operate/script access to the LIVE channel from the shell — the human+Claude-Code peer
 # to the agents' MCP tools. Goes through `bin/funes rpc` INTO the running service node:

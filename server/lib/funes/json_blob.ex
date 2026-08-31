@@ -14,7 +14,7 @@ defmodule Server.JsonBlob do
     out
     |> candidates()
     |> Enum.find_value(fn blob ->
-      case Jason.decode(blob) do
+      case JSON.decode(blob) do
         {:ok, decoded} -> shape.(decoded)
         _ -> nil
       end
