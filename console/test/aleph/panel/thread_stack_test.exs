@@ -20,7 +20,7 @@ defmodule Console.Panel.ThreadStackTest do
     line = text(rows)
     assert line =~ "▸ #39 build the thing"
     assert line =~ "@kimi"
-    assert line =~ "[build]"
+    assert line =~ "build"
     refute line =~ "kimi: hi"
   end
 
@@ -31,7 +31,7 @@ defmodule Console.Panel.ThreadStackTest do
     assert out =~ "▾ #42 review PR"
     assert out =~ "andrew: take a look"
     assert out =~ "hronir: on it"
-    assert out =~ "‹reply to #42…›"
+    assert out =~ "reply to #42"
   end
 
   test "an awaiting gate is chipped on the header" do
@@ -59,7 +59,8 @@ defmodule Console.Panel.ThreadStackTest do
       ]
 
       assert ThreadStack.pick(%{cards: cards}, rect(), 0) == {:fold_thread, 1}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 1) == {:fold_thread, 2}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 2) == {:fold_thread, 2}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 1) == nil
       assert ThreadStack.pick(%{cards: cards}, rect(), 9) == nil
     end
 
@@ -71,7 +72,7 @@ defmodule Console.Panel.ThreadStackTest do
 
       # card 1 unfolded spans header+message+reply+blank (4 rows); row 2 (the reply line) is still card 1
       assert ThreadStack.pick(%{cards: cards}, rect(), 2) == {:fold_thread, 1}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 4) == {:fold_thread, 2}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 6) == {:fold_thread, 2}
     end
   end
 end

@@ -1,29 +1,35 @@
 defmodule Console.Panel.ThreadStack do
   @moduledoc """
-  The cockpit center (Slice 3, 2026-08-30): a vertical stack of Slack-style thread cards. Each
-  card is **folded** (a one-line header — so a stack of folded cards IS the thread list) or
-  **unfolded** (`z` — the full conversation + a per-thread reply input). The active thread is
-  unfolded by default. This replaces the single follow-focus conversation/terminal center: folding
-  is the list-vs-detail split, collapsed into one surface.
+  The cockpit center (Slice 3, 2026-08-30): a vertical stack of Slack-style thread cards. Each card
+  is **folded** (a one-line header — so a stack of folded cards IS the thread list) or **unfolded**
+  (`z` — the conversation + a per-thread reply input). The active thread is unfolded by default.
 
-  Data is `%{cards: [card]}` where a card is
-  `%{id, title, lead, stage, awaiting, folded?, active?, messages}` (`messages` a list of
-  `%{author, body}`, only read when unfolded). Pure render — the cockpit assembles the cards
-  (threads + fold set + messages) so this stays testable without a live channel.
+  Styling: the active card carries an accent gutter (`▌`) and a bright header; folded/inactive cards
+  are quiet. Messages are nested under the header, author-coloured and paragraph-wrapped (the same
+  quality as `Console.Panel.Conversation`), with breathing room between them and between cards.
+
+  Data is `%{cards: [card]}`, a card `%{id, title, lead, stage, awaiting, folded?, active?, messages}`
+  (`messages` a list of `%{author, body}`, read only when unfolded). Pure render.
   """
   @behaviour Console.Panel
 
   import Console.Panel, only: [line: 2, blank: 0]
 
+  @indent "    "
+  @recent 6
+
   @impl Console.Panel
   def topics(_assigns), do: []
 
   @impl Console.Panel
-  def render(%{cards: []}, rect), do: Console.Panel.clip([line("no threads yet", :dim)], rect)
+  def render(%{cards: []}, rect),
+    do: Console.Panel.clip([blank(), line("  no threads yet — press : to file a ticket or start one", :dim)], rect)
 
   def render(%{cards: cards}, rect) do
     cards
-    |> Enum.flat_map(&card_rows(&1, rect.w))
+    |> Enum.map(&card_block(&1, rect.w))
+    |> Enum.intersperse([blank()])
+    |> Enum.concat()
     |> Console.Panel.clip(rect)
   end
 
@@ -34,12 +40,15 @@ defmodule Console.Panel.ThreadStack do
   @impl Console.Panel
   def pick(%{cards: cards}, rect, local_y) do
     {_offset, hit} =
-      Enum.reduce_while(cards, {0, nil}, fn card, {offset, _} ->
-        height = length(card_rows(card, rect.w))
+      cards
+      |> Enum.intersperse(:gap)
+      |> Enum.reduce_while({0, nil}, fn
+        :gap, {offset, _} ->
+          {:cont, {offset + 1, nil}}
 
-        if local_y >= offset and local_y < offset + height,
-          do: {:halt, {offset, {:fold_thread, card.id}}},
-          else: {:cont, {offset + height, nil}}
+        card, {offset, _} ->
+          height = length(card_block(card, rect.w))
+          if local_y >= offset and local_y < offset + height, do: {:halt, {offset, {:fold_thread, card.id}}}, else: {:cont, {offset + height, nil}}
       end)
 
     hit
@@ -47,46 +56,69 @@ defmodule Console.Panel.ThreadStack do
 
   def pick(_data, _rect, _local_y), do: nil
 
-  # A folded card is just its header; an unfolded one adds its messages + a reply input, then a gap.
-  defp card_rows(%{folded?: true} = card, _w), do: [header_row(card)]
+  # -- card layout ----------------------------------------------------------
 
-  defp card_rows(%{folded?: false} = card, w) do
-    [header_row(card)] ++ message_rows(card[:messages] || [], w) ++ [reply_row(card), blank()]
+  defp card_block(%{folded?: true} = card, w), do: [header_row(card, w)]
+
+  defp card_block(%{folded?: false} = card, w) do
+    body =
+      case message_lines(card[:messages] || [], w) do
+        [] -> [line("#{@indent}no messages yet", :dim)]
+        lines -> lines
+      end
+
+    [header_row(card, w), blank()] ++ body ++ [blank(), reply_row(card)]
   end
 
-  defp header_row(card) do
+  # `▌ ▾ #2  title            @lead · [stage] · ⏸ gate` — the active card lit, the rest quiet.
+  defp header_row(%{active?: true} = card, _w) do
+    [{"▌ ", :accent}, {"▾ ", :accent}, {"##{card.id} ", :header}, {card.title, :header}] ++ chips(card)
+  end
+
+  defp header_row(card, _w) do
     marker = if card.folded?, do: "▸ ", else: "▾ "
-    title_style = if card[:active?], do: :selected, else: :normal
-
-    [{marker, :accent}, {"##{card.id} #{card.title}", title_style}] ++ chips(card)
+    [{"  ", :normal}, {marker, :dim}, {"##{card.id} ", :dim}, {card.title, :normal}] ++ chips(card)
   end
 
-  # ` · @lead · [stage]` / ` · ⏸ awaiting` — each omitted when absent.
   defp chips(card) do
-    lead = if card[:lead], do: [{" · @#{card.lead}", :dim}], else: []
-    stage = if card[:stage], do: [{" · [#{card.stage}]", :dim}], else: []
+    lead = if card[:lead], do: [{"  @#{card.lead}", :label}], else: []
+    stage = if card[:stage], do: [{" · #{card.stage}", :dim}], else: []
     awaiting = if card[:awaiting] not in [nil, ""], do: [{" · ⏸ #{card.awaiting}", :accent}], else: []
     lead ++ stage ++ awaiting
   end
 
-  # Last few messages, one truncated line each ("  author: body"), so an unfolded card stays compact.
-  defp message_rows([], _w), do: [line("  no messages yet", :dim)]
+  # The last few messages, author-coloured + paragraph-wrapped + nested, a blank line between each.
+  defp message_lines([], _w), do: []
 
-  defp message_rows(messages, w) do
+  defp message_lines(messages, w) do
     messages
-    |> Enum.take(-6)
-    |> Enum.map(fn %{author: author, body: body} ->
-      style = if Server.Channel.operator?(author), do: :operator, else: :normal
-      [{"  ", :normal}, {truncate("#{author}: #{one_line(body)}", w - 2), style}]
-    end)
+    |> Enum.take(-@recent)
+    |> Enum.map(&message_rows(&1, w))
+    |> Enum.reject(&(&1 == []))
+    |> Enum.intersperse([blank()])
+    |> Enum.concat()
   end
 
-  defp reply_row(card), do: [{"  ‹reply to ##{card.id}…›", :dim}]
+  defp message_rows(%{author: author, body: body}, w) do
+    operator? = Server.Channel.operator?(author)
+    author_style = if operator?, do: :operator, else: :label
+    body_style = if operator?, do: :operator, else: :normal
+
+    case Console.Text.wrap_paragraphs("#{author}: #{one_line(body)}", max(w - String.length(@indent), 1)) do
+      [] -> []
+      [first | rest] -> [first_row(first, author, author_style, body_style) | Enum.map(rest, &[{@indent <> &1, body_style}])]
+    end
+  end
+
+  # Colour the author on the first line; the rest is body.
+  defp first_row(first, author, author_style, body_style) do
+    case String.split(first, ": ", parts: 2) do
+      [^author, tail] -> [{@indent, :normal}, {author, author_style}, {": ", :dim}, {tail, body_style}]
+      _ -> [{@indent <> first, body_style}]
+    end
+  end
+
+  defp reply_row(card), do: [{"#{@indent}↳ ", :accent}, {"reply to ##{card.id}… (c)", :dim}]
 
   defp one_line(body), do: body |> to_string() |> String.replace("\n", " ")
-
-  defp truncate(s, max) when max <= 1, do: s
-  defp truncate(s, max) do
-    if String.length(s) > max, do: String.slice(s, 0, max - 1) <> "…", else: s
-  end
 end
