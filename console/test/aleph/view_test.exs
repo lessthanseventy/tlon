@@ -79,14 +79,14 @@ defmodule Console.ViewTest do
   describe "the center [chat]|[terminal] toggle (reshape slice D)" do
     defp placed?(placements, mod), do: Enum.any?(placements, &match?({^mod, _, _}, &1))
 
-    test "center_view :chat swaps the Terminal section for the thread conversation" do
-      chat = %{title: "Tlön", messages: [], thinking: [], working: []}
-      placements = View.compose(reads(%{center_view: :chat, center_chat: chat}), 120, 40)
+    test "center_view :chat swaps the Terminal section for the thread stack (Slice 3)" do
+      stack = %{cards: [%{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]}
+      placements = View.compose(reads(%{center_view: :chat, thread_stack: stack}), 120, 40)
 
-      assert {Panel.Conversation, data, _rect} = Enum.find(placements, &match?({Panel.Conversation, _, _}, &1))
-      assert data.title == "Tlön"
+      assert {Panel.ThreadStack, data, _rect} = Enum.find(placements, &match?({Panel.ThreadStack, _, _}, &1))
+      assert [%{id: 1}] = data.cards
       refute placed?(placements, Panel.Terminal)
-      # the WindowBar tab strip and the Ticker frame the chat exactly as they frame the PTY
+      # the WindowBar tab strip and the Ticker frame the stack exactly as they frame the PTY
       assert placed?(placements, Panel.WindowBar)
       assert placed?(placements, Panel.Ticker)
     end
@@ -94,7 +94,7 @@ defmodule Console.ViewTest do
     test "center_view :terminal (the default) keeps the live PTY" do
       placements = View.compose(reads(%{center_view: :terminal}), 120, 40)
       assert placed?(placements, Panel.Terminal)
-      refute placed?(placements, Panel.Conversation)
+      refute placed?(placements, Panel.ThreadStack)
     end
 
     test "a reads map without center_view (older/minimal) defaults to the terminal" do

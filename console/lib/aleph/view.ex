@@ -119,14 +119,14 @@ defmodule Console.View do
     borders ++ contents ++ composer_placement(reads, composer_h, w, h) ++ [status]
   end
 
-  # The center's chat face (reshape slice D): `v` flipped center_view to :chat — swap the Terminal
-  # section for the attached thread's conversation, keeping the WindowBar/Ticker frame around it.
-  # Only when the chat read resolved: a failed/empty read (no thread, server down) degrades to the
-  # PTY, never a blank center.
+  # The center's chat face: `v` flips center_view to :chat — swap the Terminal section for the
+  # THREAD STACK (Slice 3: a stack of foldable Slack-style thread cards, the whole workspace's
+  # threads at once), keeping the WindowBar/Ticker frame around it. Only when the read resolved: a
+  # failed/empty read (server down) degrades to the PTY, never a blank center.
   defp chat_center(surface, %{center_view: :chat} = reads) do
-    if is_map(reads[:center_chat]) do
+    if is_map(reads[:thread_stack]) do
       Enum.map(surface, fn
-        {Panel.Terminal, _read_key} -> {Panel.Conversation, :center_chat}
+        {Panel.Terminal, _read_key} -> {Panel.ThreadStack, :thread_stack}
         other -> other
       end)
     else

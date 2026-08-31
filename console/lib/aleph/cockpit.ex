@@ -256,6 +256,11 @@ defmodule Console.Cockpit do
             active_key: List.first(Space.all()).key,
             focused_id: nil,
             threads: [],
+            # The thread-stack fold set (Slice 3): thread ids whose card is UNFOLDED. `nil` (the
+            # default) means "unfold the focused thread" — the default-active-open rule — so a fresh
+            # cockpit lands with your current thread open and the rest as headers. Once you `z`, it
+            # becomes an explicit set (possibly empty = nothing unfolded).
+            unfolded: nil,
             # Orbis' focus toggle (`h`/`l`) — which cursor its j/k drives: the survey's per-row
             # cursor (default, so a fresh Orbis opens ready to zoom a workspace) or the thread list.
             orbis_focus: :survey,
@@ -776,6 +781,34 @@ defmodule Console.Cockpit do
   # `active_key`) in scope — a background Bus handler, or a click that landed on a Workspace-only panel.
   # `state.active_key` when it names a Workspace, else the server-down/no-active-workspace fallback
   # (`Space.first_workspace/0`) — nil when no workspace exists at all; `tlon_run/2` no-ops on nil.
+  # The thread-stack cards (Slice 3): every chorus block → a card. An EMPTY fold set means "unfold
+  # the focused thread" (the default-active-open rule), so a fresh cockpit lands with your current
+  # thread open and the rest as one-line headers. An unfolded card carries the block's messages
+  # (already fetched by chorus); a folded one drops them.
+  defp thread_cards(chorus, focused_id, unfolded) do
+    unfolded = resolve_unfolded(unfolded, focused_id)
+
+    Enum.map(chorus, fn %{thread: t, messages: messages} ->
+      folded? = not MapSet.member?(unfolded, t.id)
+
+      %{
+        id: t.id,
+        title: t.title,
+        lead: nil,
+        stage: t.stage,
+        awaiting: t.awaiting,
+        folded?: folded?,
+        active?: t.id == focused_id,
+        messages: if(folded?, do: [], else: messages)
+      }
+    end)
+  end
+
+  # `nil` fold set → the implicit default "focused thread unfolded"; an explicit set is used as-is.
+  defp resolve_unfolded(nil, nil), do: MapSet.new()
+  defp resolve_unfolded(nil, focused_id), do: MapSet.new([focused_id])
+  defp resolve_unfolded(%MapSet{} = set, _focused_id), do: set
+
   defp active_workspace_id(%{active_key: key}) when Space.workspace?(key), do: key
 
   defp active_workspace_id(_state) do
@@ -965,6 +998,16 @@ defmodule Console.Cockpit do
 
   # The `n` verb landed: open the thread, focus it, AND spawn a session onto it in one motion —
   # a new thread is a new piece of work, so `n` starts working on it. A bad title just flashes.
+  # `z`: fold/unfold the focused thread card (Slice 3). Materializes the implicit "focused unfolded"
+  # default (nil) into an explicit set before toggling, so folding the focused thread actually sticks.
+  defp apply_effect({:toggle_fold}, %{focused_id: nil} = state), do: {:noreply, state}
+
+  defp apply_effect({:toggle_fold}, %{focused_id: id, unfolded: unfolded} = state) do
+    set = resolve_unfolded(unfolded, id)
+    next = if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
+    {:noreply, render(%{state | unfolded: next})}
+  end
+
   defp apply_effect({:create_thread, title}, state) do
     case Channel.open_thread(%{title: title}) do
       {:ok, thread} -> {:noreply, render(%{state | focused_id: thread.id, flash: spawn_onto(thread.id, state)})}
@@ -1656,6 +1699,9 @@ defmodule Console.Cockpit do
       focused_title: focused && focused.title,
       roster: roster,
       threads: threads,
+      # The thread-stack center (Slice 3): every thread as a foldable card. `chorus` already carries
+      # each thread's recent messages, so an unfolded card is free.
+      thread_stack: %{cards: thread_cards(chorus, focused && focused.id, state.unfolded)},
       # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
       # thread list + crew working flags.
       sidebar: Board.safe_read(:sidebar, [], fn -> Server.Board.sidebar() end),
