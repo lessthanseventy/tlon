@@ -32,10 +32,31 @@ defmodule Console.Orbis do
 
     rows =
       Channel.machine_threads()
+      |> without_root(root_thread_id())
       |> Enum.map(&row(&1.thread, blocking))
       |> Enum.sort_by(&status_rank(&1.status))
 
     if rows == [], do: nil, else: %{summary: summarize(rows), rows: rows, workspaces: workspaces(rows)}
+  rescue
+    _ -> nil
+  catch
+    :exit, _ -> nil
+  end
+
+  @doc "Drop the root machine thread — the coworkers' permanent home, never a work item — from
+  the survey `blocks` (`[%{thread: %{id}}]`). A nil `root_id` (funes down / no machine thread)
+  keeps every block. Pure so both survey surfaces test it without a live channel."
+  @spec without_root([%{thread: %{id: term()}}], term() | nil) :: [%{thread: %{id: term()}}]
+  def without_root(blocks, nil), do: blocks
+  def without_root(blocks, root_id), do: Enum.reject(blocks, &(&1.thread.id == root_id))
+
+  # The root machine thread's id, or nil when funes is down / no machine thread yet — the same
+  # guard shape as every server gather in this module.
+  defp root_thread_id do
+    case Channel.machine_thread() do
+      %{id: id} -> id
+      _ -> nil
+    end
   rescue
     _ -> nil
   catch

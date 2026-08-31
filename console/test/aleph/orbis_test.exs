@@ -38,6 +38,20 @@ defmodule Console.OrbisTest do
     end
   end
 
+  describe "without_root/2 (the root machine thread is the coworkers' home, never a survey row)" do
+    test "drops the block whose thread is the root, keeps the leaves" do
+      blocks = [%{thread: %{id: 1}}, %{thread: %{id: 2}}, %{thread: %{id: 3}}]
+
+      assert Orbis.without_root(blocks, 1) == [%{thread: %{id: 2}}, %{thread: %{id: 3}}]
+    end
+
+    test "no resolved root (funes down / no machine thread) → every block survives" do
+      blocks = [%{thread: %{id: 2}}, %{thread: %{id: 3}}]
+
+      assert Orbis.without_root(blocks, nil) == blocks
+    end
+  end
+
   describe "workspaces/1" do
     # workspaces/1 reads the live Console.Workspaces cache (funes down under test → []). The literal-Tlön
     # fallback is gone (reshape slice A): no workspace refs means no survey rows — honest, since funes
