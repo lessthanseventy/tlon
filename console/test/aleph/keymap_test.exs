@@ -856,6 +856,10 @@ defmodule Console.KeymapTest do
       assert {_s, {:toggle_fold}} = Keymap.handle(char("z"), state())
     end
 
+    test "Z (bare, nav) zooms one thread full-screen" do
+      assert {_s, {:zoom_thread}} = Keymap.handle(char("Z"), state())
+    end
+
     test "z forwards to the terminal when one is live (reach fold via the leader)" do
       s = state(%{center_live?: true})
       assert {^s, {:forward, %{key: :char, char: "z"}}} = Keymap.handle(char("z"), s)

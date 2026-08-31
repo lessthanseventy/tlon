@@ -283,9 +283,15 @@ defmodule Console.Cockpit do
             # composer command has it open, else nil. Cleared by any pane Enter (:tlon_enter);
             # Esc closes it through the ordinary detail mode.
             status_detail: nil,
-            # The Workspace center's face (reshape slice D): the live PTY (:terminal, the default)
-            # or the attached thread's conversation (:chat). The `v` verb flips it.
-            center_view: :terminal,
+            # The Workspace center's face: the THREAD STACK (:chat, the default now — Slice 3, no
+            # more `v`-to-find-it) or the live PTY (:terminal, still reachable). The stack is home.
+            center_view: :chat,
+            # `Z` zooms ONE thread full-screen (a real zoom over the stack): the focused thread id, or
+            # nil for the whole stack. `z` (lowercase) folds a card; `Z` (this) zooms one, `Z` back.
+            zoomed: nil,
+            # The stack's active thread id, recomputed each render (focused-if-in-stack else first) and
+            # stashed so the `z`/`Z` effects can target it between renders.
+            stack_focus: nil,
             # The field editor's own state (D2.4 Chunk 2a): `%{id, field, sub, mode}` while `e` has
             # opened it, else nil. VIEW cursors only — the workspace's data lives in server and is
             # re-read from `Console.Workspaces.all/0` every render (Console.Keymap).
@@ -781,15 +787,23 @@ defmodule Console.Cockpit do
   # `active_key`) in scope — a background Bus handler, or a click that landed on a Workspace-only panel.
   # `state.active_key` when it names a Workspace, else the server-down/no-active-workspace fallback
   # (`Space.first_workspace/0`) — nil when no workspace exists at all; `tlon_run/2` no-ops on nil.
-  # The thread-stack cards (Slice 3): every chorus block → a card. An EMPTY fold set means "unfold
-  # the focused thread" (the default-active-open rule), so a fresh cockpit lands with your current
-  # thread open and the rest as one-line headers. An unfolded card carries the block's messages
-  # (already fetched by chorus); a folded one drops them.
-  defp thread_cards(chorus, focused_id, unfolded) do
-    unfolded = resolve_unfolded(unfolded, focused_id)
+  # The thread-stack cards (Slice 3): each machine-thread block → a card. `nil` fold set means
+  # "unfold the focused thread" (the default-active-open rule). When `zoomed` names a thread, the
+  # stack collapses to just that one card, always unfolded (`Z` — the real zoom). An unfolded card
+  # carries the block's messages (already fetched); a folded one drops them.
+  # The stack's own focus: the cockpit's focused thread if it's IN the stack, else the first card —
+  # so a card is always active/unfolded even when the cockpit's focus tracks a non-stack thread.
+  defp stack_focus(blocks, focused_id) do
+    ids = Enum.map(blocks, & &1.thread.id)
+    if focused_id in ids, do: focused_id, else: List.first(ids)
+  end
 
-    Enum.map(chorus, fn %{thread: t, messages: messages} ->
-      folded? = not MapSet.member?(unfolded, t.id)
+  defp thread_cards(blocks, focus, unfolded, zoomed) do
+    blocks = if zoomed, do: Enum.filter(blocks, &(&1.thread.id == zoomed)), else: blocks
+    unfolded = resolve_unfolded(unfolded, focus)
+
+    Enum.map(blocks, fn %{thread: t, messages: messages} ->
+      folded? = is_nil(zoomed) and not MapSet.member?(unfolded, t.id)
 
       %{
         id: t.id,
@@ -798,7 +812,7 @@ defmodule Console.Cockpit do
         stage: t.stage,
         awaiting: t.awaiting,
         folded?: folded?,
-        active?: t.id == focused_id,
+        active?: t.id == focus,
         messages: if(folded?, do: [], else: messages)
       }
     end)
@@ -998,15 +1012,22 @@ defmodule Console.Cockpit do
 
   # The `n` verb landed: open the thread, focus it, AND spawn a session onto it in one motion —
   # a new thread is a new piece of work, so `n` starts working on it. A bad title just flashes.
-  # `z`: fold/unfold the focused thread card (Slice 3). Materializes the implicit "focused unfolded"
-  # default (nil) into an explicit set before toggling, so folding the focused thread actually sticks.
-  defp apply_effect({:toggle_fold}, %{focused_id: nil} = state), do: {:noreply, state}
+  # `z`: fold/unfold the stack's active thread card (Slice 3). Materializes the implicit "active
+  # unfolded" default (nil) into an explicit set before toggling, so folding the active card sticks.
+  defp apply_effect({:toggle_fold}, %{stack_focus: nil} = state), do: {:noreply, state}
 
-  defp apply_effect({:toggle_fold}, %{focused_id: id, unfolded: unfolded} = state) do
+  defp apply_effect({:toggle_fold}, %{stack_focus: id, unfolded: unfolded} = state) do
     set = resolve_unfolded(unfolded, id)
     next = if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
     {:noreply, render(%{state | unfolded: next})}
   end
+
+  # `Z`: zoom the active thread full-screen (a real zoom over the stack), or unzoom if already zoomed.
+  defp apply_effect({:zoom_thread}, %{zoomed: z} = state) when not is_nil(z),
+    do: {:noreply, render(%{state | zoomed: nil})}
+
+  defp apply_effect({:zoom_thread}, %{stack_focus: nil} = state), do: {:noreply, state}
+  defp apply_effect({:zoom_thread}, %{stack_focus: id} = state), do: {:noreply, render(%{state | zoomed: id})}
 
   defp apply_effect({:create_thread, title}, state) do
     case Channel.open_thread(%{title: title}) do
@@ -1678,6 +1699,11 @@ defmodule Console.Cockpit do
     state = %{state | threads: threads, focused_id: focused && focused.id}
     state = Board.safe_read(:resubscribe, state, fn -> resubscribe(state, focused) end)
     machine = Board.safe_read(:machine, :no_session, fn -> machine_read(state) end)
+    # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
+    # threads are machine-scope, NOT the project-scope `chorus`, so the stack reads this.
+    stack_blocks = Board.safe_read(:stack, [], fn -> Channel.machine_threads() end)
+    # Stash the stack's active thread so the `Z`/`z` effects (which run between renders) can target it.
+    state = %{state | stack_focus: stack_focus(stack_blocks, state.focused_id)}
     roster = Board.safe_read(:roster, [], fn -> Staff.roster() end)
     # The Leaves reorder context, derived ONCE per paint and cached — leaves_data/1 hands the same
     # value to the render read below and to yank/attach/preview between paints.
@@ -1699,9 +1725,9 @@ defmodule Console.Cockpit do
       focused_title: focused && focused.title,
       roster: roster,
       threads: threads,
-      # The thread-stack center (Slice 3): every thread as a foldable card. `chorus` already carries
-      # each thread's recent messages, so an unfolded card is free.
-      thread_stack: %{cards: thread_cards(chorus, focused && focused.id, state.unfolded)},
+      # The thread-stack center (Slice 3): machine threads as foldable cards; the block carries each
+      # thread's messages, so an unfolded card is free. `zoomed` collapses it to one full card.
+      thread_stack: %{cards: thread_cards(stack_blocks, state.stack_focus, state.unfolded, state.zoomed)},
       # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
       # thread list + crew working flags.
       sidebar: Board.safe_read(:sidebar, [], fn -> Server.Board.sidebar() end),

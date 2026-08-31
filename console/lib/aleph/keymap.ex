@@ -116,6 +116,7 @@ defmodule Console.Keymap do
           | {:create_thread, String.t()}
           | {:orchestrate, String.t()}
           | {:toggle_fold}
+          | {:zoom_thread}
           | {:post_message, term(), String.t()}
           | {:cycle_coworker_model, String.t()}
           | {:habit_action, :approve | :reject}
@@ -516,8 +517,10 @@ defmodule Console.Keymap do
   defp command(%{key: :char, char: ":"}, state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
 
-  # `z` folds/unfolds the focused thread card in the stack (Slice 3) — the fold/unfold "zoom".
+  # `z` folds/unfolds the active thread card in the stack; `Z` zooms one thread full-screen (a real
+  # zoom over the stack), `Z` again to go back (Slice 3).
   defp command(%{key: :char, char: "z"}, state), do: {state, {:toggle_fold}}
+  defp command(%{key: :char, char: "Z"}, state), do: {state, {:zoom_thread}}
 
   # `a` (bare) toggles Orbis' author face on; Esc (below, no input open) toggles it back off.
   # Modifier-guarded like `c`/`m` — Ctrl/Shift/Alt+A never fires this.
