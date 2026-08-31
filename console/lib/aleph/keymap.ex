@@ -517,6 +517,11 @@ defmodule Console.Keymap do
   defp command(%{key: :char, char: ":"}, state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
 
+  # Space (bare in nav, or the `Ctrl+Space Space` chord over a live terminal) also focuses the
+  # tertius line — the permanent bottom band. Same as `:`, but no reach for the colon.
+  defp command(%{key: :space}, state),
+    do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
+
   # `z` folds/unfolds the active thread card in the stack; `Z` zooms one thread full-screen (a real
   # zoom over the stack), `Z` again to go back (Slice 3).
   defp command(%{key: :char, char: "z"}, state), do: {state, {:toggle_fold}}

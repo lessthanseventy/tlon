@@ -860,6 +860,10 @@ defmodule Console.KeymapTest do
       assert {_s, {:zoom_thread}} = Keymap.handle(char("Z"), state())
     end
 
+    test "Space (nav / Ctrl+Space Space chord) focuses the tertius line, like ':'" do
+      assert {%{input: %{kind: :orchestrate, buffer: ""}}, :repaint} = Keymap.handle(key(:space), state())
+    end
+
     test "z forwards to the terminal when one is live (reach fold via the leader)" do
       s = state(%{center_live?: true})
       assert {^s, {:forward, %{key: :char, char: "z"}}} = Keymap.handle(char("z"), s)

@@ -949,6 +949,14 @@ defmodule Console.Cockpit do
     {:noreply, render(state)}
   end
 
+  # Clicking the tertius band focuses its input (Slice 3) — same as Space / `:`. If it's already
+  # focused, the click is a no-op so an in-progress command isn't wiped.
+  defp dispatch_click({Panel.Tertius, _data, _rect}, _x, _y, %{input: %{kind: :orchestrate}} = state),
+    do: {:noreply, state}
+
+  defp dispatch_click({Panel.Tertius, _data, _rect}, _x, _y, state),
+    do: {:noreply, render(%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}})}
+
   defp dispatch_click({panel, data, rect}, _x, y, state), do: apply_pick(Panel.pick(panel, data, rect, y - rect.y), state)
 
   # Select a Tlön tmux window in workspace `workspace_id` by the clicked/hovered tab's index; nil (past the
