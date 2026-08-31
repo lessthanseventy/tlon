@@ -60,6 +60,12 @@ defmodule Console.KeymapTest do
 
   defp key(k, opts \\ []), do: Enum.into(opts, %{key: k})
   defp char(c, opts \\ []), do: Enum.into(opts, %{key: :char, char: c})
+
+  # A workspace state with the thread stack as the focused center — the handle_tlon path.
+  defp stack_ctx(over \\ %{}) do
+    base = %{active_key: 0, center_view: :chat, focus: %Focus{in_terminal?: true}, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2}
+    state(Map.merge(base, over))
+  end
   defp leader, do: key(:space, ctrl: true)
 
   # A helper: press the leader, then a key, against `state`. Asserts the leader arms the prefix.
@@ -877,6 +883,39 @@ defmodule Console.KeymapTest do
     test "z forwards to the terminal when one is live (reach fold via the leader)" do
       s = state(%{center_live?: true})
       assert {^s, {:forward, %{key: :char, char: "z"}}} = Keymap.handle(char("z"), s)
+    end
+  end
+
+  describe "thread stack keyboard nav in a workspace (handle_tlon, center_view :chat)" do
+    test "j/k move the stack cursor instead of forwarding to a (hidden) terminal" do
+      assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("j"), stack_ctx())
+      assert {%{focused_id: 1}, :repaint} = Keymap.handle(char("k"), stack_ctx())
+    end
+
+    test "↑/↓ also move the cursor" do
+      assert {%{focused_id: 3}, :repaint} = Keymap.handle(key(:down), stack_ctx())
+      assert {%{focused_id: 1}, :repaint} = Keymap.handle(key(:up), stack_ctx())
+    end
+
+    test "g/G jump to top/bottom" do
+      assert {%{focused_id: 1}, :repaint} = Keymap.handle(char("g"), stack_ctx())
+      assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("G"), stack_ctx())
+    end
+
+    test "z/Space fold, Z/+ zoom" do
+      assert {_s, {:toggle_fold}} = Keymap.handle(char("z"), stack_ctx())
+      assert {_s, {:toggle_fold}} = Keymap.handle(key(:space), stack_ctx())
+      assert {_s, {:zoom_thread}} = Keymap.handle(char("Z"), stack_ctx())
+      assert {_s, {:zoom_thread}} = Keymap.handle(char("+"), stack_ctx())
+    end
+
+    test ": focuses the tertius line from the stack" do
+      assert {%{input: %{kind: :orchestrate}}, :repaint} = Keymap.handle(char(":"), stack_ctx())
+    end
+
+    test "with the terminal center (center_view :terminal), keys still forward" do
+      s = stack_ctx(%{center_view: :terminal})
+      assert {^s, {:forward, %{key: :char, char: "j"}}} = Keymap.handle(char("j"), s)
     end
   end
 

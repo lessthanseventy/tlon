@@ -657,6 +657,25 @@ defmodule Console.Keymap do
   # driver ring) stay reachable. Anything else no-ops — nav mode never leaks a key to tmux. ---
   defp handle_tlon(%{key: :space, ctrl: true}, state), do: {focus_intent(state, :toggle_terminal), :repaint}
 
+  # The thread stack is the shown center (center_view :chat, Slice 3) and it's the focused surface
+  # (in_terminal? — the center owns the keys): drive the STACK directly instead of forwarding to a
+  # tmux client that isn't there. j/k/↑↓ move the cursor, z/Space fold, Z/+ zoom, g/G ends. `:`
+  # focuses the tertius line from here too. This precedes the generic forward clause below, so the
+  # terminal path (center_view :terminal) is untouched.
+  defp handle_tlon(%{key: :char, char: ":"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
+
+  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, 1)
+  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, -1)
+  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, 1)
+  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, -1)
+  defp handle_tlon(%{key: :char, char: "g"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_jump(state, :first)
+  defp handle_tlon(%{key: :char, char: "G"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_jump(state, :last)
+  defp handle_tlon(%{key: :char, char: "z"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:toggle_fold}}
+  defp handle_tlon(%{key: :space}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:toggle_fold}}
+  defp handle_tlon(%{key: :char, char: "Z"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:zoom_thread}}
+  defp handle_tlon(%{key: :char, char: "+"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:zoom_thread}}
+
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}} = state), do: {state, {:forward, key}}
 
   # Esc steps back one level: close an open detail first, else drop out of nav into the terminal.
@@ -770,6 +789,20 @@ defmodule Console.Keymap do
   defp jump(%{threads: []} = state, _), do: {state, :none}
   defp jump(state, :first), do: {%{state | focused_id: hd(state.threads).id}, :repaint}
   defp jump(state, :last), do: {%{state | focused_id: List.last(state.threads).id}, :repaint}
+
+  # The thread-stack cursor move/jump in the Tlön (workspace) context — same as move/2 + jump/2 but
+  # returning from handle_tlon (the workspace routes keys here, not through command/2).
+  defp stack_move(%{threads: []} = state, _dir), do: {state, :none}
+
+  defp stack_move(state, dir) do
+    ids = Enum.map(state.threads, & &1.id)
+    i = Enum.find_index(ids, &(&1 == state.focused_id)) || 0
+    {%{state | focused_id: Enum.at(ids, min(max(i + dir, 0), length(ids) - 1))}, :repaint}
+  end
+
+  defp stack_jump(%{threads: []} = state, _), do: {state, :none}
+  defp stack_jump(state, :first), do: {%{state | focused_id: hd(state.threads).id}, :repaint}
+  defp stack_jump(state, :last), do: {%{state | focused_id: List.last(state.threads).id}, :repaint}
 
   # Dispatch Orbis' j/k/↑/↓: the author face's own cursor takes priority over `orbis_focus`
   # (survey/threads is meaningless while the author face is showing — Panel.Author, not Overview);

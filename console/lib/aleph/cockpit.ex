@@ -451,6 +451,8 @@ defmodule Console.Cockpit do
       # A live PTY only "owns" the keys when it's the shown center — with the thread stack up
       # (center_view :chat, Slice 3) keys drive the stack (j/k/z/Z), never a hidden terminal.
       |> Map.put(:center_live?, state.center_view != :chat and center_terminal(state) != nil)
+      # handle_tlon needs center_view to route center-focus keys to the STACK (not forward to tmux).
+      |> Map.put(:center_view, state.center_view)
       |> Map.put(:composer_thread_id, composer_thread_id(state))
       |> Map.put(:tlon_layout, tlon_layout(state))
       |> Map.put(:author_workspaces, Console.Workspaces.all())
