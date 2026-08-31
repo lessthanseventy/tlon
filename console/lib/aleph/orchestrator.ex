@@ -53,7 +53,7 @@ defmodule Console.Orchestrator do
   end
 
   def dispatch({:query, :blocked}, _ctx) do
-    n = Server.workline_statuses() |> Enum.count(&(&1.awaiting not in [nil, ""]))
+    n = Enum.count(Server.workline_statuses(), &(&1.awaiting not in [nil, ""]))
     {:ok, "#{n} thread#{if n == 1, do: "", else: "s"} awaiting you"}
   end
 
@@ -64,7 +64,7 @@ defmodule Console.Orchestrator do
   # a real conversation with the crew, not a strict command parser. (v2 hands it to the tertius agent
   # for smarter, LLM-interpreted intent — but a plain message is the honest default now.)
   def dispatch({:chat, text}, ctx) do
-    case Channel.machine_thread() do
+    case Channel.machine_thread(ctx.workspace_id) do
       %{id: id, title: title} ->
         {:ok, _} = Channel.post(%{thread_id: id, author: ctx.operator, body: text})
         {:ok, "→ posted to #{title} ✓"}
@@ -75,16 +75,34 @@ defmodule Console.Orchestrator do
   end
 
   @doc "Fire a consequential action after the operator confirms."
-  def confirm({:open, stage, title}, ctx) do
+  # No stage → an UNTRACKED plain thread (the `explore` verb): work that isn't a workline yet, tracked
+  # lazily on the first commit. A stage → a WORKLINE opened AT that stage (any-stage entry, Slice 4D).
+  def confirm({:open, nil, title}, ctx) do
     case Channel.open_thread(%{title: title, workspace_id: ctx.workspace_id}) do
-      {:ok, t} -> {:ok, "→ opened ##{t.id} #{stage_label(stage)} “#{title}” ✓"}
+      {:ok, t} -> {:ok, "→ opened ##{t.id} (untracked) “#{title}” ✓"}
       {:error, cs} -> {:error, changeset_error(cs)}
     end
   end
 
-  # Approving a gate advances the workline machine (boundary-private) — wired in Slice 4. v1 confirms
-  # the intent but defers execution honestly rather than reach across the boundary.
-  def confirm({:approve, n}, _ctx), do: {:error, "approve ##{n} is wired in Slice 4 (the workline machine)"}
+  def confirm({:open, stage, title}, ctx) do
+    case Server.open_workline(%{title: title, stage: stage, workspace_id: ctx.workspace_id}) do
+      {:ok, t} -> {:ok, "→ opened ##{t.id} #{stage_label(stage)} “#{title}” ✓"}
+      {:error, {:invalid_stage, s}} -> {:error, "can't open at stage #{s}"}
+      {:error, cs} -> {:error, changeset_error(cs)}
+    end
+  end
+
+  # Approving a parked gate advances the workline (Slice 4D): re-verifies the owed artifact, then
+  # flips (spec→plan, review→merged, machine-born intent→spec). `n` is the thread id.
+  def confirm({:approve, n}, _ctx) do
+    case Server.approve_workline(n) do
+      {:ok, t} -> {:ok, "→ approved ##{n} → #{t.stage} ✓"}
+      {:error, :no_thread} -> {:error, "no thread ##{n}"}
+      {:error, :nothing_awaiting} -> {:error, "##{n} has no parked gate to approve"}
+      {:error, {:artifact_missing, why}} -> {:error, "##{n} still owes: #{why}"}
+      {:error, reason} -> {:error, "approve ##{n} failed: #{inspect(reason)}"}
+    end
+  end
 
   # -- helpers --------------------------------------------------------------
 

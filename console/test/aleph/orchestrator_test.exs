@@ -9,8 +9,8 @@ defmodule Console.OrchestratorTest do
 
   import Ecto.Query
 
-  alias Ecto.Adapters.SQLite3
   alias Console.Orchestrator
+  alias Ecto.Adapters.SQLite3
   alias Server.Channel
   alias Server.Repo
   alias Server.Staff
@@ -93,8 +93,9 @@ defmodule Console.OrchestratorTest do
       assert {:ok, receipt} = Orchestrator.dispatch({:post, "hronir-machine", "ship it"}, ctx)
       assert receipt =~ "posted to ##{thread.id}"
       assert receipt =~ "woke @hronir-machine"
+
       assert [%{body: "@hronir-machine ship it", author: "andrew"}] =
-               Repo.all(from m in Server.Message, where: m.thread_id == ^thread.id)
+               Repo.all(from(m in Server.Message, where: m.thread_id == ^thread.id))
     end
 
     test "post to a nonexistent coworker is a clean error", %{ctx: ctx} do
@@ -107,7 +108,22 @@ defmodule Console.OrchestratorTest do
 
       assert {:ok, receipt} = Orchestrator.dispatch({:chat, "just testing stuff"}, ctx)
       assert receipt =~ "posted to general"
-      assert [%{body: "just testing stuff", author: "andrew"}] = Repo.all(from m in Server.Message, where: m.thread_id == ^root.id)
+
+      assert [%{body: "just testing stuff", author: "andrew"}] =
+               Repo.all(from(m in Server.Message, where: m.thread_id == ^root.id))
+    end
+
+    test "passthrough posts to the ACTIVE workspace's root, not another workspace's", %{ctx: ctx, workspace_id: ws} do
+      {:ok, mine} = Channel.open_thread(%{title: "general", workspace_id: ws, scope: "machine"})
+      {:ok, other_ws} = Workspaces.register(%{name: "Elsewhere"})
+      {:ok, theirs} = Channel.open_thread(%{title: "general", workspace_id: other_ws.id, scope: "machine"})
+
+      assert {:ok, _} = Orchestrator.dispatch({:chat, "for my workspace only"}, ctx)
+
+      assert [%{body: "for my workspace only"}] =
+               Repo.all(from(m in Server.Message, where: m.thread_id == ^mine.id))
+
+      assert [] == Repo.all(from(m in Server.Message, where: m.thread_id == ^theirs.id))
     end
   end
 
@@ -119,10 +135,28 @@ defmodule Console.OrchestratorTest do
       assert Repo.aggregate(Server.Thread, :count) == before
     end
 
-    test "confirm actually opens the thread", %{ctx: ctx} do
+    test "confirm at a stage opens a WORKLINE at that stage — any-stage entry (Slice 4D)", %{ctx: ctx} do
       assert {:ok, receipt} = Orchestrator.confirm({:open, "build", "a redis cache"}, ctx)
       assert receipt =~ "opened #"
-      assert Repo.exists?(from(t in Server.Thread, where: t.title == "a redis cache"))
+      t = Repo.one(from(t in Server.Thread, where: t.title == "a redis cache"))
+      assert t.stage == "build"
+      assert t.slug =~ "redis"
+    end
+
+    test "confirm with no stage opens an UNTRACKED plain thread (the explore verb)", %{ctx: ctx} do
+      assert {:ok, receipt} = Orchestrator.confirm({:open, nil, "poke at the flake"}, ctx)
+      assert receipt =~ "untracked"
+      t = Repo.one(from(t in Server.Thread, where: t.title == "poke at the flake"))
+      assert t.stage == nil
+    end
+
+    test "confirm approve on a missing thread, or one with no parked gate, errors cleanly", %{ctx: ctx} do
+      assert {:error, msg} = Orchestrator.confirm({:approve, 999_999}, ctx)
+      assert msg =~ "no thread"
+
+      {:ok, plain} = Channel.open_thread(%{title: "not a workline", scope: "machine"})
+      assert {:error, msg2} = Orchestrator.confirm({:approve, plain.id}, ctx)
+      assert msg2 =~ "no parked gate"
     end
   end
 end

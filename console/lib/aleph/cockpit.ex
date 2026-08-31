@@ -18,7 +18,6 @@ defmodule Console.Cockpit do
   alias Console.Mouse
   alias Console.Osc
   alias Console.Panel
-  alias Console.Panel.Border
   alias Console.Panel.WindowBar
   alias Console.Profile
   alias Console.Profiles
@@ -279,6 +278,10 @@ defmodule Console.Cockpit do
             # Tlön nav's delete confirm arm: the `{kind, payload, label}` a `d` press resolved
             # (MEMORY fact / LEAVES leaf), or nil. Second `d` confirms; any other key cancels.
             tlon_delete: nil,
+            # The tertius y/n confirm arm (Slice 3.5): `%{action, ctx, summary}` when a consequential
+            # verb (open work / approve a gate) is routed and waiting on the operator, else nil. `y`
+            # fires `Console.Orchestrator.confirm/2`; any other key cancels (Console.Keymap gate).
+            pending_confirm: nil,
             # The /status readout (reshape slice D): a %{title, lines} MAIN detail while the
             # composer command has it open, else nil. Cleared by any pane Enter (:tlon_enter);
             # Esc closes it through the ordinary detail mode.
@@ -313,10 +316,21 @@ defmodule Console.Cockpit do
             # `t<id>` window is attached, else `{:leader, name | nil}`. Leaves washes the leaf row
             # whose id matches. Set by attach_leaf/2 and the WindowBar tab click.
             focused_session: {:leader, nil},
-            # C3.4: `[`/`]` cycle this index into the active Workspace's right column, so only one of
-            # Health/Activity/Leaves shows (full-height) at a time. Index 0 = the first right panel
-            # (Health) — the default; the operator tunes it live.
-            right_pane_view: 0,
+            # The last acted-on left-click cell — raxol's event_translator gives mouse events NO
+            # press/release action, so a click arrives as TWO identical `:left` events; we act on the
+            # first and swallow the immediate duplicate (the release). Any other mouse event clears it.
+            last_left: nil,
+            # Right-click also arrives as a press+release pair (no action) — dedup the same way, else
+            # the release re-hits the just-opened menu and closes it.
+            last_right: nil,
+            # The open overlay menu (right-click workspace context menu / icon picker), or nil.
+            menu: nil,
+            # The open full-screen board (`:tickets` / `:notes`, Slice 3.5), or nil.
+            board: nil,
+            # The STACK-zoom embedded lazygit (Slice 4): `%{thread_id, path}` while a full-screen
+            # `lazygit` PTY is up over the focused thread's worktree, else nil. The terminal itself
+            # lives in `Console.Sessions` keyed `{:lazygit, thread_id}`; this only marks the overlay.
+            lazygit: nil,
             paste_buffer: nil,
             input: nil,
             flash: nil,
@@ -344,6 +358,10 @@ defmodule Console.Cockpit do
             # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
             # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`.
             activity: [],
+            # The NOW pane's standing ATTENTION list (Slice 4D): parked worklines awaiting the
+            # operator, cached with the other probes (@probe_ms) so the pane never reads server
+            # per-frame. Filled by `gates_read/0` in a workspace; nil→[] elsewhere.
+            gates: [],
             # Recently-seen `{tag, id}` keys (capped ~100) — the first-sight gate. A tagged event on
             # the FOCUSED thread arrives TWICE (its thread topic + the global activity topic), so this
             # dedupes side effects (notify/nudge/append) to exactly once. See `fresh?/3`.
@@ -436,6 +454,34 @@ defmodule Console.Cockpit do
     {:noreply, %{state | paste_buffer: Console.PasteBuffer.accumulate(buffer, key)}}
   end
 
+  # An open overlay menu captures navigation keys (Slice 3.5): Esc closes it, j/k/↑↓ move, Enter
+  # activates — every other key is swallowed so it can't leak to the frame underneath.
+  def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{menu: menu} = state) when not is_nil(menu),
+    do: handle_menu_key(key, state)
+
+  # The STACK-zoom embedded lazygit (Slice 4): while it's up, every key drives lazygit's PTY — it
+  # captures keys like any embedded app (Esc/hjkl/etc. are its own). `Ctrl+Space` (the TERM↔NAV
+  # leader, reused) collapses the zoom; quitting lazygit (its `q`) ends the PTY and the tick
+  # reconciles the vanished terminal. Precedes the board/menu clauses — a lazygit zoom owns the frame.
+  def handle_cast({:dispatch, %Event{type: :key, data: %{key: :space, ctrl: true}}}, %{lazygit: lg} = state)
+      when not is_nil(lg), do: {:noreply, render(%{state | lazygit: nil})}
+
+  def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{lazygit: %{thread_id: id}} = state) do
+    with term when is_pid(term) <- safe_terminal({:lazygit, id}),
+         %KeyEvent{} = event <- ghostty_key(key) do
+      Terminal.send_key(term, event)
+    end
+
+    {:noreply, state}
+  end
+
+  # A full-screen board (Tickets/Notes) closes on Esc; other keys are swallowed while it's up.
+  def handle_cast({:dispatch, %Event{type: :key, data: %{key: :escape}}}, %{board: b} = state) when not is_nil(b),
+    do: {:noreply, render(%{state | board: nil})}
+
+  def handle_cast({:dispatch, %Event{type: :key, data: _key}}, %{board: b} = state) when not is_nil(b),
+    do: {:noreply, state}
+
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, state) do
     # Any keypress clears a prior flash (a spawn/create result), so it shows until you act again.
     # `center_live?` and `composer_thread_id` are derived per keypress and handed to the keymap so
@@ -475,35 +521,61 @@ defmodule Console.Cockpit do
     dispatch_wheel(Mouse.hit_panel(state.placements, x, y), b, x, y, state)
   end
 
-  # A left PRESS routes to the panel under the cursor and asks it what that row selects — focus a
-  # thread, switch a space — then repaints. Press only: the SGR release carries the same button,
-  # and acting on both would double-fire (and re-hit re-laid-out placements after a space switch).
-  # Non-selectable panels (Brief/Stack/Health, the center terminal) return nil → no-op.
-  # A hit on the carousel border's tab strip is checked FIRST — borders are chrome to
-  # `Mouse.hit_panel/3` (never a click target), so the tab strip needs its own routing.
-  def handle_cast({:dispatch, %Event{type: :mouse, data: %{x: sx, y: sy, button: :left, action: :press}}}, state) do
+  # A left click routes to the panel under the cursor and asks it what that row selects — focus a
+  # thread, switch a space — then repaints. raxol's `event_translator` gives NO press/release action
+  # (mouse data is just `%{x, y, button}`), so a single click surfaces as two identical `:left`
+  # events: we act on the first and swallow the second (matched against `last_left`) so nothing
+  # double-fires (or re-hits a re-laid-out placement after a space switch). Any other mouse event
+  # clears `last_left`, so a repeat click at the same cell still acts. Non-selectable panels return
+  # nil → no-op.
+  def handle_cast({:dispatch, %Event{type: :mouse, data: %{x: sx, y: sy, button: :left}}}, state) do
     {x, y} = {Mouse.to_cell(sx), Mouse.to_cell(sy)}
 
-    case border_tab_hit(state.placements, x, y) do
-      nil -> dispatch_click(Mouse.hit_panel(state.placements, x, y), x, y, state)
-      idx -> {:noreply, render(%{state | right_pane_view: idx})}
+    cond do
+      {x, y} == state.last_left ->
+        {:noreply, %{state | last_left: nil}}
+
+      # An open overlay menu captures the click: a hit on a menu row runs its action; anywhere else
+      # dismisses it (click-away), without falling through to the panel underneath.
+      state.menu ->
+        handle_menu_click(Mouse.hit_panel(state.placements, x, y), y, %{state | last_left: {x, y}})
+
+      # A full-screen board is view-only for now — any click dismisses it (like Esc).
+      state.board ->
+        {:noreply, render(%{state | board: nil, last_left: {x, y}})}
+
+      true ->
+        dispatch_click(Mouse.hit_panel(state.placements, x, y), x, y, %{state | last_left: {x, y}})
     end
   end
 
-  # A left drag/release over the terminal body: forwarded to the PTY so tmux does the selecting (and
-  # copies on release). Routed per-event by position — no drag state — so a motion that leaves the
-  # terminal simply stops forwarding. Anywhere else, a drag/release is not a gesture console acts on.
-  # `:move` is the atom raxol's InputParser emits for a button-motion SGR report; `:motion` is
-  # accepted too so a raxol rename can't silently kill the live-drag forwarding.
-  def handle_cast({:dispatch, %Event{type: :mouse, data: %{x: sx, y: sy, button: :left, action: action}}}, state)
-      when action in [:move, :motion, :release] do
+  # A right click on a workspace tile opens its context menu at the cursor; anywhere else dismisses
+  # any open menu. Right-click carries no press/release pair to dedup (unlike left).
+  def handle_cast({:dispatch, %Event{type: :mouse, data: %{x: sx, y: sy, button: :right}}}, state) do
     {x, y} = {Mouse.to_cell(sx), Mouse.to_cell(sy)}
-    forward_terminal_mouse(Mouse.hit_panel(state.placements, x, y), action, x, y, state)
-    {:noreply, state}
+
+    if {x, y} == state.last_right do
+      {:noreply, %{state | last_right: nil}}
+    else
+      state = %{state | last_right: {x, y}}
+
+      case Mouse.hit_panel(state.placements, x, y) do
+        {Panel.Sidebar, data, rect} ->
+          case Panel.Sidebar.workspace_at(data, rect, y - rect.y) do
+            %{id: _} = ws -> {:noreply, render(%{state | menu: workspace_menu(ws, x, y)})}
+            _ -> {:noreply, render(%{state | menu: nil})}
+          end
+
+        _ ->
+          {:noreply, render(%{state | menu: nil})}
+      end
+    end
   end
 
-  # Any other mouse event (right/middle button, motion with no button) is not handled.
-  def handle_cast({:dispatch, %Event{type: :mouse}}, state), do: {:noreply, state}
+  # Any other mouse event (right/middle button, a release/motion that surfaced as a non-`:left`
+  # button, wheel handled above) — not acted on, but it CLEARS the click-dedup latch so the next
+  # left click at the same cell isn't mistaken for a release.
+  def handle_cast({:dispatch, %Event{type: :mouse}}, state), do: {:noreply, %{state | last_left: nil, last_right: nil}}
 
   def handle_cast({:dispatch, _event}, state), do: {:noreply, state}
 
@@ -617,6 +689,9 @@ defmodule Console.Cockpit do
     # Re-sync every tick so a missed SIGWINCH self-corrects: refresh_size re-queries via ioctl,
     # independent of any signal.
     state = refresh_size(state)
+    # If the lazygit PTY has exited (its own `q`), Sessions has dropped it — collapse the overlay so
+    # it doesn't render `:no_session` over the frame (Slice 4).
+    state = reconcile_lazygit(state)
     # Re-fit the center PTY too: a terminal spawned between resizes starts at 80x24 and would
     # otherwise fill only part of the panel. Terminal.resize no-ops when size is unchanged.
     resize_focused_terminal(state)
@@ -761,7 +836,7 @@ defmodule Console.Cockpit do
   #     owns the opening turn (two-phase, race-safe); waking here would double it.
   #   * no staffed lead, or a meta/unknown lead (no leaf window for it) → route globally.
   defp delivery_target(%{thread_id: tid}, state, lead) when is_integer(tid) do
-    standing = state.standing_thread_id || machine_thread_id()
+    standing = state.standing_thread_id || machine_thread_id(active_workspace_id(state))
 
     cond do
       tid == standing -> {:route, nil}
@@ -934,6 +1009,18 @@ defmodule Console.Cockpit do
 
   defp dispatch_wheel(nil, _b, _x, _y, state), do: {:noreply, state}
 
+  # While the lazygit overlay is up, wheel events belong to ITS PTY, not the center terminal (Slice 4).
+  defp dispatch_wheel({Panel.Terminal, _data, rect}, b, x, y, %{lazygit: %{thread_id: id}} = state) do
+    with term when is_pid(term) <- safe_terminal({:lazygit, id}),
+         {dir, n} <- Mouse.wheel_of(b) do
+      lx = clamp_cell(x - rect.x, rect.w)
+      ly = clamp_cell(y - rect.y, rect.h)
+      repaint_on_scroll(Terminal.wheel(term, dir, n, lx, ly), state)
+    else
+      _ -> {:noreply, state}
+    end
+  end
+
   # The center terminal: forward to the embedded app if it tracks the mouse, else scroll scrollback.
   defp dispatch_wheel({Panel.Terminal, _data, rect}, b, x, y, state) do
     with term when is_pid(term) <- center_terminal(state),
@@ -965,24 +1052,22 @@ defmodule Console.Cockpit do
   defp repaint_on_scroll(:scrolled, state), do: {:noreply, render(state)}
   defp repaint_on_scroll(:forwarded, state), do: {:noreply, state}
 
-  # A press on the carousel box's top frame row: which tab (Border.tab_at_x mirrors the drawn
-  # runs)? Borders are chrome to hit_panel, so this runs before it.
-  defp border_tab_hit(placements, x, y) do
-    Enum.find_value(placements, fn
-      {Border, %{tabs: tabs} = data, rect} when is_list(tabs) ->
-        if y == rect.y and x >= rect.x and x < rect.x + rect.w, do: Border.tab_at_x(data, x - rect.x)
-
-      _placement ->
-        nil
-    end)
-  end
-
   defp dispatch_click(nil, _x, _y, state), do: {:noreply, state}
 
   # Clicking the center terminal: forward to the PTY when the embedded program tracks the mouse
   # (tmux `mouse on` selects; a TUI hit-tests its own regions). The terminal renders edge-to-edge —
   # the Tlön window strip is WindowBar's own bordered panel above it (see the next clause), so
   # there is no row-0 special case here anymore.
+  # While the lazygit overlay is up, its Panel.Terminal is the hit target — route the click to THAT
+  # PTY, not the machine center terminal underneath (Slice 4).
+  defp dispatch_click({Panel.Terminal, _data, rect}, x, y, %{lazygit: %{thread_id: id}} = state) do
+    with term when is_pid(term) <- safe_terminal({:lazygit, id}) do
+      Terminal.mouse(term, :press, clamp_cell(x - rect.x, rect.w), clamp_cell(y - rect.y, rect.h))
+    end
+
+    {:noreply, state}
+  end
+
   defp dispatch_click({Panel.Terminal, _data, rect}, x, y, state) do
     with term when is_pid(term) <- center_terminal(state) do
       Terminal.mouse(term, :press, clamp_cell(x - rect.x, rect.w), clamp_cell(y - rect.y, rect.h))
@@ -1020,18 +1105,6 @@ defmodule Console.Cockpit do
 
   defp select_tlon_window(_workspace_id, _tab), do: :ok
 
-  # A drag/release over the terminal body → the PTY; anywhere else is ignored. The terminal is
-  # edge-to-edge now, so there is no tab-row offset to shift by.
-  defp forward_terminal_mouse({Panel.Terminal, _data, rect}, action, x, y, state) do
-    with term when is_pid(term) <- center_terminal(state) do
-      Terminal.mouse(term, action, clamp_cell(x - rect.x, rect.w), clamp_cell(y - rect.y, rect.h))
-    end
-
-    :ok
-  end
-
-  defp forward_terminal_mouse(_hit, _action, _x, _y, _state), do: :ok
-
   defp apply_pick(nil, state), do: {:noreply, state}
 
   # Selecting a thread by click swaps the focused thread (and thus the center's terminal) — no
@@ -1045,6 +1118,29 @@ defmodule Console.Cockpit do
     next = reset_scrolls(state, %{state | active_key: key, flash: nil})
     {:noreply, render(next)}
   end
+
+  # The spine's `+` tile (Slice 3.4): open the new-workspace input directly — the SAME flow the Orbis
+  # author face's `n` opens (template ring on h/l, Enter → {:register_workspace, …}), reused from
+  # anywhere so add-a-workspace isn't buried in the god-view.
+  defp apply_pick({:new_workspace}, state) do
+    input = %{kind: :new_workspace, buffer: "", cursor: 0, template: List.first(WorkspaceTemplates.names())}
+    {:noreply, render(%{state | input: input})}
+  end
+
+  # The spine's settings cog (Slice 3.4): land on the workspace CONFIG surface — Orbis' author face
+  # (D2.1), where workspaces are created/edited/removed (roster, repos, knobs).
+  defp apply_pick({:settings}, state) do
+    {:noreply, render(%{state | active_key: :orbis, orbis_face: :author})}
+  end
+
+  # A picked-but-not-yet-wired surface (the spine's Tickets/Notes tools, Slice 3.5): a transient
+  # footer note, honest that it's coming, rather than a dead click.
+  defp apply_pick({:flash, message}, state) do
+    {:noreply, render(%{state | flash: message})}
+  end
+
+  # The spine's Tickets/Notes tools (Slice 3.5): open the full-screen board.
+  defp apply_pick({:open_board, kind}, state), do: {:noreply, render(%{state | board: kind, menu: nil})}
 
   # Clicking a thread card focuses it AND toggles its fold — the collapse/expand button (Slice 3).
   # Toggle against the CURRENTLY-VISIBLE fold state (resolve the nil default) so a click matches
@@ -1064,6 +1160,225 @@ defmodule Console.Cockpit do
     do: %{next | scrolls: Map.drop(next.scrolls, [Panel.Brief, Panel.Conversation])}
 
   defp reset_scrolls(_prev, next), do: next
+
+  # --- The overlay menu (right-click workspace context menu + icon picker, Slice 3.5) ---
+
+  defp handle_menu_click({Panel.Menu, data, rect}, y, state),
+    do: apply_menu(Panel.Menu.pick(data, rect, y - rect.y), state)
+
+  defp handle_menu_click(_hit, _y, state), do: {:noreply, render(%{state | menu: nil})}
+
+  defp handle_menu_key(%{key: :escape}, state), do: {:noreply, render(%{state | menu: nil})}
+  defp handle_menu_key(%{char: "j"}, state), do: {:noreply, render(move_menu(state, 1))}
+  defp handle_menu_key(%{key: :down}, state), do: {:noreply, render(move_menu(state, 1))}
+  defp handle_menu_key(%{char: "k"}, state), do: {:noreply, render(move_menu(state, -1))}
+  defp handle_menu_key(%{key: :up}, state), do: {:noreply, render(move_menu(state, -1))}
+
+  defp handle_menu_key(%{key: :enter}, %{menu: %{items: items, cursor: c}} = state),
+    do: menu_action(Enum.at(items, c).action, state)
+
+  defp handle_menu_key(_key, state), do: {:noreply, state}
+
+  defp move_menu(%{menu: %{items: items, cursor: c} = menu} = state, delta) do
+    n = max(length(items), 1)
+    %{state | menu: %{menu | cursor: rem(c + delta + n, n)}}
+  end
+
+  # A workspace's context menu, anchored at the click cell.
+  defp workspace_menu(ws, x, y) do
+    %{
+      title: ws.name,
+      x: x,
+      y: y,
+      cursor: 0,
+      items: [
+        %{label: "Set icon…", action: {:icon_picker, ws}},
+        %{label: "Configure", action: {:configure_ws, ws}},
+        %{label: "Delete", action: {:delete_ws, ws}, danger: true}
+      ]
+    }
+  end
+
+  # The Set-icon picker: the workspace-icon choices, plus a reset to the position number.
+  defp icon_picker_menu(ws, x, y) do
+    icons =
+      Enum.map(Console.Icons.workspace_icons(), fn name ->
+        %{label: to_string(name), action: {:set_icon, ws, to_string(name)}, icon: name}
+      end)
+
+    %{title: "icon", x: x, y: y, cursor: 0, items: [%{label: "number", action: {:set_icon, ws, nil}} | icons]}
+  end
+
+  defp confirm_delete_menu(ws, x, y) do
+    %{
+      title: "delete?",
+      x: x,
+      y: y,
+      cursor: 1,
+      items: [
+        %{label: "Delete #{ws.name}", action: {:confirm_delete, ws}, danger: true},
+        %{label: "Cancel", action: :close}
+      ]
+    }
+  end
+
+  defp apply_menu({:menu_pick, action}, state), do: menu_action(action, state)
+  defp apply_menu(_none, state), do: {:noreply, render(%{state | menu: nil})}
+
+  defp menu_action(:close, state), do: {:noreply, render(%{state | menu: nil})}
+
+  defp menu_action({:configure_ws, _ws}, state),
+    do: {:noreply, render(%{state | menu: nil, active_key: :orbis, orbis_face: :author})}
+
+  defp menu_action({:delete_ws, ws}, %{menu: %{x: x, y: y}} = state),
+    do: {:noreply, render(%{state | menu: confirm_delete_menu(ws, x, y)})}
+
+  defp menu_action({:confirm_delete, ws}, state), do: {:noreply, render(%{remove_workspace!(state, ws.id) | menu: nil})}
+
+  defp menu_action({:icon_picker, ws}, %{menu: %{x: x, y: y}} = state),
+    do: {:noreply, render(%{state | menu: icon_picker_menu(ws, x, y)})}
+
+  defp menu_action({:set_icon, ws, icon}, state),
+    do: {:noreply, render(%{set_workspace_icon(state, ws.id, icon) | menu: nil})}
+
+  defp menu_action(_unknown, state), do: {:noreply, render(%{state | menu: nil})}
+
+  # Merge the chosen icon into the workspace's knobs (nil clears it → back to the number).
+  defp set_workspace_icon(state, id, icon) do
+    case Enum.find(Workspaces.all(), &(&1.id == id)) do
+      %{knobs: knobs} -> edit_workspace!(state, id, %{knobs: put_or_delete_icon(knobs || %{}, icon)})
+      _ -> state
+    end
+  end
+
+  defp put_or_delete_icon(knobs, nil), do: Map.delete(knobs, "icon")
+  defp put_or_delete_icon(knobs, icon), do: Map.put(knobs, "icon", icon)
+
+  # The overlay's placements (Border + the Menu content), clamped on screen, painted last (on top).
+  defp menu_placements(nil, _w, _h), do: []
+
+  defp menu_placements(%{items: items} = menu, w, h) do
+    content_w = max(Panel.Menu.width(menu), String.length(menu[:title] || ""))
+    box_w = min(content_w + 4, w)
+    box_h = min(length(items) + 2, max(h - 2, 2))
+    x = menu.x |> min(w - box_w) |> max(0)
+    y = menu.y |> min(h - box_h - 2) |> max(0)
+    rect = %{x: x, y: y, w: box_w, h: box_h}
+    inset = %{x: x + 2, y: y + 1, w: max(box_w - 4, 1), h: max(box_h - 2, 1)}
+
+    [
+      {Panel.Border, %{focused: true, digit: nil, title: menu[:title], tabs: nil, hint: nil}, rect},
+      {Panel.Menu, menu, inset}
+    ]
+  end
+
+  # --- The full-screen boards (Tickets / Notes, Slice 3.5): the spine tools zoom to a board that
+  # covers the frame; Esc closes it. Painted after the layout, before the menu. ---
+  defp board_placements(%{board: nil}), do: []
+
+  defp board_placements(%{board: kind, w: w, h: h} = state) do
+    rect = %{x: 0, y: 0, w: w, h: max(h - 1, 2)}
+    inset = %{x: 2, y: 1, w: max(w - 4, 1), h: max(h - 3, 1)}
+    {panel, data, title} = board_content(kind, state)
+
+    [
+      {Panel.Border, %{focused: true, digit: nil, title: "#{title}  ·  esc to close", tabs: nil, hint: nil}, rect},
+      {panel, data, inset}
+    ]
+  end
+
+  defp board_content(:tickets, state) do
+    id = board_workspace_id(state)
+    tickets = safe_board(fn -> id && id |> Server.Tickets.in_workspace() |> Enum.map(&ticket_row/1) end) || []
+    {Panel.TicketBoard, %{tickets: tickets}, "TICKETS"}
+  end
+
+  defp board_content(:notes, state) do
+    id = board_workspace_id(state)
+    notes = safe_board(fn -> id && Server.Notes.for_scope("workspace", id) end) || []
+    {Panel.NoteBoard, %{notes: notes}, "NOTES"}
+  end
+
+  # --- The STACK-zoom embedded lazygit overlay (Slice 4): a full-frame `Panel.Terminal` over the
+  # lazygit PTY, painted like a board. `render_state_of` yields the live cell grid or `:no_session`
+  # (the tick reconciles a vanished terminal back to `lazygit: nil`). ---
+  defp lazygit_placements(%{lazygit: nil}), do: []
+
+  defp lazygit_placements(%{lazygit: %{thread_id: id, path: path}, w: w, h: h}) do
+    rect = %{x: 0, y: 0, w: w, h: max(h - 1, 2)}
+    inset = %{x: 1, y: 1, w: max(w - 2, 1), h: max(h - 3, 1)}
+    title = "lazygit · #{Path.basename(path)}  ·  ^space to close"
+
+    [
+      {Panel.Border, %{focused: true, digit: nil, title: title, tabs: nil, hint: nil}, rect},
+      {Panel.Terminal, render_state_of(safe_terminal({:lazygit, id})), inset}
+    ]
+  end
+
+  # `Enter` on a focused STACK pane (or a click) zooms the focused thread's worktree into lazygit.
+  # Resolve thread → repo/worktree (`Server.worktree_for_thread`), spawn `lazygit` in a session
+  # terminal keyed `{:lazygit, id}`, and mark the overlay. Honest flashes on every miss; a persistent
+  # terminal (re-zoom reuses it). Needs `console:run` (new state field) to appear.
+  defp open_lazygit(%{lazygit: %{}} = state), do: {:noreply, render(state)}
+
+  defp open_lazygit(%{stack_focus: nil} = state),
+    do: {:noreply, render(%{state | flash: "no focused thread — nothing to open lazygit on"})}
+
+  defp open_lazygit(%{stack_focus: id} = state) do
+    if Console.Lazygit.available?() do
+      case Server.worktree_for_thread(id) do
+        {:ok, cwd} -> spawn_lazygit(state, id, cwd)
+        {:error, reason} -> {:noreply, render(%{state | flash: "no repo for this thread (#{inspect(reason)})"})}
+      end
+    else
+      {:noreply, render(%{state | flash: "lazygit is not installed"})}
+    end
+  rescue
+    e -> {:noreply, render(%{state | flash: "lazygit failed: #{Exception.message(e)}"})}
+  catch
+    :exit, reason -> {:noreply, render(%{state | flash: "lazygit failed: #{inspect(reason)}"})}
+  end
+
+  defp spawn_lazygit(state, id, cwd) do
+    {cmd, args} = Console.Lazygit.command(cwd)
+    {cols, rows} = {max(state.w - 2, 1), max(state.h - 3, 1)}
+
+    case safe_lazygit_spawn(id, cmd, args, cols, rows) do
+      {:ok, _pid} -> {:noreply, render(%{state | lazygit: %{thread_id: id, path: cwd}})}
+      _ -> {:noreply, render(%{state | flash: "couldn't start lazygit"})}
+    end
+  end
+
+  # Sessions is supervised but the cockpit is not — a call to a downed registry would crash the frame.
+  defp safe_lazygit_spawn(id, cmd, args, cols, rows) do
+    Sessions.ensure({:lazygit, id}, cmd: cmd, args: args, cols: cols, rows: rows)
+  rescue
+    _ -> :error
+  catch
+    :exit, _ -> :error
+  end
+
+  # Collapse a lazygit overlay whose terminal has exited (quit from inside) — else it paints
+  # `:no_session` over the frame. A no-op while the terminal is live or no overlay is up.
+  defp reconcile_lazygit(%{lazygit: %{thread_id: id}} = state) do
+    if is_pid(safe_terminal({:lazygit, id})), do: state, else: %{state | lazygit: nil}
+  end
+
+  defp reconcile_lazygit(state), do: state
+
+  defp ticket_row(t), do: %{id: t.id, title: t.title, status: t.status, priority: t.priority, assignee: t.assignee}
+
+  # The workspace whose tickets/notes the board shows: the active one, or the default (Orbis falls
+  # back to the first workspace via active_workspace_id/1).
+  defp board_workspace_id(state), do: active_workspace_id(state)
+
+  defp safe_board(fun) do
+    fun.()
+  rescue
+    _ -> nil
+  catch
+    :exit, _ -> nil
+  end
 
   # State transitions live in the pure `Console.Keymap`; the Cockpit only runs the side effect it
   # asks for — repaint, quit, or forward a key to the focused terminal.
@@ -1111,33 +1426,35 @@ defmodule Console.Cockpit do
 
   # The tertius command line (Slice 1): route the typed meta-intent and flash a RECEIPT — a line you
   # talk into with no confirmation is the exact bug this repo opened on 2026-08-30. SAFE verbs
-  # (post/note/ticket/query) fire straight; CONSEQUENTIAL ones (open work, approve) show what they
-  # WOULD do without firing — the interactive y/n confirm lands with the Slice 3 cockpit reshape.
+  # (post/note/ticket/query) fire straight; CONSEQUENTIAL ones (open work, approve) ARM the y/n gate
+  # (`pending_confirm`) — showing what they WOULD do and firing nothing until the operator says `y`
+  # (Console.Keymap → `:confirm_orchestrate`). Slice 3.5.
   defp apply_effect({:orchestrate, text}, state) do
     action = Console.Orchestrator.Router.route(text)
     ctx = %{workspace_id: active_workspace_id(state), operator: Application.get_env(:server, :operator, "andrew")}
 
-    flash =
-      case Console.Orchestrator.classify(action) do
-        :consequential ->
-          case Console.Orchestrator.dispatch(action, ctx) do
-            {:confirm, summary} -> "⏸ would #{summary} — confirm from the board (cockpit reshape)"
-            {:ok, receipt} -> receipt
-            {:error, msg} -> "✗ #{msg}"
-          end
+    case {Console.Orchestrator.classify(action), Console.Orchestrator.dispatch(action, ctx)} do
+      {:consequential, {:confirm, summary}} ->
+        arm = %{action: action, ctx: ctx, summary: summary}
+        {:noreply, render(%{state | pending_confirm: arm, flash: "⏸ #{summary}? — y to confirm · n to cancel"})}
 
-        :safe ->
-          case Console.Orchestrator.dispatch(action, ctx) do
-            {:ok, receipt} -> receipt
-            {:error, msg} -> "✗ #{msg}"
-          end
-      end
-
-    {:noreply, render(%{state | flash: flash, receipts: Enum.take([flash | state.receipts], @receipt_cap)})}
+      {_class, result} ->
+        flash_receipt(result, state)
+    end
   rescue
     e -> {:noreply, render(%{state | flash: "orchestrate failed: #{Exception.message(e)}"})}
   catch
     :exit, reason -> {:noreply, render(%{state | flash: "orchestrate failed: #{inspect(reason)}"})}
+  end
+
+  # `y` on an armed consequential verb (Console.Keymap): fire it now, log the receipt. The arm rode the
+  # effect (the keymap already cleared `pending_confirm`), so this is a clean one-shot.
+  defp apply_effect({:confirm_orchestrate, %{action: action, ctx: ctx}}, state) do
+    flash_receipt(Console.Orchestrator.confirm(action, ctx), state)
+  rescue
+    e -> {:noreply, render(%{state | flash: "confirm failed: #{Exception.message(e)}"})}
+  catch
+    :exit, reason -> {:noreply, render(%{state | flash: "confirm failed: #{inspect(reason)}"})}
   end
 
   # The `c` verb landed: post the composer's body to the focused thread AS THE OPERATOR (config
@@ -1187,8 +1504,9 @@ defmodule Console.Cockpit do
   end
 
   # Enter in Tlön nav: on the Sidebar, switch to the space under the cursor; on Leaves, attach the
-  # leaf's live Workspace window in the center (preview + commit); on any other pane, open its
-  # selection's detail in MAIN (set focus.detail?, which the View renders).
+  # leaf's live Workspace window in the center (preview + commit); on STACK, zoom the focused thread's
+  # worktree into an embedded lazygit (Slice 4); on any other pane, open its selection's detail in
+  # MAIN (set focus.detail?, which the View renders).
   defp apply_effect(:tlon_enter, state) do
     # A pane Enter always resolves ITS detail — never a leftover /status readout.
     state = %{state | status_detail: nil}
@@ -1197,6 +1515,7 @@ defmodule Console.Cockpit do
     case Focus.focused_pane(state.focus, layout) do
       Panel.Sidebar -> apply_pick({:switch_space, space_at_cursor(state, layout)}, state)
       Panel.Leaves -> jump_to_leaf(state, layout)
+      Panel.Stack -> open_lazygit(state)
       _ -> {:noreply, render(put_in(state.focus.detail?, true))}
     end
   end
@@ -1205,11 +1524,29 @@ defmodule Console.Cockpit do
   # (a live preview) WITHOUT taking focus or sending keys — commit does that. See preview_focused/1.
   defp apply_effect(:tlon_preview, state), do: {:noreply, render(preview_focused(state))}
 
-  # `[`/`]` landed (C3.4): step the Workspace's right-pane view and repaint.
-  defp apply_effect({:cycle_pane_view, dir}, state), do: {:noreply, render(cycle_pane_view(state, dir))}
-
   # Enter on the Orbis survey (D0.2) — the same space-switch a click on the row runs.
   defp apply_effect({:switch_space, key}, state), do: apply_pick({:switch_space, key}, state)
+
+  # Nav v2 (Andrew 2026-08-31): Alt+Shift+N → switch to the Nth workspace (1-based, ordered like the
+  # spine); past the end is a no-op.
+  defp apply_effect({:switch_workspace_pos, n}, state) do
+    case Enum.at(Console.Workspaces.all(), n - 1) do
+      %{id: id} -> apply_pick({:switch_space, id}, state)
+      _ -> {:noreply, state}
+    end
+  end
+
+  # Nav v2: Alt+N → select the Nth tmux TAB (window) in the active workspace; past the end is a no-op.
+  defp apply_effect({:select_tab, n}, %{active_key: key} = state) when Space.workspace?(key) do
+    case Enum.at(tlon_tabs(key), n - 1) do
+      %{index: idx} -> select_tlon_window(key, %{index: idx})
+      _ -> :ok
+    end
+
+    {:noreply, state}
+  end
+
+  defp apply_effect({:select_tab, _n}, state), do: {:noreply, state}
 
   # `a` (or Esc from the author face) landed: flip Orbis' face and repaint (D2.1).
   defp apply_effect({:toggle_orbis_face}, state), do: {:noreply, render(toggle_orbis_face(state))}
@@ -1304,32 +1641,19 @@ defmodule Console.Cockpit do
     end
   end
 
-  @doc false
-  # The pure decision behind `[`/`]`: advance `right_pane_view` by `dir`, wrapped at the CAROUSEL's
-  # length (Health is pinned, never cycled — clarity slice 2). No carousel (0/1-panel right column)
-  # → no-op, guards div-by-zero. Public + exposed (like `attach_leaf/2`/`preview_focused/1`) so it's
-  # testable without a live GenServer.
-  def cycle_pane_view(%{active_key: key} = state, dir) when Space.workspace?(key) do
-    case Space.fetch(key) do
-      %Space{} = space ->
-        case Space.carousel(space) do
-          [] ->
-            state
+  # A dispatched/confirmed orchestrator result → a flash + a receipt-log entry (newest-first, capped).
+  defp flash_receipt(result, state) do
+    flash =
+      case result do
+        {:ok, receipt} -> receipt
+        {:error, msg} -> "✗ #{msg}"
+      end
 
-          carousel ->
-            n = length(carousel)
-            %{state | right_pane_view: rem(state.right_pane_view + dir + n, n)}
-        end
-
-      nil ->
-        state
-    end
+    {:noreply, render(%{state | flash: flash, receipts: Enum.take([flash | state.receipts], @receipt_cap)})}
   end
 
-  def cycle_pane_view(state, _dir), do: state
-
   @doc false
-  # The pure flip behind Orbis' `a`/Esc (D2.1) — public + exposed like `cycle_pane_view/2` so it's
+  # The pure flip behind Orbis' `a`/Esc (D2.1) — public + exposed so it's
   # testable without a live GenServer.
   def toggle_orbis_face(%{orbis_face: :author} = state), do: %{state | orbis_face: :survey}
   def toggle_orbis_face(state), do: %{state | orbis_face: :author}
@@ -1767,7 +2091,7 @@ defmodule Console.Cockpit do
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
     # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
     # order by this, not the project-scope `chorus`. This is the ONE ordering the cockpit navigates.
-    stack_blocks = Board.safe_read(:stack, [], fn -> Channel.machine_threads() end)
+    stack_blocks = Board.safe_read(:stack, [], fn -> Channel.machine_threads(active_workspace_id(state)) end)
     threads = Enum.map(stack_blocks, & &1.thread)
     focused = focused_thread(threads, state.focused_id)
     state = %{state | threads: threads, focused_id: focused && focused.id}
@@ -1801,20 +2125,22 @@ defmodule Console.Cockpit do
       # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
       # thread list + crew working flags.
       sidebar: Board.safe_read(:sidebar, [], fn -> Server.Board.sidebar() end),
+      # Kitty host? → the Sidebar blanks its fallback glyph so the icon PNG covers cleanly (no bleed).
+      graphics?: Console.Graphics.kitty?(),
       scope: Board.safe_read(:scope, nil, fn -> focused && Server.Board.brief(focused) end),
       chatter: Board.safe_read(:chatter, [], fn -> (focused && Channel.recent_messages(focused, 30)) || [] end),
       workspaces:
         Board.safe_read(:workspaces, [], fn -> if(state.active_key == :orbis, do: orbis_workspaces(state), else: []) end),
       # The survey's focus + per-row cursor, so Overview can wash the cursor row :selected — only
-      # meaningful in Orbis (`right_pane_view`'s same "harmless elsewhere" idiom).
+      # meaningful in Orbis (a meaningless-but-harmless read elsewhere).
       orbis_focus: state.orbis_focus,
       survey_cursor: state.survey_cursor,
       # Orbis' author face (D2.1/D2.2): which center panel to render, and its own cursor.
-      # Meaningless-but-harmless outside Orbis, same idiom as `right_pane_view`.
+      # Meaningless-but-harmless outside Orbis.
       orbis_face: state.orbis_face,
       author_cursor: state.author_cursor,
       # The field editor (D2.4 Chunk 2a): nil unless `e` opened it. Meaningless-but-harmless
-      # outside Orbis' author face, same idiom as `right_pane_view`.
+      # outside Orbis' author face.
       author_edit: state.author_edit,
       terminal: terminal_read(state, focused),
       machine: machine,
@@ -1824,6 +2150,7 @@ defmodule Console.Cockpit do
       stack: state.stack || @empty_stack,
       health: state.health,
       activity: state.activity,
+      gates: state.gates || [],
       memory: if(Space.workspace?(state.active_key), do: state.memory),
       orbis: Board.safe_read(:orbis, nil, fn -> if(Space.workspace?(state.active_key), do: leaves_data(state)) end),
       focused_session: state.focused_session,
@@ -1846,10 +2173,6 @@ defmodule Console.Cockpit do
         if(Space.workspace?(state.active_key) and state.center_view == :chat,
           do: Board.safe_read(:center_chat, nil, fn -> chat_read(state) end)
         ),
-      # Which of the Workspace's right-column panels (Health/Activity/Leaves) to show, full-height —
-      # the `[`/`]` cycle (C3.4). View clamps with `rem`, so this is meaningless-but-harmless
-      # outside a Workspace.
-      right_pane_view: state.right_pane_view,
       triage: Board.safe_read(:triage, nil, fn -> if(state.active_key == :orbis, do: triage_read(threads)) end),
       scrolls: state.scrolls,
       input: state.input,
@@ -1870,7 +2193,12 @@ defmodule Console.Cockpit do
         end)
     }
 
-    placements = View.compose(reads, state.w, state.h)
+    # A full-screen board covers the layout; the overlay menu paints LAST (on top of everything). Both
+    # ride in `placements` so hit_panel can route clicks to them.
+    placements =
+      View.compose(reads, state.w, state.h) ++
+        lazygit_placements(state) ++
+        board_placements(state) ++ menu_placements(state.menu, state.w, state.h)
 
     placements
     |> Board.compose(state.w, state.h)
@@ -2015,14 +2343,14 @@ defmodule Console.Cockpit do
   def composer_thread_id(%{active_key: key} = state) when Space.workspace?(key) do
     case state.focused_session do
       {:leaf, id} -> id
-      _leader -> machine_thread_id()
+      _leader -> machine_thread_id(active_workspace_id(state))
     end
   end
 
   def composer_thread_id(state), do: state.focused_id
 
   @doc false
-  # The pure flip behind the `v` verb — exposed (like cycle_pane_view/2) for TTY-less tests.
+  # The pure flip behind the `v` verb — exposed for TTY-less tests.
   def toggle_center_view(%{center_view: :chat} = state), do: %{state | center_view: :terminal}
   def toggle_center_view(state), do: %{state | center_view: :chat}
 
@@ -2030,7 +2358,7 @@ defmodule Console.Cockpit do
   # thread — with its message tail and declared-thinking presence (same normalization as
   # presence_read). nil (no thread / server down via safe_read) degrades the View back to the PTY.
   defp chat_read(%{focused_session: {:leaf, id}} = state), do: chat_read_thread(Channel.thread(id), state)
-  defp chat_read(state), do: chat_read_thread(Channel.machine_thread(), state)
+  defp chat_read(state), do: chat_read_thread(Channel.machine_thread(active_workspace_id(state)), state)
 
   defp chat_read_thread(nil, _state), do: nil
 
@@ -2063,11 +2391,10 @@ defmodule Console.Cockpit do
 
       space ->
         %{
-          left: [Panel.Sidebar | space.left],
-          # Contextual pin + carousel (slice D) — what's actually on screen, so the focus SM's
-          # pane index can't point at a box View didn't draw. Same rail_context derivation as
-          # View.compose (the one seam), so the two can't disagree on which head is up.
-          right: Space.visible_right(space, state.right_pane_view, Space.rail_context(state.focused_session)),
+          # Nav v2 (Andrew 2026-08-31): the focus nav is the RAIL alone (`space.left`) — the spine is
+          # click/keybind only, not keyboard-navigable. h/l walks the rail; there are no pane digits.
+          left: space.left,
+          right: [],
           sections: %{Panel.Memory => memory_sections(state)},
           counts: pane_counts(state)
         }
@@ -2086,10 +2413,9 @@ defmodule Console.Cockpit do
   # sectioned — j/k walks the ACTIVE section's list (pinned=0, habits=1), so its count follows
   # focus.section. Panes without a list are absent (0 → j/k is a no-op there).
   defp pane_counts(state) do
+    # Nav v2: the Sidebar is no longer keyboard-navigable (click/keybind only) — only rail panes with
+    # a j/k list need a count.
     %{
-      # Home + one row per workspace — the Sidebar's pickable rows (its groups mirror
-      # Space.all/0's [Orbis | workspaces] order, so the count and the cursor→key math agree).
-      Panel.Sidebar => length(Space.all()),
       Panel.Stack => length((state.stack || @empty_stack).commits),
       Panel.Memory => memory_section_count(state),
       Panel.Leaves => leaf_count(state.leaves)
@@ -2207,8 +2533,13 @@ defmodule Console.Cockpit do
   defp diff_style(:meta), do: :dim
   defp diff_style(:context), do: :normal
 
-  defp machine_thread_id do
-    case Channel.machine_thread() do
+  # The active workspace's machine ROOT id (per-workspace re-scope, 2026-08-31) — the coworker
+  # IDENTITY-spawn + standing-thread paths, which must land on a real thread. Prefers the
+  # workspace's root; falls back to ANY open machine thread (a pre-bootstrap DB, the test harness's
+  # cache-only workspaces). The CENTER stack + orchestrator post stay STRICT (no fallback), so they
+  # never bleed another workspace's threads. nil only when there is no machine thread at all.
+  defp machine_thread_id(workspace_id) do
+    case Channel.machine_thread(workspace_id) || Channel.machine_thread() do
       %{id: id} -> id
       _ -> nil
     end
@@ -2217,7 +2548,7 @@ defmodule Console.Cockpit do
   # Expire cached probes once @probe_ms has passed; render's ensure_probes refills lazily.
   defp maybe_expire_probes(state) do
     if System.monotonic_time(:millisecond) - state.probed_at >= @probe_ms do
-      %{state | stack: nil, health: nil, memory: nil, leaves: nil}
+      %{state | stack: nil, health: nil, memory: nil, leaves: nil, gates: nil}
     else
       state
     end
@@ -2232,6 +2563,7 @@ defmodule Console.Cockpit do
         health: health_read(),
         memory: memory_read(),
         leaves: orbis_read(key),
+        gates: gates_read(),
         probed_at: System.monotonic_time(:millisecond)
     }
   end
@@ -2248,6 +2580,18 @@ defmodule Console.Cockpit do
   # The Memory pane read: coverage stats + the always-loaded pinned set + the pending-habit queue.
   defp memory_read do
     %{coverage: Server.recall_coverage(), pinned: Server.pinned(), habits: Server.pending_habits()}
+  end
+
+  # The NOW pane's ATTENTION read (Slice 4D): worklines parked awaiting the operator — the gates the
+  # `approve N` verb clears. Best-effort; a server hiccup leaves the feed rather than crashing a frame.
+  defp gates_read do
+    Server.workline_statuses()
+    |> Enum.filter(&(&1.awaiting not in [nil, ""]))
+    |> Enum.map(&Map.take(&1, [:id, :title, :stage, :awaiting]))
+  rescue
+    _ -> []
+  catch
+    :exit, _ -> []
   end
 
   # The STACK read: branch, dirty status, ahead/behind, status summary, enriched commits.
@@ -2399,7 +2743,7 @@ defmodule Console.Cockpit do
   # the id `ensure_thread_sessions` excludes from its own spawn pass (the standing center
   # coworker is not "a staffed machine thread it should spawn a session for", it already has one).
   defp capture_standing_thread_id(%{standing_thread_id: nil} = state),
-    do: %{state | standing_thread_id: machine_thread_id()}
+    do: %{state | standing_thread_id: machine_thread_id(active_workspace_id(state))}
 
   defp capture_standing_thread_id(state), do: state
 
@@ -2430,7 +2774,7 @@ defmodule Console.Cockpit do
   defp spawn_window(workspace_id, %Profile{name: name} = profile) do
     _ = materialise_profile(profile)
     command = Harness.driver(profile.harness).launch_command(profile)
-    spawn_harness_window(workspace_id, "#{name}-machine", name, machine_thread_id(), command)
+    spawn_harness_window(workspace_id, "#{name}-machine", name, machine_thread_id(workspace_id), command)
   end
 
   # The `chat` tab (the third Tlön window): the INTERACTIVE machine-chat — machine-scope threads as
@@ -2773,7 +3117,7 @@ defmodule Console.Cockpit do
 
     with %Profile{} = profile <- Profiles.instantiate(%{archetype: arch, name: name}),
          {:ok, _dir} <- materialise_profile(profile),
-         {:ok, exports} <- machine_exports("#{name}-machine"),
+         {:ok, exports} <- machine_exports(workspace_id, "#{name}-machine"),
          # kitty: false — tmux wants its Ctrl+B prefix as legacy \x02, not CSI-u (see Terminal.init).
          {:ok, pid} <-
            safe_spawn_harness(:machine, exports, launcher: profile_launcher(workspace_id, name, profile), kitty: false) do
@@ -2929,8 +3273,10 @@ defmodule Console.Cockpit do
 
   # Resolve a machine pane's TLON_* exports by find-or-create: reuse the latest open machine
   # thread (joining it as `agent`) if one exists, else open a fresh `scope: "machine"` thread.
-  defp machine_exports(agent) do
-    case Channel.machine_thread() do
+  defp machine_exports(workspace_id, agent) do
+    # Prefer the active workspace's root; else reuse ANY open machine thread (a pre-bootstrap DB, or
+    # the test harness's cache-only workspaces) rather than proliferating a fresh one.
+    case Channel.machine_thread(workspace_id) || Channel.machine_thread() do
       %{id: id} ->
         with {:ok, %{exports: e}} <- Spawn.join(id, agent), do: {:ok, e}
 
