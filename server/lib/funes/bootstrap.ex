@@ -32,7 +32,9 @@ defmodule Server.Bootstrap do
     paths: ["modules/*"],
     roster: [
       %{"archetype" => "surveyor", "name" => "tertius"},
-      %{"archetype" => "builder", "name" => "hronir"}
+      %{"archetype" => "builder", "name" => "hronir"},
+      %{"archetype" => "reviewer", "name" => "reviewer"},
+      %{"archetype" => "planner", "name" => "planner"}
     ]
   }
 

@@ -19,7 +19,7 @@ defmodule Server.BootstrapTest do
     assert {:ok, workspace} = Bootstrap.ensure()
     assert workspace.name == "ficciones"
     assert workspace.scope == "machine"
-    assert Enum.map(workspace.roster, & &1["name"]) == ["tertius", "hronir"]
+    assert Enum.map(workspace.roster, & &1["name"]) == ["tertius", "hronir", "reviewer", "planner"]
     assert [%{id: id}] = Workspaces.all()
     assert id == workspace.id
   end

@@ -16,7 +16,14 @@ defmodule Console.WorkspaceTemplates do
     code: %{
       type: "code",
       paths: ["modules/*"],
-      roster: [%{archetype: :surveyor, name: "surveyor"}, %{archetype: :builder, name: "builder"}],
+      # A full starter crew so a fresh workspace feels alive: the orchestrator (surveyor), the lead
+      # (builder), plus a reviewer + planner ready to be staffed.
+      roster: [
+        %{archetype: :surveyor, name: "surveyor"},
+        %{archetype: :builder, name: "builder"},
+        %{archetype: :reviewer, name: "reviewer"},
+        %{archetype: :planner, name: "planner"}
+      ],
       knobs: %{}
     },
     life: %{
