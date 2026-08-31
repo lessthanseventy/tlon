@@ -8,7 +8,6 @@ defmodule Server.BoardSidebarTest do
   alias Server.Bootstrap
   alias Server.Channel
   alias Server.Presence.Thinking
-  alias Server.Staff
   alias Server.Workline
   alias Server.Workspaces
 
@@ -88,9 +87,8 @@ defmodule Server.BoardSidebarTest do
 
   test "working and lead ride on the row; crew carries working flags" do
     {:ok, _workspace} = Bootstrap.ensure()
+    # open_thread now assigns the workspace's builder (hronir) as lead automatically (the lead invariant).
     {:ok, thread} = Channel.open_thread(%{title: "busy thread"})
-    {:ok, agent} = Staff.register_agent(%{name: "hronir-machine", mandate: "build", engine: "claude"})
-    {:ok, _} = Staff.assign(thread, agent)
     :ok = Thinking.thinking(thread.id, "hronir-machine")
 
     [%{threads: threads, crew: crew}] = Board.sidebar()

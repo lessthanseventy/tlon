@@ -259,6 +259,51 @@ defmodule Server.ChannelTest do
     end
   end
 
+  describe "the lead invariant — every thread opens with a lead (lead-as-manager)" do
+    test "a thread opens led by the workspace's builder coworker (registered on demand)" do
+      {:ok, ws} =
+        Workspaces.register(%{
+          name: "led",
+          type: "code",
+          scope: "machine",
+          paths: [],
+          roster: [
+            %{"archetype" => "surveyor", "name" => "tertius"},
+            %{"archetype" => "builder", "name" => "hronir"}
+          ]
+        })
+
+      assert Staff.agent_by_name("hronir-machine") == nil
+      {:ok, thread} = Channel.open_thread(%{title: "needs a lead", workspace_id: ws.id})
+
+      assert Channel.thread_lead(thread.id) == "hronir-machine"
+      assert Staff.agent_by_name("hronir-machine"), "the designated lead was registered on demand"
+    end
+
+    test "an explicit agent_id is honored over the default" do
+      {:ok, ws} =
+        Workspaces.register(%{
+          name: "led2",
+          type: "code",
+          scope: "machine",
+          paths: [],
+          roster: [%{"archetype" => "builder", "name" => "hronir"}]
+        })
+
+      {:ok, custom} = Staff.register_agent(%{name: "custom-machine", mandate: "general", engine: "local"})
+      {:ok, thread} = Channel.open_thread(%{title: "explicit", workspace_id: ws.id, agent_id: custom.id})
+
+      assert Channel.thread_lead(thread.id) == "custom-machine"
+    end
+
+    test "a workspace with an empty roster opens threads leaderless — no crash" do
+      {:ok, ws} = Workspaces.register(%{name: "empty", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, thread} = Channel.open_thread(%{title: "no roster", workspace_id: ws.id})
+
+      assert Channel.thread_lead(thread.id) == nil
+    end
+  end
+
   describe "workspace-scoped machine threads (the cockpit re-scope)" do
     setup do
       {:ok, wsa} = Workspaces.register(%{name: "wsa", type: "code", scope: "machine", paths: [], roster: []})

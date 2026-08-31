@@ -26,6 +26,9 @@ defmodule Server.Thread do
     # The middle tier (Workspace ▸ Project ▸ Thread, 2026-08-30). Optional/additive for now:
     # existing threads still route by `workspace_id`; new threads carry a project.
     belongs_to :project, Server.Project
+    # Lead-as-manager (Slice 4D): a lead-opened CHILD thread points back at its parent, so its
+    # close reports up. Nil for top-level threads. Self-referential; unlink-not-cascade (Channel).
+    belongs_to :parent, Server.Thread, foreign_key: :parent_thread_id
   end
 
   @doc ~s{A new thread, opened now. Title is required; state is not caller-settable. `scope`
@@ -33,7 +36,7 @@ defmodule Server.Thread do
   project surfaces (chorus / open_threads) can filter it out — see the thread_scope migration.}
   def open_changeset(attrs) do
     %__MODULE__{}
-    |> cast(attrs, [:title, :scope, :workspace_id, :project_id])
+    |> cast(attrs, [:title, :scope, :workspace_id, :project_id, :parent_thread_id, :agent_id])
     |> validate_required([:title])
     |> put_change(:state, "open")
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
@@ -53,15 +56,23 @@ defmodule Server.Thread do
   `attrs` is atom-keyed (internal callers only). `born` defaults to "operator"; the Maintain
   back-edge opens with "machine" and gates. A taken slug is a UNIQUE refusal, as a changeset.}
   def workline_changeset(attrs) do
+    # `stage` defaults to "intent" but is caller-settable for any-stage entry (Slice 4D); the
+    # openable set is enforced upstream in `Server.Workline.open` (single source: it owns the ring).
     %__MODULE__{}
-    |> cast(Map.merge(%{born: "operator", scope: "machine"}, attrs), [:title, :scope, :slug, :born, :workspace_id])
-    |> validate_required([:title, :slug])
+    |> cast(Map.merge(%{born: "operator", scope: "machine", stage: "intent"}, attrs), [
+      :title,
+      :scope,
+      :slug,
+      :born,
+      :workspace_id,
+      :stage
+    ])
+    |> validate_required([:title, :slug, :stage])
     |> validate_inclusion(:born, ["operator", "machine"])
     # The slug names filesystem paths (work/<slug>/, branch, lock files) — a separator or
     # dot-segment would traverse out of them. Closed charset, no exceptions.
     |> validate_format(:slug, ~r/\A[a-z0-9][a-z0-9-]*\z/)
     |> unique_constraint(:slug)
-    |> put_change(:stage, "intent")
     |> put_change(:state, "open")
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
   end

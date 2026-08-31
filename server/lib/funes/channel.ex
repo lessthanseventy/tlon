@@ -23,6 +23,7 @@ defmodule Server.Channel do
   alias Server.Staff
   alias Server.Thread
   alias Server.Todo
+  alias Server.Workspace
 
   # The closed thread-scope set (CHECK-guarded in the DB — see the thread_scope migration).
   # Every scope filter pins one of these, so a future third scope is a grep for the attribute,
@@ -33,11 +34,50 @@ defmodule Server.Channel do
   @doc ~s(Open a thread on the board. Returns `{:ok, thread}` or `{:error, changeset}`.
   `scope` defaults to `"project"`; the Tlön machine-coworker path opens with `"machine"`.)
   def open_thread(attrs) do
+    attrs = Map.put_new_lazy(attrs, :workspace_id, &Server.Bootstrap.default_workspace_id/0)
+
+    # The lead invariant: a thread is born with a lead (its workspace's designated manager) unless
+    # the caller names one. Enforced HERE, the one creation path, so it holds for operator, MCP, and
+    # orchestrator opens alike; tertius refines the choice afterward.
     attrs
-    |> Map.put_new_lazy(:workspace_id, &Server.Bootstrap.default_workspace_id/0)
+    |> Map.put_new_lazy(:agent_id, fn -> designated_lead(attrs[:workspace_id]) end)
     |> Thread.open_changeset()
     |> Repo.insert()
     |> Server.Bus.announce(:thread_opened)
+  end
+
+  @doc """
+  The agent_id of a workspace's designated lead — its first `builder` (manager) roster coworker,
+  registered on demand. nil when there is no workspace, no roster, or a blank roster (the thread
+  then opens leaderless, healed when a coworker is first staffed). The lead invariant's resolver.
+  """
+  def designated_lead(nil), do: nil
+
+  def designated_lead(workspace_id) do
+    with %Workspace{roster: roster} <- Repo.get(Workspace, workspace_id),
+         %{} = entry <- lead_entry(roster),
+         name when is_binary(name) <- entry["name"],
+         {:ok, agent} <- ensure_lead_agent("#{name}-machine", entry["archetype"]) do
+      agent.id
+    else
+      _ -> nil
+    end
+  end
+
+  # The lead is the first `builder`-archetype roster coworker (the manager persona); absent that, the
+  # first roster entry — better a lead than none. nil for a blank/malformed roster.
+  defp lead_entry(roster) when is_list(roster),
+    do: Enum.find(roster, &(is_map(&1) and &1["archetype"] == "builder")) || List.first(roster)
+
+  defp lead_entry(_), do: nil
+
+  # register-or-get the lead's durable agent (mandate defaults to its archetype, engine local) — a
+  # roster coworker is the standing bench, so it exists as an agent from the first thread it leads.
+  defp ensure_lead_agent(handle, archetype) do
+    case Staff.agent_by_name(handle) do
+      %Agent{} = agent -> {:ok, agent}
+      nil -> Staff.register_agent(%{name: handle, mandate: archetype || "general", engine: "local"})
+    end
   end
 
   @doc """
