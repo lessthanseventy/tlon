@@ -88,7 +88,7 @@ defmodule Console.ViewTest do
       refute placed?(placements, Panel.Terminal)
       # the WindowBar tab strip and the Ticker frame the stack exactly as they frame the PTY
       assert placed?(placements, Panel.WindowBar)
-      assert placed?(placements, Panel.Ticker)
+      assert placed?(placements, Panel.Tertius)
     end
 
     test "center_view :terminal (the default) keeps the live PTY" do

@@ -27,7 +27,7 @@ defmodule Console.Space do
   alias Console.Panel.Roster
   alias Console.Panel.Stack
   alias Console.Panel.Terminal
-  alias Console.Panel.Ticker
+  alias Console.Panel.Tertius
   alias Console.Panel.Triage
   alias Console.Panel.WindowBar
 
@@ -91,7 +91,7 @@ defmodule Console.Space do
       key: workspace.id,
       id: workspace.id,
       label: workspace.name,
-      surface: [WindowBar, {Terminal, :machine}, Ticker],
+      surface: [WindowBar, {Terminal, :machine}, Tertius],
       # Slice D: the left column is the Sidebar alone (Slack's rail) — STACK/MEMORY moved to the
       # right-rail carousel. The pinned head is contextual (visible_right/3): workspace → STACK,
       # attached thread → the BRIEF. Leaves IS the unified thread list (slice C); HEALTH lives in

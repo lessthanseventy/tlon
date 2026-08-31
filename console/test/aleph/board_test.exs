@@ -40,7 +40,7 @@ defmodule Console.BoardTest do
   alias Console.Panel.Stack
   alias Console.Panel.StatusBar
   alias Console.Panel.Terminal
-  alias Console.Panel.Ticker
+  alias Console.Panel.Tertius
   alias Console.Panel.WindowBar
   alias Console.View
 
@@ -473,7 +473,7 @@ defmodule Console.BoardTest do
       # longer the full-height center column a single-section surface would give it.
       assert [{Terminal, :no_session, term_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == Terminal end)
       assert [{WindowBar, _wb_data, wb_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == WindowBar end)
-      assert [{Ticker, _pulse_data, pulse_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == Ticker end)
+      assert [{Tertius, _data, pulse_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == Tertius end)
 
       assert wb_rect.y < term_rect.y
       assert pulse_rect.y > term_rect.y

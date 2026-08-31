@@ -16,7 +16,7 @@ defmodule Console.SpaceTest do
   alias Console.Panel.Memory
   alias Console.Panel.Stack
   alias Console.Panel.Terminal
-  alias Console.Panel.Ticker
+  alias Console.Panel.Tertius
   alias Console.Panel.WindowBar
   alias Console.Space
 
@@ -55,7 +55,7 @@ defmodule Console.SpaceTest do
 
       assert tlon.id == 1
       assert tlon.label == "Tlön"
-      assert tlon.surface == [WindowBar, {Terminal, :machine}, Ticker]
+      assert tlon.surface == [WindowBar, {Terminal, :machine}, Tertius]
       # Slice D: the left column is the Sidebar alone; STACK/MEMORY moved to the right rail,
       # whose pinned head is contextual (workspace → Stack, attached thread → the brief).
       assert tlon.left == []

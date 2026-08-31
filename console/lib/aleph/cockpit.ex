@@ -320,6 +320,8 @@ defmodule Console.Cockpit do
             paste_buffer: nil,
             input: nil,
             flash: nil,
+            # The tertius band's receipt log (Slice 3): the last few dispatches, newest-first.
+            receipts: [],
             scrolls: %{},
             placements: [],
             render_scheduled?: false,
@@ -637,6 +639,8 @@ defmodule Console.Cockpit do
   end
 
   @activity_cap 50
+  # The tertius band keeps only the last few receipts (the band shows 2; a couple more for scrollback).
+  @receipt_cap 6
   @seen_cap 100
 
   # Prepend `{tag, row}` to the activity buffer (newest-first, capped at @activity_cap). Tagged
@@ -1060,7 +1064,7 @@ defmodule Console.Cockpit do
           end
       end
 
-    {:noreply, render(%{state | flash: flash})}
+    {:noreply, render(%{state | flash: flash, receipts: Enum.take([flash | state.receipts], @receipt_cap)})}
   rescue
     e -> {:noreply, render(%{state | flash: "orchestrate failed: #{Exception.message(e)}"})}
   catch
@@ -1784,6 +1788,7 @@ defmodule Console.Cockpit do
       scrolls: state.scrolls,
       input: state.input,
       flash: state.flash,
+      receipts: state.receipts,
       leader_pending?: state.leader_pending?,
       # LOCK mode (design 2026-08-23) — the footer's loudest chip.
       lock?: state.lock?,

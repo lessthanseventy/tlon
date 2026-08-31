@@ -322,6 +322,8 @@ defmodule Console.View do
   def data_for(Panel.Leaves, r), do: r.orbis
   def data_for(Panel.Activity, r), do: %{events: r[:activity] || []}
   def data_for(Panel.Ticker, r), do: %{events: r[:activity] || []}
+  # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
+  def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
   def data_for(Panel.WindowBar, r), do: %{tabs: window_tabs(r), engine: engine_state(), thread: r.focused_id}
   def data_for(Panel.Triage, r), do: r.triage
   def data_for(Panel.Memory, r), do: r[:memory]
@@ -471,6 +473,9 @@ defmodule Console.View do
   # The WindowBar/Ticker bands framing the Tlön terminal: one content row + their own 2-row frame.
   defp fixed_height(Panel.WindowBar), do: 3
   defp fixed_height(Panel.Ticker), do: 3
+  # The tertius band is taller than the Ticker pulse it replaces: the input line + up to 2 receipts,
+  # plus the 2-row frame.
+  defp fixed_height(Panel.Tertius), do: 5
   defp fixed_height({panel, _read_key}), do: fixed_height(panel)
   defp fixed_height(_panel), do: nil
 
