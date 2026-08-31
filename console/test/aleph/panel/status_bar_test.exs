@@ -58,13 +58,11 @@ defmodule Console.Panel.StatusBarTest do
     refute line =~ "server"
   end
 
-  test "the tertius command line renders a TERTIUS prompt over the typed buffer (Slice 1)" do
+  test "an orchestrate input does NOT render in the footer (it lives in the Tertius band) — no duplication" do
     input = %{kind: :orchestrate, buffer: "file a ticket x", cursor: 15}
-    [info, hints] = StatusBar.render(base(%{input: input}), rect())
-
-    assert Enum.map_join(info, fn {t, _} -> t end) =~ "TERTIUS"
-    assert Enum.map_join(info, fn {t, _} -> t end) =~ "file a ticket x"
-    assert Enum.map_join(hints, fn {t, _} -> t end) =~ "dispatch"
+    [info, _hints] = StatusBar.render(base(%{input: input}), rect())
+    # falls through to the normal footer; the typed buffer is not repeated here
+    refute Enum.map_join(info, fn {t, _} -> t end) =~ "file a ticket x"
   end
 
   test "TERM mode: the mode segment names the Alt door and the nav toggle" do

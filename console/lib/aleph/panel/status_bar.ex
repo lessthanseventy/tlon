@@ -83,31 +83,9 @@ defmodule Console.Panel.StatusBar do
     Panel.clip([prompt, hints], rect)
   end
 
-  # The tertius command line (Slice 1): the footer becomes a `TERTIUS ▸` prompt for meta-intent
-  # ("tell @x …", "file a ticket …", "remember …"); Enter dispatches to the orchestrator.
-  @impl Panel
-  def render(%{input: %{kind: :orchestrate} = input}, rect) do
-    {before, after_} = cursor_split(input)
-
-    prompt = [
-      {" TERTIUS ", :tab},
-      {"  ", :normal},
-      {"▸ ", :accent},
-      {before, :normal},
-      {"▎", :accent},
-      {after_, :normal}
-    ]
-
-    hints = [
-      {"⏎", :header},
-      {" dispatch", :dim},
-      {"   ", :dim},
-      {"Esc", :header},
-      {" cancel", :dim}
-    ]
-
-    Panel.clip([prompt, hints], rect)
-  end
+  # NOTE: the tertius orchestrate input renders in the permanent `Console.Panel.Tertius` band (the
+  # bottom of the center), NOT here — an :orchestrate input falls through to the normal footer below,
+  # so the input never shows twice.
 
   # The author face's create-workspace prompt (D2.3): the info line becomes the prompt over the typed
   # name, prefixed by the armed template — h/l cycles it, named in the hints.
