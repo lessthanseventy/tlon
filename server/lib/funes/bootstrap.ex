@@ -11,12 +11,18 @@ defmodule Server.Bootstrap do
   """
   import Ecto.Query
 
+  alias Server.Project
+  alias Server.Projects
   alias Server.Repo
   alias Server.Thread
   alias Server.Workspace
   alias Server.Workspaces
 
   require Logger
+
+  # The default project every workspace gets (Workspace ▸ Project ▸ Thread, 2026-08-30) — the
+  # home for threads that predate the project tier or were opened without one.
+  @default_project "general"
 
   @default %{
     name: "ficciones",
@@ -38,6 +44,7 @@ defmodule Server.Bootstrap do
   def ensure do
     with {:ok, workspace} <- default_workspace() do
       repair(workspace)
+      repair_projects()
       {:ok, workspace}
     end
   end
@@ -110,4 +117,33 @@ defmodule Server.Bootstrap do
     adrift = from(t in Thread, where: is_nil(t.workspace_id) or t.workspace_id not in subquery(live))
     Repo.update_all(adrift, set: [workspace_id: id])
   end
+
+  # The project tier (2026-08-30): every workspace gets a `general` project, and every thread
+  # with no project moves to its workspace's `general`. Runs AFTER repair/1, so `workspace_id` is
+  # already real. Idempotent — an existing `general` and any thread already in a project are left.
+  defp repair_projects do
+    defaults =
+      Repo.all(Workspace)
+      |> Map.new(fn ws -> {ws.id, ensure_default_project(ws).id} end)
+
+    for {workspace_id, project_id} <- defaults do
+      unhoused = from(t in Thread, where: t.workspace_id == ^workspace_id and is_nil(t.project_id))
+      Repo.update_all(unhoused, set: [project_id: project_id])
+    end
+  end
+
+  defp ensure_default_project(%Workspace{} = ws) do
+    case Projects.by_name(ws.id, @default_project) do
+      %Project{} = project ->
+        project
+
+      nil ->
+        {:ok, project} = Projects.register(%{workspace_id: ws.id, name: @default_project, repos: workspace_repos(ws)})
+        project
+    end
+  end
+
+  # The workspace's git-tracked globs become the default project's repos (name defaults to the glob).
+  defp workspace_repos(%Workspace{paths: paths}) when is_list(paths), do: Enum.map(paths, &%{"path" => &1})
+  defp workspace_repos(_ws), do: []
 end

@@ -107,4 +107,34 @@ defmodule Server.BootstrapTest do
       end
     end
   end
+
+  describe "project tier backfill (Workspace ▸ Project ▸ Thread)" do
+    test "every workspace gets a 'general' project" do
+      {:ok, workspace} = Bootstrap.ensure()
+      assert %Server.Project{name: "general"} = Server.Projects.by_name(workspace.id, "general")
+    end
+
+    test "a thread with no project is repaired to its workspace's general project" do
+      {:ok, workspace} = Bootstrap.ensure()
+      {:ok, thread} = Channel.open_thread(%{title: "no project", workspace_id: workspace.id})
+      assert thread.project_id == nil
+
+      {:ok, _} = Bootstrap.ensure()
+      general = Server.Projects.by_name(workspace.id, "general")
+      assert Repo.get(Thread, thread.id).project_id == general.id
+    end
+
+    test "idempotent — a second ensure does not create a second general project" do
+      {:ok, workspace} = Bootstrap.ensure()
+      {:ok, _} = Bootstrap.ensure()
+      assert length(Server.Projects.in_workspace(workspace.id)) == 1
+    end
+
+    test "the default project's repos come from the workspace paths" do
+      {:ok, ws} = Workspaces.register(%{name: "Paths", paths: ["a/*", "b/*"]})
+      {:ok, _} = Bootstrap.ensure()
+      general = Server.Projects.by_name(ws.id, "general")
+      assert general.repos == [%{"path" => "a/*"}, %{"path" => "b/*"}]
+    end
+  end
 end
