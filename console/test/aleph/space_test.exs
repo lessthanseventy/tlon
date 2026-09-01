@@ -12,6 +12,7 @@ defmodule Console.SpaceTest do
   alias Console.Panel.Activity
   alias Console.Panel.Crew
   alias Console.Panel.Memory
+  alias Console.Panel.NewThread
   alias Console.Panel.Stack
   alias Console.Panel.Terminal
   alias Console.Panel.Tertius
@@ -52,8 +53,9 @@ defmodule Console.SpaceTest do
 
       assert tlon.id == 1
       assert tlon.label == "Tlön"
-      # The top WindowBar leader-strip is retired (2026-08-31) — center = Terminal/stack + Tertius band.
-      assert tlon.surface == [{Terminal, :machine}, Tertius]
+      # Center bands (2026-09-01): the Terminal/thread-stack, the persistent new-thread input, then the
+      # tertius orchestrator line. (The top WindowBar leader-strip was retired 2026-08-31.)
+      assert tlon.surface == [{Terminal, :machine}, NewThread, Tertius]
       # Slice 3.4: the funes panels stack in the left RAIL (NOW·CREW·MEMORY·STACK); the Sidebar
       # renders as the thin spine (split out in View.compose); the right rail is retired.
       assert tlon.left == [Activity, Crew, Memory, Stack]

@@ -331,6 +331,7 @@ defmodule Console.View do
   def data_for(Panel.Ticker, r), do: %{events: r[:activity] || []}
   # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
   def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
+  def data_for(Panel.NewThread, r), do: %{input: r[:input]}
   def data_for(Panel.WindowBar, r), do: %{tabs: window_tabs(r), engine: engine_state(), thread: r.focused_id}
   def data_for(Panel.Triage, r), do: r.triage
   def data_for(Panel.Memory, r), do: r[:memory]
@@ -456,6 +457,8 @@ defmodule Console.View do
   # The tertius band is taller than the Ticker pulse it replaces: the input line + up to 2 receipts,
   # plus the 2-row frame.
   defp fixed_height(Panel.Tertius), do: 5
+  # The new-thread band: one input row + the 2-row frame.
+  defp fixed_height(Panel.NewThread), do: 3
   defp fixed_height({panel, _read_key}), do: fixed_height(panel)
   defp fixed_height(_panel), do: nil
 

@@ -786,9 +786,9 @@ defmodule Console.KeymapTest do
   end
 
   describe "creating — the `n` verb" do
-    test "n in a WORKSPACE opens the New menu (thread · ticket · note)" do
+    test "n in a WORKSPACE focuses the new-thread input" do
       s = state(%{active_key: 1})
-      assert {_s, {:open_new_menu}} = Keymap.handle(char("n"), s)
+      assert {%{input: %{kind: :new_thread, buffer: ""}}, :repaint} = Keymap.handle(char("n"), s)
     end
 
     test "n on Orbis' survey face opens the title input (empty buffer) and repaints" do

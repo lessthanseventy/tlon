@@ -112,7 +112,6 @@ defmodule Console.Keymap do
           | :quit
           | {:forward, map()}
           | {:create_thread, String.t()}
-          | {:open_new_menu}
           | {:file_ticket, String.t()}
           | {:write_note, String.t()}
           | {:orchestrate, String.t()}
@@ -541,9 +540,10 @@ defmodule Console.Keymap do
     end
   end
 
-  # `n` in a workspace opens the NEW menu (Thread · Ticket · Note) — one discoverable create entry for
-  # every noun (Slice C), replacing the direct-to-new-thread jump. The cockpit builds + anchors it.
-  defp command(%{key: :char, char: "n"}, state), do: {state, {:open_new_menu}}
+  # `n` focuses the persistent new-thread input band (2026-09-01) — a shortcut to the same input you
+  # can click. Type a title, Enter creates (the :new_thread Enter clause → {:create_thread, …}).
+  defp command(%{key: :char, char: "n"}, state),
+    do: {%{state | input: %{kind: :new_thread, buffer: "", cursor: 0}}, :repaint}
 
   # `:` opens the tertius command line from any panel (Slice 1) — a vim-style command prompt for
   # meta-intent ("tell @x …", "file a ticket …", "remember …"). The generic input machinery below
@@ -710,6 +710,11 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "Z"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:zoom_thread}}
   defp handle_tlon(%{key: :char, char: "+"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:zoom_thread}}
 
+  # `n` (focus the new-thread band) and `c` (reply to the focused card) are the create/write verbs —
+  # they drive the chat directly here (like j/k/z), so they work while you're looking at the stack,
+  # not only via the Alt chords. Precede the forward clause below.
+  defp handle_tlon(%{key: :char, char: "n"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: command(k, state)
+  defp handle_tlon(%{key: :char, char: "c"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: command(k, state)
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}} = state), do: {state, {:forward, key}}
 
   # Esc steps back one level: close an open detail first, else drop out of nav into the terminal.
@@ -760,6 +765,7 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "q"}, state), do: {state, :quit}
   # The center [chat]|[terminal] toggle (reshape slice D): flip which face the Workspace center shows.
   defp handle_tlon(%{key: :char, char: "v"}, state), do: {state, :toggle_center_view}
+  defp handle_tlon(%{key: :char, char: "n"} = k, state), do: command(k, state)
   defp handle_tlon(%{key: :char, char: "c"} = k, state), do: command(k, state)
   defp handle_tlon(%{key: :char, char: "m"} = k, state), do: command(k, state)
   defp handle_tlon(_key, state), do: {state, :none}

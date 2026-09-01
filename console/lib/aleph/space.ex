@@ -21,6 +21,7 @@ defmodule Console.Space do
   alias Console.Panel.Activity
   alias Console.Panel.Crew
   alias Console.Panel.Memory
+  alias Console.Panel.NewThread
   alias Console.Panel.Overview
   alias Console.Panel.Roster
   alias Console.Panel.Stack
@@ -94,7 +95,7 @@ defmodule Console.Space do
       # surface, and a thread's live lead session shows in the toggleable right session pane — the
       # strip was the decoupled tmux-window switcher (Alt+digit still switches windows). Center =
       # the Terminal/thread-stack + the permanent Tertius band below.
-      surface: [{Terminal, :machine}, Tertius],
+      surface: [{Terminal, :machine}, NewThread, Tertius],
       # Slice 3.4: the funes panels move OFF the (now-retired) right rail into the left rail, stacked
       # top-down — NOW (attention/activity) · CREW · MEMORY · STACK — no more `[`/`]` carousel. The
       # Sidebar renders as the thin far-left SPINE (workspace switcher + global tools), split out of

@@ -1084,6 +1084,14 @@ defmodule Console.Cockpit do
 
   # Clicking the tertius band focuses its input (Slice 3) — same as Space / `:`. If it's already
   # focused, the click is a no-op so an in-progress command isn't wiped.
+  # Clicking the new-thread band focuses its input (2026-09-01) — the persistent create surface. A
+  # re-click while it's already focused is a no-op so an in-progress title isn't wiped.
+  defp dispatch_click({Panel.NewThread, _data, _rect}, _x, _y, %{input: %{kind: :new_thread}} = state),
+    do: {:noreply, state}
+
+  defp dispatch_click({Panel.NewThread, _data, _rect}, _x, _y, state),
+    do: {:noreply, render(%{state | input: %{kind: :new_thread, buffer: "", cursor: 0}})}
+
   defp dispatch_click({Panel.Tertius, _data, _rect}, _x, _y, %{input: %{kind: :orchestrate}} = state),
     do: {:noreply, state}
 
@@ -1180,22 +1188,6 @@ defmodule Console.Cockpit do
     %{state | menu: %{menu | cursor: rem(c + delta + n, n)}}
   end
 
-  # The NEW menu (Slice C): one create entry for every noun. Anchored low-left (above the footer)
-  # since `n` triggers it from the keyboard — menu_placements clamps it on screen.
-  defp new_menu(%{h: h}) do
-    %{
-      title: "New",
-      x: 2,
-      y: max(h - 8, 0),
-      cursor: 0,
-      items: [
-        %{label: "Thread", action: {:new, :thread}},
-        %{label: "Ticket", action: {:new, :ticket}},
-        %{label: "Note", action: {:new, :note}}
-      ]
-    }
-  end
-
   # A workspace's context menu, anchored at the click cell.
   defp workspace_menu(ws, x, y) do
     %{
@@ -1239,12 +1231,6 @@ defmodule Console.Cockpit do
 
   defp menu_action(:close, state), do: {:noreply, render(%{state | menu: nil})}
 
-  # The NEW menu's picks (Slice C): each opens its own create input — thread (existing flow), or a
-  # first-class ticket / note (previously only reachable via a tertius prefix). Closes the menu.
-  defp menu_action({:new, kind}, state) when kind in [:thread, :ticket, :note] do
-    input_kind = %{thread: :new_thread, ticket: :new_ticket, note: :new_note}[kind]
-    {:noreply, render(%{state | menu: nil, input: %{kind: input_kind, buffer: "", cursor: 0}})}
-  end
 
   defp menu_action({:configure_ws, _ws}, state),
     do: {:noreply, render(%{state | menu: nil, active_key: :orbis, orbis_face: :author})}
@@ -1442,13 +1428,6 @@ defmodule Console.Cockpit do
       {:error, _changeset} -> {:noreply, render(%{state | flash: "couldn't create “#{title}”"})}
     end
   end
-
-  # `n` in a workspace opens the NEW menu (Thread · Ticket · Note) — one discoverable create entry,
-  # anchored bottom-left above the footer (keyboard-triggered, so no click cell to anchor to).
-  defp apply_effect({:open_new_menu}, %{active_key: key} = state) when Space.workspace?(key),
-    do: {:noreply, render(%{state | menu: new_menu(state)})}
-
-  defp apply_effect({:open_new_menu}, state), do: {:noreply, state}
 
   # First-class ticket create (Slice C): file into the active workspace's backlog, flash a receipt.
   defp apply_effect({:file_ticket, title}, state) do
