@@ -326,6 +326,8 @@ defmodule Console.Cockpit do
             menu: nil,
             # The open full-screen board (`:tickets` / `:notes`, Slice 3.5), or nil.
             board: nil,
+            # The Tickets kanban cursor `{col, row}` (Slice D3) — reset when a board opens.
+            board_cursor: {0, 0},
             # The STACK-zoom embedded lazygit (Slice 4): `%{thread_id, path}` while a full-screen
             # `lazygit` PTY is up over the focused thread's worktree, else nil. The terminal itself
             # lives in `Console.Sessions` keyed `{:lazygit, thread_id}`; this only marks the overlay.
@@ -481,12 +483,14 @@ defmodule Console.Cockpit do
     {:noreply, state}
   end
 
-  # A full-screen board (Tickets/Notes) closes on Esc; other keys are swallowed while it's up.
-  def handle_cast({:dispatch, %Event{type: :key, data: %{key: :escape}}}, %{board: b} = state) when not is_nil(b),
+  # A full-screen board (Tickets/Notes) — Esc closes; an ACTIVE input (a new-ticket/note title) takes
+  # the keys (input: nil guard fails → falls to the normal dispatch below); else the board key handler
+  # drives the kanban cursor + verbs.
+  def handle_cast({:dispatch, %Event{type: :key, data: %{key: :escape}}}, %{board: b, input: nil} = state) when not is_nil(b),
     do: {:noreply, render(%{state | board: nil})}
 
-  def handle_cast({:dispatch, %Event{type: :key, data: _key}}, %{board: b} = state) when not is_nil(b),
-    do: {:noreply, state}
+  def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{board: b, input: nil} = state) when not is_nil(b),
+    do: handle_board_key(key, state)
 
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, state) do
     # Any keypress clears a prior flash (a spawn/create result), so it shows until you act again.
@@ -1144,7 +1148,7 @@ defmodule Console.Cockpit do
   end
 
   # The spine's Tickets/Notes tools (Slice 3.5): open the full-screen board.
-  defp apply_pick({:open_board, kind}, state), do: {:noreply, render(%{state | board: kind, menu: nil})}
+  defp apply_pick({:open_board, kind}, state), do: {:noreply, render(%{state | board: kind, board_cursor: {0, 0}, menu: nil})}
 
   # Clicking a thread card focuses it AND toggles its fold — the collapse/expand button (Slice 3).
   # Toggle against the CURRENTLY-VISIBLE fold state (resolve the nil default) so a click matches
@@ -1295,13 +1299,83 @@ defmodule Console.Cockpit do
   defp board_content(:tickets, state) do
     id = board_workspace_id(state)
     tickets = safe_board(fn -> id && id |> Server.Tickets.in_workspace() |> Enum.map(&ticket_row/1) end) || []
-    {Panel.TicketBoard, %{tickets: tickets}, "TICKETS"}
+    {Panel.TicketBoard, %{tickets: tickets, cursor: state.board_cursor}, "TICKETS · h/l·j/k move · p advance · n new · ⏎ promote"}
   end
 
   defp board_content(:notes, state) do
     id = board_workspace_id(state)
     notes = safe_board(fn -> id && Server.Notes.for_scope("workspace", id) end) || []
     {Panel.NoteBoard, %{notes: notes}, "NOTES"}
+  end
+
+  @ticket_statuses ~w(backlog todo doing done)
+
+  # The Tickets kanban keys (Slice D3): h/l/j/k move the {col,row} cursor, `p` advances the selected
+  # ticket's status, `n` files a new one (opens the :new_ticket input), Enter promotes it to a thread.
+  # The Notes board (and any other) just closes on Esc — handled by the fall-through.
+  defp handle_board_key(%{key: :char, char: "n"}, %{board: :tickets} = state),
+    do: {:noreply, render(%{state | input: %{kind: :new_ticket, buffer: "", cursor: 0}})}
+
+  defp handle_board_key(%{key: :char, char: "n"}, %{board: :notes} = state),
+    do: {:noreply, render(%{state | input: %{kind: :new_note, buffer: "", cursor: 0}})}
+
+  defp handle_board_key(%{key: :char, char: c}, %{board: :tickets} = state) when c in ~w(h l j k),
+    do: {:noreply, render(%{state | board_cursor: move_grid(state.board_cursor, c, ticket_columns(state))})}
+
+  defp handle_board_key(%{key: :char, char: "p"}, %{board: :tickets} = state),
+    do: {:noreply, render(advance_selected_ticket(state))}
+
+  defp handle_board_key(%{key: :enter}, %{board: :tickets} = state),
+    do: {:noreply, render(promote_selected_ticket(state))}
+
+  defp handle_board_key(_key, state), do: {:noreply, state}
+
+  # The active workspace's tickets grouped into kanban columns (structs — the render maps to rows off
+  # the same in_workspace order, so the cursor indexes the same grid).
+  defp ticket_columns(state) do
+    id = board_workspace_id(state)
+    tickets = safe_board(fn -> id && Server.Tickets.in_workspace(id) end) || []
+    Console.Panel.TicketBoard.by_column(tickets)
+  end
+
+  defp selected_ticket(%{board_cursor: {col, row}}, cols), do: cols |> Enum.at(col, []) |> Enum.at(row)
+
+  defp move_grid({col, row}, "h", cols), do: clamp_grid(max(col - 1, 0), row, cols)
+  defp move_grid({col, row}, "l", cols), do: clamp_grid(min(col + 1, length(cols) - 1), row, cols)
+  defp move_grid({col, row}, "j", cols), do: clamp_grid(col, row + 1, cols)
+  defp move_grid({col, row}, "k", cols), do: clamp_grid(col, max(row - 1, 0), cols)
+
+  defp clamp_grid(col, row, cols) do
+    len = length(Enum.at(cols, col, []))
+    {col, row |> max(0) |> min(max(len - 1, 0))}
+  end
+
+  defp advance_selected_ticket(state) do
+    case selected_ticket(state, ticket_columns(state)) do
+      %{status: status} = ticket ->
+        next = Enum.at(@ticket_statuses, min(Enum.find_index(@ticket_statuses, &(&1 == status)) + 1, 3), status)
+        _ = safe_board(fn -> Server.Tickets.update(ticket, %{status: next}) end)
+        %{state | flash: "ticket ##{ticket.id} → #{next}"}
+
+      _ ->
+        state
+    end
+  end
+
+  defp promote_selected_ticket(state) do
+    case selected_ticket(state, ticket_columns(state)) do
+      %{id: id, title: title} = ticket ->
+        with {:ok, thread} <- Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state), scope: "machine"}),
+             {:ok, _} <- safe_board(fn -> Server.Tickets.promote(ticket, thread.id) end) do
+          _ = spawn_onto(thread.id, state)
+          %{state | board: nil, focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
+        else
+          _ -> %{state | flash: "couldn't promote the ticket"}
+        end
+
+      _ ->
+        state
+    end
   end
 
   # --- The STACK-zoom embedded lazygit overlay (Slice 4): a full-frame `Panel.Terminal` over the
