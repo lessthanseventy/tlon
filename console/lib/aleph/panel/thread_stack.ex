@@ -99,26 +99,24 @@ defmodule Console.Panel.ThreadStack do
     |> Enum.concat()
   end
 
+  # A message as a chat bubble: the author on its own line, then the body rendered as MARKDOWN
+  # (Console.Markdown — bold/code/lists/headings), each row indented under the author. Reads like a
+  # chat, not a wall of text: the old `one_line/1` flattened the whole body onto one wrapped line.
   defp message_rows(%{author: author, body: body}, w) do
     operator? = Server.Channel.operator?(author)
     author_style = if operator?, do: :operator, else: :label
-    body_style = if operator?, do: :operator, else: :normal
+    base = if operator?, do: :operator, else: :normal
 
-    case Console.Text.wrap_paragraphs("#{author}: #{one_line(body)}", max(w - String.length(@indent), 1)) do
-      [] -> []
-      [first | rest] -> [first_row(first, author, author_style, body_style) | Enum.map(rest, &[{@indent <> &1, body_style}])]
-    end
-  end
+    body_rows =
+      body
+      |> Console.Markdown.render(max(w - String.length(@indent), 1), base)
+      |> Enum.map(fn
+        [] -> []
+        row -> [{@indent, base} | row]
+      end)
 
-  # Colour the author on the first line; the rest is body.
-  defp first_row(first, author, author_style, body_style) do
-    case String.split(first, ": ", parts: 2) do
-      [^author, tail] -> [{@indent, :normal}, {author, author_style}, {": ", :dim}, {tail, body_style}]
-      _ -> [{@indent <> first, body_style}]
-    end
+    [[{"#{author}:", author_style}] | body_rows]
   end
 
   defp reply_row(card), do: [{"#{@indent}↳ ", :accent}, {"reply to ##{card.id}… (c)", :dim}]
-
-  defp one_line(body), do: body |> to_string() |> String.replace("\n", " ")
 end

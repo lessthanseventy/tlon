@@ -29,8 +29,11 @@ defmodule Console.Panel.ThreadStackTest do
     out = ThreadStack.render(%{cards: [card]}, rect()) |> text()
 
     assert out =~ "▾ #42 review PR"
-    assert out =~ "andrew: take a look"
-    assert out =~ "hronir: on it"
+    # author on its own line, body (markdown) indented below it
+    assert out =~ "andrew:"
+    assert out =~ "take a look"
+    assert out =~ "hronir:"
+    assert out =~ "on it"
     assert out =~ "reply to #42"
   end
 
@@ -47,7 +50,8 @@ defmodule Console.Panel.ThreadStackTest do
 
     out = ThreadStack.render(%{cards: cards}, rect()) |> text()
     assert out =~ "▾ #1 a"
-    assert out =~ "x: hello"
+    assert out =~ "x:"
+    assert out =~ "hello"
     assert out =~ "▸ #2 b"
   end
 
@@ -70,9 +74,10 @@ defmodule Console.Panel.ThreadStackTest do
         %{id: 2, title: "b", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []}
       ]
 
-      # card 1 unfolded spans header+message+reply+blank (4 rows); row 2 (the reply line) is still card 1
+      # card 1 unfolded: header + blank + author-line + body + blank + reply (6 rows), then a gap;
+      # a click inside its body is still card 1, and card 2 starts after the gap.
       assert ThreadStack.pick(%{cards: cards}, rect(), 2) == {:fold_thread, 1}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 6) == {:fold_thread, 2}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 7) == {:fold_thread, 2}
     end
   end
 end

@@ -78,7 +78,15 @@ defmodule Console.Style do
     arch_builder: {@green, @bg},
     arch_reviewer: {@amber, @bg},
     arch_planner: {0xE0218A, @bg},
-    arch_assistant: {0xB98AFF, @bg}
+    arch_assistant: {0xB98AFF, @bg},
+    # Markdown rendering in the chat (Console.Markdown, 2026-09-01) — no bold attr in this palette,
+    # so emphasis maps to COLOUR: **bold** bright white, `code`/fences cyan, # headings chrome-amber,
+    # *italic* a soft grey, bullets/quotes dim.
+    md_bold: {0xFFFFFF, @bg},
+    md_italic: {0xC7C7C7, @bg},
+    md_code: {0x33C7FF, @bg},
+    md_head: {@amber, @bg},
+    md_rule: {0xB5651D, @bg}
   }
 
   @doc """
