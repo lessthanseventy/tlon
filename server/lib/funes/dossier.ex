@@ -92,19 +92,29 @@ defmodule Server.Dossier do
   constraint. His constraints outrank our conclusions by construction (§4), so a
   `derived` fact — a paraphrase of his instruction — must never silently retire one.
   """
-  def always_loaded_constraints do
+  def always_loaded_constraints(workspace_id \\ nil) do
     superseded =
       from f in Fact,
         where: not is_nil(f.supersedes) and f.provenance == "stated" and f.kind == "constraint",
         select: f.supersedes
 
-    Repo.all(
-      from f in Fact,
-        where:
-          f.provenance == "stated" and f.kind == "constraint" and f.id not in subquery(superseded) and
-            is_nil(f.forgotten_at),
-        order_by: [desc: f.id]
+    from(f in Fact,
+      where:
+        f.provenance == "stated" and f.kind == "constraint" and f.id not in subquery(superseded) and
+          is_nil(f.forgotten_at),
+      order_by: [desc: f.id]
     )
+    |> scope_facts_by_workspace(workspace_id)
+    |> Repo.all()
+  end
+
+  # A fact belongs to a workspace's memory when it's GLOBAL (no thread — the seed self-knowledge) or
+  # its thread lives in that workspace. `nil` = every workspace (the pre-scope behaviour).
+  defp scope_facts_by_workspace(query, nil), do: query
+
+  defp scope_facts_by_workspace(query, workspace_id) do
+    ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
+    from f in query, where: is_nil(f.thread_id) or f.thread_id in subquery(ids)
   end
 
   @doc "A thread's facts, scoped to it, newest first — the raw material for LEARNINGS."
@@ -343,8 +353,17 @@ defmodule Server.Dossier do
   end
 
   @doc "Habits awaiting review — the operator's queue, newest first (the console/iex review read)."
-  def pending_habits do
-    Repo.all(from h in Habit, where: h.state == "pending", order_by: [desc: h.id])
+  def pending_habits(workspace_id \\ nil) do
+    from(h in Habit, where: h.state == "pending", order_by: [desc: h.id])
+    |> scope_habits_by_workspace(workspace_id)
+    |> Repo.all()
+  end
+
+  defp scope_habits_by_workspace(query, nil), do: query
+
+  defp scope_habits_by_workspace(query, workspace_id) do
+    ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
+    from h in query, where: is_nil(h.source_thread_id) or h.source_thread_id in subquery(ids)
   end
 
   @doc "A habit by id, or nil — the load path for `approve_habit`/`reject_habit`."

@@ -2621,7 +2621,7 @@ defmodule Console.Cockpit do
       state
       | stack: stack_read(key),
         health: health_read(),
-        memory: memory_read(),
+        memory: memory_read(key),
         leaves: orbis_read(key),
         gates: gates_read(key),
         probed_at: System.monotonic_time(:millisecond)
@@ -2638,8 +2638,12 @@ defmodule Console.Cockpit do
   defp ensure_probes(state), do: state
 
   # The Memory pane read: coverage stats + the always-loaded pinned set + the pending-habit queue.
-  defp memory_read do
-    %{coverage: Server.recall_coverage(), pinned: Server.pinned(), habits: Server.pending_habits()}
+  defp memory_read(workspace_id) do
+    %{
+      coverage: Server.recall_coverage(workspace_id),
+      pinned: Server.pinned(workspace_id),
+      habits: Server.pending_habits(workspace_id)
+    }
   end
 
   # The NOW pane's ATTENTION read (Slice 4D): worklines parked awaiting the operator — the gates the

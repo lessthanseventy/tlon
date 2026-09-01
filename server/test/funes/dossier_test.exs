@@ -180,6 +180,20 @@ defmodule Server.DossierTest do
       assert texts == ["presses Enter"]
     end
 
+    test "scopes by workspace — a thread-linked constraint is workspace-local; a thread-less one is global" do
+      {:ok, wsa} = Server.Workspaces.register(%{name: "wsa", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, wsb} = Server.Workspaces.register(%{name: "wsb", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, ta} = Channel.open_thread(%{title: "a", workspace_id: wsa.id})
+
+      {:ok, _global} = Dossier.bank_fact(%{kind: "constraint", text: "global rule", provenance: "stated"})
+      {:ok, _local} = Dossier.bank_fact(%{kind: "constraint", text: "wsa rule", provenance: "stated", thread_id: ta.id})
+
+      # workspace A sees global + its own; workspace B sees only global; nil sees all.
+      assert Enum.map(Dossier.always_loaded_constraints(wsa.id), & &1.text) |> Enum.sort() == ["global rule", "wsa rule"]
+      assert Enum.map(Dossier.always_loaded_constraints(wsb.id), & &1.text) == ["global rule"]
+      assert length(Dossier.always_loaded_constraints()) == 2
+    end
+
     test "a superseded constraint drops out — superseding is explicit, never by recency (§4)" do
       {:ok, old} =
         Dossier.bank_fact(%{

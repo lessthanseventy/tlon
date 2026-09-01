@@ -124,12 +124,15 @@ defmodule Server do
 
   @doc "Recall corpus at a glance (facts/embedded/pinned vs budget) — console's Memory pane read."
   defdelegate recall_coverage(), to: Server.Recall, as: :coverage
+  defdelegate recall_coverage(workspace_id), to: Server.Recall, as: :coverage
 
   @doc "The always-loaded constraint facts (the pinned set) — console's Memory pane shows these."
   defdelegate pinned(), to: Server.Dossier, as: :always_loaded_constraints
+  defdelegate pinned(workspace_id), to: Server.Dossier, as: :always_loaded_constraints
 
   @doc "Habits awaiting the operator's review — the Memory pane's approval queue, newest first."
   defdelegate pending_habits(), to: Server.Dossier
+  defdelegate pending_habits(workspace_id), to: Server.Dossier
 
   @doc "Every open workline's live status (stage, gate, blocking check) — the WORKLINES pane read."
   defdelegate workline_statuses(), to: Server.Workline.Ledger, as: :statuses
