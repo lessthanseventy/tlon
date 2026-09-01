@@ -97,17 +97,18 @@ defmodule Console.ViewTest do
     end
 
     test "the bottom band morphs with the center step: NewThread in the list, Reply in a conversation" do
-      stack = %{cards: [%{id: 7, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]}
+      card = %{id: 7, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}
 
-      # LIST step (no thread opened): the new-thread band shows, no reply band.
-      list = View.compose(reads(%{center_view: :chat, thread_stack: stack}), 120, 40)
+      # LIST step (thread_stack.opened == nil): the new-thread band shows, no reply band.
+      list = View.compose(reads(%{center_view: :chat, thread_stack: %{cards: [card], opened: nil}}), 120, 40)
       assert placed?(list, Panel.NewThread)
       refute placed?(list, Panel.Reply)
 
-      # CONVERSATION step (a thread opened, its reply input seeded): Reply replaces NewThread.
+      # CONVERSATION step (thread_stack.opened set, its reply input seeded): Reply replaces NewThread.
+      # `opened` is read off the same thread_stack the center's list⇄conversation switch uses.
       convo =
         View.compose(
-          reads(%{center_view: :chat, thread_stack: stack, opened_thread: 7, input: %{kind: :reply, thread_id: 7, buffer: "", cursor: 0}}),
+          reads(%{center_view: :chat, thread_stack: %{cards: [card], opened: 7}, input: %{kind: :reply, thread_id: 7, buffer: "", cursor: 0}}),
           120,
           40
         )

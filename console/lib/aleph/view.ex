@@ -131,7 +131,9 @@ defmodule Console.View do
     if is_map(reads[:thread_stack]) do
       # The bottom band morphs with the center step (2026-09-01): with a thread OPENED the new-thread
       # band gives way to that thread's persistent Reply box (one band, two faces, never both).
-      opened? = is_integer(reads[:opened_thread])
+      # Read `opened` off the SAME thread_stack read the center's list⇄conversation switch uses, so the
+      # band and the center can never disagree about whether a thread is open.
+      opened? = is_integer(reads.thread_stack[:opened])
 
       Enum.map(surface, fn
         {Panel.Terminal, _read_key} -> {Panel.ThreadStack, :thread_stack}
