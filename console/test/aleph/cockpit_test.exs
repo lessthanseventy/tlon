@@ -260,57 +260,8 @@ defmodule Console.CockpitTest do
     end
   end
 
-  # Clarity slice 6 regression: `y` must copy the row RENDER highlights. Under a focused lead the
-  # panel floats that lead's leaves to the top (C3.2 `ordered/2`), so indexing the RAW rollup with
-  # the cursor copies a different row. `yank_text/1` is the pure decision `apply_effect(:yank, ...)`
-  # runs — exposed (like `cycle_pane_view/2`) so it's testable without the tty write.
-  describe "yank_text/1 follows the rendered row order" do
-    test "leaves yank under a focused lead copies the row render highlights (A/B/C repro)" do
-      # Raw order A(x) B(y) C(x); lead "x" focused floats C above B — cursor 1 shows C, not B.
-      rows = [
-        %{id: 1, title: "A", lead: "x", status: :open, conflicts: 0},
-        %{id: 2, title: "B", lead: "y", status: :open, conflicts: 0},
-        %{id: 3, title: "C", lead: "x", status: :open, conflicts: 0}
-      ]
-
-      state = %{
-        active_key: 0,
-        focus: %Focus{in_terminal?: false, column: :right, pane: 1, cursors: %{Leaves => 1}},
-        # THREADS is carousel index 3 since slice D ([Memory, Crew, Activity, Leaves]).
-        right_pane_view: 3,
-        focused_session: {:leader, nil},
-        leaves: %{summary: %{}, rows: rows},
-        focused_lead: "x",
-        stack: nil,
-        memory: nil
-      }
-
-      assert Cockpit.yank_text(state) == {"title", "C"}
-    end
-  end
-
-  # Slice D: `[`/`]` cycle the Workspace's CAROUSEL (Memory/Crew/Activity/Leaves) — the pinned head
-  # (STACK / the brief) is never cycled away, so the wrap length is the carousel's (4), not the
-  # full right column's (5).
-  # `cycle_pane_view/2` is the pure decision `apply_effect({:cycle_pane_view, dir}, state)` runs —
-  # exposed (like `attach_leaf/2`/`preview_focused/1`) so it's testable without a live GenServer.
-  # Test env's workspace fallback (funes-down / no live cache) is the hardcoded Tlön space (key 0).
-  describe "cycle_pane_view/2: the Workspace's right-pane view index" do
-    test "cycle_pane_view wraps the CAROUSEL (the pinned head excluded): 0→..→3→0" do
-      state = %{active_key: 0, right_pane_view: 0}
-      assert Cockpit.cycle_pane_view(state, 1).right_pane_view == 1
-      assert Cockpit.cycle_pane_view(%{state | right_pane_view: 3}, 1).right_pane_view == 0
-      assert Cockpit.cycle_pane_view(state, -1).right_pane_view == 3
-    end
-
-    test "outside a Workspace (Orbis) it's a no-op — nothing to cycle" do
-      state = %{active_key: :orbis, right_pane_view: 0}
-      assert Cockpit.cycle_pane_view(state, 1) == state
-    end
-  end
-
   # D2.1: `a`/Esc land `{:toggle_orbis_face}`; `toggle_orbis_face/1` is the pure flip the effect
-  # runs — exposed (like `cycle_pane_view/2`) so it's testable without a live GenServer.
+  # runs — exposed so it's testable without a live GenServer.
   describe "toggle_orbis_face/1: Orbis' survey↔author flip" do
     test "flips :survey to :author" do
       assert %{orbis_face: :author} = Cockpit.toggle_orbis_face(%{orbis_face: :survey})

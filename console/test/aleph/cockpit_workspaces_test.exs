@@ -2,7 +2,7 @@ defmodule Console.CockpitWorkspacesTest do
   @moduledoc """
   D2, Chunk 1: `Console.Cockpit.register_workspace!/3` (D2.3) and `remove_workspace!/2` (D2.5) — the author
   face's `n`/`d` funes writes. Exercises the REAL `Server.Workspaces` write pipe (register/remove)
-  through the cockpit's public, pure-ish wrappers (like `cycle_pane_view/2`/`attach_leaf/2`),
+  through the cockpit's public, pure-ish wrappers (like `attach_leaf/2`),
   mirroring `Console.WorkspacesTest`'s temp-DB setup — aleph's `config/test.exs` keeps funes' Repo down,
   so this suite boots it itself. One of the few aleph suites touching the DB → `async: false`.
   """

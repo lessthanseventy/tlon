@@ -60,7 +60,8 @@ defmodule Server.Board do
         |> Enum.sort_by(&{!&1.root, invert(&1.last_at)})
 
       %{
-        workspace: %{id: workspace.id, name: workspace.name},
+        # `icon` is the operator's chosen display icon (`knobs["icon"]`, nil = show the number).
+        workspace: %{id: workspace.id, name: workspace.name, icon: (workspace.knobs || %{})["icon"]},
         threads: rows,
         crew: crew_rows(workspace.roster, working_agents)
       }
@@ -153,8 +154,8 @@ defmodule Server.Board do
 
   @doc """
   The machine META-view: every OPEN machine-scope thread (root + leaves) as a COMPACT brief — the
-  cross-leaf read the Orbis Tertius meta agent synthesizes from (design:
-  `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`). Each leaf is trimmed to the synthesis
+  cross-thread read the Orbis Tertius meta agent synthesizes from (design:
+  `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`). Each thread is trimmed to the synthesis
   essentials — lead, NEXT step, open BLOCKERS, and the message tail — drawn from the SAME `brief/1`
   aggregate a single thread's dossier reads (one read model, not a second truth). Root-first (oldest
   id). Machine-scope only, by construction: `Channel.open_machine_threads/0` never returns project

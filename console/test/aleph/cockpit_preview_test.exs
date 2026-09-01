@@ -38,15 +38,14 @@ defmodule Console.CockpitPreviewTest do
     :ok
   end
 
-  # A Tlön nav state focused on the Leaves pane, the item cursor on `row_idx`, keys NOT forwarding
-  # (in_terminal? false). Slice D: the right column is the contextual pin + ONE carousel panel, so
-  # `right_pane_view: 3` picks THREADS (carousel index 3 of [Memory, Crew, Activity, Leaves]) —
-  # it then sits at column pane index 1 (the pinned head is 0).
+  # A Tlön nav state, the cursor on `row_idx`, keys NOT forwarding (in_terminal? false). Slice 3.4:
+  # the Leaves pane left the rail (the center thread-stack IS the thread list now), so a workspace
+  # focus lands on a funes rail pane (NOW·CREW·MEMORY·STACK), not Leaves — the leaf-hover preview
+  # path is dormant. `leaves`/rows stay in the state so `commit_preview/1` still resolves.
   defp leaves_state(rows, row_idx) do
     %{
       active_key: 0,
       focus: %Focus{in_terminal?: false, column: :right, pane: 1, cursors: %{Panel.Leaves => row_idx}},
-      right_pane_view: 3,
       focused_session: {:leader, nil},
       leaves: %{summary: %{}, rows: rows},
       stack: nil,
@@ -55,20 +54,12 @@ defmodule Console.CockpitPreviewTest do
     }
   end
 
-  describe "preview_focused/1 — hover re-points, never focuses" do
-    test "a leaf mapped to a live Workspace window re-points the center but stays in nav mode" do
+  describe "preview_focused/1 — dormant since Leaves left the rail (Slice 3.4)" do
+    test "a workspace focus on a funes rail pane (not Leaves) never previews — no re-point, no keys" do
       next = Cockpit.preview_focused(leaves_state([%{id: "t1", title: "x", lead: "hronir"}], 0))
 
-      assert next.previewed_window == "1"
-      # NO focus steal, NO keys sent — a hover, not a commit.
-      assert next.focus.in_terminal? == false
-      assert_received {:tmux, ["-L", _sock, "select-window", "-t", "w0:1"]}
-    end
-
-    test "a leaf whose lead has no live window leaves the center where it is (no re-point)" do
-      next = Cockpit.preview_focused(leaves_state([%{id: "t9", title: "x", lead: "ghost"}], 0))
-
       assert next.previewed_window == nil
+      assert next.focus.in_terminal? == false
       refute_received {:tmux, ["-L", _sock, "select-window" | _]}
     end
 
