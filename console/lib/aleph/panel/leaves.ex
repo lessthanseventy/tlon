@@ -84,8 +84,7 @@ defmodule Console.Panel.Leaves do
   @doc """
   The rollup line as a styled row: the operator's three buckets, conflicts appended only when there
   are any — a clean board reads clean, and a cut without a count would be its own little lie. Public
-  so the `chat` tab's header strip (`Console.MachineChat.Loop`) paints the identical line above its
-  feed, not a hand-rolled copy that could drift.
+  so the Home/Orbis survey shares the identical line, not a hand-rolled copy that could drift.
   """
   @spec summary_row(map()) :: Console.Panel.row()
   def summary_row(%{open: open, stalled: stalled, done: done} = summary) do

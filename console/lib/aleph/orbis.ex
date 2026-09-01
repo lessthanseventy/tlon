@@ -4,9 +4,7 @@ defmodule Console.Orbis do
   design, slice 2). tertius no longer sits as Tlön's center coworker in the operator's eye; its
   home view is this survey — the god-view over workspaces. Every machine thread (root + leaves) is
   reduced to lead + status + conflict count, plus the open/stalled/done tallies. The single source
-  of the rollup's semantics, shared by BOTH surfaces — the Tlön sidebar panel (`Console.Panel.Orbis`,
-  via `Console.Cockpit`) and the `chat` tab's header strip (`Console.MachineChat.Loop`) — so a status
-  rule never drifts between them.
+  of the rollup's semantics for the Home/Orbis survey (`Console.Panel.Overview`, via `Console.Cockpit`).
 
   Pure data, no styling: `rollup/0` returns `%{summary: %{open, stalled, done, conflicts},
   rows: [%{id, title, lead, status, conflicts, workspace_id, stage, awaiting, blocking}]

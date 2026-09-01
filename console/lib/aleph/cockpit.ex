@@ -2086,7 +2086,6 @@ defmodule Console.Cockpit do
     # was handed, so a tmux/server hiccup skips that step this frame instead of losing the frame.
     state = Board.safe_read(:probes, state, fn -> ensure_probes(state) end)
     state = Board.safe_read(:workspace_roster, state, fn -> ensure_workspace_roster(state) end)
-    state = Board.safe_read(:log_window, state, fn -> ensure_log_window(state) end)
     state = Board.safe_read(:thread_sessions, state, fn -> ensure_thread_sessions(state) end)
     state = Board.safe_read(:session_pane, state, fn -> ensure_session(state) end)
 
@@ -2878,21 +2877,6 @@ defmodule Console.Cockpit do
     spawn_harness_window(workspace_id, "#{name}-machine", name, machine_thread_id(workspace_id), command)
   end
 
-  # The `chat` tab (the third Tlön window): the INTERACTIVE machine-chat — machine-scope threads as
-  # foldable blocks with author-turn grouping (fold/zoom/scroll), so the tertius/hronir tabs can stay
-  # their raw harness selves. NOT a coworker — no server identity, no wake-loop entry (Console.Mention
-  # doesn't know it); it just polls the db the cockpit writes. Gated like the claude window: pi up
-  # (so a machine thread exists to read), window absent (`new-window` isn't idempotent), retried each
-  # render — a failed open just leaves the tab missing.
-  defp ensure_log_window(%{active_key: key} = state) when Space.workspace?(key) do
-    cond do
-      not is_pid(safe_terminal(:machine)) -> state
-      Enum.any?(tlon_tabs(key), &(&1.name == "general")) -> state
-      true -> spawn_log_window(key) && state
-    end
-  end
-
-  defp ensure_log_window(state), do: state
 
   # A staffed-but-session-less machine thread gets its own tmux window (`t<id>`), so a
   # thread the operator opened outside the standing coworkers gets a live coworker
@@ -3152,28 +3136,6 @@ defmodule Console.Cockpit do
   end
 
   defp one_line(body), do: String.replace(body || "", "\n", " ")
-
-  # Open the `general` window (the operator's console) running `mix console.machine_chat` from the console
-  # project (where mise/mix resolve). It inherits the tlon session's `TLON_DB`, so it reads the SAME
-  # db the cockpit writes — the whole point of the poll-the-db design (a separate process can't share
-  # the in-node Bus). Fire-and-forget: a failed spawn leaves the tab absent and the next render retries.
-  defp spawn_log_window(workspace_id) do
-    dir = Path.join(Profiles.repo(), "modules/aleph")
-    script = "export TERM=xterm-256color\ncd #{dir}\nexec mise exec -- mix console.machine_chat"
-    session = workspace_session(workspace_id)
-
-    System.cmd("tmux", tlon_tmux(workspace_id, ["new-window", "-t", session, "-n", "general", script]),
-      stderr_to_stdout: true
-    )
-
-    # general is the primary Tlön surface (the doorway), so seat it as tab 1: move it below base-index,
-    # then renumber so it becomes the first window and tertius/hronir shift after it.
-    System.cmd("tmux", tlon_tmux(workspace_id, ["move-window", "-s", "#{session}:general", "-t", "#{session}:0"]),
-      stderr_to_stdout: true
-    )
-
-    System.cmd("tmux", tlon_tmux(workspace_id, ["move-window", "-r", "-t", "#{session}:0"]), stderr_to_stdout: true)
-  end
 
   # `tmux new-window`, not Sessions.spawn_harness: a roster tail entry rides as a window of the
   # ALREADY-embedded tlon tmux session (the center is window 0), not a separate Console.Terminal/PTY

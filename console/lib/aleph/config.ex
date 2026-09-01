@@ -106,9 +106,8 @@ defmodule Console.Config do
 
   @doc """
   The operator's persisted default-coworker override for new chat threads, or `nil` when unset.
-  Just the override — the roster-derived default lives with the staffing decision
-  (`Console.MachineChat.Staffing.default_coworker/1`), fed the LIVE workspace roster by the caller, so no
-  stale hardcoded stand-in handle can leak in as a thread lead.
+  Just the override — the roster-derived default is resolved from the LIVE workspace roster by the
+  caller (server `designated_lead`), so no stale hardcoded stand-in handle can leak in as a thread lead.
   """
   @spec default_coworker_override(String.t()) :: String.t() | nil
   def default_coworker_override(path \\ path()) do
