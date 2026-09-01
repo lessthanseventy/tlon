@@ -295,6 +295,11 @@ defmodule Server.Channel do
   @doc "A thread by id, or nil — the load path for the cross-thread `close_thread` verb."
   def thread(id), do: Repo.get(Thread, id)
 
+  @doc "Every thread id in a workspace — the cockpit filters its global activity feed to these."
+  def workspace_thread_ids(workspace_id) do
+    Repo.all(from t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
+  end
+
   @doc """
   The message with this id, or nil. The `from_message` hook for stated facts
   (`Dossier.bank_stated_fact/2`): a caller quotes a message by reference, never

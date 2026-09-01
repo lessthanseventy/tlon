@@ -345,6 +345,13 @@ defmodule Server.ChannelTest do
       assert "a-thread" in titles
       assert "b-thread" in titles
     end
+
+    test "workspace_thread_ids/1 returns only that workspace's thread ids", %{wsa: wsa, wsb: wsb} do
+      {:ok, ta} = Channel.open_thread(%{title: "a", workspace_id: wsa.id})
+      {:ok, _tb} = Channel.open_thread(%{title: "b", workspace_id: wsb.id})
+
+      assert Channel.workspace_thread_ids(wsa.id) == [ta.id]
+    end
   end
 
   describe "the state CHECK is the DB's own guard" do

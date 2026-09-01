@@ -361,6 +361,9 @@ defmodule Console.Cockpit do
             # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
             # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`.
             activity: [],
+            # The active workspace's thread ids (cached on the probe cadence) — the global activity
+            # feed is filtered to these so NOW shows only this workspace's events. nil = unfiltered.
+            ws_thread_ids: nil,
             # The NOW pane's standing ATTENTION list (Slice 4D): parked worklines awaiting the
             # operator, cached with the other probes (@probe_ms) so the pane never reads server
             # per-frame. Filled by `gates_read/0` in a workspace; nil→[] elsewhere.
@@ -2148,7 +2151,7 @@ defmodule Console.Cockpit do
       crew: Board.safe_read(:crew, nil, fn -> crew_read(state, machine) end),
       stack: state.stack || @empty_stack,
       health: state.health,
-      activity: state.activity,
+      activity: scope_activity(state.activity, state.ws_thread_ids),
       gates: state.gates || [],
       memory: if(Space.workspace?(state.active_key), do: state.memory),
       orbis: Board.safe_read(:orbis, nil, fn -> if(Space.workspace?(state.active_key), do: leaves_data(state)) end),
@@ -2624,6 +2627,7 @@ defmodule Console.Cockpit do
         memory: memory_read(key),
         leaves: orbis_read(key),
         gates: gates_read(key),
+        ws_thread_ids: workspace_thread_id_set(key),
         probed_at: System.monotonic_time(:millisecond)
     }
   end
@@ -2648,6 +2652,28 @@ defmodule Console.Cockpit do
 
   # The NOW pane's ATTENTION read (Slice 4D): worklines parked awaiting the operator — the gates the
   # `approve N` verb clears. Best-effort; a server hiccup leaves the feed rather than crashing a frame.
+  # The active workspace's thread ids as a MapSet (or nil on a server hiccup → unfiltered feed).
+  defp workspace_thread_id_set(workspace_id) do
+    MapSet.new(Server.workspace_thread_ids(workspace_id))
+  rescue
+    _ -> nil
+  catch
+    :exit, _ -> nil
+  end
+
+  # Filter the global activity buffer to the active workspace: keep an event when its row has no
+  # thread (a global event) or its thread is in the workspace. nil id-set = unfiltered (server down).
+  defp scope_activity(activity, nil), do: activity
+
+  defp scope_activity(activity, %MapSet{} = ids) do
+    Enum.filter(activity, fn {_tag, row} ->
+      case Map.get(row, :thread_id) do
+        nil -> true
+        tid -> MapSet.member?(ids, tid)
+      end
+    end)
+  end
+
   defp gates_read(workspace_id) do
     Server.workline_statuses(workspace_id)
     |> Enum.filter(&(&1.awaiting not in [nil, ""]))

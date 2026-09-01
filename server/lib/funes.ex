@@ -60,6 +60,7 @@ defmodule Server do
 
   @doc "Staffed machine-scope threads — the `ensure_thread_sessions` candidate list."
   defdelegate staffed_machine_threads, to: Server.Channel
+  defdelegate workspace_thread_ids(workspace_id), to: Server.Channel
 
   @doc "The most recent operator-authored message on a thread, or nil — the opening-turn source."
   defdelegate latest_operator_message(thread_id), to: Server.Channel
