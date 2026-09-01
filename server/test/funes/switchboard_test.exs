@@ -338,7 +338,11 @@ defmodule Server.SwitchboardTest do
       refute_received {:spawned, _}
     end
 
-    test "a lead with a live (even cold) session is not auto-spawned — no zombie double-spawn" do
+    test "a lead whose ONLY session is cold is ROTATED — a fresh pane is spawned, not left stranded" do
+      # 2026-09-01 (Andrew): a cold session is too stale to cheaply resume, so posting to it rotates
+      # in a fresh, dossier-seeded session rather than reviving a huge context (or stranding, the old
+      # behaviour). The cold session is superseded when the fresh agent connects (Staff.start_session's
+      # zombie guard), so no double-spawn survives — the spawn IS the retirement.
       {:ok, thread} = Channel.open_thread(%{title: "cold but attended"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
       {:ok, _} = Staff.assign(thread, carl)
@@ -348,8 +352,23 @@ defmodule Server.SwitchboardTest do
       {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "hi"})
       Switchboard.deliver(m)
 
-      # cold → not poked, and a live session already exists → not re-spawned.
+      # cold → never a cheap wake, but rotated: a fresh pane carrying Carl's identity on this thread.
       refute_received {:woke, _, _}
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Carl")
+    end
+
+    test "a WARM session is woken, never spawned — no rotation over a still-cheap resume" do
+      {:ok, thread} = Channel.open_thread(%{title: "warm and attended"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+      {:ok, sess} = Staff.start_session(%{agent_id: carl.id, thread_id: thread.id, pane_ref: "wCarl"})
+      set_last_active(sess, 60)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "hi"})
+      Switchboard.deliver(m)
+
+      assert_received {:woke, "wCarl", _}
       refute_received {:spawned, _}
     end
 

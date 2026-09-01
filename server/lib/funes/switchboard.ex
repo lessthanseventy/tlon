@@ -194,7 +194,7 @@ defmodule Server.Switchboard do
     with %Thread{agent_id: agent_id} when not is_nil(agent_id) <- Repo.get(Thread, thread_id),
          %Agent{} = lead <- Repo.get(Agent, agent_id),
          true <- lead_addressed?(message, lead),
-         false <- has_live_session?(thread_id, agent_id),
+         false <- has_warm_session?(thread_id, agent_id),
          false <- Presence.clocked_out?(lead),
          {:ok, %{exports: exports}} <- Spawn.join(thread_id, lead.name) do
       Arbiter.spawn(exports)
@@ -208,10 +208,20 @@ defmodule Server.Switchboard do
     message |> target_names() |> Enum.any?(&(String.downcase(&1) == down))
   end
 
-  defp has_live_session?(thread_id, agent_id) do
+  # A WARM session is one worth waking (a cheap resume): live AND active within the warmth window.
+  # A cold session (stale last_active_at) is treated as ABSENT so the lead gets ROTATED — a fresh
+  # brief-seeded session, never a /resume of a huge stale context (2026-09-01). The old
+  # `has_live_session?` (ended_at-only) stranded a cold lead: recipients wouldn't wake it (too cold)
+  # and this wouldn't replace it (a session existed). The fresh spawn's Staff.start_session
+  # supersedes the cold session on connect (the zombie guard), so the rotation leaves no double.
+  defp has_warm_session?(thread_id, agent_id) do
+    cutoff = Presence.warmth_cutoff()
+
     Repo.exists?(
       from s in Session,
-        where: s.thread_id == ^thread_id and s.agent_id == ^agent_id and is_nil(s.ended_at)
+        where:
+          s.thread_id == ^thread_id and s.agent_id == ^agent_id and is_nil(s.ended_at) and
+            s.last_active_at > ^cutoff
     )
   end
 
