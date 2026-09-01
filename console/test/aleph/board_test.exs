@@ -390,7 +390,7 @@ defmodule Console.BoardTest do
       assert [info, hints] = StatusBar.render(data, %{x: 0, y: 0, w: 120, h: 2})
       assert text(info) =~ "COMPOSE"
       refute text(info) =~ "ship it"
-      assert text(hints) =~ "post"
+      assert text(hints) =~ "reply"
       assert text(hints) =~ "newline"
     end
   end

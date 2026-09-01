@@ -754,7 +754,7 @@ defmodule Console.KeymapTest do
       assert {%{leader_pending?: false}, :none} = via_leader(key(:enter), s)
     end
 
-    test "^B n opens the title input modal" do
+    test "^B n opens the title input modal (Orbis)" do
       s = state(%{center_live?: true})
 
       assert {%{input: %{kind: :new_thread, buffer: ""}, leader_pending?: false}, :repaint} =
@@ -785,8 +785,13 @@ defmodule Console.KeymapTest do
     end
   end
 
-  describe "creating a thread — the `n` verb + title input mode" do
-    test "n (bare, nav context) opens title input (empty buffer) and repaints" do
+  describe "creating — the `n` verb" do
+    test "n in a WORKSPACE opens the New menu (thread · ticket · note)" do
+      s = state(%{active_key: 1})
+      assert {_s, {:open_new_menu}} = Keymap.handle(char("n"), s)
+    end
+
+    test "n on Orbis' survey face opens the title input (empty buffer) and repaints" do
       assert {%{input: %{kind: :new_thread, buffer: ""}}, :repaint} = Keymap.handle(char("n"), state())
     end
 

@@ -1180,6 +1180,22 @@ defmodule Console.Cockpit do
     %{state | menu: %{menu | cursor: rem(c + delta + n, n)}}
   end
 
+  # The NEW menu (Slice C): one create entry for every noun. Anchored low-left (above the footer)
+  # since `n` triggers it from the keyboard — menu_placements clamps it on screen.
+  defp new_menu(%{h: h}) do
+    %{
+      title: "New",
+      x: 2,
+      y: max(h - 8, 0),
+      cursor: 0,
+      items: [
+        %{label: "Thread", action: {:new, :thread}},
+        %{label: "Ticket", action: {:new, :ticket}},
+        %{label: "Note", action: {:new, :note}}
+      ]
+    }
+  end
+
   # A workspace's context menu, anchored at the click cell.
   defp workspace_menu(ws, x, y) do
     %{
@@ -1222,6 +1238,13 @@ defmodule Console.Cockpit do
   defp apply_menu(_none, state), do: {:noreply, render(%{state | menu: nil})}
 
   defp menu_action(:close, state), do: {:noreply, render(%{state | menu: nil})}
+
+  # The NEW menu's picks (Slice C): each opens its own create input — thread (existing flow), or a
+  # first-class ticket / note (previously only reachable via a tertius prefix). Closes the menu.
+  defp menu_action({:new, kind}, state) when kind in [:thread, :ticket, :note] do
+    input_kind = %{thread: :new_thread, ticket: :new_ticket, note: :new_note}[kind]
+    {:noreply, render(%{state | menu: nil, input: %{kind: input_kind, buffer: "", cursor: 0}})}
+  end
 
   defp menu_action({:configure_ws, _ws}, state),
     do: {:noreply, render(%{state | menu: nil, active_key: :orbis, orbis_face: :author})}
@@ -1414,9 +1437,35 @@ defmodule Console.Cockpit do
   defp apply_effect({:zoom_thread}, %{stack_focus: id} = state), do: {:noreply, render(%{state | zoomed: id})}
 
   defp apply_effect({:create_thread, title}, state) do
-    case Channel.open_thread(%{title: title}) do
+    case Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state)}) do
       {:ok, thread} -> {:noreply, render(%{state | focused_id: thread.id, flash: spawn_onto(thread.id, state)})}
       {:error, _changeset} -> {:noreply, render(%{state | flash: "couldn't create “#{title}”"})}
+    end
+  end
+
+  # `n` in a workspace opens the NEW menu (Thread · Ticket · Note) — one discoverable create entry,
+  # anchored bottom-left above the footer (keyboard-triggered, so no click cell to anchor to).
+  defp apply_effect({:open_new_menu}, %{active_key: key} = state) when Space.workspace?(key),
+    do: {:noreply, render(%{state | menu: new_menu(state)})}
+
+  defp apply_effect({:open_new_menu}, state), do: {:noreply, state}
+
+  # First-class ticket create (Slice C): file into the active workspace's backlog, flash a receipt.
+  defp apply_effect({:file_ticket, title}, state) do
+    case safe_board(fn -> Server.Tickets.file(%{workspace_id: active_workspace_id(state), title: title}) end) do
+      {:ok, t} -> {:noreply, render(%{state | flash: "filed ticket ##{t.id} in backlog"})}
+      _ -> {:noreply, render(%{state | flash: "couldn't file the ticket"})}
+    end
+  end
+
+  # First-class note create (Slice C): a workspace-scoped note, authored by the operator.
+  defp apply_effect({:write_note, body}, state) do
+    operator = Application.get_env(:server, :operator, "andrew")
+    attrs = %{body: body, scope: "workspace", scope_id: active_workspace_id(state), author: operator}
+
+    case safe_board(fn -> Server.Notes.write(attrs) end) do
+      {:ok, n} -> {:noreply, render(%{state | flash: "noted ##{n.id}"})}
+      _ -> {:noreply, render(%{state | flash: "couldn't save the note"})}
     end
   end
 

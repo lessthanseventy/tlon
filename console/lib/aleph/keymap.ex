@@ -112,6 +112,9 @@ defmodule Console.Keymap do
           | :quit
           | {:forward, map()}
           | {:create_thread, String.t()}
+          | {:open_new_menu}
+          | {:file_ticket, String.t()}
+          | {:write_note, String.t()}
           | {:orchestrate, String.t()}
           | {:confirm_orchestrate, map()}
           | {:toggle_fold}
@@ -181,6 +184,14 @@ defmodule Console.Keymap do
 
   def handle(%{key: :enter}, %{input: %{kind: :new_thread, buffer: buffer}} = state),
     do: {%{state | input: nil}, {:create_thread, buffer}}
+
+  # The `new` menu's ticket/note branches (Slice C): file a workspace ticket / jot a workspace note —
+  # first-class create for the two nouns that were previously only reachable via a tertius prefix.
+  def handle(%{key: :enter}, %{input: %{kind: :new_ticket, buffer: buffer}} = state),
+    do: {%{state | input: nil}, {:file_ticket, buffer}}
+
+  def handle(%{key: :enter}, %{input: %{kind: :new_note, buffer: buffer}} = state),
+    do: {%{state | input: nil}, {:write_note, buffer}}
 
   # The tertius command line (Slice 1): Enter dispatches the typed meta-intent to the orchestrator,
   # which routes + executes it and hands back a receipt (the cockpit flashes it).
@@ -530,8 +541,9 @@ defmodule Console.Keymap do
     end
   end
 
-  defp command(%{key: :char, char: "n"}, state),
-    do: {%{state | input: %{kind: :new_thread, buffer: "", cursor: 0}}, :repaint}
+  # `n` in a workspace opens the NEW menu (Thread · Ticket · Note) — one discoverable create entry for
+  # every noun (Slice C), replacing the direct-to-new-thread jump. The cockpit builds + anchors it.
+  defp command(%{key: :char, char: "n"}, state), do: {state, {:open_new_menu}}
 
   # `:` opens the tertius command line from any panel (Slice 1) — a vim-style command prompt for
   # meta-intent ("tell @x …", "file a ticket …", "remember …"). The generic input machinery below
