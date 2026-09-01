@@ -10,10 +10,20 @@ defmodule Console.Graphics do
 
   @chunk 4096
 
-  @doc "Is the host kitty (or kitty-graphics capable)? Env detection — cheap, per call."
+  @doc """
+  Is the host kitty-graphics capable? Env detection — cheap, per call. Covers kitty itself and
+  **ghostty** (`TERM=xterm-ghostty` / `TERM_PROGRAM=ghostty` / `GHOSTTY_*`), which implements the same
+  graphics protocol but reports neither `KITTY_WINDOW_ID` nor a kitty `TERM`.
+  """
   @spec kitty?() :: boolean()
   def kitty? do
-    System.get_env("KITTY_WINDOW_ID") != nil or String.contains?(System.get_env("TERM") || "", "kitty")
+    term = System.get_env("TERM") || ""
+
+    System.get_env("KITTY_WINDOW_ID") != nil or
+      String.contains?(term, "kitty") or
+      String.contains?(term, "ghostty") or
+      System.get_env("TERM_PROGRAM") == "ghostty" or
+      System.get_env("GHOSTTY_RESOURCES_DIR") != nil
   end
 
   @doc "A dim placeholder run for hosts without graphics."
