@@ -965,6 +965,22 @@ defmodule Console.Cockpit do
   defp typing_agent(thinking) when map_size(thinking) == 0, do: nil
   defp typing_agent(thinking), do: thinking |> Map.keys() |> List.first() |> String.replace_suffix("-machine", "")
 
+  # Entering the PTY, point the center's tmux client at the FOCUSED thread's own lead window (its
+  # `t<id>`) so `v` on a thread shows THAT thread's agent, not whatever the standing coworker was on
+  # (Andrew: "v takes me to pi"). A root/window-less thread leaves the client where it is.
+  defp select_focused_window(%{active_key: key, stack_focus: id}) when Space.workspace?(key) and is_integer(id) do
+    case leaf_tab(tlon_tabs(key), id) do
+      %{index: idx} -> tlon_run(key, ["select-window", "-t", "#{workspace_session(key)}:#{idx}"])
+      _ -> :ok
+    end
+  rescue
+    _ -> :ok
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp select_focused_window(_state), do: :ok
+
   # `nil` fold set → the implicit default "focused thread unfolded"; an explicit set is used as-is.
   defp resolve_unfolded(nil, nil), do: MapSet.new()
   defp resolve_unfolded(nil, focused_id), do: MapSet.new([focused_id])
@@ -1604,7 +1620,15 @@ defmodule Console.Cockpit do
 
   # The `v` verb landed (reshape slice D): flip the Workspace center between the live PTY and the
   # attached thread's conversation.
-  defp apply_effect(:toggle_center_view, state), do: {:noreply, render(toggle_center_view(state))}
+  # `v` toggles the center between the thread stack and the live PTY. Entering the PTY, point the
+  # center's tmux client at the FOCUSED thread's own lead window (its `t<id>`) — so `v` on a thread
+  # shows THAT thread's agent, not whatever the standing coworker was on (Andrew: "v takes me to pi").
+  # A root/window-less thread leaves the client where it is (the standing coworker).
+  defp apply_effect(:toggle_center_view, state) do
+    next = toggle_center_view(state)
+    if next.center_view == :terminal, do: select_focused_window(next)
+    {:noreply, render(next)}
+  end
 
   # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
   # beside the stack. Only meaningful in a workspace chat view; elsewhere it's a harmless flip.
