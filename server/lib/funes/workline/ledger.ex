@@ -65,14 +65,21 @@ defmodule Server.Workline.Ledger do
   defp date(%DateTime{} = at), do: Calendar.strftime(at, "%Y-%m-%d")
   defp date(_at), do: "?"
 
-  @doc "Every open workline's live status (console panel read-model), in id order — see `status_for/1`."
-  def statuses do
+  @doc """
+  Every open workline's live status (console panel read-model), in id order — see `status_for/1`.
+  `workspace_id` scopes to one workspace's worklines; `nil` is every workspace.
+  """
+  def statuses(workspace_id \\ nil) do
     Thread
     |> where([t], not is_nil(t.stage))
+    |> scope_workspace(workspace_id)
     |> order_by([t], asc: t.id)
     |> Repo.all()
     |> Enum.map(&status_for/1)
   end
+
+  defp scope_workspace(query, nil), do: query
+  defp scope_workspace(query, workspace_id), do: where(query, [t], t.workspace_id == ^workspace_id)
 
   @doc """
   One workline's live status (console panel read-model): stage, gate, and `blocking` — the

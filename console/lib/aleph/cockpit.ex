@@ -2622,7 +2622,7 @@ defmodule Console.Cockpit do
         health: health_read(),
         memory: memory_read(),
         leaves: orbis_read(key),
-        gates: gates_read(),
+        gates: gates_read(key),
         probed_at: System.monotonic_time(:millisecond)
     }
   end
@@ -2643,8 +2643,8 @@ defmodule Console.Cockpit do
 
   # The NOW pane's ATTENTION read (Slice 4D): worklines parked awaiting the operator — the gates the
   # `approve N` verb clears. Best-effort; a server hiccup leaves the feed rather than crashing a frame.
-  defp gates_read do
-    Server.workline_statuses()
+  defp gates_read(workspace_id) do
+    Server.workline_statuses(workspace_id)
     |> Enum.filter(&(&1.awaiting not in [nil, ""]))
     |> Enum.map(&Map.take(&1, [:id, :title, :stage, :awaiting]))
   rescue

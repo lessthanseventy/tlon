@@ -6,6 +6,7 @@ defmodule Server.WorklineLedgerTest do
 
   alias Server.Workline
   alias Server.Workline.Ledger
+  alias Server.Workspaces
 
   defmodule AllPresent do
     @moduledoc false
@@ -120,6 +121,17 @@ defmodule Server.WorklineLedgerTest do
       assert a.blocking == nil
       assert b.slug == "line-g"
       assert b.blocking == %{cmd: "mix test", tail: "boom"}
+    end
+
+    test "statuses/1 scopes to a workspace; nil is global" do
+      {:ok, wsa} = Workspaces.register(%{name: "wsa", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, wsb} = Workspaces.register(%{name: "wsb", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, _a} = Workline.open(%{title: "one", slug: "line-h", workspace_id: wsa.id})
+      {:ok, _b} = Workline.open(%{title: "two", slug: "line-i", workspace_id: wsb.id})
+
+      assert [%{slug: "line-h"}] = Ledger.statuses(wsa.id)
+      assert [%{slug: "line-i"}] = Ledger.statuses(wsb.id)
+      assert length(Ledger.statuses()) == 2
     end
   end
 end

@@ -64,6 +64,61 @@ defmodule Server do
   @doc "The most recent operator-authored message on a thread, or nil — the opening-turn source."
   defdelegate latest_operator_message(thread_id), to: Server.Channel
 
+  @doc """
+  The primary repo dir a thread's work lives in (thread→project→first repo) — the base a per-thread
+  worktree or a STACK-zoom lazygit opens against (Slice 4). Takes a thread id or struct.
+  `{:ok, path}`, `{:error, :no_repo}`, or `{:error, :no_thread}`.
+  """
+  def repo_for_thread(%Server.Thread{} = thread), do: Server.Projects.repo_for_thread(thread)
+
+  def repo_for_thread(thread_id) when is_integer(thread_id) do
+    case Server.Channel.thread(thread_id) do
+      nil -> {:error, :no_thread}
+      thread -> Server.Projects.repo_for_thread(thread)
+    end
+  end
+
+  @doc """
+  Resolve a thread to the working dir a STACK-zoom lazygit (or crew) should open against (Slice 4):
+  its project's repo, then — for a workline thread (one with a `slug`) — a lazily-ensured per-thread
+  `git worktree` at `.worktrees/<slug>`. A thread with no slug falls back to the repo itself (lazygit
+  at the project repo, per the plan). `{:ok, path}`, `{:error, :no_repo | :no_thread | reason}`.
+  """
+  def worktree_for_thread(%Server.Thread{slug: slug} = thread) do
+    case repo_for_thread(thread) do
+      {:ok, repo} when is_nil(slug) -> {:ok, repo}
+      {:ok, repo} -> Server.Worktree.ensure(repo, slug)
+      {:error, _} = error -> error
+    end
+  end
+
+  def worktree_for_thread(thread_id) when is_integer(thread_id) do
+    case Server.Channel.thread(thread_id) do
+      nil -> {:error, :no_thread}
+      thread -> worktree_for_thread(thread)
+    end
+  end
+
+  @doc """
+  Open a workline from a title at `stage` (any-stage entry) — the tertius `open`/`spike`/`build`
+  verbs' door (Slice 4D). `attrs` must carry `:title` + `:stage`; `:workspace_id`/`:project_id`/
+  `:parent_thread_id` are optional. `{:ok, thread}` | `{:error, {:invalid_stage, s}}` | `{:error, cs}`.
+  """
+  def open_workline(%{title: title, stage: stage} = attrs),
+    do: Server.Workline.open_titled(title, stage, Map.drop(attrs, [:title, :stage]))
+
+  @doc """
+  Approve a parked workline gate by thread id — the tertius `approve N` verb (Slice 4D). `{:ok,
+  thread}` (flipped), `{:error, {:artifact_missing, why}}`, `{:error, :nothing_awaiting}`, or
+  `{:error, :no_thread}`.
+  """
+  def approve_workline(thread_id) when is_integer(thread_id) do
+    case Server.Channel.thread(thread_id) do
+      nil -> {:error, :no_thread}
+      thread -> Server.Workline.approve(thread)
+    end
+  end
+
   @doc "Recall corpus at a glance (facts/embedded/pinned vs budget) — console's Memory pane read."
   defdelegate recall_coverage(), to: Server.Recall, as: :coverage
 
@@ -75,6 +130,7 @@ defmodule Server do
 
   @doc "Every open workline's live status (stage, gate, blocking check) — the WORKLINES pane read."
   defdelegate workline_statuses(), to: Server.Workline.Ledger, as: :statuses
+  defdelegate workline_statuses(workspace_id), to: Server.Workline.Ledger, as: :statuses
 
   @doc """
   Approve a pending habit by id (the Memory pane's `a`) — loads fresh, so a stale row the pane
@@ -93,7 +149,7 @@ defmodule Server do
   end
 
   @doc """
-  Hard-delete a thread by id (the cockpit's `d` on a LEAVES leaf) — loads fresh, so a stale
+  Hard-delete a thread by id (the cockpit's `d` on a THREADS row) — loads fresh, so a stale
   row can't be acted on. `{:ok, thread}` · `{:error, :not_found}` · `{:error, :root_machine_thread}`.
   """
   def delete_thread(id) do
