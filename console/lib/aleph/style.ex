@@ -62,7 +62,23 @@ defmodule Console.Style do
     event_bad: {0xFF5555, @bg},
     event_msg: {0x33C7FF, @bg},
     event_done: {@amber, @bg},
-    event_warn: {@amber, @bg}
+    event_warn: {@amber, @bg},
+    # Slice D visual system — STATUS colors (the signal tier: card gutters + status dots). working
+    # phosphor-green, blocked/failing alarm-red, awaiting-you operator-pink, open chrome-amber, done
+    # a muted green (it recedes), idle the same dim as :dim.
+    st_working: {@green, @bg},
+    st_blocked: {0xFF5555, @bg},
+    st_await: {0xE0218A, @bg},
+    st_open: {@amber, @bg},
+    st_done: {0x5FA35F, @bg},
+    st_idle: {0x9A803F, @bg},
+    # IDENTITY colors (the splash tier: same entity → same hue). Per coworker archetype, reused as the
+    # workspace-hue cycle. surveyor cyan, builder green, reviewer amber, planner pink, assistant lilac.
+    arch_surveyor: {0x33C7FF, @bg},
+    arch_builder: {@green, @bg},
+    arch_reviewer: {@amber, @bg},
+    arch_planner: {0xE0218A, @bg},
+    arch_assistant: {0xB98AFF, @bg}
   }
 
   @doc """
