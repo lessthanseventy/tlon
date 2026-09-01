@@ -132,6 +132,7 @@ defmodule Console.Keymap do
           | {:edit_workspace, term(), map()}
           | {:coworker_knob, String.t(), :model | :yolo}
           | :tlon_enter
+          | :stack_delete_arm
           | :tlon_preview
           | :yank
           | :none
@@ -715,6 +716,10 @@ defmodule Console.Keymap do
   # not only via the Alt chords. Precede the forward clause below.
   defp handle_tlon(%{key: :char, char: "n"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: command(k, state)
   defp handle_tlon(%{key: :char, char: "c"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: command(k, state)
+  # `d` arms the two-key delete for the FOCUSED thread card (the second `d` is caught by the armed
+  # clause at the top of handle_tlon). This restores thread-delete, lost when the MachineChat TUI and
+  # the LEAVES rail panel — the old delete surfaces — were retired.
+  defp handle_tlon(%{key: :char, char: "d"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, :stack_delete_arm}
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}} = state), do: {state, {:forward, key}}
 
   # Esc steps back one level: close an open detail first, else drop out of nav into the terminal.

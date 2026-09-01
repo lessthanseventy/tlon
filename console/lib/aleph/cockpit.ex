@@ -1721,6 +1721,33 @@ defmodule Console.Cockpit do
     end
   end
 
+  # Arm the two-key delete for the focused thread CARD (chat stack). The root machine thread is
+  # refused by delete_thread itself; here we just resolve the title for the confirm label.
+  defp apply_effect(:stack_delete_arm, %{stack_focus: id} = state) when is_integer(id) do
+    case Enum.find(state.threads, &(&1.id == id)) do
+      %{title: title} ->
+        {:noreply, render(%{state | tlon_delete: {:thread, id, "delete “#{title}”"}, flash: "press d again to delete “#{title}”"})}
+
+      _ ->
+        {:noreply, render(%{state | flash: "no thread focused"})}
+    end
+  end
+
+  defp apply_effect(:stack_delete_arm, state), do: {:noreply, render(%{state | flash: "no thread focused"})}
+
+  defp apply_effect({:tlon_delete, {:thread, id, _label}}, state) do
+    flash =
+      case Server.delete_thread(id) do
+        {:ok, thread} -> "deleted “#{thread.title}”"
+        {:error, :root_machine_thread} -> "can't delete the root thread"
+        {:error, reason} -> "delete refused: #{inspect(reason)}"
+      end
+
+    {:noreply, render(%{state | tlon_delete: nil, flash: flash})}
+  rescue
+    e -> {:noreply, render(%{state | flash: "delete failed: #{Exception.message(e)}"})}
+  end
+
   # The second `d` (still armed) landed: execute against the ARM-TIME target.
   defp apply_effect({:tlon_delete, {:fact, fact, _label}}, state) do
     flash =
