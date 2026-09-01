@@ -254,11 +254,6 @@ defmodule Console.Cockpit do
             active_key: List.first(Space.all()).key,
             focused_id: nil,
             threads: [],
-            # The thread-stack fold set (Slice 3): thread ids whose card is UNFOLDED. `nil` (the
-            # default) means "unfold the focused thread" — the default-active-open rule — so a fresh
-            # cockpit lands with your current thread open and the rest as headers. Once you `z`, it
-            # becomes an explicit set (possibly empty = nothing unfolded).
-            unfolded: nil,
             # Orbis' focus toggle (`h`/`l`) — which cursor its j/k drives: the survey's per-row
             # cursor (default, so a fresh Orbis opens ready to zoom a workspace) or the thread list.
             orbis_focus: :survey,
@@ -291,11 +286,8 @@ defmodule Console.Cockpit do
             # Two-step center (2026-09-01): nil = the thread LIST; an id = that thread's CONVERSATION
             # (scrollable, text-selectable). Enter opens, Esc goes back — replaces the fold/zoom stack.
             opened_thread: nil,
-            # `Z` zooms ONE thread full-screen (a real zoom over the stack): the focused thread id, or
-            # nil for the whole stack. `z` (lowercase) folds a card; `Z` (this) zooms one, `Z` back.
-            zoomed: nil,
-            # The stack's active thread id, recomputed each render (focused-if-in-stack else first) and
-            # stashed so the `z`/`Z` effects can target it between renders.
+            # The list cursor's thread id, recomputed each render (focused-if-in-stack else first) and
+            # stashed so open/move effects can target it between renders.
             stack_focus: nil,
             # The field editor's own state (D2.4 Chunk 2a): `%{id, field, sub, mode}` while `e` has
             # opened it, else nil. VIEW cursors only — the workspace's data lives in server and is
@@ -988,11 +980,6 @@ defmodule Console.Cockpit do
 
   defp select_focused_window(_state), do: :ok
 
-  # `nil` fold set → the implicit default "focused thread unfolded"; an explicit set is used as-is.
-  defp resolve_unfolded(nil, nil), do: MapSet.new()
-  defp resolve_unfolded(nil, focused_id), do: MapSet.new([focused_id])
-  defp resolve_unfolded(%MapSet{} = set, _focused_id), do: set
-
   defp active_workspace_id(%{active_key: key}) when Space.workspace?(key), do: key
 
   defp active_workspace_id(_state) do
@@ -1182,14 +1169,6 @@ defmodule Console.Cockpit do
   # Click a thread row in the list → open its conversation (two-step center).
   defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)
 
-  # Clicking a thread card focuses it AND toggles its fold — the collapse/expand button (Slice 3).
-  # Toggle against the CURRENTLY-VISIBLE fold state (resolve the nil default) so a click matches
-  # what's on screen.
-  defp apply_pick({:fold_thread, id}, state) do
-    set = resolve_unfolded(state.unfolded, state.stack_focus)
-    next = if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
-    {:noreply, render(%{state | focused_id: id, unfolded: next})}
-  end
 
   # Reset scroll offsets when the context they're relative to changes. A space switch swaps every
   # panel, so all offsets go; a focus change only swaps the thread-specific panels (Brief,
@@ -1508,25 +1487,6 @@ defmodule Console.Cockpit do
 
     {:noreply, state}
   end
-
-  # The `n` verb landed: open the thread, focus it, AND spawn a session onto it in one motion —
-  # a new thread is a new piece of work, so `n` starts working on it. A bad title just flashes.
-  # `z`: fold/unfold the stack's active thread card (Slice 3). Materializes the implicit "active
-  # unfolded" default (nil) into an explicit set before toggling, so folding the active card sticks.
-  defp apply_effect({:toggle_fold}, %{stack_focus: nil} = state), do: {:noreply, state}
-
-  defp apply_effect({:toggle_fold}, %{stack_focus: id, unfolded: unfolded} = state) do
-    set = resolve_unfolded(unfolded, id)
-    next = if MapSet.member?(set, id), do: MapSet.delete(set, id), else: MapSet.put(set, id)
-    {:noreply, render(%{state | unfolded: next})}
-  end
-
-  # `Z`: zoom the active thread full-screen (a real zoom over the stack), or unzoom if already zoomed.
-  defp apply_effect({:zoom_thread}, %{zoomed: z} = state) when not is_nil(z),
-    do: {:noreply, render(%{state | zoomed: nil})}
-
-  defp apply_effect({:zoom_thread}, %{stack_focus: nil} = state), do: {:noreply, state}
-  defp apply_effect({:zoom_thread}, %{stack_focus: id} = state), do: {:noreply, render(%{state | zoomed: id})}
 
   defp apply_effect({:create_thread, text}, state) do
     # The typed text is the OPENING MESSAGE, not just a title: post it as the operator so the thread

@@ -116,9 +116,7 @@ defmodule Console.Keymap do
           | {:write_note, String.t()}
           | {:orchestrate, String.t()}
           | {:confirm_orchestrate, map()}
-          | {:toggle_fold}
           | :toggle_session_pane
-          | {:zoom_thread}
           | {:post_message, term(), String.t()}
           | {:cycle_coworker_model, String.t()}
           | {:habit_action, :approve | :reject}
@@ -551,16 +549,6 @@ defmodule Console.Keymap do
   # handles the typing/cursor; Enter (above) dispatches to the orchestrator.
   defp command(%{key: :char, char: ":"}, state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
-
-  # Space toggles the fold on the focused card (the standard fold-nav paradigm: z/Enter/Space).
-  # Tertius is focused by click or `:`.
-  defp command(%{key: :space}, state), do: {state, {:toggle_fold}}
-
-  # `z` folds/unfolds the active thread card in the stack; `Z` zooms one thread full-screen (a real
-  # zoom over the stack), `Z` again to go back (Slice 3).
-  defp command(%{key: :char, char: "z"}, state), do: {state, {:toggle_fold}}
-  defp command(%{key: :char, char: "Z"}, state), do: {state, {:zoom_thread}}
-  defp command(%{key: :char, char: "+"}, state), do: {state, {:zoom_thread}}
 
   # `g`/`G` jump the stack cursor to the top/bottom thread (vim/less convention).
   defp command(%{key: :char, char: "g"}, %{active_key: key} = state) when key != :orbis, do: jump(state, :first)

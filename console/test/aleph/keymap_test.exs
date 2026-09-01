@@ -863,21 +863,6 @@ defmodule Console.KeymapTest do
       assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
     end
 
-    test "z (bare, nav) folds/unfolds the focused thread card" do
-      assert {_s, {:toggle_fold}} = Keymap.handle(char("z"), state())
-    end
-
-    test "Z (bare, nav) zooms one thread full-screen" do
-      assert {_s, {:zoom_thread}} = Keymap.handle(char("Z"), state())
-    end
-
-    test "Space toggles the fold on the focused card (standard z/Enter/Space fold nav)" do
-      assert {_s, {:toggle_fold}} = Keymap.handle(key(:space), state())
-    end
-
-    test "+ zooms one thread (alias of Z)" do
-      assert {_s, {:zoom_thread}} = Keymap.handle(char("+"), state())
-    end
 
     test "g/G jump the cursor to the first/last thread (workspace context)" do
       s = state(%{active_key: 0, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2})
