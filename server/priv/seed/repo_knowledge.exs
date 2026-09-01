@@ -104,6 +104,40 @@
           "claiming ficciones work is green, or flag it unverified. Precommit compiles with " <>
           "--warnings-as-errors; the console may only call EXPORTED Server modules (the :boundary compiler " <>
           "enforces this — use the Server facade, never Server.Repo/Server.MCP.Tool from console)."
+    },
+    # --- 2026-09-01 direction (Andrew). These supersede the two-brain framing in seed:runtime-services
+    #     and seed:persistence as the TARGET; keep those as the current state until WS3 lands. ---
+    %{
+      intent: "seed:one-brain-direction",
+      kind: "decision",
+      provenance: "stated",
+      text:
+        "Architecture target (2026-09-01): converge on ONE always-up server as the single source of truth " <>
+          "— it owns the DB, MCP, and the future web UI (Phoenix) + Oban jobs. The cockpit becomes an RPC " <>
+          "client of it (distributed-Erlang :erpc into the server node), NOT an embedder — retiring today's " <>
+          "two brains (embedded :4041 on .dev/tlon.db vs systemd :4040 on wb.db). .dev DBs become test-only. " <>
+          "SQLite → Postgres is likely once Oban/web-UI land; build the client boundary first, migrate the store later."
+    },
+    %{
+      intent: "seed:coworker-lifecycle",
+      kind: "decision",
+      provenance: "stated",
+      text:
+        "Coworker lifecycle (2026-09-01): a coworker comes online ON-DEMAND when the operator posts to its " <>
+          "thread — never an eager spawn of the whole roster. A WARM lead (a live session inside the ~1h warmth " <>
+          "window) is woken (cheap resume, cache hot). A COLD or offline lead gets a FRESH session seeded from " <>
+          "Board.brief (dossier catch-up), NEVER a /resume of a huge transcript — re-ingesting a stale context " <>
+          "burns a 5-hour window. Switchboard.has_live_session? must treat a cold session as absent, or it strands."
+    },
+    %{
+      intent: "seed:bootstrap-knowledge-loop",
+      kind: "constraint",
+      provenance: "stated",
+      text:
+        "This seed file (priv/seed/repo_knowledge.exs) IS Tlön's wipe-proof brain: Server.Seed re-applies it " <>
+          "idempotently on every boot, so a DB wipe restores all of it. The intent is to bootstrap a fresh world " <>
+          "with as much accumulated knowledge as possible — so genuinely useful learnings should be PROMOTED from " <>
+          "session-banked facts into this file (keyed by a stable seed:* intent) rather than left to die on the next wipe."
     }
   ],
   # No seeded projects: ficciones is the monorepo (nix/home-manager + the Tlön app), and every
