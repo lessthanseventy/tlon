@@ -79,7 +79,7 @@ defmodule Console.View do
           base =
             no_digits(boxed(spine, cols.spine)) ++
               no_digits(boxed(rail, cols.rail)) ++
-              no_digits(boxed(center_panels, cols.center))
+              no_digits(boxed(center_panels, cols.center, new_thread_overrides(reads, cols.center.w)))
 
           # The right session pane (the selected thread's live lead PTY), only when toggled on.
           if session?,
@@ -150,6 +150,18 @@ defmodule Console.View do
   end
 
   defp composer_height(_reads, _w, _h), do: 0
+
+  # The new-thread band grows with its buffer (Andrew 2026-09-01): a height override for the center
+  # `boxed/3` = the wrapped line count + the 2-row frame, capped. The wrap width matches the panel's
+  # own (`Panel.NewThread.wrap_width/1`) over the band's inset content width, so height ↔ render agree.
+  defp new_thread_overrides(%{input: %{kind: :new_thread, buffer: buffer}}, center_w) do
+    content_w = max(center_w - 4, 8)
+    lines = buffer |> Panel.NewThread.wrapped_lines(Panel.NewThread.wrap_width(content_w)) |> length() |> max(1)
+
+    %{Panel.NewThread => min(lines + 2, 12)}
+  end
+
+  defp new_thread_overrides(_reads, _center_w), do: %{}
 
   defp composer_placement(_reads, 0, _w, _h), do: []
 
@@ -399,14 +411,15 @@ defmodule Console.View do
 
   # Stack sections vertically down a column as box rects, a 1-row gap between them. The picker
   # takes a fixed height, the rest split the remainder (the last absorbs the rounding remainder).
-  defp boxed([], _rect), do: []
+  defp boxed(panels, rect, overrides \\ %{})
+  defp boxed([], _rect, _overrides), do: []
 
-  defp boxed(panels, %{x: x, y: y, w: w, h: h}) do
+  defp boxed(panels, %{x: x, y: y, w: w, h: h}, overrides) do
     gaps = max(length(panels) - 1, 0) * @gap
     # The section budget is the column minus the inter-section gaps; never inflate it past what
     # fits (a `length(panels)` floor would push short columns off-frame). split_heights/2 fits the
     # sections into exactly this budget, so no placed box's `y + h` ever exceeds the column bottom.
-    heights = split_heights(panels, max(h - gaps, 0))
+    heights = split_heights(panels, max(h - gaps, 0), overrides)
 
     {placed, _y} =
       panels
@@ -421,8 +434,8 @@ defmodule Console.View do
   # Resolve each section's height within `total_h` (the column's row budget net of gaps). The
   # invariant is that the resolved heights SUM to at most `total_h`, so `boxed/2` never places a box
   # past the column bottom (design: "no overflow past the frame").
-  defp split_heights(panels, total_h) do
-    fixed = Enum.map(panels, &fixed_height/1)
+  defp split_heights(panels, total_h, overrides) do
+    fixed = Enum.map(panels, fn p -> Map.get(overrides, p) || fixed_height(p) end)
     fixed_sum = fixed |> Enum.reject(&is_nil/1) |> Enum.sum()
     flex_count = Enum.count(fixed, &is_nil/1)
 

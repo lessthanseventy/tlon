@@ -1020,9 +1020,14 @@ defmodule Console.KeymapTest do
       assert {%{input: %{buffer: "one\nt"}}, :repaint} = Keymap.handle(char("t"), s2)
     end
 
-    test "Shift+Enter in a title still submits (no newlines in thread titles)" do
+    test "Shift+Enter in the new-thread input inserts a newline (it's a multi-line message now)" do
       s = state(%{input: %{kind: :new_thread, buffer: "fable"}})
-      assert {%{input: nil}, {:create_thread, "fable"}} = Keymap.handle(key(:enter, shift: true), s)
+      assert {%{input: %{buffer: "fable\n", kind: :new_thread}}, :repaint} = Keymap.handle(key(:enter, shift: true), s)
+    end
+
+    test "plain Enter in the new-thread input submits (creates the thread)" do
+      s = state(%{input: %{kind: :new_thread, buffer: "fable"}})
+      assert {%{input: nil}, {:create_thread, "fable"}} = Keymap.handle(key(:enter), s)
     end
 
     test "Enter on a non-empty buffer posts {:post_message, thread_id, body} and leaves input mode" do

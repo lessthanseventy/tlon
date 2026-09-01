@@ -176,7 +176,7 @@ defmodule Console.Keymap do
   # Shift+Enter in the composer inserts a newline (a multiline body) instead of submitting, AT
   # the cursor (not always the end — Up/Down can have moved it off the last line). Must precede
   # the plain-Enter clauses — %{key: :enter, shift: true} also matches %{key: :enter}.
-  def handle(%{key: :enter, shift: true}, %{input: %{kind: :compose} = input} = state),
+  def handle(%{key: :enter, shift: true}, %{input: %{kind: kind} = input} = state) when kind in [:compose, :new_thread],
     do: {%{state | input: insert_at(input, "\n")}, :repaint}
 
   # Enter submits — but an empty buffer creates/posts nothing (cancel), never a blank thread/message.

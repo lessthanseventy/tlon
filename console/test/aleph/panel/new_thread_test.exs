@@ -23,4 +23,11 @@ defmodule Console.Panel.NewThreadTest do
     out = NewThread.render(%{input: %{kind: :orchestrate, buffer: "x"}}, @rect) |> text()
     assert out =~ "start a new thread"
   end
+
+  test "grows to multiple rows for a multi-line buffer" do
+    rows = NewThread.render(%{input: %{kind: :new_thread, buffer: "line one\nline two"}}, @rect)
+    assert length(rows) == 2
+    assert text(rows) =~ "line one"
+    assert text(rows) =~ "line two"
+  end
 end
