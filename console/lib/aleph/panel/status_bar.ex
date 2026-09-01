@@ -19,7 +19,7 @@ defmodule Console.Panel.StatusBar do
   @hints [
     {"^␣", "console"},
     {"^␣n", "new"},
-    {"^␣c", "post"},
+    {"^␣c", "reply"},
     {"^␣⏎", "spawn"},
     {"^␣Tab", "space"},
     {"^␣↑↓", "thread"},
@@ -39,7 +39,7 @@ defmodule Console.Panel.StatusBar do
 
     hints = [
       {"⏎", :header},
-      {" post", :dim},
+      {" reply", :dim},
       {"   ", :dim},
       {"⇧⏎", :header},
       {" newline", :dim},
@@ -284,7 +284,7 @@ defmodule Console.Panel.StatusBar do
   defp mode_seg(:nav), do: [{"Alt+0", "term"}, {"q", "quit"}]
   defp mode_seg(:lock), do: [{"Alt+g", "unlock"}]
 
-  defp space_seg(%{mode: :nav, workspace?: true}), do: [{"c", "post"}, {"n", "task"}, {"v", "chat"}, {"m", "driver"}]
+  defp space_seg(%{mode: :nav, workspace?: true}), do: [{"c", "reply"}, {"n", "new"}, {"v", "term"}, {"m", "model"}]
   defp space_seg(_data), do: []
 
   defp hints_row(hints) do

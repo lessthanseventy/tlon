@@ -78,9 +78,9 @@ defmodule Console.Panel.StatusBarTest do
     [_info, hints] = StatusBar.render(data, rect())
     line = Enum.map_join(hints, fn {t, _} -> t end)
     assert line =~ "Alt+0"
-    assert line =~ "c post"
-    assert line =~ "n task"
-    assert line =~ "m driver"
+    assert line =~ "c reply"
+    assert line =~ "n new"
+    assert line =~ "m model"
     assert line =~ "j/k commits"
     assert line =~ "⏎ diff"
   end
@@ -101,6 +101,6 @@ defmodule Console.Panel.StatusBarTest do
   test "hints keyed on workspace-ness, never the label: a renamed workspace still gets workspace hints" do
     data = base(%{space: "Uqbar", mode: :nav, workspace?: true})
     [_info, hints] = StatusBar.render(data, rect())
-    assert Enum.map_join(hints, fn {t, _} -> t end) =~ "c post"
+    assert Enum.map_join(hints, fn {t, _} -> t end) =~ "c reply"
   end
 end
