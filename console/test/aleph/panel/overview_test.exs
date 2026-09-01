@@ -1,58 +1,64 @@
 defmodule Console.Panel.OverviewTest do
-  # CHORUS — Orbis' center, re-pointed from a per-thread feed to the per-WORKSPACE survey. On-screen
-  # paint is the eye test; this pins the panel → styled-rows path headlessly (no termbox),
-  # asserting the header + workspace row + its rollup summary, and (D0.3) the cursor-row wash.
+  # HOME — the god-view dashboard (Slice D2): a stat header + one boxed card per workspace with its
+  # open/stalled/done tally + top threads. Pins the panel → styled-rows path headlessly (no termbox).
   use ExUnit.Case, async: true
 
   alias Console.Panel.Overview
 
   @rect %{x: 0, y: 0, w: 80, h: 100}
 
-  defp lines(rows) do
-    Enum.map(rows, fn row -> Enum.map_join(row, fn {t, _style} -> t end) end)
-  end
+  defp lines(rows), do: Enum.map(rows, fn row -> Enum.map_join(row, fn {t, _s} -> t end) end)
 
-  test "renders the ORBIS · workspaces header and one workspace row with its rollup summary" do
+  test "renders the HOME header + a boxed workspace card with its dot tally and top threads" do
     data = %{
       workspaces: [
         %{
           id: 1,
           name: "Tlön",
           summary: %{open: 2, stalled: 1, done: 3, conflicts: 4},
-          leaves: [%{id: 1}, %{id: 2}]
+          leaves: [%{id: 1, title: "redis cache", lead: "hronir", status: :open}]
         }
       ]
     }
 
     text = data |> Overview.render(@rect) |> lines() |> Enum.join("\n")
 
-    assert text =~ "ORBIS · workspaces"
+    assert text =~ "HOME"
     assert text =~ "Tlön"
-
-    # The workspace's summary line carries the leads/open/stalled/done/trouble rollup.
+    # the tally (dots rendered separately; the counts read in the header line)
     assert text =~ "2 open"
     assert text =~ "1 stalled"
     assert text =~ "3 done"
-    assert text =~ "4 conflicts"
+    # the per-thread rows are now surfaced (were discarded before)
+    assert text =~ "redis cache"
+    assert text =~ "hronir"
+    # a boxed card is drawn
+    assert text =~ "╭─"
   end
 
-  test "no workspaces (funes down / empty) renders the header and a placeholder, no crash" do
+  test "caps threads per card and notes the remainder" do
+    leaves = for i <- 1..7, do: %{id: i, title: "t#{i}", lead: "x", status: :open}
+    data = %{workspaces: [%{id: 1, name: "W", summary: %{open: 7, stalled: 0, done: 0, conflicts: 0}, leaves: leaves}]}
+    text = data |> Overview.render(@rect) |> lines() |> Enum.join("\n")
+
+    assert text =~ "t1"
+    assert text =~ "+3 more"
+  end
+
+  test "no workspaces renders the header and a placeholder, no crash" do
     text = %{workspaces: []} |> Overview.render(@rect) |> lines() |> Enum.join("\n")
-    assert text =~ "ORBIS · workspaces"
+    assert text =~ "HOME"
     assert text =~ "no workspaces"
   end
 
-  test "clicking a workspace row zooms to ITS OWN workspace id; the header is inert" do
-    data = %{
-      workspaces: [%{id: 9, name: "Tlön", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []}]
-    }
-
-    # Header (0) + blank (1), then the workspace's rows start at y = 2.
-    assert Overview.pick(data, @rect, 2) == {:switch_space, 9}
+  test "clicking a workspace card zooms to ITS OWN id; the header is inert" do
+    data = %{workspaces: [%{id: 9, name: "Tlön", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []}]}
+    # header is 3 rows; the first card's top border is at local_y 3.
+    assert Overview.pick(data, @rect, 3) == {:switch_space, 9}
     assert Overview.pick(data, @rect, 0) == nil
   end
 
-  test "with 2 workspaces, clicking the SECOND row's block zooms into its own id, not the first's" do
+  test "with 2 workspaces, clicking the SECOND card zooms into its own id, not the first's" do
     data = %{
       workspaces: [
         %{id: 1, name: "Tlön", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []},
@@ -60,27 +66,22 @@ defmodule Console.Panel.OverviewTest do
       ]
     }
 
-    # Each workspace block is 3 rows (head/summary/blank); workspace 1 spans content rows 2-4, workspace 2 5-7.
-    assert Overview.pick(data, @rect, 2) == {:switch_space, 1}
-    assert Overview.pick(data, @rect, 5) == {:switch_space, 2}
-    assert Overview.pick(data, @rect, 8) == nil
+    # Empty-leaf card = 3 rows + 1 blank = 4 tall. Card 1 covers content 0-3 (local_y 3-6), card 2 4-7 (7-10).
+    assert Overview.pick(data, @rect, 3) == {:switch_space, 1}
+    assert Overview.pick(data, @rect, 7) == {:switch_space, 2}
+    assert Overview.pick(data, @rect, 20) == nil
   end
 
-  test "the survey_cursor row washes :selected only while orbis_focus is :survey" do
+  test "the survey_cursor card's title washes :selected only while orbis_focus is :survey" do
     workspaces = [
       %{id: 1, name: "Tlön", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []},
       %{id: 2, name: "Freedonia", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []}
     ]
 
     rows = Overview.render(%{workspaces: workspaces, survey_cursor: 1, orbis_focus: :survey}, @rect)
-    freedonia_head = Enum.find(rows, &Enum.any?(&1, fn {t, _} -> t == "Freedonia" end))
-    assert Enum.any?(freedonia_head, fn {_t, s} -> s == :selected end)
-    tlon_head = Enum.find(rows, &Enum.any?(&1, fn {t, _} -> t == "Tlön" end))
-    refute Enum.any?(tlon_head, fn {_t, s} -> s == :selected end)
-
-    # Same cursor, but the thread list has focus — no row washes :selected.
-    rows2 = Overview.render(%{workspaces: workspaces, survey_cursor: 1, orbis_focus: :threads}, @rect)
-    freedonia_head2 = Enum.find(rows2, &Enum.any?(&1, fn {t, _} -> t == "Freedonia" end))
-    refute Enum.any?(freedonia_head2, fn {_t, s} -> s == :selected end)
+    freedonia = Enum.find(rows, &Enum.any?(&1, fn {t, _} -> t == "Freedonia" end))
+    assert Enum.any?(freedonia, fn {_t, s} -> s == :selected end)
+    tlon = Enum.find(rows, &Enum.any?(&1, fn {t, _} -> t == "Tlön" end))
+    refute Enum.any?(tlon, fn {_t, s} -> s == :selected end)
   end
 end

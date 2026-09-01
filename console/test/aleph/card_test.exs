@@ -47,23 +47,28 @@ defmodule Console.CardTest do
     end
   end
 
-  describe "boxed_card/4" do
-    test "frames a title + body in status-coloured box-drawing chars, w wide" do
-      [top | rest] = Card.boxed_card("ficciones", [[{"3 open", :dim}]], 24, :open)
+  describe "boxed_card" do
+    test "frames a title + body in the given frame style, w wide" do
+      [top | rest] = Card.boxed_card("ficciones", [[{"3 open", :dim}]], 24, :arch_builder)
       {body, [bottom]} = Enum.split(rest, -1)
 
       # top border carries the title and opens/closes with the frame corners
-      assert [{"╭─ ", :st_open}, {"ficciones", :label} | _] = top
-      assert List.last(top) == {"╮", :st_open}
+      assert [{"╭─ ", :arch_builder}, {"ficciones", :label} | _] = top
+      assert List.last(top) == {"╮", :arch_builder}
       # each body row is framed left+right
-      assert [[{"│ ", :st_open} | _] = row] = body
-      assert List.last(row) == {" │", :st_open}
+      assert [[{"│ ", :arch_builder} | _] = row] = body
+      assert List.last(row) == {" │", :arch_builder}
       # bottom is a single frame rule
-      assert [{"╰" <> _, :st_open}] = bottom
+      assert [{"╰" <> _, :arch_builder}] = bottom
+    end
+
+    test "title_style overrides the title colour (e.g. a selected card)" do
+      [top | _] = Card.boxed_card("ficciones", [], 24, :arch_builder, :selected)
+      assert Enum.at(top, 1) == {"ficciones", :selected}
     end
 
     test "a title too wide for the box is truncated, not overflowed" do
-      [top | _] = Card.boxed_card("a very long workspace name indeed", [], 12, :done)
+      [top | _] = Card.boxed_card("a very long workspace name indeed", [], 12, :st_done)
       title = Enum.at(top, 1) |> elem(0)
       assert String.length(title) <= 12
     end

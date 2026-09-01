@@ -260,29 +260,27 @@ defmodule Console.BoardTest do
       assert Enum.map_join(rows, "\n", &text/1) =~ "Enter to spawn"
     end
 
-    test "chorus surveys workspaces — the ORBIS · workspaces header + a row per workspace with its rollup" do
+    test "HOME dashboard — the header + a boxed workspace card with its dot tally" do
       workspaces = [
         %{
           id: 1,
           name: "Tlön",
           summary: %{open: 2, stalled: 1, done: 3, conflicts: 4},
-          leaves: [%{id: 1}, %{id: 2}]
+          leaves: [%{id: 1, title: "a thread", lead: "hronir", status: :open}]
         }
       ]
 
       rows = Overview.render(%{workspaces: workspaces}, %{x: 0, y: 0, w: 60, h: 40})
       joined = Enum.map_join(rows, "\n", &text/1)
 
-      assert joined =~ "ORBIS · workspaces"
+      assert joined =~ "HOME"
       assert joined =~ "Tlön"
-      # the workspace's summary line carries the open/stalled/done/trouble rollup
       assert joined =~ "2 open"
       assert joined =~ "1 stalled"
       assert joined =~ "3 done"
-      assert joined =~ "4 conflicts"
-      # the workspace header row washes :header (the ▸ + name)
-      workspace_head = Enum.find(rows, &(text(&1) =~ "Tlön" and text(&1) =~ "▸"))
-      assert Enum.any?(workspace_head, fn {_t, s} -> s == :header end)
+      # the card is boxed and the thread row surfaces
+      assert joined =~ "╭─"
+      assert joined =~ "a thread"
     end
   end
 
@@ -302,14 +300,14 @@ defmodule Console.BoardTest do
 
       data = %{workspaces: workspaces, scroll: 0}
       rect = %{x: 0, y: 0, w: 60, h: 40}
-      # survey header (0) + blank (1) select nothing
+      # the 3-row HOME header (0–2) selects nothing
       assert Overview.pick(data, rect, 0) == nil
-      assert Overview.pick(data, rect, 1) == nil
-      # the workspace's rows (head + summary + blank) span content rows 2–4 → zoom to its own id
-      assert {:switch_space, 3} = Overview.pick(data, rect, 2)
-      assert {:switch_space, 3} = Overview.pick(data, rect, 4)
-      # a click past the last workspace selects nothing
-      assert Overview.pick(data, rect, 5) == nil
+      assert Overview.pick(data, rect, 2) == nil
+      # the workspace's boxed card starts at row 3 → zoom to its own id
+      assert {:switch_space, 3} = Overview.pick(data, rect, 3)
+      assert {:switch_space, 3} = Overview.pick(data, rect, 5)
+      # a click far past the last workspace selects nothing
+      assert Overview.pick(data, rect, 30) == nil
     end
   end
 

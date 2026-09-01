@@ -1,79 +1,102 @@
 defmodule Console.Panel.Overview do
   @moduledoc """
-  ORBIS — the **survey**: Orbis' center, one row per WORKSPACE. Each workspace row shows its name and the
-  leads/open/stalled/done/trouble rollup for all its leaves — the god-view glance the operator
-  opens on. `Enter` (keymap, `orbis_focus == :survey`) or a click zooms to the row's OWN workspace id
-  (D0.2 — no more a single hardcoded lens). Data is `%{workspaces: [%{id, name, summary, leaves}],
-  survey_cursor, orbis_focus}` — `workspaces` from `Console.Orbis.rollup/0`'s `workspaces` key (an empty list
-  when server is down / there are no workspaces); `survey_cursor`/`orbis_focus` (View-injected, D0.3)
-  wash the cursor row `:selected`, only while the survey (not the thread list) has focus.
+  HOME — the god-view **dashboard** (Slice D2, 2026-09-01): a stat row across every workspace, then
+  one **boxed card per workspace** (framed in the workspace's identity hue) showing its open/stalled/
+  done tally as status dots + its top few threads (status dot · title · lead). The per-thread rollup
+  rows `Console.Orbis.rollup/0` computes were previously discarded — this surfaces them.
 
-  Was a per-thread message feed (`Server.Channel.chorus/1`); re-pointed to workspaces in the Slice 0
-  collapse so the survey surveys workspaces, not threads. The per-thread rollup still lives in the
-  LEAVES sidebar (`Console.Panel.Leaves`), whose `summary_row/1` this reuses so the two never drift.
+  `Enter` (keymap, `orbis_focus == :survey`) or a click zooms to the card's own workspace id. Data is
+  `%{workspaces: [%{id, name, summary, leaves}], survey_cursor, orbis_focus}`; each `summary` is
+  `%{open, stalled, done, conflicts}` and each `leaves` entry `%{id, title, lead, status, …}`.
   """
   @behaviour Console.Panel
 
   import Console.Panel, only: [line: 2, blank: 0]
 
-  alias Console.Panel.Leaves
+  alias Console.Card
 
-  # Header (title) + blank spacer above the workspace rows; each workspace block is head + summary + blank.
-  @header_rows 2
-  @workspace_rows 3
+  @header_rows 3
+  @threads_shown 4
 
-  # The cockpit already subscribes to ALL activity events, so the survey repaints on any thread's
-  # activity — no per-thread topic needed.
   @impl Console.Panel
   def topics(_assigns), do: []
 
   @impl Console.Panel
   def render(%{workspaces: workspaces} = data, rect) do
-    header = [line("ORBIS · workspaces", :header), blank()]
-    # Only wash a row :selected while the SURVEY (not the thread list) has focus — D0.3.
     cursor = if Map.get(data, :orbis_focus) == :survey, do: Map.get(data, :survey_cursor)
+    w = rect.w
 
     body =
       case workspaces do
-        [] -> [line("no workspaces yet", :dim)]
-        ws -> ws |> Enum.with_index() |> Enum.flat_map(fn {w, i} -> workspace_rows(w, i == cursor) end)
+        [] -> [line("  no workspaces yet — press n to create one", :dim)]
+        list -> list |> Enum.with_index() |> Enum.flat_map(fn {ws, i} -> card(ws, i == cursor, w) ++ [blank()] end)
       end
 
-    Console.Panel.clip(header ++ body, rect)
+    Console.Panel.clip(header(workspaces) ++ body, rect)
   end
 
-  # Click a workspace's rows → zoom to ITS id (D0.2). The header + blank (rows 0–1) and clicks past
-  # the last workspace are inert.
+  # A click resolves to the workspace whose card covers `local_y` — walk the real (variable) card
+  # heights, exactly as render lays them out, since a card's height depends on its thread count.
   @impl Console.Panel
-  def pick(%{workspaces: workspaces} = data, _rect, local_y) do
-    idx = Console.Panel.scroll_offset(data) + local_y - @header_rows
-    workspace_at(workspaces, idx)
+  def pick(%{workspaces: workspaces} = data, rect, local_y) do
+    target = Console.Panel.scroll_offset(data) + local_y - @header_rows
+
+    workspaces
+    |> Enum.reduce_while({0, nil}, fn ws, {offset, _} ->
+      height = length(card(ws, false, rect.w)) + 1
+      if target >= offset and target < offset + height, do: {:halt, {offset, {:switch_space, ws.id}}}, else: {:cont, {offset + height, nil}}
+    end)
+    |> elem(1)
   end
 
   def pick(_data, _rect, _local_y), do: nil
 
-  # Every workspace block is a fixed @workspace_rows tall, so idx→workspace is plain integer division; a
-  # wrapping/variable-height summary would need to measure each block's rendered height instead.
-  defp workspace_at(workspaces, idx) when idx >= 0 do
-    case Enum.at(workspaces, div(idx, @workspace_rows)) do
-      %{id: id} -> {:switch_space, id}
-      nil -> nil
+  # -- rendering ------------------------------------------------------------
+
+  defp header(workspaces) do
+    totals =
+      Enum.reduce(workspaces, %{open: 0, stalled: 0, done: 0}, fn ws, acc ->
+        %{open: acc.open + ws.summary.open, stalled: acc.stalled + ws.summary.stalled, done: acc.done + ws.summary.done}
+      end)
+
+    count = length(workspaces)
+    [[{"HOME", :header}, {"  across #{count} workspace#{plural(count)}", :dim}], tally_row(totals), blank()]
+  end
+
+  defp card(ws, selected?, w) do
+    frame = Card.workspace_hue(ws)
+    title_style = if selected?, do: :selected, else: :label
+    body = [tally_row(ws.summary)] ++ thread_rows(ws.leaves)
+    Card.boxed_card(ws.name, body, w, frame, title_style)
+  end
+
+  # A tally as three status dots — the signal tier at a glance. Zeroes stay dim so a clean workspace
+  # reads clean; the dot still carries the colour so the eye finds trouble (stalled = red) instantly.
+  defp tally_row(%{open: o, stalled: s, done: d}) do
+    [
+      Card.status_dot(:open),
+      {" #{o} open   ", :dim},
+      Card.status_dot(:stalled),
+      {" #{s} stalled   ", :dim},
+      Card.status_dot(:done),
+      {" #{d} done", :dim}
+    ]
+  end
+
+  defp thread_rows(leaves) do
+    shown = Enum.take(leaves, @threads_shown)
+
+    rows =
+      Enum.map(shown, fn l ->
+        [Card.status_dot(l.status), {" ", :normal}, {l.title, :normal}, {"  ", :normal}, {l.lead || "—", :dim}]
+      end)
+
+    case length(leaves) - length(shown) do
+      more when more > 0 -> rows ++ [[{"+#{more} more", :dim}]]
+      _ -> rows
     end
   end
 
-  defp workspace_at(_workspaces, _idx), do: nil
-
-  # One workspace: a ▸ + its name (washed :selected under the survey cursor), then an indented summary
-  # line — leaf count + the shared rollup line (open/stalled/done, trouble called out only when
-  # there is any), then a blank spacer.
-  defp workspace_rows(%{name: name, summary: summary, leaves: leaves}, selected?) do
-    name_style = if selected?, do: :selected, else: :header
-    head = [{"▸ ", :accent}, {name, name_style}]
-    count = length(leaves)
-    summary_line = [{"  #{count} #{leaf_word(count)} · ", :dim} | Leaves.summary_row(summary)]
-    [head, summary_line, blank()]
-  end
-
-  defp leaf_word(1), do: "leaf"
-  defp leaf_word(_n), do: "leaves"
+  defp plural(1), do: ""
+  defp plural(_), do: "s"
 end

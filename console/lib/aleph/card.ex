@@ -66,21 +66,22 @@ defmodule Console.Card do
   end
 
   @doc """
-  A boxed card `w` wide: a status-coloured frame (`╭─ title ─╮` / `│ … │` / `╰──╯`) around
-  `body_rows` (each padded + framed). Title truncates if it can't fit. For the few big items.
+  A boxed card `w` wide: a `frame`-styled box (`╭─ title ─╮` / `│ … │` / `╰──╯`) around `body_rows`
+  (each padded + framed). `frame` is a style atom — pass `workspace_hue/1` for identity or
+  `status_color/1` for a status frame. `title_style` colours the title. Title truncates to fit.
   """
-  def boxed_card(title, body_rows, w, status \\ :open) when is_binary(title) do
-    frame = status_color(status)
+  def boxed_card(title, body_rows, w, frame \\ :separator, title_style \\ :label) when is_binary(title) do
     inner = max(w - 4, 1)
     title = String.slice(title, 0, max(w - 6, 1))
     fill = max(w - 5 - String.length(title), 0)
 
-    top = [{"╭─ ", frame}, {title, :label}, {" " <> String.duplicate("─", fill), frame}, {"╮", frame}]
+    top = [{"╭─ ", frame}, {title, title_style}, {" " <> String.duplicate("─", fill), frame}, {"╮", frame}]
     bottom = [{"╰" <> String.duplicate("─", max(w - 2, 0)) <> "╯", frame}]
 
     body =
       Enum.map(body_rows, fn row ->
-        [{"│ ", frame}] ++ Panel.pad(row, inner, :normal) ++ [{" │", frame}]
+        clipped = Panel.clip([row], %{w: inner, h: 1}) |> List.first() || []
+        [{"│ ", frame}] ++ Panel.pad(clipped, inner, :normal) ++ [{" │", frame}]
       end)
 
     [top] ++ body ++ [bottom]
