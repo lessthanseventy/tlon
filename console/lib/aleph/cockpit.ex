@@ -1423,7 +1423,9 @@ defmodule Console.Cockpit do
   defp apply_effect({:zoom_thread}, %{stack_focus: id} = state), do: {:noreply, render(%{state | zoomed: id})}
 
   defp apply_effect({:create_thread, title}, state) do
-    case Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state)}) do
+    # scope: "machine" — the center thread-stack shows machine-scope threads, so a new thread opened
+    # from the cockpit must be machine-scope or it's created invisibly (the "didn't make a thread" bug).
+    case Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state), scope: "machine"}) do
       {:ok, thread} -> {:noreply, render(%{state | focused_id: thread.id, flash: spawn_onto(thread.id, state)})}
       {:error, _changeset} -> {:noreply, render(%{state | flash: "couldn't create “#{title}”"})}
     end
