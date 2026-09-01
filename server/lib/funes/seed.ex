@@ -24,6 +24,10 @@ defmodule Server.Seed do
   require Logger
 
   @seed_path "priv/seed/repo_knowledge.exs"
+  # The machine-appended companion to the hand-curated file: `mix server.promote_fact` writes here,
+  # so a genuinely useful session-banked fact graduates into the wipe-proof set without hand-editing
+  # (or reformatting) the curated file. `load/0` merges both. Path is app-env overridable for tests.
+  @promoted_path "priv/seed/promoted_facts.exs"
 
   @doc """
   Apply the seed: bank any missing base facts, ensure the baseline projects in the default
@@ -53,14 +57,74 @@ defmodule Server.Seed do
       :skipped
   end
 
-  @doc "Load and evaluate the seed file into its data map (`%{facts: [...], projects: [...]}`)."
+  @doc "Load the seed data (`%{facts: [...], projects: [...]}`) — the curated file with the promoted
+  facts appended. A promoted fact sharing a curated `intent` is harmless (ensure_facts dedups by intent)."
   @spec load() :: map()
   def load do
     {data, _binding} = Code.eval_file(seed_file())
-    data
+    Map.update(data, :facts, promoted_facts(), &(&1 ++ promoted_facts()))
+  end
+
+  @doc "The machine-appended promoted facts (`[]` when the file doesn't exist yet)."
+  @spec promoted_facts() :: [map()]
+  def promoted_facts do
+    path = promoted_file()
+
+    if File.exists?(path) do
+      {list, _binding} = Code.eval_file(path)
+      list
+    else
+      []
+    end
+  end
+
+  @doc """
+  Add `fact`'s seed-entry to a `promoted` list under `intent`, idempotently — the pure core of
+  `mix server.promote_fact`. A stated fact keeps `stated` provenance; anything else records `derived`
+  (a promoted learning is our claim, not the owner's verbatim word). Returns the (possibly unchanged) list.
+  """
+  @spec promote(Fact.t(), [map()], String.t()) :: [map()]
+  def promote(%Fact{} = fact, promoted, intent) when is_binary(intent) do
+    if Enum.any?(promoted, &(&1[:intent] == intent)) do
+      promoted
+    else
+      promoted ++ [%{intent: intent, kind: fact.kind, provenance: fact.provenance || "derived", text: fact.text}]
+    end
+  end
+
+  @doc """
+  Promote the banked fact `id` into the wipe-proof set: resolve its `intent` (explicit → the fact's
+  own → a generated `seed:promoted:<id>`), append it to the promoted file idempotently, and write.
+  `{:ok, intent, count}` or `{:error, :no_fact}`. The engine behind `mix server.promote_fact`.
+  """
+  @spec promote_fact(integer() | String.t(), String.t() | nil) :: {:ok, String.t(), non_neg_integer()} | {:error, :no_fact}
+  def promote_fact(id, intent \\ nil) do
+    case Repo.get(Fact, id) do
+      nil ->
+        {:error, :no_fact}
+
+      %Fact{} = fact ->
+        key = intent || fact.intent || "seed:promoted:#{id}"
+        updated = promote(fact, promoted_facts(), key)
+        write_promoted(updated)
+        {:ok, key, length(updated)}
+    end
+  end
+
+  @doc "Serialize a promoted-facts list back to its file as an evaluable Elixir literal."
+  @spec write_promoted([map()]) :: :ok
+  def write_promoted(list) do
+    header =
+      "# Machine-appended seed facts (`mix server.promote_fact`) — promoted session learnings that must\n" <>
+        "# survive a DB wipe. `Server.Seed` merges these with the curated priv/seed/repo_knowledge.exs.\n" <>
+        "# Hand-edits are fine; keep it an evaluable list of %{intent:, kind:, provenance:, text:} maps.\n\n"
+
+    File.write!(promoted_file(), header <> inspect(list, pretty: true, limit: :infinity) <> "\n")
   end
 
   defp seed_file, do: Application.app_dir(:server, @seed_path)
+
+  defp promoted_file, do: Application.get_env(:server, :promoted_facts_path) || Application.app_dir(:server, @promoted_path)
 
   # Bank each fact whose `intent` isn't already present (forgotten or not — an operator's tombstone
   # is respected). Returns how many were banked this run.
