@@ -1496,12 +1496,19 @@ defmodule Console.Cockpit do
   defp apply_effect({:zoom_thread}, %{stack_focus: nil} = state), do: {:noreply, state}
   defp apply_effect({:zoom_thread}, %{stack_focus: id} = state), do: {:noreply, render(%{state | zoomed: id})}
 
-  defp apply_effect({:create_thread, title}, state) do
-    # scope: "machine" — the center thread-stack shows machine-scope threads, so a new thread opened
-    # from the cockpit must be machine-scope or it's created invisibly (the "didn't make a thread" bug).
-    case Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state), scope: "machine"}) do
-      {:ok, thread} -> {:noreply, render(%{state | focused_id: thread.id, flash: spawn_onto(thread.id, state)})}
-      {:error, _changeset} -> {:noreply, render(%{state | flash: "couldn't create “#{title}”"})}
+  defp apply_effect({:create_thread, text}, state) do
+    # The typed text is the OPENING MESSAGE, not just a title: post it as the operator so the thread
+    # reads as a real chat and its lead has something to answer (the "no messages yet / silent agent"
+    # bug). The title is a short slug of it. scope: "machine" so it shows in the stack.
+    operator = Application.get_env(:server, :operator, "andrew")
+
+    case Channel.open_thread(%{title: thread_title(text), workspace_id: active_workspace_id(state), scope: "machine"}) do
+      {:ok, thread} ->
+        _ = Channel.post(%{thread_id: thread.id, author: operator, body: text})
+        {:noreply, render(%{state | focused_id: thread.id, flash: spawn_onto(thread.id, state)})}
+
+      {:error, _changeset} ->
+        {:noreply, render(%{state | flash: "couldn't create the thread"})}
     end
   end
 
@@ -3240,6 +3247,11 @@ defmodule Console.Cockpit do
   end
 
   defp one_line(body), do: String.replace(body || "", "\n", " ")
+
+  # A thread title from its opening message — first line, trimmed to a glanceable length.
+  defp thread_title(text) do
+    text |> String.split("\n", parts: 2) |> List.first() |> String.trim() |> String.slice(0, 60)
+  end
 
   # `tmux new-window`, not Sessions.spawn_harness: a roster tail entry rides as a window of the
   # ALREADY-embedded tlon tmux session (the center is window 0), not a separate Console.Terminal/PTY
