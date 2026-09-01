@@ -40,9 +40,21 @@ defmodule Console.Panel.Activity do
     [{"  ⏸ ", :event_warn}, {"##{id} #{title} — #{stage} · approve #{id}", :event_warn}]
   end
 
+  # A posted message: the author is a COLOURED dot (operator pink, each agent its own stable hue),
+  # not wasted horizontal text — just the dot + the body. Every other event keeps its icon+text.
+  defp event_row({:message_posted, m}), do: [{"● ", author_style(m.author)}, {flatten(m.body), :dim}]
+
   defp event_row(event) do
     {icon, style, text} = summarize(event)
     [{icon, style}, {text, style}]
+  end
+
+  @author_hues [:arch_surveyor, :arch_builder, :arch_reviewer, :arch_planner, :arch_assistant]
+
+  defp author_style(author) do
+    if Server.Channel.operator?(author),
+      do: :operator,
+      else: Enum.at(@author_hues, rem(:erlang.phash2(author), length(@author_hues)))
   end
 
   @doc """

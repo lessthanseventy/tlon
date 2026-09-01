@@ -594,9 +594,16 @@ defmodule Console.Cockpit do
   # isn't up yet is skipped (the coworker is never spawned just to deliver a mention).
   @impl true
   def handle_info({:message_posted, row}, state) do
-    desktop_notify(:message_posted, row)
-    mention_notify(row, state)
-    {:noreply, render(push_activity(state, :message_posted, row))}
+    # First-sight gate (like the tagged-event clause): a message can arrive twice (thread + activity
+    # topics, or the mirror re-broadcast), which was doubling every line in the NOW feed. Dedup by id.
+    if fresh?(state, :message_posted, row) do
+      desktop_notify(:message_posted, row)
+      mention_notify(row, state)
+      state = %{state | seen_events: cap_seen([seen_key(:message_posted, row) | state.seen_events])}
+      {:noreply, render(push_activity(state, :message_posted, row))}
+    else
+      {:noreply, state}
+    end
   end
 
   # The activity-buffer subset of this clause's tags: `Server.Bus` publishes these to the global
