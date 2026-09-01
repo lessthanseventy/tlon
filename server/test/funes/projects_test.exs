@@ -19,7 +19,8 @@ defmodule Server.ProjectsTest do
     test "inserts under a workspace and announces on the projects topic", %{workspace: ws} do
       Bus.subscribe_projects()
 
-      {:ok, project} = Projects.register(%{workspace_id: ws.id, name: "cockpit", repos: [%{"name" => "ficciones", "path" => "."}]})
+      {:ok, project} =
+        Projects.register(%{workspace_id: ws.id, name: "cockpit", repos: [%{"name" => "ficciones", "path" => "."}]})
 
       assert %Project{} = project
       assert project.name == "cockpit"
@@ -82,6 +83,62 @@ defmodule Server.ProjectsTest do
       {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "cockpit"})
       {:ok, _thread} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id, project_id: p.id})
       assert {:error, :has_threads} = Projects.remove(p)
+    end
+  end
+
+  describe "repo_for_thread/1 — resolve a thread to its primary repo dir (Slice 4, the worktree base)" do
+    alias Server.Channel
+
+    test "the thread's project's FIRST repo path, ~-expanded", %{workspace: ws} do
+      repos = [%{"name" => "ficciones", "path" => "~/projects/ficciones"}, %{"name" => "other", "path" => "/x"}]
+      {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "cockpit", repos: repos})
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+
+      assert {:ok, path} = Projects.repo_for_thread(t)
+      assert path == Path.expand("~/projects/ficciones")
+    end
+
+    test "with no project_id, falls back to the workspace's first repo-bearing project", %{workspace: ws} do
+      # An earlier repo-less project is skipped; the resolver finds the one that has repos.
+      {:ok, _empty} = Projects.register(%{workspace_id: ws.id, name: "empty"})
+
+      {:ok, _p} =
+        Projects.register(%{workspace_id: ws.id, name: "has-repo", repos: [%{"name" => "r", "path" => "/srv/r"}]})
+
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id})
+
+      assert {:ok, "/srv/r"} = Projects.repo_for_thread(t)
+    end
+
+    test "an explicit project with NO repos resolves to :no_repo (never silently borrows another's)", %{workspace: ws} do
+      {:ok, other} =
+        Projects.register(%{workspace_id: ws.id, name: "other", repos: [%{"name" => "r", "path" => "/srv/r"}]})
+
+      {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "cockpit", repos: []})
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+      _ = other
+
+      assert {:error, :no_repo} = Projects.repo_for_thread(t)
+    end
+
+    test "no repo-bearing project anywhere in the workspace → {:error, :no_repo}", %{workspace: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id})
+      assert {:error, :no_repo} = Projects.repo_for_thread(t)
+    end
+  end
+
+  describe "repo_for_workspace/1 — the STACK panel's per-workspace git dir" do
+    test "the workspace's first repo-bearing project's ~-expanded primary repo", %{workspace: ws} do
+      {:ok, _empty} = Projects.register(%{workspace_id: ws.id, name: "empty"})
+      {:ok, _p} = Projects.register(%{workspace_id: ws.id, name: "client", repos: [%{"name" => "r", "path" => "~/projects/x"}]})
+
+      assert {:ok, path} = Projects.repo_for_workspace(ws.id)
+      assert path == Path.expand("~/projects/x")
+    end
+
+    test "no repo-bearing project → {:error, :no_repo}; a nil id too", %{workspace: ws} do
+      assert {:error, :no_repo} = Projects.repo_for_workspace(ws.id)
+      assert {:error, :no_repo} = Projects.repo_for_workspace(nil)
     end
   end
 end

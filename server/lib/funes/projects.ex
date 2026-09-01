@@ -49,4 +49,51 @@ defmodule Server.Projects do
       project |> Repo.delete() |> Bus.announce(:project_removed)
     end
   end
+
+  @doc """
+  Resolve a thread to the primary repo dir its work lives in (Slice 4 — the worktree/lazygit base).
+  An explicit `project_id` uses THAT project's first repo (or `:no_repo` — never silently borrows
+  another project's); a thread with no project falls back to the workspace's first repo-bearing
+  project. `{:ok, expanded_path}` or `{:error, :no_repo}`. The path is `~`-expanded but not checked
+  for existence — the caller (`Server.Worktree`) reports a bad tree honestly.
+  """
+  def repo_for_thread(%Server.Thread{project_id: pid}) when not is_nil(pid) do
+    pid |> get() |> primary_repo_path()
+  end
+
+  def repo_for_thread(%Server.Thread{workspace_id: wid}) when not is_nil(wid) do
+    wid
+    |> in_workspace()
+    |> Enum.find_value({:error, :no_repo}, fn project ->
+      case primary_repo_path(project) do
+        {:ok, _} = ok -> ok
+        {:error, _} -> false
+      end
+    end)
+  end
+
+  def repo_for_thread(_thread), do: {:error, :no_repo}
+
+  @doc """
+  The `~`-expanded path of a workspace's first repo-bearing project (its primary repo) — what the
+  cockpit's STACK panel reads git from, so each workspace shows ITS repo. `{:ok, path}` or
+  `{:error, :no_repo}`. Not existence-checked (the caller decides how to degrade).
+  """
+  def repo_for_workspace(workspace_id) when is_integer(workspace_id) do
+    workspace_id
+    |> in_workspace()
+    |> Enum.find_value({:error, :no_repo}, fn project ->
+      case primary_repo_path(project) do
+        {:ok, _} = ok -> ok
+        {:error, _} -> false
+      end
+    end)
+  end
+
+  def repo_for_workspace(_), do: {:error, :no_repo}
+
+  # The first repo's `~`-expanded path, or `:no_repo`. Repos are a JSON list of `%{"path" => …}`.
+  defp primary_repo_path(%Project{repos: [%{"path" => path} | _]}) when is_binary(path), do: {:ok, Path.expand(path)}
+
+  defp primary_repo_path(_project), do: {:error, :no_repo}
 end

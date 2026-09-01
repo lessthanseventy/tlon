@@ -71,6 +71,9 @@ defmodule Server do
   """
   def repo_for_thread(%Server.Thread{} = thread), do: Server.Projects.repo_for_thread(thread)
 
+  @doc "A workspace's primary repo dir — the cockpit STACK panel's per-workspace git root. See `Projects.repo_for_workspace/1`."
+  defdelegate repo_for_workspace(workspace_id), to: Server.Projects
+
   def repo_for_thread(thread_id) when is_integer(thread_id) do
     case Server.Channel.thread(thread_id) do
       nil -> {:error, :no_thread}

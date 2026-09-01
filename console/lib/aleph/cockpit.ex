@@ -2577,7 +2577,8 @@ defmodule Console.Cockpit do
   defp commit_detail(state, index) do
     case Enum.at((state.stack || @empty_stack).commits, index) do
       %{hash: hash, subject: subject} ->
-        %{title: "commit #{hash} · #{subject}", lines: Enum.map(Console.Stack.show(hash), &diff_line/1)}
+        dir = workspace_repo_dir(active_workspace_id(state))
+        %{title: "commit #{hash} · #{subject}", lines: Enum.map(Console.Stack.show(hash, dir), &diff_line/1)}
 
       nil ->
         nil
@@ -2618,7 +2619,7 @@ defmodule Console.Cockpit do
   defp ensure_probes(%{active_key: key, stack: nil} = state) when Space.workspace?(key) do
     %{
       state
-      | stack: stack_read(),
+      | stack: stack_read(key),
         health: health_read(),
         memory: memory_read(),
         leaves: orbis_read(key),
@@ -2655,19 +2656,30 @@ defmodule Console.Cockpit do
 
   # The STACK read: branch, dirty status, ahead/behind, status summary, enriched commits.
   # One ahead_behind call, destructured — it forks a git per call.
-  defp stack_read do
-    {ahead, behind} = Console.Stack.ahead_behind()
+  defp stack_read(workspace_id) do
+    dir = workspace_repo_dir(workspace_id)
+    {ahead, behind} = Console.Stack.ahead_behind(dir)
 
     %{
-      branch: Console.Stack.branch(),
-      dirty: Console.Stack.dirty?(),
+      branch: Console.Stack.branch(dir),
+      dirty: Console.Stack.dirty?(dir),
       ahead: ahead,
       behind: behind,
-      status_summary: Console.Stack.status_summary(),
-      commits: Console.Stack.commits(),
-      files: Console.Stack.recent_files(),
+      status_summary: Console.Stack.status_summary(dir),
+      commits: Console.Stack.commits(dir),
+      files: Console.Stack.recent_files(dir),
       tools: Console.Stack.tools()
     }
+  end
+
+  # The git root the active workspace's STACK reads from: its primary repo path (each workspace
+  # carries one), falling back to "." (the console's own checkout — the ficciones monorepo) when the
+  # workspace has no real repo dir (e.g. a glob path like "modules/*", or a client dir that's absent).
+  defp workspace_repo_dir(workspace_id) do
+    case Server.repo_for_workspace(workspace_id) do
+      {:ok, path} -> if File.dir?(path), do: path, else: "."
+      _ -> "."
+    end
   end
 
   # The HEALTH read. One nix_status call for gen+behind — nix-env --list-generations is the
