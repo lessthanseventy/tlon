@@ -1598,7 +1598,10 @@ defmodule Console.Cockpit do
   # offset clamps to the bottom at render). Esc closes back to the list.
   defp apply_effect({:open_thread_view, id}, state) when is_integer(id) do
     scrolls = Map.put(state.scrolls, Panel.ThreadStack, 100_000)
-    {:noreply, render(%{state | opened_thread: id, focused_id: id, stack_focus: id, scrolls: scrolls})}
+    # Opening a thread IS focusing its reply (2026-09-01): seed the persistent `:reply` input so the
+    # box is live the instant the conversation shows — no `c` verb. `:close_thread_view` tears it down.
+    input = %{kind: :reply, thread_id: id, buffer: "", cursor: 0}
+    {:noreply, render(%{state | opened_thread: id, focused_id: id, stack_focus: id, scrolls: scrolls, input: input})}
   end
 
   defp apply_effect(:open_focused_thread, %{stack_focus: id} = state) when is_integer(id),
@@ -1607,7 +1610,7 @@ defmodule Console.Cockpit do
   defp apply_effect(:open_focused_thread, state), do: {:noreply, state}
 
   defp apply_effect(:close_thread_view, state),
-    do: {:noreply, render(%{state | opened_thread: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
+    do: {:noreply, render(%{state | opened_thread: nil, input: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
 
   # Scroll the open conversation by `n` rows (j/k in conversation mode); clamped at render.
   defp apply_effect({:scroll_conversation, n}, state) do

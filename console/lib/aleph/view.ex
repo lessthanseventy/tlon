@@ -129,8 +129,13 @@ defmodule Console.View do
   # failed/empty read (server down) degrades to the PTY, never a blank center.
   defp chat_center(surface, %{center_view: :chat} = reads) do
     if is_map(reads[:thread_stack]) do
+      # The bottom band morphs with the center step (2026-09-01): with a thread OPENED the new-thread
+      # band gives way to that thread's persistent Reply box (one band, two faces, never both).
+      opened? = is_integer(reads[:opened_thread])
+
       Enum.map(surface, fn
         {Panel.Terminal, _read_key} -> {Panel.ThreadStack, :thread_stack}
+        Panel.NewThread when opened? -> Panel.Reply
         other -> other
       end)
     else
@@ -160,6 +165,14 @@ defmodule Console.View do
     lines = buffer |> Panel.NewThread.wrapped_lines(Panel.NewThread.wrap_width(content_w)) |> length() |> max(1)
 
     %{Panel.NewThread => min(lines + 2, 12)}
+  end
+
+  # The reply band grows the same way (its wrap width nets the id-dependent `↳ reply to #N ▸` prefix).
+  defp new_thread_overrides(%{input: %{kind: :reply, thread_id: id, buffer: buffer}}, center_w) do
+    content_w = max(center_w - 4, 8)
+    lines = buffer |> Panel.Reply.wrapped_lines(Panel.Reply.wrap_width(content_w, id)) |> length() |> max(1)
+
+    %{Panel.Reply => min(lines + 2, 12)}
   end
 
   defp new_thread_overrides(_reads, _center_w), do: %{}
@@ -345,6 +358,7 @@ defmodule Console.View do
   # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
   def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
   def data_for(Panel.NewThread, r), do: %{input: r[:input]}
+  def data_for(Panel.Reply, r), do: %{input: r[:input]}
   def data_for(Panel.WindowBar, r), do: %{tabs: window_tabs(r), engine: engine_state(), thread: r.focused_id}
   def data_for(Panel.Triage, r), do: r.triage
   def data_for(Panel.Memory, r), do: r[:memory]
@@ -471,8 +485,9 @@ defmodule Console.View do
   # The tertius band is taller than the Ticker pulse it replaces: the input line + up to 2 receipts,
   # plus the 2-row frame.
   defp fixed_height(Panel.Tertius), do: 5
-  # The new-thread band: one input row + the 2-row frame.
+  # The new-thread band and its conversation-step twin, the reply band: one input row + the 2-row frame.
   defp fixed_height(Panel.NewThread), do: 3
+  defp fixed_height(Panel.Reply), do: 3
   defp fixed_height({panel, _read_key}), do: fixed_height(panel)
   defp fixed_height(_panel), do: nil
 

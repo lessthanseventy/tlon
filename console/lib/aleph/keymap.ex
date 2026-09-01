@@ -169,13 +169,23 @@ defmodule Console.Keymap do
 
   # --- input mode: a MODAL — every key belongs to the buffer until Enter/Esc, so a binding
   # letter (q, s, tab) types its character instead of firing. Must come first. ---
+  # The persistent reply box (2026-09-01): Esc doesn't just drop the input, it steps the whole
+  # center back to the thread LIST (`:close_thread_view` clears `opened_thread`) AND drops the draft,
+  # so no half-typed reply leaks into the next thread. Precedes the generic Esc below.
+  def handle(%{key: :escape}, %{input: %{kind: :reply}} = state), do: {%{state | input: nil}, :close_thread_view}
+
   def handle(%{key: :escape}, %{input: %{}} = state), do: {%{state | input: nil}, :repaint}
 
   # Shift+Enter in the composer inserts a newline (a multiline body) instead of submitting, AT
   # the cursor (not always the end — Up/Down can have moved it off the last line). Must precede
   # the plain-Enter clauses — %{key: :enter, shift: true} also matches %{key: :enter}.
-  def handle(%{key: :enter, shift: true}, %{input: %{kind: kind} = input} = state) when kind in [:compose, :new_thread],
+  def handle(%{key: :enter, shift: true}, %{input: %{kind: kind} = input} = state) when kind in [:compose, :new_thread, :reply],
     do: {%{state | input: insert_at(input, "\n")}, :repaint}
+
+  # The reply box is PERSISTENT (born with the open thread), so Enter on an empty buffer is a plain
+  # no-op — it must NOT clear the input like the transient composers below (that would blank the box
+  # mid-conversation). Precedes the generic empty-buffer clause.
+  def handle(%{key: :enter}, %{input: %{kind: :reply, buffer: ""}} = state), do: {state, :repaint}
 
   # Enter submits — but an empty buffer creates/posts nothing (cancel), never a blank thread/message.
   def handle(%{key: :enter}, %{input: %{buffer: ""}} = state), do: {%{state | input: nil}, :repaint}
@@ -222,6 +232,12 @@ defmodule Console.Keymap do
       _body -> {%{state | input: nil}, {:post_message, id, buffer}}
     end
   end
+
+  # The reply box posts to its thread and STAYS focused with a cleared buffer (unlike the composer,
+  # which closes) — send, keep talking. The empty-buffer case already returned above, so `buffer`
+  # here is non-blank.
+  def handle(%{key: :enter}, %{input: %{kind: :reply, thread_id: id, buffer: buffer} = input} = state),
+    do: {%{state | input: %{input | buffer: "", cursor: 0}}, {:post_message, id, buffer}}
 
   # Backspace deletes the grapheme BEFORE the cursor (not always the buffer's last char — the
   # cursor can sit mid-buffer once Up/Down/Left/Right have moved it). A cursor at 0 is a no-op.
@@ -293,6 +309,12 @@ defmodule Console.Keymap do
   # lock arm included) — they fall to the ignore catch-all below.
   def handle(%{key: :char, char: c} = k, %{input: %{}} = state) when is_binary(c) and not is_map_key(k, :alt),
     do: {%{state | input: insert_at(state.input, c)}, :repaint}
+
+  # With the reply box focused the buffer owns j/k (they type), so backlog scrolling rides PgUp/PgDn
+  # (and the mouse wheel, handled in the cockpit) — routed to the same `:scroll_conversation` effect
+  # the list-nav path used. Precede the ignore catch-all so these don't vanish while typing.
+  def handle(%{key: :page_up}, %{input: %{kind: :reply}} = state), do: {state, {:scroll_conversation, -3}}
+  def handle(%{key: :page_down}, %{input: %{kind: :reply}} = state), do: {state, {:scroll_conversation, 3}}
 
   # A space can arrive as %{key: :space} with no `char`: under [>1u disambiguation (which the cockpit
   # enables) Kitty CSI-u reports Shift+Space as [32;2u → %{key: :space, shift: true}. A plain space
@@ -705,11 +727,11 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, -3}}
   defp handle_tlon(%{key: :escape}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, :close_thread_view}
 
-  # `n` (focus the new-thread band) and `c` (reply to the focused card) are the create/write verbs —
-  # they drive the chat directly here (like j/k/z), so they work while you're looking at the stack,
-  # not only via the Alt chords. Precede the forward clause below.
+  # `n` focuses the new-thread band while looking at the LIST (like j/k), not only via the Alt chords.
+  # `c` is retired from the chat flow: opening a thread now focuses its persistent reply box directly
+  # (the `:reply` input), so there's no compose verb to reach here. (`c` still opens a composer in
+  # Orbis / terminal view via the `command` clause, which routes through `composer_thread_id`.)
   defp handle_tlon(%{key: :char, char: "n"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: command(k, state)
-  defp handle_tlon(%{key: :char, char: "c"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: command(k, state)
   # `d` arms the two-key delete for the FOCUSED thread card (the second `d` is caught by the armed
   # clause at the top of handle_tlon). This restores thread-delete, lost when the MachineChat TUI and
   # the LEAVES rail panel — the old delete surfaces — were retired.

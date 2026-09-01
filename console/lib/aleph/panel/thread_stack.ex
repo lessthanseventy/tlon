@@ -1,15 +1,16 @@
 defmodule Console.Panel.ThreadStack do
   @moduledoc """
-  The cockpit center (Slice 3, 2026-08-30): a vertical stack of Slack-style thread cards. Each card
-  is **folded** (a one-line header — so a stack of folded cards IS the thread list) or **unfolded**
-  (`z` — the conversation + a per-thread reply input). The active thread is unfolded by default.
+  The cockpit center (Slice 3, 2026-08-30): a two-step master⇄detail. With no thread `opened` it's a
+  clean LIST (one row per thread — a stack of headers IS the thread list); with a thread opened it's
+  that ONE conversation, scrollable and text-selectable. Replying is a separate persistent band below
+  (`Console.Panel.Reply`), focused the moment a thread opens — this panel is read-only backlog.
 
-  Styling: the active card carries an accent gutter (`▌`) and a bright header; folded/inactive cards
-  are quiet. Messages are nested under the header, author-coloured and paragraph-wrapped (the same
-  quality as `Console.Panel.Conversation`), with breathing room between them and between cards.
+  Styling: the active row carries an accent gutter (`▌`) and a bright header; inactive rows are quiet.
+  Messages are nested under the header, author-coloured and paragraph-wrapped (the same quality as
+  `Console.Panel.Conversation`), with breathing room between them.
 
-  Data is `%{cards: [card]}`, a card `%{id, title, lead, stage, awaiting, folded?, active?, messages}`
-  (`messages` a list of `%{author, body}`, read only when unfolded). Pure render.
+  Data is `%{cards: [card], opened: id | nil}`, a card `%{id, title, lead, stage, awaiting, active?,
+  messages}` (`messages` a list of `%{author, body}`, read only for the opened thread). Pure render.
   """
   @behaviour Console.Panel
 
@@ -40,7 +41,7 @@ defmodule Console.Panel.ThreadStack do
   end
 
   @impl Console.Panel
-  def hints(%{opened: opened}) when is_integer(opened), do: [{"esc", "back"}, {"c", "reply"}, {"j/k", "scroll"}]
+  def hints(%{opened: opened}) when is_integer(opened), do: [{"type", "reply"}, {"⇞⇟", "scroll"}, {"esc", "back"}]
   def hints(_data), do: [{"⏎", "open"}, {"j/k", "move"}, {"n", "new"}]
 
   # LIST: one row per thread, so `local_y` indexes the card directly → OPEN it (not fold).
@@ -76,7 +77,9 @@ defmodule Console.Panel.ThreadStack do
       end
 
     header = [[{"‹ ", :accent}, {"##{card.id} #{card.title}", :header}] ++ chips(card), blank()]
-    footer = [blank(), reply_row(card), line("#{@indent}esc · back to threads", :dim)]
+    # The reply input is its own persistent band below this panel now (Panel.Reply) — the conversation
+    # just carries the backlog + a back-hint; the old inline `↳ reply… (c)` stub is retired.
+    footer = [blank(), line("#{@indent}esc · back to threads", :dim)]
 
     Console.Panel.clip(header ++ body ++ footer, rect)
   end
@@ -120,6 +123,4 @@ defmodule Console.Panel.ThreadStack do
 
     [[{"#{author}:", author_style}] | body_rows]
   end
-
-  defp reply_row(card), do: [{"#{@indent}↳ ", :accent}, {"reply to ##{card.id}… (c)", :dim}]
 end

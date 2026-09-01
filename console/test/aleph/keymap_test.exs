@@ -926,11 +926,16 @@ defmodule Console.KeymapTest do
       assert {_s, :open_focused_thread} = Keymap.handle(key(:enter), stack_ctx())
     end
 
-    test "in conversation mode: j/k scroll, Esc goes back to the list" do
-      s = stack_ctx(%{opened_thread: 2})
-      assert {_s, {:scroll_conversation, 3}} = Keymap.handle(char("j"), s)
-      assert {_s, {:scroll_conversation, -3}} = Keymap.handle(char("k"), s)
-      assert {_s, :close_thread_view} = Keymap.handle(key(:escape), s)
+    test "in conversation mode the reply box owns typing: j/k type, PgUp/PgDn scroll, Esc backs out" do
+      # A thread is open ⇒ the reply input is present, so the modal owns keys (j/k type into it).
+      s = stack_ctx(%{opened_thread: 2, input: %{kind: :reply, thread_id: 2, buffer: "", cursor: 0}})
+      assert {%{input: %{buffer: "j"}}, :repaint} = Keymap.handle(char("j"), s)
+      assert {%{input: %{buffer: "k"}}, :repaint} = Keymap.handle(char("k"), s)
+      # Backlog scroll rides PgUp/PgDn (+ wheel, tested via the cockpit) — j/k are the buffer's now.
+      assert {_s, {:scroll_conversation, -3}} = Keymap.handle(key(:page_up), s)
+      assert {_s, {:scroll_conversation, 3}} = Keymap.handle(key(:page_down), s)
+      # Esc steps back to the list AND clears the reply so no draft leaks into the next thread.
+      assert {%{input: nil}, :close_thread_view} = Keymap.handle(key(:escape), s)
     end
 
     test ": focuses the tertius line from the stack" do
@@ -940,6 +945,37 @@ defmodule Console.KeymapTest do
     test "with the terminal center (center_view :terminal), keys still forward" do
       s = stack_ctx(%{center_view: :terminal})
       assert {^s, {:forward, %{key: :char, char: "j"}}} = Keymap.handle(char("j"), s)
+    end
+  end
+
+  describe "the per-thread reply input (:reply — the persistent thread-scope box)" do
+    defp reply_ctx(over \\ %{}),
+      do: stack_ctx(Map.merge(%{opened_thread: 2, input: %{kind: :reply, thread_id: 2, buffer: "", cursor: 0}}, over))
+
+    test "typing inserts into the reply buffer (the box is always focused)" do
+      assert {%{input: %{kind: :reply, buffer: "hi"}}, :repaint} =
+               Keymap.handle(char("i"), reply_ctx(%{input: %{kind: :reply, thread_id: 2, buffer: "h", cursor: 1}}))
+    end
+
+    test "Enter on a non-empty buffer posts to the thread AND keeps the box focused (buffer cleared)" do
+      s = reply_ctx(%{input: %{kind: :reply, thread_id: 2, buffer: "ship it", cursor: 7}})
+      assert {%{input: %{kind: :reply, thread_id: 2, buffer: "", cursor: 0}}, {:post_message, 2, "ship it"}} =
+               Keymap.handle(key(:enter), s)
+    end
+
+    test "Enter on an empty buffer is a no-op — never posts blank, never closes the box" do
+      s = reply_ctx()
+      assert {^s, :repaint} = Keymap.handle(key(:enter), s)
+    end
+
+    test "Shift+Enter inserts a newline (a multiline reply) instead of sending" do
+      s = reply_ctx(%{input: %{kind: :reply, thread_id: 2, buffer: "one", cursor: 3}})
+      assert {%{input: %{kind: :reply, buffer: "one\n"}}, :repaint} = Keymap.handle(key(:enter, shift: true), s)
+    end
+
+    test "Esc sends nothing, backs out to the list, and clears the draft" do
+      s = reply_ctx(%{input: %{kind: :reply, thread_id: 2, buffer: "half typed", cursor: 10}})
+      assert {%{input: nil}, :close_thread_view} = Keymap.handle(key(:escape), s)
     end
   end
 

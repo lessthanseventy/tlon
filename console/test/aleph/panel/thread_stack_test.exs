@@ -54,7 +54,7 @@ defmodule Console.Panel.ThreadStackTest do
   end
 
   describe "conversation mode (a thread opened)" do
-    test "shows the opened thread's messages, a reply hint, and an esc-back hint" do
+    test "shows the opened thread's messages and an esc-back hint (the reply input is its own band now)" do
       cards = [
         card(%{id: 42, title: "review PR", lead: "hronir", stage: "review", messages: [%{author: "andrew", body: "take a look"}, %{author: "hronir", body: "on it"}]}),
         card(%{id: 43, title: "other"})
@@ -65,7 +65,8 @@ defmodule Console.Panel.ThreadStackTest do
       assert out =~ "andrew:"
       assert out =~ "take a look"
       assert out =~ "hronir:"
-      assert out =~ "reply to #42"
+      # the inline `↳ reply… (c)` stub is gone — replying is the persistent Panel.Reply band below
+      refute out =~ "reply to #42"
       assert out =~ "esc"
       # the OTHER thread's row is not shown in conversation mode
       refute out =~ "#43 other"
