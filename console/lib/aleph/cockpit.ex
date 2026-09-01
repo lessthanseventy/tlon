@@ -1504,8 +1504,13 @@ defmodule Console.Cockpit do
 
     case Channel.open_thread(%{title: thread_title(text), workspace_id: active_workspace_id(state), scope: "machine"}) do
       {:ok, thread} ->
+        # Post the opening message; do NOT spawn a PTY here. The thread is staffed (the lead
+        # invariant), so the render preamble's `ensure_thread_sessions` spawns its LEAD in a window
+        # and two-phase-injects this operator message — the proven wake path. `spawn_onto` used to
+        # fire here too, spawning a generic "pi" as an invisible per-thread terminal that never got
+        # the message (the "agent booted idle" bug) and doubled the real lead's spawn.
         _ = Channel.post(%{thread_id: thread.id, author: operator, body: text})
-        {:noreply, render(%{state | focused_id: thread.id, flash: spawn_onto(thread.id, state)})}
+        {:noreply, render(%{state | focused_id: thread.id, flash: "→ started “#{thread_title(text)}” · waking its lead"})}
 
       {:error, _changeset} ->
         {:noreply, render(%{state | flash: "couldn't create the thread"})}
