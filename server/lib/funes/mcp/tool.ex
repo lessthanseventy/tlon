@@ -600,18 +600,19 @@ defmodule Server.MCP.Tool.OpenThread do
   end
 end
 
-defmodule Server.MCP.Tool.StaffLeaf do
+defmodule Server.MCP.Tool.StaffChild do
   @moduledoc """
-  Open a NEW worker-led thread — the sanctioned "kick off a leaf" verb. Composes the cross-thread
-  primitives: open a thread titled `title`, assign the registered agent `lead`, and post `brief`
-  (authored by the CALLER's bound identity) as its opening message. Staffing, not spawning: no
-  terminal starts here — the cockpit's convergent leaf sweep sees a worker-led thread without a
-  window and stands one up (human-named, `@funes_thread`-tagged, leaf-cap-accounted, its harness
-  server-bound). An agent never launches a harness by hand — a bare spawn is not a server citizen
-  and is invisible to the board; it staffs the thread and lets the board actuate.
+  Open a NEW worker-led CHILD thread — the sanctioned "delegate a sub-effort" verb (lead-as-manager,
+  Slice 4D). Composes the cross-thread primitives: open a thread titled `title` parented at the
+  CALLER's thread (so its close reports up) and inheriting the caller's project, assign the registered
+  agent `lead`, and post `brief` (authored by the caller's bound identity) as its opening message.
+  Staffing, not spawning: no terminal starts here — the cockpit's convergent sweep sees a worker-led
+  thread without a window and stands one up (human-named, `@funes_thread`-tagged, cap-accounted, its
+  harness server-bound). An agent never launches a harness by hand — a bare spawn is not a server
+  citizen and is invisible to the board; it staffs the thread and lets the board actuate.
 
   The lead resolves BEFORE the thread opens, so a bad handle refuses cleanly instead of leaving an
-  orphan leaderless thread — the machine-chat silence bug's tool-side twin.
+  orphan lead-less thread — the machine-chat silence bug's tool-side twin.
   """
   use Anubis.Server.Component, type: :tool
 
@@ -622,7 +623,7 @@ defmodule Server.MCP.Tool.StaffLeaf do
   alias Server.Staff
 
   schema do
-    field :title, :string, required: true, description: "What the leaf is for (its NORTH STAR)"
+    field :title, :string, required: true, description: "What the child thread is for (its NORTH STAR)"
     field :lead, :string, required: true, description: "Registered worker handle to staff as lead (e.g. hronir-machine)"
     field :brief, :string, required: true, description: "The opening assignment, posted as the thread's first message"
   end
@@ -630,9 +631,12 @@ defmodule Server.MCP.Tool.StaffLeaf do
   @impl true
   def execute(params, frame) do
     identity = MCP.Identity.from_frame(frame)
+    # The child is parented at the CALLER's bound thread (lead-as-manager, Slice 4D) so its close
+    # reports up, and inherits the caller's project. An unbound caller opens a top-level thread.
+    parent = identity.thread_id && Channel.thread(identity.thread_id)
 
     with {:agent, %Agent{}} <- {:agent, Staff.agent_by_name(params[:lead])},
-         {:ok, thread} <- Channel.open_thread(%{title: params[:title]}),
+         {:ok, thread} <- Channel.open_thread(child_attrs(params[:title], parent)),
          {:ok, _} <- Channel.assign_lead(thread.id, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}) do
       {:reply, Response.json(Response.tool(), %{"thread_id" => thread.id, "lead" => params[:lead]}), frame}
@@ -648,9 +652,12 @@ defmodule Server.MCP.Tool.StaffLeaf do
         {:reply, Response.error(Response.tool(), MCP.Tool.changeset_error(changeset)), frame}
 
       {:error, reason} ->
-        {:reply, Response.error(Response.tool(), "staff_leaf failed: #{inspect(reason)}"), frame}
+        {:reply, Response.error(Response.tool(), "staff_child failed: #{inspect(reason)}"), frame}
     end
   end
+
+  defp child_attrs(title, nil), do: %{title: title}
+  defp child_attrs(title, parent), do: %{title: title, parent_thread_id: parent.id, project_id: parent.project_id}
 end
 
 defmodule Server.MCP.Tool.CloseThread do
@@ -679,6 +686,42 @@ defmodule Server.MCP.Tool.CloseThread do
       thread ->
         {:ok, closed} = Channel.close_thread(thread)
         {:reply, Response.json(Response.tool(), %{"closed" => closed.id, "state" => closed.state}), frame}
+    end
+  end
+end
+
+defmodule Server.MCP.Tool.AssignLead do
+  @moduledoc """
+  (Re)assign a thread's LEAD by id — the orchestrator's staffing verb (lead-as-manager, Slice 4D).
+  tertius routes an intent by opening a thread then assigning who leads; a lead reassigns when a
+  different coworker fits. Takes a thread_id BY DESIGN — like close_thread, staffing a thread other
+  than the caller's own is exactly the coordination act this verb exists for. A missing thread or an
+  unregistered handle refuses cleanly, never leaving a half-staffed thread.
+  """
+  use Anubis.Server.Component, type: :tool
+
+  alias Anubis.Server.Response
+  alias Server.Channel
+
+  schema do
+    field :thread_id, :integer, required: true, description: "The thread to staff"
+    field :lead, :string, required: true, description: "Registered worker handle to assign as lead (e.g. hronir-machine)"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    case Channel.assign_lead(params[:thread_id], params[:lead]) do
+      {:ok, _thread} ->
+        {:reply, Response.json(Response.tool(), %{"thread_id" => params[:thread_id], "lead" => params[:lead]}), frame}
+
+      {:error, :no_agent} ->
+        {:reply, Response.error(Response.tool(), "no registered agent named #{inspect(params[:lead])}"), frame}
+
+      {:error, :no_thread} ->
+        {:reply, Response.error(Response.tool(), "no such thread: #{params[:thread_id]}"), frame}
+
+      {:error, reason} ->
+        {:reply, Response.error(Response.tool(), "assign_lead failed: #{inspect(reason)}"), frame}
     end
   end
 end
@@ -849,7 +892,7 @@ end
 defmodule Server.MCP.Tool.MachineOverview do
   @moduledoc """
   The machine META-view: every OPEN machine thread as a compact brief (title, lead, next step,
-  open blockers, recent messages) — the cross-leaf read the Orbis Tertius meta agent synthesizes
+  open blockers, recent messages) — the cross-thread read the Orbis Tertius meta agent synthesizes
   from (design: docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md). Unlike the self-thread
   reads it spans threads, yet it honours "no tool takes a thread parameter": it takes none, and is
   served ONLY to a machine-scope connection — a project-scope agent is refused, so it reads across
@@ -881,10 +924,10 @@ end
 
 defmodule Server.MCP.Tool.SpawnCrew do
   @moduledoc """
-  Staff a crew role onto THIS thread — the leader's spawn verb (server crew MVP). Mints the role's
+  Staff a crew role onto THIS thread — the lead's spawn verb (server crew MVP). Mints the role's
   server identity on your thread and stands up its terminal, then hands it `task` as its opening
   assignment. MVP role is `reviewer`. Like every self-thread tool it takes no thread parameter: the
-  role joins the connection's own thread, so a leader spawns a reviewer onto the work it is leading.
+  role joins the connection's own thread, so a lead spawns a reviewer onto the work it is leading.
 
   Actuated by the configured crew backend (`Server.Crew`) — on the console hub that spawns the window
   in the live node. With no backend (the standalone service) it reports unavailable rather than
@@ -923,7 +966,7 @@ end
 
 defmodule Server.MCP.Tool.KillCrew do
   @moduledoc """
-  Tear down a crew role's terminal on THIS thread — the leader's teardown verb (server crew MVP).
+  Tear down a crew role's terminal on THIS thread — the lead's teardown verb (server crew MVP).
   Thread-scoped by the connection's identity; role defaults to `reviewer`. Best-effort: a role that
   is already gone is not an error.
   """

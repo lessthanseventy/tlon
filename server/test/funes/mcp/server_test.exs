@@ -84,7 +84,8 @@ defmodule Server.MCP.ServerTest do
                "track_thread",
                "open_thread",
                "close_thread",
-               "staff_leaf",
+               "staff_child",
+               "assign_lead",
                "switch_thread",
                "consult_peer",
                "spawn_crew",
@@ -582,14 +583,15 @@ defmodule Server.MCP.ServerTest do
     assert_received {:crew_kill, "reviewer", ^thread_id}
   end
 
-  test "staff_leaf opens a worker-led thread with the brief as its first message", %{token: token} do
+  test "staff_child opens a worker-led CHILD thread parented at the caller (lead-as-manager, Slice 4D)",
+       %{token: token, thread: thread} do
     {:ok, _} = Staff.register_agent(%{name: "hronir-machine", mandate: "build", engine: "fresh"})
 
     session = handshake(token)
     call(token, session, 3, "register", %{})
 
     r =
-      call(token, session, 4, "staff_leaf", %{
+      call(token, session, 4, "staff_child", %{
         "title" => "typing presence slices",
         "lead" => "hronir-machine",
         "brief" => "Execute docs/plans/2026-08-22 plan, slice by slice."
@@ -603,19 +605,39 @@ defmodule Server.MCP.ServerTest do
     # The staffed thread is exactly what the cockpit's leaf sweep spawns from: a worker lead...
     assert Channel.thread_lead(tid) == "hronir-machine"
 
+    # ...parented at the CALLER's thread, so its close reports up to the manager (Slice 4D)...
+    assert Repo.get!(Thread, tid).parent_thread_id == thread.id
+
     # ...and the brief on the thread (authored by the CALLER — identity from the token, no spoof).
     [first] = Repo.all(from m in Message, where: m.thread_id == ^tid, order_by: m.id)
     assert first.author == "Carl"
     assert first.body =~ "slice by slice"
   end
 
-  test "staff_leaf refuses an unregistered lead without opening a thread", %{token: token} do
+  test "assign_lead (re)staffs an existing thread by id — tertius's orchestrator verb (Slice 4D)",
+       %{token: token} do
+    {:ok, _} = Staff.register_agent(%{name: "menard-machine", mandate: "review", engine: "fresh"})
+    {:ok, target} = Channel.open_thread(%{title: "the diff to review", scope: "machine"})
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r = call(token, session, 4, "assign_lead", %{"thread_id" => target.id, "lead" => "menard-machine"})
+    refute r["isError"]
+    assert Channel.thread_lead(target.id) == "menard-machine"
+
+    # A missing thread and an unregistered lead each refuse cleanly.
+    assert call(token, session, 5, "assign_lead", %{"thread_id" => 999_999, "lead" => "menard-machine"})["isError"]
+    assert call(token, session, 6, "assign_lead", %{"thread_id" => target.id, "lead" => "ghost-machine"})["isError"]
+  end
+
+  test "staff_child refuses an unregistered lead without opening a thread", %{token: token} do
     session = handshake(token)
     call(token, session, 3, "register", %{})
 
     threads_before = Repo.aggregate(Thread, :count)
 
-    r = call(token, session, 4, "staff_leaf", %{"title" => "x", "lead" => "ghost-machine", "brief" => "y"})
+    r = call(token, session, 4, "staff_child", %{"title" => "x", "lead" => "ghost-machine", "brief" => "y"})
     assert r["isError"]
     %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
     assert text =~ "ghost-machine"
@@ -642,11 +664,13 @@ defmodule Server.MCP.ServerTest do
     token = MCP.Tokens.mint(thread, agent)
     session = handshake(token)
 
-    filed = call(token, session, 2, "file_ticket", %{"title" => "auth is fucked", "priority" => "high"}) |> decode_tool_json()
+    filed =
+      token |> call(session, 2, "file_ticket", %{"title" => "auth is fucked", "priority" => "high"}) |> decode_tool_json()
+
     assert %{"id" => id, "status" => "backlog", "priority" => "high"} = filed
     assert is_integer(id)
 
-    listed = call(token, session, 3, "list_tickets", %{}) |> decode_tool_json()
+    listed = token |> call(session, 3, "list_tickets", %{}) |> decode_tool_json()
     assert Enum.any?(listed, &(&1["id"] == id and &1["title"] == "auth is fucked"))
   end
 
@@ -657,7 +681,7 @@ defmodule Server.MCP.ServerTest do
     session = handshake(token)
 
     call(token, session, 2, "write_note", %{"body" => "leads are managers"})
-    [note] = call(token, session, 3, "get_notes", %{}) |> decode_tool_json()
+    [note] = token |> call(session, 3, "get_notes", %{}) |> decode_tool_json()
     assert note["body"] == "leads are managers"
     assert note["scope"] == "thread"
     assert note["scope_id"] == thread.id

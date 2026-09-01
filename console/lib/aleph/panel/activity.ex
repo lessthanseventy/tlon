@@ -21,14 +21,23 @@ defmodule Console.Panel.Activity do
   def topics(_assigns), do: []
 
   @impl Console.Panel
-  def render(%{events: events}, rect) do
-    body =
-      case events do
-        [] -> [line("no activity yet", :dim)]
-        evs -> Enum.map(evs, &event_row/1)
-      end
+  def render(data, rect) do
+    # Gates lead — the parked worklines awaiting the operator (Slice 4D ATTENTION), a standing list
+    # above the ambient feed. `gates` is optional so the plain `%{events: …}` shape still renders.
+    Console.Panel.clip(gate_section(data[:gates] || []) ++ event_body(data[:events] || []), rect)
+  end
 
-    Console.Panel.clip(body, rect)
+  defp event_body([]), do: [line("no activity yet", :dim)]
+  defp event_body(evs), do: Enum.map(evs, &event_row/1)
+
+  defp gate_section([]), do: []
+
+  defp gate_section(gates) do
+    [line("⏸ AWAITING YOU", :event_warn)] ++ Enum.map(gates, &gate_row/1) ++ [line("", :dim)]
+  end
+
+  defp gate_row(%{id: id, title: title, stage: stage}) do
+    [{"  ⏸ ", :event_warn}, {"##{id} #{title} — #{stage} · approve #{id}", :event_warn}]
   end
 
   defp event_row(event) do

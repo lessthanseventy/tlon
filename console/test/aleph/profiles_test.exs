@@ -118,12 +118,24 @@ defmodule Console.ProfilesTest do
       assert p.sandbox["network"]["allowAllUnixSockets"] == true
     end
 
-    test "cuts the boundary-crossing funes tools (self-containment) but keeps the record/read verbs" do
+    test "carries the ORCHESTRATOR toolset (Slice 4D): staffing + cross-thread verbs, minus register/consult" do
       tlon = Profiles.fetch("tertius").mcp["tlon"]
-      # consult_peer (ask other local coworkers) + open/close_thread (cross-thread) break isolation.
-      for cut <- ["consult_peer", "open_thread", "close_thread"], do: assert(cut in tlon["excludeTools"])
-      # its own machine-work loop stays: post/bank/record/brief/habit.
-      for kept <- ["post_message", "bank_fact", "record_done", "get_brief", "propose_habit"],
+      # register (session-claim) + consult_peer (model-to-model) are still cut; the orchestrator does
+      # NOT self-contain on open/close — it opens untracked work and closes finished children.
+      for cut <- ["register", "consult_peer"], do: assert(cut in tlon["excludeTools"])
+      refute "open_thread" in tlon["excludeTools"]
+      # The manager's routing verbs + its own machine-work loop.
+      for kept <- [
+            "post_message",
+            "bank_fact",
+            "record_done",
+            "get_brief",
+            "machine_overview",
+            "staff_child",
+            "assign_lead",
+            "open_thread",
+            "close_thread"
+          ],
           do: assert(kept in tlon["directTools"])
     end
 
@@ -233,11 +245,14 @@ defmodule Console.ProfilesTest do
   end
 
   describe "the tertius profile — the Orbis Tertius meta agent (the center)" do
-    test "carries the meta-agent persona as its system_prompt (the vantage role)" do
+    test "carries the ORCHESTRATOR persona as its system_prompt (intake · staff · surface, Slice 4D)" do
       p = Profiles.fetch("tertius")
       assert p.system_prompt =~ "tertius-machine"
-      assert p.system_prompt =~ "synthesis"
+      assert p.system_prompt =~ "ORCHESTRATOR"
       assert p.system_prompt =~ "root"
+      # The delegation toolset the mandate names — staffing, not building.
+      assert p.system_prompt =~ "staff_child"
+      assert p.system_prompt =~ "assign_lead"
     end
 
     test "render carries the persona through to the materialised files" do

@@ -21,6 +21,25 @@ defmodule Console.Panel.ActivityTest do
     assert text =~ "no activity"
   end
 
+  test "renders an AWAITING YOU gate section above the feed (Slice 4D ATTENTION surfacing)" do
+    gates = [%{id: 7, title: "the redis cache", stage: "spec", awaiting: "andrew"}]
+    data = %{events: [{:fact_banked, %{id: 1, kind: "x", text: "y"}}], gates: gates}
+    text = data |> Activity.render(@rect) |> lines() |> Enum.join("\n")
+
+    assert text =~ "AWAITING YOU"
+    assert text =~ "#7"
+    assert text =~ "the redis cache"
+    assert text =~ "spec"
+    # The gate section leads (attention before ambient feed).
+    assert :binary.match(text, "AWAITING") < :binary.match(text, "fact #1")
+  end
+
+  test "no gates key → no awaiting section, just the feed (back-compat with the plain shape)" do
+    text = %{events: []} |> Activity.render(@rect) |> lines() |> Enum.join("\n")
+    refute text =~ "AWAITING"
+    assert text =~ "no activity"
+  end
+
   test "renders a fact_banked row and a check_failed row, newest-first, with semantic styles" do
     fact = %{id: 35, kind: "insight", text: "aleph:check is the aleph gate"}
     check_failed = %{kind: "check_failed", detail: %{"cmd" => "mix test", "exit" => 1, "tail" => "1 failure"}}

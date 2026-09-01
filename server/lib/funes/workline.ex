@@ -47,18 +47,56 @@ defmodule Server.Workline do
   @doc "The stage ring, first to terminal."
   def stages, do: @stages
 
+  # Any-stage entry (Slice 4D): a workline may open at any stage except the terminal one. Opening
+  # LATER than intent sets the starting position — it does not retroactively owe the earlier stages'
+  # artifacts; advances FROM there still owe theirs. `merged` is terminal, never an entry.
+  @openable @stages -- ["merged"]
+
+  @doc "The stages a workline may be opened at (every stage but terminal `merged`)."
+  def openable_stages, do: @openable
+
   @doc """
-  Open a workline: a machine-scoped thread at stage "intent" + the `work/<slug>/` name.
-  `{:ok, thread}` or `{:error, changeset}` (a taken slug is a UNIQUE refusal).
+  Open a workline: a machine-scoped thread + the `work/<slug>/` name, at stage `:stage` (default
+  "intent"; any-stage entry, Slice 4D). `{:ok, thread}`, `{:error, {:invalid_stage, s}}` for a
+  terminal/unknown stage, or `{:error, changeset}` (a taken slug is a UNIQUE refusal).
   """
   def open(attrs) do
-    attrs = Map.put_new_lazy(attrs, :workspace_id, &Server.Bootstrap.default_workspace_id/0)
+    stage = Map.get(attrs, :stage, "intent")
 
-    with {:ok, thread} <-
-           attrs |> Thread.workline_changeset() |> Repo.insert() |> Server.Bus.announce(:thread_opened) do
-      # The brief IS the wake from stage one — the intent playbook must not wait for an advance.
-      post_brief(thread, Brief.stage_message(thread))
-      {:ok, thread}
+    if stage in @openable do
+      attrs =
+        attrs
+        |> Map.put(:stage, stage)
+        |> Map.put_new_lazy(:workspace_id, &Server.Bootstrap.default_workspace_id/0)
+
+      with {:ok, thread} <-
+             attrs |> Thread.workline_changeset() |> Repo.insert() |> Server.Bus.announce(:thread_opened) do
+        # The brief IS the wake from the entry stage — the opening playbook must not wait for an advance.
+        post_brief(thread, Brief.stage_message(thread))
+        {:ok, thread}
+      end
+    else
+      {:error, {:invalid_stage, stage}}
+    end
+  end
+
+  @doc """
+  Open a workline from a `title` (deriving the slug) at `stage` — the tertius `open`/`spike`/`build`
+  verbs' server door (Slice 4D). `extra` carries workspace/project/parent. A slug collision gets a
+  unique suffix. `{:ok, thread}` | `{:error, {:invalid_stage, s}}` | `{:error, changeset}`.
+  """
+  def open_titled(title, stage, extra \\ %{}) do
+    open(Map.merge(%{title: title, slug: fresh_slug(title), stage: stage}, extra))
+  end
+
+  # A title → a fresh, unique work slug. Collisions (or an unslugifiable title) get a unique suffix.
+  defp fresh_slug(title) do
+    base = slugify_base(title)
+
+    cond do
+      base == "" -> "thread-#{System.unique_integer([:positive])}"
+      slug_taken?(base) -> "#{base}-#{System.unique_integer([:positive])}"
+      true -> base
     end
   end
 
@@ -126,13 +164,7 @@ defmodule Server.Workline do
   end
 
   defp promote_slug(%Thread{} = thread) do
-    base =
-      thread.title
-      |> String.downcase()
-      |> String.replace(~r/[^a-z0-9]+/u, "-")
-      |> String.trim("-")
-      |> String.slice(0, 40)
-      |> String.trim("-")
+    base = slugify_base(thread.title)
 
     cond do
       base == "" -> "thread-#{thread.id}"
@@ -142,6 +174,16 @@ defmodule Server.Workline do
   end
 
   defp slug_taken?(slug), do: Repo.get_by(Thread, slug: slug) != nil
+
+  # A title → its bare slug candidate (closed charset, ≤40 chars). Shared by promote + open_titled.
+  defp slugify_base(title) do
+    title
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/u, "-")
+    |> String.trim("-")
+    |> String.slice(0, 40)
+    |> String.trim("-")
+  end
 
   @doc """
   Advance past the current stage. `{:ok, thread}` on a flip, `{:awaiting, thread}` when the

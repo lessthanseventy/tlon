@@ -49,6 +49,29 @@ defmodule Server.WorklineTest do
     assert thread.scope == "machine"
   end
 
+  test "any-stage entry: open at a later stage (Slice 4D) sets the start, doesn't gate or backfill" do
+    at_build = open!(%{slug: "any-build", stage: "build"})
+    assert at_build.stage == "build"
+    assert at_build.born == "operator"
+    # Operator-initiated later-stage entry parks on nothing — the human chose the entry point.
+    assert at_build.awaiting == nil
+
+    at_review = open!(%{slug: "any-review", stage: "review"})
+    assert at_review.stage == "review"
+  end
+
+  test "any-stage entry opens with the brief for THAT stage, not the intent brief" do
+    at_build = open!(%{slug: "brief-build", stage: "build"})
+    bodies = Server.Message |> Repo.all() |> Enum.filter(&(&1.thread_id == at_build.id)) |> Enum.map(& &1.body)
+    # The build brief owes "commits on branch work/<slug>" — intent's brief never says "branch".
+    assert Enum.any?(bodies, &(&1 =~ "branch work/brief-build"))
+  end
+
+  test "any-stage entry refuses the terminal stage and any non-stage" do
+    assert {:error, {:invalid_stage, "merged"}} = Workline.open(%{title: "t", slug: "no-merged", stage: "merged"})
+    assert {:error, {:invalid_stage, "garbage"}} = Workline.open(%{title: "t", slug: "no-garbage", stage: "garbage"})
+  end
+
   test "advance refuses without the owed artifact — the invariant advance_stage carries" do
     thread = open!()
     assert {:error, {:artifact_missing, reason}} = Workline.advance(thread, artifacts: NonePresent)
