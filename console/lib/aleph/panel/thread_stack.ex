@@ -84,7 +84,9 @@ defmodule Console.Panel.ThreadStack do
     lead = if card[:lead], do: [{"  @#{card.lead}", :label}], else: []
     stage = if card[:stage], do: [{" · #{card.stage}", :dim}], else: []
     awaiting = if card[:awaiting] not in [nil, ""], do: [{" · ⏸ #{card.awaiting}", :accent}], else: []
-    lead ++ stage ++ awaiting
+    # A live "…typing" signal while the lead is composing (declared thinking presence).
+    typing = if card[:typing], do: [{" · #{card.typing} is typing…", :st_working}], else: []
+    lead ++ stage ++ awaiting ++ typing
   end
 
   # The last few messages, author-coloured + paragraph-wrapped + nested, a blank line between each.

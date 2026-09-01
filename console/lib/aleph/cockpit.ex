@@ -939,7 +939,7 @@ defmodule Console.Cockpit do
     if focused_id in ids, do: focused_id, else: List.first(ids)
   end
 
-  defp thread_cards(blocks, focus, unfolded, zoomed) do
+  defp thread_cards(blocks, focus, unfolded, zoomed, thinking) do
     blocks = if zoomed, do: Enum.filter(blocks, &(&1.thread.id == zoomed)), else: blocks
     unfolded = resolve_unfolded(unfolded, focus)
 
@@ -954,10 +954,16 @@ defmodule Console.Cockpit do
         awaiting: t.awaiting,
         folded?: folded?,
         active?: t.id == focus,
+        # The card's "…typing" signal: the first agent declaring thinking on this thread, sans the
+        # `-machine` suffix (nil when none is). Drives the thread_stack typing chip.
+        typing: typing_agent(Map.get(thinking, t.id, %{})),
         messages: if(folded?, do: [], else: messages)
       }
     end)
   end
+
+  defp typing_agent(thinking) when map_size(thinking) == 0, do: nil
+  defp typing_agent(thinking), do: thinking |> Map.keys() |> List.first() |> String.replace_suffix("-machine", "")
 
   # `nil` fold set → the implicit default "focused thread unfolded"; an explicit set is used as-is.
   defp resolve_unfolded(nil, nil), do: MapSet.new()
@@ -2265,7 +2271,7 @@ defmodule Console.Cockpit do
       threads: threads,
       # The thread-stack center (Slice 3): machine threads as foldable cards; the block carries each
       # thread's messages, so an unfolded card is free. `zoomed` collapses it to one full card.
-      thread_stack: %{cards: thread_cards(stack_blocks, state.stack_focus, state.unfolded, state.zoomed)},
+      thread_stack: %{cards: thread_cards(stack_blocks, state.stack_focus, state.unfolded, state.zoomed, state.thinking)},
       # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
       # thread list + crew working flags.
       sidebar: Board.safe_read(:sidebar, [], fn -> Server.Board.sidebar() end),
