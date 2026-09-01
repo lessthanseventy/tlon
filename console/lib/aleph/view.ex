@@ -30,6 +30,7 @@ defmodule Console.View do
     Panel.Sidebar,
     Panel.Overview,
     Panel.Conversation,
+    Panel.ThreadStack,
     Panel.Crew,
     Panel.Brief,
     Panel.Roster,

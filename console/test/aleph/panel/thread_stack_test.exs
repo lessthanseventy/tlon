@@ -1,6 +1,6 @@
 defmodule Console.Panel.ThreadStackTest do
-  # The cockpit center (Slice 3): a stack of foldable Slack thread cards. Pure render — folded
-  # cards are one-line headers, unfolded ones show messages + a reply input.
+  # The cockpit center (two-step, 2026-09-01): a LIST of thread rows (no thread opened), or ONE
+  # thread's CONVERSATION (opened: id) — scrollable, markdown, esc back. Pure render.
   use ExUnit.Case, async: true
 
   alias Console.Panel.ThreadStack
@@ -8,76 +8,76 @@ defmodule Console.Panel.ThreadStackTest do
   defp rect(h \\ 40), do: %{x: 0, y: 0, w: 80, h: h}
   defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
 
+  defp card(over \\ %{}) do
+    Map.merge(%{id: 1, title: "a thread", lead: nil, stage: nil, awaiting: nil, active?: false, typing: nil, messages: []}, over)
+  end
+
   test "an empty stack renders a placeholder" do
     assert ThreadStack.render(%{cards: []}, rect()) |> text() =~ "no threads yet"
   end
 
-  test "a folded card is a single header line (no messages)" do
-    card = %{id: 39, title: "build the thing", lead: "kimi", stage: "build", awaiting: nil, folded?: true, active?: false, messages: [%{author: "kimi", body: "hi"}]}
-    rows = ThreadStack.render(%{cards: [card]}, rect())
-
-    assert length(rows) == 1
-    line = text(rows)
-    assert line =~ "▸ #39 build the thing"
-    assert line =~ "@kimi"
-    assert line =~ "build"
-    refute line =~ "kimi: hi"
-  end
-
-  test "an unfolded card shows its messages and a reply input" do
-    card = %{id: 42, title: "review PR", lead: "hronir", stage: "review", awaiting: nil, folded?: false, active?: true, messages: [%{author: "andrew", body: "take a look"}, %{author: "hronir", body: "on it"}]}
-    out = ThreadStack.render(%{cards: [card]}, rect()) |> text()
-
-    assert out =~ "▾ #42 review PR"
-    # author on its own line, body (markdown) indented below it
-    assert out =~ "andrew:"
-    assert out =~ "take a look"
-    assert out =~ "hronir:"
-    assert out =~ "on it"
-    assert out =~ "reply to #42"
-  end
-
-  test "an awaiting gate is chipped on the header" do
-    card = %{id: 38, title: "merge", lead: "hronir", stage: "review", awaiting: "andrew", folded?: true, active?: false, messages: []}
-    assert ThreadStack.render(%{cards: [card]}, rect()) |> text() =~ "⏸ andrew"
-  end
-
-  test "multiple cards stack — folded ones stay one line, the unfolded one expands" do
-    cards = [
-      %{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: [%{author: "x", body: "hello"}]},
-      %{id: 2, title: "b", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []}
-    ]
-
-    out = ThreadStack.render(%{cards: cards}, rect()) |> text()
-    assert out =~ "▾ #1 a"
-    assert out =~ "x:"
-    assert out =~ "hello"
-    assert out =~ "▸ #2 b"
-  end
-
-  describe "pick (click → fold/focus a card)" do
-    test "a click resolves to the card under that row" do
+  describe "list mode (no thread opened)" do
+    test "each thread is a single row — id, title, lead/stage chips; no messages" do
       cards = [
-        %{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []},
-        %{id: 2, title: "b", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []}
+        card(%{id: 39, title: "build the thing", lead: "kimi", stage: "build", messages: [%{author: "kimi", body: "hi"}]}),
+        card(%{id: 40, title: "review PR"})
       ]
 
-      assert ThreadStack.pick(%{cards: cards}, rect(), 0) == {:fold_thread, 1}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 2) == {:fold_thread, 2}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 1) == nil
-      assert ThreadStack.pick(%{cards: cards}, rect(), 9) == nil
+      rows = ThreadStack.render(%{cards: cards}, rect())
+      assert length(rows) == 2
+      out = text(rows)
+      assert out =~ "#39 build the thing"
+      assert out =~ "@kimi"
+      assert out =~ "build"
+      # bodies are NOT shown in the list
+      refute out =~ "kimi: hi"
     end
 
-    test "clicks inside an unfolded card's body still resolve to that card" do
+    test "the active (cursor) row is lit with the gutter" do
+      cards = [card(%{id: 1, active?: true}), card(%{id: 2, active?: false})]
+      [first, second] = ThreadStack.render(%{cards: cards}, rect())
+      assert Enum.any?(first, fn {t, s} -> t == "▌ " and s == :accent end)
+      refute Enum.any?(second, fn {t, s} -> t == "▌ " and s == :accent end)
+    end
+
+    test "a typing thread shows the typing chip" do
+      out = ThreadStack.render(%{cards: [card(%{typing: "hronir"})]}, rect()) |> text()
+      assert out =~ "hronir is typing…"
+    end
+
+    test "a click on a row OPENS that thread (not fold)" do
+      cards = [card(%{id: 7}), card(%{id: 8})]
+      assert ThreadStack.pick(%{cards: cards}, rect(), 0) == {:open_thread_view, 7}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 1) == {:open_thread_view, 8}
+      assert ThreadStack.pick(%{cards: cards}, rect(), 9) == nil
+    end
+  end
+
+  describe "conversation mode (a thread opened)" do
+    test "shows the opened thread's messages, a reply hint, and an esc-back hint" do
       cards = [
-        %{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: [%{author: "x", body: "hi"}]},
-        %{id: 2, title: "b", lead: nil, stage: nil, awaiting: nil, folded?: true, active?: false, messages: []}
+        card(%{id: 42, title: "review PR", lead: "hronir", stage: "review", messages: [%{author: "andrew", body: "take a look"}, %{author: "hronir", body: "on it"}]}),
+        card(%{id: 43, title: "other"})
       ]
 
-      # card 1 unfolded: header + blank + author-line + body + blank + reply (6 rows), then a gap;
-      # a click inside its body is still card 1, and card 2 starts after the gap.
-      assert ThreadStack.pick(%{cards: cards}, rect(), 2) == {:fold_thread, 1}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 7) == {:fold_thread, 2}
+      out = ThreadStack.render(%{cards: cards, opened: 42}, rect()) |> text()
+      assert out =~ "‹ #42 review PR"
+      assert out =~ "andrew:"
+      assert out =~ "take a look"
+      assert out =~ "hronir:"
+      assert out =~ "reply to #42"
+      assert out =~ "esc"
+      # the OTHER thread's row is not shown in conversation mode
+      refute out =~ "#43 other"
+    end
+
+    test "an opened id that no longer exists falls back to the list" do
+      out = ThreadStack.render(%{cards: [card(%{id: 1, title: "x"})], opened: 999}, rect()) |> text()
+      assert out =~ "#1 x"
+    end
+
+    test "clicks are inert in conversation mode (so text selection works)" do
+      assert ThreadStack.pick(%{cards: [card(%{id: 1})], opened: 1}, rect(), 3) == nil
     end
   end
 end

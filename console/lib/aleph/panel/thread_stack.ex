@@ -21,63 +21,64 @@ defmodule Console.Panel.ThreadStack do
   @impl Console.Panel
   def topics(_assigns), do: []
 
+  # Two-step master⇄detail (2026-09-01, Andrew): with no thread `opened`, the center is a clean LIST
+  # (one line per thread, pick to enter); with a thread opened it's that ONE conversation — scrollable,
+  # text-selectable (clicks no longer toggle anything), markdown. Esc goes back to the list.
   @impl Console.Panel
   def render(%{cards: []}, rect),
-    do: Console.Panel.clip([blank(), line("  no threads yet — press : to file a ticket or start one", :dim)], rect)
+    do: Console.Panel.clip([blank(), line("  no threads yet — press n to start one", :dim)], rect)
+
+  def render(%{cards: cards, opened: opened} = data, rect) when is_integer(opened) do
+    case Enum.find(cards, &(&1.id == opened)) do
+      nil -> render(Map.delete(data, :opened), rect)
+      card -> conversation(card, rect)
+    end
+  end
 
   def render(%{cards: cards}, rect) do
-    cards
-    |> Enum.map(&card_block(&1, rect.w))
-    |> Enum.intersperse([blank()])
-    |> Enum.concat()
-    |> Console.Panel.clip(rect)
+    cards |> Enum.map(&list_row(&1, rect.w)) |> Console.Panel.clip(rect)
   end
 
   @impl Console.Panel
-  def hints(_data), do: [{"z", "fold"}, {"Z", "zoom"}, {"j/k", "move"}, {"c", "reply"}]
+  def hints(%{opened: opened}) when is_integer(opened), do: [{"esc", "back"}, {"c", "reply"}, {"j/k", "scroll"}]
+  def hints(_data), do: [{"⏎", "open"}, {"j/k", "move"}, {"n", "new"}]
 
-  # Click → the card under `local_y` (walking the same row layout render produces) → fold/focus it.
+  # LIST: one row per thread, so `local_y` indexes the card directly → OPEN it (not fold).
   @impl Console.Panel
-  def pick(%{cards: cards}, rect, local_y) do
-    {_offset, hit} =
-      cards
-      |> Enum.intersperse(:gap)
-      |> Enum.reduce_while({0, nil}, fn
-        :gap, {offset, _} ->
-          {:cont, {offset + 1, nil}}
+  def pick(%{opened: opened}, _rect, _local_y) when is_integer(opened), do: nil
 
-        card, {offset, _} ->
-          height = length(card_block(card, rect.w))
-          if local_y >= offset and local_y < offset + height, do: {:halt, {offset, {:fold_thread, card.id}}}, else: {:cont, {offset + height, nil}}
-      end)
-
-    hit
+  def pick(%{cards: cards}, _rect, local_y) do
+    case Enum.at(cards, local_y) do
+      %{id: id} -> {:open_thread_view, id}
+      _ -> nil
+    end
   end
 
   def pick(_data, _rect, _local_y), do: nil
 
-  # -- card layout ----------------------------------------------------------
+  # -- list ----------------------------------------------------------------
 
-  defp card_block(%{folded?: true} = card, w), do: [header_row(card, w)]
+  # A compact one-line thread row: `▌ #7 title   @lead · stage · …typing`, the active one lit.
+  defp list_row(card, w) do
+    cursor = if card.active?, do: {"▌ ", :accent}, else: {"  ", :normal}
+    id_style = if card.active?, do: :header, else: :dim
+    title_style = if card.active?, do: :header, else: :normal
+    [cursor, {"##{card.id} ", id_style}, {String.slice(card.title || "", 0, max(w - 24, 8)), title_style}] ++ chips(card)
+  end
 
-  defp card_block(%{folded?: false} = card, w) do
+  # -- conversation --------------------------------------------------------
+
+  defp conversation(card, rect) do
     body =
-      case message_lines(card[:messages] || [], w) do
+      case message_lines(card[:messages] || [], rect.w) do
         [] -> [line("#{@indent}no messages yet", :dim)]
         lines -> lines
       end
 
-    [header_row(card, w), blank()] ++ body ++ [blank(), reply_row(card)]
-  end
+    header = [[{"‹ ", :accent}, {"##{card.id} #{card.title}", :header}] ++ chips(card), blank()]
+    footer = [blank(), reply_row(card), line("#{@indent}esc · back to threads", :dim)]
 
-  # `▌ ▾ #2  title            @lead · [stage] · ⏸ gate` — the active card lit, the rest quiet.
-  defp header_row(%{active?: true} = card, _w) do
-    [{"▌ ", :accent}, {"▾ ", :accent}, {"##{card.id} ", :header}, {card.title, :header}] ++ chips(card)
-  end
-
-  defp header_row(card, _w) do
-    marker = if card.folded?, do: "▸ ", else: "▾ "
-    [{"  ", :normal}, {marker, :dim}, {"##{card.id} ", :dim}, {card.title, :normal}] ++ chips(card)
+    Console.Panel.clip(header ++ body ++ footer, rect)
   end
 
   defp chips(card) do

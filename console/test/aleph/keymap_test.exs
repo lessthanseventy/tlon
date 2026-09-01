@@ -63,7 +63,7 @@ defmodule Console.KeymapTest do
 
   # A workspace state with the thread stack as the focused center — the handle_tlon path.
   defp stack_ctx(over \\ %{}) do
-    base = %{active_key: 0, center_view: :chat, focus: %Focus{in_terminal?: true}, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2}
+    base = %{active_key: 0, center_view: :chat, opened_thread: nil, focus: %Focus{in_terminal?: true}, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2}
     state(Map.merge(base, over))
   end
   defp leader, do: key(:space, ctrl: true)
@@ -937,11 +937,15 @@ defmodule Console.KeymapTest do
       assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("G"), stack_ctx())
     end
 
-    test "z/Space fold, Z/+ zoom" do
-      assert {_s, {:toggle_fold}} = Keymap.handle(char("z"), stack_ctx())
-      assert {_s, {:toggle_fold}} = Keymap.handle(key(:space), stack_ctx())
-      assert {_s, {:zoom_thread}} = Keymap.handle(char("Z"), stack_ctx())
-      assert {_s, {:zoom_thread}} = Keymap.handle(char("+"), stack_ctx())
+    test "Enter opens the focused thread's conversation (two-step center)" do
+      assert {_s, :open_focused_thread} = Keymap.handle(key(:enter), stack_ctx())
+    end
+
+    test "in conversation mode: j/k scroll, Esc goes back to the list" do
+      s = stack_ctx(%{opened_thread: 2})
+      assert {_s, {:scroll_conversation, 3}} = Keymap.handle(char("j"), s)
+      assert {_s, {:scroll_conversation, -3}} = Keymap.handle(char("k"), s)
+      assert {_s, :close_thread_view} = Keymap.handle(key(:escape), s)
     end
 
     test ": focuses the tertius line from the stack" do

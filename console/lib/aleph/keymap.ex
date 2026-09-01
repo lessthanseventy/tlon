@@ -700,16 +700,22 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: ":"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
 
-  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, 1)
-  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, -1)
-  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, 1)
-  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_move(state, -1)
-  defp handle_tlon(%{key: :char, char: "g"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_jump(state, :first)
-  defp handle_tlon(%{key: :char, char: "G"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: stack_jump(state, :last)
-  defp handle_tlon(%{key: :char, char: "z"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:toggle_fold}}
-  defp handle_tlon(%{key: :space}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:toggle_fold}}
-  defp handle_tlon(%{key: :char, char: "Z"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:zoom_thread}}
-  defp handle_tlon(%{key: :char, char: "+"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:zoom_thread}}
+  # LIST mode (no thread opened): j/k move the cursor, g/G jump, Enter opens the focused thread's
+  # conversation. (Two-step center — the fold/zoom stack is retired.)
+  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, 1)
+  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, -1)
+  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, 1)
+  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, -1)
+  defp handle_tlon(%{key: :char, char: "g"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_jump(state, :first)
+  defp handle_tlon(%{key: :char, char: "G"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_jump(state, :last)
+  defp handle_tlon(%{key: :enter}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: {state, :open_focused_thread}
+
+  # CONVERSATION mode (a thread opened): j/k scroll it; Esc goes back to the list.
+  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, 3}}
+  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, -3}}
+  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, 3}}
+  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, -3}}
+  defp handle_tlon(%{key: :escape}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, :close_thread_view}
 
   # `n` (focus the new-thread band) and `c` (reply to the focused card) are the create/write verbs —
   # they drive the chat directly here (like j/k/z), so they work while you're looking at the stack,

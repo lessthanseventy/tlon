@@ -288,6 +288,9 @@ defmodule Console.Cockpit do
             # The Workspace center's face: the THREAD STACK (:chat, the default now — Slice 3, no
             # more `v`-to-find-it) or the live PTY (:terminal, still reachable). The stack is home.
             center_view: :chat,
+            # Two-step center (2026-09-01): nil = the thread LIST; an id = that thread's CONVERSATION
+            # (scrollable, text-selectable). Enter opens, Esc goes back — replaces the fold/zoom stack.
+            opened_thread: nil,
             # `Z` zooms ONE thread full-screen (a real zoom over the stack): the focused thread id, or
             # nil for the whole stack. `z` (lowercase) folds a card; `Z` (this) zooms one, `Z` back.
             zoomed: nil,
@@ -509,6 +512,9 @@ defmodule Console.Cockpit do
       |> Map.put(:center_live?, state.center_view != :chat and center_terminal(state) != nil)
       # handle_tlon needs center_view to route center-focus keys to the STACK (not forward to tmux).
       |> Map.put(:center_view, state.center_view)
+      # Two-step center: nil = the thread LIST (j/k move · ⏎ open), an id = that CONVERSATION (j/k
+      # scroll · esc back). The keymap branches chat keys on it.
+      |> Map.put(:opened_thread, state.opened_thread)
       |> Map.put(:composer_thread_id, composer_thread_id(state))
       |> Map.put(:tlon_layout, tlon_layout(state))
       |> Map.put(:author_workspaces, Console.Workspaces.all())
@@ -946,25 +952,19 @@ defmodule Console.Cockpit do
     if focused_id in ids, do: focused_id, else: List.first(ids)
   end
 
-  defp thread_cards(blocks, focus, unfolded, zoomed, thinking) do
-    blocks = if zoomed, do: Enum.filter(blocks, &(&1.thread.id == zoomed)), else: blocks
-    unfolded = resolve_unfolded(unfolded, focus)
-
+  # The two-step card set: every thread as a list row; only the `opened` one carries its messages
+  # (the conversation view). `active?` is the list cursor; `typing` the thinking chip.
+  defp thread_cards(blocks, focus, opened, thinking) do
     Enum.map(blocks, fn %{thread: t, messages: messages} ->
-      folded? = is_nil(zoomed) and not MapSet.member?(unfolded, t.id)
-
       %{
         id: t.id,
         title: t.title,
         lead: nil,
         stage: t.stage,
         awaiting: t.awaiting,
-        folded?: folded?,
         active?: t.id == focus,
-        # The card's "…typing" signal: the first agent declaring thinking on this thread, sans the
-        # `-machine` suffix (nil when none is). Drives the thread_stack typing chip.
         typing: typing_agent(Map.get(thinking, t.id, %{})),
-        messages: if(folded?, do: [], else: messages)
+        messages: if(t.id == opened, do: messages, else: [])
       }
     end)
   end
@@ -1178,6 +1178,9 @@ defmodule Console.Cockpit do
 
   # The spine's Tickets/Notes tools (Slice 3.5): open the full-screen board.
   defp apply_pick({:open_board, kind}, state), do: {:noreply, render(%{state | board: kind, board_cursor: {0, 0}, menu: nil})}
+
+  # Click a thread row in the list → open its conversation (two-step center).
+  defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)
 
   # Clicking a thread card focuses it AND toggles its fold — the collapse/expand button (Slice 3).
   # Toggle against the CURRENTLY-VISIBLE fold state (resolve the nil default) so a click matches
@@ -1631,6 +1634,27 @@ defmodule Console.Cockpit do
   # center's tmux client at the FOCUSED thread's own lead window (its `t<id>`) — so `v` on a thread
   # shows THAT thread's agent, not whatever the standing coworker was on (Andrew: "v takes me to pi").
   # A root/window-less thread leaves the client where it is (the standing coworker).
+  # Open a thread's conversation (two-step center): show ITS messages, scrolled to the latest (a big
+  # offset clamps to the bottom at render). Esc closes back to the list.
+  defp apply_effect({:open_thread_view, id}, state) when is_integer(id) do
+    scrolls = Map.put(state.scrolls, Panel.ThreadStack, 100_000)
+    {:noreply, render(%{state | opened_thread: id, focused_id: id, stack_focus: id, scrolls: scrolls})}
+  end
+
+  defp apply_effect(:open_focused_thread, %{stack_focus: id} = state) when is_integer(id),
+    do: apply_effect({:open_thread_view, id}, state)
+
+  defp apply_effect(:open_focused_thread, state), do: {:noreply, state}
+
+  defp apply_effect(:close_thread_view, state),
+    do: {:noreply, render(%{state | opened_thread: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
+
+  # Scroll the open conversation by `n` rows (j/k in conversation mode); clamped at render.
+  defp apply_effect({:scroll_conversation, n}, state) do
+    cur = Map.get(state.scrolls, Panel.ThreadStack, 0)
+    {:noreply, render(%{state | scrolls: Map.put(state.scrolls, Panel.ThreadStack, max(cur + n, 0))})}
+  end
+
   defp apply_effect(:toggle_center_view, state) do
     next = toggle_center_view(state)
     if next.center_view == :terminal, do: select_focused_window(next)
@@ -2302,7 +2326,10 @@ defmodule Console.Cockpit do
       threads: threads,
       # The thread-stack center (Slice 3): machine threads as foldable cards; the block carries each
       # thread's messages, so an unfolded card is free. `zoomed` collapses it to one full card.
-      thread_stack: %{cards: thread_cards(stack_blocks, state.stack_focus, state.unfolded, state.zoomed, state.thinking)},
+      thread_stack: %{
+        cards: thread_cards(stack_blocks, state.stack_focus, state.opened_thread, state.thinking),
+        opened: state.opened_thread
+      },
       # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
       # thread list + crew working flags.
       sidebar: Board.safe_read(:sidebar, [], fn -> Server.Board.sidebar() end),
