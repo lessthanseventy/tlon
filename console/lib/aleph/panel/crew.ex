@@ -81,7 +81,7 @@ defmodule Console.Panel.Crew do
 
   @impl Console.Panel
   def render(%{coworkers: coworkers, leaves: {live, cap}}, rect) do
-    header = [[{"leaves #{live}/#{cap}", :dim}], blank()]
+    header = [[{"#{live}/#{cap} live", :dim}], blank()]
     Console.Panel.clip(header ++ Enum.flat_map(coworkers, &entry(&1, rect.w)), rect)
   end
 

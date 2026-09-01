@@ -61,7 +61,7 @@ defmodule Console.Panel.CrewTest do
     end
   end
 
-  test "leaves counter + per-coworker archetype, presence, seat, and driver" do
+  test "live-count header + per-coworker archetype, presence, seat, and driver" do
     data = %{
       leaves: {2, 6},
       coworkers: [
@@ -79,7 +79,7 @@ defmodule Console.Panel.CrewTest do
 
     body = texts(Crew.render(data, %{x: 0, y: 0, w: 26, h: 30}))
 
-    assert Enum.at(body, 0) =~ "leaves 2/6"
+    assert Enum.at(body, 0) =~ "2/6 live"
     assert Enum.any?(body, &(&1 =~ "tertius" and &1 =~ "surveyor"))
     assert Enum.any?(body, &(&1 =~ "idle"))
     assert Enum.any?(body, &(&1 =~ "working" and &1 =~ "fix the bug"))
