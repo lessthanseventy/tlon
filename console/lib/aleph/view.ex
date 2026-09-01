@@ -62,44 +62,47 @@ defmodule Console.View do
         true -> chat_center(space.surface, reads)
       end
 
-    left_sections = [Panel.Sidebar | space.left]
-    # The contextual right rail (slice D): pinned head (workspace → STACK, attached thread → the
-    # BRIEF) + the view-indexed carousel panel — the single source (Space.visible_right/3)
-    # View/keymap/cockpit all read, so they can't disagree.
-    right_sections =
-      Space.visible_right(space, reads[:right_pane_view] || 0, Space.rail_context(reads[:focused_session]))
+    # Slice 3.4: three regions — the thin far-left SPINE (the workspace switcher + global tools, the
+    # Sidebar rendered narrow), the funes RAIL (`space.left`, stacked top-down: NOW·CREW·MEMORY·STACK),
+    # and the CENTER (thread stack + tertius). The old right rail is retired (`space.right == []`).
+    spine = [Panel.Sidebar]
+    rail = space.left
 
     boxes =
       case layout_for(w) do
         :wide ->
-          %{left: left, center: center, right: right} = wide_columns(w, body_h)
+          session? = is_integer(reads[:session_pane])
+          cols = wide_columns(w, body_h, session?)
 
-          assign_digits(boxed(left_sections, left), 1) ++
-            assign_digits(boxed(center_panels, center), :center) ++
-            assign_digits(pinned_boxes(right_sections, right, reads), 1 + length(left_sections))
+          # Nav v2 (Andrew 2026-08-31): NO pane digits. The spine is click/keybind only (not in the
+          # focus nav); the rail is walked with h/l; Alt+N is tmux tabs, Alt+Shift+N is workspaces.
+          base =
+            no_digits(boxed(spine, cols.spine)) ++
+              no_digits(boxed(rail, cols.rail)) ++
+              no_digits(boxed(center_panels, cols.center))
+
+          # The right session pane (the selected thread's live lead PTY), only when toggled on.
+          if session?,
+            do: base ++ no_digits(boxed([{Panel.Terminal, :session}], cols.right)),
+            else: base
 
         :narrow ->
-          sections = left_sections ++ center_panels ++ right_sections
-          assign_digits(boxed(sections, %{x: 0, y: 0, w: w, h: body_h}), 1)
+          no_digits(boxed(spine ++ rail ++ center_panels, %{x: 0, y: 0, w: w, h: body_h}))
       end
 
-    # A box under 2 rows can't hold a frame (Border renders [] below 2) and its inset content
-    # would poke a row past the column — drop it whole. AFTER digit assignment, so a collapsed
-    # box never renumbers its neighbors (the digits must match the focus layout's ordering).
+    # A box under 2 rows can't hold a frame (Border renders [] below 2) and its inset content would
+    # poke a row past the column — drop it whole.
     boxes = Enum.reject(boxes, fn {_section, rect, _digit} -> rect.h < 2 end)
 
     # In Tlön nav mode one sidebar pane is focused — its border lights up (the lazygit "active
     # pane" cue). Every other box, and every other space, stays neutral.
-    focused = focused_section(reads[:focus], space, right_sections)
+    focused = focused_section(reads[:focus], space, rail)
 
-    # The carousel box's own section (the one right_sections member that isn't the pinned head) —
-    # its border gets the tab strip instead of a plain title.
-    carousel_active = List.last(right_sections)
-
+    # Slice 3.4: the rail stacks every panel, so there's no carousel and no border tab strip — every
+    # box carries a plain digit-first title.
     borders =
       Enum.map(boxes, fn {section, rect, digit} ->
-        tabs = carousel_border(space, reads, section, carousel_active)
-        {Panel.Border, border_data(section, digit, focused, tabs), rect}
+        {Panel.Border, border_data(section, digit, focused, nil), rect}
       end)
 
     # The focused pane alone is fed a slice of the focus — its item cursor (j/k) as `selected` and
@@ -161,21 +164,15 @@ defmodule Console.View do
   # terminal is the active pane then). Matches by section module — the panes are distinct, so module
   # identity is unambiguous. The Sidebar leads the left column here exactly as it does on screen, so
   # its frame lights when the focus navigates onto the workspace nav.
-  defp focused_section(%Focus{in_terminal?: false} = focus, space, right_sections),
-    do: Focus.focused_pane(focus, %{left: [Panel.Sidebar | space.left], right: right_sections, sections: %{}})
+  # Nav v2: the focus nav is the RAIL alone (the spine is click/keybind only) — so h/l/j/k walk the
+  # rail, and the lit border is whichever rail pane the focus sits on.
+  defp focused_section(%Focus{in_terminal?: false} = focus, _space, rail),
+    do: Focus.focused_pane(focus, %{left: rail, right: [], sections: %{}})
 
-  defp focused_section(_focus, _space, _right_sections), do: nil
+  defp focused_section(_focus, _space, _rail), do: nil
 
-  # Sidebar boxes number top-down from `start` (left 1.., right continuing); the center's
-  # terminal box alone is 0 — Alt+0/`0` mean "back to the terminal" (design 2026-08-23).
-  defp assign_digits(boxes, :center),
-    do: Enum.map(boxes, fn {section, rect} -> {section, rect, if(terminal_section?({section, rect}), do: 0)} end)
-
-  defp assign_digits(boxes, start) do
-    boxes
-    |> Enum.with_index(start)
-    |> Enum.map(fn {{section, rect}, d} -> {section, rect, d} end)
-  end
+  # Nav v2: no pane digits (the numbers are gone from the frames) — every box just carries `nil`.
+  defp no_digits(boxes), do: Enum.map(boxes, fn {section, rect} -> {section, rect, nil} end)
 
   defp border_data(section, digit, focused, tabs) do
     %{
@@ -187,26 +184,18 @@ defmodule Console.View do
     }
   end
 
-  # The carousel box's tab strip: every carousel member's title, the visible one lit. nil for
-  # every other box (and when there's no carousel — Orbis).
-  defp carousel_border(space, reads, section, carousel_active) do
-    carousel = Space.carousel(space)
-
-    if carousel != [] and section == carousel_active and section in carousel do
-      # Integer.mod matches Space.visible_right's wrap, so the lit tab is the shown panel.
-      active = Enum.at(carousel, Integer.mod(reads[:right_pane_view] || 0, length(carousel)))
-      Enum.map(carousel, fn p -> {section_title(p), p == active} end)
-    end
-  end
-
   # The on-frame title per section. A section with no entry (Terminal, WindowBar, Ticker, the
   # center surfaces) gets a bare frame.
+  # The right session pane's frame title (the selected thread's live lead PTY).
+  defp section_title({Panel.Terminal, :session}), do: "SESSION"
   defp section_title({panel, _read_key}), do: section_title(panel)
-  defp section_title(Panel.Sidebar), do: "WORKSPACES"
+  # A thin icon-dock spine (Slice 3.4) — a short frame title so it doesn't clip the narrow column.
+  defp section_title(Panel.Sidebar), do: "WS"
   defp section_title(Panel.Stack), do: "STACK"
   defp section_title(Panel.Memory), do: "MEMORY"
   defp section_title(Panel.Crew), do: "CREW"
-  defp section_title(Panel.Activity), do: "ACTIVITY"
+  # NOW since Slice 3.4 — the rail's top pane is the attention/activity feed.
+  defp section_title(Panel.Activity), do: "NOW"
   # THREADS since reshape slice C: chat + tracked threads are ONE list; stage rides as a chip.
   defp section_title(Panel.Leaves), do: "THREADS"
   defp section_title(Panel.Roster), do: "ACTIVE"
@@ -227,25 +216,41 @@ defmodule Console.View do
 
   defp focus_slice(_reads), do: nil
 
-  # The three-column geometry (left ¼ · center ½ · right ¼) of the wide layout, as box rects — the
-  # single source of truth for where each column sits. `compose/3` places panels into these, and
-  # `center_rect/3` derives the center Terminal's content rect from the SAME math, so the embedded
-  # PTY can be sized to exactly what's on screen (a wider PTY spills pi past the frame; a shorter
-  # one leaves a dead band).
-  defp wide_columns(w, body_h) do
-    left_w = clamp_col(div(w, 4), w)
-    right_w = clamp_col(div(w, 4), w)
-    center_w = max(w - left_w - right_w - 2, 1)
-    center_x = left_w + 1
-    right_x = center_x + center_w + 1
-    right_w = max(w - right_x, 1)
+  # The three-region geometry (Slice 3.4): a thin SPINE (far-left workspace switcher + global tools),
+  # the funes RAIL (~¼), and the CENTER (the rest) — the single source of truth for where each region
+  # sits. `compose/3` places panels into these, and `center_rect/3` derives the center Terminal's
+  # content rect from the SAME math, so the embedded PTY is sized to exactly what's on screen (a wider
+  # PTY spills pi past the frame; a shorter one leaves a dead band). The old right ¼ column is gone.
+  defp wide_columns(w, body_h, session? \\ false) do
+    spine_w = spine_width(w)
+    rail_w = clamp_col(div(w, 4), w)
+    rail_x = spine_w + 1
+    center_x = rail_x + rail_w + 1
+    center_total = max(w - center_x, 1)
 
-    %{
-      left: %{x: 0, y: 0, w: left_w, h: body_h},
-      center: %{x: center_x, y: 0, w: center_w, h: body_h},
-      right: %{x: right_x, y: 0, w: right_w, h: body_h}
+    base = %{
+      spine: %{x: 0, y: 0, w: spine_w, h: body_h},
+      rail: %{x: rail_x, y: 0, w: rail_w, h: body_h}
     }
+
+    # The toggleable right SESSION PANE (2026-08-31): split ~⅓ of the center off as a right column
+    # (the selected thread's live lead PTY); the thread stack keeps the rest. Off = center spans it all.
+    if session? do
+      right_w = max(div(center_total, 3), 1)
+      center_w = max(center_total - right_w - 1, 1)
+
+      Map.merge(base, %{
+        center: %{x: center_x, y: 0, w: center_w, h: body_h},
+        right: %{x: center_x + center_w + 1, y: 0, w: right_w, h: body_h}
+      })
+    else
+      Map.put(base, :center, %{x: center_x, y: 0, w: center_total, h: body_h})
+    end
   end
+
+  # The spine is a thin icon dock (Slice 3.4, refined 2026-08-31): fully-clickable icon TILES. Kept
+  # tight — barely wider than the small square icon, minimal horizontal padding.
+  defp spine_width(w), do: w |> div(18) |> max(7) |> min(9)
 
   @doc """
   The content rect the center Terminal renders into for a `space_key`/`w`×`h` cockpit — the single
@@ -296,7 +301,9 @@ defmodule Console.View do
   defp merge_slice(data, _slice), do: data
 
   @doc "Resolve the data a panel is fed from the assembled reads (keeps spaces plain data)."
-  def data_for(Panel.Sidebar, r), do: %{groups: r[:sidebar] || [], active_key: r.active_key}
+  def data_for(Panel.Sidebar, r),
+    do: %{groups: r[:sidebar] || [], active_key: r.active_key, graphics?: r[:graphics?] == true}
+
   def data_for(Panel.Roster, r), do: %{sessions: r.roster}
 
   def data_for(Panel.Brief, r), do: r.scope
@@ -320,7 +327,7 @@ defmodule Console.View do
   # `leaves_data/1`, the single enrichment its yank/attach/preview paths share), so the row order
   # here can never disagree with what those paths index.
   def data_for(Panel.Leaves, r), do: r.orbis
-  def data_for(Panel.Activity, r), do: %{events: r[:activity] || []}
+  def data_for(Panel.Activity, r), do: %{events: r[:activity] || [], gates: r[:gates] || []}
   def data_for(Panel.Ticker, r), do: %{events: r[:activity] || []}
   # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
   def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
@@ -379,42 +386,15 @@ defmodule Console.View do
   defp footer_mode(%{focus: %Focus{}}), do: :nav
   defp footer_mode(_reads), do: nil
 
-  # The focused pane's declared verbs; the carousel slot appends the view-cycle key.
+  # The focused pane's declared verbs.
   defp pane_hints(_reads, _space, nil), do: []
 
-  defp pane_hints(reads, space, focused) do
+  defp pane_hints(reads, _space, focused) do
     {panel, data, _rect} = content_for(focused, reads, %{x: 0, y: 0, w: 40, h: 10})
-    hints = Panel.hints(panel, data)
-    if focused in Space.carousel(space), do: hints ++ [{"[/]", "view"}], else: hints
+    Panel.hints(panel, data)
   end
 
   @gap 1
-
-  # The right column (design 2026-08-23): the pinned head at intrinsic height (content + 2
-  # frame rows, never flexed), the carousel below at full remaining height.
-  defp pinned_boxes([], _rect, _reads), do: []
-  defp pinned_boxes([only], rect, _reads), do: boxed([only], rect)
-
-  defp pinned_boxes([pinned, carousel_panel], %{x: x, y: y, w: w, h: h}, reads) do
-    # A short column shrinks the pinned head before the carousel dies: capped so the carousel
-    # keeps at least a 2-row frame, floored at a 2-row frame of its own, never past the column.
-    # A half that still lands under 2 rows is dropped whole by `compose/3` — a sliver box's
-    # inset would poke a row past the frame (the no-overflow invariant).
-    pinned_h = h |> min(max(h - @gap - 2, 2)) |> min(intrinsic_height(pinned, reads, w) + 2)
-    rest_h = max(h - pinned_h - @gap, 0)
-
-    [
-      {pinned, %{x: x, y: y, w: w, h: pinned_h}},
-      {carousel_panel, %{x: x, y: y + pinned_h + @gap, w: w, h: rest_h}}
-    ]
-  end
-
-  # Content height at the box's inset width. nil data (probe not run yet — pure tests, boot
-  # frame) gets a stable nominal so the layout doesn't jump when the probe lands ≈ its size.
-  defp intrinsic_height(section, reads, box_w) do
-    {panel, data, _rect} = content_for(section, reads, %{x: 0, y: 0, w: max(box_w - 4, 1), h: 1})
-    if data == nil, do: 10, else: Panel.content_height(panel, data, max(box_w - 4, 1))
-  end
 
   # Stack sections vertically down a column as box rects, a 1-row gap between them. The picker
   # takes a fixed height, the rest split the remainder (the last absorbs the rounding remainder).

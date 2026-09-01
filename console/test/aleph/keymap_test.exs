@@ -886,6 +886,36 @@ defmodule Console.KeymapTest do
     end
   end
 
+  describe "the tertius y/n confirm gate — a consequential verb is armed, waiting on y/n (Slice 3.5)" do
+    # The arm is `%{action, ctx, summary}` — the routed action to fire, the dispatch ctx, and the
+    # human summary. `y` fires it (`:confirm_orchestrate`, apply_effect reads the arm); anything else
+    # backs out. This gate precedes the space/orbis routing — a consequential intent can be armed from
+    # either, and every key belongs to the gate until it's answered.
+    @arm %{action: {:open, "build", "a cache"}, ctx: %{}, summary: "open [build] “a cache”"}
+    defp armed(over \\ %{}), do: state(Map.merge(%{pending_confirm: @arm}, over))
+
+    test "y while armed fires {:confirm_orchestrate, arm} (payload rides the effect) and clears the arm" do
+      assert {%{pending_confirm: nil}, {:confirm_orchestrate, @arm}} = Keymap.handle(char("y"), armed())
+    end
+
+    test "n while armed cancels — clears the arm, no fire" do
+      assert {%{pending_confirm: nil}, :repaint} = Keymap.handle(char("n"), armed())
+    end
+
+    test "any other key while armed cancels (Esc, or a stray nav key)" do
+      assert {%{pending_confirm: nil}, :repaint} = Keymap.handle(key(:escape), armed())
+      assert {%{pending_confirm: nil}, :repaint} = Keymap.handle(char("j"), armed())
+    end
+
+    test "the gate precedes a live terminal — an armed confirm captures y even with center_live?" do
+      assert {%{pending_confirm: nil}, {:confirm_orchestrate, @arm}} = Keymap.handle(char("y"), armed(%{center_live?: true}))
+    end
+
+    test "not armed (nil): y is not the confirm gate — it falls through to ordinary routing" do
+      refute match?({_s, {:confirm_orchestrate, _}}, Keymap.handle(char("y"), state()))
+    end
+  end
+
   describe "thread stack keyboard nav in a workspace (handle_tlon, center_view :chat)" do
     test "j/k move the stack cursor instead of forwarding to a (hidden) terminal" do
       assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("j"), stack_ctx())
@@ -1332,12 +1362,6 @@ defmodule Console.KeymapTest do
       assert {_s, {:forward, _key}} = Keymap.handle(char("v"), s)
     end
 
-    test "in nav mode, ] and [ cycle the right-pane view (C3.4 — space-switch moved to Tab)" do
-      s = tlon(nav_focus())
-      assert {^s, {:cycle_pane_view, 1}} = Keymap.handle(char("]"), s)
-      assert {^s, {:cycle_pane_view, -1}} = Keymap.handle(char("["), s)
-    end
-
     test "in nav mode, c opens the composer on the machine thread" do
       s = tlon(nav_focus(), %{composer_thread_id: 7})
       assert {%{input: %{kind: :compose, thread_id: 7}}, :repaint} = Keymap.handle(char("c"), s)
@@ -1365,18 +1389,20 @@ defmodule Console.KeymapTest do
     # jumps land distinctly across both columns.
     defp alt_layout, do: %{left: [:a, :b, :c], right: [:d, :e], sections: %{}, counts: %{}}
 
-    test "Alt+digit jumps focus from INSIDE the terminal — implicit nav" do
-      s = tlon(Focus.new(), %{tlon_layout: alt_layout()})
-      {next, :repaint} = Keymap.handle(char("2", alt: true), s)
-      assert next.focus.in_terminal? == false
-      assert next.focus.column == :left
-      assert next.focus.pane == 1
+    test "Alt+digit selects the Nth tmux tab (nav v2)" do
+      s = tlon(Focus.new())
+      assert {_next, {:select_tab, 2}} = Keymap.handle(char("2", alt: true), s)
     end
 
-    test "Alt+0 returns to the terminal from nav" do
-      s = tlon(nav_focus(%{column: :left, pane: 1}), %{tlon_layout: alt_layout()})
-      {next, :repaint} = Keymap.handle(char("0", alt: true), s)
-      assert next.focus.in_terminal? == true
+    test "Alt+0 selects the 10th tab" do
+      s = tlon(Focus.new())
+      assert {_next, {:select_tab, 10}} = Keymap.handle(char("0", alt: true), s)
+    end
+
+    test "Alt+Shift+digit switches to the Nth workspace (0 = the 10th)" do
+      s = tlon(Focus.new())
+      assert {_next, {:switch_workspace_pos, 3}} = Keymap.handle(char("3", alt: true, shift: true), s)
+      assert {_next, {:switch_workspace_pos, 10}} = Keymap.handle(char("0", alt: true, shift: true), s)
     end
 
     test "Alt+j moves a pane down from the terminal (implicit nav)" do
@@ -1385,21 +1411,20 @@ defmodule Console.KeymapTest do
       assert next.focus.in_terminal? == false
     end
 
-    test "Alt+] cycles the carousel from anywhere (even from inside the terminal)" do
-      s = tlon(Focus.new())
-      assert {_next, {:cycle_pane_view, 1}} = Keymap.handle(char("]", alt: true), s)
-    end
-
     test "Alt+c opens the composer from the terminal" do
       s = tlon(Focus.new(), %{composer_thread_id: 7})
       {next, :repaint} = Keymap.handle(char("c", alt: true), s)
       assert next.input.kind == :compose
     end
 
-    test "bare digit in NAV is the fallback jump (leader-digit path)" do
+    test "Alt+\\ toggles the right session pane" do
+      s = tlon(Focus.new())
+      assert {_next, :toggle_session_pane} = Keymap.handle(char("\\", alt: true), s)
+    end
+
+    test "a bare digit in NAV is a no-op — pane digits are gone (nav v2)" do
       s = tlon(nav_focus(), %{tlon_layout: alt_layout()})
-      {next, :repaint} = Keymap.handle(char("4"), s)
-      assert next.focus.column == :right
+      assert {^s, :none} = Keymap.handle(char("4"), s)
     end
 
     test "Alt+h / Alt+j in Orbis are no-ops — chords never drive Orbis nav" do

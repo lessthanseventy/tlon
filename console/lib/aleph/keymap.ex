@@ -36,8 +36,6 @@ defmodule Console.Keymap do
     * `{:cycle_coworker_model, profile}` — advance the active space's coworker driver model one
       step round `Console.Profiles.model_ring/0` and persist it (the `m` verb — the SETTINGS knob;
       only in a space with a coworker).
-    * `{:cycle_pane_view, dir}` — cycle the Workspace's right-pane view (Health↔Activity↔Leaves, one
-      panel shown full-height at a time) by `dir` (+1/-1, the `[`/`]` verb, Workspace nav only).
     * `{:switch_space, key}` — Enter on the Orbis survey (`orbis_focus == :survey`) zooms into the
       cursor row's workspace id — the same effect a survey-row click emits (D0.2).
     * `{:toggle_orbis_face}` — `a` (Orbis, bare) flips `orbis_face` survey↔author (D2.1); Esc in
@@ -89,7 +87,7 @@ defmodule Console.Keymap do
   The roster sub-list ALSO carries `knob :: :model | :yolo` (D2.4 Chunk 2b, default `:model`,
   read tolerantly via `Map.get/3` so older literal states don't need it) — meaningless outside
   `mode: :sub, field: 3` (roster), same "meaningless-but-harmless elsewhere" idiom as
-  `orbis_focus`/`right_pane_view`. There `Tab` flips it; `Enter`/`Space` emit
+  `orbis_focus`. There `Tab` flips it; `Enter`/`Space` emit
   `{:coworker_knob, name, knob}` for the sub-selected entry (`name` resolved off the LIVE roster,
   `workspace_field/2`, same as the `a`/`x`/`d` clauses) — the Settings modal's model-ring-cycle /
   yolo-flip, now reached from here. This absorbs Settings; Chunk 2b deletes the `,` modal.
@@ -115,13 +113,16 @@ defmodule Console.Keymap do
           | {:forward, map()}
           | {:create_thread, String.t()}
           | {:orchestrate, String.t()}
+          | {:confirm_orchestrate, map()}
           | {:toggle_fold}
+          | :toggle_session_pane
           | {:zoom_thread}
           | {:post_message, term(), String.t()}
           | {:cycle_coworker_model, String.t()}
           | {:habit_action, :approve | :reject}
-          | {:cycle_pane_view, integer()}
           | {:switch_space, atom() | non_neg_integer()}
+          | {:switch_workspace_pos, pos_integer()}
+          | {:select_tab, pos_integer()}
           | {:toggle_orbis_face}
           | {:register_workspace, atom(), String.t()}
           | {:arm_delete, term(), String.t()}
@@ -153,6 +154,17 @@ defmodule Console.Keymap do
   # :shift) never matches here, so the prefix is untouched.
   def handle(%{key: :space, shift: true} = key, state) when not is_map_key(key, :ctrl),
     do: handle(%{key: :char, char: " "}, state)
+
+  # --- tertius y/n confirm gate (Slice 3.5): a consequential verb (open work / approve a gate) was
+  # routed and is armed, waiting on the operator — the whole point is that a command line you talk into
+  # NEVER fires a consequential action without a yes. While `pending_confirm` is set every key belongs
+  # to the gate: `y` fires it (`:confirm_orchestrate`, apply_effect reads the arm), anything else backs
+  # out. Precedes even the input modal — no modal can be open while armed (the submit cleared it). ---
+  def handle(%{key: :char, char: "y"}, %{pending_confirm: pc} = state) when not is_nil(pc),
+    do: {%{state | pending_confirm: nil}, {:confirm_orchestrate, pc}}
+
+  def handle(_key, %{pending_confirm: pc} = state) when not is_nil(pc),
+    do: {%{state | pending_confirm: nil}, :repaint}
 
   # --- input mode: a MODAL — every key belongs to the buffer until Enter/Esc, so a binding
   # letter (q, s, tab) types its character instead of firing. Must come first. ---
@@ -292,16 +304,20 @@ defmodule Console.Keymap do
   # Must precede the Tlön routing clause (which would forward them to tmux from TERM). Each clears
   # an armed leader (`clear_leader/1`) — these sit above the leader-consumption clause, so without
   # it Ctrl+Space then an Alt chord would leave the prefix stuck.
-  def handle(%{key: :char, char: d, alt: true} = k, %{active_key: key, focus: %Focus{}} = state)
+  # Nav v2 (Andrew 2026-08-31): Alt+Shift+digit → switch to the Nth WORKSPACE; Alt+digit (no shift) →
+  # select tmux TAB N in the active workspace. `0` is the 10th. The shift clause is first (more
+  # specific). (These replace the old Alt+digit focus-pane jump — pane digits are gone.)
+  def handle(%{key: :char, char: d, alt: true, shift: true} = k, %{active_key: key} = state)
       when Space.workspace?(key) and d in ~w(0 1 2 3 4 5 6 7 8 9) and not is_map_key(k, :ctrl),
-      do: {state |> clear_leader() |> focus_jump(String.to_integer(d)), :repaint}
+      do: {clear_leader(state), {:switch_workspace_pos, digit_pos(d)}}
+
+  def handle(%{key: :char, char: d, alt: true} = k, %{active_key: key} = state)
+      when Space.workspace?(key) and d in ~w(0 1 2 3 4 5 6 7 8 9) and not is_map_key(k, :ctrl),
+      do: {clear_leader(state), {:select_tab, digit_pos(d)}}
 
   def handle(%{key: :char, char: c, alt: true} = k, %{active_key: key, focus: %Focus{}} = state)
       when Space.workspace?(key) and c in ~w(h j k l) and not is_map_key(k, :ctrl),
       do: {state |> clear_leader() |> alt_move(c), :repaint}
-
-  def handle(%{key: :char, char: "]", alt: true}, state), do: {clear_leader(state), {:cycle_pane_view, 1}}
-  def handle(%{key: :char, char: "[", alt: true}, state), do: {clear_leader(state), {:cycle_pane_view, -1}}
 
   # Alt+n / Alt+c reach the shared command table with the modifier stripped (its clauses are
   # modifier-guarded on purpose — a bare-shaped key is the door).
@@ -310,6 +326,12 @@ defmodule Console.Keymap do
 
   def handle(%{key: :char, char: "c", alt: true} = k, state) when not is_map_key(k, :ctrl),
     do: command(%{key: :char, char: "c"}, clear_leader(state))
+
+  # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
+  # beside the stack. Workspace-only (there's no thread stack elsewhere); global across TERM/NAV.
+  def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
+      when Space.workspace?(key) and not is_map_key(k, :ctrl),
+      do: {clear_leader(state), :toggle_session_pane}
 
   # --- Tlön: the lazygit focus model (design 2026-08-20). The center is a live tmux client, so
   # `Ctrl+Space` is a STICKY toggle in/out of it — NOT the arm-next-key leader other spaces use.
@@ -683,11 +705,7 @@ defmodule Console.Keymap do
     do: {focus_intent(state, :close_detail), :repaint}
 
   defp handle_tlon(%{key: :escape}, state), do: {put_in(state.focus.in_terminal?, true), :repaint}
-  # Bare digits in nav: the no-plumbing fallback for the Alt chords (`^␣ 5`) — jump by border
-  # number; 0 re-enters the terminal.
-  defp handle_tlon(%{key: :char, char: d}, state) when d in ~w(0 1 2 3 4 5 6 7 8 9),
-    do: {focus_jump(state, String.to_integer(d)), :repaint}
-
+  # Nav v2: pane digits are gone — the rail is walked with h/l. (Bare digits are no longer a jump.)
   defp handle_tlon(%{key: :char, char: "l"}, state), do: {focus_intent(state, :pane_next), :repaint}
   defp handle_tlon(%{key: :char, char: "h"}, state), do: {focus_intent(state, :pane_prev), :repaint}
   defp handle_tlon(%{key: :char, char: "L"}, state), do: {focus_intent(state, :col_right), :repaint}
@@ -728,10 +746,6 @@ defmodule Console.Keymap do
   # so the section must stay reachable.
   defp handle_tlon(%{key: :char, char: "s"}, state), do: {focus_intent(state, :section_next), :repaint}
   defp handle_tlon(%{key: :char, char: "q"}, state), do: {state, :quit}
-  # `[`/`]` cycle the Workspace's right-pane view (Health↔Activity↔Leaves, one full-height panel at a
-  # time) — the cockpit resolves the active space's right-column length and wraps the index.
-  defp handle_tlon(%{key: :char, char: "]"}, state), do: {state, {:cycle_pane_view, 1}}
-  defp handle_tlon(%{key: :char, char: "["}, state), do: {state, {:cycle_pane_view, -1}}
   # The center [chat]|[terminal] toggle (reshape slice D): flip which face the Workspace center shows.
   defp handle_tlon(%{key: :char, char: "v"}, state), do: {state, :toggle_center_view}
   defp handle_tlon(%{key: :char, char: "c"} = k, state), do: command(k, state)
@@ -740,7 +754,9 @@ defmodule Console.Keymap do
 
   defp focus_intent(state, intent), do: %{state | focus: Focus.handle(state.focus, state.tlon_layout, intent)}
 
-  defp focus_jump(state, digit), do: %{state | focus: Focus.jump(state.focus, state.tlon_layout, digit)}
+  # A digit key to a 1-based position: "1".."9" → 1..9, "0" → 10 (the super+1..0 idiom).
+  defp digit_pos("0"), do: 10
+  defp digit_pos(d), do: String.to_integer(d)
 
   # A global Alt chord consumes any armed leader — without this, Ctrl+Space then an Alt chord
   # leaves the prefix stuck (the next Ctrl+Space would silently disarm instead of arming).

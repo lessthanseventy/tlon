@@ -330,6 +330,10 @@ defmodule Console.Cockpit do
             # `lazygit` PTY is up over the focused thread's worktree, else nil. The terminal itself
             # lives in `Console.Sessions` keyed `{:lazygit, thread_id}`; this only marks the overlay.
             lazygit: nil,
+            # The toggleable right SESSION PANE (2026-08-31): true = show the selected thread's live
+            # lead PTY in a right column beside the thread stack. The target follows the stack cursor;
+            # the terminal lives in `Console.Sessions` keyed `{:session, thread_id}`. Alt+\ toggles.
+            session_pane: false,
             paste_buffer: nil,
             input: nil,
             flash: nil,
@@ -1477,6 +1481,11 @@ defmodule Console.Cockpit do
   # attached thread's conversation.
   defp apply_effect(:toggle_center_view, state), do: {:noreply, render(toggle_center_view(state))}
 
+  # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
+  # beside the stack. Only meaningful in a workspace chat view; elsewhere it's a harmless flip.
+  defp apply_effect(:toggle_session_pane, state),
+    do: {:noreply, render(%{state | session_pane: not state.session_pane})}
+
   # The `Enter` verb landed: enter-or-spawn on the focused thread. The result flashes in the footer.
   # UNREFERENCED since Slice 0 collapse (Sessions deleted) — no keymap clause emits :enter_or_spawn
   # now; kept intact, teardown TBD.
@@ -2076,6 +2085,7 @@ defmodule Console.Cockpit do
     state = Board.safe_read(:workspace_roster, state, fn -> ensure_workspace_roster(state) end)
     state = Board.safe_read(:log_window, state, fn -> ensure_log_window(state) end)
     state = Board.safe_read(:thread_sessions, state, fn -> ensure_thread_sessions(state) end)
+    state = Board.safe_read(:session_pane, state, fn -> ensure_session(state) end)
 
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
     # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
@@ -2176,6 +2186,11 @@ defmodule Console.Cockpit do
       # The layout the View reads for the focused pane + item cursor (counts), and the resolved
       # MAIN detail (nil unless the focus opened one). Both nil outside a Workspace space.
       tlon_layout: tlon_layout,
+      # The right SESSION PANE (2026-08-31): the selected thread's id when the pane is toggled on
+      # (else nil → no right column), and its embedded lead PTY render-state. View.compose splits a
+      # right column off the center when the target is set.
+      session_pane: session_pane_target(state),
+      session: Board.safe_read(:session, :no_session, fn -> session_read(state) end),
       detail:
         Board.safe_read(:detail, nil, fn ->
           if(Space.workspace?(state.active_key) and state.focus.detail?, do: tlon_detail(state, tlon_layout))
@@ -2291,6 +2306,61 @@ defmodule Console.Cockpit do
   end
 
   defp machine_read(_state), do: :no_session
+
+  # The right session pane's TARGET: the stack-focused thread's id when the pane is toggled on in a
+  # workspace chat view, else nil (the pane is hidden). Follows the cursor — moving j/k re-targets it,
+  # so the pane always shows whatever thread you're looking at.
+  defp session_pane_target(%{session_pane: true, active_key: key, center_view: :chat, stack_focus: id})
+       when Space.workspace?(key) and is_integer(id),
+       do: id
+
+  defp session_pane_target(_state), do: nil
+
+  # The session pane's embedded terminal render-state — the selected thread's live lead PTY, keyed
+  # `{:session, id}` in Console.Sessions, or `:no_session` until spawned. LIVE seam: `ensure_session`
+  # spawns/attaches the PTY (render + key routing are Andrew's kitty pass).
+  defp session_read(state) do
+    case session_pane_target(state) do
+      id when is_integer(id) -> render_state_of(safe_terminal({:session, id}))
+      _ -> :no_session
+    end
+  end
+
+  # Spawn (or reuse) the selected thread's lead session PTY when the pane is on — a tmux client
+  # attached to the thread's lead window in the workspace session (`Console.SessionPane.command/1`).
+  # Rate-limited out of the hot path like the other ensure_* preamble steps; a miss just leaves the
+  # pane on `:no_session` this frame. LIVE-tunable (the attach shape is the kitty pass).
+  defp ensure_session(state) do
+    with id when is_integer(id) <- session_pane_target(state),
+         nil <- session_terminal_pid(id),
+         %{index: index} <- leaf_tab(tlon_tabs(active_workspace_id(state)), id) do
+      ws = active_workspace_id(state)
+      {cmd, args} = Console.SessionPane.command(workspace_socket(ws), workspace_session(ws), index)
+      {cols, rows} = session_pane_dims(state)
+      _ = safe_session_spawn(id, cmd, args, cols, rows)
+    end
+
+    state
+  end
+
+  defp session_terminal_pid(id) do
+    case safe_terminal({:session, id}) do
+      pid when is_pid(pid) -> pid
+      _ -> nil
+    end
+  end
+
+  defp safe_session_spawn(id, cmd, args, cols, rows) do
+    Sessions.ensure({:session, id}, cmd: cmd, args: args, cols: cols, rows: rows)
+  rescue
+    _ -> :error
+  catch
+    :exit, _ -> :error
+  end
+
+  # The session pane occupies the right column (~⅓ of the center's width) — spawn dims only; the live
+  # resize-on-window-change is the kitty pass.
+  defp session_pane_dims(%{w: w, h: h}), do: {max(div(w, 3) - 2, 1), max(h - 3, 1)}
 
   defp render_state_of(nil), do: :no_session
   defp render_state_of(term), do: Terminal.render_state(term)

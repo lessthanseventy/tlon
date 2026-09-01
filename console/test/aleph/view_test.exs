@@ -124,6 +124,32 @@ defmodule Console.ViewTest do
     end
   end
 
+  describe "the toggleable right session pane (2026-08-31)" do
+    defp chat_reads(overrides) do
+      stack = %{cards: [%{id: 7, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]}
+      reads(Map.merge(%{center_view: :chat, thread_stack: stack}, overrides))
+    end
+
+    test "off (default): no session terminal; the stack spans the center" do
+      placements = View.compose(chat_reads(%{}), 120, 40)
+      refute placed?(placements, Panel.Terminal)
+      assert placed?(placements, Panel.ThreadStack)
+    end
+
+    test "on: a right session pane appears and narrows the stack" do
+      wide = View.compose(chat_reads(%{}), 120, 40)
+      {_, _, wide_stack} = Enum.find(wide, &match?({Panel.ThreadStack, _, _}, &1))
+
+      placements = View.compose(chat_reads(%{session_pane: 7, session: :no_session}), 120, 40)
+      assert {Panel.Terminal, _data, sess_rect} = Enum.find(placements, &match?({Panel.Terminal, _, _}, &1))
+      {_, _, narrow_stack} = Enum.find(placements, &match?({Panel.ThreadStack, _, _}, &1))
+
+      # the stack gave up width to the session pane, which sits to its right
+      assert narrow_stack.w < wide_stack.w
+      assert sess_rect.x > narrow_stack.x
+    end
+  end
+
   describe "the funes rail (Slice 3.4)" do
     test "the rail stacks NOW·CREW·MEMORY·STACK to the right of the spine; no right rail, no Brief" do
       placements = View.compose(reads(%{focused_session: {:leader, "tertius"}}), 120, 40)
