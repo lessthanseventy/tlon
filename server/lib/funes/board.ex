@@ -16,6 +16,8 @@ defmodule Server.Board do
   alias Server.Agent
   alias Server.Channel
   alias Server.Dossier
+  alias Server.Event
+  alias Server.Fact
   alias Server.Message
   alias Server.Presence.Thinking
   alias Server.Recall
@@ -24,6 +26,35 @@ defmodule Server.Board do
   alias Server.Workspace
 
   @cap 5
+
+  @doc """
+  The machine-wide activity feed as `{tag, row}` entries, newest-first — the durable backfill for
+  the cockpit's in-memory activity ring (a fresh cockpit starts blank; this seeds it so NOW isn't
+  empty after a restart). Merges the append-only logs the live feed is dominated by — posted
+  messages, banked facts, recorded events — sorted by `created_at`. Transition-only tags
+  (issue/question/todo resolved) aren't reconstructable from current state, so they're left to the
+  live Bus stream; the seed covers the visible bulk without lying about state.
+  """
+  @spec recent_activity(pos_integer()) :: [{atom(), map()}]
+  def recent_activity(limit \\ 50) do
+    entries =
+      Enum.map(Channel.recent_across(limit), &{:message_posted, &1}) ++
+        Enum.map(recent_facts(limit), &{:fact_banked, &1}) ++
+        Enum.map(recent_events(limit), &{:event_recorded, &1})
+
+    entries
+    |> Enum.sort_by(fn {_tag, row} -> row.created_at end, {:desc, DateTime})
+    |> Enum.take(limit)
+  end
+
+  # Recently banked, still-live facts (a forgotten fact is out of every recall surface).
+  defp recent_facts(limit) do
+    Repo.all(from f in Fact, where: is_nil(f.forgotten_at), order_by: [desc: f.id], limit: ^limit)
+  end
+
+  defp recent_events(limit) do
+    Repo.all(from e in Event, order_by: [desc: e.id], limit: ^limit)
+  end
 
   @doc """
   The sidebar read-model (reshape slice C) — the contract the Slack-shaped UI sits on.

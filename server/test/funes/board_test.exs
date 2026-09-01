@@ -25,6 +25,42 @@ defmodule Server.BoardTest do
     s
   end
 
+  describe "recent_activity/1 — the cockpit NOW backfill" do
+    test "merges recent messages, facts, and events as {tag, row}, each carrying a thread_id" do
+      {:ok, thread} = Channel.open_thread(%{title: "seed"})
+      {:ok, _msg} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "shipping it"})
+      {:ok, _fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "use sqlite", provenance: "derived"})
+      {:ok, _event} = Dossier.record_event(%{thread_id: thread.id, kind: "work_landed", detail: %{"summary" => "landed"}})
+
+      feed = Board.recent_activity(50)
+      tags = Enum.map(feed, fn {tag, _row} -> tag end)
+
+      assert :message_posted in tags
+      assert :fact_banked in tags
+      assert :event_recorded in tags
+      # every seeded row carries thread_id so the cockpit's scope_activity/2 can filter by workspace
+      assert Enum.all?(feed, fn {_tag, row} -> row.thread_id == thread.id end)
+    end
+
+    test "forgotten facts are left out of the seed" do
+      {:ok, thread} = Channel.open_thread(%{title: "forget"})
+      {:ok, fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "temporary", provenance: "derived"})
+
+      fact
+      |> Ecto.Changeset.change(forgotten_at: DateTime.truncate(DateTime.utc_now(), :second))
+      |> Repo.update!()
+
+      refute Enum.any?(Board.recent_activity(50), &match?({:fact_banked, _}, &1))
+    end
+
+    test "caps at the requested limit" do
+      {:ok, thread} = Channel.open_thread(%{title: "many"})
+      for i <- 1..8, do: {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "m#{i}"})
+
+      assert length(Board.recent_activity(3)) == 3
+    end
+  end
+
   describe "Staff.roster/0 — IN FLIGHT" do
     test "lists live sessions across threads with a warm/cold flag, omitting ended ones" do
       {:ok, thread} = Channel.open_thread(%{title: "one"})

@@ -356,8 +356,10 @@ defmodule Console.Cockpit do
             # preview, so cursor indexing always matches the row order on screen.
             focused_lead: nil,
             # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
-            # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`.
-            activity: [],
+            # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`. Seeded from
+            # the durable logs so a fresh cockpit's NOW isn't blank until new events flow (the ring
+            # itself is in-memory — this backfill is the restart fix); live Bus events prepend onto it.
+            activity: seed_activity(),
             # The active workspace's thread ids (cached on the probe cadence) — the global activity
             # feed is filtered to these so NOW shows only this workspace's events. nil = unfiltered.
             ws_thread_ids: nil,
@@ -753,6 +755,11 @@ defmodule Console.Cockpit do
   defp push_activity(state, tag, row) do
     %{state | activity: Enum.take([{tag, row} | state.activity], @activity_cap)}
   end
+
+  # The one-shot backfill behind `activity: []`'s replacement — the durable feed at cockpit start,
+  # guarded so a not-yet-up server (init can race the server boot) just yields an empty ring rather
+  # than crashing the cockpit. Scoped to the active workspace at render by `scope_activity/2`.
+  defp seed_activity, do: Console.Board.safe_read(:activity_seed, [], fn -> Server.Board.recent_activity(@activity_cap) end)
 
   # First-sight test for a tagged event: true unless its key is already in the recently-seen set.
   # The key is `{tag, row.id}` (a durable row always has an id, so the two topic deliveries share
