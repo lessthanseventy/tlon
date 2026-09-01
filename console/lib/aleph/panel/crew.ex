@@ -93,7 +93,8 @@ defmodule Console.Panel.Crew do
     label = label <> elapsed_suffix(cw[:elapsed_s])
 
     [
-      [{clip("#{cw.name}", w - 12), :normal}, {"  #{cw.archetype}", :dim}],
+      # The name carries the archetype identity hue (the "splash" — same archetype, same colour).
+      [{clip("#{cw.name}", w - 12), Console.Card.archetype_color(cw.archetype)}, {"  #{cw.archetype}", :dim}],
       [{"  #{glyph} ", glyph_style(cw.status)}, {clip(label <> seat(cw), w - 4), :dim}],
       [{clip("  #{short_model(cw.model)} · #{harness_label(cw.harness)}", w), :dim}],
       blank()
