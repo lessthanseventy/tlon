@@ -15,8 +15,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { activityFrom, heartbeatDue, nextHeartbeatState, phraseHeartbeat, type HeartbeatState } from "./activity.ts";
+import { readHookInput, runHook } from "./hook.ts";
 import { completeText } from "./llm.ts";
-import { FunesClient } from "./mcp.ts";
+import { FunesClient, identityFromEnv } from "./mcp.ts";
 
 // A hook must never wedge a tool call — the sidecar phrasing call gets a real budget (it's the
 // deliverable, unlike capture's best-effort extraction), but the whole hook still has a ceiling.
@@ -39,7 +40,7 @@ interface PostToolUseInput {
 
 function stateFilePath(sessionId: string): string {
   const stateHome = env.XDG_STATE_HOME?.trim() || join(homedir(), ".local/state");
-  return join(stateHome, "funes-cc-heartbeat", sessionId);
+  return join(stateHome, "tlon-cc-heartbeat", sessionId);
 }
 
 async function readState(path: string): Promise<HeartbeatState | null> {
@@ -63,21 +64,11 @@ async function writeState(path: string, state: HeartbeatState): Promise<void> {
 // capture(): this talks to the filesystem, the network, and completeText; the decision math and
 // message-building it calls into are what's pure and pinned, in activity.ts).
 async function heartbeat(): Promise<void> {
-  const url = env.TLON_MCP_URL;
-  const threadEnv = env.TLON_THREAD;
-  const agent = env.TLON_AUTHOR;
-  if (!url || !threadEnv || !agent) return;
-  const threadId = Number(threadEnv);
-  if (!Number.isInteger(threadId)) return;
+  const identity = identityFromEnv();
+  if (!identity) return;
 
-  const stdinText = await Bun.stdin.text();
-  let hookInput: PostToolUseInput;
-  try {
-    hookInput = JSON.parse(stdinText) as PostToolUseInput;
-  } catch {
-    return;
-  }
-  if (!hookInput.session_id || !hookInput.tool_name) return;
+  const hookInput = await readHookInput<PostToolUseInput>();
+  if (!hookInput?.session_id || !hookInput.tool_name) return;
 
   const path = stateFilePath(hookInput.session_id);
   const now = Date.now();
@@ -96,7 +87,7 @@ async function heartbeat(): Promise<void> {
   const line = await phraseHeartbeat(activity, elapsedSeconds, completeText);
 
   try {
-    const client = new FunesClient({ url, threadId, agent });
+    const client = new FunesClient(identity);
     await client.connect();
     await client.postMessage(line);
   } catch {
@@ -106,18 +97,6 @@ async function heartbeat(): Promise<void> {
   await writeState(path, { turnStartedAt, lastPostAt: now }).catch(() => {});
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main(): Promise<void> {
-  try {
-    await Promise.race([heartbeat(), delay(HOOK_TIMEOUT_MS)]);
-  } catch {
-    // silent no-op — a PostToolUse hook must never surface a failure or block the tool call
-  }
-}
-
 if (import.meta.main) {
-  main().finally(() => process.exit(0));
+  runHook(heartbeat, HOOK_TIMEOUT_MS).finally(() => process.exit(0));
 }

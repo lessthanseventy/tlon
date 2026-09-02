@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mise run funes:claude [thread-id] — launch Claude Code as a funes citizen.
+# mise run server:claude [thread-id] — launch Claude Code as a citizen of a server thread.
 # No thread-id: open a fresh thread. A numeric thread-id: join that thread (resume across
 # a /clear).
 #
@@ -28,24 +28,28 @@ if [ -z "${TLON_MCP_URL:-}" ] || [ -z "${TLON_THREAD:-}" ] || [ -z "${TLON_AUTHO
     shift
   fi
 
+  # The CLI's stderr passes through: its own error (no release, service down, no such
+  # thread) is the diagnosis, so nothing here guesses at one.
   if [ -n "$join_id" ]; then
-    block="$("$cli" spawn --join "$join_id" claude-code 2>/dev/null || true)"
+    block="$("$cli" spawn --join "$join_id" claude-code || true)"
   else
     branch="$(git -C "$PWD" branch --show-current 2>/dev/null || true)"
-    block="$("$cli" spawn "claude-code @ $(basename "$PWD")${branch:+ ($branch)}" claude-code 2>/dev/null || true)"
+    block="$("$cli" spawn "claude-code @ $(basename "$PWD")${branch:+ ($branch)}" claude-code || true)"
   fi
 
-  # Degrade gracefully: no live channel (or no such thread) → launch a PLAIN claude, so
-  # the harness is never held hostage to funes being up.
+  # Degrade gracefully: spawn failed → launch a PLAIN claude, not as a citizen, so the
+  # harness is never held hostage to the server being up.
   if [ -z "$block" ]; then
-    echo "funes: channel not up${join_id:+ or no thread #$join_id} — launching plain claude (start it with 'mise run funes:restart')" >&2
+    echo "tlon: spawn failed${join_id:+ for thread #$join_id} (see above) — launching plain claude, not as a citizen. If the service is down: 'mise run server:restart'" >&2
     [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ] && { echo "exec: claude $*"; exit 0; }
     exec claude "$@"
   fi
   eval "$block" # exports TLON_MCP_URL / TLON_THREAD / TLON_AUTHOR (no TLON_TOKEN — minted per connect)
 fi
 
-mcp_json="{\"mcpServers\":{\"funes\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\",\"headersHelper\":\"$cli token\"}}}"
+# The MCP server key is `tlon` on every harness (flake.nix's mcpServers.tlon for pi), so the
+# tools read as mcp__tlon__post_message etc. Nothing reads the key back; it is a label.
+mcp_json="{\"mcpServers\":{\"tlon\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\",\"headersHelper\":\"$cli token\"}}}"
 
 # A write-fenced role (aleph's claude_code driver sets TLON_PERMISSIONS_DENY, e.g.
 # "Write,Edit,NotebookEdit" for the reviewer) lands as a real permissions.deny in --settings —
@@ -67,11 +71,11 @@ fi
 # `git commit` promotes the thread into the stage machine — track-hook.sh).
 settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh\"}]}],\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/heartbeat-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/track-hook.sh\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}],\"SessionEnd\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}]}$perms_json}"
 
-# The funes-citizen protocol, as a system prompt. Without it Claude Code treats a teammate's message
-# (injected into its input as "[funes thread #N] <author>: ...") like the human talking and answers in
-# its own window — which no one else can see, so the reply is lost and the peer is never woken. Spell
-# out that a reply is a post_message tool call that @-mentions the sender.
-sys_prompt="You are a funes citizen posting as \"$TLON_AUTHOR\" on thread #$TLON_THREAD, working alongside other agents. Messages from teammates arrive in your input prefixed \"[funes thread #N] <author>:\" — these are from other agents, NOT the human operator, and your terminal output is invisible to them. To reply so the sender actually receives it and takes their turn, call the funes post_message tool and @-mention the sender by handle (for example @pi-machine); answering only in your own window reaches no one."
+# The citizen protocol, as a system prompt. Without it Claude Code treats a teammate's message
+# (injected into its input as "[tlon thread #N] <author>: ..." — Console.Mention's prefix) like the
+# human talking and answers in its own window — which no one else can see, so the reply is lost and
+# the peer is never woken. Spell out that a reply is a post_message tool call that @-mentions the sender.
+sys_prompt="You are a citizen of tlon thread #$TLON_THREAD posting as \"$TLON_AUTHOR\", working alongside other agents. Messages from teammates arrive in your input prefixed \"[tlon thread #N] <author>:\" — these are from other agents, NOT the human operator, and your terminal output is invisible to them. To reply so the sender actually receives it and takes their turn, call the tlon post_message tool and @-mention the sender by handle (for example @pi-machine); answering only in your own window reaches no one."
 
 # A coworker ROLE (archetype persona) rides in as a file via TLON_ROLE_PROMPT_FILE (aleph's
 # claude_code harness driver sets it) and is APPENDED to the citizen protocol — a second

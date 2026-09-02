@@ -25,8 +25,9 @@ import {
   serializeDelta,
   type Entry,
 } from "./capture.ts";
+import { readHookInput, runHook } from "./hook.ts";
 import { completeText } from "./llm.ts";
-import { FunesClient } from "./mcp.ts";
+import { FunesClient, identityFromEnv } from "./mcp.ts";
 
 // A hung completion or a wedged funes connection must never keep the hook process alive past the
 // turn — bound the whole capture with a hard ceiling and let the process exit regardless.
@@ -72,7 +73,7 @@ export function parseTranscript(jsonlText: string): Entry[] {
 
 function stateFilePath(sessionId: string): string {
   const stateHome = env.XDG_STATE_HOME?.trim() || join(homedir(), ".local/state");
-  return join(stateHome, "funes-cc-capture", sessionId);
+  return join(stateHome, "tlon-cc-capture", sessionId);
 }
 
 async function readWatermark(path: string): Promise<number> {
@@ -93,20 +94,11 @@ async function writeWatermark(path: string, watermark: number): Promise<void> {
 // The IO/orchestration core (deliberately not unit-tested — same split as extension.ts vs
 // capture.ts: this talks to the filesystem, the network, and completeText; nothing here is pure).
 async function capture(): Promise<void> {
-  const url = env.TLON_MCP_URL;
-  const threadEnv = env.TLON_THREAD;
-  const agent = env.TLON_AUTHOR;
-  if (!url || !threadEnv || !agent) return;
-  const threadId = Number(threadEnv);
-  if (!Number.isInteger(threadId)) return;
+  const identity = identityFromEnv();
+  if (!identity) return;
 
-  const stdinText = await Bun.stdin.text();
-  let hookInput: StopHookInput;
-  try {
-    hookInput = JSON.parse(stdinText) as StopHookInput;
-  } catch {
-    return;
-  }
+  const hookInput = await readHookInput<StopHookInput>();
+  if (!hookInput) return;
   const sessionId = hookInput.session_id;
   const transcriptPath = hookInput.transcript_path;
   if (!sessionId || !transcriptPath) return;
@@ -147,7 +139,7 @@ async function capture(): Promise<void> {
   }
 
   try {
-    const client = new FunesClient({ url, threadId, agent });
+    const client = new FunesClient(identity);
     await client.connect();
     for (const f of facts) {
       try {
@@ -164,21 +156,9 @@ async function capture(): Promise<void> {
   await writeWatermark(path, nextWatermark).catch(() => {});
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main(): Promise<void> {
-  try {
-    // If the ceiling wins the race mid-bank, capture()'s writeWatermark never runs, so the same
-    // delta re-extracts and re-banks next turn — a rare duplicate-fact tradeoff we accept over the
-    // alternative (letting a hung completion wedge the session). funes dedups on promotion anyway.
-    await Promise.race([capture(), delay(HOOK_TIMEOUT_MS)]);
-  } catch {
-    // silent no-op — a Stop hook must never surface a failure or break the session
-  }
-}
-
+// If the ceiling wins the race mid-bank, capture()'s writeWatermark never runs, so the same
+// delta re-extracts and re-banks next turn — a rare duplicate-fact tradeoff we accept over the
+// alternative (letting a hung completion wedge the session). funes dedups on promotion anyway.
 if (import.meta.main) {
-  main().finally(() => process.exit(0));
+  runHook(capture, HOOK_TIMEOUT_MS).finally(() => process.exit(0));
 }

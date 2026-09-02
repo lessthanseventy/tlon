@@ -3,7 +3,7 @@
 The third story in the stack. `server` is the memory, `console` is the sight, `adapters` is the
 **hands**: how a working agent reaches server, comes up already knowing its thread, and banks what it
 learns as it works. Read `../server/docs/spec.md` and
-`../../docs/plans/2026-08-15-pi-integration-and-funes-mcp-design.md` before reshaping anything here —
+`../../docs/plans/2026-08-15-pi-integration-and-server-mcp-design.md` before reshaping anything here —
 this module is Track B's agent side, and the spec's boundaries govern it.
 
 ## What adapters is, and is not
@@ -21,7 +21,7 @@ a thin bridge from that harness's lifecycle to the server's one sovereign channe
   coworker (the Tlön profile drops `adapters/pi` to sever server) still gets it. It reads pi's own
   model/context/session surface, not server.
 - **`claude-code/`** — the Claude Code adapter (built). Same two doors, adapted to Claude Code's own
-  mechanisms: the MCP tools via `mcpServers.server` `type:http` with a **`headersHelper`**
+  mechanisms: the MCP tools via `mcpServers.tlon` `type:http` with a **`headersHelper`**
   (`scripts/tlon-cli.sh token`) that mints a FRESH token per connect — so unlike pi's static bearer,
   auth survives a server restart — and the brief via a `SessionStart` hook (`brief-hook.sh`). Both are
   scoped to the session by `server:claude`'s `--mcp-config`/`--settings` launch flags, so a plain
@@ -55,26 +55,32 @@ not the transport — is the identity:
 2. **`pi-mcp-adapter`** exposes the server's write verbs (`post_message`, `bank_fact`, `raise_issue`,
    `record_done`) to the *model* as first-class tools.
 
-Because server binds a session to the **token** (`Server.MCP.Tokens.bind_session/2`), not to a transport
+Because server binds a session to the **token** (`Funes.MCP.Tokens.bind_session/2`), not to a transport
 connection, `register` on door 1 claims the session that door 2's calls then resolve to — so the
 model's writes bump the same session's warmth for free. Register once; both doors are that session.
 
-## Install (the human is the arbiter, for now)
+## Install
 
-Slices before the automated arbiter (pi doc §5, slice 5) install by hand. In the serving server node's
-`iex`, `Server.MCP.Spawn.env/2` opens a thread, staffs an agent, and prints the identity-only
-`export TLON_*` block (`TLON_MCP_URL`, `TLON_THREAD`, `TLON_AUTHOR` — NO `TLON_TOKEN`).
-Paste it into a fresh pi pane, then point pi at adapters:
+The launchers do the spawn: `mise run pi:*` (`pi/launch.sh`) and `mise run server:claude`
+(`claude-code/launch.sh`) call `scripts/tlon-cli.sh spawn`, which opens (or `--join`s) a thread,
+staffs the agent, and exports the identity-only `TLON_*` block (`TLON_MCP_URL`, `TLON_THREAD`,
+`TLON_AUTHOR` — NO `TLON_TOKEN`) before exec'ing the harness. The same block is what
+`mise run server:spawn` prints for a hand-run pane.
 
-- `~/.pi/agent/settings.json` → `"extensions": [".../modules/adapters/pi/src/extension.ts"]`,
-  `"packages": ["pi-mcp-adapter", "npm:pi-sandbox", "npm:@ollama/pi-web-search",
-  "npm:pi-agent-browser-native", "npm:pi-multi-account",
-  "npm:@gotgenes/pi-permission-system", "npm:pi-cc-header",
-  "npm:@lincoln504/pi-research", "npm:pi-interactive-shell"]`,
-  `"skills": [".../modules/adapters/skills/*"]`.
-- an `mcp.json` (see `pi/mcp.json.example`) points `pi-mcp-adapter` at
-  `http://127.0.0.1:${TLON_MCP_PORT}/mcp` with `Authorization` set to a `!command`
-  (`scripts/tlon-cli.sh bearer`) that mints a fresh token per connect.
+pi's side is flake-owned (`manosWiring` in `flake.nix`, applied by `home:switch`) — it merges
+into `~/.pi/agent/settings.json`:
+
+- `"extensions"`: the six repo extensions — `pi/src/extension.ts`, `consult/src/extension.ts`,
+  `fmt/src/extension.ts`, `lsp/src/extension.ts`, `reload/src/extension.ts`, `footer/src/footer.ts`.
+- `"packages"`: `["npm:pi-mcp-adapter", "npm:pi-sandbox", "npm:@ollama/pi-web-search",
+  "npm:pi-agent-browser-native", "npm:pi-multi-account", "npm:@gotgenes/pi-permission-system",
+  "npm:@lincoln504/pi-research", "npm:pi-interactive-shell", "npm:@narumitw/pi-retry",
+  "npm:@pi-unipi/notify"]` (pi-cc-header was retired; the flake prunes it).
+- `"skills"`: `".../modules/adapters/skills/*"`.
+- `~/.pi/agent/mcp.json` is flake-owned (`serverMcpJson` in `flake.nix`): its `mcpServers.tlon`
+  entry points `pi-mcp-adapter` at `${TLON_MCP_URL}` with `Authorization` set to a `!command`
+  (`scripts/tlon-cli.sh bearer`) that mints a fresh token per connect. There is no example
+  file to copy — the flake is the config.
 
 The env contract is identity-only (`TLON_MCP_URL`, `TLON_THREAD`, `TLON_AUTHOR`). The token
 is NEVER frozen in env — both doors mint per connect against the URL's `/mint` endpoint, so a
@@ -89,7 +95,8 @@ Driven through the shared mise tasks (`mise tasks`), same as the rest of the rep
 - `mise run adapters:pi:check` — typecheck + tests, the precommit gate for this module.
 - `mise run server:serve` — boot server with its sovereign channel on, against the scratch db, so a
   hand-spawned pi pane has something to register with.
-- `mise run check` — the whole-repo gate (server + console + pi).
+- `mise run check` — the whole-repo gate: nine gates — `server:check`, `console:check`, and the
+  seven adapters packages (`adapters:{pi,consult,fmt,lsp,lspd,reload,footer}:check`).
 
 ## Verify
 

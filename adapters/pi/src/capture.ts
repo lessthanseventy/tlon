@@ -31,7 +31,7 @@ const MAX_DELTA_CHARS = 16_000;
 
 // The default cheap model that runs cadence extraction out-of-band (ollama-cloud). Flash: efficient
 // MoE, large enough context for a bounded delta, cheap enough to run on a cadence. The single
-// source of truth for BOTH harness reflexes — pi's extension.ts (overridable via funes-recall.json)
+// source of truth for BOTH harness reflexes — pi's extension.ts (overridable via server-recall.json)
 // and claude-code's cc-capture.ts (fixed) — so the two never drift.
 export const DEFAULT_CAPTURE_MODEL = "deepseek-v4-flash";
 

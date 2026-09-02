@@ -1,5 +1,5 @@
 import { test, expect, mock, afterEach } from "bun:test";
-import { FunesClient, FunesRejected } from "./mcp";
+import { FunesClient, FunesRejected, identityFromEnv } from "./mcp";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -139,4 +139,23 @@ test("postMessage calls post_message with the body", async () => {
   await c.postMessage("still on it — running mix test");
 
   expect(calls).toEqual([{ name: "post_message", args: { body: "still on it — running mix test" } }]);
+});
+
+// identityFromEnv — the one parse of the TLON_* identity, shared by the extension and every
+// claude-code hook. All three present + an integer thread → a config; anything less → null,
+// so a process not spawned as a citizen stays quiet instead of guessing.
+test("identityFromEnv: the full TLON_* triple becomes a FunesConfig", () => {
+  expect(
+    identityFromEnv({ TLON_MCP_URL: "http://127.0.0.1:4040/mcp", TLON_THREAD: "42", TLON_AUTHOR: "claude-code" }),
+  ).toEqual({ url: "http://127.0.0.1:4040/mcp", threadId: 42, agent: "claude-code" });
+});
+
+test("identityFromEnv: a missing or empty var, or a non-integer thread, is null", () => {
+  const full = { TLON_MCP_URL: "http://127.0.0.1:4040/mcp", TLON_THREAD: "42", TLON_AUTHOR: "pi" };
+  expect(identityFromEnv({ ...full, TLON_MCP_URL: undefined })).toBeNull();
+  expect(identityFromEnv({ ...full, TLON_THREAD: "" })).toBeNull();
+  expect(identityFromEnv({ ...full, TLON_AUTHOR: undefined })).toBeNull();
+  expect(identityFromEnv({ ...full, TLON_THREAD: "forty-two" })).toBeNull();
+  expect(identityFromEnv({ ...full, TLON_THREAD: "4.2" })).toBeNull();
+  expect(identityFromEnv({})).toBeNull();
 });

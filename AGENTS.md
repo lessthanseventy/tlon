@@ -3,7 +3,7 @@
 This repository is one person's whole machine: an installer, dotfiles, a desktop, and an AI stack, as
 Nix-shaped modules under `modules/`. It is named *ficciones* after the Borges collection that contains
 the "Funes" story — the repo contains the `server` module as the book contains the story, and each module
-is another story. Read `docs/plans/2026-08-14-machine-v2-and-server-design.md` before reshaping anything
+is another story. Read `docs/plans/2026-08-14-machine-v2-and-funes-design.md` before reshaping anything
 here — it is the design and every decision behind it.
 
 ## The dev loop — one shared API

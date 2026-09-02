@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { lastToolActivity, phraseHeartbeat, sawSuccessfulCommit } from "./activity.ts";
 import { renderBrief, type Dossier } from "./brief.ts";
-import { FunesClient, FunesRejected, FunesUnreachable, type FunesConfig } from "./mcp.ts";
+import { FunesClient, FunesRejected, FunesUnreachable, identityFromEnv } from "./mcp.ts";
 import { detectCorrection } from "./recall.ts";
 import {
   buildExtractionPrompt,
@@ -28,7 +28,7 @@ import type { ExtensionAPI, ExtensionContext } from "./pi.ts";
 
 // The cheap model that runs cadence extraction out-of-band (ollama-cloud), shared with the
 // claude-code reflex via capture.ts's DEFAULT_CAPTURE_MODEL. Overridable per-pane via
-// funes-recall.json `captureModel` (e.g. a local-daemon model to keep deltas off the wire entirely).
+// server-recall.json `captureModel` (e.g. a local-daemon model to keep deltas off the wire entirely).
 const CAPTURE_MODEL = DEFAULT_CAPTURE_MODEL;
 
 interface RecallConfig {
@@ -45,11 +45,13 @@ const RECALL_DEFAULTS: RecallConfig = {
   captureModel: CAPTURE_MODEL,
 };
 
-// The total-recall noise knob: ~/.pi/agent/funes-recall.json (flake-seeded with defaults + a
-// comment). A missing/broken file → defaults, so the adapter never fails to load over config.
+// The total-recall noise knob: ~/.pi/agent/server-recall.json (flake.nix `piRecallJson` owns
+// it). A missing/broken file → defaults, so the adapter never fails to load over config.
+export const RECALL_CONFIG_PATH = ".pi/agent/server-recall.json";
+
 function readRecallConfig(): RecallConfig {
   try {
-    const raw = readFileSync(join(homedir(), ".pi/agent/funes-recall.json"), "utf-8");
+    const raw = readFileSync(join(homedir(), RECALL_CONFIG_PATH), "utf-8");
     const c = JSON.parse(raw) as Partial<RecallConfig>;
     const n = c.captureEveryTurns;
     return {
@@ -69,26 +71,13 @@ function readRecallConfig(): RecallConfig {
 const STATUS_KEY = "funes";
 const WIDGET_KEY = "funes";
 
-// Identity travels in the spawn (pi doc §2d): TLON_MCP_URL/THREAD/AUTHOR. No TLON_TOKEN
-// — the client mints a fresh token per connect against the URL's origin, so a pane survives
-// a token-model change or secret regeneration. Missing any of the three means this pane
-// wasn't spawned as a funes citizen; the adapter stays quiet rather than guessing.
-function readConfig(): FunesConfig | null {
-  const url = env.TLON_MCP_URL;
-  const thread = env.TLON_THREAD;
-  const author = env.TLON_AUTHOR;
-  if (!url || !thread || !author) return null;
-  const threadId = Number(thread);
-  if (!Number.isInteger(threadId)) return null;
-  return { url, threadId, agent: author };
-}
-
 function identityLabel(): string {
   return `${env.TLON_AUTHOR ?? "?"} on ${env.TLON_THREAD ?? "?"}`;
 }
 
 export default function adapters(pi: ExtensionAPI): void {
-  const config = readConfig();
+  // No identity in the env → this pane wasn't spawned as a citizen; stay quiet, never guess.
+  const config = identityFromEnv();
 
   // One client for this pane's lifetime — connect() is guarded so only the first hook does
   // the handshake. register binds the session to the TOKEN, so the model's own tool calls
@@ -308,11 +297,14 @@ export default function adapters(pi: ExtensionAPI): void {
   });
 }
 
-// The footer: the live at-a-glance the human driving pi directly sees — the same dossier
-// the cockpit shows (pi doc §2b). For slice 2 that is the goal and the open blockers; the
-// TODOS line joins when slice 3 lands.
+// The widget: the live at-a-glance the human driving pi directly sees — the same dossier
+// the cockpit shows (pi doc §2b): the goal, the open todos (and which is next), the blockers.
 function updateWidget(ctx: ExtensionContext, d: Dossier): void {
   const lines = [`funes · ${d.north_star ?? "(untitled)"} — ${d.lead ?? "unstaffed"}`];
+  const todos = d.todos.shown.length + d.todos.more;
+  if (todos > 0) {
+    lines.push(`todos (${todos})${d.next ? ` → next: ${d.next.text}` : ""}`);
+  }
   const blockers = d.blockers.shown.length + d.blockers.more;
   if (blockers > 0) {
     lines.push(`blockers (${blockers}):`);

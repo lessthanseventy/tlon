@@ -19,10 +19,12 @@ The launcher `eval`s the export block from `server:spawn` and `exec`s `claude`.
 
 ## The two doors
 
-Both reach the **live** server service node (loopback MCP on :4040); the service must be up
-(`systemd --user` unit).
+Door 1 follows `TLON_MCP_URL` — whichever node spawned the session (the always-up service on
+:4040, or a console-launched cockpit brain on :4041). Door 2 goes through `bin/server rpc` into
+the service node regardless of `TLON_MCP_URL`, so a console-launched claude briefs from the
+service db — a known limitation, noted in the hook's header.
 
-- **Door 1 — the MCP tools.** Claude Code's `mcpServers.server` entry is `type: http`
+- **Door 1 — the MCP tools.** Claude Code's `mcpServers.tlon` entry is `type: http`
   pointing at the channel, with a **`headersHelper`** (`scripts/tlon-cli.sh token`) instead
   of a static bearer. Claude Code runs the helper on every connect and reconnect; it mints a
   **fresh** server token for `(TLON_THREAD, TLON_AUTHOR)` each time, so auth survives a server
@@ -42,7 +44,7 @@ Both reach the **live** server service node (loopback MCP on :4040); the service
 (delta-slicing, secret redaction, the extraction prompt, tolerant parse) and `mcp.ts`'s
 `FunesClient` verbatim — the same reflex pi's `extension.ts` runs on a cadence, adapted to
 Claude Code's stateless-per-turn hook model: a per-session watermark is persisted to
-`${XDG_STATE_HOME:-~/.local/state}/server-cc-capture/<session_id>` instead of living in a
+`${XDG_STATE_HOME:-~/.local/state}/tlon-cc-capture/<session_id>` instead of living in a
 long-lived closure. Extracted facts are banked `derived`, with `intent`, unbidden. Same
 failure discipline as everything else here: no identity, a down channel, a bad completion,
 or an unparseable transcript is a silent no-op — a Stop hook must never be why a session
@@ -69,7 +71,7 @@ which reads as frozen on one long turn; the heartbeat is the fix.
 
 Since Claude Code gives each hook fire a fresh process (no long-lived closure to hold an interval
 in, unlike pi), the cadence lives in a state file
-(`${XDG_STATE_HOME:-~/.local/state}/server-cc-heartbeat/<session_id>`) instead: every `PostToolUse`
+(`${XDG_STATE_HOME:-~/.local/state}/tlon-cc-heartbeat/<session_id>`) instead: every `PostToolUse`
 call asks "has it been ≥45s since the last post (or since the turn started)?" — `activity.ts`'s
 `nextHeartbeatState`/`heartbeatDue` answer that, shared verbatim with pi's side so the two
 harnesses' cadence never drifts apart.
@@ -83,9 +85,12 @@ reflex, a heartbeat is never silently dropped, since the message IS the delivera
 
 ## Install
 
-Declarative, via home-manager (`flake.nix`), the same merge-not-own pattern as the pi
-adapter's `manosWiring`: the `mcpServers.server` entry and the `SessionStart` hook are merged
-into `~/.claude` settings idempotently. `home:switch` is the human's.
+There is nothing to install: nothing is merged into `~/.claude`. Wiring is **per session** —
+[`launch.sh`](launch.sh) (`mise run server:claude`) passes the `mcpServers.tlon` entry via
+`--mcp-config` and the hooks via `--settings`, so a plain `claude` stays untouched. The one
+prerequisite is a built release (`mise run server:release`): `tlon-cli.sh`'s `spawn` and
+`dossier` go through `bin/server rpc`; only `token` (the `headersHelper`) mints purely over
+HTTP. The hook bodies run under `bun` (mise-pinned), which must be on `PATH`.
 
 ## Why not a static token / a SessionStart env-mint
 

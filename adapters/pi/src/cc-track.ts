@@ -8,9 +8,9 @@
 // Same failure discipline as the sibling hooks: funes down, no identity, an unparseable
 // payload — all silent no-ops. A PostToolUse hook must never block or break a tool call.
 
-import { env } from "node:process";
 import { isCommitCommand } from "./activity.ts";
-import { FunesClient } from "./mcp.ts";
+import { readHookInput, runHook } from "./hook.ts";
+import { FunesClient, identityFromEnv } from "./mcp.ts";
 
 const HOOK_TIMEOUT_MS = 10_000;
 
@@ -47,38 +47,17 @@ export function shouldTrack(input: PostToolUseInput): boolean {
 }
 
 async function track(): Promise<void> {
-  const url = env.TLON_MCP_URL;
-  const threadEnv = env.TLON_THREAD;
-  const agent = env.TLON_AUTHOR;
-  if (!url || !threadEnv || !agent) return;
-  const threadId = Number(threadEnv);
-  if (!Number.isInteger(threadId)) return;
+  const identity = identityFromEnv();
+  if (!identity) return;
 
-  let hookInput: PostToolUseInput;
-  try {
-    hookInput = JSON.parse(await Bun.stdin.text()) as PostToolUseInput;
-  } catch {
-    return;
-  }
-  if (!shouldTrack(hookInput)) return;
+  const hookInput = await readHookInput<PostToolUseInput>();
+  if (!hookInput || !shouldTrack(hookInput)) return;
 
-  const client = new FunesClient({ url, threadId, agent });
+  const client = new FunesClient(identity);
   await client.connect();
   await client.trackThread();
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main(): Promise<void> {
-  try {
-    await Promise.race([track(), delay(HOOK_TIMEOUT_MS)]);
-  } catch {
-    // silent no-op
-  }
-}
-
 if (import.meta.main) {
-  main().finally(() => process.exit(0));
+  runHook(track, HOOK_TIMEOUT_MS).finally(() => process.exit(0));
 }
