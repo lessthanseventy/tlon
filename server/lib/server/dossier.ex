@@ -296,7 +296,7 @@ defmodule Server.Dossier do
   """
   def checks_for_fact(%Fact{} = fact) do
     correlation = "fact:#{fact.id}"
-    checks = from e in Event, where: e.correlation == ^correlation and e.kind in @check_kinds
+    checks = from e in Event, where: e.correlation == ^correlation and e.kind in ^@check_kinds
 
     shown = Repo.all(from e in checks, order_by: [desc: e.id], limit: @check_cap)
     total = Repo.aggregate(checks, :count, :id)
@@ -310,7 +310,7 @@ defmodule Server.Dossier do
   verification state (last check red or green), not a self-reported one.
   """
   def recent_checks_for_thread(%Thread{} = thread) do
-    checks = from e in Event, where: e.thread_id == ^thread.id and e.kind in @check_kinds
+    checks = from e in Event, where: e.thread_id == ^thread.id and e.kind in ^@check_kinds
 
     shown = Repo.all(from e in checks, order_by: [desc: e.id], limit: @check_cap)
     total = Repo.aggregate(checks, :count, :id)

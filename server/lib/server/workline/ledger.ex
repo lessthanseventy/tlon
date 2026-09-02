@@ -104,7 +104,7 @@ defmodule Server.Workline.Ledger do
     latest =
       Repo.one(
         from(e in Event,
-          where: e.thread_id == ^t.id and e.correlation == ^correlation and e.kind in ["check_passed", "check_failed"],
+          where: e.thread_id == ^t.id and e.correlation == ^correlation and e.kind in ^["check_passed", "check_failed"],
           order_by: [desc: e.id],
           limit: 1
         )
