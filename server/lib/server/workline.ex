@@ -52,9 +52,6 @@ defmodule Server.Workline do
   # artifacts; advances FROM there still owe theirs. `merged` is terminal, never an entry.
   @openable @stages -- ["merged"]
 
-  @doc "The stages a workline may be opened at (every stage but terminal `merged`)."
-  def openable_stages, do: @openable
-
   @doc """
   Open a workline: a machine-scoped thread + the `work/<slug>/` name, at stage `:stage` (default
   "intent"; any-stage entry, Slice 4D). `{:ok, thread}`, `{:error, {:invalid_stage, s}}` for a

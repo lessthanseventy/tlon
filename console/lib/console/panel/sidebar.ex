@@ -119,10 +119,6 @@ defmodule Console.Panel.Sidebar do
 
   def key_at(_data, _index), do: nil
 
-  @doc "How many pickable rows (Home + workspace headers) — what j/k clamps against."
-  def pickable_count(%{groups: groups}), do: 1 + length(groups)
-  def pickable_count(_data), do: 1
-
   # The SCREEN-ROW list render + pick share — every visible row, in order, laid out to `height`.
   # Layout (Andrew 2026-08-31): **numbered workspaces at the TOP**, then a big flex gap, then the pinned
   # BOTTOM group — a `─` rule, the specials (Home/god-view cursor 0, Tickets, Notes), a `─` rule, and
