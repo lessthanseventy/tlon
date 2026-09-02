@@ -1,0 +1,282 @@
+defmodule Console.Cockpit.Author do
+  @moduledoc """
+  The operator's authoring verbs over workspaces: the right-click context menu (icon picker,
+  configure, the two-step delete) and the Orbis author face's writes — register / remove / edit a
+  workspace, a coworker's model or yolo knob. Every write goes to `Server.Workspaces` /
+  `Console.Config` and answers the next cockpit state (a flash on failure, never a crash); the
+  cockpit repaints it.
+  """
+
+  alias Console.Panel
+  alias Console.Profiles
+  alias Console.Safe
+  alias Console.WorkspaceTemplates
+  alias Server.Workspaces
+
+  @doc """
+  An open overlay menu's keys: Esc closes, j/k/↑↓ move, Enter runs the cursor item's action —
+  every other key is `:ignore`d so it can't leak to the frame underneath.
+  """
+  @spec handle_menu_key(map(), map()) :: map() | :ignore
+  def handle_menu_key(%{key: :escape}, state), do: %{state | menu: nil}
+  def handle_menu_key(%{char: "j"}, state), do: move_menu(state, 1)
+  def handle_menu_key(%{key: :down}, state), do: move_menu(state, 1)
+  def handle_menu_key(%{char: "k"}, state), do: move_menu(state, -1)
+  def handle_menu_key(%{key: :up}, state), do: move_menu(state, -1)
+
+  def handle_menu_key(%{key: :enter}, %{menu: %{items: items, cursor: c}} = state),
+    do: menu_action(Enum.at(items, c).action, state)
+
+  def handle_menu_key(_key, _state), do: :ignore
+
+  defp move_menu(%{menu: %{items: items, cursor: c} = menu} = state, delta) do
+    n = max(length(items), 1)
+    %{state | menu: %{menu | cursor: rem(c + delta + n, n)}}
+  end
+
+  @doc "A workspace's right-click context menu, anchored at the click cell."
+  def workspace_menu(ws, x, y) do
+    %{
+      title: ws.name,
+      x: x,
+      y: y,
+      cursor: 0,
+      items: [
+        %{label: "Set icon…", action: {:icon_picker, ws}},
+        %{label: "Configure", action: {:configure_ws, ws}},
+        %{label: "Delete", action: {:delete_ws, ws}, danger: true}
+      ]
+    }
+  end
+
+  # The Set-icon picker: the workspace-icon choices, plus a reset to the position number.
+  defp icon_picker_menu(ws, x, y) do
+    icons =
+      Enum.map(Console.Icons.workspace_icons(), fn name ->
+        %{label: to_string(name), action: {:set_icon, ws, to_string(name)}, icon: name}
+      end)
+
+    %{title: "icon", x: x, y: y, cursor: 0, items: [%{label: "number", action: {:set_icon, ws, nil}} | icons]}
+  end
+
+  defp confirm_delete_menu(ws, x, y) do
+    %{
+      title: "delete?",
+      x: x,
+      y: y,
+      cursor: 1,
+      items: [
+        %{label: "Delete #{ws.name}", action: {:confirm_delete, ws}, danger: true},
+        %{label: "Cancel", action: :close}
+      ]
+    }
+  end
+
+  @doc "A click on the open menu: a picked row runs its action; a miss closes the menu."
+  def apply_menu({:menu_pick, action}, state), do: menu_action(action, state)
+  def apply_menu(_none, state), do: %{state | menu: nil}
+
+  defp menu_action(:close, state), do: %{state | menu: nil}
+
+  defp menu_action({:configure_ws, _ws}, state), do: %{state | menu: nil, active_key: :orbis, orbis_face: :author}
+
+  defp menu_action({:delete_ws, ws}, %{menu: %{x: x, y: y}} = state), do: %{state | menu: confirm_delete_menu(ws, x, y)}
+
+  defp menu_action({:confirm_delete, ws}, state), do: %{remove_workspace!(state, ws.id) | menu: nil}
+
+  defp menu_action({:icon_picker, ws}, %{menu: %{x: x, y: y}} = state), do: %{state | menu: icon_picker_menu(ws, x, y)}
+
+  defp menu_action({:set_icon, ws, icon}, state), do: %{set_workspace_icon(state, ws.id, icon) | menu: nil}
+
+  defp menu_action(_unknown, state), do: %{state | menu: nil}
+
+  # Merge the chosen icon into the workspace's knobs (nil clears it → back to the number).
+  defp set_workspace_icon(state, id, icon) do
+    case Enum.find(Workspaces.all(), &(&1.id == id)) do
+      %{knobs: knobs} -> edit_workspace!(state, id, %{knobs: put_or_delete_icon(knobs || %{}, icon)})
+      _ -> state
+    end
+  end
+
+  defp put_or_delete_icon(knobs, nil), do: Map.delete(knobs, "icon")
+  defp put_or_delete_icon(knobs, icon), do: Map.put(knobs, "icon", icon)
+
+  @doc "The overlay's placements (Border + the Menu content), clamped on screen — painted last, on top."
+  def menu_placements(nil, _w, _h), do: []
+
+  def menu_placements(%{items: items} = menu, w, h) do
+    content_w = max(Panel.Menu.width(menu), String.length(menu[:title] || ""))
+    box_w = min(content_w + 4, w)
+    box_h = min(length(items) + 2, max(h - 2, 2))
+    x = menu.x |> min(w - box_w) |> max(0)
+    y = menu.y |> min(h - box_h - 2) |> max(0)
+    rect = %{x: x, y: y, w: box_w, h: box_h}
+    inset = %{x: x + 2, y: y + 1, w: max(box_w - 4, 1), h: max(box_h - 2, 1)}
+
+    [
+      {Panel.Border, %{focused: true, digit: nil, title: menu[:title], tabs: nil, hint: nil}, rect},
+      {Panel.Menu, menu, inset}
+    ]
+  end
+
+  @doc false
+  # The pure flip behind Orbis' `a`/Esc (D2.1) — public + exposed so it's
+  # testable without a live GenServer.
+  def toggle_orbis_face(%{orbis_face: :author} = state), do: %{state | orbis_face: :survey}
+  def toggle_orbis_face(state), do: %{state | orbis_face: :author}
+
+  @doc false
+  # Register a workspace from `template` + the operator-typed `name` (D2.3's `n` verb). `{:ok, _}`
+  # clears the input and flashes; `{:error, changeset}` (a blank OR duplicate name — both are the
+  # server changeset's job, not re-validated here) flashes the reason and REOPENS the input with
+  # what was typed, so a rejected name can be edited and resubmitted rather than retyped from
+  # scratch. Wrapped like `create_thread`/`post_message` — a server hiccup flashes, never crashes
+  # the cockpit.
+  def register_workspace!(state, template, name) do
+    Safe.flash_on_error(state, "create", fn ->
+      case Workspaces.register(WorkspaceTemplates.new_workspace_attrs(template, name)) do
+        {:ok, workspace} ->
+          %{state | input: nil, flash: "created #{workspace.name}"}
+
+        {:error, changeset} ->
+          %{
+            state
+            | input: %{kind: :new_workspace, buffer: name, cursor: String.length(name), template: template},
+              flash: "couldn't create “#{name}” — #{changeset_error(changeset)}"
+          }
+      end
+    end)
+  end
+
+  @doc false
+  # Remove workspace `id` (D2.5's second `d`). Guards against stranding the cockpit on a deleted
+  # active workspace (falls back to `:orbis`) and clamps `author_cursor` to the shrunk list. A missing
+  # workspace (already gone) or a server hiccup flashes, never crashes.
+  def remove_workspace!(state, id) do
+    Safe.flash_on_error(state, "delete", fn ->
+      case Workspaces.get(id) do
+        nil ->
+          %{state | flash: "workspace ##{id} already gone"}
+
+        workspace ->
+          case Workspaces.remove(workspace) do
+            {:ok, _} ->
+              state
+              |> Map.put(:active_key, if(state.active_key == id, do: :orbis, else: state.active_key))
+              |> Map.put(:author_cursor, clamp_author_cursor(state.author_cursor))
+              |> Map.put(:flash, "deleted #{workspace.name}")
+
+            {:error, :last_workspace} ->
+              %{state | flash: "couldn't delete #{workspace.name} — the last workspace; threads must have a home"}
+
+            {:error, changeset} ->
+              %{state | flash: "couldn't delete #{workspace.name} — #{changeset_error(changeset)}"}
+          end
+      end
+    end)
+  end
+
+  # Re-clamp the author cursor against the POST-delete count (one fewer row) — same edge-clamp
+  # discipline as the keymap's move_author_cursor, applied here since a delete can shrink the list
+  # out from under a cursor sitting on (or past) the new last row.
+  defp clamp_author_cursor(cursor), do: max(min(cursor, max(length(Workspaces.all()) - 1, 0)), 0)
+
+  @doc false
+  # Apply one field edit (D2.4 Chunk 2a: the editor's type/scope rings, and the paths/roster
+  # sub-list's add/remove) immediately — no draft/commit step, mirroring how Settings applies each
+  # change on the spot. `name` is immutable (`Workspace.edit_changeset` drops it — see server/workspace.ex);
+  # nothing here special-cases it. Same missing/error/rescue shape as `register_workspace!`/
+  # `remove_workspace!`. On success, re-clamps `author_edit.sub` against the POST-edit paths/roster
+  # length (a removal can strand `sub` past the shrunk list, same reasoning as
+  # `clamp_author_cursor/1` above).
+  def edit_workspace!(state, id, attrs) do
+    Safe.flash_on_error(state, "edit", fn ->
+      case Workspaces.get(id) do
+        nil ->
+          %{state | flash: "workspace ##{id} already gone"}
+
+        workspace ->
+          case Workspaces.edit(workspace, attrs) do
+            {:ok, updated} -> reclamp_author_edit_sub(%{state | flash: "updated #{updated.name}"})
+            {:error, changeset} -> %{state | flash: "couldn't update #{workspace.name} — #{changeset_error(changeset)}"}
+          end
+      end
+    end)
+  end
+
+  # Only reachable when `author_edit` is actually mid-edit on a paths/roster sub-list (field 2/3) —
+  # elsewhere (the type/scope rings, or no editor open) this is a no-op via the fallback clause.
+  defp reclamp_author_edit_sub(%{author_edit: %{id: id, field: field} = edit} = state) when field in [2, 3] do
+    case Workspaces.get(id) do
+      nil ->
+        state
+
+      workspace ->
+        len = workspace |> Map.get(sub_list_field(field)) |> length()
+        %{state | author_edit: %{edit | sub: edit.sub |> min(max(len - 1, 0)) |> max(0)}}
+    end
+  end
+
+  defp reclamp_author_edit_sub(state), do: state
+
+  defp sub_list_field(2), do: :paths
+  defp sub_list_field(3), do: :roster
+
+  @doc false
+  # The roster sub-editor's Tab+Enter/Space knob (D2.4 Chunk 2b — absorbs the Settings modal):
+  # cycle the sub-selected coworker's model ring, or flip its yolo policy, writing Console.Config
+  # (file-backed, applies on the coworker's NEXT SPAWN — same honest scope as the `m` verb/old
+  # Settings). Looks the roster entry up off the LIVE workspace (Workspaces.get, like edit_workspace!) rather
+  # than trust the effect's bare name, so the entry's archetype (the model ring's default-fallback
+  # source) is available.
+  def apply_coworker_knob!(state, name, knob) do
+    Safe.flash_on_error(state, "settings write", fn ->
+      case roster_entry_for(state, name) do
+        nil -> %{state | flash: "#{name}: roster entry not found"}
+        entry -> %{state | flash: apply_knob(entry, knob)}
+      end
+    end)
+  end
+
+  defp roster_entry_for(%{author_edit: %{id: id}}, name) do
+    case Workspaces.get(id) do
+      nil -> nil
+      workspace -> Enum.find(workspace.roster || [], &(&1["name"] == name))
+    end
+  end
+
+  defp roster_entry_for(_state, _name), do: nil
+
+  defp apply_knob(entry, :model) do
+    norm = Profiles.roster_entry(entry)
+    next = Profiles.next_model(Profiles.instantiate(norm).model)
+    Console.Config.put_coworker_model(norm.name, next)
+    "#{norm.name} driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
+  end
+
+  defp apply_knob(entry, :yolo) do
+    name = entry["name"]
+    next = Console.Config.coworker_yolo(name) != true
+    Console.Config.put_coworker_yolo(name, next)
+    policy = if next, do: "yolo (auto-approve)", else: "ask"
+    "#{name} permissions → #{policy} — applies on next spawn (console:reset)"
+  end
+
+  @doc """
+  A short `field message; field message` sentence from an Ecto changeset — a duplicate name's
+  UNIQUE violation reads "name has already been taken", not an inspect dump.
+  """
+  def changeset_error(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+    |> Enum.map_join("; ", fn {field, errors} -> "#{field} #{Enum.join(errors, ", ")}" end)
+  end
+
+  @doc "Advance a coworker's driver one step round the ring and persist it; returns the flash string."
+  def cycle_model!(profile_name) do
+    current = Profiles.fetch(profile_name)
+    next = Profiles.next_model(current && current.model)
+    Console.Config.put_coworker_model(profile_name, next)
+    "coworker driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
+  end
+end

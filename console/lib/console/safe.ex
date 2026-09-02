@@ -58,6 +58,22 @@ defmodule Console.Safe do
   @spec read(atom(), term(), (-> term())) :: term()
   def read(label, fallback, fun), do: logged("read error: #{label}", fallback, fun)
 
+  @doc """
+  Run a verb that yields the next cockpit state; a raise/exit becomes a `<label> failed: …` footer
+  flash on the state it was handed — a server hiccup never kills the cockpit.
+  """
+  @spec flash_on_error(map(), String.t(), (-> map())) :: map()
+  def flash_on_error(state, label, fun) do
+    case call(fun) do
+      {:ok, next} -> next
+      {:error, reason} -> flash_failed(state, label, reason)
+    end
+  end
+
+  @doc "The state with a `<label> failed: <reason>` flash."
+  @spec flash_failed(map(), String.t(), reason()) :: map()
+  def flash_failed(state, label, reason), do: %{state | flash: "#{label} failed: #{describe(reason)}"}
+
   @doc "The operator-facing text of a `call/1` failure: the exception's message, or the exit/throw reason."
   @spec describe(reason()) :: String.t()
   def describe({kind, reason}) when kind in [:exit, :throw], do: inspect(reason)

@@ -1,13 +1,13 @@
 defmodule Console.CockpitWorkspacesTest do
   @moduledoc """
-  D2, Chunk 1: `Console.Cockpit.register_workspace!/3` (D2.3) and `remove_workspace!/2` (D2.5) — the author
+  D2, Chunk 1: `Console.Author.register_workspace!/3` (D2.3) and `remove_workspace!/2` (D2.5) — the author
   face's `n`/`d` funes writes. Exercises the REAL `Server.Workspaces` write pipe (register/remove)
   through the cockpit's public, pure-ish wrappers against a
   `Console.TestRepo` scratch db → `async: false`.
   """
   use ExUnit.Case, async: false
 
-  alias Console.Cockpit
+  alias Console.Cockpit.Author
   alias Server.Repo
   alias Server.Workspace
   alias Server.Workspaces
@@ -29,7 +29,7 @@ defmodule Console.CockpitWorkspacesTest do
   describe "register_workspace!/3 — the author face's `n` verb (D2.3)" do
     test "a valid template + name registers a workspace, clears the input, and flashes success" do
       s = state(%{input: %{kind: :new_workspace, buffer: "Ficciones2", cursor: 10, template: :code}})
-      next = Cockpit.register_workspace!(s, :code, "Ficciones2")
+      next = Author.register_workspace!(s, :code, "Ficciones2")
 
       assert next.input == nil
       assert next.flash =~ "created Ficciones2"
@@ -38,7 +38,7 @@ defmodule Console.CockpitWorkspacesTest do
 
     test "the end-to-end release-bar chain: register_workspace! → Server.Workspaces gets a 2nd row" do
       {:ok, _tlon} = Workspaces.register(%{name: "Tlön", type: "code"})
-      next = Cockpit.register_workspace!(state(%{}), :blank, "Ficciones2")
+      next = Author.register_workspace!(state(%{}), :blank, "Ficciones2")
 
       assert next.flash =~ "created"
       names = Workspaces.all() |> Enum.map(& &1.name) |> Enum.sort()
@@ -49,7 +49,7 @@ defmodule Console.CockpitWorkspacesTest do
       {:ok, _} = Workspaces.register(%{name: "Tlön", type: "code"})
       s = state(%{input: %{kind: :new_workspace, buffer: "Tlön", cursor: 4, template: :code}})
 
-      next = Cockpit.register_workspace!(s, :code, "Tlön")
+      next = Author.register_workspace!(s, :code, "Tlön")
 
       assert next.input == %{kind: :new_workspace, buffer: "Tlön", cursor: 4, template: :code}
       assert next.flash =~ "couldn't create"
@@ -58,7 +58,7 @@ defmodule Console.CockpitWorkspacesTest do
 
     test "a blank name flashes and keeps the input open (the funes required-name changeset)" do
       s = state(%{input: %{kind: :new_workspace, buffer: "", cursor: 0, template: :blank}})
-      next = Cockpit.register_workspace!(s, :blank, "")
+      next = Author.register_workspace!(s, :blank, "")
 
       assert next.input.kind == :new_workspace
       assert next.flash =~ "couldn't create"
@@ -70,7 +70,7 @@ defmodule Console.CockpitWorkspacesTest do
     test "removes the workspace and flashes success" do
       {:ok, _keep} = Workspaces.register(%{name: "Home", type: "blank"})
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Cockpit.remove_workspace!(state(%{}), w.id)
+      next = Author.remove_workspace!(state(%{}), w.id)
 
       assert next.flash =~ "deleted Freedonia"
       assert Enum.map(Workspaces.all(), & &1.name) == ["Home"]
@@ -78,7 +78,7 @@ defmodule Console.CockpitWorkspacesTest do
 
     test "the LAST workspace is refused with a flash (threads must have a home)" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Cockpit.remove_workspace!(state(%{}), w.id)
+      next = Author.remove_workspace!(state(%{}), w.id)
 
       assert next.flash =~ "last workspace"
       assert length(Workspaces.all()) == 1
@@ -87,14 +87,14 @@ defmodule Console.CockpitWorkspacesTest do
     test "removing the ACTIVE workspace resolves active_key to :orbis — never stranded on a dead space" do
       {:ok, _keep} = Workspaces.register(%{name: "Home", type: "blank"})
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Cockpit.remove_workspace!(state(%{active_key: w.id}), w.id)
+      next = Author.remove_workspace!(state(%{active_key: w.id}), w.id)
 
       assert next.active_key == :orbis
     end
 
     test "removing a workspace that ISN'T active leaves active_key untouched" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Cockpit.remove_workspace!(state(%{active_key: :orbis}), w.id)
+      next = Author.remove_workspace!(state(%{active_key: :orbis}), w.id)
 
       assert next.active_key == :orbis
     end
@@ -103,13 +103,13 @@ defmodule Console.CockpitWorkspacesTest do
       {:ok, w1} = Workspaces.register(%{name: "A", type: "blank"})
       {:ok, _w2} = Workspaces.register(%{name: "B", type: "blank"})
 
-      next = Cockpit.remove_workspace!(state(%{author_cursor: 1}), w1.id)
+      next = Author.remove_workspace!(state(%{author_cursor: 1}), w1.id)
 
       assert next.author_cursor == 0
     end
 
     test "a missing workspace (already gone) flashes, never crashes" do
-      next = Cockpit.remove_workspace!(state(%{}), 999_999)
+      next = Author.remove_workspace!(state(%{}), 999_999)
       assert next.flash =~ "already gone"
     end
   end
@@ -117,7 +117,7 @@ defmodule Console.CockpitWorkspacesTest do
   describe "edit_workspace!/3 — the field editor's immediate apply (D2.4 Chunk 2a)" do
     test "a valid attrs map updates the row and flashes success" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "code"})
-      next = Cockpit.edit_workspace!(state(%{}), w.id, %{type: "life"})
+      next = Author.edit_workspace!(state(%{}), w.id, %{type: "life"})
 
       assert next.flash =~ "updated Freedonia"
       assert [%{name: "Freedonia", type: "life"}] = Workspaces.all()
@@ -125,9 +125,9 @@ defmodule Console.CockpitWorkspacesTest do
 
     test "scope, paths, and roster all apply through the same wrapper" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      Cockpit.edit_workspace!(state(%{}), w.id, %{scope: "machine"})
-      Cockpit.edit_workspace!(state(%{}), w.id, %{paths: ["a", "b"]})
-      next = Cockpit.edit_workspace!(state(%{}), w.id, %{roster: [%{"archetype" => "assistant", "name" => "amy"}]})
+      Author.edit_workspace!(state(%{}), w.id, %{scope: "machine"})
+      Author.edit_workspace!(state(%{}), w.id, %{paths: ["a", "b"]})
+      next = Author.edit_workspace!(state(%{}), w.id, %{roster: [%{"archetype" => "assistant", "name" => "amy"}]})
 
       assert next.flash =~ "updated"
 
@@ -136,13 +136,13 @@ defmodule Console.CockpitWorkspacesTest do
     end
 
     test "a missing workspace (already gone) flashes, never crashes" do
-      next = Cockpit.edit_workspace!(state(%{}), 999_999, %{type: "life"})
+      next = Author.edit_workspace!(state(%{}), 999_999, %{type: "life"})
       assert next.flash =~ "already gone"
     end
 
     test "name is immutable — edit_changeset drops it, no error, no rename" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Cockpit.edit_workspace!(state(%{}), w.id, %{name: "Ignored"})
+      next = Author.edit_workspace!(state(%{}), w.id, %{name: "Ignored"})
 
       assert next.flash =~ "updated Freedonia"
       assert [%{name: "Freedonia"}] = Workspaces.all()
@@ -150,7 +150,7 @@ defmodule Console.CockpitWorkspacesTest do
 
     test "an invalid type (outside the DB CHECK's closed set) flashes, never crashes" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Cockpit.edit_workspace!(state(%{}), w.id, %{type: "nonsense"})
+      next = Author.edit_workspace!(state(%{}), w.id, %{type: "nonsense"})
 
       assert next.flash =~ "edit failed"
       assert [%{type: "blank"}] = Workspaces.all()
@@ -178,14 +178,14 @@ defmodule Console.CockpitWorkspacesTest do
       {:ok, w} =
         Workspaces.register(%{name: "Freedonia", type: "blank", roster: [%{"archetype" => "surveyor", "name" => "amy"}]})
 
-      next = Cockpit.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
+      next = Author.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
 
       assert next.flash =~ "amy driver"
       assert next.flash =~ "applies on next spawn"
       override = Console.Config.coworker_model("amy", path)
       assert override
       # cycling again lands on the FOLLOWING ring entry — proves it's a cycle, not a fixed write.
-      next2 = Cockpit.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
+      next2 = Author.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
       assert Console.Config.coworker_model("amy", path) == Console.Profiles.next_model(override)
       assert next2.flash =~ "amy driver"
     end
@@ -195,7 +195,7 @@ defmodule Console.CockpitWorkspacesTest do
         Workspaces.register(%{name: "Freedonia", type: "blank", roster: [%{"archetype" => "surveyor", "name" => "amy"}]})
 
       next =
-        Cockpit.apply_coworker_knob!(
+        Author.apply_coworker_knob!(
           roster_edit_state(w.id, %{author_edit: %{id: w.id, field: 3, sub: 0, mode: :sub, knob: :yolo}}),
           "amy",
           :yolo
@@ -204,20 +204,20 @@ defmodule Console.CockpitWorkspacesTest do
       assert next.flash =~ "amy permissions"
       assert Console.Config.coworker_yolo("amy", path) == true
 
-      next2 = Cockpit.apply_coworker_knob!(next, "amy", :yolo)
+      next2 = Author.apply_coworker_knob!(next, "amy", :yolo)
       assert Console.Config.coworker_yolo("amy", path) == false
       assert next2.flash =~ "ask"
     end
 
     test "a roster entry that's vanished (renamed/removed mid-edit) flashes, never crashes" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Cockpit.apply_coworker_knob!(roster_edit_state(w.id), "ghost", :model)
+      next = Author.apply_coworker_knob!(roster_edit_state(w.id), "ghost", :model)
 
       assert next.flash =~ "roster entry not found"
     end
 
     test "an already-gone workspace flashes, never crashes" do
-      next = Cockpit.apply_coworker_knob!(roster_edit_state(999_999), "amy", :model)
+      next = Author.apply_coworker_knob!(roster_edit_state(999_999), "amy", :model)
       assert next.flash =~ "roster entry not found"
     end
   end

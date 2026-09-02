@@ -12,13 +12,13 @@ defmodule Console.Cockpit do
   use GenServer
 
   alias Console.Board
+  alias Console.Cockpit.Author
   alias Console.Cockpit.Recovery
   alias Console.Delivery
   alias Console.Keymap
   alias Console.Mouse
   alias Console.Osc
   alias Console.Panel
-  alias Console.Profiles
   alias Console.Reads
   alias Console.Safe
   alias Console.Sessions
@@ -34,7 +34,6 @@ defmodule Console.Cockpit do
   alias Server.Bus
   alias Server.Channel
   alias Server.Dossier
-  alias Server.Workspaces
 
   # `Space.workspace?/1` is a `defguard` (usable in clause-head `when`s), which requires the module,
   # not just an alias.
@@ -317,7 +316,7 @@ defmodule Console.Cockpit do
   # An open overlay menu captures navigation keys (Slice 3.5): Esc closes it, j/k/↑↓ move, Enter
   # activates — every other key is swallowed so it can't leak to the frame underneath.
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{menu: menu} = state) when not is_nil(menu),
-    do: handle_menu_key(key, state)
+    do: overlay_reply(Author.handle_menu_key(key, state), state)
 
   # The STACK-zoom embedded lazygit (Slice 4): while it's up, every key drives lazygit's PTY — it
   # captures keys like any embedded app (Esc/hjkl/etc. are its own). `Ctrl+Space` (the TERM↔NAV
@@ -427,7 +426,7 @@ defmodule Console.Cockpit do
       case Mouse.hit_panel(state.placements, x, y) do
         {Panel.Sidebar, data, rect} ->
           case Panel.Sidebar.workspace_at(data, rect, y - rect.y) do
-            %{id: _} = ws -> {:noreply, render(%{state | menu: workspace_menu(ws, x, y)})}
+            %{id: _} = ws -> {:noreply, render(%{state | menu: Author.workspace_menu(ws, x, y)})}
             _ -> {:noreply, render(%{state | menu: nil})}
           end
 
@@ -615,7 +614,7 @@ defmodule Console.Cockpit do
   defp maybe_hot_reload(%{reload_seen: :unset} = state), do: %{state | reload_seen: trigger_mtime()}
 
   defp maybe_hot_reload(state) do
-    flash_on_error(state, "reload", fn ->
+    Safe.flash_on_error(state, "reload", fn ->
       case trigger_mtime() do
         m when m != nil and m != state.reload_seen ->
           n = reload_console_modules()
@@ -777,113 +776,13 @@ defmodule Console.Cockpit do
   defp reset_scrolls(_prev, next), do: next
 
   defp handle_menu_click({Panel.Menu, data, rect}, y, state),
-    do: apply_menu(Panel.Menu.pick(data, rect, y - rect.y), state)
+    do: {:noreply, render(Author.apply_menu(Panel.Menu.pick(data, rect, y - rect.y), state))}
 
   defp handle_menu_click(_hit, _y, state), do: {:noreply, render(%{state | menu: nil})}
 
-  defp handle_menu_key(%{key: :escape}, state), do: {:noreply, render(%{state | menu: nil})}
-  defp handle_menu_key(%{char: "j"}, state), do: {:noreply, render(move_menu(state, 1))}
-  defp handle_menu_key(%{key: :down}, state), do: {:noreply, render(move_menu(state, 1))}
-  defp handle_menu_key(%{char: "k"}, state), do: {:noreply, render(move_menu(state, -1))}
-  defp handle_menu_key(%{key: :up}, state), do: {:noreply, render(move_menu(state, -1))}
-
-  defp handle_menu_key(%{key: :enter}, %{menu: %{items: items, cursor: c}} = state),
-    do: menu_action(Enum.at(items, c).action, state)
-
-  defp handle_menu_key(_key, state), do: {:noreply, state}
-
-  defp move_menu(%{menu: %{items: items, cursor: c} = menu} = state, delta) do
-    n = max(length(items), 1)
-    %{state | menu: %{menu | cursor: rem(c + delta + n, n)}}
-  end
-
-  # A workspace's context menu, anchored at the click cell.
-  defp workspace_menu(ws, x, y) do
-    %{
-      title: ws.name,
-      x: x,
-      y: y,
-      cursor: 0,
-      items: [
-        %{label: "Set icon…", action: {:icon_picker, ws}},
-        %{label: "Configure", action: {:configure_ws, ws}},
-        %{label: "Delete", action: {:delete_ws, ws}, danger: true}
-      ]
-    }
-  end
-
-  # The Set-icon picker: the workspace-icon choices, plus a reset to the position number.
-  defp icon_picker_menu(ws, x, y) do
-    icons =
-      Enum.map(Console.Icons.workspace_icons(), fn name ->
-        %{label: to_string(name), action: {:set_icon, ws, to_string(name)}, icon: name}
-      end)
-
-    %{title: "icon", x: x, y: y, cursor: 0, items: [%{label: "number", action: {:set_icon, ws, nil}} | icons]}
-  end
-
-  defp confirm_delete_menu(ws, x, y) do
-    %{
-      title: "delete?",
-      x: x,
-      y: y,
-      cursor: 1,
-      items: [
-        %{label: "Delete #{ws.name}", action: {:confirm_delete, ws}, danger: true},
-        %{label: "Cancel", action: :close}
-      ]
-    }
-  end
-
-  defp apply_menu({:menu_pick, action}, state), do: menu_action(action, state)
-  defp apply_menu(_none, state), do: {:noreply, render(%{state | menu: nil})}
-
-  defp menu_action(:close, state), do: {:noreply, render(%{state | menu: nil})}
-
-  defp menu_action({:configure_ws, _ws}, state),
-    do: {:noreply, render(%{state | menu: nil, active_key: :orbis, orbis_face: :author})}
-
-  defp menu_action({:delete_ws, ws}, %{menu: %{x: x, y: y}} = state),
-    do: {:noreply, render(%{state | menu: confirm_delete_menu(ws, x, y)})}
-
-  defp menu_action({:confirm_delete, ws}, state), do: {:noreply, render(%{remove_workspace!(state, ws.id) | menu: nil})}
-
-  defp menu_action({:icon_picker, ws}, %{menu: %{x: x, y: y}} = state),
-    do: {:noreply, render(%{state | menu: icon_picker_menu(ws, x, y)})}
-
-  defp menu_action({:set_icon, ws, icon}, state),
-    do: {:noreply, render(%{set_workspace_icon(state, ws.id, icon) | menu: nil})}
-
-  defp menu_action(_unknown, state), do: {:noreply, render(%{state | menu: nil})}
-
-  # Merge the chosen icon into the workspace's knobs (nil clears it → back to the number).
-  defp set_workspace_icon(state, id, icon) do
-    case Enum.find(Workspaces.all(), &(&1.id == id)) do
-      %{knobs: knobs} -> edit_workspace!(state, id, %{knobs: put_or_delete_icon(knobs || %{}, icon)})
-      _ -> state
-    end
-  end
-
-  defp put_or_delete_icon(knobs, nil), do: Map.delete(knobs, "icon")
-  defp put_or_delete_icon(knobs, icon), do: Map.put(knobs, "icon", icon)
-
-  # The overlay's placements (Border + the Menu content), clamped on screen, painted last (on top).
-  defp menu_placements(nil, _w, _h), do: []
-
-  defp menu_placements(%{items: items} = menu, w, h) do
-    content_w = max(Panel.Menu.width(menu), String.length(menu[:title] || ""))
-    box_w = min(content_w + 4, w)
-    box_h = min(length(items) + 2, max(h - 2, 2))
-    x = menu.x |> min(w - box_w) |> max(0)
-    y = menu.y |> min(h - box_h - 2) |> max(0)
-    rect = %{x: x, y: y, w: box_w, h: box_h}
-    inset = %{x: x + 2, y: y + 1, w: max(box_w - 4, 1), h: max(box_h - 2, 1)}
-
-    [
-      {Panel.Border, %{focused: true, digit: nil, title: menu[:title], tabs: nil, hint: nil}, rect},
-      {Panel.Menu, menu, inset}
-    ]
-  end
+  # An overlay's key handler answers the next state, or `:ignore` for a swallowed key (no repaint).
+  defp overlay_reply(:ignore, state), do: {:noreply, state}
+  defp overlay_reply(next, _state), do: {:noreply, render(next)}
 
   # The full-screen boards (Tickets / Notes, Slice 3.5): the spine tools zoom to a board that
   # covers the frame; Esc closes it. Painted after the layout, before the menu.
@@ -1191,7 +1090,8 @@ defmodule Console.Cockpit do
   # it (Console.Config). Honest about scope: the RUNNING coworker keeps its model — the override
   # applies wherever Profiles.fetch flows on the next spawn (console:reset, or kill the pi window).
   defp apply_effect({:cycle_coworker_model, profile_name}, state),
-    do: flashing(state, "settings write", fn -> {:noreply, render(%{state | flash: cycle_model!(profile_name)})} end)
+    do:
+      flashing(state, "settings write", fn -> {:noreply, render(%{state | flash: Author.cycle_model!(profile_name)})} end)
 
   # Enter in Tlön nav: on the Sidebar, switch to the space under the cursor; on STACK, zoom the
   # focused thread's worktree into an embedded lazygit (Slice 4); on any other pane, open its
@@ -1233,26 +1133,27 @@ defmodule Console.Cockpit do
   defp apply_effect({:select_tab, _n}, state), do: {:noreply, state}
 
   # `a` (or Esc from the author face) landed: flip Orbis' face and repaint (D2.1).
-  defp apply_effect({:toggle_orbis_face}, state), do: {:noreply, render(toggle_orbis_face(state))}
+  defp apply_effect({:toggle_orbis_face}, state), do: {:noreply, render(Author.toggle_orbis_face(state))}
 
   # The author face's `n` verb landed: register a workspace from the armed template + typed name.
   defp apply_effect({:register_workspace, template, name}, state),
-    do: {:noreply, render(register_workspace!(state, template, name))}
+    do: {:noreply, render(Author.register_workspace!(state, template, name))}
 
   # `d` on the author face's cursor workspace landed: arm the two-key delete confirm.
   defp apply_effect({:arm_delete, id, name}, state),
     do: {:noreply, render(%{state | pending_delete: id, flash: "press d again to delete #{name}"})}
 
   # The second `d` (still armed on this id) landed: remove the workspace.
-  defp apply_effect({:remove_workspace, id}, state), do: {:noreply, render(remove_workspace!(state, id))}
+  defp apply_effect({:remove_workspace, id}, state), do: {:noreply, render(Author.remove_workspace!(state, id))}
 
   # The field editor's h/l rings and paths/roster sub-list add/remove (D2.4 Chunk 2a) landed: apply
   # the attrs map immediately — no draft/commit step, matching Settings' per-change apply.
-  defp apply_effect({:edit_workspace, id, attrs}, state), do: {:noreply, render(edit_workspace!(state, id, attrs))}
+  defp apply_effect({:edit_workspace, id, attrs}, state), do: {:noreply, render(Author.edit_workspace!(state, id, attrs))}
 
   # The roster sub-editor's Tab-armed knob landed on Enter/Space (D2.4 Chunk 2b, absorbs Settings):
   # apply it via Console.Config.
-  defp apply_effect({:coworker_knob, name, knob}, state), do: {:noreply, render(apply_coworker_knob!(state, name, knob))}
+  defp apply_effect({:coworker_knob, name, knob}, state),
+    do: {:noreply, render(Author.apply_coworker_knob!(state, name, knob))}
 
   # a/r on Memory's habits section: resolve the selected pending habit from the focus + cached read,
   # act via server, then null the memory cache so the pane reflects the shrunk queue on next render.
@@ -1377,169 +1278,8 @@ defmodule Console.Cockpit do
   defp flashing(state, label, fun) do
     case Safe.call(fun) do
       {:ok, reply} -> reply
-      {:error, reason} -> {:noreply, render(flash_failed(state, label, reason))}
+      {:error, reason} -> {:noreply, render(Safe.flash_failed(state, label, reason))}
     end
-  end
-
-  # The state-returning twin: `fun` yields the next state, or the failure flashes on the old one.
-  defp flash_on_error(state, label, fun) do
-    case Safe.call(fun) do
-      {:ok, next} -> next
-      {:error, reason} -> flash_failed(state, label, reason)
-    end
-  end
-
-  defp flash_failed(state, label, reason), do: %{state | flash: "#{label} failed: #{Safe.describe(reason)}"}
-
-  @doc false
-  # The pure flip behind Orbis' `a`/Esc (D2.1) — public + exposed so it's
-  # testable without a live GenServer.
-  def toggle_orbis_face(%{orbis_face: :author} = state), do: %{state | orbis_face: :survey}
-  def toggle_orbis_face(state), do: %{state | orbis_face: :author}
-
-  @doc false
-  # Register a workspace from `template` + the operator-typed `name` (D2.3's `n` verb). `{:ok, _}`
-  # clears the input and flashes; `{:error, changeset}` (a blank OR duplicate name — both are the
-  # server changeset's job, not re-validated here) flashes the reason and REOPENS the input with
-  # what was typed, so a rejected name can be edited and resubmitted rather than retyped from
-  # scratch. Wrapped like `create_thread`/`post_message` — a server hiccup flashes, never crashes
-  # the cockpit.
-  def register_workspace!(state, template, name) do
-    flash_on_error(state, "create", fn ->
-      case Workspaces.register(WorkspaceTemplates.new_workspace_attrs(template, name)) do
-        {:ok, workspace} ->
-          %{state | input: nil, flash: "created #{workspace.name}"}
-
-        {:error, changeset} ->
-          %{
-            state
-            | input: %{kind: :new_workspace, buffer: name, cursor: String.length(name), template: template},
-              flash: "couldn't create “#{name}” — #{changeset_error(changeset)}"
-          }
-      end
-    end)
-  end
-
-  @doc false
-  # Remove workspace `id` (D2.5's second `d`). Guards against stranding the cockpit on a deleted
-  # active workspace (falls back to `:orbis`) and clamps `author_cursor` to the shrunk list. A missing
-  # workspace (already gone) or a server hiccup flashes, never crashes.
-  def remove_workspace!(state, id) do
-    flash_on_error(state, "delete", fn ->
-      case Workspaces.get(id) do
-        nil ->
-          %{state | flash: "workspace ##{id} already gone"}
-
-        workspace ->
-          case Workspaces.remove(workspace) do
-            {:ok, _} ->
-              state
-              |> Map.put(:active_key, if(state.active_key == id, do: :orbis, else: state.active_key))
-              |> Map.put(:author_cursor, clamp_author_cursor(state.author_cursor))
-              |> Map.put(:flash, "deleted #{workspace.name}")
-
-            {:error, :last_workspace} ->
-              %{state | flash: "couldn't delete #{workspace.name} — the last workspace; threads must have a home"}
-
-            {:error, changeset} ->
-              %{state | flash: "couldn't delete #{workspace.name} — #{changeset_error(changeset)}"}
-          end
-      end
-    end)
-  end
-
-  # Re-clamp the author cursor against the POST-delete count (one fewer row) — same edge-clamp
-  # discipline as the keymap's move_author_cursor, applied here since a delete can shrink the list
-  # out from under a cursor sitting on (or past) the new last row.
-  defp clamp_author_cursor(cursor), do: max(min(cursor, max(length(Workspaces.all()) - 1, 0)), 0)
-
-  @doc false
-  # Apply one field edit (D2.4 Chunk 2a: the editor's type/scope rings, and the paths/roster
-  # sub-list's add/remove) immediately — no draft/commit step, mirroring how Settings applies each
-  # change on the spot. `name` is immutable (`Workspace.edit_changeset` drops it — see server/workspace.ex);
-  # nothing here special-cases it. Same missing/error/rescue shape as `register_workspace!`/
-  # `remove_workspace!`. On success, re-clamps `author_edit.sub` against the POST-edit paths/roster
-  # length (a removal can strand `sub` past the shrunk list, same reasoning as
-  # `clamp_author_cursor/1` above).
-  def edit_workspace!(state, id, attrs) do
-    flash_on_error(state, "edit", fn ->
-      case Workspaces.get(id) do
-        nil ->
-          %{state | flash: "workspace ##{id} already gone"}
-
-        workspace ->
-          case Workspaces.edit(workspace, attrs) do
-            {:ok, updated} -> reclamp_author_edit_sub(%{state | flash: "updated #{updated.name}"})
-            {:error, changeset} -> %{state | flash: "couldn't update #{workspace.name} — #{changeset_error(changeset)}"}
-          end
-      end
-    end)
-  end
-
-  # Only reachable when `author_edit` is actually mid-edit on a paths/roster sub-list (field 2/3) —
-  # elsewhere (the type/scope rings, or no editor open) this is a no-op via the fallback clause.
-  defp reclamp_author_edit_sub(%{author_edit: %{id: id, field: field} = edit} = state) when field in [2, 3] do
-    case Workspaces.get(id) do
-      nil ->
-        state
-
-      workspace ->
-        len = workspace |> Map.get(sub_list_field(field)) |> length()
-        %{state | author_edit: %{edit | sub: edit.sub |> min(max(len - 1, 0)) |> max(0)}}
-    end
-  end
-
-  defp reclamp_author_edit_sub(state), do: state
-
-  defp sub_list_field(2), do: :paths
-  defp sub_list_field(3), do: :roster
-
-  @doc false
-  # The roster sub-editor's Tab+Enter/Space knob (D2.4 Chunk 2b — absorbs the Settings modal):
-  # cycle the sub-selected coworker's model ring, or flip its yolo policy, writing Console.Config
-  # (file-backed, applies on the coworker's NEXT SPAWN — same honest scope as the `m` verb/old
-  # Settings). Looks the roster entry up off the LIVE workspace (Workspaces.get, like edit_workspace!) rather
-  # than trust the effect's bare name, so the entry's archetype (the model ring's default-fallback
-  # source) is available.
-  def apply_coworker_knob!(state, name, knob) do
-    flash_on_error(state, "settings write", fn ->
-      case roster_entry_for(state, name) do
-        nil -> %{state | flash: "#{name}: roster entry not found"}
-        entry -> %{state | flash: apply_knob(entry, knob)}
-      end
-    end)
-  end
-
-  defp roster_entry_for(%{author_edit: %{id: id}}, name) do
-    case Workspaces.get(id) do
-      nil -> nil
-      workspace -> Enum.find(workspace.roster || [], &(&1["name"] == name))
-    end
-  end
-
-  defp roster_entry_for(_state, _name), do: nil
-
-  defp apply_knob(entry, :model) do
-    norm = Profiles.roster_entry(entry)
-    next = Profiles.next_model(Profiles.instantiate(norm).model)
-    Console.Config.put_coworker_model(norm.name, next)
-    "#{norm.name} driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
-  end
-
-  defp apply_knob(entry, :yolo) do
-    name = entry["name"]
-    next = Console.Config.coworker_yolo(name) != true
-    Console.Config.put_coworker_yolo(name, next)
-    policy = if next, do: "yolo (auto-approve)", else: "ask"
-    "#{name} permissions → #{policy} — applies on next spawn (console:reset)"
-  end
-
-  # A short "field message, message" sentence from an Ecto changeset — surfaces e.g. a duplicate
-  # name's UNIQUE(name) violation ("name has already been taken") without a full inspect dump.
-  defp changeset_error(changeset) do
-    changeset
-    |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
-    |> Enum.map_join("; ", fn {field, errors} -> "#{field} #{Enum.join(errors, ", ")}" end)
   end
 
   # Arm one coalesced render if none is armed. The first terminal event in a burst schedules
@@ -1583,7 +1323,7 @@ defmodule Console.Cockpit do
     placements =
       View.compose(reads, state.w, state.h) ++
         lazygit_placements(state) ++
-        board_placements(state) ++ menu_placements(state.menu, state.w, state.h)
+        board_placements(state) ++ Author.menu_placements(state.menu, state.w, state.h)
 
     placements
     |> Board.compose(state.w, state.h)
@@ -1639,14 +1379,6 @@ defmodule Console.Cockpit do
   # The pure flip behind the `v` verb — exposed for TTY-less tests.
   def toggle_center_view(%{center_view: :chat} = state), do: %{state | center_view: :terminal}
   def toggle_center_view(state), do: %{state | center_view: :chat}
-
-  # Advance a coworker's driver one step round the ring and persist it; returns the flash string.
-  defp cycle_model!(profile_name) do
-    current = Profiles.fetch(profile_name)
-    next = Profiles.next_model(current && current.model)
-    Console.Config.put_coworker_model(profile_name, next)
-    "coworker driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
-  end
 
   # A thread title from its opening message — first line, trimmed to a glanceable length.
   defp thread_title(text) do
