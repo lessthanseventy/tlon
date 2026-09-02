@@ -14,6 +14,8 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Type } from "./pi.ts";
+import { extractText } from "../../shared/text.ts";
+export { extractText };
 import type {
   CommandOptions,
   ExtensionAPI,
@@ -287,23 +289,6 @@ export function serializeEntries(entries: SessionEntry[]): string {
   );
 }
 
-// Pull the text out of a message's content (string or array of {type:"text",text} blocks).
-export function extractText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const parts: string[] = [];
-  for (const block of content) {
-    if (
-      block &&
-      typeof block === "object" &&
-      (block as { type?: string }).type === "text" &&
-      typeof (block as { text?: string }).text === "string"
-    ) {
-      parts.push((block as { text: string }).text);
-    }
-  }
-  return parts.join("\n").trim();
-}
 
 // Auto-vision: pi's read tool emits "Read image file [image/png]\n[Current model does not
 // support images. The image will be omitted from this request.]" when a text-only model

@@ -10,6 +10,9 @@
 // This module is the PURE core — delta-slicing, prompt-building, tolerant parse — unit-pinned
 // without a live session or model.
 
+import { extractText } from "../../shared/text.ts";
+export { extractText };
+
 export interface Entry {
   message?: { role?: string; content?: unknown };
 }
@@ -60,17 +63,6 @@ export function serializeDelta(entries: Entry[]): string {
   return joined;
 }
 
-// Pull text out of a message's content (string, or array of {type:"text",text} blocks).
-export function extractText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const parts: string[] = [];
-  for (const block of content) {
-    const b = block as { type?: string; text?: string } | null;
-    if (b && b.type === "text" && typeof b.text === "string") parts.push(b.text);
-  }
-  return parts.join("\n").trim();
-}
 
 // The same conservative credential shapes the server's write-path scanner (Server.Secrets) refuses —
 // mirrored here because capture EGRESSES the raw delta to ollama.com before the server ever sees it:
