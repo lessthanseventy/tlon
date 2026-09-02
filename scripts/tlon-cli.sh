@@ -26,14 +26,14 @@
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
 set -euo pipefail
 
-FUNES="$(dirname "$0")/../modules/server/_build/prod/rel/server/bin/server"
+SERVER="$(dirname "$0")/../modules/server/_build/prod/rel/server/bin/server"
 # Every rpc subcommand shells into `bin/server rpc` and needs the release. `token`/`bearer`
 # do NOT — they mint purely over HTTP (/mint at TLON_MCP_URL's origin), so they must work
 # without a local release (that's the whole point of per-connect minting: any node, any
 # world). Gating them on the release strands every MCP headersHelper when no release is built.
 case "${1:-}" in
   token | bearer) ;;
-  *) [ -x "$FUNES" ] || { echo "no release at $FUNES — run 'mise run server:release' first" >&2; exit 1; } ;;
+  *) [ -x "$SERVER" ] || { echo "no release at $SERVER — run 'mise run server:release' first" >&2; exit 1; } ;;
 esac
 
 # Escape a string for embedding as an Elixir "..." literal: backslash first, then quote,
@@ -42,8 +42,8 @@ esac
 esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/#{/\\#{/g'; }
 int() { case "$1" in ('' | *[!0-9]*) return 1 ;; (*) return 0 ;; esac; }
 
-# Mint a fresh token against TLON_MCP_URL's origin /mint (Funes.MCP.Gateway) — the same
-# per-connect mint manos/pi's mcp.ts does: POST {"thread_id", "agent"} → {"token"}. The token
+# Mint a fresh token against TLON_MCP_URL's origin /mint (Server.MCP.Gateway) — the same
+# per-connect mint adapters/pi's mcp.ts does: POST {"thread_id", "agent"} → {"token"}. The token
 # is signed with THAT node's world secret, so it verifies at /mcp on the same node (console's
 # 4041 or the service's 4040); minting via `bin/server rpc` instead would only reach the service
 # node and strand an console-handed pane in the wrong world. No token is frozen — a fresh one per
@@ -76,14 +76,14 @@ case "$cmd" in
       shift; id="${1:-}"; agent="${2:-}"
       { int "$id" && [ -n "$agent" ]; } ||
         { echo 'usage: tlon-cli.sh spawn --join <thread-id> <agent-name>' >&2; exit 2; }
-      call="Funes.MCP.Spawn.join($id, \"$(esc "$agent")\")"
+      call="Server.MCP.Spawn.join($id, \"$(esc "$agent")\")"
     else
       title="${1:-}"; agent="${2:-}"
       { [ -n "$title" ] && [ -n "$agent" ]; } ||
         { echo 'usage: mise run server:spawn -- "<thread title>" <agent-name>' >&2; exit 2; }
-      call="Funes.MCP.Spawn.env(\"$(esc "$title")\", \"$(esc "$agent")\")"
+      call="Server.MCP.Spawn.env(\"$(esc "$title")\", \"$(esc "$agent")\")"
     fi
-    exec "$FUNES" rpc "{:ok, m} = $call; IO.puts(m.exports)"
+    exec "$SERVER" rpc "{:ok, m} = $call; IO.puts(m.exports)"
     ;;
 
   token)
@@ -104,8 +104,8 @@ case "$cmd" in
 
   roster)
     # Who's on the clock (Staff.roster): every live session, warm ● / cold ○.
-    exec "$FUNES" rpc '
-      Funes.Staff.roster()
+    exec "$SERVER" rpc '
+      Server.Staff.roster()
       |> Enum.map_join("\n", fn r ->
         mark = if r.warm?, do: "●", else: "○"
         pane = if r.pane_ref, do: " [" <> r.pane_ref <> "]", else: ""
@@ -118,8 +118,8 @@ case "$cmd" in
   dossier)
     tid="${1:-${TLON_THREAD:-}}"
     int "$tid" || { echo 'usage: mise run server:dossier -- <thread-id> (or set TLON_THREAD)' >&2; exit 2; }
-    # Same Board.in_scope |> Brief.scope the get_dossier MCP tool renders, pretty-printed.
-    exec "$FUNES" rpc "%Funes.Thread{id: $tid} |> Funes.Board.in_scope() |> Funes.MCP.Brief.scope() |> inspect(pretty: true, limit: :infinity) |> IO.puts()"
+    # Same Board.brief |> Brief.scope the get_dossier MCP tool renders, pretty-printed.
+    exec "$SERVER" rpc "%Server.Thread{id: $tid} |> Server.Board.brief() |> Server.MCP.Brief.scope() |> inspect(pretty: true, limit: :infinity) |> IO.puts()"
     ;;
 
   post)
@@ -128,7 +128,7 @@ case "$cmd" in
     { int "$tid" && [ -n "$body" ]; } ||
       { echo 'usage: mise run server:post -- <thread-id> <message text…>' >&2; exit 2; }
     # Post as the operator (default andrew) — parity with the agents' post_message.
-    exec "$FUNES" rpc "op = Application.get_env(:server, :operator, \"andrew\"); {:ok, m} = Funes.Channel.post(%{thread_id: $tid, author: op, body: \"$(esc "$body")\"}); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
+    exec "$SERVER" rpc "op = Application.get_env(:server, :operator, \"andrew\"); {:ok, m} = Server.Channel.post(%{thread_id: $tid, author: op, body: \"$(esc "$body")\"}); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
     ;;
 
   workline)
@@ -137,7 +137,7 @@ case "$cmd" in
       { echo 'usage: tlon-cli.sh workline "<title>" <slug>' >&2; exit 2; }
     # Open a workline at stage intent — the operator's kickoff. The stage machine takes it
     # from here (advance_stage / approve).
-    exec "$FUNES" rpc "case Funes.Workline.open(%{title: \"$(esc "$title")\", slug: \"$(esc "$slug")\"}) do {:ok, t} -> IO.puts(\"workline ##{t.id} #{t.slug} at #{t.stage} — folder work/#{t.slug}/\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\") end"
+    exec "$SERVER" rpc "case Server.Workline.open(%{title: \"$(esc "$title")\", slug: \"$(esc "$slug")\"}) do {:ok, t} -> IO.puts(\"workline ##{t.id} #{t.slug} at #{t.stage} — folder work/#{t.slug}/\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\") end"
     ;;
 
   advance)
@@ -145,7 +145,7 @@ case "$cmd" in
     int "$tid" || { echo 'usage: tlon-cli.sh advance <thread-id>' >&2; exit 2; }
     # Advance a workline past its current stage (the git artifact checker runs in the SERVICE
     # node — set TLON_WORKLINE_ROOT there). The verifier script's green-path exit.
-    exec "$FUNES" rpc "case Funes.Repo.get(Funes.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Funes.Workline.advance(t) do {:ok, a} -> IO.puts(\"advanced — thread #$tid now at #{a.stage}\"); {:awaiting, a} -> IO.puts(\"gated at #{a.stage} — awaiting #{a.awaiting}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.advance(t) do {:ok, a} -> IO.puts(\"advanced — thread #$tid now at #{a.stage}\"); {:awaiting, a} -> IO.puts(\"gated at #{a.stage} — awaiting #{a.awaiting}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
     ;;
 
   record-verify)
@@ -154,7 +154,7 @@ case "$cmd" in
       { echo 'usage: tlon-cli.sh record-verify <thread-id> <slug> <exit> <cmd> <tail…>' >&2; exit 2; }
     # The verifier script's evidence path: a measured check correlated workline:<slug>:verify —
     # exactly what the verify stage's owed :checks artifact looks for.
-    exec "$FUNES" rpc "{:ok, e} = Funes.Dossier.record_check(%{thread_id: $tid, cmd: \"$(esc "$cmd")\", exit: $code, tail: \"$(esc "$tail")\", correlation: \"workline:$(esc "$slug"):verify\"}); IO.puts(\"recorded ##{e.id} #{e.kind}\")"
+    exec "$SERVER" rpc "{:ok, e} = Server.Dossier.record_check(%{thread_id: $tid, cmd: \"$(esc "$cmd")\", exit: $code, tail: \"$(esc "$tail")\", correlation: \"workline:$(esc "$slug"):verify\"}); IO.puts(\"recorded ##{e.id} #{e.kind}\")"
     ;;
 
   approve)
@@ -163,7 +163,7 @@ case "$cmd" in
     # Complete a workline's parked gate (awaiting: andrew) — the operator's approval verb.
     # approve RE-VERIFIES the owed artifact via git in the SERVICE node — like `advance`,
     # the service needs TLON_WORKLINE_ROOT pointed at the worktree.
-    exec "$FUNES" rpc "case Funes.Repo.get(Funes.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Funes.Workline.approve(t) do {:ok, a} -> IO.puts(\"approved — thread #$tid now at #{a.stage}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.approve(t) do {:ok, a} -> IO.puts(\"approved — thread #$tid now at #{a.stage}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
     ;;
 
   delete-thread)
@@ -171,14 +171,14 @@ case "$cmd" in
     int "$tid" || { echo 'usage: tlon-cli.sh delete-thread <thread-id>' >&2; exit 2; }
     # The operator's hard delete: thread + its messages/todos/questions/sessions; facts survive
     # unlinked. The root machine thread is refused by Channel.delete_thread itself.
-    exec "$FUNES" rpc "case Funes.Repo.get(Funes.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Funes.Channel.delete_thread(t) do {:ok, _} -> IO.puts(\"deleted thread #$tid — #{t.title}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Channel.delete_thread(t) do {:ok, _} -> IO.puts(\"deleted thread #$tid — #{t.title}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
     ;;
 
   forget-fact)
     fid="${1:-}"
     int "$fid" || { echo 'usage: tlon-cli.sh forget-fact <fact-id>' >&2; exit 2; }
     # The operator's tombstone: out of every recall surface, row + provenance kept.
-    exec "$FUNES" rpc "case Funes.Repo.get(Funes.Fact, $fid) do nil -> IO.puts(\"no fact #$fid\"); f -> {:ok, _} = Funes.Dossier.forget_fact(f); IO.puts(\"forgot fact #$fid — #{f.text}\") end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Fact, $fid) do nil -> IO.puts(\"no fact #$fid\"); f -> {:ok, _} = Server.Dossier.forget_fact(f); IO.puts(\"forgot fact #$fid — #{f.text}\") end"
     ;;
 
   *)

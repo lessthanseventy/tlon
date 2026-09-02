@@ -51,7 +51,7 @@ dir = "modules/server"
 run = "TLON_DB=.dev/tlon.db mix server.doctor"
 
 # Boot funes with its sovereign channel on, loopback-only, against the scratch db — so
-# a hand-spawned pi pane has something to register with. `Funes.MCP.Spawn.env("title",
+# a hand-spawned pi pane has something to register with. `Server.MCP.Spawn.env("title",
 # "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
 [tasks."server:serve"]
 description = "server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
@@ -107,7 +107,7 @@ description = "server: who's on the clock — every live session, warm/cold (Sta
 run = "scripts/tlon-cli.sh roster"
 
 [tasks."server:dossier"]
-description = "server: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool"
+description = "server: render a thread's brief from the shell (Board.brief → Brief.scope) — parity with the get_dossier MCP tool"
 run = "scripts/tlon-cli.sh dossier"
 
 [tasks."server:post"]
