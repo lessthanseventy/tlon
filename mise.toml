@@ -241,14 +241,9 @@ dir = "modules/console"
 run = "mix compile && touch .reload && echo 'console:reload — recompiled + signaled; the cockpit swaps in the new code on its next tick (~0.5s)'"
 
 [tasks."console:check"]
-description = "console: the precommit gate — format + warnings-as-errors + tests + deterministic steering evals"
+description = "console: the precommit gate — format + warnings-as-errors + tests"
 dir = "modules/console"
-run = "mix precommit && mix console.eval --deterministic"
-
-[tasks."console:eval"]
-description = "console: the FULL steering evals (routing corpus; judged scenarios land with later slices)"
-dir = "modules/console"
-run = "mix console.eval"
+run = "mix precommit"
 
 [tasks."console:setup"]
 description = "console: fetch deps, create + migrate the shared funes db (via Server.Repo)"

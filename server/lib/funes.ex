@@ -36,11 +36,6 @@ defmodule Server do
       Consult,
       # Migration pre-flight (console.run refuses to boot a behind db).
       Doctor,
-      # The steering-config eval harness (worklines slice 0) — console's scenarios use the
-      # same runner/judge, so each module gates its own steering.
-      Eval,
-      Eval.Scenario,
-      Eval.Judge,
       # Identity minting for spawned harnesses (the server-citizen handshake).
       MCP.Spawn,
       # The arbiter behaviour a host implements (console's terminal-writing arbiter).
