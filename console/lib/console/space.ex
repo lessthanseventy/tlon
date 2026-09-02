@@ -99,8 +99,8 @@ defmodule Console.Space do
       # Slice 3.4: the funes panels move OFF the (now-retired) right rail into the left rail, stacked
       # top-down — NOW (attention/activity) · CREW · MEMORY · STACK — no more `[`/`]` carousel. The
       # Sidebar renders as the thin far-left SPINE (workspace switcher + global tools), split out of
-      # this list in `View.compose`. THREADS/Leaves is gone from the rail — the center thread-stack IS
-      # the thread list now; HEALTH stays in the footer + /status.
+      # this list in `View.compose`. The center thread-stack IS the thread list; HEALTH stays in the
+      # footer + /status.
       left: [Activity, Crew, Memory, Stack],
       right: [],
       coworker: lead_coworker(workspace.roster),

@@ -4,7 +4,7 @@ defmodule Console.Panel.Author do
   view (D2, Chunk 1); `e` on the cursor workspace opens the in-place FIELD EDITOR (D2.4 Chunk 2a),
   `data[:edit]` present. List: one row per `Console.Workspaces.all/0` workspace (name · type · path/roster
   counts), the `author_cursor` row washed `:selected` — same wash idiom as
-  `Console.Panel.Overview`/`Leaves`. Data is `%{workspaces: [%{id, name, type, paths, roster, scope}],
+  `Console.Panel.Overview`. Data is `%{workspaces: [%{id, name, type, paths, roster, scope}],
   cursor, edit}` (`cursor`/`edit` View-injected). Replaces Overview as Orbis' center only while
   `orbis_face == :author` (`Console.View.compose/3`).
 

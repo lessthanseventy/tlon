@@ -302,14 +302,6 @@ defmodule Console.Cockpit do
             # center tmux terminal). Persistent across keypresses — the keymap reads+advances it,
             # only in the Tlön space. Defaults in-terminal, so Tlön opens with keys going to tmux.
             focus: Focus.new(),
-            # The Workspace tmux window the center is previewing (Workspaces Slice 0, tweak #1): a hover over
-            # a window-bearing pane (Leaves) re-points the center here WITHOUT taking focus; a commit
-            # (`commit_preview/1`) drops keys into it. nil = center on its default (active) window.
-            previewed_window: nil,
-            # Which Workspace window is attached in the center (C3.3): `{:leaf, id}` when a leaf's own
-            # `t<id>` window is attached, else `{:leader, name | nil}`. Leaves washes the leaf row
-            # whose id matches. Set by attach_leaf/2 and the WindowBar tab click.
-            focused_session: {:leader, nil},
             # The last acted-on left-click cell — raxol's event_translator gives mouse events NO
             # press/release action, so a click arrives as TWO identical `:left` events; we act on the
             # first and swallow the immediate duplicate (the release). Any other mouse event clears it.
@@ -348,13 +340,9 @@ defmodule Console.Cockpit do
             # The Memory pane's read (coverage + pinned + pending habits), cached with stack/health;
             # invalidated on a habit approve/reject so the pane reflects the write immediately.
             memory: nil,
-            # The Leaves rollup (machine_overview), cached with the other probes so its item count is
-            # available to the keymap for j/k clamping at keypress time (before reads exist).
+            # The Orbis rollup (`Console.Orbis.rollup/0`) the survey reads, cached on the probe cadence so
+            # the keymap's survey cursor can clamp against it at keypress time.
             leaves: nil,
-            # The Leaves reorder context (the active WindowBar tab's agent), derived once per render
-            # (View.focused_lead) — leaves_data/1 injects it for the render read AND yank/attach/
-            # preview, so cursor indexing always matches the row order on screen.
-            focused_lead: nil,
             # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
             # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`. Seeded from
             # the durable logs so a fresh cockpit's NOW isn't blank until new events flow (the ring
@@ -1652,10 +1640,9 @@ defmodule Console.Cockpit do
     e -> {:noreply, render(%{state | flash: "settings write failed: #{Exception.message(e)}"})}
   end
 
-  # Enter in Tlön nav: on the Sidebar, switch to the space under the cursor; on Leaves, attach the
-  # leaf's live Workspace window in the center (preview + commit); on STACK, zoom the focused thread's
-  # worktree into an embedded lazygit (Slice 4); on any other pane, open its selection's detail in
-  # MAIN (set focus.detail?, which the View renders).
+  # Enter in Tlön nav: on the Sidebar, switch to the space under the cursor; on STACK, zoom the
+  # focused thread's worktree into an embedded lazygit (Slice 4); on any other pane, open its
+  # selection's detail in MAIN (set focus.detail?, which the View renders).
   defp apply_effect(:tlon_enter, state) do
     # A pane Enter always resolves ITS detail — never a leftover /status readout.
     state = %{state | status_detail: nil}
@@ -1663,15 +1650,10 @@ defmodule Console.Cockpit do
 
     case Focus.focused_pane(state.focus, layout) do
       Panel.Sidebar -> apply_pick({:switch_space, space_at_cursor(state, layout)}, state)
-      Panel.Leaves -> jump_to_leaf(state, layout)
       Panel.Stack -> open_lazygit(state)
       _ -> {:noreply, render(put_in(state.focus.detail?, true))}
     end
   end
-
-  # A hover in Tlön nav (`:tlon_preview`): re-point the Workspace center to the window under the cursor
-  # (a live preview) WITHOUT taking focus or sending keys — commit does that. See preview_focused/1.
-  defp apply_effect(:tlon_preview, state), do: {:noreply, render(preview_focused(state))}
 
   # Enter on the Orbis survey (D0.2) — the same space-switch a click on the row runs.
   defp apply_effect({:switch_space, key}, state), do: apply_pick({:switch_space, key}, state)
@@ -1797,12 +1779,6 @@ defmodule Console.Cockpit do
     {:noreply, render(%{state | memory: nil, flash: flash})}
   rescue
     e -> {:noreply, render(%{state | flash: "forget failed: #{Exception.message(e)}"})}
-  end
-
-  defp apply_effect({:tlon_delete, {:leaf, id, _label}}, state) do
-    {:noreply, render(delete_leaf!(state, id))}
-  rescue
-    e -> {:noreply, render(%{state | flash: "leaf delete failed: #{Exception.message(e)}"})}
   end
 
   # `y` landed: resolve the focused pane's semantic text, OSC-52 it to the host clipboard
@@ -2000,13 +1976,12 @@ defmodule Console.Cockpit do
 
   defp selected_habit(_state), do: nil
 
-  # What `d` would delete under the current focus: a MEMORY pinned fact (forget) or a LEAVES
-  # leaf (its window + thread). The label rides along for the arm flash.
+  # What `d` would delete under the current focus: a MEMORY pinned fact (forget). The label rides
+  # along for the arm flash.
   defp tlon_delete_target(state) do
-    cond do
-      fact = selected_pinned_fact(state) -> {:fact, fact, "forget fact ##{fact.id}"}
-      leaf = selected_leaf(state) -> {:leaf, leaf.id, "delete leaf ##{leaf.id} (window + thread)"}
-      true -> nil
+    case selected_pinned_fact(state) do
+      nil -> nil
+      fact -> {:fact, fact, "forget fact ##{fact.id}"}
     end
   end
 
@@ -2020,136 +1995,6 @@ defmodule Console.Cockpit do
   end
 
   defp selected_pinned_fact(_state), do: nil
-
-  # The leaf row under the Leaves cursor in nav — the same on-screen ordering attach/yank use.
-  defp selected_leaf(%{focus: %{in_terminal?: false} = focus} = state) do
-    layout = tlon_layout(state)
-
-    with Panel.Leaves <- Focus.focused_pane(focus, layout),
-         %{} = data <- leaves_data(state) do
-      Panel.Leaves.row_at(data, Focus.cursor(focus, layout))
-    else
-      _ -> nil
-    end
-  end
-
-  defp selected_leaf(_state), do: nil
-
-  # Kill the leaf's live `t<id>` window (if any), then hard-delete its thread through the server
-  # facade — it refuses the root machine thread, which flashes instead of half-deleting.
-  defp delete_leaf!(state, id) do
-    workspace_id = active_workspace_id(state)
-
-    case leaf_index(tlon_tabs(workspace_id), id) do
-      nil -> :ok
-      idx -> tlon_run(workspace_id, ["kill-window", "-t", "#{workspace_session(workspace_id)}:#{idx}"])
-    end
-
-    flash =
-      case Server.delete_thread(id) do
-        {:ok, thread} -> "deleted leaf ##{id} — #{thread.title}"
-        {:error, reason} -> "delete refused: #{inspect(reason)}"
-      end
-
-    %{state | leaves: nil, flash: flash}
-  end
-
-  # The Leaves data EXACTLY as the panel renders it: the cached rollup + the reorder context
-  # (`focused_lead`, derived once per paint in render/1) + the attached wash. The SINGLE enrichment
-  # the render read (`reads.orbis`) and the nav paths (yank/attach/preview via
-  # `Panel.Leaves.row_at/2`) all consume — cursor indexing can never disagree with the paint.
-  defp leaves_data(state) do
-    case Map.get(state, :leaves) do
-      nil ->
-        nil
-
-      leaves ->
-        leaves
-        |> Map.put(:focused_lead, Map.get(state, :focused_lead))
-        |> Map.put(:attached, attached_leaf(Map.get(state, :focused_session)))
-    end
-  end
-
-  defp attached_leaf({:leaf, id}), do: id
-  defp attached_leaf(_focused_session), do: nil
-
-  # The selected leaf → attach its live Workspace window in the center (Workspaces Slice 0): the Enter path
-  # of the preview-swap. render is un-unit-testable (it paints via termbox); attach_leaf/2 is the
-  # pure decision, so it carries the logic + tests.
-  defp jump_to_leaf(state, layout), do: {:noreply, render(attach_leaf(state, layout))}
-
-  @doc false
-  # PREVIEW (re-point) then COMMIT (focus in) the Workspace tmux window under the Leaves cursor. C3.3:
-  # a leaf is now a real attachable session — prefer ITS OWN `t<id>` window over its lead's, so
-  # `focused_session` becomes `{:leaf, id}`. Falls back to the lead's window (today's Slice-0
-  # behavior, `focused_session: {:leader, lead}`) when the leaf has no live window of its own. Both
-  # lookups run off ONE `tlon_tabs()` snapshot: resolve `idx`, then `select_tlon_window` + commit
-  # against that same idx — never a second read that could disagree (a TOCTOU half-attach if a
-  # window vanished between two snapshots). No leaf under the cursor, or no window either way, can't
-  # attach yet: flash the deferral, re-point nothing. Supersedes the old jump into the retiring
-  # Sessions space. Note: `preview_focused/1` (the arrow-hover path) is deliberately NOT reused here
-  # — it takes its own snapshot, which is safe for its single read but would reintroduce the double
-  # read.
-  def attach_leaf(state, layout) do
-    workspace_id = active_workspace_id(state)
-
-    # row_at over leaves_data: the ON-SCREEN row order (focused lead floated), never the raw rollup.
-    case Panel.Leaves.row_at(leaves_data(state), Focus.cursor(state.focus, layout)) do
-      %{id: id, lead: lead} ->
-        tabs = tlon_tabs(workspace_id)
-
-        case {leaf_index(tabs, id), window_index(tabs, lead)} do
-          {idx, _} when not is_nil(idx) ->
-            select_tlon_window(workspace_id, %{index: idx})
-
-            state
-            |> Map.put(:previewed_window, idx)
-            |> commit_preview()
-            |> Map.merge(%{focused_session: {:leaf, id}, flash: nil})
-
-          {nil, idx} when not is_nil(idx) ->
-            select_tlon_window(workspace_id, %{index: idx})
-
-            state
-            |> Map.put(:previewed_window, idx)
-            |> commit_preview()
-            |> Map.merge(%{focused_session: {:leader, lead}, flash: nil})
-
-          _ ->
-            %{state | flash: "no live session (Slice 1)"}
-        end
-
-      _ ->
-        %{state | flash: "no live session (Slice 1)"}
-    end
-  end
-
-  @doc false
-  # Preview-swap (Workspaces Slice 0, tweak #1): re-point the Workspace center to the tmux window under the
-  # nav cursor, storing it in `previewed_window`, WITHOUT taking keyboard focus (in_terminal? stays
-  # put) or sending keys — a live preview that follows the selection. Only a window-bearing pane
-  # (Leaves, mapped by the leaf's lead to a live window) re-points; a leaf with no live window, or
-  # any other pane/space, leaves the center exactly where it was. commit_preview/1 is what focuses.
-  def preview_focused(%{active_key: key} = state) when Space.workspace?(key) do
-    layout = tlon_layout(state)
-
-    with Panel.Leaves <- Focus.focused_pane(state.focus, layout),
-         # row_at over leaves_data: the ON-SCREEN row order, same as attach/yank.
-         %{lead: lead} <- Panel.Leaves.row_at(leaves_data(state), Focus.cursor(state.focus, layout)),
-         idx when not is_nil(idx) <- window_index(tlon_tabs(key), lead) do
-      select_tlon_window(key, %{index: idx})
-      %{state | previewed_window: idx}
-    else
-      _ -> state
-    end
-  end
-
-  def preview_focused(state), do: state
-
-  @doc false
-  # Commit the previewed Workspace window: take keyboard focus into the center (in_terminal? true) so
-  # keystrokes now flow to tmux. The shared "attach in place" step — Task 2's Leaves-Enter reuses it.
-  def commit_preview(state), do: put_in(state.focus.in_terminal?, true)
 
   # `enter_or_spawn`: if the focused thread already has a live session, it's already the center —
   # nothing to do (you're already working there). Otherwise spawn one onto it — one `spawn_onto/2`
@@ -2276,14 +2121,6 @@ defmodule Console.Cockpit do
     state = Board.safe_read(:resubscribe, state, fn -> resubscribe(state, focused) end)
     machine = Board.safe_read(:machine, :no_session, fn -> machine_read(state) end)
     roster = Board.safe_read(:roster, [], fn -> Staff.roster() end)
-    # The Leaves reorder context, derived ONCE per paint and cached — leaves_data/1 hands the same
-    # value to the render read below and to yank/attach/preview between paints.
-    focused_lead =
-      Board.safe_read(:focused_lead, nil, fn ->
-        View.focused_lead(%{machine: machine, active_key: state.active_key, roster: roster})
-      end)
-
-    state = %{state | focused_lead: focused_lead}
 
     # Computed once — the layout read and the detail read below share it (the detail is resolved
     # against the same frame's layout).
@@ -2332,20 +2169,6 @@ defmodule Console.Cockpit do
       activity: scope_activity(state.activity, state.ws_thread_ids),
       gates: state.gates || [],
       memory: if(Space.workspace?(state.active_key), do: state.memory),
-      orbis: Board.safe_read(:orbis, nil, fn -> if(Space.workspace?(state.active_key), do: leaves_data(state)) end),
-      focused_session: state.focused_session,
-      # The right rail's pinned BRIEF (slice D): the ATTACHED leaf's brief — only read while a
-      # leaf holds the center (thread context), so no per-frame DB read in workspace context. nil
-      # (leaf gone, server down) leaves the Brief placeholder up — the layout never jumps.
-      brief:
-        Board.safe_read(:brief, nil, fn ->
-          with {:leaf, id} <- state.focused_session,
-               %{} = thread <- Channel.thread(id) do
-            Server.Board.brief(thread)
-          else
-            _ -> nil
-          end
-        end),
       # The center's face + the chat face's read (reshape slice D). The chat read only runs
       # while the chat face is up — no per-frame DB tail while the PTY holds the center.
       center_view: state.center_view,
@@ -2570,21 +2393,16 @@ defmodule Console.Cockpit do
   # The thread `c` composes onto, derived per keypress (like center_live?): the focused project
   # thread in Orbis; in a Workspace space, whoever you're actually LOOKING at (reshape slice D:
   # the thread is the address, fixing the "who am I talking to" decoupling) — in chat view
-  # (Slice 3.3) that's the stack-focused card (the unfolded thread on screen), which can diverge
-  # from a background-attached leaf; in terminal view it's the ATTACHED leaf's thread, else the
-  # MACHINE thread. nil (no thread) makes `c` a no-op.
+  # (Slice 3.3) that's the stack-focused card (the unfolded thread on screen); in terminal view
+  # it's the MACHINE thread. nil (no thread) makes `c` a no-op.
   @doc false
   def composer_thread_id(%{active_key: key, center_view: :chat, stack_focus: focus})
       when Space.workspace?(key) and not is_nil(focus) do
     focus
   end
 
-  def composer_thread_id(%{active_key: key} = state) when Space.workspace?(key) do
-    case state.focused_session do
-      {:leaf, id} -> id
-      _leader -> machine_thread_id(active_workspace_id(state))
-    end
-  end
+  def composer_thread_id(%{active_key: key} = state) when Space.workspace?(key),
+    do: machine_thread_id(active_workspace_id(state))
 
   def composer_thread_id(state), do: state.focused_id
 
@@ -2593,10 +2411,9 @@ defmodule Console.Cockpit do
   def toggle_center_view(%{center_view: :chat} = state), do: %{state | center_view: :terminal}
   def toggle_center_view(state), do: %{state | center_view: :chat}
 
-  # The chat face's read: the center's CURRENT thread — the attached leaf's, else the machine
-  # thread — with its message tail and declared-thinking presence (same normalization as
-  # presence_read). nil (no thread / server down via safe_read) degrades the View back to the PTY.
-  defp chat_read(%{focused_session: {:leaf, id}} = state), do: chat_read_thread(Channel.thread(id), state)
+  # The chat face's read: the machine thread with its message tail and declared-thinking presence
+  # (same normalization as presence_read). nil (no thread / server down via safe_read) degrades the
+  # View back to the PTY.
   defp chat_read(state), do: chat_read_thread(Channel.machine_thread(active_workspace_id(state)), state)
 
   defp chat_read_thread(nil, _state), do: nil
@@ -2656,13 +2473,9 @@ defmodule Console.Cockpit do
     # a j/k list need a count.
     %{
       Panel.Stack => length((state.stack || @empty_stack).commits),
-      Panel.Memory => memory_section_count(state),
-      Panel.Leaves => leaf_count(state.leaves)
+      Panel.Memory => memory_section_count(state)
     }
   end
-
-  defp leaf_count(%{rows: rows}), do: length(rows)
-  defp leaf_count(_), do: 0
 
   defp memory_section_count(%{memory: nil}), do: 0
   defp memory_section_count(%{focus: %{section: 1}, memory: m}), do: length(m.habits)
@@ -2699,8 +2512,8 @@ defmodule Console.Cockpit do
 
   @doc false
   # The focused selection's clipboard text — pane dispatch mirrors tlon_detail/2. An open detail
-  # wins (yank what's on screen). Exposed (like `attach_leaf/2`) as the pure decision behind
-  # `apply_effect(:yank, ...)`, testable without the tty write.
+  # wins (yank what's on screen). Exposed as the pure decision behind `apply_effect(:yank, ...)`,
+  # testable without the tty write.
   def yank_text(%{focus: %Focus{detail?: true}} = state) do
     case tlon_detail(state, tlon_layout(state)) do
       %{title: title, lines: lines} -> {"detail", Enum.map_join([{title, nil} | lines], "\n", fn {t, _} -> t end)}
@@ -2715,8 +2528,6 @@ defmodule Console.Cockpit do
     case Focus.focused_pane(state.focus, layout) do
       Panel.Stack -> Panel.Stack.yank(state.stack, cursor)
       Panel.Memory -> Panel.Memory.yank(memory_for_yank(state), cursor)
-      # leaves_data, not the raw rollup: yank must copy the row render highlighted (float order).
-      Panel.Leaves -> Panel.Leaves.yank(leaves_data(state), cursor)
       _ -> nil
     end
   end
@@ -2802,7 +2613,6 @@ defmodule Console.Cockpit do
       | stack: stack_read(key),
         health: health_read(),
         memory: memory_read(key),
-        leaves: orbis_read(key),
         gates: gates_read(key),
         ws_thread_ids: workspace_thread_id_set(key),
         probed_at: System.monotonic_time(:millisecond)
@@ -2813,7 +2623,7 @@ defmodule Console.Cockpit do
   # rollup on the SAME @probe_ms throttle so `orbis_workspaces/1` reads the cache, never gathers server
   # per-frame.
   defp ensure_probes(%{active_key: :orbis, leaves: nil} = state) do
-    %{state | leaves: orbis_read(:orbis), probed_at: System.monotonic_time(:millisecond)}
+    %{state | leaves: Console.Orbis.rollup(), probed_at: System.monotonic_time(:millisecond)}
   end
 
   defp ensure_probes(state), do: state
@@ -2916,18 +2726,10 @@ defmodule Console.Cockpit do
     "coworker driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
   end
 
-  # ORBIS rollup (Orbis Tertius slice 2) — the machine-scoped vantage, gathered on the spaces that
-  # show it (a Workspace's LEAVES sidebar + Orbis' survey), cached in `state.leaves` on the @probe_ms
-  # throttle. The semantics live in `Console.Orbis` (shared with the `chat` tab's header strip) so a
-  # status rule never drifts between the surfaces.
-  defp orbis_read(:orbis), do: Console.Orbis.rollup()
-  defp orbis_read(key) when Space.workspace?(key), do: Console.Orbis.rollup()
-  defp orbis_read(_key), do: nil
-
-  # The Orbis survey (Overview center): the per-WORKSPACE rollup grouping (Slice 0: one hardcoded workspace).
-  # Reads the SAME cached `state.leaves` rollup the @probe_ms throttle fills — its `workspaces` key — so
-  # the survey and the Tlön LEAVES sidebar share one gather. Empty list when server is down / the
-  # cache is cold / there are no workspaces. Public: a pure read seam (unit-tested against a known cache).
+  # The Orbis survey (Overview center): the per-WORKSPACE rollup grouping. Reads the cached
+  # `state.leaves` rollup the @probe_ms throttle fills — its `workspaces` key. Empty list when server
+  # is down / the cache is cold / there are no workspaces. Public: a pure read seam (unit-tested
+  # against a known cache).
   def orbis_workspaces(state) do
     case state.leaves do
       %{workspaces: workspaces} -> workspaces
@@ -3509,13 +3311,6 @@ defmodule Console.Cockpit do
   # the legacy `t<id>`-named one (a live pre-C window) — nil when the leaf has no window yet.
   # Routing resolves thread → window HERE, never by parsing a (now human-named) window name.
   defp leaf_tab(tabs, id), do: Enum.find(tabs, &(&1.thread_id == id)) || Enum.find(tabs, &(&1.name == "t#{id}"))
-
-  defp leaf_index(tabs, id) do
-    case leaf_tab(tabs, id) do
-      %{index: index} -> index
-      _ -> nil
-    end
-  end
 
   # Resolve a machine pane's TLON_* exports by find-or-create: reuse the latest open machine
   # thread (joining it as `agent`) if one exists, else open a fresh `scope: "machine"` thread.

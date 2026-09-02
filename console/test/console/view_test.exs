@@ -178,7 +178,7 @@ defmodule Console.ViewTest do
 
   describe "the funes rail (Slice 3.4)" do
     test "the rail stacks NOW·CREW·MEMORY·STACK to the right of the spine; no right rail, no Brief" do
-      placements = View.compose(reads(%{focused_session: {:leader, "tertius"}}), 120, 40)
+      placements = View.compose(reads(%{}), 120, 40)
 
       # Every funes panel is placed, stacked in a single rail column (all at the same x, past the spine).
       rail_rects =
@@ -191,12 +191,6 @@ defmodule Console.ViewTest do
       assert rail_rects |> Enum.map(& &1.x) |> Enum.uniq() |> length() == 1
       # The retired right rail: no pinned Brief, in either center context.
       refute Enum.any?(placements, &match?({Panel.Brief, _, _}, &1))
-    end
-
-    test "a leaf holding the center no longer pins a Brief — thread context reads in the center feed" do
-      placements = View.compose(reads(%{focused_session: {:leaf, 5}}), 120, 40)
-      refute Enum.any?(placements, &match?({Panel.Brief, _, _}, &1))
-      assert Enum.any?(placements, &match?({Panel.Stack, _, _}, &1))
     end
   end
 
@@ -334,11 +328,11 @@ defmodule Console.ViewTest do
   end
 
   # The funes rail (Slice 3.4): NOW·CREW·MEMORY·STACK all stack in one column — no carousel, no
-  # cycling. HEALTH stays in the footer + /status; THREADS/Leaves is the center thread-stack.
+  # cycling. HEALTH stays in the footer + /status; the center thread-stack is the thread list.
   describe "the funes rail stacks (Slice 3.4)" do
     defp right_placed?(placements, mod), do: Enum.any?(placements, &match?({^mod, _, _}, &1))
 
-    test "all four funes panels are placed; HEALTH and Leaves-as-a-panel are not" do
+    test "all four funes panels are placed; HEALTH is not" do
       placements = View.compose(reads(%{active_key: 0, tlon_layout: layout()}), 120, 40)
 
       assert right_placed?(placements, Panel.Activity)
@@ -346,7 +340,6 @@ defmodule Console.ViewTest do
       assert right_placed?(placements, Panel.Memory)
       assert right_placed?(placements, Panel.Stack)
       refute right_placed?(placements, Panel.Health)
-      refute right_placed?(placements, Panel.Leaves)
     end
 
     test "the rail panels stack top-down in NOW·CREW·MEMORY·STACK order" do

@@ -8,8 +8,6 @@ defmodule Console.CockpitTest do
   use ExUnit.Case, async: true
 
   alias Console.Cockpit
-  alias Console.Panel.Leaves
-  alias Console.Tlon.Focus
   alias Ghostty.KeyEvent
 
   # Workspace fixture: the hardcoded fallback Workspace is gone (reshape slice A); suites
@@ -89,19 +87,11 @@ defmodule Console.CockpitTest do
   end
 
   # `c` targets the thread you're actually LOOKING at (Slice 3.3): in chat view (the thread
-  # stack is the center) that's the stack-focused card, not whatever leaf happens attached —
-  # they can diverge (e.g. after a background attach) and posting to the attached leaf silently
-  # replies to the wrong thread. In terminal view there is no stack card on screen, so the
-  # attached leaf/leader is still the right target.
+  # stack is the center) that's the stack-focused card.
   describe "composer_thread_id/1 — which thread `c` posts to" do
-    test "in chat view, targets the stack-focused card over a divergent attached leaf" do
-      state = %{active_key: 0, center_view: :chat, stack_focus: 7, focused_session: {:leaf, 99}}
+    test "in chat view, targets the stack-focused card" do
+      state = %{active_key: 0, center_view: :chat, stack_focus: 7}
       assert Cockpit.composer_thread_id(state) == 7
-    end
-
-    test "in terminal view, still targets the attached leaf" do
-      state = %{active_key: 0, center_view: :terminal, stack_focus: 7, focused_session: {:leaf, 99}}
-      assert Cockpit.composer_thread_id(state) == 99
     end
   end
 
@@ -215,48 +205,6 @@ defmodule Console.CockpitTest do
       assert conf =~ "set -g 'status-format[0]' ''"
       assert conf =~ "set -g pane-border-status off"
       assert conf =~ "set -g mode-style 'bg=#3b4261,fg=#c0caf5'"
-    end
-  end
-
-  # C2.2: session/socket are id-derived (`w<id>` / `console-workspace-<id>`), not the old singleton "tlon"
-  # session on the lead-name-derived "aleph-tertius" socket — a rename can't orphan the running
-  # session and two workspaces can't collide. `attach_leaf/2` takes the layout as a plain arg (no
-  # `Space.fetch` involved), so `active_key: 1` proves the id comes from STATE, not from whatever
-  # workspace happens to be seeded in the test env (the funes-down fallback is id 0 — see
-  # `Console.CockpitLeavesAttachTest`).
-  describe "workspace id threads into the tmux target (C2.2 — de-singleton the tlon session/socket)" do
-    setup do
-      test_pid = self()
-
-      Application.put_env(:console, :tlon_cmd, fn "tmux", args, _opts ->
-        send(test_pid, {:tmux, args})
-
-        if Enum.member?(args, "list-windows"),
-          do: {"1\t0\ttertius\n0\t1\thronir\n", 0},
-          else: {"", 0}
-      end)
-
-      on_exit(fn -> Application.delete_env(:console, :tlon_cmd) end)
-      :ok
-    end
-
-    test "a query for Workspace id 1 targets socket console-workspace-1 and session w1" do
-      state = %{
-        active_key: 1,
-        focus: %Focus{in_terminal?: false, column: :right, pane: 0, cursors: %{Leaves => 0}},
-        leaves: %{summary: %{}, rows: [%{id: "t1", title: "x", lead: "hronir"}]},
-        stack: nil,
-        memory: nil,
-        flash: nil,
-        previewed_window: nil
-      }
-
-      layout = %{left: [], right: [Leaves], sections: %{}, counts: %{Leaves => 1}}
-
-      Cockpit.attach_leaf(state, layout)
-
-      assert_received {:tmux, ["-L", "console-workspace-1", "list-windows", "-t", "w1" | _]}
-      assert_received {:tmux, ["-L", "console-workspace-1", "select-window", "-t", "w1:1"]}
     end
   end
 

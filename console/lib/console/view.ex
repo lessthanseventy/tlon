@@ -35,7 +35,6 @@ defmodule Console.View do
     Panel.Brief,
     Panel.Roster,
     Panel.Stack,
-    Panel.Leaves,
     Panel.Activity,
     Panel.Triage,
     Panel.Memory,
@@ -224,8 +223,6 @@ defmodule Console.View do
   defp section_title(Panel.Crew), do: "CREW"
   # NOW since Slice 3.4 — the rail's top pane is the attention/activity feed.
   defp section_title(Panel.Activity), do: "NOW"
-  # THREADS since reshape slice C: chat + tracked threads are ONE list; stage rides as a chip.
-  defp section_title(Panel.Leaves), do: "THREADS"
   defp section_title(Panel.Roster), do: "ACTIVE"
   defp section_title(Panel.Triage), do: "TRIAGE"
   defp section_title(Panel.Brief), do: "BRIEF"
@@ -351,10 +348,6 @@ defmodule Console.View do
   def data_for(Panel.Conversation, r), do: Map.merge(%{title: r.focused_title, messages: r.chatter}, r[:presence] || %{})
   def data_for(Panel.Stack, r), do: r.stack
   def data_for(Panel.Crew, r), do: r[:crew]
-  # `r.orbis` arrives ALREADY enriched with `:focused_lead`/`:attached` (the cockpit's
-  # `leaves_data/1`, the single enrichment its yank/attach/preview paths share), so the row order
-  # here can never disagree with what those paths index.
-  def data_for(Panel.Leaves, r), do: r.orbis
   def data_for(Panel.Activity, r), do: %{events: r[:activity] || [], gates: r[:gates] || []}
   def data_for(Panel.Ticker, r), do: %{events: r[:activity] || []}
   # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
@@ -526,14 +519,6 @@ defmodule Console.View do
 
   defp tabs_of(%{tabs: tabs}), do: tabs
   defp tabs_of(_render_state), do: []
-
-  @doc """
-  The active leader — the focused WindowBar tab's agent handle, off `window_tabs/1` (C3.2). The
-  ONE derivation of the Leaves reorder context: the cockpit calls it per render (over the same
-  `machine`/`roster` reads compose sees) and caches it, so render, yank, attach, and preview all
-  float rows by the identical lead. `reads` needs `:machine`, `:active_key`, `:roster`.
-  """
-  def focused_lead(r), do: r |> window_tabs() |> Enum.find_value(fn t -> if t.active?, do: t.agent end)
 
   # The Claude-engine clock readout: `:off` only once the operator has manually clocked "claude"
   # out (`Server.Presence.clock_out/1`, e.g. from `server:console`) — nothing calls that today, so

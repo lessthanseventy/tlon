@@ -2,7 +2,7 @@ defmodule Console.CockpitWorkspacesTest do
   @moduledoc """
   D2, Chunk 1: `Console.Cockpit.register_workspace!/3` (D2.3) and `remove_workspace!/2` (D2.5) — the author
   face's `n`/`d` funes writes. Exercises the REAL `Server.Workspaces` write pipe (register/remove)
-  through the cockpit's public, pure-ish wrappers (like `attach_leaf/2`) against a
+  through the cockpit's public, pure-ish wrappers against a
   `Console.TestRepo` scratch db → `async: false`.
   """
   use ExUnit.Case, async: false

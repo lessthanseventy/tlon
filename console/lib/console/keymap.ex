@@ -92,7 +92,6 @@ defmodule Console.Keymap do
   `workspace_field/2`, same as the `a`/`x`/`d` clauses) — the Settings modal's model-ring-cycle /
   yolo-flip, now reached from here. This absorbs Settings; Chunk 2b deletes the `,` modal.
   """
-  alias Console.Panel
   alias Console.Profiles
   alias Console.Space
   alias Console.Tlon.Focus
@@ -131,7 +130,6 @@ defmodule Console.Keymap do
           | {:coworker_knob, String.t(), :model | :yolo}
           | :tlon_enter
           | :stack_delete_arm
-          | :tlon_preview
           | :yank
           | :none
 
@@ -780,17 +778,13 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "h"}, state), do: {focus_intent(state, :pane_prev), :repaint}
   defp handle_tlon(%{key: :char, char: "L"}, state), do: {focus_intent(state, :col_right), :repaint}
   defp handle_tlon(%{key: :char, char: "H"}, state), do: {focus_intent(state, :col_left), :repaint}
-  # j/k move the item cursor within the focused pane; Enter opens its selection's detail in MAIN.
-  # (Leaves' Enter is a space-jump, not a detail — Phase 4 special-cases it ahead of this clause.)
-  # Over a WINDOW-BEARING pane (Leaves — each leaf maps to a live Workspace tmux window) the move emits
-  # `:tlon_preview` so the cockpit re-points the center to the hovered window (a hover, not a commit
-  # — focus stays in nav); anywhere else it's a plain `:repaint`.
-  defp handle_tlon(%{key: :char, char: "j"}, state), do: nav_move(state, :item_next)
-  defp handle_tlon(%{key: :char, char: "k"}, state), do: nav_move(state, :item_prev)
-  defp handle_tlon(%{key: :down}, state), do: nav_move(state, :item_next)
-  defp handle_tlon(%{key: :up}, state), do: nav_move(state, :item_prev)
-  # Enter is contextual: the cockpit resolves the focused pane and either opens a MAIN detail
-  # (Commits/Memory) or jumps to a thread (Leaves) — the keymap can't, it lacks the reads.
+  # j/k move the item cursor within the focused pane.
+  defp handle_tlon(%{key: :char, char: "j"}, state), do: {focus_intent(state, :item_next), :repaint}
+  defp handle_tlon(%{key: :char, char: "k"}, state), do: {focus_intent(state, :item_prev), :repaint}
+  defp handle_tlon(%{key: :down}, state), do: {focus_intent(state, :item_next), :repaint}
+  defp handle_tlon(%{key: :up}, state), do: {focus_intent(state, :item_prev), :repaint}
+  # Enter is contextual: the cockpit resolves the focused pane (space switch / lazygit zoom / a MAIN
+  # detail) — the keymap can't, it lacks the reads.
   defp handle_tlon(%{key: :enter}, state), do: {state, :tlon_enter}
   # a/r act on the selected pending habit (Memory's habits section) — the cockpit resolves which
   # --- input-buffer cursor math (graphemes, not bytes) — what makes the composer/new-thread box
@@ -806,7 +800,7 @@ defmodule Console.Keymap do
   # writes it to the clipboard via OSC 52. Detail-open yanks the detail body.
   defp handle_tlon(%{key: :char, char: "y"}, state), do: {state, :yank}
   # `d` — the operator's delete verb: the cockpit resolves the focused pane's selection (MEMORY
-  # fact → forget, LEAVES leaf → window + thread) and arms the two-key confirm above.
+  # fact → forget) and arms the two-key confirm above.
   defp handle_tlon(%{key: :char, char: "d"}, state), do: {state, :tlon_delete_arm}
   # C3.4 reshuffle: Tab/Shift+Tab switch spaces (matching the command level) instead of cycling
   # sections — Shift+Tab must precede the bare :tab clause below, which also matches it.
@@ -841,18 +835,6 @@ defmodule Console.Keymap do
     focus = %{state.focus | in_terminal?: false}
     %{state | focus: Focus.handle(focus, state.tlon_layout, @alt_moves[c])}
   end
-
-  # Move the item cursor, then decide the effect: over a window-bearing pane the cockpit should
-  # preview (re-point the center) — `:tlon_preview`; elsewhere a plain `:repaint`. The cockpit
-  # re-checks and no-ops the re-point if the hovered leaf has no live window.
-  defp nav_move(state, intent) do
-    next = focus_intent(state, intent)
-    if window_bearing?(next), do: {next, :tlon_preview}, else: {next, :repaint}
-  end
-
-  # A pane whose selection maps to a live Workspace tmux window — Leaves today (each leaf → its lead's
-  # window). Only these drive the center preview.
-  defp window_bearing?(state), do: Focus.focused_pane(state.focus, state.tlon_layout) == Panel.Leaves
 
   defp switch(state, dir) do
     space =
