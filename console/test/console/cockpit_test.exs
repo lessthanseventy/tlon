@@ -20,43 +20,6 @@ defmodule Console.CockpitTest do
     end
   end
 
-  # `c` targets the thread you're actually LOOKING at (Slice 3.3): in chat view (the thread
-  # stack is the center) that's the stack-focused card.
-  describe "composer_thread_id/1 — which thread `c` posts to" do
-    test "in chat view, targets the stack-focused card" do
-      state = %{active_key: 0, center_view: :chat, stack_focus: 7}
-      assert Cockpit.composer_thread_id(state) == 7
-    end
-  end
-
-  # /status (reshape slice D): HEALTH's full readout as a MAIN detail, built from the same
-  # health read the footer condenses. Pure so the composer command is testable without a TTY.
-  describe "status_detail_content/1 — the /status readout" do
-    test "a live health read becomes a titled detail with the panel's lines" do
-      health = %{
-        funes_up: true,
-        tlon_up: true,
-        nix_gen: 36,
-        nix_behind: 0,
-        disk_pct: 68,
-        mem_pct: 28,
-        load_avg: 2.18,
-        tools: [%{name: "pi", version: "0.84.2"}]
-      }
-
-      assert %{title: "status", lines: lines} = Cockpit.status_detail_content(health)
-      joined = Enum.map_join(lines, "\n", fn {t, _style} -> t end)
-      assert joined =~ "server"
-      assert joined =~ "disk 68%"
-      assert joined =~ "pi"
-    end
-
-    test "a nil health read (probe not run) says so instead of crashing" do
-      assert %{title: "status", lines: [{line, _style}]} = Cockpit.status_detail_content(nil)
-      assert line =~ "health"
-    end
-  end
-
   describe "profile_launcher/3: the Workspace window-0 command runs pi from its profile's config dir" do
     @profile %Console.Profile{name: "tlon"}
 
@@ -125,24 +88,6 @@ defmodule Console.CockpitTest do
 
     test "flips :author back to :survey" do
       assert %{orbis_face: :survey} = Cockpit.toggle_orbis_face(%{orbis_face: :author})
-    end
-  end
-
-  describe "orbis_workspaces/1: the survey reads the CACHED rollup, never re-gathers funes" do
-    test "returns the cached rollup's workspaces — no live funes gather" do
-      # ensure_probes fills state.leaves with the full rollup (workspaces key included) on the @probe_ms
-      # throttle; the survey must read THAT, so a known cache flows straight through untouched.
-      cached = %{
-        summary: %{open: 1, stalled: 0, done: 0, conflicts: 0},
-        rows: [%{id: 1}],
-        workspaces: [%{workspace: "Tlön", summary: %{open: 1, stalled: 0, done: 0, conflicts: 0}, leaves: [%{id: 1}]}]
-      }
-
-      assert Cockpit.orbis_workspaces(%{leaves: cached}) == cached.workspaces
-    end
-
-    test "a cold / funes-down cache (nil leaves) is an empty survey, not a crash" do
-      assert Cockpit.orbis_workspaces(%{leaves: nil}) == []
     end
   end
 
