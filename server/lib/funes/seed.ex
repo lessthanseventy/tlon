@@ -133,20 +133,19 @@ defmodule Server.Seed do
   defp ensure_facts(facts) do
     Enum.count(facts, fn attrs ->
       intent = Map.fetch!(attrs, :intent)
-
-      if fact_exists?(intent) do
-        false
-      else
-        case Dossier.bank_fact(attrs) do
-          {:ok, _fact} ->
-            true
-
-          {:error, changeset} ->
-            Logger.warning("Server.Seed: fact #{inspect(intent)} rejected — #{inspect(changeset.errors)}")
-            false
-        end
-      end
+      not fact_exists?(intent) and bank_seed_fact(intent, attrs)
     end)
+  end
+
+  defp bank_seed_fact(intent, attrs) do
+    case Dossier.bank_fact(attrs) do
+      {:ok, _fact} ->
+        true
+
+      {:error, changeset} ->
+        Logger.warning("Server.Seed: fact #{inspect(intent)} rejected — #{inspect(changeset.errors)}")
+        false
+    end
   end
 
   defp fact_exists?(intent), do: Repo.exists?(from f in Fact, where: f.intent == ^intent)

@@ -88,21 +88,24 @@ defmodule Server.Worktree do
   defp ignore_worktrees(repo_path) do
     with {dir, 0} <- git(repo_path, ["rev-parse", "--git-common-dir"]) do
       exclude = Path.join([Path.expand(String.trim(dir), repo_path), "info", "exclude"])
-
-      current =
-        case File.read(exclude) do
-          {:ok, c} -> c
-          _ -> ""
-        end
-
-      if !String.contains?(current, ".worktrees/") do
-        File.mkdir_p!(Path.dirname(exclude))
-        sep = if current == "" or String.ends_with?(current, "\n"), do: "", else: "\n"
-        File.write!(exclude, current <> sep <> ".worktrees/\n")
-      end
+      append_line_once(exclude, ".worktrees/")
     end
 
     :ok
+  end
+
+  defp append_line_once(file, line) do
+    current =
+      case File.read(file) do
+        {:ok, c} -> c
+        _ -> ""
+      end
+
+    if !String.contains?(current, line) do
+      File.mkdir_p!(Path.dirname(file))
+      sep = if current == "" or String.ends_with?(current, "\n"), do: "", else: "\n"
+      File.write!(file, current <> sep <> line <> "\n")
+    end
   end
 
   defp registered?(repo_path, wt) do
