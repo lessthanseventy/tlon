@@ -35,4 +35,8 @@ defmodule Server.Issue do
   def state_changeset(issue, state) do
     change(issue, state: state)
   end
+
+  @doc "Close an issue, recording `resolution` when given (nil leaves the field as it was)."
+  def resolve_changeset(issue, nil), do: state_changeset(issue, "closed")
+  def resolve_changeset(issue, resolution), do: change(issue, state: "closed", resolution: resolution)
 end

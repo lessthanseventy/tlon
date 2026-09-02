@@ -127,9 +127,12 @@ defmodule Server.Dossier do
     attrs |> Issue.raise_changeset() |> Repo.insert() |> Bus.announce(:issue_raised)
   end
 
-  @doc "Close an issue — a finding that has been settled."
-  def resolve_issue(%Issue{} = issue) do
-    issue |> Issue.state_changeset("closed") |> Repo.update() |> Bus.announce(:issue_resolved)
+  @doc """
+  Close an issue — a finding that has been settled — recording `resolution` when given. The
+  operator's path is `tlon-cli.sh resolve-issue`; there is deliberately no MCP tool.
+  """
+  def resolve_issue(%Issue{} = issue, resolution \\ nil) do
+    issue |> Issue.resolve_changeset(resolution) |> Repo.update() |> Bus.announce(:issue_resolved)
   end
 
   @doc """
