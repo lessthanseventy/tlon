@@ -25,19 +25,9 @@ defmodule Server.Dossier do
   alias Server.Thread
   alias Server.Todo
 
-  # orient shows at most five open issues per thread; the rest is a number, never a
+  # Every capped read shows at most five rows; the rest is a number, never a
   # complete-and-useless list (§5 rank-and-cut, §1).
-  @issue_cap 5
-
-  # Open todos are capped the same way — a plan longer than five steps shows the next
-  # five and counts the rest; a complete list is not a useful one (§5/§6).
-  @todo_cap 5
-
-  # Open questions (UNKNOWNS) cap identically — the brief shows five gaps and counts more.
-  @question_cap 5
-
-  # Recent checks (CHECKS) cap the same — the last five measured verifications, counted.
-  @check_cap 5
+  @cap 5
 
   # A measured check outcome is one of these event kinds, keyed on the real exit code.
   @check_kinds ["check_passed", "check_failed"]
@@ -150,11 +140,13 @@ defmodule Server.Dossier do
   Closed issues and other threads' issues are excluded.
   """
   def open_issues_for_thread(%Thread{} = thread) do
-    open = from i in Issue, where: i.thread_id == ^thread.id and i.state == "open"
+    cut(from(i in Issue, where: i.thread_id == ^thread.id and i.state == "open"), desc: :id)
+  end
 
-    shown = Repo.all(from i in open, order_by: [desc: i.id], limit: @issue_cap)
-    total = Repo.aggregate(open, :count, :id)
-
+  # Rank and cut (§5): the first `@cap` rows of `queryable` in `order`, and the count of the rest.
+  defp cut(queryable, order) do
+    shown = Repo.all(from q in queryable, order_by: ^order, limit: @cap)
+    total = Repo.aggregate(queryable, :count, :id)
     %{shown: shown, more: total - length(shown)}
   end
 
@@ -181,12 +173,7 @@ defmodule Server.Dossier do
   todos and other threads' todos are excluded.
   """
   def open_todos_for_thread(%Thread{} = thread) do
-    open = from t in Todo, where: t.thread_id == ^thread.id and is_nil(t.done_at)
-
-    shown = Repo.all(from t in open, order_by: [asc: t.id], limit: @todo_cap)
-    total = Repo.aggregate(open, :count, :id)
-
-    %{shown: shown, more: total - length(shown)}
+    cut(from(t in Todo, where: t.thread_id == ^thread.id and is_nil(t.done_at)), asc: :id)
   end
 
   @doc """
@@ -224,12 +211,7 @@ defmodule Server.Dossier do
   threads' questions are excluded.
   """
   def open_questions_for_thread(%Thread{} = thread) do
-    open = from q in Question, where: q.thread_id == ^thread.id and q.state == "open"
-
-    shown = Repo.all(from q in open, order_by: [desc: q.id], limit: @question_cap)
-    total = Repo.aggregate(open, :count, :id)
-
-    %{shown: shown, more: total - length(shown)}
+    cut(from(q in Question, where: q.thread_id == ^thread.id and q.state == "open"), desc: :id)
   end
 
   @doc """
@@ -279,12 +261,7 @@ defmodule Server.Dossier do
   verification state (last check red or green), not a self-reported one.
   """
   def recent_checks_for_thread(%Thread{} = thread) do
-    checks = from e in Event, where: e.thread_id == ^thread.id and e.kind in @check_kinds
-
-    shown = Repo.all(from e in checks, order_by: [desc: e.id], limit: @check_cap)
-    total = Repo.aggregate(checks, :count, :id)
-
-    %{shown: shown, more: total - length(shown)}
+    cut(from(e in Event, where: e.thread_id == ^thread.id and e.kind in @check_kinds), desc: :id)
   end
 
   @doc """
