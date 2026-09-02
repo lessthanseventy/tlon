@@ -10,10 +10,29 @@
 # `mise run console:run` wrappers left hanging on a dead beam child (mise doesn't always
 # exit when its beam is killed), without touching this invocation's own process tree.
 #
-# Safe to run any time; a free port is a no-op. Override the port with TLON_MCP_PORT.
+# Also tears down every workspace's coworker tmux server first: those are not meant to outlive
+# the cockpit, and a survivor is what keeps 4041 held through an inherited fd.
+#
+# Override the port with TLON_MCP_PORT.
 set -euo pipefail
 
 PORT="${TLON_MCP_PORT:-4041}"
+
+# 0. kill the coworker tmux servers
+# Each workspace's coworkers run on a private server (`tmux -L console-workspace-<id>`, see
+# Console.Crew), whose socket lives in tmux's socket dir. Killing the server frees the inherited
+# port fd; step 1 then reaps whatever still listens.
+sockdir="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
+for sock in "$sockdir"/console-workspace-*; do
+  [ -S "$sock" ] || continue
+  if tmux -S "$sock" kill-server 2>/dev/null; then
+    echo "console-reap: killed coworker tmux server $(basename "$sock")"
+  fi
+done
+# A `tlon` session on the user's DEFAULT server predates socket isolation and never belongs there.
+if tmux kill-session -t tlon 2>/dev/null; then
+  echo "console-reap: dropped a legacy tlon session from the default tmux server"
+fi
 
 # 1. reap the port listener
 # ss -tlnpH "sport = :N" prints one line per listening socket with users:(("comm",pid=N,...)).
