@@ -14,7 +14,7 @@ code → call `reload` → wake up in the same thread running the new code.
 
 ## How it works
 
-- The tlön launcher (`console` `Cockpit.tlon_launcher`) exports two things into the session:
+- The coworker launcher (`console` `Cockpit.profile_launcher/3`) exports two things into the session:
   `TMUX_PANE` (pi's own pane, tmux-provided) and **`ADAPTERS_RELOAD_CMD`** — the command that
   re-launches pi with `--continue` (resume the most-recent session = this one).
 - `reload` fires a **detached** helper that, after ~0.4s, runs `tmux respawn-pane -k` on pi's pane.

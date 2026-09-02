@@ -6,7 +6,7 @@
 // it respawns pi in place and RESUMES the current session, so the agent edits code, calls
 // `reload`, and wakes up in the same thread running the new code.
 //
-// Mechanism: the tlon launcher (aleph Cockpit.tlon_launcher) exports ADAPTERS_RELOAD_CMD — the
+// Mechanism: the coworker launcher (console Cockpit.profile_launcher/3) exports ADAPTERS_RELOAD_CMD — the
 // command that re-launches pi with `--continue` (resume the most-recent session = this one).
 // reload fires a DETACHED helper (own session via setsid-equivalent) that, after a short delay,
 // runs `tmux respawn-pane -k` on pi's own pane: the delay lets this turn's result flush to the
@@ -46,7 +46,7 @@ export function planReload(env: ReloadEnv, delaySeconds = 0.4): ReloadPlan {
     return {
       ok: false,
       error:
-        "reload has no respawn command — $ADAPTERS_RELOAD_CMD is unset. The tlön launcher (aleph Cockpit.tlon_launcher) exports it; reboot the cockpit after updating aleph so the session carries it.",
+        "reload has no respawn command — $ADAPTERS_RELOAD_CMD is unset. The coworker launcher (console Cockpit.profile_launcher/3) exports it; reboot the cockpit after updating console so the session carries it.",
     };
   }
   // Positional args ($0=pane, $1=cmd) dodge all quoting. `exec` so no bash lingers. The whole
