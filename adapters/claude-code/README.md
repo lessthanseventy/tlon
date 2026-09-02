@@ -19,10 +19,9 @@ The launcher `eval`s the export block from `server:spawn` and `exec`s `claude`.
 
 ## The two doors
 
-Door 1 follows `TLON_MCP_URL` — whichever node spawned the session (the always-up service on
-:4040, or a console-launched cockpit brain on :4041). Door 2 goes through `bin/server rpc` into
-the service node regardless of `TLON_MCP_URL`, so a console-launched claude briefs from the
-service db — a known limitation, noted in the hook's header.
+Both doors follow `TLON_MCP_URL` — whichever node spawned the session (the always-up service on
+:4040, or a console-launched cockpit brain on :4041) — so a console-launched claude is briefed
+from, and posts to, the same `.dev` world.
 
 - **Door 1 — the MCP tools.** Claude Code's `mcpServers.tlon` entry is `type: http`
   pointing at the channel, with a **`headersHelper`** (`scripts/tlon-cli.sh token`) instead
@@ -33,9 +32,10 @@ service db — a known limitation, noted in the hook's header.
   Claude Code's `headersHelper` and pi's in-adapter mint are the same idea in two shapes.
 - **Door 2 — the brief.** [`brief-hook.sh`](brief-hook.sh) is a `SessionStart` hook. Claude
   Code adds its plain stdout to the session context, so on start / resume / clear it renders
-  the thread's dossier (the same `Board.in_scope → Brief` as `get_dossier`) and Claude
-  re-orients from server. No identity, a down channel, or a missing thread → a silent no-op;
-  it never blocks the session.
+  the thread's dossier — the `get_dossier` tool itself, called over MCP at `TLON_MCP_URL` by
+  `scripts/tlon-cli.sh dossier` (mint → initialize → tools/call, as pi's `mcp.ts` does),
+  printed as JSON — and Claude re-orients from server. No identity, a down channel, or a
+  missing thread → a silent no-op; it never blocks the session.
 
 ## The capture reflex (one-ledger Cut 1)
 
@@ -87,10 +87,11 @@ reflex, a heartbeat is never silently dropped, since the message IS the delivera
 
 There is nothing to install: nothing is merged into `~/.claude`. Wiring is **per session** —
 [`launch.sh`](launch.sh) (`mise run server:claude`) passes the `mcpServers.tlon` entry via
-`--mcp-config` and the hooks via `--settings`, so a plain `claude` stays untouched. The one
-prerequisite is a built release (`mise run server:release`): `tlon-cli.sh`'s `spawn` and
-`dossier` go through `bin/server rpc`; only `token` (the `headersHelper`) mints purely over
-HTTP. The hook bodies run under `bun` (mise-pinned), which must be on `PATH`.
+`--mcp-config` and the hooks via `--settings`, so a plain `claude` stays untouched. Opening a
+fresh thread needs a built release (`mise run server:release`): `tlon-cli.sh spawn` goes
+through `bin/server rpc`. Once the identity is in the env, `token` (the `headersHelper`) and
+`dossier` (the brief hook) work purely over HTTP at `TLON_MCP_URL` — no release needed. The
+hook bodies run under `bun` (mise-pinned), which must be on `PATH`.
 
 ## Why not a static token / a SessionStart env-mint
 

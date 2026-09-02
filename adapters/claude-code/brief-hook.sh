@@ -4,12 +4,13 @@
 # session carries a server identity (TLON_THREAD), render that thread's brief so a fresh or
 # /clear'd context re-orients from the server instead of from nothing.
 #
-# Known limitation: the brief comes via `bin/server rpc` into the always-up service node
-# regardless of TLON_MCP_URL, so a console-launched claude (:4041 / .dev) briefs from the
-# service db, not the world it was spawned into.
+# The brief comes from the node that spawned this session: `tlon-cli.sh dossier` calls the
+# `get_dossier` MCP tool at TLON_MCP_URL (a console-launched claude briefs from the :4041
+# .dev world, a service-launched one from :4040) — the same world Door 1's tools talk to.
+# Rendered as JSON.
 #
-# Never blocks the session: no identity is a silent no-op; a failed dossier (no release,
-# service down, no such thread) logs to stderr and still exits 0 with no output. Reads its
+# Never blocks the session: no identity is a silent no-op; a failed dossier (node down, no
+# such thread, unknown agent) logs to stderr and still exits 0 with no output. Reads its
 # JSON on stdin and ignores it.
 set -euo pipefail
 
