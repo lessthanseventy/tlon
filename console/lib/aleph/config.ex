@@ -104,25 +104,6 @@ defmodule Console.Config do
     end
   end
 
-  @doc """
-  The operator's persisted default-coworker override for new chat threads, or `nil` when unset.
-  Just the override — the roster-derived default is resolved from the LIVE workspace roster by the
-  caller (server `designated_lead`), so no stale hardcoded stand-in handle can leak in as a thread lead.
-  """
-  @spec default_coworker_override(String.t()) :: String.t() | nil
-  def default_coworker_override(path \\ path()) do
-    case read(path) do
-      %{"default_coworker" => h} when is_binary(h) and h != "" -> h
-      _ -> nil
-    end
-  end
-
-  @doc "Persist the default coworker handle."
-  @spec put_default_coworker(String.t(), String.t()) :: :ok
-  def put_default_coworker(handle, path \\ path()) when is_binary(handle) do
-    path |> read() |> Map.put("default_coworker", handle) |> write!(path)
-  end
-
   # Merge fields into `coworkers.<profile>` so independent knobs (model, yolo) coexist — a later
   # put on one never clobbers the other. Seeds the intermediate maps when absent.
   defp merge_coworker(profile, fields, path) do
