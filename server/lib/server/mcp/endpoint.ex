@@ -2,9 +2,9 @@ defmodule Server.MCP.Endpoint do
   @moduledoc """
   The sovereign channel (pi doc §2a): server' MCP server. Every tool and resource
   is a thin caller of the contexts — never a second writer to the DB (§10) — and
-  identity rides the CONNECTION: the bearer token (minted in-node by
-  `Server.MCP.Tokens`) resolves to a (thread, agent, session) binding on every
-  request, so no tool takes a thread parameter. The protocol lifecycle —
+  identity rides the CONNECTION: the bearer token (a stateless HMAC over its
+  claims, `Server.MCP.Tokens`) resolves to a (thread, agent, session) binding on
+  every request, so no tool takes a thread parameter. The protocol lifecycle —
   JSON-RPC, sessions, version negotiation, auth — is anubis', a library that
   tracks the MCP spec so this seam cannot drift from it under our hands.
 
@@ -21,11 +21,7 @@ defmodule Server.MCP.Endpoint do
       validator: {Server.MCP.TokenValidator, []}
     ]
 
-  alias Server.MCP.Tool.EditWorkspace
   alias Server.MCP.Tool.GetBrief
-  alias Server.MCP.Tool.ListWorkspaces
-  alias Server.MCP.Tool.RegisterWorkspace
-  alias Server.MCP.Tool.RemoveWorkspace
 
   component(Server.MCP.Tool.Register, name: "register")
   component(Server.MCP.Tool.PostMessage, name: "post_message")
@@ -52,25 +48,20 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.PresenceThinking, name: "presence_thinking")
   component(Server.MCP.Tool.PresenceIdle, name: "presence_idle")
   component(Server.MCP.Tool.ProposeHabit, name: "propose_habit")
-  component(GetBrief, name: "get_brief")
-  # Transition alias (clarity rename slice E): the same module answers the old name too, so an
-  # agent whose prompt still says get_dossier keeps working until the window closes.
+  # `get_dossier` is the canonical name (the pi adapter, the flake's directTools and the CLI call
+  # it); `get_brief` is the name the console's harness catch-up prompt and profile allowlists use.
   component(GetBrief, name: "get_dossier")
+  component(GetBrief, name: "get_brief")
   component(Server.MCP.Tool.GetFacts, name: "get_facts")
   component(Server.MCP.Tool.GetMessages, name: "get_messages")
   component(Server.MCP.Tool.SearchHistory, name: "search_history")
   component(Server.MCP.Tool.SearchFacts, name: "search_facts")
   component(Server.MCP.Tool.MachineOverview, name: "machine_overview")
-  component(RegisterWorkspace, name: "register_workspace")
-  component(ListWorkspaces, name: "list_workspaces")
-  component(EditWorkspace, name: "edit_workspace")
-  component(RemoveWorkspace, name: "remove_workspace")
-  # Transition aliases (clarity rename slice E): the workspace tools answer their old world names too.
-  component(RegisterWorkspace, name: "register_world")
-  component(ListWorkspaces, name: "list_worlds")
-  component(EditWorkspace, name: "edit_world")
-  component(RemoveWorkspace, name: "remove_world")
-  # Container tier (2026-08-30): projects, the lightweight ticket tracker, and notes.
+  component(Server.MCP.Tool.RegisterWorkspace, name: "register_workspace")
+  component(Server.MCP.Tool.ListWorkspaces, name: "list_workspaces")
+  component(Server.MCP.Tool.EditWorkspace, name: "edit_workspace")
+  component(Server.MCP.Tool.RemoveWorkspace, name: "remove_workspace")
+  # Container tier: projects, the lightweight ticket tracker, and notes.
   component(Server.MCP.Tool.RegisterProject, name: "register_project")
   component(Server.MCP.Tool.FileTicket, name: "file_ticket")
   component(Server.MCP.Tool.ListTickets, name: "list_tickets")
