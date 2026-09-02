@@ -14,7 +14,9 @@ defmodule Server.MCP.Brief do
   alias Server.Habit
   alias Server.Issue
   alias Server.Message
+  alias Server.Note
   alias Server.Question
+  alias Server.Ticket
   alias Server.Todo
   alias Server.Workspace
 
@@ -165,6 +167,23 @@ defmodule Server.MCP.Brief do
       "at" => at(h.created_at)
     }
   end
+
+  @doc "A ticket row, rendered — the container tools' reply shape."
+  def ticket(%Ticket{} = t) do
+    %{
+      "id" => t.id,
+      "title" => t.title,
+      "status" => t.status,
+      "priority" => t.priority,
+      "labels" => t.labels,
+      "assignee" => t.assignee,
+      "promoted_thread_id" => t.promoted_thread_id
+    }
+  end
+
+  @doc "A note row, rendered."
+  def note(%Note{} = n),
+    do: %{"id" => n.id, "scope" => n.scope, "scope_id" => n.scope_id, "body" => n.body, "author" => n.author}
 
   @doc """
   A WORLD — a composition console reads to drive its picker/survey/spawn. Machine-
