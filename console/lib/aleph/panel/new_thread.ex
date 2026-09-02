@@ -34,8 +34,7 @@ defmodule Console.Panel.NewThread do
     |> Console.Panel.clip(rect)
   end
 
-  def render(_data, rect),
-    do: Console.Panel.clip([[{"＋ ", :st_working}, {@placeholder, :dim}]], rect)
+  def render(_data, rect), do: Console.Panel.clip([[{"＋ ", :st_working}, {@placeholder, :dim}]], rect)
 
   @doc "Wrap width for the buffer — the content width minus the prefix. Shared with the height calc."
   def wrap_width(content_w), do: max(content_w - String.length(@prefix), 8)

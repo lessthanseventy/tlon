@@ -52,12 +52,7 @@ defmodule Console.ViewTest do
   # Mirrors production `tlon_layout` since nav v2: the RAIL is the focus nav (`left`), the spine is
   # not navigable (`right` empty). STACK is rail (left) pane 3.
   defp layout(counts \\ %{Panel.Stack => 3}),
-    do: %{
-      left: [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack],
-      right: [],
-      sections: %{},
-      counts: counts
-    }
+    do: %{left: [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack], right: [], sections: %{}, counts: counts}
 
   # The rects of every border flagged as focused.
   defp focused_borders(placements), do: for({Panel.Border, %{focused: true}, rect} <- placements, do: rect)
@@ -85,7 +80,10 @@ defmodule Console.ViewTest do
     defp placed?(placements, mod), do: Enum.any?(placements, &match?({^mod, _, _}, &1))
 
     test "center_view :chat swaps the Terminal section for the thread stack (Slice 3)" do
-      stack = %{cards: [%{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]}
+      stack = %{
+        cards: [%{id: 1, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]
+      }
+
       placements = View.compose(reads(%{center_view: :chat, thread_stack: stack}), 120, 40)
 
       assert {Panel.ThreadStack, data, _rect} = Enum.find(placements, &match?({Panel.ThreadStack, _, _}, &1))
@@ -108,7 +106,11 @@ defmodule Console.ViewTest do
       # `opened` is read off the same thread_stack the center's list⇄conversation switch uses.
       convo =
         View.compose(
-          reads(%{center_view: :chat, thread_stack: %{cards: [card], opened: 7}, input: %{kind: :reply, thread_id: 7, buffer: "", cursor: 0}}),
+          reads(%{
+            center_view: :chat,
+            thread_stack: %{cards: [card], opened: 7},
+            input: %{kind: :reply, thread_id: 7, buffer: "", cursor: 0}
+          }),
           120,
           40
         )
@@ -147,7 +149,10 @@ defmodule Console.ViewTest do
 
   describe "the toggleable right session pane (2026-08-31)" do
     defp chat_reads(overrides) do
-      stack = %{cards: [%{id: 7, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]}
+      stack = %{
+        cards: [%{id: 7, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]
+      }
+
       reads(Map.merge(%{center_view: :chat, thread_stack: stack}, overrides))
     end
 
@@ -399,7 +404,7 @@ defmodule Console.ViewTest do
       leaf = Map.put(tab("builder-hola-who-is-this-what"), :thread_id, 2)
       r = reads(%{active_key: 0, machine: %{tabs: [tab("hronir"), leaf]}})
 
-      names = View.data_for(Panel.WindowBar, r).tabs |> Enum.map(& &1.name)
+      names = Enum.map(View.data_for(Panel.WindowBar, r).tabs, & &1.name)
 
       assert "hronir" in names
       refute "builder-hola-who-is-this-what" in names

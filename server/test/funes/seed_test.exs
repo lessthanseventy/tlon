@@ -29,6 +29,7 @@ defmodule Server.SeedTest do
     setup do
       path = Path.join(System.tmp_dir!(), "promoted-#{System.unique_integer([:positive])}.exs")
       Application.put_env(:server, :promoted_facts_path, path)
+
       on_exit(fn ->
         Application.delete_env(:server, :promoted_facts_path)
         File.rm(path)
@@ -41,7 +42,15 @@ defmodule Server.SeedTest do
       fact = %Fact{kind: "learned", text: "the arbiter is Console.Arbiter", provenance: "stated"}
 
       one = Seed.promote(fact, [], "seed:promoted:arbiter")
-      assert one == [%{intent: "seed:promoted:arbiter", kind: "learned", provenance: "stated", text: "the arbiter is Console.Arbiter"}]
+
+      assert one == [
+               %{
+                 intent: "seed:promoted:arbiter",
+                 kind: "learned",
+                 provenance: "stated",
+                 text: "the arbiter is Console.Arbiter"
+               }
+             ]
 
       # same intent again → no duplicate
       assert Seed.promote(fact, one, "seed:promoted:arbiter") == one
@@ -52,9 +61,14 @@ defmodule Server.SeedTest do
     test "write_promoted/1 round-trips through the file, and load/0 merges it in" do
       curated = Seed.load().facts
 
-      Seed.write_promoted([%{intent: "seed:promoted:demo", kind: "learned", provenance: "derived", text: "a promoted learning"}])
+      Seed.write_promoted([
+        %{intent: "seed:promoted:demo", kind: "learned", provenance: "derived", text: "a promoted learning"}
+      ])
 
-      assert Seed.promoted_facts() == [%{intent: "seed:promoted:demo", kind: "learned", provenance: "derived", text: "a promoted learning"}]
+      assert Seed.promoted_facts() == [
+               %{intent: "seed:promoted:demo", kind: "learned", provenance: "derived", text: "a promoted learning"}
+             ]
+
       merged = Seed.load().facts
       assert length(merged) == length(curated) + 1
       assert Enum.any?(merged, &(&1.intent == "seed:promoted:demo"))
@@ -62,7 +76,9 @@ defmodule Server.SeedTest do
 
     test "promote_fact/2 resolves a banked fact by id and generates an intent when none is given" do
       {:ok, thread} = Server.Channel.open_thread(%{title: "t"})
-      {:ok, fact} = Server.Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "a real learning", provenance: "derived"})
+
+      {:ok, fact} =
+        Server.Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "a real learning", provenance: "derived"})
 
       assert {:ok, intent, 1} = Seed.promote_fact(fact.id)
       assert intent == "seed:promoted:#{fact.id}"
@@ -76,7 +92,10 @@ defmodule Server.SeedTest do
     end
 
     test "ensure/0 banks a promoted fact (it survives a wipe like any seed fact)" do
-      Seed.write_promoted([%{intent: "seed:promoted:survives", kind: "learned", provenance: "derived", text: "promoted knowledge"}])
+      Seed.write_promoted([
+        %{intent: "seed:promoted:survives", kind: "learned", provenance: "derived", text: "promoted knowledge"}
+      ])
+
       Seed.ensure()
 
       assert Repo.exists?(from f in Fact, where: f.intent == "seed:promoted:survives")

@@ -97,7 +97,8 @@ defmodule Server.Seed do
   own → a generated `seed:promoted:<id>`), append it to the promoted file idempotently, and write.
   `{:ok, intent, count}` or `{:error, :no_fact}`. The engine behind `mix server.promote_fact`.
   """
-  @spec promote_fact(integer() | String.t(), String.t() | nil) :: {:ok, String.t(), non_neg_integer()} | {:error, :no_fact}
+  @spec promote_fact(integer() | String.t(), String.t() | nil) ::
+          {:ok, String.t(), non_neg_integer()} | {:error, :no_fact}
   def promote_fact(id, intent \\ nil) do
     case Repo.get(Fact, id) do
       nil ->
@@ -124,7 +125,8 @@ defmodule Server.Seed do
 
   defp seed_file, do: Application.app_dir(:server, @seed_path)
 
-  defp promoted_file, do: Application.get_env(:server, :promoted_facts_path) || Application.app_dir(:server, @promoted_path)
+  defp promoted_file,
+    do: Application.get_env(:server, :promoted_facts_path) || Application.app_dir(:server, @promoted_path)
 
   # Bank each fact whose `intent` isn't already present (forgotten or not — an operator's tombstone
   # is respected). Returns how many were banked this run.

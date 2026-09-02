@@ -9,18 +9,18 @@ defmodule Console.Panel.NewThreadTest do
   defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _s} -> t end) end)
 
   test "idle: a placeholder inviting a new thread" do
-    out = NewThread.render(%{input: nil}, @rect) |> text()
+    out = %{input: nil} |> NewThread.render(@rect) |> text()
     assert out =~ "＋"
     assert out =~ "new thread"
   end
 
   test "focused: the live buffer with a caret" do
-    out = NewThread.render(%{input: %{kind: :new_thread, buffer: "add redis"}}, @rect) |> text()
+    out = %{input: %{kind: :new_thread, buffer: "add redis"}} |> NewThread.render(@rect) |> text()
     assert out =~ "new thread ▸ add redis"
   end
 
   test "another input kind (e.g. orchestrate) leaves it idle" do
-    out = NewThread.render(%{input: %{kind: :orchestrate, buffer: "x"}}, @rect) |> text()
+    out = %{input: %{kind: :orchestrate, buffer: "x"}} |> NewThread.render(@rect) |> text()
     assert out =~ "start a new thread"
   end
 

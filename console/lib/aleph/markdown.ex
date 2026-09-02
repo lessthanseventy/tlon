@@ -106,7 +106,7 @@ defmodule Console.Markdown do
   defp token("*" <> _ = t, _base) when byte_size(t) > 2, do: {strip(t, 1), :md_italic}
   defp token(t, base), do: {t, base}
 
-  defp strip(t, n), do: t |> String.slice(n, max(String.length(t) - 2 * n, 0))
+  defp strip(t, n), do: String.slice(t, n, max(String.length(t) - 2 * n, 0))
 
   defp prepend(rows, acc), do: Enum.reduce(rows, acc, fn row, a -> [row | a] end)
 end

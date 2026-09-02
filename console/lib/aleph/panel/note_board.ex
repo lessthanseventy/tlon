@@ -14,8 +14,7 @@ defmodule Console.Panel.NoteBoard do
   def topics(_assigns), do: []
 
   @impl Console.Panel
-  def render(%{notes: []}, rect),
-    do: Console.Panel.clip([line("no notes yet — press n to jot one", :dim)], rect)
+  def render(%{notes: []}, rect), do: Console.Panel.clip([line("no notes yet — press n to jot one", :dim)], rect)
 
   def render(%{notes: notes}, rect) do
     notes

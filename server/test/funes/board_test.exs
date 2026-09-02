@@ -29,7 +29,10 @@ defmodule Server.BoardTest do
     test "merges recent messages, facts, and events as {tag, row}, each carrying a thread_id" do
       {:ok, thread} = Channel.open_thread(%{title: "seed"})
       {:ok, _msg} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "shipping it"})
-      {:ok, _fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "use sqlite", provenance: "derived"})
+
+      {:ok, _fact} =
+        Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "use sqlite", provenance: "derived"})
+
       {:ok, _event} = Dossier.record_event(%{thread_id: thread.id, kind: "work_landed", detail: %{"summary" => "landed"}})
 
       feed = Board.recent_activity(50)

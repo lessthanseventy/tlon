@@ -87,7 +87,7 @@ defmodule Console.Panel.ThreadStack do
   defp chips(card) do
     lead = if card[:lead], do: [{"  @#{card.lead}", :label}], else: []
     stage = if card[:stage], do: [{" · #{card.stage}", :dim}], else: []
-    awaiting = if card[:awaiting] not in [nil, ""], do: [{" · ⏸ #{card.awaiting}", :accent}], else: []
+    awaiting = if card[:awaiting] in [nil, ""], do: [], else: [{" · ⏸ #{card.awaiting}", :accent}]
     # A live "…typing" signal while the lead is composing (declared thinking presence).
     typing = if card[:typing], do: [{" · #{card.typing} is typing…", :st_working}], else: []
     lead ++ stage ++ awaiting ++ typing

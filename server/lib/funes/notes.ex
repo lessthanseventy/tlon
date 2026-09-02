@@ -16,7 +16,7 @@ defmodule Server.Notes do
     attrs |> Note.write_changeset() |> Repo.insert() |> Bus.announce(:note_written)
   end
 
-  @doc "Notes in a scope, newest-first. `for_scope(\"global\", nil)` / `for_scope(\"project\", id)`."
+  @doc ~s{Notes in a scope, newest-first. `for_scope("global", nil)` / `for_scope("project", id)`.}
   def for_scope(scope, scope_id) do
     Repo.all(from n in Note, where: ^where_scope(scope, scope_id), order_by: [desc: n.id])
   end

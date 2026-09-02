@@ -76,12 +76,12 @@ defmodule Console.Icons do
   def icon_name(_name), do: nil
 
   # Recompile if a PNG changes; embed the bytes so there's no per-frame file IO.
-  for name <- @names, do: @external_resource Path.join(@dir, "#{name}.png")
-  @pngs (for name <- @names, into: %{}, do: {name, File.read!(Path.join(@dir, "#{name}.png"))})
+  for name <- @names, do: @external_resource(Path.join(@dir, "#{name}.png"))
+  @pngs for name <- @names, into: %{}, do: {name, File.read!(Path.join(@dir, "#{name}.png"))}
 
   # A stable kitty image id per icon (transmit-once cache key). 7000+ keeps clear of any ad-hoc ids a
   # panel might use for its own imagery.
-  @ids (for {name, i} <- Enum.with_index(@names, 7000), into: %{}, do: {name, i})
+  @ids for {name, i} <- Enum.with_index(@names, 7000), into: %{}, do: {name, i}
 
   @doc "Every icon name."
   @spec names() :: [atom()]

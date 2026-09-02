@@ -13,10 +13,10 @@ defmodule Console.Panel.TicketBoard do
   @columns ~w(backlog todo doing done)
   @status_color %{"backlog" => :st_idle, "todo" => :st_open, "doing" => :st_working, "done" => :st_done}
 
-  @impl Console.Panel
+  @impl Panel
   def topics(_assigns), do: []
 
-  @impl Console.Panel
+  @impl Panel
   def hints(_data), do: [{"h/l·j/k", "move"}, {"p", "advance"}, {"n", "new"}, {"⏎", "promote"}]
 
   @doc "Tickets grouped by status, in column order — the cockpit indexes its cursor into this."
@@ -25,9 +25,8 @@ defmodule Console.Panel.TicketBoard do
     Enum.map(@columns, &Map.get(by, &1, []))
   end
 
-  @impl Console.Panel
-  def render(%{tickets: []}, rect),
-    do: Panel.clip([[{"no tickets — press n to file one", :dim}]], rect)
+  @impl Panel
+  def render(%{tickets: []}, rect), do: Panel.clip([[{"no tickets — press n to file one", :dim}]], rect)
 
   def render(%{tickets: tickets} = data, rect) do
     cursor = data[:cursor]
@@ -79,7 +78,7 @@ defmodule Console.Panel.TicketBoard do
     end
   end
 
-  defp clip_row(row, w), do: Panel.clip([row], %{w: w, h: 1}) |> List.first() || []
+  defp clip_row(row, w), do: [row] |> Panel.clip(%{w: w, h: 1}) |> List.first() || []
 
   defp status_atom("backlog"), do: :idle
   defp status_atom("todo"), do: :open

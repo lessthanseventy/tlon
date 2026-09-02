@@ -130,7 +130,9 @@ defmodule Server.ProjectsTest do
   describe "repo_for_workspace/1 — the STACK panel's per-workspace git dir" do
     test "the workspace's first repo-bearing project's ~-expanded primary repo", %{workspace: ws} do
       {:ok, _empty} = Projects.register(%{workspace_id: ws.id, name: "empty"})
-      {:ok, _p} = Projects.register(%{workspace_id: ws.id, name: "client", repos: [%{"name" => "r", "path" => "~/projects/x"}]})
+
+      {:ok, _p} =
+        Projects.register(%{workspace_id: ws.id, name: "client", repos: [%{"name" => "r", "path" => "~/projects/x"}]})
 
       assert {:ok, path} = Projects.repo_for_workspace(ws.id)
       assert path == Path.expand("~/projects/x")

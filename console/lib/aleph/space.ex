@@ -165,5 +165,4 @@ defmodule Console.Space do
     i = Enum.find_index(spaces, &(&1.key == key)) || 0
     Enum.at(spaces, rem(i + delta + length(spaces), length(spaces)))
   end
-
 end

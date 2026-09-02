@@ -13,7 +13,7 @@ defmodule Console.Panel.NoteBoardTest do
       %{body: "multi\nline\nnote", author: nil}
     ]
 
-    lines = NoteBoard.render(%{notes: notes}, @rect) |> Enum.map(&text/1)
+    lines = %{notes: notes} |> NoteBoard.render(@rect) |> Enum.map(&text/1)
 
     assert Enum.any?(lines, &(&1 =~ "check the deploy gate" and &1 =~ "hronir"))
     assert Enum.any?(lines, &(&1 =~ "multi"))
@@ -21,7 +21,7 @@ defmodule Console.Panel.NoteBoardTest do
   end
 
   test "empty scope shows a quiet hint" do
-    lines = NoteBoard.render(%{notes: []}, @rect) |> Enum.map(&text/1)
+    lines = %{notes: []} |> NoteBoard.render(@rect) |> Enum.map(&text/1)
     assert Enum.any?(lines, &(&1 =~ "no notes"))
   end
 

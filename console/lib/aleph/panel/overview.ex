@@ -44,7 +44,10 @@ defmodule Console.Panel.Overview do
     workspaces
     |> Enum.reduce_while({0, nil}, fn ws, {offset, _} ->
       height = length(card(ws, false, rect.w)) + 1
-      if target >= offset and target < offset + height, do: {:halt, {offset, {:switch_space, ws.id}}}, else: {:cont, {offset + height, nil}}
+
+      if target >= offset and target < offset + height,
+        do: {:halt, {offset, {:switch_space, ws.id}}},
+        else: {:cont, {offset + height, nil}}
     end)
     |> elem(1)
   end

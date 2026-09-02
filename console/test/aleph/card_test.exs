@@ -69,7 +69,7 @@ defmodule Console.CardTest do
 
     test "a title too wide for the box is truncated, not overflowed" do
       [top | _] = Card.boxed_card("a very long workspace name indeed", [], 12, :st_done)
-      title = Enum.at(top, 1) |> elem(0)
+      title = top |> Enum.at(1) |> elem(0)
       assert String.length(title) <= 12
     end
   end

@@ -97,14 +97,17 @@ defmodule Server.WorktreeTest do
     setup %{repo: repo} do
       Server.TestDB.clean!()
       {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
-      {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "proj", repos: [%{"name" => "r", "path" => repo}]})
+
+      {:ok, project} =
+        Server.Projects.register(%{workspace_id: ws.id, name: "proj", repos: [%{"name" => "r", "path" => repo}]})
+
       %{ws: ws, project: project}
     end
 
     test "a workline thread (has a slug) → a lazily-ensured .worktrees/<slug> checkout", %{repo: repo, ws: ws, project: p} do
       thread = struct!(Server.Thread, %{id: 1, workspace_id: ws.id, project_id: p.id, slug: "redis-cache", title: "t"})
       assert {:ok, wt} = Server.worktree_for_thread(thread)
-      assert wt == Server.Worktree.path(repo, "redis-cache")
+      assert wt == Worktree.path(repo, "redis-cache")
       assert File.exists?(Path.join(wt, ".git"))
     end
 

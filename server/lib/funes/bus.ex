@@ -102,20 +102,17 @@ defmodule Server.Bus do
 
   # Projects are workspace-scoped (no thread_id of their own): their own topic + the
   # cross-thread activity feed, like workspaces.
-  def broadcast({tag, %Server.Project{}} = event)
-      when tag in [:project_registered, :project_edited, :project_removed] do
+  def broadcast({tag, %Server.Project{}} = event) when tag in [:project_registered, :project_edited, :project_removed] do
     publish([projects_topic(), activity_topic()], event)
   end
 
   # Notes carry a polymorphic scope (no single thread_id): their own topic + the activity feed.
-  def broadcast({tag, %Server.Note{}} = event)
-      when tag in [:note_written, :note_edited, :note_removed] do
+  def broadcast({tag, %Server.Note{}} = event) when tag in [:note_written, :note_edited, :note_removed] do
     publish([notes_topic(), activity_topic()], event)
   end
 
   # Tickets are workspace-scoped (the lightweight tracker): their own topic + the activity feed.
-  def broadcast({tag, %Server.Ticket{}} = event)
-      when tag in [:ticket_filed, :ticket_updated, :ticket_removed] do
+  def broadcast({tag, %Server.Ticket{}} = event) when tag in [:ticket_filed, :ticket_updated, :ticket_removed] do
     publish([tickets_topic(), activity_topic()], event)
   end
 

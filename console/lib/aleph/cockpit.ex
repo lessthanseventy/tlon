@@ -483,8 +483,8 @@ defmodule Console.Cockpit do
   # A full-screen board (Tickets/Notes) — Esc closes; an ACTIVE input (a new-ticket/note title) takes
   # the keys (input: nil guard fails → falls to the normal dispatch below); else the board key handler
   # drives the kanban cursor + verbs.
-  def handle_cast({:dispatch, %Event{type: :key, data: %{key: :escape}}}, %{board: b, input: nil} = state) when not is_nil(b),
-    do: {:noreply, render(%{state | board: nil})}
+  def handle_cast({:dispatch, %Event{type: :key, data: %{key: :escape}}}, %{board: b, input: nil} = state)
+      when not is_nil(b), do: {:noreply, render(%{state | board: nil})}
 
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{board: b, input: nil} = state) when not is_nil(b),
     do: handle_board_key(key, state)
@@ -759,7 +759,7 @@ defmodule Console.Cockpit do
   # The one-shot backfill behind `activity: []`'s replacement — the durable feed at cockpit start,
   # guarded so a not-yet-up server (init can race the server boot) just yields an empty ring rather
   # than crashing the cockpit. Scoped to the active workspace at render by `scope_activity/2`.
-  defp seed_activity, do: Console.Board.safe_read(:activity_seed, [], fn -> Server.Board.recent_activity(@activity_cap) end)
+  defp seed_activity, do: Board.safe_read(:activity_seed, [], fn -> Server.Board.recent_activity(@activity_cap) end)
 
   # First-sight test for a tagged event: true unless its key is already in the recently-seen set.
   # The key is `{tag, row.id}` (a durable row always has an id, so the two topic deliveries share
@@ -1109,6 +1109,7 @@ defmodule Console.Cockpit do
     {:noreply, state}
   end
 
+  # --- The overlay menu (right-click workspace context menu + icon picker, Slice 3.5) ---
   # Clicking the tertius band focuses its input (Slice 3) — same as Space / `:`. If it's already
   # focused, the click is a no-op so an in-progress command isn't wiped.
   # Clicking the new-thread band focuses its input (2026-09-01) — the persistent create surface. A
@@ -1171,11 +1172,11 @@ defmodule Console.Cockpit do
   end
 
   # The spine's Tickets/Notes tools (Slice 3.5): open the full-screen board.
-  defp apply_pick({:open_board, kind}, state), do: {:noreply, render(%{state | board: kind, board_cursor: {0, 0}, menu: nil})}
+  defp apply_pick({:open_board, kind}, state),
+    do: {:noreply, render(%{state | board: kind, board_cursor: {0, 0}, menu: nil})}
 
   # Click a thread row in the list → open its conversation (two-step center).
   defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)
-
 
   # Reset scroll offsets when the context they're relative to changes. A space switch swaps every
   # panel, so all offsets go; a focus change only swaps the thread-specific panels (Brief,
@@ -1186,8 +1187,6 @@ defmodule Console.Cockpit do
     do: %{next | scrolls: Map.drop(next.scrolls, [Panel.Brief, Panel.Conversation])}
 
   defp reset_scrolls(_prev, next), do: next
-
-  # --- The overlay menu (right-click workspace context menu + icon picker, Slice 3.5) ---
 
   defp handle_menu_click({Panel.Menu, data, rect}, y, state),
     do: apply_menu(Panel.Menu.pick(data, rect, y - rect.y), state)
@@ -1253,7 +1252,6 @@ defmodule Console.Cockpit do
 
   defp menu_action(:close, state), do: {:noreply, render(%{state | menu: nil})}
 
-
   defp menu_action({:configure_ws, _ws}, state),
     do: {:noreply, render(%{state | menu: nil, active_key: :orbis, orbis_face: :author})}
 
@@ -1317,7 +1315,9 @@ defmodule Console.Cockpit do
   defp board_content(:tickets, state) do
     id = board_workspace_id(state)
     tickets = safe_board(fn -> id && id |> Server.Tickets.in_workspace() |> Enum.map(&ticket_row/1) end) || []
-    {Panel.TicketBoard, %{tickets: tickets, cursor: state.board_cursor}, "TICKETS · h/l·j/k move · p advance · n new · ⏎ promote"}
+
+    {Panel.TicketBoard, %{tickets: tickets, cursor: state.board_cursor},
+     "TICKETS · h/l·j/k move · p advance · n new · ⏎ promote"}
   end
 
   defp board_content(:notes, state) do
@@ -1383,7 +1383,8 @@ defmodule Console.Cockpit do
   defp promote_selected_ticket(state) do
     case selected_ticket(state, ticket_columns(state)) do
       %{id: id, title: title} = ticket ->
-        with {:ok, thread} <- Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state), scope: "machine"}),
+        with {:ok, thread} <-
+               Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state), scope: "machine"}),
              {:ok, _} <- safe_board(fn -> Server.Tickets.promote(ticket, thread.id) end) do
           _ = spawn_onto(thread.id, state)
           %{state | board: nil, focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
@@ -1617,7 +1618,8 @@ defmodule Console.Cockpit do
   defp apply_effect(:open_focused_thread, state), do: {:noreply, state}
 
   defp apply_effect(:close_thread_view, state),
-    do: {:noreply, render(%{state | opened_thread: nil, input: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
+    do:
+      {:noreply, render(%{state | opened_thread: nil, input: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
 
   # Scroll the open conversation by `n` rows (j/k in conversation mode); clamped at render.
   defp apply_effect({:scroll_conversation, n}, state) do
@@ -1633,8 +1635,7 @@ defmodule Console.Cockpit do
 
   # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
   # beside the stack. Only meaningful in a workspace chat view; elsewhere it's a harmless flip.
-  defp apply_effect(:toggle_session_pane, state),
-    do: {:noreply, render(%{state | session_pane: not state.session_pane})}
+  defp apply_effect(:toggle_session_pane, state), do: {:noreply, render(%{state | session_pane: not state.session_pane})}
 
   # The `Enter` verb landed: enter-or-spawn on the focused thread. The result flashes in the footer.
   # UNREFERENCED since Slice 0 collapse (Sessions deleted) — no keymap clause emits :enter_or_spawn
@@ -1762,7 +1763,8 @@ defmodule Console.Cockpit do
   defp apply_effect(:stack_delete_arm, %{stack_focus: id} = state) when is_integer(id) do
     case Enum.find(state.threads, &(&1.id == id)) do
       %{title: title} ->
-        {:noreply, render(%{state | tlon_delete: {:thread, id, "delete “#{title}”"}, flash: "press d again to delete “#{title}”"})}
+        {:noreply,
+         render(%{state | tlon_delete: {:thread, id, "delete “#{title}”"}, flash: "press d again to delete “#{title}”"})}
 
       _ ->
         {:noreply, render(%{state | flash: "no thread focused"})}
@@ -2490,8 +2492,7 @@ defmodule Console.Cockpit do
   # workspace chat view, else nil (the pane is hidden). Follows the cursor — moving j/k re-targets it,
   # so the pane always shows whatever thread you're looking at.
   defp session_pane_target(%{session_pane: true, active_key: key, center_view: :chat, stack_focus: id})
-       when Space.workspace?(key) and is_integer(id),
-       do: id
+       when Space.workspace?(key) and is_integer(id), do: id
 
   defp session_pane_target(_state), do: nil
 
@@ -2851,7 +2852,8 @@ defmodule Console.Cockpit do
   end
 
   defp gates_read(workspace_id) do
-    Server.workline_statuses(workspace_id)
+    workspace_id
+    |> Server.workline_statuses()
     |> Enum.filter(&(&1.awaiting not in [nil, ""]))
     |> Enum.map(&Map.take(&1, [:id, :title, :stage, :awaiting]))
   rescue
@@ -3053,7 +3055,6 @@ defmodule Console.Cockpit do
     command = Harness.driver(profile.harness).launch_command(profile)
     spawn_harness_window(workspace_id, "#{name}-machine", name, machine_thread_id(workspace_id), command)
   end
-
 
   # A staffed-but-session-less machine thread gets its own tmux window (`t<id>`), so a
   # thread the operator opened outside the standing coworkers gets a live coworker

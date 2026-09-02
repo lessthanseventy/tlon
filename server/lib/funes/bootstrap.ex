@@ -130,7 +130,8 @@ defmodule Server.Bootstrap do
   # already real. Idempotent — an existing `general` and any thread already in a project are left.
   defp repair_projects do
     defaults =
-      Repo.all(Workspace)
+      Workspace
+      |> Repo.all()
       |> Map.new(fn ws -> {ws.id, ensure_default_project(ws).id} end)
 
     for {workspace_id, project_id} <- defaults do

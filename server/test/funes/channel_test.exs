@@ -341,7 +341,7 @@ defmodule Server.ChannelTest do
       {:ok, _ta} = Channel.open_thread(%{title: "a-thread", scope: "machine", workspace_id: wsa.id})
       {:ok, _tb} = Channel.open_thread(%{title: "b-thread", scope: "machine", workspace_id: wsb.id})
 
-      titles = Channel.machine_threads() |> Enum.map(& &1.thread.title)
+      titles = Enum.map(Channel.machine_threads(), & &1.thread.title)
       assert "a-thread" in titles
       assert "b-thread" in titles
     end

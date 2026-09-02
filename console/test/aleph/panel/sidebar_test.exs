@@ -83,8 +83,8 @@ defmodule Console.Panel.SidebarTest do
   end
 
   test "on a kitty host the fallback glyph/digit is blanked (the icon PNG covers it, no bleed)" do
-    plain = Sidebar.render(%{groups: groups(), active_key: :orbis}, @rect) |> texts()
-    kitty = Sidebar.render(%{groups: groups(), active_key: :orbis, graphics?: true}, @rect) |> texts()
+    plain = %{groups: groups(), active_key: :orbis} |> Sidebar.render(@rect) |> texts()
+    kitty = %{groups: groups(), active_key: :orbis, graphics?: true} |> Sidebar.render(@rect) |> texts()
 
     # Off kitty the digit shows; on kitty it's blanked (only the placed image renders).
     assert Enum.any?(plain, &(&1 =~ "1"))

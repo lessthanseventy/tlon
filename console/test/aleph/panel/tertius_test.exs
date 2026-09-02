@@ -8,19 +8,19 @@ defmodule Console.Panel.TertiusTest do
   defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
 
   test "idle: a permanent tertius prompt with a placeholder" do
-    out = Tertius.render(%{receipts: [], input: nil}, rect()) |> text()
+    out = %{receipts: [], input: nil} |> Tertius.render(rect()) |> text()
     assert out =~ "tertius ▸"
     assert out =~ "file a ticket"
   end
 
   test "active: renders the live buffer with a caret" do
-    out = Tertius.render(%{receipts: [], input: %{kind: :orchestrate, buffer: "file a ticket x"}}, rect()) |> text()
+    out = %{receipts: [], input: %{kind: :orchestrate, buffer: "file a ticket x"}} |> Tertius.render(rect()) |> text()
     assert out =~ "tertius ▸ file a ticket x"
     assert out =~ "▎"
   end
 
   test "shows the last couple of receipts above the input, oldest-first" do
-    out = Tertius.render(%{receipts: ["→ noted #2 ✓", "→ filed ticket #1 ✓"], input: nil}, rect()) |> text()
+    out = %{receipts: ["→ noted #2 ✓", "→ filed ticket #1 ✓"], input: nil} |> Tertius.render(rect()) |> text()
     # newest is head of the list; the log shows the last two in chronological order (oldest first)
     lines = String.split(out, "\n")
     assert Enum.at(lines, 0) =~ "filed ticket #1"

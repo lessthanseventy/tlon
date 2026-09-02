@@ -80,7 +80,7 @@ defmodule Console.Card do
 
     body =
       Enum.map(body_rows, fn row ->
-        clipped = Panel.clip([row], %{w: inner, h: 1}) |> List.first() || []
+        clipped = [row] |> Panel.clip(%{w: inner, h: 1}) |> List.first() || []
         [{"│ ", frame}] ++ Panel.pad(clipped, inner, :normal) ++ [{" │", frame}]
       end)
 

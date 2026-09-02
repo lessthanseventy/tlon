@@ -52,6 +52,8 @@ defmodule Server do
       Message
     ]
 
+  alias Server.Workline.Ledger
+
   @doc "The handle of the agent staffed on a thread (its lead), or nil."
   defdelegate thread_lead(thread_id), to: Server.Channel
 
@@ -136,8 +138,8 @@ defmodule Server do
   defdelegate pending_habits(workspace_id), to: Server.Dossier
 
   @doc "Every open workline's live status (stage, gate, blocking check) — the WORKLINES pane read."
-  defdelegate workline_statuses(), to: Server.Workline.Ledger, as: :statuses
-  defdelegate workline_statuses(workspace_id), to: Server.Workline.Ledger, as: :statuses
+  defdelegate workline_statuses(), to: Ledger, as: :statuses
+  defdelegate workline_statuses(workspace_id), to: Ledger, as: :statuses
 
   @doc """
   Approve a pending habit by id (the Memory pane's `a`) — loads fresh, so a stale row the pane

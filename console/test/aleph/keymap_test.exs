@@ -63,9 +63,18 @@ defmodule Console.KeymapTest do
 
   # A workspace state with the thread stack as the focused center — the handle_tlon path.
   defp stack_ctx(over \\ %{}) do
-    base = %{active_key: 0, center_view: :chat, opened_thread: nil, focus: %Focus{in_terminal?: true}, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2}
+    base = %{
+      active_key: 0,
+      center_view: :chat,
+      opened_thread: nil,
+      focus: %Focus{in_terminal?: true},
+      threads: [%{id: 1}, %{id: 2}, %{id: 3}],
+      focused_id: 2
+    }
+
     state(Map.merge(base, over))
   end
+
   defp leader, do: key(:space, ctrl: true)
 
   # A helper: press the leader, then a key, against `state`. Asserts the leader arms the prefix.
@@ -863,7 +872,6 @@ defmodule Console.KeymapTest do
       assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
     end
 
-
     test "g/G jump the cursor to the first/last thread (workspace context)" do
       s = state(%{active_key: 0, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2})
       assert {%{focused_id: 1}, :repaint} = Keymap.handle(char("g"), s)
@@ -898,7 +906,8 @@ defmodule Console.KeymapTest do
     end
 
     test "the gate precedes a live terminal — an armed confirm captures y even with center_live?" do
-      assert {%{pending_confirm: nil}, {:confirm_orchestrate, @arm}} = Keymap.handle(char("y"), armed(%{center_live?: true}))
+      assert {%{pending_confirm: nil}, {:confirm_orchestrate, @arm}} =
+               Keymap.handle(char("y"), armed(%{center_live?: true}))
     end
 
     test "not armed (nil): y is not the confirm gate — it falls through to ordinary routing" do
@@ -959,6 +968,7 @@ defmodule Console.KeymapTest do
 
     test "Enter on a non-empty buffer posts to the thread AND keeps the box focused (buffer cleared)" do
       s = reply_ctx(%{input: %{kind: :reply, thread_id: 2, buffer: "ship it", cursor: 7}})
+
       assert {%{input: %{kind: :reply, thread_id: 2, buffer: "", cursor: 0}}, {:post_message, 2, "ship it"}} =
                Keymap.handle(key(:enter), s)
     end

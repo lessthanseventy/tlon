@@ -30,7 +30,7 @@ defmodule Console.MarkdownTest do
 
   test "fenced code blocks render verbatim in the code style, no inline parsing" do
     rows = Markdown.render("```\nx = **not bold**\n```", 80)
-    joined = text(rows) |> Enum.join("\n")
+    joined = rows |> text() |> Enum.join("\n")
     assert joined =~ "x = **not bold**"
     assert :md_code in styles(rows)
     refute :md_bold in styles(rows)

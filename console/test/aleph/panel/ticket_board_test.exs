@@ -8,7 +8,7 @@ defmodule Console.Panel.TicketBoardTest do
   defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
 
   test "an empty board nudges you to file one" do
-    assert TicketBoard.render(%{tickets: []}, rect()) |> text() =~ "no tickets"
+    assert %{tickets: []} |> TicketBoard.render(rect()) |> text() =~ "no tickets"
   end
 
   test "the four status columns render side by side on the header row, with counts" do
@@ -48,7 +48,11 @@ defmodule Console.Panel.TicketBoardTest do
   end
 
   test "empty columns render a placeholder, not nothing" do
-    out = TicketBoard.render(%{tickets: [%{id: 1, title: "x", status: "todo", priority: "med", assignee: nil}]}, rect()) |> text()
+    out =
+      %{tickets: [%{id: 1, title: "x", status: "todo", priority: "med", assignee: nil}]}
+      |> TicketBoard.render(rect())
+      |> text()
+
     assert out =~ "BACKLOG (0)"
     assert out =~ "—"
   end

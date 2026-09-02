@@ -20,7 +20,8 @@ defmodule Server.MCP.Tool.Containers do
     }
   end
 
-  defp note_json(n), do: %{"id" => n.id, "scope" => n.scope, "scope_id" => n.scope_id, "body" => n.body, "author" => n.author}
+  defp note_json(n),
+    do: %{"id" => n.id, "scope" => n.scope, "scope_id" => n.scope_id, "body" => n.body, "author" => n.author}
 
   def ticket_json_public(t), do: ticket_json(t)
   def note_json_public(n), do: note_json(n)

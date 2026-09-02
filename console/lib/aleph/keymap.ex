@@ -164,8 +164,7 @@ defmodule Console.Keymap do
   def handle(%{key: :char, char: "y"}, %{pending_confirm: pc} = state) when not is_nil(pc),
     do: {%{state | pending_confirm: nil}, {:confirm_orchestrate, pc}}
 
-  def handle(_key, %{pending_confirm: pc} = state) when not is_nil(pc),
-    do: {%{state | pending_confirm: nil}, :repaint}
+  def handle(_key, %{pending_confirm: pc} = state) when not is_nil(pc), do: {%{state | pending_confirm: nil}, :repaint}
 
   # --- input mode: a MODAL — every key belongs to the buffer until Enter/Esc, so a binding
   # letter (q, s, tab) types its character instead of firing. Must come first. ---
@@ -179,8 +178,8 @@ defmodule Console.Keymap do
   # Shift+Enter in the composer inserts a newline (a multiline body) instead of submitting, AT
   # the cursor (not always the end — Up/Down can have moved it off the last line). Must precede
   # the plain-Enter clauses — %{key: :enter, shift: true} also matches %{key: :enter}.
-  def handle(%{key: :enter, shift: true}, %{input: %{kind: kind} = input} = state) when kind in [:compose, :new_thread, :reply],
-    do: {%{state | input: insert_at(input, "\n")}, :repaint}
+  def handle(%{key: :enter, shift: true}, %{input: %{kind: kind} = input} = state)
+      when kind in [:compose, :new_thread, :reply], do: {%{state | input: insert_at(input, "\n")}, :repaint}
 
   # The reply box is PERSISTENT (born with the open thread), so Enter on an empty buffer is a plain
   # no-op — it must NOT clear the input like the transient composers below (that would blank the box
@@ -361,8 +360,7 @@ defmodule Console.Keymap do
   # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
   # beside the stack. Workspace-only (there's no thread stack elsewhere); global across TERM/NAV.
   def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
-      when Space.workspace?(key) and not is_map_key(k, :ctrl),
-      do: {clear_leader(state), :toggle_session_pane}
+      when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {clear_leader(state), :toggle_session_pane}
 
   # --- Tlön: the lazygit focus model (design 2026-08-20). The center is a live tmux client, so
   # `Ctrl+Space` is a STICKY toggle in/out of it — NOT the arm-next-key leader other spaces use.
@@ -712,30 +710,64 @@ defmodule Console.Keymap do
 
   # LIST mode (no thread opened): j/k move the cursor, g/G jump, Enter opens the focused thread's
   # conversation. (Two-step center — the fold/zoom stack is retired.)
-  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, 1)
-  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, -1)
-  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, 1)
-  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_move(state, -1)
-  defp handle_tlon(%{key: :char, char: "g"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_jump(state, :first)
-  defp handle_tlon(%{key: :char, char: "G"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: stack_jump(state, :last)
-  defp handle_tlon(%{key: :enter}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state), do: {state, :open_focused_thread}
+  defp handle_tlon(
+         %{key: :char, char: "j"},
+         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
+       ), do: stack_move(state, 1)
+
+  defp handle_tlon(
+         %{key: :char, char: "k"},
+         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
+       ), do: stack_move(state, -1)
+
+  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state),
+    do: stack_move(state, 1)
+
+  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state),
+    do: stack_move(state, -1)
+
+  defp handle_tlon(
+         %{key: :char, char: "g"},
+         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
+       ), do: stack_jump(state, :first)
+
+  defp handle_tlon(
+         %{key: :char, char: "G"},
+         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
+       ), do: stack_jump(state, :last)
+
+  defp handle_tlon(%{key: :enter}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state),
+    do: {state, :open_focused_thread}
 
   # CONVERSATION mode (a thread opened): j/k scroll it; Esc goes back to the list.
-  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, 3}}
-  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, -3}}
-  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, 3}}
-  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, {:scroll_conversation, -3}}
-  defp handle_tlon(%{key: :escape}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, :close_thread_view}
+  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: {state, {:scroll_conversation, 3}}
+
+  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: {state, {:scroll_conversation, -3}}
+
+  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: {state, {:scroll_conversation, 3}}
+
+  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: {state, {:scroll_conversation, -3}}
+
+  defp handle_tlon(%{key: :escape}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: {state, :close_thread_view}
 
   # `n` focuses the new-thread band while looking at the LIST (like j/k), not only via the Alt chords.
   # `c` is retired from the chat flow: opening a thread now focuses its persistent reply box directly
   # (the `:reply` input), so there's no compose verb to reach here. (`c` still opens a composer in
   # Orbis / terminal view via the `command` clause, which routes through `composer_thread_id`.)
-  defp handle_tlon(%{key: :char, char: "n"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: command(k, state)
+  defp handle_tlon(%{key: :char, char: "n"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: command(k, state)
+
   # `d` arms the two-key delete for the FOCUSED thread card (the second `d` is caught by the armed
   # clause at the top of handle_tlon). This restores thread-delete, lost when the MachineChat TUI and
   # the LEAVES rail panel — the old delete surfaces — were retired.
-  defp handle_tlon(%{key: :char, char: "d"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state), do: {state, :stack_delete_arm}
+  defp handle_tlon(%{key: :char, char: "d"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
+    do: {state, :stack_delete_arm}
+
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}} = state), do: {state, {:forward, key}}
 
   # Esc steps back one level: close an open detail first, else drop out of nav into the terminal.

@@ -189,7 +189,11 @@ defmodule Server.DossierTest do
       {:ok, _local} = Dossier.bank_fact(%{kind: "constraint", text: "wsa rule", provenance: "stated", thread_id: ta.id})
 
       # workspace A sees global + its own; workspace B sees only global; nil sees all.
-      assert Enum.map(Dossier.always_loaded_constraints(wsa.id), & &1.text) |> Enum.sort() == ["global rule", "wsa rule"]
+      assert wsa.id |> Dossier.always_loaded_constraints() |> Enum.map(& &1.text) |> Enum.sort() == [
+               "global rule",
+               "wsa rule"
+             ]
+
       assert Enum.map(Dossier.always_loaded_constraints(wsb.id), & &1.text) == ["global rule"]
       assert length(Dossier.always_loaded_constraints()) == 2
     end

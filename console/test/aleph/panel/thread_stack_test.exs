@@ -9,17 +9,26 @@ defmodule Console.Panel.ThreadStackTest do
   defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
 
   defp card(over \\ %{}) do
-    Map.merge(%{id: 1, title: "a thread", lead: nil, stage: nil, awaiting: nil, active?: false, typing: nil, messages: []}, over)
+    Map.merge(
+      %{id: 1, title: "a thread", lead: nil, stage: nil, awaiting: nil, active?: false, typing: nil, messages: []},
+      over
+    )
   end
 
   test "an empty stack renders a placeholder" do
-    assert ThreadStack.render(%{cards: []}, rect()) |> text() =~ "no threads yet"
+    assert %{cards: []} |> ThreadStack.render(rect()) |> text() =~ "no threads yet"
   end
 
   describe "list mode (no thread opened)" do
     test "each thread is a single row — id, title, lead/stage chips; no messages" do
       cards = [
-        card(%{id: 39, title: "build the thing", lead: "kimi", stage: "build", messages: [%{author: "kimi", body: "hi"}]}),
+        card(%{
+          id: 39,
+          title: "build the thing",
+          lead: "kimi",
+          stage: "build",
+          messages: [%{author: "kimi", body: "hi"}]
+        }),
         card(%{id: 40, title: "review PR"})
       ]
 
@@ -41,7 +50,7 @@ defmodule Console.Panel.ThreadStackTest do
     end
 
     test "a typing thread shows the typing chip" do
-      out = ThreadStack.render(%{cards: [card(%{typing: "hronir"})]}, rect()) |> text()
+      out = %{cards: [card(%{typing: "hronir"})]} |> ThreadStack.render(rect()) |> text()
       assert out =~ "hronir is typing…"
     end
 
@@ -56,11 +65,17 @@ defmodule Console.Panel.ThreadStackTest do
   describe "conversation mode (a thread opened)" do
     test "shows the opened thread's messages and an esc-back hint (the reply input is its own band now)" do
       cards = [
-        card(%{id: 42, title: "review PR", lead: "hronir", stage: "review", messages: [%{author: "andrew", body: "take a look"}, %{author: "hronir", body: "on it"}]}),
+        card(%{
+          id: 42,
+          title: "review PR",
+          lead: "hronir",
+          stage: "review",
+          messages: [%{author: "andrew", body: "take a look"}, %{author: "hronir", body: "on it"}]
+        }),
         card(%{id: 43, title: "other"})
       ]
 
-      out = ThreadStack.render(%{cards: cards, opened: 42}, rect()) |> text()
+      out = %{cards: cards, opened: 42} |> ThreadStack.render(rect()) |> text()
       assert out =~ "‹ #42 review PR"
       assert out =~ "andrew:"
       assert out =~ "take a look"
@@ -73,7 +88,7 @@ defmodule Console.Panel.ThreadStackTest do
     end
 
     test "an opened id that no longer exists falls back to the list" do
-      out = ThreadStack.render(%{cards: [card(%{id: 1, title: "x"})], opened: 999}, rect()) |> text()
+      out = %{cards: [card(%{id: 1, title: "x"})], opened: 999} |> ThreadStack.render(rect()) |> text()
       assert out =~ "#1 x"
     end
 
