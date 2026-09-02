@@ -85,25 +85,40 @@ defmodule Server.Search do
   end
 
   @doc """
-  Which of `fact_ids` match `query` in the fact FTS index — the keyword half of the recall layer's
-  relevance blend (`Server.Recall`). A `MapSet` of matched ids; empty for a blank query or id list.
+  Keyword relevance of each of `fact_ids` to `query` — the keyword half of the recall layer's
+  relevance blend (`Server.Recall`). Unlike the searches above, a fact matches on ANY query term
+  (the query is a thread's title + the operator's last words, not a hand-typed AND), graded by
+  bm25 and normalised so the best match is 1.0 — bm25's idf is what keeps "the" from counting like
+  "credential". A map of id => relevance in (0, 1]; unmatched ids are absent; empty for a blank
+  query or id list.
   """
-  def matching_fact_ids(query, fact_ids) when is_binary(query) and is_list(fact_ids) do
-    case {fts_match(query), fact_ids} do
+  def fact_relevance(query, fact_ids) when is_binary(query) and is_list(fact_ids) do
+    case {fts_any(query), fact_ids} do
       {"", _} ->
-        MapSet.new()
+        %{}
 
       {_match, []} ->
-        MapSet.new()
+        %{}
 
       {match, ids} ->
         id_list = Enum.map_join(ids, ",", &Integer.to_string/1)
 
         %{rows: rows} =
-          Repo.query!("SELECT rowid FROM fact_fts WHERE fact_fts MATCH ? AND rowid IN (#{id_list})", [match])
+          Repo.query!(
+            "SELECT rowid, bm25(fact_fts) FROM fact_fts WHERE fact_fts MATCH ? AND rowid IN (#{id_list})",
+            [match]
+          )
 
-        MapSet.new(rows, fn [id] -> id end)
+        normalise(rows)
     end
+  end
+
+  # bm25 scores are negative, best-first; scale to (0, 1] against the best so the top hit is 1.0.
+  defp normalise([]), do: %{}
+
+  defp normalise(rows) do
+    best = rows |> Enum.map(fn [_id, score] -> score end) |> Enum.min()
+    if best == 0, do: Map.new(rows, fn [id, _] -> {id, 1.0} end), else: Map.new(rows, fn [id, s] -> {id, s / best} end)
   end
 
   defp count(table, match) do
@@ -125,11 +140,14 @@ defmodule Server.Search do
   # Turn a raw query into a safe FTS5 MATCH: each whitespace token becomes a quoted string literal
   # (inner quotes stripped), so operators/punctuation are searched for, not interpreted. Multiple
   # tokens AND implicitly. An all-blank query yields "" — the callers short-circuit to an empty cut.
-  defp fts_match(query) do
+  defp fts_match(query), do: query |> fts_tokens() |> Enum.join(" ")
+
+  defp fts_any(query), do: query |> fts_tokens() |> Enum.join(" OR ")
+
+  defp fts_tokens(query) do
     query
     |> String.split(~r/\s+/, trim: true)
     |> Enum.map(fn token -> ~s("#{String.replace(token, "\"", "")}") end)
     |> Enum.reject(&(&1 == ~s("")))
-    |> Enum.join(" ")
   end
 end

@@ -9,6 +9,7 @@ defmodule Server.Recall.Embedding do
   """
   @default_endpoint "http://127.0.0.1:11434/api/embed"
   @default_model "nomic-embed-text"
+  @default_timeout_ms 10_000
 
   @doc "Cosine similarity of two equal-length vectors. A zero vector is uncorrelated (0.0)."
   @spec cosine([number()], [number()]) :: float()
@@ -24,18 +25,22 @@ defmodule Server.Recall.Embedding do
     if denom == 0.0, do: 0.0, else: dot / denom
   end
 
-  @doc "Embed `text` via ollama. `{:ok, vector}` or `{:error, reason}` (never raises upward)."
+  @doc """
+  Embed `text` via ollama. `{:ok, vector}` or `{:error, reason}` (never raises upward). `:timeout`
+  (ms, connect + response) bounds how long a down or absent embedder can hold the caller.
+  """
   @spec embed(String.t(), keyword()) :: {:ok, [float()]} | {:error, term()}
   def embed(text, opts \\ []) do
     cfg = Application.get_env(:server, :embedding, [])
     endpoint = opts[:endpoint] || cfg[:endpoint] || @default_endpoint
     model = opts[:model] || cfg[:model] || @default_model
+    timeout = opts[:timeout] || cfg[:timeout] || @default_timeout_ms
 
     _ = Application.ensure_all_started(:inets)
     body = JSON.encode!(%{model: model, input: text})
     request = {String.to_charlist(endpoint), [], ~c"application/json", body}
 
-    case :httpc.request(:post, request, [{:timeout, 10_000}], body_format: :binary) do
+    case :httpc.request(:post, request, [{:timeout, timeout}, {:connect_timeout, timeout}], body_format: :binary) do
       {:ok, {{_v, 200, _r}, _headers, resp}} -> parse(resp)
       {:ok, {{_v, code, _r}, _headers, _resp}} -> {:error, {:http, code}}
       {:error, reason} -> {:error, reason}

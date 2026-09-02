@@ -8,6 +8,10 @@ config :server, Server.Repo,
 # run against the harness-owned repo would race the per-test TestDB.clean!.
 config :server, bootstrap: false
 
+# The suite is headless: recall's query embedding points at a port nothing listens on, so it
+# degrades to keyword relevance instantly instead of reaching a real ollama.
+config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
+
 # The consult mirror is off in tests: the pure maybe_mirror tests call it directly, and the
 # round-trip test starts it explicitly. An always-on subscriber would double-mirror.
 config :server, start_consult_mirror: false
