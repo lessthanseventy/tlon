@@ -35,7 +35,7 @@ and every layer the console doc's re-laid §9 asked for
 - **the MCP channel** (`Server.MCP.*`) — the sovereign door for any agent, `anubis_mcp` over Bandit,
   loopback-only. Identity rides the CONNECTION: a signed token resolves to (thread, agent, session) on
   every request, so no tool takes a thread parameter and every authenticated call bumps warmth. Tools
-  (`mcp/tool.ex`, `mcp/tool_containers.ex`) are thin context callers; reads render through
+  (`mcp/tools/*.ex`, each `use Server.MCP.Tool`) are thin context callers; reads render through
   `Server.MCP.Brief` (certainty stated > checked > opinion, caps with counts); the dossier is also a
   resource. `record_check` lands a measured exit code, never a self-report.
 - **worklines** (`Server.Workline`) — a thread as a stage machine with git as the artifact chain
