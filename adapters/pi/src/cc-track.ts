@@ -9,6 +9,7 @@
 // payload — all silent no-ops. A PostToolUse hook must never block or break a tool call.
 
 import { isCommitCommand } from "./activity.ts";
+import { readHookInput, runHook } from "./hook.ts";
 import { FunesClient, identityFromEnv } from "./mcp.ts";
 
 const HOOK_TIMEOUT_MS = 10_000;
@@ -49,31 +50,14 @@ async function track(): Promise<void> {
   const identity = identityFromEnv();
   if (!identity) return;
 
-  let hookInput: PostToolUseInput;
-  try {
-    hookInput = JSON.parse(await Bun.stdin.text()) as PostToolUseInput;
-  } catch {
-    return;
-  }
-  if (!shouldTrack(hookInput)) return;
+  const hookInput = await readHookInput<PostToolUseInput>();
+  if (!hookInput || !shouldTrack(hookInput)) return;
 
   const client = new FunesClient(identity);
   await client.connect();
   await client.trackThread();
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main(): Promise<void> {
-  try {
-    await Promise.race([track(), delay(HOOK_TIMEOUT_MS)]);
-  } catch {
-    // silent no-op
-  }
-}
-
 if (import.meta.main) {
-  main().finally(() => process.exit(0));
+  runHook(track, HOOK_TIMEOUT_MS).finally(() => process.exit(0));
 }

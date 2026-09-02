@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { activityFrom, heartbeatDue, nextHeartbeatState, phraseHeartbeat, type HeartbeatState } from "./activity.ts";
+import { readHookInput, runHook } from "./hook.ts";
 import { completeText } from "./llm.ts";
 import { FunesClient, identityFromEnv } from "./mcp.ts";
 
@@ -66,14 +67,8 @@ async function heartbeat(): Promise<void> {
   const identity = identityFromEnv();
   if (!identity) return;
 
-  const stdinText = await Bun.stdin.text();
-  let hookInput: PostToolUseInput;
-  try {
-    hookInput = JSON.parse(stdinText) as PostToolUseInput;
-  } catch {
-    return;
-  }
-  if (!hookInput.session_id || !hookInput.tool_name) return;
+  const hookInput = await readHookInput<PostToolUseInput>();
+  if (!hookInput?.session_id || !hookInput.tool_name) return;
 
   const path = stateFilePath(hookInput.session_id);
   const now = Date.now();
@@ -102,18 +97,6 @@ async function heartbeat(): Promise<void> {
   await writeState(path, { turnStartedAt, lastPostAt: now }).catch(() => {});
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main(): Promise<void> {
-  try {
-    await Promise.race([heartbeat(), delay(HOOK_TIMEOUT_MS)]);
-  } catch {
-    // silent no-op — a PostToolUse hook must never surface a failure or block the tool call
-  }
-}
-
 if (import.meta.main) {
-  main().finally(() => process.exit(0));
+  runHook(heartbeat, HOOK_TIMEOUT_MS).finally(() => process.exit(0));
 }

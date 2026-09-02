@@ -25,6 +25,7 @@ import {
   serializeDelta,
   type Entry,
 } from "./capture.ts";
+import { readHookInput, runHook } from "./hook.ts";
 import { completeText } from "./llm.ts";
 import { FunesClient, identityFromEnv } from "./mcp.ts";
 
@@ -96,13 +97,8 @@ async function capture(): Promise<void> {
   const identity = identityFromEnv();
   if (!identity) return;
 
-  const stdinText = await Bun.stdin.text();
-  let hookInput: StopHookInput;
-  try {
-    hookInput = JSON.parse(stdinText) as StopHookInput;
-  } catch {
-    return;
-  }
+  const hookInput = await readHookInput<StopHookInput>();
+  if (!hookInput) return;
   const sessionId = hookInput.session_id;
   const transcriptPath = hookInput.transcript_path;
   if (!sessionId || !transcriptPath) return;
@@ -160,21 +156,9 @@ async function capture(): Promise<void> {
   await writeWatermark(path, nextWatermark).catch(() => {});
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main(): Promise<void> {
-  try {
-    // If the ceiling wins the race mid-bank, capture()'s writeWatermark never runs, so the same
-    // delta re-extracts and re-banks next turn — a rare duplicate-fact tradeoff we accept over the
-    // alternative (letting a hung completion wedge the session). funes dedups on promotion anyway.
-    await Promise.race([capture(), delay(HOOK_TIMEOUT_MS)]);
-  } catch {
-    // silent no-op — a Stop hook must never surface a failure or break the session
-  }
-}
-
+// If the ceiling wins the race mid-bank, capture()'s writeWatermark never runs, so the same
+// delta re-extracts and re-banks next turn — a rare duplicate-fact tradeoff we accept over the
+// alternative (letting a hung completion wedge the session). funes dedups on promotion anyway.
 if (import.meta.main) {
-  main().finally(() => process.exit(0));
+  runHook(capture, HOOK_TIMEOUT_MS).finally(() => process.exit(0));
 }
