@@ -22,7 +22,7 @@ The launcher `eval`s the export block from `server:spawn` and `exec`s `claude`.
 Both reach the **live** server service node (loopback MCP on :4040); the service must be up
 (`systemd --user` unit).
 
-- **Door 1 — the MCP tools.** Claude Code's `mcpServers.server` entry is `type: http`
+- **Door 1 — the MCP tools.** Claude Code's `mcpServers.tlon` entry is `type: http`
   pointing at the channel, with a **`headersHelper`** (`scripts/tlon-cli.sh token`) instead
   of a static bearer. Claude Code runs the helper on every connect and reconnect; it mints a
   **fresh** server token for `(TLON_THREAD, TLON_AUTHOR)` each time, so auth survives a server

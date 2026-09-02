@@ -21,7 +21,7 @@ a thin bridge from that harness's lifecycle to server' one sovereign channel:
   coworker (the Tlön profile drops `adapters/pi` to sever server) still gets it. It reads pi's own
   model/context/session surface, not server.
 - **`claude-code/`** — the Claude Code adapter (built). Same two doors, adapted to Claude Code's own
-  mechanisms: the MCP tools via `mcpServers.server` `type:http` with a **`headersHelper`**
+  mechanisms: the MCP tools via `mcpServers.tlon` `type:http` with a **`headersHelper`**
   (`scripts/tlon-cli.sh token`) that mints a FRESH token per connect — so unlike pi's static bearer,
   auth survives a server restart — and the brief via a `SessionStart` hook (`brief-hook.sh`). Both are
   scoped to the session by `server:claude`'s `--mcp-config`/`--settings` launch flags, so a plain
