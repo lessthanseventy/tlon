@@ -6,8 +6,8 @@
 
 [tools]
 # Combined build (precompiled for this OTP) — pairing a bare "1.19" with a separate
-# erlang picks an incompatible OTP and fails to boot. OTP 28: aleph needs it
-# (ghostty_ex/libghostty-vt) and boots funes, so the whole repo runs on one OTP.
+# erlang picks an incompatible OTP and fails to boot. OTP 28: console needs it
+# (ghostty_ex/libghostty-vt) and boots server, so the whole repo runs on one OTP.
 erlang = "28"
 elixir = "1.19.5-otp-28"
 # adapters' pi adapter is TypeScript; bun runs it natively (no build step) and is the test
@@ -32,7 +32,7 @@ run = "mix test"
 description = "server: the precommit gate — format + warnings-as-errors + credo + tests + deterministic steering evals"
 dir = "modules/server"
 # Two invocations: precommit runs in :test (start_repo off), the eval needs the dev boot +
-# its own ephemeral db — the deterministic set is offline/fast, judged mode is funes:eval.
+# its own ephemeral db — the deterministic set is offline/fast, judged mode is server:eval.
 run = "mix precommit && mix server.eval --deterministic"
 
 [tasks."server:eval"]
@@ -50,7 +50,7 @@ description = "server: the 2am report against the scratch db"
 dir = "modules/server"
 run = "TLON_DB=.dev/tlon.db mix server.doctor"
 
-# Boot funes with its sovereign channel on, loopback-only, against the scratch db — so
+# Boot server with its sovereign channel on, loopback-only, against the scratch db — so
 # a hand-spawned pi pane has something to register with. `Funes.MCP.Spawn.env("title",
 # "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
 [tasks."server:serve"]
@@ -58,8 +58,8 @@ description = "server: boot the sovereign MCP channel (loopback) against the scr
 dir = "modules/server"
 run = "TLON_DB=.dev/tlon.db TLON_START_MCP=1 iex -S mix"
 
-# `funes:serve` above is the DEV path (hand-run iex on the scratch db); these run the
-# same funes as a self-contained release, headless, on the REAL db, kept up by the
+# `server:serve` above is the DEV path (hand-run iex on the scratch db); these run the
+# same server as a self-contained release, headless, on the REAL db, kept up by the
 # home-manager systemd --user service. A release bundles ERTS, so the unit runs one
 # absolute path with nothing on PATH, and `remote`/`rpc` reach the LIVE node.
 [tasks."server:release"]
@@ -68,7 +68,7 @@ dir = "modules/server"
 run = "MIX_ENV=prod mix release --overwrite"
 
 [tasks."server:restart"]
-description = "server: rebuild the release + restart the always-up service (redeploy a funes change)"
+description = "server: rebuild the release + restart the always-up service (redeploy a server change)"
 depends = ["server:release"]
 run = "systemctl --user restart tlon && systemctl --user --no-pager status tlon | head -12"
 
@@ -82,9 +82,9 @@ description = "server: follow the always-up service's logs"
 run = "journalctl --user -u tlon -n 80 -f"
 
 # Operate/script access to the LIVE channel from the shell — the human+Claude-Code peer
-# to the agents' MCP tools. Goes through `bin/funes rpc` INTO the running service node:
+# to the agents' MCP tools. Goes through `bin/server rpc` INTO the running service node:
 # a token minted anywhere else dies with its node, and roster/presence is in-memory
-# there. Thin and deliberate — operate access, NOT a second cockpit (aleph is the rich surface).
+# there. Thin and deliberate — operate access, NOT a second cockpit (the console is the rich surface).
 [tasks."server:spawn"]
 description = "server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
 run = "scripts/tlon-cli.sh spawn"
@@ -114,12 +114,12 @@ run = "scripts/tlon-cli.sh dossier"
 description = "server: post to a thread as the operator from the shell — parity with the agents' post_message"
 run = "scripts/tlon-cli.sh post"
 
-# Launch Claude Code as a funes citizen. No arg → a fresh thread; a numeric thread-id →
-# JOIN it (resume across a /clear). Scopes the funes MCP server (fresh token per
+# Launch Claude Code as a citizen of a server thread. No arg → a fresh thread; a numeric thread-id →
+# JOIN it (resume across a /clear). Scopes the `tlon` MCP server (fresh token per
 # connect) + the SessionStart brief hook to THIS session via --mcp-config/--settings —
 # no ~/.claude mutation, so a plain `claude` stays untouched.
 [tasks."server:claude"]
-description = "launch Claude Code as a funes citizen — `server:claude` (fresh thread) or `server:claude -- <id>` (join)"
+description = "launch Claude Code as a citizen of a server thread — `server:claude` (fresh thread) or `server:claude -- <id>` (join)"
 run = "modules/adapters/claude-code/launch.sh"
 
 [tasks.cap]
@@ -246,7 +246,7 @@ dir = "modules/console"
 run = "mix precommit"
 
 [tasks."console:setup"]
-description = "console: fetch deps, create + migrate the shared funes db (via Server.Repo)"
+description = "console: fetch deps, create + migrate the shared server db (via Server.Repo)"
 dir = "modules/console"
 run = "mix deps.get && TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet && TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo"
 
@@ -263,7 +263,7 @@ description = "console: B1.4 clean-slate — delete every MACHINE-scope thread +
 dir = "modules/console"
 run = "TLON_DB=../server/.dev/tlon.db mix console.clear_machine_threads"
 
-# The cockpit reads the SAME db funes' own tasks use, so posting from another shell
+# The cockpit reads the SAME db server's own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
 [tasks."console:run"]
 description = "console: launch the live cockpit in THIS terminal (run in ghostty)"
@@ -330,7 +330,7 @@ echo "console:reset:db — dev db wiped, recreated, and migrated (fresh + empty)
 """
 
 [tasks.check]
-description = "Everything green: the funes + aleph + adapters (pi + consult + fmt + lsp + reload + footer) precommit gates (format + warnings + credo + types + tests)"
+description = "Everything green: the server + console + adapters (pi + consult + fmt + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests)"
 depends = ["server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:fmt:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check"]
 
 [tasks."flake:check"]
@@ -350,7 +350,7 @@ run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox
 # pi the agent — model launchers, pinned to a model + thinking level. NOT the adapters/pi
 # renderer (that's adapters:pi:test/check/watch above) — distinct namespace. All draw on
 # the flat $20 ollama.com plan (kimi-k3 excluded: bills as EXTRA usage on top). Bare
-# `pi` already starts on ollama-cloud/glm-5.2; these are one-command alternates —
+# `pi` already starts on ollama-cloud/deepseek-v4-flash (the flake default); these are one-command alternates —
 # in-session Ctrl+P still cycles the same ring. Args pass through:
 # `mise run pi:deep -- -p "one-shot prompt"`. Full when-to-reach-for-each: AGENTS.md.
 
@@ -378,7 +378,7 @@ run = "modules/adapters/pi/launch.sh --provider ollama --model qwen3-coder"
 # install (~/.pi/agent/npm) and its VERSIONS — that dir is not nix-managed. So `home:switch` never
 # bumps an extension; this task is the update path, keeping it in the one control loop instead of an
 # ad-hoc `pi update` off the startup nag. Also updates the Tlön coworker profile (its own npm/ under
-# ~/.pi/profiles/tlon) when aleph has materialised it. See [[pi-automode-guardrail]].
+# ~/.pi/profiles/tlon) when the console has materialised it.
 [tasks."pi:update"]
 description = "pi agent: update installed npm extensions to the latest the flake's package list allows (pi owns the mutable npm/ install, not nix — this is the update path, NOT home:switch). Also updates the Tlön coworker profile if present."
 run = """
