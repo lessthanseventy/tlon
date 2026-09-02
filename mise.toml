@@ -50,6 +50,19 @@ description = "server: the 2am report against the scratch db"
 dir = "modules/server"
 run = "TLON_DB=.dev/tlon.db mix server.doctor"
 
+# The seed is what makes a wiped/fresh world know itself: priv/seed/repo_knowledge.exs (curated)
+# + priv/seed/promoted_facts.exs (learnings graduated via promote-fact). Server.Seed.ensure/0 runs
+# on every boot too; these are the by-hand paths against the dev scratch db (server:doctor's db).
+[tasks."server:seed"]
+description = "server: apply the seed (base facts + baseline projects) to the scratch db — idempotent, keyed on intent"
+dir = "modules/server"
+run = "TLON_DB=.dev/tlon.db mix server.seed"
+
+[tasks."server:promote-fact"]
+description = "server: graduate a banked fact into the wipe-proof seed — usage: mise run server:promote-fact -- <fact-id> [--intent seed:slug] (scratch db)"
+dir = "modules/server"
+run = "TLON_DB=.dev/tlon.db mix server.promote_fact"
+
 # Boot server with its sovereign channel on, loopback-only, against the scratch db — so
 # a hand-spawned pi pane has something to register with. `Funes.MCP.Spawn.env("title",
 # "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
