@@ -13,6 +13,7 @@ defmodule Console.Cockpit do
 
   alias Console.Board
   alias Console.Cockpit.Author
+  alias Console.Cockpit.Boards
   alias Console.Cockpit.Recovery
   alias Console.Delivery
   alias Console.Keymap
@@ -341,7 +342,7 @@ defmodule Console.Cockpit do
       when not is_nil(b), do: {:noreply, render(%{state | board: nil})}
 
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{board: b, input: nil} = state) when not is_nil(b),
-    do: handle_board_key(key, state)
+    do: overlay_reply(Boards.handle_board_key(key, state), state)
 
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, state) do
     # Any keypress clears a prior flash (a spawn/create result), so it shows until you act again.
@@ -784,106 +785,6 @@ defmodule Console.Cockpit do
   defp overlay_reply(:ignore, state), do: {:noreply, state}
   defp overlay_reply(next, _state), do: {:noreply, render(next)}
 
-  # The full-screen boards (Tickets / Notes, Slice 3.5): the spine tools zoom to a board that
-  # covers the frame; Esc closes it. Painted after the layout, before the menu.
-  defp board_placements(%{board: nil}), do: []
-
-  defp board_placements(%{board: kind, w: w, h: h} = state) do
-    rect = %{x: 0, y: 0, w: w, h: max(h - 1, 2)}
-    inset = %{x: 2, y: 1, w: max(w - 4, 1), h: max(h - 3, 1)}
-    {panel, data, title} = board_content(kind, state)
-
-    [
-      {Panel.Border, %{focused: true, digit: nil, title: "#{title}  ·  esc to close", tabs: nil, hint: nil}, rect},
-      {panel, data, inset}
-    ]
-  end
-
-  defp board_content(:tickets, state) do
-    id = board_workspace_id(state)
-    tickets = Safe.value(fn -> id && id |> Server.Tickets.in_workspace() |> Enum.map(&ticket_row/1) end, nil) || []
-
-    {Panel.TicketBoard, %{tickets: tickets, cursor: state.board_cursor},
-     "TICKETS · h/l·j/k move · p advance · n new · ⏎ promote"}
-  end
-
-  defp board_content(:notes, state) do
-    id = board_workspace_id(state)
-    notes = Safe.value(fn -> id && Server.Notes.for_scope("workspace", id) end, nil) || []
-    {Panel.NoteBoard, %{notes: notes}, "NOTES"}
-  end
-
-  @ticket_statuses ~w(backlog todo doing done)
-
-  # The Tickets kanban keys (Slice D3): h/l/j/k move the {col,row} cursor, `p` advances the selected
-  # ticket's status, `n` files a new one (opens the :new_ticket input), Enter promotes it to a thread.
-  # The Notes board (and any other) just closes on Esc — handled by the fall-through.
-  defp handle_board_key(%{key: :char, char: "n"}, %{board: :tickets} = state),
-    do: {:noreply, render(%{state | input: %{kind: :new_ticket, buffer: "", cursor: 0}})}
-
-  defp handle_board_key(%{key: :char, char: "n"}, %{board: :notes} = state),
-    do: {:noreply, render(%{state | input: %{kind: :new_note, buffer: "", cursor: 0}})}
-
-  defp handle_board_key(%{key: :char, char: c}, %{board: :tickets} = state) when c in ~w(h l j k),
-    do: {:noreply, render(%{state | board_cursor: move_grid(state.board_cursor, c, ticket_columns(state))})}
-
-  defp handle_board_key(%{key: :char, char: "p"}, %{board: :tickets} = state),
-    do: {:noreply, render(advance_selected_ticket(state))}
-
-  defp handle_board_key(%{key: :enter}, %{board: :tickets} = state),
-    do: {:noreply, render(promote_selected_ticket(state))}
-
-  defp handle_board_key(_key, state), do: {:noreply, state}
-
-  # The active workspace's tickets grouped into kanban columns (structs — the render maps to rows off
-  # the same in_workspace order, so the cursor indexes the same grid).
-  defp ticket_columns(state) do
-    id = board_workspace_id(state)
-    tickets = Safe.value(fn -> id && Server.Tickets.in_workspace(id) end, nil) || []
-    Console.Panel.TicketBoard.by_column(tickets)
-  end
-
-  defp selected_ticket(%{board_cursor: {col, row}}, cols), do: cols |> Enum.at(col, []) |> Enum.at(row)
-
-  defp move_grid({col, row}, "h", cols), do: clamp_grid(max(col - 1, 0), row, cols)
-  defp move_grid({col, row}, "l", cols), do: clamp_grid(min(col + 1, length(cols) - 1), row, cols)
-  defp move_grid({col, row}, "j", cols), do: clamp_grid(col, row + 1, cols)
-  defp move_grid({col, row}, "k", cols), do: clamp_grid(col, max(row - 1, 0), cols)
-
-  defp clamp_grid(col, row, cols) do
-    len = length(Enum.at(cols, col, []))
-    {col, row |> max(0) |> min(max(len - 1, 0))}
-  end
-
-  defp advance_selected_ticket(state) do
-    case selected_ticket(state, ticket_columns(state)) do
-      %{status: status} = ticket ->
-        next = Enum.at(@ticket_statuses, min(Enum.find_index(@ticket_statuses, &(&1 == status)) + 1, 3), status)
-        _ = Safe.value(fn -> Server.Tickets.update(ticket, %{status: next}) end, nil)
-        %{state | flash: "ticket ##{ticket.id} → #{next}"}
-
-      _ ->
-        state
-    end
-  end
-
-  defp promote_selected_ticket(state) do
-    case selected_ticket(state, ticket_columns(state)) do
-      %{id: id, title: title} = ticket ->
-        with {:ok, thread} <-
-               Channel.open_thread(%{title: title, workspace_id: Space.active_workspace_id(state), scope: "machine"}),
-             {:ok, _} <- Safe.value(fn -> Server.Tickets.promote(ticket, thread.id) end, nil) do
-          _ = Staffing.spawn_onto(thread.id, Reads.center_dims(state))
-          %{state | board: nil, focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
-        else
-          _ -> %{state | flash: "couldn't promote the ticket"}
-        end
-
-      _ ->
-        state
-    end
-  end
-
   # The STACK-zoom embedded lazygit overlay (Slice 4): a full-frame `Panel.Terminal` over the
   # lazygit PTY, painted like a board. `render_state_of` yields the live cell grid or `:no_session`
   # (the tick reconciles a vanished terminal back to `lazygit: nil`).
@@ -939,12 +840,6 @@ defmodule Console.Cockpit do
   end
 
   defp reconcile_lazygit(state), do: state
-
-  defp ticket_row(t), do: %{id: t.id, title: t.title, status: t.status, priority: t.priority, assignee: t.assignee}
-
-  # The workspace whose tickets/notes the board shows: the active one, or the default (Orbis falls
-  # back to the first workspace via active_workspace_id/1).
-  defp board_workspace_id(state), do: Space.active_workspace_id(state)
 
   # State transitions live in the pure `Console.Keymap`; the Cockpit only runs the side effect it
   # asks for — repaint, quit, or forward a key to the focused terminal.
@@ -1323,7 +1218,7 @@ defmodule Console.Cockpit do
     placements =
       View.compose(reads, state.w, state.h) ++
         lazygit_placements(state) ++
-        board_placements(state) ++ Author.menu_placements(state.menu, state.w, state.h)
+        Boards.board_placements(state) ++ Author.menu_placements(state.menu, state.w, state.h)
 
     placements
     |> Board.compose(state.w, state.h)
