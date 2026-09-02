@@ -10,9 +10,10 @@ Ireneo Funes fell off a horse and woke up unable to forget anything. He could re
 his life in perfect detail; each reconstruction took a full day. He found it hard to sleep, because he
 could not stop perceiving. He was not, in any useful sense, able to think.
 
-This module is named after him as a warning to itself. It is the machine-side memory and coordination
-layer — the thing between [Herdr](https://herdr.dev) (the terminal), [pi](https://github.com/earendil-works/pi-coding-agent)
-(the agent), and the work — and its entire specification is an argument against being Funes. It remembers
+This module is named after him as a warning to itself. It is Tlön's spine — the memory and coordination
+layer between the cockpit (`../console`), the agents that reach it over MCP (`../adapters`: Claude Code,
+[pi](https://github.com/earendil-works/pi-coding-agent)), and the work — and its entire specification is
+an argument against being Funes. It remembers
 carefully rather than completely: the always-loaded set is 32 rows, not 297; a surface that is *complete*
 is not one that *answers a question*; rank and cut everything. A system that could not forget would be
 correct and useless, which was the exact verdict on the thing this replaces.
@@ -37,26 +38,32 @@ the spec records why.
 | `docs/spec.md` | The specification. Every rule names the failure that paid for it. |
 | `docs/spec-review.md` | A fresh session's adversarial review of the spec, which found seven defects. Kept because the arguments are the reasoning. |
 | `docs/v1-review.md` | An adversarial review of **version one** — what made a version two worth specifying. |
-| `docs/issues.md` | The bootstrap issue list, until the `issue` table exists to replace it. |
+| `docs/issues.md` | The bootstrap issue list from before the `issue` table existed. Historical. |
+| `lib/server.ex` | The public surface: the `exports:` list is everything a consumer may call. |
+| `lib/server/` | The contexts — `Channel` (threads, messages), `Staff`, `Dossier`, `Board`, the container tier (`Workspaces`, `Projects`, `Tickets`, `Notes`), `Switchboard` + `Bus` + `Arbiter` (delivery wakes the addressee), `MCP.*` (the agents' channel), `Workline`, `Recall`, `Seed` + `Bootstrap`, `Doctor`. |
+| `priv/repo/migrations/`, `priv/seed/` | The schema, and the wipe-proof base knowledge applied on every boot. |
+| `rel/` | The headless release the `systemd --user` service runs. |
 
 ## The one architectural decision
 
 Three owners, no overlap:
 
-- **SQLite** holds the machine's truth — facts, events, issues, signals, the channel.
-- **Markdown under `~/notes`** holds what a human reads, generated as a draft rather than authored.
-- **Herdr** holds the terminal's truth — workspaces, tabs, panes, focus, agent lifecycle.
+- **SQLite** holds the machine's truth — facts, events, issues, the channel, the containers.
+- **The cockpit, over tmux** holds the terminal's truth — windows, panes, focus, which agent is live.
+- **Agents** hold nothing durable: they reach the spine only through the MCP channel, and what they
+  learn is banked here or lost.
 
 If the split is wrong, most of this is wrong.
 
 ## Deliberately not built
 
-A meta-orchestrator session. Mode-switch keybindings. A second log or a dual write. Mirrored Herdr
+A meta-orchestrator session. Mode-switch keybindings. A second log or a dual write. Mirrored terminal
 state. Metrics that never changed a decision. Hand-authored machine documentation. A taxonomy on what
 may be posted to the channel. See `docs/spec.md` §10 for why each is out, with the measurement.
 
-## Not yet a program
+## Working on it
 
-There is no code here yet, on purpose. `docs/spec.md` §9 says what day one is, and the first step is the
-database plus a repair tool — because nothing should ship that cannot be fixed at 2am. Funes remembered
-everything and could fix nothing; this does the opposite on purpose.
+`AGENTS.md` here is the law and the dev loop: the `mise` tasks, the gate (`mise run server:check`),
+the always-up service and how to redeploy it. The first thing built was the database plus a repair
+tool (`mix server.doctor`) — nothing ships that cannot be fixed at 2am. Funes remembered everything
+and could fix nothing; this does the opposite on purpose.
