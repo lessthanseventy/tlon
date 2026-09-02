@@ -81,17 +81,9 @@ defmodule Console.Crew do
     Tmux.argv(ws, ["kill-window", "-t", Tmux.target(ws, crew_window(role_key, thread_id))])
   end
 
-  @doc """
-  The window's boot script: set TERM, source the server `exports` block (so `${TLON_MCP_URL}` etc.
-  reach pi's env), then `exec` the bare pi launcher. Mirrors `Cockpit.spawn_agent_window/3` — a
-  role's window rides the ALREADY-created `r<tid>` window on the shared tlon server, so it must
-  exec the bare `Cockpit.pi_command/1`, never `profile_launcher/1` (a `tmux new-session` wrapper
-  meant for a coworker's own dedicated server — execing it here would nest a second server).
-  """
+  @doc "The window's boot script — `Console.Staffing.boot_script/2`, the one builder every harness window rides."
   @spec boot_script(String.t(), String.t()) :: String.t()
-  def boot_script(exports, launcher) do
-    "export TERM=xterm-256color\n" <> exports <> "\nexec " <> launcher
-  end
+  defdelegate boot_script(exports, launcher), to: Console.Staffing
 
   # The reviewer runs on the SAME server the cockpit uses — the injected minter defaults to
   # Server.MCP.Spawn.join, which mints in-node against the live Repo/tokens (this backend runs inside

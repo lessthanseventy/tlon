@@ -14,6 +14,7 @@ defmodule Console.Reads do
   alias Console.Terminal
   alias Console.Tlon.Focus
   alias Console.Tmux
+  alias Console.View
   alias Server.Channel
   alias Server.Staff
 
@@ -21,17 +22,6 @@ defmodule Console.Reads do
 
   @activity_cap 50
   @seen_cap 100
-
-  # The Workspace's cast is roster-driven (`ensure_workspace_roster/1`, C2.3): head = the center (embedded
-  # terminal, `new-session`), tail = tmux windows (`new-window`), harness-dispatched. Server handle =
-  # `"<name>-machine"`, tmux window = `"<name>"` (`roster_entry/1`). No more hardcoded
-  # tertius/hronir/claude-machine identity — the seed roster (surveyor "tertius", builder "hronir")
-  # reproduces the old Borges cast (**general** console · **hronir** builder · **tertius**
-  # orchestrator) as DATA, not constants.
-
-  # tmux is a first-class stack citizen here: each Workspace's center is a real `tmux attach`, so the
-  # workspace gets mouse, windows, and copy-mode, and it SURVIVES console restarts. Naming + the
-  # command seam live in `Console.Tmux`.
 
   # Tlön probe cadence: the Stack/Health reads fork subprocesses (git ×~6, nix-env, df, tmux)
   # and open a TCP probe — far too heavy to run per render (a streaming terminal coalesces to
@@ -559,6 +549,14 @@ defmodule Console.Reads do
 
   defp cmd_from_detail(%{"cmd" => cmd}), do: cmd
   defp cmd_from_detail(_), do: "check"
+
+  # Size the PTY to EXACTLY the center Terminal's content rect (Console.View.center_rect), so pi never
+  # draws past the frame (a wider PTY spills; a shorter one leaves a dead band). The tertius band
+  # already shrinks that rect (its own section, not the terminal's), so no separate reserve is needed.
+  def center_dims(%{active_key: active_key, w: w, h: h}) do
+    rect = View.center_rect(active_key, w, h)
+    {max(rect.w, 1), max(rect.h, 1)}
+  end
 
   @doc "The frame's read-model for `Console.View.compose/3` — one call per paint, off the preamble's state."
   def frame(state, stack_blocks, focused) do

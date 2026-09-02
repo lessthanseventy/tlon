@@ -12,9 +12,9 @@ defmodule Console.CockpitRosterTest do
   """
   use ExUnit.Case, async: false
 
-  alias Console.Cockpit
   alias Console.Sessions
   alias Console.Space
+  alias Console.Staffing
   alias Server.Channel
 
   # Workspace fixture: the hardcoded fallback Workspace is gone (reshape slice A); suites
@@ -66,7 +66,7 @@ defmodule Console.CockpitRosterTest do
   end
 
   test "the seed cast's builder tail entry spawns a claude window: handle hronir-machine, window hronir" do
-    assert %{} = Cockpit.ensure_workspace_roster(%{active_key: 0})
+    assert %{} = Staffing.ensure_workspace_roster(%{active_key: 0})
 
     assert_receive {:join, _tid, "hronir-machine", opts}
     assert opts[:mandate] == "machine"
@@ -77,7 +77,7 @@ defmodule Console.CockpitRosterTest do
   end
 
   test "the center (already up) is not re-spawned — no new-session call" do
-    Cockpit.ensure_workspace_roster(%{active_key: 0})
+    Staffing.ensure_workspace_roster(%{active_key: 0})
     refute_received {:tmux, ["-L", "console-workspace-0", "new-session" | _]}
   end
 
@@ -98,7 +98,7 @@ defmodule Console.CockpitRosterTest do
       }
     ]
 
-    Cockpit.ensure_workspace_roster(%{active_key: 99}, Space.all(workspaces))
+    Staffing.ensure_workspace_roster(%{active_key: 99}, Space.all(workspaces))
 
     assert_receive {:join, _tid, "borges-machine", opts}
     assert opts[:mandate] == "machine"

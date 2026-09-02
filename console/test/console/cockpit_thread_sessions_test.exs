@@ -8,8 +8,8 @@ defmodule Console.CockpitThreadSessionsTest do
   """
   use ExUnit.Case, async: false
 
-  alias Console.Cockpit
   alias Console.Space
+  alias Console.Staffing
   alias Server.Channel
   alias Server.Staff
 
@@ -92,7 +92,7 @@ defmodule Console.CockpitThreadSessionsTest do
 
     thread = staffed_thread("borges-machine")
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
     assert_receive {:join, tid, "borges-machine", opts}
     assert tid == thread.id
@@ -115,7 +115,7 @@ defmodule Console.CockpitThreadSessionsTest do
   test "a claude-harness worker lead still gets its claude leaf window (regression)" do
     thread = staffed_thread("hronir-machine")
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
     assert_receive {:join, _tid, "hronir-machine", _opts}
 
@@ -143,7 +143,7 @@ defmodule Console.CockpitThreadSessionsTest do
         else: {"", 0}
     end)
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
     refute_receive {:tmux, ["-L", _, "new-window" | _]}, 50
   end
@@ -151,7 +151,7 @@ defmodule Console.CockpitThreadSessionsTest do
   test "a meta (surveyor) lead never gets a leaf window — the vantage is not a worker" do
     staffed_thread("rufus-machine")
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
     refute_receive {:tmux, ["-L", _, "new-window" | _]}, 50
   end
@@ -169,7 +169,7 @@ defmodule Console.CockpitThreadSessionsTest do
         else: {"", 0}
     end)
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
     refute_receive {:tmux, ["-L", _, "send-keys" | _]}, 50
   end
 
@@ -185,7 +185,7 @@ defmodule Console.CockpitThreadSessionsTest do
         else: {"", 0}
     end)
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
     assert_receive {:tmux, ["-L", "console-workspace-99", "send-keys", "-t", "w99:1", "Enter"]}
     assert_receive {:tmux, ["-L", "console-workspace-99", "set-option", "-w", "-t", "w99:1", "@funes_opening", "done"]}
@@ -214,7 +214,7 @@ defmodule Console.CockpitThreadSessionsTest do
         else: {"", 0}
     end)
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
     refute_receive {:tmux, ["-L", _, "new-window" | _]}, 50
     assert [%{body: body}] = Channel.thread_messages(Channel.thread(thread.id))
@@ -235,7 +235,7 @@ defmodule Console.CockpitThreadSessionsTest do
         else: {"", 0}
     end)
 
-    Cockpit.ensure_thread_sessions(state(), Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
     assert_receive {:tmux, ["-L", "console-workspace-99", "kill-window", "-t", "w99:2"]}
     assert_receive {:tmux, ["-L", "console-workspace-99", "kill-window", "-t", "w99:3"]}
@@ -246,7 +246,7 @@ defmodule Console.CockpitThreadSessionsTest do
   test "the standing thread is excluded — the center already runs it" do
     thread = staffed_thread("borges-machine")
 
-    Cockpit.ensure_thread_sessions(%{state() | standing_thread_id: thread.id}, Space.all(@workspaces))
+    Staffing.ensure_thread_sessions(%{state() | standing_thread_id: thread.id}, Space.all(@workspaces))
 
     refute_receive {:tmux, ["-L", _, "new-window" | _]}, 50
   end
