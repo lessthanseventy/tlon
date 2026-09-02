@@ -20,6 +20,7 @@ defmodule Console.Cockpit do
   alias Console.Panel
   alias Console.Profile
   alias Console.Profiles
+  alias Console.Safe
   alias Console.Sessions
   alias Console.Space
   alias Console.Terminal
@@ -179,13 +180,7 @@ defmodule Console.Cockpit do
 
   # stderr can be as dead as stdio after a host-side teardown — a status line is never worth a
   # second crash in the recovery path.
-  defp note(msg) do
-    IO.puts(:stderr, msg)
-  rescue
-    _ -> :ok
-  catch
-    _, _ -> :ok
-  end
+  defp note(msg), do: Safe.value(fn -> IO.puts(:stderr, msg) end, :ok)
 
   defp act_on(:quit), do: :ok
 
@@ -747,7 +742,7 @@ defmodule Console.Cockpit do
   # The one-shot backfill behind `activity: []`'s replacement — the durable feed at cockpit start,
   # guarded so a not-yet-up server (init can race the server boot) just yields an empty ring rather
   # than crashing the cockpit. Scoped to the active workspace at render by `scope_activity/2`.
-  defp seed_activity, do: Board.safe_read(:activity_seed, [], fn -> Server.Board.recent_activity(@activity_cap) end)
+  defp seed_activity, do: Safe.read(:activity_seed, [], fn -> Server.Board.recent_activity(@activity_cap) end)
 
   # First-sight test for a tagged event: true unless its key is already in the recently-seen set.
   # The key is `{tag, row.id}` (a durable row always has an id, so the two topic deliveries share
@@ -876,13 +871,7 @@ defmodule Console.Cockpit do
 
   # The server handle of the coworker staffed on this message's thread (its lead), or nil.
   # Read in-process (console boots server); never crash the hub if the lookup fails.
-  defp thread_lead(%{thread_id: tid}) when not is_nil(tid) do
-    Server.thread_lead(tid)
-  rescue
-    _ -> nil
-  catch
-    :exit, _ -> nil
-  end
+  defp thread_lead(%{thread_id: tid}) when not is_nil(tid), do: Safe.value(fn -> Server.thread_lead(tid) end, nil)
 
   defp thread_lead(_), do: nil
 
@@ -903,16 +892,16 @@ defmodule Console.Cockpit do
   defp maybe_hot_reload(%{reload_seen: :unset} = state), do: %{state | reload_seen: trigger_mtime()}
 
   defp maybe_hot_reload(state) do
-    case trigger_mtime() do
-      m when m != nil and m != state.reload_seen ->
-        n = reload_console_modules()
-        %{state | reload_seen: m, flash: "↻ reloaded #{n} modules"}
+    flash_on_error(state, "reload", fn ->
+      case trigger_mtime() do
+        m when m != nil and m != state.reload_seen ->
+          n = reload_console_modules()
+          %{state | reload_seen: m, flash: "↻ reloaded #{n} modules"}
 
-      m ->
-        %{state | reload_seen: m}
-    end
-  rescue
-    e -> %{state | flash: "reload failed: #{Exception.message(e)}"}
+        m ->
+          %{state | reload_seen: m}
+      end
+    end)
   end
 
   defp trigger_mtime do
@@ -963,14 +952,15 @@ defmodule Console.Cockpit do
   # `t<id>`) so `v` on a thread shows THAT thread's agent, not whatever the standing coworker was on
   # (Andrew: "v takes me to pi"). A root/window-less thread leaves the client where it is.
   defp select_focused_window(%{active_key: key, stack_focus: id}) when Space.workspace?(key) and is_integer(id) do
-    case Tmux.leaf_tab(Tmux.list_windows(key), id) do
-      %{index: idx} -> Tmux.select_window(key, idx)
-      _ -> :ok
-    end
-  rescue
-    _ -> :ok
-  catch
-    :exit, _ -> :ok
+    Safe.value(
+      fn ->
+        case Tmux.leaf_tab(Tmux.list_windows(key), id) do
+          %{index: idx} -> Tmux.select_window(key, idx)
+          _ -> :ok
+        end
+      end,
+      :ok
+    )
   end
 
   defp select_focused_window(_state), do: :ok
@@ -1262,7 +1252,7 @@ defmodule Console.Cockpit do
 
   defp board_content(:tickets, state) do
     id = board_workspace_id(state)
-    tickets = safe_board(fn -> id && id |> Server.Tickets.in_workspace() |> Enum.map(&ticket_row/1) end) || []
+    tickets = Safe.value(fn -> id && id |> Server.Tickets.in_workspace() |> Enum.map(&ticket_row/1) end, nil) || []
 
     {Panel.TicketBoard, %{tickets: tickets, cursor: state.board_cursor},
      "TICKETS · h/l·j/k move · p advance · n new · ⏎ promote"}
@@ -1270,7 +1260,7 @@ defmodule Console.Cockpit do
 
   defp board_content(:notes, state) do
     id = board_workspace_id(state)
-    notes = safe_board(fn -> id && Server.Notes.for_scope("workspace", id) end) || []
+    notes = Safe.value(fn -> id && Server.Notes.for_scope("workspace", id) end, nil) || []
     {Panel.NoteBoard, %{notes: notes}, "NOTES"}
   end
 
@@ -1300,7 +1290,7 @@ defmodule Console.Cockpit do
   # the same in_workspace order, so the cursor indexes the same grid).
   defp ticket_columns(state) do
     id = board_workspace_id(state)
-    tickets = safe_board(fn -> id && Server.Tickets.in_workspace(id) end) || []
+    tickets = Safe.value(fn -> id && Server.Tickets.in_workspace(id) end, nil) || []
     Console.Panel.TicketBoard.by_column(tickets)
   end
 
@@ -1320,7 +1310,7 @@ defmodule Console.Cockpit do
     case selected_ticket(state, ticket_columns(state)) do
       %{status: status} = ticket ->
         next = Enum.at(@ticket_statuses, min(Enum.find_index(@ticket_statuses, &(&1 == status)) + 1, 3), status)
-        _ = safe_board(fn -> Server.Tickets.update(ticket, %{status: next}) end)
+        _ = Safe.value(fn -> Server.Tickets.update(ticket, %{status: next}) end, nil)
         %{state | flash: "ticket ##{ticket.id} → #{next}"}
 
       _ ->
@@ -1333,7 +1323,7 @@ defmodule Console.Cockpit do
       %{id: id, title: title} = ticket ->
         with {:ok, thread} <-
                Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state), scope: "machine"}),
-             {:ok, _} <- safe_board(fn -> Server.Tickets.promote(ticket, thread.id) end) do
+             {:ok, _} <- Safe.value(fn -> Server.Tickets.promote(ticket, thread.id) end, nil) do
           _ = spawn_onto(thread.id, state)
           %{state | board: nil, focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
         else
@@ -1371,37 +1361,26 @@ defmodule Console.Cockpit do
     do: {:noreply, render(%{state | flash: "no focused thread — nothing to open lazygit on"})}
 
   defp open_lazygit(%{stack_focus: id} = state) do
-    if Console.Lazygit.available?() do
-      case Server.worktree_for_thread(id) do
-        {:ok, cwd} -> spawn_lazygit(state, id, cwd)
-        {:error, reason} -> {:noreply, render(%{state | flash: "no repo for this thread (#{inspect(reason)})"})}
+    flashing(state, "lazygit", fn ->
+      if Console.Lazygit.available?() do
+        case Server.worktree_for_thread(id) do
+          {:ok, cwd} -> spawn_lazygit(state, id, cwd)
+          {:error, reason} -> {:noreply, render(%{state | flash: "no repo for this thread (#{inspect(reason)})"})}
+        end
+      else
+        {:noreply, render(%{state | flash: "lazygit is not installed"})}
       end
-    else
-      {:noreply, render(%{state | flash: "lazygit is not installed"})}
-    end
-  rescue
-    e -> {:noreply, render(%{state | flash: "lazygit failed: #{Exception.message(e)}"})}
-  catch
-    :exit, reason -> {:noreply, render(%{state | flash: "lazygit failed: #{inspect(reason)}"})}
+    end)
   end
 
   defp spawn_lazygit(state, id, cwd) do
     {cmd, args} = Console.Lazygit.command(cwd)
     {cols, rows} = {max(state.w - 2, 1), max(state.h - 3, 1)}
 
-    case safe_lazygit_spawn(id, cmd, args, cols, rows) do
+    case safe_session_ensure({:lazygit, id}, cmd: cmd, args: args, cols: cols, rows: rows) do
       {:ok, _pid} -> {:noreply, render(%{state | lazygit: %{thread_id: id, path: cwd}})}
       _ -> {:noreply, render(%{state | flash: "couldn't start lazygit"})}
     end
-  end
-
-  # Sessions is supervised but the cockpit is not — a call to a downed registry would crash the frame.
-  defp safe_lazygit_spawn(id, cmd, args, cols, rows) do
-    Sessions.ensure({:lazygit, id}, cmd: cmd, args: args, cols: cols, rows: rows)
-  rescue
-    _ -> :error
-  catch
-    :exit, _ -> :error
   end
 
   # Collapse a lazygit overlay whose terminal has exited (quit from inside) — else it paints
@@ -1417,14 +1396,6 @@ defmodule Console.Cockpit do
   # The workspace whose tickets/notes the board shows: the active one, or the default (Orbis falls
   # back to the first workspace via active_workspace_id/1).
   defp board_workspace_id(state), do: active_workspace_id(state)
-
-  defp safe_board(fun) do
-    fun.()
-  rescue
-    _ -> nil
-  catch
-    :exit, _ -> nil
-  end
 
   # State transitions live in the pure `Console.Keymap`; the Cockpit only runs the side effect it
   # asks for — repaint, quit, or forward a key to the focused terminal.
@@ -1467,7 +1438,7 @@ defmodule Console.Cockpit do
 
   # First-class ticket create (Slice C): file into the active workspace's backlog, flash a receipt.
   defp apply_effect({:file_ticket, title}, state) do
-    case safe_board(fn -> Server.Tickets.file(%{workspace_id: active_workspace_id(state), title: title}) end) do
+    case Safe.value(fn -> Server.Tickets.file(%{workspace_id: active_workspace_id(state), title: title}) end, nil) do
       {:ok, t} -> {:noreply, render(%{state | flash: "filed ticket ##{t.id} in backlog"})}
       _ -> {:noreply, render(%{state | flash: "couldn't file the ticket"})}
     end
@@ -1478,7 +1449,7 @@ defmodule Console.Cockpit do
     operator = Application.get_env(:server, :operator, "andrew")
     attrs = %{body: body, scope: "workspace", scope_id: active_workspace_id(state), author: operator}
 
-    case safe_board(fn -> Server.Notes.write(attrs) end) do
+    case Safe.value(fn -> Server.Notes.write(attrs) end, nil) do
       {:ok, n} -> {:noreply, render(%{state | flash: "noted ##{n.id}"})}
       _ -> {:noreply, render(%{state | flash: "couldn't save the note"})}
     end
@@ -1489,48 +1460,25 @@ defmodule Console.Cockpit do
   # (post/note/ticket/query) fire straight; CONSEQUENTIAL ones (open work, approve) ARM the y/n gate
   # (`pending_confirm`) — showing what they WOULD do and firing nothing until the operator says `y`
   # (Console.Keymap → `:confirm_orchestrate`). Slice 3.5.
-  defp apply_effect({:orchestrate, text}, state) do
-    action = Console.Orchestrator.Router.route(text)
-    ctx = %{workspace_id: active_workspace_id(state), operator: Application.get_env(:server, :operator, "andrew")}
-
-    case {Console.Orchestrator.classify(action), Console.Orchestrator.dispatch(action, ctx)} do
-      {:consequential, {:confirm, summary}} ->
-        arm = %{action: action, ctx: ctx, summary: summary}
-        {:noreply, render(%{state | pending_confirm: arm, flash: "⏸ #{summary}? — y to confirm · n to cancel"})}
-
-      {_class, result} ->
-        flash_receipt(result, state)
-    end
-  rescue
-    e -> {:noreply, render(%{state | flash: "orchestrate failed: #{Exception.message(e)}"})}
-  catch
-    :exit, reason -> {:noreply, render(%{state | flash: "orchestrate failed: #{inspect(reason)}"})}
-  end
+  defp apply_effect({:orchestrate, text}, state), do: flashing(state, "orchestrate", fn -> orchestrate(text, state) end)
 
   # `y` on an armed consequential verb (Console.Keymap): fire it now, log the receipt. The arm rode the
   # effect (the keymap already cleared `pending_confirm`), so this is a clean one-shot.
-  defp apply_effect({:confirm_orchestrate, %{action: action, ctx: ctx}}, state) do
-    flash_receipt(Console.Orchestrator.confirm(action, ctx), state)
-  rescue
-    e -> {:noreply, render(%{state | flash: "confirm failed: #{Exception.message(e)}"})}
-  catch
-    :exit, reason -> {:noreply, render(%{state | flash: "confirm failed: #{inspect(reason)}"})}
-  end
+  defp apply_effect({:confirm_orchestrate, %{action: action, ctx: ctx}}, state),
+    do: flashing(state, "confirm", fn -> flash_receipt(Console.Orchestrator.confirm(action, ctx), state) end)
 
   # The `c` verb landed: post the composer's body to the focused thread AS THE OPERATOR (config
   # `:server, :operator`), so a posted message is the human's voice, not an agent's. The Bus
   # announce repaints the chorus live, so the message lands visibly; a failure flashes in the footer.
   defp apply_effect({:post_message, thread_id, body}, state) do
-    operator = Application.get_env(:server, :operator, "andrew")
+    flashing(state, "post", fn ->
+      operator = Application.get_env(:server, :operator, "andrew")
 
-    case Channel.post(%{thread_id: thread_id, author: operator, body: body}) do
-      {:ok, _message} -> {:noreply, render(%{state | flash: "posted"})}
-      {:error, _changeset} -> {:noreply, render(%{state | flash: "couldn't post — is the thread open?"})}
-    end
-  rescue
-    e -> {:noreply, render(%{state | flash: "post failed: #{Exception.message(e)}"})}
-  catch
-    :exit, reason -> {:noreply, render(%{state | flash: "post failed: #{inspect(reason)}"})}
+      case Channel.post(%{thread_id: thread_id, author: operator, body: body}) do
+        {:ok, _message} -> {:noreply, render(%{state | flash: "posted"})}
+        {:error, _changeset} -> {:noreply, render(%{state | flash: "couldn't post — is the thread open?"})}
+      end
+    end)
   end
 
   # The composer's /status command (reshape slice D): the full HEALTH readout — the panel demoted
@@ -1588,11 +1536,8 @@ defmodule Console.Cockpit do
   # The `m` verb landed: advance the coworker's driver model one step round the ring and persist
   # it (Console.Config). Honest about scope: the RUNNING coworker keeps its model — the override
   # applies wherever Profiles.fetch flows on the next spawn (console:reset, or kill the pi window).
-  defp apply_effect({:cycle_coworker_model, profile_name}, state) do
-    {:noreply, render(%{state | flash: cycle_model!(profile_name)})}
-  rescue
-    e -> {:noreply, render(%{state | flash: "settings write failed: #{Exception.message(e)}"})}
-  end
+  defp apply_effect({:cycle_coworker_model, profile_name}, state),
+    do: flashing(state, "settings write", fn -> {:noreply, render(%{state | flash: cycle_model!(profile_name)})} end)
 
   # Enter in Tlön nav: on the Sidebar, switch to the space under the cursor; on STACK, zoom the
   # focused thread's worktree into an embedded lazygit (Slice 4); on any other pane, open its
@@ -1659,27 +1604,27 @@ defmodule Console.Cockpit do
   # act via server, then null the memory cache so the pane reflects the shrunk queue on next render.
   # A no-op (flash only) if the focus isn't on a selectable habit.
   defp apply_effect({:habit_action, action}, state) do
-    case selected_habit(state) do
-      nil ->
-        {:noreply, render(%{state | flash: "no habit selected — Tab to HABITS, j/k to pick"})}
+    flashing(state, "habit action", fn ->
+      case selected_habit(state) do
+        nil ->
+          {:noreply, render(%{state | flash: "no habit selected — Tab to HABITS, j/k to pick"})}
 
-      habit ->
-        {verb, result} =
-          case action do
-            :approve -> {"approved", Server.approve_habit(habit.id)}
-            :reject -> {"rejected", Server.reject_habit(habit.id)}
-          end
+        habit ->
+          {verb, result} =
+            case action do
+              :approve -> {"approved", Server.approve_habit(habit.id)}
+              :reject -> {"rejected", Server.reject_habit(habit.id)}
+            end
 
-        flash =
-          case result do
-            {:ok, _} -> "habit #{verb}"
-            _ -> "couldn't #{action} habit"
-          end
+          flash =
+            case result do
+              {:ok, _} -> "habit #{verb}"
+              _ -> "couldn't #{action} habit"
+            end
 
-        {:noreply, render(%{state | memory: nil, flash: flash})}
-    end
-  rescue
-    e -> {:noreply, render(%{state | flash: "habit action failed: #{Exception.message(e)}"})}
+          {:noreply, render(%{state | memory: nil, flash: flash})}
+      end
+    end)
   end
 
   # `d` in Tlön nav landed: arm the two-key confirm on the focused pane's selection — a MEMORY
@@ -1710,29 +1655,29 @@ defmodule Console.Cockpit do
   defp apply_effect(:stack_delete_arm, state), do: {:noreply, render(%{state | flash: "no thread focused"})}
 
   defp apply_effect({:tlon_delete, {:thread, id, _label}}, state) do
-    flash =
-      case Server.delete_thread(id) do
-        {:ok, thread} -> "deleted “#{thread.title}”"
-        {:error, :root_machine_thread} -> "can't delete the root thread"
-        {:error, reason} -> "delete refused: #{inspect(reason)}"
-      end
+    flashing(state, "delete", fn ->
+      flash =
+        case Server.delete_thread(id) do
+          {:ok, thread} -> "deleted “#{thread.title}”"
+          {:error, :root_machine_thread} -> "can't delete the root thread"
+          {:error, reason} -> "delete refused: #{inspect(reason)}"
+        end
 
-    {:noreply, render(%{state | tlon_delete: nil, flash: flash})}
-  rescue
-    e -> {:noreply, render(%{state | flash: "delete failed: #{Exception.message(e)}"})}
+      {:noreply, render(%{state | tlon_delete: nil, flash: flash})}
+    end)
   end
 
   # The second `d` (still armed) landed: execute against the ARM-TIME target.
   defp apply_effect({:tlon_delete, {:fact, fact, _label}}, state) do
-    flash =
-      case Dossier.forget_fact(fact) do
-        {:ok, _} -> "forgot fact ##{fact.id}"
-        _ -> "couldn't forget fact ##{fact.id}"
-      end
+    flashing(state, "forget", fn ->
+      flash =
+        case Dossier.forget_fact(fact) do
+          {:ok, _} -> "forgot fact ##{fact.id}"
+          _ -> "couldn't forget fact ##{fact.id}"
+        end
 
-    {:noreply, render(%{state | memory: nil, flash: flash})}
-  rescue
-    e -> {:noreply, render(%{state | flash: "forget failed: #{Exception.message(e)}"})}
+      {:noreply, render(%{state | memory: nil, flash: flash})}
+    end)
   end
 
   # `y` landed: resolve the focused pane's semantic text, OSC-52 it to the host clipboard
@@ -1748,6 +1693,20 @@ defmodule Console.Cockpit do
     end
   end
 
+  defp orchestrate(text, state) do
+    action = Console.Orchestrator.Router.route(text)
+    ctx = %{workspace_id: active_workspace_id(state), operator: Application.get_env(:server, :operator, "andrew")}
+
+    case {Console.Orchestrator.classify(action), Console.Orchestrator.dispatch(action, ctx)} do
+      {:consequential, {:confirm, summary}} ->
+        arm = %{action: action, ctx: ctx, summary: summary}
+        {:noreply, render(%{state | pending_confirm: arm, flash: "⏸ #{summary}? — y to confirm · n to cancel"})}
+
+      {_class, result} ->
+        flash_receipt(result, state)
+    end
+  end
+
   # A dispatched/confirmed orchestrator result → a flash + a receipt-log entry (newest-first, capped).
   defp flash_receipt(result, state) do
     flash =
@@ -1758,6 +1717,25 @@ defmodule Console.Cockpit do
 
     {:noreply, render(%{state | flash: flash, receipts: Enum.take([flash | state.receipts], @receipt_cap)})}
   end
+
+  # Run a verb that answers `{:noreply, state}`; a raise/exit becomes a footer flash and a repaint —
+  # a server hiccup never kills the cockpit.
+  defp flashing(state, label, fun) do
+    case Safe.call(fun) do
+      {:ok, reply} -> reply
+      {:error, reason} -> {:noreply, render(flash_failed(state, label, reason))}
+    end
+  end
+
+  # The state-returning twin: `fun` yields the next state, or the failure flashes on the old one.
+  defp flash_on_error(state, label, fun) do
+    case Safe.call(fun) do
+      {:ok, next} -> next
+      {:error, reason} -> flash_failed(state, label, reason)
+    end
+  end
+
+  defp flash_failed(state, label, reason), do: %{state | flash: "#{label} failed: #{Safe.describe(reason)}"}
 
   @doc false
   # The pure flip behind Orbis' `a`/Esc (D2.1) — public + exposed so it's
@@ -1773,21 +1751,19 @@ defmodule Console.Cockpit do
   # scratch. Wrapped like `create_thread`/`post_message` — a server hiccup flashes, never crashes
   # the cockpit.
   def register_workspace!(state, template, name) do
-    case Workspaces.register(WorkspaceTemplates.new_workspace_attrs(template, name)) do
-      {:ok, workspace} ->
-        %{state | input: nil, flash: "created #{workspace.name}"}
+    flash_on_error(state, "create", fn ->
+      case Workspaces.register(WorkspaceTemplates.new_workspace_attrs(template, name)) do
+        {:ok, workspace} ->
+          %{state | input: nil, flash: "created #{workspace.name}"}
 
-      {:error, changeset} ->
-        %{
-          state
-          | input: %{kind: :new_workspace, buffer: name, cursor: String.length(name), template: template},
-            flash: "couldn't create “#{name}” — #{changeset_error(changeset)}"
-        }
-    end
-  rescue
-    e -> %{state | flash: "create failed: #{Exception.message(e)}"}
-  catch
-    :exit, reason -> %{state | flash: "create failed: #{inspect(reason)}"}
+        {:error, changeset} ->
+          %{
+            state
+            | input: %{kind: :new_workspace, buffer: name, cursor: String.length(name), template: template},
+              flash: "couldn't create “#{name}” — #{changeset_error(changeset)}"
+          }
+      end
+    end)
   end
 
   @doc false
@@ -1795,29 +1771,27 @@ defmodule Console.Cockpit do
   # active workspace (falls back to `:orbis`) and clamps `author_cursor` to the shrunk list. A missing
   # workspace (already gone) or a server hiccup flashes, never crashes.
   def remove_workspace!(state, id) do
-    case Workspaces.get(id) do
-      nil ->
-        %{state | flash: "workspace ##{id} already gone"}
+    flash_on_error(state, "delete", fn ->
+      case Workspaces.get(id) do
+        nil ->
+          %{state | flash: "workspace ##{id} already gone"}
 
-      workspace ->
-        case Workspaces.remove(workspace) do
-          {:ok, _} ->
-            state
-            |> Map.put(:active_key, if(state.active_key == id, do: :orbis, else: state.active_key))
-            |> Map.put(:author_cursor, clamp_author_cursor(state.author_cursor))
-            |> Map.put(:flash, "deleted #{workspace.name}")
+        workspace ->
+          case Workspaces.remove(workspace) do
+            {:ok, _} ->
+              state
+              |> Map.put(:active_key, if(state.active_key == id, do: :orbis, else: state.active_key))
+              |> Map.put(:author_cursor, clamp_author_cursor(state.author_cursor))
+              |> Map.put(:flash, "deleted #{workspace.name}")
 
-          {:error, :last_workspace} ->
-            %{state | flash: "couldn't delete #{workspace.name} — the last workspace; threads must have a home"}
+            {:error, :last_workspace} ->
+              %{state | flash: "couldn't delete #{workspace.name} — the last workspace; threads must have a home"}
 
-          {:error, changeset} ->
-            %{state | flash: "couldn't delete #{workspace.name} — #{changeset_error(changeset)}"}
-        end
-    end
-  rescue
-    e -> %{state | flash: "delete failed: #{Exception.message(e)}"}
-  catch
-    :exit, reason -> %{state | flash: "delete failed: #{inspect(reason)}"}
+            {:error, changeset} ->
+              %{state | flash: "couldn't delete #{workspace.name} — #{changeset_error(changeset)}"}
+          end
+      end
+    end)
   end
 
   # Re-clamp the author cursor against the POST-delete count (one fewer row) — same edge-clamp
@@ -1834,20 +1808,18 @@ defmodule Console.Cockpit do
   # length (a removal can strand `sub` past the shrunk list, same reasoning as
   # `clamp_author_cursor/1` above).
   def edit_workspace!(state, id, attrs) do
-    case Workspaces.get(id) do
-      nil ->
-        %{state | flash: "workspace ##{id} already gone"}
+    flash_on_error(state, "edit", fn ->
+      case Workspaces.get(id) do
+        nil ->
+          %{state | flash: "workspace ##{id} already gone"}
 
-      workspace ->
-        case Workspaces.edit(workspace, attrs) do
-          {:ok, updated} -> reclamp_author_edit_sub(%{state | flash: "updated #{updated.name}"})
-          {:error, changeset} -> %{state | flash: "couldn't update #{workspace.name} — #{changeset_error(changeset)}"}
-        end
-    end
-  rescue
-    e -> %{state | flash: "edit failed: #{Exception.message(e)}"}
-  catch
-    :exit, reason -> %{state | flash: "edit failed: #{inspect(reason)}"}
+        workspace ->
+          case Workspaces.edit(workspace, attrs) do
+            {:ok, updated} -> reclamp_author_edit_sub(%{state | flash: "updated #{updated.name}"})
+            {:error, changeset} -> %{state | flash: "couldn't update #{workspace.name} — #{changeset_error(changeset)}"}
+          end
+      end
+    end)
   end
 
   # Only reachable when `author_edit` is actually mid-edit on a paths/roster sub-list (field 2/3) —
@@ -1876,14 +1848,12 @@ defmodule Console.Cockpit do
   # than trust the effect's bare name, so the entry's archetype (the model ring's default-fallback
   # source) is available.
   def apply_coworker_knob!(state, name, knob) do
-    case roster_entry_for(state, name) do
-      nil -> %{state | flash: "#{name}: roster entry not found"}
-      entry -> %{state | flash: apply_knob(entry, knob)}
-    end
-  rescue
-    e -> %{state | flash: "settings write failed: #{Exception.message(e)}"}
-  catch
-    :exit, reason -> %{state | flash: "settings write failed: #{inspect(reason)}"}
+    flash_on_error(state, "settings write", fn ->
+      case roster_entry_for(state, name) do
+        nil -> %{state | flash: "#{name}: roster entry not found"}
+        entry -> %{state | flash: apply_knob(entry, knob)}
+      end
+    end)
   end
 
   defp roster_entry_for(%{author_edit: %{id: id}}, name) do
@@ -1958,20 +1928,17 @@ defmodule Console.Cockpit do
     agent = Application.get_env(:console, :spawn_agent, "pi")
     {cols, rows} = center_dims(state)
 
-    case Spawn.join(thread_id, agent) do
-      {:ok, %{exports: exports}} ->
-        case safe_spawn_harness(thread_id, exports, cols: cols, rows: rows) do
-          {:ok, _pid} -> "session live — type to use it, Ctrl+Space for console"
-          {:error, reason} -> "spawn failed: #{inspect(reason)}"
-        end
+    spawn =
+      Safe.call(fn ->
+        with {:ok, %{exports: exports}} <- Spawn.join(thread_id, agent),
+             do: safe_spawn_harness(thread_id, exports, cols: cols, rows: rows)
+      end)
 
-      {:error, reason} ->
-        "spawn failed: #{inspect(reason)}"
+    case spawn do
+      {:ok, {:ok, _pid}} -> "session live — type to use it, Ctrl+Space for console"
+      {:ok, {:error, reason}} -> "spawn failed: #{inspect(reason)}"
+      {:error, reason} -> "spawn crashed: #{Safe.describe(reason)}"
     end
-  rescue
-    e -> "spawn crashed: #{Exception.message(e)}"
-  catch
-    :exit, reason -> "spawn crashed: #{inspect(reason)}"
   end
 
   # console key event → Ghostty.KeyEvent (public + tested: a missing mapping silently drops a key).
@@ -2026,48 +1993,36 @@ defmodule Console.Cockpit do
   end
 
   # The frame is guarded at two grains. Each server/tmux READ below degrades individually through
-  # Board.safe_read — one bad read renders as that panel's quiet state while the rest of the frame
+  # `Safe.read` — one bad read renders as that panel's quiet state while the rest of the frame
   # stays live — and this wrapper is the backstop for anything left (View.compose, the paint): log
-  # and keep the previous frame's state instead of dying. The read seam is exactly where the
-  # 2026-08-28 DateTime crash rode past safe_rows (crew_read raised upstream of any panel render)
-  # and took the whole cockpit down.
-  defp render(state) do
-    do_render(state)
-  rescue
-    e ->
-      Console.CrashLog.append("render error", Exception.format(:error, e, __STACKTRACE__))
-      state
-  catch
-    kind, reason ->
-      Console.CrashLog.append("render error", Exception.format(kind, reason, __STACKTRACE__))
-      state
-  end
+  # and keep the previous frame's state instead of dying.
+  defp render(state), do: Safe.logged("render error", state, fn -> do_render(state) end)
 
   defp do_render(state) do
     # Fill the probe cache (Tlön only) and find-or-spawn the Workspace's roster — both stateful,
     # both rate-limited, both OUT of the per-frame hot path. Each step degrades to the state it
     # was handed, so a tmux/server hiccup skips that step this frame instead of losing the frame.
-    state = Board.safe_read(:probes, state, fn -> ensure_probes(state) end)
-    state = Board.safe_read(:workspace_roster, state, fn -> ensure_workspace_roster(state) end)
-    state = Board.safe_read(:thread_sessions, state, fn -> ensure_thread_sessions(state) end)
-    state = Board.safe_read(:session_pane, state, fn -> ensure_session(state) end)
+    state = Safe.read(:probes, state, fn -> ensure_probes(state) end)
+    state = Safe.read(:workspace_roster, state, fn -> ensure_workspace_roster(state) end)
+    state = Safe.read(:thread_sessions, state, fn -> ensure_thread_sessions(state) end)
+    state = Safe.read(:session_pane, state, fn -> ensure_session(state) end)
 
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
     # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
     # order by this, not the project-scope `chorus`. This is the ONE ordering the cockpit navigates.
-    stack_blocks = Board.safe_read(:stack, [], fn -> Channel.machine_threads(active_workspace_id(state)) end)
+    stack_blocks = Safe.read(:stack, [], fn -> Channel.machine_threads(active_workspace_id(state)) end)
     threads = Enum.map(stack_blocks, & &1.thread)
     focused = focused_thread(threads, state.focused_id)
     state = %{state | threads: threads, focused_id: focused && focused.id}
     state = %{state | stack_focus: stack_focus(stack_blocks, state.focused_id)}
-    state = Board.safe_read(:resubscribe, state, fn -> resubscribe(state, focused) end)
-    machine = Board.safe_read(:machine, :no_session, fn -> machine_read(state) end)
-    roster = Board.safe_read(:roster, [], fn -> Staff.roster() end)
+    state = Safe.read(:resubscribe, state, fn -> resubscribe(state, focused) end)
+    machine = Safe.read(:machine, :no_session, fn -> machine_read(state) end)
+    roster = Safe.read(:roster, [], fn -> Staff.roster() end)
 
     # Computed once — the layout read and the detail read below share it (the detail is resolved
     # against the same frame's layout).
     tlon_layout =
-      Board.safe_read(:tlon_layout, nil, fn -> if(Space.workspace?(state.active_key), do: tlon_layout(state)) end)
+      Safe.read(:tlon_layout, nil, fn -> if(Space.workspace?(state.active_key), do: tlon_layout(state)) end)
 
     reads = %{
       active_key: state.active_key,
@@ -2083,11 +2038,11 @@ defmodule Console.Cockpit do
       },
       # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
       # thread list + crew working flags.
-      sidebar: Board.safe_read(:sidebar, [], fn -> Server.Board.sidebar() end),
+      sidebar: Safe.read(:sidebar, [], fn -> Server.Board.sidebar() end),
       # Kitty host? → the Sidebar blanks its fallback glyph so the icon PNG covers cleanly (no bleed).
       graphics?: Console.Graphics.kitty?(),
       workspaces:
-        Board.safe_read(:workspaces, [], fn -> if(state.active_key == :orbis, do: orbis_workspaces(state), else: []) end),
+        Safe.read(:workspaces, [], fn -> if(state.active_key == :orbis, do: orbis_workspaces(state), else: []) end),
       # The survey's focus + per-row cursor, so Overview can wash the cursor row :selected — only
       # meaningful in Orbis (a meaningless-but-harmless read elsewhere).
       orbis_focus: state.orbis_focus,
@@ -2100,7 +2055,7 @@ defmodule Console.Cockpit do
       # outside Orbis' author face.
       author_edit: state.author_edit,
       machine: machine,
-      crew: Board.safe_read(:crew, nil, fn -> crew_read(state, machine) end),
+      crew: Safe.read(:crew, nil, fn -> crew_read(state, machine) end),
       stack: state.stack || @empty_stack,
       health: state.health,
       activity: scope_activity(state.activity, state.ws_thread_ids),
@@ -2108,7 +2063,7 @@ defmodule Console.Cockpit do
       memory: if(Space.workspace?(state.active_key), do: state.memory),
       # The center's face (reshape slice D).
       center_view: state.center_view,
-      triage: Board.safe_read(:triage, nil, fn -> if(state.active_key == :orbis, do: triage_read(threads)) end),
+      triage: Safe.read(:triage, nil, fn -> if(state.active_key == :orbis, do: triage_read(threads)) end),
       scrolls: state.scrolls,
       input: state.input,
       flash: state.flash,
@@ -2126,9 +2081,9 @@ defmodule Console.Cockpit do
       # (else nil → no right column), and its embedded lead PTY render-state. View.compose splits a
       # right column off the center when the target is set.
       session_pane: session_pane_target(state),
-      session: Board.safe_read(:session, :no_session, fn -> session_read(state) end),
+      session: Safe.read(:session, :no_session, fn -> session_read(state) end),
       detail:
-        Board.safe_read(:detail, nil, fn ->
+        Safe.read(:detail, nil, fn ->
           if(Space.workspace?(state.active_key) and state.focus.detail?, do: tlon_detail(state, tlon_layout))
         end)
     }
@@ -2169,12 +2124,15 @@ defmodule Console.Cockpit do
   # The reconcile-on-connect read: whatever the store already holds when the cockpit boots
   # (declares made before this subscribe). Degrades to empty if the store isn't up.
   defp thinking_snapshot do
-    Map.new(Server.Presence.Thinking.thinking_all(), fn {tid, entries} ->
-      # Same normalization as the live event path — cockpit state holds unix seconds.
-      {tid, Map.new(entries, &{&1.agent, Console.Presence.started_s(&1.started_at)})}
-    end)
-  catch
-    :exit, _ -> %{}
+    Safe.value(
+      fn ->
+        Map.new(Server.Presence.Thinking.thinking_all(), fn {tid, entries} ->
+          # Same normalization as the live event path — cockpit state holds unix seconds.
+          {tid, Map.new(entries, &{&1.agent, Console.Presence.started_s(&1.started_at)})}
+        end)
+      end,
+      %{}
+    )
   end
 
   # The CREW sidebar's read: the active Workspace's roster joined with the tmux snapshot, the leaf
@@ -2242,7 +2200,7 @@ defmodule Console.Cockpit do
          %{index: index} <- Tmux.leaf_tab(Tmux.list_windows(active_workspace_id(state)), id) do
       {cmd, args} = Console.SessionPane.command(active_workspace_id(state), index)
       {cols, rows} = session_pane_dims(state)
-      _ = safe_session_spawn(id, cmd, args, cols, rows)
+      _ = safe_session_ensure({:session, id}, cmd: cmd, args: args, cols: cols, rows: rows)
     end
 
     state
@@ -2253,14 +2211,6 @@ defmodule Console.Cockpit do
       pid when is_pid(pid) -> pid
       _ -> nil
     end
-  end
-
-  defp safe_session_spawn(id, cmd, args, cols, rows) do
-    Sessions.ensure({:session, id}, cmd: cmd, args: args, cols: cols, rows: rows)
-  rescue
-    _ -> :error
-  catch
-    :exit, _ -> :error
   end
 
   # The session pane occupies the right column (~⅓ of the center's width) — spawn dims only; the live
@@ -2274,17 +2224,12 @@ defmodule Console.Cockpit do
   # against a torn-down registry raises `(EXIT) no process`, which would otherwise propagate up
   # through render and kill the cockpit, wedging all input (Enter would go nowhere). Degrade to
   # nil so a dead registry just reads as "no session"; the supervisor restarts it on its own.
-  defp safe_terminal(thread_id) do
-    Sessions.terminal(thread_id)
-  catch
-    :exit, _ -> nil
-  end
+  defp safe_terminal(key), do: Safe.value(fn -> Sessions.terminal(key) end, nil)
 
-  defp safe_spawn_harness(thread_id, exports, opts) do
-    Sessions.spawn_harness(thread_id, exports, opts)
-  catch
-    :exit, _ -> {:error, :sessions_down}
-  end
+  defp safe_spawn_harness(key, exports, opts),
+    do: Safe.value(fn -> Sessions.spawn_harness(key, exports, opts) end, {:error, :sessions_down})
+
+  defp safe_session_ensure(key, opts), do: Safe.value(fn -> Sessions.ensure(key, opts) end, :error)
 
   # The terminal that owns the keys, by space: a Workspace → the embedded tmux client (still the single
   # `:machine` registry entry in Slice 1 — C2 keys the terminal per workspace id). nil elsewhere (Orbis
@@ -2522,13 +2467,8 @@ defmodule Console.Cockpit do
   # The NOW pane's ATTENTION read (Slice 4D): worklines parked awaiting the operator — the gates the
   # `approve N` verb clears. Best-effort; a server hiccup leaves the feed rather than crashing a frame.
   # The active workspace's thread ids as a MapSet (or nil on a server hiccup → unfiltered feed).
-  defp workspace_thread_id_set(workspace_id) do
-    MapSet.new(Server.workspace_thread_ids(workspace_id))
-  rescue
-    _ -> nil
-  catch
-    :exit, _ -> nil
-  end
+  defp workspace_thread_id_set(workspace_id),
+    do: Safe.value(fn -> MapSet.new(Server.workspace_thread_ids(workspace_id)) end, nil)
 
   # Filter the global activity buffer to the active workspace: keep an event when its row has no
   # thread (a global event) or its thread is in the workspace. nil id-set = unfiltered (server down).
@@ -2544,14 +2484,15 @@ defmodule Console.Cockpit do
   end
 
   defp gates_read(workspace_id) do
-    workspace_id
-    |> Server.workline_statuses()
-    |> Enum.filter(&(&1.awaiting not in [nil, ""]))
-    |> Enum.map(&Map.take(&1, [:id, :title, :stage, :awaiting]))
-  rescue
-    _ -> []
-  catch
-    :exit, _ -> []
+    Safe.value(
+      fn ->
+        workspace_id
+        |> Server.workline_statuses()
+        |> Enum.filter(&(&1.awaiting not in [nil, ""]))
+        |> Enum.map(&Map.take(&1, [:id, :title, :stage, :awaiting]))
+      end,
+      []
+    )
   end
 
   # The STACK read: branch, dirty status, ahead/behind, status summary, enriched commits.
@@ -2829,19 +2770,18 @@ defmodule Console.Cockpit do
       state
     else
       _ =
-        try do
-          Channel.post(%{
-            thread_id: id,
-            author: "console",
-            body:
-              "⏸ parked — the leaf cap (#{Console.Config.max_leaves()}) is reached. This thread keeps its lead " <>
-                "and starts automatically when a seat frees (close an idle leaf, or raise \"max_leaves\")."
-          })
-        rescue
-          _ -> :ok
-        catch
-          :exit, _ -> :ok
-        end
+        Safe.value(
+          fn ->
+            Channel.post(%{
+              thread_id: id,
+              author: "console",
+              body:
+                "⏸ parked — the leaf cap (#{Console.Config.max_leaves()}) is reached. This thread keeps its lead " <>
+                  "and starts automatically when a seat frees (close an idle leaf, or raise \"max_leaves\")."
+            })
+          end,
+          :ok
+        )
 
       %{state | parked_noted: MapSet.put(state.parked_noted, id)}
     end
@@ -3038,11 +2978,7 @@ defmodule Console.Cockpit do
   end
 
   # Wrap the raising materialiser so a filesystem hiccup degrades to "no coworker", never a cockpit crash.
-  defp materialise_profile(profile) do
-    {:ok, Profiles.materialise!(profile)}
-  rescue
-    e -> {:error, e}
-  end
+  defp materialise_profile(profile), do: Safe.call(fn -> Profiles.materialise!(profile) end)
 
   # The bare `pi` invocation for a profile — moved to the pi harness driver (Slice D); kept as a
   # delegator for `profile_launcher` (the center's new-session) and `Console.Crew`.
@@ -3137,11 +3073,7 @@ defmodule Console.Cockpit do
     # Best-effort: clear any placed images before the alt screen goes away. Straight to /dev/tty
     # like the Kitty pop below (the io server may already be winding down on a crash), and a
     # failure here must never skip the tty restore (a wedged shell is worse than a stray image).
-    try do
-      if Console.Graphics.kitty?(), do: File.write("/dev/tty", Console.Graphics.delete_all())
-    catch
-      _, _ -> :ok
-    end
+    Safe.value(fn -> if Console.Graphics.kitty?(), do: File.write("/dev/tty", Console.Graphics.delete_all()) end, :ok)
 
     # Pop Kitty while still ON the alt screen (the spec gives main and alternate screens
     # INDEPENDENT keyboard-flag stacks, so the pop must land on the screen the push landed on).
@@ -3150,18 +3082,12 @@ defmodule Console.Cockpit do
 
     # Each step in its own try: a wedged Driver stop (it can exceed its 500ms) must never skip
     # tb_shutdown — that skip leaves the shell in alt-screen + mouse-reporting, needing `reset`.
-    try do
-      if is_pid(state.driver) and Process.alive?(state.driver),
-        do: GenServer.stop(state.driver, :normal, 500)
-    catch
-      _, _ -> :ok
-    end
+    Safe.value(
+      fn -> if is_pid(state.driver) and Process.alive?(state.driver), do: GenServer.stop(state.driver, :normal, 500) end,
+      :ok
+    )
 
-    try do
-      :termbox2_nif.tb_shutdown()
-    catch
-      _, _ -> :ok
-    end
+    Safe.value(fn -> :termbox2_nif.tb_shutdown() end, :ok)
 
     # Back on the MAIN screen now — final belt-and-braces restore (see restore_host_tty/0).
     restore_host_tty()
@@ -3186,17 +3112,18 @@ defmodule Console.Cockpit do
   # Append a crashed exit to the crash log and echo it to stderr after the tty is restored, so it
   # doesn't get swallowed by the alt-screen. Best-effort: a log write failure never masks the crash.
   defp log_crash(reason) do
-    case crash_report(reason) do
-      nil ->
+    with report when is_binary(report) <- crash_report(reason) do
+      Safe.value(
+        fn ->
+          Console.CrashLog.append("console crash", report)
+          IO.puts(:stderr, "console crashed (logged to #{Console.CrashLog.path()}):\n#{report}")
+          file_crash_issue(report)
+        end,
         :ok
-
-      report ->
-        Console.CrashLog.append("console crash", report)
-        IO.puts(:stderr, "console crashed (logged to #{Console.CrashLog.path()}):\n#{report}")
-        file_crash_issue(report)
+      )
     end
-  rescue
-    _ -> :ok
+
+    :ok
   end
 
   @doc false
@@ -3212,14 +3139,15 @@ defmodule Console.Cockpit do
   defp file_crash_issue(report) do
     summary = "console crashed: " <> crash_summary(report)
 
-    with %{id: id} = thread <- Channel.machine_thread(),
-         false <- crash_issue_open?(Dossier.open_issues_for_thread(thread), summary) do
-      Dossier.raise_issue(%{thread_id: id, summary: summary, evidence: report, found_by: "console"})
-    end
-  rescue
-    _ -> :ok
-  catch
-    _, _ -> :ok
+    Safe.value(
+      fn ->
+        with %{id: id} = thread <- Channel.machine_thread(),
+             false <- crash_issue_open?(Dossier.open_issues_for_thread(thread), summary) do
+          Dossier.raise_issue(%{thread_id: id, summary: summary, evidence: report, found_by: "console"})
+        end
+      end,
+      :ok
+    )
   end
 
   @doc false
