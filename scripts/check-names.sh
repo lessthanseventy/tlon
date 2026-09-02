@@ -52,8 +52,10 @@ while IFS=: read -r file line ref; do
 done < <(grep -noE '\bmix (server|console)\.[a-z_]+' mise.toml flake.nix $scripts 2>/dev/null | sort -u)
 
 # ---- (c) mise tasks ---------------------------------------------------------------------------
-known="$(mise tasks ls 2>/dev/null | awk 'NF {print $1}' | sort -u)"
-[ -n "$known" ] || miss "(c) \`mise tasks ls\` returned nothing — is mise on PATH and mise.toml parseable?"
+# Only tasks THIS repo's mise.toml defines: mise merges every mise.toml up the directory tree, so
+# inside a worktree under the main checkout the parent's tasks would otherwise mask a miss.
+known="$(mise tasks ls --json 2>/dev/null | jq -r --arg src "$root/mise.toml" '.[] | select(.source == $src) | .name' | sort -u)"
+[ -n "$known" ] || miss "(c) \`mise tasks ls\` lists no task from $root/mise.toml — is mise on PATH and mise.toml parseable?"
 n_mise=0
 while IFS=: read -r file line ref; do
   [ -n "$ref" ] || continue

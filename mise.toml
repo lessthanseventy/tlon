@@ -268,14 +268,6 @@ description = "console: seed the shared db with sample threads/agents/sessions f
 dir = "modules/console"
 run = "TLON_DB=../server/.dev/tlon.db mix console.seed"
 
-# B1.4's clean-slate step: the old machine threads under the staffing experiment are disposable —
-# clear them once, by hand, before ensure_thread_sessions starts spawning per-thread windows.
-# Never touches project-scope threads; the always-up service db is untouched (dev db only).
-[tasks."console:clear-machine-threads"]
-description = "console: B1.4 clean-slate — delete every MACHINE-scope thread + its messages from the dev db (project threads untouched)"
-dir = "modules/console"
-run = "TLON_DB=../server/.dev/tlon.db mix console.clear_machine_threads"
-
 # The cockpit reads the SAME db server's own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
 [tasks."console:run"]
