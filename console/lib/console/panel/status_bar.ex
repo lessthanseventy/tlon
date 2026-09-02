@@ -243,8 +243,8 @@ defmodule Console.Panel.StatusBar do
 
   defp service_dot(true), do: "●"
   defp service_dot(_up), do: "○"
-  defp service_style(true), do: :stat_live
-  defp service_style(_up), do: :stat_warn
+  defp service_style(true), do: :st_working
+  defp service_style(_up), do: :st_blocked
 
   defp short_load(load) when is_number(load), do: :erlang.float_to_binary(load / 1, decimals: 1)
   defp short_load(_load), do: "?"

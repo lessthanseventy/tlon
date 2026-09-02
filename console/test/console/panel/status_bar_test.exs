@@ -52,6 +52,30 @@ defmodule Console.Panel.StatusBarTest do
     assert line =~ "l2.2"
   end
 
+  # The service dots must be fg-only styled (glyph tinted, footer's black background shows
+  # through) like every other status dot in the app (Card.status_color/1, NewThread's ＋) — NOT
+  # the chip styles (:stat_live/:stat_warn), which paint dark text on a BRIGHT field and read as
+  # a big colored square around a single glyph.
+  test "service dots use fg-only status styles, not the bright chip styles" do
+    health = %{
+      funes_up: true,
+      tlon_up: false,
+      nix_gen: 36,
+      nix_behind: 0,
+      disk_pct: 68,
+      mem_pct: 28,
+      load_avg: 2.18,
+      tools: []
+    }
+
+    [info, _hints] = StatusBar.render(base(%{health: health}), rect())
+
+    assert {"● ", :st_working} in info
+    assert {"○ ", :st_blocked} in info
+    refute {"● ", :stat_live} in info
+    refute {"○ ", :stat_warn} in info
+  end
+
   test "a nil health read (probe not run) leaves the footer clean" do
     [info, _hints] = StatusBar.render(base(%{health: nil}), rect())
     line = Enum.map_join(info, fn {t, _} -> t end)
