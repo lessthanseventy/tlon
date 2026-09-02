@@ -1,7 +1,7 @@
 defmodule Console.Panel.Tertius do
   @moduledoc """
-  The permanent tertius command line (Slice 3, 2026-08-30): the bottom band of the Tlön center,
-  where the Ticker pulse used to live. Always shows the orchestrator input (`tertius ▸ …`) plus a
+  The permanent tertius command line (Slice 3, 2026-08-30): the bottom band of the Tlön center.
+  Always shows the orchestrator input (`tertius ▸ …`) plus a
   short log of the last few dispatch RECEIPTS — a command line you talk into with no confirmation
   is the exact failure this repo opened on, so the log keeps the last actions visible.
 

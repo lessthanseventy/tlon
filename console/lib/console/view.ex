@@ -6,15 +6,13 @@ defmodule Console.View do
   right sidebar — each section in its own bordered box — and the status footer, as a list of
   `{panel, data, rect}` placements the `Console.Board` paints. Pure and testable: no TTY, no server.
 
-  `reads` is the map the Cockpit assembles:
-    `%{active_key, focused_id, focused_title, roster, threads, scope, chatter, session}`
+  `reads` is the map the Cockpit assembles (`Console.Cockpit` `do_render/1`): `active_key`,
+  `focused_id`, `focused_title`, `roster`, `threads`, `thread_stack`, `machine`, the rail reads, …
   """
-  alias Console.Mention
   alias Console.Panel
   alias Console.Space
   alias Console.Tlon.Focus
   alias Console.Workspaces
-  alias Server.Presence
 
   # Space.workspace?/1 is a defguard — usable outside a guard too, but only once required.
   require Space
@@ -29,10 +27,8 @@ defmodule Console.View do
   @scrollable [
     Panel.Sidebar,
     Panel.Overview,
-    Panel.Conversation,
     Panel.ThreadStack,
     Panel.Crew,
-    Panel.Brief,
     Panel.Roster,
     Panel.Stack,
     Panel.Activity,
@@ -124,7 +120,7 @@ defmodule Console.View do
 
   # The center's chat face: `v` flips center_view to :chat — swap the Terminal section for the
   # THREAD STACK (Slice 3: a stack of foldable Slack-style thread cards, the whole workspace's
-  # threads at once), keeping the WindowBar/Ticker frame around it. Only when the read resolved: a
+  # threads at once), keeping the bands around it. Only when the read resolved: a
   # failed/empty read (server down) degrades to the PTY, never a blank center.
   defp chat_center(surface, %{center_view: :chat} = reads) do
     if is_map(reads[:thread_stack]) do
@@ -211,8 +207,8 @@ defmodule Console.View do
     }
   end
 
-  # The on-frame title per section. A section with no entry (Terminal, WindowBar, Ticker, the
-  # center surfaces) gets a bare frame.
+  # The on-frame title per section. A section with no entry (Terminal, the center surfaces) gets a
+  # bare frame.
   # The right session pane's frame title (the selected thread's live lead PTY).
   defp section_title({Panel.Terminal, :session}), do: "SESSION"
   defp section_title({panel, _read_key}), do: section_title(panel)
@@ -225,7 +221,6 @@ defmodule Console.View do
   defp section_title(Panel.Activity), do: "NOW"
   defp section_title(Panel.Roster), do: "ACTIVE"
   defp section_title(Panel.Triage), do: "TRIAGE"
-  defp section_title(Panel.Brief), do: "BRIEF"
   defp section_title(_section), do: nil
 
   # True when the Tlön focus has a detail open AND the cockpit resolved content for it — an Enter on
@@ -281,8 +276,8 @@ defmodule Console.View do
   The content rect the center Terminal renders into for a `space_key`/`w`×`h` cockpit — the single
   source of truth the embedded PTY sizes to, so pi never draws wider or taller than the visible
   area. Orbis carries no center Terminal (its surface is `[Overview]`, the survey) → this falls back
-  to the full center column. Tlön's WindowBar/Ticker bands (`Console.Space`) share the column with its
-  Terminal, so its box is smaller — found via the SAME `boxed/2` stacking `compose/3` uses, not a
+  to the full center column. A Workspace's NewThread/Tertius bands (`Console.Space`) share the column
+  with its Terminal, so its box is smaller — found via the SAME `boxed/2` stacking `compose/3` uses, not a
   second formula that could drift. (The PTY is only sized in the wide layout — a real cockpit is
   never below the narrow threshold.)
   """
@@ -331,8 +326,6 @@ defmodule Console.View do
 
   def data_for(Panel.Roster, r), do: %{sessions: r.roster}
 
-  def data_for(Panel.Brief, r), do: r.scope
-
   def data_for(Panel.Overview, r),
     do: %{workspaces: r[:workspaces] || [], survey_cursor: r[:survey_cursor], orbis_focus: r[:orbis_focus]}
 
@@ -343,25 +336,20 @@ defmodule Console.View do
   def data_for(Panel.Author, r),
     do: %{workspaces: author_workspaces(), cursor: r[:author_cursor] || 0, edit: r[:author_edit]}
 
-  # `presence` (thinking/working lists for the focused thread) is optional so pure View tests
-  # can compose reads without it — the panel treats missing lists as empty.
-  def data_for(Panel.Conversation, r), do: Map.merge(%{title: r.focused_title, messages: r.chatter}, r[:presence] || %{})
   def data_for(Panel.Stack, r), do: r.stack
   def data_for(Panel.Crew, r), do: r[:crew]
   def data_for(Panel.Activity, r), do: %{events: r[:activity] || [], gates: r[:gates] || []}
-  def data_for(Panel.Ticker, r), do: %{events: r[:activity] || []}
   # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
   def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
   def data_for(Panel.NewThread, r), do: %{input: r[:input]}
   def data_for(Panel.Reply, r), do: %{input: r[:input]}
-  def data_for(Panel.WindowBar, r), do: %{tabs: window_tabs(r), engine: engine_state(), thread: r.focused_id}
   def data_for(Panel.Triage, r), do: r.triage
   def data_for(Panel.Memory, r), do: r[:memory]
   def data_for(Panel.Detail, r), do: r[:detail]
   def data_for(_other, _r), do: nil
 
-  # Inject the panel's current scroll offset into scrollable panels' data (nil data left alone —
-  # e.g. Brief with no focused thread renders its placeholder, no scroll needed).
+  # Inject the panel's current scroll offset into scrollable panels' data (nil data left alone — a
+  # panel with no data renders its placeholder, no scroll needed).
   defp scroll_data(_panel, nil, _reads), do: nil
 
   defp scroll_data(panel, data, reads) when panel in @scrollable,
@@ -474,57 +462,13 @@ defmodule Console.View do
     resolved
   end
 
-  # The WindowBar/Ticker bands framing the Tlön terminal: one content row + their own 2-row frame.
-  defp fixed_height(Panel.WindowBar), do: 3
-  defp fixed_height(Panel.Ticker), do: 3
-  # The tertius band is taller than the Ticker pulse it replaces: the input line + up to 2 receipts,
-  # plus the 2-row frame.
+  # The tertius band: the input line + up to 2 receipts, plus the 2-row frame.
   defp fixed_height(Panel.Tertius), do: 5
   # The new-thread band and its conversation-step twin, the reply band: one input row + the 2-row frame.
   defp fixed_height(Panel.NewThread), do: 3
   defp fixed_height(Panel.Reply), do: 3
   defp fixed_height({panel, _read_key}), do: fixed_height(panel)
   defp fixed_height(_panel), do: nil
-
-  # The Tlön window strip, presence-joined: `reads.machine`'s tabs (from `tlon_tabs()`, forked
-  # once per render by the Cockpit) each get their agent handle (window → agent via
-  # `Console.Mention.coworkers/1`, inverted, sourced from the active space's roster) and warmth
-  # (`reads.roster`, already fetched for the sidebar) — so WindowBar stays a pure render with no
-  # server reads of its own.
-  # C3.1: the strip is LEADERS only — leaf windows (spawned by ensure_thread_sessions) move to the
-  # Leaves panel. A leaf is any window carrying a thread tag (`@funes_thread` → `thread_id`); the
-  # `t<id>` name is only the legacy fallback (Slice 0: descriptive names like `builder-…` dodged a
-  # name-only reject and leaked onto the strip). Reject by the leaf SHAPE, not a roster allowlist, so
-  # an unexpected leader window (roster not yet loaded, a hand-made window) still shows.
-  @leaf_window ~r/^t\d+$/
-
-  # Mirrors Cockpit.leaf_window?/1 (that one is a private seam over the same tab shape) — retire the
-  # duplication when leaf/leader is renamed out (Slice 4).
-  defp leaf_tab?(%{thread_id: tid}) when is_integer(tid), do: true
-  defp leaf_tab?(%{name: name}), do: Regex.match?(@leaf_window, name)
-
-  defp window_tabs(r) do
-    agents = Map.new(Mention.coworkers(fetch_space(r.active_key).roster), fn {agent, window} -> {window, agent} end)
-    warm_agents = r.roster |> Enum.filter(& &1.warm?) |> MapSet.new(& &1.agent)
-
-    r
-    |> Map.get(:machine, %{})
-    |> tabs_of()
-    |> Enum.reject(&leaf_tab?/1)
-    |> Enum.map(fn tab ->
-      agent = agents[tab.name]
-      Map.merge(tab, %{agent: agent, warm?: agent != nil and MapSet.member?(warm_agents, agent)})
-    end)
-  end
-
-  defp tabs_of(%{tabs: tabs}), do: tabs
-  defp tabs_of(_render_state), do: []
-
-  # The Claude-engine clock readout: `:off` only once the operator has manually clocked "claude"
-  # out (`Server.Presence.clock_out/1`, e.g. from `server:console`) — nothing calls that today, so
-  # this reads `:on` until that console verb exists. A real per-agent engine reader (§3b,
-  # `Server.Presence.Engine`) is a later, local backend swapped into the same seam.
-  defp engine_state, do: if("claude" in Presence.clocked_out_engines(), do: :off, else: :on)
 
   defp clamp_col(v, w), do: v |> max(@min_col) |> min(max(div(w, 3), @min_col))
 end

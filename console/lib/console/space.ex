@@ -11,8 +11,8 @@ defmodule Console.Space do
   The
   `Console.Panel.Sidebar` workspace nav switches the active one; the center renders that space's `surface`.
 
-  A surface is a LIST of sections stacked down the center — usually one (Orbis), but Tlön frames its
-  Terminal with two more: WindowBar above, Ticker below. A section is either a bare
+  A surface is a LIST of sections stacked down the center — usually one (Orbis), but a Workspace frames
+  its Terminal with the NewThread and Tertius bands below. A section is either a bare
   panel module (its data shaped by `Console.View.data_for/2`, like the sidebars) or a
   `{panel_module, read_key}` pair whose data is the named Cockpit read verbatim — how two
   Terminal panes on one surface get distinct data. A space stays plain data either way.
@@ -91,10 +91,9 @@ defmodule Console.Space do
       key: workspace.id,
       id: workspace.id,
       label: workspace.name,
-      # The top WindowBar leader-strip is RETIRED (2026-08-31): the center thread-stack is the thread
-      # surface, and a thread's live lead session shows in the toggleable right session pane — the
-      # strip was the decoupled tmux-window switcher (Alt+digit still switches windows). Center =
-      # the Terminal/thread-stack + the permanent Tertius band below.
+      # The center thread-stack is the thread surface; a thread's live lead session shows in the
+      # toggleable right session pane (Alt+digit switches tmux windows). Center = the
+      # Terminal/thread-stack + the new-thread band + the permanent Tertius band below.
       surface: [{Terminal, :machine}, NewThread, Tertius],
       # Slice 3.4: the funes panels move OFF the (now-retired) right rail into the left rail, stacked
       # top-down — NOW (attention/activity) · CREW · MEMORY · STACK — no more `[`/`]` carousel. The

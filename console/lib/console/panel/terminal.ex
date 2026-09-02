@@ -5,9 +5,7 @@ defmodule Console.Panel.Terminal do
   from the VT engine (not a semantic palette). The cursor cell is inverted so you can see where
   you type, and the `inverse` attribute (SGR 7) swaps fg/bg like a real terminal.
 
-  Renders edge-to-edge — no header row. The Tlön workspace's window strip (once drawn here as row
-  0) is now `Console.Panel.WindowBar`, a standalone bordered panel `Console.View.compose/3` places
-  above this one.
+  Renders edge-to-edge — no header row.
 
   Data is a `render_state` map (`%{cells, cursor, foreground, background}`) or `:no_session`.
   Pure: a render_state in → styled rows out, no TTY. The cockpit blits these through `Console.Board`,

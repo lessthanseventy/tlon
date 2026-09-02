@@ -1,7 +1,7 @@
 defmodule Console.Panel.TerminalTest do
   @moduledoc """
   The center terminal is mostly cell-blitting (eye-tested live) — it renders edge-to-edge, no
-  header row (the Tlön window strip moved out to `Console.Panel.WindowBar`; see its own test).
+  header row.
   """
   use ExUnit.Case, async: true
 

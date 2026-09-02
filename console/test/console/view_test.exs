@@ -28,14 +28,10 @@ defmodule Console.ViewTest do
         focused_title: nil,
         threads: [],
         roster: [],
-        scope: nil,
-        chatter: [],
         chorus: [],
-        terminal: :no_session,
         machine: :no_session,
         stack: nil,
         health: nil,
-        orbis: nil,
         triage: nil,
         scrolls: %{},
         input: nil,
@@ -89,8 +85,7 @@ defmodule Console.ViewTest do
       assert {Panel.ThreadStack, data, _rect} = Enum.find(placements, &match?({Panel.ThreadStack, _, _}, &1))
       assert [%{id: 1}] = data.cards
       refute placed?(placements, Panel.Terminal)
-      # the WindowBar leader-strip is retired; the tertius band still frames the stack below
-      refute placed?(placements, Panel.WindowBar)
+      # the tertius band still frames the stack below
       assert placed?(placements, Panel.Tertius)
     end
 
@@ -133,17 +128,17 @@ defmodule Console.ViewTest do
     test "an open detail still outranks the chat face" do
       focus = %Focus{in_terminal?: false, column: :left, pane: 0, detail?: true}
       detail = %{title: "commit abc · x", lines: [{"+added", :diff_add}]}
-      chat = %{title: "Tlön", messages: []}
+      stack = %{cards: [], opened: nil}
 
       placements =
         View.compose(
-          reads(%{focus: focus, tlon_layout: layout(), detail: detail, center_view: :chat, center_chat: chat}),
+          reads(%{focus: focus, tlon_layout: layout(), detail: detail, center_view: :chat, thread_stack: stack}),
           120,
           40
         )
 
       assert placed?(placements, Panel.Detail)
-      refute placed?(placements, Panel.Conversation)
+      refute placed?(placements, Panel.ThreadStack)
     end
   end
 
@@ -177,7 +172,7 @@ defmodule Console.ViewTest do
   end
 
   describe "the funes rail (Slice 3.4)" do
-    test "the rail stacks NOW·CREW·MEMORY·STACK to the right of the spine; no right rail, no Brief" do
+    test "the rail stacks NOW·CREW·MEMORY·STACK to the right of the spine; no right rail" do
       placements = View.compose(reads(%{}), 120, 40)
 
       # Every funes panel is placed, stacked in a single rail column (all at the same x, past the spine).
@@ -189,8 +184,6 @@ defmodule Console.ViewTest do
 
       assert Enum.all?(rail_rects, &(&1.x > 0))
       assert rail_rects |> Enum.map(& &1.x) |> Enum.uniq() |> length() == 1
-      # The retired right rail: no pinned Brief, in either center context.
-      refute Enum.any?(placements, &match?({Panel.Brief, _, _}, &1))
     end
   end
 
@@ -354,9 +347,9 @@ defmodule Console.ViewTest do
       assert ys == Enum.sort(ys)
     end
 
-    test "the Orbis god-view carries no right rail (no Brief, no funes rail)" do
+    test "the Orbis god-view carries no funes rail" do
       placements = View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40)
-      refute right_placed?(placements, Panel.Brief)
+      refute right_placed?(placements, Panel.Stack)
     end
 
     test "a short frame never places a box (or its content) past the body — the status rows stay clean" do
@@ -373,34 +366,6 @@ defmodule Console.ViewTest do
                  "#{inspect(panel)} ends past the body at 120x#{h}: #{inspect(rect)} (body_h #{body_h})"
         end
       end
-    end
-  end
-
-  # C3.1: the tab strip is LEADERS only — a workspace's roster windows (+ the general console furniture);
-  # `t<id>` leaf windows move to the Leaves panel, not the strip.
-  describe "WindowBar leaders only" do
-    defp tab(name), do: %{name: name, active?: false, index: "1"}
-
-    test "leaf windows (t<id>) are excluded from the tab strip; leaders (roster + general) stay" do
-      r = reads(%{active_key: 0, machine: %{tabs: [tab("tertius"), tab("hronir"), tab("general"), tab("t42")]}})
-
-      %{tabs: tabs} = View.data_for(Panel.WindowBar, r)
-      names = Enum.map(tabs, & &1.name)
-
-      assert "tertius" in names
-      assert "hronir" in names
-      assert "general" in names
-      refute "t42" in names
-    end
-
-    test "a thread-tagged leaf is excluded even when named descriptively (not t<id>)" do
-      leaf = Map.put(tab("builder-hola-who-is-this-what"), :thread_id, 2)
-      r = reads(%{active_key: 0, machine: %{tabs: [tab("hronir"), leaf]}})
-
-      names = Enum.map(View.data_for(Panel.WindowBar, r).tabs, & &1.name)
-
-      assert "hronir" in names
-      refute "builder-hola-who-is-this-what" in names
     end
   end
 

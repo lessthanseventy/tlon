@@ -32,7 +32,6 @@ defmodule Console.BoardTest do
   alias Console.Panel
   alias Console.Panel.Activity
   alias Console.Panel.Border
-  alias Console.Panel.Brief
   alias Console.Panel.Health
   alias Console.Panel.Overview
   alias Console.Panel.Roster
@@ -70,12 +69,8 @@ defmodule Console.BoardTest do
         focused_title: "review PR 329",
         roster: @roster,
         threads: @threads,
-        scope: nil,
-        chatter: [],
         chorus: [],
-        terminal: :no_session,
         health: nil,
-        orbis: nil,
         triage: %{blockers: %{shown: [], more: 0}, failed_checks: %{shown: [], more: 0}, unassigned: []}
       },
       overrides
@@ -92,7 +87,7 @@ defmodule Console.BoardTest do
       assert text(robert) =~ "○"
     end
 
-    test "thread rows live in the Leaves panel now (slice C/D) — no separate thread list" do
+    test "no separate thread-list panel — the center thread-stack is the list" do
       refute Code.ensure_loaded?(Console.Panel.ThreadList)
     end
 
@@ -180,63 +175,6 @@ defmodule Console.BoardTest do
       assert joined =~ "TOOLS"
       assert joined =~ "pi"
       assert joined =~ "0.9.1"
-    end
-
-    test "the brief panel renders sections from a brief map, honest about empties and cuts" do
-      # todos/learnings/blockers/done are each %{shown, more} (funes Board): a cap is
-      # always rendered WITH its count — a cut without a count lies. DONE is the merged
-      # view (completed todos + work_landed events); NEXT is the first open todo.
-      scope = %{
-        goal: "ship the board",
-        lead: "Sandra",
-        todos: %{shown: [%{id: 1, text: "wire the composer"}, %{id: 2, text: "then the footer"}], more: 3},
-        next: %{id: 1, text: "wire the composer"},
-        learnings: %{shown: [%{text: "termbox compiles"}], more: 2},
-        unknowns: %{shown: [%{text: "does raxol embed?"}], more: 0},
-        blockers: %{shown: [], more: 0},
-        checks: %{
-          shown: [
-            %{kind: "check_passed", detail: %{"cmd" => "mise run check"}},
-            %{kind: "check_failed", detail: %{"cmd" => "mix test", "exit" => 1}}
-          ],
-          more: 0
-        },
-        done: %{
-          shown: [
-            %{source: :todo, row: %{text: "did a step"}},
-            %{source: :event, row: %{detail: %{"summary" => "merged it"}}}
-          ],
-          more: 0
-        },
-        recent: []
-      }
-
-      rows = Brief.render(scope, %{x: 0, y: 0, w: 40, h: 40})
-      joined = Enum.map_join(rows, "\n", &text/1)
-      assert joined =~ "GOAL"
-      assert joined =~ "ship the board"
-      # TODOS with NEXT marked by an arrow; the rest plain
-      assert joined =~ "TODOS"
-      assert joined =~ "→ wire the composer"
-      assert joined =~ "· then the footer"
-      assert joined =~ "LEARNINGS"
-      assert joined =~ "termbox compiles"
-      # UNKNOWNS surfaces open questions with a "?"
-      assert joined =~ "UNKNOWNS"
-      assert joined =~ "? does raxol embed?"
-      # CHECKS: a measured pass (✓) and a fail (✗ with its exit code)
-      assert joined =~ "CHECKS"
-      assert joined =~ "✓ mise run check"
-      assert joined =~ "✗ mix test (exit 1)"
-      # DONE merges a completed todo (✓) and a work_landed event's summary
-      assert joined =~ "DONE"
-      assert joined =~ "✓ did a step"
-      assert joined =~ "merged it"
-      # every cut is counted, never silent
-      assert joined =~ "+2 more"
-      assert joined =~ "+3 more"
-      # empty section keeps its shape with a dim em-dash, never an invented value
-      assert joined =~ "—"
     end
 
     test "terminal panel renders ghostty cells as truecolor runs, inverting the cursor cell" do
@@ -426,8 +364,6 @@ defmodule Console.BoardTest do
       assert Sidebar in mods
       assert Overview in mods
       assert StatusBar in mods
-      # Slice 3.4: the right rail (BRIEF) is retired — orbis is spine + rail (roster/triage) + survey.
-      refute Brief in mods
       # every section gets its own bordered box (spine switcher, roster, triage, survey)
       content_panels = Enum.reject(mods, &(&1 in [Border, StatusBar]))
       assert Enum.count(mods, &(&1 == Border)) == length(content_panels)
@@ -467,8 +403,8 @@ defmodule Console.BoardTest do
 
       placements = View.compose(tlon, 120, 40)
 
-      # the WindowBar leader-strip is retired; the terminal is framed by the tertius band below it —
-      # no longer the full-height center column a single-section surface would give it.
+      # the terminal is framed by the tertius band below it — no longer the full-height center column
+      # a single-section surface would give it.
       assert [{Terminal, :no_session, term_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == Terminal end)
       assert [{Tertius, _data, pulse_rect}] = Enum.filter(placements, fn {m, _d, _r} -> m == Tertius end)
 
@@ -479,8 +415,8 @@ defmodule Console.BoardTest do
     test "the PTY sizes to the placed Terminal rect — no overflow past the frame" do
       # center_rect is what the embedded PTY is sized to; it MUST equal the rect compose places the
       # Terminal into, or pi draws wider/taller than the visible area (content spills past the frame,
-      # or a dead band opens below). One authority for both, asserted across sizes. Tlön is the only
-      # terminal-bearing space since the Slice 0 collapse; its column also carries WindowBar/Ticker.
+      # or a dead band opens below). One authority for both, asserted across sizes. A Workspace is the
+      # only terminal-bearing space; its column also carries the NewThread/Tertius bands.
       for {key, w, h} <- [{0, 120, 40}, {0, 84, 30}] do
         r =
           reads(%{
@@ -498,10 +434,10 @@ defmodule Console.BoardTest do
     end
 
     test "a short Tlön terminal never places a section (or the PTY) past the frame" do
-      # WindowBar(3) + Terminal(flex) + Ticker(3) stacked in the center column overflowed at short
-      # heights: split_heights floored the flex Terminal at 1 but never clamped the SUM against the
-      # column, so the Ticker box landed below the column (on/past the StatusBar). Clamp now shrinks
-      # the fixed bands in stack order — a lower band collapses to 0 rather than going off-frame.
+      # Fixed bands + a flex Terminal stacked in the center column can overflow at short heights if
+      # split_heights never clamps the SUM against the column (a lower band lands on/past the
+      # StatusBar). The clamp shrinks the fixed bands in stack order — a lower band collapses to 0
+      # rather than going off-frame.
       # 12 is a comfortably short cockpit; 8 is the regime that used to overflow.
       for {key, w, h} <- [{0, 120, 12}, {0, 120, 8}] do
         r =

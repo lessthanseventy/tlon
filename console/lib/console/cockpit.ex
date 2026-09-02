@@ -1076,9 +1076,7 @@ defmodule Console.Cockpit do
   defp dispatch_click(nil, _x, _y, state), do: {:noreply, state}
 
   # Clicking the center terminal: forward to the PTY when the embedded program tracks the mouse
-  # (tmux `mouse on` selects; a TUI hit-tests its own regions). The terminal renders edge-to-edge —
-  # the Tlön window strip is WindowBar's own bordered panel above it (see the next clause), so
-  # there is no row-0 special case here anymore.
+  # (tmux `mouse on` selects; a TUI hit-tests its own regions). The terminal renders edge-to-edge.
   # While the lazygit overlay is up, its Panel.Terminal is the hit target — route the click to THAT
   # PTY, not the machine center terminal underneath (Slice 4).
   defp dispatch_click({Panel.Terminal, _data, rect}, x, y, %{lazygit: %{thread_id: id}} = state) do
@@ -1166,14 +1164,9 @@ defmodule Console.Cockpit do
   # Click a thread row in the list → open its conversation (two-step center).
   defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)
 
-  # Reset scroll offsets when the context they're relative to changes. A space switch swaps every
-  # panel, so all offsets go; a focus change only swaps the thread-specific panels (Brief,
-  # Conversation), so just those. Function-head dispatch on what changed — house rule.
+  # Reset scroll offsets when the context they're relative to changes: a space switch swaps every
+  # panel, so all offsets go.
   defp reset_scrolls(%{active_key: a}, %{active_key: a2} = next) when a != a2, do: %{next | scrolls: %{}}
-
-  defp reset_scrolls(%{focused_id: f}, %{focused_id: f2} = next) when f != f2,
-    do: %{next | scrolls: Map.drop(next.scrolls, [Panel.Brief, Panel.Conversation])}
-
   defp reset_scrolls(_prev, next), do: next
 
   defp handle_menu_click({Panel.Menu, data, rect}, y, state),
@@ -2144,8 +2137,6 @@ defmodule Console.Cockpit do
       sidebar: Board.safe_read(:sidebar, [], fn -> Server.Board.sidebar() end),
       # Kitty host? → the Sidebar blanks its fallback glyph so the icon PNG covers cleanly (no bleed).
       graphics?: Console.Graphics.kitty?(),
-      scope: Board.safe_read(:scope, nil, fn -> focused && Server.Board.brief(focused) end),
-      chatter: Board.safe_read(:chatter, [], fn -> (focused && Channel.recent_messages(focused, 30)) || [] end),
       workspaces:
         Board.safe_read(:workspaces, [], fn -> if(state.active_key == :orbis, do: orbis_workspaces(state), else: []) end),
       # The survey's focus + per-row cursor, so Overview can wash the cursor row :selected — only
@@ -2159,23 +2150,15 @@ defmodule Console.Cockpit do
       # The field editor (D2.4 Chunk 2a): nil unless `e` opened it. Meaningless-but-harmless
       # outside Orbis' author face.
       author_edit: state.author_edit,
-      terminal: terminal_read(state, focused),
       machine: machine,
-      presence:
-        Board.safe_read(:presence, %{thinking: [], working: []}, fn -> presence_read(state, focused, machine) end),
       crew: Board.safe_read(:crew, nil, fn -> crew_read(state, machine) end),
       stack: state.stack || @empty_stack,
       health: state.health,
       activity: scope_activity(state.activity, state.ws_thread_ids),
       gates: state.gates || [],
       memory: if(Space.workspace?(state.active_key), do: state.memory),
-      # The center's face + the chat face's read (reshape slice D). The chat read only runs
-      # while the chat face is up — no per-frame DB tail while the PTY holds the center.
+      # The center's face (reshape slice D).
       center_view: state.center_view,
-      center_chat:
-        if(Space.workspace?(state.active_key) and state.center_view == :chat,
-          do: Board.safe_read(:center_chat, nil, fn -> chat_read(state) end)
-        ),
       triage: Board.safe_read(:triage, nil, fn -> if(state.active_key == :orbis, do: triage_read(threads)) end),
       scrolls: state.scrolls,
       input: state.input,
@@ -2245,31 +2228,6 @@ defmodule Console.Cockpit do
     :exit, _ -> %{}
   end
 
-  # The focused thread's presence for Panel.Conversation: explicit thinking declarations plus the
-  # tmux-activity floor. Precedence thinking > working — an agent that DECLARED never re-lists as
-  # merely inferred-working; live/none render nothing.
-  defp presence_read(_state, nil, _machine), do: %{thinking: [], working: []}
-
-  defp presence_read(state, focused, machine) do
-    declared = Map.get(state.thinking, focused.id, %{})
-    names = declared |> Map.keys() |> Enum.sort()
-    now = System.os_time(:second)
-    thinking = Enum.map(names, &{&1, max(now - declared[&1], 0)})
-    %{thinking: thinking, working: working_lead(machine, focused, names)}
-  end
-
-  defp working_lead(%{tabs: tabs}, focused, thinking) do
-    with :working <- Console.Presence.thread_status(tabs, focused.id, System.os_time(:second)),
-         lead when is_binary(lead) <- Server.thread_lead(focused.id),
-         false <- lead in thinking do
-      [lead]
-    else
-      _ -> []
-    end
-  end
-
-  defp working_lead(_machine, _focused, _thinking), do: []
-
   # The CREW sidebar's read: the active Workspace's roster joined with the tmux snapshot, the leaf
   # leads, and the thinking declarations (Console.Panel.Crew.coworkers/6). Lead lookups go one
   # server query per live leaf window — at most the leaf cap.
@@ -2294,10 +2252,6 @@ defmodule Console.Cockpit do
   end
 
   defp crew_read(_state, _machine), do: nil
-
-  # No space carries a per-thread native-PTY center since the Slice 0 collapse (Sessions deleted);
-  # Tlön's center reads via machine_read, so terminal_read is uniformly `:no_session`.
-  defp terminal_read(_state, _focused), do: :no_session
 
   # The Tlön center's read: the embedded tmux client. Lookup only — the find-or-spawn lives in
   # ensure_center (render's stateful preamble, via ensure_workspace_roster), so a failing spawn can back
@@ -2410,26 +2364,6 @@ defmodule Console.Cockpit do
   # The pure flip behind the `v` verb — exposed for TTY-less tests.
   def toggle_center_view(%{center_view: :chat} = state), do: %{state | center_view: :terminal}
   def toggle_center_view(state), do: %{state | center_view: :chat}
-
-  # The chat face's read: the machine thread with its message tail and declared-thinking presence
-  # (same normalization as presence_read). nil (no thread / server down via safe_read) degrades the
-  # View back to the PTY.
-  defp chat_read(state), do: chat_read_thread(Channel.machine_thread(active_workspace_id(state)), state)
-
-  defp chat_read_thread(nil, _state), do: nil
-
-  defp chat_read_thread(thread, state) do
-    declared = Map.get(state.thinking, thread.id, %{})
-    now = System.os_time(:second)
-    thinking = declared |> Map.keys() |> Enum.sort() |> Enum.map(&{&1, max(now - declared[&1], 0)})
-
-    %{
-      title: thread.title,
-      messages: Channel.recent_messages(thread, 30),
-      thinking: thinking,
-      working: []
-    }
-  end
 
   # The shape the Tlön focus SM navigates: the space's two sidebar columns, per-pane section counts
   # (empty until a multi-section pane lands — Memory's coverage/pinned/habits split), and per-pane
@@ -3337,9 +3271,8 @@ defmodule Console.Cockpit do
   end
 
   # Size the PTY to EXACTLY the center Terminal's content rect (Console.View.center_rect), so pi never
-  # draws past the frame (a wider PTY spills; a shorter one leaves a dead band). Tlön's WindowBar
-  # and Ticker bands already shrink that rect (they're their own sections, not the terminal's), so
-  # no separate reserve is needed here.
+  # draws past the frame (a wider PTY spills; a shorter one leaves a dead band). The tertius band
+  # already shrinks that rect (its own section, not the terminal's), so no separate reserve is needed.
   defp center_dims(%{active_key: active_key, w: w, h: h}) do
     rect = View.center_rect(active_key, w, h)
     {max(rect.w, 1), max(rect.h, 1)}

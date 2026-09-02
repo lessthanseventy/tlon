@@ -6,8 +6,8 @@ defmodule Console.Panel.ThreadStack do
   (`Console.Panel.Reply`), focused the moment a thread opens — this panel is read-only backlog.
 
   Styling: the active row carries an accent gutter (`▌`) and a bright header; inactive rows are quiet.
-  Messages are nested under the header, author-coloured and paragraph-wrapped (the same quality as
-  `Console.Panel.Conversation`), with breathing room between them.
+  Messages are nested under the header, author-coloured and paragraph-wrapped, with breathing room
+  between them.
 
   Data is `%{cards: [card], opened: id | nil}`, a card `%{id, title, lead, stage, awaiting, active?,
   messages}` (`messages` a list of `%{author, body}`, read only for the opened thread). Pure render.

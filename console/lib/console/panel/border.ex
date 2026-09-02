@@ -29,7 +29,7 @@ defmodule Console.Panel.Border do
 
   @doc """
   Which carousel tab a click at top-row local `x` lands on (index into `data.tabs`), or nil.
-  Mirrors the offsets `label_runs/2` draws (the WindowBar `tab_at_x` idiom) so the clickable
+  Mirrors the offsets `label_runs/2` draws so the clickable
   regions can't drift from the paint; the border_test pins the agreement.
   """
   @spec tab_at_x(term(), non_neg_integer()) :: non_neg_integer() | nil
