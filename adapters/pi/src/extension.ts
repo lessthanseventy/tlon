@@ -310,11 +310,14 @@ export default function adapters(pi: ExtensionAPI): void {
   });
 }
 
-// The footer: the live at-a-glance the human driving pi directly sees — the same dossier
-// the cockpit shows (pi doc §2b). For slice 2 that is the goal and the open blockers; the
-// TODOS line joins when slice 3 lands.
+// The widget: the live at-a-glance the human driving pi directly sees — the same dossier
+// the cockpit shows (pi doc §2b): the goal, the open todos (and which is next), the blockers.
 function updateWidget(ctx: ExtensionContext, d: Dossier): void {
   const lines = [`funes · ${d.north_star ?? "(untitled)"} — ${d.lead ?? "unstaffed"}`];
+  const todos = d.todos.shown.length + d.todos.more;
+  if (todos > 0) {
+    lines.push(`todos (${todos})${d.next ? ` → next: ${d.next.text}` : ""}`);
+  }
   const blockers = d.blockers.shown.length + d.blockers.more;
   if (blockers > 0) {
     lines.push(`blockers (${blockers}):`);
