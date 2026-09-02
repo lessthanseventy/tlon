@@ -5,7 +5,7 @@ import { renderBrief, type Dossier } from "./brief.ts";
 const NOW = new Date("2026-08-16T12:00:00Z");
 const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
 
-// The get_dossier shape funes' Funes.MCP.Brief.scope/1 returns — the contract this
+// The get_dossier shape funes' Server.MCP.Brief.scope/1 returns — the contract this
 // renderer consumes. Overridable per test.
 function dossier(over: Partial<Dossier> = {}): Dossier {
   return {

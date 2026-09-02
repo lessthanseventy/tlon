@@ -2,7 +2,7 @@
 
 The TTY cockpit over `server` (design: `docs/plans/2026-08-15-console-tui-design.md`). A full-screen
 terminal app with three spaces — **Orbis** (the chorus), **Sessions** (threads + their embedded
-harness terminals), **Tlön** (the machine/dogfood workspace) — rendering server' read models and
+harness terminals), **Tlön** (the machine/dogfood workspace) — rendering the server's read models and
 embedding real terminals via `ghostty`. Not a service: you launch it, sit at it, quit it.
 
 **Tlön's cast** (design: `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`) — the nouns of
@@ -24,7 +24,7 @@ leaf threads (B1.4) get their own `t<id>` windows.
 
 ## The law
 
-- **Depends on server, one-directionally.** console boots server' OTP app and calls only what `Funes`
+- **Depends on server, one-directionally.** console boots the server's OTP app and calls only what `Funes`
   exports (the `:boundary` compiler enforces it — reach past and the build fails). server NEVER
   depends on aleph. That export list in `lib/server.ex` IS funes' API surface — don't grep for a
   function, see `modules/server/AGENTS.md` § Public surface.

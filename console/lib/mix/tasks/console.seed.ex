@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Console.Seed do
   @moduledoc """
   Populate `TLON_DB` with a small, believable workspace so the cockpit has something to render and
   react to. Idempotent: re-running won't duplicate agents, threads, or a thread's opening messages.
-  Writes only through server' public API (never raw rows) — the same path agents and the human use.
+  Writes only through the server's public API (never raw rows) — the same path agents and the human use.
   """
   use Mix.Task
   use Boundary, classify_to: Console

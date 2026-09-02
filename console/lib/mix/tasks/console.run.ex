@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Console.Run do
 
   @impl Mix.Task
   def run(_args) do
-    # Start console and its deps — server' OTP app (PubSub always, Repo from console's config) comes up
+    # Start console and its deps — the server's OTP app (PubSub always, Repo from console's config) comes up
     # as a dependency. A DB misconfig surfaces here rather than deep in the first read.
     case Application.ensure_all_started(:console) do
       {:ok, _apps} ->

@@ -18,7 +18,7 @@ defmodule Console.Application do
     Supervisor.start_link(children, strategy: :one_for_one, name: Console.Supervisor)
   end
 
-  # Event-driven cache of server' workspaces so the per-render picker/survey never hit the DB. Gated
+  # Event-driven cache of the server's workspaces so the per-render picker/survey never hit the DB. Gated
   # off under test (config/test.exs: `start_workspaces: false`): the app-global would subscribe to the
   # server workspaces Bus and cache workspaces registered by async DB tests, polluting Space.all/0 for the
   # pure-render tests. With it unstarted, fetch_workspaces/0 degrades to [] → the deterministic Tlön

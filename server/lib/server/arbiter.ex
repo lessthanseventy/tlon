@@ -6,7 +6,7 @@ defmodule Server.Arbiter do
 
   The backend is chosen by config — `config :server, :arbiter, SomeModule` (a `Server.Arbiter`
   behaviour). On the console hub that is `Console.Arbiter`, which writes to the ghostty terminal console
-  owns for the session's thread; server' tests use `Server.Arbiter.Test`. **No backend configured is
+  owns for the session's thread; the server's tests use `Server.Arbiter.Test`. **No backend configured is
   a valid state** (the always-up service runs the durable channel without a display): `wake`/`spawn`
   return `{:error, :no_arbiter}` and the switchboard leaves the message a pending durable row —
   degrade honestly, no ceremony backend, no crash.

@@ -3,7 +3,7 @@
 The hands of the stack. `server` remembers, `console` sees, **`adapters` acts** — it is how a
 working agent reaches server, wakes up already knowing its thread, and banks what it learns.
 
-adapters is **vendor-agnostic**: server' channel is MCP, so any harness can be a citizen of a
+adapters is **vendor-agnostic**: the server's channel is MCP, so any harness can be a citizen of a
 thread. adapters holds one thin adapter per harness. Today that is **`pi/`** (for `pi`, and
 the models that run through it — codex, glm, kimi, …). Claude Code is a first-class harness
 too; its adapter is born when it has content, not before.
@@ -29,7 +29,7 @@ adapters/
 ```
 mise run adapters:pi:test   # the renderer's unit suite (bun)
 mise run adapters:pi:check  # typecheck + tests — this module's gate
-mise run server:serve # boot server' channel; in its iex, Funes.MCP.Spawn.env/2 prints the
+mise run server:serve # boot the server's channel; in its iex, Server.MCP.Spawn.env/2 prints the
                      # export TLON_* block to paste into a fresh pi pane
 ```
 

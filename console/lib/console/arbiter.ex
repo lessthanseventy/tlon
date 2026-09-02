@@ -1,6 +1,6 @@
 defmodule Console.Arbiter do
   @moduledoc """
-  The arbiter backend for the console hub — how server' switchboard actuates a wake now that sessions
+  The arbiter backend for the console hub — how the server's switchboard actuates a wake now that sessions
   are embedded ghostty terminals console owns, not tmux panes. Configured as `config :server, :arbiter,
   Console.Arbiter`: server calls it through the behaviour seam (§8), never importing console — the
   dependency stays one-directional, server → nothing.

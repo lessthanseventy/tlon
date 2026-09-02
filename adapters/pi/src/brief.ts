@@ -11,7 +11,7 @@
 //      since is unrecorded" (§6: unrecorded time is named), and every capped section
 //      carries its +N more (a cut without a count is the empty-world lie in miniature).
 
-// The get_dossier shape — funes' Funes.MCP.Brief.scope/1 (one source, two protocol
+// The get_dossier shape — funes' Server.MCP.Brief.scope/1 (one source, two protocol
 // doors). Timestamps are ISO8601 strings or null; certainty is the read-time §4a rank.
 export type Certainty = "stated" | "checked" | "opinion";
 

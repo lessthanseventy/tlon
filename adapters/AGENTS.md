@@ -3,14 +3,14 @@
 The third story in the stack. `server` is the memory, `console` is the sight, `adapters` is the
 **hands**: how a working agent reaches server, comes up already knowing its thread, and banks what it
 learns as it works. Read `../server/docs/spec.md` and
-`../../docs/plans/2026-08-15-pi-integration-and-server-mcp-design.md` before reshaping anything here —
+`../../docs/plans/2026-08-15-pi-integration-and-funes-mcp-design.md` before reshaping anything here —
 this module is Track B's agent side, and the spec's boundaries govern it.
 
 ## What adapters is, and is not
 
-**adapters is vendor-agnostic by identity.** server' channel is MCP — an agent-agnostic protocol, not a
+**adapters is vendor-agnostic by identity.** the server's channel is MCP — an agent-agnostic protocol, not a
 pi API — so *any* harness can be a citizen of a thread. adapters holds **one adapter per harness**, each
-a thin bridge from that harness's lifecycle to server' one sovereign channel:
+a thin bridge from that harness's lifecycle to the server's one sovereign channel:
 
 - **`pi/`** — the pi adapter (built). A TypeScript extension for `pi`
   (`github.com/earendil-works/pi`): `extension.ts` registers at session start, briefs before the
@@ -29,8 +29,8 @@ a thin bridge from that harness's lifecycle to server' one sovereign channel:
 
 **The rules that hold across every adapter — break one and adapters stops being the hands:**
 
-- **An adapter is a client of server' MCP channel, never a second writer.** It calls the channel; it
-  never touches the shared SQLite. A direct write bypasses server' single-writer + Bus-announce
+- **An adapter is a client of the server's MCP channel, never a second writer.** It calls the channel; it
+  never touches the shared SQLite. A direct write bypasses the server's single-writer + Bus-announce
   discipline (spec §4/§10) — the drift the whole stack is built against.
 - **An adapter holds no state.** No retry queue, no spill file. When server is unreachable it surfaces
   the failure and does nothing else — a client-side buffer is the second log this design removes
@@ -52,17 +52,17 @@ not the transport — is the identity:
 1. **The extension's own client** calls `register` (once, at session start) and `get_dossier` (to
    brief), deterministically, before the model runs. There is no pi API to invoke a tool from a hook,
    so the extension is itself a small MCP client (`pi/src/mcp.ts`).
-2. **`pi-mcp-adapter`** exposes server' write verbs (`post_message`, `bank_fact`, `raise_issue`,
+2. **`pi-mcp-adapter`** exposes the server's write verbs (`post_message`, `bank_fact`, `raise_issue`,
    `record_done`) to the *model* as first-class tools.
 
-Because server binds a session to the **token** (`Funes.MCP.Tokens.bind_session/2`), not to a transport
+Because server binds a session to the **token** (`Server.MCP.Tokens.bind_session/2`), not to a transport
 connection, `register` on door 1 claims the session that door 2's calls then resolve to — so the
 model's writes bump the same session's warmth for free. Register once; both doors are that session.
 
 ## Install (the human is the arbiter, for now)
 
 Slices before the automated arbiter (pi doc §5, slice 5) install by hand. In the serving server node's
-`iex`, `Funes.MCP.Spawn.env/2` opens a thread, staffs an agent, and prints the identity-only
+`iex`, `Server.MCP.Spawn.env/2` opens a thread, staffs an agent, and prints the identity-only
 `export TLON_*` block (`TLON_MCP_URL`, `TLON_THREAD`, `TLON_AUTHOR` — NO `TLON_TOKEN`).
 Paste it into a fresh pi pane, then point pi at adapters:
 

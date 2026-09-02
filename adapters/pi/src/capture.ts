@@ -72,7 +72,7 @@ export function extractText(content: unknown): string {
   return parts.join("\n").trim();
 }
 
-// The same conservative credential shapes funes' write-path scanner (Funes.Secrets) refuses —
+// The same conservative credential shapes funes' write-path scanner (Server.Secrets) refuses —
 // mirrored here because capture EGRESSES the raw delta to ollama.com before funes ever sees it:
 // the inbound bank_fact scan fires one network hop too late to stop a pasted key leaving the box.
 // Pattern-based, not entropy-based, for the same reason as the Elixir side (SHAs and hashes are

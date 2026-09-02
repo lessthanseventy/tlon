@@ -12,7 +12,7 @@
 // PER-CONNECT MINT (the fix for the literal-tmux stale-401 of 2026-08-16): the token is
 // NOT read from a frozen TLON_TOKEN env. On every connect (and reconnect), the client
 // mints a fresh token against the SAME origin as TLON_MCP_URL (POST /mint — see
-// Funes.MCP.Gateway), so it always hits the right world (aleph's .dev world on 4041, or
+// Server.MCP.Gateway), so it always hits the right world (aleph's .dev world on 4041, or
 // the always-up service's XDG world on 4040) and a pane is never stranded by a token-
 // model change or a world-secret regeneration. Identity travels as the stable,
 // format-agnostic (TLON_THREAD, TLON_AUTHOR, TLON_MCP_URL); the token is derived.

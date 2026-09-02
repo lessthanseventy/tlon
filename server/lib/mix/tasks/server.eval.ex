@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Server.Eval do
-  @shortdoc "Run server' steering evals (worklines slice 0) — --deterministic for the offline gate set"
+  @shortdoc "Run the server's steering evals (worklines slice 0) — --deterministic for the offline gate set"
   @moduledoc """
   #{@shortdoc}.
 

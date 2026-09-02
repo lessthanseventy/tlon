@@ -49,7 +49,7 @@ describe("lastToolActivity — the mechanical signal, no LLM involved", () => {
   });
 });
 
-describe("formatDuration — sub-minute-precise, mirrors the aleph-side Aleph.Text.duration/1", () => {
+describe("formatDuration — sub-minute-precise, mirrors the aleph-side Console.Text.duration/1", () => {
   test("under a minute is bare seconds", () => {
     expect(formatDuration(0)).toBe("0s");
     expect(formatDuration(45)).toBe("45s");

@@ -4,7 +4,7 @@ defmodule Server do
   compile warning, and the gate runs `--warnings-as-errors`, so reaching into a non-exported
   module fails `mise run check`).
 
-  The exports below ARE server' public surface — what a consumer (console, an MCP adapter) may
+  The exports below ARE the server's public surface — what a consumer (console, an MCP adapter) may
   call. Everything else (`Repo`, the schemas' changesets, `Switchboard`, `Agent`, `Session`,
   the event/fact/issue internals) is this module's own business: reach for it from outside and
   the build says no. Widening the surface is a one-line diff HERE, which is the point — the

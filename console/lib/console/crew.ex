@@ -2,9 +2,9 @@ defmodule Console.Crew do
   @moduledoc """
   The server crew — roles the leader spawns onto a task thread and tears down when done.
 
-  This is the console-side crew backend: server' `spawn_crew`/`kill_crew` tools dispatch through the
+  This is the console-side crew backend: the server's `spawn_crew`/`kill_crew` tools dispatch through the
   `Server.Crew` behaviour (`config :server, :crew, Console.Crew`) into `spawn_role/3` / `kill_role/2`,
-  which run IN the live cockpit node — the same node holding server' Repo, tokens, and the `tlon`
+  which run IN the live cockpit node — the same node holding the server's Repo, tokens, and the `tlon`
   tmux server. No second BEAM boots and no port is re-bound; the leader staffs a reviewer from the
   thread it is leading and the window lands beside it.
 
@@ -24,7 +24,7 @@ defmodule Console.Crew do
   """
 
   # The crew backend server dispatches to (`config :server, :crew, Console.Crew`) — the same seam as
-  # Console.Arbiter. server' `spawn_crew`/`kill_crew` tools call through `Server.Crew` and land in
+  # Console.Arbiter. the server's `spawn_crew`/`kill_crew` tools call through `Server.Crew` and land in
   # `spawn_role/3` / `kill_role/2` below, run IN this live node, so no second BEAM boots.
   @behaviour Server.Crew
 
@@ -182,7 +182,7 @@ defmodule Console.Crew do
     :ok
   end
 
-  # `Server.Crew` behaviour — the doors server' spawn_crew/kill_crew tools land in. Thin delegates to
+  # `Server.Crew` behaviour — the doors the server's spawn_crew/kill_crew tools land in. Thin delegates to
   # the IO wrappers above; the leader's handle in `opening_turn/2` is claude-machine (MVP lead).
   # spawn/4 (not spawn/3) — a local spawn/3 call is ambiguous with Kernel.spawn/3.
   @impl Server.Crew

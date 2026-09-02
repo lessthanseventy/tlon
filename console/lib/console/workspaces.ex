@@ -1,6 +1,6 @@
 defmodule Console.Workspaces do
   @moduledoc """
-  An event-driven cache of server' workspaces (workspaces/orbis Slice 1, Task B1).
+  An event-driven cache of the server's workspaces (workspaces/orbis Slice 1, Task B1).
 
   `Space.all/0` and the Orbis survey are per-render hot paths — reading
   `Server.Workspaces.all/0` there would be a server DB hit every frame, the same
@@ -27,7 +27,7 @@ defmodule Console.Workspaces do
 
   @workspace_events [:workspace_registered, :workspace_edited, :workspace_removed]
   # The console-shaped subset lifted off each `Server.Workspace` — dropping `knobs`/`created_at`.
-  # Taken by key (not a struct match) so console needn't reference server' unexported struct.
+  # Taken by key (not a struct match) so console needn't reference the server's unexported struct.
   @fields [:id, :name, :type, :paths, :roster, :scope]
 
   def start_link(opts \\ []) do
@@ -54,7 +54,7 @@ defmodule Console.Workspaces do
     {:ok, load([])}
   end
 
-  # Guarded like `load/1`: if server' PubSub is down at boot, degrade to an unsubscribed
+  # Guarded like `load/1`: if the server's PubSub is down at boot, degrade to an unsubscribed
   # empty cache instead of crash-looping the supervisor. Happy path is a plain subscribe.
   defp subscribe do
     Bus.subscribe_workspaces()

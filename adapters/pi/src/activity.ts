@@ -53,7 +53,7 @@ export function lastToolActivity(entries: Entry[]): ToolActivity | undefined {
   return undefined;
 }
 
-// A ticking elapsed-time label — mirrors aleph's Aleph.Text.duration/1 exactly (same reasoning:
+// A ticking elapsed-time label — mirrors aleph's Console.Text.duration/1 exactly (same reasoning:
 // sub-minute precision so the number visibly moves, unlike a coarser "N minutes ago" bucket).
 export function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
