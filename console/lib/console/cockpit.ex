@@ -12,6 +12,7 @@ defmodule Console.Cockpit do
   use GenServer
 
   alias Console.Board
+  alias Console.Cockpit.Recovery
   alias Console.Harness
   alias Console.Keymap
   alias Console.LeafWindow
@@ -40,6 +41,10 @@ defmodule Console.Cockpit do
   # `Space.workspace?/1` is a `defguard` (usable in clause-head `when`s), which requires the module,
   # not just an alias.
   require Space
+
+  @doc "Start the cockpit and block until the operator quits — the entry point `mix console.run` calls."
+  @spec run() :: :ok
+  defdelegate run, to: Recovery
 
   # Redraw cadence for tmux liveness + roster warmth, independent of Bus events.
   @tick_ms 500
@@ -87,12 +92,6 @@ defmodule Console.Cockpit do
   # bump it if the first turn still lands typed-but-unsent.
   @opening_submit_delay_ms 1_200
 
-  # Crash recovery (see run/0): relaunch the cockpit in place after a crash, but give up after
-  # @resurrect_max_fails crashes in a row so a persistent bad state can't spin the terminal. A run
-  # that survived @resurrect_healthy_ms is treated as healthy — its next crash starts the count over.
-  @resurrect_max_fails 3
-  @resurrect_healthy_ms 5_000
-
   # The server identity the Tlön pi needs to wire its MCP client (`${TLON_MCP_URL}` in the profile's
   # mcp.json + the bearer minted for TLON_THREAD/TLON_AUTHOR). Carried into the tmux SESSION env so
   # it survives a respawn — see funes_identity_flags/0.
@@ -101,104 +100,20 @@ defmodule Console.Cockpit do
   # The empty Stack shape non-Tlön spaces (and a not-yet-probed Tlön) render.
   @empty_stack %{branch: nil, dirty: false, ahead: nil, behind: nil, status_summary: nil, commits: [], tools: []}
 
-  # Kitty keyboard protocol: push flags + set disambiguate (CSI > 1 u) at init, pop (CSI < u)
-  # at teardown. See the init comment for the full shifted-key round-trip.
+  # Kitty keyboard protocol: push flags + set disambiguate (CSI > 1 u) at init; `Recovery.pop_modes/0`
+  # pops it at teardown. See the init comment for the full shifted-key round-trip.
   @kitty_enable "\e[>1u"
-  @kitty_disable "\e[<u"
 
-  # Bracketed paste: enable (\e[?2004h) at init so ghostty wraps a paste in \e[200~…\e[201~,
-  # disable (\e[?2004l) at teardown. Without it a paste reaches raxol's InputParser one char at a
-  # time and every newline submits; with it the cockpit's paste buffer forwards the whole block.
+  # Bracketed paste: enable (\e[?2004h) at init so ghostty wraps a paste in \e[200~…\e[201~
+  # (disabled at teardown). Without it a paste reaches raxol's InputParser one char at a time and
+  # every newline submits; with it the cockpit's paste buffer forwards the whole block.
   @paste_enable "\e[?2004h"
-  @paste_disable "\e[?2004l"
 
   # Button-motion mouse tracking (\e[?1002h): report mouse MOTION while a button is held, not just
   # press/release. The raxol Driver enables only 1000 (button) + 1006 (SGR); without 1002 ghostty
   # sends nothing during a drag, so a Tlön text selection only highlights on mouseup. Enabled here
   # (additive to the Driver's modes, written after it starts); teardown's reset already clears 1002.
   @mouse_motion_enable "\e[?1002h"
-
-  @doc "Start the cockpit and block until the operator quits — the entry point `mix console.run` calls."
-  @spec run() :: :ok
-  def run, do: run(0)
-
-  # `strikes` = consecutive rapid crashes so far. The cockpit is an unlinked, monitored GenServer —
-  # its crash surfaces here as a clean DOWN (a linked exit would kill this task before it restored
-  # the terminal). server (Repo/Bus) and the session terminals are supervised and keep running, so a
-  # crash relaunches a FRESH cockpit in place — a reconnect, not a cold boot — unless it's looping.
-  defp run(strikes) do
-    case GenServer.start(__MODULE__, %{}) do
-      {:ok, pid} ->
-        ref = Process.monitor(pid)
-        started = System.monotonic_time(:millisecond)
-
-        receive do
-          {:DOWN, ^ref, :process, ^pid, reason} ->
-            restore_host_tty()
-            # Capture a crashed exit — the alt-screen otherwise swallows it silently. (No-op on a
-            # clean quit, so a normal `q` never spams the log.)
-            log_crash(reason)
-            act_on(resurrect_decision(reason, strikes, System.monotonic_time(:millisecond) - started, stdio_alive?()))
-        end
-
-      {:error, {:tb_init_failed, code}} ->
-        note("console needs a real terminal (tb_init returned #{code}) — run this in ghostty.")
-        :ok
-
-      {:error, reason} ->
-        note("console failed to start: #{inspect(reason)}")
-        :ok
-    end
-  end
-
-  @doc false
-  # The recovery decision after a cockpit goes DOWN. Pure so it's unit-tested without a TTY:
-  #   :quit              — a clean operator quit (:normal / :shutdown), end the session.
-  #   {:resurrect, n}    — a crash; relaunch, now on strike n.
-  #   {:stop, n}         — the nth crash in a row hit the ceiling; stay down.
-  #   :dead_io           — a crash, but :standard_io died with it; a relaunch would raise on
-  #                        init's alt-screen writes ("console failed to start"), so stay down.
-  # `crash_report/1` is the clean-vs-crash oracle (nil = normal/shutdown). A run that lasted at
-  # least @resurrect_healthy_ms resets the strike count, so an isolated crash always heals.
-  def resurrect_decision(reason, prev_strikes, alive_ms, io_alive? \\ true) do
-    cond do
-      is_nil(crash_report(reason)) ->
-        :quit
-
-      not io_alive? ->
-        :dead_io
-
-      true ->
-        strikes = if alive_ms >= @resurrect_healthy_ms, do: 1, else: prev_strikes + 1
-        if strikes >= @resurrect_max_fails, do: {:stop, strikes}, else: {:resurrect, strikes}
-    end
-  end
-
-  # :io requests to a dead device return {:error, :terminated} instead of raising — the probe a
-  # resurrect runs before writing anything to :standard_io again.
-  defp stdio_alive?, do: match?(opts when is_list(opts), :io.getopts(:standard_io))
-
-  # stderr can be as dead as stdio after a host-side teardown — a status line is never worth a
-  # second crash in the recovery path.
-  defp note(msg), do: Safe.value(fn -> IO.puts(:stderr, msg) end, :ok)
-
-  defp act_on(:quit), do: :ok
-
-  defp act_on(:dead_io) do
-    Console.CrashLog.append("resurrect skipped", "stdio died with the cockpit — staying down")
-    note("console crashed and its terminal is gone — staying down. Trace: #{Console.CrashLog.path()}")
-    :ok
-  end
-
-  defp act_on({:stop, n}) do
-    note("console crashed #{n}× in a row — staying down. Trace: #{Console.CrashLog.path()}")
-    :ok
-  end
-
-  defp act_on({:resurrect, n}) do
-    note("console crashed — recovering in place… (#{n}/#{@resurrect_max_fails})")
-    run(n)
-  end
 
   @impl true
   def init(_opts) do
@@ -3022,7 +2937,8 @@ defmodule Console.Cockpit do
   end
 
   # terminate/2 (not the quit path) owns the tty restore, so it runs on a normal quit AND on a
-  # crash in any callback — the reason init traps exits.
+  # crash in any callback — the reason init traps exits. The run loop around this GenServer
+  # (relaunch-after-crash, the crash log + issue) is `Console.Cockpit.Recovery`.
   defp quit(state), do: {:stop, :normal, state}
 
   @impl true
@@ -3036,8 +2952,7 @@ defmodule Console.Cockpit do
 
     # Pop Kitty while still ON the alt screen (the spec gives main and alternate screens
     # INDEPENDENT keyboard-flag stacks, so the pop must land on the screen the push landed on).
-    # Straight to /dev/tty, not stdout — the io server may already be winding down on a crash.
-    _ = File.write("/dev/tty", @kitty_disable <> @paste_disable)
+    Recovery.pop_modes()
 
     # Each step in its own try: a wedged Driver stop (it can exceed its 500ms) must never skip
     # tb_shutdown — that skip leaves the shell in alt-screen + mouse-reporting, needing `reset`.
@@ -3048,72 +2963,7 @@ defmodule Console.Cockpit do
 
     Safe.value(fn -> :termbox2_nif.tb_shutdown() end, :ok)
 
-    # Back on the MAIN screen now — final belt-and-braces restore (see restore_host_tty/0).
-    restore_host_tty()
+    # Back on the MAIN screen now — final belt-and-braces restore.
+    Recovery.restore_host_tty()
   end
-
-  # Force-disarm everything a dead cockpit could have left armed: Kitty pop (no-op on an empty
-  # stack), mouse reporting off, leave alt screen, show cursor. Idempotent — run/0 also calls this
-  # after a DOWN, so even a killed GenServer leaves a working shell, not `;5u` keystroke garbage.
-  defp restore_host_tty do
-    _ = File.write("/dev/tty", @kitty_disable <> @paste_disable <> "\e[?1000;1002;1003;1006l\e[?1049l\e[?25h")
-    :ok
-  end
-
-  @doc false
-  # A formatted crash report for a non-normal DOWN reason, or nil for a clean quit — so a normal
-  # operator quit doesn't spam the log. Pure; the IO is in log_crash/1.
-  @spec crash_report(term()) :: String.t() | nil
-  def crash_report(reason) when reason in [:normal, :shutdown], do: nil
-  def crash_report({:shutdown, _}), do: nil
-  def crash_report(reason), do: Exception.format_exit(reason)
-
-  # Append a crashed exit to the crash log and echo it to stderr after the tty is restored, so it
-  # doesn't get swallowed by the alt-screen. Best-effort: a log write failure never masks the crash.
-  defp log_crash(reason) do
-    with report when is_binary(report) <- crash_report(reason) do
-      Safe.value(
-        fn ->
-          Console.CrashLog.append("console crash", report)
-          IO.puts(:stderr, "console crashed (logged to #{Console.CrashLog.path()}):\n#{report}")
-          file_crash_issue(report)
-        end,
-        :ok
-      )
-    end
-
-    :ok
-  end
-
-  @doc false
-  @spec crash_summary(String.t()) :: String.t()
-  def crash_summary(report) do
-    report |> String.split("\n", trim: true) |> List.first("a cockpit crash") |> String.slice(0, 120)
-  end
-
-  # A crashed cockpit files a server issue on the machine thread — its own failures become tracked,
-  # triageable work in the system it renders, not just a log line. Deduped against the thread's open
-  # issues so a crash loop files one, not a hundred. Best-effort: no server (down, or the crash took
-  # it too) just means the crash log is the only record.
-  defp file_crash_issue(report) do
-    summary = "console crashed: " <> crash_summary(report)
-
-    Safe.value(
-      fn ->
-        with %{id: id} = thread <- Channel.machine_thread(),
-             false <- crash_issue_open?(Dossier.open_issues_for_thread(thread), summary) do
-          Dossier.raise_issue(%{thread_id: id, summary: summary, evidence: report, found_by: "console"})
-        end
-      end,
-      :ok
-    )
-  end
-
-  @doc false
-  # Dedupe against the thread's open issues. open_issues_for_thread returns the capped
-  # `%{shown, more}` shape, NOT a bare list — enumerating the map raised here, the rescue above
-  # swallowed it, and a crashed cockpit silently never filed its issue. Public + tested so the
-  # shape contract can't silently regress again.
-  @spec crash_issue_open?(%{shown: [map()]}, String.t()) :: boolean()
-  def crash_issue_open?(%{shown: shown}, summary), do: Enum.any?(shown, &(&1.summary == summary))
 end

@@ -57,32 +57,6 @@ defmodule Console.CockpitTest do
     end
   end
 
-  describe "crash_report/1: only a real crash gets logged" do
-    test "a clean quit (:normal / :shutdown) produces no report" do
-      assert Cockpit.crash_report(:normal) == nil
-      assert Cockpit.crash_report(:shutdown) == nil
-      assert Cockpit.crash_report({:shutdown, :quit}) == nil
-    end
-
-    test "a crash reason is formatted into a report (with the stacktrace, when present)" do
-      report = Cockpit.crash_report({%RuntimeError{message: "boom"}, []})
-      assert is_binary(report)
-      assert report =~ "boom"
-    end
-
-    test "crash_summary takes the first non-blank report line (for the filed issue's title)" do
-      assert Cockpit.crash_summary("\n** (RuntimeError) boom\n    at foo.ex:1\n") ==
-               "** (RuntimeError) boom"
-    end
-
-    test "crash_issue_open? reads the capped %{shown, more} shape open_issues_for_thread returns" do
-      issues = %{shown: [%{summary: "aleph crashed: boom"}], more: 3}
-      assert Cockpit.crash_issue_open?(issues, "aleph crashed: boom")
-      refute Cockpit.crash_issue_open?(issues, "aleph crashed: other")
-      refute Cockpit.crash_issue_open?(%{shown: [], more: 0}, "aleph crashed: boom")
-    end
-  end
-
   describe "profile_launcher/3: the Workspace window-0 command runs pi from its profile's config dir" do
     @profile %Console.Profile{name: "tlon"}
 
@@ -203,43 +177,6 @@ defmodule Console.CockpitTest do
       assert flags =~ ~s(-e TLON_MCP_URL="$TLON_MCP_URL")
       assert flags =~ ~s(-e TLON_THREAD="$TLON_THREAD")
       assert flags =~ ~s(-e TLON_AUTHOR="$TLON_AUTHOR")
-    end
-  end
-
-  # run/0's crash-recovery decision: a clean quit ends; a crash relaunches the cockpit in place
-  # (funes + the session terminals stay supervised), unless it's crash-looping.
-  describe "resurrect_decision/3 — what run/0 does after the cockpit goes DOWN" do
-    test "a clean quit (:normal / :shutdown) ends the session, never resurrects" do
-      assert Cockpit.resurrect_decision(:normal, 0, 10) == :quit
-      assert Cockpit.resurrect_decision(:shutdown, 2, 10) == :quit
-    end
-
-    test "a crash relaunches, counting the strike" do
-      assert Cockpit.resurrect_decision({:badmatch, nil}, 0, 50) == {:resurrect, 1}
-      assert Cockpit.resurrect_decision({:badmatch, nil}, 1, 50) == {:resurrect, 2}
-    end
-
-    test "too many rapid crashes in a row stay down instead of spinning the terminal" do
-      assert Cockpit.resurrect_decision({:badmatch, nil}, 2, 50) == {:stop, 3}
-    end
-
-    test "a cockpit that stayed up a while resets the strike count — an isolated crash still heals" do
-      assert Cockpit.resurrect_decision({:badmatch, nil}, 2, 30_000) == {:resurrect, 1}
-    end
-
-    # A relaunch into a dead :standard_io would raise on init's alt-screen writes and turn a
-    # recoverable crash into "aleph failed to start" — detect it up front and stay down cleanly.
-    test "a crash with dead stdio stays down instead of relaunching into a dead terminal" do
-      assert Cockpit.resurrect_decision({:badmatch, nil}, 0, 50, false) == :dead_io
-      assert Cockpit.resurrect_decision({:badmatch, nil}, 2, 30_000, false) == :dead_io
-    end
-
-    test "a clean quit with dead stdio is still just a quit" do
-      assert Cockpit.resurrect_decision(:normal, 0, 10, false) == :quit
-    end
-
-    test "live stdio keeps the resurrect behavior (explicit 4-arity)" do
-      assert Cockpit.resurrect_decision({:badmatch, nil}, 0, 50, true) == {:resurrect, 1}
     end
   end
 end
