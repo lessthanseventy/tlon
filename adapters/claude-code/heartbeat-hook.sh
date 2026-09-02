@@ -5,7 +5,7 @@
 # silence until Stop.
 #
 # Thin wrapper like capture-hook.sh: the actual logic is cc-heartbeat.ts (bun, reuses activity.ts's
-# pure cadence gate + message-building, and mcp.ts's FunesClient). Never blocks the tool call: any
+# pure cadence gate + message-building, and mcp.ts's TlonClient). Never blocks the tool call: any
 # failure in the bun entry is its own silent no-op (exit 0, no output); this wrapper adds one more
 # no-op layer in case bun itself is missing.
 set -uo pipefail

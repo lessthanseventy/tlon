@@ -10,7 +10,7 @@
 
 import { isCommitCommand } from "./activity.ts";
 import { readHookInput, runHook } from "./hook.ts";
-import { FunesClient, identityFromEnv } from "./mcp.ts";
+import { TlonClient, identityFromEnv } from "./mcp.ts";
 
 const HOOK_TIMEOUT_MS = 10_000;
 
@@ -53,7 +53,7 @@ async function track(): Promise<void> {
   const hookInput = await readHookInput<PostToolUseInput>();
   if (!hookInput || !shouldTrack(hookInput)) return;
 
-  const client = new FunesClient(identity);
+  const client = new TlonClient(identity);
   await client.connect();
   await client.trackThread();
 }

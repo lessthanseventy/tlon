@@ -17,7 +17,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { activityFrom, heartbeatDue, nextHeartbeatState, phraseHeartbeat, type HeartbeatState } from "./activity.ts";
 import { readHookInput, runHook } from "./hook.ts";
 import { completeText } from "./llm.ts";
-import { FunesClient, identityFromEnv } from "./mcp.ts";
+import { TlonClient, identityFromEnv } from "./mcp.ts";
 
 // A hook must never wedge a tool call — the sidecar phrasing call gets a real budget (it's the
 // deliverable, unlike capture's best-effort extraction), but the whole hook still has a ceiling.
@@ -87,7 +87,7 @@ async function heartbeat(): Promise<void> {
   const line = await phraseHeartbeat(activity, elapsedSeconds, completeText);
 
   try {
-    const client = new FunesClient(identity);
+    const client = new TlonClient(identity);
     await client.connect();
     await client.postMessage(line);
   } catch {

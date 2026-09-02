@@ -2,7 +2,7 @@
 // has no persistent extension process the way pi does; a Claude Code Stop hook is a fresh bun
 // process per turn, fed the turn's transcript on stdin and nothing else. This module reuses
 // capture.ts's PURE core (delta-slicing, redaction, prompt, tolerant parse) and mcp.ts's
-// FunesClient exactly as pi's extension.ts does — the only new code here is (1) parseTranscript,
+// TlonClient exactly as pi's extension.ts does — the only new code here is (1) parseTranscript,
 // which turns Claude Code's JSONL transcript into the same Entry[] shape capture.ts already
 // consumes, and (2) a per-session watermark FILE, since there's no long-lived closure to hold one
 // across turns the way pi's extension does.
@@ -27,7 +27,7 @@ import {
 } from "./capture.ts";
 import { readHookInput, runHook } from "./hook.ts";
 import { completeText } from "./llm.ts";
-import { FunesClient, identityFromEnv } from "./mcp.ts";
+import { TlonClient, identityFromEnv } from "./mcp.ts";
 
 // A hung completion or a wedged funes connection must never keep the hook process alive past the
 // turn — bound the whole capture with a hard ceiling and let the process exit regardless.
@@ -139,7 +139,7 @@ async function capture(): Promise<void> {
   }
 
   try {
-    const client = new FunesClient(identity);
+    const client = new TlonClient(identity);
     await client.connect();
     for (const f of facts) {
       try {

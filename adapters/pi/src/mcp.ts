@@ -26,7 +26,7 @@ interface ToolResult {
   isError?: boolean;
 }
 
-export interface FunesConfig {
+export interface TlonConfig {
   url: string; // TLON_MCP_URL — the MCP endpoint, e.g. http://127.0.0.1:4041/mcp
   threadId: number; // TLON_THREAD — the (thread, agent) the mint binds the token to
   agent: string; // TLON_AUTHOR
@@ -38,7 +38,7 @@ export interface FunesConfig {
 // rather than guessing. One parse for the extension and every claude-code hook.
 export function identityFromEnv(
   source: Record<string, string | undefined> = env,
-): FunesConfig | null {
+): TlonConfig | null {
   const url = source.TLON_MCP_URL;
   const thread = source.TLON_THREAD;
   const agent = source.TLON_AUTHOR;
@@ -48,10 +48,10 @@ export function identityFromEnv(
   return { url, threadId, agent };
 }
 
-export class FunesUnreachable extends Error {}
-export class FunesRejected extends Error {}
+export class TlonUnreachable extends Error {}
+export class TlonRejected extends Error {}
 
-export class FunesClient {
+export class TlonClient {
   #url: string;
   #threadId: number;
   #agent: string;
@@ -60,7 +60,7 @@ export class FunesClient {
   #rpcId = 0;
   #connected = false;
 
-  constructor({ url, threadId, agent }: FunesConfig) {
+  constructor({ url, threadId, agent }: TlonConfig) {
     this.#url = url;
     this.#threadId = threadId;
     this.#agent = agent;
@@ -90,7 +90,7 @@ export class FunesClient {
 
       this.#sessionId = headers.get("mcp-session-id");
       if (!body || !("result" in body)) {
-        throw new FunesRejected(`funes refused the handshake: ${JSON.stringify(body)}`);
+        throw new TlonRejected(`funes refused the handshake: ${JSON.stringify(body)}`);
       }
 
       await this.#post({ jsonrpc: "2.0", method: "notifications/initialized" });
@@ -123,7 +123,7 @@ export class FunesClient {
 
   // Bank a DERIVED fact from cadence capture (total-recall slice C). No from_message → funes banks
   // it `derived` (the low-authority lane automation is allowed to fill). funes' own secret scan
-  // (slice B) rejects a credential here, which surfaces as a thrown FunesRejected the caller drops.
+  // (slice B) rejects a credential here, which surfaces as a thrown TlonRejected the caller drops.
   // intent (one-ledger Cut 1) is what the fact is FOR — omitted, not sent, when the extractor
   // didn't produce one, so older funes servers still accept the call.
   async bankFact(text: string, kind: "learned" | "decision", intent?: string): Promise<void> {
@@ -165,19 +165,19 @@ export class FunesClient {
     });
 
     if (!body || !("result" in body)) {
-      throw new FunesRejected(`funes returned no result for ${name}: ${JSON.stringify(body)}`);
+      throw new TlonRejected(`funes returned no result for ${name}: ${JSON.stringify(body)}`);
     }
 
     const result = body.result as ToolResult;
     if (result.isError) {
-      throw new FunesRejected(`funes rejected ${name}: ${this.#textOf(result)}`);
+      throw new TlonRejected(`funes rejected ${name}: ${this.#textOf(result)}`);
     }
     return result;
   }
 
   #decodeJsonContent(result: ToolResult): unknown {
     const text = this.#textOf(result);
-    if (!text) throw new FunesRejected("funes returned an empty tool result");
+    if (!text) throw new TlonRejected("funes returned an empty tool result");
     return JSON.parse(text);
   }
 
@@ -193,7 +193,7 @@ export class FunesClient {
   // Mint a fresh token against the TLON_MCP_URL origin's /mint endpoint — unauthenticated
   // loopback (same trust as bin/funes rpc). The token is signed with THIS node's world
   // secret, so it always verifies at /mcp on the same node. A mint failure (node down, no
-  // /mint endpoint on an older node) is a FunesRejected — never a fallback to a frozen
+  // /mint endpoint on an older node) is a TlonRejected — never a fallback to a frozen
   // token, which would just defer the 401 to the handshake and hide the real cause.
   async #mint(): Promise<string> {
     const mintUrl = new URL(this.#url).origin + "/mint";
@@ -205,19 +205,19 @@ export class FunesClient {
         body: JSON.stringify({ thread_id: this.#threadId, agent: this.#agent }),
       });
     } catch (cause) {
-      throw new FunesUnreachable(`funes mint endpoint not reachable at ${mintUrl}`, { cause });
+      throw new TlonUnreachable(`funes mint endpoint not reachable at ${mintUrl}`, { cause });
     }
     if (!res.ok) {
-      throw new FunesRejected(`funes mint failed (HTTP ${res.status}) at ${mintUrl}`);
+      throw new TlonRejected(`funes mint failed (HTTP ${res.status}) at ${mintUrl}`);
     }
     const json = (await res.json()) as { token?: string };
-    if (!json.token) throw new FunesRejected("funes mint returned no token");
+    if (!json.token) throw new TlonRejected("funes mint returned no token");
     return json.token;
   }
 
   // One POST of a JSON-RPC message. A StreamableHTTP reply is JSON or a one-shot SSE
   // stream — accept both, exactly as funes' e2e test does. A transport failure (funes
-  // not listening) becomes FunesUnreachable; a 401 becomes FunesRejected. Either resets
+  // not listening) becomes TlonUnreachable; a 401 becomes TlonRejected. Either resets
   // #connected so the next connect() re-mints and re-handshakes instead of no-oping on a
   // dead session.
   async #post(
@@ -235,26 +235,26 @@ export class FunesClient {
       res = await fetch(this.#url, { method: "POST", headers, body: JSON.stringify(message) });
     } catch (cause) {
       this.#drop();
-      throw new FunesUnreachable(`funes is not reachable at ${this.#url}`, { cause });
+      throw new TlonUnreachable(`funes is not reachable at ${this.#url}`, { cause });
     }
 
     if (res.status === 401) {
       this.#drop();
-      throw new FunesRejected("funes rejected the token (401) — the minted token didn't verify");
+      throw new TlonRejected("funes rejected the token (401) — the minted token didn't verify");
     }
     // 5xx is the node booting or down, not a refusal — surface it AS unreachable so the
     // human reads the honest cause; both surface, only the label differs.
     if (res.status >= 500) {
       this.#drop();
-      throw new FunesUnreachable(`funes returned HTTP ${res.status} — the node may be starting or down`);
+      throw new TlonUnreachable(`funes returned HTTP ${res.status} — the node may be starting or down`);
     }
     // 404 = the node lost this session (restarted) — dead like a 401, so drop and let the next
     // connect() re-mint + re-handshake instead of hammering the stale session id.
     if (res.status === 404) {
       this.#drop();
-      throw new FunesRejected("funes lost the session (404) — the node restarted; reconnecting");
+      throw new TlonRejected("funes lost the session (404) — the node restarted; reconnecting");
     }
-    if (res.status >= 400) throw new FunesRejected(`funes returned HTTP ${res.status}`);
+    if (res.status >= 400) throw new TlonRejected(`funes returned HTTP ${res.status}`);
 
     return { headers: res.headers, body: await this.#decodeBody(res) };
   }

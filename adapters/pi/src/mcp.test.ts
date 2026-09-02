@@ -1,5 +1,5 @@
 import { test, expect, mock, afterEach } from "bun:test";
-import { FunesClient, FunesRejected, identityFromEnv } from "./mcp";
+import { TlonClient, TlonRejected, identityFromEnv } from "./mcp";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -44,13 +44,13 @@ test("a 404 (lost session) drops the connection so the next connect() re-handsha
   const { fn, mints } = scriptedFetch();
   globalThis.fetch = fn as unknown as typeof fetch;
 
-  const c = new FunesClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
+  const c = new TlonClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
 
   await c.connect();
   expect(mints()).toBe(1);
 
   // A tool call 404s — anubis lost the session (the node restarted).
-  await expect(c.register(undefined)).rejects.toBeInstanceOf(FunesRejected);
+  await expect(c.register(undefined)).rejects.toBeInstanceOf(TlonRejected);
 
   // Without a #drop() on 404, #connected stays true → this connect() no-ops and the dead session
   // id is reused forever (the Tlön 404 loop). The fix drops on 404, so connect() re-mints.
@@ -92,7 +92,7 @@ test("presenceThinking / presenceIdle call their argless self-thread tools", asy
   });
   globalThis.fetch = fn as unknown as typeof fetch;
 
-  const c = new FunesClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
+  const c = new TlonClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
   await c.connect();
   await c.presenceThinking();
   await c.presenceIdle();
@@ -134,7 +134,7 @@ test("postMessage calls post_message with the body", async () => {
   });
   globalThis.fetch = fn as unknown as typeof fetch;
 
-  const c = new FunesClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
+  const c = new TlonClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
   await c.connect();
   await c.postMessage("still on it — running mix test");
 
@@ -144,7 +144,7 @@ test("postMessage calls post_message with the body", async () => {
 // identityFromEnv — the one parse of the TLON_* identity, shared by the extension and every
 // claude-code hook. All three present + an integer thread → a config; anything less → null,
 // so a process not spawned as a citizen stays quiet instead of guessing.
-test("identityFromEnv: the full TLON_* triple becomes a FunesConfig", () => {
+test("identityFromEnv: the full TLON_* triple becomes a TlonConfig", () => {
   expect(
     identityFromEnv({ TLON_MCP_URL: "http://127.0.0.1:4040/mcp", TLON_THREAD: "42", TLON_AUTHOR: "claude-code" }),
   ).toEqual({ url: "http://127.0.0.1:4040/mcp", threadId: 42, agent: "claude-code" });

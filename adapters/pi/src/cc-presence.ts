@@ -1,7 +1,7 @@
 // adapters — the claude-code adapter's thinking-presence declare. claude-machine has no
 // persistent extension process, so each hook fire is a fresh bun process (same shape as
 // cc-capture.ts): UserPromptSubmit declares thinking, Stop/SessionEnd declare idle — the
-// verb rides argv. Reuses mcp.ts's FunesClient; identity is the TLON_* env, the tools are
+// verb rides argv. Reuses mcp.ts's TlonClient; identity is the TLON_* env, the tools are
 // argless self-thread declares.
 //
 // Same failure discipline as the other hooks: funes down, no identity, a slow connect —
@@ -9,7 +9,7 @@
 
 import { argv } from "node:process";
 import { runHook } from "./hook.ts";
-import { FunesClient, identityFromEnv } from "./mcp.ts";
+import { TlonClient, identityFromEnv } from "./mcp.ts";
 
 // Presence is a per-turn nicety; a declare that can't land fast isn't worth waiting on.
 const HOOK_TIMEOUT_MS = 5_000;
@@ -24,7 +24,7 @@ async function declare(): Promise<void> {
   const identity = identityFromEnv();
   if (!identity) return;
 
-  const client = new FunesClient(identity);
+  const client = new TlonClient(identity);
   await client.connect();
   if (verbOf(argv) === "idle") {
     await client.presenceIdle();

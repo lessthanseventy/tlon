@@ -4,7 +4,7 @@
 # the turn's transcript delta and bank them `derived` to funes, unbidden.
 #
 # Thin wrapper like brief-hook.sh: the actual logic is cc-capture.ts (bun, reuses capture.ts's
-# pure core + mcp.ts's FunesClient — no forked extraction prompt). Never blocks the session: any
+# pure core + mcp.ts's TlonClient — no forked extraction prompt). Never blocks the session: any
 # failure in the bun entry is its own silent no-op (exit 0, no output); this wrapper adds one more
 # no-op layer in case bun itself is missing, so a broken/uninstalled bun still can't wedge Stop.
 set -uo pipefail

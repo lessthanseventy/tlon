@@ -4,7 +4,7 @@
 # (clear it; SessionEnd is the exit/crash safety net — funes' max-age sweep backstops the rest).
 #
 # Thin wrapper like capture-hook.sh: the logic is cc-presence.ts (bun, reuses mcp.ts's
-# FunesClient). Never blocks the session: any failure is a silent no-op, and a missing bun
+# TlonClient). Never blocks the session: any failure is a silent no-op, and a missing bun
 # still can't wedge the hook.
 set -uo pipefail
 

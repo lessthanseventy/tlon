@@ -42,7 +42,7 @@ from, and posts to, the same `.dev` world.
 [`capture-hook.sh`](capture-hook.sh) is a `Stop` hook — it runs every turn. It execs
 [`cc-capture.ts`](../pi/src/cc-capture.ts) (bun), which reuses pi's `capture.ts` pure core
 (delta-slicing, secret redaction, the extraction prompt, tolerant parse) and `mcp.ts`'s
-`FunesClient` verbatim — the same reflex pi's `extension.ts` runs on a cadence, adapted to
+`TlonClient` verbatim — the same reflex pi's `extension.ts` runs on a cadence, adapted to
 Claude Code's stateless-per-turn hook model: a per-session watermark is persisted to
 `${XDG_STATE_HOME:-~/.local/state}/tlon-cc-capture/<session_id>` instead of living in a
 long-lived closure. Extracted facts are banked `derived`, with `intent`, unbidden. Same

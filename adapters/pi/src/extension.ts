@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { lastToolActivity, phraseHeartbeat, sawSuccessfulCommit } from "./activity.ts";
 import { renderBrief, type Dossier } from "./brief.ts";
-import { FunesClient, FunesRejected, FunesUnreachable, identityFromEnv } from "./mcp.ts";
+import { TlonClient, TlonRejected, TlonUnreachable, identityFromEnv } from "./mcp.ts";
 import { detectCorrection } from "./recall.ts";
 import {
   buildExtractionPrompt,
@@ -82,7 +82,7 @@ export default function adapters(pi: ExtensionAPI): void {
   // One client for this pane's lifetime — connect() is guarded so only the first hook does
   // the handshake. register binds the session to the TOKEN, so the model's own tool calls
   // (a separate connection, same token) resolve this same session.
-  const client = config ? new FunesClient(config) : null;
+  const client = config ? new TlonClient(config) : null;
 
   // The last dossier state we surfaced this pane. The dossier is re-read every turn (to catch
   // what peers banked), but re-DISPLAYING an unchanged brief every turn buries the pane in
@@ -276,7 +276,7 @@ export default function adapters(pi: ExtensionAPI): void {
         // A REFUSAL (e.g. the root machine thread — its standing coworkers commit constantly)
         // latches too: retrying a doomed promote every turn_end forever helps no one. Only a
         // transport failure (funes down) leaves the latch open for a later retry.
-        if (e instanceof FunesRejected) threadTracked = true;
+        if (e instanceof TlonRejected) threadTracked = true;
       }
     }
     // Cadence capture (slice C): every Nth turn, flush the delta. Bounded input, so it never
@@ -320,7 +320,7 @@ function updateWidget(ctx: ExtensionContext, d: Dossier): void {
 // both, and do nothing else — no queue, no spill, no silent swallow.
 function surface(ctx: ExtensionContext, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
-  const label = err instanceof FunesUnreachable ? "tlon unreachable" : "tlon error";
+  const label = err instanceof TlonUnreachable ? "tlon unreachable" : "tlon error";
   ctx.ui.setStatus(STATUS_KEY, `${label}: ${message}`);
   ctx.ui.notify(`${label}: ${message}`, "error");
 }
