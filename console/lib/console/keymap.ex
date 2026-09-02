@@ -25,19 +25,34 @@ defmodule Console.Keymap do
   `workspaces` list — the same cache the cockpit's `orbis_workspaces/1` reads). A `key_event` is the
   `Raxol.Core.Events.Event` `data` map, e.g. `%{key: :up}` or `%{key: :char, char: "j"}`.
 
-  Effects:
+  Effects (every one the reducer emits — the cockpit's `apply_effect/2` must cover each):
 
     * `:repaint` — state changed; reload server reads and paint.
     * `:quit` — tear down and stop.
-    * `{:forward, key}` — send this key to the focused session's embedded terminal.
-    * `{:create_thread, title}` — open a new thread AND spawn a session onto it (the `n` verb).
-    * `{:post_message, thread_id, body}` — post the composer's body to the focused thread as the
-      operator (the `c` verb).
+    * `:none` — nothing to do.
+    * `{:forward, key}` — send this key to the live center terminal.
+    * `{:create_thread, text}` — the new-thread band's Enter: open a thread with `text` as its
+      opening message (the `n` verb).
+    * `{:file_ticket, text}` / `{:write_note, text}` — the New menu's ticket/note inputs.
+    * `{:post_message, thread_id, body}` — post the composer's/reply box's body to that thread as
+      the operator; `{:show_status, thread_id}` is the composer's `/status` slash command.
+    * `{:orchestrate, text}` — the tertius `:` line's Enter; `{:confirm_orchestrate, armed}` — `y`
+      on a routed consequential verb that is waiting for confirmation (`pending_confirm`).
+    * `:open_focused_thread` / `:close_thread_view` / `{:scroll_conversation, rows}` — the
+      two-step chat center: Enter opens the cursor thread's conversation, Esc steps back to the
+      list, j/k (PgUp/PgDn with the reply box focused) scroll the open backlog.
+    * `:stack_delete_arm` — `d` on a thread card arms the two-key delete; `:tlon_delete_arm` /
+      `{:tlon_delete, target}` — the rail's `d` arm and its confirmed arm-time target.
+    * `:toggle_center_view` (`v`, chat⇄terminal) and `:toggle_session_pane` (Alt+\\).
+    * `:tlon_enter` — Enter on a rail pane (space switch / lazygit zoom / detail, cockpit-resolved).
+    * `:yank` — `y` in nav: the focused pane's semantic text to the clipboard.
+    * `{:habit_action, :approve | :reject}` — `a`/`r` on the Memory pane's pending habit.
     * `{:cycle_coworker_model, profile}` — advance the active space's coworker driver model one
-      step round `Console.Profiles.model_ring/0` and persist it (the `m` verb — the SETTINGS knob;
-      only in a space with a coworker).
+      step round `Console.Profiles.model_ring/0` and persist it (the `m` verb; only in a space with
+      a coworker).
     * `{:switch_space, key}` — Enter on the Orbis survey (`orbis_focus == :survey`) zooms into the
       cursor row's workspace id — the same effect a survey-row click emits (D0.2).
+    * `{:switch_workspace_pos, n}` / `{:select_tab, n}` — Alt+Shift+digit / Alt+digit.
     * `{:toggle_orbis_face}` — `a` (Orbis, bare) flips `orbis_face` survey↔author (D2.1); Esc in
       the author face emits the same effect to step back to the survey.
     * `{:register_workspace, template_key, name}` — Enter on the `:new_workspace` input (the author
@@ -47,14 +62,15 @@ defmodule Console.Keymap do
     * `{:edit_workspace, id, attrs}` — the field editor's `h`/`l` rings (type/scope) and the paths/
       roster sub-list's `a`/`x`/`d` (D2.4 Chunk 2a) — apply one attrs map to a workspace immediately.
     * `{:coworker_knob, name, knob}` — the roster sub-list's `Tab`-selected knob (`:model` |
-      `:yolo`), applied by `Enter`/`Space` to the sub-selected coworker (D2.4 Chunk 2b — absorbs
-      the old `,` settings modal into the roster editor; the modal itself is deleted).
-    * `:none` — nothing to do.
+      `:yolo`), applied by `Enter`/`Space` to the sub-selected coworker (D2.4 Chunk 2b).
 
-  `state.input` is `nil` normally, or `%{kind: :new_thread, buffer, cursor}` (the `n` verb),
-  `%{kind: :compose, thread_id, buffer, cursor}` (the `c` verb), or `%{kind: :new_workspace, buffer,
-  cursor, template}` (the author face's `n` verb — `template` is a `WorkspaceTemplates.names/0` atom,
-  `h`/`l` cycle it) while the operator is typing — a modal that captures EVERY key (so `q` types a
+  `state.input` is `nil` normally, or a typing modal `%{kind, buffer, cursor, …}`. Kinds:
+  `:new_thread` (the `n` verb / new-thread band), `:compose` (`c`, carries `thread_id`), `:reply`
+  (the persistent per-thread reply box, `thread_id`; Enter posts and keeps the box, Esc closes the
+  thread view), `:new_ticket` / `:new_note` (the New menu), `:orchestrate` (the tertius `:` line),
+  `:new_workspace` (the author face's `n` — `template` is a `WorkspaceTemplates.names/0` atom,
+  `h`/`l` cycle it), and the field editor's `:new_path` / `:new_roster` (`workspace_id`; the latter
+  also an `archetype` ring). A modal captures EVERY key (so `q` types a
   "q", it does not quit) until Enter submits or Esc cancels. `cursor` is a grapheme offset into
   `buffer` (not always the end — Left/Right/Up/Down/Home/End move it, Ctrl+P/Ctrl+N alias Up/Down
   for hosts that don't deliver arrow keys, and Ctrl+A/Ctrl+E/Ctrl+U/Ctrl+K/Ctrl+W are readline's
@@ -116,7 +132,12 @@ defmodule Console.Keymap do
           | {:orchestrate, String.t()}
           | {:confirm_orchestrate, map()}
           | :toggle_session_pane
+          | :toggle_center_view
           | {:post_message, term(), String.t()}
+          | {:show_status, term()}
+          | :open_focused_thread
+          | :close_thread_view
+          | {:scroll_conversation, integer()}
           | {:cycle_coworker_model, String.t()}
           | {:habit_action, :approve | :reject}
           | {:switch_space, atom() | non_neg_integer()}
@@ -130,13 +151,15 @@ defmodule Console.Keymap do
           | {:coworker_knob, String.t(), :model | :yolo}
           | :tlon_enter
           | :stack_delete_arm
+          | :tlon_delete_arm
+          | {:tlon_delete, term()}
           | :yank
           | :none
 
   @doc "Map a key event against the current state to the next state and the effect to run."
   @spec handle(map(), map()) :: {map(), effect()}
 
-  # --- LOCK mode (design 2026-08-23): total passthrough. Alt+g alone is console's; every other
+  # LOCK mode (design 2026-08-23): total passthrough. Alt+g alone is console's; every other
   # key — Alt chords, the leader, Esc — forwards raw so readline/emacs keep their Alt bindings.
   # These LOCKED-state clauses precede everything; the ARM clause sits BELOW the input modal by
   # design (modal-blocked) — locking mid-compose is never intended, and no modal can open while
@@ -154,18 +177,18 @@ defmodule Console.Keymap do
   def handle(%{key: :space, shift: true} = key, state) when not is_map_key(key, :ctrl),
     do: handle(%{key: :char, char: " "}, state)
 
-  # --- tertius y/n confirm gate (Slice 3.5): a consequential verb (open work / approve a gate) was
+  # tertius y/n confirm gate (Slice 3.5): a consequential verb (open work / approve a gate) was
   # routed and is armed, waiting on the operator — the whole point is that a command line you talk into
   # NEVER fires a consequential action without a yes. While `pending_confirm` is set every key belongs
   # to the gate: `y` fires it (`:confirm_orchestrate`, apply_effect reads the arm), anything else backs
-  # out. Precedes even the input modal — no modal can be open while armed (the submit cleared it). ---
+  # out. Precedes even the input modal — no modal can be open while armed (the submit cleared it).
   def handle(%{key: :char, char: "y"}, %{pending_confirm: pc} = state) when not is_nil(pc),
     do: {%{state | pending_confirm: nil}, {:confirm_orchestrate, pc}}
 
   def handle(_key, %{pending_confirm: pc} = state) when not is_nil(pc), do: {%{state | pending_confirm: nil}, :repaint}
 
-  # --- input mode: a MODAL — every key belongs to the buffer until Enter/Esc, so a binding
-  # letter (q, s, tab) types its character instead of firing. Must come first. ---
+  # input mode: a MODAL — every key belongs to the buffer until Enter/Esc, so a binding
+  # letter (q, s, tab) types its character instead of firing. Must come first.
   # The persistent reply box (2026-09-01): Esc doesn't just drop the input, it steps the whole
   # center back to the thread LIST (`:close_thread_view` clears `opened_thread`) AND drops the draft,
   # so no half-typed reply leaks into the next thread. Precedes the generic Esc below.
@@ -327,7 +350,7 @@ defmodule Console.Keymap do
   def handle(%{key: :char, char: "g", alt: true} = k, state) when not is_map_key(k, :ctrl),
     do: {Map.put(state, :lock?, true), :repaint}
 
-  # --- Global Alt chords (design 2026-08-23): work from ANY mode — TERM included — and switch
+  # Global Alt chords (design 2026-08-23): work from ANY mode — TERM included — and switch
   # mode implicitly. Workspace-only for movement (there's no pane grid elsewhere); n/c everywhere.
   # Must precede the Tlön routing clause (which would forward them to tmux from TERM). Each clears
   # an armed leader (`clear_leader/1`) — these sit above the leader-consumption clause, so without
@@ -360,15 +383,15 @@ defmodule Console.Keymap do
   def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
       when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {clear_leader(state), :toggle_session_pane}
 
-  # --- Tlön: the lazygit focus model (design 2026-08-20). The center is a live tmux client, so
+  # Tlön: the lazygit focus model (design 2026-08-20). The center is a live tmux client, so
   # `Ctrl+Space` is a STICKY toggle in/out of it — NOT the arm-next-key leader other spaces use.
   # In the terminal every key forwards to tmux; out of it console owns the keys and drives the pure
   # `Console.Tlon.Focus` SM over `tlon_layout` (h/l pane · H/L column · s section · Esc→terminal).
   # `focus` (persistent) and `tlon_layout` (derived per keypress, like center_live?) are supplied by
-  # the cockpit only for this space; the guard keeps every other space on the leader path below. ---
+  # the cockpit only for this space; the guard keeps every other space on the leader path below.
   def handle(key, %{active_key: k, focus: %Focus{}} = state) when Space.workspace?(k), do: handle_tlon(key, state)
 
-  # --- leader pending: Ctrl+Space was pressed; the next key is an console command. ---
+  # leader pending: Ctrl+Space was pressed; the next key is an console command.
   # Ctrl+Space again → send a LITERAL Ctrl+Space through (the prefix-twice convention), so an
   # app that binds it (emacs set-mark!) still gets it. Only with a live terminal to receive it.
   def handle(%{key: :space, ctrl: true}, %{leader_pending?: true, center_live?: true} = state),
@@ -386,10 +409,10 @@ defmodule Console.Keymap do
     {%{next | leader_pending?: false}, effect}
   end
 
-  # --- the leader: Ctrl+Space arms the next key as an console command. ---
+  # the leader: Ctrl+Space arms the next key as an console command.
   def handle(%{key: :space, ctrl: true}, state), do: {%{state | leader_pending?: true}, :repaint}
 
-  # --- default: the center surface owns the keys. ---
+  # default: the center surface owns the keys.
   # A live terminal in the center → every key forwards to its PTY. The terminal is "normal mode";
   # you type into it immediately. (Ctrl+C lands here too → forwards as an interrupt, never a quit.)
   def handle(key, %{center_live?: true} = state), do: {state, {:forward, key}}
@@ -398,13 +421,13 @@ defmodule Console.Keymap do
   # bare — the same command table the leader reaches, just without the prefix.
   def handle(key, state), do: command(key, state)
 
-  # --- console's command table — one source of bindings, reached two ways: bare in a nav-default
-  # space, or via the Ctrl+Space leader from inside a running terminal. ---
+  # console's command table — one source of bindings, reached two ways: bare in a nav-default
+  # space, or via the Ctrl+Space leader from inside a running terminal.
 
-  # --- Orbis' delete confirm (author face, D2.5): a `d` on the cursor row arms; the SECOND `d`
+  # Orbis' delete confirm (author face, D2.5): a `d` on the cursor row arms; the SECOND `d`
   # (still armed on that SAME id — nothing else could have changed it, see the next clause)
   # confirms; literally any other key cancels. Both must precede EVERY other clause (even `q`) so
-  # an armed delete can never be confirmed by a stale keypress. ---
+  # an armed delete can never be confirmed by a stale keypress.
   defp command(%{key: :char, char: "d"}, %{active_key: :orbis, pending_delete: id} = state) when not is_nil(id) do
     {Map.put(state, :pending_delete, nil), {:remove_workspace, id}}
   end
@@ -413,8 +436,8 @@ defmodule Console.Keymap do
     {Map.put(state, :pending_delete, nil), :repaint}
   end
 
-  # --- the field editor (D2.4 Chunk 2a): `author_edit != nil` gates its own key table, ahead of
-  # the list's `n`/`d`/`a`/Esc/h/l/j/k so editing and list-management never leak into each other. ---
+  # the field editor (D2.4 Chunk 2a): `author_edit != nil` gates its own key table, ahead of
+  # the list's `n`/`d`/`a`/Esc/h/l/j/k so editing and list-management never leak into each other.
 
   # `e` on the list's cursor workspace opens the editor at field 0. A no-op off the author face, on an
   # empty list, or while ALREADY editing (never re-arms onto a different cursor workspace mid-edit).
@@ -670,19 +693,19 @@ defmodule Console.Keymap do
   # Anything else (Ctrl+C, F-keys, page-up…) is unbound — a no-op, never a quit.
   defp command(_key, state), do: {state, :none}
 
-  # --- Tlön's delete confirm (mirrors Orbis'): `d` arms on the focused pane's selection (the
+  # Tlön's delete confirm (mirrors Orbis'): `d` arms on the focused pane's selection (the
   # cockpit resolves the target + flashes), the SECOND `d` — still armed — confirms with the
   # ARM-TIME target; literally any other key cancels. Both precede every other clause so a stale
-  # keypress can never confirm. ---
+  # keypress can never confirm.
   defp handle_tlon(%{key: :char, char: "d"}, %{tlon_delete: target} = state) when not is_nil(target),
     do: {%{state | tlon_delete: nil}, {:tlon_delete, target}}
 
   defp handle_tlon(_key, %{tlon_delete: target} = state) when not is_nil(target),
     do: {%{state | tlon_delete: nil}, :repaint}
 
-  # --- Tlön focus routing. Ctrl+Space toggles the terminal; in the terminal every key forwards;
+  # Tlön focus routing. Ctrl+Space toggles the terminal; in the terminal every key forwards;
   # out of it the nav keys drive the focus SM and the bare commands (quit, space-switch, composer,
-  # driver ring) stay reachable. Anything else no-ops — nav mode never leaks a key to tmux. ---
+  # driver ring) stay reachable. Anything else no-ops — nav mode never leaks a key to tmux.
   defp handle_tlon(%{key: :space, ctrl: true}, state), do: {focus_intent(state, :toggle_terminal), :repaint}
 
   # The thread stack is the shown center (center_view :chat, Slice 3) and it's the focused surface
@@ -778,13 +801,8 @@ defmodule Console.Keymap do
   # detail) — the keymap can't, it lacks the reads.
   defp handle_tlon(%{key: :enter}, state), do: {state, :tlon_enter}
   # a/r act on the selected pending habit (Memory's habits section) — the cockpit resolves which
-  # --- input-buffer cursor math (graphemes, not bytes) — what makes the composer/new-thread box
   # habit from the focus + reads and no-ops if the focus isn't on a habit. Approving writes it into
-  # behave like a normal text field instead of an append-only log. `input.cursor` defaults to the
   # the recall floor; rejecting drops it.
-  # buffer's end when absent (a state built before this field existed, or by an older test),
-  # matching the old append-always behaviour exactly until something actually moves the cursor.
-
   defp handle_tlon(%{key: :char, char: "a"}, state), do: {state, {:habit_action, :approve}}
   defp handle_tlon(%{key: :char, char: "r"}, state), do: {state, {:habit_action, :reject}}
   # `y` — semantic yank: the cockpit resolves the focused pane's real text (sha/fact/title) and
@@ -991,6 +1009,8 @@ defmodule Console.Keymap do
   # though it's a real row here).
   defp author_workspaces(state), do: Map.get(state, :author_workspaces, [])
 
+  # Input-buffer cursor math (graphemes, not bytes). `input.cursor` defaults to the buffer's end when
+  # absent (a state built before this field existed, or by an older test).
   defp cursor_of(%{cursor: c}), do: c
   defp cursor_of(%{buffer: buffer}), do: String.length(buffer)
 

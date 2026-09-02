@@ -1095,7 +1095,6 @@ defmodule Console.Cockpit do
     {:noreply, state}
   end
 
-  # --- The overlay menu (right-click workspace context menu + icon picker, Slice 3.5) ---
   # Clicking the tertius band focuses its input (Slice 3) — same as Space / `:`. If it's already
   # focused, the click is a no-op so an in-progress command isn't wiped.
   # Clicking the new-thread band focuses its input (2026-09-01) — the persistent create surface. A
@@ -1278,8 +1277,8 @@ defmodule Console.Cockpit do
     ]
   end
 
-  # --- The full-screen boards (Tickets / Notes, Slice 3.5): the spine tools zoom to a board that
-  # covers the frame; Esc closes it. Painted after the layout, before the menu. ---
+  # The full-screen boards (Tickets / Notes, Slice 3.5): the spine tools zoom to a board that
+  # covers the frame; Esc closes it. Painted after the layout, before the menu.
   defp board_placements(%{board: nil}), do: []
 
   defp board_placements(%{board: kind, w: w, h: h} = state) do
@@ -1378,9 +1377,9 @@ defmodule Console.Cockpit do
     end
   end
 
-  # --- The STACK-zoom embedded lazygit overlay (Slice 4): a full-frame `Panel.Terminal` over the
+  # The STACK-zoom embedded lazygit overlay (Slice 4): a full-frame `Panel.Terminal` over the
   # lazygit PTY, painted like a board. `render_state_of` yields the live cell grid or `:no_session`
-  # (the tick reconciles a vanished terminal back to `lazygit: nil`). ---
+  # (the tick reconciles a vanished terminal back to `lazygit: nil`).
   defp lazygit_placements(%{lazygit: nil}), do: []
 
   defp lazygit_placements(%{lazygit: %{thread_id: id, path: path}, w: w, h: h}) do
