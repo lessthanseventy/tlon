@@ -43,7 +43,7 @@ export function deltaSince(entries: Entry[], watermark: number): { slice: Entry[
 }
 
 // Render a delta as a plain role/text transcript for the extractor. Only user/assistant text
-// (tool spam and the funes brief injections are dropped); tail-capped as a backstop.
+// (tool spam and the tlon brief injections are dropped); tail-capped as a backstop.
 export function serializeDelta(entries: Entry[]): string {
   const blocks: string[] = [];
   for (const e of entries) {
@@ -72,8 +72,8 @@ export function extractText(content: unknown): string {
   return parts.join("\n").trim();
 }
 
-// The same conservative credential shapes funes' write-path scanner (Server.Secrets) refuses —
-// mirrored here because capture EGRESSES the raw delta to ollama.com before funes ever sees it:
+// The same conservative credential shapes the server's write-path scanner (Server.Secrets) refuses —
+// mirrored here because capture EGRESSES the raw delta to ollama.com before the server ever sees it:
 // the inbound bank_fact scan fires one network hop too late to stop a pasted key leaving the box.
 // Pattern-based, not entropy-based, for the same reason as the Elixir side (SHAs and hashes are
 // legitimate technical facts).

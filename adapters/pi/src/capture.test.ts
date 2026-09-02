@@ -57,7 +57,7 @@ describe("buildExtractionPrompt — pins the JSON contract + the kind restrictio
 });
 
 describe("redactSecrets — outbound deltas never carry a credential off the box", () => {
-  test("replaces the funes-mirrored credential shapes with labelled placeholders", () => {
+  test("replaces the server-mirrored credential shapes with labelled placeholders", () => {
     const delta =
       "set AKIAIOSFODNN7EXAMPLE then ghp_0123456789012345678901234567890123456789 " +
       "and sk-ant-abcdefghijklmnopqrstu";

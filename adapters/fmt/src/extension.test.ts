@@ -4,7 +4,7 @@ import type { ToolResultEvent } from "./pi.ts";
 
 // formatTarget is the pure decision — test it without spawning mix. The findMixRoot walk
 // is exercised against the real repo layout (this file lives under modules/adapters/fmt, no
-// mix.exs above it; funes/aleph do have one).
+// mix.exs above it; server/console do have one).
 
 describe("formatTarget — which edits to format", () => {
   const edit = (p: string): ToolResultEvent => ({
@@ -15,10 +15,10 @@ describe("formatTarget — which edits to format", () => {
   });
 
   test("an .ex edit inside a mix project → {root, rel}", () => {
-    const t = formatTarget(edit("/home/andrew/projects/ficciones/modules/server/lib/funes/mcp/gateway.ex"));
+    const t = formatTarget(edit("/home/andrew/projects/ficciones/modules/server/lib/server/mcp/gateway.ex"));
     expect(t).not.toBeNull();
     expect(t!.root).toBe("/home/andrew/projects/ficciones/modules/server");
-    expect(t!.rel).toBe("lib/funes/mcp/gateway.ex");
+    expect(t!.rel).toBe("lib/server/mcp/gateway.ex");
   });
 
   test("an .exs edit inside a mix project → formatted too", () => {
@@ -46,8 +46,8 @@ describe("formatTarget — which edits to format", () => {
 });
 
 describe("findMixRoot — walk up to mix.exs", () => {
-  test("finds the funes project root from a deep file", () => {
-    expect(findMixRoot("/home/andrew/projects/ficciones/modules/server/lib/funes/mcp/gateway.ex")).toBe(
+  test("finds the server project root from a deep file", () => {
+    expect(findMixRoot("/home/andrew/projects/ficciones/modules/server/lib/server/mcp/gateway.ex")).toBe(
       "/home/andrew/projects/ficciones/modules/server",
     );
   });

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "adapters — the pi adapter: funes' hands in the pi harness (register + brief). The dense statusline lives in the sibling adapters/footer package.",
+  "description": "adapters — the pi adapter: the server's hands in the pi harness (register + brief). The dense statusline lives in the sibling adapters/footer package.",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"

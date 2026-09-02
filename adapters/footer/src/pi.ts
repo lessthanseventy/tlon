@@ -3,8 +3,8 @@
 // When pi publishes its own types, this is what to replace with them.
 //
 // The footer needs the reactive footer API (setFooter + FooterData), the model/context/session
-// readers it renders from, and the theme. It shares no types with the funes adapter's pi.ts —
-// the footer is its own package precisely so it doesn't ride on funes' surface.
+// readers it renders from, and the theme. It shares no types with the server adapter's pi.ts —
+// the footer is its own package precisely so it doesn't ride on the server's surface.
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 

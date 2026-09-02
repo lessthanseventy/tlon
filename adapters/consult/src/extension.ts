@@ -3,7 +3,7 @@
 // context (a rich second opinion); /fresh is a clean one-shot with just the prompt.
 //
 // Both spawn a transient `pi --mode json --no-session --model <id>` with no TLON_* env, so
-// the adapters adapter stays quiet and no funes thread is registered by the delegate. `--mode
+// the adapters adapter stays quiet and no server thread is registered by the delegate. `--mode
 // json` (not `-p`) makes pi emit one JSON event per line AS IT WORKS, so the peer's answer
 // streams in token-by-token instead of arriving in one lump when the delegate exits.
 //

@@ -1,4 +1,4 @@
-// The honest brief (pi doc §2b). A pure function: funes' get_dossier JSON in, the
+// The honest brief (pi doc §2b). A pure function: the server's get_dossier JSON in, the
 // prompt text a fresh session wakes to out. It is pure so it is testable, and so the
 // wiring (extension.ts) can stay a thin transport around it.
 //
@@ -11,7 +11,7 @@
 //      since is unrecorded" (§6: unrecorded time is named), and every capped section
 //      carries its +N more (a cut without a count is the empty-world lie in miniature).
 
-// The get_dossier shape — funes' Server.MCP.Brief.scope/1 (one source, two protocol
+// The get_dossier shape — the server's Server.MCP.Brief.scope/1 (one source, two protocol
 // doors). Timestamps are ISO8601 strings or null; certainty is the read-time §4a rank.
 export type Certainty = "stated" | "checked" | "opinion";
 
@@ -102,7 +102,7 @@ export interface Dossier {
   chatter: ChatterMessage[];
 }
 
-// The operator's handle, so a stated fact reads as HIS words. funes trusts only this
+// The operator's handle, so a stated fact reads as HIS words. The server trusts only this
 // author for `stated` provenance; the render names him for the reader.
 const OPERATOR = "andrew";
 
@@ -183,7 +183,7 @@ function renderChatter(m: ChatterMessage): string {
   return `- ${m.author}: ${m.body}`;
 }
 
-// The default case FAILS CLOSED: `opinion`, or any certainty funes emits that we don't
+// The default case FAILS CLOSED: `opinion`, or any certainty the server emits that we don't
 // model, degrades to the least-authoritative rendering — never an unmarked line, which
 // would launder an unknown into apparent truth.
 function renderFact(f: Fact): string {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code PostToolUse hook — the claude-code adapter's heartbeat (funes thread #3,
+# Claude Code PostToolUse hook — the claude-code adapter's heartbeat (thread #3,
 # 2026-08-27). Mirrors pi's turn_start/turn_end interval (adapters/pi's extension.ts): a periodic
 # "here's what's happening" check-in posted to the thread during a long single turn, instead of
 # silence until Stop.

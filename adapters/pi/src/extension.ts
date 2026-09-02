@@ -1,10 +1,10 @@
 // adapters — the pi adapter (pi doc §2b). Three lifecycle hooks make a pi session a citizen
-// of its funes thread: session_start registers (claims the pane, supersedes any zombie
+// of its server thread: session_start registers (claims the pane, supersedes any zombie
 // predecessor); before_agent_start injects the rendered dossier as the honest brief
-// (aleph §3b: briefed from funes state, never a raw replay); turn_end refreshes the footer.
+// (console §3b: briefed from the server state, never a raw replay); turn_end refreshes the footer.
 //
-// Holds no state, touches no SQLite — calls funes through its own MCP client (mcp.ts).
-// When funes is unreachable it surfaces the failure and does nothing else: no retry queue,
+// Holds no state, touches no SQLite — calls the server through its own MCP client (mcp.ts).
+// When the server is unreachable it surfaces the failure and does nothing else: no retry queue,
 // no spill file (AGENTS.md, pi doc §2a).
 
 import { env } from "node:process";
@@ -102,7 +102,7 @@ export default function adapters(pi: ExtensionAPI): void {
   let turnCount = 0;
   let capturing = false;
 
-  // The heartbeat (funes thread #3, 2026-08-27): "here's what's happening" check-ins on a
+  // The heartbeat (thread #3, 2026-08-27): "here's what's happening" check-ins on a
   // cadence during a long single turn, instead of silence until turn_end. turnStartedAt seeds
   // the elapsed-time the sidecar's prompt (and the mechanical fallback) names; heartbeatTimer
   // is armed in turn_start and disarmed in turn_end, so it can never tick after (or across) a
@@ -131,7 +131,7 @@ export default function adapters(pi: ExtensionAPI): void {
   // Re-entrancy is the `capturing` guard (a compaction flush and a turn tick can't double-run);
   // the watermark advances ONLY after a successful extraction, so a failed call retries the same
   // delta next flush instead of punching a permanent hole in the record. The outbound delta is
-  // secret-REDACTED before it leaves the box — funes' own scan guards the inbound bank one hop
+  // secret-REDACTED before it leaves the box — the server's own scan guards the inbound bank one hop
   // too late to stop egress. Best-effort throughout: a failure never disturbs the session.
   const runCapture = async (ctx: ExtensionContext): Promise<void> => {
     if (!client || !recall.boundaryCapture || capturing) return;
@@ -229,7 +229,7 @@ export default function adapters(pi: ExtensionAPI): void {
 
   // Thinking presence (the cockpit's typing indicator): declare at turn start, clear at turn
   // end. Best-effort both ways — presence is a nicety and must never disturb the session; a
-  // crash that skips the idle is cleared by funes' own max-age sweep.
+  // crash that skips the idle is cleared by the server's own max-age sweep.
   pi.on("turn_start", async (_event, ctx) => {
     turnStartedAt = Date.now();
     if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -275,7 +275,7 @@ export default function adapters(pi: ExtensionAPI): void {
       } catch (e) {
         // A REFUSAL (e.g. the root machine thread — its standing coworkers commit constantly)
         // latches too: retrying a doomed promote every turn_end forever helps no one. Only a
-        // transport failure (funes down) leaves the latch open for a later retry.
+        // transport failure (the server down) leaves the latch open for a later retry.
         if (e instanceof TlonRejected) threadTracked = true;
       }
     }
@@ -316,7 +316,7 @@ function updateWidget(ctx: ExtensionContext, d: Dossier): void {
   ctx.ui.setWidget(WIDGET_KEY, lines);
 }
 
-// Surface and stop (pi doc §2a): distinguish "funes is down" from "funes said no", show
+// Surface and stop (pi doc §2a): distinguish "the server is down" from "the server said no", show
 // both, and do nothing else — no queue, no spill, no silent swallow.
 function surface(ctx: ExtensionContext, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);

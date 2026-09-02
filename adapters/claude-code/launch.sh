@@ -3,13 +3,13 @@
 # No thread-id: open a fresh thread. A numeric thread-id: join that thread (resume across
 # a /clear).
 #
-# The funes MCP server (Door 1), the brief hook (Door 2), and the capture reflex (a Stop
-# hook that banks durable facts back to funes each turn) are scoped to THIS session via
+# The tlon MCP server (Door 1), the brief hook (Door 2), and the capture reflex (a Stop
+# hook that banks durable facts back to the server each turn) are scoped to THIS session via
 # `--mcp-config`/`--settings`, not installed into ~/.claude, so a normal `claude` stays
 # untouched.
 #
 # The token is never frozen: the MCP server's `headersHelper` mints a fresh token per
-# connect/reconnect (POST /mint at TLON_MCP_URL's origin), so auth survives a funes
+# connect/reconnect (POST /mint at TLON_MCP_URL's origin), so auth survives a server
 # restart, a token-model change, or a secret regeneration.
 set -euo pipefail
 
@@ -17,7 +17,7 @@ adapter="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$adapter/../../.." && pwd)"
 cli="$repo/scripts/tlon-cli.sh"
 
-# If the environment already carries a funes identity (e.g. aleph's Tlön pane exported it
+# If the environment already carries a server identity (e.g. the console's Tlön pane exported it
 # before exec'ing this launcher), keep it as-is — per-connect minting targets TLON_MCP_URL's
 # origin, so the token is always minted in the same world that serves /mcp.
 if [ -z "${TLON_MCP_URL:-}" ] || [ -z "${TLON_THREAD:-}" ] || [ -z "${TLON_AUTHOR:-}" ]; then
@@ -51,7 +51,7 @@ fi
 # tools read as mcp__tlon__post_message etc. Nothing reads the key back; it is a label.
 mcp_json="{\"mcpServers\":{\"tlon\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\",\"headersHelper\":\"$cli token\"}}}"
 
-# A write-fenced role (aleph's claude_code driver sets TLON_PERMISSIONS_DENY, e.g.
+# A write-fenced role (the console's claude_code driver sets TLON_PERMISSIONS_DENY, e.g.
 # "Write,Edit,NotebookEdit" for the reviewer) lands as a real permissions.deny in --settings —
 # a structural fence, not a persona request.
 perms_json=""
@@ -66,7 +66,7 @@ fi
 
 # Presence (thinking counts as working): UserPromptSubmit declares thinking, Stop clears it
 # (parallel to the capture reflex, so a slow extraction never delays the idle), SessionEnd is
-# the exit/crash safety net. PostToolUse carries the heartbeat (funes thread #3, cadence-gated
+# the exit/crash safety net. PostToolUse carries the heartbeat (thread #3, cadence-gated
 # check-ins during a long turn — heartbeat-hook.sh) AND auto-track (reshape slice B: a landed
 # `git commit` promotes the thread into the stage machine — track-hook.sh).
 settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh\"}]}],\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/heartbeat-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/track-hook.sh\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}],\"SessionEnd\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}]}$perms_json}"
@@ -77,7 +77,7 @@ settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\
 # the peer is never woken. Spell out that a reply is a post_message tool call that @-mentions the sender.
 sys_prompt="You are a citizen of tlon thread #$TLON_THREAD posting as \"$TLON_AUTHOR\", working alongside other agents. Messages from teammates arrive in your input prefixed \"[tlon thread #N] <author>:\" — these are from other agents, NOT the human operator, and your terminal output is invisible to them. To reply so the sender actually receives it and takes their turn, call the tlon post_message tool and @-mention the sender by handle (for example @pi-machine); answering only in your own window reaches no one."
 
-# A coworker ROLE (archetype persona) rides in as a file via TLON_ROLE_PROMPT_FILE (aleph's
+# A coworker ROLE (archetype persona) rides in as a file via TLON_ROLE_PROMPT_FILE (console's
 # claude_code harness driver sets it) and is APPENDED to the citizen protocol — a second
 # --append-system-prompt flag would replace it, not add to it.
 if [ -n "${TLON_ROLE_PROMPT_FILE:-}" ] && [ -f "$TLON_ROLE_PROMPT_FILE" ]; then

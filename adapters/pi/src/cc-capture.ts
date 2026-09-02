@@ -7,7 +7,7 @@
 // consumes, and (2) a per-session watermark FILE, since there's no long-lived closure to hold one
 // across turns the way pi's extension does.
 //
-// Same failure discipline as extension.ts: funes down, no identity, a bad completion, an
+// Same failure discipline as extension.ts: the server down, no identity, a bad completion, an
 // unparseable transcript — all silent no-ops. A Stop hook's stdout/stderr never surface to the
 // operator by default, but silence is the contract regardless: this must never be the reason a
 // session looks broken.
@@ -29,7 +29,7 @@ import { readHookInput, runHook } from "./hook.ts";
 import { completeText } from "./llm.ts";
 import { TlonClient, identityFromEnv } from "./mcp.ts";
 
-// A hung completion or a wedged funes connection must never keep the hook process alive past the
+// A hung completion or a wedged server connection must never keep the hook process alive past the
 // turn — bound the whole capture with a hard ceiling and let the process exit regardless.
 const HOOK_TIMEOUT_MS = 45_000;
 
@@ -149,7 +149,7 @@ async function capture(): Promise<void> {
       }
     }
   } catch {
-    // funes unreachable/rejected the connection — this pass banked nothing, but the extraction
+    // the server unreachable/rejected the connection — this pass banked nothing, but the extraction
     // itself succeeded, so the watermark still advances below (same discipline as extension.ts).
   }
 
@@ -158,7 +158,7 @@ async function capture(): Promise<void> {
 
 // If the ceiling wins the race mid-bank, capture()'s writeWatermark never runs, so the same
 // delta re-extracts and re-banks next turn — a rare duplicate-fact tradeoff we accept over the
-// alternative (letting a hung completion wedge the session). funes dedups on promotion anyway.
+// alternative (letting a hung completion wedge the session). The server dedups on promotion anyway.
 if (import.meta.main) {
   runHook(capture, HOOK_TIMEOUT_MS).finally(() => process.exit(0));
 }

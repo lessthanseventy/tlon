@@ -1,25 +1,25 @@
-// A minimal MCP-over-StreamableHTTP client — funes' extension door (pi doc §2a, the
+// A minimal MCP-over-StreamableHTTP client — the server's extension door (pi doc §2a, the
 // "two doors, one token" seam). There is no pi API to invoke a tool from a lifecycle
 // hook, so the extension is itself a small MCP client: it does the handshake, calls
 // `register` and `get_dossier`, and stops. It deliberately reuses the exact JSON-RPC
-// dance funes' own e2e test proved over the wire (server_test.exs), not an SDK, so there
+// dance the server's own e2e test proved over the wire (server_test.exs), not an SDK, so there
 // is one fewer moving part between the hook and the channel.
 //
 // It holds no state beyond one connection's session id, and it never queues or spills:
-// funes down ⇒ every call throws and the caller surfaces it (AGENTS.md: an adapter holds
+// the server down ⇒ every call throws and the caller surfaces it (AGENTS.md: an adapter holds
 // no state). Identity rides the bearer token, never a call parameter.
 //
 // PER-CONNECT MINT (the fix for the literal-tmux stale-401 of 2026-08-16): the token is
 // NOT read from a frozen TLON_TOKEN env. On every connect (and reconnect), the client
 // mints a fresh token against the SAME origin as TLON_MCP_URL (POST /mint — see
-// Server.MCP.Gateway), so it always hits the right world (aleph's .dev world on 4041, or
+// Server.MCP.Gateway), so it always hits the right world (the console's .dev world on 4041, or
 // the always-up service's XDG world on 4040) and a pane is never stranded by a token-
 // model change or a world-secret regeneration. Identity travels as the stable,
 // format-agnostic (TLON_THREAD, TLON_AUTHOR, TLON_MCP_URL); the token is derived.
 
 import { env } from "node:process";
 
-const PROTOCOL_VERSION = "2025-03-26"; // the version funes' server_test handshakes with
+const PROTOCOL_VERSION = "2025-03-26"; // the version the server's server_test handshakes with
 
 interface ToolResult {
   content?: Array<{ type: string; text?: string }>;
@@ -90,7 +90,7 @@ export class TlonClient {
 
       this.#sessionId = headers.get("mcp-session-id");
       if (!body || !("result" in body)) {
-        throw new TlonRejected(`funes refused the handshake: ${JSON.stringify(body)}`);
+        throw new TlonRejected(`tlon refused the handshake: ${JSON.stringify(body)}`);
       }
 
       await this.#post({ jsonrpc: "2.0", method: "notifications/initialized" });
@@ -104,7 +104,7 @@ export class TlonClient {
   }
 
   // Claim this connection's session and its pane. Supersedes any crashed predecessor
-  // for the same (thread, agent) — the zombie guard is funes-side; we just call it.
+  // for the same (thread, agent) — the zombie guard is server-side; we just call it.
   async register(paneRef: string | undefined): Promise<void> {
     await this.#callTool("register", paneRef ? { pane_ref: paneRef } : {});
   }
@@ -121,11 +121,11 @@ export class TlonClient {
     await this.#callTool("propose_habit", rationale ? { text, rationale } : { text });
   }
 
-  // Bank a DERIVED fact from cadence capture (total-recall slice C). No from_message → funes banks
-  // it `derived` (the low-authority lane automation is allowed to fill). funes' own secret scan
+  // Bank a DERIVED fact from cadence capture (total-recall slice C). No from_message → the server banks
+  // it `derived` (the low-authority lane automation is allowed to fill). The server's own secret scan
   // (slice B) rejects a credential here, which surfaces as a thrown TlonRejected the caller drops.
   // intent (one-ledger Cut 1) is what the fact is FOR — omitted, not sent, when the extractor
-  // didn't produce one, so older funes servers still accept the call.
+  // didn't produce one, so older server nodes still accept the call.
   async bankFact(text: string, kind: "learned" | "decision", intent?: string): Promise<void> {
     await this.#callTool("bank_fact", intent ? { text, kind, intent } : { text, kind });
   }
@@ -145,7 +145,7 @@ export class TlonClient {
     await this.#callTool("presence_idle", {});
   }
 
-  // Post to this connection's thread — the heartbeat check-in's vehicle (funes thread #3).
+  // Post to this connection's thread — the heartbeat check-in's vehicle (thread #3).
   async postMessage(body: string): Promise<void> {
     await this.#callTool("post_message", { body });
   }
@@ -165,19 +165,19 @@ export class TlonClient {
     });
 
     if (!body || !("result" in body)) {
-      throw new TlonRejected(`funes returned no result for ${name}: ${JSON.stringify(body)}`);
+      throw new TlonRejected(`tlon returned no result for ${name}: ${JSON.stringify(body)}`);
     }
 
     const result = body.result as ToolResult;
     if (result.isError) {
-      throw new TlonRejected(`funes rejected ${name}: ${this.#textOf(result)}`);
+      throw new TlonRejected(`tlon rejected ${name}: ${this.#textOf(result)}`);
     }
     return result;
   }
 
   #decodeJsonContent(result: ToolResult): unknown {
     const text = this.#textOf(result);
-    if (!text) throw new TlonRejected("funes returned an empty tool result");
+    if (!text) throw new TlonRejected("tlon returned an empty tool result");
     return JSON.parse(text);
   }
 
@@ -191,7 +191,7 @@ export class TlonClient {
   }
 
   // Mint a fresh token against the TLON_MCP_URL origin's /mint endpoint — unauthenticated
-  // loopback (same trust as bin/funes rpc). The token is signed with THIS node's world
+  // loopback (same trust as bin/server rpc). The token is signed with THIS node's world
   // secret, so it always verifies at /mcp on the same node. A mint failure (node down, no
   // /mint endpoint on an older node) is a TlonRejected — never a fallback to a frozen
   // token, which would just defer the 401 to the handshake and hide the real cause.
@@ -205,18 +205,18 @@ export class TlonClient {
         body: JSON.stringify({ thread_id: this.#threadId, agent: this.#agent }),
       });
     } catch (cause) {
-      throw new TlonUnreachable(`funes mint endpoint not reachable at ${mintUrl}`, { cause });
+      throw new TlonUnreachable(`tlon mint endpoint not reachable at ${mintUrl}`, { cause });
     }
     if (!res.ok) {
-      throw new TlonRejected(`funes mint failed (HTTP ${res.status}) at ${mintUrl}`);
+      throw new TlonRejected(`tlon mint failed (HTTP ${res.status}) at ${mintUrl}`);
     }
     const json = (await res.json()) as { token?: string };
-    if (!json.token) throw new TlonRejected("funes mint returned no token");
+    if (!json.token) throw new TlonRejected("tlon mint returned no token");
     return json.token;
   }
 
   // One POST of a JSON-RPC message. A StreamableHTTP reply is JSON or a one-shot SSE
-  // stream — accept both, exactly as funes' e2e test does. A transport failure (funes
+  // stream — accept both, exactly as the server's e2e test does. A transport failure (server
   // not listening) becomes TlonUnreachable; a 401 becomes TlonRejected. Either resets
   // #connected so the next connect() re-mints and re-handshakes instead of no-oping on a
   // dead session.
@@ -235,26 +235,26 @@ export class TlonClient {
       res = await fetch(this.#url, { method: "POST", headers, body: JSON.stringify(message) });
     } catch (cause) {
       this.#drop();
-      throw new TlonUnreachable(`funes is not reachable at ${this.#url}`, { cause });
+      throw new TlonUnreachable(`tlon is not reachable at ${this.#url}`, { cause });
     }
 
     if (res.status === 401) {
       this.#drop();
-      throw new TlonRejected("funes rejected the token (401) — the minted token didn't verify");
+      throw new TlonRejected("tlon rejected the token (401) — the minted token didn't verify");
     }
     // 5xx is the node booting or down, not a refusal — surface it AS unreachable so the
     // human reads the honest cause; both surface, only the label differs.
     if (res.status >= 500) {
       this.#drop();
-      throw new TlonUnreachable(`funes returned HTTP ${res.status} — the node may be starting or down`);
+      throw new TlonUnreachable(`tlon returned HTTP ${res.status} — the node may be starting or down`);
     }
     // 404 = the node lost this session (restarted) — dead like a 401, so drop and let the next
     // connect() re-mint + re-handshake instead of hammering the stale session id.
     if (res.status === 404) {
       this.#drop();
-      throw new TlonRejected("funes lost the session (404) — the node restarted; reconnecting");
+      throw new TlonRejected("tlon lost the session (404) — the node restarted; reconnecting");
     }
-    if (res.status >= 400) throw new TlonRejected(`funes returned HTTP ${res.status}`);
+    if (res.status >= 400) throw new TlonRejected(`tlon returned HTTP ${res.status}`);
 
     return { headers: res.headers, body: await this.#decodeBody(res) };
   }

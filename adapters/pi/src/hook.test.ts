@@ -6,7 +6,7 @@ import { runHook } from "./hook";
 test("runHook: a throwing body is a silent no-op", async () => {
   await expect(
     runHook(async () => {
-      throw new Error("funes down");
+      throw new Error("server down");
     }, 1_000),
   ).resolves.toBeUndefined();
 });

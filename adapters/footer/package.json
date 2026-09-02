@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "adapters/footer — a dense 2-line pi statusline (model, context bar, I/O, branch, statuses). A generic footer, NOT a funes concern, so it loads for every pi (self-contained coworkers included).",
+  "description": "adapters/footer — a dense 2-line pi statusline (model, context bar, I/O, branch, statuses). A generic footer, NOT a server concern, so it loads for every pi (self-contained coworkers included).",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"

@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 // A mock fetch that scripts the MCP handshake and then 404s the first tool call — exactly what
-// anubis does when aleph restarts and loses the session the token was minted into.
+// anubis does when console restarts and loses the session the token was minted into.
 function scriptedFetch() {
   let mints = 0;
   const fn = mock(async (input: string | URL | Request, init?: RequestInit) => {
@@ -100,7 +100,7 @@ test("presenceThinking / presenceIdle call their argless self-thread tools", asy
   expect(called).toEqual(["presence_thinking", "presence_idle"]);
 });
 
-// postMessage backs the heartbeat check-in (funes thread #3): pin the tool name + body arg go
+// postMessage backs the heartbeat check-in (thread #3): pin the tool name + body arg go
 // out exactly as the PostMessage tool expects.
 test("postMessage calls post_message with the body", async () => {
   const calls: Array<{ name: string; args: unknown }> = [];

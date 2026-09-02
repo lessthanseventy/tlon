@@ -53,7 +53,7 @@ describe("parseTranscript — Claude Code JSONL transcript → capture.ts's Entr
 describe("the reused pipeline — parseTranscript feeds capture.ts's pure core (DRY reuse pinned)", () => {
   test("transcript → deltaSince → serializeDelta → redactSecrets → buildExtractionPrompt carries the turn text, redacted", () => {
     const jsonl = [
-      JSON.stringify({ type: "user", message: { role: "user", content: "we settled on exqlite for the funes repo" } }),
+      JSON.stringify({ type: "user", message: { role: "user", content: "we settled on exqlite for the server repo" } }),
       JSON.stringify({
         type: "assistant",
         message: {
@@ -68,7 +68,7 @@ describe("the reused pipeline — parseTranscript feeds capture.ts's pure core (
     const prompt = buildExtractionPrompt(redactSecrets(serializeDelta(slice)));
 
     // The user/assistant turn text survives the whole pipeline into the extraction prompt...
-    expect(prompt).toContain("we settled on exqlite for the funes repo");
+    expect(prompt).toContain("we settled on exqlite for the server repo");
     expect(prompt).toContain("### assistant");
     // ...while the credential is redacted BEFORE the prompt is built (never egresses in the delta).
     expect(prompt).toContain("[REDACTED:aws-access-key]");

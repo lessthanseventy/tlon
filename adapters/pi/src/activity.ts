@@ -1,4 +1,4 @@
-// The heartbeat's pure core (funes thread #3, 2026-08-27): "here's what's happening" check-ins
+// The heartbeat's pure core (thread #3, 2026-08-27): "here's what's happening" check-ins
 // during a long single turn, instead of silence until Stop. Split the same way capture.ts is —
 // this module is the mechanical, LLM-free signal (which tool, what target, how long); the sidecar
 // phrasing call (llm.ts's completeText, same cheap out-of-band model capture.ts already uses) turns
@@ -53,7 +53,7 @@ export function lastToolActivity(entries: Entry[]): ToolActivity | undefined {
   return undefined;
 }
 
-// A ticking elapsed-time label — mirrors aleph's Console.Text.duration/1 exactly (same reasoning:
+// A ticking elapsed-time label — mirrors the console's Console.Text.duration/1 exactly (same reasoning:
 // sub-minute precision so the number visibly moves, unlike a coarser "N minutes ago" bucket).
 export function formatDuration(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));

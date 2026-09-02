@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code Stop hook — the claude-code adapter's capture reflex (one-ledger Cut 1, Task 4).
 # Mirrors pi's cadence capture (adapters/pi's extension.ts + capture.ts): extract durable facts from
-# the turn's transcript delta and bank them `derived` to funes, unbidden.
+# the turn's transcript delta and bank them `derived` to the server, unbidden.
 #
 # Thin wrapper like brief-hook.sh: the actual logic is cc-capture.ts (bun, reuses capture.ts's
 # pure core + mcp.ts's TlonClient — no forked extraction prompt). Never blocks the session: any

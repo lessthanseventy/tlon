@@ -1,4 +1,4 @@
-// adapters — the claude-code adapter's heartbeat (funes thread #3, 2026-08-27). Same problem as
+// adapters — the claude-code adapter's heartbeat (thread #3, 2026-08-27). Same problem as
 // cc-capture.ts/cc-presence.ts solve for facts/presence: claude-machine has no persistent
 // extension process the way pi does, so a PostToolUse hook is a fresh bun process per tool call.
 // Where pi's extension.ts arms a setInterval for the turn's duration, this hook re-derives "is a
@@ -6,7 +6,7 @@
 // (nextHeartbeatState/heartbeatDue) and the message-building (activityFrom/phraseHeartbeat) are
 // activity.ts's pure core, shared verbatim with pi's side so the two harnesses never drift.
 //
-// Same failure discipline as the other hooks: funes down, no identity, an unparseable payload —
+// Same failure discipline as the other hooks: the server down, no identity, an unparseable payload —
 // all silent no-ops. A PostToolUse hook must never be why a session looks broken or a tool call
 // stalls waiting on it.
 
@@ -91,7 +91,7 @@ async function heartbeat(): Promise<void> {
     await client.connect();
     await client.postMessage(line);
   } catch {
-    // funes unreachable — this beat is dropped; the next due PostToolUse call retries
+    // the server unreachable — this beat is dropped; the next due PostToolUse call retries
   }
 
   await writeState(path, { turnStartedAt, lastPostAt: now }).catch(() => {});

@@ -5,7 +5,7 @@
 // the ticket condenses out of the work. The server is idempotent, so firing on every commit is
 // safe; no state file needed.
 //
-// Same failure discipline as the sibling hooks: funes down, no identity, an unparseable
+// Same failure discipline as the sibling hooks: the server down, no identity, an unparseable
 // payload — all silent no-ops. A PostToolUse hook must never block or break a tool call.
 
 import { isCommitCommand } from "./activity.ts";

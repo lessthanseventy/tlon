@@ -8,7 +8,7 @@
 // mismatch disk — self-recovers on the model's next re-read.
 //
 // Only Elixir is formatted — it's the only language whose gate runs a formatter check
-// (funes:check / aleph:check). TypeScript's gate has no formatter, so nothing to do here.
+// (server:check / console:check). TypeScript's gate has no formatter, so nothing to do here.
 
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";

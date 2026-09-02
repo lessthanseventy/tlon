@@ -1,6 +1,6 @@
 // Total-recall slice D: correction detection. When the operator corrects the agent ("don't do
 // that", "use ripgrep instead", "always run the gate first"), that's a working preference worth
-// remembering — so the adapter proposes it as a funes HABIT (PENDING, for the operator to approve
+// remembering — so the adapter proposes it as a server HABIT (PENDING, for the operator to approve
 // in the Tlön panel). It only PROPOSES: a false positive costs one line in the review queue, never
 // a silent behaviour change, which is what lets the detection be a cheap heuristic instead of an
 // LLM call (the extension API exposes no inference; see the total-recall design doc).

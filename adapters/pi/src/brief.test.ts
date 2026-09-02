@@ -5,7 +5,7 @@ import { renderBrief, type Dossier } from "./brief.ts";
 const NOW = new Date("2026-08-16T12:00:00Z");
 const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
 
-// The get_dossier shape funes' Server.MCP.Brief.scope/1 returns — the contract this
+// The get_dossier shape the server's Server.MCP.Brief.scope/1 returns — the contract this
 // renderer consumes. Overridable per test.
 function dossier(over: Partial<Dossier> = {}): Dossier {
   return {
@@ -80,7 +80,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
               kind: "learned",
               text: "the flaky test is a race in drain/0",
               provenance: "derived",
-              check_cmd: "mix test test/funes/switchboard_test.exs",
+              check_cmd: "mix test test/server/switchboard_test.exs",
               certainty: "checked",
               at: minsAgo(10),
             },
@@ -91,7 +91,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
       NOW,
     );
     expect(out).toContain("[checked]");
-    expect(out).toContain("mix test test/funes/switchboard_test.exs");
+    expect(out).toContain("mix test test/server/switchboard_test.exs");
   });
 
   test("an opinion renders AS a hunch — never as flat truth (anti-laundering)", () => {
@@ -132,7 +132,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
               text: "some claim with a certainty we don't model",
               provenance: "derived",
               check_cmd: null,
-              // funes emits a value this renderer has never seen.
+              // the server emits a value this renderer has never seen.
               certainty: "surprise" as unknown as "opinion",
               at: minsAgo(5),
             },
@@ -179,7 +179,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
             {
               id: 1,
               summary: "termbox NIF crashes on resize",
-              evidence: "aleph pane, 2026-08-15",
+              evidence: "console pane, 2026-08-15",
               found_by: "Carl",
               state: "open",
               at: minsAgo(30),
@@ -205,7 +205,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
       NOW,
     );
     expect(out).toContain("termbox NIF crashes on resize");
-    expect(out).toContain("aleph pane, 2026-08-15");
+    expect(out).toContain("console pane, 2026-08-15");
     // a completed todo renders as a checked box; a work_landed event as its summary
     expect(out).toContain("[x] wired the composer");
     expect(out).toContain("review shipped");

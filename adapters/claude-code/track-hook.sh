@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code PostToolUse hook — auto-track (reshape slice B): a successful `git … commit`
-# promotes this session's thread into the stage machine via funes' track_thread, so the ticket
+# promotes this session's thread into the stage machine via the server's track_thread, so the ticket
 # condenses out of the work. Thin wrapper like heartbeat-hook.sh: the logic is cc-track.ts
 # (bun, shares activity.ts's isCommitCommand + mcp.ts's TlonClient with pi's side). Never
 # blocks the tool call: any failure is a silent no-op.

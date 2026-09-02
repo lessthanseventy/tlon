@@ -4,7 +4,7 @@
 // verb rides argv. Reuses mcp.ts's TlonClient; identity is the TLON_* env, the tools are
 // argless self-thread declares.
 //
-// Same failure discipline as the other hooks: funes down, no identity, a slow connect —
+// Same failure discipline as the other hooks: the server down, no identity, a slow connect —
 // all silent no-ops, hard-bounded so a wedged connect can never hold the session's hook.
 
 import { argv } from "node:process";
