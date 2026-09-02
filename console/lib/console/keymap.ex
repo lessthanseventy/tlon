@@ -122,6 +122,16 @@ defmodule Console.Keymap do
   @type_ring ["code", "life", "blank"]
   @scope_ring ["project", "machine"]
 
+  # j/k/↓/↑ are ONE gesture wherever a list is walked: `vertical/1` reads it as +1 (down) / -1 (up)
+  # and each site dispatches on that instead of spelling the four keys out.
+  defguardp is_vertical(k) when k.key in [:up, :down] or (k.key == :char and k.char in ["j", "k"])
+
+  # Enter, Space, or a typed space — the "apply" gesture of the roster sub-editor's knob.
+  defguardp is_apply_key(k) when k.key in [:enter, :space] or (k.key == :char and k.char == " ")
+
+  # Bare = no modifier at all; the Orbis nav keys demand it so a fallen-through chord can't leak in.
+  defguardp is_bare(k) when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt)
+
   @type effect ::
           :repaint
           | :quit
@@ -452,17 +462,8 @@ defmodule Console.Keymap do
   end
 
   # Field-list mode: j/k move the field cursor 0..3, clamped (no wrap).
-  defp command(%{key: :char, char: "j"}, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state),
-    do: {put_author_edit(state, %{edit | field: min(edit.field + 1, 3)}), :repaint}
-
-  defp command(%{key: :down}, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state),
-    do: {put_author_edit(state, %{edit | field: min(edit.field + 1, 3)}), :repaint}
-
-  defp command(%{key: :char, char: "k"}, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state),
-    do: {put_author_edit(state, %{edit | field: max(edit.field - 1, 0)}), :repaint}
-
-  defp command(%{key: :up}, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state),
-    do: {put_author_edit(state, %{edit | field: max(edit.field - 1, 0)}), :repaint}
+  defp command(key, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state) when is_vertical(key),
+    do: {put_author_edit(state, %{edit | field: (edit.field + vertical(key)) |> max(0) |> min(3)}), :repaint}
 
   # Field-list mode: h/l cycle the type (field 0) / scope (field 1) ring against the LIVE workspace
   # (author_workspaces, threaded per keypress) and emit the edit immediately — no draft/commit step.
@@ -486,17 +487,8 @@ defmodule Console.Keymap do
 
   # Sub-list mode (D2.4 Chunk 2b/2c): j/k move `sub`, clamped to the field's LIVE list length
   # (paths/roster off author_workspaces, threaded per keypress — never stale).
-  defp command(%{key: :char, char: "j"}, %{active_key: :orbis, author_edit: %{mode: :sub} = edit} = state),
-    do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, 1)}), :repaint}
-
-  defp command(%{key: :down}, %{active_key: :orbis, author_edit: %{mode: :sub} = edit} = state),
-    do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, 1)}), :repaint}
-
-  defp command(%{key: :char, char: "k"}, %{active_key: :orbis, author_edit: %{mode: :sub} = edit} = state),
-    do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, -1)}), :repaint}
-
-  defp command(%{key: :up}, %{active_key: :orbis, author_edit: %{mode: :sub} = edit} = state),
-    do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, -1)}), :repaint}
+  defp command(key, %{active_key: :orbis, author_edit: %{mode: :sub} = edit} = state) when is_vertical(key),
+    do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, vertical(key))}), :repaint}
 
   # Sub-list mode, field 2 (paths): `a` opens a `:new_path` add buffer (state.input, kind-agnostic
   # reuse of the printable-insert/Enter/Esc machinery, mirrors `:new_workspace`).
@@ -546,13 +538,7 @@ defmodule Console.Keymap do
   # Sub-list mode, field 3 (roster) only: Enter/Space applies the active knob to the sub-selected
   # coworker (the Settings modal's apply, now here) — `name` off the LIVE roster (workspace_field/2,
   # same source `a`/`x`/`d` read). A vanished entry (sub past the shrunk list) is a no-op.
-  defp command(%{key: :enter}, %{active_key: :orbis, author_edit: %{mode: :sub, field: 3}} = state),
-    do: roster_knob_apply(state)
-
-  defp command(%{key: :char, char: " "}, %{active_key: :orbis, author_edit: %{mode: :sub, field: 3}} = state),
-    do: roster_knob_apply(state)
-
-  defp command(%{key: :space}, %{active_key: :orbis, author_edit: %{mode: :sub, field: 3}} = state),
+  defp command(key, %{active_key: :orbis, author_edit: %{mode: :sub, field: 3}} = state) when is_apply_key(key),
     do: roster_knob_apply(state)
 
   # Sub-list mode: Esc steps back to the field list (mode: :field), field unchanged.
@@ -680,15 +666,9 @@ defmodule Console.Keymap do
   # j/k/↑/↓ route by `orbis_focus`: :survey moves the survey's per-row cursor (clamped, no wrap);
   # :threads keeps the thread-focus move. Orbis-only: this table is only reached with `active_key
   # :orbis` (a Workspace routes every key through `handle_tlon`, which delegates just n/c/m here).
-  defp command(%{key: :up}, %{active_key: :orbis} = state), do: move_orbis(state, -1)
-
-  defp command(%{key: :char, char: "k"} = k, %{active_key: :orbis} = state)
-       when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt), do: move_orbis(state, -1)
-
-  defp command(%{key: :down}, %{active_key: :orbis} = state), do: move_orbis(state, 1)
-
-  defp command(%{key: :char, char: "j"} = k, %{active_key: :orbis} = state)
-       when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt), do: move_orbis(state, 1)
+  # The letters must be bare (a chord is never nav); the arrows carry whatever modifiers they have.
+  defp command(key, %{active_key: :orbis} = state) when is_vertical(key) and (key.key != :char or is_bare(key)),
+    do: move_orbis(state, vertical(key))
 
   # Anything else (Ctrl+C, F-keys, page-up…) is unbound — a no-op, never a quit.
   defp command(_key, state), do: {state, :none}
@@ -718,21 +698,8 @@ defmodule Console.Keymap do
 
   # LIST mode (no thread opened): j/k move the cursor, g/G jump, Enter opens the focused thread's
   # conversation. (Two-step center — the fold/zoom stack is retired.)
-  defp handle_tlon(
-         %{key: :char, char: "j"},
-         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
-       ), do: stack_move(state, 1)
-
-  defp handle_tlon(
-         %{key: :char, char: "k"},
-         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
-       ), do: stack_move(state, -1)
-
-  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state),
-    do: stack_move(state, 1)
-
-  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state),
-    do: stack_move(state, -1)
+  defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state)
+       when is_vertical(key), do: move_thread(state, vertical(key))
 
   defp handle_tlon(
          %{key: :char, char: "g"},
@@ -748,17 +715,8 @@ defmodule Console.Keymap do
     do: {state, :open_focused_thread}
 
   # CONVERSATION mode (a thread opened): j/k scroll it; Esc goes back to the list.
-  defp handle_tlon(%{key: :char, char: "j"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
-    do: {state, {:scroll_conversation, 3}}
-
-  defp handle_tlon(%{key: :char, char: "k"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
-    do: {state, {:scroll_conversation, -3}}
-
-  defp handle_tlon(%{key: :down}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
-    do: {state, {:scroll_conversation, 3}}
-
-  defp handle_tlon(%{key: :up}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
-    do: {state, {:scroll_conversation, -3}}
+  defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state) when is_vertical(key),
+    do: {state, {:scroll_conversation, 3 * vertical(key)}}
 
   defp handle_tlon(%{key: :escape}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
     do: {state, :close_thread_view}
@@ -793,10 +751,7 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "L"}, state), do: {focus_intent(state, :col_right), :repaint}
   defp handle_tlon(%{key: :char, char: "H"}, state), do: {focus_intent(state, :col_left), :repaint}
   # j/k move the item cursor within the focused pane.
-  defp handle_tlon(%{key: :char, char: "j"}, state), do: {focus_intent(state, :item_next), :repaint}
-  defp handle_tlon(%{key: :char, char: "k"}, state), do: {focus_intent(state, :item_prev), :repaint}
-  defp handle_tlon(%{key: :down}, state), do: {focus_intent(state, :item_next), :repaint}
-  defp handle_tlon(%{key: :up}, state), do: {focus_intent(state, :item_prev), :repaint}
+  defp handle_tlon(key, state) when is_vertical(key), do: {focus_intent(state, item_intent(vertical(key))), :repaint}
   # Enter is contextual: the cockpit resolves the focused pane (space switch / lazygit zoom / a MAIN
   # detail) — the keymap can't, it lacks the reads.
   defp handle_tlon(%{key: :enter}, state), do: {state, :tlon_enter}
@@ -828,6 +783,17 @@ defmodule Console.Keymap do
 
   defp focus_intent(state, intent), do: %{state | focus: Focus.handle(state.focus, state.tlon_layout, intent)}
 
+  @doc false
+  @spec vertical(map()) :: 1 | -1 | nil
+  def vertical(%{key: :down}), do: 1
+  def vertical(%{key: :up}), do: -1
+  def vertical(%{char: "j"}), do: 1
+  def vertical(%{char: "k"}), do: -1
+  def vertical(_key), do: nil
+
+  defp item_intent(1), do: :item_next
+  defp item_intent(-1), do: :item_prev
+
   # A digit key to a 1-based position: "1".."9" → 1..9, "0" → 10 (the super+1..0 idiom).
   defp digit_pos("0"), do: 10
   defp digit_pos(d), do: String.to_integer(d)
@@ -854,19 +820,11 @@ defmodule Console.Keymap do
     {%{state | active_key: space.key}, :repaint}
   end
 
-  defp move(%{threads: []} = state, _dir), do: {state, :none}
+  # The thread cursor: one step through `state.threads`, clamped (no wrap) — the Workspace stack's
+  # j/k and Orbis' thread-focus move alike.
+  defp move_thread(%{threads: []} = state, _dir), do: {state, :none}
 
-  defp move(state, dir) do
-    ids = Enum.map(state.threads, & &1.id)
-    i = Enum.find_index(ids, &(&1 == state.focused_id)) || 0
-    new_id = Enum.at(ids, min(max(i + dir, 0), length(ids) - 1))
-    {%{state | focused_id: new_id}, :repaint}
-  end
-
-  # The thread-stack cursor move/jump in the Workspace context (returned from handle_tlon).
-  defp stack_move(%{threads: []} = state, _dir), do: {state, :none}
-
-  defp stack_move(state, dir) do
+  defp move_thread(state, dir) do
     ids = Enum.map(state.threads, & &1.id)
     i = Enum.find_index(ids, &(&1 == state.focused_id)) || 0
     {%{state | focused_id: Enum.at(ids, min(max(i + dir, 0), length(ids) - 1))}, :repaint}
@@ -878,18 +836,18 @@ defmodule Console.Keymap do
 
   # Dispatch Orbis' j/k/↑/↓: the author face's own cursor takes priority over `orbis_focus`
   # (survey/threads is meaningless while the author face is showing — Panel.Author, not Overview);
-  # else the survey's per-row cursor, or the pre-existing thread move (`move/2`, unchanged — keeps
-  # the composer's `c` target working).
+  # else the survey's per-row cursor, or the thread move (`move_thread/2` — keeps the composer's `c`
+  # target working).
   defp move_orbis(state, dir) do
     cond do
       orbis_face(state) == :author -> move_author_cursor(state, dir)
       orbis_focus(state) == :survey -> move_survey(state, dir)
-      true -> move(state, dir)
+      true -> move_thread(state, dir)
     end
   end
 
   # Clamp `survey_cursor` into `0..length(workspaces) - 1` — no wrap, same edge-clamp discipline as
-  # `move/2`. Zero workspaces clamps to 0 (harmless; Enter no-ops on an empty survey).
+  # `move_thread/2`. Zero workspaces clamps to 0 (harmless; Enter no-ops on an empty survey).
   # `Map.put/3`, not `%{state | ...}` — that raises KeyError when `:survey_cursor` is absent (an
   # older test's literal state map, built before this field existed), same tolerance as the
   # composer's `insert_at/2`.

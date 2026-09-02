@@ -12,7 +12,7 @@ launch it, sit at it, quit it.
 
 **The cast is data, not constants.** Each workspace's roster (`Server.Workspaces`) names coworkers by
 archetype — `surveyor` (tertius, the center), `builder` (hronir, the lead), reviewer/planner/… — and
-the cockpit spawns them from it (`Console.Cockpit.ensure_workspace_roster/2`): server handle
+the cockpit spawns them from it (`Console.Staffing.ensure_workspace_roster/2`): server handle
 `<name>-machine`, tmux window `<name>`, on the workspace's private tmux server
 `console-workspace-<id>` (session `w<id>`, persistence-free config from the coworker's profile dir,
 `Console.Profiles`). Staffed threads get per-thread `t<id>` windows; crew roles get `r<id>`.
@@ -38,10 +38,15 @@ the cockpit spawns them from it (`Console.Cockpit.ensure_workspace_roster/2`): s
   server NEVER depends on the console. That export list in `../server/lib/server.ex` IS the API
   surface — don't grep for a function, see `../server/AGENTS.md` § Public surface.
 - **Not supervised at boot — it grabs the TTY.** Runs only under `mix console.run` in a real terminal,
-  never during `mix test`. The GenServer (`Console.Cockpit`) is a thin interpreter; the decisions
-  live in pure modules — `Console.Keymap` (the reducer), `Console.View` (composition), the panels,
-  `Console.Mention`, `Console.SessionPane` — and those are what the suite covers. A suite that
-  needs the real `Server` contexts boots a scratch db through `Console.TestRepo` (`async: false`).
+  never during `mix test`. The GenServer (`Console.Cockpit`) is a thin interpreter — the callbacks
+  and `apply_effect`; `Console.Cockpit.Recovery` is the run loop around it. The decisions live in
+  pure modules — `Console.Keymap` (the reducer), `Console.View` (composition), the panels,
+  `Console.Mention`, `Console.SessionPane` — and the preamble's work in named ones: `Console.Reads`
+  (the frame's data), `Console.Staffing` (find-or-spawn), `Console.Delivery` (event → coworker),
+  `Console.Cockpit.Author` / `.Boards` (menus, workspace CRUD, the boards), `Console.Tmux` (naming
+  + the `:tlon_cmd` seam), `Console.Safe` (the degrade guards). Those are what the suite covers. A
+  suite that needs the real `Server` contexts boots a scratch db through `Console.TestRepo`
+  (`async: false`).
 - **The console runs its OWN server on :4041 (`../server/.dev/tlon.db`)** — isolated from the always-up
   service on :4040. Dogfood junk stays in the sandbox; it never touches the real channel. (WS3 in
   `docs/plans/2026-09-01-ws3-cockpit-http-client-design.md` is the plan to collapse the two.)

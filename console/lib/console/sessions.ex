@@ -30,7 +30,7 @@ defmodule Console.Sessions do
   """
   def spawn_harness(thread_id, exports, opts \\ []) do
     # `:launcher` overrides the configured default — the Tlön center launches pi via a custom tmux
-    # launcher (Cockpit.tlon_launcher) through this same seam.
+    # launcher (`Console.Staffing.profile_launcher/3`) through this same seam.
     {launcher, opts} = Keyword.pop(opts, :launcher, Application.get_env(:console, :spawn_launcher, "mise exec -- pi"))
     # `env --default-signal` resets the child's signal dispositions to default before exec. The BEAM
     # runs SIGCHLD in a non-default state (it reaps its own children), and Ghostty.PTY's forkpty child

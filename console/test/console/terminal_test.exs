@@ -5,7 +5,7 @@ defmodule Console.TerminalTest do
   """
   use ExUnit.Case, async: true
 
-  alias Console.Cockpit
+  alias Console.GhosttyKey
   alias Console.Terminal
 
   test "runs a command in a real PTY, pings on output, reads the screen back with color" do
@@ -138,25 +138,25 @@ defmodule Console.TerminalTest do
     # input_key emits them; without Kitty it emits modifyOtherKeys (\e[27;2;13~) which pi drops.
     test "shift+enter encodes to \e[13;2u — the newline binding pi expects" do
       {:ok, t} = Terminal.start_link(cmd: "/bin/cat", cols: 40, rows: 4, notify: self())
-      ev = Cockpit.ghostty_key(%{key: :enter, shift: true})
+      ev = GhosttyKey.from_event(%{key: :enter, shift: true})
       assert {:ok, "\e[13;2u"} = Terminal.encode_key(t, ev)
     end
 
     test "ctrl+v encodes to \e[118;5u — the paste-image binding pi expects" do
       {:ok, t} = Terminal.start_link(cmd: "/bin/cat", cols: 40, rows: 4, notify: self())
-      ev = Cockpit.ghostty_key(%{key: :char, char: "v", ctrl: true})
+      ev = GhosttyKey.from_event(%{key: :char, char: "v", ctrl: true})
       assert {:ok, "\e[118;5u"} = Terminal.encode_key(t, ev)
     end
 
     test "ctrl+shift+c encodes to \e[99;6u — copy, not collapsed to ^C (0x03)" do
       {:ok, t} = Terminal.start_link(cmd: "/bin/cat", cols: 40, rows: 4, notify: self())
-      ev = Cockpit.ghostty_key(%{key: :char, char: "c", ctrl: true, shift: true})
+      ev = GhosttyKey.from_event(%{key: :char, char: "c", ctrl: true, shift: true})
       assert {:ok, "\e[99;6u"} = Terminal.encode_key(t, ev)
     end
 
     test "a plain unmodified key still encodes as its bare char (Kitty doesn't disturb typing)" do
       {:ok, t} = Terminal.start_link(cmd: "/bin/cat", cols: 40, rows: 4, notify: self())
-      ev = Cockpit.ghostty_key(%{key: :char, char: "a"})
+      ev = GhosttyKey.from_event(%{key: :char, char: "a"})
       assert {:ok, "a"} = Terminal.encode_key(t, ev)
     end
   end

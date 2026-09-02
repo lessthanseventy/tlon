@@ -159,6 +159,34 @@ defmodule Console.Space do
   @spec fetch(atom() | non_neg_integer(), [t()]) :: t() | nil
   def fetch(key, spaces), do: Enum.find(spaces, &(&1.key == key))
 
+  @doc """
+  A Workspace's roster (the cast `Console.Mention.route/3` resolves against and the spawn pass
+  staffs from) — `[]` when the workspace is missing (server down / no roster: nobody resolves,
+  nobody wakes). `spaces` defaults to the live cache; tests inject a list.
+  """
+  @spec roster(non_neg_integer() | nil, [t()]) :: [map()]
+  def roster(workspace_id, spaces \\ all()) do
+    case fetch(workspace_id, spaces) do
+      %__MODULE__{roster: roster} -> roster
+      _ -> []
+    end
+  end
+
+  @doc """
+  The workspace id a call site with only cockpit `state` in scope should target (a Bus handler, a
+  click on a Workspace-only panel): `active_key` when it names a Workspace, else the first
+  workspace — nil when none exists at all (`Console.Tmux.run/3` no-ops on nil).
+  """
+  @spec active_workspace_id(%{active_key: term()}) :: non_neg_integer() | nil
+  def active_workspace_id(%{active_key: key}) when workspace?(key), do: key
+
+  def active_workspace_id(_state) do
+    case first_workspace() do
+      nil -> nil
+      space -> space.id
+    end
+  end
+
   defp step(key, delta) do
     spaces = all()
     i = Enum.find_index(spaces, &(&1.key == key)) || 0

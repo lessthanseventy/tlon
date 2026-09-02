@@ -19,6 +19,10 @@ defmodule Console.Config do
   is just "no overrides"); writes are atomic (tmp + rename) so a crash mid-write can't truncate it.
   """
 
+  @doc "The operator's server author handle — what the cockpit posts as (`config :server, :operator`)."
+  @spec operator() :: String.t()
+  def operator, do: Application.get_env(:server, :operator, "andrew")
+
   @doc "The settings file path (`config :console, :config_path` override, else ~/.config/console/config.json)."
   @spec path() :: String.t()
   def path do

@@ -33,6 +33,7 @@ defmodule Console.Board do
   # a raise degrades THAT panel to an error row and is logged (the bug still surfaces via the crash
   # log), while every other panel paints. This is why per-renderer catch-alls aren't needed: a
   # missing clause stays a loud failure — just a survivable, recorded one, not a dead cockpit.
+  # (`Console.Safe.read/3` is the same guard one layer up, on the cockpit's reads.)
   defp safe_rows(panel, data, rect) do
     Panel.render_scroll(panel, data, rect)
   rescue
@@ -47,25 +48,6 @@ defmodule Console.Board do
 
   defp panel_name(panel) when is_atom(panel), do: panel |> Atom.to_string() |> String.split(".") |> List.last()
   defp panel_name(panel), do: inspect(panel)
-
-  @doc """
-  `safe_rows/3`'s twin, one layer up: guard a cockpit READ (the per-frame server/tmux assembly —
-  crew, presence, logbook…) so a raise OR an exit (a down server GenServer) degrades that one read
-  to `fallback` and a crash-log entry instead of taking the whole cockpit down. Panels already
-  tolerate their read's empty shape, so a degraded read renders as that panel's quiet state.
-  """
-  @spec safe_read(atom(), term(), (-> term())) :: term()
-  def safe_read(label, fallback, fun) do
-    fun.()
-  rescue
-    e ->
-      Console.CrashLog.append("read error: #{label}", Exception.format(:error, e, __STACKTRACE__))
-      fallback
-  catch
-    kind, reason ->
-      Console.CrashLog.append("read error: #{label}", Exception.format(kind, reason, __STACKTRACE__))
-      fallback
-  end
 
   @doc """
   Turn already-rendered rows into cells at the rect's offset — the guts of `compose/3` for a single

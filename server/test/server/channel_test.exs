@@ -556,29 +556,6 @@ defmodule Server.ChannelTest do
     end
   end
 
-  describe "clear_machine_threads/0 — the B1.4 clean-slate reset" do
-    test "deletes every machine-scope thread and its messages, leaving project threads alone" do
-      {:ok, m1} = Channel.open_thread(%{title: "Tlön · one", scope: "machine"})
-      {:ok, _} = Channel.post(%{thread_id: m1.id, author: "andrew", body: "gone"})
-      {:ok, m2} = Channel.open_thread(%{title: "Tlön · two", scope: "machine"})
-      {:ok, _} = Channel.close_thread(m2)
-      {:ok, project} = Channel.open_thread(%{title: "keep me"})
-      {:ok, _} = Channel.post(%{thread_id: project.id, author: "andrew", body: "stays"})
-
-      assert {:ok, %{threads: 2, messages: 1}} = Channel.clear_machine_threads()
-
-      assert Channel.machine_threads() == []
-      assert Repo.get(Thread, m1.id) == nil
-      assert Repo.get(Thread, m2.id) == nil
-      assert Repo.get(Thread, project.id)
-      assert project |> Channel.thread_messages() |> Enum.map(& &1.body) == ["stays"]
-    end
-
-    test "no-op (zero counts) when there are no machine threads" do
-      assert {:ok, %{threads: 0, messages: 0}} = Channel.clear_machine_threads()
-    end
-  end
-
   describe "delete_thread/1 — the operator's hard delete" do
     setup do
       {:ok, thread} = Channel.open_thread(%{title: "test clutter"})

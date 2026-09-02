@@ -336,11 +336,6 @@ defmodule Console.ProfilesTest do
       refute conf =~ "continuum"
     end
 
-    test "the socket name is per-profile, so no coworker shares the user's default server" do
-      assert Profiles.socket("tlon") == "console-tlon"
-      assert Profiles.socket("desk") == "console-desk"
-    end
-
     test "idempotent — a second materialise re-links without error", %{base: base, root: root} do
       Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
       assert Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root) == Path.join(root, "tertius")
@@ -449,8 +444,6 @@ defmodule Console.ProfilesTest do
       # content (sandbox/mcp) from the builder template
       assert p.sandbox == Profiles.archetype(:builder).sandbox
       assert p.mcp == Profiles.archetype(:builder).mcp
-      # socket keys off the instance name
-      assert Profiles.socket(p.name) == "console-atlas"
     end
 
     test "builder instantiates as a claude_code harness; surveyor as pi" do
