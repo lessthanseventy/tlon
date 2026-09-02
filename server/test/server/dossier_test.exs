@@ -4,6 +4,8 @@ defmodule Server.DossierTest do
   # BLOCKERS. The DB is the bus (§10): every assertion reads back through SQLite.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.Channel
   alias Server.Dossier
   alias Server.Event
@@ -325,7 +327,7 @@ defmodule Server.DossierTest do
       {:ok, _} =
         Dossier.record_event(%{thread_id: thread.id, kind: "work_landed", correlation: "h-1"})
 
-      grouped = thread |> Dossier.events_for_thread() |> Enum.filter(&(&1.correlation == "h-1"))
+      grouped = Repo.all(from e in Event, where: e.thread_id == ^thread.id and e.correlation == "h-1")
       assert length(grouped) == 2
     end
   end

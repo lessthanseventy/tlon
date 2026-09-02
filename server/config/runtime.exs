@@ -21,21 +21,21 @@ if root = System.get_env("TLON_WORKLINE_ROOT") do
   config :server, workline_root: root
 end
 
-# The Maintain monitor (worklines slice 6) is opt-in the same way: control-band sweeps that
+# The Maintain monitor is opt-in the same way: control-band sweeps that
 # nag stale gates and flag stalled worklines as gated machine-born intents.
 config :server, maintain: System.get_env("TLON_MAINTAIN") in ~w(1 true yes)
 
-# The post-response memory pass (worklines slice 5) is opt-in: presence_idle → cheap
+# The post-response memory pass is opt-in: presence_idle → cheap
 # extractor → banked facts. Off by default so a dev shell never shells a model unasked.
 config :server, memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes)
 
 # The operator's handle — who the human IS on this machine's channel. Local
-# configuration, never identity in the design (§8); the same default aleph uses.
+# configuration, never identity in the design (§8); the same default the console uses.
 # `Dossier.bank_stated_fact` trusts only this author for `stated` provenance.
 config :server, operator: System.get_env("TLON_OPERATOR") || "andrew"
 
 # The sovereign channel is opt-in (pi doc §2a): a node that serves agents flips it on.
-# `mise run funes:serve` sets TLON_START_MCP=1 so a hand-spawned pi pane has something to
+# `mise run server:serve` sets TLON_START_MCP=1 so a hand-spawned pi pane has something to
 # register with. Guarded out of :test — the suite owns its own MCP lifecycle on its own
 # port, and this guard means a stray TLON_START_MCP=1 in a dev shell can't bind Bandit
 # during `mix test`. The port is loopback-only (Server.Application); TLON_MCP_PORT lets a

@@ -5,9 +5,10 @@ defmodule Server.Staff do
   agent/session data model and assignment; `Server.Channel` keeps owning
   thread/message.
 
-  Deliberately out of scope, and deferred (§3b/§10): presence ("clocked out" is
-  derived from the engine, asked live), routing/cover, the night shift, engine
-  resolution, and the PubSub wake.
+  Warmth is `Server.Presence`'s (measured from `last_active_at`, never a heartbeat) and
+  rides the roster; waking a session on delivery is `Server.Switchboard`'s. Still deferred
+  (§3b/§10): the engine-credit half of presence, routing/cover, the night shift, and
+  engine resolution.
   """
   import Ecto.Query
 
@@ -63,17 +64,6 @@ defmodule Server.Staff do
     |> Ecto.Changeset.force_change(:agent_id, agent.id)
     |> Repo.update()
     |> Server.Bus.announce(:thread_assigned)
-  end
-
-  @doc "Clear a thread's agent back to unassigned."
-  def unassign(%Thread{} = thread) do
-    # force_change, not change: the caller's struct may hold a stale agent_id (it is
-    # not reloaded after assign), and change/2 would emit a no-op if the in-memory
-    # value already matched. The write must be unconditional.
-    thread
-    |> Ecto.Changeset.change()
-    |> Ecto.Changeset.force_change(:agent_id, nil)
-    |> Repo.update()
   end
 
   @doc "The threads an agent is staffed on (an agent maps to many threads, §3), newest first."

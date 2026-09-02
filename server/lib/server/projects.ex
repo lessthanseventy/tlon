@@ -1,6 +1,6 @@
 defmodule Server.Projects do
   @moduledoc """
-  The projects context (Workspace ▸ Project ▸ Thread, 2026-08-30): the write pipe
+  The projects context (Workspace ▸ Project ▸ Thread): the write pipe
   (changeset |> insert |> Bus.announce) and reads over the `project` table. A project is
   the middle tier — it belongs to a workspace and owns threads. Every write announces on
   `Server.Bus`'s projects topic so the console's switcher/rail refresh. The DB is the bus
@@ -15,11 +15,6 @@ defmodule Server.Projects do
   @doc "Register a project under a workspace. `{:ok, project}` or `{:error, changeset}` (dup name within the workspace / bad workspace_id)."
   def register(attrs) do
     attrs |> Project.register_changeset() |> Repo.insert() |> Bus.announce(:project_registered)
-  end
-
-  @doc "Every project, newest-first (by id)."
-  def all do
-    Repo.all(from p in Project, order_by: [desc: p.id])
   end
 
   @doc "Projects in one workspace, oldest-first (the switcher's stable order)."

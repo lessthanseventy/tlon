@@ -153,11 +153,11 @@ defmodule Server.Channel do
   end
 
   @doc "Whether `thread` IS the root machine thread — the standing coworkers' permanent home.
-  Public: delete_thread refuses it here, and Workline.promote refuses to track it (slice B)."
+  Public: delete_thread refuses it here, and Workline.promote refuses to track it."
   def root_machine_thread?(%Thread{scope: @machine_scope} = thread) do
     # Root-ness is per-workspace (each workspace has its own root): a thread is THE root only if it
     # is the oldest open stage-less machine thread in ITS OWN workspace. A nil workspace_id
-    # (pre-bootstrap threads) falls through to the global oldest — the old single-root behaviour.
+    # (pre-bootstrap threads) falls through to the global oldest.
     case machine_thread(thread.workspace_id) do
       %Thread{id: root_id} -> root_id == thread.id
       nil -> false
@@ -205,7 +205,7 @@ defmodule Server.Channel do
   in flight, not the closed history.
   """
   def open_machine_threads do
-    # TRACKED child threads stay in (reshape slice C): auto-promote gives a working child a stage on
+    # TRACKED child threads stay in: auto-promote gives a working child a stage on
     # its first commit — filtering on `is_nil(stage)` here made exactly the leaves doing real
     # work vanish from the meta agent's overview. Only ROOT resolution (machine_thread/0)
     # still excludes staged threads: the root is never a work item.
@@ -277,19 +277,12 @@ defmodule Server.Channel do
   `[%{thread, messages}]`.
   """
   def machine_threads(workspace_id \\ nil, per_thread \\ 20) do
-    by_thread = 300 |> recent_across() |> Enum.group_by(& &1.thread_id)
-
     # Worklines stay IN the chat surface — the spec interview happens on the workline thread.
     # Only ROOT resolution (machine_thread/1) and the surveyor's child set exclude them.
     # `workspace_id` scopes the stack to the active workspace (nil = every workspace).
     from(t in Thread, where: t.scope == ^@machine_scope)
     |> scope_workspace(workspace_id)
-    |> Repo.all()
-    |> Enum.map(fn t ->
-      messages = by_thread |> Map.get(t.id, []) |> Enum.take(-per_thread)
-      %{thread: t, messages: messages}
-    end)
-    |> Enum.sort_by(&sort_key/1, :desc)
+    |> thread_blocks(per_thread)
   end
 
   @doc "A thread by id, or nil — the load path for the cross-thread `close_thread` verb."
@@ -343,7 +336,8 @@ defmodule Server.Channel do
 
   @doc """
   Is `author` the configured operator (config `:operator`, case-insensitive)? The one
-  operator-detection seam — renderers color by it, `latest_operator_message/1` queries by it.
+  operator-detection seam — renderers color by it, `latest_operator_message/1` queries by it,
+  `Dossier.bank_stated_fact/2` gates `stated` provenance on it.
   """
   def operator?(author) when is_binary(author), do: String.downcase(author) == operator()
   def operator?(_author), do: false
@@ -389,9 +383,15 @@ defmodule Server.Channel do
   trail (newest thread first), so a just-made quiet thread is visible at the bottom, not lost.
   """
   def chorus(per_thread \\ 20) do
+    thread_blocks(from(t in Thread, where: t.state == "open" and t.scope == ^@project_scope), per_thread)
+  end
+
+  # The threads of `query` as `[%{thread, messages}]` blocks: each carries its last `per_thread`
+  # messages (chat order within), most-recent-activity first.
+  defp thread_blocks(query, per_thread) do
     by_thread = 300 |> recent_across() |> Enum.group_by(& &1.thread_id)
 
-    from(t in Thread, where: t.state == "open" and t.scope == ^@project_scope)
+    query
     |> Repo.all()
     |> Enum.map(fn t ->
       messages = by_thread |> Map.get(t.id, []) |> Enum.take(-per_thread)

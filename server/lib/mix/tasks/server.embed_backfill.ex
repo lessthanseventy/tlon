@@ -1,13 +1,14 @@
 defmodule Mix.Tasks.Server.EmbedBackfill do
-  @shortdoc "Embed existing facts that have no vector yet (the forgetting-engine one-off backfill)"
+  @shortdoc "Embed every fact that has no vector yet"
   @moduledoc """
   #{@shortdoc}.
 
   Walks every fact whose `embedding` is still NULL and embeds it via the configured ollama model
-  (`Server.Recall.embed_fact/1`), so the recall read path has semantic vectors to rank by. Run this
-  ONCE after enabling embed-on-write, before flipping `TLON_RECALL=1`. Idempotent — an already
-  embedded fact is skipped, so a re-run only picks up what a down embedder missed. Hits the live DB
-  and live ollama; a fact the embedder can't reach is left NULL (recall falls back to keyword) and
+  (`Server.Recall.embed_fact/1`), so semantic recall can rank it. A fact is left NULL when it was
+  banked before embed-on-write existed or while the embedder was down (`embed_on_write/1` is
+  best-effort, never a write-path failure) — recall falls back to keyword + strength for it until
+  this runs. Idempotent: an embedded fact is skipped, so a re-run only picks up what was missed.
+  Hits the live DB and live ollama; a fact the embedder still can't reach stays NULL and is
   counted, never fatal.
   """
   use Mix.Task

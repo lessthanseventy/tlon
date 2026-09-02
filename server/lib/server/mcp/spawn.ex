@@ -4,9 +4,10 @@ defmodule Server.MCP.Spawn do
   `server:claude`, the `pi:*` model tasks — opens a fresh thread or JOINS an existing
   one, staffs an agent, and lets the harness authenticate to the sovereign channel.
 
-  Run in the SERVING node (the one holding the `Server.MCP.Tokens` registry and Bandit):
-  a token minted anywhere else dies with its node and 401s. So the launchers reach this
-  through `bin/server rpc` into the LIVE service node, OR through the loopback `POST /mint`
+  A token is a stateless HMAC under the world's secret (`Server.MCP.Secret`, the file
+  beside the db), so it must be minted on the SAME world that validates it — a token
+  minted against another db's secret 401s. So the launchers reach this through
+  `bin/server rpc` into the LIVE service node, OR through the loopback `POST /mint`
   endpoint (`Server.MCP.Gateway`) that any adapter on the same box hits per connect.
 
   Three doors onto the same core (`ensure/3`, which mints nothing):

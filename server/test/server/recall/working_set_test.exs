@@ -86,10 +86,10 @@ defmodule Server.Recall.WorkingSetTest do
     assert Enum.find_index(ids, &(&1 == near.id)) < Enum.find_index(ids, &(&1 == far.id))
   end
 
-  test "reinforcing a fact (a cited touch) lifts it above an equal unreferenced one", %{thread: thread} do
+  test "a cited touch lifts a fact above an equal unreferenced one", %{thread: thread} do
     {:ok, plain} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "plain", provenance: "derived"})
     {:ok, used} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "used", provenance: "derived"})
-    {:ok, _} = Recall.reinforce_fact(used)
+    {:ok, _} = Dossier.record_event(%{thread_id: thread.id, kind: "cited", correlation: "fact:#{used.id}"})
 
     ids = ids(Recall.working_set_for_thread(thread, budget: 10_000))
     assert Enum.find_index(ids, &(&1 == used.id)) < Enum.find_index(ids, &(&1 == plain.id))

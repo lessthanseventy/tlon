@@ -111,7 +111,7 @@ defmodule Server.StaffTest do
       assert Repo.get!(Thread, thread.id).agent_id == agent.id
     end
 
-    test "a thread has 0..1 agent — assigning replaces, unassign clears to NULL", %{
+    test "a thread has 0..1 agent — assigning replaces", %{
       thread: thread,
       agent: agent
     } do
@@ -120,9 +120,6 @@ defmodule Server.StaffTest do
       {:ok, _} = Staff.assign(thread, agent)
       {:ok, _} = Staff.assign(thread, other)
       assert Repo.get!(Thread, thread.id).agent_id == other.id
-
-      {:ok, _} = Staff.unassign(thread)
-      assert Repo.get!(Thread, thread.id).agent_id == nil
     end
 
     test "threads_for/1 returns an agent's threads, scoped to it", %{

@@ -1,14 +1,16 @@
 defmodule Server.Secrets do
   @moduledoc """
-  A conservative secret scanner for the write path (total-recall slice B): it refuses to let the
-  ledger store an obvious credential, so the durable memory — and the automated capture that will
-  feed it — never becomes a place a leaked key lives.
+  A conservative secret scanner for the write path: it refuses to let the ledger store an obvious
+  credential, so the durable memory — and the automated capture that feeds it — never becomes a
+  place a leaked key lives. `validate_no_secret/2` is the changeset validator every FTS-indexed,
+  searchable text column (a fact's text, a message's body) runs.
 
   Deliberately PATTERN-based, not entropy-based: a generic high-entropy detector would flag commit
   SHAs, base64 blobs, and hex hashes — legitimate technical facts server exists to remember. So only
   well-known, prefixed credential shapes match, keeping false positives near zero. `scan/1` returns
   `:ok` or `{:secret, label}`.
   """
+  import Ecto.Changeset, only: [add_error: 3, get_field: 2]
 
   @patterns [
     {"AWS access key", ~r/\bAKIA[0-9A-Z]{16}\b/},
@@ -27,5 +29,14 @@ defmodule Server.Secrets do
     Enum.find_value(@patterns, :ok, fn {label, re} ->
       if Regex.match?(re, text), do: {:secret, label}
     end)
+  end
+
+  @doc "Refuse a changeset whose `field` carries an obvious credential — a changeset error, so it rides the same `{:error, changeset}` path as any invalid write."
+  @spec validate_no_secret(Ecto.Changeset.t(), atom()) :: Ecto.Changeset.t()
+  def validate_no_secret(changeset, field) do
+    case scan(get_field(changeset, field)) do
+      :ok -> changeset
+      {:secret, label} -> add_error(changeset, field, "looks like a secret (#{label}); tlon does not store credentials")
+    end
   end
 end

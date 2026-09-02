@@ -8,6 +8,7 @@ defmodule Server.Fact do
   use Ecto.Schema
 
   import Ecto.Changeset
+  import Ecto.Query, only: [from: 2]
 
   schema "fact" do
     field :kind, :string
@@ -27,6 +28,17 @@ defmodule Server.Fact do
     field :forgotten_at, :utc_datetime
     belongs_to :thread, Server.Thread
     belongs_to :source_session, Server.Session
+  end
+
+  @doc """
+  Scope a fact query to a workspace's memory: a fact belongs to it when it is GLOBAL (no thread —
+  the seed self-knowledge) or its thread lives in that workspace. `nil` = every workspace.
+  """
+  def in_workspace(query, nil), do: query
+
+  def in_workspace(query, workspace_id) do
+    ids = from(t in Server.Thread, where: t.workspace_id == ^workspace_id, select: t.id)
+    from f in query, where: is_nil(f.thread_id) or f.thread_id in subquery(ids)
   end
 
   @doc "Attach an embedding vector + its model to an existing fact (not part of the write path)."
@@ -59,20 +71,7 @@ defmodule Server.Fact do
       :source_session_id
     ])
     |> validate_required([:kind, :text, :provenance])
-    |> validate_no_secret(:text)
+    |> Server.Secrets.validate_no_secret(:text)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
-  end
-
-  # Refuse a fact whose text carries an obvious credential (total-recall slice B): the ledger — and
-  # the automated capture that will feed it — must never store a secret. Returned as a changeset
-  # error, so it rides the same {:error, changeset} path as any other invalid write.
-  defp validate_no_secret(changeset, field) do
-    case Server.Secrets.scan(get_field(changeset, field)) do
-      :ok ->
-        changeset
-
-      {:secret, label} ->
-        add_error(changeset, field, "looks like a secret (#{label}); tlon does not store credentials")
-    end
   end
 end

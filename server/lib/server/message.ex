@@ -45,20 +45,7 @@ defmodule Server.Message do
       :mirrored
     ])
     |> validate_required([:thread_id, :author, :body])
-    |> validate_no_secret(:body)
+    |> Server.Secrets.validate_no_secret(:body)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
-  end
-
-  # The channel is §4's PRIMARY capture path and messages are FTS-indexed + searchable, so the
-  # total-recall slice-B guard applies here as much as to facts — a secret in a message would
-  # persist and be searchable exactly like one in a fact.
-  defp validate_no_secret(changeset, field) do
-    case Server.Secrets.scan(get_field(changeset, field)) do
-      :ok ->
-        changeset
-
-      {:secret, label} ->
-        add_error(changeset, field, "looks like a secret (#{label}); tlon does not store credentials")
-    end
   end
 end
