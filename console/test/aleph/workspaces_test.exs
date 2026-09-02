@@ -20,32 +20,17 @@ defmodule Console.WorkspacesTest do
   @moduledoc """
   The `Console.Workspaces` cache (workspaces/orbis Slice 1, Task B1): an event-driven read of
   funes' `workspace` table, so the per-render hot paths (`Space.all/0`, the survey) hit a
-  cached list instead of the DB every frame. funes runs in-process in aleph, so we drive
-  the real `Server.Workspaces`/`Server.Bus` — but aleph's test env keeps funes' Repo DOWN
-  (config/test.exs `start_repo: false`), so this suite boots the Repo itself, mirroring
-  funes' own test_helper. It is the only aleph suite that touches the DB → `async: false`.
+  cached list instead of the DB every frame. Drives the real `Server.Workspaces`/`Server.Bus`
+  against a `Console.TestRepo` scratch db → `async: false`.
   """
   use ExUnit.Case, async: false
 
-  alias Ecto.Adapters.SQLite3
   alias Server.Repo
   alias Server.Workspace
   alias Server.Workspaces
 
   setup_all do
-    db = Path.join(System.tmp_dir!(), "aleph_workspaces_test_#{System.unique_integer([:positive])}.db")
-    Application.put_env(:server, Repo, Keyword.merge(Application.get_env(:server, Repo, []), database: db, pool_size: 1))
-
-    config = Repo.config()
-    _ = SQLite3.storage_down(config)
-    :ok = SQLite3.storage_up(config)
-    {:ok, _repo} = Repo.start_link()
-    Ecto.Migrator.run(Repo, :up, all: true)
-
-    on_exit(fn ->
-      if Process.whereis(Repo), do: Repo.stop()
-      _ = SQLite3.storage_down(config)
-    end)
+    Console.TestRepo.boot!("workspaces")
 
     :ok
   end

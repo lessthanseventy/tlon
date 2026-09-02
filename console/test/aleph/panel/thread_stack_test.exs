@@ -8,7 +8,7 @@ defmodule Console.Panel.ThreadStackTest do
   defp rect(h \\ 40), do: %{x: 0, y: 0, w: 80, h: h}
   defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
 
-  defp card(over \\ %{}) do
+  defp card(over) do
     Map.merge(
       %{id: 1, title: "a thread", lead: nil, stage: nil, awaiting: nil, active?: false, typing: nil, messages: []},
       over

@@ -10,9 +10,7 @@ defmodule Console.CockpitThreadSessionsTest do
 
   alias Console.Cockpit
   alias Console.Space
-  alias Ecto.Adapters.SQLite3
   alias Server.Channel
-  alias Server.Repo
   alias Server.Staff
 
   @workspaces [
@@ -28,23 +26,11 @@ defmodule Console.CockpitThreadSessionsTest do
   ]
 
   setup_all do
-    db = Path.join(System.tmp_dir!(), "aleph_thread_sessions_test_#{System.unique_integer([:positive])}.db")
-    Application.put_env(:server, Repo, Keyword.merge(Application.get_env(:server, Repo, []), database: db, pool_size: 1))
-
-    config = Repo.config()
-    _ = SQLite3.storage_down(config)
-    :ok = SQLite3.storage_up(config)
-    {:ok, _repo} = Repo.start_link()
-    Ecto.Migrator.run(Repo, :up, all: true)
+    Console.TestRepo.boot!("cockpit-thread-sessions")
 
     for handle <- ["rufus-machine", "hronir-machine", "borges-machine"] do
       {:ok, _} = Staff.register_agent(%{name: handle, mandate: "machine", engine: "test"})
     end
-
-    on_exit(fn ->
-      if Process.whereis(Repo), do: Repo.stop()
-      _ = SQLite3.storage_down(config)
-    end)
 
     :ok
   end

@@ -7,19 +7,15 @@ defmodule Console.CockpitRosterTest do
   `Console.CockpitTest` already uses) and `:tlon_join` (the funes identity minter, mirroring
   `Console.Crew`'s `:crew_join`/`:crew_cmd` pair) — so no live tmux/pi process is ever forked.
 
-  The tail dispatch's DEFAULT thread id (`machine_thread_id/0`) still reads the real funes Repo
-  (aleph's `config/test.exs` keeps it down), so this suite boots its own temp DB + one open
-  machine thread, mirroring `Console.WorkspacesTest` — and for the same reason, is the one aleph suite
-  (besides that one) that isn't `async: true`.
+  The tail dispatch's DEFAULT thread id (`machine_thread_id/0`) reads the real Repo, so this
+  suite boots a `Console.TestRepo` scratch db + one open machine thread → `async: false`.
   """
   use ExUnit.Case, async: false
 
   alias Console.Cockpit
   alias Console.Sessions
   alias Console.Space
-  alias Ecto.Adapters.SQLite3
   alias Server.Channel
-  alias Server.Repo
 
   # Workspace fixture: the hardcoded fallback Workspace is gone (reshape slice A); suites
   # that render or drive a Workspace push one through the Console.Workspaces cache-down seam.
@@ -28,21 +24,9 @@ defmodule Console.CockpitRosterTest do
   end
 
   setup_all do
-    db = Path.join(System.tmp_dir!(), "aleph_cockpit_roster_test_#{System.unique_integer([:positive])}.db")
-    Application.put_env(:server, Repo, Keyword.merge(Application.get_env(:server, Repo, []), database: db, pool_size: 1))
-
-    config = Repo.config()
-    _ = SQLite3.storage_down(config)
-    :ok = SQLite3.storage_up(config)
-    {:ok, _repo} = Repo.start_link()
-    Ecto.Migrator.run(Repo, :up, all: true)
+    Console.TestRepo.boot!("cockpit-roster")
 
     {:ok, thread} = Channel.open_thread(%{title: "Tlön", scope: "machine"})
-
-    on_exit(fn ->
-      if Process.whereis(Repo), do: Repo.stop()
-      _ = SQLite3.storage_down(config)
-    end)
 
     %{thread_id: thread.id}
   end

@@ -1,16 +1,13 @@
 defmodule Console.OrchestratorTest do
   @moduledoc """
-  The tertius command line's dispatch (Slice 1). funes runs in-process in the console, but the
-  console test env keeps funes' Repo DOWN (config/test.exs `start_repo: false`), so this suite
-  boots the Repo itself — mirroring `Console.WorkspacesTest` and funes' own test_helper. Touches
-  the DB → `async: false`.
+  The tertius command line's dispatch. Drives the real `Server` contexts, so it boots a scratch
+  db through `Console.TestRepo` → `async: false`.
   """
   use ExUnit.Case, async: false
 
   import Ecto.Query
 
   alias Console.Orchestrator
-  alias Ecto.Adapters.SQLite3
   alias Server.Channel
   alias Server.Repo
   alias Server.Staff
@@ -18,44 +15,13 @@ defmodule Console.OrchestratorTest do
   alias Server.Workspaces
 
   setup_all do
-    db = Path.join(System.tmp_dir!(), "aleph_orchestrator_test_#{System.unique_integer([:positive])}.db")
-    Application.put_env(:server, Repo, Keyword.merge(Application.get_env(:server, Repo, []), database: db, pool_size: 1))
-
-    config = Repo.config()
-    _ = SQLite3.storage_down(config)
-    :ok = SQLite3.storage_up(config)
-    {:ok, _repo} = Repo.start_link()
-    Ecto.Migrator.run(Repo, :up, all: true)
-
-    on_exit(fn ->
-      if Process.whereis(Repo), do: Repo.stop()
-      _ = SQLite3.storage_down(config)
-    end)
+    Console.TestRepo.boot!("orchestrator")
 
     :ok
   end
 
   setup do
-    # FK-safe clean (children before parents) — mirrors Server.TestDB.@ordered, which isn't
-    # compiled into the console app.
-    for schema <- [
-          Server.Ticket,
-          Server.Note,
-          Server.Fact,
-          Server.Event,
-          Server.Issue,
-          Server.Todo,
-          Server.Question,
-          Server.Habit,
-          Server.Message,
-          Server.Session,
-          Server.Thread,
-          Server.Agent,
-          Server.Project,
-          Server.Workspace
-        ] do
-      Repo.delete_all(schema)
-    end
+    Console.TestRepo.clean!()
 
     {:ok, ws} = Workspaces.register(%{name: "Home"})
     {:ok, workspace_id: ws.id, ctx: %{workspace_id: ws.id, operator: "andrew"}}
