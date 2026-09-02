@@ -1,10 +1,10 @@
 // The dense statusline — replaces pi's default thin footer with a 2-line bar that
 // packs the things you glance at most: full model name (never truncated), context
-// usage with a visual bar, session I/O, git branch, sandbox, and funes connection.
+// usage with a visual bar, session I/O, git branch, sandbox, and server connection.
 //
-// A generic statusline: NOT a funes concern, so it lives in its own adapters package (not
-// modules/adapters/pi, which the Tlön coworker profile drops to sever funes) — the footer
-// loads for every pi, funes-citizen or self-contained.
+// A generic statusline: NOT a server concern, so it lives in its own adapters package (not
+// modules/adapters/pi, which the Tlön coworker profile drops to sever the server) — the
+// footer loads for every pi, server-citizen or self-contained.
 //
 // Uses the footerData API for reactive git-branch updates and extension statuses, plus
 // ctx.sessionManager / ctx.model / ctx.getContextUsage() for everything else.
@@ -67,6 +67,15 @@ export function cacheHitPct(input: number, cacheRead: number, cacheWrite: number
   const prompt = input + cacheRead + cacheWrite;
   if (prompt === 0) return 0;
   return Math.round((cacheRead / prompt) * 100);
+}
+
+// Self-describing statuses pass through: adapters/pi's "tlon" key (its text already reads
+// "tlon: registered …") and pi-sandbox's "sandbox". Every other key prefixes itself for context.
+// "tlon" must equal adapters/pi's STATUS_KEY — footer.test.ts pins the two together.
+export const SELF_DESCRIBING_STATUS_KEYS: ReadonlySet<string> = new Set(["tlon", "sandbox"]);
+
+export function statusLabel(key: string, text: string): string {
+  return SELF_DESCRIBING_STATUS_KEYS.has(key) ? text : `${key}: ${text}`;
 }
 
 export function fmtCwd(cwd: string): string {
@@ -184,16 +193,9 @@ export default function footer(pi: ExtensionAPI): void {
             const branchStr = branch ? ` (${branch})` : "";
             const locBase = `${cwd}${branchStr}`;
 
-            // Extension statuses — funes, sandbox, etc.
             const statuses = footerData.getExtensionStatuses();
             const statusParts: string[] = [];
-            statuses.forEach((text, key) => {
-              // Both funes and sandbox statuses are self-describing — the text
-              // already reads as "funes: registered..." or "🔒 Sandbox: 12 domains...".
-              // Other keys get the key as prefix for context.
-              const label = key === "funes" || key === "sandbox" ? text : `${key}: ${text}`;
-              statusParts.push(label);
-            });
+            statuses.forEach((text, key) => statusParts.push(statusLabel(key, text)));
             const statusStr = statusParts.length > 0 ? statusParts.join(" │ ") : "";
 
             const left = theme.fg("dim", locBase);

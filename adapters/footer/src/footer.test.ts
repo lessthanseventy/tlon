@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { accumulateUsage, cacheHitPct, contextBar, fmtCost, fmtTokens } from "./footer.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  accumulateUsage,
+  cacheHitPct,
+  contextBar,
+  fmtCost,
+  fmtTokens,
+  SELF_DESCRIBING_STATUS_KEYS,
+  statusLabel,
+} from "./footer.ts";
 
 describe("fmtTokens — human token counts", () => {
   test("0 / under 1k / k / M thresholds", () => {
@@ -45,6 +55,25 @@ describe("cacheHitPct — share of prompt tokens served from cache", () => {
 
   test("all-fresh input is 0%", () => {
     expect(cacheHitPct(1000, 0, 0)).toBe(0);
+  });
+});
+
+describe("statusLabel — self-describing statuses pass through, others get their key", () => {
+  test("tlon and sandbox are shown as their text; anything else is prefixed", () => {
+    expect(statusLabel("tlon", "tlon: registered — pi on 7")).toBe("tlon: registered — pi on 7");
+    expect(statusLabel("sandbox", "🔒 Sandbox: 12 domains")).toBe("🔒 Sandbox: 12 domains");
+    expect(statusLabel("lsp", "3 diagnostics")).toBe("lsp: 3 diagnostics");
+  });
+
+  // The footer keys on the status the pi adapter sets. The two packages share no code on
+  // purpose (the footer loads without adapters/pi), so the coupling is pinned by text: if
+  // adapters/pi renames its STATUS_KEY, this fails instead of the footer silently prefixing
+  // "tlon: tlon: registered…".
+  test("the pass-through key is the one adapters/pi sets its status under", () => {
+    const ext = readFileSync(join(import.meta.dir, "../../pi/src/extension.ts"), "utf-8");
+    const key = /^const STATUS_KEY = "([^"]+)";/m.exec(ext)?.[1];
+    expect(key).toBeDefined();
+    expect(SELF_DESCRIBING_STATUS_KEYS.has(key!)).toBe(true);
   });
 });
 

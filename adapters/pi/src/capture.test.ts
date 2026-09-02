@@ -35,7 +35,7 @@ describe("serializeDelta — a role/text transcript, tool spam + brief injection
       user("real question"),
       asst("real answer"),
       user("[/consult glm-5.2] echoed"),
-      user("<funes-brief>the dossier</funes-brief>"),
+      user("<tlon-brief>the dossier</tlon-brief>"),
       { message: { role: "tool", content: "tool noise" } },
     ]);
     expect(out).toContain("### user\nreal question");

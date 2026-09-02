@@ -68,8 +68,8 @@ function readRecallConfig(): RecallConfig {
   }
 }
 
-const STATUS_KEY = "funes";
-const WIDGET_KEY = "funes";
+const STATUS_KEY = "tlon";
+const WIDGET_KEY = "tlon";
 
 function identityLabel(): string {
   return `${env.TLON_AUTHOR ?? "?"} on ${env.TLON_THREAD ?? "?"}`;
@@ -169,7 +169,7 @@ export default function adapters(pi: ExtensionAPI): void {
         }
       }
       if (facts.length || questions.length) {
-        ctx.ui.setStatus(STATUS_KEY, `funes: captured ${facts.length} fact(s), ${questions.length} question(s)`);
+        ctx.ui.setStatus(STATUS_KEY, `tlon: captured ${facts.length} fact(s), ${questions.length} question(s)`);
       }
     } catch {
       // extraction is a nicety; a failure never interrupts the session
@@ -181,13 +181,13 @@ export default function adapters(pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     recall = readRecallConfig();
     if (!client) {
-      ctx.ui.setStatus(STATUS_KEY, "funes: not wired (need TLON_MCP_URL / TLON_THREAD / TLON_AUTHOR)");
+      ctx.ui.setStatus(STATUS_KEY, "tlon: not wired (need TLON_MCP_URL / TLON_THREAD / TLON_AUTHOR)");
       return;
     }
     try {
       await client.connect();
       await client.register(env.TMUX_PANE);
-      ctx.ui.setStatus(STATUS_KEY, `funes: registered — ${identityLabel()}`);
+      ctx.ui.setStatus(STATUS_KEY, `tlon: registered — ${identityLabel()}`);
     } catch (err) {
       surface(ctx, err);
     }
@@ -207,7 +207,7 @@ export default function adapters(pi: ExtensionAPI): void {
           lastProposedCorrection = habit;
           try {
             await client.proposeHabit(habit, "auto-detected from a correction you made");
-            ctx.ui.setStatus(STATUS_KEY, "funes: proposed a habit from your correction (review in Tlön)");
+            ctx.ui.setStatus(STATUS_KEY, "tlon: proposed a habit from your correction (review in Tlön)");
           } catch {
             // proposing is a nicety; never interrupt the turn over it
           }
@@ -220,7 +220,7 @@ export default function adapters(pi: ExtensionAPI): void {
       const key = JSON.stringify(dossier);
       const changed = key !== lastDossierKey;
       lastDossierKey = key;
-      return { message: { customType: "funes-brief", content, display: changed } };
+      return { message: { customType: "tlon-brief", content, display: changed } };
     } catch (err) {
       surface(ctx, err);
       return;
@@ -300,7 +300,7 @@ export default function adapters(pi: ExtensionAPI): void {
 // The widget: the live at-a-glance the human driving pi directly sees — the same dossier
 // the cockpit shows (pi doc §2b): the goal, the open todos (and which is next), the blockers.
 function updateWidget(ctx: ExtensionContext, d: Dossier): void {
-  const lines = [`funes · ${d.north_star ?? "(untitled)"} — ${d.lead ?? "unstaffed"}`];
+  const lines = [`tlon · ${d.north_star ?? "(untitled)"} — ${d.lead ?? "unstaffed"}`];
   const todos = d.todos.shown.length + d.todos.more;
   if (todos > 0) {
     lines.push(`todos (${todos})${d.next ? ` → next: ${d.next.text}` : ""}`);
@@ -320,7 +320,7 @@ function updateWidget(ctx: ExtensionContext, d: Dossier): void {
 // both, and do nothing else — no queue, no spill, no silent swallow.
 function surface(ctx: ExtensionContext, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
-  const label = err instanceof FunesUnreachable ? "funes unreachable" : "funes error";
+  const label = err instanceof FunesUnreachable ? "tlon unreachable" : "tlon error";
   ctx.ui.setStatus(STATUS_KEY, `${label}: ${message}`);
   ctx.ui.notify(`${label}: ${message}`, "error");
 }

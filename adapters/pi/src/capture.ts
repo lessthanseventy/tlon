@@ -52,7 +52,7 @@ export function serializeDelta(entries: Entry[]): string {
     const text = extractText(e.message?.content);
     if (!text) continue;
     if (text.startsWith("[/consult ") || text.startsWith("[/fresh ")) continue;
-    if (text.startsWith("<funes-brief")) continue;
+    if (text.startsWith("<tlon-brief")) continue;
     blocks.push(`### ${role}\n${text}`);
   }
   let joined = blocks.join("\n\n");
