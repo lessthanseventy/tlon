@@ -131,6 +131,18 @@ defmodule Console.SpaceTest do
     end
   end
 
+  describe "roster/2 and active_workspace_id/1" do
+    test "roster is the workspace's cast, [] for a missing workspace" do
+      spaces = Space.all([@tlon])
+      assert Space.roster(@tlon.id, spaces) == @tlon.roster
+      assert Space.roster(999, spaces) == []
+    end
+
+    test "active_workspace_id is the active key when it names a Workspace" do
+      assert Space.active_workspace_id(%{active_key: 7}) == 7
+    end
+  end
+
   describe "the retired right rail (Slice 3.4)" do
     test "every space has an empty right column" do
       space = Enum.find(Space.all([@tlon]), &Space.workspace?(&1.key))

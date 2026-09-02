@@ -146,7 +146,7 @@ defmodule Console.CockpitTest do
     end
   end
 
-  describe "machine_spawn_due?/2: the Tlön coworker backoff gate" do
+  describe "spawn_due?/2: the coworker backoff gate" do
     test "a fresh cockpit (no prior failure) is due — even though BEAM monotonic time is NEGATIVE" do
       # The bug: machine_retry_at started at 0 and the guard was `now < retry_at`. BEAM monotonic
       # time starts as a large NEGATIVE number, so `now < 0` was ALWAYS true and the spawn line was
@@ -154,17 +154,17 @@ defmodule Console.CockpitTest do
       # be honoured regardless of the sign of `now`.
       now = System.monotonic_time(:millisecond)
       assert now < 0, "precondition: this box's monotonic clock is negative (#{now})"
-      assert Cockpit.machine_spawn_due?(nil, now)
+      assert Cockpit.spawn_due?(nil, now)
     end
 
     test "a pending backoff still in the future is NOT due" do
       now = System.monotonic_time(:millisecond)
-      refute Cockpit.machine_spawn_due?(now + 5_000, now)
+      refute Cockpit.spawn_due?(now + 5_000, now)
     end
 
     test "an elapsed backoff is due again" do
       now = System.monotonic_time(:millisecond)
-      assert Cockpit.machine_spawn_due?(now - 1, now)
+      assert Cockpit.spawn_due?(now - 1, now)
     end
   end
 

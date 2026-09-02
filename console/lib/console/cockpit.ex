@@ -686,7 +686,7 @@ defmodule Console.Cockpit do
   # thread-scoped, so it doesn't reach the cockpit globally the way :thread_closed does.)
   defp nudge_tertius_on_finish(:thread_closed, %{scope: "machine", id: id}, %{standing_thread_id: root} = state)
        when is_integer(root) and is_integer(id) and id != root do
-    workspace_id = active_workspace_id(state)
+    workspace_id = Space.active_workspace_id(state)
 
     case tlon_window_index(workspace_id, lead_window_name(workspace_id)) do
       nil ->
@@ -709,7 +709,7 @@ defmodule Console.Cockpit do
   # window. Can't respawn-loop: the spawn candidates (`Server.staffed_machine_threads`) are OPEN
   # threads only. Best-effort — a vanished window is already what we wanted.
   defp teardown_closed_leaf(:thread_closed, %{scope: "machine", id: id}, state) when is_integer(id) do
-    workspace_id = active_workspace_id(state)
+    workspace_id = Space.active_workspace_id(state)
 
     case Tmux.leaf_tab(Tmux.list_windows(workspace_id), id) do
       %{index: index} -> Tmux.kill_window(workspace_id, index)
@@ -727,7 +727,7 @@ defmodule Console.Cockpit do
   # tmux send-keys, never a crash on a missing window.
   defp mention_notify(row, state) do
     lead = thread_lead(row)
-    workspace_id = active_workspace_id(state)
+    workspace_id = Space.active_workspace_id(state)
 
     case delivery_target(row, state, lead) do
       :skip ->
@@ -735,7 +735,7 @@ defmodule Console.Cockpit do
 
       {:route, staffed} ->
         for {window, text} <-
-              Console.Mention.route(row, [lead: lead, staffed_window: staffed], active_roster(workspace_id)),
+              Console.Mention.route(row, [lead: lead, staffed_window: staffed], Space.roster(workspace_id)),
             index = tlon_window_index(workspace_id, window),
             not is_nil(index) do
           inject_turn(workspace_id, index, text)
@@ -756,11 +756,11 @@ defmodule Console.Cockpit do
   #     owns the opening turn (two-phase, race-safe); waking here would double it.
   #   * no staffed lead, or a meta/unknown lead (no leaf window for it) → route globally.
   defp delivery_target(%{thread_id: tid}, state, lead) when is_integer(tid) do
-    standing = state.standing_thread_id || machine_thread_id(active_workspace_id(state))
+    standing = state.standing_thread_id || machine_thread_id(Space.active_workspace_id(state))
 
     cond do
       tid == standing -> {:route, nil}
-      is_nil(lead) or not leaf_staffed?(lead, active_workspace_id(state)) -> {:route, nil}
+      is_nil(lead) or not leaf_staffed?(lead, Space.active_workspace_id(state)) -> {:route, nil}
       window = staffed_leaf_window(tid, state) -> {:route, window}
       true -> :skip
     end
@@ -775,7 +775,7 @@ defmodule Console.Cockpit do
   # `opening_injected`) keeps delivering to already-running leaves instead of `:skip`ping them
   # forever. nil while mid-spawn / pre-opening (→ `:skip`; the spawn pass owns the opening turn).
   defp staffed_leaf_window(tid, state) do
-    case Tmux.leaf_tab(Tmux.list_windows(active_workspace_id(state)), tid) do
+    case Tmux.leaf_tab(Tmux.list_windows(Space.active_workspace_id(state)), tid) do
       %{name: name} = tab ->
         if tab[:opening] == "done" or MapSet.member?(state.opening_injected, tid), do: name
 
@@ -790,10 +790,6 @@ defmodule Console.Cockpit do
 
   defp thread_lead(_), do: nil
 
-  # The tmux target workspace id for a call site that only has `state` (not a `Space.workspace?`-guarded
-  # `active_key`) in scope — a background Bus handler, or a click that landed on a Workspace-only panel.
-  # `state.active_key` when it names a Workspace, else the server-down/no-active-workspace fallback
-  # (`Space.first_workspace/0`) — nil when no workspace exists at all; `Tmux.run/3` no-ops on nil.
   # The thread-stack cards (Slice 3): each machine-thread block → a card. `nil` fold set means
   # "unfold the focused thread" (the default-active-open rule). When `zoomed` names a thread, the
   # stack collapses to just that one card, always unfolded (`Z` — the real zoom). An unfolded card
@@ -880,15 +876,6 @@ defmodule Console.Cockpit do
 
   defp select_focused_window(_state), do: :ok
 
-  defp active_workspace_id(%{active_key: key}) when Space.workspace?(key), do: key
-
-  defp active_workspace_id(_state) do
-    case Space.first_workspace() do
-      nil -> nil
-      space -> space.id
-    end
-  end
-
   # The active roster's LEAD window name (the center's tab label) for `workspace_id`, or nil (no roster
   # / server down).
   defp lead_window_name(workspace_id) do
@@ -912,21 +899,10 @@ defmodule Console.Cockpit do
 
   defp dispatch_wheel(nil, _b, _x, _y, state), do: {:noreply, state}
 
-  # While the lazygit overlay is up, wheel events belong to ITS PTY, not the center terminal (Slice 4).
-  defp dispatch_wheel({Panel.Terminal, _data, rect}, b, x, y, %{lazygit: %{thread_id: id}} = state) do
-    with term when is_pid(term) <- safe_terminal({:lazygit, id}),
-         {dir, n} <- Mouse.wheel_of(b) do
-      lx = clamp_cell(x - rect.x, rect.w)
-      ly = clamp_cell(y - rect.y, rect.h)
-      repaint_on_scroll(Terminal.wheel(term, dir, n, lx, ly), state)
-    else
-      _ -> {:noreply, state}
-    end
-  end
-
-  # The center terminal: forward to the embedded app if it tracks the mouse, else scroll scrollback.
+  # The shown terminal (lazygit overlay, else the center): forward to the embedded app if it tracks
+  # the mouse, else scroll scrollback.
   defp dispatch_wheel({Panel.Terminal, _data, rect}, b, x, y, state) do
-    with term when is_pid(term) <- center_terminal(state),
+    with term when is_pid(term) <- shown_terminal(state),
          {dir, n} <- Mouse.wheel_of(b) do
       lx = clamp_cell(x - rect.x, rect.w)
       ly = clamp_cell(y - rect.y, rect.h)
@@ -952,25 +928,20 @@ defmodule Console.Cockpit do
 
   defp clamp_cell(v, extent), do: v |> max(0) |> min(max(extent - 1, 0))
 
+  # The terminal a mouse event on a Panel.Terminal belongs to: while the lazygit overlay is up, ITS
+  # PTY owns the frame — never the machine center underneath.
+  defp shown_terminal(%{lazygit: %{thread_id: id}}), do: safe_terminal({:lazygit, id})
+  defp shown_terminal(state), do: center_terminal(state)
+
   defp repaint_on_scroll(:scrolled, state), do: {:noreply, render(state)}
   defp repaint_on_scroll(:forwarded, state), do: {:noreply, state}
 
   defp dispatch_click(nil, _x, _y, state), do: {:noreply, state}
 
-  # Clicking the center terminal: forward to the PTY when the embedded program tracks the mouse
+  # Clicking the shown terminal: forward to the PTY when the embedded program tracks the mouse
   # (tmux `mouse on` selects; a TUI hit-tests its own regions). The terminal renders edge-to-edge.
-  # While the lazygit overlay is up, its Panel.Terminal is the hit target — route the click to THAT
-  # PTY, not the machine center terminal underneath (Slice 4).
-  defp dispatch_click({Panel.Terminal, _data, rect}, x, y, %{lazygit: %{thread_id: id}} = state) do
-    with term when is_pid(term) <- safe_terminal({:lazygit, id}) do
-      Terminal.mouse(term, :press, clamp_cell(x - rect.x, rect.w), clamp_cell(y - rect.y, rect.h))
-    end
-
-    {:noreply, state}
-  end
-
   defp dispatch_click({Panel.Terminal, _data, rect}, x, y, state) do
-    with term when is_pid(term) <- center_terminal(state) do
+    with term when is_pid(term) <- shown_terminal(state) do
       Terminal.mouse(term, :press, clamp_cell(x - rect.x, rect.w), clamp_cell(y - rect.y, rect.h))
     end
 
@@ -1237,7 +1208,7 @@ defmodule Console.Cockpit do
     case selected_ticket(state, ticket_columns(state)) do
       %{id: id, title: title} = ticket ->
         with {:ok, thread} <-
-               Channel.open_thread(%{title: title, workspace_id: active_workspace_id(state), scope: "machine"}),
+               Channel.open_thread(%{title: title, workspace_id: Space.active_workspace_id(state), scope: "machine"}),
              {:ok, _} <- Safe.value(fn -> Server.Tickets.promote(ticket, thread.id) end, nil) do
           _ = spawn_onto(thread.id, state)
           %{state | board: nil, focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
@@ -1310,7 +1281,7 @@ defmodule Console.Cockpit do
 
   # The workspace whose tickets/notes the board shows: the active one, or the default (Orbis falls
   # back to the first workspace via active_workspace_id/1).
-  defp board_workspace_id(state), do: active_workspace_id(state)
+  defp board_workspace_id(state), do: Space.active_workspace_id(state)
 
   # State transitions live in the pure `Console.Keymap`; the Cockpit only runs the side effect it
   # asks for — repaint, quit, or forward a key to the focused terminal.
@@ -1334,9 +1305,13 @@ defmodule Console.Cockpit do
     # The typed text is the OPENING MESSAGE, not just a title: post it as the operator so the thread
     # reads as a real chat and its lead has something to answer (the "no messages yet / silent agent"
     # bug). The title is a short slug of it. scope: "machine" so it shows in the stack.
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Console.Config.operator()
 
-    case Channel.open_thread(%{title: thread_title(text), workspace_id: active_workspace_id(state), scope: "machine"}) do
+    case Channel.open_thread(%{
+           title: thread_title(text),
+           workspace_id: Space.active_workspace_id(state),
+           scope: "machine"
+         }) do
       {:ok, thread} ->
         # Post the opening message; do NOT spawn a PTY here. The thread is staffed (the lead
         # invariant), so the render preamble's `ensure_thread_sessions` spawns its LEAD in a window
@@ -1353,7 +1328,7 @@ defmodule Console.Cockpit do
 
   # First-class ticket create (Slice C): file into the active workspace's backlog, flash a receipt.
   defp apply_effect({:file_ticket, title}, state) do
-    case Safe.value(fn -> Server.Tickets.file(%{workspace_id: active_workspace_id(state), title: title}) end, nil) do
+    case Safe.value(fn -> Server.Tickets.file(%{workspace_id: Space.active_workspace_id(state), title: title}) end, nil) do
       {:ok, t} -> {:noreply, render(%{state | flash: "filed ticket ##{t.id} in backlog"})}
       _ -> {:noreply, render(%{state | flash: "couldn't file the ticket"})}
     end
@@ -1361,8 +1336,8 @@ defmodule Console.Cockpit do
 
   # First-class note create (Slice C): a workspace-scoped note, authored by the operator.
   defp apply_effect({:write_note, body}, state) do
-    operator = Application.get_env(:server, :operator, "andrew")
-    attrs = %{body: body, scope: "workspace", scope_id: active_workspace_id(state), author: operator}
+    operator = Console.Config.operator()
+    attrs = %{body: body, scope: "workspace", scope_id: Space.active_workspace_id(state), author: operator}
 
     case Safe.value(fn -> Server.Notes.write(attrs) end, nil) do
       {:ok, n} -> {:noreply, render(%{state | flash: "noted ##{n.id}"})}
@@ -1387,7 +1362,7 @@ defmodule Console.Cockpit do
   # announce repaints the chorus live, so the message lands visibly; a failure flashes in the footer.
   defp apply_effect({:post_message, thread_id, body}, state) do
     flashing(state, "post", fn ->
-      operator = Application.get_env(:server, :operator, "andrew")
+      operator = Console.Config.operator()
 
       case Channel.post(%{thread_id: thread_id, author: operator, body: body}) do
         {:ok, _message} -> {:noreply, render(%{state | flash: "posted"})}
@@ -1610,7 +1585,7 @@ defmodule Console.Cockpit do
 
   defp orchestrate(text, state) do
     action = Console.Orchestrator.Router.route(text)
-    ctx = %{workspace_id: active_workspace_id(state), operator: Application.get_env(:server, :operator, "andrew")}
+    ctx = %{workspace_id: Space.active_workspace_id(state), operator: Console.Config.operator()}
 
     case {Console.Orchestrator.classify(action), Console.Orchestrator.dispatch(action, ctx)} do
       {:consequential, {:confirm, summary}} ->
@@ -1884,7 +1859,7 @@ defmodule Console.Cockpit do
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
     # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
     # order by this, not the project-scope `chorus`. This is the ONE ordering the cockpit navigates.
-    stack_blocks = Safe.read(:stack, [], fn -> Channel.machine_threads(active_workspace_id(state)) end)
+    stack_blocks = Safe.read(:stack, [], fn -> Channel.machine_threads(Space.active_workspace_id(state)) end)
     threads = Enum.map(stack_blocks, & &1.thread)
     focused = focused_thread(threads, state.focused_id)
     state = %{state | threads: threads, focused_id: focused && focused.id}
@@ -2024,7 +1999,7 @@ defmodule Console.Cockpit do
       end)
 
     titles = Map.new(state.threads, &{&1.id, &1.title})
-    roster = active_roster(active_workspace_id(state))
+    roster = Space.roster(Space.active_workspace_id(state))
 
     %{
       coworkers: Panel.Crew.coworkers(roster, tabs, led_by, titles, state.thinking, System.os_time(:second)),
@@ -2071,8 +2046,8 @@ defmodule Console.Cockpit do
   defp ensure_session(state) do
     with id when is_integer(id) <- session_pane_target(state),
          nil <- session_terminal_pid(id),
-         %{index: index} <- Tmux.leaf_tab(Tmux.list_windows(active_workspace_id(state)), id) do
-      {cmd, args} = Console.SessionPane.command(active_workspace_id(state), index)
+         %{index: index} <- Tmux.leaf_tab(Tmux.list_windows(Space.active_workspace_id(state)), id) do
+      {cmd, args} = Console.SessionPane.command(Space.active_workspace_id(state), index)
       {cols, rows} = session_pane_dims(state)
       _ = safe_session_ensure({:session, id}, cmd: cmd, args: args, cols: cols, rows: rows)
     end
@@ -2123,7 +2098,7 @@ defmodule Console.Cockpit do
   end
 
   def composer_thread_id(%{active_key: key} = state) when Space.workspace?(key),
-    do: machine_thread_id(active_workspace_id(state))
+    do: machine_thread_id(Space.active_workspace_id(state))
 
   def composer_thread_id(state), do: state.focused_id
 
@@ -2269,7 +2244,7 @@ defmodule Console.Cockpit do
   defp commit_detail(state, index) do
     case Enum.at((state.stack || @empty_stack).commits, index) do
       %{hash: hash, subject: subject} ->
-        dir = workspace_repo_dir(active_workspace_id(state))
+        dir = workspace_repo_dir(Space.active_workspace_id(state))
         %{title: "commit #{hash} · #{subject}", lines: Enum.map(Console.Stack.show(hash, dir), &diff_line/1)}
 
       nil ->
@@ -2291,11 +2266,15 @@ defmodule Console.Cockpit do
   # cache-only workspaces). The CENTER stack + orchestrator post stay STRICT (no fallback), so they
   # never bleed another workspace's threads. nil only when there is no machine thread at all.
   defp machine_thread_id(workspace_id) do
-    case Channel.machine_thread(workspace_id) || Channel.machine_thread() do
+    case machine_thread(workspace_id) do
       %{id: id} -> id
       _ -> nil
     end
   end
+
+  # Prefer the workspace's own root; else ANY open machine thread (a pre-bootstrap DB, the test
+  # harness's cache-only workspaces) rather than proliferating a fresh one.
+  defp machine_thread(workspace_id), do: Channel.machine_thread(workspace_id) || Channel.machine_thread()
 
   # Expire cached probes once @probe_ms has passed; render's ensure_probes refills lazily.
   defp maybe_expire_probes(state) do
@@ -2500,7 +2479,7 @@ defmodule Console.Cockpit do
       is_pid(safe_terminal(:machine)) ->
         state
 
-      not machine_spawn_due?(state.machine_retry_at, now) ->
+      not spawn_due?(state.machine_retry_at, now) ->
         state
 
       true ->
@@ -2521,7 +2500,7 @@ defmodule Console.Cockpit do
   # the id `ensure_thread_sessions` excludes from its own spawn pass (the standing center
   # coworker is not "a staffed machine thread it should spawn a session for", it already has one).
   defp capture_standing_thread_id(%{standing_thread_id: nil} = state),
-    do: %{state | standing_thread_id: machine_thread_id(active_workspace_id(state))}
+    do: %{state | standing_thread_id: machine_thread_id(Space.active_workspace_id(state))}
 
   defp capture_standing_thread_id(state), do: state
 
@@ -2575,7 +2554,7 @@ defmodule Console.Cockpit do
   def ensure_thread_sessions(%{active_key: key} = state, spaces) when Space.workspace?(key) do
     tabs = Tmux.list_windows(key)
     now = System.monotonic_time(:millisecond)
-    roster = space_roster(key, spaces)
+    roster = Space.roster(key, spaces)
     threads = Server.staffed_machine_threads()
     # Window names spawned THIS pass join the taken set, so two new leaves with the same title in
     # one render can't collide on a name (the tag targets by name once, right after new-window).
@@ -2626,7 +2605,7 @@ defmodule Console.Cockpit do
       Tmux.leaf_tab(tabs, id) ->
         {maybe_inject_opening_turn(workspace_id, id, tabs, now, state), taken, budget}
 
-      not thread_spawn_due?(state.thread_spawn_retry[id], now) ->
+      not spawn_due?(state.thread_spawn_retry[id], now) ->
         {state, taken, budget}
 
       budget <= 0 ->
@@ -2701,32 +2680,10 @@ defmodule Console.Cockpit do
   defp record_thread_spawn(_result, state, id, now),
     do: %{state | thread_spawn_retry: Map.put(state.thread_spawn_retry, id, now + @thread_spawn_backoff_ms)}
 
-  # Is a per-thread session spawn attempt due? Mirrors `machine_spawn_due?/2` — nil means "no
-  # backoff pending, try now".
-  defp thread_spawn_due?(nil, _now), do: true
-  defp thread_spawn_due?(retry_at, now), do: now >= retry_at
-
   # Does the cockpit staff a per-thread leaf window for this lead? Any WORKER roster handle
   # (claude or pi harness) qualifies — the predicate `delivery_target` and the spawn pass share,
   # so routing and spawning can never disagree about who owns a thread's turns.
-  defp leaf_staffed?(lead, workspace_id), do: lead in Profiles.leaf_handles(active_roster(workspace_id))
-
-  # This Workspace's roster (`Console.Mention.route/3`'s resolution fixture) — server-down / no roster
-  # degrades to `[]` (nobody resolves, nobody wakes).
-  defp active_roster(workspace_id) do
-    case Space.fetch(workspace_id) do
-      %Space{roster: roster} -> roster
-      _ -> []
-    end
-  end
-
-  # Same read against an injected spaces list (the `ensure_thread_sessions/2` test seam).
-  defp space_roster(workspace_id, spaces) do
-    case Space.fetch(workspace_id, spaces) do
-      %Space{roster: roster} -> roster
-      _ -> []
-    end
-  end
+  defp leaf_staffed?(lead, workspace_id), do: lead in Profiles.leaf_handles(Space.roster(workspace_id))
 
   # Two-phase, so a just-booted leaf window submits its opening turn instead of leaving it typed
   # but unsent: stage 1 types the text; stage 2, once the text has settled for
@@ -2784,7 +2741,7 @@ defmodule Console.Cockpit do
     message = Server.latest_operator_message(id)
 
     if message do
-      operator = Application.get_env(:server, :operator, "andrew")
+      operator = Console.Config.operator()
       Tmux.send_text(workspace_id, index, "[server thread ##{id}] #{operator}: #{one_line(message.body)}")
     end
 
@@ -2826,12 +2783,12 @@ defmodule Console.Cockpit do
   defp joiner, do: Application.get_env(:console, :tlon_join, &Spawn.join/3)
 
   @doc false
-  # Is a machine-coworker spawn attempt due? `machine_retry_at` is nil until an attempt FAILS (the
-  # "no backoff pending" sentinel — try now), then a future monotonic timestamp for @machine_spawn_backoff_ms.
-  # It MUST be nil, not 0: BEAM monotonic time starts large-NEGATIVE, so `now < 0` reads as "still
-  # backing off" forever and the coworker never spawns.
-  def machine_spawn_due?(nil = _retry_at, _now), do: true
-  def machine_spawn_due?(retry_at, now), do: now >= retry_at
+  # Is a spawn attempt due (the center's `machine_retry_at`, a leaf's `thread_spawn_retry` entry)?
+  # nil until an attempt FAILS — the "no backoff pending" sentinel — then a future monotonic
+  # timestamp. It MUST be nil, not 0: BEAM monotonic time starts large-NEGATIVE, so `now < 0`
+  # reads as "still backing off" forever and the coworker never spawns.
+  def spawn_due?(nil = _retry_at, _now), do: true
+  def spawn_due?(retry_at, now), do: now >= retry_at
 
   # Materialise the Workspace's LEAD roster entry into a profile, find-or-create the machine identity,
   # then spawn the center: an embedded tmux client attached to the standing session (pi as window 0
@@ -2894,9 +2851,7 @@ defmodule Console.Cockpit do
   # Resolve a machine pane's TLON_* exports by find-or-create: reuse the latest open machine
   # thread (joining it as `agent`) if one exists, else open a fresh `scope: "machine"` thread.
   defp machine_exports(workspace_id, agent) do
-    # Prefer the active workspace's root; else reuse ANY open machine thread (a pre-bootstrap DB, or
-    # the test harness's cache-only workspaces) rather than proliferating a fresh one.
-    case Channel.machine_thread(workspace_id) || Channel.machine_thread() do
+    case machine_thread(workspace_id) do
       %{id: id} ->
         with {:ok, %{exports: e}} <- Spawn.join(id, agent), do: {:ok, e}
 
