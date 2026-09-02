@@ -6,15 +6,8 @@ defmodule Console.Harness.Driver do
 
     * `launch_command/1` — the exec string a spawned window runs for a profile (the `spawn` half
       of the design contract; the cockpit wraps it in identity exports + `tmux new-window`).
-    * `reset_command/0` — the slash command that clears the conversation but keeps the process
-      warm (`reset_context`): typed as a turn before a rebind's dossier catch-up.
-    * `resume_command/1` — the launch variant that reattaches the harness's own prior
-      conversation (`resume`) — the return-to-a-leaf's-OWN-agent escape hatch, never the rebind
-      path (resuming onto a different leaf re-imports the context-bleed bug).
   """
   @callback launch_command(Console.Profile.t()) :: String.t()
-  @callback reset_command() :: String.t()
-  @callback resume_command(Console.Profile.t()) :: String.t()
 end
 
 defmodule Console.Harness do
@@ -44,26 +37,6 @@ defmodule Console.Harness do
   @doc "The driver module for a harness atom (raises on an unknown harness)."
   @spec driver(atom()) :: module()
   def driver(harness), do: Map.fetch!(@drivers, harness)
-
-  @doc """
-  The ordered turns that REBIND a warm worker onto a new leaf (Slice F): `reset_command` first —
-  clear the conversation, keep the process warm — then a catch-up turn pointing the agent at the
-  leaf's brief (it re-hydrates itself via `get_brief`; piping a rendered brief through
-  send-keys is fragile and stale the moment it lands). Never `resume`: resuming a pooled worker
-  onto a DIFFERENT leaf re-imports exactly the context-bleed bug per-thread leads exist to kill —
-  `resume_command/1` is only the return-to-a-leaf's-OWN-agent escape hatch. Pool sizing/eviction
-  stays a later policy over this primitive (fresh-per-leaf is a pool of 1 that never rebinds).
-  """
-  @spec rebind_turns(Console.Profile.t(), integer(), String.t() | nil) :: [String.t()]
-  def rebind_turns(%Console.Profile{} = profile, thread_id, title) do
-    subject = if title in [nil, ""], do: "", else: " (#{title})"
-
-    [
-      driver(profile.harness).reset_command(),
-      "[tlon] you are rebound to thread ##{thread_id}#{subject}. Fresh context, on purpose: " <>
-        "run get_brief and continue from its FACTS/TODOS/NEXT — assume nothing from before."
-    ]
-  end
 end
 
 defmodule Console.Harness.ClaudeCode do
@@ -72,7 +45,7 @@ defmodule Console.Harness.ClaudeCode do
   brief/capture hooks + the citizen protocol prompt). A profile's persona rides as
   `TLON_ROLE_PROMPT_FILE` (the launcher appends it to its citizen prompt — a second
   `--append-system-prompt` flag would *replace* the citizen protocol, not add to it); an
-  anthropic model as `--model`. Reset is `/clear`; resume is `--continue`.
+  anthropic model as `--model`.
   """
   @behaviour Console.Harness.Driver
 
@@ -111,19 +84,12 @@ defmodule Console.Harness.ClaudeCode do
   end
 
   defp deny_env(_p), do: ""
-
-  @impl true
-  def reset_command, do: "/clear"
-
-  @impl true
-  def resume_command(%Profile{} = p), do: launch_command(p) <> " --continue"
 end
 
 defmodule Console.Harness.Pi do
   @moduledoc """
   The pi driver: the bare `pi` invocation for a profile — config dir as `PI_CODING_AGENT_DIR`,
-  persona as `--append-system-prompt`, driver as `--model`. Reset is `/new` (fresh session, warm
-  process); resume is `--continue`.
+  persona as `--append-system-prompt`, driver as `--model`.
   """
   @behaviour Console.Harness.Driver
 
@@ -147,10 +113,4 @@ defmodule Console.Harness.Pi do
 
     "env PI_CODING_AGENT_DIR=#{dir} #{base}#{prompt}#{model}"
   end
-
-  @impl true
-  def reset_command, do: "/new"
-
-  @impl true
-  def resume_command(%Profile{} = p), do: launch_command(p) <> " --continue"
 end

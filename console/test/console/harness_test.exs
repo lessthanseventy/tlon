@@ -115,31 +115,5 @@ defmodule Console.HarnessTest do
       assert cmd =~ "--append-system-prompt"
       assert cmd =~ "--model ollama-cloud/glm-5.2 --thinking medium"
     end
-
-    test "reset clears context but keeps the process warm; resume reattaches the OWN session" do
-      assert Harness.driver(:claude_code).reset_command() == "/clear"
-      assert Harness.driver(:pi).reset_command() == "/new"
-      assert Harness.driver(:claude_code).resume_command(%Profile{name: "x"}) =~ "--continue"
-      assert Harness.driver(:pi).resume_command(%Profile{name: "x"}) =~ "--continue"
-    end
-  end
-
-  describe "rebind_turns/3 — clear-not-resume (Slice F)" do
-    test "reset first, then the brief catch-up naming the new leaf" do
-      p = %Profile{name: "borges", harness: :pi}
-
-      assert ["/new", catchup] = Harness.rebind_turns(p, 42, "fix the window naming")
-      assert catchup =~ "thread #42"
-      assert catchup =~ "fix the window naming"
-      assert catchup =~ "get_brief"
-    end
-
-    test "a claude-bound worker resets via /clear; a blank title is omitted" do
-      p = %Profile{name: "hronir", harness: :claude_code}
-
-      assert ["/clear", catchup] = Harness.rebind_turns(p, 7, nil)
-      assert catchup =~ "thread #7."
-      refute p |> Harness.rebind_turns(7, "") |> Enum.at(1) |> String.contains?("()")
-    end
   end
 end
