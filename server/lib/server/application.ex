@@ -6,21 +6,17 @@ defmodule Server.Application do
   def start(_type, _args) do
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
     # test harness needs it so Channel.post can broadcast. The Repo is started
-    # except under :test (the harness owns its lifecycle). The switchboard Server is
-    # opt-in (off by default): its presence-gating prerequisite exists (BOTH
-    # warmth and engine-credit, see Server.Switchboard), but the wake only pokes for
-    # real once a deployment ALSO sets a non-Inert arbiter — so the dogfood hub
-    # (console, topology A) flips :start_switchboard on, the prod service stays inert
-    # until the service→tmux path is proven (see the tlön design doc). The MCP
-    # channel is opt-in the same way: a node that serves agents flips :start_mcp on.
-    # The consult mirror is on by default (it only writes DB rows, never pokes a pane, so it
-    # is safe where the switchboard is deliberately opt-in) — but the test harness turns it
-    # off so the pure maybe_mirror tests don't double-fire.
-    # Boot integrity (reshape slice A): seed the default workspace if none, repair
-    # dangling thread→workspace refs. Replaces the flake's ExecStartPre seed_workspace.
-    # Server.Bootstrap's start_link runs the work synchronously and returns :ignore,
-    # so children after it (consult mirror, MCP/Bandit) start only once seed+repair
-    # are done — nothing serves against an unseeded db.
+    # except under :test (the harness owns its lifecycle). The switchboard runner is
+    # opt-in per node (:start_switchboard — the console's config, the service's
+    # TLON_START_SWITCHBOARD): with an arbiter it pokes panes, without one it is
+    # bookkeeping only (drain on boot, claim, coalesce). The MCP channel is opt-in the
+    # same way: a node that serves agents flips :start_mcp on. The consult mirror is on
+    # by default (it only writes DB rows) — the test harness turns it off so the pure
+    # maybe_mirror tests don't double-fire.
+    # Boot integrity: Server.Bootstrap seeds the default workspace if none and repairs
+    # dangling thread→workspace refs; its start_link runs the work synchronously and
+    # returns :ignore, so children after it (consult mirror, MCP/Bandit) start only once
+    # seed+repair are done — nothing serves against an unseeded db.
     children =
       [
         {Phoenix.PubSub, name: Server.PubSub},

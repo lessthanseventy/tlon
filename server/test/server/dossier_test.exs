@@ -397,7 +397,7 @@ defmodule Server.DossierTest do
     end
   end
 
-  describe "resolve_issue/1" do
+  describe "resolve_issue/2" do
     test "closes an issue — read back through SQLite" do
       {:ok, thread} = Channel.open_thread(%{title: "a subject"})
       {:ok, issue} = Dossier.raise_issue(%{thread_id: thread.id, summary: "x"})
@@ -405,6 +405,17 @@ defmodule Server.DossierTest do
       {:ok, resolved} = Dossier.resolve_issue(issue)
       assert resolved.state == "closed"
       assert Repo.get!(Issue, issue.id).state == "closed"
+    end
+
+    test "records the resolution when one is given, keeps the old one when not" do
+      {:ok, thread} = Channel.open_thread(%{title: "a subject"})
+      {:ok, issue} = Dossier.raise_issue(%{thread_id: thread.id, summary: "x", resolution: "tbd"})
+
+      {:ok, _} = Dossier.resolve_issue(issue, "fixed in cee009f")
+      assert Repo.get!(Issue, issue.id).resolution == "fixed in cee009f"
+
+      {:ok, _} = Dossier.resolve_issue(Repo.get!(Issue, issue.id))
+      assert Repo.get!(Issue, issue.id).resolution == "fixed in cee009f"
     end
   end
 

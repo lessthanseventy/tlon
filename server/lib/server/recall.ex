@@ -21,6 +21,12 @@ defmodule Server.Recall do
   # Fact-correlated events that count as strength touches (weighted in Server.Recall.Strength).
   @touch_kinds ["check_passed", "check_failed", "cited"]
   @default_budget 4000
+  # A brief must not wait on ollama: the query embedding is a hint, and a down embedder degrades
+  # to keyword relevance within this bound. Writes (`embed_fact/1`) keep the embedder's default.
+  @query_embed_timeout_ms 1_000
+  # An unrelated fact is never scored to zero — the query is a hint that lifts what it names, and
+  # strength still orders everything else (a fact must be 5× stronger to beat a query hit).
+  @relevance_floor 0.2
 
   @type candidate :: %{
           optional(any()) => any(),
@@ -69,8 +75,10 @@ defmodule Server.Recall do
 
   @doc """
   Assemble a thread's working set from the DB: the pinned operator constraints plus the thread's
-  facts, each scored by strength (from its touch events) and — for now — uniform relevance, cut to
-  the token budget. Query-relevance (FTS × cosine) blends into `:relevance` in a later pass.
+  facts, each scored by strength (from its touch events) × relevance to `:query` (keyword bm25
+  soft-OR'd with cosine over `:query_embedding`/an ollama embedding of the query; uniform with no
+  query), cut to the token budget. `Server.Board.brief/1` derives the query from the thread's title
+  and the operator's latest message.
   """
   @spec working_set_for_thread(Thread.t(), keyword()) :: [candidate()]
   def working_set_for_thread(%Thread{} = thread, opts \\ []) do
@@ -92,7 +100,7 @@ defmodule Server.Recall do
         else: thread_facts
 
     ids = Enum.map(facts, & &1.id)
-    matched = keyword_matches(opts[:query], ids)
+    keyword = keyword_relevance(opts[:query], ids)
     touch_events = touches_by_fact(ids)
     superseded = superseded_ids(ids)
 
@@ -111,7 +119,7 @@ defmodule Server.Recall do
       %{
         id: f.id,
         fact: f,
-        relevance: relevance(f, query_vec, matched),
+        relevance: relevance(f, query_vec, keyword),
         strength: Strength.of(touches, now),
         tokens: est_tokens(f.text),
         pinned?: MapSet.member?(pinned_ids, f.id)
@@ -147,7 +155,7 @@ defmodule Server.Recall do
         vec
 
       q = opts[:query] ->
-        case Embedding.embed(q, model: embedding_model()) do
+        case Embedding.embed(q, model: embedding_model(), timeout: @query_embed_timeout_ms) do
           {:ok, vec} -> vec
           {:error, _} -> nil
         end
@@ -157,15 +165,15 @@ defmodule Server.Recall do
     end
   end
 
-  # Relevance blends the semantic (cosine) and keyword (FTS) signals as a soft-OR — a fact matching
-  # EITHER strongly is relevant, both is best, capped at 1. No query at all → uniform 1.0 (rank by
-  # pure strength); a keyword-exact match is fully relevant even with no embedding.
+  # Relevance blends the semantic (cosine) and keyword (bm25) signals as a soft-OR — a fact matching
+  # EITHER strongly is relevant, both is best, capped at 1 — lifted onto the floor. No query at all
+  # → uniform 1.0 (rank by pure strength); the best keyword hit is fully relevant with no embedding.
   defp relevance(_fact, nil, nil), do: 1.0
 
-  defp relevance(fact, query_vec, matched) do
+  defp relevance(fact, query_vec, keyword) do
     s = semantic_rel(fact, query_vec)
-    k = keyword_rel(fact, matched)
-    s + k - s * k
+    k = keyword_rel(fact, keyword)
+    @relevance_floor + (1 - @relevance_floor) * (s + k - s * k)
   end
 
   defp semantic_rel(_fact, nil), do: 0.0
@@ -173,11 +181,11 @@ defmodule Server.Recall do
   defp semantic_rel(%{embedding: emb}, query_vec), do: max(Embedding.cosine(query_vec, emb), 0.0)
 
   defp keyword_rel(_fact, nil), do: 0.0
-  defp keyword_rel(%{id: id}, matched), do: if(MapSet.member?(matched, id), do: 1.0, else: 0.0)
+  defp keyword_rel(%{id: id}, keyword), do: Map.get(keyword, id, 0.0)
 
-  # The keyword half: which candidate ids FTS-match the query, or nil when there's no query string.
-  defp keyword_matches(nil, _ids), do: nil
-  defp keyword_matches(query, ids), do: Server.Search.matching_fact_ids(query, ids)
+  # The keyword half: each candidate's bm25 relevance to the query, or nil when there's no query.
+  defp keyword_relevance(nil, _ids), do: nil
+  defp keyword_relevance(query, ids), do: Server.Search.fact_relevance(query, ids)
 
   @doc "Store a fact's embedding vector + model (written after `bank_fact`, off the write path)."
   @spec store_embedding(Fact.t(), [float()], String.t()) :: {:ok, Fact.t()} | {:error, term()}

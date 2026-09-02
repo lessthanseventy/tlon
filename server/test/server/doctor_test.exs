@@ -47,6 +47,27 @@ defmodule Server.DoctorTest do
            }
   end
 
+  test "export/1 writes one JSONL file per table — the escape hatch on disk" do
+    dir = Path.join(System.tmp_dir!(), "doctor-export-#{System.unique_integer([:positive])}")
+    Server.TestDB.clean!()
+
+    on_exit(fn ->
+      File.rm_rf!(dir)
+      Repo.query!("DELETE FROM collection WHERE source = 'doctor-export'")
+    end)
+
+    Repo.query!("INSERT INTO collection (source, last_attempt) VALUES ('doctor-export', '2026-08-14T00:00:00Z')")
+
+    paths = Doctor.export(dir)
+
+    assert Enum.map(paths, &Path.basename/1) == Enum.map(Doctor.tables(), &"#{&1}.jsonl")
+    assert Enum.all?(paths, &File.exists?/1)
+
+    rows = dir |> Path.join("collection.jsonl") |> File.read!() |> String.split("\n", trim: true)
+    assert Enum.any?(rows, &(JSON.decode!(&1)["source"] == "doctor-export"))
+    assert File.read!(Path.join(dir, "ticket.jsonl")) == ""
+  end
+
   test "refuses an unknown table rather than interpolating it" do
     assert_raise ArgumentError, ~r/no such table/, fn ->
       Doctor.table_to_jsonl("collection; DROP TABLE collection")

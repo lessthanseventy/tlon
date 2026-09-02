@@ -23,6 +23,7 @@
 #   post <id> <text…>              post as the operator
 #   delete-thread <id>             operator hard delete (messages go too; facts survive unlinked)
 #   forget-fact <id>               operator tombstone — out of recall, row kept
+#   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
@@ -245,8 +246,15 @@ case "$cmd" in
     exec "$SERVER" rpc "case Server.Repo.get(Server.Fact, $fid) do nil -> IO.puts(\"no fact #$fid\"); f -> {:ok, _} = Server.Dossier.forget_fact(f); IO.puts(\"forgot fact #$fid — #{f.text}\") end"
     ;;
 
+  resolve-issue)
+    iid="${1:-}"; shift || true
+    int "$iid" || { echo 'usage: tlon-cli.sh resolve-issue <issue-id> [resolution…]' >&2; exit 2; }
+    if [ "$#" -gt 0 ]; then res="\"$(esc "$*")\""; else res=nil; fi
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Issue, $iid) do nil -> IO.puts(\"no issue #$iid\"); i -> {:ok, _} = Server.Dossier.resolve_issue(i, $res); IO.puts(\"resolved issue #$iid — #{i.summary}\") end"
+    ;;
+
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|workline|advance|record-verify|approve|delete-thread|forget-fact} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|workline|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac

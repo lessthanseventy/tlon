@@ -206,6 +206,43 @@ defmodule Server.BoardTest do
       assert Enum.find_index(texts, &(&1 == "proven")) < Enum.find_index(texts, &(&1 == "plain"))
     end
 
+    test "the operator's latest words are the recall query: a fact carrying his term outranks an unrelated one" do
+      {:ok, thread} = Channel.open_thread(%{title: "t"})
+
+      # `hit` is banked FIRST (older, so fractionally weaker) — only the query can put it ahead.
+      {:ok, hit} =
+        Dossier.bank_fact(%{
+          thread_id: thread.id,
+          kind: "learned",
+          text: "rotate the credential nightly",
+          provenance: "derived"
+        })
+
+      {:ok, _unrelated} =
+        Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "raxol needs OTP 28", provenance: "derived"})
+
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "is the credential rotation done?"})
+
+      assert hd(Board.brief(thread).learnings.shown).id == hit.id
+    end
+
+    test "the thread's title is part of the recall query too" do
+      {:ok, thread} = Channel.open_thread(%{title: "credential rotation"})
+
+      {:ok, hit} =
+        Dossier.bank_fact(%{
+          thread_id: thread.id,
+          kind: "learned",
+          text: "rotate the credential nightly",
+          provenance: "derived"
+        })
+
+      {:ok, _unrelated} =
+        Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "raxol needs OTP 28", provenance: "derived"})
+
+      assert hd(Board.brief(thread).learnings.shown).id == hit.id
+    end
+
     test "a below-budget fact falls out of context and is COUNTED, not silently cut" do
       # A budget that fits ~one small fact (each is ~1 token) — the weaker one drops out of the
       # working set but is still on disk (get_facts returns it); `more` must own the cut. Budget

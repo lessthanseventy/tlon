@@ -174,7 +174,7 @@ defmodule Server.Board do
       # LEARNINGS is the forgetting engine's token-budgeted working set (relevance × strength,
       # design: `docs/plans/2026-08-19-funes-forgetting-design.md`) — not a recency window; `more`
       # counts what fell out of budget (still on disk, `get_facts` returns the total).
-      learnings: Recall.thread_learnings(thread),
+      learnings: Recall.thread_learnings(thread, query: recall_query(thread)),
       # UNKNOWNS beside FACTS — knowing what you don't know is first-class (§4a).
       unknowns: Dossier.open_questions_for_thread(thread),
       blockers: Dossier.open_issues_for_thread(thread),
@@ -182,6 +182,17 @@ defmodule Server.Board do
       checks: Dossier.recent_checks_for_thread(thread),
       recent: Channel.recent_messages(thread, @cap)
     }
+  end
+
+  # What the thread is about, as recall's relevance hint: its title plus the operator's latest
+  # words on it (his own, never an agent's paraphrase). nil when both are blank → uniform relevance.
+  defp recall_query(%Thread{} = thread) do
+    latest = Channel.latest_operator_message(thread.id)
+
+    case [thread.title, latest && latest.body] |> Enum.join(" ") |> String.trim() do
+      "" -> nil
+      query -> query
+    end
   end
 
   @doc """

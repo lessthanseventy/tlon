@@ -51,6 +51,25 @@ defmodule Server.Doctor do
   end
 
   @doc """
+  Export every table as JSONL into `dir` (created if missing), one `<table>.jsonl` per table —
+  `mix server.doctor --export <dir>`. Returns the paths written, in table order; an empty table
+  writes an empty file, so a missing file always means a missing table.
+  """
+  @spec export(Path.t()) :: [Path.t()]
+  def export(dir) do
+    File.mkdir_p!(dir)
+
+    for table <- tables() do
+      path = Path.join(dir, "#{table}.jsonl")
+      File.write!(path, jsonl_file(table_to_jsonl(table)))
+      path
+    end
+  end
+
+  defp jsonl_file(""), do: ""
+  defp jsonl_file(lines), do: lines <> "\n"
+
+  @doc """
   Export one table as JSONL — the escape hatch. The table name cannot be a bound
   parameter, so it is validated against the live schema before it is interpolated:
   an unknown name is refused, not run.

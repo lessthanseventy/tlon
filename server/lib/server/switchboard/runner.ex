@@ -5,8 +5,10 @@ defmodule Server.Switchboard.Runner do
   *exist* (§10) — on start it `drain/0`s the DB, so anything posted while it was
   down is still delivered; while up, it reacts to PubSub for low latency.
 
-  Opt-in (`config :server, :start_switchboard, true`) and off by default: it should
-  not auto-poke real panes until presence-gating exists (see `Server.Switchboard`).
+  Opt-in per node (`config :server, :start_switchboard, true` — the console sets it, the
+  service via `TLON_START_SWITCHBOARD=1`). A node with no arbiter configured still runs it
+  for the durable bookkeeping (drain on boot, claim + coalesce); only a node with an
+  arbiter pokes a pane (see `Server.Switchboard`).
 
   Follow-up, to land alongside a real arbiter: wakes actuate synchronously in this
   process, so a slow shell-out backend would stall every thread's delivery behind

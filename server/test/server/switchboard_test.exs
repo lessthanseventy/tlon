@@ -5,6 +5,8 @@ defmodule Server.SwitchboardTest do
   # never the whole room. The DB stays the truth (delivered_at is durable).
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Server.Channel
   alias Server.Message
   alias Server.Presence.Engine.Manual
@@ -385,6 +387,21 @@ defmodule Server.SwitchboardTest do
       Switchboard.deliver(m)
 
       refute_received {:spawned, _}
+    end
+  end
+
+  describe "no arbiter configured — the always-up service" do
+    test "a message to a warm session is bookkept without raising or warning; nothing is poked" do
+      %{thread: thread} = staffed_thread()
+      Application.delete_env(:server, :arbiter)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "anyone there?"})
+
+      log = capture_log([level: :warning], fn -> assert {:delivered, _} = Switchboard.deliver(m) end)
+
+      assert log == ""
+      refute_received {:woke, _, _}
+      assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
   end
 
