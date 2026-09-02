@@ -1,14 +1,15 @@
 defmodule Server.MCP.Tool.Containers do
   @moduledoc """
-  Container-tier MCP tools (2026-08-30): the agent-facing surface over `Server.Tickets`,
+  Container-tier MCP tools: the agent-facing surface over `Server.Tickets`,
   `Server.Notes`, and `Server.Projects`. Like `register_workspace` these are workspace-scoped
   rather than thread-scoped — but identity carries a thread, so the "current workspace" is
   resolved from the bound thread (`Server.MCP.Tool.workspace_of/1`). Each is a thin caller of
   its context, never a second writer (§10). Grouped here as several small faces, the way
-  `Server.MCP.Tool` groups the slice-1 tools.
+  `Server.MCP.Tool` groups the thread-scoped tools.
   """
 
-  defp ticket_json(t) do
+  @doc false
+  def ticket_json(t) do
     %{
       "id" => t.id,
       "title" => t.title,
@@ -20,11 +21,9 @@ defmodule Server.MCP.Tool.Containers do
     }
   end
 
-  defp note_json(n),
+  @doc false
+  def note_json(n),
     do: %{"id" => n.id, "scope" => n.scope, "scope_id" => n.scope_id, "body" => n.body, "author" => n.author}
-
-  def ticket_json_public(t), do: ticket_json(t)
-  def note_json_public(n), do: note_json(n)
 end
 
 defmodule Server.MCP.Tool.FileTicket do
@@ -59,7 +58,7 @@ defmodule Server.MCP.Tool.FileTicket do
       workspace_id ->
         case Tickets.file(Map.put(params, :workspace_id, workspace_id)) do
           {:ok, ticket} ->
-            {:reply, Response.json(Response.tool(), Containers.ticket_json_public(ticket)), frame}
+            {:reply, Response.json(Response.tool(), Containers.ticket_json(ticket)), frame}
 
           {:error, changeset} ->
             {:reply, Response.error(Response.tool(), MCP.Tool.changeset_error(changeset)), frame}
@@ -95,7 +94,7 @@ defmodule Server.MCP.Tool.ListTickets do
             do: Tickets.in_workspace(workspace_id),
             else: Tickets.open_in_workspace(workspace_id)
 
-        {:reply, Response.json(Response.tool(), Enum.map(tickets, &Containers.ticket_json_public/1)), frame}
+        {:reply, Response.json(Response.tool(), Enum.map(tickets, &Containers.ticket_json/1)), frame}
     end
   end
 end
@@ -128,7 +127,7 @@ defmodule Server.MCP.Tool.UpdateTicket do
         attrs = params |> Map.delete(:id) |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
         case Tickets.update(ticket, attrs) do
-          {:ok, updated} -> {:reply, Response.json(Response.tool(), Containers.ticket_json_public(updated)), frame}
+          {:ok, updated} -> {:reply, Response.json(Response.tool(), Containers.ticket_json(updated)), frame}
           {:error, changeset} -> {:reply, Response.error(Response.tool(), MCP.Tool.changeset_error(changeset)), frame}
         end
     end
@@ -161,7 +160,7 @@ defmodule Server.MCP.Tool.WriteNote do
     scope_id = resolve_scope_id(scope, params[:scope_id], identity)
 
     case Notes.write(%{body: params[:body], scope: scope, scope_id: scope_id, author: identity.agent}) do
-      {:ok, note} -> {:reply, Response.json(Response.tool(), Containers.note_json_public(note)), frame}
+      {:ok, note} -> {:reply, Response.json(Response.tool(), Containers.note_json(note)), frame}
       {:error, changeset} -> {:reply, Response.error(Response.tool(), MCP.Tool.changeset_error(changeset)), frame}
     end
   end
@@ -200,7 +199,7 @@ defmodule Server.MCP.Tool.GetNotes do
       end
 
     notes = Notes.for_scope(scope, scope_id)
-    {:reply, Response.json(Response.tool(), Enum.map(notes, &Containers.note_json_public/1)), frame}
+    {:reply, Response.json(Response.tool(), Enum.map(notes, &Containers.note_json/1)), frame}
   end
 end
 
