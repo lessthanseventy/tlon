@@ -172,5 +172,8 @@ then read 1800 lines," every time.
 ## Verify
 
 `server` day-one step 1 exists and runs; verify with `mise run check` (tests + types) and `mise run
-flake:check` (Nix). A claim that something works is backed by the command that proved it — and the agent
+flake:check` (Nix). `mise run check:names` (first in `check`) is the names-exist gate: every
+`Server.*`/`Console.*` module, mix task, mise task and `~/.pi/agent` file that scripts, `mise.toml`,
+`flake.nix`, the adapters or a guide name must actually exist — a rename that strands a reference
+fails here instead of at 2am. A claim that something works is backed by the command that proved it — and the agent
 and human run the *same* `mise` tasks, so "it works" means the shared task passed, not two private ones.

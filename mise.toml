@@ -342,9 +342,15 @@ TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
 echo "console:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
 """
 
+# The seams no compiler covers: a script calling a module that no longer exists, a mise task a
+# guide names but mise.toml lost, a pi config file the adapter reads but the flake stopped writing.
+[tasks."check:names"]
+description = "names-exist gate: every Server.*/Console.* module, mix task, mise task and ~/.pi/agent file the glue names must exist (grep, offline, fast)"
+run = "scripts/check-names.sh"
+
 [tasks.check]
-description = "Everything green: the server + console + adapters (pi + consult + fmt + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests)"
-depends = ["server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:fmt:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check"]
+description = "Everything green: the names gate + the server + console + adapters (pi + consult + fmt + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests)"
+depends = ["check:names", "server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:fmt:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check"]
 
 [tasks."flake:check"]
 description = "machine: nix flake check + build the activation script — the machine-level gate"
