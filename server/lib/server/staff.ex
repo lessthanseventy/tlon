@@ -65,17 +65,6 @@ defmodule Server.Staff do
     |> Server.Bus.announce(:thread_assigned)
   end
 
-  @doc "Clear a thread's agent back to unassigned."
-  def unassign(%Thread{} = thread) do
-    # force_change, not change: the caller's struct may hold a stale agent_id (it is
-    # not reloaded after assign), and change/2 would emit a no-op if the in-memory
-    # value already matched. The write must be unconditional.
-    thread
-    |> Ecto.Changeset.change()
-    |> Ecto.Changeset.force_change(:agent_id, nil)
-    |> Repo.update()
-  end
-
   @doc "The threads an agent is staffed on (an agent maps to many threads, §3), newest first."
   def threads_for(%Agent{} = agent) do
     Repo.all(from t in Thread, where: t.agent_id == ^agent.id, order_by: [desc: t.id])

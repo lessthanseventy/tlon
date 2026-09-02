@@ -95,49 +95,6 @@ defmodule Server.CheckTest do
     end
   end
 
-  describe "checks_for_fact/1 — a fact's re-verification trail, newest first, capped + counted" do
-    setup %{thread: thread} do
-      {:ok, fact} =
-        Dossier.bank_fact(%{
-          thread_id: thread.id,
-          kind: "learned",
-          text: "reproducible claim",
-          provenance: "derived",
-          check_cmd: "mise run check"
-        })
-
-      %{fact: fact}
-    end
-
-    test "returns only THIS fact's checks, newest first, cut at five with a count", %{
-      thread: thread,
-      fact: fact
-    } do
-      # a free-floating thread check and another fact's re-verification must be excluded
-      Dossier.record_check(%{thread_id: thread.id, cmd: "unrelated", exit: 0, tail: ""})
-
-      {:ok, other} =
-        Dossier.bank_fact(%{
-          thread_id: thread.id,
-          kind: "learned",
-          text: "another claim",
-          provenance: "derived",
-          check_cmd: "true"
-        })
-
-      Dossier.recheck_fact(other, %{exit: 0, tail: ""})
-
-      for i <- 1..6, do: Dossier.recheck_fact(fact, %{exit: rem(i, 2), tail: "run #{i}"})
-
-      %{shown: shown, more: more} = Dossier.checks_for_fact(fact)
-      assert length(shown) == 5
-      assert more == 1
-      assert Enum.all?(shown, &(&1.correlation == "fact:#{fact.id}"))
-      # newest first: the last re-run (run 6) heads the list
-      assert hd(shown).detail["tail"] == "run 6"
-    end
-  end
-
   describe "recent_checks_for_thread/1 — CHECKS, newest first, capped + counted" do
     test "shows recent checks newest-first, cut at five with a count, thread-scoped", %{thread: thread} do
       {:ok, other} = Channel.open_thread(%{title: "other"})

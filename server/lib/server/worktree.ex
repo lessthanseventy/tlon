@@ -37,24 +37,6 @@ defmodule Server.Worktree do
     end
   end
 
-  @doc """
-  Remove the thread's worktree (best-effort — `--force`, since crew may leave a dirty tree). `:ok`
-  even if it was never created; `{:error, reason}` only on a hard git fault. The branch is kept —
-  the artifact chain and any merge still need it.
-  """
-  def prune(repo_path, slug) do
-    wt = path(repo_path, slug)
-
-    if registered?(repo_path, wt) do
-      case git(repo_path, ["worktree", "remove", "--force", wt]) do
-        {_out, 0} -> :ok
-        {out, _} -> {:error, "git worktree remove refused: #{String.slice(out, 0, 200)}"}
-      end
-    else
-      :ok
-    end
-  end
-
   # -- helpers --------------------------------------------------------------
 
   defp do_ensure(repo_path, slug) do
@@ -105,15 +87,6 @@ defmodule Server.Worktree do
       File.mkdir_p!(Path.dirname(file))
       sep = if current == "" or String.ends_with?(current, "\n"), do: "", else: "\n"
       File.write!(file, current <> sep <> line <> "\n")
-    end
-  end
-
-  defp registered?(repo_path, wt) do
-    case git(repo_path, ["worktree", "list", "--porcelain"]) do
-      # `git worktree list` prints canonicalized absolute paths; match on a trailing segment so a
-      # /tmp↔/private/tmp symlink or a relative repo_path doesn't read as "not registered".
-      {out, 0} -> String.contains?(out, "worktree ") and String.contains?(out, Path.basename(wt))
-      _ -> false
     end
   end
 

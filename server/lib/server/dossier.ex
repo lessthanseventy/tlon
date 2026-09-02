@@ -1,15 +1,15 @@
 defmodule Server.Dossier do
   @moduledoc """
-  The dossier (console §9.4, spec §4/§5): `fact`, `event`, and `issue` scoped to a
-  thread — the thread's accumulated state, and the source of LEARNINGS, SHIPPED and
-  BLOCKERS. These are the judgement and the record a system cannot re-derive from a
-  transcript; the channel (`Server.Channel`) and the staff (`Server.Staff`) own the
-  rest of the spine.
+  The dossier (console §9.4, spec §4/§5): `fact`, `event`, `issue`, `todo`, `question` and
+  `habit` scoped to a thread — the thread's accumulated state, and the source of the brief's
+  LEARNINGS, DONE, BLOCKERS, TODOS/NEXT, UNKNOWNS and CHECKS (`Server.Board.brief/1`). These
+  are the judgement and the record a system cannot re-derive from a transcript; the channel
+  (`Server.Channel`) and the staff (`Server.Staff`) own the rest of the spine.
 
-  The per-thread reads here are raw material — `facts_for_thread`, `events_for_thread`
-  and `shipped_for_thread` return every row, uncapped. Rank-and-cut (§5/§6) lives on
-  the surface that renders LEARNINGS/SHIPPED, not built yet; only `open_issues_for_thread`
-  caps today, because §5 makes its capped read the acceptance test that must exist now.
+  The open/recent reads are ranked and cut (§5/§6): `%{shown, more}`, at most five rows and
+  the count of what was set aside, so a cut never reads as "this is everything". The raw
+  per-thread reads (`facts_for_thread`, `shipped_for_thread`, `done_todos_for_thread`) return
+  every row for the surfaces that rank them themselves.
   """
   import Ecto.Query
 
@@ -128,11 +128,6 @@ defmodule Server.Dossier do
   @doc "Record an append-only event. `{:ok, event}` or `{:error, changeset}`."
   def record_event(attrs) do
     attrs |> Event.record_changeset() |> Repo.insert() |> Bus.announce(:event_recorded)
-  end
-
-  @doc "A thread's events, scoped to it, newest first."
-  def events_for_thread(%Thread{} = thread) do
-    Repo.all(from e in Event, where: e.thread_id == ^thread.id, order_by: [desc: e.id])
   end
 
   @doc """
@@ -286,22 +281,6 @@ defmodule Server.Dossier do
       tail: attrs[:tail],
       correlation: "fact:#{fact.id}"
     })
-  end
-
-  @doc """
-  A fact's re-verification trail: the `check_passed`/`check_failed` events correlated to
-  it, `%{shown, more}`, newest first, capped and counted like every check read. The head
-  is the fact's CURRENT verification state — green if its command still passes, red if it
-  has drifted. Other facts' checks and free-floating thread checks are excluded.
-  """
-  def checks_for_fact(%Fact{} = fact) do
-    correlation = "fact:#{fact.id}"
-    checks = from e in Event, where: e.correlation == ^correlation and e.kind in @check_kinds
-
-    shown = Repo.all(from e in checks, order_by: [desc: e.id], limit: @check_cap)
-    total = Repo.aggregate(checks, :count, :id)
-
-    %{shown: shown, more: total - length(shown)}
   end
 
   @doc """

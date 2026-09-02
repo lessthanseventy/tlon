@@ -17,11 +17,6 @@ defmodule Server.Projects do
     attrs |> Project.register_changeset() |> Repo.insert() |> Bus.announce(:project_registered)
   end
 
-  @doc "Every project, newest-first (by id)."
-  def all do
-    Repo.all(from p in Project, order_by: [desc: p.id])
-  end
-
   @doc "Projects in one workspace, oldest-first (the switcher's stable order)."
   def in_workspace(workspace_id) do
     Repo.all(from p in Project, where: p.workspace_id == ^workspace_id, order_by: [asc: p.id])

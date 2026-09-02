@@ -219,16 +219,6 @@ defmodule Server.Recall do
   defp embedding_model, do: get_in(Application.get_env(:server, :embedding, []), [:model]) || "nomic-embed-text"
 
   @doc """
-  Reinforce a fact that was surfaced-and-used: record a `cited` touch (correlated `fact:<id>`) so a
-  genuinely-useful fact stays warm even as raw age grows. Best-effort — a citation is never
-  load-bearing.
-  """
-  @spec reinforce_fact(Fact.t()) :: {:ok, Event.t()} | {:error, term()}
-  def reinforce_fact(%Fact{id: id, thread_id: thread_id}) do
-    Dossier.record_event(%{thread_id: thread_id, kind: "cited", correlation: "fact:#{id}"})
-  end
-
-  @doc """
   The recall corpus at a glance — the observability read behind console's Memory pane: total facts,
   how many carry an embedding (semantic-recall coverage), and the always-loaded floor's size in
   facts and estimated tokens against the working-set budget. Cheap: two counts + the floor query.

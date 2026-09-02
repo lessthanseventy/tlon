@@ -80,19 +80,6 @@ defmodule Server.WorktreeTest do
     end
   end
 
-  describe "prune/2" do
-    test "removes the checkout; ensure then re-creates it", %{repo: repo} do
-      {:ok, wt} = Worktree.ensure(repo, "redis-cache")
-      assert :ok = Worktree.prune(repo, "redis-cache")
-      refute File.exists?(Path.join(wt, ".git"))
-      assert {:ok, ^wt} = Worktree.ensure(repo, "redis-cache")
-    end
-
-    test "pruning a worktree that was never created is a no-op :ok", %{repo: repo} do
-      assert :ok = Worktree.prune(repo, "never-made")
-    end
-  end
-
   describe "Server.worktree_for_thread/1 (facade: thread → project repo → ensured worktree)" do
     setup %{repo: repo} do
       Server.TestDB.clean!()
