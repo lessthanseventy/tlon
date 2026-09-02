@@ -104,17 +104,8 @@ defmodule Server.Dossier do
           is_nil(f.forgotten_at),
       order_by: [desc: f.id]
     )
-    |> scope_facts_by_workspace(workspace_id)
+    |> Fact.in_workspace(workspace_id)
     |> Repo.all()
-  end
-
-  # A fact belongs to a workspace's memory when it's GLOBAL (no thread — the seed self-knowledge) or
-  # its thread lives in that workspace. `nil` = every workspace (the pre-scope behaviour).
-  defp scope_facts_by_workspace(query, nil), do: query
-
-  defp scope_facts_by_workspace(query, workspace_id) do
-    ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
-    from f in query, where: is_nil(f.thread_id) or f.thread_id in subquery(ids)
   end
 
   @doc "A thread's facts, scoped to it, newest first — the raw material for LEARNINGS."

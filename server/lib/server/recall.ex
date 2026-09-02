@@ -233,7 +233,7 @@ defmodule Server.Recall do
         }
   def coverage(workspace_id \\ nil) do
     pinned = Dossier.always_loaded_constraints(workspace_id)
-    facts = scope_facts_by_workspace(Fact, workspace_id)
+    facts = Fact.in_workspace(Fact, workspace_id)
 
     %{
       facts: Repo.aggregate(facts, :count),
@@ -243,15 +243,6 @@ defmodule Server.Recall do
       budget: recall_budget(),
       model: embedding_model()
     }
-  end
-
-  # A fact counts toward a workspace's coverage when it's GLOBAL (no thread — seed self-knowledge) or
-  # its thread lives in that workspace. `nil` = every workspace.
-  defp scope_facts_by_workspace(query, nil), do: query
-
-  defp scope_facts_by_workspace(query, workspace_id) do
-    ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
-    from f in query, where: is_nil(f.thread_id) or f.thread_id in subquery(ids)
   end
 
   defp recall_budget, do: get_in(Application.get_env(:server, :recall, []), [:budget]) || @default_budget
