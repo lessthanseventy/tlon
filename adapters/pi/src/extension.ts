@@ -28,7 +28,7 @@ import type { ExtensionAPI, ExtensionContext } from "./pi.ts";
 
 // The cheap model that runs cadence extraction out-of-band (ollama-cloud), shared with the
 // claude-code reflex via capture.ts's DEFAULT_CAPTURE_MODEL. Overridable per-pane via
-// funes-recall.json `captureModel` (e.g. a local-daemon model to keep deltas off the wire entirely).
+// server-recall.json `captureModel` (e.g. a local-daemon model to keep deltas off the wire entirely).
 const CAPTURE_MODEL = DEFAULT_CAPTURE_MODEL;
 
 interface RecallConfig {
@@ -45,11 +45,13 @@ const RECALL_DEFAULTS: RecallConfig = {
   captureModel: CAPTURE_MODEL,
 };
 
-// The total-recall noise knob: ~/.pi/agent/funes-recall.json (flake-seeded with defaults + a
-// comment). A missing/broken file → defaults, so the adapter never fails to load over config.
+// The total-recall noise knob: ~/.pi/agent/server-recall.json (flake.nix `piRecallJson` owns
+// it). A missing/broken file → defaults, so the adapter never fails to load over config.
+export const RECALL_CONFIG_PATH = ".pi/agent/server-recall.json";
+
 function readRecallConfig(): RecallConfig {
   try {
-    const raw = readFileSync(join(homedir(), ".pi/agent/funes-recall.json"), "utf-8");
+    const raw = readFileSync(join(homedir(), RECALL_CONFIG_PATH), "utf-8");
     const c = JSON.parse(raw) as Partial<RecallConfig>;
     const n = c.captureEveryTurns;
     return {
