@@ -42,7 +42,7 @@ Both reach the **live** server service node (loopback MCP on :4040); the service
 (delta-slicing, secret redaction, the extraction prompt, tolerant parse) and `mcp.ts`'s
 `FunesClient` verbatim — the same reflex pi's `extension.ts` runs on a cadence, adapted to
 Claude Code's stateless-per-turn hook model: a per-session watermark is persisted to
-`${XDG_STATE_HOME:-~/.local/state}/server-cc-capture/<session_id>` instead of living in a
+`${XDG_STATE_HOME:-~/.local/state}/tlon-cc-capture/<session_id>` instead of living in a
 long-lived closure. Extracted facts are banked `derived`, with `intent`, unbidden. Same
 failure discipline as everything else here: no identity, a down channel, a bad completion,
 or an unparseable transcript is a silent no-op — a Stop hook must never be why a session
@@ -69,7 +69,7 @@ which reads as frozen on one long turn; the heartbeat is the fix.
 
 Since Claude Code gives each hook fire a fresh process (no long-lived closure to hold an interval
 in, unlike pi), the cadence lives in a state file
-(`${XDG_STATE_HOME:-~/.local/state}/server-cc-heartbeat/<session_id>`) instead: every `PostToolUse`
+(`${XDG_STATE_HOME:-~/.local/state}/tlon-cc-heartbeat/<session_id>`) instead: every `PostToolUse`
 call asks "has it been ≥45s since the last post (or since the turn started)?" — `activity.ts`'s
 `nextHeartbeatState`/`heartbeatDue` answer that, shared verbatim with pi's side so the two
 harnesses' cadence never drifts apart.

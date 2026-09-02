@@ -72,7 +72,7 @@ export function parseTranscript(jsonlText: string): Entry[] {
 
 function stateFilePath(sessionId: string): string {
   const stateHome = env.XDG_STATE_HOME?.trim() || join(homedir(), ".local/state");
-  return join(stateHome, "funes-cc-capture", sessionId);
+  return join(stateHome, "tlon-cc-capture", sessionId);
 }
 
 async function readWatermark(path: string): Promise<number> {

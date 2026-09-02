@@ -39,7 +39,7 @@ interface PostToolUseInput {
 
 function stateFilePath(sessionId: string): string {
   const stateHome = env.XDG_STATE_HOME?.trim() || join(homedir(), ".local/state");
-  return join(stateHome, "funes-cc-heartbeat", sessionId);
+  return join(stateHome, "tlon-cc-heartbeat", sessionId);
 }
 
 async function readState(path: string): Promise<HeartbeatState | null> {
