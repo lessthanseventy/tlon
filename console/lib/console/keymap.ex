@@ -568,10 +568,6 @@ defmodule Console.Keymap do
   defp command(%{key: :char, char: ":"}, state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
 
-  # `g`/`G` jump the stack cursor to the top/bottom thread (vim/less convention).
-  defp command(%{key: :char, char: "g"}, %{active_key: key} = state) when key != :orbis, do: jump(state, :first)
-  defp command(%{key: :char, char: "G"}, %{active_key: key} = state) when key != :orbis, do: jump(state, :last)
-
   # `a` (bare) toggles Orbis' author face on; Esc (below, no input open) toggles it back off.
   # Modifier-guarded like `c`/`m` — Ctrl/Shift/Alt+A never fires this.
   defp command(%{key: :char, char: "a"} = k, %{active_key: :orbis} = state)
@@ -659,7 +655,8 @@ defmodule Console.Keymap do
        do: {toggle_orbis_focus(state), :repaint}
 
   # j/k/↑/↓ route by `orbis_focus`: :survey moves the survey's per-row cursor (clamped, no wrap);
-  # :threads keeps the pre-existing thread-focus move. Orbis-only (Workspace j/k is `handle_tlon`'s).
+  # :threads keeps the thread-focus move. Orbis-only: this table is only reached with `active_key
+  # :orbis` (a Workspace routes every key through `handle_tlon`, which delegates just n/c/m here).
   defp command(%{key: :up}, %{active_key: :orbis} = state), do: move_orbis(state, -1)
 
   defp command(%{key: :char, char: "k"} = k, %{active_key: :orbis} = state)
@@ -669,16 +666,6 @@ defmodule Console.Keymap do
 
   defp command(%{key: :char, char: "j"} = k, %{active_key: :orbis} = state)
        when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt), do: move_orbis(state, 1)
-
-  defp command(%{key: :up}, state), do: move(state, -1)
-
-  defp command(%{key: :char, char: "k"} = k, state)
-       when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt), do: move(state, -1)
-
-  defp command(%{key: :down}, state), do: move(state, 1)
-
-  defp command(%{key: :char, char: "j"} = k, state)
-       when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt), do: move(state, 1)
 
   # Anything else (Ctrl+C, F-keys, page-up…) is unbound — a no-op, never a quit.
   defp command(_key, state), do: {state, :none}
@@ -854,13 +841,7 @@ defmodule Console.Keymap do
     {%{state | focused_id: new_id}, :repaint}
   end
 
-  # `g`/`G`: jump the cursor to the first/last thread (top/bottom of the stack).
-  defp jump(%{threads: []} = state, _), do: {state, :none}
-  defp jump(state, :first), do: {%{state | focused_id: hd(state.threads).id}, :repaint}
-  defp jump(state, :last), do: {%{state | focused_id: List.last(state.threads).id}, :repaint}
-
-  # The thread-stack cursor move/jump in the Tlön (workspace) context — same as move/2 + jump/2 but
-  # returning from handle_tlon (the workspace routes keys here, not through command/2).
+  # The thread-stack cursor move/jump in the Workspace context (returned from handle_tlon).
   defp stack_move(%{threads: []} = state, _dir), do: {state, :none}
 
   defp stack_move(state, dir) do

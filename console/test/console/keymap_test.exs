@@ -871,12 +871,6 @@ defmodule Console.KeymapTest do
       assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
     end
 
-    test "g/G jump the cursor to the first/last thread (workspace context)" do
-      s = state(%{active_key: 0, threads: [%{id: 1}, %{id: 2}, %{id: 3}], focused_id: 2})
-      assert {%{focused_id: 1}, :repaint} = Keymap.handle(char("g"), s)
-      assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("G"), s)
-    end
-
     test "z forwards to the terminal when one is live (reach fold via the leader)" do
       s = state(%{center_live?: true})
       assert {^s, {:forward, %{key: :char, char: "z"}}} = Keymap.handle(char("z"), s)
