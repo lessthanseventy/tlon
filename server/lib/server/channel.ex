@@ -343,7 +343,8 @@ defmodule Server.Channel do
 
   @doc """
   Is `author` the configured operator (config `:operator`, case-insensitive)? The one
-  operator-detection seam — renderers color by it, `latest_operator_message/1` queries by it.
+  operator-detection seam — renderers color by it, `latest_operator_message/1` queries by it,
+  `Dossier.bank_stated_fact/2` gates `stated` provenance on it.
   """
   def operator?(author) when is_binary(author), do: String.downcase(author) == operator()
   def operator?(_author), do: false

@@ -14,6 +14,7 @@ defmodule Server.Dossier do
   import Ecto.Query
 
   alias Server.Bus
+  alias Server.Channel
   alias Server.Event
   alias Server.Fact
   alias Server.Habit
@@ -60,16 +61,14 @@ defmodule Server.Dossier do
   mechanical (pi doc §2a). `stated` outranks everything by construction, so it is
   reachable only THROUGH a message row: the fact quotes the message body VERBATIM
   and is scoped to the message's thread. The message must be authored by the
-  operator (config `:operator`, case-insensitive) — an agent's paraphrase, or an
-  agent quoted by another agent, laundered into the owner's instruction is the one
-  abuse the provenance ordering makes possible, refused here rather than by rule.
+  operator (`Channel.operator?/1`) — an agent's paraphrase, or an agent quoted by
+  another agent, laundered into the owner's instruction is the one abuse the
+  provenance ordering makes possible, refused here rather than by rule.
   `attrs` carries the judgement half (`kind`, optionally `check_cmd`/`incident`).
   Returns `{:ok, fact}`, `{:error, :not_the_operator}`, or `{:error, changeset}`.
   """
   def bank_stated_fact(%Message{} = message, attrs) do
-    operator = Application.get_env(:server, :operator, "andrew")
-
-    if String.downcase(message.author) == String.downcase(operator) do
+    if Channel.operator?(message.author) do
       attrs
       |> Map.merge(%{
         text: message.body,
