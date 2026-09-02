@@ -55,8 +55,8 @@ not the transport — is the identity:
 2. **`pi-mcp-adapter`** exposes the server's write verbs (`post_message`, `bank_fact`, `raise_issue`,
    `record_done`) to the *model* as first-class tools.
 
-Because server binds a session to the **token** (`Funes.MCP.Tokens.bind_session/2`), not to a transport
-connection, `register` on door 1 claims the session that door 2's calls then resolve to — so the
+Because the server resolves every call's identity from the **token** (`Server.MCP.Tokens.resolve/1` — a
+stateless signed claim on thread + agent), not from a transport connection, `register` on door 1 claims the session that door 2's calls then resolve to — so the
 model's writes bump the same session's warmth for free. Register once; both doors are that session.
 
 ## Install
