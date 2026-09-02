@@ -305,32 +305,48 @@ defmodule Console.Staffing do
   defp maybe_inject_opening_turn(workspace_id, id, tabs, now, state) do
     tab = Tmux.leaf_tab(tabs, id)
 
-    cond do
-      is_nil(tab) ->
+    case opening_step(tab, id, state, now) do
+      :none ->
         state
 
-      tab.opening == "done" or MapSet.member?(state.opening_injected, id) ->
+      :done ->
         mark_opening_done(state, id)
 
-      tab.opening == "typed" or Map.has_key?(state.opening_text_at, id) ->
-        submit_opening(workspace_id, id, tab, now, state)
+      :wait ->
+        state
 
-      true ->
+      :submit ->
+        Tmux.submit(workspace_id, tab.index)
+        tag_opening(workspace_id, tab.index, "done")
+        mark_opening_done(state, id)
+
+      :type ->
         inject_opening_text(workspace_id, id, tab)
         tag_opening(workspace_id, tab.index, "typed")
         %{state | opening_text_at: Map.put(state.opening_text_at, id, now)}
     end
   end
 
-  defp submit_opening(workspace_id, id, tab, now, state) do
-    typed_at = state.opening_text_at[id]
+  @doc """
+  The opening-turn phase decision for thread `id`'s leaf `tab` (nil = no window yet): `:none`,
+  `:done` (submitted — the window's tag or process memory says so), `:submit` (typed and settled
+  for `@opening_submit_delay_ms`, or typed with no timestamp — a restart — so long ago), `:wait`
+  (typed, still settling), `:type` (fresh window).
+  """
+  @spec opening_step(Tmux.tab() | nil, integer(), map(), integer()) :: :none | :done | :submit | :wait | :type
+  def opening_step(nil, _id, _state, _now), do: :none
 
-    if is_nil(typed_at) or now - typed_at >= @opening_submit_delay_ms do
-      Tmux.submit(workspace_id, tab.index)
-      tag_opening(workspace_id, tab.index, "done")
-      mark_opening_done(state, id)
-    else
-      state
+  def opening_step(tab, id, state, now) do
+    cond do
+      tab.opening == "done" or MapSet.member?(state.opening_injected, id) ->
+        :done
+
+      tab.opening == "typed" or Map.has_key?(state.opening_text_at, id) ->
+        typed_at = state.opening_text_at[id]
+        if is_nil(typed_at) or now - typed_at >= @opening_submit_delay_ms, do: :submit, else: :wait
+
+      true ->
+        :type
     end
   end
 

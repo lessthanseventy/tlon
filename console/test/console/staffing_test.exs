@@ -26,6 +26,28 @@ defmodule Console.StaffingTest do
     end
   end
 
+  describe "opening_step/4 — the two-phase opening turn's phase decision" do
+    @tab %{name: "builder-x", index: "1", thread_id: 5, opening: nil, activity: nil, active?: false}
+    @fresh %{opening_injected: MapSet.new(), opening_text_at: %{}}
+
+    test "no window → :none; a fresh window → :type" do
+      assert Staffing.opening_step(nil, 5, @fresh, 0) == :none
+      assert Staffing.opening_step(@tab, 5, @fresh, 0) == :type
+    end
+
+    test "done by tag or by process memory" do
+      assert Staffing.opening_step(%{@tab | opening: "done"}, 5, @fresh, 0) == :done
+      assert Staffing.opening_step(@tab, 5, %{@fresh | opening_injected: MapSet.new([5])}, 0) == :done
+    end
+
+    test "typed: submit once settled, wait until then; a typed tag with no timestamp (restart) submits now" do
+      typed = %{@fresh | opening_text_at: %{5 => 1_000}}
+      assert Staffing.opening_step(@tab, 5, typed, 1_500) == :wait
+      assert Staffing.opening_step(@tab, 5, typed, 2_200) == :submit
+      assert Staffing.opening_step(%{@tab | opening: "typed"}, 5, @fresh, 0) == :submit
+    end
+  end
+
   describe "boot_script/2 — the one builder every harness window rides" do
     test "sets TERM, sources the exports, execs the bare command" do
       script = Staffing.boot_script("export TLON_THREAD=\"42\"", "mise exec -- pi")

@@ -773,8 +773,9 @@ defmodule Console.Cockpit do
 
   # Reset scroll offsets when the context they're relative to changes: a space switch swaps every
   # panel, so all offsets go.
-  defp reset_scrolls(%{active_key: a}, %{active_key: a2} = next) when a != a2, do: %{next | scrolls: %{}}
-  defp reset_scrolls(_prev, next), do: next
+  @doc false
+  def reset_scrolls(%{active_key: a}, %{active_key: a2} = next) when a != a2, do: %{next | scrolls: %{}}
+  def reset_scrolls(_prev, next), do: next
 
   defp handle_menu_click({Panel.Menu, data, rect}, y, state),
     do: {:noreply, render(Author.apply_menu(Panel.Menu.pick(data, rect, y - rect.y), state))}
@@ -1276,7 +1277,8 @@ defmodule Console.Cockpit do
   def toggle_center_view(state), do: %{state | center_view: :chat}
 
   # A thread title from its opening message — first line, trimmed to a glanceable length.
-  defp thread_title(text) do
+  @doc false
+  def thread_title(text) do
     text |> String.split("\n", parts: 2) |> List.first() |> String.trim() |> String.slice(0, 60)
   end
 
