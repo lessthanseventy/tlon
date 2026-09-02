@@ -7,9 +7,9 @@ defmodule Server.Board do
   from the dossier rather than the transcript (§3b): one artifact, two consumers.
 
   Ranked and cut (§6): each pane is capped WITH a count. For an agent briefed from
-  this map (the MCP channel's `get_brief`), a cut without a count reads as "this
-  is everything" — the empty-workspace lie in miniature — so LEARNINGS, SHIPPED and
-  BLOCKERS are each `%{shown, more}`.
+  this map (the MCP channel's `get_dossier`), a cut without a count reads as "this
+  is everything" — the empty-workspace lie in miniature — so TODOS, LEARNINGS,
+  UNKNOWNS, BLOCKERS and CHECKS are each `%{shown, more}`.
   """
   import Ecto.Query
 
@@ -57,7 +57,7 @@ defmodule Server.Board do
   end
 
   @doc """
-  The sidebar read-model (reshape slice C) — the contract the Slack-shaped UI sits on.
+  The sidebar read-model — the contract the Slack-shaped UI sits on.
   One group per workspace (oldest first): its OPEN threads as ONE unified list — a chat
   thread and a tracked thread are the same kind of row, `stage` nil or set — root first,
   then newest activity; and the workspace's crew with working flags. Each thread row:
@@ -155,8 +155,9 @@ defmodule Server.Board do
 
   @doc """
   The IN SCOPE brief for a thread — read fresh from the DB (the argument is just an
-  id handle): GOAL (title), the assigned lead, SHIPPED, LEARNINGS and
-  BLOCKERS each `%{shown, more}`, and RECENT (the message tail).
+  id handle): GOAL (title), the assigned lead, TODOS with the derived NEXT, DONE (the
+  merged todo + `work_landed` view), LEARNINGS, UNKNOWNS, BLOCKERS and CHECKS each
+  `%{shown, more}`, and RECENT (the message tail).
   """
   def brief(%Thread{} = thread) do
     thread = Repo.get!(Thread, thread.id)
@@ -200,7 +201,7 @@ defmodule Server.Board do
         thread_id: thread.id,
         title: thread.title,
         lead: s.lead,
-        # TRACKED leaves are in this set now (slice C) — carry the signal that says so,
+        # TRACKED leaves are in this set — carry the signal that says so,
         # or the meta agent sees the thread but not that it's staged/parked on a gate.
         stage: thread.stage,
         awaiting: thread.awaiting,

@@ -10,27 +10,33 @@ defmodule Server.Bus do
   nothing is lost; readers recover from the DB.
 
   ## Topics
-    * `server:messages`      — every posted message (the switchboard's stream)
-    * `server:thread:{id}`   — everything on one thread: messages, facts, events,
-                              issues, assignment/close (feeds IN SCOPE)
-    * `server:threads`       — thread lifecycle: opened, closed, assigned (the list)
-    * `server:sessions`      — session start/end (feeds the IN FLIGHT roster)
-    * `server:presence`      — explicit thinking/idle declarations (`Server.Presence.Thinking`)
-    * `server:habits`        — habit proposed/approved/rejected (the operator's review queue)
-    * `server:workspaces`        — workspace registered/edited/removed (console's picker/survey follow this)
-    * `server:activity`      — every durable write, cross-thread (the machine-wide activity feed)
+    * `tlon:messages`     — every posted message (the switchboard's stream)
+    * `tlon:thread:{id}`  — everything on one thread: messages, facts, events, issues,
+                            todos, questions, sessions, presence, assignment/close (feeds IN SCOPE)
+    * `tlon:threads`      — thread lifecycle: opened, closed, deleted, assigned, workline
+                            advanced/gated (the list)
+    * `tlon:sessions`     — session start/end (feeds the IN FLIGHT roster)
+    * `tlon:presence`     — explicit thinking/idle declarations (`Server.Presence.Thinking`)
+    * `tlon:habits`       — habit proposed/approved/rejected (the operator's review queue)
+    * `tlon:workspaces`   — workspace registered/edited/removed (the console's picker/survey)
+    * `tlon:projects`     — project registered/edited/removed
+    * `tlon:notes`        — note written/edited/removed
+    * `tlon:tickets`      — ticket filed/updated/removed
+    * `tlon:activity`     — every durable write, cross-thread (the machine-wide activity feed)
 
   ## Events (the envelope every subscriber matches)
-    `{:message_posted, message}` · `{:fact_banked, fact}` · `{:event_recorded, event}`
-    `{:issue_raised, issue}` · `{:issue_resolved, issue}` · `{:todo_added, todo}`
-    `{:todo_completed, todo}` · `{:question_raised, q}` · `{:question_resolved, q}`
-    `{:habit_proposed, h}` · `{:habit_approved, h}` · `{:habit_rejected, h}`
-    `{:workspace_registered, w}` · `{:workspace_edited, w}` · `{:workspace_removed, w}`
-    `{:thread_opened, thread}`
-    `{:thread_closed, thread}` · `{:thread_deleted, thread}` · `{:thread_assigned, thread}`
-    `{:workline_advanced, thread}` · `{:workline_gated, thread}` · `{:session_started, s}`
-    `{:session_ended, s}` · `{:presence_thinking, %{thread_id, agent, started_at}}`
-    `{:presence_idle, %{thread_id, agent}}`
+    `{:message_posted, message}` · `{:fact_banked, fact}` · `{:fact_forgotten, fact}`
+    `{:event_recorded, event}` · `{:issue_raised, issue}` · `{:issue_resolved, issue}`
+    `{:todo_added, todo}` · `{:todo_completed, todo}` · `{:question_raised, q}`
+    `{:question_resolved, q}` · `{:habit_proposed, h}` · `{:habit_approved, h}`
+    `{:habit_rejected, h}` · `{:workspace_registered, w}` · `{:workspace_edited, w}`
+    `{:workspace_removed, w}` · `{:project_registered, p}` · `{:project_edited, p}`
+    `{:project_removed, p}` · `{:note_written, n}` · `{:note_edited, n}` · `{:note_removed, n}`
+    `{:ticket_filed, t}` · `{:ticket_updated, t}` · `{:ticket_removed, t}`
+    `{:thread_opened, thread}` · `{:thread_closed, thread}` · `{:thread_deleted, thread}`
+    `{:thread_assigned, thread}` · `{:workline_advanced, thread}` · `{:workline_gated, thread}`
+    `{:session_started, s}` · `{:session_ended, s}`
+    `{:presence_thinking, %{thread_id, agent, started_at}}` · `{:presence_idle, %{thread_id, agent}}`
   """
   @pubsub Server.PubSub
 

@@ -215,7 +215,7 @@ defmodule Server.Dossier do
   end
 
   @doc """
-  Record a MEASURED check (roadmap #5): the command run, its real `exit` code, and a
+  Record a MEASURED check: the command run, its real `exit` code, and a
   `tail` of output. exit 0 lands a `check_passed` event, anything else a `check_failed` —
   the outcome is keyed on the number, never on a self-report. `{:ok, event}` or
   `{:error, changeset}`. The agent runs the command (via `cap`); server only records.
@@ -265,7 +265,7 @@ defmodule Server.Dossier do
   end
 
   @doc """
-  Propose a HABIT (roadmap: pi-synthesis slice 2) — the agent's suggestion for how to work
+  Propose a HABIT — the agent's suggestion for how to work
   with the operator, distinct from a `stated` constraint (his verbatim words). It lands
   `pending`; the operator promotes it via `approve_habit/1`. `{:ok, habit}` or `{:error, cs}`.
   """

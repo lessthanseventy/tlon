@@ -5,9 +5,10 @@ defmodule Server.Staff do
   agent/session data model and assignment; `Server.Channel` keeps owning
   thread/message.
 
-  Deliberately out of scope, and deferred (§3b/§10): presence ("clocked out" is
-  derived from the engine, asked live), routing/cover, the night shift, engine
-  resolution, and the PubSub wake.
+  Warmth is `Server.Presence`'s (measured from `last_active_at`, never a heartbeat) and
+  rides the roster; waking a session on delivery is `Server.Switchboard`'s. Still deferred
+  (§3b/§10): the engine-credit half of presence, routing/cover, the night shift, and
+  engine resolution.
   """
   import Ecto.Query
 
