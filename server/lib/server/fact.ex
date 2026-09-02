@@ -71,20 +71,7 @@ defmodule Server.Fact do
       :source_session_id
     ])
     |> validate_required([:kind, :text, :provenance])
-    |> validate_no_secret(:text)
+    |> Server.Secrets.validate_no_secret(:text)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
-  end
-
-  # Refuse a fact whose text carries an obvious credential (total-recall slice B): the ledger — and
-  # the automated capture that will feed it — must never store a secret. Returned as a changeset
-  # error, so it rides the same {:error, changeset} path as any other invalid write.
-  defp validate_no_secret(changeset, field) do
-    case Server.Secrets.scan(get_field(changeset, field)) do
-      :ok ->
-        changeset
-
-      {:secret, label} ->
-        add_error(changeset, field, "looks like a secret (#{label}); tlon does not store credentials")
-    end
   end
 end
