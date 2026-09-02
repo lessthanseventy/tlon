@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mise run funes:claude [thread-id] — launch Claude Code as a funes citizen.
+# mise run server:claude [thread-id] — launch Claude Code as a citizen of a server thread.
 # No thread-id: open a fresh thread. A numeric thread-id: join that thread (resume across
 # a /clear).
 #
@@ -28,17 +28,19 @@ if [ -z "${TLON_MCP_URL:-}" ] || [ -z "${TLON_THREAD:-}" ] || [ -z "${TLON_AUTHO
     shift
   fi
 
+  # The CLI's stderr passes through: its own error (no release, service down, no such
+  # thread) is the diagnosis, so nothing here guesses at one.
   if [ -n "$join_id" ]; then
-    block="$("$cli" spawn --join "$join_id" claude-code 2>/dev/null || true)"
+    block="$("$cli" spawn --join "$join_id" claude-code || true)"
   else
     branch="$(git -C "$PWD" branch --show-current 2>/dev/null || true)"
-    block="$("$cli" spawn "claude-code @ $(basename "$PWD")${branch:+ ($branch)}" claude-code 2>/dev/null || true)"
+    block="$("$cli" spawn "claude-code @ $(basename "$PWD")${branch:+ ($branch)}" claude-code || true)"
   fi
 
-  # Degrade gracefully: no live channel (or no such thread) → launch a PLAIN claude, so
-  # the harness is never held hostage to funes being up.
+  # Degrade gracefully: spawn failed → launch a PLAIN claude, not as a citizen, so the
+  # harness is never held hostage to the server being up.
   if [ -z "$block" ]; then
-    echo "funes: channel not up${join_id:+ or no thread #$join_id} — launching plain claude (start it with 'mise run funes:restart')" >&2
+    echo "tlon: spawn failed${join_id:+ for thread #$join_id} (see above) — launching plain claude, not as a citizen. If the service is down: 'mise run server:restart'" >&2
     [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ] && { echo "exec: claude $*"; exit 0; }
     exec claude "$@"
   fi
