@@ -24,6 +24,7 @@ defmodule Console.Cockpit do
   alias Console.Space
   alias Console.Terminal
   alias Console.Tlon.Focus
+  alias Console.Tmux
   alias Console.View
   alias Console.WorkspaceTemplates
   alias Ghostty.KeyEvent
@@ -60,9 +61,8 @@ defmodule Console.Cockpit do
   # orchestrator) as DATA, not constants.
 
   # tmux is a first-class stack citizen here: each Workspace's center is a real `tmux attach`, so the
-  # workspace gets mouse, windows, and copy-mode, and it SURVIVES console restarts. Session/socket are
-  # id-derived (workspace_session/1, workspace_socket/1, near tlon_tmux/2) — not name-derived — so a workspace
-  # rename can't orphan the running session and two workspaces never collide.
+  # workspace gets mouse, windows, and copy-mode, and it SURVIVES console restarts. Naming + the
+  # command seam live in `Console.Tmux`.
 
   # Tlön probe cadence: the Stack/Health reads fork subprocesses (git ×~6, nix-env, df, tmux)
   # and open a TCP probe — far too heavy to run per render (a streaming terminal coalesces to
@@ -801,8 +801,8 @@ defmodule Console.Cockpit do
   defp teardown_closed_leaf(:thread_closed, %{scope: "machine", id: id}, state) when is_integer(id) do
     workspace_id = active_workspace_id(state)
 
-    case leaf_tab(tlon_tabs(workspace_id), id) do
-      %{index: index} -> tlon_run(workspace_id, ["kill-window", "-t", "#{workspace_session(workspace_id)}:#{index}"])
+    case Tmux.leaf_tab(Tmux.list_windows(workspace_id), id) do
+      %{index: index} -> Tmux.kill_window(workspace_id, index)
       _ -> :ok
     end
 
@@ -865,7 +865,7 @@ defmodule Console.Cockpit do
   # `opening_injected`) keeps delivering to already-running leaves instead of `:skip`ping them
   # forever. nil while mid-spawn / pre-opening (→ `:skip`; the spawn pass owns the opening turn).
   defp staffed_leaf_window(tid, state) do
-    case leaf_tab(tlon_tabs(active_workspace_id(state)), tid) do
+    case Tmux.leaf_tab(Tmux.list_windows(active_workspace_id(state)), tid) do
       %{name: name} = tab ->
         if tab[:opening] == "done" or MapSet.member?(state.opening_injected, tid), do: name
 
@@ -889,7 +889,7 @@ defmodule Console.Cockpit do
   # The tmux target workspace id for a call site that only has `state` (not a `Space.workspace?`-guarded
   # `active_key`) in scope — a background Bus handler, or a click that landed on a Workspace-only panel.
   # `state.active_key` when it names a Workspace, else the server-down/no-active-workspace fallback
-  # (`Space.first_workspace/0`) — nil when no workspace exists at all; `tlon_run/2` no-ops on nil.
+  # (`Space.first_workspace/0`) — nil when no workspace exists at all; `Tmux.run/3` no-ops on nil.
   # The thread-stack cards (Slice 3): each machine-thread block → a card. `nil` fold set means
   # "unfold the focused thread" (the default-active-open rule). When `zoomed` names a thread, the
   # stack collapses to just that one card, always unfolded (`Z` — the real zoom). An unfolded card
@@ -963,8 +963,8 @@ defmodule Console.Cockpit do
   # `t<id>`) so `v` on a thread shows THAT thread's agent, not whatever the standing coworker was on
   # (Andrew: "v takes me to pi"). A root/window-less thread leaves the client where it is.
   defp select_focused_window(%{active_key: key, stack_focus: id}) when Space.workspace?(key) and is_integer(id) do
-    case leaf_tab(tlon_tabs(key), id) do
-      %{index: idx} -> tlon_run(key, ["select-window", "-t", "#{workspace_session(key)}:#{idx}"])
+    case Tmux.leaf_tab(Tmux.list_windows(key), id) do
+      %{index: idx} -> Tmux.select_window(key, idx)
       _ -> :ok
     end
   rescue
@@ -995,37 +995,14 @@ defmodule Console.Cockpit do
 
   # The tmux window index for a named coworker window in workspace `workspace_id`, from the live session
   # (nil if not up).
-  defp tlon_window_index(workspace_id, name), do: window_index(tlon_tabs(workspace_id), name)
+  defp tlon_window_index(workspace_id, name), do: Tmux.window_index(Tmux.list_windows(workspace_id), name)
 
-  # Same lookup against an already-fetched tabs list — for a caller (`ensure_thread_sessions`)
-  # that snapshot tlon_tabs() once for a whole render pass instead of forking `tmux` per thread.
-  defp window_index(tabs, name) do
-    Enum.find_value(tabs, fn %{name: n, index: index} -> if n == name, do: index end)
-  end
-
-  # Inject `text` as a submitted turn into window `index` of workspace `workspace_id`: literal text, then
-  # the Enter key — so a multiline body flattened to one line reaches the coworker's input as a
-  # single message. Safe for a LONG-BOOTED window (the standing coworkers); a freshly-spawned
-  # harness needs the split form below (`inject_text`/`submit_turn`) so the Enter doesn't get
-  # swallowed in the same input burst.
+  # Inject `text` as a submitted turn into window `index`: text, then Enter, in one go. Only safe for
+  # a LONG-BOOTED window (the standing coworkers); a freshly-spawned harness needs the two-phase
+  # form (`Tmux.send_text` now, `Tmux.submit` on a later render) or the Enter is swallowed.
   defp inject_turn(workspace_id, index, text) do
-    inject_text(workspace_id, index, text)
-    submit_turn(workspace_id, index)
-  end
-
-  # Type literal `text` into window `index` of workspace `workspace_id` WITHOUT submitting — the first half
-  # of a fresh-window inject, so the Enter can be sent on a later render once the TUI has settled.
-  defp inject_text(workspace_id, index, text) do
-    _ = tlon_run(workspace_id, ["send-keys", "-l", "-t", "#{workspace_session(workspace_id)}:#{index}", text])
-    :ok
-  end
-
-  # Send Enter to window `index` of workspace `workspace_id` — submits whatever's in its input. Split from
-  # `inject_text` so a just-booted Claude Code TUI gets the text and the Enter as separate bursts (a
-  # bundled Enter lands as a literal newline / gets swallowed, leaving the turn typed-but-unsent).
-  defp submit_turn(workspace_id, index) do
-    _ = tlon_run(workspace_id, ["send-keys", "-t", "#{workspace_session(workspace_id)}:#{index}", "Enter"])
-    :ok
+    Tmux.send_text(workspace_id, index, text)
+    Tmux.submit(workspace_id, index)
   end
 
   defp dispatch_wheel(nil, _b, _x, _y, state), do: {:noreply, state}
@@ -1112,15 +1089,6 @@ defmodule Console.Cockpit do
     do: {:noreply, render(%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}})}
 
   defp dispatch_click({panel, data, rect}, _x, y, state), do: apply_pick(Panel.pick(panel, data, rect, y - rect.y), state)
-
-  # Select a Tlön tmux window in workspace `workspace_id` by the clicked/hovered tab's index; nil (past the
-  # tabs) is a no-op.
-  defp select_tlon_window(workspace_id, %{index: idx}) do
-    tlon_run(workspace_id, ["select-window", "-t", "#{workspace_session(workspace_id)}:#{idx}"])
-    :ok
-  end
-
-  defp select_tlon_window(_workspace_id, _tab), do: :ok
 
   defp apply_pick(nil, state), do: {:noreply, state}
 
@@ -1655,8 +1623,8 @@ defmodule Console.Cockpit do
 
   # Nav v2: Alt+N → select the Nth tmux TAB (window) in the active workspace; past the end is a no-op.
   defp apply_effect({:select_tab, n}, %{active_key: key} = state) when Space.workspace?(key) do
-    case Enum.at(tlon_tabs(key), n - 1) do
-      %{index: idx} -> select_tlon_window(key, %{index: idx})
+    case Enum.at(Tmux.list_windows(key), n - 1) do
+      %{index: idx} -> Tmux.select_window(key, idx)
       _ -> :ok
     end
 
@@ -2228,7 +2196,7 @@ defmodule Console.Cockpit do
 
     %{
       coworkers: Panel.Crew.coworkers(roster, tabs, led_by, titles, state.thinking, System.os_time(:second)),
-      leaves: {Enum.count(tabs, &leaf_window?/1), Console.Config.max_leaves()}
+      leaves: {Enum.count(tabs, &Tmux.leaf_window?/1), Console.Config.max_leaves()}
     }
   end
 
@@ -2239,7 +2207,7 @@ defmodule Console.Cockpit do
   # off instead of re-materialising the profile and re-issuing tmux new-session every frame.
   defp machine_read(%{active_key: key}) when Space.workspace?(key) do
     case render_state_of(safe_terminal(:machine)) do
-      %{} = render_state -> Map.put(render_state, :tabs, tlon_tabs(key))
+      %{} = render_state -> Map.put(render_state, :tabs, Tmux.list_windows(key))
       other -> other
     end
   end
@@ -2271,9 +2239,8 @@ defmodule Console.Cockpit do
   defp ensure_session(state) do
     with id when is_integer(id) <- session_pane_target(state),
          nil <- session_terminal_pid(id),
-         %{index: index} <- leaf_tab(tlon_tabs(active_workspace_id(state)), id) do
-      ws = active_workspace_id(state)
-      {cmd, args} = Console.SessionPane.command(workspace_socket(ws), workspace_session(ws), index)
+         %{index: index} <- Tmux.leaf_tab(Tmux.list_windows(active_workspace_id(state)), id) do
+      {cmd, args} = Console.SessionPane.command(active_workspace_id(state), index)
       {cols, rows} = session_pane_dims(state)
       _ = safe_session_spawn(id, cmd, args, cols, rows)
     end
@@ -2726,7 +2693,7 @@ defmodule Console.Cockpit do
           pid when is_pid(pid) ->
             # Harnesses inside the center can emit kitty graphics themselves — tmux must pass the
             # APC through instead of eating it (design 2026-08-23 §Images rider).
-            _ = tlon_run(workspace_id, ["set-option", "-g", "allow-passthrough", "on"])
+            _ = Tmux.run(workspace_id, ["set-option", "-g", "allow-passthrough", "on"])
             capture_standing_thread_id(state)
 
           _ ->
@@ -2750,7 +2717,7 @@ defmodule Console.Cockpit do
   # a naive re-run every render would spawn a fresh coworker every tick).
   defp ensure_windows(state, workspace_id, entries) do
     if is_pid(safe_terminal(:machine)) do
-      existing = workspace_id |> tlon_tabs() |> MapSet.new(& &1.name)
+      existing = workspace_id |> Tmux.list_windows() |> MapSet.new(& &1.name)
 
       entries
       |> Enum.map(&Profiles.roster_entry/1)
@@ -2777,7 +2744,7 @@ defmodule Console.Cockpit do
   # thread the operator opened outside the standing coworkers gets a live coworker
   # working IT specifically, not just accumulating unread messages. Two-phase, like the coworker
   # windows: `new-window` first (this pass), the opening turn only injected on a LATER render once
-  # the window shows up live in `tlon_tabs()` — send-keys the instant `new-window` returns races
+  # the window shows up live in `Tmux.list_windows/1` — send-keys the instant `new-window` returns races
   # the harness's own boot and the first turn lands on the floor.
   #
   # EVERY worker roster lead gets a leaf window — claude AND pi harness, dispatched by the lead's
@@ -2791,7 +2758,7 @@ defmodule Console.Cockpit do
   def ensure_thread_sessions(state, spaces \\ Space.all())
 
   def ensure_thread_sessions(%{active_key: key} = state, spaces) when Space.workspace?(key) do
-    tabs = tlon_tabs(key)
+    tabs = Tmux.list_windows(key)
     now = System.monotonic_time(:millisecond)
     roster = space_roster(key, spaces)
     threads = Server.staffed_machine_threads()
@@ -2800,7 +2767,7 @@ defmodule Console.Cockpit do
     taken = MapSet.new(tabs, & &1.name)
     # The leaf-cap budget (Config.max_leaves): seats left after the already-live leaves. A thread
     # past the cap stays open/staffed and just waits — a later pass staffs it once a seat frees.
-    budget = Console.Config.max_leaves() - Enum.count(tabs, &leaf_window?/1)
+    budget = Console.Config.max_leaves() - Enum.count(tabs, &Tmux.leaf_window?/1)
 
     {state, _taken, _budget} =
       Enum.reduce(threads, {state, taken, budget}, fn thread, {st, tk, bg} ->
@@ -2813,11 +2780,6 @@ defmodule Console.Cockpit do
 
   def ensure_thread_sessions(state, _spaces), do: state
 
-  # Is this tab a LEAF session (vs the center/tail/console windows)? The `@funes_thread` tag, or
-  # the legacy `t<id>` name.
-  defp leaf_window?(%{thread_id: tid}) when is_integer(tid), do: true
-  defp leaf_window?(%{name: name}), do: Regex.match?(~r/\At\d+\z/, name)
-
   # Convergent teardown: a leaf window whose thread is no longer open+staffed — closed while
   # console was down, or wholesale-cleared — dies here, not only on the `:thread_closed` Bus event
   # the cockpit may never have seen. Matches ONLY leaf windows (the `@funes_thread` tag, or the
@@ -2825,9 +2787,7 @@ defmodule Console.Cockpit do
   # tabs snapshot as the spawn pass, so a leaf spawned this pass (absent from the snapshot) can't
   # be swept.
   defp sweep_orphan_leaves(workspace_id, tabs, live_ids) do
-    for tab <- tabs, orphan_leaf?(tab, live_ids) do
-      tlon_run(workspace_id, ["kill-window", "-t", "#{workspace_session(workspace_id)}:#{tab.index}"])
-    end
+    for tab <- tabs, orphan_leaf?(tab, live_ids), do: Tmux.kill_window(workspace_id, tab.index)
 
     :ok
   end
@@ -2848,7 +2808,7 @@ defmodule Console.Cockpit do
       id == state.standing_thread_id ->
         {state, taken, budget}
 
-      leaf_tab(tabs, id) ->
+      Tmux.leaf_tab(tabs, id) ->
         {maybe_inject_opening_turn(workspace_id, id, tabs, now, state), taken, budget}
 
       not thread_spawn_due?(state.thread_spawn_retry[id], now) ->
@@ -2915,8 +2875,7 @@ defmodule Console.Cockpit do
   # Name-targeted exact-match (`=`); safe because the name was minted collision-free against this
   # pass's taken set. Only a successful spawn tags; a failed one just backs off.
   defp tag_leaf({_out, 0} = ok, workspace_id, window, id) do
-    session = workspace_session(workspace_id)
-    _ = tlon_run(workspace_id, ["set-option", "-w", "-t", "#{session}:=#{window}", "@funes_thread", "#{id}"])
+    Tmux.set_window_option(workspace_id, "=" <> window, "@funes_thread", "#{id}")
     ok
   end
 
@@ -2962,7 +2921,7 @@ defmodule Console.Cockpit do
   # live session or (done-tagged) re-send it — process state only carries the settle timestamp; a
   # "typed" tag with no timestamp (restart) means the text settled long ago, submit now.
   defp maybe_inject_opening_turn(workspace_id, id, tabs, now, state) do
-    tab = leaf_tab(tabs, id)
+    tab = Tmux.leaf_tab(tabs, id)
 
     cond do
       is_nil(tab) ->
@@ -2985,7 +2944,7 @@ defmodule Console.Cockpit do
     typed_at = state.opening_text_at[id]
 
     if is_nil(typed_at) or now - typed_at >= @opening_submit_delay_ms do
-      submit_turn(workspace_id, tab.index)
+      Tmux.submit(workspace_id, tab.index)
       tag_opening(workspace_id, tab.index, "done")
       mark_opening_done(state, id)
     else
@@ -3002,19 +2961,7 @@ defmodule Console.Cockpit do
   end
 
   # Stamp the opening phase on the window itself — index-targeted, best-effort.
-  defp tag_opening(workspace_id, index, phase) do
-    _ =
-      tlon_run(workspace_id, [
-        "set-option",
-        "-w",
-        "-t",
-        "#{workspace_session(workspace_id)}:#{index}",
-        "@funes_opening",
-        phase
-      ])
-
-    :ok
-  end
+  defp tag_opening(workspace_id, index, phase), do: Tmux.set_window_option(workspace_id, index, "@funes_opening", phase)
 
   # Type the thread's latest operator message into its just-appeared leaf window (no Enter yet —
   # stage 2 submits). Best-effort: a thread with no operator message yet is silently skipped —
@@ -3024,7 +2971,7 @@ defmodule Console.Cockpit do
 
     if message do
       operator = Application.get_env(:server, :operator, "andrew")
-      inject_text(workspace_id, index, "[server thread ##{id}] #{operator}: #{one_line(message.body)}")
+      Tmux.send_text(workspace_id, index, "[server thread ##{id}] #{operator}: #{one_line(message.body)}")
     end
 
     :ok
@@ -3054,7 +3001,7 @@ defmodule Console.Cockpit do
       script = "export TERM=xterm-256color\n" <> exports <> "\nexec " <> command
       # `-d`: spawn the window in the background — a coworker starting must NOT yank the operator
       # off whatever window they're on.
-      tlon_run(workspace_id, ["new-window", "-d", "-t", workspace_session(workspace_id), "-n", window, script])
+      Tmux.run(workspace_id, ["new-window", "-d", "-t", Tmux.session(workspace_id), "-n", window, script])
     end
   end
 
@@ -3113,8 +3060,8 @@ defmodule Console.Cockpit do
     reload_cmd = {"ADAPTERS_RELOAD_CMD", pi <> " --continue"}
     env_flags = Enum.map_join([reload_cmd], " ", fn {k, v} -> "-e #{sh_single_quote(k <> "=" <> v)}" end)
 
-    "tmux -L #{workspace_socket(workspace_id)} -f #{Path.join(dir, "tmux.conf")}" <>
-      " new-session -A -s #{workspace_session(workspace_id)} -n #{lead_name} #{funes_identity_flags()} #{env_flags} '#{pi}'"
+    "tmux -L #{Tmux.socket(workspace_id)} -f #{Path.join(dir, "tmux.conf")}" <>
+      " new-session -A -s #{Tmux.session(workspace_id)} -n #{lead_name} #{funes_identity_flags()} #{env_flags} '#{pi}'"
   end
 
   @doc false
@@ -3133,99 +3080,6 @@ defmodule Console.Cockpit do
 
   # POSIX single-quote: escape embedded quotes as '\'' so the value survives the shell verbatim.
   defp sh_single_quote(s), do: "'" <> String.replace(s, "'", "'\\''") <> "'"
-
-  # A Workspace's tmux session/socket, id-derived (rename-proof) — replaces the old singleton "tlon"
-  # session on the lead-name-derived "console-<coworker>" socket. Two workspaces can never collide on
-  # either name, and a workspace rename can't orphan a running session.
-  defp workspace_session(id), do: "w#{id}"
-  defp workspace_socket(id), do: "console-workspace-#{id}"
-
-  # A Workspace's windows as tabs — console draws them itself (tmux's own status bar is off), so it asks
-  # tmux for the live truth rather than tracking cockpit state (can't drift). Best-effort: the
-  # session not being up yet is an empty strip, not a crash.
-  defp tlon_tabs(workspace_id) do
-    args = [
-      "list-windows",
-      "-t",
-      workspace_session(workspace_id),
-      "-F",
-      "\#{window_active}\t\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{window_activity}"
-    ]
-
-    case tlon_run(workspace_id, args) do
-      {out, 0} -> parse_tlon_tabs(out)
-      _ -> []
-    end
-  end
-
-  # Every Workspace tmux call — queries, re-points, AND the send-keys injects — routes through here:
-  # one seam over the coworker's private server, so a test can inject a fake runner
-  # (`:console, :tlon_cmd`) and assert argv without a live tmux.
-  # No workspace id (server genuinely down — the fallback Workspace is gone, reshape slice A): there is
-  # no coworker server to target, and dropping the `-L` flag would aim kill-window/send-keys at
-  # the user's PERSONAL tmux server. No-op with a nonzero "exit" so callers read it as a miss.
-  defp tlon_run(nil, _args), do: {"no active workspace", 1}
-
-  defp tlon_run(workspace_id, args) do
-    runner = Application.get_env(:console, :tlon_cmd, &System.cmd/3)
-    runner.("tmux", tlon_tmux(workspace_id, args), stderr_to_stdout: true)
-  end
-
-  # Every tmux call about a Workspace's coworker targets ITS private server (`-L console-workspace-<id>`),
-  # never the user's default one.
-  defp tlon_tmux(workspace_id, args), do: ["-L", workspace_socket(workspace_id)] ++ args
-
-  @doc false
-  # `window_active` is "1" for the current window, "0" otherwise; each line is
-  # `<active>\t<index>\t<name>\t<@funes_thread>\t<@funes_opening>\t<window_activity>` — the index
-  # is tmux's window index (select-window on a tab click); `@funes_thread` is the leaf routing key
-  # stamped at spawn (Slice C — empty for non-leaf windows, parsed to nil); `@funes_opening` is the
-  # two-phase opening-turn state ("typed"/"done") persisted in tmux so a cockpit restart never
-  # re-types a live leaf's opening; `window_activity` is the last-content-change unix timestamp
-  # `Console.Presence` infers "working" from. Shorter lines (older fakes/format) still parse,
-  # missing fields nil.
-  def parse_tlon_tabs(out) do
-    out
-    |> String.split("\n", trim: true)
-    |> Enum.flat_map(fn line ->
-      case String.split(line, "\t", parts: 6) do
-        [active, index, name | rest] when rest != [] or name != "" ->
-          [thread, opening, activity] =
-            case rest do
-              [t, o, a] -> [t, o, a]
-              [t, o] -> [t, o, ""]
-              [t] -> [t, "", ""]
-              [] -> ["", "", ""]
-            end
-
-          [
-            %{
-              name: name,
-              active?: active == "1",
-              index: index,
-              thread_id: int_or_nil(thread),
-              opening: if(opening in ["typed", "done"], do: opening),
-              activity: int_or_nil(activity)
-            }
-          ]
-
-        _ ->
-          []
-      end
-    end)
-  end
-
-  defp int_or_nil(s) do
-    case Integer.parse(s) do
-      {id, ""} -> id
-      _ -> nil
-    end
-  end
-
-  # The tab running thread `id`'s leaf session: the `@funes_thread`-stamped window (Slice C), else
-  # the legacy `t<id>`-named one (a live pre-C window) — nil when the leaf has no window yet.
-  # Routing resolves thread → window HERE, never by parsing a (now human-named) window name.
-  defp leaf_tab(tabs, id), do: Enum.find(tabs, &(&1.thread_id == id)) || Enum.find(tabs, &(&1.name == "t#{id}"))
 
   # Resolve a machine pane's TLON_* exports by find-or-create: reuse the latest open machine
   # thread (joining it as `agent`) if one exists, else open a fresh `scope: "machine"` thread.

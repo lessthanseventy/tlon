@@ -13,12 +13,14 @@ defmodule Console.SessionPane do
   """
 
   @doc ~S"""
-  The PTY command to view the lead window `index` of `session` on `socket` — a grouped tmux client
-  pinned to that window. `{"/bin/bash", ["-lc", "exec tmux …"]}`: a login shell so PATH/env resolve
-  like the harness terminals; `exec` so tmux becomes the PTY's own process. All interpolations are
-  single-quoted so a name can't split the command.
+  The PTY command to view the lead window `index` of workspace `workspace_id`'s session — a grouped
+  tmux client pinned to that window. `{"/bin/bash", ["-lc", "exec tmux …"]}`: a login shell so
+  PATH/env resolve like the harness terminals; `exec` so tmux becomes the PTY's own process. All
+  interpolations are single-quoted so a name can't split the command.
   """
-  def command(socket, session, index) do
+  def command(workspace_id, index) do
+    socket = Console.Tmux.socket(workspace_id)
+    session = Console.Tmux.session(workspace_id)
     view = "#{session}_view"
     target = "#{session}:#{index}"
 

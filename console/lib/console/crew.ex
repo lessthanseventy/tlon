@@ -30,6 +30,7 @@ defmodule Console.Crew do
 
   alias Console.Profiles
   alias Console.Space
+  alias Console.Tmux
 
   @roles %{
     "reviewer" => %{handle: "reviewer-machine", window_prefix: "r", profile: "reviewer"}
@@ -61,39 +62,23 @@ defmodule Console.Crew do
     end
   end
 
-  # The tmux session/socket for the ACTIVE workspace's workspace — id-derived (rename-proof), not
-  # lead-name-derived. Slice 1's one-workspace bridge (`Space.first_workspace/0`); C2.3+ picks the truly
-  # active workspace once there's more than one. `first_workspace/0` can be nil now that the hardcoded
-  # fallback Workspace is gone (reshape slice A) — spawn/kill guard BEFORE reaching these, so the
-  # raise here is a bug sentinel, not a reachable path.
+  # The crew rides the FIRST workspace's tmux server (`Console.Tmux` naming). `first_workspace/0`
+  # is nil with no workspace at all — spawn/kill guard before reaching this, so a raise here is a
+  # bug sentinel, not a reachable path.
   defp workspace_id, do: Space.first_workspace().id
-  defp workspace_session, do: "w#{workspace_id()}"
-  defp workspace_socket, do: "console-workspace-#{workspace_id()}"
-
-  @doc "The tmux server socket the Tlön coworkers share, id-derived (rename-proof), e.g. `console-workspace-1`."
-  @spec tlon_socket() :: String.t()
-  def tlon_socket, do: workspace_socket()
 
   @doc "The `tmux` argv to spawn a role's per-thread window (detached) running `script`."
   @spec spawn_argv(String.t(), integer() | String.t(), String.t()) :: [String.t()]
   def spawn_argv(role_key, thread_id, script) do
-    [
-      "-L",
-      tlon_socket(),
-      "new-window",
-      "-d",
-      "-t",
-      workspace_session(),
-      "-n",
-      crew_window(role_key, thread_id),
-      script
-    ]
+    ws = workspace_id()
+    Tmux.argv(ws, ["new-window", "-d", "-t", Tmux.session(ws), "-n", crew_window(role_key, thread_id), script])
   end
 
   @doc "The `tmux` argv to tear down a role's per-thread window."
   @spec kill_argv(String.t(), integer() | String.t()) :: [String.t()]
   def kill_argv(role_key, thread_id) do
-    ["-L", tlon_socket(), "kill-window", "-t", "#{workspace_session()}:#{crew_window(role_key, thread_id)}"]
+    ws = workspace_id()
+    Tmux.argv(ws, ["kill-window", "-t", Tmux.target(ws, crew_window(role_key, thread_id))])
   end
 
   @doc """
@@ -203,30 +188,30 @@ defmodule Console.Crew do
   # for ready is what stops a booting TUI from swallowing the Enter and leaving the turn unsubmitted.
   # Best-effort throughout — a poll timeout still injects (the deadline outlasts a normal boot).
   defp inject_opening(window, text) do
-    sock = tlon_socket()
-    target = "#{workspace_session()}:#{window}"
-    _ = await_ready(sock, target)
-    _ = cmd_runner().("tmux", ["-L", sock, "send-keys", "-l", "-t", target, text], stderr_to_stdout: true)
+    ws = workspace_id()
+    runner = [runner: cmd_runner()]
+    _ = await_ready(ws, window, runner)
+    Tmux.send_text(ws, window, text, runner)
     Process.sleep(opening_settle_ms())
-    _ = cmd_runner().("tmux", ["-L", sock, "send-keys", "-t", target, "Enter"], stderr_to_stdout: true)
-    :ok
+    Tmux.submit(ws, window, runner)
   end
 
   # Poll the pane until it shows pi's registered footer (or the budget elapses). Returns whether it
   # became ready — the caller injects either way, so a never-ready pane degrades to the old behaviour
   # rather than dropping the turn.
-  defp await_ready(sock, target), do: poll_ready(sock, target, div(ready_timeout_ms(), max(ready_poll_ms(), 1)))
+  defp await_ready(ws, window, runner),
+    do: poll_ready(ws, window, runner, div(ready_timeout_ms(), max(ready_poll_ms(), 1)))
 
-  defp poll_ready(_sock, _target, remaining) when remaining <= 0, do: false
+  defp poll_ready(_ws, _window, _runner, remaining) when remaining <= 0, do: false
 
-  defp poll_ready(sock, target, remaining) do
-    case cmd_runner().("tmux", ["-L", sock, "capture-pane", "-p", "-t", target], stderr_to_stdout: true) do
+  defp poll_ready(ws, window, runner, remaining) do
+    case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, window)], runner) do
       {out, 0} when is_binary(out) ->
         if String.contains?(out, @ready_marker) do
           true
         else
           Process.sleep(ready_poll_ms())
-          poll_ready(sock, target, remaining - 1)
+          poll_ready(ws, window, runner, remaining - 1)
         end
 
       _ ->

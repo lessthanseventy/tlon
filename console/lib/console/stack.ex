@@ -345,8 +345,7 @@ defmodule Console.Stack do
   end
 
   @doc """
-  Whether the active Workspace's tmux session exists — on its own private server (`-L
-  console-workspace-<id>`, id-derived, rename-proof).
+  Whether the active Workspace's tmux session exists on its own private server (`Console.Tmux`).
   """
   def tlon_up? do
     case Console.Space.first_workspace() do
@@ -355,7 +354,7 @@ defmodule Console.Stack do
         false
 
       %{id: id} ->
-        case cmd("tmux", ["-L", "console-workspace-#{id}", "has-session", "-t", "w#{id}"]) do
+        case cmd("tmux", Console.Tmux.argv(id, ["has-session", "-t", Console.Tmux.session(id)])) do
           {:ok, _} -> true
           :error -> false
         end

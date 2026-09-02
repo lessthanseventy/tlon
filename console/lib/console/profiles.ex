@@ -538,8 +538,7 @@ defmodule Console.Profiles do
   # significant (settings-modal rows, `names/0`): tertius first, then reviewer.
   #
   #   * tertius — the Tlön CENTER (Orbis Tertius meta agent `tertius-machine`; its tmux socket is
-  #     id-derived per Workspace now — `console-workspace-<id>`, see `Console.Cockpit.workspace_socket/1` — not
-  #     name-derived off this profile).
+  #     per Workspace, `Console.Tmux.socket/1` — not name-derived off this profile).
   #     NO model override — it inherits the surveyor archetype's @glm default, so its materialisation
   #     stays BYTE-IDENTICAL to the pre-archetype profile (it is the only live Slice-0 spawn;
   #     regression-locked) WHILE leaving `Console.Config` (the SETTINGS `m` verb) free to retarget it: a
@@ -754,14 +753,6 @@ defmodule Console.Profiles do
   @doc "The config dir a profile materialises into (its `PI_CODING_AGENT_DIR`)."
   @spec config_dir(String.t()) :: String.t()
   def config_dir(name), do: Path.join([base_dir_root(), "profiles", name])
-
-  @doc """
-  The tmux socket name a coworker's private server runs on (`tmux -L console-<profile>`). One
-  socket per coworker keeps it structurally outside the user's default tmux server — and thus
-  outside resurrect/continuum, so a torn-down coworker is never restored stale.
-  """
-  @spec socket(String.t()) :: String.t()
-  def socket(name), do: "console-" <> name
 
   @doc "The persistence-free tmux config a coworker's server boots from (see `@coworker_tmux_conf`)."
   @spec tmux_conf() :: String.t()
