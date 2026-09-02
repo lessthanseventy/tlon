@@ -17,6 +17,8 @@
 // model change or a world-secret regeneration. Identity travels as the stable,
 // format-agnostic (TLON_THREAD, TLON_AUTHOR, TLON_MCP_URL); the token is derived.
 
+import { env } from "node:process";
+
 const PROTOCOL_VERSION = "2025-03-26"; // the version funes' server_test handshakes with
 
 interface ToolResult {
@@ -28,6 +30,22 @@ export interface FunesConfig {
   url: string; // TLON_MCP_URL — the MCP endpoint, e.g. http://127.0.0.1:4041/mcp
   threadId: number; // TLON_THREAD — the (thread, agent) the mint binds the token to
   agent: string; // TLON_AUTHOR
+}
+
+// Identity travels in the spawn (pi doc §2d): TLON_MCP_URL / TLON_THREAD / TLON_AUTHOR. No
+// TLON_TOKEN — the client mints per connect. Missing any of the three (or a non-integer
+// thread) means this process wasn't spawned as a citizen: null, and the caller stays quiet
+// rather than guessing. One parse for the extension and every claude-code hook.
+export function identityFromEnv(
+  source: Record<string, string | undefined> = env,
+): FunesConfig | null {
+  const url = source.TLON_MCP_URL;
+  const thread = source.TLON_THREAD;
+  const agent = source.TLON_AUTHOR;
+  if (!url || !thread || !agent) return null;
+  const threadId = Number(thread);
+  if (!Number.isInteger(threadId)) return null;
+  return { url, threadId, agent };
 }
 
 export class FunesUnreachable extends Error {}

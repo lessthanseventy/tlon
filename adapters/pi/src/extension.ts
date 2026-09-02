@@ -13,7 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { lastToolActivity, phraseHeartbeat, sawSuccessfulCommit } from "./activity.ts";
 import { renderBrief, type Dossier } from "./brief.ts";
-import { FunesClient, FunesRejected, FunesUnreachable, type FunesConfig } from "./mcp.ts";
+import { FunesClient, FunesRejected, FunesUnreachable, identityFromEnv } from "./mcp.ts";
 import { detectCorrection } from "./recall.ts";
 import {
   buildExtractionPrompt,
@@ -71,26 +71,13 @@ function readRecallConfig(): RecallConfig {
 const STATUS_KEY = "funes";
 const WIDGET_KEY = "funes";
 
-// Identity travels in the spawn (pi doc §2d): TLON_MCP_URL/THREAD/AUTHOR. No TLON_TOKEN
-// — the client mints a fresh token per connect against the URL's origin, so a pane survives
-// a token-model change or secret regeneration. Missing any of the three means this pane
-// wasn't spawned as a funes citizen; the adapter stays quiet rather than guessing.
-function readConfig(): FunesConfig | null {
-  const url = env.TLON_MCP_URL;
-  const thread = env.TLON_THREAD;
-  const author = env.TLON_AUTHOR;
-  if (!url || !thread || !author) return null;
-  const threadId = Number(thread);
-  if (!Number.isInteger(threadId)) return null;
-  return { url, threadId, agent: author };
-}
-
 function identityLabel(): string {
   return `${env.TLON_AUTHOR ?? "?"} on ${env.TLON_THREAD ?? "?"}`;
 }
 
 export default function adapters(pi: ExtensionAPI): void {
-  const config = readConfig();
+  // No identity in the env → this pane wasn't spawned as a citizen; stay quiet, never guess.
+  const config = identityFromEnv();
 
   // One client for this pane's lifetime — connect() is guarded so only the first hook does
   // the handshake. register binds the session to the TOKEN, so the model's own tool calls

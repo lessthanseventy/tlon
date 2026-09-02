@@ -7,8 +7,8 @@
 // Same failure discipline as the other hooks: funes down, no identity, a slow connect —
 // all silent no-ops, hard-bounded so a wedged connect can never hold the session's hook.
 
-import { argv, env } from "node:process";
-import { FunesClient } from "./mcp.ts";
+import { argv } from "node:process";
+import { FunesClient, identityFromEnv } from "./mcp.ts";
 
 // Presence is a per-turn nicety; a declare that can't land fast isn't worth waiting on.
 const HOOK_TIMEOUT_MS = 5_000;
@@ -20,14 +20,10 @@ export function verbOf(args: string[]): "thinking" | "idle" {
 }
 
 async function declare(): Promise<void> {
-  const url = env.TLON_MCP_URL;
-  const threadEnv = env.TLON_THREAD;
-  const agent = env.TLON_AUTHOR;
-  if (!url || !threadEnv || !agent) return;
-  const threadId = Number(threadEnv);
-  if (!Number.isInteger(threadId)) return;
+  const identity = identityFromEnv();
+  if (!identity) return;
 
-  const client = new FunesClient({ url, threadId, agent });
+  const client = new FunesClient(identity);
   await client.connect();
   if (verbOf(argv) === "idle") {
     await client.presenceIdle();

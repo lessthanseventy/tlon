@@ -26,7 +26,7 @@ import {
   type Entry,
 } from "./capture.ts";
 import { completeText } from "./llm.ts";
-import { FunesClient } from "./mcp.ts";
+import { FunesClient, identityFromEnv } from "./mcp.ts";
 
 // A hung completion or a wedged funes connection must never keep the hook process alive past the
 // turn — bound the whole capture with a hard ceiling and let the process exit regardless.
@@ -93,12 +93,8 @@ async function writeWatermark(path: string, watermark: number): Promise<void> {
 // The IO/orchestration core (deliberately not unit-tested — same split as extension.ts vs
 // capture.ts: this talks to the filesystem, the network, and completeText; nothing here is pure).
 async function capture(): Promise<void> {
-  const url = env.TLON_MCP_URL;
-  const threadEnv = env.TLON_THREAD;
-  const agent = env.TLON_AUTHOR;
-  if (!url || !threadEnv || !agent) return;
-  const threadId = Number(threadEnv);
-  if (!Number.isInteger(threadId)) return;
+  const identity = identityFromEnv();
+  if (!identity) return;
 
   const stdinText = await Bun.stdin.text();
   let hookInput: StopHookInput;
@@ -147,7 +143,7 @@ async function capture(): Promise<void> {
   }
 
   try {
-    const client = new FunesClient({ url, threadId, agent });
+    const client = new FunesClient(identity);
     await client.connect();
     for (const f of facts) {
       try {
