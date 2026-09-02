@@ -1,77 +1,54 @@
 # server
 
-**Read `docs/spec.md` before writing anything.** It is the specification this repository exists to
+**Read `docs/spec.md` before writing anything.** It is the specification this module exists to
 implement, every rule in it names the failure that paid for it, and it was reviewed adversarially twice
 (`docs/spec-review.md`, `docs/v1-review.md`). If something here contradicts the spec, the spec wins; if
 the spec is wrong, say so and change it in the same commit as the code that proves it.
 
-## What to build, in order
+## What is here
 
-The build order is the console doc's **re-laid §9** (`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`),
-which supersedes `docs/spec.md` §9's ordering: the thread/channel is the spine and moves up, so it is
-db+doctor → thread+message → agent → the dossier → the board → collectors. Step one is still the database
-plus `server doctor`: **nothing ships that cannot be repaired at 2am** — schema, migrations,
-`integrity_check`, JSONL export. Do not skip ahead to a later step because it is more interesting.
-**Steps 1–3 are built and green in Elixir:**
+The spine of Tlön: SQLite is the truth (a real db reads back under `sqlite3`), Ecto over `ecto_sqlite3`,
+and every layer the console doc's re-laid §9 asked for
+(`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`) is built and gated:
 
-- **Step 1** — Ecto over `ecto_sqlite3`, the `collection` migration, `Funes.Doctor` (integrity_check,
-  tables, pending migrations, JSONL export), and `mix server.doctor`. The §4 write contract is re-verified
-  on `exqlite`: WAL and foreign keys via PRAGMA, and a **bounded busy_timeout proven by a contention test**
-  (exqlite sets it through a NIF, not `PRAGMA busy_timeout`, so a held-lock timing test is the only honest
-  probe).
-- **Step 2** — `thread` + `message` (`Funes.Channel`): the atom of work and the channel/§4 capture path,
-  with `delivered` a separate column from `read` and a sender who cannot fake delivery (§5b.3).
-- **Step 3** — `agent` + `session` and staffing (`Funes.Staff`): the durable named identity and its
-  ephemeral instance (console §3), a thread's `agent_id`, and the opaque `pane_ref` the arbiter jumps
-  into. This is the recipient model step 2 deferred its PubSub wake to await.
-- **Step 4** — the dossier: `fact`/`event`/`issue` scoped to threads (`Funes.Dossier`) →
-  `LEARNINGS`/`SHIPPED`/`BLOCKERS`. `fact` is the ledger's successor with `provenance` (stated | derived,
-  the DB CHECKs it), a separate reproducibility axis `check_cmd`, and explicit `supersedes`; `event` is
-  append-only with a closed `kind` that includes the `work_landed` outcome; `issue` is a local,
-  ticket-shaped finding read capped-and-counted by `open_issues_for_thread` (§5's acceptance test).
+- **db + doctor** — the schema (`priv/repo/migrations/`), `Server.Doctor` (integrity_check, tables,
+  pending migrations, JSONL export), `mix server.doctor`. The §4 write contract holds on `exqlite`: WAL
+  and foreign keys via PRAGMA, and a bounded busy_timeout proven by a contention test (exqlite sets it
+  through a NIF, not `PRAGMA busy_timeout`, so a held-lock timing test is the only honest probe).
+  **Nothing ships that cannot be repaired at 2am.**
+- **thread + message** (`Server.Channel`) — the atom of work and the channel/§4 capture path.
+  `delivered` is a separate column from `read`, and a sender cannot fake delivery (§5b.3). A thread is
+  born with a lead (`designated_lead/1`, the workspace roster's first builder) — the lead invariant.
+- **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
+  instance; warmth is measured from `last_active_at`, never a heartbeat.
+- **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;
+  `check_cmd` as a separate reproducibility axis; `supersedes`; `forgotten_at` tombstones), append-only
+  `event` with a closed `kind`, `issue`, `todo`, `question`, `habit`. Read capped-and-counted.
+- **the container tier** — `Server.Workspaces` (roster + paths), `Server.Projects` (repos),
+  `Server.Tickets`, `Server.Notes`.
+- **the switchboard** (`Server.Switchboard` + `Server.Bus` + `Server.Arbiter`) — delivery WAKES the
+  addressee (§5b.2): a posted message is a durable row first, then broadcast over `Phoenix.PubSub`, and
+  the switchboard pokes the thread's lead / the @mentioned coworker / a reply's author through the
+  arbiter behaviour the host implements (the console's tmux arbiter). Coalesced (a backlog is one
+  nudge), warmth-gated (a cold session is rotated onto a fresh, brief-seeded one, never poked), and
+  `drain/0` re-delivers on restart, so killing the BEAM loses nothing.
+- **the MCP channel** (`Server.MCP.*`) — the sovereign door for any agent, `anubis_mcp` over Bandit,
+  loopback-only. Identity rides the CONNECTION: a signed token resolves to (thread, agent, session) on
+  every request, so no tool takes a thread parameter and every authenticated call bumps warmth. Tools
+  (`mcp/tool.ex`, `mcp/tool_containers.ex`) are thin context callers; reads render through
+  `Server.MCP.Brief` (certainty stated > checked > opinion, caps with counts); the dossier is also a
+  resource. `record_check` lands a measured exit code, never a self-report.
+- **worklines** (`Server.Workline`) — a thread as a stage machine with git as the artifact chain
+  (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s.
+- **recall + forgetting** (`Server.Recall`, `Server.Search`) — the budgeted always-loaded set.
+- **seed + bootstrap** (`Server.Seed`, `Server.Bootstrap`) — the wipe-proof base knowledge
+  (`priv/seed/repo_knowledge.exs` + the machine-appended `promoted_facts.exs`) and the default
+  workspace, applied idempotently on every boot.
+- **the steering evals** (`Server.Eval`, `evals/`) — scenarios over the briefs and playbooks,
+  deterministic ones in the gate, judged ones in `mise run server:eval`.
 
-- **The switchboard** (`Funes.Switchboard` + `Funes.Bus` + `Switchboard.Server`, `Funes.Arbiter`,
-  `Funes.Mentions`) — the liveness layer step 2 deferred. Delivery WAKES the recipient (§5b.2): a posted
-  message is broadcast over `Phoenix.PubSub` and the switchboard pokes **who the message is addressed to** —
-  the thread's **lead** for a plain post, an **@mentioned** coworker, or a **reply's** author — through the
-  **arbiter, a capability not a product** (Herdr | tmux, §8) that defaults to `Inert`. §10 holds: the message
-  is a durable row before any wake, and `drain/0` re-delivers on restart, so killing the BEAM loses nothing.
-  Three guard-rails against burning a five-hour window: the wake is **coalesced** (a backlog is one nudge,
-  not N); **warmth-gated** — a **cold** session (idle past the ~1h prompt-cache window, `last_active_at`) is
-  never poked, the "resumed a thread and burned my allotment" footgun; and the default arbiter is **inert**,
-  so nothing real is poked until a backend is deliberately wired.
-
-- **The MCP channel** (`Funes.MCP.*` — Track B slice 1, pi doc §2a/§5.1): server' sovereign channel to
-  any agent, over `anubis_mcp` + Bandit (loopback-only, opt-in via `:start_mcp`). Identity rides the
-  CONNECTION — an in-node token (`Funes.MCP.Tokens`) resolves to (thread, agent, session) claims on
-  every request, so no tool takes a thread parameter and every authenticated call bumps warmth through
-  `Staff.touch_sessions` (measured, never a heartbeat). Tools are thin context callers: register
-  (supersedes the zombie), post_message, bank_fact (derived by default; STATED only by quoting the
-  operator's own message verbatim via `Dossier.bank_stated_fact`), raise_issue, record_done (evidence
-  required), get_dossier/get_facts/get_messages rendered through `Funes.MCP.Brief` (read-time
-  certainty stated > checked > opinion, caps with counts). The dossier and always-loaded constraints
-  are also MCP resources — same reads, second door. Proven end-to-end by a raw JSON-RPC client, not
-  the anubis client.
-
-Change the build-order status line above as each step lands — do not leave it asserting a step that is
-already built (the trap the step-2 handoff caught here). Track B slices 1–2 (the MCP channel, the pi
-adapter) and capability-map moves #1–#3 (server-as-a-service, the mise parity pack, the claude-code
-adapter) are built. **The `todo` slice (pi doc §5 slice 3) is built**: `todo` (thread-scoped, `done_at`
-from birth), `add_todo`/`complete_todo` (complete refuses another thread's step), and the dossier's
-TODOS / NEXT (derived, first open) / DONE (a MERGED view — completed todos + `work_landed`, replacing the
-old SHIPPED-only pane), rendered in both `Funes.MCP.Brief` and the pi `brief.ts`; the `keep-todos-current`
-skill. **The `question` slice (pi doc §5 slice 4) is built too**: `question` (`resolved_at` from birth,
-`state` open/resolved), `raise_question`/`resolve_question` (resolve refuses another thread's; resolution
-optional, a durable answer is `bank_fact`'d), and the dossier's UNKNOWNS beside FACTS — rendered in all
-three surfaces. **Measured verification (capability-map #5) is built too**: `record_check(cmd, exit, tail)`
-→ a `check_passed`/`check_failed` event keyed on the real exit code, a CHECKS dossier pane, and the
-`verify-with-evidence` skill — "it works" is measured, not self-reported. **Next is the arbiter bootstrap
-(pi doc slice 5)** — env-in-spawn automated (§2d). The console board (step 5) has its first live cockpit; its
-build order lives in the console docs. Deferred
-still: the **engine-credit half of presence** (clocked-out from spent credits/rate-limit — combine into
-`recipients/1` before an auto-poking backend replaces `Inert`), the human-notification path + re-deliver
-on session-join, cross-thread **mentions**, and the `Sense` collectors. SQLite is the truth — a real db
-reads back under `sqlite3`.
+Still deferred: the engine-credit half of presence (clocked-out from spent credits/rate-limit), the
+human-notification path, cross-thread mentions, and the `Sense` collectors.
 
 Version one ran on the *work* machine and is **not on this clean-room box** (§8c). It is **evidence, not
 a source**: it exists to show what a failure looked like, never to copy a shape. Nothing here needs to be
@@ -79,22 +56,21 @@ backwards compatible with it.
 
 ## Public surface
 
-funes' public API *is* its boundary: the `exports:` list in `lib/server.ex` (`use Boundary`). That
-annotated list — `Channel` (threads/messages/chorus), `Board`/`Staff`/`Dossier`/`Presence` (read
-models), `Doctor`, `MCP.Spawn`, `Arbiter`, `Thread`/`Message` (structs) — is the whole surface a
-consumer (console, an MCP adapter) may call, machine-enforced: reach a non-exported module and the
-`:boundary` compiler fails the build. Each export is a context whose functions carry `@doc`s — call
-`Funes.<Context>.<fun>` (e.g. `Funes.Dossier.raise_issue/1`, `Funes.Channel.machine_thread/0`). To
-find one, read the context module or `h Funes.Dossier.raise_issue` in `iex -S mix` — the `@doc`s are
-the reference. Don't grep for it, and don't copy it into a hand-maintained doc that would drift.
+The module's public API *is* its boundary: the `exports:` list in `lib/server.ex` (`use Boundary`).
+That annotated list is the whole surface a consumer (the console, an MCP adapter) may call,
+machine-enforced: reach a non-exported module and the `:boundary` compiler fails the build. Each
+export is a context whose functions carry `@doc`s — call `Server.<Context>.<fun>` (e.g.
+`Server.Dossier.raise_issue/1`, `Server.Channel.machine_thread/0`). To find one, read the context
+module or `h Server.Dossier.raise_issue` in `iex -S mix` — the `@doc`s are the reference. Don't grep
+for it, and don't copy it into a hand-maintained doc that would drift. Widening the surface is a
+one-line diff in that file, on purpose.
 
 ## The rules most likely to be broken by accident
 
 - **When two things can answer the same question, delete one.** Three defects in one day were "two
   sources of truth where the untested one was in the live path".
-- **Ask the arbiter whose output contains the field you care about.** A test that reads our own files
-  proves only that we were consistent. `herdr config check` said `config: ok` about a stale registry
-  and `herdr plugin list` printed neither the version nor the actions that had diverged.
+- **Ask the tool whose output contains the field you care about.** A test that reads our own files
+  proves only that we were consistent — ask `tmux` what windows exist, ask `git` what the branch is.
 - **A field computed at write time is not a fact at read time.** Compute age, staleness and counts in
   the query.
 - **A cache that reports an empty world is a lie.** A collector that cannot collect writes nothing and
@@ -110,7 +86,7 @@ the reference. Don't grep for it, and don't copy it into a hand-maintained doc t
   model must degrade honestly rather than break. The same goes for credentials: how this machine
   authenticates is local configuration and no code here may know which mechanism it is.
 - **In production, Andrew presses Enter.** Prefill the exact reviewed text in a visible pane and stop.
-  Typing is only inert where `herdr pane process-info` proves a shell is in the foreground.
+  Typing into a pane is only inert where the pane is proven to have a shell in the foreground.
 
 ## The dev loop
 
@@ -119,35 +95,35 @@ the same commands, which is the one control loop §3 asks for:
 
 - `mise run server:test` — the ExUnit suite (`mix test`).
 - `mise run server:check` — the **precommit gate**: `mix precommit` = format-check + warnings-as-errors +
-  `credo --strict` + the suite (runs in `:test`). Same alias a git pre-commit hook would call.
+  `credo --strict` + the suite (runs in `:test`), then the deterministic evals.
 - `mise run server:setup` — deps + create/migrate the repo-local scratch db (run once).
 - `mise run server:doctor` — `mix server.doctor` against the scratch db, never the real one.
-- `mise run check` — the server precommit gate, the green-before-commit gate.
+- `mise run server:serve` — the dev iex with the MCP channel up, against the scratch db.
+- `mise run check` — every module's gate, the green-before-commit gate.
 
-The **always-up channel** is a headless service, distinct from the `server:serve` dev iex:
-a self-contained local `mix release` run by `systemd.user.services.server` (flake.nix) —
-loopback, the **real XDG db**, migrate-on-boot (`Funes.Release.migrate/0` via
-`bin/server eval`, so server never serves on a schema it can't repair), and a named node +
-cookie (the release's `rel/env.sh.eex`) so the operator can reach the live node:
+The **always-up channel** is a headless service, distinct from the `server:serve` dev iex: a
+self-contained local `mix release` run by `systemd.user.services.tlon` (flake.nix) — loopback, the
+**real XDG db**, migrate-on-boot (`Server.Release.migrate/0` via `bin/server eval`, so it never serves
+on a schema it can't repair), and a named node + cookie (`rel/env.sh.eex`) so the operator can reach
+the live node:
 
 - `mise run server:release` — build the release the service runs.
 - `mise run server:restart` — rebuild + restart the service (redeploy a server change).
-- `mise run server:console` — remote iex INTO the running service node; the only place a
-  token minted by `Funes.MCP.Spawn.env` survives (the `Tokens` registry dies with its node).
+- `mise run server:console` — remote iex INTO the running service node.
 - `mise run server:logs` — follow the service's journal.
 
-The **mise parity pack** — operate the live channel from the shell, our peer to the
-agents' MCP tools (all via `scripts/tlon-cli.sh` → `bin/server rpc` into the running node,
-so the service must be up):
+The **shell parity pack** — operate the live channel from the shell, our peer to the agents' MCP tools
+(all via `scripts/tlon-cli.sh` → `bin/server rpc` into the running node, so the service must be up):
 
-- `mise run server:spawn -- "<title>" <agent>` — open a thread, staff+register the agent,
-  mint a token, print the `export FUNES_*` block for a pi pane (the human-arbiter path).
+- `mise run server:spawn -- "<title>" <agent>` — open a thread, staff+register the agent, mint a
+  token, print the `export TLON_*` block for a pi pane.
 - `mise run server:roster` — who's on the clock (live sessions, warm/cold).
 - `mise run server:dossier -- <thread-id>` — render a thread's brief (parity with get_dossier).
 - `mise run server:post -- <thread-id> <text…>` — post as the operator (parity with post_message).
+- `mise run server:cli -- <subcommand>` — everything else the CLI knows (worklines, approve, …).
 
-The `home:switch` that installs the service is the human's (system-mutating); build + verify
-the release with `server:release` and `nix build .#homeConfigurations.personalbox.activationPackage`.
+The `home:switch` that installs the service is the human's (system-mutating); build + verify the
+release with `server:release` and `mise run flake:check`.
 
 If a command belongs in the loop, it becomes a task in the root `mise.toml`. Do not invent a second way
 to run these.
@@ -155,5 +131,5 @@ to run these.
 ## Verify
 
 Built test-first (RED before GREEN), and a claim that something works is backed by having run it — the
-spec exists because "it works" without running it happened repeatedly in version one. `mise run check`
-is the gate; `server doctor` against a real db, read back with `sqlite3`, is the 2am proof.
+spec exists because "it works" without running it happened repeatedly in version one. `mise run
+server:check` is the gate; `server doctor` against a real db, read back with `sqlite3`, is the 2am proof.
