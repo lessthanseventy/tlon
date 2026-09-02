@@ -72,9 +72,10 @@ Paste it into a fresh pi pane, then point pi at adapters:
   "npm:@gotgenes/pi-permission-system", "npm:pi-cc-header",
   "npm:@lincoln504/pi-research", "npm:pi-interactive-shell"]`,
   `"skills": [".../modules/adapters/skills/*"]`.
-- an `mcp.json` (see `pi/mcp.json.example`) points `pi-mcp-adapter` at
-  `http://127.0.0.1:${TLON_MCP_PORT}/mcp` with `Authorization` set to a `!command`
-  (`scripts/tlon-cli.sh bearer`) that mints a fresh token per connect.
+- `~/.pi/agent/mcp.json` is flake-owned (`serverMcpJson` in `flake.nix`): its `mcpServers.tlon`
+  entry points `pi-mcp-adapter` at `${TLON_MCP_URL}` with `Authorization` set to a `!command`
+  (`scripts/tlon-cli.sh bearer`) that mints a fresh token per connect. There is no example
+  file to copy — the flake is the config.
 
 The env contract is identity-only (`TLON_MCP_URL`, `TLON_THREAD`, `TLON_AUTHOR`). The token
 is NEVER frozen in env — both doors mint per connect against the URL's `/mint` endpoint, so a

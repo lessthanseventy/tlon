@@ -18,7 +18,6 @@ adapters/
     src/brief.ts         the honest brief renderer (pure, unit-tested)
     src/mcp.ts           a minimal MCP client — the extension's own door to server
     src/pi.ts            the slice of pi's ExtensionAPI adapters depends on
-    mcp.json.example     the pi-mcp-adapter config (the model's write verbs)
   skills/                harness-neutral discipline (installed into any harness)
     coordinate-via-server/
     bank-what-you-learn/
@@ -32,6 +31,9 @@ mise run adapters:pi:check  # typecheck + tests — this module's gate
 mise run server:serve # boot server' channel; in its iex, Funes.MCP.Spawn.env/2 prints the
                      # export TLON_* block to paste into a fresh pi pane
 ```
+
+The pi-mcp-adapter config (the model's write verbs) is flake-owned: `serverMcpJson` in
+`flake.nix` writes `~/.pi/agent/mcp.json` with the `mcpServers.tlon` entry.
 
 See `AGENTS.md` for the two-doors-one-token model, the install, and the boundaries every
 adapter holds to.
