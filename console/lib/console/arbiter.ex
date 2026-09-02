@@ -36,19 +36,11 @@ defmodule Console.Arbiter do
   # torn-down registry exits (`:noproc`, or a 5s `:timeout` while `{:ensure}` blocks spawning a
   # terminal), which would otherwise propagate up and kill the hub — the ISSUES-panel
   # `GenServer.call(Console.Sessions, {:terminal, :machine}, 5000)`. Degrade to nil / {:error, ...}
-  # so the switchboard leaves the message a pending durable row and retries once Sessions is live,
-  # mirroring the cockpit's own `safe_terminal/1` guard.
-  defp safe_terminal(thread_id) do
-    Sessions.terminal(thread_id)
-  catch
-    :exit, _ -> nil
-  end
+  # so the switchboard leaves the message a pending durable row and retries once Sessions is live.
+  defp safe_terminal(thread_id), do: Console.Safe.value(fn -> Sessions.terminal(thread_id) end, nil)
 
-  defp safe_spawn_harness(thread_id, exports) do
-    Sessions.spawn_harness(thread_id, exports)
-  catch
-    :exit, _ -> {:error, :sessions_down}
-  end
+  defp safe_spawn_harness(thread_id, exports),
+    do: Console.Safe.value(fn -> Sessions.spawn_harness(thread_id, exports) end, {:error, :sessions_down})
 
   @doc "Collapse a prompt to one clean line — control bytes → spaces, runs collapsed, trimmed."
   def sanitize(prompt) do

@@ -27,7 +27,7 @@ defmodule Console.GhosttyKey do
   # carried by utf8 alone under :unidentified.
   # to_atom, NOT to_existing_atom: the char set is bounded (a-z, A-Z, 0-9 → 36 known atoms), so there's
   # no atom-table-exhaustion risk — and to_existing_atom CRASHES the cockpit on any letter whose atom
-  # wasn't already interned (e.g. pressing "o" when :o exists nowhere as a literal). The ghostty_key
+  # wasn't already interned (e.g. pressing "o" when :o exists nowhere as a literal). The from_event
   # unit tests masked this: their :x/:c/:v literals intern exactly those atoms at compile time.
   defp char_key(<<cp>>) when cp in ?a..?z, do: String.to_atom(<<cp>>)
   defp char_key(<<cp>>) when cp in ?A..?Z, do: String.to_atom(<<cp + 32>>)

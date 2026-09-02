@@ -6,6 +6,11 @@ defmodule Console.Cockpit do
   the server reads and repaints. Holds the only shared state — the active space and the focused
   thread (§8) — and caches nothing about tmux past the paint (§5).
 
+  The GenServer keeps the callbacks and `apply_effect/2` (the keymap's effects); the work behind
+  them lives in `Console.Reads` (the frame's data), `Console.Staffing` (find-or-spawn),
+  `Console.Delivery` (event → coworker), `Console.Cockpit.Author` / `Boards` (menus, workspace
+  CRUD, the boards) and `Console.Cockpit.Recovery` (the run loop around this process).
+
   Not supervised at app boot: it grabs the TTY, so it runs only under `mix console.run` in a real
   terminal, never during `mix test`.
   """
