@@ -79,7 +79,7 @@ backwards compatible with it.
 
 ## Public surface
 
-funes' public API *is* its boundary: the `exports:` list in `lib/funes.ex` (`use Boundary`). That
+funes' public API *is* its boundary: the `exports:` list in `lib/server.ex` (`use Boundary`). That
 annotated list — `Channel` (threads/messages/chorus), `Board`/`Staff`/`Dossier`/`Presence` (read
 models), `Doctor`, `MCP.Spawn`, `Arbiter`, `Thread`/`Message` (structs) — is the whole surface a
 consumer (console, an MCP adapter) may call, machine-enforced: reach a non-exported module and the

@@ -26,7 +26,7 @@ leaf threads (B1.4) get their own `t<id>` windows.
 
 - **Depends on server, one-directionally.** console boots server' OTP app and calls only what `Funes`
   exports (the `:boundary` compiler enforces it — reach past and the build fails). server NEVER
-  depends on aleph. That export list in `lib/funes.ex` IS funes' API surface — don't grep for a
+  depends on aleph. That export list in `lib/server.ex` IS funes' API surface — don't grep for a
   function, see `modules/server/AGENTS.md` § Public surface.
 - **Not supervised at boot — it grabs the TTY.** Runs only under `mix console.run` in a real terminal,
   never during `mix test`. Tests cover PURE seams only (`ghostty_key`, `tlon_launcher`,
