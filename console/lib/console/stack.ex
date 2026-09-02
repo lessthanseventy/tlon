@@ -176,8 +176,8 @@ defmodule Console.Stack do
   nix-env --list-generations prints one gen per line; the current gen is marked "(current)".
   "Behind" = how many generations have a higher number than the current one (rollback gap).
   Tries home-manager first (common on non-NixOS), then the system profile. This is the single
-  most expensive probe in the health battery — callers should destructure this, not call
-  `nix_generation/0` + `nix_behind/0` (each runs the full sweep again).
+  most expensive probe in the health battery — callers should destructure this rather than call
+  `nix_behind/0` alongside it (each runs the full sweep again).
   """
   def nix_status do
     Enum.reduce_while(nix_profile_paths(), {nil, nil}, fn path, _acc ->
@@ -218,9 +218,6 @@ defmodule Console.Stack do
 
     {current_gen, behind}
   end
-
-  @doc "Current nix generation number, or nil. Best-effort: nil if nix isn't available."
-  def nix_generation, do: elem(nix_status(), 0)
 
   @doc "How many generations behind the current one is. 0 means current, nil if unknown."
   def nix_behind, do: elem(nix_status(), 1)

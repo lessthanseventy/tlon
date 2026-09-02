@@ -6,16 +6,6 @@ defmodule Console.PresenceTest do
 
   @now 1_000_000
 
-  test "parse_windows: name + thread tag + activity; blanks nil; malformed lines drop" do
-    out = "tertius\t\t#{@now}\nplanner-fix\t7\t#{@now - 60}\nt9\t\t\n\n"
-
-    assert Presence.parse_windows(out) == [
-             %{name: "tertius", thread_id: nil, activity: @now},
-             %{name: "planner-fix", thread_id: 7, activity: @now - 60},
-             %{name: "t9", thread_id: nil, activity: nil}
-           ]
-  end
-
   test "thread_status: recent activity → working; stale → live; no window → none; legacy t<id> matches" do
     windows = [
       %{name: "planner-fix", thread_id: 7, activity: @now - 3},
@@ -38,15 +28,6 @@ defmodule Console.PresenceTest do
     assert Presence.coworker_seat(windows, "vera", [12], @now) == {:working, 12}
     assert Presence.coworker_seat(windows, "vera", [], @now) == {:live, nil}
     assert Presence.coworker_seat([], "vera", [], @now) == {:none, nil}
-  end
-
-  test "working_count counts distinct active windows" do
-    windows = [
-      %{name: "a", thread_id: nil, activity: @now - 1},
-      %{name: "b", thread_id: nil, activity: @now - 100}
-    ]
-
-    assert Presence.working_count(windows, @now) == 1
   end
 
   describe "started_s/1 — funes time normalized to unix seconds at the TUI boundary" do

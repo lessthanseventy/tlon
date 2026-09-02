@@ -139,22 +139,10 @@ defmodule Console.Panel do
     if function_exported?(panel, :images, 2), do: panel.images(data, rect) || [], else: []
   end
 
-  # Every list panel opens with the same chrome: a title row + a blank spacer above the rows.
-  @header_rows 2
-
   @doc "The scroll offset a panel's data carries (0 when unscrolled or not scrollable)."
   @spec scroll_offset(term()) :: non_neg_integer()
   def scroll_offset(%{scroll: n}), do: n
   def scroll_offset(_data), do: 0
-
-  @doc """
-  The list item at content row `i` under the shared header+blank layout, or `nil` on the
-  header rows. The one place the "#{@header_rows} rows of chrome above the items" convention
-  lives — a panel whose header grows must stop using this rather than fork the math.
-  """
-  @spec item_at([item], non_neg_integer()) :: item | nil when item: term()
-  def item_at(_items, i) when i < @header_rows, do: nil
-  def item_at(items, i), do: Enum.at(items, i - @header_rows)
 
   defp clip_row(_runs, w) when w <= 0, do: []
 

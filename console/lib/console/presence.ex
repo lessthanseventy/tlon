@@ -51,45 +51,6 @@ defmodule Console.Presence do
   defp rank(:none), do: 0
 
   @doc """
-  Parse a `list-windows -F "\#{window_name}\\t\#{@funes_thread}\\t\#{window_activity}"` dump into
-  window maps. Missing/blank tags parse to nil; malformed lines drop.
-  """
-  @spec parse_windows(String.t()) :: [window()]
-  def parse_windows(out) do
-    out
-    |> String.split("\n", trim: true)
-    |> Enum.flat_map(fn line ->
-      case String.split(line, "\t", parts: 3) do
-        [name | rest] when name != "" ->
-          [thread, activity] =
-            case rest do
-              [t, a] -> [t, a]
-              [t] -> [t, ""]
-              [] -> ["", ""]
-            end
-
-          [%{name: name, thread_id: int_or_nil(thread), activity: int_or_nil(activity)}]
-
-        _ ->
-          []
-      end
-    end)
-  end
-
-  defp int_or_nil(s) do
-    case Integer.parse(s) do
-      {n, ""} -> n
-      _ -> nil
-    end
-  end
-
-  @doc "How many distinct windows read as working — the header's `N working` count."
-  @spec working_count([window()], integer()) :: non_neg_integer()
-  def working_count(windows, now_s) do
-    Enum.count(windows, &(status(&1, now_s) == :working))
-  end
-
-  @doc """
   A thinking declaration's `started_at` as UNIX SECONDS — the one seam where server time
   (idiomatic DateTimes, on the Bus event and in `thinking_all/0`) becomes cockpit time
   (the integers `Crew.seat`/`presence_read` subtract). The live 2026-08-28 crash was this
