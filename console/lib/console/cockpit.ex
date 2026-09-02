@@ -1618,12 +1618,6 @@ defmodule Console.Cockpit do
   # beside the stack. Only meaningful in a workspace chat view; elsewhere it's a harmless flip.
   defp apply_effect(:toggle_session_pane, state), do: {:noreply, render(%{state | session_pane: not state.session_pane})}
 
-  # The `Enter` verb landed: enter-or-spawn on the focused thread. The result flashes in the footer.
-  # UNREFERENCED since Slice 0 collapse (Sessions deleted) — no keymap clause emits :enter_or_spawn
-  # now; kept intact, teardown TBD.
-  defp apply_effect({:enter_or_spawn, thread_id}, state),
-    do: {:noreply, render(%{state | flash: enter_or_spawn(thread_id, state)})}
-
   # The `m` verb landed: advance the coworker's driver model one step round the ring and persist
   # it (Console.Config). Honest about scope: the RUNNING coworker keeps its model — the override
   # applies wherever Profiles.fetch flows on the next spawn (console:reset, or kill the pi window).
@@ -1988,18 +1982,6 @@ defmodule Console.Cockpit do
   end
 
   defp selected_pinned_fact(_state), do: nil
-
-  # `enter_or_spawn`: if the focused thread already has a live session, it's already the center —
-  # nothing to do (you're already working there). Otherwise spawn one onto it — one `spawn_onto/2`
-  # path, reached via `n` (new thread) or `Enter` (existing).
-  # UNREFERENCED since Slice 0 collapse (Sessions deleted) — the `Enter`-to-spawn path is gone; the
-  # `n`/new-thread path still calls spawn_onto/2 directly. Kept intact, teardown TBD.
-  defp enter_or_spawn(thread_id, state) do
-    case safe_terminal(thread_id) do
-      pid when is_pid(pid) -> "already live — type to use it, Ctrl+Space for console"
-      nil -> spawn_onto(thread_id, state)
-    end
-  end
 
   # Spawn a harness as an embedded terminal on this thread: mint identity IN-PROCESS
   # (Server.MCP.Spawn.join — console is the serving node) and start an Console.Terminal that runs the
