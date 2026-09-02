@@ -20,16 +20,16 @@ defmodule Server.MCP.Tool.TrackThread do
     identity = Identity.from_frame(frame)
 
     case Repo.get(Thread, identity.thread_id) do
-      nil ->
-        fail(frame, "no thread ##{identity.thread_id}")
-
-      thread ->
-        case Workline.promote(thread) do
-          {:error, :root_machine_thread} -> fail(frame, "refused: the root machine thread is not a work item")
-          result -> reply(frame, result, fn tracked -> %{"stage" => tracked.stage, "slug" => tracked.slug} end)
-        end
+      nil -> fail(frame, "no thread ##{identity.thread_id}")
+      thread -> promoted(frame, Workline.promote(thread))
     end
   end
+
+  defp promoted(frame, {:error, :root_machine_thread}),
+    do: fail(frame, "refused: the root machine thread is not a work item")
+
+  defp promoted(frame, result),
+    do: reply(frame, result, fn tracked -> %{"stage" => tracked.stage, "slug" => tracked.slug} end)
 end
 
 defmodule Server.MCP.Tool.AdvanceStage do

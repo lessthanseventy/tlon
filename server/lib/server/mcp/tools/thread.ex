@@ -361,12 +361,14 @@ defmodule Server.MCP.Tool.RecheckFact do
     thread_id = Identity.from_frame(frame).thread_id
 
     own(frame, thread_id, {"fact", params[:id], Dossier.fact(params[:id])}, fn fact ->
-      case Dossier.recheck_fact(fact, %{exit: params[:exit], tail: Map.get(params, :tail)}) do
-        {:error, :no_check_cmd} -> fail(frame, "fact #{params[:id]} has no check_cmd — nothing to re-run")
-        result -> reply(frame, result, fn event -> %{"event_id" => event.id, "kind" => event.kind} end)
-      end
+      rechecked(frame, params[:id], Dossier.recheck_fact(fact, %{exit: params[:exit], tail: Map.get(params, :tail)}))
     end)
   end
+
+  defp rechecked(frame, id, {:error, :no_check_cmd}), do: fail(frame, "fact #{id} has no check_cmd — nothing to re-run")
+
+  defp rechecked(frame, _id, result),
+    do: reply(frame, result, fn event -> %{"event_id" => event.id, "kind" => event.kind} end)
 end
 
 defmodule Server.MCP.Tool.ProposeHabit do

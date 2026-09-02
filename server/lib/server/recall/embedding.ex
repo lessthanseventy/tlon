@@ -31,10 +31,9 @@ defmodule Server.Recall.Embedding do
   """
   @spec embed(String.t(), keyword()) :: {:ok, [float()]} | {:error, term()}
   def embed(text, opts \\ []) do
-    cfg = Application.get_env(:server, :embedding, [])
-    endpoint = opts[:endpoint] || cfg[:endpoint] || @default_endpoint
-    model = opts[:model] || cfg[:model] || @default_model
-    timeout = opts[:timeout] || cfg[:timeout] || @default_timeout_ms
+    endpoint = setting(opts, :endpoint, @default_endpoint)
+    model = setting(opts, :model, @default_model)
+    timeout = setting(opts, :timeout, @default_timeout_ms)
 
     _ = Application.ensure_all_started(:inets)
     body = JSON.encode!(%{model: model, input: text})
@@ -48,6 +47,9 @@ defmodule Server.Recall.Embedding do
   rescue
     e -> {:error, e}
   end
+
+  # Per-call option, else `config :server, :embedding`, else the default.
+  defp setting(opts, key, default), do: opts[key] || Application.get_env(:server, :embedding, [])[key] || default
 
   # ollama returns %{"embeddings" => [[..vector..]]} for a single input.
   defp parse(resp) do
