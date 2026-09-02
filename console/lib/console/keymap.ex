@@ -753,7 +753,11 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "d"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
     do: {state, :stack_delete_arm}
 
-  defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}} = state), do: {state, {:forward, key}}
+  # The center owns the keys only while a live PTY is actually SHOWN there (`center_live?`, derived per
+  # keypress by the cockpit): the chat view has none, so an unlisted key is a no-op — never a forward
+  # into the hidden machine PTY underneath.
+  defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}, center_live?: true} = state), do: {state, {:forward, key}}
+  defp handle_tlon(_key, %{focus: %Focus{in_terminal?: true}} = state), do: {state, :none}
 
   # Esc steps back one level: close an open detail first, else drop out of nav into the terminal.
   defp handle_tlon(%{key: :escape}, %{focus: %Focus{detail?: true}} = state),

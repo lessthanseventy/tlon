@@ -944,9 +944,20 @@ defmodule Console.KeymapTest do
       assert {%{input: %{kind: :orchestrate}}, :repaint} = Keymap.handle(char(":"), stack_ctx())
     end
 
-    test "with the terminal center (center_view :terminal), keys still forward" do
-      s = stack_ctx(%{center_view: :terminal})
+    test "with a live terminal center (center_view :terminal), keys still forward" do
+      s = stack_ctx(%{center_view: :terminal, center_live?: true})
       assert {^s, {:forward, %{key: :char, char: "j"}}} = Keymap.handle(char("j"), s)
+    end
+
+    # The chat view has NO live terminal in the center (the cockpit derives center_live? false there),
+    # so an unlisted key must be a no-op — never forwarded to the hidden machine PTY underneath.
+    test "in the chat view an unlisted key is :none, not a forward to the hidden PTY" do
+      s = stack_ctx()
+      refute s.center_live?
+
+      for k <- [char("v"), char("y"), char("q"), key(:tab), key(:f5)] do
+        assert {^s, :none} = Keymap.handle(k, s), "#{inspect(k)} leaked"
+      end
     end
   end
 
