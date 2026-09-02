@@ -45,3 +45,10 @@ if config_env() != :test do
     start_mcp: System.get_env("TLON_START_MCP") in ~w(1 true yes),
     mcp_port: String.to_integer(System.get_env("TLON_MCP_PORT") || "4040")
 end
+
+# The switchboard runner (deliver + wake) is opt-in per node the same way — the service sets
+# TLON_START_SWITCHBOARD=1 for the durable bookkeeping even with no arbiter to poke. Guarded
+# out of :test: the suite starts the runner itself where a test needs it.
+if config_env() != :test do
+  config :server, start_switchboard: System.get_env("TLON_START_SWITCHBOARD") in ~w(1 true yes)
+end

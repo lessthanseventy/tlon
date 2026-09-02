@@ -33,8 +33,10 @@ defmodule Server.Switchboard do
      The OTHER half of "clocked out" — an engine out of credits or past its
      rate-limit window — gates the wake too: `recipients/1` drops a session whose
      engine `Server.Presence.Engine.clocked_out?/1` reports spent (a pluggable §8
-     backend, defaulting to always-available). Both halves gate the wake before an
-     auto-poking tmux backend replaces the default `Inert` arbiter.
+     backend, defaulting to always-available).
+
+  With no arbiter configured (the headless service) every wake is bookkeeping only: the
+  message is claimed as delivered, the recipient's warmth bumped, nothing poked.
   """
   import Ecto.Query
 
@@ -275,16 +277,17 @@ defmodule Server.Switchboard do
     Staff.touch_sessions(Enum.map(sessions, & &1.id), now())
   end
 
-  # Actuate one wake through the configured arbiter. No backend wired (`:no_arbiter`) is expected —
-  # the message stays a durable row, delivered when a display appears — so it's silent; a real
-  # backend's failure (a dead terminal) is surfaced, because a lost nudge should be visible.
+  # Actuate one wake through the configured arbiter. No backend wired (`:no_arbiter`) is the
+  # always-up service's normal state — the row is claimed and the display-owning node's arbiter
+  # is what pokes — so it's a debug line, never a warning per message; a real backend's failure
+  # (a dead terminal) is surfaced, because a lost nudge should be visible.
   defp poke(session, prompt) do
     case Arbiter.wake(session, prompt) do
       :ok ->
         :ok
 
       {:error, :no_arbiter} ->
-        :ok
+        Logger.debug("switchboard: no arbiter on this node — #{inspect(session.pane_ref)} not poked")
 
       {:error, reason} ->
         Logger.warning("arbiter failed to wake #{inspect(session.pane_ref)}: #{inspect(reason)}")
