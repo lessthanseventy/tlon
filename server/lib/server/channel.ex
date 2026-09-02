@@ -14,7 +14,6 @@ defmodule Server.Channel do
   alias Server.Agent
   alias Server.Event
   alias Server.Fact
-  alias Server.Habit
   alias Server.Issue
   alias Server.Message
   alias Server.Question
@@ -232,41 +231,6 @@ defmodule Server.Channel do
         where: t.scope == ^@machine_scope and t.state == "open" and not is_nil(t.agent_id),
         select: %{id: t.id, lead: a.name, title: t.title}
     )
-  end
-
-  @doc """
-  Delete every MACHINE-scope thread and everything hanging off it — the clean-slate reset behind
-  `mise run console:clear-machine-threads` (old machine threads are disposable).
-
-  Every table with a `thread_id` FK must be cleared before the threads themselves: SQLite's FKs
-  are `NO ACTION`, so a single surviving child row rejects the whole thread delete. Two wrinkles
-  in the child sweep:
-
-    * `fact` references `session` (`fact.source_session_id`), so facts must be deleted BEFORE
-      sessions, or the session delete trips that FK.
-    * `habit` is machine-WIDE and only cites the proposing thread as nullable provenance
-      (`source_thread_id`) — we null that pointer instead of deleting the habit, so a clean-slate
-      never discards learned behavior.
-
-  If a new table gains a `thread_id` FK, add it to the sweep below. All of it runs in one
-  transaction. Returns `{:ok, %{threads: n, messages: m}}` so the caller can report what it
-  cleared. NEVER touches project-scope threads.
-  """
-  def clear_machine_threads do
-    Repo.transaction(fn ->
-      ids = Repo.all(from t in Thread, where: t.scope == ^@machine_scope, select: t.id)
-
-      Repo.update_all(from(h in Habit, where: h.source_thread_id in ^ids), set: [source_thread_id: nil])
-
-      # Fact before Session (fact.source_session_id FK); the rest only reference thread_id.
-      for schema <- [Fact, Session, Event, Issue, Question, Todo] do
-        Repo.delete_all(from r in schema, where: r.thread_id in ^ids)
-      end
-
-      {messages, _} = Repo.delete_all(from m in Message, where: m.thread_id in ^ids)
-      {threads, _} = Repo.delete_all(from t in Thread, where: t.id in ^ids)
-      %{threads: threads, messages: messages}
-    end)
   end
 
   @doc """

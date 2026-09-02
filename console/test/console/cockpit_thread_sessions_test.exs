@@ -8,10 +8,15 @@ defmodule Console.CockpitThreadSessionsTest do
   """
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Console.Space
   alias Console.Staffing
   alias Server.Channel
+  alias Server.Message
+  alias Server.Repo
   alias Server.Staff
+  alias Server.Thread
 
   @workspaces [
     %{
@@ -56,7 +61,7 @@ defmodule Console.CockpitThreadSessionsTest do
 
     # Each test stages its own thread — clear the previous test's so a stale staffed thread can't
     # produce an extra spawn the refute_receive assertions would trip on.
-    {:ok, _} = Channel.clear_machine_threads()
+    clear_machine_threads()
 
     on_exit(fn ->
       Application.delete_env(:console, :tlon_cmd)
@@ -66,6 +71,13 @@ defmodule Console.CockpitThreadSessionsTest do
     end)
 
     :ok
+  end
+
+  # Machine threads here carry only messages (the parked note); nothing else references them.
+  defp clear_machine_threads do
+    ids = Repo.all(from(t in Thread, where: t.scope == "machine", select: t.id))
+    Repo.delete_all(from(m in Message, where: m.thread_id in ^ids))
+    Repo.delete_all(from(t in Thread, where: t.id in ^ids))
   end
 
   defp staffed_thread(handle) do
