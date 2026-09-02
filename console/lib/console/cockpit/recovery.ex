@@ -82,9 +82,10 @@ defmodule Console.Cockpit.Recovery do
   # resurrect runs before writing anything to :standard_io again.
   defp stdio_alive?, do: match?(opts when is_list(opts), :io.getopts(:standard_io))
 
-  # stderr can be as dead as stdio after a host-side teardown — a status line is never worth a
-  # second crash in the recovery path.
-  defp note(msg), do: Safe.value(fn -> IO.puts(:stderr, msg) end, :ok)
+  # stdout can be dead after a host-side teardown — a status line is never worth a second crash
+  # in the recovery path. stdout, not stderr: `console:run` parks fd 2 in a log file while the
+  # cockpit runs (see mise.toml), so stderr never reaches the operator's screen.
+  defp note(msg), do: Safe.value(fn -> IO.puts(msg) end, :ok)
 
   defp act_on(:quit), do: :ok
 
@@ -132,14 +133,14 @@ defmodule Console.Cockpit.Recovery do
   def crash_report({:shutdown, _}), do: nil
   def crash_report(reason), do: Exception.format_exit(reason)
 
-  # Append a crashed exit to the crash log and echo it to stderr after the tty is restored, so it
+  # Append a crashed exit to the crash log and echo it to stdout after the tty is restored, so it
   # doesn't get swallowed by the alt-screen. Best-effort: a log write failure never masks the crash.
   defp log_crash(reason) do
     with report when is_binary(report) <- crash_report(reason) do
       Safe.value(
         fn ->
           Console.CrashLog.append("console crash", report)
-          IO.puts(:stderr, "console crashed (logged to #{Console.CrashLog.path()}):\n#{report}")
+          IO.puts("console crashed (logged to #{Console.CrashLog.path()}):\n#{report}")
           file_crash_issue(report)
         end,
         :ok

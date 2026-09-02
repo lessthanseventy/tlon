@@ -282,7 +282,12 @@ run = """
 # trips the behind-DB guard and forces a manual `console:setup`. Throwaway dev db only — the
 # always-up service db is home:switch's. No deps.get, so no network.
 TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
-TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run
+# fd 2 goes to a log, not the tty: the embedded terminal's NIF (libghostty-vt) writes its own
+# warnings to stderr, and termbox2 only repaints cells IT changed, so any stray write to the
+# screen sits there corrupting the frame until that cell happens to redraw. The cockpit's own
+# crash notice goes to stdout after the tty is restored (Console.Cockpit.Recovery).
+stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
+TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run 2>>"$stderr_log"
 """
 
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't

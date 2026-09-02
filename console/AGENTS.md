@@ -28,7 +28,8 @@ the cockpit spawns them from it (`Console.Staffing.ensure_workspace_roster/2`): 
   no trace, an old cockpit still on :4041): reap + `mix clean`. Data untouched. `console:fresh` is
   reset + run in one gesture; `console:reset:db` is the separate, confirmed DATA wipe.
 - `mise run console:test` (headless) · `mise run console:check` (the gate).
-- **A silent crash logs to `~/.cache/tlon/crash.log`.** Look there first — the alt-screen swallows
+- **A silent crash logs to `~/.cache/tlon/crash.log`; stderr goes to `~/.cache/tlon/stderr.log`**
+  (the embedded terminal's NIF warnings land there, never on the screen). Look there first — the alt-screen swallows
   the terminal output, so a crash otherwise leaves nothing.
 
 ## The law
