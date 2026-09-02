@@ -7,6 +7,7 @@ defmodule Console.Cockpit.Author do
   cockpit repaints it.
   """
 
+  alias Console.Keymap
   alias Console.Panel
   alias Console.Profiles
   alias Console.Safe
@@ -19,15 +20,16 @@ defmodule Console.Cockpit.Author do
   """
   @spec handle_menu_key(map(), map()) :: map() | :ignore
   def handle_menu_key(%{key: :escape}, state), do: %{state | menu: nil}
-  def handle_menu_key(%{char: "j"}, state), do: move_menu(state, 1)
-  def handle_menu_key(%{key: :down}, state), do: move_menu(state, 1)
-  def handle_menu_key(%{char: "k"}, state), do: move_menu(state, -1)
-  def handle_menu_key(%{key: :up}, state), do: move_menu(state, -1)
 
   def handle_menu_key(%{key: :enter}, %{menu: %{items: items, cursor: c}} = state),
     do: menu_action(Enum.at(items, c).action, state)
 
-  def handle_menu_key(_key, _state), do: :ignore
+  def handle_menu_key(key, state) do
+    case Keymap.vertical(key) do
+      nil -> :ignore
+      delta -> move_menu(state, delta)
+    end
+  end
 
   defp move_menu(%{menu: %{items: items, cursor: c} = menu} = state, delta) do
     n = max(length(items), 1)
