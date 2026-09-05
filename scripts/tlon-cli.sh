@@ -18,6 +18,7 @@
 #   token                          headersHelper: mint a FRESH token for (TLON_THREAD,
 #                                  TLON_AUTHOR) from the env → {"Authorization":"Bearer …"}
 #   roster                         who's on the clock (warm ●/cold ○)
+#   shell-status                   roster + thread counts as JSON, for the desktop shell
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
@@ -162,6 +163,19 @@ case "$cmd" in
     tok=$(mint_token) || exit 1
     printf 'Bearer %s
 ' "$tok"
+    ;;
+
+  shell-status)
+    # One JSON blob for the desktop shell's AGENTS pane (modules/desktop/shell): the roster
+    # plus thread counts by state and how many are awaiting the operator. Polled every ~30s.
+    exec "$SERVER" rpc '
+      roster = Server.Staff.roster() |> Enum.map(fn r ->
+        %{agent: r.agent, thread_id: r.thread_id, title: r.thread_title, warm: r.warm?}
+      end)
+      import Ecto.Query
+      counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
+      awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and not is_nil(t.awaiting), select: count(t.id))
+      %{roster: roster, counts: counts, awaiting: awaiting} |> JSON.encode!() |> IO.puts()'
     ;;
 
   roster)
