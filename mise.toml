@@ -359,6 +359,42 @@ run = [
   "nix build --no-link .#homeConfigurations.personalbox.activationPackage",
 ]
 
+# The NixOS VM — the laptop's configuration booted under QEMU with this working tree shared in
+# at its real path (modules/os/vm.nix). KVM + virtio-gpu GL; the window is a Hyprland session
+# logged in as andrew. Ctrl+Alt+G releases the pointer.
+[tasks."vm:build"]
+description = "machine: build the NixOS VM runner from nixosConfigurations.vm"
+run = "nix build .#nixosConfigurations.vm.config.system.build.vm -o .dev/vm"
+
+[tasks."vm:run"]
+description = "machine: boot the VM (vm:build first); disk state lives in .dev/vm.qcow2"
+depends = ["vm:build"]
+run = "cd .dev && NIX_DISK_IMAGE=vm.qcow2 ./vm/bin/run-vm-vm"
+
+# The desktop shell (modules/desktop/shell). `ags` on PATH comes from home:switch (the same
+# build the package used), so the dev loop and the store package see one Astal.
+[tasks."shell:dev"]
+description = "shell: run the shell from source (Ctrl+C stops it); runs alongside caelestia"
+dir = "modules/desktop/shell"
+run = "ags run --gtk4 app.tsx"
+
+[tasks."shell:check"]
+description = "shell: regenerate @girs types + tsc --noEmit — the precommit gate"
+dir = "modules/desktop/shell"
+run = [
+  "ags types -d . --ignore-version-conflicts >/dev/null",
+  "[ -d node_modules/ags ] || { mkdir -p node_modules && ln -sfn $(dirname $(dirname $(readlink -f $(command -v ags))))/share/ags/js node_modules/ags && ln -sfn node_modules/ags/node_modules/gnim node_modules/gnim; }",
+  "npx --yes -p typescript@5 tsc --noEmit -p .",
+]
+
+[tasks."shell:restart"]
+description = "shell: restart the astal-shell user unit (VM / post-cutover)"
+run = "systemctl --user restart astal-shell.service"
+
+[tasks."shell:logs"]
+description = "shell: follow the astal-shell unit's journal"
+run = "journalctl --user -u astal-shell.service -f"
+
 [tasks."home:switch"]
 description = "machine: apply the home-manager profile"
 run = "nix run github:nix-community/home-manager -- switch --flake .#personalbox -b backup"
