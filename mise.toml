@@ -371,6 +371,10 @@ description = "machine: boot the VM (vm:build first); disk state lives in .dev/v
 depends = ["vm:build"]
 run = "cd .dev && NIX_DISK_IMAGE=vm.qcow2 ./vm/bin/run-vm-vm"
 
+[tasks."vm:ssh"]
+description = "machine: ssh into the running VM as andrew (password andrew); pass a command to run it"
+run = "ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null andrew@localhost"
+
 # The desktop shell (modules/desktop/shell). `ags` on PATH comes from home:switch (the same
 # build the package used), so the dev loop and the store package see one Astal.
 [tasks."shell:dev"]
