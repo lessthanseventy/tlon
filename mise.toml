@@ -349,7 +349,7 @@ run = "scripts/check-names.sh"
 description = "Everything green: the names gate + the server + console + adapters (pi + consult + fmt + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests)"
 depends = ["check:names", "server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:fmt:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check"]
 
-# The one palette (modules/desktop/theme/palette.nix) → the checked-in shell scss/ts + Console.Palette.
+# The one palette (modules/desktop/theme/palette.nix → palettes/<current>.nix) → the checked-in shell scss/ts + Console.Palette.
 [tasks."theme:gen"]
 description = "theme: rewrite the palette-generated files in the repo from palette.nix (checks.palette-sync fails the flake when they drift)"
 run = "scripts/theme-gen.sh"
