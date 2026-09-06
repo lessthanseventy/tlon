@@ -14,16 +14,16 @@ defmodule Console.Palette do
   def chip, do: 0xFFD000
   def cream, do: 0xFFF4C2
   def cyan, do: 0x33C7FF
-  def dim, do: 0x9A803F
-  def ember, do: 0xFF6000
-  def emberDim, do: 0x7A2E00
+  def dim, do: 0xB09248
+  def ember, do: 0xFF6305
+  def emberDim, do: 0x9E3B00
   def green, do: 0x33FF00
   def grey, do: 0xC7C7C7
   def ink, do: 0x0A0A0A
   def lilac, do: 0xB4A5D6
-  def moss, do: 0x5FA35F
-  def pink, do: 0xE0218A
-  def red, do: 0xFF5555
+  def moss, do: 0x62A562
+  def pink, do: 0xEA69B0
+  def red, do: 0xFF5F5F
   def sel, do: 0x5B00AE
   def sep, do: 0xB5651D
   def surface0, do: 0x0A0A0A
