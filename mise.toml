@@ -445,7 +445,7 @@ run = "modules/adapters/pi/launch.sh --provider ollama --model qwen3-coder"
 # ad-hoc `pi update` off the startup nag. Also updates the Tlön coworker profile (its own npm/ under
 # ~/.pi/profiles/tlon) when the console has materialised it.
 [tasks."pi:update"]
-description = "pi agent: update installed npm extensions to the latest the flake's package list allows (pi owns the mutable npm/ install, not nix — this is the update path, NOT home:switch). Also updates the Tlön coworker profile if present."
+description = "pi agent: update installed npm EXTENSIONS to the latest the flake's package list allows (pi owns the mutable npm/ install, not nix). Does NOT move pi itself — that is pi:upgrade."
 run = """
 pi update --extensions
 if [ -d "$HOME/.pi/profiles/tlon" ]; then
@@ -453,3 +453,10 @@ if [ -d "$HOME/.pi/profiles/tlon" ]; then
   PI_CODING_AGENT_DIR="$HOME/.pi/profiles/tlon" pi update --extensions
 fi
 """
+
+# pi PROPER is nix's: a release tarball pinned (version + hash) in flake.nix. This task moves that
+# pin to the latest GitHub release (or `-- 0.85.1`), keeps adapters/pi's pi-* dep ranges in step,
+# home:switches, then runs pi:update so the extensions follow. PI_UPGRADE_NO_SWITCH=1 edits only.
+[tasks."pi:upgrade"]
+description = "pi agent: upgrade pi ITSELF — bump the flake's release pin + hash (latest, or `-- <version>`), sync adapters/pi deps, home:switch, then pi:update for the extensions"
+run = "modules/adapters/pi/upgrade.sh"
