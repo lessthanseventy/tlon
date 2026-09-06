@@ -5,88 +5,95 @@ defmodule Console.Style do
   not a hunt through every panel (design §3: panels are thin; presentation is centralized).
 
   Colors are 24-bit RGB for termbox2's `TB_OUTPUT_TRUECOLOR` (see `Mix.Tasks.Console.Run`);
-  `@bg` is `0x000000`, which truecolor maps to the terminal's own background.
+  `@bg` is `0x000000`, which truecolor maps to the terminal's own background. The values
+  themselves are `Console.Palette` — generated, shared with every other surface on the box.
   """
 
-  @bg 0x000000
+  # Every hue comes from Console.Palette (generated from modules/desktop/theme/palette.nix —
+  # the one palette the whole machine shares, plan doc §5b). The rule, same as the shell's:
+  # body text AMBER on black; green is the LIVE highlight; pink flags agents/the operator;
+  # cyan is keys/labels/code; lilac is secondary text; the active thing is inverse video
+  # (amber field, near-black ink). Green used to be the body here — that was the drift.
+  alias Console.Palette, as: P
 
-  # Green is the body (content/strings); amber is reserved for chrome (titles, labels, warm dots)
-  # so it pops instead of tiring the eye everywhere. Pink flags agents, burnt orange marks
-  # structure, violet marks selection.
-  @sel 0x5B00AE
+  @bg P.bg()
+  @amber P.amber()
+  @green P.green()
+  @cyan P.cyan()
+  @pink P.pink()
+  @lilac P.lilac()
+  @red P.red()
+  @dim P.dim()
+  @sep P.sep()
+  @sel P.sel()
 
-  # The two canonical phosphors: green #33FF00 (body) and amber #FFB000 (chrome).
-  @green 0x33FF00
-  @amber 0xFFB000
-
-  # Chip fields carry dark text, so their background must be BRIGHT to pop — chrome amber (#FFB000)
-  # is a burnt mid-tone that leaves black text looking muddy next to the green chip. #FFD000 lifts
-  # the field to ~the green's luminance (black-on-it 14.3:1 vs 11.5) while staying gold, not lime.
-  @amber_chip 0xFFD000
+  # Chip fields carry dark text, so their background must be BRIGHT to pop — body amber is a
+  # burnt mid-tone that leaves black text muddy next to the green chip; the chip amber lifts
+  # the field to ~the green's luminance (black-on-it 14.3:1 vs 11.5) while staying gold.
+  @chip P.chip()
 
   # Chip TEXT ink. Must NOT be 0x000000: under TB_OUTPUT_TRUECOLOR color 0 is termbox's "default"
   # sentinel — fine as a background (→ terminal bg), but as a FOREGROUND it falls through to the
   # terminal's default fg (light), so `{@bg, chip}` rendered as white-on-chip, not the intended
   # black. A non-zero near-black keeps the dark text the bright fields were tuned for.
-  @ink 0x0A0A0A
+  @ink P.ink()
 
   @colors %{
-    normal: {@green, @bg},
-    header: {@amber, @bg},
-    label: {@amber, @bg},
-    accent: {0xE0218A, @bg},
+    normal: {@amber, @bg},
+    header: {@cyan, @bg},
+    label: {@cyan, @bg},
+    accent: {@pink, @bg},
     # The operator's voice in chat — pink, its OWN key (not :accent) so re-theming the operator
     # doesn't entangle with the cursor/thinking chrome.
-    operator: {0xE0218A, @bg},
+    operator: {@pink, @bg},
     warm: {@amber, @bg},
-    dim: {0x9A803F, @bg},
-    separator: {0xB5651D, @bg},
-    selected: {0xFFF4C2, @sel},
-    selected_accent: {0xFFFFFF, @sel},
-    # Status-line chips: inverse-video tabs on the phosphors, dark text on a bright field.
-    tab: {0xFFFFFF, @sel},
-    stat: {@ink, @amber_chip},
+    dim: {@dim, @bg},
+    meta: {@lilac, @bg},
+    separator: {@sep, @bg},
+    selected: {P.cream(), @sel},
+    selected_accent: {P.white(), @sel},
+    # Status-line chips: inverse-video tabs, dark text on a bright field.
+    tab: {P.white(), @sel},
+    stat: {@ink, @chip},
     stat_live: {@ink, @green},
     # LOCK's chip — total keyboard passthrough deserves the loudest, most alarming color on hand.
-    stat_warn: {@ink, 0xFF5555},
+    stat_warn: {@ink, @red},
     # A commit diff in MAIN (Commits pane detail): additions green, deletions red, hunk headers
-    # cyan. File/meta lines borrow chrome amber (:label) and :dim from above.
+    # cyan. File/meta lines borrow :label and :dim from above.
     diff_add: {@green, @bg},
-    diff_del: {0xFF5555, @bg},
-    diff_hunk: {0x33C7FF, @bg},
+    diff_del: {@red, @bg},
+    diff_hunk: {@cyan, @bg},
     # Semantic event styles (the server activity feed + footer pulse): a fact banked or a check
-    # passing reads body-green, a failure diff-red, a posted message diff-cyan; work landed and
-    # an issue/question raised both read chrome amber — icon carries the done/warn distinction,
-    # not color.
+    # passing reads live-green, a failure red, a posted message cyan; work landed and an
+    # issue/question raised both read body amber — icon carries the done/warn distinction.
     event_ok: {@green, @bg},
-    event_bad: {0xFF5555, @bg},
-    event_msg: {0x33C7FF, @bg},
+    event_bad: {@red, @bg},
+    event_msg: {@cyan, @bg},
     event_done: {@amber, @bg},
     event_warn: {@amber, @bg},
-    # Slice D visual system — STATUS colors (the signal tier: card gutters + status dots). working
-    # phosphor-green, blocked/failing alarm-red, awaiting-you operator-pink, open chrome-amber, done
-    # a muted green (it recedes), idle the same dim as :dim.
-    st_working: {@green, @bg},
-    st_blocked: {0xFF5555, @bg},
-    st_await: {0xE0218A, @bg},
-    st_open: {@amber, @bg},
-    st_done: {0x5FA35F, @bg},
-    st_idle: {0x9A803F, @bg},
-    # IDENTITY colors (the splash tier: same entity → same hue). Per coworker archetype, reused as the
-    # workspace-hue cycle. surveyor cyan, builder green, reviewer amber, planner pink, assistant lilac.
-    arch_surveyor: {0x33C7FF, @bg},
-    arch_builder: {@green, @bg},
-    arch_reviewer: {@amber, @bg},
-    arch_planner: {0xE0218A, @bg},
-    arch_assistant: {0xB98AFF, @bg},
-    # Markdown rendering in the chat (Console.Markdown, 2026-09-01) — no bold attr in this palette,
-    # so emphasis maps to COLOUR: **bold** bright white, `code`/fences cyan, # headings chrome-amber,
-    # *italic* a soft grey, bullets/quotes dim.
-    md_bold: {0xFFFFFF, @bg},
-    md_italic: {0xC7C7C7, @bg},
-    md_code: {0x33C7FF, @bg},
-    md_head: {@amber, @bg},
-    md_rule: {0xB5651D, @bg}
+    # Slice D visual system — STATUS colors (the signal tier: card gutters + status dots).
+    st_working: {P.green(), @bg},
+    st_blocked: {P.red(), @bg},
+    st_await: {P.pink(), @bg},
+    st_open: {P.amber(), @bg},
+    st_done: {P.moss(), @bg},
+    st_idle: {P.dim(), @bg},
+    # IDENTITY colors (the splash tier: same entity → same hue). Per coworker archetype, reused as
+    # the workspace-hue cycle. surveyor cyan, builder green, reviewer amber, planner pink,
+    # assistant violet.
+    arch_surveyor: {P.cyan(), @bg},
+    arch_builder: {P.green(), @bg},
+    arch_reviewer: {P.amber(), @bg},
+    arch_planner: {P.pink(), @bg},
+    arch_assistant: {P.violet(), @bg},
+    # Markdown rendering in the chat (Console.Markdown) — no bold attr in this palette, so
+    # emphasis maps to COLOUR: **bold** white, `code`/fences cyan, # headings the chip amber,
+    # *italic* lilac, rules the structure orange.
+    md_bold: {P.white(), @bg},
+    md_italic: {@lilac, @bg},
+    md_code: {@cyan, @bg},
+    md_head: {@chip, @bg},
+    md_rule: {@sep, @bg}
   }
 
   @doc """
