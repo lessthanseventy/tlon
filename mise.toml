@@ -395,6 +395,38 @@ description = "shell: run the shell from source (Ctrl+C stops it); pkill -x gjs 
 dir = "modules/desktop/shell"
 run = "ags run app.tsx"
 
+# Silent screenshots for an agent's eyes (no flameshot UI): a PNG under ~/Pictures/Screenshots,
+# its path on stdout — Read it. `shot:window` matches class or title (regex, case-insensitive)
+# and takes the first mapped hit; no arg = the focused window. Andrew's own captures are the
+# rail's card / Print keys (flameshot).
+[tasks."shot:monitor"]
+description = "desktop: grim the focused monitor to ~/Pictures/Screenshots, print the path"
+run = '''
+set -euo pipefail
+d="$HOME/Pictures/Screenshots"; mkdir -p "$d"
+m=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+f="$d/$(date +%Y-%m-%d_%H.%M.%S)_monitor-$m.png"
+grim -o "$m" "$f" && echo "$f"
+'''
+
+[tasks."shot:window"]
+description = "desktop: grim one window (arg: class/title regex; none = focused) to ~/Pictures/Screenshots, print the path"
+run = '''
+set -euo pipefail
+d="$HOME/Pictures/Screenshots"; mkdir -p "$d"
+re='{{arg(name="match", default="")}}'
+if [ -n "$re" ]; then
+  c=$(hyprctl clients -j | jq -c --arg re "$re" '[.[] | select(.mapped and ((.class|test($re;"i")) or (.title|test($re;"i"))))][0]')
+else
+  c=$(hyprctl activewindow -j)
+fi
+[ "$c" != "null" ] && [ -n "$c" ] || { echo "no window matches ${re:-<focused>}" >&2; exit 1; }
+g=$(jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' <<<"$c")
+n=$(jq -r '.class' <<<"$c" | tr -c 'A-Za-z0-9.' '_')
+f="$d/$(date +%Y-%m-%d_%H.%M.%S)_window-$n.png"
+grim -g "$g" "$f" && echo "$f"
+'''
+
 [tasks."shell:check"]
 description = "shell: the gate — ags bundle (syntax + imports + scss), then tsc over our files; both hard-fail"
 dir = "modules/desktop/shell"
