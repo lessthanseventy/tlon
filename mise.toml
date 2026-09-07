@@ -404,13 +404,6 @@ run = [
 description = "shell: restart the astal-shell user unit (VM / post-cutover)"
 run = "systemctl --user restart astal-shell.service"
 
-# The end of the hyprland.conf → hyprland.lua port: once a Hyprland has STARTED on the .lua
-# (log out / in — a reload keeps the config path it began with), this drops the .conf twins
-# and their links, switches, and commits. Refuses while the running instance is on the .conf.
-[tasks."hypr:finish-lua"]
-description = "hypr: after a Hyprland restart on hyprland.lua — delete hyprland.conf/hosts/*.conf/theme.conf + links, home:switch, commit (refuses if the running Hyprland is still on the .conf)"
-run = "modules/desktop/hypr/scripts/finish-lua.sh"
-
 [tasks."shell:logs"]
 description = "shell: follow the astal-shell unit's journal"
 run = "journalctl --user -u astal-shell.service -f"
