@@ -383,7 +383,7 @@ run = "ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null a
 # The desktop shell (modules/desktop/shell). `ags` on PATH comes from home:switch (the same
 # build the package used), so the dev loop and the store package see one Astal.
 [tasks."shell:dev"]
-description = "shell: run the shell from source (Ctrl+C stops it); runs alongside caelestia"
+description = "shell: run the shell from source (Ctrl+C stops it); pkill -x gjs first — the dbus name is taken while the installed shell runs"
 dir = "modules/desktop/shell"
 run = "ags run app.tsx"
 
