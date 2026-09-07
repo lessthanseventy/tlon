@@ -354,6 +354,14 @@ depends = ["check:names", "server:check", "console:check", "adapters:pi:check", 
 description = "theme: rewrite the palette-generated files in the repo from palette.nix (checks.palette-sync fails the flake when they drift)"
 run = "scripts/theme-gen.sh"
 
+[tasks."flake:bump"]
+description = "machine: nix flake update (inputs) + nix-update over the hand-pinned packages (pi, expert: version + hash from upstream releases)"
+run = [
+  "nix flake update",
+  "nix run nixpkgs#nix-update -- --flake pi",
+  "nix run nixpkgs#nix-update -- --flake expert",
+]
+
 [tasks."flake:check"]
 description = "machine: nix flake check + build the activation script — the machine-level gate"
 # `nix flake check` only EVALUATES homeConfigurations; it never builds the activation script, so a
