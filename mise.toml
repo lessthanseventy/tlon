@@ -388,16 +388,15 @@ dir = "modules/desktop/shell"
 run = "ags run app.tsx"
 
 [tasks."shell:check"]
-description = "shell: the gate — ags bundle (syntax + imports + scss) hard-fails; tsc over our files is advisory"
+description = "shell: the gate — ags bundle (syntax + imports + scss), then tsc over our files; both hard-fail"
 dir = "modules/desktop/shell"
-# tsc is advisory, not the gate: ags 3.1's own lib does not typecheck under TS 5.9 (decorator
-# signatures, two GObject identities — a stock `ags init` project fails the same way), and the
-# app.tsx errors are that identity problem leaking through createBinding(app, ...). Library
-# noise (/nix/store paths) is filtered; what remains is worth reading, not worth blocking on.
+# ags 3.1's own lib does not typecheck under TS 5.9 (decorator signatures, two GObject
+# identities — a stock `ags init` project fails the same way), so errors inside /nix/store are
+# filtered; every error in OUR files fails the gate (zero as of 2026-09-07).
 run = [
   "ags bundle app.tsx \"$(mktemp -d)/astal-shell\" >/dev/null && echo 'shell:check — bundle ok'",
   "ags types -d . -u --ignore Gtk3 --ignore Astal3 >/dev/null",
-  "npx --yes -p typescript@5 tsc --noEmit -p . 2>&1 | grep -v '^ ' | grep -v '/nix/store' || true",
+  "out=$(npx --yes -p typescript@5 tsc --noEmit -p . 2>&1 | grep -v '^ ' | grep -v '/nix/store' || true); if [ -n \"$out\" ]; then echo \"$out\"; exit 1; fi; echo 'shell:check — tsc ok'",
 ]
 
 [tasks."shell:restart"]
