@@ -126,6 +126,8 @@ defmodule Console.Cockpit do
             active_key: List.first(Space.all()).key,
             focused_id: nil,
             threads: [],
+            # The rail's last painted rows (`reads.sidebar`) — what the keyboard resolves against.
+            sidebar: [],
             # Orbis' focus toggle (`h`/`l`) — which cursor its j/k drives: the survey's per-row
             # cursor (default, so a fresh Orbis opens ready to zoom a workspace) or the thread list.
             orbis_focus: :survey,
@@ -429,15 +431,9 @@ defmodule Console.Cockpit do
     else
       state = %{state | last_right: {x, y}}
 
-      case Mouse.hit_panel(state.placements, x, y) do
-        {Panel.Sidebar, data, rect} ->
-          case Panel.Sidebar.workspace_at(data, rect, y - rect.y) do
-            %{id: _} = ws -> {:noreply, render(%{state | menu: Author.workspace_menu(ws, x, y)})}
-            _ -> {:noreply, render(%{state | menu: nil})}
-          end
-
-        _ ->
-          {:noreply, render(%{state | menu: nil})}
+      case context_workspace(Mouse.hit_panel(state.placements, x, y), y) do
+        %{id: _} = ws -> {:noreply, render(%{state | menu: Author.workspace_menu(ws, x, y)})}
+        nil -> {:noreply, render(%{state | menu: nil})}
       end
     end
   end
@@ -704,6 +700,14 @@ defmodule Console.Cockpit do
 
   defp repaint_on_scroll(:scrolled, state), do: {:noreply, render(state)}
   defp repaint_on_scroll(:forwarded, state), do: {:noreply, state}
+
+  @doc false
+  # The workspace a right click landed on, per the panel under the cursor. The rail carries the
+  # workspace rows since the spine left the frame; Panel.Sidebar keeps its door for the drawer.
+  # Pure — the right-click `handle_cast` clause turns it into a menu.
+  def context_workspace({Panel.Rail, data, rect}, y), do: Panel.Rail.workspace_at(data, rect, y - rect.y)
+  def context_workspace({Panel.Sidebar, data, rect}, y), do: Panel.Sidebar.workspace_at(data, rect, y - rect.y)
+  def context_workspace(_hit, _y), do: nil
 
   defp dispatch_click(nil, _x, _y, state), do: {:noreply, state}
 
@@ -997,18 +1001,20 @@ defmodule Console.Cockpit do
     do:
       flashing(state, "settings write", fn -> {:noreply, render(%{state | flash: Author.cycle_model!(profile_name)})} end)
 
-  # Enter in Tlön nav: on the Sidebar, switch to the space under the cursor; on STACK, zoom the
-  # focused thread's worktree into an embedded lazygit (Slice 4); on any other pane, open its
-  # selection's detail in MAIN (set focus.detail?, which the View renders).
+  # Enter in Tlön nav: on the RAIL, the row under the cursor speaks the click's own verb (open a
+  # thread / switch workspace); on STACK, zoom the focused thread's worktree into an embedded
+  # lazygit (Slice 4); on a pane with a detail, open it in MAIN (set focus.detail?, which the View
+  # renders). `Reads.enter_verb/2` is the pure resolution — `:none` leaves the frame alone, so
+  # Enter never arms a detail mode nothing can show (which the next Esc would silently spend).
   defp apply_effect(:tlon_enter, state) do
     # A pane Enter always resolves ITS detail — never a leftover /status readout.
     state = %{state | status_detail: nil}
-    layout = Reads.tlon_layout(state)
 
-    case Focus.focused_pane(state.focus, layout) do
-      Panel.Sidebar -> apply_pick({:switch_space, Reads.space_at_cursor(state, layout)}, state)
-      Panel.Stack -> open_lazygit(state)
-      _ -> {:noreply, render(put_in(state.focus.detail?, true))}
+    case Reads.enter_verb(state, Reads.tlon_layout(state)) do
+      {:pick, verb} -> apply_pick(verb, state)
+      :lazygit -> open_lazygit(state)
+      :detail -> {:noreply, render(put_in(state.focus.detail?, true))}
+      :none -> {:noreply, state}
     end
   end
 
@@ -1224,6 +1230,9 @@ defmodule Console.Cockpit do
     state = %{state | stack_focus: Reads.stack_focus(stack_blocks, state.focused_id)}
     state = Safe.read(:resubscribe, state, fn -> resubscribe(state, focused) end)
     reads = Reads.frame(state, stack_blocks, focused)
+    # The rail's rows, stashed for the keyboard: j/k's count and Enter's row resolve against the
+    # SAME read the frame painted, without a second Board.sidebar/0 round-trip per keypress.
+    state = %{state | sidebar: reads.sidebar}
 
     # A full-screen board covers the layout; the overlay menu paints LAST (on top of everything). Both
     # ride in `placements` so hit_panel can route clicks to them.

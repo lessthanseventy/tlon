@@ -5,6 +5,7 @@ defmodule Console.ReadsTest do
   """
   use ExUnit.Case, async: true
 
+  alias Console.Panel.Rail
   alias Console.Reads
 
   setup do
@@ -67,6 +68,66 @@ defmodule Console.ReadsTest do
       feed = [{:a, %{thread_id: 1}}, {:b, %{thread_id: 2}}, {:c, %{}}]
       assert Reads.scope_activity(feed, MapSet.new([2])) == [{:b, %{thread_id: 2}}, {:c, %{}}]
       assert Reads.scope_activity(feed, nil) == feed
+    end
+  end
+
+  # UX slice 1, task 2: the rail is the only left pane, so the focus's j/k count and Enter both
+  # resolve against the SAME stashed sidebar read the frame rendered from.
+  describe "the rail's keyboard: tlon_layout/1 counts and enter_verb/2" do
+    @sidebar [
+      %{workspace: %{id: 0, name: "Tlön"}, threads: [%{id: 9, title: "general"}, %{id: 8, title: "aleph"}]},
+      %{workspace: %{id: 1, name: "ficciones"}, threads: [%{id: 5, title: "hidden"}]}
+    ]
+
+    defp rail_state(over \\ %{}) do
+      Map.merge(
+        %{
+          active_key: 0,
+          sidebar: @sidebar,
+          stack: nil,
+          memory: nil,
+          focus: %Console.Tlon.Focus{in_terminal?: false, column: :left, pane: 0, cursors: %{}}
+        },
+        over
+      )
+    end
+
+    defp at(cursor, over \\ %{}) do
+      state = rail_state(over)
+      %{state | focus: %{state.focus | cursors: %{Rail => cursor}}}
+    end
+
+    test "the layout counts the rail's rows — the active workspace's threads, not every group's" do
+      layout = Reads.tlon_layout(rail_state())
+
+      # workspace 0, its two threads, workspace 1 (collapsed).
+      assert layout.counts[Rail] == 4
+      assert layout.left == [Rail]
+    end
+
+    test "an empty sidebar read counts zero rows, so j/k is a no-op instead of a crash" do
+      assert Reads.tlon_layout(rail_state(%{sidebar: []})).counts[Rail] == 0
+    end
+
+    test "Enter on the rail is a pick verb — a thread opens, a workspace switches; never a detail" do
+      state = at(0)
+      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:switch_space, 0}}
+
+      state = at(1)
+      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:open_thread_view, 9}}
+
+      state = at(3)
+      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:switch_space, 1}}
+    end
+
+    test "Enter with nothing to land on does nothing — it never arms the detail mode" do
+      state = at(0, %{sidebar: []})
+      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == :none
+    end
+
+    test "Enter outside a workspace (no pane focused) does nothing" do
+      state = rail_state(%{active_key: :orbis})
+      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == :none
     end
   end
 

@@ -248,18 +248,44 @@ defmodule Console.Reads do
   defp memory_sections(%{memory: %{habits: habits}}) when habits != [], do: 2
   defp memory_sections(_state), do: 1
 
-  def space_at_cursor(state, layout), do: Enum.at(Space.all(), Focus.cursor(state.focus, layout)).key
-
   # The navigable item count per pane, for j/k clamping. Commits = the commit-log length; Memory is
   # sectioned — j/k walks the ACTIVE section's list (pinned=0, habits=1), so its count follows
   # focus.section. Panes without a list are absent (0 → j/k is a no-op there).
   defp pane_counts(state) do
-    # Only panes with a j/k list need a count; the rail's own lands with the drawer (its rows come
-    # from the sidebar read, not from state).
     %{
+      Panel.Rail => length(Panel.Rail.entries(rail_data(state))),
       Panel.Stack => length((state.stack || @empty_stack).commits),
       Panel.Memory => memory_section_count(state)
     }
+  end
+
+  # The rail renders from `reads.sidebar`; `do_render/1` stashes that same read on state so the
+  # keyboard (j/k's count, Enter's row) resolves against what is painted, with no second
+  # `Board.sidebar/0` round-trip per keypress.
+  defp rail_data(state), do: %{groups: state[:sidebar] || [], active_key: state.active_key}
+
+  @doc """
+  What Enter means on the focused pane — the pure half of the cockpit's `:tlon_enter`. The rail
+  answers `{:pick, verb}` with one of the verbs `apply_pick/2` already dispatches; STACK zooms
+  lazygit; a pane with a detail arms the detail mode; nothing focused (or nothing under the
+  cursor) is `:none`, so Enter can never arm a detail that has nothing to show.
+  """
+  @spec enter_verb(map(), map()) :: {:pick, tuple()} | :lazygit | :detail | :none
+  def enter_verb(state, layout) do
+    case Focus.focused_pane(state.focus, layout) do
+      Panel.Rail -> rail_verb(state, layout)
+      Panel.Stack -> :lazygit
+      nil -> :none
+      _pane -> :detail
+    end
+  end
+
+  defp rail_verb(state, layout) do
+    case state |> rail_data() |> Panel.Rail.entries() |> Enum.at(Focus.cursor(state.focus, layout)) do
+      {:thread, %{id: id}} -> {:pick, {:open_thread_view, id}}
+      {:workspace, %{id: id}} -> {:pick, {:switch_space, id}}
+      _ -> :none
+    end
   end
 
   defp memory_section_count(%{memory: nil}), do: 0
@@ -645,7 +671,7 @@ defmodule Console.Reads do
     warm = for session <- roster, session.warm?, into: MapSet.new(), do: session.thread_id
 
     for group <- Board.sidebar() do
-      Map.update!(group, :threads, fn threads ->
+      Map.update(group, :threads, [], fn threads ->
         Enum.map(threads, &Map.put(&1, :warm?, MapSet.member?(warm, &1.id)))
       end)
     end
