@@ -2,7 +2,7 @@ defmodule Console.Backend.Link do
   @moduledoc """
   Keeps this node connected to the server node for `Console.Backend.Remote`.
 
-  On start it makes the node distributed if it is not (`console@127.0.0.1`, long names — the
+  On start it makes the node distributed if it is not (`console-<pid>@127.0.0.1`, long names — the
   release uses `RELEASE_DISTRIBUTION=name`), sets the cookie from the shared cookie file
   (`TLON_COOKIE_FILE`, default `~/.local/share/tlon/cookie`; the same file `tlon.service` feeds
   `RELEASE_COOKIE` from), connects, and re-tries every 2 s while the server is away.
@@ -53,6 +53,7 @@ defmodule Console.Backend.Link do
   @impl true
   def handle_info(:connect, state) do
     node = Remote.node_name()
+    if !Node.alive?(), do: ensure_distribution([])
 
     if Node.connect(node) do
       {:noreply, flip(state, true)}
@@ -90,16 +91,32 @@ defmodule Console.Backend.Link do
   end
 
   # ── distribution ─────────────────────────────────────────────────────────────────────────
+  # The node name carries the OS pid (console-12345@127.0.0.1): two cockpits — a stale one and
+  # a fresh `console:run` — must never fight over one name (they did, 2026-09-08, and the loser
+  # crashed the app). Server.CockpitNode finds any `console*@` node. A failure to start
+  # distribution is logged and retried with the connect loop, never a crash: the cockpit still
+  # renders, with the server-down state, and comes up the moment the node does.
   defp ensure_distribution(opts) do
-    if !Node.alive?() do
-      name = Keyword.get(opts, :name, Application.get_env(:console, :node_name, :"console@127.0.0.1"))
+    if Node.alive?() do
+      set_cookie()
+    else
+      name = Keyword.get(opts, :name, default_node_name())
 
       case Node.start(name, :longnames) do
-        {:ok, _} -> :ok
-        {:error, reason} -> Logger.warning("console node could not start distribution: #{inspect(reason)}")
+        {:ok, _} -> set_cookie()
+        {:error, reason} -> Logger.warning("console node could not start distribution as #{name}: #{inspect(reason)}")
       end
     end
+  end
 
+  defp default_node_name do
+    case Application.get_env(:console, :node_name) do
+      nil -> :"console-#{System.pid()}@127.0.0.1"
+      name -> name
+    end
+  end
+
+  defp set_cookie do
     case cookie() do
       nil -> Logger.warning("no server cookie at #{cookie_file()} — the link will not authenticate")
       c -> Node.set_cookie(c)

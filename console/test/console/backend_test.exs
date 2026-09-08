@@ -103,3 +103,27 @@ defmodule Console.Backend.RemoteTest do
     end
   end
 end
+
+defmodule Console.Backend.LinkTest do
+  use ExUnit.Case, async: false
+
+  alias Console.Backend.Link
+
+  # a stale cockpit holding the node name must not take a fresh one down: start_link with a name
+  # that cannot be taken (the empty host part is invalid) logs and lives, and up?/0 is false
+  test "the link survives a failed distribution start" do
+    Application.put_env(:console, :server_node, :"nobody@127.0.0.1")
+    {:ok, reg} = Registry.start_link(keys: :duplicate, name: Console.Backend.Link.Registry)
+
+    try do
+      {:ok, pid} = Link.start_link(name: :"bad name with spaces@")
+      Process.sleep(100)
+      assert Process.alive?(pid)
+      refute Link.up?()
+      GenServer.stop(pid)
+    after
+      Process.exit(reg, :normal)
+      Application.delete_env(:console, :server_node)
+    end
+  end
+end

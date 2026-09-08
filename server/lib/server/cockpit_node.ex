@@ -1,7 +1,7 @@
 defmodule Server.CockpitNode do
   @moduledoc """
   Where the cockpit is, when the server is its own node (docs/plans/2026-09-08-one-brain-client-server-plan.md
-  phase 3). The cockpit connects as `console@<host>` (`Console.Backend.Link`); the arbiter and
+  phase 3). The cockpit connects as `console-<pid>@<host>` (`Console.Backend.Link`); the arbiter and
   crew backends that need a terminal find it here and `:erpc` into the console's own
   implementations. No cockpit connected is the always-up service's normal state: `{:error,
   :no_cockpit}`, the same honest degrade as no backend at all.
@@ -12,7 +12,7 @@ defmodule Server.CockpitNode do
   @doc "The connected cockpit node, or nil."
   @spec find() :: node() | nil
   def find do
-    Enum.find(Node.list(), fn n -> n |> Atom.to_string() |> String.starts_with?("console@") end)
+    Enum.find(Node.list(), fn n -> n |> Atom.to_string() |> String.starts_with?("console") end)
   end
 
   @doc "Call `mod.fun(args)` on the cockpit; `{:error, :no_cockpit}` when none is connected or it drops mid-call."
