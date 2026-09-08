@@ -75,7 +75,11 @@ while [ "$p" -gt 1 ] 2>/dev/null; do
   p="$next"
 done
 
-orphans="$(pgrep -af 'mise run console:run|mix console\.run' 2>/dev/null || true)"
+# WHOLE command lines only: an unanchored match also hit the tmux client whose ARGUMENT is
+# "mise run console:run" (the wrapper console:run now execs into) and any shell whose command
+# mentioned it — both were killed on 2026-09-08. A cockpit is exactly the mise wrapper or the
+# beam running mix console.run.
+orphans="$(pgrep -af '^(\S*/)?mise run console:run(:local)?$|(^|\s)mix console\.run(\s|$)' 2>/dev/null || true)"
 if [ -n "$orphans" ]; then
   while IFS= read -r line; do
     [ -n "$line" ] || continue
