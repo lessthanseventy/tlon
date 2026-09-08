@@ -66,7 +66,7 @@ defmodule Console.Panel.StatusBarTest do
 
   test "NAV mode names the session pane's mode, so Alt+\\ says what it would leave" do
     for {mode, label} <- [{:auto, "Alt+\\ pane auto"}, {true, "Alt+\\ pane on"}, {false, "Alt+\\ pane off"}] do
-      data = base(%{mode: :nav, workspace?: true, session_pane: mode})
+      data = base(%{mode: :nav, workspace?: true, session_pane_mode: mode})
       assert text(StatusBar.render(data, rect())) =~ label
     end
   end

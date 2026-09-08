@@ -451,7 +451,7 @@ defmodule Console.View do
       mode: footer_mode(reads),
       workspace?: Space.workspace?(reads.active_key),
       # Which way Alt+\ is set, so the footer's pane verb names the mode it is in.
-      session_pane: reads[:session_pane_mode],
+      session_pane_mode: reads[:session_pane_mode],
       pane_hints: pane_hints(reads, focused)
     }
   end
