@@ -31,21 +31,23 @@ defmodule Console.SpaceTest do
     roster: [%{"archetype" => "surveyor", "name" => "tertius"}]
   }
 
-  test "funes down → the picker is Orbis alone; no fake Workspace (reshape slice A)" do
+  test "funes down → no spaces at all; no fake Workspace, no Home (UX slice 1, task 5)" do
     # Space.all/0 reads the live Console.Workspaces cache (funes down under test → []). The hardcoded
     # Tlön fallback is gone: funes self-seeds a default workspace at boot (Server.Bootstrap), so an
     # empty workspace list means funes is genuinely down — rendered honestly, not papered over.
-    assert Enum.map(Space.all(), & &1.key) == [:orbis]
+    assert Space.all() == []
   end
 
-  test "Tab with no workspaces wraps Orbis to itself" do
-    assert Space.next(:orbis).key == :orbis
-    assert Space.prev(:orbis).key == :orbis
+  test "Tab with no workspaces goes nowhere (nil), and with one wraps to itself" do
+    assert Space.next(1) == nil
+    assert Space.prev(1) == nil
+    [only] = Space.all([@tlon])
+    assert Space.next(only.key, [only]).key == only.key
   end
 
   describe "all/1 (derived from funes workspaces)" do
-    test "one seeded Tlön workspace → picker is exactly [:orbis, 1]" do
-      assert Enum.map(Space.all([@tlon]), & &1.key) == [:orbis, 1]
+    test "one seeded Tlön workspace → picker is exactly [1]" do
+      assert Enum.map(Space.all([@tlon]), & &1.key) == [1]
     end
 
     test "the derived Tlön space matches the Slice-0 hardcoded surface/coworker/left/right" do
@@ -66,15 +68,15 @@ defmodule Console.SpaceTest do
       assert tlon.roster == @tlon.roster
     end
 
-    test "empty workspaces → Orbis alone, no fabricated Workspace" do
-      assert Enum.map(Space.all([]), & &1.key) == [:orbis]
+    test "empty workspaces → nothing, no fabricated Workspace" do
+      assert Space.all([]) == []
     end
 
-    test "two workspaces → [:orbis, 1, 2], keyed by funes id" do
+    test "two workspaces → [1, 2], keyed by funes id" do
       freedonia = %{@tlon | id: 2, name: "Freedonia", roster: [%{"archetype" => "surveyor", "name" => "rufus"}]}
 
       spaces = Space.all([@tlon, freedonia])
-      assert Enum.map(spaces, & &1.key) == [:orbis, 1, 2]
+      assert Enum.map(spaces, & &1.key) == [1, 2]
 
       second = Enum.find(spaces, &(&1.key == 2))
       assert second.id == 2
@@ -88,7 +90,7 @@ defmodule Console.SpaceTest do
           %{id: 7, name: "Tlön", roster: [%{"name" => "tertius"}], type: "code", paths: [], scope: "machine"}
         ])
 
-      assert [%{key: :orbis}, %{key: 7, label: "Tlön", id: 7}] = spaces
+      assert [%{key: 7, label: "Tlön", id: 7}] = spaces
     end
 
     test "a roster with atom keys still yields the lead coworker (defensive)" do
@@ -108,7 +110,6 @@ defmodule Console.SpaceTest do
   describe "fetch/2 (pure, over an explicit spaces list)" do
     test "returns the matching space" do
       spaces = Space.all([@tlon])
-      assert Space.fetch(:orbis, spaces).key == :orbis
       assert Space.fetch(1, spaces).key == 1
     end
 
@@ -124,8 +125,9 @@ defmodule Console.SpaceTest do
   end
 
   describe "workspace?/1" do
-    test "is the mode predicate distinguishing Orbis from Workspace keys" do
+    test "is the mode predicate: any integer key is a Workspace, anything else is not" do
       refute Space.workspace?(:orbis)
+      refute Space.workspace?(nil)
       assert Space.workspace?(1)
       assert Space.workspace?(0)
     end
@@ -145,13 +147,10 @@ defmodule Console.SpaceTest do
 
   describe "the retired right rail (Slice 3.4)" do
     test "every space has an empty right column" do
-      space = Enum.find(Space.all([@tlon]), &Space.workspace?(&1.key))
-      [orbis | _] = Space.all([@tlon])
+      [space] = Space.all([@tlon])
 
-      # The right rail is gone: `right` is [] for both the workspace and the Orbis god-view — the
-      # funes panels moved to the left rail (`left`) and the carousel machinery is retired.
+      # The right rail is gone: `right` is [] — the funes panels live in the drawer now.
       assert space.right == []
-      assert orbis.right == []
     end
   end
 end

@@ -65,7 +65,7 @@ defmodule Console.BoardTest do
   defp reads(overrides \\ %{}) do
     Map.merge(
       %{
-        active_key: :orbis,
+        active_key: 0,
         focused_id: 1,
         focused_title: "review PR 329",
         roster: @roster,
@@ -350,14 +350,14 @@ defmodule Console.BoardTest do
   end
 
   describe "view composition" do
-    test "orbis space: the rail, the chorus surface, a box per section, status bar — all in bounds" do
+    test "a workspace: the rail, the centre surface, a box per section, status bar — all in bounds" do
       placements = View.compose(reads(), 120, 40)
       mods = Enum.map(placements, fn {m, _d, _r} -> m end)
 
       assert Rail in mods
-      assert Overview in mods
+      assert Terminal in mods
       assert StatusBar in mods
-      # every section gets its own bordered box (rail, survey) — the frame's two bars are borderless.
+      # every section gets its own bordered box (rail, centre) — the frame's two bars are borderless.
       content_panels = Enum.reject(mods, &(&1 in [Border, TopBar, StatusBar]))
       assert Enum.count(mods, &(&1 == Border)) == length(content_panels)
       assert length(content_panels) >= 2
@@ -488,15 +488,13 @@ defmodule Console.BoardTest do
       end
     end
 
-    test "orbis space centers the chorus feed, with the rail (not a thread list) at its side" do
-      placements = View.compose(reads(%{active_key: :orbis}), 120, 40)
+    test "a workspace centers its thread surface, with the rail at its side" do
+      placements = View.compose(reads(%{active_key: 0}), 120, 40)
       mods = Enum.map(placements, fn {m, _d, _r} -> m end)
-      # the chorus (all threads, one feed) is the center; the rail is the left column in EVERY space
-      # since UX slice 1 — ACTIVE/TRIAGE are drawer panes now.
-      assert Overview in mods
+      # the rail is the left column in EVERY space since UX slice 1 — ROSTER/TRIAGE are drawer panes
+      assert Terminal in mods
       assert Rail in mods
       refute Roster in mods
-      refute Terminal in mods
     end
   end
 

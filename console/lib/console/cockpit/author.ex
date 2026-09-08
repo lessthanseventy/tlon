@@ -80,7 +80,12 @@ defmodule Console.Cockpit.Author do
 
   defp menu_action(:close, state), do: %{state | menu: nil}
 
-  defp menu_action({:configure_ws, _ws}, state), do: %{state | menu: nil, active_key: :orbis, orbis_face: :author}
+  # Configure → the drawer's CONFIG pane with the cursor on that workspace.
+  defp menu_action({:configure_ws, ws}, state) do
+    # the cache (what CONFIG lists), not a server round-trip
+    cursor = Enum.find_index(Console.Workspaces.all(), &(&1.id == ws.id)) || 0
+    Console.Cockpit.Drawer.open(%{state | menu: nil, author_cursor: cursor}, :config)
+  end
 
   defp menu_action({:delete_ws, ws}, %{menu: %{x: x, y: y}} = state), do: %{state | menu: confirm_delete_menu(ws, x, y)}
 
@@ -122,12 +127,6 @@ defmodule Console.Cockpit.Author do
   end
 
   @doc false
-  # The pure flip behind Orbis' `a`/Esc (D2.1) — public + exposed so it's
-  # testable without a live GenServer.
-  def toggle_orbis_face(%{orbis_face: :author} = state), do: %{state | orbis_face: :survey}
-  def toggle_orbis_face(state), do: %{state | orbis_face: :author}
-
-  @doc false
   # Register a workspace from `template` + the operator-typed `name` (D2.3's `n` verb). `{:ok, _}`
   # clears the input and flashes; `{:error, changeset}` (a blank OR duplicate name — both are the
   # server changeset's job, not re-validated here) flashes the reason and REOPENS the input with
@@ -152,7 +151,7 @@ defmodule Console.Cockpit.Author do
 
   @doc false
   # Remove workspace `id` (D2.5's second `d`). Guards against stranding the cockpit on a deleted
-  # active workspace (falls back to `:orbis`) and clamps `author_cursor` to the shrunk list. A missing
+  # active workspace (falls back to the first remaining workspace) and clamps `author_cursor` to the shrunk list. A missing
   # workspace (already gone) or a server hiccup flashes, never crashes.
   def remove_workspace!(state, id) do
     Safe.flash_on_error(state, "delete", fn ->
@@ -164,7 +163,7 @@ defmodule Console.Cockpit.Author do
           case Workspaces.remove(workspace) do
             {:ok, _} ->
               state
-              |> Map.put(:active_key, if(state.active_key == id, do: :orbis, else: state.active_key))
+              |> Map.put(:active_key, if(state.active_key == id, do: first_remaining(id), else: state.active_key))
               |> Map.put(:author_cursor, clamp_author_cursor(state.author_cursor))
               |> Map.put(:flash, "deleted #{workspace.name}")
 
@@ -191,6 +190,15 @@ defmodule Console.Cockpit.Author do
   # `remove_workspace!`. On success, re-clamps `author_edit.sub` against the POST-edit paths/roster
   # length (a removal can strand `sub` past the shrunk list, same reasoning as
   # `clamp_author_cursor/1` above).
+  # The active workspace was just deleted: land on the first one the server still has (its own
+  # read, not the Bus-fed cache, which may not have caught up); `0` is the no-workspace sentinel.
+  defp first_remaining(id) do
+    case Enum.find(Workspaces.all(), &(&1.id != id)) do
+      %{id: next} -> next
+      nil -> 0
+    end
+  end
+
   def edit_workspace!(state, id, attrs) do
     Safe.flash_on_error(state, "edit", fn ->
       case Workspaces.get(id) do

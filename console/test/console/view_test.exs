@@ -355,8 +355,8 @@ defmodule Console.ViewTest do
       assert focused_borders(placements) == []
     end
 
-    test "a non-Tlön space (focus nil) never highlights a border" do
-      placements = View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40)
+    test "a stale space key (focus nil) never highlights a border" do
+      placements = View.compose(reads(%{active_key: 999, focus: nil}), 120, 40)
       assert focused_borders(placements) == []
     end
   end
@@ -386,34 +386,6 @@ defmodule Console.ViewTest do
 
       refute detail_placed?(placements)
       assert terminal_placed?(placements)
-    end
-  end
-
-  describe "Orbis' author face (D2.1)" do
-    defp chorus_placed?(placements), do: Enum.any?(placements, &match?({Panel.Overview, _, _}, &1))
-    defp author_placed?(placements), do: Enum.any?(placements, &match?({Panel.Author, _, _}, &1))
-
-    test "orbis_face == :author replaces Overview with Panel.Author" do
-      placements = View.compose(reads(%{active_key: :orbis, orbis_face: :author}), 120, 40)
-      assert author_placed?(placements)
-      refute chorus_placed?(placements)
-    end
-
-    test "orbis_face == :survey (the default) keeps Overview, no Panel.Author" do
-      placements = View.compose(reads(%{active_key: :orbis, orbis_face: :survey}), 120, 40)
-      refute author_placed?(placements)
-      assert chorus_placed?(placements)
-    end
-
-    test "orbis_face absent from reads (an older/minimal reads map) defaults to the survey" do
-      placements = View.compose(reads(%{active_key: :orbis}), 120, 40)
-      refute author_placed?(placements)
-      assert chorus_placed?(placements)
-    end
-
-    test "orbis_face == :author outside Orbis is inert — only Orbis' center swaps" do
-      placements = View.compose(reads(%{active_key: 0, orbis_face: :author}), 120, 40)
-      refute author_placed?(placements)
     end
   end
 
@@ -466,8 +438,8 @@ defmodule Console.ViewTest do
       end
     end
 
-    test "Orbis gets the same rail, and neither ACTIVE nor TRIAGE" do
-      placements = View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40)
+    test "a missing space (the server-down sentinel) gets the same rail, and neither ACTIVE nor TRIAGE" do
+      placements = View.compose(reads(%{active_key: 0, focus: nil}), 120, 40)
 
       assert right_placed?(placements, Panel.Rail)
       refute right_placed?(placements, Panel.Roster)

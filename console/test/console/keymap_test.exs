@@ -25,26 +25,29 @@ defmodule Console.KeymapTest do
 
   # The slice of cockpit state the keymap reads. Threads are anything with an `.id`.
   # `center_live?` and `composer_thread_id` are derived per keypress by the cockpit; here they're
-  # set explicitly per test (`composer_thread_id` defaults to the focused thread). `orbis_focus`
-  # defaults to `:threads` here (NOT the cockpit's `:survey` init default) so the many pre-existing
-  # thread-nav tests below keep exercising thread focus without every one of them overriding it;
-  # the "Orbis survey cursor" describe block below sets `:survey` explicitly.
+  # set explicitly per test (`composer_thread_id` defaults to the focused thread).
+  # two workspaces for the space ring — the cockpit threads the live cache in as `author_workspaces`
+  defp two_workspaces,
+    do: [
+      %{id: 1, name: "Tlön", roster: [], type: "code", paths: [], scope: "machine"},
+      %{id: 2, name: "Freedonia", roster: [], type: "code", paths: [], scope: "machine"}
+    ]
+
   defp state(overrides \\ %{}) do
     base =
       Map.merge(
         %{
-          active_key: :orbis,
+          # the server-down sentinel: a Workspace key with no space (no focus struct either, so
+          # keys reach the command table directly — the leader's path)
+          active_key: 0,
           focused_id: 2,
           threads: [%{id: 1}, %{id: 2}, %{id: 3}],
           center_live?: false,
           leader_pending?: false,
           input: nil,
-          orbis_focus: :threads,
-          survey_cursor: 0,
-          leaves: nil,
-          # Orbis' author face (D2, Chunk 1) — defaults mirror the cockpit's init state; the
-          # "Orbis author face" describe block below sets `orbis_face: :author` explicitly.
-          orbis_face: :survey,
+          # the drawer (UX slice 1): CONFIG hosts the Author — its tests open it explicitly
+          drawer: nil,
+          last_drawer: :memory,
           author_cursor: 0,
           author_workspaces: [],
           pending_delete: nil,
@@ -128,20 +131,14 @@ defmodule Console.KeymapTest do
       assert {_state, :quit} = Keymap.handle(char("q"), state())
     end
 
-    test "Tab moves to the next space and repaints" do
-      assert {%{active_key: 0}, :repaint} = Keymap.handle(key(:tab), state())
+    test "Tab moves to the next workspace and repaints" do
+      s = state(%{active_key: 1, author_workspaces: two_workspaces()})
+      assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab), s)
     end
 
-    test "Shift-Tab moves to the previous space (wraps)" do
-      assert {%{active_key: 0}, :repaint} =
-               Keymap.handle(key(:tab, shift: true), state(%{active_key: :orbis}))
-    end
-
-    test "[ and ] are unbound outside a Workspace — nothing to cycle in Orbis (C3.4 reshuffle)" do
-      s = state()
-      assert {^s, :none} = Keymap.handle(char("]"), s)
-      s2 = state(%{active_key: 0})
-      assert {^s2, :none} = Keymap.handle(char("["), s2)
+    test "Shift-Tab moves to the previous workspace (wraps)" do
+      s = state(%{active_key: 1, author_workspaces: two_workspaces()})
+      assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab, shift: true), s)
     end
 
     test "Down and j both move focus forward" do
@@ -166,98 +163,13 @@ defmodule Console.KeymapTest do
       s = state(%{threads: [], focused_id: nil})
       assert {^s, :none} = Keymap.handle(key(:down), s)
     end
-
-    test "Enter with orbis_focus == :threads is a no-op — nothing to zoom from the thread list" do
-      s = state(%{active_key: :orbis, orbis_focus: :threads})
-      assert {^s, :none} = Keymap.handle(key(:enter), s)
-    end
   end
 
-  describe "the Orbis survey cursor (D0.1/D0.2/D0.3: orbis_focus == :survey, the cockpit default)" do
-    @two_workspaces [
-      %{id: 11, name: "Tlön", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []},
-      %{id: 22, name: "Freedonia", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []}
-    ]
-
-    defp survey_state(overrides \\ %{}),
-      do: state(Map.merge(%{orbis_focus: :survey, leaves: %{workspaces: @two_workspaces}}, overrides))
-
-    test "j/k (and ↑/↓) move survey_cursor, clamped 0..length(workspaces)-1 — no wrap" do
-      s = survey_state(%{survey_cursor: 0})
-      assert {%{survey_cursor: 1}, :repaint} = Keymap.handle(char("j"), s)
-      assert {%{survey_cursor: 1}, :repaint} = Keymap.handle(key(:down), s)
-
-      # stops at the last workspace — 2 workspaces, index 1 is the ceiling.
-      s1 = survey_state(%{survey_cursor: 1})
-      assert {%{survey_cursor: 1}, :repaint} = Keymap.handle(char("j"), s1)
-      assert {%{survey_cursor: 1}, :repaint} = Keymap.handle(key(:down), s1)
-
-      # stops at 0 — no wrap below the floor either.
-      assert {%{survey_cursor: 0}, :repaint} = Keymap.handle(char("k"), survey_state(%{survey_cursor: 0}))
-      assert {%{survey_cursor: 0}, :repaint} = Keymap.handle(key(:up), survey_state(%{survey_cursor: 0}))
-    end
-
-    test "h/l toggle orbis_focus between :survey and :threads" do
-      assert {%{orbis_focus: :threads}, :repaint} = Keymap.handle(char("h"), survey_state())
-      assert {%{orbis_focus: :threads}, :repaint} = Keymap.handle(char("l"), survey_state())
-
-      s = state(%{active_key: :orbis, orbis_focus: :threads})
-      assert {%{orbis_focus: :survey}, :repaint} = Keymap.handle(char("h"), s)
-      assert {%{orbis_focus: :survey}, :repaint} = Keymap.handle(char("l"), s)
-    end
-
-    test "with orbis_focus == :threads, j/k still move focused_id — compose unbroken" do
-      s = survey_state(%{orbis_focus: :threads, focused_id: 2})
-      assert {%{focused_id: 3, survey_cursor: 0}, :repaint} = Keymap.handle(char("j"), s)
-      assert {%{focused_id: 1, survey_cursor: 0}, :repaint} = Keymap.handle(char("k"), s)
-    end
-
-    test "Enter zooms into the CURSOR row's own workspace id, not the first workspace's" do
-      assert {_state, {:switch_space, 22}} = Keymap.handle(key(:enter), survey_state(%{survey_cursor: 1}))
-      assert {_state, {:switch_space, 11}} = Keymap.handle(key(:enter), survey_state(%{survey_cursor: 0}))
-    end
-
-    test "Enter on an empty survey (funes down / no workspaces) is a no-op, never a crash" do
-      s = state(%{active_key: :orbis, orbis_focus: :survey, leaves: nil})
-      assert {^s, :none} = Keymap.handle(key(:enter), s)
-    end
-  end
-
-  describe "Orbis' author face — the survey↔author toggle (D2.1)" do
-    test "bare `a` in Orbis emits {:toggle_orbis_face}, state untouched (the cockpit flips it)" do
-      s = state(%{active_key: :orbis})
-      assert {^s, {:toggle_orbis_face}} = Keymap.handle(char("a"), s)
-    end
-
-    test "Ctrl/Shift/Alt+A is unbound — only bare `a` toggles" do
-      s = state(%{active_key: :orbis})
-      assert {^s, :none} = Keymap.handle(char("a", ctrl: true), s)
-      assert {^s, :none} = Keymap.handle(char("a", shift: true), s)
-      assert {^s, :none} = Keymap.handle(char("a", alt: true), s)
-    end
-
-    test "Esc in the author face emits {:toggle_orbis_face} to step back to the survey" do
-      s = state(%{active_key: :orbis, orbis_face: :author})
-      assert {^s, {:toggle_orbis_face}} = Keymap.handle(key(:escape), s)
-    end
-
-    test "Esc on the survey face is a no-op — nothing to close" do
-      s = state(%{active_key: :orbis, orbis_face: :survey})
-      assert {^s, :none} = Keymap.handle(key(:escape), s)
-    end
-
-    test "`a` outside Orbis is unbound (not a table-wide binding)" do
-      s = state(%{active_key: 0})
-      assert {^s, :none} = Keymap.handle(char("a"), s)
-    end
-  end
-
-  describe "Panel.Author's row cursor (D2.2: author_cursor, orbis_face == :author)" do
+  describe "Panel.Author's row cursor (D2.2: author_cursor, in the drawer's CONFIG pane)" do
     @two_author_workspaces [%{id: 11, name: "Tlön"}, %{id: 22, name: "Freedonia"}]
 
     defp author_state(overrides),
-      do:
-        state(Map.merge(%{active_key: :orbis, orbis_face: :author, author_workspaces: @two_author_workspaces}, overrides))
+      do: state(Map.merge(%{drawer: :config, author_workspaces: @two_author_workspaces}, overrides))
 
     test "j/k (and ↑/↓) move author_cursor, clamped 0..length(author_workspaces)-1 — no wrap" do
       s = author_state(%{author_cursor: 0})
@@ -271,38 +183,19 @@ defmodule Console.KeymapTest do
       assert {%{author_cursor: 0}, :repaint} = Keymap.handle(char("k"), author_state(%{author_cursor: 0}))
       assert {%{author_cursor: 0}, :repaint} = Keymap.handle(key(:up), author_state(%{author_cursor: 0}))
     end
-
-    test "the author face's cursor is independent of the survey's orbis_focus dimension" do
-      # orbis_focus left at its :threads default (irrelevant while orbis_face == :author) — the
-      # author cursor still moves, proving move_orbis checks orbis_face FIRST.
-      s = author_state(%{orbis_focus: :threads, author_cursor: 0, focused_id: 2})
-      assert {%{author_cursor: 1, focused_id: 2}, :repaint} = Keymap.handle(char("j"), s)
-    end
-
-    test "back on the survey face, j/k move survey_cursor/focused_id as before — untouched by author_cursor" do
-      s =
-        state(%{
-          active_key: :orbis,
-          orbis_face: :survey,
-          orbis_focus: :survey,
-          leaves: %{workspaces: @two_author_workspaces}
-        })
-
-      assert {%{survey_cursor: 1}, :repaint} = Keymap.handle(char("j"), s)
-    end
   end
 
   describe "creating a workspace — the author face's `n` verb + :new_workspace input (D2.3)" do
     @templates Console.WorkspaceTemplates.names()
 
-    test "n in the author face opens :new_workspace input armed with the FIRST template" do
-      s = state(%{active_key: :orbis, orbis_face: :author})
+    test "n in CONFIG opens :new_workspace input armed with the FIRST template" do
+      s = state(%{drawer: :config})
       assert {%{input: %{kind: :new_workspace, buffer: "", template: t}}, :repaint} = Keymap.handle(char("n"), s)
       assert t == List.first(@templates)
     end
 
-    test "n on the survey face still opens :new_thread — unaffected" do
-      s = state(%{active_key: :orbis, orbis_face: :survey})
+    test "n with the drawer shut still opens :new_thread — unaffected" do
+      s = state()
       assert {%{input: %{kind: :new_thread, buffer: ""}}, :repaint} = Keymap.handle(char("n"), s)
     end
 
@@ -350,17 +243,11 @@ defmodule Console.KeymapTest do
 
   describe "deleting a workspace — the author face's `d` verb, two-key confirm (D2.5)" do
     defp author_state2(overrides),
-      do:
-        state(Map.merge(%{active_key: :orbis, orbis_face: :author, author_workspaces: @two_author_workspaces}, overrides))
+      do: state(Map.merge(%{drawer: :config, author_workspaces: @two_author_workspaces}, overrides))
 
     test "d on the cursor workspace arms the confirm: {:arm_delete, id, name}" do
       s = author_state2(%{author_cursor: 1})
       assert {^s, {:arm_delete, 22, "Freedonia"}} = Keymap.handle(char("d"), s)
-    end
-
-    test "d on the survey face is a no-op — nothing to delete from the survey" do
-      s = state(%{active_key: :orbis, orbis_face: :survey})
-      assert {^s, :none} = Keymap.handle(char("d"), s)
     end
 
     test "a second d while armed on the SAME id confirms: {:remove_workspace, id}, and clears the arm" do
@@ -377,17 +264,11 @@ defmodule Console.KeymapTest do
 
   describe "editing a workspace — `e` opens the field editor, h/l cycle type/scope rings (D2.4 Chunk 2a)" do
     defp editor_state(overrides),
-      do:
-        state(Map.merge(%{active_key: :orbis, orbis_face: :author, author_workspaces: @two_author_workspaces}, overrides))
+      do: state(Map.merge(%{drawer: :config, author_workspaces: @two_author_workspaces}, overrides))
 
     test "e on the author cursor workspace opens author_edit at field 0, sub 0" do
       s = editor_state(%{author_cursor: 1})
       assert {%{author_edit: %{id: 22, field: 0, sub: 0, mode: :field}}, :repaint} = Keymap.handle(char("e"), s)
-    end
-
-    test "e on the survey face is a no-op — nothing to edit from the survey" do
-      s = state(%{active_key: :orbis, orbis_face: :survey})
-      assert {^s, :none} = Keymap.handle(char("e"), s)
     end
 
     test "e on an empty workspace list is a no-op" do
@@ -463,7 +344,8 @@ defmodule Console.KeymapTest do
     test "Chunk 1 create/delete/toggle are untouched when author_edit is nil (list view)" do
       s = editor_state(%{author_cursor: 1, author_edit: nil})
       assert {_s, {:arm_delete, 22, "Freedonia"}} = Keymap.handle(char("d"), s)
-      assert {_s, {:toggle_orbis_face}} = Keymap.handle(char("a"), s)
+      # `a` has no list verb in CONFIG (the face toggle died with Orbis) — a no-op, not a habit verb
+      assert {^s, :none} = Keymap.handle(char("a"), s)
     end
   end
 
@@ -471,10 +353,7 @@ defmodule Console.KeymapTest do
     @workspace_with_paths %{id: 22, name: "Freedonia", type: "code", scope: "machine", paths: ["a", "b"], roster: []}
 
     defp paths_state(overrides),
-      do:
-        state(
-          Map.merge(%{active_key: :orbis, orbis_face: :author, author_workspaces: [@workspace_with_paths]}, overrides)
-        )
+      do: state(Map.merge(%{drawer: :config, author_workspaces: [@workspace_with_paths]}, overrides))
 
     test "Enter on field 2 drops into the sub-list: mode: :sub, sub: 0" do
       s = paths_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :field}})
@@ -512,7 +391,7 @@ defmodule Console.KeymapTest do
     test "Enter on a non-empty :new_path buffer emits {:edit_workspace, id, %{paths: existing ++ [buf]}}" do
       s =
         state(%{
-          active_key: :orbis,
+          drawer: :config,
           author_workspaces: [@workspace_with_paths],
           input: %{kind: :new_path, buffer: "c", cursor: 1, workspace_id: 22}
         })
@@ -554,10 +433,7 @@ defmodule Console.KeymapTest do
     }
 
     defp roster_state(overrides),
-      do:
-        state(
-          Map.merge(%{active_key: :orbis, orbis_face: :author, author_workspaces: [@workspace_with_roster]}, overrides)
-        )
+      do: state(Map.merge(%{drawer: :config, author_workspaces: [@workspace_with_roster]}, overrides))
 
     test "Enter on field 3 drops into the sub-list: mode: :sub, sub: 0" do
       s = roster_state(%{author_edit: %{id: 22, field: 3, sub: 0, mode: :field}})
@@ -607,7 +483,7 @@ defmodule Console.KeymapTest do
     test "Enter on a non-empty :new_roster buffer emits {:edit_workspace, id, %{roster: existing ++ [entry]}}" do
       s =
         state(%{
-          active_key: :orbis,
+          drawer: :config,
           author_workspaces: [@workspace_with_roster],
           input: %{kind: :new_roster, buffer: "amy", cursor: 3, workspace_id: 22, archetype: :assistant}
         })
@@ -656,10 +532,7 @@ defmodule Console.KeymapTest do
     }
 
     defp roster_knob_state(overrides),
-      do:
-        state(
-          Map.merge(%{active_key: :orbis, orbis_face: :author, author_workspaces: [@workspace_with_roster]}, overrides)
-        )
+      do: state(Map.merge(%{drawer: :config, author_workspaces: [@workspace_with_roster]}, overrides))
 
     test "Tab flips the armed knob :model <-> :yolo" do
       s = roster_knob_state(%{author_edit: %{id: 22, field: 3, sub: 0, mode: :sub, knob: :model}})
@@ -676,13 +549,15 @@ defmodule Console.KeymapTest do
 
     test "Tab in field-list mode is untouched by the knob clause (author_edit unchanged)" do
       s = roster_knob_state(%{author_edit: %{id: 22, field: 3, sub: 0, mode: :field}})
-      {next, :repaint} = Keymap.handle(key(:tab), s)
+      {next, :none} = Keymap.handle(key(:tab), s)
       assert next.author_edit == s.author_edit
     end
 
+    # (Tab is unbound in the drawer — it used to fall through to the space switch — so the effect
+    # is :none; the assertion is about the edit state.)
     test "Tab in the paths sub-list (field 2) is untouched by the knob clause (author_edit unchanged)" do
       s = roster_knob_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
-      {next, :repaint} = Keymap.handle(key(:tab), s)
+      {next, :none} = Keymap.handle(key(:tab), s)
       assert next.author_edit == s.author_edit
     end
 
@@ -751,14 +626,13 @@ defmodule Console.KeymapTest do
       assert {%{focused_id: 1, leader_pending?: false}, :repaint} = via_leader(char("k"), s)
     end
 
-    test "^B Tab switches spaces" do
-      s = state(%{center_live?: true})
-      assert {%{active_key: 0, leader_pending?: false}, :repaint} = via_leader(key(:tab), s)
+    test "^B Tab switches workspaces" do
+      s = state(%{center_live?: true, active_key: 1, author_workspaces: two_workspaces()})
+      assert {%{active_key: 2, leader_pending?: false}, :repaint} = via_leader(key(:tab), s)
     end
 
     test "^B Enter is a no-op since the Slice 0 collapse (no enter-or-spawn verb)" do
-      # The leader lives in the Tlön terminal; there Enter has no top-level verb (the Orbis
-      # survey's Enter-zooms clause is keyed to :orbis and never matches here).
+      # The leader lives in the Tlön terminal; there Enter has no top-level verb.
       s = state(%{center_live?: true, focused_id: 2, active_key: 0})
       assert {%{leader_pending?: false}, :none} = via_leader(key(:enter), s)
     end
@@ -881,7 +755,7 @@ defmodule Console.KeymapTest do
   describe "the tertius y/n confirm gate — a consequential verb is armed, waiting on y/n (Slice 3.5)" do
     # The arm is `%{action, ctx, summary}` — the routed action to fire, the dispatch ctx, and the
     # human summary. `y` fires it (`:confirm_orchestrate`, apply_effect reads the arm); anything else
-    # backs out. This gate precedes the space/orbis routing — a consequential intent can be armed from
+    # backs out. This gate precedes the space routing — a consequential intent can be armed from
     # either, and every key belongs to the gate until it's answered.
     @arm %{action: {:open, "build", "a cache"}, ctx: %{}, summary: "open [build] “a cache”"}
     defp armed(over \\ %{}), do: state(Map.merge(%{pending_confirm: @arm}, over))
@@ -1213,8 +1087,8 @@ defmodule Console.KeymapTest do
       assert {%{leader_pending?: false}, {:cycle_coworker_model, "tertius"}} = via_leader(char("m"), s)
     end
 
-    test "in a space without a coworker, `m` is a no-op" do
-      s = state(%{active_key: :orbis})
+    test "in a space without a coworker (a key no space has), `m` is a no-op" do
+      s = state(%{active_key: 999})
       assert {^s, :none} = Keymap.handle(char("m"), s)
     end
 
@@ -1307,19 +1181,25 @@ defmodule Console.KeymapTest do
       assert n2.focus.section == 0
     end
 
-    test "in nav mode, Tab and Shift+Tab switch spaces (consistent with the command level)" do
-      # Two-space ring after the collapse: from Tlön, either direction lands on Orbis.
-      s = tlon(nav_focus())
-      assert {%{active_key: :orbis}, :repaint} = Keymap.handle(key(:tab), s)
-      assert {%{active_key: :orbis}, :repaint} = Keymap.handle(key(:tab, shift: true), s)
+    # Workspaces are the only spaces (UX slice 1, task 5): the ring is the keypress's workspace list.
+    test "in nav mode, Tab and Shift+Tab walk the workspace ring, wrapping" do
+      s = tlon(nav_focus(), %{active_key: 1, author_workspaces: two_workspaces()})
+      assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab), s)
+      assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab, shift: true), s)
+      assert {%{active_key: 1}, :repaint} = Keymap.handle(key(:tab), %{s | active_key: 2})
+    end
+
+    test "in nav mode, with no workspaces Tab goes nowhere (server down is not a crash)" do
+      s = tlon(nav_focus(), %{active_key: 0, author_workspaces: []})
+      assert {^s, :none} = Keymap.handle(key(:tab), s)
     end
 
     # UX slice 1, task 2: the rail advertises `[ ]` — bind it to the space ring Tab already walks,
     # so every key the rail's hints name actually does something.
     test "in nav mode, [ and ] walk the space ring like Shift+Tab / Tab" do
-      s = tlon(nav_focus())
-      assert {%{active_key: :orbis}, :repaint} = Keymap.handle(char("]"), s)
-      assert {%{active_key: :orbis}, :repaint} = Keymap.handle(char("["), s)
+      s = tlon(nav_focus(), %{active_key: 1, author_workspaces: two_workspaces()})
+      assert {%{active_key: 2}, :repaint} = Keymap.handle(char("]"), s)
+      assert {%{active_key: 2}, :repaint} = Keymap.handle(char("["), s)
     end
 
     test "in nav mode, j/k move the item cursor within the focused pane, clamped to its count" do
@@ -1413,8 +1293,8 @@ defmodule Console.KeymapTest do
       assert next.input.buffer == "l"
     end
 
-    test "outside Tlön a present focus struct is ignored — Ctrl+Space arms the leader as before" do
-      s = state(%{active_key: :orbis, center_live?: true, focus: Focus.new()})
+    test "off a workspace key (a stale one) a present focus struct is ignored — Ctrl+Space arms the leader as before" do
+      s = state(%{active_key: :stale, center_live?: true, focus: Focus.new()})
       assert {%{leader_pending?: true}, :repaint} = Keymap.handle(leader(), s)
     end
   end
@@ -1462,14 +1342,8 @@ defmodule Console.KeymapTest do
       assert {^s, :none} = Keymap.handle(char("4"), s)
     end
 
-    test "Alt+h / Alt+j in Orbis are no-ops — chords never drive Orbis nav" do
-      s = state(%{active_key: :orbis, orbis_focus: :survey})
-      assert {^s, :none} = Keymap.handle(char("h", alt: true), s)
-      assert {^s, :none} = Keymap.handle(char("j", alt: true), s)
-    end
-
     test "a global Alt chord consumes an armed leader — no stuck prefix" do
-      s = state(%{active_key: :orbis, leader_pending?: true})
+      s = state(%{leader_pending?: true})
       {next, :repaint} = Keymap.handle(char("n", alt: true), s)
       assert next.input.kind == :new_thread
       assert next.leader_pending? == false

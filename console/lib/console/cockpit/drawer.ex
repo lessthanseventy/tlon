@@ -31,7 +31,9 @@ defmodule Console.Cockpit.Drawer do
     triage: Panel.Triage,
     tickets: Panel.TicketBoard,
     notes: Panel.NoteBoard,
-    health: Panel.Health
+    health: Panel.Health,
+    # the Author — workspaces created/edited/removed (roster, repos, knobs) — as CONFIG (task 5)
+    config: Panel.Author
   ]
 
   # Only keys the drawer itself binds — the strip is walkable and closable, nothing more is claimed

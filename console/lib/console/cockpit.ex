@@ -124,7 +124,8 @@ defmodule Console.Cockpit do
             driver: driver,
             w: max(:termbox2_nif.tb_width(), 1),
             h: max(:termbox2_nif.tb_height(), 1),
-            active_key: List.first(Space.all()).key,
+            # the first workspace; `0` is the server-down sentinel (a Workspace key with no space)
+            active_key: (Space.first_workspace() || %{key: 0}).key,
             focused_id: nil,
             threads: [],
             # The rail's last painted rows (`reads.sidebar`) — what the keyboard resolves against.
@@ -777,11 +778,9 @@ defmodule Console.Cockpit do
     {:noreply, render(%{state | input: input})}
   end
 
-  # The spine's settings cog (Slice 3.4): land on the workspace CONFIG surface — Orbis' author face
-  # (D2.1), where workspaces are created/edited/removed (roster, repos, knobs).
-  defp apply_pick({:settings}, state) do
-    {:noreply, render(%{state | active_key: :orbis, orbis_face: :author})}
-  end
+  # The settings verb: the drawer's CONFIG pane — the Author, where workspaces are created/edited/
+  # removed (roster, repos, knobs).
+  defp apply_pick({:settings}, state), do: {:noreply, render(Drawer.open(state, :config))}
 
   # A picked-but-not-yet-wired surface (the spine's Tickets/Notes tools, Slice 3.5): a transient
   # footer note, honest that it's coming, rather than a dead click.
@@ -1076,7 +1075,6 @@ defmodule Console.Cockpit do
   defp apply_effect({:select_tab, _n}, state), do: {:noreply, state}
 
   # `a` (or Esc from the author face) landed: flip Orbis' face and repaint (D2.1).
-  defp apply_effect({:toggle_orbis_face}, state), do: {:noreply, render(Author.toggle_orbis_face(state))}
 
   # The author face's `n` verb landed: register a workspace from the armed template + typed name.
   defp apply_effect({:register_workspace, template, name}, state),

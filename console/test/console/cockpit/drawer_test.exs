@@ -54,7 +54,7 @@ defmodule Console.Cockpit.DrawerTest do
       assert rect.y == 1
       assert rect.y + rect.h == 39
 
-      assert Enum.map(border.tabs, &elem(&1, 0)) == ~w(now crew memory stack roster triage tickets notes health)
+      assert Enum.map(border.tabs, &elem(&1, 0)) == ~w(now crew memory stack roster triage tickets notes health config)
       assert Enum.any?(content, &match?({Panel.Memory, _, _}, &1))
     end
 
@@ -116,8 +116,10 @@ defmodule Console.Cockpit.DrawerTest do
 
   describe "the pane table" do
     test "the order is fixed and each atom maps to one panel" do
-      assert Keyword.keys(Drawer.panes()) == ~w(now crew memory stack roster triage tickets notes health)a
+      assert Keyword.keys(Drawer.panes()) == ~w(now crew memory stack roster triage tickets notes health config)a
       assert Drawer.panel(:memory) == Panel.Memory
+      # the Author lives here as CONFIG (UX slice 1, task 5)
+      assert Drawer.panel(:config) == Panel.Author
       assert Drawer.panel(:tickets) == Panel.TicketBoard
       assert Drawer.panel(:now) == Panel.Activity
       assert Drawer.pane_modules() == Enum.map(Drawer.panes(), &elem(&1, 1))
@@ -126,7 +128,7 @@ defmodule Console.Cockpit.DrawerTest do
     test "keys walk the ring, clamped at both ends (h/l are not a carousel)" do
       assert Drawer.step(:now, -1) == :now
       assert Drawer.step(:now, +1) == :crew
-      assert Drawer.step(:health, +1) == :health
+      assert Drawer.step(:config, +1) == :config
       assert Drawer.at(3) == :stack
       assert Drawer.at(99) == nil
       assert Drawer.index(:stack) == 3

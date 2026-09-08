@@ -84,12 +84,12 @@ defmodule Console.CockpitWorkspacesTest do
       assert length(Workspaces.all()) == 1
     end
 
-    test "removing the ACTIVE workspace resolves active_key to :orbis — never stranded on a dead space" do
-      {:ok, _keep} = Workspaces.register(%{name: "Home", type: "blank"})
+    test "removing the ACTIVE workspace lands on the first remaining one — never stranded on a dead space" do
+      {:ok, keep} = Workspaces.register(%{name: "Home", type: "blank"})
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
       next = Author.remove_workspace!(state(%{active_key: w.id}), w.id)
 
-      assert next.active_key == :orbis
+      assert next.active_key == keep.id
     end
 
     test "removing a workspace that ISN'T active leaves active_key untouched" do

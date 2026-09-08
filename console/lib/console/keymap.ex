@@ -157,7 +157,6 @@ defmodule Console.Keymap do
           | {:switch_space, atom() | non_neg_integer()}
           | {:switch_workspace_pos, pos_integer()}
           | {:select_tab, pos_integer()}
-          | {:toggle_orbis_face}
           | {:register_workspace, atom(), String.t()}
           | {:arm_delete, term(), String.t()}
           | {:remove_workspace, term()}
@@ -450,137 +449,7 @@ defmodule Console.Keymap do
   # console's command table — one source of bindings, reached two ways: bare in a nav-default
   # space, or via the Ctrl+Space leader from inside a running terminal.
 
-  # Orbis' delete confirm (author face, D2.5): a `d` on the cursor row arms; the SECOND `d`
-  # (still armed on that SAME id — nothing else could have changed it, see the next clause)
-  # confirms; literally any other key cancels. Both must precede EVERY other clause (even `q`) so
-  # an armed delete can never be confirmed by a stale keypress.
-  defp command(%{key: :char, char: "d"}, %{active_key: :orbis, pending_delete: id} = state) when not is_nil(id) do
-    {Map.put(state, :pending_delete, nil), {:remove_workspace, id}}
-  end
-
-  defp command(_key, %{active_key: :orbis, pending_delete: id} = state) when not is_nil(id) do
-    {Map.put(state, :pending_delete, nil), :repaint}
-  end
-
-  # the field editor (D2.4 Chunk 2a): `author_edit != nil` gates its own key table, ahead of
-  # the list's `n`/`d`/`a`/Esc/h/l/j/k so editing and list-management never leak into each other.
-
-  # `e` on the list's cursor workspace opens the editor at field 0. A no-op off the author face, on an
-  # empty list, or while ALREADY editing (never re-arms onto a different cursor workspace mid-edit).
-  defp command(%{key: :char, char: "e"}, %{active_key: :orbis} = state) do
-    case {orbis_face(state), author_edit(state), Enum.at(author_workspaces(state), author_cursor(state))} do
-      {:author, nil, %{id: id}} ->
-        {Map.put(state, :author_edit, %{id: id, field: 0, sub: 0, mode: :field, knob: :model}), :repaint}
-
-      _ ->
-        {state, :none}
-    end
-  end
-
-  # Field-list mode: j/k move the field cursor 0..3, clamped (no wrap).
-  defp command(key, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state) when is_vertical(key),
-    do: {put_author_edit(state, %{edit | field: (edit.field + vertical(key)) |> max(0) |> min(3)}), :repaint}
-
-  # Field-list mode: h/l cycle the type (field 0) / scope (field 1) ring against the LIVE workspace
-  # (author_workspaces, threaded per keypress) and emit the edit immediately — no draft/commit step.
-  # Fields 2/3 (paths/roster) have no ring — a no-op, matching the plan's "otherwise no-op".
-  defp command(%{key: :char, char: "h"}, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state),
-    do: {state, field_ring_edit(state, edit, -1)}
-
-  defp command(%{key: :char, char: "l"}, %{active_key: :orbis, author_edit: %{mode: :field} = edit} = state),
-    do: {state, field_ring_edit(state, edit, 1)}
-
-  # Esc in field-list mode clears author_edit — back to the list.
-  defp command(%{key: :escape}, %{active_key: :orbis, author_edit: %{mode: :field}} = state),
-    do: {put_author_edit(state, nil), :repaint}
-
-  # Field-list mode: Enter on fields 2/3 (paths/roster) drops into the sub-list. Fields 0/1's
-  # rings already apply via h/l — nothing for Enter to open, a no-op.
-  defp command(%{key: :enter}, %{active_key: :orbis, author_edit: %{mode: :field, field: f} = edit} = state)
-       when f in [2, 3], do: {put_author_edit(state, %{edit | mode: :sub, sub: 0}), :repaint}
-
-  defp command(%{key: :enter}, %{active_key: :orbis, author_edit: %{mode: :field}} = state), do: {state, :none}
-
-  # Sub-list mode (D2.4 Chunk 2b/2c): j/k move `sub`, clamped to the field's LIVE list length
-  # (paths/roster off author_workspaces, threaded per keypress — never stale).
-  defp command(key, %{active_key: :orbis, author_edit: %{mode: :sub} = edit} = state) when is_vertical(key),
-    do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, vertical(key))}), :repaint}
-
-  # Sub-list mode, field 2 (paths): `a` opens a `:new_path` add buffer (state.input, kind-agnostic
-  # reuse of the printable-insert/Enter/Esc machinery, mirrors `:new_workspace`).
-  defp command(%{key: :char, char: "a"}, %{active_key: :orbis, author_edit: %{mode: :sub, field: 2, id: id}} = state),
-    do: {%{state | input: %{kind: :new_path, buffer: "", cursor: 0, workspace_id: id}}, :repaint}
-
-  # Sub-list mode, field 2 (paths): x/d removes the sub-selected path immediately — no confirm
-  # (unlike the list's whole-workspace delete, an add re-creates it; the two-key arm is reserved for
-  # destroying a WORKSPACE).
-  defp command(
-         %{key: :char, char: c},
-         %{active_key: :orbis, author_edit: %{mode: :sub, field: 2, id: id, sub: sub}} = state
-       )
-       when c in ["x", "d"],
-       do: {state, {:edit_workspace, id, %{paths: List.delete_at(workspace_field(state, id, :paths), sub)}}}
-
-  # Sub-list mode, field 3 (roster): `a` opens a `:new_roster` add flow — the same `state.input`
-  # kit as `:new_path`, plus an `archetype` ring (Profiles.archetypes/0's keys, cycled by h/l
-  # below) armed at the FIRST archetype, mirroring `:new_workspace`'s `template`.
-  defp command(%{key: :char, char: "a"}, %{active_key: :orbis, author_edit: %{mode: :sub, field: 3, id: id}} = state) do
-    input = %{
-      kind: :new_roster,
-      buffer: "",
-      cursor: 0,
-      workspace_id: id,
-      archetype: List.first(Map.keys(Profiles.archetypes()))
-    }
-
-    {%{state | input: input}, :repaint}
-  end
-
-  # Sub-list mode, field 3 (roster): x/d removes the sub-selected entry immediately — same no-confirm
-  # reasoning as field 2's paths removal.
-  defp command(
-         %{key: :char, char: c},
-         %{active_key: :orbis, author_edit: %{mode: :sub, field: 3, id: id, sub: sub}} = state
-       )
-       when c in ["x", "d"],
-       do: {state, {:edit_workspace, id, %{roster: List.delete_at(workspace_field(state, id, :roster), sub)}}}
-
-  # Sub-list mode, field 3 (roster) only: `Tab` flips the knob (:model <-> :yolo) Enter/Space
-  # applies (D2.4 Chunk 2b, absorbs Settings' field-flip). Guarded to field 3 (paths has no knob)
-  # and must precede the generic Tab-switches-space clauses below.
-  defp command(%{key: :tab}, %{active_key: :orbis, author_edit: %{mode: :sub, field: 3} = edit} = state),
-    do: {put_author_edit(state, Map.put(edit, :knob, flip_knob(edit_knob(edit)))), :repaint}
-
-  # Sub-list mode, field 3 (roster) only: Enter/Space applies the active knob to the sub-selected
-  # coworker (the Settings modal's apply, now here) — `name` off the LIVE roster (workspace_field/2,
-  # same source `a`/`x`/`d` read). A vanished entry (sub past the shrunk list) is a no-op.
-  defp command(key, %{active_key: :orbis, author_edit: %{mode: :sub, field: 3}} = state) when is_apply_key(key),
-    do: roster_knob_apply(state)
-
-  # Sub-list mode: Esc steps back to the field list (mode: :field), field unchanged.
-  defp command(%{key: :escape}, %{active_key: :orbis, author_edit: %{mode: :sub} = edit} = state),
-    do: {put_author_edit(state, %{edit | mode: :field}), :repaint}
-
-  # The list's n/d/a verbs are blocked while author_edit is set — editing is its own mode; falling
-  # through here (rather than to the list clauses below) keeps Chunk 1's create/delete/toggle
-  # list-only, untouched when author_edit is nil.
-  defp command(%{key: :char, char: c}, %{active_key: :orbis, author_edit: %{}} = state) when c in ["n", "d", "a"],
-    do: {state, :none}
-
   defp command(%{key: :char, char: "q"}, state), do: {state, :quit}
-
-  # `n` in Orbis' author face opens the create-workspace flow (a template ring + a name buffer, D2.3)
-  # instead of the thread composer; every other space (and Orbis' survey face) keeps `n` == new
-  # thread. `orbis_face/1` isn't guard-safe (a plain function, not a `defguard`), so the branch is
-  # in the body, not the clause head.
-  defp command(%{key: :char, char: "n"}, %{active_key: :orbis} = state) do
-    if orbis_face(state) == :author do
-      input = %{kind: :new_workspace, buffer: "", cursor: 0, template: List.first(WorkspaceTemplates.names())}
-      {%{state | input: input}, :repaint}
-    else
-      {%{state | input: %{kind: :new_thread, buffer: "", cursor: 0}}, :repaint}
-    end
-  end
 
   # `n` focuses the persistent new-thread input band (2026-09-01) — a shortcut to the same input you
   # can click. Type a title, Enter creates (the :new_thread Enter clause → {:create_thread, …}).
@@ -592,29 +461,6 @@ defmodule Console.Keymap do
   # handles the typing/cursor; Enter (above) dispatches to the orchestrator.
   defp command(%{key: :char, char: ":"}, state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
-
-  # `a` (bare) toggles Orbis' author face on; Esc (below, no input open) toggles it back off.
-  # Modifier-guarded like `c`/`m` — Ctrl/Shift/Alt+A never fires this.
-  defp command(%{key: :char, char: "a"} = k, %{active_key: :orbis} = state)
-       when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt),
-       do: {state, {:toggle_orbis_face}}
-
-  # Esc steps the author face back to the survey. Only reached with `input` nil (the input-mode
-  # Esc clause up top intercepts first while typing) — a bare Esc on the survey face is a no-op,
-  # nothing to close.
-  defp command(%{key: :escape}, %{active_key: :orbis} = state) do
-    if orbis_face(state) == :author, do: {state, {:toggle_orbis_face}}, else: {state, :none}
-  end
-
-  # `d` on the author face's cursor workspace arms the delete confirm (D2.5) — the FIRST press; the
-  # armed-state clauses above own the second press and every cancel. A no-op off the author face
-  # (nothing to delete from the survey) or on an empty list.
-  defp command(%{key: :char, char: "d"}, %{active_key: :orbis} = state) do
-    case {orbis_face(state), Enum.at(author_workspaces(state), author_cursor(state))} do
-      {:author, %{id: id, name: name}} -> {state, {:arm_delete, id, name}}
-      _ -> {state, :none}
-    end
-  end
 
   # `c` — the composer: post to the thread `composer_thread_id` (the focused thread in Orbis, the
   # machine thread in Tlön — resolved per keypress by the cockpit, like center_live?).
@@ -630,31 +476,10 @@ defmodule Console.Keymap do
   # only, same modifier discipline as `c`.
   defp command(%{key: :char, char: "m"} = k, %{active_key: key} = state)
        when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt) do
-    case Space.fetch(key).coworker do
-      nil -> {state, :none}
-      profile -> {state, {:cycle_coworker_model, profile}}
-    end
-  end
-
-  # Enter in the Orbis survey (focus == :survey) zooms into the CURSOR row's own workspace id — the
-  # god-view → workspace zoom, resolved from `survey_cursor` against the live workspaces list (D0.3 gives
-  # every row an `id`). With focus on :threads, Enter has no verb here (falls to the plain no-op
-  # below, same as "elsewhere") — the thread list has nothing for Enter to do (Slice 1). The
-  # author face has no Enter verb yet either (opening the field editor is Chunk 2) — a no-op, not
-  # an accidental zoom into the cursor workspace's space.
-  defp command(%{key: :enter}, %{active_key: :orbis} = state) do
-    cond do
-      orbis_face(state) == :author ->
-        {state, :none}
-
-      orbis_focus(state) == :survey ->
-        case Enum.at(survey_workspaces(state), survey_cursor(state)) do
-          %{id: id} -> {state, {:switch_space, id}}
-          _ -> {state, :none}
-        end
-
-      true ->
-        {state, :none}
+    # a missing space (the server-down sentinel 0) has no coworker either
+    case Space.fetch(key) do
+      %{coworker: profile} when not is_nil(profile) -> {state, {:cycle_coworker_model, profile}}
+      _ -> {state, :none}
     end
   end
 
@@ -666,25 +491,10 @@ defmodule Console.Keymap do
   defp command(%{key: :tab, shift: true}, state), do: switch(state, :prev)
   defp command(%{key: :tab}, state), do: switch(state, :next)
 
-  # `h`/`l` toggle Orbis' focus between the survey (per-row cursor) and the thread list (the
-  # existing `focused_id` nav) — Orbis-only; in a Workspace, h/l belong to Focus pane-nav
-  # (`handle_tlon`), never reaching this table. Bare keys only (same modifier discipline as
-  # `a`/`c`/`m`) — a workspace-guarded Alt chord that fell past the Global Alt block must not leak
-  # into Orbis nav.
-  defp command(%{key: :char, char: "h"} = k, %{active_key: :orbis} = state)
-       when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt),
-       do: {toggle_orbis_focus(state), :repaint}
-
-  defp command(%{key: :char, char: "l"} = k, %{active_key: :orbis} = state)
-       when not is_map_key(k, :ctrl) and not is_map_key(k, :shift) and not is_map_key(k, :alt),
-       do: {toggle_orbis_focus(state), :repaint}
-
-  # j/k/↑/↓ route by `orbis_focus`: :survey moves the survey's per-row cursor (clamped, no wrap);
-  # :threads keeps the thread-focus move. Orbis-only: this table is only reached with `active_key
-  # :orbis` (a Workspace routes every key through `handle_tlon`, which delegates just n/c/m here).
-  # The letters must be bare (a chord is never nav); the arrows carry whatever modifiers they have.
-  defp command(key, %{active_key: :orbis} = state) when is_vertical(key) and (key.key != :char or is_bare(key)),
-    do: move_orbis(state, vertical(key))
+  # j/k/↑/↓ move the thread focus — the leader's path from a live terminal (^Space j). The letters
+  # must be bare (a chord is never nav); the arrows carry whatever modifiers they have.
+  defp command(key, state) when is_vertical(key) and (key.key != :char or is_bare(key)),
+    do: move_thread(state, vertical(key))
 
   # Anything else (Ctrl+C, F-keys, page-up…) is unbound — a no-op, never a quit.
   defp command(_key, state), do: {state, :none}
@@ -818,54 +628,193 @@ defmodule Console.Keymap do
   def handle_drawer(_key, %{tlon_delete: target} = state) when not is_nil(target),
     do: {%{state | tlon_delete: nil}, :repaint}
 
+  # CONFIG (the Author, UX slice 1 task 5): its own key table — the workspace list's n/e/d, the
+  # field editor, the sub-lists — then the drawer's common keys.
+  def handle_drawer(key, %{drawer: :config} = state), do: config(key, state)
+
+  def handle_drawer(key, state), do: drawer_common(key, state)
+
+  # The drawer's common keys, every pane.
   # Esc steps back one level: an open detail first, then the drawer itself.
-  def handle_drawer(%{key: :escape}, %{focus: %Focus{detail?: true}} = state),
+  defp drawer_common(%{key: :escape}, %{focus: %Focus{detail?: true}} = state),
     do: {focus_intent(state, :close_detail), :repaint}
 
-  def handle_drawer(%{key: :escape}, state), do: {Drawer.close(state), :repaint}
+  defp drawer_common(%{key: :escape}, state), do: {Drawer.close(state), :repaint}
 
-  def handle_drawer(%{key: :char, char: "d", alt: true} = k, state) when not is_map_key(k, :ctrl),
+  defp drawer_common(%{key: :char, char: "d", alt: true} = k, state) when not is_map_key(k, :ctrl),
     do: {Drawer.close(state), :repaint}
 
   # 1-9 jump straight to a pane; a digit past the strip is a no-op, never a blank drawer.
-  def handle_drawer(%{key: :char, char: d} = k, state) when is_bare(k) and d in ~w(1 2 3 4 5 6 7 8 9) do
+  defp drawer_common(%{key: :char, char: d} = k, state) when is_bare(k) and d in ~w(1 2 3 4 5 6 7 8 9) do
     case Drawer.at(String.to_integer(d) - 1) do
       nil -> {state, :none}
       key -> {Drawer.open(state, key), :repaint}
     end
   end
 
-  def handle_drawer(%{key: :char, char: "l"}, state), do: {Drawer.open(state, Drawer.step(state.drawer, +1)), :repaint}
-  def handle_drawer(%{key: :char, char: "h"}, state), do: {Drawer.open(state, Drawer.step(state.drawer, -1)), :repaint}
+  defp drawer_common(%{key: :char, char: "l"}, state), do: {Drawer.open(state, Drawer.step(state.drawer, +1)), :repaint}
+  defp drawer_common(%{key: :char, char: "h"}, state), do: {Drawer.open(state, Drawer.step(state.drawer, -1)), :repaint}
 
   # TICKETS is a grid, so its cursor needs a horizontal move too — `H`/`L`, since `h`/`l` walk the
   # strip. The cockpit owns the move (the live columns are a server read); the keymap stays pure.
-  def handle_drawer(%{key: :char, char: c}, %{drawer: :tickets} = state) when c in ~w(H L),
+  defp drawer_common(%{key: :char, char: c}, %{drawer: :tickets} = state) when c in ~w(H L),
     do: {state, {:ticket_move, if(c == "H", do: "h", else: "l")}}
 
-  def handle_drawer(key, %{drawer: :tickets} = state) when is_vertical(key),
+  defp drawer_common(key, %{drawer: :tickets} = state) when is_vertical(key),
     do: {state, {:ticket_move, if(vertical(key) == 1, do: "j", else: "k")}}
 
-  def handle_drawer(%{key: :char, char: "p"}, %{drawer: :tickets} = state), do: {state, :ticket_advance}
+  defp drawer_common(%{key: :char, char: "p"}, %{drawer: :tickets} = state), do: {state, :ticket_advance}
 
   # `n` on a board files/jots one — the same create inputs the New menu opens.
-  def handle_drawer(%{key: :char, char: "n"}, %{drawer: :tickets} = state),
+  defp drawer_common(%{key: :char, char: "n"}, %{drawer: :tickets} = state),
     do: {%{state | input: %{kind: :new_ticket, buffer: "", cursor: 0}}, :repaint}
 
-  def handle_drawer(%{key: :char, char: "n"}, %{drawer: :notes} = state),
+  defp drawer_common(%{key: :char, char: "n"}, %{drawer: :notes} = state),
     do: {%{state | input: %{kind: :new_note, buffer: "", cursor: 0}}, :repaint}
 
   # j/k move the open pane's own item cursor (stored per pane, so each keeps its place).
-  def handle_drawer(key, state) when is_vertical(key), do: {focus_intent(state, item_intent(vertical(key))), :repaint}
+  defp drawer_common(key, state) when is_vertical(key), do: {focus_intent(state, item_intent(vertical(key))), :repaint}
 
   # Enter is contextual — the cockpit resolves the open pane (lazygit zoom / a detail / a promote).
-  def handle_drawer(%{key: :enter}, state), do: {state, :tlon_enter}
-  def handle_drawer(%{key: :char, char: "s"}, state), do: {focus_intent(state, :section_next), :repaint}
-  def handle_drawer(%{key: :char, char: "y"}, state), do: {state, :yank}
-  def handle_drawer(%{key: :char, char: "d"}, state), do: {state, :tlon_delete_arm}
-  def handle_drawer(%{key: :char, char: "a"}, state), do: {state, {:habit_action, :approve}}
-  def handle_drawer(%{key: :char, char: "r"}, state), do: {state, {:habit_action, :reject}}
-  def handle_drawer(_key, state), do: {state, :none}
+  defp drawer_common(%{key: :enter}, state), do: {state, :tlon_enter}
+  defp drawer_common(%{key: :char, char: "s"}, state), do: {focus_intent(state, :section_next), :repaint}
+  defp drawer_common(%{key: :char, char: "y"}, state), do: {state, :yank}
+  defp drawer_common(%{key: :char, char: "d"}, state), do: {state, :tlon_delete_arm}
+  defp drawer_common(%{key: :char, char: "a"}, state), do: {state, {:habit_action, :approve}}
+  defp drawer_common(%{key: :char, char: "r"}, state), do: {state, {:habit_action, :reject}}
+  defp drawer_common(_key, state), do: {state, :none}
+
+  # CONFIG's delete confirm (D2.5): a `d` on the cursor row arms; the SECOND `d`
+  # (still armed on that SAME id — nothing else could have changed it, see the next clause)
+  # confirms; literally any other key cancels. Both must precede EVERY other clause (even `q`) so
+  # an armed delete can never be confirmed by a stale keypress.
+  defp config(%{key: :char, char: "d"}, %{pending_delete: id} = state) when not is_nil(id) do
+    {Map.put(state, :pending_delete, nil), {:remove_workspace, id}}
+  end
+
+  defp config(_key, %{pending_delete: id} = state) when not is_nil(id) do
+    {Map.put(state, :pending_delete, nil), :repaint}
+  end
+
+  # the field editor (D2.4 Chunk 2a): `author_edit != nil` gates its own key table, ahead of
+  # the list's `n`/`d`/`a`/Esc/h/l/j/k so editing and list-management never leak into each other.
+
+  # `e` on the list's cursor workspace opens the editor at field 0. A no-op on an
+  # empty list, or while ALREADY editing (never re-arms onto a different cursor workspace mid-edit).
+  defp config(%{key: :char, char: "e"}, state) do
+    case {author_edit(state), Enum.at(author_workspaces(state), author_cursor(state))} do
+      {nil, %{id: id}} ->
+        {Map.put(state, :author_edit, %{id: id, field: 0, sub: 0, mode: :field, knob: :model}), :repaint}
+
+      _ ->
+        {state, :none}
+    end
+  end
+
+  # Field-list mode: j/k move the field cursor 0..3, clamped (no wrap).
+  defp config(key, %{author_edit: %{mode: :field} = edit} = state) when is_vertical(key),
+    do: {put_author_edit(state, %{edit | field: (edit.field + vertical(key)) |> max(0) |> min(3)}), :repaint}
+
+  # Field-list mode: h/l cycle the type (field 0) / scope (field 1) ring against the LIVE workspace
+  # (author_workspaces, threaded per keypress) and emit the edit immediately — no draft/commit step.
+  # Fields 2/3 (paths/roster) have no ring — a no-op, matching the plan's "otherwise no-op".
+  defp config(%{key: :char, char: "h"}, %{author_edit: %{mode: :field} = edit} = state),
+    do: {state, field_ring_edit(state, edit, -1)}
+
+  defp config(%{key: :char, char: "l"}, %{author_edit: %{mode: :field} = edit} = state),
+    do: {state, field_ring_edit(state, edit, 1)}
+
+  # Esc in field-list mode clears author_edit — back to the list.
+  defp config(%{key: :escape}, %{author_edit: %{mode: :field}} = state), do: {put_author_edit(state, nil), :repaint}
+
+  # Field-list mode: Enter on fields 2/3 (paths/roster) drops into the sub-list. Fields 0/1's
+  # rings already apply via h/l — nothing for Enter to open, a no-op.
+  defp config(%{key: :enter}, %{author_edit: %{mode: :field, field: f} = edit} = state) when f in [2, 3],
+    do: {put_author_edit(state, %{edit | mode: :sub, sub: 0}), :repaint}
+
+  defp config(%{key: :enter}, %{author_edit: %{mode: :field}} = state), do: {state, :none}
+
+  # Sub-list mode (D2.4 Chunk 2b/2c): j/k move `sub`, clamped to the field's LIVE list length
+  # (paths/roster off author_workspaces, threaded per keypress — never stale).
+  defp config(key, %{author_edit: %{mode: :sub} = edit} = state) when is_vertical(key),
+    do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, vertical(key))}), :repaint}
+
+  # Sub-list mode, field 2 (paths): `a` opens a `:new_path` add buffer (state.input, kind-agnostic
+  # reuse of the printable-insert/Enter/Esc machinery, mirrors `:new_workspace`).
+  defp config(%{key: :char, char: "a"}, %{author_edit: %{mode: :sub, field: 2, id: id}} = state),
+    do: {%{state | input: %{kind: :new_path, buffer: "", cursor: 0, workspace_id: id}}, :repaint}
+
+  # Sub-list mode, field 2 (paths): x/d removes the sub-selected path immediately — no confirm
+  # (unlike the list's whole-workspace delete, an add re-creates it; the two-key arm is reserved for
+  # destroying a WORKSPACE).
+  defp config(%{key: :char, char: c}, %{author_edit: %{mode: :sub, field: 2, id: id, sub: sub}} = state)
+       when c in ["x", "d"],
+       do: {state, {:edit_workspace, id, %{paths: List.delete_at(workspace_field(state, id, :paths), sub)}}}
+
+  # Sub-list mode, field 3 (roster): `a` opens a `:new_roster` add flow — the same `state.input`
+  # kit as `:new_path`, plus an `archetype` ring (Profiles.archetypes/0's keys, cycled by h/l
+  # below) armed at the FIRST archetype, mirroring `:new_workspace`'s `template`.
+  defp config(%{key: :char, char: "a"}, %{author_edit: %{mode: :sub, field: 3, id: id}} = state) do
+    input = %{
+      kind: :new_roster,
+      buffer: "",
+      cursor: 0,
+      workspace_id: id,
+      archetype: List.first(Map.keys(Profiles.archetypes()))
+    }
+
+    {%{state | input: input}, :repaint}
+  end
+
+  # Sub-list mode, field 3 (roster): x/d removes the sub-selected entry immediately — same no-confirm
+  # reasoning as field 2's paths removal.
+  defp config(%{key: :char, char: c}, %{author_edit: %{mode: :sub, field: 3, id: id, sub: sub}} = state)
+       when c in ["x", "d"],
+       do: {state, {:edit_workspace, id, %{roster: List.delete_at(workspace_field(state, id, :roster), sub)}}}
+
+  # Sub-list mode, field 3 (roster) only: `Tab` flips the knob (:model <-> :yolo) Enter/Space
+  # applies (D2.4 Chunk 2b, absorbs Settings' field-flip). Guarded to field 3 (paths has no knob)
+  # and must precede the generic Tab-switches-space clauses below.
+  defp config(%{key: :tab}, %{author_edit: %{mode: :sub, field: 3} = edit} = state),
+    do: {put_author_edit(state, Map.put(edit, :knob, flip_knob(edit_knob(edit)))), :repaint}
+
+  # Sub-list mode, field 3 (roster) only: Enter/Space applies the active knob to the sub-selected
+  # coworker (the Settings modal's apply, now here) — `name` off the LIVE roster (workspace_field/2,
+  # same source `a`/`x`/`d` read). A vanished entry (sub past the shrunk list) is a no-op.
+  defp config(key, %{author_edit: %{mode: :sub, field: 3}} = state) when is_apply_key(key), do: roster_knob_apply(state)
+
+  # Sub-list mode: Esc steps back to the field list (mode: :field), field unchanged.
+  defp config(%{key: :escape}, %{author_edit: %{mode: :sub} = edit} = state),
+    do: {put_author_edit(state, %{edit | mode: :field}), :repaint}
+
+  # The list's n/d/a verbs are blocked while author_edit is set — editing is its own mode; falling
+  # through here (rather than to the list clauses below) keeps Chunk 1's create/delete/toggle
+  # list-only, untouched when author_edit is nil.
+  defp config(%{key: :char, char: c}, %{author_edit: %{}} = state) when c in ["n", "d", "a"], do: {state, :none}
+
+  # `n` opens the create-workspace flow (a template ring + a name buffer, D2.3).
+  defp config(%{key: :char, char: "n"}, state) do
+    input = %{kind: :new_workspace, buffer: "", cursor: 0, template: List.first(WorkspaceTemplates.names())}
+    {%{state | input: input}, :repaint}
+  end
+
+  # `d` on the cursor workspace arms the delete confirm (D2.5) — the FIRST press; the armed-state
+  # clauses above own the second press and every cancel. A no-op on an empty list.
+  defp config(%{key: :char, char: "d"}, state) do
+    case Enum.at(author_workspaces(state), author_cursor(state)) do
+      %{id: id, name: name} -> {state, {:arm_delete, id, name}}
+      _ -> {state, :none}
+    end
+  end
+
+  # j/k walk the workspace list; Enter has no verb on the list (e opens the editor) — and never
+  # the drawer's :tlon_enter, which would arm a detail this pane cannot show.
+  defp config(key, state) when is_vertical(key) and (key.key != :char or is_bare(key)),
+    do: move_author_cursor(state, vertical(key))
+
+  defp config(%{key: :enter}, state), do: {state, :none}
+  defp config(%{key: :char, char: "a"}, state), do: {state, :none}
+  defp config(key, state), do: drawer_common(key, state)
 
   defp focus_intent(state, intent), do: %{state | focus: Focus.handle(state.focus, state.tlon_layout, intent)}
 
@@ -897,13 +846,17 @@ defmodule Console.Keymap do
     %{state | focus: Focus.handle(focus, state.tlon_layout, @alt_moves[c])}
   end
 
+  # Tab/Shift+Tab/[ ] walk the workspace ring; with no workspaces (server down) there is nowhere
+  # to go — a no-op, not a crash.
   defp switch(state, dir) do
-    space =
-      if dir == :next,
-        do: Space.next(state.active_key),
-        else: Space.prev(state.active_key)
+    # the ring is the keypress's own workspace list (the cockpit threads the cache in), so the
+    # keymap stays pure and a test can hand it two workspaces
+    spaces = Space.all(author_workspaces(state))
 
-    {%{state | active_key: space.key}, :repaint}
+    case if(dir == :next, do: Space.next(state.active_key, spaces), else: Space.prev(state.active_key, spaces)) do
+      nil -> {state, :none}
+      space -> {%{state | active_key: space.key}, :repaint}
+    end
   end
 
   # The thread cursor: one step through `state.threads`, clamped (no wrap) — the Workspace stack's
@@ -919,34 +872,6 @@ defmodule Console.Keymap do
   defp stack_jump(%{threads: []} = state, _), do: {state, :none}
   defp stack_jump(state, :first), do: {%{state | focused_id: hd(state.threads).id}, :repaint}
   defp stack_jump(state, :last), do: {%{state | focused_id: List.last(state.threads).id}, :repaint}
-
-  # Dispatch Orbis' j/k/↑/↓: the author face's own cursor takes priority over `orbis_focus`
-  # (survey/threads is meaningless while the author face is showing — Panel.Author, not Overview);
-  # else the survey's per-row cursor, or the thread move (`move_thread/2` — keeps the composer's `c`
-  # target working).
-  defp move_orbis(state, dir) do
-    cond do
-      orbis_face(state) == :author -> move_author_cursor(state, dir)
-      orbis_focus(state) == :survey -> move_survey(state, dir)
-      true -> move_thread(state, dir)
-    end
-  end
-
-  # Clamp `survey_cursor` into `0..length(workspaces) - 1` — no wrap, same edge-clamp discipline as
-  # `move_thread/2`. Zero workspaces clamps to 0 (harmless; Enter no-ops on an empty survey).
-  # `Map.put/3`, not `%{state | ...}` — that raises KeyError when `:survey_cursor` is absent (an
-  # older test's literal state map, built before this field existed), same tolerance as the
-  # composer's `insert_at/2`.
-  defp move_survey(state, dir) do
-    max_idx = max(length(survey_workspaces(state)) - 1, 0)
-    cursor = (survey_cursor(state) + dir) |> max(0) |> min(max_idx)
-    {Map.put(state, :survey_cursor, cursor), :repaint}
-  end
-
-  defp toggle_orbis_focus(state) do
-    next = if orbis_focus(state) == :survey, do: :threads, else: :survey
-    Map.put(state, :orbis_focus, next)
-  end
 
   # Clamp `author_cursor` into `0..length(author_workspaces) - 1` — same edge-clamp discipline as
   # `move_survey/2`.
@@ -974,9 +899,6 @@ defmodule Console.Keymap do
 
   # Defaults tolerate a state map built before these fields existed (an older test's literal
   # state) — `:survey`/`0`, matching the cockpit's init-state defaults.
-  defp orbis_focus(state), do: Map.get(state, :orbis_focus, :survey)
-  defp survey_cursor(state), do: Map.get(state, :survey_cursor, 0)
-  defp orbis_face(state), do: Map.get(state, :orbis_face, :survey)
   defp author_cursor(state), do: Map.get(state, :author_cursor, 0)
   defp author_edit(state), do: Map.get(state, :author_edit)
   defp put_author_edit(state, edit), do: Map.put(state, :author_edit, edit)
@@ -1036,21 +958,6 @@ defmodule Console.Keymap do
     end
   end
 
-  # The live workspaces list Orbis' survey cursor/Enter resolve against — the same cached
-  # `Console.Orbis.rollup/0` the cockpit's `orbis_workspaces/1` reads (`state.leaves.workspaces`). Kept local
-  # (not a call into `Console.Cockpit`) so the keymap stays a pure reducer over its passed-in state.
-  defp survey_workspaces(state) do
-    case Map.get(state, :leaves) do
-      %{workspaces: workspaces} -> workspaces
-      _ -> []
-    end
-  end
-
-  # The author face's own workspace list — `Console.Workspaces.all/0`, threaded in per keypress by the
-  # cockpit (like `composer_thread_id`) so this stays a pure reducer with no server call of its
-  # own. Distinct from `survey_workspaces/1` (the Orbis rollup, which is `nil` whenever there are no
-  # MACHINE THREADS yet — a freshly-created, thread-less workspace would vanish from that list even
-  # though it's a real row here).
   defp author_workspaces(state), do: Map.get(state, :author_workspaces, [])
 
   # Input-buffer cursor math (graphemes, not bytes). `input.cursor` defaults to the buffer's end when

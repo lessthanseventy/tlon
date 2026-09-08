@@ -36,7 +36,16 @@ defmodule Console.Cockpit.AuthorTest do
 
   describe "handle_menu_key/2" do
     setup do
-      %{state: %{menu: Author.workspace_menu(@ws, 1, 1), active_key: 3, orbis_face: :survey}}
+      %{
+        state: %{
+          menu: Author.workspace_menu(@ws, 1, 1),
+          active_key: 3,
+          drawer: nil,
+          last_drawer: :memory,
+          author_cursor: 0,
+          focus: Console.Tlon.Focus.new()
+        }
+      }
     end
 
     test "j/k wrap the cursor round the items", %{state: state} do
@@ -50,9 +59,9 @@ defmodule Console.Cockpit.AuthorTest do
       assert Author.handle_menu_key(%{key: :char, char: "x"}, state) == :ignore
     end
 
-    test "Enter on Configure lands on the author face; on Delete arms the confirm menu", %{state: state} do
+    test "Enter on Configure opens the drawer's CONFIG pane; on Delete arms the confirm menu", %{state: state} do
       configure = put_in(state.menu.cursor, 1)
-      assert %{menu: nil, active_key: :orbis, orbis_face: :author} = Author.handle_menu_key(%{key: :enter}, configure)
+      assert %{menu: nil, drawer: :config} = Author.handle_menu_key(%{key: :enter}, configure)
 
       delete = put_in(state.menu.cursor, 2)
       assert %{menu: %{title: "delete?", cursor: 1}} = Author.handle_menu_key(%{key: :enter}, delete)
@@ -68,18 +77,6 @@ defmodule Console.Cockpit.AuthorTest do
         |> Ecto.Changeset.add_error(:type, "is invalid")
 
       assert Author.changeset_error(cs) == "name has already been taken; type is invalid"
-    end
-  end
-
-  # D2.1: `a`/Esc land `{:toggle_orbis_face}`; `toggle_orbis_face/1` is the pure flip the effect
-  # runs — exposed so it's testable without a live GenServer.
-  describe "toggle_orbis_face/1: Orbis' survey↔author flip" do
-    test "flips :survey to :author" do
-      assert %{orbis_face: :author} = Author.toggle_orbis_face(%{orbis_face: :survey})
-    end
-
-    test "flips :author back to :survey" do
-      assert %{orbis_face: :survey} = Author.toggle_orbis_face(%{orbis_face: :author})
     end
   end
 end

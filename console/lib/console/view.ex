@@ -55,13 +55,7 @@ defmodule Console.View do
     # get distinct data. Wide viewports get three columns; narrow ones collapse to one.
     # MAIN is the terminal by default; a Tlön focus that opened a detail (Enter) replaces it with
     # the Detail panel until Esc closes it (the tmux terminal keeps running underneath, unpainted).
-    # Orbis' author face (D2.1) replaces the survey (Overview) with Panel.Author the same way.
-    center_panels =
-      cond do
-        detail_open?(reads) -> [Panel.Detail]
-        reads.active_key == :orbis and reads[:orbis_face] == :author -> [Panel.Author]
-        true -> chat_center(space.surface, reads)
-      end
+    center_panels = if detail_open?(reads), do: [Panel.Detail], else: chat_center(space.surface, reads)
 
     # UX slice 1: TWO regions — the always-on RAIL (workspaces + the active workspace's threads) at
     # the frame's left edge, and the CENTER (thread stack + tertius). The spine and the funes rail
