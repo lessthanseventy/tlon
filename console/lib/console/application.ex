@@ -13,7 +13,7 @@ defmodule Console.Application do
       [
         {DynamicSupervisor, name: Console.TerminalSup, strategy: :one_for_one},
         Console.Sessions
-      ] ++ maybe_workspaces()
+      ] ++ maybe_link() ++ maybe_workspaces()
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Console.Supervisor)
   end
@@ -23,6 +23,14 @@ defmodule Console.Application do
   # server workspaces Bus and cache workspaces registered by async DB tests, polluting Space.all/0 for the
   # pure-render tests. With it unstarted, fetch_workspaces/0 degrades to [] → the deterministic Tlön
   # fallback the render tests rely on.
+  # the node link to the always-up server, only under the Remote backend (Local = the server is
+  # in this node: tests, server:dev); Workspaces comes after it so its first cache fill can land
+  defp maybe_link do
+    if Console.Backend.impl() == Console.Backend.Remote,
+      do: [{Registry, keys: :duplicate, name: Console.Backend.Link.Registry}, Console.Backend.Link],
+      else: []
+  end
+
   defp maybe_workspaces do
     if Application.get_env(:console, :start_workspaces, true), do: [Console.Workspaces], else: []
   end
