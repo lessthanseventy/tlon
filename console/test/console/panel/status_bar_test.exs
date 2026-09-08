@@ -64,6 +64,13 @@ defmodule Console.Panel.StatusBarTest do
     assert line =~ "⏎ diff"
   end
 
+  test "NAV mode names the session pane's mode, so Alt+\\ says what it would leave" do
+    for {mode, label} <- [{:auto, "Alt+\\ pane auto"}, {true, "Alt+\\ pane on"}, {false, "Alt+\\ pane off"}] do
+      data = base(%{mode: :nav, workspace?: true, session_pane: mode})
+      assert text(StatusBar.render(data, rect())) =~ label
+    end
+  end
+
   test "LOCK mode: the unlock chord alone" do
     [hints] = StatusBar.render(base(%{mode: :lock, workspace?: true}), rect())
     line = text([hints])

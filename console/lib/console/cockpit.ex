@@ -193,10 +193,10 @@ defmodule Console.Cockpit do
             # `lazygit` PTY is up over the focused thread's worktree, else nil. The terminal itself
             # lives in `Console.Sessions` keyed `{:lazygit, thread_id}`; this only marks the overlay.
             lazygit: nil,
-            # The toggleable right SESSION PANE (2026-08-31): true = show the selected thread's live
-            # lead PTY in a right column beside the thread stack. The target follows the stack cursor;
-            # the terminal lives in `Console.Sessions` keyed `{:session, thread_id}`. Alt+\ toggles.
-            session_pane: false,
+            # The right SESSION PANE's mode: `:auto` (follow the coworker — the pane is up whenever the
+            # OPEN thread's lead PTY is live), or `true`/`false` forcing it on/off. The terminal lives
+            # in `Console.Sessions` keyed `{:session, thread_id}`. Alt+\ cycles the three.
+            session_pane: :auto,
             paste_buffer: nil,
             input: nil,
             flash: nil,
@@ -990,9 +990,11 @@ defmodule Console.Cockpit do
     {:noreply, render(next)}
   end
 
-  # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
-  # beside the stack. Only meaningful in a workspace chat view; elsewhere it's a harmless flip.
-  defp apply_effect(:toggle_session_pane, state), do: {:noreply, render(%{state | session_pane: not state.session_pane})}
+  # Alt+\ cycles the right SESSION PANE's mode — :auto → off → on → :auto — so the operator can pin
+  # the pane open or shut instead of only following the coworker. Only meaningful in a workspace chat
+  # view; elsewhere it's a harmless mode change.
+  defp apply_effect(:toggle_session_pane, state),
+    do: {:noreply, render(%{state | session_pane: Reads.cycle_session_pane(state.session_pane)})}
 
   # The `m` verb landed: advance the coworker's driver model one step round the ring and persist
   # it (Console.Config). Honest about scope: the RUNNING coworker keeps its model — the override
@@ -1263,12 +1265,12 @@ defmodule Console.Cockpit do
     end
   end
 
-  # Spawn (or reuse) the selected thread's lead session PTY when the pane is on — a tmux client
+  # Spawn (or reuse) the OPEN thread's lead session PTY unless the pane is forced off — a tmux client
   # attached to the thread's lead window in the workspace session (`Console.SessionPane.command/1`).
   # Rate-limited out of the hot path like the other ensure_* preamble steps; a miss just leaves the
   # pane on `:no_session` this frame. LIVE-tunable (the attach shape is the kitty pass).
   defp ensure_session(state) do
-    with id when is_integer(id) <- Reads.session_pane_target(state),
+    with id when is_integer(id) <- Reads.session_thread(state),
          nil <- session_terminal_pid(id),
          %{index: index} <- Tmux.leaf_tab(Tmux.list_windows(Space.active_workspace_id(state)), id) do
       {cmd, args} = Console.SessionPane.command(Space.active_workspace_id(state), index)

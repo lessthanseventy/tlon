@@ -132,17 +132,34 @@ defmodule Console.ReadsTest do
   end
 
   describe "the session pane" do
-    test "targets the stack cursor only when toggled on, in a workspace, in chat view" do
-      on = %{session_pane: true, active_key: 0, center_view: :chat, stack_focus: 7}
-      assert Reads.session_pane_target(on) == 7
-      assert Reads.session_pane_target(%{on | session_pane: false}) == nil
-      assert Reads.session_pane_target(%{on | center_view: :terminal}) == nil
-      assert Reads.session_pane_target(%{on | active_key: :orbis}) == nil
-      assert Reads.session_pane_target(%{on | stack_focus: nil}) == nil
+    # The pane sits beside the OPEN conversation, in a workspace chat view — nowhere else.
+    test "the attachable thread is the OPEN one; `false` stops the attach outright" do
+      open = %{session_pane: :auto, active_key: 0, center_view: :chat, opened_thread: 7}
+      assert Reads.session_thread(open) == 7
+      assert Reads.session_thread(%{open | session_pane: true}) == 7
+      assert Reads.session_thread(%{open | session_pane: false}) == nil
+      assert Reads.session_thread(%{open | center_view: :terminal}) == nil
+      assert Reads.session_thread(%{open | active_key: :orbis}) == nil
+      assert Reads.session_thread(%{open | opened_thread: nil}) == nil
     end
 
-    test "dims are a third of the width, never zero" do
-      assert Reads.session_pane_dims(%{w: 120, h: 40}) == {38, 37}
+    # :auto follows the coworker (no live PTY under test → no pane); true/false force the mode.
+    test "the target: `true` forces the pane on, `false` off, `:auto` follows the live session" do
+      open = %{session_pane: true, active_key: 0, center_view: :chat, opened_thread: 7}
+      assert Reads.session_pane_target(open) == 7
+      assert Reads.session_pane_target(%{open | session_pane: false}) == nil
+      assert Reads.session_pane_target(%{open | session_pane: :auto}) == nil
+      assert Reads.session_pane_target(%{open | opened_thread: nil}) == nil
+    end
+
+    test "Alt+\\ cycles the mode :auto → off → on → :auto" do
+      assert Reads.cycle_session_pane(:auto) == false
+      assert Reads.cycle_session_pane(false) == true
+      assert Reads.cycle_session_pane(true) == :auto
+    end
+
+    test "dims are the pane's own half of the centre, never zero" do
+      assert Reads.session_pane_dims(%{w: 120, h: 40}) == {43, 36}
       assert Reads.session_pane_dims(%{w: 3, h: 2}) == {1, 1}
     end
   end

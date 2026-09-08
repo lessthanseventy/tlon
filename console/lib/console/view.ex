@@ -23,6 +23,9 @@ defmodule Console.View do
   @status_h 1
   # Below this width (phone / a shrunk tile) the three columns collapse to one (Addendum §D).
   @wide_min 80
+  # Below this the centre stays ONE pane: two halves of a narrower frame are too thin to read a
+  # conversation and a terminal side by side. A live session still splits it — that pane was asked for.
+  @two_pane_min 100
   # Panels whose content can overflow their box and so accept a `:scroll` offset (wheel scroll).
   # The center Terminal and StatusBar/Border never overflow.
   @scrollable [
@@ -68,18 +71,15 @@ defmodule Console.View do
     boxes =
       case layout_for(w) do
         :wide ->
-          session? = is_integer(reads[:session_pane])
-          cols = wide_columns(w, body_h, session?)
+          right = right_section(reads, w)
+          cols = wide_columns(w, body_h, right != nil)
 
           # Nav v2 (Andrew 2026-08-31): NO pane digits. Alt+N is tmux tabs, Alt+Shift+N is workspaces.
           base =
             no_digits(boxed(rail, cols.rail)) ++
               no_digits(boxed(center_panels, cols.center, new_thread_overrides(reads, cols.center.w)))
 
-          # The right session pane (the selected thread's live lead PTY), only when toggled on.
-          if session?,
-            do: base ++ no_digits(boxed([{Panel.Terminal, :session}], cols.right)),
-            else: base
+          if right, do: base ++ no_digits(boxed([right], cols.right)), else: base
 
         :narrow ->
           no_digits(boxed(rail ++ center_panels, %{x: 0, y: @top_h, w: w, h: body_h}))
@@ -207,8 +207,10 @@ defmodule Console.View do
 
   # The on-frame title per section. A section with no entry (Terminal, the center surfaces) gets a
   # bare frame.
-  # The right session pane's frame title (the selected thread's live lead PTY).
+  # The right session pane's frame title (the open thread's live lead PTY).
   defp section_title({Panel.Terminal, :session}), do: "SESSION"
+  # Same box, same name — only the contents differ (no live PTY to attach yet).
+  defp section_title(Panel.Placeholder), do: "SESSION"
   defp section_title({panel, _read_key}), do: section_title(panel)
   # The always-on left rail (UX slice 1) — workspaces + the active workspace's threads.
   defp section_title(Panel.Rail), do: "RAIL"
@@ -234,6 +236,21 @@ defmodule Console.View do
 
   defp focus_slice(_reads), do: nil
 
+  # What the right pane holds, or nil — the conversation then spans the whole centre. A live session
+  # puts the coworker's PTY there; with none, an OPEN conversation still keeps the pane, holding the
+  # stand-in that names the spawn verb, so the frame doesn't reflow every time a session ends.
+  defp right_section(reads, w) do
+    cond do
+      is_integer(reads[:session_pane]) -> {Panel.Terminal, :session}
+      w >= @two_pane_min and conversation_open?(reads) -> Panel.Placeholder
+      true -> nil
+    end
+  end
+
+  # The pane sits beside the CONVERSATION (design 2026-09-08 §2) — never beside the machine terminal,
+  # which owns the whole centre.
+  defp conversation_open?(reads), do: reads[:center_view] == :chat and not is_nil(opened_id(reads))
+
   # The two-region geometry (UX slice 1): the RAIL at the frame's left edge, and the CENTER (the
   # rest) — the single source of truth for where each region sits. `compose/3` places panels into
   # these, and `center_rect/3` derives the center Terminal's content rect from the SAME math, so the
@@ -246,10 +263,11 @@ defmodule Console.View do
 
     base = %{rail: %{x: 0, y: @top_h, w: rail_w, h: body_h}}
 
-    # The toggleable right SESSION PANE (2026-08-31): split ~⅓ of the center off as a right column
-    # (the selected thread's live lead PTY); the thread stack keeps the rest. Off = center spans it all.
+    # The right SESSION PANE (design 2026-09-08 §2): the conversation is the centre with the
+    # coworker's terminal beside it — TWO EQUAL panes, the odd column going to the conversation.
+    # No pane = the conversation spans the whole centre.
     if session? do
-      right_w = max(div(center_total, 3), 1)
+      right_w = max(div(center_total - 1, 2), 1)
       center_w = max(center_total - right_w - 1, 1)
 
       Map.merge(base, %{
@@ -284,6 +302,14 @@ defmodule Console.View do
       nil -> inset(center_col)
     end
   end
+
+  @doc """
+  The content rect the right SESSION pane's PTY renders into — the same split `compose/3` places the
+  pane into, so the attached tmux client is sized to exactly what's on screen (one authority, like
+  `center_rect/3` for the centre).
+  """
+  @spec session_rect(pos_integer(), pos_integer()) :: Panel.rect()
+  def session_rect(w, h), do: inset(wide_columns(w, max(h - @top_h - @status_h, 1), true).right)
 
   # `Space.fetch/1` returns nil on a miss (Phase C1: no silent Orbis default at the Space layer) —
   # a stale/unknown active_key mid-render degrades to an empty space here instead of crashing the
@@ -350,6 +376,8 @@ defmodule Console.View do
   def data_for(Panel.Triage, r), do: r.triage
   def data_for(Panel.Memory, r), do: r[:memory]
   def data_for(Panel.Detail, r), do: r[:detail]
+  # `s` is what the frame advertises for starting a coworker on the open thread.
+  def data_for(Panel.Placeholder, _r), do: %{verb: "s"}
   def data_for(_other, _r), do: nil
 
   # Inject the panel's current scroll offset into scrollable panels' data (nil data left alone — a
@@ -413,6 +441,8 @@ defmodule Console.View do
       # The contextual footer's keys (design 2026-08-23) — workspace-ness, never the label.
       mode: footer_mode(reads),
       workspace?: Space.workspace?(reads.active_key),
+      # Which way Alt+\ is set, so the footer's pane verb names the mode it is in.
+      session_pane: reads[:session_pane_mode],
       pane_hints: pane_hints(reads, focused)
     }
   end

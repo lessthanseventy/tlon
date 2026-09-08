@@ -170,13 +170,34 @@ defmodule Console.Reads do
 
   defp machine_read(_state), do: :no_session
 
-  # The right session pane's TARGET: the stack-focused thread's id when the pane is toggled on in a
-  # workspace chat view, else nil (the pane is hidden). Follows the cursor — moving j/k re-targets it,
-  # so the pane always shows whatever thread you're looking at.
-  def session_pane_target(%{session_pane: true, active_key: key, center_view: :chat, stack_focus: id})
+  # The thread whose lead PTY the right pane can attach to: the OPEN conversation (design 2026-09-08
+  # §2 — the terminal sits beside the conversation it belongs to) in a workspace chat view. `false`
+  # (the pane forced off) stops the attach too, so a hidden pane costs nothing.
+  def session_thread(%{session_pane: false}), do: nil
+
+  def session_thread(%{active_key: key, center_view: :chat, opened_thread: id})
       when Space.workspace?(key) and is_integer(id), do: id
 
-  def session_pane_target(_state), do: nil
+  def session_thread(_state), do: nil
+
+  # The pane's TARGET (nil = no pane): `:auto` follows the coworker — the pane appears once the
+  # thread's lead PTY is live and folds away when it isn't; `true`/`false` force it on/off.
+  def session_pane_target(state) do
+    case session_thread(state) do
+      nil -> nil
+      id -> if state.session_pane == true or live_session?(id), do: id
+    end
+  end
+
+  # Live = the console holds a running PTY for the thread. The attach itself is unconditional (the
+  # cockpit's ensure_session, off `session_thread/1`), so `:auto` can never deadlock waiting on a
+  # pane it is itself gating.
+  defp live_session?(id), do: is_pid(terminal({:session, id}))
+
+  @doc "Alt+\\ walks the pane's mode: `:auto` (follow the coworker) → off → on → `:auto`."
+  def cycle_session_pane(:auto), do: false
+  def cycle_session_pane(false), do: true
+  def cycle_session_pane(true), do: :auto
 
   # The session pane's embedded terminal render-state — the selected thread's live lead PTY, keyed
   # `{:session, id}` in Console.Sessions, or `:no_session` until spawned. LIVE seam: `ensure_session`
@@ -188,9 +209,13 @@ defmodule Console.Reads do
     end
   end
 
-  # The session pane occupies the right column (~⅓ of the center's width) — spawn dims only; the live
-  # resize-on-window-change is the kitty pass.
-  def session_pane_dims(%{w: w, h: h}), do: {max(div(w, 3) - 2, 1), max(h - 3, 1)}
+  # The session pane's PTY is sized to the pane's OWN rect (Console.View.session_rect — half the
+  # centre), so the attached client draws neither past the frame nor short of it. Spawn dims; the
+  # live resize-on-window-change is the kitty pass.
+  def session_pane_dims(%{w: w, h: h}) do
+    rect = View.session_rect(w, h)
+    {max(rect.w, 1), max(rect.h, 1)}
+  end
 
   def render_state_of(nil), do: :no_session
   def render_state_of(term), do: Terminal.render_state(term)
@@ -651,10 +676,12 @@ defmodule Console.Reads do
       # The layout the View reads for the focused pane + item cursor (counts), and the resolved
       # MAIN detail (nil unless the focus opened one). Both nil outside a Workspace space.
       tlon_layout: tlon_layout,
-      # The right SESSION PANE (2026-08-31): the selected thread's id when the pane is toggled on
-      # (else nil → no right column), and its embedded lead PTY render-state. View.compose splits a
-      # right column off the center when the target is set.
+      # The right SESSION PANE: the OPEN thread's id when the pane resolves on (else nil → no PTY
+      # pane), and its embedded lead PTY render-state. View.compose splits the centre in two when
+      # the target is set — or, with a thread open and no session, for the stand-in.
       session_pane: session_pane_target(state),
+      # The mode behind that target (:auto | true | false) — the footer names the one Alt+\ is on.
+      session_pane_mode: state.session_pane,
       session: Safe.read(:session, :no_session, fn -> session_read(state) end),
       detail:
         Safe.read(:detail, nil, fn ->

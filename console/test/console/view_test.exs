@@ -218,32 +218,62 @@ defmodule Console.ViewTest do
     end
   end
 
-  describe "the toggleable right session pane (2026-08-31)" do
-    defp chat_reads(overrides) do
+  describe "the toggleable right session pane (UX slice 1)" do
+    # The chat centre, optionally with a thread OPEN — the two-pane frame keys off the open
+    # conversation, the same read the centre's list⇄conversation switch uses.
+    defp chat_reads(overrides, opened \\ nil) do
       stack = %{
-        cards: [%{id: 7, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}]
+        cards: [%{id: 7, title: "a", lead: nil, stage: nil, awaiting: nil, folded?: false, active?: true, messages: []}],
+        opened: opened
       }
 
       reads(Map.merge(%{center_view: :chat, thread_stack: stack}, overrides))
     end
 
-    test "off (default): no session terminal; the stack spans the center" do
+    defp stack_rect(placements) do
+      {_, _, rect} = Enum.find(placements, &match?({Panel.ThreadStack, _, _}, &1))
+      rect
+    end
+
+    test "nothing open, no session: the conversation spans the centre" do
       placements = View.compose(chat_reads(%{}), 120, 40)
       refute placed?(placements, Panel.Terminal)
+      refute placed?(placements, Panel.Placeholder)
       assert placed?(placements, Panel.ThreadStack)
     end
 
-    test "on: a right session pane appears and narrows the stack" do
-      wide = View.compose(chat_reads(%{}), 120, 40)
-      {_, _, wide_stack} = Enum.find(wide, &match?({Panel.ThreadStack, _, _}, &1))
+    test "a live session splits the centre into two EQUAL panes" do
+      wide = stack_rect(View.compose(chat_reads(%{}), 120, 40))
+      placements = View.compose(chat_reads(%{session_pane: 7, session: :no_session}, 7), 120, 40)
 
-      placements = View.compose(chat_reads(%{session_pane: 7, session: :no_session}), 120, 40)
-      assert {Panel.Terminal, _data, sess_rect} = Enum.find(placements, &match?({Panel.Terminal, _, _}, &1))
-      {_, _, narrow_stack} = Enum.find(placements, &match?({Panel.ThreadStack, _, _}, &1))
+      assert {Panel.Terminal, _data, sess} = Enum.find(placements, &match?({Panel.Terminal, _, _}, &1))
+      stack = stack_rect(placements)
 
-      # the stack gave up width to the session pane, which sits to its right
-      assert narrow_stack.w < wide_stack.w
-      assert sess_rect.x > narrow_stack.x
+      assert abs(stack.w - sess.w) <= 1
+      assert sess.x > stack.x
+      assert stack.w < wide.w
+    end
+
+    test "a thread open with no live session: the terminal's place carries the spawn verb, equally split" do
+      placements = View.compose(chat_reads(%{}, 9), 120, 40)
+
+      assert {Panel.Placeholder, %{verb: "s"}, right} = Enum.find(placements, &match?({Panel.Placeholder, _, _}, &1))
+      stack = stack_rect(placements)
+
+      refute placed?(placements, Panel.Terminal)
+      assert abs(stack.w - right.w) <= 1
+      assert right.x > stack.x
+    end
+
+    test "too narrow for two panes: the conversation spans it rather than halving to nothing" do
+      placements = View.compose(chat_reads(%{}, 9), 90, 40)
+      refute placed?(placements, Panel.Placeholder)
+      assert stack_rect(placements).w == stack_rect(View.compose(chat_reads(%{}), 90, 40)).w
+    end
+
+    test "the terminal centre never splits — the pane sits beside the CONVERSATION" do
+      placements = View.compose(reads(%{thread_stack: %{cards: [], opened: 9}}), 120, 40)
+      refute placed?(placements, Panel.Placeholder)
     end
   end
 

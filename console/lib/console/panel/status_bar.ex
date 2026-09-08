@@ -186,8 +186,15 @@ defmodule Console.Panel.StatusBar do
   defp mode_seg(:nav), do: [{"Alt+0", "term"}, {"q", "quit"}]
   defp mode_seg(:lock), do: [{"Alt+g", "unlock"}]
 
-  defp space_seg(%{mode: :nav, workspace?: true}), do: [{"c", "reply"}, {"n", "new"}, {"v", "term"}, {"m", "model"}]
+  defp space_seg(%{mode: :nav, workspace?: true} = data),
+    do: [{"c", "reply"}, {"n", "new"}, {"v", "term"}, {"m", "model"}, {"Alt+\\", pane_mode(data[:session_pane])}]
+
   defp space_seg(_data), do: []
+
+  # The right session pane's mode, named rather than implied — Alt+\ cycles :auto → off → on.
+  defp pane_mode(true), do: "pane on"
+  defp pane_mode(false), do: "pane off"
+  defp pane_mode(_auto), do: "pane auto"
 
   # A face's own row: prompt left, verbs right-aligned, as many as fit. The row is one line high,
   # so a verb that doesn't fit is GONE — hence the drop-from-the-tail order (verbs are listed
