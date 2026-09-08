@@ -28,6 +28,8 @@ defmodule Console.BoardTest do
   """
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [row_text: 1]
+
   alias Console.Board
   alias Console.Panel
   alias Console.Panel.Activity
@@ -47,9 +49,6 @@ defmodule Console.BoardTest do
   setup do
     Console.TestWorkspaces.put()
   end
-
-  # Flatten a styled row to its text, for assertions.
-  defp text(row), do: Enum.map_join(row, fn {t, _style} -> t end)
 
   @roster [
     %{agent: "Sandra", thread_id: 1, thread_title: "review PR 329", pane_ref: nil, warm?: true},
@@ -102,10 +101,10 @@ defmodule Console.BoardTest do
     test "roster: one row per session, warmth marked (title lives on the frame now)" do
       rect = %{x: 0, y: 0, w: 40, h: 10}
       assert [sandra, robert] = Roster.render(%{sessions: @roster}, rect)
-      assert text(sandra) =~ "Sandra"
-      assert text(sandra) =~ "review PR 329"
-      assert text(sandra) =~ "●"
-      assert text(robert) =~ "○"
+      assert row_text(sandra) =~ "Sandra"
+      assert row_text(sandra) =~ "review PR 329"
+      assert row_text(sandra) =~ "●"
+      assert row_text(robert) =~ "○"
     end
 
     test "no separate thread-list panel — the center thread-stack is the list" do
@@ -128,10 +127,10 @@ defmodule Console.BoardTest do
 
       data = %{branch: "main", dirty: false, ahead: nil, behind: nil, status_summary: nil, commits: commits}
       assert [_label, branch, _rule, _commits_label, subject, meta] = Stack.render(data, rect)
-      assert text(branch) =~ "main"
-      assert text(meta) =~ "bc86cc8"
-      assert text(meta) =~ "2 hours ago"
-      assert text(subject) =~ "open_thread"
+      assert row_text(branch) =~ "main"
+      assert row_text(meta) =~ "bc86cc8"
+      assert row_text(meta) =~ "2 hours ago"
+      assert row_text(subject) =~ "open_thread"
       assert Enum.any?(meta, fn {t, s} -> s == :dim and t =~ "bc86cc8" end)
     end
 
@@ -139,11 +138,11 @@ defmodule Console.BoardTest do
       rect = %{x: 0, y: 0, w: 60, h: 10}
       data_ahead = %{branch: "main", dirty: false, ahead: 3, behind: 1, status_summary: nil, commits: []}
       rows = Stack.render(data_ahead, rect)
-      branch_row = Enum.find(rows, fn r -> text(r) =~ "main" end)
-      assert text(branch_row) =~ "↑"
-      assert text(branch_row) =~ "3"
-      assert text(branch_row) =~ "↓"
-      assert text(branch_row) =~ "1"
+      branch_row = Enum.find(rows, fn r -> row_text(r) =~ "main" end)
+      assert row_text(branch_row) =~ "↑"
+      assert row_text(branch_row) =~ "3"
+      assert row_text(branch_row) =~ "↓"
+      assert row_text(branch_row) =~ "1"
 
       data_dirty = %{
         branch: "main",
@@ -155,7 +154,7 @@ defmodule Console.BoardTest do
       }
 
       rows_dirty = Stack.render(data_dirty, rect)
-      joined = Enum.map_join(rows_dirty, "\n", &text/1)
+      joined = Enum.map_join(rows_dirty, "\n", &row_text/1)
       assert joined =~ "✗"
       assert joined =~ "+2"
       assert joined =~ "~1"
@@ -166,8 +165,8 @@ defmodule Console.BoardTest do
       rect = %{x: 0, y: 0, w: 60, h: 10}
       data = %{branch: nil, dirty: false, ahead: nil, behind: nil, status_summary: nil, commits: []}
       assert [_label, branch, _rule, _commits_label, empty] = Stack.render(data, rect)
-      assert text(branch) =~ "no branch"
-      assert text(empty) =~ "no git history"
+      assert row_text(branch) =~ "no branch"
+      assert row_text(empty) =~ "no git history"
     end
 
     test "health (Tlön): services, system metrics, and tools in sections" do
@@ -185,7 +184,7 @@ defmodule Console.BoardTest do
       }
 
       rows = Health.render(data, rect)
-      joined = Enum.map_join(rows, "\n", &text/1)
+      joined = Enum.map_join(rows, "\n", &row_text/1)
       assert joined =~ "server"
       assert joined =~ "tlon"
       assert joined =~ "SYS"
@@ -216,7 +215,7 @@ defmodule Console.BoardTest do
 
     test "terminal panel shows the empty state when there is no session — no dead verb" do
       rows = Terminal.render(:no_session, %{x: 0, y: 0, w: 60, h: 4})
-      shown = Enum.map_join(rows, "\n", &text/1)
+      shown = Enum.map_join(rows, "\n", &row_text/1)
 
       # ONE copy source (Panel.Placeholder) so the two empty states can't drift apart, and no verb
       # that doesn't exist: `Enter` never spawned anything here.
@@ -265,7 +264,7 @@ defmodule Console.BoardTest do
     # Console.Panel.TopBar.
     test "the footer is a single hints row" do
       assert [hints] = StatusBar.render(status(), %{x: 0, y: 0, w: 120, h: 1})
-      joined = text(hints)
+      joined = row_text(hints)
       assert joined =~ "quit"
       assert joined =~ "thread"
       refute joined =~ "threads "
@@ -275,7 +274,7 @@ defmodule Console.BoardTest do
     test "composing shows the mode chip and the composer verbs — the buffer lives in the compose box" do
       data = status(%{input: %{kind: :compose, thread_id: 2, buffer: "ship it"}})
       assert [row] = StatusBar.render(data, %{x: 0, y: 0, w: 120, h: 1})
-      joined = text(row)
+      joined = row_text(row)
       assert joined =~ "COMPOSE"
       refute joined =~ "ship it"
       assert joined =~ "reply"
@@ -287,10 +286,10 @@ defmodule Console.BoardTest do
     test "draws a rounded box framing the whole rect" do
       rows = Border.render(nil, %{x: 0, y: 0, w: 6, h: 4})
       assert length(rows) == 4
-      assert text(Enum.at(rows, 0)) == "╭────╮"
-      assert text(Enum.at(rows, 3)) == "╰────╯"
+      assert row_text(Enum.at(rows, 0)) == "╭────╮"
+      assert row_text(Enum.at(rows, 3)) == "╰────╯"
       mid = Enum.at(rows, 1)
-      assert text(mid) == "│    │"
+      assert row_text(mid) == "│    │"
       # the frame is drawn in the separator style; the interior is neutral
       assert {"│", :separator} = hd(mid)
     end
@@ -304,7 +303,7 @@ defmodule Console.BoardTest do
     test "clips rows to height and each row to width" do
       rows = [Panel.line("a very long header line", :header)]
       assert [clipped] = Panel.clip(rows, %{x: 0, y: 0, w: 5, h: 1})
-      assert String.length(text(clipped)) == 5
+      assert String.length(row_text(clipped)) == 5
     end
   end
 

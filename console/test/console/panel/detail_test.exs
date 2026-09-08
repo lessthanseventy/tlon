@@ -3,22 +3,23 @@ defmodule Console.Panel.DetailTest do
   # panel → styled-rows path headlessly; the real paint is the eye test.
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [lines: 1]
+
   alias Console.Panel.Detail
 
   @rect %{x: 0, y: 0, w: 80, h: 100}
 
-  defp text(rows), do: Enum.map(rows, fn row -> Enum.map_join(row, fn {t, _s} -> t end) end)
   defp styles(rows), do: Enum.flat_map(rows, fn row -> Enum.map(row, fn {_t, s} -> s end) end)
 
   test "nil data renders a quiet placeholder, no crash" do
     rows = Detail.render(nil, @rect)
-    assert text(rows) == ["no detail"]
+    assert lines(rows) == ["no detail"]
   end
 
   test "renders the title, a rule, then the styled lines" do
     data = %{title: "commit abc · fix", lines: [{"+added", :diff_add}, {"-gone", :diff_del}, {"@@ -1 +1 @@", :diff_hunk}]}
     rows = Detail.render(data, @rect)
-    joined = text(rows)
+    joined = lines(rows)
 
     assert List.first(joined) == "commit abc · fix"
     assert "+added" in joined
@@ -32,7 +33,7 @@ defmodule Console.Panel.DetailTest do
     data = %{title: "t", lines: [{"a", :normal}, {"b", :normal}, {"c", :normal}], scroll: 2}
     rows = Detail.render(data, @rect)
     # dropped the title + rule (2 rows); "a"/"b"/"c" begin appearing
-    assert "a" in text(rows)
-    refute "t" in text(rows)
+    assert "a" in lines(rows)
+    refute "t" in lines(rows)
   end
 end

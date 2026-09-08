@@ -2,10 +2,11 @@ defmodule Console.Panel.TertiusTest do
   # The permanent tertius command line band (Slice 3): input line + recent receipts. Pure render.
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [text: 1]
+
   alias Console.Panel.Tertius
 
   defp rect, do: %{x: 0, y: 0, w: 80, h: 6}
-  defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
 
   test "idle: a permanent tertius prompt with a placeholder" do
     out = %{receipts: [], input: nil} |> Tertius.render(rect()) |> text()

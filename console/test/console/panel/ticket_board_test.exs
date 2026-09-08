@@ -2,10 +2,11 @@ defmodule Console.Panel.TicketBoardTest do
   # The Tickets kanban (Slice D3): side-by-side status columns of gutter-cards, with a cursor. Pure render.
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [text: 1]
+
   alias Console.Panel.TicketBoard
 
   defp rect, do: %{x: 0, y: 0, w: 120, h: 40}
-  defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
 
   test "an empty board nudges you to file one" do
     assert %{tickets: []} |> TicketBoard.render(rect()) |> text() =~ "no tickets"

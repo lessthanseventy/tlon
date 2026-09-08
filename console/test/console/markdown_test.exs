@@ -1,9 +1,10 @@
 defmodule Console.MarkdownTest do
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [lines: 1]
+
   alias Console.Markdown
 
-  defp text(rows), do: Enum.map(rows, fn row -> Enum.map_join(row, fn {t, _} -> t end) end)
   defp styles(rows), do: rows |> Enum.flat_map(& &1) |> Enum.map(fn {_t, s} -> s end)
 
   test "inline bold/code become styled runs; surrounding text keeps the base style" do
@@ -22,7 +23,7 @@ defmodule Console.MarkdownTest do
 
   test "bullet lists get a marker + inline-parsed body" do
     rows = Markdown.render("- first\n- **second**", 80)
-    lines = text(rows)
+    lines = lines(rows)
     assert Enum.any?(lines, &(&1 =~ "• first"))
     assert Enum.any?(lines, &(&1 =~ "• second"))
     assert :md_bold in styles(rows)
@@ -30,7 +31,7 @@ defmodule Console.MarkdownTest do
 
   test "fenced code blocks render verbatim in the code style, no inline parsing" do
     rows = Markdown.render("```\nx = **not bold**\n```", 80)
-    joined = rows |> text() |> Enum.join("\n")
+    joined = rows |> lines() |> Enum.join("\n")
     assert joined =~ "x = **not bold**"
     assert :md_code in styles(rows)
     refute :md_bold in styles(rows)
@@ -44,6 +45,6 @@ defmodule Console.MarkdownTest do
 
   test "blank lines separate paragraphs" do
     rows = Markdown.render("one\n\ntwo", 80)
-    assert text(rows) == ["one", "", "two"]
+    assert lines(rows) == ["one", "", "two"]
   end
 end

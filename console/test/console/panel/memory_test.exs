@@ -3,6 +3,8 @@ defmodule Console.Panel.MemoryTest do
   # cursor lit. A thin view; funes reads are the cockpit's. Pins the panel → styled-rows path.
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [lines: 1]
+
   alias Console.Panel.Memory
 
   @rect %{x: 0, y: 0, w: 60, h: 100}
@@ -16,8 +18,6 @@ defmodule Console.Panel.MemoryTest do
     Map.merge(%{coverage: coverage(), pinned: [fact("prefer X"), fact("never Y")], habits: [habit("do Z", "glm")]}, extra)
   end
 
-  defp text(rows), do: Enum.map(rows, fn row -> Enum.map_join(row, fn {t, _s} -> t end) end)
-
   defp style_of(rows, needle) do
     Enum.find_value(rows, fn row ->
       case row do
@@ -28,11 +28,11 @@ defmodule Console.Panel.MemoryTest do
   end
 
   test "nil data renders a placeholder, no crash" do
-    assert nil |> Memory.render(@rect) |> text() |> Enum.any?(&(&1 == "no recall yet"))
+    assert nil |> Memory.render(@rect) |> lines() |> Enum.any?(&(&1 == "no recall yet"))
   end
 
   test "coverage header shows embedded/pinned/forgotten" do
-    joined = Enum.join(text(Memory.render(data(), @rect)), "\n")
+    joined = Enum.join(lines(Memory.render(data(), @rect)), "\n")
     assert joined =~ "embedded 23/30"
     assert joined =~ "pinned 8"
     assert joined =~ "7 forgotten"
@@ -46,7 +46,7 @@ defmodule Console.Panel.MemoryTest do
 
   test "with the HABITS section active, the selected habit lights and the a/r hint shows" do
     rows = Memory.render(data(%{section: 1, selected: 0}), @rect)
-    joined = Enum.join(text(rows), "\n")
+    joined = Enum.join(lines(rows), "\n")
     assert style_of(rows, "do Z") == :selected
     assert joined =~ "approve"
     assert joined =~ "reject"
@@ -54,7 +54,7 @@ defmodule Console.Panel.MemoryTest do
 
   test "an unfocused Memory (no section/selected) shows the pinned with no cursor" do
     rows = Memory.render(data(), @rect)
-    refute Enum.any?(text(rows), &String.starts_with?(&1, "▸"))
+    refute Enum.any?(lines(rows), &String.starts_with?(&1, "▸"))
   end
 
   test "an empty HABITS section collapses to nothing — no label, no dash" do

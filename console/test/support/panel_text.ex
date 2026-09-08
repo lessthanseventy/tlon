@@ -11,4 +11,8 @@ defmodule Console.PanelText do
   @doc "Rows flattened to one newline-joined string."
   @spec text([Console.Panel.row()]) :: String.t()
   def text(rows), do: Enum.map_join(rows, "\n", &row_text/1)
+
+  @doc "Rows as a list of their texts, one string per row."
+  @spec lines([Console.Panel.row()]) :: [String.t()]
+  def lines(rows), do: Enum.map(rows, &row_text/1)
 end

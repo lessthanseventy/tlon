@@ -2,9 +2,9 @@ defmodule Console.Panel.MenuTest do
   @moduledoc "The overlay menu (right-click workspace context menu / icon picker)."
   use ExUnit.Case, async: true
 
-  alias Console.Panel.Menu
+  import Console.PanelText, only: [row_text: 1]
 
-  defp text(row), do: Enum.map_join(row, fn {t, _s} -> t end)
+  alias Console.Panel.Menu
 
   @data %{
     title: "ws",
@@ -18,7 +18,7 @@ defmodule Console.Panel.MenuTest do
 
   test "render lists the items, marks the cursor row" do
     rows = Menu.render(@data, %{x: 0, y: 0, w: 20, h: 5})
-    lines = Enum.map(rows, &text/1)
+    lines = Enum.map(rows, &row_text/1)
 
     assert Enum.at(lines, 0) =~ "Set icon"
     assert Enum.at(lines, 1) =~ "▸" and Enum.at(lines, 1) =~ "Configure"

@@ -3,9 +3,9 @@ defmodule Console.Panel.ComposerTest do
   # line/col, and a window that scrolls to keep the cursor visible past the height cap.
   use ExUnit.Case, async: true
 
-  alias Console.Panel.Composer
+  import Console.PanelText, only: [text: 1]
 
-  defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _s} -> t end) end)
+  alias Console.Panel.Composer
 
   describe "lines/2 — the wrapped buffer with the cursor marker" do
     test "an empty buffer is one line holding just the cursor" do
