@@ -182,10 +182,11 @@ defmodule Console.Reads do
 
   # The pane's TARGET (nil = no pane): `:auto` follows the coworker — the pane appears once the
   # thread's lead PTY is live and folds away when it isn't; `true`/`false` force it on/off.
-  def session_pane_target(state) do
+  # `live?` is injectable so the read is pure under test (the default asks the live registry).
+  def session_pane_target(state, live? \\ &live_session?/1) do
     case session_thread(state) do
       nil -> nil
-      id -> if state.session_pane == true or live_session?(id), do: id
+      id -> if state.session_pane == true or live?.(id), do: id
     end
   end
 

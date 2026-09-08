@@ -143,13 +143,24 @@ defmodule Console.ReadsTest do
       assert Reads.session_thread(%{open | opened_thread: nil}) == nil
     end
 
-    # :auto follows the coworker (no live PTY under test → no pane); true/false force the mode.
+    # :auto follows the coworker; true/false force the mode. Liveness is INJECTED — the read stays
+    # pure, with no hidden dependency on whatever the shared Console.Sessions happens to hold.
     test "the target: `true` forces the pane on, `false` off, `:auto` follows the live session" do
       open = %{session_pane: true, active_key: 0, center_view: :chat, opened_thread: 7}
-      assert Reads.session_pane_target(open) == 7
-      assert Reads.session_pane_target(%{open | session_pane: false}) == nil
-      assert Reads.session_pane_target(%{open | session_pane: :auto}) == nil
-      assert Reads.session_pane_target(%{open | opened_thread: nil}) == nil
+      dead = fn _id -> false end
+      live = fn id -> id == 7 end
+
+      assert Reads.session_pane_target(open, dead) == 7
+      assert Reads.session_pane_target(%{open | session_pane: false}, live) == nil
+      assert Reads.session_pane_target(%{open | session_pane: :auto}, dead) == nil
+      assert Reads.session_pane_target(%{open | session_pane: :auto}, live) == 7
+      assert Reads.session_pane_target(%{open | opened_thread: nil}, live) == nil
+    end
+
+    test "the default liveness check is the console's own session registry" do
+      open = %{session_pane: :auto, active_key: 0, center_view: :chat, opened_thread: 9_309}
+      # nothing is holding a PTY for that id, so :auto resolves to no pane
+      assert Reads.session_pane_target(open) == nil
     end
 
     test "Alt+\\ cycles the mode :auto → off → on → :auto" do
