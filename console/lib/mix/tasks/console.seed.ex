@@ -8,9 +8,9 @@ defmodule Mix.Tasks.Console.Seed do
   use Mix.Task
   use Boundary, classify_to: Console
 
-  alias Server.Channel
-  alias Server.Dossier
-  alias Server.Staff
+  alias Console.Server.Channel
+  alias Console.Server.Dossier
+  alias Console.Server.Staff
 
   @requirements ["app.config"]
 

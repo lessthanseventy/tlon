@@ -78,7 +78,7 @@ defmodule Console.Workspaces do
   # Load + shape the workspace list; on any server error keep `fallback` (init: `[]`; a
   # reload: the prior cache) so a DB blip never takes the cockpit down.
   defp load(fallback) do
-    Enum.map(Server.Workspaces.all(), &shape/1)
+    Enum.map(Console.Server.Workspaces.all(), &shape/1)
   rescue
     _ -> fallback
   catch

@@ -19,7 +19,7 @@ defmodule Console.Orbis do
   self-report. The gather is guarded: a server hiccup degrades to `nil`, never a crash.
   """
 
-  alias Server.Channel
+  alias Console.Server.Channel
 
   @spec rollup() :: %{summary: map(), rows: [map()], workspaces: [map()]} | nil
   def rollup do
@@ -64,7 +64,7 @@ defmodule Console.Orbis do
   # Keyed by thread id; through the Server facade (the Ledger module is boundary-private).
   # Guarded like every server gather here.
   defp blocking_by_thread do
-    Map.new(Server.workline_statuses(), &{&1.id, %{awaiting: &1.awaiting, blocking: &1.blocking}})
+    Map.new(Console.Server.workline_statuses(), &{&1.id, %{awaiting: &1.awaiting, blocking: &1.blocking}})
   rescue
     _ -> %{}
   catch
@@ -121,7 +121,7 @@ defmodule Console.Orbis do
   end
 
   defp row(thread, blocking_by_thread) do
-    scope = Server.Board.brief(thread)
+    scope = Console.Server.Board.brief(thread)
     conflicts = length(scope.blockers.shown) + scope.blockers.more + failed_checks(scope)
     ledger = Map.get(blocking_by_thread, thread.id, %{})
 

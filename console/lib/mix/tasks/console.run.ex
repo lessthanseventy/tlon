@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Console.Run do
   # `%Exqlite.Error{}` ("no such table: todo") deep in render. So ask the arbiter whose
   # output names the gap — `Server.Doctor.pending/0` — and turn that crash into the fix.
   defp launch_or_explain do
-    case Server.Doctor.pending() do
+    case Console.Server.Doctor.pending() do
       [] ->
         Console.Cockpit.run()
 

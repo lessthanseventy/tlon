@@ -89,7 +89,7 @@ defmodule Console.Crew do
   # Server.MCP.Spawn.join, which mints in-node against the live Repo/tokens (this backend runs inside
   # the cockpit BEAM), so the identity is valid the instant the reviewer's pi connects to :4041.
   defp cmd_runner, do: Application.get_env(:console, :crew_cmd, &System.cmd/3)
-  defp joiner, do: Application.get_env(:console, :crew_join, &Server.MCP.Spawn.join/3)
+  defp joiner, do: Application.get_env(:console, :crew_join, &Console.Server.MCP.Spawn.join/3)
 
   # Wait between window boot and injecting the opening turn — the profile pi's TUI must settle before
   # send-keys, same reason as Cockpit's @opening_submit_delay_ms two-phase inject. Overridable via app

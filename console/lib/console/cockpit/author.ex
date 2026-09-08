@@ -11,8 +11,8 @@ defmodule Console.Cockpit.Author do
   alias Console.Panel
   alias Console.Profiles
   alias Console.Safe
+  alias Console.Server.Workspaces
   alias Console.WorkspaceTemplates
-  alias Server.Workspaces
 
   @doc """
   An open overlay menu's keys: Esc closes, j/k/↑↓ move, Enter runs the cursor item's action —

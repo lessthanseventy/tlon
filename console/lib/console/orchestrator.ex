@@ -10,9 +10,9 @@ defmodule Console.Orchestrator do
   compiler enforces it). `ctx` is `%{workspace_id: id, operator: name}` — the focused workspace and
   who's speaking.
   """
-  alias Server.Channel
-  alias Server.Notes
-  alias Server.Tickets
+  alias Console.Server.Channel
+  alias Console.Server.Notes
+  alias Console.Server.Tickets
 
   @doc "`:safe` (dispatch straight) or `:consequential` (confirm first). Pure."
   def classify({:open, _stage, _title}), do: :consequential
@@ -46,14 +46,14 @@ defmodule Console.Orchestrator do
   end
 
   def dispatch({:query, :roster}, _ctx) do
-    case Server.staffed_machine_threads() |> Enum.map(& &1.lead) |> Enum.uniq() do
+    case Console.Server.staffed_machine_threads() |> Enum.map(& &1.lead) |> Enum.uniq() do
       [] -> {:ok, "no coworkers leading an open thread"}
       names -> {:ok, "on the clock: " <> Enum.join(names, ", ")}
     end
   end
 
   def dispatch({:query, :blocked}, _ctx) do
-    n = Enum.count(Server.workline_statuses(), &(&1.awaiting not in [nil, ""]))
+    n = Enum.count(Console.Server.workline_statuses(), &(&1.awaiting not in [nil, ""]))
     {:ok, "#{n} thread#{if n == 1, do: "", else: "s"} awaiting you"}
   end
 
@@ -85,7 +85,7 @@ defmodule Console.Orchestrator do
   end
 
   def confirm({:open, stage, title}, ctx) do
-    case Server.open_workline(%{title: title, stage: stage, workspace_id: ctx.workspace_id}) do
+    case Console.Server.open_workline(%{title: title, stage: stage, workspace_id: ctx.workspace_id}) do
       {:ok, t} -> {:ok, "→ opened ##{t.id} #{stage_label(stage)} “#{title}” ✓"}
       {:error, {:invalid_stage, s}} -> {:error, "can't open at stage #{s}"}
       {:error, cs} -> {:error, changeset_error(cs)}
@@ -95,7 +95,7 @@ defmodule Console.Orchestrator do
   # Approving a parked gate advances the workline (Slice 4D): re-verifies the owed artifact, then
   # flips (spec→plan, review→merged, machine-born intent→spec). `n` is the thread id.
   def confirm({:approve, n}, _ctx) do
-    case Server.approve_workline(n) do
+    case Console.Server.approve_workline(n) do
       {:ok, t} -> {:ok, "→ approved ##{n} → #{t.stage} ✓"}
       {:error, :no_thread} -> {:error, "no thread ##{n}"}
       {:error, :nothing_awaiting} -> {:error, "##{n} has no parked gate to approve"}
@@ -109,7 +109,7 @@ defmodule Console.Orchestrator do
   # Resolve @handle → the open thread that agent leads, via the exported facade (never a raw query).
   # v1 scope: the staffed machine threads (where coworkers live); project-thread leads land in Slice 4.
   defp thread_of(handle) do
-    case Enum.find(Server.staffed_machine_threads(), &(&1.lead == handle)) do
+    case Enum.find(Console.Server.staffed_machine_threads(), &(&1.lead == handle)) do
       %{id: id} -> id
       _ -> nil
     end

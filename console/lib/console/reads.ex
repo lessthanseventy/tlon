@@ -9,14 +9,15 @@ defmodule Console.Reads do
 
   alias Console.Panel
   alias Console.Safe
+  alias Console.Server.Board
+  alias Console.Server.Channel
+  alias Console.Server.Staff
   alias Console.Sessions
   alias Console.Space
   alias Console.Terminal
   alias Console.Tlon.Focus
   alias Console.Tmux
   alias Console.View
-  alias Server.Channel
-  alias Server.Staff
 
   require Space
 
@@ -43,7 +44,7 @@ defmodule Console.Reads do
   # The one-shot backfill behind `activity: []`'s replacement — the durable feed at cockpit start,
   # guarded so a not-yet-up server (init can race the server boot) just yields an empty ring rather
   # than crashing the cockpit. Scoped to the active workspace at render by `scope_activity/2`.
-  def seed_activity, do: Safe.read(:activity_seed, [], fn -> Server.Board.recent_activity(@activity_cap) end)
+  def seed_activity, do: Safe.read(:activity_seed, [], fn -> Board.recent_activity(@activity_cap) end)
 
   # First-sight test for a tagged event: true unless its key is already in the recently-seen set.
   # The key is `{tag, row.id}` (a durable row always has an id, so the two topic deliveries share
@@ -123,7 +124,7 @@ defmodule Console.Reads do
   def thinking_snapshot do
     Safe.value(
       fn ->
-        Map.new(Server.Presence.Thinking.thinking_all(), fn {tid, entries} ->
+        Map.new(Console.Server.Presence.Thinking.thinking_all(), fn {tid, entries} ->
           # Same normalization as the live event path — cockpit state holds unix seconds.
           {tid, Map.new(entries, &{&1.agent, Console.Presence.started_s(&1.started_at)})}
         end)
@@ -140,7 +141,7 @@ defmodule Console.Reads do
       tabs
       |> Enum.filter(&is_integer(&1.thread_id))
       |> Enum.reduce(%{}, fn %{thread_id: tid}, acc ->
-        case Server.thread_lead(tid) do
+        case Console.Server.thread_lead(tid) do
           lead when is_binary(lead) -> Map.update(acc, lead, [tid], &[tid | &1])
           _ -> acc
         end
@@ -420,9 +421,9 @@ defmodule Console.Reads do
   # The Memory pane read: coverage stats + the always-loaded pinned set + the pending-habit queue.
   defp memory_read(workspace_id) do
     %{
-      coverage: Server.recall_coverage(workspace_id),
-      pinned: Server.pinned(workspace_id),
-      habits: Server.pending_habits(workspace_id)
+      coverage: Console.Server.recall_coverage(workspace_id),
+      pinned: Console.Server.pinned(workspace_id),
+      habits: Console.Server.pending_habits(workspace_id)
     }
   end
 
@@ -430,7 +431,7 @@ defmodule Console.Reads do
   # `approve N` verb clears. Best-effort; a server hiccup leaves the feed rather than crashing a frame.
   # The active workspace's thread ids as a MapSet (or nil on a server hiccup → unfiltered feed).
   defp workspace_thread_id_set(workspace_id),
-    do: Safe.value(fn -> MapSet.new(Server.workspace_thread_ids(workspace_id)) end, nil)
+    do: Safe.value(fn -> MapSet.new(Console.Server.workspace_thread_ids(workspace_id)) end, nil)
 
   # Filter the global activity buffer to the active workspace: keep an event when its row has no
   # thread (a global event) or its thread is in the workspace. nil id-set = unfiltered (server down).
@@ -449,7 +450,7 @@ defmodule Console.Reads do
     Safe.value(
       fn ->
         workspace_id
-        |> Server.workline_statuses()
+        |> Console.Server.workline_statuses()
         |> Enum.filter(&(&1.awaiting not in [nil, ""]))
         |> Enum.map(&Map.take(&1, [:id, :title, :stage, :awaiting]))
       end,
@@ -479,7 +480,7 @@ defmodule Console.Reads do
   # carries one), falling back to "." (the console's own checkout — the ficciones monorepo) when the
   # workspace has no real repo dir (e.g. a glob path like "modules/*", or a client dir that's absent).
   defp workspace_repo_dir(workspace_id) do
-    case Server.repo_for_workspace(workspace_id) do
+    case Console.Server.repo_for_workspace(workspace_id) do
       {:ok, path} -> if File.dir?(path), do: path, else: "."
       _ -> "."
     end
@@ -518,7 +519,7 @@ defmodule Console.Reads do
   # Gathers from all open threads — a server Board aggregate.
   # Each section is `%{shown: [...], more: count}` so the panel can render "+N more".
   defp triage_read(threads) do
-    scopes = for thread <- threads, do: {thread, Server.Board.brief(thread)}
+    scopes = for thread <- threads, do: {thread, Board.brief(thread)}
 
     all_blockers =
       Enum.flat_map(scopes, fn {thread, scope} ->
@@ -583,7 +584,7 @@ defmodule Console.Reads do
       },
       # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
       # thread list + crew working flags.
-      sidebar: Safe.read(:sidebar, [], fn -> Server.Board.sidebar() end),
+      sidebar: Safe.read(:sidebar, [], fn -> Board.sidebar() end),
       # Kitty host? → the Sidebar blanks its fallback glyph so the icon PNG covers cleanly (no bleed).
       graphics?: Console.Graphics.kitty?(),
       workspaces:

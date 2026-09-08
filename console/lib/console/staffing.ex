@@ -18,11 +18,11 @@ defmodule Console.Staffing do
   alias Console.Profiles
   alias Console.Reads
   alias Console.Safe
+  alias Console.Server.Channel
+  alias Console.Server.MCP.Spawn
   alias Console.Sessions
   alias Console.Space
   alias Console.Tmux
-  alias Server.Channel
-  alias Server.MCP.Spawn
 
   require Space
 
@@ -166,7 +166,7 @@ defmodule Console.Staffing do
     tabs = Tmux.list_windows(key)
     now = System.monotonic_time(:millisecond)
     roster = Space.roster(key, spaces)
-    threads = Server.staffed_machine_threads()
+    threads = Console.Server.staffed_machine_threads()
     # Window names spawned THIS pass join the taken set, so two new leaves with the same title in
     # one render can't collide on a name (the tag targets by name once, right after new-window).
     taken = MapSet.new(tabs, & &1.name)
@@ -365,7 +365,7 @@ defmodule Console.Staffing do
   # stage 2 submits). Best-effort: a thread with no operator message yet is silently skipped —
   # never a render crash.
   defp inject_opening_text(workspace_id, id, %{index: index}) do
-    message = Server.latest_operator_message(id)
+    message = Console.Server.latest_operator_message(id)
 
     if message do
       operator = Console.Config.operator()

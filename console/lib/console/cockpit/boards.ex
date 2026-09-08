@@ -9,9 +9,10 @@ defmodule Console.Cockpit.Boards do
   alias Console.Panel
   alias Console.Reads
   alias Console.Safe
+  alias Console.Server.Channel
+  alias Console.Server.Tickets
   alias Console.Space
   alias Console.Staffing
-  alias Server.Channel
 
   @doc "The full-screen board's placements: a frame-covering border + the board panel (painted after the layout, before the menu)."
   def board_placements(%{board: nil}), do: []
@@ -29,7 +30,7 @@ defmodule Console.Cockpit.Boards do
 
   defp board_content(:tickets, state) do
     id = board_workspace_id(state)
-    tickets = Safe.value(fn -> id && id |> Server.Tickets.in_workspace() |> Enum.map(&ticket_row/1) end, nil) || []
+    tickets = Safe.value(fn -> id && id |> Tickets.in_workspace() |> Enum.map(&ticket_row/1) end, nil) || []
 
     {Panel.TicketBoard, %{tickets: tickets, cursor: state.board_cursor},
      "TICKETS · h/l·j/k move · p advance · n new · ⏎ promote"}
@@ -37,7 +38,7 @@ defmodule Console.Cockpit.Boards do
 
   defp board_content(:notes, state) do
     id = board_workspace_id(state)
-    notes = Safe.value(fn -> id && Server.Notes.for_scope("workspace", id) end, nil) || []
+    notes = Safe.value(fn -> id && Console.Server.Notes.for_scope("workspace", id) end, nil) || []
     {Panel.NoteBoard, %{notes: notes}, "NOTES"}
   end
 
@@ -68,7 +69,7 @@ defmodule Console.Cockpit.Boards do
   # the same in_workspace order, so the cursor indexes the same grid).
   defp ticket_columns(state) do
     id = board_workspace_id(state)
-    tickets = Safe.value(fn -> id && Server.Tickets.in_workspace(id) end, nil) || []
+    tickets = Safe.value(fn -> id && Tickets.in_workspace(id) end, nil) || []
     Console.Panel.TicketBoard.by_column(tickets)
   end
 
@@ -97,7 +98,7 @@ defmodule Console.Cockpit.Boards do
     case selected_ticket(state, ticket_columns(state)) do
       %{status: status} = ticket ->
         next = next_status(status)
-        _ = Safe.value(fn -> Server.Tickets.update(ticket, %{status: next}) end, nil)
+        _ = Safe.value(fn -> Tickets.update(ticket, %{status: next}) end, nil)
         %{state | flash: "ticket ##{ticket.id} → #{next}"}
 
       _ ->
@@ -110,7 +111,7 @@ defmodule Console.Cockpit.Boards do
       %{id: id, title: title} = ticket ->
         with {:ok, thread} <-
                Channel.open_thread(%{title: title, workspace_id: Space.active_workspace_id(state), scope: "machine"}),
-             {:ok, _} <- Safe.value(fn -> Server.Tickets.promote(ticket, thread.id) end, nil) do
+             {:ok, _} <- Safe.value(fn -> Tickets.promote(ticket, thread.id) end, nil) do
           _ = Staffing.spawn_onto(thread.id, Reads.center_dims(state))
           %{state | board: nil, focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
         else

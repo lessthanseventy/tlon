@@ -52,7 +52,7 @@ defmodule Console.Panel.Activity do
   @author_hues [:arch_surveyor, :arch_builder, :arch_reviewer, :arch_planner, :arch_assistant]
 
   defp author_style(author) do
-    if Server.Channel.operator?(author),
+    if Console.Server.Channel.operator?(author),
       do: :operator,
       else: Enum.at(@author_hues, rem(:erlang.phash2(author), length(@author_hues)))
   end

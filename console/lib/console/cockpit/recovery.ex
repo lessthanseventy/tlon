@@ -8,8 +8,8 @@ defmodule Console.Cockpit.Recovery do
   """
 
   alias Console.Safe
-  alias Server.Channel
-  alias Server.Dossier
+  alias Console.Server.Channel
+  alias Console.Server.Dossier
 
   @resurrect_max_fails 3
   @resurrect_healthy_ms 5_000

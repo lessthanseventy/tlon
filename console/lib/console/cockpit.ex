@@ -27,6 +27,8 @@ defmodule Console.Cockpit do
   alias Console.Panel
   alias Console.Reads
   alias Console.Safe
+  alias Console.Server.Channel
+  alias Console.Server.Dossier
   alias Console.Sessions
   alias Console.Space
   alias Console.Staffing
@@ -38,8 +40,6 @@ defmodule Console.Cockpit do
   alias Ghostty.KeyEvent
   alias Raxol.Core.Events.Event
   alias Server.Bus
-  alias Server.Channel
-  alias Server.Dossier
 
   # `Space.workspace?/1` is a `defguard` (usable in clause-head `when`s), which requires the module,
   # not just an alias.
@@ -819,7 +819,7 @@ defmodule Console.Cockpit do
   defp open_lazygit(%{stack_focus: id} = state) do
     flashing(state, "lazygit", fn ->
       if Console.Lazygit.available?() do
-        case Server.worktree_for_thread(id) do
+        case Console.Server.worktree_for_thread(id) do
           {:ok, cwd} -> spawn_lazygit(state, id, cwd)
           {:error, reason} -> {:noreply, render(%{state | flash: "no repo for this thread (#{inspect(reason)})"})}
         end
@@ -892,7 +892,10 @@ defmodule Console.Cockpit do
 
   # First-class ticket create (Slice C): file into the active workspace's backlog, flash a receipt.
   defp apply_effect({:file_ticket, title}, state) do
-    case Safe.value(fn -> Server.Tickets.file(%{workspace_id: Space.active_workspace_id(state), title: title}) end, nil) do
+    case Safe.value(
+           fn -> Console.Server.Tickets.file(%{workspace_id: Space.active_workspace_id(state), title: title}) end,
+           nil
+         ) do
       {:ok, t} -> {:noreply, render(%{state | flash: "filed ticket ##{t.id} in backlog"})}
       _ -> {:noreply, render(%{state | flash: "couldn't file the ticket"})}
     end
@@ -903,7 +906,7 @@ defmodule Console.Cockpit do
     operator = Console.Config.operator()
     attrs = %{body: body, scope: "workspace", scope_id: Space.active_workspace_id(state), author: operator}
 
-    case Safe.value(fn -> Server.Notes.write(attrs) end, nil) do
+    case Safe.value(fn -> Console.Server.Notes.write(attrs) end, nil) do
       {:ok, n} -> {:noreply, render(%{state | flash: "noted ##{n.id}"})}
       _ -> {:noreply, render(%{state | flash: "couldn't save the note"})}
     end
@@ -1068,8 +1071,8 @@ defmodule Console.Cockpit do
         habit ->
           {verb, result} =
             case action do
-              :approve -> {"approved", Server.approve_habit(habit.id)}
-              :reject -> {"rejected", Server.reject_habit(habit.id)}
+              :approve -> {"approved", Console.Server.approve_habit(habit.id)}
+              :reject -> {"rejected", Console.Server.reject_habit(habit.id)}
             end
 
           flash =
@@ -1113,7 +1116,7 @@ defmodule Console.Cockpit do
   defp apply_effect({:tlon_delete, {:thread, id, _label}}, state) do
     flashing(state, "delete", fn ->
       flash =
-        case Server.delete_thread(id) do
+        case Console.Server.delete_thread(id) do
           {:ok, thread} -> "deleted “#{thread.title}”"
           {:error, :root_machine_thread} -> "can't delete the root thread"
           {:error, reason} -> "delete refused: #{inspect(reason)}"
@@ -1187,6 +1190,9 @@ defmodule Console.Cockpit do
   # the :render; the rest see the flag set and do nothing — the single :render picks up the
   # latest terminal state, whatever arrived in the ~8ms window.
   defp schedule_render(%{render_scheduled?: true} = state), do: state
+
+  # Sessions is supervised (Console.Supervisor) but the cockpit is NOT — a call against a torn-down
+  # registry exits, which would otherwise kill the cockpit. Degrade instead (see `Reads.terminal/1`).
 
   defp schedule_render(state) do
     Process.send_after(self(), :render, @render_coalesce_ms)
@@ -1270,9 +1276,6 @@ defmodule Console.Cockpit do
       _ -> nil
     end
   end
-
-  # Sessions is supervised (Console.Supervisor) but the cockpit is NOT — a call against a torn-down
-  # registry exits, which would otherwise kill the cockpit. Degrade instead (see `Reads.terminal/1`).
 
   defp safe_session_ensure(key, opts), do: Safe.value(fn -> Sessions.ensure(key, opts) end, :error)
 

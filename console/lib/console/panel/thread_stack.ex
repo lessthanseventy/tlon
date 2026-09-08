@@ -109,7 +109,7 @@ defmodule Console.Panel.ThreadStack do
   # (Console.Markdown — bold/code/lists/headings), each row indented under the author. Reads like a
   # chat, not a wall of text: the old `one_line/1` flattened the whole body onto one wrapped line.
   defp message_rows(%{author: author, body: body}, w) do
-    operator? = Server.Channel.operator?(author)
+    operator? = Console.Server.Channel.operator?(author)
     author_style = if operator?, do: :operator, else: :label
     base = if operator?, do: :operator, else: :normal
 
