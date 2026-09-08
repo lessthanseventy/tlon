@@ -401,7 +401,16 @@ defmodule Console.Staffing do
   bare command, never `profile_launcher/3`'s `tmux new-session` wrapper (that would nest a server).
   """
   @spec boot_script(String.t(), String.t()) :: String.t()
-  def boot_script(exports, command), do: "export TERM=xterm-256color\n" <> exports <> "\nexec " <> command
+  def boot_script(exports, command),
+    do: "export TERM=xterm-256color\n" <> exports <> "\n" <> cd_worktree() <> "\nexec " <> command
+
+  @doc """
+  The line every harness boot takes after sourcing the exports: into the thread's worktree
+  (`TLON_CWD`, the server's `Server.worktree_for_thread/1`) — a coworker never writes in the main
+  tree (2026-09-08). Guarded, so a workspace with no repo starts the pane where it is.
+  """
+  @spec cd_worktree() :: String.t()
+  def cd_worktree, do: ~s([ -n "$TLON_CWD" ] && cd "$TLON_CWD")
 
   # The identity minter for a tail-window spawn — defaults to the live server join (mints in-node
   # against the Repo/tokens), overridable via `:console, :tlon_join` so a test drives `ensure_windows`
@@ -464,8 +473,11 @@ defmodule Console.Staffing do
     reload_cmd = {"ADAPTERS_RELOAD_CMD", pi <> " --continue"}
     env_flags = Enum.map_join([reload_cmd], " ", fn {k, v} -> "-e #{sh_single_quote(k <> "=" <> v)}" end)
 
+    # `-c`: the session starts in the thread's worktree — the boot script sourced the exports first,
+    # so $TLON_CWD expands here; unset (no repo) → wherever the shell is.
     "tmux -L #{Tmux.socket(workspace_id)} -f #{Path.join(dir, "tmux.conf")}" <>
-      " new-session -A -s #{Tmux.session(workspace_id)} -n #{lead_name} #{funes_identity_flags()} #{env_flags} '#{pi}'"
+      ~s( new-session -A -s #{Tmux.session(workspace_id)} -n #{lead_name} -c "${TLON_CWD:-$PWD}") <>
+      " #{funes_identity_flags()} #{env_flags} '#{pi}'"
   end
 
   @doc false

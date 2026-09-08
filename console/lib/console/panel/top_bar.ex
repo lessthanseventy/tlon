@@ -4,7 +4,7 @@ defmodule Console.Panel.TopBar do
 
   One row, justified: the workspace, then the focused thread and its stage on the left; the
   thread's lead with a warmth dot on the right, preceded by an alarm chip when the link to the
-  always-up server is down. Data is `%{workspace, thread, stage, lead, warm?, link}` — every key
+  always-up server is down. Data is `%{workspace, thread, stage, cwd, lead, warm?, link}` — every key
   optional but `link`, so a half-assembled frame renders rather than crashing.
   """
   @behaviour Console.Panel
@@ -44,8 +44,18 @@ defmodule Console.Panel.TopBar do
   defp clip_row(_row, _w), do: []
 
   defp left(data) do
-    [{" #{data[:workspace] || "—"} ", :tab}] ++ thread_seg(data[:thread]) ++ stage_seg(data[:stage])
+    [{" #{data[:workspace] || "—"} ", :tab}] ++
+      thread_seg(data[:thread]) ++ stage_seg(data[:stage]) ++ cwd_seg(data[:cwd])
   end
+
+  # The open thread's worktree, its last two segments (`.worktrees/<name>`) — enough to know which
+  # tree the coworker is in, short enough for one row.
+  defp cwd_seg(cwd) when is_binary(cwd) and cwd != "" do
+    short = cwd |> Path.split() |> Enum.take(-2) |> Path.join()
+    [{"  ", :normal}, {short, :dim}]
+  end
+
+  defp cwd_seg(_cwd), do: []
 
   defp thread_seg(thread) when is_binary(thread) and thread != "", do: [{" · ", :dim}, {thread, :normal}]
   defp thread_seg(_thread), do: []

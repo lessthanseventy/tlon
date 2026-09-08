@@ -566,6 +566,15 @@ defmodule Console.Reads do
     }
   end
 
+  defp cwd_read(id) when is_integer(id) do
+    case Console.Server.cwd_for_thread(id) do
+      {:ok, path} -> path
+      _ -> nil
+    end
+  end
+
+  defp cwd_read(_none), do: nil
+
   # TRIAGE reads: cross-thread blockers, failed checks, and unassigned threads.
   # Gathers from all open threads — a server Board aggregate.
   # Each section is `%{shown: [...], more: count}` so the panel can render "+N more".
@@ -638,6 +647,8 @@ defmodule Console.Reads do
       sidebar: Safe.read(:sidebar, [], fn -> sidebar_read(roster) end),
       # Kitty host? → the rail blanks its fallback glyph so an icon PNG covers cleanly (no bleed).
       graphics?: Console.Graphics.kitty?(),
+      # The open thread's worktree path (display only; the spawn ensures it) for the top bar.
+      cwd: Safe.read(:cwd, nil, fn -> cwd_read(state.opened_thread) end),
       # CONFIG (the Author, in the drawer): its own cursor.
       author_cursor: state.author_cursor,
       # The field editor (D2.4 Chunk 2a): nil unless `e` opened it. Meaningless-but-harmless

@@ -706,6 +706,14 @@ defmodule Console.Cockpit do
   defp repaint_on_scroll(:scrolled, state), do: {:noreply, render(state)}
   defp repaint_on_scroll(:forwarded, state), do: {:noreply, state}
 
+  # The delete's one line: the thread, then what became of its worktree — gone, kept (and why),
+  # or there was none. Pure, for the test.
+  def delete_flash({:ok, thread, :none}), do: "deleted “#{thread.title}”"
+  def delete_flash({:ok, thread, {:removed, _path}}), do: "deleted “#{thread.title}” and its worktree"
+  def delete_flash({:ok, thread, {:kept, reason}}), do: "deleted “#{thread.title}” — worktree kept: #{reason}"
+  def delete_flash({:error, :root_machine_thread}), do: "can't delete the root thread"
+  def delete_flash({:error, reason}), do: "delete refused: #{inspect(reason)}"
+
   @doc false
   # The workspace a right click landed on, per the panel under the cursor. The rail carries the
   # workspace rows since the spine left the frame.
@@ -1139,14 +1147,7 @@ defmodule Console.Cockpit do
 
   defp apply_effect({:tlon_delete, {:thread, id, _label}}, state) do
     flashing(state, "delete", fn ->
-      flash =
-        case Console.Server.delete_thread(id) do
-          {:ok, thread} -> "deleted “#{thread.title}”"
-          {:error, :root_machine_thread} -> "can't delete the root thread"
-          {:error, reason} -> "delete refused: #{inspect(reason)}"
-        end
-
-      {:noreply, render(%{state | tlon_delete: nil, flash: flash})}
+      {:noreply, render(%{state | tlon_delete: nil, flash: delete_flash(Console.Server.delete_thread(id))})}
     end)
   end
 

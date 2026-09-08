@@ -49,9 +49,16 @@ defmodule Console.StaffingTest do
   end
 
   describe "boot_script/2 — the one builder every harness window rides" do
-    test "sets TERM, sources the exports, execs the bare command" do
+    test "sets TERM, sources the exports, cds into the thread's worktree when one is exported, execs the bare command" do
       script = Staffing.boot_script("export TLON_THREAD=\"42\"", "mise exec -- pi")
-      assert script == "export TERM=xterm-256color\nexport TLON_THREAD=\"42\"\nexec mise exec -- pi"
+
+      assert script ==
+               "export TERM=xterm-256color\nexport TLON_THREAD=\"42\"\n" <>
+                 Staffing.cd_worktree() <> "\nexec mise exec -- pi"
+
+      # the cd is guarded: no TLON_CWD (a workspace with no repo) → the pane starts where it is
+      assert Staffing.cd_worktree() =~ ~s([ -n "$TLON_CWD" ])
+      assert Staffing.cd_worktree() =~ ~s(cd "$TLON_CWD")
     end
   end
 
@@ -60,6 +67,12 @@ defmodule Console.StaffingTest do
 
     test "attaches-or-creates the workspace's w<id> session" do
       assert Staffing.profile_launcher(1, "tertius", @profile) =~ "new-session -A -s w1"
+    end
+
+    # the centre coworker's session starts in the thread's worktree too (the exports are sourced
+    # by the boot script before this launcher runs, so $TLON_CWD expands); unset → the cwd
+    test "the session starts in the exported worktree" do
+      assert Staffing.profile_launcher(1, "tertius", @profile) =~ ~s(-c "${TLON_CWD:-$PWD}")
     end
 
     test "runs on the workspace's PRIVATE tmux server (id-derived), with the profile's persistence-free config" do

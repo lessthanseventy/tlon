@@ -100,6 +100,21 @@ defmodule Server do
   end
 
   @doc """
+  Where a thread's coworker works, as a PATH ONLY — no git, nothing ensured — for a display that
+  runs every frame (the cockpit's top bar). `{:ok, path}` or `{:error, :no_repo | :no_thread}`.
+  """
+  def cwd_for_thread(%Server.Thread{} = thread) do
+    with {:ok, repo} <- repo_for_thread(thread), do: {:ok, Server.Worktree.path(repo, Server.Worktree.name_for(thread))}
+  end
+
+  def cwd_for_thread(thread_id) when is_integer(thread_id) do
+    case Server.Channel.thread(thread_id) do
+      nil -> {:error, :no_thread}
+      thread -> cwd_for_thread(thread)
+    end
+  end
+
+  @doc """
   Open a workline from a title at `stage` (any-stage entry) — the tertius `open`/`spike`/`build`
   verbs' door (Slice 4D). `attrs` must carry `:title` + `:stage`; `:workspace_id`/`:project_id`/
   `:parent_thread_id` are optional. `{:ok, thread}` | `{:error, {:invalid_stage, s}}` | `{:error, cs}`.

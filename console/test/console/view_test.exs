@@ -388,6 +388,18 @@ defmodule Console.ViewTest do
     end
   end
 
+  describe "the top bar's worktree" do
+    test "the open thread's cwd rides into the TopBar data; nothing open → nil" do
+      reads = reads(%{thread_stack: %{cards: [%{id: 9, title: "t", stage: nil}], opened: 9}, cwd: "/r/.worktrees/t9"})
+      {_, data, _} = Enum.find(View.compose(reads, 120, 40), &match?({Panel.TopBar, _, _}, &1))
+      assert data.cwd == "/r/.worktrees/t9"
+
+      closed = reads(%{thread_stack: %{cards: [], opened: nil}, cwd: "/r/.worktrees/t9"})
+      {_, data, _} = Enum.find(View.compose(closed, 120, 40), &match?({Panel.TopBar, _, _}, &1))
+      assert data.cwd == nil
+    end
+  end
+
   describe "item selection" do
     # The data handed to a given panel module in the placements.
     defp panel_data(placements, mod) do

@@ -421,6 +421,7 @@ defmodule Console.View do
       workspace: space.label,
       thread: card && card[:title],
       stage: card && card[:stage],
+      cwd: card && reads[:cwd],
       lead: lead && lead.agent,
       warm?: lead != nil and lead.warm? == true,
       link: reads[:link] || :up

@@ -84,4 +84,25 @@ defmodule Console.Panel.TopBarTest do
     assert [row] = TopBar.render(data, %{x: 0, y: 0, w: 30, h: 1})
     assert Console.Panel.row_width(row) <= 30
   end
+
+  # The worktree the open thread's coworker works in — shown so "which tree am I in" is never a
+  # question (Andrew, 2026-09-08). Shortened to its last two segments; absent when no repo.
+  test "the open thread's worktree shows, shortened, after the stage" do
+    data = %{
+      workspace: "Tlön",
+      thread: "review PR 42",
+      stage: "build",
+      cwd: "/home/a/projects/ficciones/.worktrees/review-pr-42",
+      link: :up
+    }
+
+    [row] = TopBar.render(data, %{x: 0, y: 0, w: 100, h: 1})
+    assert row_text(row) =~ "review PR 42  [build]  .worktrees/review-pr-42"
+    refute row_text(row) =~ "/home/a"
+  end
+
+  test "no worktree → no path segment" do
+    [row] = TopBar.render(%{workspace: "Tlön", thread: "t", cwd: nil, link: :up}, %{x: 0, y: 0, w: 60, h: 1})
+    refute row_text(row) =~ ".worktrees"
+  end
 end

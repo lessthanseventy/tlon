@@ -82,4 +82,14 @@ defmodule Console.CockpitTest do
       refute Cockpit.typing_only?(closed, closed)
     end
   end
+
+  describe "delete_flash/1 — the thread and what became of its worktree" do
+    test "says gone, kept (with the reason), or nothing about a worktree it never had" do
+      t = %{title: "busy"}
+      assert Cockpit.delete_flash({:ok, t, :none}) == "deleted “busy”"
+      assert Cockpit.delete_flash({:ok, t, {:removed, "/x/.worktrees/t1"}}) == "deleted “busy” and its worktree"
+      assert Cockpit.delete_flash({:ok, t, {:kept, "work/t1 has unmerged commits"}}) =~ "worktree kept: work/t1"
+      assert Cockpit.delete_flash({:error, :root_machine_thread}) =~ "root"
+    end
+  end
 end
