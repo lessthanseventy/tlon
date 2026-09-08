@@ -380,7 +380,7 @@ defmodule Console.Cockpit do
   def handle_cast({:dispatch, %Event{type: :mouse, data: %{x: sx, y: sy, button: b}}}, state)
       when b in [:wheel_up, :wheel_down] do
     {x, y} = {Mouse.to_cell(sx), Mouse.to_cell(sy)}
-    dispatch_wheel(Mouse.hit_panel(state.placements, x, y), b, x, y, state)
+    dispatch_wheel(Mouse.hit_panel(wheel_targets(state, x, y), x, y), b, x, y, state)
   end
 
   # A left click routes to the panel under the cursor and asks it what that row selects — focus a
@@ -657,6 +657,12 @@ defmodule Console.Cockpit do
 
   defp select_focused_window(_state), do: :ok
 
+  # The drawer's own pane takes the wheel where it covers the frame (its placements are appended
+  # last, so hit-testing in reverse finds them before the boxes underneath).
+  defp wheel_targets(state, x, y) do
+    if Drawer.covers?(state, x, y), do: Enum.reverse(state.placements), else: state.placements
+  end
+
   defp dispatch_wheel(nil, _b, _x, _y, state), do: {:noreply, state}
 
   # The shown terminal (lazygit overlay, else the center): forward to the embedded app if it tracks
@@ -833,7 +839,8 @@ defmodule Console.Cockpit do
     {cols, rows} = {max(state.w - 2, 1), max(state.h - 3, 1)}
 
     case safe_session_ensure({:lazygit, id}, cmd: cmd, args: args, cols: cols, rows: rows) do
-      {:ok, _pid} -> {:noreply, render(%{state | lazygit: %{thread_id: id, path: cwd}})}
+      # The zoom is full-frame and owns the keys — the drawer that launched it steps out of the way.
+      {:ok, _pid} -> {:noreply, render(%{Drawer.close(state) | lazygit: %{thread_id: id, path: cwd}})}
       _ -> {:noreply, render(%{state | flash: "couldn't start lazygit"})}
     end
   end
