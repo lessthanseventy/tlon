@@ -278,10 +278,9 @@ dir = "modules/console"
 # db, MCP and the switchboard, and the coworkers are ITS clients — so nothing here migrates a db
 # or reaps coworkers. console-reap.sh still clears a stale cockpit process.
 run = """
-# Always inside the dedicated tmux server (-L tlon, session "cockpit"): the cockpit survives a
-# closed terminal, and Claude can drive it (scripts/cockpit-tmux.sh, the drive-cockpit skill).
-# Not already in THAT server → re-exec into it (new-session -A attaches if it already exists).
-case "${TMUX:-}" in *"/tlon,"*) ;; *) exec tmux -L tlon new-session -A -s cockpit -c "$PWD" "mise run console:run" ;; esac
+# Directly on the terminal, NOT inside tmux: the cockpit draws its icons with the kitty graphics
+# protocol and reads keys with the kitty keyboard protocol, and tmux passes neither through (blank
+# WS tiles, missing icons, odd Ctrl+Space — 2026-09-08). console:run:tmux is the drivable variant.
 if ! systemctl --user is-active --quiet tlon; then
   echo "console:run: the tlon service is not running — systemctl --user start tlon (or mise run server:restart); for an embedded server on the scratch db use console:run:local" >&2
   exit 1
@@ -293,6 +292,13 @@ KEEP_COWORKERS=1 ../../scripts/console-reap.sh || exit $?
 # crash notice goes to stdout after the tty is restored (Console.Cockpit.Recovery).
 stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
 TLON_BACKEND=remote TLON_NODE="${TLON_NODE:-funes@127.0.0.1}" TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" mix console.run 2>>"$stderr_log"
+"""
+
+[tasks."console:run:tmux"]
+description = "console: the cockpit inside the tlon tmux server (session cockpit, -A attaches) so Claude can drive it (drive-cockpit skill) — icons and kitty keys degrade under tmux; the plain console:run is the one to look at"
+dir = "modules/console"
+run = """
+case "${TMUX:-}" in *"/tlon,"*) exec mise run console:run ;; *) exec tmux -L tlon new-session -A -s cockpit -c "$PWD" "mise run console:run" ;; esac
 """
 
 [tasks."console:run:local"]

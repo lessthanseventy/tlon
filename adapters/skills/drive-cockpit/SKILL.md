@@ -12,12 +12,14 @@ Claude and Andrew look at the same screen.
 ## Setup (Andrew, in a ghostty window)
 
 ```
-mise run console:run
+mise run console:run:tmux
 ```
 
-`console:run` re-execs itself into the `tlon` tmux server (session `cockpit`, `new-session -A`)
-when it is not already inside it, so the cockpit is always drivable and survives a closed
-terminal; a second `console:run` attaches to the running one.
+That variant runs the cockpit inside the `tlon` tmux server (session `cockpit`, `-A` attaches).
+The plain `console:run` runs on the bare terminal on purpose: the cockpit draws icons with the
+kitty graphics protocol and reads keys with the kitty keyboard protocol, and tmux passes
+neither through — so under tmux the WS tiles and icons are blank and Ctrl+Space is `C-Space`.
+Drive layout, text and flow in tmux; judge icons and glyph alignment on the bare terminal.
 
 - `-L tlon` is a dedicated tmux server so the cockpit's own coworker servers (`console-workspace-*`)
   and the default server are never touched.
