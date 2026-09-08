@@ -25,4 +25,14 @@ defmodule Console.Panel.ReplyTest do
     assert text(rows) =~ "line one"
     assert text(rows) =~ "line two"
   end
+
+  test "a trailing space shows — the box renders what was typed, not a re-flowed paragraph" do
+    out = %{input: %{kind: :reply, thread_id: 7, buffer: "on it "}} |> Reply.render(@rect) |> text()
+    assert out =~ "on it ▎"
+  end
+
+  test "a double space survives" do
+    out = %{input: %{kind: :reply, thread_id: 7, buffer: "on  it"}} |> Reply.render(@rect) |> text()
+    assert out =~ "on  it"
+  end
 end

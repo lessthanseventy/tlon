@@ -52,4 +52,36 @@ defmodule Console.TextTest do
       assert Text.duration(-5) == "0s"
     end
   end
+
+  # An INPUT buffer is not prose: what you typed is what you see. `wrap/2` collapses whitespace,
+  # so a trailing space (or a double space) vanished from the reply box until the next word
+  # arrived (Andrew, 2026-09-08: "spaces would go through but not display"). `wrap_exact/2` keeps
+  # every character: the lines re-join to the input, spaces included.
+  describe "wrap_exact/2" do
+    test "a trailing space is kept on the line" do
+      assert Text.wrap_exact("hello ", 20) == ["hello "]
+    end
+
+    test "double spaces survive" do
+      assert Text.wrap_exact("a  b", 20) == ["a  b"]
+    end
+
+    test "lines re-join to the input exactly, breaking after a space when one is in reach" do
+      text = "one two three four"
+      lines = Text.wrap_exact(text, 9)
+      assert lines == ["one two ", "three ", "four"]
+      assert Enum.join(lines) == text
+    end
+
+    test "a word longer than the width hard-breaks and still re-joins" do
+      text = "abcdefghij kl"
+      lines = Text.wrap_exact(text, 4)
+      assert Enum.join(lines) == text
+      assert Enum.all?(lines, &(String.length(&1) <= 4))
+    end
+
+    test "the empty string is one empty line, so the caret has a row" do
+      assert Text.wrap_exact("", 10) == [""]
+    end
+  end
 end

@@ -46,10 +46,7 @@ defmodule Console.Panel.Reply do
     (buffer || "")
     |> String.split("\n")
     |> Enum.flat_map(fn hard ->
-      case Console.Text.wrap(hard, width) do
-        [] -> [""]
-        wrapped -> wrapped
-      end
+      Console.Text.wrap_exact(hard, width)
     end)
   end
 end

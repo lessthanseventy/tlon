@@ -35,6 +35,41 @@ defmodule Console.Text do
   end
 
   @doc """
+  Wrap an INPUT buffer to `width` without changing it: every grapheme (spaces included) lands on
+  some line, so `Enum.join(lines) == string`. Breaks after the last space that fits, else hard.
+  The reply box and the new-thread band use this — what you typed is what you see; `wrap/2`
+  collapses whitespace and is for prose (2026-09-08). An empty string is one empty line.
+  """
+  @spec wrap_exact(String.t(), pos_integer()) :: [String.t()]
+  def wrap_exact(string, width) when width > 0 do
+    string |> String.graphemes() |> exact_lines(width, []) |> Enum.reverse()
+  end
+
+  defp exact_lines([], _width, []), do: [""]
+  defp exact_lines([], _width, acc), do: acc
+
+  defp exact_lines(graphemes, width, acc) do
+    {line, rest} = Enum.split(graphemes, width)
+
+    {line, rest} =
+      case {rest, line |> Enum.reverse() |> Enum.find_index(&(&1 == " "))} do
+        # the whole remainder fits, or no space to break after — take the chunk as is
+        {[], _} ->
+          {line, rest}
+
+        {_, nil} ->
+          {line, rest}
+
+        # break AFTER the last space in reach; the space stays on this line
+        {_, from_end} ->
+          keep = width - from_end
+          {Enum.take(line, keep), Enum.drop(line, keep) ++ rest}
+      end
+
+    exact_lines(rest, width, [Enum.join(line) | acc])
+  end
+
+  @doc """
   Paragraph-aware wrap: hard newlines keep their breaks (each line wraps separately, so lists
   survive), and a run of blank lines becomes exactly ONE empty line between paragraphs — the
   author's paragraph structure renders instead of collapsing. An empty string yields `[]`.
