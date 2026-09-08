@@ -9,13 +9,15 @@ The cockpit (`mise run console:run`) is a termbox TUI: it cannot be scripted dir
 tmux session its frame is text tmux can capture and its keys are keys tmux can send. This is how
 Claude and Andrew look at the same screen.
 
-## Setup (Andrew, once per pass, in a ghostty window)
+## Setup (Andrew, in a ghostty window)
 
 ```
-tmux -L tlon new -s cockpit -x 200 -y 50
-# inside it:
 mise run console:run
 ```
+
+`console:run` re-execs itself into the `tlon` tmux server (session `cockpit`, `new-session -A`)
+when it is not already inside it, so the cockpit is always drivable and survives a closed
+terminal; a second `console:run` attaches to the running one.
 
 - `-L tlon` is a dedicated tmux server so the cockpit's own coworker servers (`console-workspace-*`)
   and the default server are never touched.
