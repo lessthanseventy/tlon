@@ -13,7 +13,7 @@ defmodule Console.CrashLog do
   end
 
   defp default_path do
-    cache = System.get_env("XDG_CACHE_HOME") || Path.join(System.user_home!() || "/tmp", ".cache")
+    cache = System.get_env("XDG_CACHE_HOME") || Path.join(System.user_home!(), ".cache")
     Path.join([cache, "tlon", "crash.log"])
   end
 

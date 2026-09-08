@@ -572,8 +572,7 @@ defmodule Console.Profiles do
   # permissions map (what `instantiate/1` holds); a nil override or a profile without permissions is a
   # pass-through.
   defp apply_yolo_override(perms, nil), do: perms
-  defp apply_yolo_override(perms, yolo) when is_map(perms), do: Map.put(perms, "yoloMode", yolo)
-  defp apply_yolo_override(perms, _yolo), do: perms
+  defp apply_yolo_override(perms, yolo), do: Map.put(perms, "yoloMode", yolo)
 
   @doc "Every registered coworker profile — the seed roster resolved through the archetype registry."
   @spec all() :: [Profile.t()]
@@ -613,7 +612,7 @@ defmodule Console.Profiles do
       # Slice D: the harness is an environment-resolved BINDING from the model (anthropic model at
       # home → the official claude_code harness; else pi), not an archetype trait. A template
       # `harness:` key stays an explicit pin (the escape hatch).
-      harness: Map.get(t, :harness) || Console.Harness.resolve(model, Console.Config.environment()),
+      harness: t[:harness] || Console.Harness.resolve(model, Console.Config.environment()),
       add_extensions: Map.get(t, :add_extensions, []),
       mcp: t.mcp,
       model: model,
@@ -683,8 +682,8 @@ defmodule Console.Profiles do
 
   # The server handle convention: profile name + "-machine" (profile "tertius" → "tertius-machine").
   # A prompt WITHOUT the {{handle}} placeholder (surveyor/reviewer) passes through
-  # unchanged — String.replace is a no-op, so those personas stay byte-identical.
-  defp personalize(nil, _name), do: nil
+  # unchanged — String.replace is a no-op, so those personas stay byte-identical. Every
+  # archetype carries a prompt (Elixir 1.20's type checker proved a nil clause dead).
   defp personalize(prompt, name), do: String.replace(prompt, "{{handle}}", "#{name}-machine")
 
   @doc "The ring entry after `current` (matched on provider+model), wrapping; unknown → the ring head."

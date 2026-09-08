@@ -112,18 +112,18 @@ defmodule Console.MixProject do
       # Modified cursor/arrow keys via CSI params: ESC [ 1 ; <mods> <A|B|C|D|F|H|P|Q|R|S>. The
       # dedicated parse_one clause only matches a SINGLE-BYTE modifier, so a MULTI-DIGIT mods field
       # falls through to here — and a lock modifier produces exactly that: with Num Lock on, ghostty
-      # (under \e[>1u Kitty) tags every key with num_lock (128), so a plain Up arrives as \e[1;129A,
-      # not \e[A, and was silently dropped (arrows did nothing whenever Num Lock/Caps Lock was on).
+      # (under \\e[>1u Kitty) tags every key with num_lock (128), so a plain Up arrives as \\e[1;129A,
+      # not \\e[A, and was silently dropped (arrows did nothing whenever Num Lock/Caps Lock was on).
       # decode_modifier keys off bits 1/2/4 only, so lock bits (num_lock=128, caps_lock=64) read as
-      # "no modifier" — a plain Up stays a plain Up, ctrl+Up (\e[1;133A = 4+128) stays ctrl+Up.
+      # "no modifier" — a plain Up stays a plain Up, ctrl+Up (\\e[1;133A = 4+128) stays ctrl+Up.
       {[1, mods], final, rest} when final in [65, 66, 67, 68, 70, 72, 80, 81, 82, 83] ->
         {shift, alt, ctrl} = decode_modifier(mods)
         {key_event(csi_letter_to_key(final), shift: shift, alt: alt, ctrl: ctrl), rest}
 
       # Kitty keyboard protocol CSI-u: ESC [ <codepoint> [ ; <mods> [ ; <event> ] ] u.
-      # Enabled by Console.Cockpit writing \e[>1u (disambiguate) on the host tty. Modified keys
-      # with no legacy form — shift+enter (\e[13;2u), ctrl+enter (\e[13;5u), shift+tab
-      # (\e[9;2u) — arrive here. Plain keys keep their legacy form (enter stays \r), so this
+      # Enabled by Console.Cockpit writing \\e[>1u (disambiguate) on the host tty. Modified keys
+      # with no legacy form — shift+enter (\\e[13;2u), ctrl+enter (\\e[13;5u), shift+tab
+      # (\\e[9;2u) — arrive here. Plain keys keep their legacy form (enter stays \\r), so this
       # only fires for the modified/disambiguated ones. `mods` is 1 + bitmask (shift=1, alt=2,
       # ctrl=4, meta=8).
       {[cp], ?u, rest} ->
@@ -150,7 +150,7 @@ defmodule Console.MixProject do
     end
 
     # A Kitty CSI-u event: map the codepoint to a key atom (special keys) or a :char (printable),
-    # then attach the modifier opts. Plain keys with a legacy form (enter=\r, tab=\t, ctrl+v=\x16)
+    # then attach the modifier opts. Plain keys with a legacy form (enter=\\r, tab=\\t, ctrl+v=\\x16)
     # never arrive here — only modified or disambiguated ones — so the mapping covers the keys
     # that actually surface as CSI-u under disambiguate mode.
     defp csi_u_event(cp, opts) do
@@ -231,8 +231,8 @@ defmodule Console.MixProject do
   # the host tty. Surfaced as distinct paste-start/paste-end events (data.phase) so the cockpit's
   # paste buffer collects the content between them and forwards it as one block.
   @paste_csi_tilde_clauses """
-      # Bracketed-paste markers (CSI-tilde n=200/201): aleph enables \e[?2004h on the host tty, so
-      # ghostty wraps a paste in \e[200~…\e[201~. Surfaced as distinct paste-start/paste-end events
+      # Bracketed-paste markers (CSI-tilde n=200/201): aleph enables \\e[?2004h on the host tty, so
+      # ghostty wraps a paste in \\e[200~…\\e[201~. Surfaced as distinct paste-start/paste-end events
       # so the cockpit's paste buffer collects the content between them and forwards it as one block.
       {[200], ?~, rest} ->
         {%Event{type: :paste, data: %{phase: :start}}, rest}

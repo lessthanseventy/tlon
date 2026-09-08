@@ -6,10 +6,10 @@
 
 [tools]
 # Combined build (precompiled for this OTP) — pairing a bare "1.19" with a separate
-# erlang picks an incompatible OTP and fails to boot. OTP 28: console needs it
+# erlang picks an incompatible OTP and fails to boot. OTP 29 (2026-09-07; was 28): console needs it
 # (ghostty_ex/libghostty-vt) and boots server, so the whole repo runs on one OTP.
-erlang = "28"
-elixir = "1.19.5-otp-28"
+erlang = "29"
+elixir = "1.20.4-otp-29"
 # adapters' pi adapter is TypeScript; bun runs it natively (no build step) and is the test
 # runner. mise owns the dev runtime, so the JS toolchain is pinned here too, not assumed.
 bun = "1.3.14"
