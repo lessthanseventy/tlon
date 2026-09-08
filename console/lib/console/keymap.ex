@@ -770,6 +770,9 @@ defmodule Console.Keymap do
   # sections — Shift+Tab must precede the bare :tab clause below, which also matches it.
   defp handle_tlon(%{key: :tab, shift: true}, state), do: switch(state, :prev)
   defp handle_tlon(%{key: :tab}, state), do: switch(state, :next)
+  # `[`/`]` are the rail's own advertised space keys — the same ring Tab walks.
+  defp handle_tlon(%{key: :char, char: "["}, state), do: switch(state, :prev)
+  defp handle_tlon(%{key: :char, char: "]"}, state), do: switch(state, :next)
   # `s` took over section-cycle (freed by Tab) — habits approve/reject needs focus.section == 1,
   # so the section must stay reachable.
   defp handle_tlon(%{key: :char, char: "s"}, state), do: {focus_intent(state, :section_next), :repaint}

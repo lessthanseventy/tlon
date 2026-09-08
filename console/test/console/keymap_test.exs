@@ -1313,6 +1313,14 @@ defmodule Console.KeymapTest do
       assert {%{active_key: :orbis}, :repaint} = Keymap.handle(key(:tab, shift: true), s)
     end
 
+    # UX slice 1, task 2: the rail advertises `[ ]` — bind it to the space ring Tab already walks,
+    # so every key the rail's hints name actually does something.
+    test "in nav mode, [ and ] walk the space ring like Shift+Tab / Tab" do
+      s = tlon(nav_focus())
+      assert {%{active_key: :orbis}, :repaint} = Keymap.handle(char("]"), s)
+      assert {%{active_key: :orbis}, :repaint} = Keymap.handle(char("["), s)
+    end
+
     test "in nav mode, j/k move the item cursor within the focused pane, clamped to its count" do
       {n1, :repaint} = Keymap.handle(char("j"), tlon(nav_focus(%{column: :left, pane: 0})))
       assert n1.focus.cursors[:a] == 1
