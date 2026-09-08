@@ -1,10 +1,10 @@
 defmodule Console.SessionPane do
   @moduledoc """
-  Launch spec for the toggleable right SESSION PANE (2026-08-31). A thread's lead runs as a live
-  agent in a tmux window of the workspace session; toggling the pane on a selected thread embeds
-  that window in a `Console.Terminal` PTY beside the thread stack, driven with the same
-  `Ctrl+Space` TERM↔NAV leader as any embedded app. This module ONLY builds the attach command;
-  the cockpit owns the terminal lifecycle (spawn on show, retarget as the cursor moves).
+  Launch spec for the right SESSION PANE. A thread's lead runs as a live agent in a tmux window of
+  the workspace session; the pane embeds that window in a `Console.Terminal` PTY beside the OPEN
+  conversation, driven with the same `Ctrl+Space` TERM↔NAV leader as any embedded app. This module
+  ONLY builds the attach command; the cockpit owns the terminal lifecycle (spawn on open, end it
+  when the centre moves off the thread).
 
   LIVE-tunable (Andrew's kitty pass): the exact attach shape — a plain `attach` shares the center
   client's current window, so the pane opens a **grouped** session (`new-session -t`) that shares
