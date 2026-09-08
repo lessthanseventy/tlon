@@ -17,7 +17,6 @@ defmodule Console.View do
   # Space.workspace?/1 is a defguard — usable outside a guard too, but only once required.
   require Space
 
-  @min_col 16
   # The frame's bars (UX slice 1): one line each, top and bottom. The top bar says where you are
   # and who is on it (Console.Panel.TopBar); the footer is the contextual hints (Panel.StatusBar).
   @top_h 1
@@ -27,6 +26,7 @@ defmodule Console.View do
   # Panels whose content can overflow their box and so accept a `:scroll` offset (wheel scroll).
   # The center Terminal and StatusBar/Border never overflow.
   @scrollable [
+    Panel.Rail,
     Panel.Sidebar,
     Panel.Overview,
     Panel.ThreadStack,
@@ -60,11 +60,10 @@ defmodule Console.View do
         true -> chat_center(space.surface, reads)
       end
 
-    # Slice 3.4: three regions — the thin far-left SPINE (the workspace switcher + global tools, the
-    # Sidebar rendered narrow), the funes RAIL (`space.left`, stacked top-down: NOW·CREW·MEMORY·STACK),
-    # and the CENTER (thread stack + tertius). The old right rail is retired (`space.right == []`).
-    spine = [Panel.Sidebar]
-    rail = space.left
+    # UX slice 1: TWO regions — the always-on RAIL (workspaces + the active workspace's threads) at
+    # the frame's left edge, and the CENTER (thread stack + tertius). The spine and the funes rail
+    # (`space.left`, NOW·CREW·MEMORY·STACK) are off the frame; the drawer hosts those panes.
+    rail = [Panel.Rail]
 
     boxes =
       case layout_for(w) do
@@ -72,11 +71,9 @@ defmodule Console.View do
           session? = is_integer(reads[:session_pane])
           cols = wide_columns(w, body_h, session?)
 
-          # Nav v2 (Andrew 2026-08-31): NO pane digits. The spine is click/keybind only (not in the
-          # focus nav); the rail is walked with h/l; Alt+N is tmux tabs, Alt+Shift+N is workspaces.
+          # Nav v2 (Andrew 2026-08-31): NO pane digits. Alt+N is tmux tabs, Alt+Shift+N is workspaces.
           base =
-            no_digits(boxed(spine, cols.spine)) ++
-              no_digits(boxed(rail, cols.rail)) ++
+            no_digits(boxed(rail, cols.rail)) ++
               no_digits(boxed(center_panels, cols.center, new_thread_overrides(reads, cols.center.w)))
 
           # The right session pane (the selected thread's live lead PTY), only when toggled on.
@@ -85,7 +82,7 @@ defmodule Console.View do
             else: base
 
         :narrow ->
-          no_digits(boxed(spine ++ rail ++ center_panels, %{x: 0, y: @top_h, w: w, h: body_h}))
+          no_digits(boxed(rail ++ center_panels, %{x: 0, y: @top_h, w: w, h: body_h}))
       end
 
     # A box under 2 rows can't hold a frame (Border renders [] below 2) and its inset content would
@@ -94,7 +91,7 @@ defmodule Console.View do
 
     # In Tlön nav mode one sidebar pane is focused — its border lights up (the lazygit "active
     # pane" cue). Every other box, and every other space, stays neutral.
-    focused = focused_section(reads[:focus], space, rail)
+    focused = focused_section(reads[:focus])
 
     # Slice 3.4: the rail stacks every panel, so there's no carousel and no border tab strip — every
     # box carries a plain digit-first title.
@@ -187,17 +184,13 @@ defmodule Console.View do
   defp layout_for(w) when w >= @wide_min, do: :wide
   defp layout_for(_w), do: :narrow
 
-  # The sidebar pane the Tlön focus sits on — only in nav mode (out of the terminal), so the frame
-  # lights the instant you Ctrl+Space out. nil for other spaces and while in the terminal (the
-  # terminal is the active pane then). Matches by section module — the panes are distinct, so module
-  # identity is unambiguous. The Sidebar leads the left column here exactly as it does on screen, so
-  # its frame lights when the focus navigates onto the workspace nav.
-  # Nav v2: the focus nav is the RAIL alone (the spine is click/keybind only) — so h/l/j/k walk the
-  # rail, and the lit border is whichever rail pane the focus sits on.
-  defp focused_section(%Focus{in_terminal?: false} = focus, _space, rail),
-    do: Focus.focused_pane(focus, %{left: rail, right: [], sections: %{}})
+  # The pane the Tlön focus sits on — only in nav mode (out of the terminal), so the frame lights the
+  # instant you Ctrl+Space out. nil while in the terminal (the terminal is the active pane then).
+  # UX slice 1: the left column is the rail alone; the drawer's panes join the walk when it opens.
+  defp focused_section(%Focus{in_terminal?: false} = focus),
+    do: Focus.focused_pane(focus, %{left: [Panel.Rail], right: [], sections: %{}})
 
-  defp focused_section(_focus, _space, _rail), do: nil
+  defp focused_section(_focus), do: nil
 
   # Nav v2: no pane digits (the numbers are gone from the frames) — every box just carries `nil`.
   defp no_digits(boxes), do: Enum.map(boxes, fn {section, rect} -> {section, rect, nil} end)
@@ -217,8 +210,8 @@ defmodule Console.View do
   # The right session pane's frame title (the selected thread's live lead PTY).
   defp section_title({Panel.Terminal, :session}), do: "SESSION"
   defp section_title({panel, _read_key}), do: section_title(panel)
-  # A thin icon-dock spine (Slice 3.4) — a short frame title so it doesn't clip the narrow column.
-  defp section_title(Panel.Sidebar), do: "WS"
+  # The always-on left rail (UX slice 1) — workspaces + the active workspace's threads.
+  defp section_title(Panel.Rail), do: "RAIL"
   defp section_title(Panel.Stack), do: "STACK"
   defp section_title(Panel.Memory), do: "MEMORY"
   defp section_title(Panel.Crew), do: "CREW"
@@ -241,22 +234,17 @@ defmodule Console.View do
 
   defp focus_slice(_reads), do: nil
 
-  # The three-region geometry (Slice 3.4): a thin SPINE (far-left workspace switcher + global tools),
-  # the funes RAIL (~¼), and the CENTER (the rest) — the single source of truth for where each region
-  # sits. `compose/3` places panels into these, and `center_rect/3` derives the center Terminal's
-  # content rect from the SAME math, so the embedded PTY is sized to exactly what's on screen (a wider
-  # PTY spills pi past the frame; a shorter one leaves a dead band). The old right ¼ column is gone.
+  # The two-region geometry (UX slice 1): the RAIL at the frame's left edge, and the CENTER (the
+  # rest) — the single source of truth for where each region sits. `compose/3` places panels into
+  # these, and `center_rect/3` derives the center Terminal's content rect from the SAME math, so the
+  # embedded PTY is sized to exactly what's on screen (a wider PTY spills pi past the frame; a
+  # shorter one leaves a dead band).
   defp wide_columns(w, body_h, session? \\ false) do
-    spine_w = spine_width(w)
-    rail_w = clamp_col(div(w, 4), w)
-    rail_x = spine_w + 1
-    center_x = rail_x + rail_w + 1
+    rail_w = rail_width(w)
+    center_x = rail_w + 1
     center_total = max(w - center_x, 1)
 
-    base = %{
-      spine: %{x: 0, y: @top_h, w: spine_w, h: body_h},
-      rail: %{x: rail_x, y: @top_h, w: rail_w, h: body_h}
-    }
+    base = %{rail: %{x: 0, y: @top_h, w: rail_w, h: body_h}}
 
     # The toggleable right SESSION PANE (2026-08-31): split ~⅓ of the center off as a right column
     # (the selected thread's live lead PTY); the thread stack keeps the rest. Off = center spans it all.
@@ -273,9 +261,9 @@ defmodule Console.View do
     end
   end
 
-  # The spine is a thin icon dock (Slice 3.4, refined 2026-08-31): fully-clickable icon TILES. Kept
-  # tight — barely wider than the small square icon, minimal horizontal padding.
-  defp spine_width(w), do: w |> div(18) |> max(7) |> min(9)
+  # Thin, but wide enough for a thread title: a fifth of the frame, floored at 22 columns so a rail
+  # row is readable, capped at a third so it can never crowd the conversation.
+  defp rail_width(w), do: w |> div(5) |> max(22) |> min(div(w, 3))
 
   @doc """
   The content rect the center Terminal renders into for a `space_key`/`w`×`h` cockpit — the single
@@ -326,6 +314,8 @@ defmodule Console.View do
   defp merge_slice(data, _slice), do: data
 
   @doc "Resolve the data a panel is fed from the assembled reads (keeps spaces plain data)."
+  def data_for(Panel.Rail, r), do: %{groups: r[:sidebar] || [], active_key: r.active_key, opened: opened_id(r)}
+
   def data_for(Panel.Sidebar, r),
     do: %{groups: r[:sidebar] || [], active_key: r.active_key, graphics?: r[:graphics?] == true}
 
@@ -395,6 +385,10 @@ defmodule Console.View do
   defp opened_card(%{thread_stack: %{opened: id, cards: cards}}) when not is_nil(id), do: Enum.find(cards, &(&1.id == id))
 
   defp opened_card(_reads), do: nil
+
+  # The OPEN thread's id — what the rail marks and the top bar names, off the one thread_stack read.
+  defp opened_id(%{thread_stack: %{opened: id}}), do: id
+  defp opened_id(_reads), do: nil
 
   # The roster row working that thread (agent + warmth), or nil.
   defp lead_of(reads, id), do: Enum.find(reads[:roster] || [], &(&1.thread_id == id))
@@ -491,6 +485,4 @@ defmodule Console.View do
   defp fixed_height(Panel.Reply), do: 3
   defp fixed_height({panel, _read_key}), do: fixed_height(panel)
   defp fixed_height(_panel), do: nil
-
-  defp clamp_col(v, w), do: v |> max(@min_col) |> min(max(div(w, 3), @min_col))
 end

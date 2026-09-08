@@ -222,8 +222,9 @@ defmodule Console.Reads do
   # ITEM counts (what j/k clamps against), derived from the live reads in `state`. Keyed by pane
   # module, matching space.left/right. nil-ish layout for other spaces (the keymap only reads it in
   # Tlön anyway).
-  # The Sidebar leads the left column in the FOCUS layout exactly as it does on screen (View
-  # prepends it to `space.left`), so `h`/`H` can land on the workspace nav and `Enter` switches.
+  # The focus walks what the frame PAINTS — UX slice 1 leaves one box on the left, the rail, so the
+  # left column is `[Panel.Rail]`. The funes panes (NOW·CREW·MEMORY·STACK) come back into the walk
+  # with the drawer that hosts them.
   def tlon_layout(%{active_key: key} = state) when Space.workspace?(key) do
     case Space.fetch(key) do
       # A stale/removed active_key mid-render (Space.fetch/1 returns nil on a miss) — degrade to
@@ -231,11 +232,9 @@ defmodule Console.Reads do
       nil ->
         %{left: [], right: [], sections: %{}, counts: %{}}
 
-      space ->
+      _space ->
         %{
-          # Nav v2 (Andrew 2026-08-31): the focus nav is the RAIL alone (`space.left`) — the spine is
-          # click/keybind only, not keyboard-navigable. h/l walks the rail; there are no pane digits.
-          left: space.left,
+          left: [Panel.Rail],
           right: [],
           sections: %{Panel.Memory => memory_sections(state)},
           counts: pane_counts(state)
@@ -255,8 +254,8 @@ defmodule Console.Reads do
   # sectioned — j/k walks the ACTIVE section's list (pinned=0, habits=1), so its count follows
   # focus.section. Panes without a list are absent (0 → j/k is a no-op there).
   defp pane_counts(state) do
-    # Nav v2: the Sidebar is no longer keyboard-navigable (click/keybind only) — only rail panes with
-    # a j/k list need a count.
+    # Only panes with a j/k list need a count; the rail's own lands with the drawer (its rows come
+    # from the sidebar read, not from state).
     %{
       Panel.Stack => length((state.stack || @empty_stack).commits),
       Panel.Memory => memory_section_count(state)
@@ -582,9 +581,9 @@ defmodule Console.Reads do
         cards: thread_cards(stack_blocks, state.stack_focus, state.opened_thread, state.thinking),
         opened: state.opened_thread
       },
-      # The Slack sidebar's read-model (reshape slice C): workspace groups with their unified
-      # thread list + crew working flags.
-      sidebar: Safe.read(:sidebar, [], fn -> Board.sidebar() end),
+      # The rail's read-model: workspace groups with their unified thread list (+ crew working
+      # flags), each thread carrying the warmth of its live session.
+      sidebar: Safe.read(:sidebar, [], fn -> sidebar_read(roster) end),
       # Kitty host? → the Sidebar blanks its fallback glyph so the icon PNG covers cleanly (no bleed).
       graphics?: Console.Graphics.kitty?(),
       workspaces:
@@ -636,6 +635,20 @@ defmodule Console.Reads do
           if(Space.workspace?(state.active_key) and state.focus.detail?, do: tlon_detail(state, tlon_layout))
         end)
     }
+  end
+
+  # `Server.Board.sidebar/0`'s groups, each thread given the `warm?` of its live session — read off
+  # the SAME roster the top bar's lead comes from, so bar and rail can never disagree about warmth.
+  # (`awaiting`/`working` ride along from the board; `unread?` waits on message read-state, design
+  # 2026-09-08 §4 — a thread without it simply carries no unread badge.)
+  defp sidebar_read(roster) do
+    warm = for session <- roster, session.warm?, into: MapSet.new(), do: session.thread_id
+
+    for group <- Board.sidebar() do
+      Map.update!(group, :threads, fn threads ->
+        Enum.map(threads, &Map.put(&1, :warm?, MapSet.member?(warm, &1.id)))
+      end)
+    end
   end
 
   # Only the remote backend can lose its server; an embedded one is reachable by definition.

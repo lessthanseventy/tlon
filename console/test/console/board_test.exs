@@ -34,8 +34,8 @@ defmodule Console.BoardTest do
   alias Console.Panel.Border
   alias Console.Panel.Health
   alias Console.Panel.Overview
+  alias Console.Panel.Rail
   alias Console.Panel.Roster
-  alias Console.Panel.Sidebar
   alias Console.Panel.Stack
   alias Console.Panel.StatusBar
   alias Console.Panel.Terminal
@@ -324,18 +324,17 @@ defmodule Console.BoardTest do
   end
 
   describe "view composition" do
-    test "orbis space: picker, chorus surface, a box per section, status bar — all in bounds" do
+    test "orbis space: the rail, the chorus surface, a box per section, status bar — all in bounds" do
       placements = View.compose(reads(), 120, 40)
       mods = Enum.map(placements, fn {m, _d, _r} -> m end)
 
-      assert Sidebar in mods
+      assert Rail in mods
       assert Overview in mods
       assert StatusBar in mods
-      # every section gets its own bordered box (spine switcher, roster, triage, survey) — the
-      # frame's two bars are borderless.
+      # every section gets its own bordered box (rail, survey) — the frame's two bars are borderless.
       content_panels = Enum.reject(mods, &(&1 in [Border, TopBar, StatusBar]))
       assert Enum.count(mods, &(&1 == Border)) == length(content_panels)
-      assert length(content_panels) >= 4
+      assert length(content_panels) >= 2
 
       Enum.each(placements, fn {_m, _d, r} ->
         assert r.x >= 0 and r.y >= 0
@@ -346,9 +345,9 @@ defmodule Console.BoardTest do
 
     test "content sits inside its column box, not against the frame" do
       placements = View.compose(reads(), 120, 40)
-      {_m, _d, roster_rect} = Enum.find(placements, fn {m, _d, _r} -> m == Roster end)
-      # the left sidebar is inset from the left frame — padded, not jammed to x=0
-      assert roster_rect.x >= 2
+      {_m, _d, rail_rect} = Enum.find(placements, fn {m, _d, _r} -> m == Rail end)
+      # the rail's content is inset from the left frame — padded, not jammed to x=0
+      assert rail_rect.x >= 2
     end
 
     test "tlön space centers ONE machine terminal (the embedded tmux client), fed by the :machine read" do
@@ -428,13 +427,14 @@ defmodule Console.BoardTest do
       end
     end
 
-    test "orbis space centers the chorus feed, with the roster (not a thread list) at its side" do
+    test "orbis space centers the chorus feed, with the rail (not a thread list) at its side" do
       placements = View.compose(reads(%{active_key: :orbis}), 120, 40)
       mods = Enum.map(placements, fn {m, _d, _r} -> m end)
-      # the chorus (all threads, one feed) is the center; the roster is the left sidebar (presence) —
-      # the feed is the navigator now (the old thread-list panel is deleted, slice D).
+      # the chorus (all threads, one feed) is the center; the rail is the left column in EVERY space
+      # since UX slice 1 — ACTIVE/TRIAGE are drawer panes now.
       assert Overview in mods
-      assert Roster in mods
+      assert Rail in mods
+      refute Roster in mods
       refute Terminal in mods
     end
   end
@@ -448,10 +448,10 @@ defmodule Console.BoardTest do
       |> Enum.sort()
     end
 
-    test "a wide viewport lays out three columns" do
+    test "a wide viewport lays out two columns" do
       xs = reads() |> View.compose(140, 40) |> box_xs()
-      # three distinct column x-offsets (left at 0, center, right)
-      assert length(xs) == 3
+      # two distinct column x-offsets since UX slice 1: the rail at 0, the center past it
+      assert length(xs) == 2
       assert 0 in xs
     end
 

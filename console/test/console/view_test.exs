@@ -44,31 +44,75 @@ defmodule Console.ViewTest do
     )
   end
 
-  # A Tlön layout with a commits count, so Focus.cursor/2 clamps and the Stack pane is navigable.
-  # Mirrors production `tlon_layout` since nav v2: the RAIL is the focus nav (`left`), the spine is
-  # not navigable (`right` empty). STACK is rail (left) pane 3.
-  defp layout(counts \\ %{Panel.Stack => 3}),
-    do: %{left: [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack], right: [], sections: %{}, counts: counts}
+  # A Tlön layout with item counts, so Focus.cursor/2 clamps against something. Mirrors production
+  # `tlon_layout` (the focus walks the `left` column; `right` is empty).
+  defp layout(counts \\ %{Panel.Rail => 3}), do: %{left: [Panel.Rail], right: [], sections: %{}, counts: counts}
 
   # The rects of every border flagged as focused.
   defp focused_borders(placements), do: for({Panel.Border, %{focused: true}, rect} <- placements, do: rect)
 
-  describe "the Slack sidebar (reshape slice D)" do
-    test "the left column leads with Panel.Sidebar fed from reads[:sidebar]; SPACES is gone" do
-      groups = [%{workspace: %{id: 1, name: "ficciones"}, threads: [], crew: []}]
-      placements = View.compose(reads(%{active_key: :orbis, sidebar: groups}), 120, 40)
+  # UX slice 1, task 2: ONE rail (workspaces + the active workspace's threads) at x 0 — the thin
+  # spine (Panel.Sidebar) and the funes rail (space.left) are no longer placed; the drawer hosts
+  # those panes from task 4.
+  describe "the rail replaces the Slack sidebar (UX slice 1)" do
+    defp rail_of(placements), do: Enum.find(placements, &match?({Panel.Rail, _, _}, &1))
 
-      assert {Panel.Sidebar, data, _rect} =
-               Enum.find(placements, &match?({Panel.Sidebar, _, _}, &1))
+    # The rail's BOX (its bordered rect) — the content placement is inset inside it.
+    defp rail_box(placements) do
+      Enum.find_value(placements, fn
+        {Panel.Border, %{title: "RAIL"}, rect} -> rect
+        _ -> nil
+      end)
+    end
 
+    test "the left column IS Panel.Rail, fed from reads[:sidebar]; the spine is gone" do
+      groups = [%{workspace: %{id: 0, name: "ficciones"}, threads: [], crew: []}]
+      placements = View.compose(reads(%{sidebar: groups}), 120, 40)
+
+      assert {Panel.Rail, data, _rect} = rail_of(placements)
       assert data.groups == groups
-      assert data.active_key == :orbis
+      assert data.active_key == 0
+      assert %{x: 0, y: 1} = rail_box(placements)
+      refute Enum.any?(placements, &match?({Panel.Sidebar, _, _}, &1))
       refute Enum.any?(placements, &match?({Panel.Spaces, _, _}, &1))
     end
 
+    test "the rail carries the OPENED thread, so it can mark the one the center holds" do
+      stack = %{cards: [], opened: 7}
+      assert {Panel.Rail, %{opened: 7}, _} = rail_of(View.compose(reads(%{thread_stack: stack}), 120, 40))
+      assert {Panel.Rail, %{opened: nil}, _} = rail_of(View.compose(reads(%{}), 120, 40))
+    end
+
+    test "a fifth of the frame, floored at 22 columns (and never past a third)" do
+      assert %{w: 24} = rail_box(View.compose(reads(%{}), 120, 40))
+      assert 24 == max(22, div(120, 5))
+      # At the wide threshold a fifth is under the floor, so the floor wins — and 22 is still
+      # inside the third-of-the-frame cap (27), which is the guard against a fat rail on a tile.
+      assert %{w: 22} = rail_box(View.compose(reads(%{}), 82, 40))
+    end
+
+    test "the center starts one column right of the rail" do
+      placements = View.compose(reads(%{}), 120, 40)
+      rail = rail_box(placements)
+
+      boxes =
+        for {Panel.Border, %{title: title}, rect} <- placements, title != "RAIL", do: rect
+
+      assert boxes != []
+      assert Enum.all?(boxes, &(&1.x >= rail.x + rail.w + 1))
+    end
+
     test "a missing sidebar read degrades to empty groups, not a crash" do
-      placements = View.compose(reads(%{active_key: :orbis}), 120, 40)
-      assert {Panel.Sidebar, %{groups: []}, _rect} = Enum.find(placements, &match?({Panel.Sidebar, _, _}, &1))
+      assert {Panel.Rail, %{groups: []}, _rect} = rail_of(View.compose(reads(%{}), 120, 40))
+    end
+
+    test "the narrow layout stacks the rail above the center" do
+      placements = View.compose(reads(%{}), 60, 30)
+      rail = rail_box(placements)
+      assert %{x: 0, y: 1, w: 60} = rail
+
+      boxes = for {Panel.Border, %{title: title}, rect} <- placements, title != "RAIL", do: rect
+      assert Enum.all?(boxes, &(&1.y >= rail.y + rail.h))
     end
   end
 
@@ -171,40 +215,34 @@ defmodule Console.ViewTest do
     end
   end
 
-  describe "the funes rail (Slice 3.4)" do
-    test "the rail stacks NOW·CREW·MEMORY·STACK to the right of the spine; no right rail" do
+  # UX slice 1, task 2: the funes rail (NOW·CREW·MEMORY·STACK) is off the frame — the panels' modules
+  # stay, the drawer hosts them from task 4.
+  describe "the funes rail is off the frame (UX slice 1)" do
+    test "none of the four funes panels is placed; the one rail is" do
       placements = View.compose(reads(%{}), 120, 40)
 
-      # Every funes panel is placed, stacked in a single rail column (all at the same x, past the spine).
-      rail_rects =
-        for mod <- [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack] do
-          assert {_p, _d, rect} = Enum.find(placements, &match?({^mod, _, _}, &1)), "#{inspect(mod)} not placed"
-          rect
-        end
+      for mod <- [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack] do
+        refute Enum.any?(placements, &match?({^mod, _, _}, &1)), "#{inspect(mod)} is still placed"
+      end
 
-      assert Enum.all?(rail_rects, &(&1.x > 0))
-      assert rail_rects |> Enum.map(& &1.x) |> Enum.uniq() |> length() == 1
+      assert Enum.any?(placements, &match?({Panel.Rail, _, _}, &1))
     end
   end
 
   describe "Tlön focus highlight" do
-    test "in nav mode, exactly one RAIL border lights — the focused pane (nav v2)" do
-      # Nav v2: the focus nav is the rail (Focus `left` column); the spine is not navigable.
+    test "in nav mode, the RAIL's border lights — it is the whole left column now (UX slice 1)" do
       focus = %Focus{in_terminal?: false, column: :left, pane: 0}
       placements = View.compose(reads(%{focus: focus}), 120, 40)
 
       assert [rect] = focused_borders(placements)
-      # The rail sits to the RIGHT of the thin spine — the lit pane is past x = 0.
-      assert rect.x > 0
+      # The rail is the frame's left edge since the spine went.
+      assert rect.x == 0
     end
 
-    test "moving down the rail lights a different rail border" do
-      p0 = View.compose(reads(%{focus: %Focus{in_terminal?: false, column: :left, pane: 0}}), 120, 40)
-      p1 = View.compose(reads(%{focus: %Focus{in_terminal?: false, column: :left, pane: 1}}), 120, 40)
+    test "past the rail nothing lights — the left column holds exactly one pane" do
+      placements = View.compose(reads(%{focus: %Focus{in_terminal?: false, column: :left, pane: 1}}), 120, 40)
 
-      assert [r0] = focused_borders(p0)
-      assert [r1] = focused_borders(p1)
-      assert r0.y != r1.y
+      assert focused_borders(placements) == []
     end
 
     test "in the terminal (default focus), no border is highlighted — the terminal is the active pane" do
@@ -284,71 +322,51 @@ defmodule Console.ViewTest do
     end
 
     test "the focused pane gets its cursor + section as a slice; other panes don't" do
-      # Nav v2: the rail is the focus `left` column — STACK is left pane 3 (NOW·CREW·MEMORY·STACK).
+      # UX slice 1: the rail IS the focus `left` column (left pane 0).
       focus = %Focus{
         in_terminal?: false,
         column: :left,
-        pane: 3,
-        cursors: %{Panel.Stack => 2},
+        pane: 0,
+        cursors: %{Panel.Rail => 2},
         section: 0,
         detail?: false
       }
 
-      stack = %{
-        branch: nil,
-        dirty: false,
-        ahead: nil,
-        behind: nil,
-        status_summary: nil,
-        commits: [],
-        tools: []
-      }
-
-      memory = %{coverage: nil, pinned: [], habits: []}
-
       placements =
         View.compose(
-          reads(%{focus: focus, tlon_layout: layout(), stack: stack, memory: memory}),
+          reads(%{focus: focus, tlon_layout: layout(%{Panel.Rail => 5})}),
           120,
           40
         )
 
-      assert {:ok, %{selected: 2, section: 0}} = panel_data(placements, Panel.Stack)
-      # Memory (rail pane 2, not focused) gets no slice merged in.
-      assert {:ok, mem} = panel_data(placements, Panel.Memory)
-      refute Map.has_key?(mem, :selected)
+      assert {:ok, %{selected: 2, section: 0}} = panel_data(placements, Panel.Rail)
+      # The tertius band (unfocused) gets no slice merged in.
+      assert {:ok, tertius} = panel_data(placements, Panel.Tertius)
+      refute Map.has_key?(tertius, :selected)
     end
   end
 
-  # The funes rail (Slice 3.4): NOW·CREW·MEMORY·STACK all stack in one column — no carousel, no
-  # cycling. HEALTH stays in the footer + /status; the center thread-stack is the thread list.
-  describe "the funes rail stacks (Slice 3.4)" do
+  # Every space gets the same frame now (UX slice 1): one rail, one center. The situational panes
+  # (funes rail, Orbis' ACTIVE/TRIAGE) are drawer material from task 4.
+  describe "one frame for every space (UX slice 1)" do
     defp right_placed?(placements, mod), do: Enum.any?(placements, &match?({^mod, _, _}, &1))
 
-    test "all four funes panels are placed; HEALTH is not" do
+    test "a workspace gets the rail and no situational panes" do
       placements = View.compose(reads(%{active_key: 0, tlon_layout: layout()}), 120, 40)
 
-      assert right_placed?(placements, Panel.Activity)
-      assert right_placed?(placements, Panel.Crew)
-      assert right_placed?(placements, Panel.Memory)
-      assert right_placed?(placements, Panel.Stack)
-      refute right_placed?(placements, Panel.Health)
+      assert right_placed?(placements, Panel.Rail)
+
+      for mod <- [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack, Panel.Health] do
+        refute right_placed?(placements, mod)
+      end
     end
 
-    test "the rail panels stack top-down in NOW·CREW·MEMORY·STACK order" do
-      placements = View.compose(reads(%{}), 120, 40)
-
-      ys =
-        for mod <- [Panel.Activity, Panel.Crew, Panel.Memory, Panel.Stack] do
-          {_p, _d, rect} = Enum.find(placements, &match?({^mod, _, _}, &1))
-          rect.y
-        end
-
-      assert ys == Enum.sort(ys)
-    end
-
-    test "the Orbis god-view carries no funes rail" do
+    test "Orbis gets the same rail, and neither ACTIVE nor TRIAGE" do
       placements = View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40)
+
+      assert right_placed?(placements, Panel.Rail)
+      refute right_placed?(placements, Panel.Roster)
+      refute right_placed?(placements, Panel.Triage)
       refute right_placed?(placements, Panel.Stack)
     end
 
@@ -526,23 +544,21 @@ defmodule Console.ViewTest do
       end)
     end
 
-    test "boxes carry plain titles, NO pane digits (nav v2)" do
+    test "boxes carry NO pane digits (nav v2)" do
       placements = View.compose(reads(%{}), 120, 40)
+      digits = for {Panel.Border, %{digit: d}, _rect} <- placements, do: d
 
-      # The spine + rail borders show their title only — no leading number (digit is nil).
-      assert %{digit: nil} = border_of(placements, "WS")
-      assert %{digit: nil} = border_of(placements, "NOW")
-      assert %{digit: nil} = border_of(placements, "CREW")
-      assert %{digit: nil} = border_of(placements, "MEMORY")
-      assert %{digit: nil} = border_of(placements, "STACK")
+      assert digits != []
+      assert Enum.all?(digits, &is_nil/1)
     end
 
-    test "orbis boxes are titled too (shared pieces inherit)" do
-      placements = View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40)
-      # Orbis' rail is [Roster (ACTIVE), Triage (TRIAGE)] now — the retired BRIEF is gone.
-      assert border_of(placements, "ACTIVE")
-      assert border_of(placements, "TRIAGE")
-      refute border_of(placements, "BRIEF")
+    test "the rail's box is titled, and the retired panes' titles are gone with them" do
+      placements = View.compose(reads(%{}), 120, 40)
+
+      assert %{digit: nil} = border_of(placements, "RAIL")
+      refute border_of(placements, "WS")
+      refute border_of(placements, "NOW")
+      refute border_of(placements, "STACK")
     end
   end
 
@@ -576,11 +592,10 @@ defmodule Console.ViewTest do
       assert data.workspace? == false
     end
 
-    test "a focused Stack pane's own verbs ride through" do
-      # Nav v2: STACK is the last RAIL pane (left pane 3: NOW·CREW·MEMORY·STACK).
-      focus = %Focus{in_terminal?: false, column: :left, pane: 3}
+    test "the focused rail's own verbs ride through" do
+      focus = %Focus{in_terminal?: false, column: :left, pane: 0}
       data = status_of(View.compose(reads(%{focus: focus}), 120, 40))
-      assert {"⏎", "diff"} in data.pane_hints
+      assert {"⏎", "open"} in data.pane_hints
     end
   end
 end
