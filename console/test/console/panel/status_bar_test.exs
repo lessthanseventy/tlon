@@ -177,4 +177,46 @@ defmodule Console.Panel.StatusBarTest do
       assert Console.Panel.row_width(row) <= 34
     end
   end
+
+  # Esc must survive a narrow footer on every modal input face — it's the escape hatch, same as
+  # the leader face. A realistic typed buffer used to push it off the tail before "⏎ create".
+  describe "Esc cancel survives a narrow footer (modal input faces)" do
+    defp narrow_face(input, w) do
+      rows = StatusBar.render(base(%{input: input}), %{x: 0, y: 0, w: w, h: 1})
+      assert length(rows) == 1
+      text(rows)
+    end
+
+    test "new_ticket" do
+      input = %{kind: :new_ticket, buffer: "flaky test hunt", cursor: 15}
+      assert narrow_face(input, 60) =~ "Esc"
+      assert narrow_face(input, 40) =~ "Esc"
+    end
+
+    test "new_note" do
+      input = %{kind: :new_note, buffer: "flaky test hunt", cursor: 15}
+      assert narrow_face(input, 60) =~ "Esc"
+      assert narrow_face(input, 40) =~ "Esc"
+    end
+
+    test "new_workspace" do
+      input = %{kind: :new_workspace, template: "code", buffer: "flaky test hunt", cursor: 15}
+      assert narrow_face(input, 60) =~ "Esc"
+      assert narrow_face(input, 40) =~ "Esc"
+    end
+
+    test "new_path" do
+      input = %{kind: :new_path, buffer: "modules/*", cursor: 9}
+      assert narrow_face(input, 60) =~ "Esc"
+      assert narrow_face(input, 40) =~ "Esc"
+    end
+
+    # archetype "qa" (not "builder"): the fix clips the typed buffer, not the archetype chip —
+    # at w:40 "◂ builder ▸ " alone leaves no room for Esc no matter how far the buffer shrinks.
+    test "new_roster" do
+      input = %{kind: :new_roster, archetype: "qa", buffer: "flaky test hunt", cursor: 15}
+      assert narrow_face(input, 60) =~ "Esc"
+      assert narrow_face(input, 40) =~ "Esc"
+    end
+  end
 end

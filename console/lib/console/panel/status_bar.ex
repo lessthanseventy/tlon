@@ -62,12 +62,12 @@ defmodule Console.Panel.StatusBar do
       {label, :tab},
       {"  ", :normal},
       {"▸ ", :accent},
-      {before, :normal},
+      {before, :buf},
       {"▎", :accent},
-      {after_, :normal}
+      {after_, :buf}
     ]
 
-    Panel.clip([prompt_row(prompt, [{"⏎", "create"}, {"Esc", "cancel"}, {"←→", "move"}], rect.w)], rect)
+    Panel.clip([prompt_row(prompt, [{"Esc", "cancel"}, {"⏎", "create"}, {"←→", "move"}], rect.w)], rect)
   end
 
   # NOTE: the tertius orchestrate input renders in the permanent `Console.Panel.Tertius` band (the
@@ -84,12 +84,12 @@ defmodule Console.Panel.StatusBar do
       {" NEW WORKSPACE ", :tab},
       {"  ", :normal},
       {"◂ #{template} ▸ ", :accent},
-      {before, :normal},
+      {before, :buf},
       {"▎", :accent},
-      {after_, :normal}
+      {after_, :buf}
     ]
 
-    verbs = [{"⏎", "create"}, {"Esc", "cancel"}, {"h/l", "template"}, {"←→", "move"}]
+    verbs = [{"Esc", "cancel"}, {"⏎", "create"}, {"h/l", "template"}, {"←→", "move"}]
     Panel.clip([prompt_row(prompt, verbs, rect.w)], rect)
   end
 
@@ -103,12 +103,12 @@ defmodule Console.Panel.StatusBar do
       {" NEW PATH ", :tab},
       {"  ", :normal},
       {"▸ ", :accent},
-      {before, :normal},
+      {before, :buf},
       {"▎", :accent},
-      {after_, :normal}
+      {after_, :buf}
     ]
 
-    Panel.clip([prompt_row(prompt, [{"⏎", "add"}, {"Esc", "cancel"}, {"←→", "move"}], rect.w)], rect)
+    Panel.clip([prompt_row(prompt, [{"Esc", "cancel"}, {"⏎", "add"}, {"←→", "move"}], rect.w)], rect)
   end
 
   # The field editor's roster sub-list `a` add (D2.4 Chunk 2c): the row becomes the prompt over the
@@ -121,12 +121,12 @@ defmodule Console.Panel.StatusBar do
       {" NEW ROSTER ENTRY ", :tab},
       {"  ", :normal},
       {"◂ #{archetype} ▸ ", :accent},
-      {before, :normal},
+      {before, :buf},
       {"▎", :accent},
-      {after_, :normal}
+      {after_, :buf}
     ]
 
-    verbs = [{"⏎", "add"}, {"Esc", "cancel"}, {"h/l", "archetype"}, {"←→", "move"}]
+    verbs = [{"Esc", "cancel"}, {"⏎", "add"}, {"h/l", "archetype"}, {"←→", "move"}]
     Panel.clip([prompt_row(prompt, verbs, rect.w)], rect)
   end
 
@@ -191,10 +191,16 @@ defmodule Console.Panel.StatusBar do
 
   # A face's own row: prompt left, verbs right-aligned, as many as fit. The row is one line high,
   # so a verb that doesn't fit is GONE — hence the drop-from-the-tail order (verbs are listed
-  # most-load-bearing first).
-  defp prompt_row(prompt, verbs, w), do: Panel.justify(prompt, fit_verbs(prompt, verbs, w), w)
+  # most-load-bearing first, Esc/the head verb always survives). When even the head verb has no
+  # room, the prompt yields instead of the verb — see fit_prompt/3.
+  defp prompt_row(prompt, verbs, w) do
+    fit = fit_verbs(prompt, verbs, w)
+    Panel.justify(fit_prompt(prompt, fit, w), fit, w)
+  end
 
   defp fit_verbs(_prompt, [], _w), do: []
+  # The head verb is load-bearing (Esc, or a face's lone primary action) — never dropped.
+  defp fit_verbs(_prompt, [_only] = verbs, _w), do: verbs_row(verbs)
 
   defp fit_verbs(prompt, verbs, w) do
     runs = verbs_row(verbs)
@@ -203,6 +209,26 @@ defmodule Console.Panel.StatusBar do
       do: runs,
       else: fit_verbs(prompt, Enum.drop(verbs, -1), w)
   end
+
+  # Room for the head verb comes from the prompt's typed buffer (style :buf) — the least
+  # load-bearing text, clipped from the tail of each :buf run in turn before anything else gives.
+  defp fit_prompt(prompt, verbs, w) do
+    over = Panel.row_width(prompt) - (w - Panel.row_width(verbs) - 1)
+
+    if over > 0 do
+      {clipped, _left} = Enum.map_reduce(prompt, over, &clip_buf/2)
+      clipped
+    else
+      prompt
+    end
+  end
+
+  defp clip_buf({text, :buf}, left) when left > 0 do
+    keep = max(String.length(text) - left, 0)
+    {{String.slice(text, 0, keep), :buf}, left - (String.length(text) - keep)}
+  end
+
+  defp clip_buf(run, left), do: {run, left}
 
   # Right-aligned verbs: no trailing separator (it would push the last verb off the edge), one
   # trailing space so the row does not butt against the frame.
