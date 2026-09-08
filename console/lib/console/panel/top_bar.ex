@@ -44,7 +44,7 @@ defmodule Console.Panel.TopBar do
   defp clip_row(_row, _w), do: []
 
   defp left(data) do
-    [{" ", :normal}, {data[:workspace] || "—", :tab}] ++ thread_seg(data[:thread]) ++ stage_seg(data[:stage])
+    [{" #{data[:workspace] || "—"} ", :tab}] ++ thread_seg(data[:thread]) ++ stage_seg(data[:stage])
   end
 
   defp thread_seg(thread) when is_binary(thread) and thread != "", do: [{" · ", :dim}, {thread, :normal}]

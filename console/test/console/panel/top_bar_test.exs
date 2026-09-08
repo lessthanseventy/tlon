@@ -20,6 +20,12 @@ defmodule Console.Panel.TopBarTest do
     assert text =~ "●"
   end
 
+  test "the workspace renders as a padded tab chip, like the old footer's" do
+    [row] = TopBar.render(%{workspace: "Tlön", link: :up}, %{x: 0, y: 0, w: 60, h: 1})
+
+    assert Enum.any?(row, &match?({" Tlön ", :tab}, &1))
+  end
+
   test "a cold coworker gets the hollow dot" do
     data = %{workspace: "Tlön", thread: "t", lead: "hronir", warm?: false, link: :up}
     [row] = TopBar.render(data, %{x: 0, y: 0, w: 80, h: 1})

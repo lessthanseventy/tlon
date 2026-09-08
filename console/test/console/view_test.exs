@@ -471,6 +471,17 @@ defmodule Console.ViewTest do
       refute data.warm?
     end
 
+    test "the narrow layout gets the same two bars and keeps the body between them" do
+      boxes = View.compose(reads(%{}), 60, 30)
+
+      assert {Panel.TopBar, _, %{x: 0, y: 0, w: 60, h: 1}} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
+      assert {Panel.StatusBar, _, %{x: 0, y: 29, w: 60, h: 1}} = Enum.find(boxes, &match?({Panel.StatusBar, _, _}, &1))
+
+      body = for {p, _, r} <- boxes, p not in [Panel.TopBar, Panel.StatusBar], do: r
+      assert body != []
+      assert Enum.all?(body, &(&1.y >= 1 and &1.y + &1.h <= 29))
+    end
+
     test "an open composer still sits directly above the (now one-row) footer" do
       input = %{kind: :compose, thread_id: 1, buffer: "one\ntwo", cursor: 7}
       boxes = View.compose(reads(%{input: input}), 120, 40)

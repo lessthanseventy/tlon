@@ -118,7 +118,8 @@ defmodule Console.View do
     status =
       {Panel.StatusBar, status_data(reads, focused), %{x: 0, y: h - @status_h, w: w, h: @status_h}}
 
-    # Borders first: panel content paints over each box interior, leaving only the frames.
+    # The top bar, then the borders: panel content paints over each box interior, leaving only the
+    # frames. The two bars are borderless, so neither is in `boxes`.
     [top | borders] ++ contents ++ composer_placement(reads, composer_h, w, h) ++ [status]
   end
 
