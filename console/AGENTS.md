@@ -32,6 +32,32 @@ the cockpit spawns them from it (`Console.Staffing.ensure_workspace_roster/2`): 
   (the embedded terminal's NIF warnings land there, never on the screen). Look there first — the alt-screen swallows
   the terminal output, so a crash otherwise leaves nothing.
 
+## The frame (UX slice 1, 2026-09-08)
+
+The cockpit is shell-shaped (`docs/plans/2026-09-08-cockpit-ux-principles-design.md` §2):
+
+- **Row 0** is `Panel.TopBar` — workspace chip · open thread and `[stage]` · its `.worktrees/<name>` ·
+  the lead with ● warm / ○ cold · a `server down` alarm that outranks the title on a narrow frame.
+- **The rail** (`Panel.Rail`, left, always on) — every workspace, then the active one's threads with
+  a warmth dot and ONE badge (`!` awaiting you > `•` unread > `…` working). `j/k` walk it, `⏎` opens,
+  `[ ]`/Tab/Shift+Tab walk the workspace ring, right-click a workspace for its menu. Workspaces are
+  the only spaces — Home/Orbis is gone.
+- **The centre** — the conversation, and beside it the coworker's terminal as two EQUAL panes when
+  the open thread's lead has a live PTY and the frame is ≥100 cols. `Alt+\` cycles the pane's mode
+  `auto → off → on`; the footer names it. With nothing live the right pane says so (no dead verb).
+- **The drawer** (`Alt+d`, `Console.Cockpit.Drawer`) covers the centre with the old panes as tabs —
+  `now crew memory stack roster triage tickets notes health config`; `1-9`/`h`/`l` switch, `j/k`
+  move the pane's cursor, `⏎` is contextual (STACK → lazygit, a MEMORY fact → its detail inside the
+  drawer, TICKETS → promote), Esc steps back then closes; a click on a tab switches. CONFIG is the
+  workspace author (create/edit/delete, roster, repos, knobs) — its own key table in `Console.Keymap`.
+- **The footer** is one row: the hints, or the face of an open input (its verbs fit the row, Esc always
+  survives).
+- **`View.center_rect/4` and `View.session_rect/3` are the PTY size authorities** — the placed Terminal
+  rects equal them at every size (board_test); the drawer never changes them.
+- **Every coworker works in a worktree** — `.worktrees/<slug|t<id>>` under the workspace's repo, ensured
+  at spawn (`TLON_CWD`), renamed to the slug on promotion, removed on delete when clean (kept and named
+  when it has unmerged work). Never the main tree.
+
 ## The law
 
 - **Depends on server, one-directionally.** The console boots the server's OTP app and calls only what
