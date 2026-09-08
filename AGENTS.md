@@ -90,6 +90,14 @@ automatically**, and you only spend a turn when something actually breaks. Kill 
 the change is done. This is the intended inner loop here — not "edit, then manually run tests,
 then read 1800 lines," every time.
 
+## How to work — the four rules
+
+Every agent on this machine, in any repo, works by the four rules in `modules/agents/how-to-work.md`:
+think before coding (state assumptions, ask when readings diverge), the simplest thing that works,
+surgical changes, and goal-driven execution against a check you can run. The flake installs that file
+as `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`, so it is already in your context; this section
+exists so a reader of the repo knows where the law comes from and edits the one source.
+
 ## The rules most likely to be broken by accident
 
 - **Working inside `modules/server/`? That module has its own law.** Read `modules/server/AGENTS.md` and
