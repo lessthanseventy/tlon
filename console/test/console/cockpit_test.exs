@@ -59,4 +59,27 @@ defmodule Console.CockpitTest do
       assert Cockpit.toggle_center_view(%{center_view: :chat}).center_view == :terminal
     end
   end
+
+  # A typed character changes `input` (and clears a flash) and nothing else — that repaint reuses
+  # the last frame's reads instead of re-reading the world over erpc (2026-09-08, Andrew: typing
+  # "felt a tiny bit laggy"). Anything else that moved means a real frame.
+  describe "typing_only?/2 — the cheap-repaint predicate" do
+    test "input changed, nothing else: typing" do
+      before = %{input: %{kind: :reply, buffer: "a"}, flash: "spawned", focus: :x, reads: %{}}
+      after_ = %{before | input: %{kind: :reply, buffer: "ab"}, flash: nil}
+      assert Cockpit.typing_only?(before, after_)
+    end
+
+    test "a cursor/focus/scroll change is a real frame" do
+      before = %{input: %{kind: :reply, buffer: "a"}, flash: nil, focus: :x, reads: %{}}
+      refute Cockpit.typing_only?(before, %{before | input: %{kind: :reply, buffer: "ab"}, focus: :y})
+    end
+
+    test "no reads cached yet, or no input open: never cheap" do
+      before = %{input: %{kind: :reply, buffer: "a"}, flash: nil, focus: :x, reads: nil}
+      refute Cockpit.typing_only?(before, %{before | input: %{kind: :reply, buffer: "ab"}})
+      closed = %{input: nil, flash: nil, focus: :x, reads: %{}}
+      refute Cockpit.typing_only?(closed, closed)
+    end
+  end
 end

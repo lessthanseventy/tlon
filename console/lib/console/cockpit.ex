@@ -129,6 +129,9 @@ defmodule Console.Cockpit do
             threads: [],
             # The rail's last painted rows (`reads.sidebar`) — what the keyboard resolves against.
             sidebar: [],
+            # The last frame's reads: a keystroke that only edits `input` repaints from these
+            # instead of re-reading the world (typing_only?/2).
+            reads: nil,
             # Orbis' focus toggle (`h`/`l`) — which cursor its j/k drives: the survey's per-row
             # cursor (default, so a fresh Orbis opens ready to zoom a workspace) or the thread list.
             orbis_focus: :survey,
@@ -370,7 +373,11 @@ defmodule Console.Cockpit do
 
     next = reset_scrolls(state, drop_derived(next))
 
-    apply_effect(effect, next)
+    # Typing repaints from the last frame's reads: eight reads, most of them erpc round-trips to
+    # the service, per character was the lag (2026-09-08). Anything else that moved is a real frame.
+    if effect == :repaint and typing_only?(state, next),
+      do: {:noreply, repaint_input(next)},
+      else: apply_effect(effect, next)
   end
 
   # A wheel routes to whatever panel is under the cursor: the center terminal forwards to its PTY
@@ -1210,6 +1217,19 @@ defmodule Console.Cockpit do
     end
   end
 
+  @doc "True when `after_` differs from `before` only in the open input (and a cleared flash)."
+  def typing_only?(%{reads: reads, input: %{}} = before, %{input: %{}} = after_) when is_map(reads),
+    do: Map.drop(before, [:input, :flash]) == Map.drop(after_, [:input, :flash])
+
+  def typing_only?(_before, _after), do: false
+
+  # The cheap frame: the cached reads with the live input/flash, then the same paint as do_render/1.
+  defp repaint_input(state) do
+    Safe.logged("render error", state, fn ->
+      paint(state, %{state.reads | input: state.input, flash: state.flash})
+    end)
+  end
+
   # The slice of cockpit state the keymap reads: the state itself plus the reads DERIVED per
   # keypress (never stored — `drop_derived/1` takes them off again on the way back).
   defp keymap_state(state) do
@@ -1269,11 +1289,14 @@ defmodule Console.Cockpit do
     reads = Reads.frame(state, stack_blocks, focused)
     # The rail's rows, stashed for the keyboard: j/k's count and Enter's row resolve against the
     # SAME read the frame painted, without a second Board.sidebar/0 round-trip per keypress.
-    state = %{state | sidebar: reads.sidebar}
+    paint(%{state | sidebar: reads.sidebar, reads: reads}, reads)
+  end
 
-    # The drawer covers the centre; the overlay menu paints LAST (on top of everything). Both ride in
-    # `placements` so hit_panel can route clicks to them. The drawer resolves its panes' data from
-    # THIS frame's reads, so it can't drift from what the frame underneath would have shown.
+  # The paint half of a frame, shared with repaint_input/1. The drawer covers the centre; the
+  # overlay menu paints LAST (on top of everything). Both ride in `placements` so hit_panel can
+  # route clicks to them. The drawer resolves its panes' data from THIS frame's reads, so it can't
+  # drift from what the frame underneath would have shown.
+  defp paint(state, reads) do
     placements =
       View.compose(reads, state.w, state.h) ++
         lazygit_placements(state) ++
