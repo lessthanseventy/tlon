@@ -105,6 +105,18 @@ defmodule Console.TmuxTest do
       assert Tmux.leaf_tab(@tabs, 8) == nil
     end
 
+    test "pane_index: a thread's own leaf window, the STANDING thread's centre window" do
+      # The standing (machine) thread never gets a leaf — its coworker IS the centre window, named
+      # for the roster lead — so the session pane resolved to nothing and read "no session" forever.
+      assert Tmux.pane_index(@tabs, 7, nil, "tertius") == "1"
+      assert Tmux.pane_index(@tabs, 7, 42, "tertius") == "1"
+      assert Tmux.pane_index(@tabs, 42, 42, "tertius") == "0"
+      # no lead name (a server-down space), or no window under it: nothing to attach to
+      assert Tmux.pane_index(@tabs, 42, 42, nil) == nil
+      assert Tmux.pane_index(@tabs, 42, 42, "gone") == nil
+      assert Tmux.pane_index(@tabs, 8, 42, "tertius") == nil
+    end
+
     test "leaf_window? is the tag or the t<id> name — never the center/tail windows" do
       assert Enum.map(@tabs, &Tmux.leaf_window?/1) == [false, true, true]
     end

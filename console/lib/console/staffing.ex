@@ -438,6 +438,18 @@ defmodule Console.Staffing do
   # Wrap the raising materialiser so a filesystem hiccup degrades to "no coworker", never a cockpit crash.
   defp materialise_profile(profile), do: Safe.call(fn -> Profiles.materialise!(profile) end)
 
+  @doc """
+  The name of the workspace's CENTRE window — the roster lead's, which `profile_launcher/3` passes
+  as `-n`. nil for a space with no roster (server down / not a Workspace).
+  """
+  @spec lead_window_name(term()) :: String.t() | nil
+  def lead_window_name(workspace_id) do
+    case Space.fetch(workspace_id) do
+      %Space{roster: [lead | _]} -> Profiles.roster_entry(lead).name
+      _ -> nil
+    end
+  end
+
   @doc "The bare `pi` invocation for a profile (`Console.Harness.Pi`) — the center's window-0 command."
   def pi_command(%Profile{} = profile), do: Harness.Pi.launch_command(profile)
 

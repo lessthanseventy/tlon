@@ -125,6 +125,17 @@ defmodule Console.Tmux do
   @spec leaf_tab([tab()], integer()) :: tab() | nil
   def leaf_tab(tabs, id), do: Enum.find(tabs, &(&1.thread_id == id)) || Enum.find(tabs, &(&1.name == "t#{id}"))
 
+  @doc """
+  The window index the SESSION pane attaches to for thread `id`: its own leaf window, or — when `id`
+  is the STANDING thread, whose coworker runs in the CENTRE window (named for the roster lead) and
+  so never gets a leaf — that window. nil when neither is up.
+  """
+  @spec pane_index([tab()], integer(), integer() | nil, String.t() | nil) :: String.t() | nil
+  def pane_index(tabs, id, standing_id, lead_name)
+  def pane_index(tabs, id, id, lead_name) when is_binary(lead_name), do: window_index(tabs, lead_name)
+  def pane_index(_tabs, id, id, nil), do: nil
+  def pane_index(tabs, id, _standing_id, _lead_name), do: leaf_tab(tabs, id)[:index]
+
   @doc "Is this tab a LEAF session (a `@funes_thread` tag or a legacy `t<id>` name), vs the center/tail windows?"
   @spec leaf_window?(tab()) :: boolean()
   def leaf_window?(%{thread_id: tid}) when is_integer(tid), do: true

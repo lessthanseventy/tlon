@@ -6,7 +6,6 @@ defmodule Console.Delivery do
   best-effort edges — a missing window is a skip, never a crash.
   """
 
-  alias Console.Profiles
   alias Console.Reads
   alias Console.Safe
   alias Console.Space
@@ -145,12 +144,8 @@ defmodule Console.Delivery do
 
   # The active roster's LEAD window name (the center's tab label) for `workspace_id`, or nil (no roster
   # / server down).
-  defp lead_window_name(workspace_id) do
-    case Space.fetch(workspace_id) do
-      %Space{roster: [lead | _]} -> Profiles.roster_entry(lead).name
-      _ -> nil
-    end
-  end
+  # The centre window's name lives with the code that names it (Console.Staffing.profile_launcher/3).
+  defp lead_window_name(workspace_id), do: Staffing.lead_window_name(workspace_id)
 
   # The tmux window index for a named coworker window in workspace `workspace_id`, from the live session
   # (nil if not up).

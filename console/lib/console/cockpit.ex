@@ -1269,14 +1269,19 @@ defmodule Console.Cockpit do
   end
 
   # Spawn (or reuse) the OPEN thread's lead session PTY unless the pane is forced off — a tmux client
-  # attached to the thread's lead window in the workspace session (`Console.SessionPane.command/1`).
-  # Rate-limited out of the hot path like the other ensure_* preamble steps; a miss just leaves the
-  # pane on `:no_session` this frame. LIVE-tunable (the attach shape is the kitty pass).
+  # attached to the thread's window in the workspace session (`Console.SessionPane.command/3`).
+  # `Tmux.pane_index/4` resolves that window: a leaf for an ordinary thread, the CENTRE window for
+  # the standing thread (which never gets a leaf — its coworker is the centre one). Rate-limited out
+  # of the hot path like the other ensure_* preamble steps; a miss just leaves the pane on
+  # `:no_session` this frame. LIVE-tunable (the attach shape is the kitty pass).
   defp ensure_session(state) do
+    key = Space.active_workspace_id(state)
+
     with id when is_integer(id) <- Reads.session_thread(state),
          nil <- session_terminal_pid(id),
-         %{index: index} <- Tmux.leaf_tab(Tmux.list_windows(Space.active_workspace_id(state)), id) do
-      {cmd, args} = Console.SessionPane.command(Space.active_workspace_id(state), index, id)
+         index when not is_nil(index) <-
+           Tmux.pane_index(Tmux.list_windows(key), id, state.standing_thread_id, Staffing.lead_window_name(key)) do
+      {cmd, args} = Console.SessionPane.command(key, index, id)
       {cols, rows} = Reads.session_pane_dims(state)
       _ = safe_session_ensure({:session, id}, cmd: cmd, args: args, cols: cols, rows: rows)
     end
