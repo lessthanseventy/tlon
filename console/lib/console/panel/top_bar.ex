@@ -17,8 +17,31 @@ defmodule Console.Panel.TopBar do
 
   @impl Panel
   def render(data, rect) do
-    Panel.clip([Panel.justify(left(data), right(data), rect.w)], rect)
+    Panel.clip([row(data, rect.w)], rect)
   end
+
+  # The alarm outranks the thread title (design 2026-09-08 §2): when both sides won't fit, drop the
+  # lead, reserve the alarm's width and clip the left into the remainder — "server down" must not be
+  # the thing a narrow frame loses. Link up, nothing outranks the left, so the left simply survives.
+  defp row(data, w) do
+    left = left(data)
+    alarm = link_seg(data[:link])
+    lead = lead_seg(data[:lead], data[:warm?] == true)
+
+    cond do
+      w - Panel.row_width(left) - Panel.row_width(alarm) - Panel.row_width(lead) >= 1 ->
+        Panel.justify(left, alarm ++ lead, w)
+
+      alarm == [] ->
+        left
+
+      true ->
+        Panel.justify(clip_row(left, w - Panel.row_width(alarm) - 1), alarm, w)
+    end
+  end
+
+  defp clip_row(row, w) when w > 0, do: hd(Panel.clip([row], %{x: 0, y: 0, w: w, h: 1}))
+  defp clip_row(_row, _w), do: []
 
   defp left(data) do
     [{" ", :normal}, {data[:workspace] || "—", :tab}] ++ thread_seg(data[:thread]) ++ stage_seg(data[:stage])
@@ -29,8 +52,6 @@ defmodule Console.Panel.TopBar do
 
   defp stage_seg(stage) when is_binary(stage) and stage != "", do: [{"  [", :dim}, {stage, :accent}, {"]", :dim}]
   defp stage_seg(_stage), do: []
-
-  defp right(data), do: link_seg(data[:link]) ++ lead_seg(data[:lead], data[:warm?] == true)
 
   # ● warm / ○ cold — the same pair Panel.Roster uses for a session's warmth.
   defp lead_seg(lead, warm?) when is_binary(lead) and lead != "" do

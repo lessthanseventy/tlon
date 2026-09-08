@@ -52,6 +52,27 @@ defmodule Console.Panel.TopBarTest do
            end)
   end
 
+  # Design 2026-09-08 §2: the alarm outranks the thread title. A narrow frame reserves the
+  # alarm's width and clips the title into the remainder, dropping the lead first.
+  test "a narrow frame keeps the server-down alarm and clips the title instead" do
+    data = %{workspace: "Tlön", thread: String.duplicate("t", 60), lead: "hronir", warm?: true, link: :down}
+    [row] = TopBar.render(data, %{x: 0, y: 0, w: 40, h: 1})
+    text = row_text(row)
+
+    assert text =~ "server down"
+    assert text =~ "t"
+    refute text =~ "hronir"
+    assert Console.Panel.row_width(row) <= 40
+  end
+
+  test "a narrow frame with the link up keeps the title — nothing to outrank it" do
+    data = %{workspace: "Tlön", thread: String.duplicate("t", 60), lead: "hronir", warm?: true, link: :up}
+    [row] = TopBar.render(data, %{x: 0, y: 0, w: 40, h: 1})
+
+    assert row_text(row) =~ "tttt"
+    assert Console.Panel.row_width(row) <= 40
+  end
+
   test "the row is exactly one line, clipped to the rect width" do
     data = %{workspace: String.duplicate("w", 50), thread: String.duplicate("t", 50), lead: "x", warm?: true, link: :up}
     assert [row] = TopBar.render(data, %{x: 0, y: 0, w: 30, h: 1})
