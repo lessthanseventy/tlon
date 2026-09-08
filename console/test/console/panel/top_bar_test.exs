@@ -4,10 +4,9 @@ defmodule Console.Panel.TopBarTest do
   """
   use ExUnit.Case, async: true
 
-  alias Console.Panel.TopBar
+  import Console.PanelText, only: [row_text: 1]
 
-  # Console.Panel has no row_text/1 — every panel suite defines its own (see border_test.exs).
-  defp row_text(row), do: Enum.map_join(row, fn {t, _s} -> t end)
+  alias Console.Panel.TopBar
 
   test "one row: workspace · thread and stage · coworker and warmth · link" do
     data = %{workspace: "Tlön", thread: "review PR 42", stage: "build", lead: "hronir", warm?: true, link: :up}

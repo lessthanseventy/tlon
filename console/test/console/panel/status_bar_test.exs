@@ -7,6 +7,8 @@ defmodule Console.Panel.StatusBarTest do
   # are moved to Console.Panel.TopBar, HEALTH to the drawer.
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [text: 1]
+
   alias Console.Panel.StatusBar
 
   defp rect, do: %{x: 0, y: 0, w: 120, h: 1}
@@ -24,8 +26,6 @@ defmodule Console.Panel.StatusBarTest do
       over
     )
   end
-
-  defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _s} -> t end) end)
 
   # HEALTH left the footer with UX slice 1 (it lands in the drawer, task 4) — the footer must not
   # resurrect a second row for it.

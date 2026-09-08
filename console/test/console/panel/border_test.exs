@@ -5,11 +5,11 @@ defmodule Console.Panel.BorderTest do
   """
   use ExUnit.Case, async: true
 
+  import Console.PanelText, only: [row_text: 1]
+
   alias Console.Panel.Border
 
   defp rect(w \\ 20, h \\ 5), do: %{x: 0, y: 0, w: w, h: h}
-
-  defp row_text(row), do: Enum.map_join(row, fn {t, _s} -> t end)
 
   test "a plain border (no title) renders the bare frame" do
     [top | _] = Border.render(%{focused: false}, rect())
