@@ -359,13 +359,65 @@ defmodule Console.ViewTest do
       # too short for a real frame (h < 2) must be dropped whole, never emitted as slivers.
       for h <- [4, 8, 15] do
         placements = View.compose(reads(%{}), 120, h)
-        body_h = h - 2
+        # The body sits between the two one-row bars (UX slice 1): rows 1..h-2.
+        body_bottom = h - 1
 
-        for {panel, _data, rect} <- placements, panel != Panel.StatusBar do
-          assert rect.y + rect.h <= body_h,
-                 "#{inspect(panel)} ends past the body at 120x#{h}: #{inspect(rect)} (body_h #{body_h})"
+        for {panel, _data, rect} <- placements, panel not in [Panel.TopBar, Panel.StatusBar] do
+          assert rect.y >= 1 and rect.y + rect.h <= body_bottom,
+                 "#{inspect(panel)} ends past the body at 120x#{h}: #{inspect(rect)} (bottom #{body_bottom})"
         end
       end
+    end
+  end
+
+  # UX slice 1, task 1: the frame gains a one-line top bar and its footer shrinks to one line, so
+  # the body is exactly the rows between them.
+  describe "the frame's bars (UX slice 1)" do
+    test "row 0 is the TopBar, the last row is a one-line StatusBar, the body is between" do
+      boxes = View.compose(reads(%{}), 120, 40)
+
+      assert {Panel.TopBar, _, %{x: 0, y: 0, w: 120, h: 1}} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
+      assert {Panel.StatusBar, _, %{x: 0, y: 39, w: 120, h: 1}} = Enum.find(boxes, &match?({Panel.StatusBar, _, _}, &1))
+
+      body = for {p, _, r} <- boxes, p not in [Panel.TopBar, Panel.StatusBar], do: r
+      assert body != []
+      assert Enum.all?(body, &(&1.y >= 1 and &1.y + &1.h <= 39))
+    end
+
+    test "the top bar reads the space, the focused thread and its lead's warmth" do
+      roster = [%{agent: "hronir", thread_id: 7, thread_title: "review PR 42", pane_ref: nil, warm?: true}]
+
+      cards = [
+        %{id: 7, title: "review PR 42", lead: nil, stage: "build", awaiting: nil, active?: true, messages: []}
+      ]
+
+      boxes =
+        View.compose(
+          reads(%{
+            focused_id: 7,
+            focused_title: "review PR 42",
+            roster: roster,
+            thread_stack: %{cards: cards, opened: 7}
+          }),
+          120,
+          40
+        )
+
+      assert {Panel.TopBar, data, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
+      assert data.thread == "review PR 42"
+      assert data.stage == "build"
+      assert data.lead == "hronir"
+      assert data.warm? == true
+      # The local backend is always reachable — the link segment only fires against a remote server.
+      assert data.link == :up
+    end
+
+    test "an open composer still sits directly above the (now one-row) footer" do
+      input = %{kind: :compose, thread_id: 1, buffer: "one\ntwo", cursor: 7}
+      boxes = View.compose(reads(%{input: input}), 120, 40)
+
+      assert {Panel.Composer, _, rect} = Enum.find(boxes, &match?({Panel.Composer, _, _}, &1))
+      assert rect.y == 40 - 1 - 2
     end
   end
 
@@ -382,8 +434,8 @@ defmodule Console.ViewTest do
 
       assert [{%{input: ^input}, rect}] = composer_placements(placements)
       assert rect.h == 3
-      # Directly above the 2-row status footer, full width.
-      assert rect.y == 40 - 2 - 3
+      # Directly above the one-row status footer, full width.
+      assert rect.y == 40 - 1 - 3
       assert rect.w == 120
     end
 

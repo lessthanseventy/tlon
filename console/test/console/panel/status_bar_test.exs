@@ -2,96 +2,51 @@ defmodule Console.Panel.StatusBarTest do
   # The contextual footer (design 2026-08-23): mode segment (TERM/NAV/LOCK's own verbs) → space
   # segment (workspace-only post/task/driver) → the focused pane's own hints. Keyed on workspace?, never
   # the space label — the stale "Tlön"-keyed table died with this.
+  #
+  # UX slice 1: ONE row. The info row (mode chip, space, thread, counts, HEALTH) is gone — where you
+  # are moved to Console.Panel.TopBar, HEALTH to the drawer.
   use ExUnit.Case, async: true
 
   alias Console.Panel.StatusBar
 
-  defp rect, do: %{x: 0, y: 0, w: 120, h: 2}
+  defp rect, do: %{x: 0, y: 0, w: 120, h: 1}
 
   defp base(over) do
     Map.merge(
       %{
-        space: "Tlön",
-        thread: nil,
-        thread_count: 0,
-        live_count: 0,
         input: nil,
         flash: nil,
         leader_pending?: false,
-        focus: nil,
         mode: nil,
         workspace?: false,
-        lock?: false,
         pane_hints: []
       },
       over
     )
   end
 
-  # HEALTH demoted to the footer (reshape slice D): a condensed one-line segment on the info
-  # line's right — service dots + disk/mem/load. The full readout moved to /status.
-  test "the info line carries a condensed health segment when the read is up" do
-    health = %{
-      funes_up: true,
-      tlon_up: false,
-      nix_gen: 36,
-      nix_behind: 0,
-      disk_pct: 68,
-      mem_pct: 28,
-      load_avg: 2.18,
-      tools: []
-    }
+  defp text(rows), do: Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, fn {t, _s} -> t end) end)
 
-    [info, _hints] = StatusBar.render(base(%{health: health}), rect())
-    line = Enum.map_join(info, fn {t, _} -> t end)
+  # HEALTH left the footer with UX slice 1 (it lands in the drawer, task 4) — the footer must not
+  # resurrect a second row for it.
+  test "a health read no longer renders in the footer" do
+    health = %{funes_up: true, tlon_up: false, disk_pct: 68, mem_pct: 28, load_avg: 2.18, tools: []}
+    rows = StatusBar.render(base(%{health: health}), rect())
 
-    assert line =~ "server"
-    assert line =~ "tlon"
-    assert line =~ "d68%"
-    assert line =~ "m28%"
-    assert line =~ "l2.2"
-  end
-
-  # The service dots must be fg-only styled (glyph tinted, footer's black background shows
-  # through) like every other status dot in the app (Card.status_color/1, NewThread's ＋) — NOT
-  # the chip styles (:stat_live/:stat_warn), which paint dark text on a BRIGHT field and read as
-  # a big colored square around a single glyph.
-  test "service dots use fg-only status styles, not the bright chip styles" do
-    health = %{
-      funes_up: true,
-      tlon_up: false,
-      nix_gen: 36,
-      nix_behind: 0,
-      disk_pct: 68,
-      mem_pct: 28,
-      load_avg: 2.18,
-      tools: []
-    }
-
-    [info, _hints] = StatusBar.render(base(%{health: health}), rect())
-
-    assert {"● ", :st_working} in info
-    assert {"○ ", :st_blocked} in info
-    refute {"● ", :stat_live} in info
-    refute {"○ ", :stat_warn} in info
-  end
-
-  test "a nil health read (probe not run) leaves the footer clean" do
-    [info, _hints] = StatusBar.render(base(%{health: nil}), rect())
-    line = Enum.map_join(info, fn {t, _} -> t end)
-    refute line =~ "server"
+    assert length(rows) == 1
+    refute text(rows) =~ "d68%"
   end
 
   test "an orchestrate input does NOT render in the footer (it lives in the Tertius band) — no duplication" do
     input = %{kind: :orchestrate, buffer: "file a ticket x", cursor: 15}
-    [info, _hints] = StatusBar.render(base(%{input: input}), rect())
+    [hints] = StatusBar.render(base(%{input: input}), rect())
     # falls through to the normal footer; the typed buffer is not repeated here
-    refute Enum.map_join(info, fn {t, _} -> t end) =~ "file a ticket x"
+    refute text([hints]) =~ "file a ticket x"
   end
 
   test "TERM mode: the mode segment names the Alt door and the nav toggle" do
-    [_info, hints] = StatusBar.render(base(%{mode: :term, workspace?: true}), rect())
-    line = Enum.map_join(hints, fn {t, _} -> t end)
+    [hints] = StatusBar.render(base(%{mode: :term, workspace?: true}), rect())
+    line = text([hints])
     assert line =~ "Alt+#"
     assert line =~ "^␣"
     refute line =~ "space"
@@ -99,8 +54,8 @@ defmodule Console.Panel.StatusBarTest do
 
   test "NAV mode: mode + space verbs + the focused pane's own verbs" do
     data = base(%{mode: :nav, workspace?: true, pane_hints: [{"j/k", "commits"}, {"⏎", "diff"}]})
-    [_info, hints] = StatusBar.render(data, rect())
-    line = Enum.map_join(hints, fn {t, _} -> t end)
+    [hints] = StatusBar.render(data, rect())
+    line = text([hints])
     assert line =~ "Alt+0"
     assert line =~ "c reply"
     assert line =~ "n new"
@@ -109,22 +64,21 @@ defmodule Console.Panel.StatusBarTest do
     assert line =~ "⏎ diff"
   end
 
-  test "LOCK mode: the unlock chord alone, and a warning chip" do
-    [info, hints] = StatusBar.render(base(%{mode: :lock, workspace?: true}), rect())
-    assert {" LOCK ", :stat_warn} in info
-    line = Enum.map_join(hints, fn {t, _} -> t end)
+  test "LOCK mode: the unlock chord alone" do
+    [hints] = StatusBar.render(base(%{mode: :lock, workspace?: true}), rect())
+    line = text([hints])
     assert line =~ "Alt+g unlock"
     refute line =~ "post"
   end
 
   test "a non-workspace space (mode nil) keeps the shared leader table" do
-    [_info, hints] = StatusBar.render(base(%{space: "Orbis"}), rect())
-    assert Enum.map_join(hints, fn {t, _} -> t end) =~ "^␣n new"
+    [hints] = StatusBar.render(base(%{}), rect())
+    assert text([hints]) =~ "^␣n new"
   end
 
   test "hints keyed on workspace-ness, never the label: a renamed workspace still gets workspace hints" do
-    data = base(%{space: "Uqbar", mode: :nav, workspace?: true})
-    [_info, hints] = StatusBar.render(data, rect())
-    assert Enum.map_join(hints, fn {t, _} -> t end) =~ "c reply"
+    data = base(%{mode: :nav, workspace?: true})
+    [hints] = StatusBar.render(data, rect())
+    assert text([hints]) =~ "c reply"
   end
 end

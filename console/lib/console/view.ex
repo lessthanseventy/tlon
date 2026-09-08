@@ -18,8 +18,10 @@ defmodule Console.View do
   require Space
 
   @min_col 16
-  # The bottom footer: an info line + a hints line (Console.Panel.StatusBar).
-  @status_h 2
+  # The frame's bars (UX slice 1): one line each, top and bottom. The top bar says where you are
+  # and who is on it (Console.Panel.TopBar); the footer is the contextual hints (Panel.StatusBar).
+  @top_h 1
+  @status_h 1
   # Below this width (phone / a shrunk tile) the three columns collapse to one (Addendum §D).
   @wide_min 80
   # Panels whose content can overflow their box and so accept a `:scroll` offset (wheel scroll).
@@ -42,7 +44,7 @@ defmodule Console.View do
   def compose(reads, w, h) do
     space = fetch_space(reads.active_key)
     composer_h = composer_height(reads, w, h)
-    body_h = max(h - @status_h - composer_h, 1)
+    body_h = max(h - @top_h - @status_h - composer_h, 1)
 
     # Each column holds a stack of *sections*, each its own bordered box, so sections read as
     # defined regions. A section is a bare panel module (data resolved by `data_for/2`) or a
@@ -83,7 +85,7 @@ defmodule Console.View do
             else: base
 
         :narrow ->
-          no_digits(boxed(spine ++ rail ++ center_panels, %{x: 0, y: 0, w: w, h: body_h}))
+          no_digits(boxed(spine ++ rail ++ center_panels, %{x: 0, y: @top_h, w: w, h: body_h}))
       end
 
     # A box under 2 rows can't hold a frame (Border renders [] below 2) and its inset content would
@@ -111,11 +113,13 @@ defmodule Console.View do
         content_for(section, reads, inset(rect), if(section == focused, do: slice))
       end)
 
+    top = {Panel.TopBar, top_data(reads, space), %{x: 0, y: 0, w: w, h: @top_h}}
+
     status =
-      {Panel.StatusBar, status_data(reads, space, focused), %{x: 0, y: h - @status_h, w: w, h: @status_h}}
+      {Panel.StatusBar, status_data(reads, focused), %{x: 0, y: h - @status_h, w: w, h: @status_h}}
 
     # Borders first: panel content paints over each box interior, leaving only the frames.
-    borders ++ contents ++ composer_placement(reads, composer_h, w, h) ++ [status]
+    [top | borders] ++ contents ++ composer_placement(reads, composer_h, w, h) ++ [status]
   end
 
   # The center's chat face: `v` flips center_view to :chat — swap the Terminal section for the
@@ -249,8 +253,8 @@ defmodule Console.View do
     center_total = max(w - center_x, 1)
 
     base = %{
-      spine: %{x: 0, y: 0, w: spine_w, h: body_h},
-      rail: %{x: rail_x, y: 0, w: rail_w, h: body_h}
+      spine: %{x: 0, y: @top_h, w: spine_w, h: body_h},
+      rail: %{x: rail_x, y: @top_h, w: rail_w, h: body_h}
     }
 
     # The toggleable right SESSION PANE (2026-08-31): split ~⅓ of the center off as a right column
@@ -260,11 +264,11 @@ defmodule Console.View do
       center_w = max(center_total - right_w - 1, 1)
 
       Map.merge(base, %{
-        center: %{x: center_x, y: 0, w: center_w, h: body_h},
-        right: %{x: center_x + center_w + 1, y: 0, w: right_w, h: body_h}
+        center: %{x: center_x, y: @top_h, w: center_w, h: body_h},
+        right: %{x: center_x + center_w + 1, y: @top_h, w: right_w, h: body_h}
       })
     else
-      Map.put(base, :center, %{x: center_x, y: 0, w: center_total, h: body_h})
+      Map.put(base, :center, %{x: center_x, y: @top_h, w: center_total, h: body_h})
     end
   end
 
@@ -283,7 +287,7 @@ defmodule Console.View do
   """
   @spec center_rect(atom(), pos_integer(), pos_integer()) :: Panel.rect()
   def center_rect(space_key, w, h) do
-    center_col = wide_columns(w, max(h - @status_h, 1)).center
+    center_col = wide_columns(w, max(h - @top_h - @status_h, 1)).center
     surface = fetch_space(space_key).surface
 
     case Enum.find(boxed(surface, center_col), &terminal_section?/1) do
@@ -368,27 +372,52 @@ defmodule Console.View do
     :exit, _ -> []
   end
 
-  defp status_data(reads, space, focused) do
+  # The top bar's read (UX slice 1): where you are, what you're on, who is on it, is the server up.
+  # The thread/stage/lead the old footer info row carried moved HERE — the footer is hints only now.
+  defp top_data(reads, space) do
+    lead = lead_of(reads)
+
     %{
-      space: space.label,
+      workspace: space.label,
       thread: reads.focused_title,
-      thread_count: length(reads.threads),
-      live_count: Enum.count(reads.roster, & &1.warm?),
-      # HEALTH demoted to the footer (reshape slice D) — the condensed segment's read.
-      health: reads[:health],
+      stage: stage_of(reads),
+      lead: lead && lead.agent,
+      warm?: lead != nil and lead.warm? == true,
+      link: link_state()
+    }
+  end
+
+  # The focused thread's stage, off the same thread_stack cards the center renders.
+  defp stage_of(%{focused_id: id, thread_stack: %{cards: cards}}) when not is_nil(id) do
+    Enum.find_value(cards, fn card -> if card.id == id, do: card[:stage] end)
+  end
+
+  defp stage_of(_reads), do: nil
+
+  # The roster row working the focused thread (agent + warmth), or nil.
+  defp lead_of(%{focused_id: id, roster: roster}) when not is_nil(id), do: Enum.find(roster, &(&1.thread_id == id))
+
+  defp lead_of(_reads), do: nil
+
+  # Only the remote backend can lose its server; an embedded one is reachable by definition.
+  defp link_state do
+    if Console.Backend.impl() == Console.Backend.Remote and not Console.Backend.Link.up?(),
+      do: :down,
+      else: :up
+  end
+
+  defp status_data(reads, focused) do
+    %{
       # When the operator is typing a new-thread title, the footer becomes the prompt.
       input: reads[:input],
       # A transient result line (a spawn's pane id or failure), shown until the next keypress.
       flash: reads[:flash],
       # True for the one keypress after Ctrl+Space — the hints line shows the armed-prefix state.
       leader_pending?: reads[:leader_pending?],
-      # Tlön's focus (nil elsewhere) — the footer shows NAV/TERM and the focus-model hints.
-      focus: reads[:focus],
       # The contextual footer's keys (design 2026-08-23) — workspace-ness, never the label.
       mode: footer_mode(reads),
-      workspace?: Space.workspace?(space.key),
-      lock?: reads[:lock?] == true,
-      pane_hints: pane_hints(reads, space, focused)
+      workspace?: Space.workspace?(reads.active_key),
+      pane_hints: pane_hints(reads, focused)
     }
   end
 
@@ -398,9 +427,9 @@ defmodule Console.View do
   defp footer_mode(_reads), do: nil
 
   # The focused pane's declared verbs.
-  defp pane_hints(_reads, _space, nil), do: []
+  defp pane_hints(_reads, nil), do: []
 
-  defp pane_hints(reads, _space, focused) do
+  defp pane_hints(reads, focused) do
     {panel, data, _rect} = content_for(focused, reads, %{x: 0, y: 0, w: 40, h: 10})
     Panel.hints(panel, data)
   end

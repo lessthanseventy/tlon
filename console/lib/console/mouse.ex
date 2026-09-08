@@ -16,11 +16,12 @@ defmodule Console.Mouse do
 
   alias Console.Panel.Border
   alias Console.Panel.StatusBar
+  alias Console.Panel.TopBar
 
-  # Borders and the status bar are frame/chrome, not content — a hit there is not a panel hit.
+  # Borders and the two frame bars are chrome, not content — a hit there is not a panel hit.
   # (Borders' rect is the whole box; the content placement's inset rect is what we want, and it
   # already sits inside the frame, so a cell on the frame matches no content rect.)
-  @chrome [Border, StatusBar]
+  @chrome [Border, TopBar, StatusBar]
 
   # Rows per wheel notch — a comfortable default that doesn't leap past a short panel in one tick.
   @wheel_step 3

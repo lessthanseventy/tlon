@@ -40,6 +40,7 @@ defmodule Console.BoardTest do
   alias Console.Panel.StatusBar
   alias Console.Panel.Terminal
   alias Console.Panel.Tertius
+  alias Console.Panel.TopBar
   alias Console.View
 
   # Workspace fixture: the hardcoded fallback Workspace is gone (reshape slice A); suites
@@ -272,53 +273,17 @@ defmodule Console.BoardTest do
 
   describe "status bar" do
     defp status(overrides \\ %{}) do
-      Map.merge(
-        %{
-          space: "Sessions",
-          thread: "flaky test hunt",
-          thread_count: 3,
-          live_count: 1,
-          mode: nil,
-          workspace?: false,
-          lock?: false,
-          pane_hints: []
-        },
-        overrides
-      )
+      Map.merge(%{mode: nil, workspace?: false, pane_hints: []}, overrides)
     end
 
-    test "info line shows the space, thread, and global counts" do
-      assert [info, _hints] = StatusBar.render(status(), %{x: 0, y: 0, w: 120, h: 2})
-      joined = text(info)
-      assert joined =~ "Sessions"
-      assert joined =~ "flaky test hunt"
-      # the underused right side now carries global state
-      assert joined =~ "3 threads"
-      assert joined =~ "1 live"
-    end
-
-    test "hints line is always present on the bottom row" do
-      assert [_info, hints] = StatusBar.render(status(), %{x: 0, y: 0, w: 120, h: 2})
+    # UX slice 1: the footer is ONE row of hints — the space/thread/counts info row moved to
+    # Console.Panel.TopBar.
+    test "the footer is a single hints row" do
+      assert [hints] = StatusBar.render(status(), %{x: 0, y: 0, w: 120, h: 1})
       joined = text(hints)
       assert joined =~ "quit"
       assert joined =~ "thread"
-    end
-
-    test "the info line fills the width without flooding it with a chip background" do
-      w = 120
-      assert [info, _hints] = StatusBar.render(status(), %{x: 0, y: 0, w: w, h: 2})
-      # padded to the full width...
-      assert Panel.row_width(info) == w
-      # ...but the wide gap is neutral, never a chip/selection background (the old full-bar flood)
-      refute Enum.any?(info, fn {t, s} ->
-               s != :normal and String.trim(t) == "" and String.length(t) >= 3
-             end)
-    end
-
-    test "the space renders as a discrete tab chip" do
-      assert [info, _hints] = StatusBar.render(status(), %{x: 0, y: 0, w: 120, h: 2})
-      chip = Enum.find(info, fn {t, s} -> s == :tab and t =~ "Sessions" end)
-      assert chip, "space should render as a :tab chip"
+      refute joined =~ "threads "
     end
 
     test "composing shows the mode chip and the composer hints — the buffer lives in the compose box" do
@@ -364,8 +329,9 @@ defmodule Console.BoardTest do
       assert Sidebar in mods
       assert Overview in mods
       assert StatusBar in mods
-      # every section gets its own bordered box (spine switcher, roster, triage, survey)
-      content_panels = Enum.reject(mods, &(&1 in [Border, StatusBar]))
+      # every section gets its own bordered box (spine switcher, roster, triage, survey) — the
+      # frame's two bars are borderless.
+      content_panels = Enum.reject(mods, &(&1 in [Border, TopBar, StatusBar]))
       assert Enum.count(mods, &(&1 == Border)) == length(content_panels)
       assert length(content_panels) >= 4
 

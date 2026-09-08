@@ -1,13 +1,12 @@
 defmodule Console.Panel.StatusBar do
   @moduledoc """
-  The bottom status footer — two rows, always present:
+  The bottom status footer — **one row** since UX slice 1: the contextual hints (mode verbs →
+  space verbs → the focused pane's own), keycaps lit against dim labels. Where you are and who is
+  on it belongs to `Console.Panel.TopBar` now.
 
-    * an **info** line, justified into sections: a space *tab* and the focused thread on the left,
-      the global counts (open threads, live sessions) as chips on the right;
-    * a **hints** line: the key bindings, keycaps lit against dim labels.
-
-  The gap between left and right is neutral (never a chip background), so the footer frames the
-  screen instead of flooding it. Data is `%{space, thread, thread_count, live_count}`.
+  While an input is open (compose, new ticket/note/workspace/path/roster) or a flash/leader prefix
+  is live, that state takes the row instead — the row the frame gives it is 1 high, so only the
+  face's first line lands.
   """
   @behaviour Console.Panel
 
@@ -199,62 +198,12 @@ defmodule Console.Panel.StatusBar do
     Panel.clip([justify(info, [], rect.w), hints_row(@leader_hints)], rect)
   end
 
+  # The default face: hints only. The old info row (mode chip, space, thread, counts) moved to
+  # Panel.TopBar with UX slice 1; HEALTH goes to the drawer.
   @impl Panel
-  def render(%{space: space} = data, rect) do
-    thread = data[:thread] || "—"
-    threads = data[:thread_count] || 0
-    live = data[:live_count] || 0
-
-    left =
-      mode_chip(data) ++
-        [
-          {" #{space} ", :tab},
-          {"  ", :normal},
-          {"▸ ", :accent},
-          {thread, :normal}
-        ]
-
-    right =
-      health_seg(data[:health]) ++
-        [
-          {" ◷ #{threads} threads ", :stat},
-          {" ", :normal},
-          {" ● #{live} live ", :stat_live}
-        ]
-
-    Panel.clip([justify(left, right, rect.w), hints_row(assemble_hints(data))], rect)
+  def render(data, rect) do
+    Panel.clip([hints_row(assemble_hints(data))], rect)
   end
-
-  # HEALTH demoted to a one-line footer segment (reshape slice D): service dots + disk/mem/load,
-  # dim so it frames rather than shouts. The full readout is `/status` in the composer. nil
-  # (probe not run — Orbis, boot frame) renders nothing.
-  defp health_seg(%{funes_up: server, tlon_up: tlon} = h) do
-    [
-      {"#{service_dot(server)} ", service_style(server)},
-      {"server ", :dim},
-      {"#{service_dot(tlon)} ", service_style(tlon)},
-      {"tlon ", :dim},
-      {"· d#{h[:disk_pct]}% m#{h[:mem_pct]}% l#{short_load(h[:load_avg])} ", :dim},
-      {" ", :normal}
-    ]
-  end
-
-  defp health_seg(_health), do: []
-
-  defp service_dot(true), do: "●"
-  defp service_dot(_up), do: "○"
-  defp service_style(true), do: :st_working
-  defp service_style(_up), do: :st_blocked
-
-  defp short_load(load) when is_number(load), do: :erlang.float_to_binary(load / 1, decimals: 1)
-  defp short_load(_load), do: "?"
-
-  # LOCK outranks TERM/NAV — total keyboard passthrough deserves the loudest chip. Absent for
-  # spaces without a focus model (mode nil, focus nil).
-  defp mode_chip(%{mode: :lock}), do: [{" LOCK ", :stat_warn}, {" ", :normal}]
-  defp mode_chip(%{focus: %{in_terminal?: true}}), do: [{" TERM ", :stat_live}, {" ", :normal}]
-  defp mode_chip(%{focus: %{in_terminal?: false}}), do: [{" NAV ", :stat}, {" ", :normal}]
-  defp mode_chip(_data), do: []
 
   # The CURRENT line of a (possibly multiline) input buffer, split into the text before/after the
   # cursor — what the composer's single visible line renders around the `▎` marker. `cursor`
@@ -280,8 +229,12 @@ defmodule Console.Panel.StatusBar do
   # trims from the right — pane verbs drop first on a narrow frame, the mode chip survives.
   # Keyed on workspace-ness (mode/workspace? from View.status_data), NEVER the space label — a renamed
   # or additional Workspace still gets these, unlike the old "Tlön"-keyed table.
-  defp assemble_hints(%{mode: nil}), do: @hints
-  defp assemble_hints(data), do: mode_seg(data.mode) ++ space_seg(data) ++ (data[:pane_hints] || [])
+  defp assemble_hints(data) do
+    case data[:mode] do
+      nil -> @hints
+      mode -> mode_seg(mode) ++ space_seg(data) ++ (data[:pane_hints] || [])
+    end
+  end
 
   defp mode_seg(:term), do: [{"Alt+#", "panes"}, {"^␣", "nav"}]
   defp mode_seg(:nav), do: [{"Alt+0", "term"}, {"q", "quit"}]
