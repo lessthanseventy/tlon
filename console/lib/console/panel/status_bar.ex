@@ -187,7 +187,7 @@ defmodule Console.Panel.StatusBar do
   @impl Panel
   def render(%{flash: flash}, rect) when is_binary(flash) do
     info = [{" ", :normal}, {"▸ ", :accent}, {flash, :normal}]
-    Panel.clip([justify(info, [], rect.w), hints_row()], rect)
+    Panel.clip([Panel.justify(info, [], rect.w), hints_row()], rect)
   end
 
   # The prefix is armed (Ctrl+Space was pressed, awaiting the next key) — show the prefix state
@@ -195,7 +195,7 @@ defmodule Console.Panel.StatusBar do
   @impl Panel
   def render(%{leader_pending?: true}, rect) do
     info = [{" ", :normal}, {"▸ ^␣ ", :accent}, {"prefix armed", :normal}]
-    Panel.clip([justify(info, [], rect.w), hints_row(@leader_hints)], rect)
+    Panel.clip([Panel.justify(info, [], rect.w), hints_row(@leader_hints)], rect)
   end
 
   # The default face: hints only. The old info row (mode chip, space, thread, counts) moved to
@@ -248,15 +248,5 @@ defmodule Console.Panel.StatusBar do
       {key, label} when is_binary(label) -> [{key, :header}, {" #{label}", :dim}, {"   ", :dim}]
       {text, style} -> [{text, style}]
     end)
-  end
-
-  # Left-align `left`, right-align `right`, fill the middle with neutral spaces to exactly `w`.
-  # When too narrow for both, keep the left (clip/1 trims it) — the thread matters more than counts.
-  defp justify(left, right, w) do
-    gap = w - Panel.row_width(left) - Panel.row_width(right)
-
-    if gap >= 1,
-      do: left ++ [{String.duplicate(" ", gap), :normal}] ++ right,
-      else: left
   end
 end

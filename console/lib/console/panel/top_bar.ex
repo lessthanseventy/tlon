@@ -17,7 +17,7 @@ defmodule Console.Panel.TopBar do
 
   @impl Panel
   def render(data, rect) do
-    Panel.clip([justify(left(data), right(data), rect.w)], rect)
+    Panel.clip([Panel.justify(left(data), right(data), rect.w)], rect)
   end
 
   defp left(data) do
@@ -42,14 +42,4 @@ defmodule Console.Panel.TopBar do
 
   defp link_seg(:down), do: [{" server down ", :stat_warn}, {" ", :normal}]
   defp link_seg(_link), do: []
-
-  # Same shape as the footer's: left-aligned, right-aligned, a neutral fill between. Too narrow
-  # for both → the left survives (where you are beats who is on it).
-  defp justify(left, right, w) do
-    gap = w - Panel.row_width(left) - Panel.row_width(right)
-
-    if gap >= 1,
-      do: left ++ [{String.duplicate(" ", gap), :normal}] ++ right,
-      else: left
-  end
 end

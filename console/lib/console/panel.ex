@@ -166,6 +166,20 @@ defmodule Console.Panel do
   def row_width(runs), do: Enum.reduce(runs, 0, fn {t, _}, acc -> acc + String.length(t) end)
 
   @doc """
+  Left-align `left`, right-align `right`, fill the middle with neutral spaces to exactly `w`.
+  When there is no room for both, the left survives — `clip/2` trims it. A caller whose right
+  segment outranks its left (the top bar's server-down alarm) reserves that width itself.
+  """
+  @spec justify(row(), row(), non_neg_integer()) :: row()
+  def justify(left, right, w) do
+    gap = w - row_width(left) - row_width(right)
+
+    if gap >= 1,
+      do: left ++ [{String.duplicate(" ", gap), :normal}] ++ right,
+      else: left
+  end
+
+  @doc """
   Pad a row with trailing spaces (in `style`) out to `w` graphemes — used to extend a
   selection's background across the full column width.
   """

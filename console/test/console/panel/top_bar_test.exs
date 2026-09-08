@@ -39,6 +39,19 @@ defmodule Console.Panel.TopBarTest do
     refute text =~ "·"
   end
 
+  # The invariant the retired board_test guarded on the old footer info row: the justified fill is
+  # neutral, so a chip/selection background never floods the whole bar.
+  test "the row fills the width and the justified gap is neutral" do
+    data = %{workspace: "Tlön", thread: "review PR 42", stage: "build", lead: "hronir", warm?: true, link: :up}
+    [row] = TopBar.render(data, %{x: 0, y: 0, w: 120, h: 1})
+
+    assert Console.Panel.row_width(row) == 120
+
+    refute Enum.any?(row, fn {t, s} ->
+             s != :normal and String.trim(t) == "" and String.length(t) >= 3
+           end)
+  end
+
   test "the row is exactly one line, clipped to the rect width" do
     data = %{workspace: String.duplicate("w", 50), thread: String.duplicate("t", 50), lead: "x", warm?: true, link: :up}
     assert [row] = TopBar.render(data, %{x: 0, y: 0, w: 30, h: 1})
