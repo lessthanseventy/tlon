@@ -28,7 +28,19 @@ mise run console:run
 Every tmux call needs the sandbox off (the socket is under `/tmp/tmux-1000`): pass
 `dangerouslyDisableSandbox: true` and say why once.
 
-Read the frame:
+Prefer the helper — it sends, waits for the frame to SETTLE (two identical captures 300 ms
+apart, tmux-cli's wait_idle idea), and prints the frame, so a read never lands mid-repaint:
+
+```
+scripts/cockpit-tmux.sh send j j Enter      # keys, then the settled frame
+scripts/cockpit-tmux.sh send M-d            # the drawer
+scripts/cockpit-tmux.sh type 'hello there'  # literal text into the focused input
+scripts/cockpit-tmux.sh cap                 # just read
+scripts/cockpit-tmux.sh idle 10             # wait up to 10 s for a slow repaint
+scripts/cockpit-tmux.sh size 79 30          # the narrow layout
+```
+
+Raw tmux, when the helper is not enough. Read the frame:
 
 ```
 tmux -L tlon capture-pane -t cockpit -p -e      # -e keeps colours as SGR; drop it for plain text
