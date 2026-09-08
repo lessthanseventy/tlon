@@ -80,3 +80,19 @@ collapses to one column).
 - Never `tmux kill-server -L tlon` or `kill-session`: that is Andrew's window. `q` in the cockpit quits it cleanly.
 - Never type into the coworker's terminal pane on his behalf unless asked — that is a live agent.
 - Report what the capture shows, not what the code says should be there.
+
+## The bare-terminal path (untested as of 2026-09-08 — try it first next time)
+
+Ghostty has no `kitty @ send-text` equivalent, but the compositor does: `wtype` (flake) is a
+Wayland virtual keyboard. Focus the cockpit's ghostty window, type, screenshot — nothing in the
+path degrades icons or kitty keys, at the cost of stealing focus while keys are sent.
+
+```
+A=$(hyprctl -j clients | jq -r '.[]|select(.title=="mise run console:run")|.address')
+hyprctl dispatch "hl.dsp.focus({ window = \"address:$A\" })"
+wtype -M ctrl -k space -m ctrl          # Ctrl+Space
+wtype -k Tab; wtype 'hello'; wtype -k Return
+mise run shot:window 'mise run console:run'   # grim → png; Read it
+```
+
+If this works, prefer it over `console:run:tmux` for anything visual, and tmux for text/flow.
