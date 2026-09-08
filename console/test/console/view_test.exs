@@ -51,6 +51,27 @@ defmodule Console.ViewTest do
   # The rects of every border flagged as focused.
   defp focused_borders(placements), do: for({Panel.Border, %{focused: true}, rect} <- placements, do: rect)
 
+  # UX slice 1, task 4: the drawer is painted over the frame by the cockpit, but the FOOTER is the
+  # View's — while it's open the footer must name the drawer's verbs and the open pane's, never the
+  # rail's (the rail isn't walkable then).
+  describe "the footer while the drawer is open" do
+    test "the footer is in DRAWER mode and carries the open pane's hints" do
+      reads = reads(%{active_key: 0, drawer: :memory, focus: %Focus{in_terminal?: false}, memory: nil})
+      data = status_of(View.compose(reads, 120, 40))
+
+      assert data.mode == :drawer
+      assert data.pane_hints == Panel.Memory.hints(nil)
+    end
+
+    test "with it shut the footer is the rail's again" do
+      reads = reads(%{active_key: 0, drawer: nil, focus: %Focus{in_terminal?: false}, tlon_layout: layout()})
+      data = status_of(View.compose(reads, 120, 40))
+
+      assert data.mode == :nav
+      assert data.pane_hints == Panel.Rail.hints(nil)
+    end
+  end
+
   # UX slice 1, task 2: ONE rail (workspaces + the active workspace's threads) at x 0 — the thin
   # spine (Panel.Sidebar) and the funes rail (space.left) are no longer placed; the drawer hosts
   # those panes from task 4.

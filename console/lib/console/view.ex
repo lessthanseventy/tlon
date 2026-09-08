@@ -473,6 +473,8 @@ defmodule Console.View do
     }
   end
 
+  # The open drawer is its own mode: it owns every key, so the footer names ITS verbs (task 4).
+  defp footer_mode(%{drawer: key}) when not is_nil(key), do: :drawer
   defp footer_mode(%{lock?: true}), do: :lock
   defp footer_mode(%{focus: %Focus{in_terminal?: true}}), do: :term
   defp footer_mode(%{focus: %Focus{}}), do: :nav

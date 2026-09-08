@@ -64,6 +64,25 @@ defmodule Console.Panel.StatusBarTest do
     assert line =~ "⏎ diff"
   end
 
+  test "NAV mode advertises the drawer — the one key that opens the panes the rail no longer holds" do
+    [hints] = StatusBar.render(base(%{mode: :nav, workspace?: true}), rect())
+    assert text([hints]) =~ "Alt+d drawer"
+  end
+
+  # UX slice 1, task 4: the drawer owns every key while it's open, so the footer must show ITS
+  # verbs — the NAV face's `Alt+0`/`q`/`c`/`v` do nothing under it and would be dead hints.
+  test "DRAWER mode: close + the strip + the open pane's own verbs, and nothing that's shut off" do
+    data = base(%{mode: :drawer, workspace?: true, pane_hints: [{"j/k", "facts"}, {"⏎", "open"}]})
+    line = text(StatusBar.render(data, rect()))
+
+    assert line =~ "esc close"
+    assert line =~ "h/l pane"
+    assert line =~ "j/k facts"
+    assert line =~ "⏎ open"
+    refute line =~ "q quit"
+    refute line =~ "c reply"
+  end
+
   test "NAV mode names the session pane's mode, so Alt+\\ says what it would leave" do
     for {mode, label} <- [{:auto, "Alt+\\ pane auto"}, {true, "Alt+\\ pane on"}, {false, "Alt+\\ pane off"}] do
       data = base(%{mode: :nav, workspace?: true, session_pane_mode: mode})

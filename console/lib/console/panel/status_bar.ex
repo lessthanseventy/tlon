@@ -185,9 +185,20 @@ defmodule Console.Panel.StatusBar do
   defp mode_seg(:term), do: [{"Alt+#", "panes"}, {"^␣", "nav"}]
   defp mode_seg(:nav), do: [{"Alt+0", "term"}, {"q", "quit"}]
   defp mode_seg(:lock), do: [{"Alt+g", "unlock"}]
+  # The open drawer owns every key (Console.Cockpit.Drawer): only its own verbs, plus the open
+  # pane's, are live — the NAV face's would be dead hints under it.
+  defp mode_seg(:drawer), do: [{"esc", "close"}, {"h/l", "pane"}]
 
-  defp space_seg(%{mode: :nav, workspace?: true} = data),
-    do: [{"c", "reply"}, {"n", "new"}, {"v", "term"}, {"m", "model"}, {"Alt+\\", pane_mode(data[:session_pane_mode])}]
+  defp space_seg(%{mode: :nav, workspace?: true} = data) do
+    [
+      {"Alt+d", "drawer"},
+      {"c", "reply"},
+      {"n", "new"},
+      {"v", "term"},
+      {"m", "model"},
+      {"Alt+\\", pane_mode(data[:session_pane_mode])}
+    ]
+  end
 
   defp space_seg(_data), do: []
 
