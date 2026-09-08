@@ -77,6 +77,13 @@ defmodule Console.Panel.RailTest do
       assert row_text(row_with(rows(), "aleph")) =~ "○"
     end
 
+    test "the OPEN thread's dot is still its warmth — an open COLD thread reads ○, like the top bar" do
+      row = row_text(row_with(rows(%{opened: 8}), "aleph"))
+
+      assert row =~ "○"
+      refute row =~ "●"
+    end
+
     test "the OPEN thread and the ACTIVE workspace render as the selected face" do
       rows = rows()
       styles = fn substr -> rows |> row_with(substr) |> Enum.map(fn {_t, s} -> s end) end
@@ -97,6 +104,22 @@ defmodule Console.Panel.RailTest do
     test "an empty read renders a prompt, not a crash" do
       assert [row] = Rail.render(%{groups: [], active_key: nil}, @rect)
       assert row_text(row) =~ "no workspaces"
+    end
+
+    test "a long title at the floor width (22) still ends in its badge" do
+      long = String.duplicate("x", 80)
+      rect = %{@rect | w: 22}
+
+      rows =
+        Rail.render(
+          data(%{groups: [%{workspace: %{id: 1, name: "T"}, threads: [thread(%{title: long, awaiting: "andrew"})]}]}),
+          rect
+        )
+
+      row = rows |> Enum.map(&row_text/1) |> Enum.find(&(&1 =~ "xxx"))
+
+      assert String.ends_with?(row, "!")
+      assert Console.Panel.row_width(row_with(rows, "xxx")) <= 22
     end
 
     test "rows clip to the rail's width" do
@@ -121,8 +144,22 @@ defmodule Console.Panel.RailTest do
     end
   end
 
-  test "hints name the rail's verbs" do
-    assert {"⏎", "open"} in Rail.hints(data())
+  describe "workspace_at/3 — the right-click context menu's target" do
+    test "a workspace row answers its workspace; a thread row answers nothing" do
+      assert Rail.workspace_at(data(), @rect, 0) == %{id: 1, name: "Tlön"}
+      assert Rail.workspace_at(data(), @rect, 1) == nil
+      assert Rail.workspace_at(data(), @rect, 3) == %{id: 2, name: "ficciones"}
+      assert Rail.workspace_at(data(), @rect, 99) == nil
+      assert Rail.workspace_at(%{}, @rect, 0) == nil
+    end
+
+    test "a scrolled rail resolves the row under the CURSOR, not the unscrolled list" do
+      assert Rail.workspace_at(data(%{scroll: 3}), @rect, 0) == %{id: 2, name: "ficciones"}
+    end
+  end
+
+  test "hints name only keys that work" do
+    assert Rail.hints(data()) == [{"j/k", "row"}, {"⏎", "open"}, {"[ ]", "space"}]
   end
 
   test "topics cover threads, sessions and workspaces" do

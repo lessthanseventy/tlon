@@ -52,7 +52,18 @@ defmodule Console.Panel.Rail do
   def pick(_data, _rect, _local_y), do: nil
 
   @impl Panel
-  def hints(_data), do: [{"j/k", "thread"}, {"⏎", "open"}, {"[ ]", "workspace"}]
+  def hints(_data), do: [{"j/k", "row"}, {"⏎", "open"}, {"[ ]", "space"}]
+
+  @doc "The workspace under `local_y` (the right-click context menu's target), or nil."
+  @spec workspace_at(map(), Panel.rect(), non_neg_integer()) :: map() | nil
+  def workspace_at(%{groups: _} = data, _rect, local_y) do
+    case data |> entries() |> Enum.at(Panel.scroll_offset(data) + local_y) do
+      {:workspace, workspace} -> workspace
+      _ -> nil
+    end
+  end
+
+  def workspace_at(_data, _rect, _local_y), do: nil
 
   @doc "The rail's rows as data: every workspace, and the ACTIVE workspace's threads under it."
   @spec entries(map()) :: [{:workspace, map()} | {:thread, map()}]
@@ -103,10 +114,14 @@ defmodule Console.Panel.Rail do
     end
   end
 
-  # ● warm / ○ cold — the pair Panel.Roster and the top bar use.
-  defp dot(_thread, :active), do: {"●", :selected}
-  defp dot(%{warm?: true}, _face), do: {"●", :warm}
-  defp dot(_thread, _face), do: {"○", :dim}
+  # ● warm / ○ cold — the pair Panel.Roster and the top bar use. The face only STYLES the dot;
+  # the glyph follows warmth alone, so an open-but-cold thread can never read warm here while
+  # the top bar reads it cold.
+  defp dot(%{warm?: true}, face), do: {"●", dot_style(face, :warm)}
+  defp dot(_thread, face), do: {"○", dot_style(face, :dim)}
+
+  defp dot_style(:active, _style), do: :selected
+  defp dot_style(_face, style), do: style
 
   # An inverse row is inverse all the way across, so its runs take the selection's own styles.
   defp badge_style(:active, _style), do: :selected_accent
