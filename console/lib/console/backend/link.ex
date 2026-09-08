@@ -26,6 +26,19 @@ defmodule Console.Backend.Link do
   @spec up?() :: boolean()
   def up?, do: Remote.node_name() in Node.list()
 
+  @doc "Block until the server node is connected, up to `ms`; `:ok` or `{:error, :server_down}`."
+  @spec await(non_neg_integer()) :: :ok | {:error, :server_down}
+  def await(ms) when ms <= 0, do: if(up?(), do: :ok, else: {:error, :server_down})
+
+  def await(ms) do
+    if up?() do
+      :ok
+    else
+      Process.sleep(100)
+      await(ms - 100)
+    end
+  end
+
   @doc "Receive `{:server_link, :up | :down}` in the caller's mailbox on every change."
   def subscribe, do: Registry.register(Console.Backend.Link.Registry, :link, nil)
 

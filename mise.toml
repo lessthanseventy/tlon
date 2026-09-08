@@ -271,23 +271,46 @@ run = "TLON_DB=../server/.dev/tlon.db mix console.seed"
 # The cockpit reads the SAME db server's own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
 [tasks."console:run"]
-description = "console: launch the live cockpit in THIS terminal (run in ghostty)"
+description = "console: launch the live cockpit in THIS terminal (run in ghostty) — a CLIENT of the always-up tlon service (one brain); console:run:local embeds a server on the scratch db instead"
 dir = "modules/console"
-# Self-heals before launch: scripts/console-reap.sh kills every workspace's coworker tmux server
-# (coworkers never outlive the cockpit; a survivor squats port 4041 via an inherited fd) and any
-# stale listener on the port. A fresh coworker spawns on entry.
+# One brain (docs/plans/2026-09-08-one-brain-client-server-plan.md): the cockpit is a node that
+# :erpc's into the service (funes@127.0.0.1, ~/.local/share/tlon/cookie); the service owns the
+# db, MCP and the switchboard, and the coworkers are ITS clients — so nothing here migrates a db
+# or reaps coworkers. console-reap.sh still clears a stale cockpit process.
 run = """
-../../scripts/console-reap.sh || exit $?
-# Apply pending migrations to the dev scratch db BEFORE launch, so a fresh server slice never
-# trips the behind-DB guard and forces a manual `console:setup`. Throwaway dev db only — the
-# always-up service db is home:switch's. No deps.get, so no network.
-TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
+if ! systemctl --user is-active --quiet tlon; then
+  echo "console:run: the tlon service is not running — systemctl --user start tlon (or mise run server:restart); for an embedded server on the scratch db use console:run:local" >&2
+  exit 1
+fi
+KEEP_COWORKERS=1 ../../scripts/console-reap.sh || exit $?
 # fd 2 goes to a log, not the tty: the embedded terminal's NIF (libghostty-vt) writes its own
 # warnings to stderr, and termbox2 only repaints cells IT changed, so any stray write to the
 # screen sits there corrupting the frame until that cell happens to redraw. The cockpit's own
 # crash notice goes to stdout after the tty is restored (Console.Cockpit.Recovery).
 stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
-TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run 2>>"$stderr_log"
+TLON_BACKEND=remote TLON_NODE="${TLON_NODE:-funes@127.0.0.1}" TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" mix console.run 2>>"$stderr_log"
+"""
+
+[tasks."console:run:local"]
+description = "console: the cockpit with an EMBEDDED server on the scratch db (../server/.dev/tlon.db, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run"
+dir = "modules/console"
+run = """
+../../scripts/console-reap.sh || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
+stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
+TLON_BACKEND=local TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run 2>>"$stderr_log"
+"""
+
+[tasks."server:dev"]
+description = "server: a scratch server NODE (funes-dev@127.0.0.1, ../server/.dev/tlon.db, MCP :4041) in iex — hack on the server with the live service untouched; attach a cockpit with `TLON_NODE=funes-dev@127.0.0.1 mise run console:run`"
+dir = "modules/server"
+run = """
+db=.dev/tlon.db
+# never the service's file: two BEAM nodes on one SQLite file is `database is locked`
+case "$(readlink -f "$db" 2>/dev/null)" in "$(readlink -f "$HOME/.local/share/funes/wb.db" 2>/dev/null)") echo "server:dev refuses the service's db" >&2; exit 1;; esac
+TLON_DB=$db mix ecto.migrate || exit $?
+TLON_DB=$db TLON_START_MCP=1 TLON_MCP_PORT=4041 TLON_START_SWITCHBOARD=1 TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" \
+  iex --name funes-dev@127.0.0.1 --cookie "$(tr -d '[:space:]' < "${TLON_COOKIE_FILE:-$HOME/.local/share/tlon/cookie}")" -S mix
 """
 
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't

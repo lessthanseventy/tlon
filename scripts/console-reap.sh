@@ -23,6 +23,10 @@ PORT="${TLON_MCP_PORT:-4041}"
 # Console.Crew), whose socket lives in tmux's socket dir. Killing the server frees the inherited
 # port fd; step 1 then reaps whatever still listens.
 sockdir="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
+# One brain (docs/plans/2026-09-08-one-brain-client-server-plan.md): under the remote backend the
+# coworkers are the always-up service's clients and outlive the cockpit by design — KEEP_COWORKERS=1
+# leaves their tmux servers alone and only clears a stale cockpit / listener.
+[ "${KEEP_COWORKERS:-0}" = 1 ] && sockdir=/nonexistent
 for sock in "$sockdir"/console-workspace-*; do
   [ -S "$sock" ] || continue
   if tmux -S "$sock" kill-server 2>/dev/null; then

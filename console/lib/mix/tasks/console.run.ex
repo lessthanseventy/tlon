@@ -10,6 +10,8 @@ defmodule Mix.Tasks.Console.Run do
   use Mix.Task
   use Boundary, classify_to: Console
 
+  alias Console.Backend.Remote
+
   @requirements ["app.config"]
 
   @impl Mix.Task
@@ -34,6 +36,25 @@ defmodule Mix.Tasks.Console.Run do
   # `%Exqlite.Error{}` ("no such table: todo") deep in render. So ask the arbiter whose
   # output names the gap — `Server.Doctor.pending/0` — and turn that crash into the fix.
   defp launch_or_explain do
+    # under the remote backend the first read is over the wire: give the node link a moment,
+    # and say so if the service is not there (docs/plans/2026-09-08-one-brain-client-server-plan.md)
+    case await_server() do
+      :ok ->
+        check_migrations_and_launch()
+
+      {:error, :server_down} ->
+        Mix.shell().error(
+          "console cannot reach the tlon service node #{Remote.node_name()} — " <>
+            "is it running (`systemctl --user status tlon`)? For an embedded server on the scratch db: `mise run console:run:local`."
+        )
+    end
+  end
+
+  defp await_server do
+    if Console.Backend.impl() == Remote, do: Console.Backend.Link.await(5_000), else: :ok
+  end
+
+  defp check_migrations_and_launch do
     case Console.Server.Doctor.pending() do
       [] ->
         Console.Cockpit.run()
@@ -42,7 +63,7 @@ defmodule Mix.Tasks.Console.Run do
         names = Enum.map_join(pending, "\n  ", fn {version, name} -> "#{version}_#{name}" end)
 
         Mix.shell().error(
-          "console's database is #{length(pending)} migration(s) behind — run `mise run console:setup` first.\n" <>
+          "the server's database is #{length(pending)} migration(s) behind — `mise run server:restart` (service) or `mise run console:setup` (scratch db) first.\n" <>
             "Pending:\n  " <> names
         )
     end
