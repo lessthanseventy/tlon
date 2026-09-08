@@ -271,6 +271,28 @@ defmodule Console.ViewTest do
       assert stack_rect(placements).w == stack_rect(View.compose(chat_reads(%{}), 90, 40)).w
     end
 
+    test "the pane forced OFF places no right box at all — not even the stand-in" do
+      placements = View.compose(chat_reads(%{session_pane: nil, session_pane_mode: false}, 9), 120, 40)
+
+      refute placed?(placements, Panel.Placeholder)
+      refute placed?(placements, Panel.Terminal)
+      assert stack_rect(placements).w == stack_rect(View.compose(chat_reads(%{}), 120, 40)).w
+    end
+
+    test "under :auto a live session does NOT split a frame below the two-pane floor" do
+      narrow = View.compose(chat_reads(%{session_pane: 7, session_pane_mode: :auto, session: :no_session}, 7), 90, 40)
+
+      refute placed?(narrow, Panel.Terminal)
+      assert stack_rect(narrow).w == stack_rect(View.compose(chat_reads(%{}), 90, 40)).w
+    end
+
+    test "pinned ON, the pane splits below the floor too — that split was asked for" do
+      placements = View.compose(chat_reads(%{session_pane: 7, session_pane_mode: true, session: :no_session}, 7), 90, 40)
+
+      assert {Panel.Terminal, _data, sess} = Enum.find(placements, &match?({Panel.Terminal, _, _}, &1))
+      assert sess.x > stack_rect(placements).x
+    end
+
     test "the terminal centre never splits — the pane sits beside the CONVERSATION" do
       placements = View.compose(reads(%{thread_stack: %{cards: [], opened: 9}}), 120, 40)
       refute placed?(placements, Panel.Placeholder)

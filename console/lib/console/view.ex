@@ -238,10 +238,14 @@ defmodule Console.View do
 
   # What the right pane holds, or nil — the conversation then spans the whole centre. A live session
   # puts the coworker's PTY there; with none, an OPEN conversation still keeps the pane, holding the
-  # stand-in that names the spawn verb, so the frame doesn't reflow every time a session ends.
+  # stand-in, so the frame doesn't reflow every time a session ends. Only an EXPLICIT `true` splits a
+  # frame under the two-pane floor, and `false` means no box at all — the footer says "pane off".
   defp right_section(reads, w) do
+    mode = reads[:session_pane_mode]
+
     cond do
-      is_integer(reads[:session_pane]) -> {Panel.Terminal, :session}
+      is_integer(reads[:session_pane]) and (w >= @two_pane_min or mode == true) -> {Panel.Terminal, :session}
+      mode == false -> nil
       w >= @two_pane_min and conversation_open?(reads) -> Panel.Placeholder
       true -> nil
     end
