@@ -487,8 +487,10 @@ defmodule Console.Keymap do
   defp command(%{key: :tab, shift: true}, state), do: switch(state, :prev)
   defp command(%{key: :tab}, state), do: switch(state, :next)
 
-  # j/k/↑/↓ move the thread focus — the leader's path from a live terminal (^Space j). The letters
-  # must be bare (a chord is never nav); the arrows carry whatever modifiers they have.
+  # j/k/↑/↓ move the thread focus. Since task 5 every live keypress enters through handle_tlon
+  # (every active_key is a workspace key and the cockpit always carries a Focus), so this table —
+  # and the Ctrl+Space leader above it — is reached only by handle_tlon's delegations and by tests
+  # that build a state without :focus. Slice 2 (the key layers) decides the leader's fate.
   defp command(key, state) when is_vertical(key) and (key.key != :char or is_bare(key)),
     do: move_thread(state, vertical(key))
 
