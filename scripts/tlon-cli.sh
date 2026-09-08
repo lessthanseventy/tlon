@@ -18,7 +18,8 @@
 #   token                          headersHelper: mint a FRESH token for (TLON_THREAD,
 #                                  TLON_AUTHOR) from the env → {"Authorization":"Bearer …"}
 #   roster                         who's on the clock (warm ●/cold ○)
-#   shell-status                   roster + thread counts as JSON, for the desktop shell
+#   shell-status                   roster + open threads + counts as JSON, for the desktop shell
+#   shell-dossier <id>             a thread's brief as JSON, for the shell's AGENTS pane
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
@@ -175,7 +176,15 @@ case "$cmd" in
       import Ecto.Query
       counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
       awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and not is_nil(t.awaiting), select: count(t.id))
-      %{roster: roster, counts: counts, awaiting: awaiting} |> JSON.encode!() |> IO.puts()'
+      threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting})
+      %{roster: roster, counts: counts, awaiting: awaiting, threads: threads} |> JSON.encode!() |> IO.puts()'
+    ;;
+
+  shell-dossier)
+    # A thread's brief as JSON for the AGENTS pane's detail (the same scope get_dossier gives an agent)
+    tid="${1:-}"
+    int "$tid" || { echo 'usage: tlon-cli.sh shell-dossier <thread-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "%Server.Thread{id: $tid} |> Server.Board.brief() |> Server.MCP.Brief.scope() |> JSON.encode!() |> IO.puts()"
     ;;
 
   roster)
