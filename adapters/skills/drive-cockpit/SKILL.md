@@ -1,0 +1,66 @@
+---
+name: drive-cockpit
+description: Drive the live Tlön cockpit (the console TUI) from Claude through a shared tmux session — send keys, read the frame back as text, screenshot it. Use for live passes, reproducing a UX bug, or verifying a frame change end to end (not just tests). Andrew starts the session in ghostty; Claude never launches the cockpit itself.
+---
+
+# Driving the cockpit over tmux
+
+The cockpit (`mise run console:run`) is a termbox TUI: it cannot be scripted directly, but inside a
+tmux session its frame is text tmux can capture and its keys are keys tmux can send. This is how
+Claude and Andrew look at the same screen.
+
+## Setup (Andrew, once per pass, in a ghostty window)
+
+```
+tmux -L tlon new -s cockpit -x 200 -y 50
+# inside it:
+mise run console:run
+```
+
+- `-L tlon` is a dedicated tmux server so the cockpit's own coworker servers (`console-workspace-*`)
+  and the default server are never touched.
+- Alt chords (`Alt+d`, `Alt+\`, `Alt+Shift+N`) must pass through tmux: the flake's tmux.conf sets
+  `extended-keys on` and `escape-time 0`; if a chord does not land, check `tmux -L tlon show -s extended-keys`.
+- The tlon service must be up (`systemctl --user is-active tlon`); `console:run` refuses otherwise.
+
+## Driving (Claude)
+
+Every tmux call needs the sandbox off (the socket is under `/tmp/tmux-1000`): pass
+`dangerouslyDisableSandbox: true` and say why once.
+
+Read the frame:
+
+```
+tmux -L tlon capture-pane -t cockpit -p -e      # -e keeps colours as SGR; drop it for plain text
+```
+
+Send keys (tmux key names; `M-` is Alt, `C-` is Ctrl, `Escape`, `Enter`, `Tab`, `BTab`):
+
+```
+tmux -L tlon send-keys -t cockpit j j Enter
+tmux -L tlon send-keys -t cockpit M-d           # the drawer
+tmux -L tlon send-keys -t cockpit -l 'hello'    # literal text into the reply box
+tmux -L tlon send-keys -t cockpit Escape
+```
+
+Wait ~300 ms after a key before capturing (the cockpit repaints on its tick). A real screenshot
+when colours or glyph alignment matter: `mise run shot:window ghostty` (grim, prints the path),
+then Read the png.
+
+Size: `tmux -L tlon resize-window -t cockpit -x 120 -y 40` to test the narrow layout (< 80 cols
+collapses to one column).
+
+## Reading what happened underneath
+
+- Cockpit stderr: `~/.cache/tlon/stderr.log` (the frame never shows it).
+- Crash notice: printed to stdout after the tty is restored (`Console.Cockpit.Recovery`).
+- Server side: `mise run server:console` (remote iex into the service), or
+  `journalctl --user -u tlon -n 50`.
+- Hot reload after a code edit: `mise run console:reload` in a second terminal (render/keymap/panel
+  edits land on the next tick; a state-shape change needs a restart: `q` then `console:run` again).
+
+## Rules
+
+- Never `tmux kill-server -L tlon` or `kill-session`: that is Andrew's window. `q` in the cockpit quits it cleanly.
+- Never type into the coworker's terminal pane on his behalf unless asked — that is a live agent.
+- Report what the capture shows, not what the code says should be there.
