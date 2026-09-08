@@ -51,6 +51,9 @@ defmodule Console.Workspaces do
   @impl true
   def init(_opts) do
     subscribe()
+    # under the remote backend the first load races the node link: an empty cache would then
+    # sit until a workspace event — so the link's up/down messages reload it (2026-09-08)
+    if Console.Backend.impl() == Console.Backend.Remote, do: Console.Backend.Link.subscribe()
     {:ok, load([])}
   end
 
@@ -72,6 +75,8 @@ defmodule Console.Workspaces do
   def handle_info({tag, _workspace}, workspaces) when tag in @workspace_events do
     {:noreply, load(workspaces)}
   end
+
+  def handle_info({:server_link, :up}, workspaces), do: {:noreply, load(workspaces)}
 
   def handle_info(_msg, workspaces), do: {:noreply, workspaces}
 
