@@ -116,11 +116,16 @@ defmodule Console.Backend.LinkTest do
     {:ok, reg} = Registry.start_link(keys: :duplicate, name: Console.Backend.Link.Registry)
 
     try do
-      {:ok, pid} = Link.start_link(name: :"bad name with spaces@")
-      Process.sleep(100)
-      assert Process.alive?(pid)
-      refute Link.up?()
-      GenServer.stop(pid)
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          {:ok, pid} = Link.start_link(name: :"bad name with spaces@")
+          Process.sleep(100)
+          assert Process.alive?(pid)
+          refute Link.up?()
+          GenServer.stop(pid)
+        end)
+
+      assert log =~ "could not start distribution"
     after
       Process.exit(reg, :normal)
       Application.delete_env(:console, :server_node)
