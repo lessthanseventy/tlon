@@ -21,7 +21,7 @@ defmodule Console.Panel.Triage do
 
   @impl Console.Panel
   def render(nil, rect) do
-    Console.Panel.clip([line("switch to Orbis", :dim)], rect)
+    Console.Panel.clip([line("triage has not been read yet", :dim)], rect)
   end
 
   @impl Console.Panel

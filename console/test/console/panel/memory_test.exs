@@ -73,7 +73,8 @@ defmodule Console.Panel.MemoryTest do
              {"j/k", "facts"},
              {"⏎", "open"},
              {"y", "text"},
-             {"d", "forget"}
+             {"d", "forget"},
+             {"a/r", "habit"}
            ]
   end
 

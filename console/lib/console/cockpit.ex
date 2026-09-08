@@ -409,14 +409,22 @@ defmodule Console.Cockpit do
       state.menu ->
         handle_menu_click(Mouse.hit_panel(state.placements, x, y), y, %{state | last_left: {x, y}})
 
-      # The open drawer: a click inside it picks off the pane it covers (the overlay placements are
-      # last, so hit-test them first); a click outside — the rail, the bars — closes it, like Esc.
+      # The open drawer: a click on its tab strip switches pane; inside it picks off the pane it
+      # covers (the overlay placements are last, so hit-test them first); outside — the rail, the
+      # bars — closes it, like Esc.
       state.drawer ->
         state = %{state | last_left: {x, y}}
 
-        if Drawer.covers?(state, x, y),
-          do: dispatch_click(Mouse.hit_panel(Enum.reverse(state.placements), x, y), x, y, state),
-          else: {:noreply, render(Drawer.close(state))}
+        cond do
+          tab = Drawer.tab_at(state, x, y) ->
+            {:noreply, render(Drawer.open(state, tab))}
+
+          Drawer.covers?(state, x, y) ->
+            dispatch_click(Mouse.hit_panel(Enum.reverse(state.placements), x, y), x, y, state)
+
+          true ->
+            {:noreply, render(Drawer.close(state))}
+        end
 
       true ->
         dispatch_click(Mouse.hit_panel(state.placements, x, y), x, y, %{state | last_left: {x, y}})

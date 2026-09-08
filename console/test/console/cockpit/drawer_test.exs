@@ -142,4 +142,22 @@ defmodule Console.Cockpit.DrawerTest do
     refute Drawer.covers?(state, 30, 39), "the footer is never covered"
     refute Drawer.covers?(%{state | drawer: nil}, 30, 10)
   end
+
+  # The tab strip invites a click: a hit on a tab label on the drawer's top rule names its pane;
+  # anywhere else on the drawer is nil (the pane underneath takes it). Mirrors Border.tab_at_x/2.
+  test "tab_at/3 names the pane under a click on the tab strip, nil elsewhere" do
+    state = state(%{drawer: :memory, w: 120, h: 40})
+    [{Panel.Border, border, rect}] = Enum.take(Drawer.placements(state, 120, 40), 1)
+    # the label runs: find where "stack" starts by asking the border itself
+    x_of = fn label ->
+      Enum.find(0..rect.w, fn x ->
+        Panel.Border.tab_at_x(border, x) == Enum.find_index(border.tabs, &(elem(&1, 0) == label))
+      end)
+    end
+
+    assert Drawer.tab_at(state, rect.x + x_of.("stack"), rect.y) == :stack
+    assert Drawer.tab_at(state, rect.x + x_of.("health"), rect.y) == :health
+    assert Drawer.tab_at(state, rect.x + 5, rect.y + 5) == nil, "inside the pane, not the strip"
+    assert Drawer.tab_at(%{state | drawer: nil}, rect.x + 5, rect.y) == nil
+  end
 end

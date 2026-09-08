@@ -113,6 +113,17 @@ defmodule Console.Cockpit.Drawer do
 
   defp rect(state, w, h), do: View.center_region(w, h, Map.get(state, :input))
 
+  @doc "The pane under a click on the tab strip (the drawer's top rule), or nil anywhere else."
+  @spec tab_at(map(), non_neg_integer(), non_neg_integer()) :: atom() | nil
+  def tab_at(%{drawer: nil}, _x, _y), do: nil
+
+  def tab_at(%{drawer: key, w: w, h: h} = state, x, y) do
+    r = rect(state, w, h)
+
+    if y == r.y and x >= r.x and x < r.x + r.w,
+      do: at(Panel.Border.tab_at_x(border(key), x - r.x))
+  end
+
   defp border(key) do
     tabs = for {k, _panel} <- @panes, do: {Atom.to_string(k), k == key}
     %{focused: true, digit: nil, title: nil, tabs: tabs, hint: @hint}

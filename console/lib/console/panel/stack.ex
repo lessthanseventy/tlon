@@ -121,7 +121,7 @@ defmodule Console.Panel.Stack do
   defp file_row(path), do: [{"  ", :dim}, {path, :normal}]
 
   @impl Console.Panel
-  def hints(_data), do: [{"j/k", "commits"}, {"⏎", "diff"}, {"y", "sha"}]
+  def hints(_data), do: [{"j/k", "commits"}, {"⏎", "lazygit"}, {"y", "sha"}]
 
   @doc "The semantic yank for the cursor row: the full sha."
   def yank(%{commits: commits}, cursor) do

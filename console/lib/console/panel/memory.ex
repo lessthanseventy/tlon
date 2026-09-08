@@ -112,7 +112,8 @@ defmodule Console.Panel.Memory do
 
   # `s` cycles PINNED/HABITS since the C3.4 reshuffle handed Tab to space-switching.
   @impl Console.Panel
-  def hints(_data), do: [{"s", "section"}, {"j/k", "facts"}, {"⏎", "open"}, {"y", "text"}, {"d", "forget"}]
+  def hints(_data),
+    do: [{"s", "section"}, {"j/k", "facts"}, {"⏎", "open"}, {"y", "text"}, {"d", "forget"}, {"a/r", "habit"}]
 
   @doc "The semantic yank for the cursor row: section-aware, data carries :section like render/2."
   def yank(%{habits: habits, section: @habits_section}, cursor) do

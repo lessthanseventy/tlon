@@ -45,7 +45,7 @@ defmodule Console.Panel.StackTest do
   end
 
   test "hints/1 declares the pane's footer verbs" do
-    assert Console.Panel.hints(Stack, %{}) == [{"j/k", "commits"}, {"⏎", "diff"}, {"y", "sha"}]
+    assert Console.Panel.hints(Stack, %{}) == [{"j/k", "commits"}, {"⏎", "lazygit"}, {"y", "sha"}]
   end
 
   test "a panel without hints/1 declares nothing" do
