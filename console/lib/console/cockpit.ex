@@ -966,6 +966,7 @@ defmodule Console.Cockpit do
     # Opening a thread IS focusing its reply (2026-09-01): seed the persistent `:reply` input so the
     # box is live the instant the conversation shows — no `c` verb. `:close_thread_view` tears it down.
     input = %{kind: :reply, thread_id: id, buffer: "", cursor: 0}
+    _ = drop_stale_session(state, id)
     {:noreply, render(%{state | opened_thread: id, focused_id: id, stack_focus: id, scrolls: scrolls, input: input})}
   end
 
@@ -974,9 +975,11 @@ defmodule Console.Cockpit do
 
   defp apply_effect(:open_focused_thread, state), do: {:noreply, state}
 
-  defp apply_effect(:close_thread_view, state),
-    do:
-      {:noreply, render(%{state | opened_thread: nil, input: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
+  defp apply_effect(:close_thread_view, state) do
+    _ = drop_stale_session(state, nil)
+
+    {:noreply, render(%{state | opened_thread: nil, input: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
+  end
 
   # Scroll the open conversation by `n` rows (j/k in conversation mode); clamped at render.
   defp apply_effect({:scroll_conversation, n}, state) do
@@ -1273,13 +1276,24 @@ defmodule Console.Cockpit do
     with id when is_integer(id) <- Reads.session_thread(state),
          nil <- session_terminal_pid(id),
          %{index: index} <- Tmux.leaf_tab(Tmux.list_windows(Space.active_workspace_id(state)), id) do
-      {cmd, args} = Console.SessionPane.command(Space.active_workspace_id(state), index)
+      {cmd, args} = Console.SessionPane.command(Space.active_workspace_id(state), index, id)
       {cols, rows} = Reads.session_pane_dims(state)
       _ = safe_session_ensure({:session, id}, cmd: cmd, args: args, cols: cols, rows: rows)
     end
 
     state
   end
+
+  @doc false
+  # One open thread, one pane PTY: the SESSION terminal (and the per-thread tmux view session it
+  # attaches to) belongs to the OPEN conversation, so the centre moving off a thread ends it —
+  # nothing else tears these down, and a left-behind PTY holds a client on the workspace session.
+  def drop_stale_session(%{opened_thread: id}, id), do: :ok
+
+  def drop_stale_session(%{opened_thread: old}, _next) when is_integer(old),
+    do: Safe.value(fn -> Sessions.close({:session, old}) end, :ok)
+
+  def drop_stale_session(_state, _next), do: :ok
 
   defp session_terminal_pid(id) do
     case Reads.terminal({:session, id}) do

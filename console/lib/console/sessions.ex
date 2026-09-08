@@ -50,6 +50,13 @@ defmodule Console.Sessions do
   @doc "All live session terminals as `%{thread_id => pid}`."
   def all, do: GenServer.call(__MODULE__, :all)
 
+  @doc """
+  End the terminal for `thread_id` (a no-op when there is none). The owner of a terminal is the
+  surface showing it — the session pane's PTY dies when the centre moves off its thread — so the
+  registry needs a teardown as well as the exit-driven drop.
+  """
+  def close(thread_id), do: GenServer.call(__MODULE__, {:close, thread_id})
+
   @impl true
   def init(:ok), do: {:ok, %{by_thread: %{}, by_ref: %{}, observer: nil}}
 
@@ -81,6 +88,22 @@ defmodule Console.Sessions do
           {:error, _reason} = error ->
             {:reply, error, state}
         end
+    end
+  end
+
+  def handle_call({:close, thread_id}, _from, state) do
+    case Map.get(state.by_thread, thread_id) do
+      nil ->
+        {:reply, :ok, state}
+
+      pid ->
+        _ = DynamicSupervisor.terminate_child(@sup, pid)
+        # Drop it here rather than waiting on our own DOWN: the caller's next `terminal/1` must not
+        # hand back a dead pid.
+        {refs, by_ref} = Enum.split_with(state.by_ref, fn {_ref, tid} -> tid == thread_id end)
+        for {ref, _tid} <- refs, do: Process.demonitor(ref, [:flush])
+
+        {:reply, :ok, %{state | by_thread: Map.delete(state.by_thread, thread_id), by_ref: Map.new(by_ref)}}
     end
   end
 

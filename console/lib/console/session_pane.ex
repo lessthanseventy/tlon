@@ -13,15 +13,19 @@ defmodule Console.SessionPane do
   """
 
   @doc ~S"""
-  The PTY command to view the lead window `index` of workspace `workspace_id`'s session — a grouped
-  tmux client pinned to that window. `{"/bin/bash", ["-lc", "exec tmux …"]}`: a login shell so
-  PATH/env resolve like the harness terminals; `exec` so tmux becomes the PTY's own process. All
-  interpolations are single-quoted so a name can't split the command.
+  The PTY command to view the lead window `index` of workspace `workspace_id`'s session for thread
+  `thread_id` — a grouped tmux client pinned to that window. `{"/bin/bash", ["-lc", "exec tmux …"]}`:
+  a login shell so PATH/env resolve like the harness terminals; `exec` so tmux becomes the PTY's own
+  process. All interpolations are single-quoted so a name can't split the command.
+
+  The view session is named PER THREAD: `-A` attaches to an existing one, so a workspace-wide name
+  put every open thread's pane on the same client — whose current window the newest `select-window`
+  moved, leaving the older pane showing the newer thread's coworker.
   """
-  def command(workspace_id, index) do
+  def command(workspace_id, index, thread_id) do
     socket = Console.Tmux.socket(workspace_id)
     session = Console.Tmux.session(workspace_id)
-    view = "#{session}_view"
+    view = "#{session}_view_#{thread_id}"
     target = "#{session}:#{index}"
 
     script =
