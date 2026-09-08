@@ -86,8 +86,9 @@ defmodule Console.ViewTest do
     test "a fifth of the frame, floored at 22 columns (and never past a third)" do
       assert %{w: 24} = rail_box(View.compose(reads(%{}), 120, 40))
       assert 24 == max(22, div(120, 5))
-      # At the wide threshold a fifth is under the floor, so the floor wins — and 22 is still
-      # inside the third-of-the-frame cap (27), which is the guard against a fat rail on a tile.
+      # At the wide threshold a fifth is under the floor, so the floor wins. The third-of-the-frame
+      # cap never binds at a wide width (a fifth is always under a third) — it is kept as the guard
+      # for the narrow/derived sizes `center_rect/3` can be asked for, and is not exercised here.
       assert %{w: 22} = rail_box(View.compose(reads(%{}), 82, 40))
     end
 
@@ -100,6 +101,37 @@ defmodule Console.ViewTest do
 
       assert boxes != []
       assert Enum.all?(boxes, &(&1.x >= rail.x + rail.w + 1))
+    end
+
+    # The rail's j/k cursor is an ABSOLUTE row index and the scroll window is taken over the same
+    # absolute rows, so the window has to follow the cursor or j walks it off the visible rail.
+    test "the scroll window follows the j/k cursor: down past the last visible row scrolls" do
+      focus = %Focus{in_terminal?: false, column: :left, pane: 0, cursors: %{Panel.Rail => 40}}
+      placements = View.compose(reads(%{focus: focus, tlon_layout: layout(%{Panel.Rail => 60})}), 120, 40)
+
+      assert {Panel.Rail, %{scroll: scroll, selected: 40}, rect} = rail_of(placements)
+      assert scroll == 40 - rect.h + 1
+      assert scroll > 0
+    end
+
+    test "a cursor already inside the window leaves the offset alone" do
+      focus = %Focus{in_terminal?: false, column: :left, pane: 0, cursors: %{Panel.Rail => 2}}
+      placements = View.compose(reads(%{focus: focus, tlon_layout: layout(%{Panel.Rail => 60})}), 120, 40)
+
+      assert {Panel.Rail, %{scroll: 0}, _rect} = rail_of(placements)
+    end
+
+    test "a wheel scroll past the cursor snaps back so the cursor stays on screen" do
+      focus = %Focus{in_terminal?: false, column: :left, pane: 0, cursors: %{Panel.Rail => 2}}
+
+      placements =
+        View.compose(
+          reads(%{focus: focus, tlon_layout: layout(%{Panel.Rail => 60}), scrolls: %{Panel.Rail => 30}}),
+          120,
+          40
+        )
+
+      assert {Panel.Rail, %{scroll: 2}, _rect} = rail_of(placements)
     end
 
     test "a missing sidebar read degrades to empty groups, not a crash" do
