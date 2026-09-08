@@ -291,14 +291,15 @@ defmodule Console.View do
   The content rect the center Terminal renders into for a `space_key`/`w`×`h` cockpit — the single
   source of truth the embedded PTY sizes to, so pi never draws wider or taller than the visible
   area. Orbis carries no center Terminal (its surface is `[Overview]`, the survey) → this falls back
-  to the full center column. A Workspace's NewThread/Tertius bands (`Console.Space`) share the column
+  to the full center column. `input` is the cockpit's open input (nil = none), so an open composer
+  shortens the rect the same way it shortens the frame. A Workspace's NewThread/Tertius bands (`Console.Space`) share the column
   with its Terminal, so its box is smaller — found via the SAME `boxed/2` stacking `compose/3` uses, not a
   second formula that could drift. (The PTY is only sized in the wide layout — a real cockpit is
   never below the narrow threshold.)
   """
-  @spec center_rect(atom(), pos_integer(), pos_integer()) :: Panel.rect()
-  def center_rect(space_key, w, h) do
-    center_col = wide_columns(w, max(h - @top_h - @status_h, 1)).center
+  @spec center_rect(atom(), pos_integer(), pos_integer(), map() | nil) :: Panel.rect()
+  def center_rect(space_key, w, h, input \\ nil) do
+    center_col = wide_columns(w, body_height(w, h, input)).center
     surface = fetch_space(space_key).surface
 
     case Enum.find(boxed(surface, center_col), &terminal_section?/1) do
@@ -312,8 +313,12 @@ defmodule Console.View do
   pane into, so the attached tmux client is sized to exactly what's on screen (one authority, like
   `center_rect/3` for the centre).
   """
-  @spec session_rect(pos_integer(), pos_integer()) :: Panel.rect()
-  def session_rect(w, h), do: inset(wide_columns(w, max(h - @top_h - @status_h, 1), true).right)
+  @spec session_rect(pos_integer(), pos_integer(), map() | nil) :: Panel.rect()
+  def session_rect(w, h, input \\ nil), do: inset(wide_columns(w, body_height(w, h, input), true).right)
+
+  # The body both rects live in — the frame less the two bars AND the open composer, exactly as
+  # `compose/3` computes it, so a PTY attached while `c` is open isn't sized over the compose box.
+  defp body_height(w, h, input), do: max(h - @top_h - @status_h - composer_height(%{input: input}, w, h), 1)
 
   # `Space.fetch/1` returns nil on a miss (Phase C1: no silent Orbis default at the Space layer) —
   # a stale/unknown active_key mid-render degrades to an empty space here instead of crashing the

@@ -78,6 +78,27 @@ defmodule Console.BoardTest do
     )
   end
 
+  # A Workspace chat with a thread OPEN and the session pane pinned on — the only Panel.Terminal in
+  # the frame is then the pane's (the centre holds the conversation).
+  defp pane_reads(overrides \\ %{}) do
+    reads(
+      Map.merge(
+        %{
+          active_key: 0,
+          center_view: :chat,
+          thread_stack: %{cards: [], opened: 7},
+          session_pane: 7,
+          session_pane_mode: true,
+          session: :no_session,
+          machine: :no_session,
+          stack: nil,
+          health: nil
+        },
+        overrides
+      )
+    )
+  end
+
   describe "panels render styled rows" do
     test "roster: one row per session, warmth marked (title lives on the frame now)" do
       rect = %{x: 0, y: 0, w: 40, h: 10}
@@ -403,6 +424,41 @@ defmodule Console.BoardTest do
         assert View.center_rect(key, w, h) == term_rect,
                "center_rect drifted from the Terminal placement at #{key} #{w}x#{h}"
       end
+    end
+
+    test "the session pane's PTY sizes to the placed pane rect — the twin of center_rect" do
+      # session_rect is what the ATTACHED tmux client is sized to; like center_rect it must equal the
+      # rect compose places the pane into, or the coworker's terminal draws past its half (or short
+      # of it). The pane is pinned on so the split holds below the two-pane floor too.
+      for {w, h} <- [{120, 40}, {100, 30}, {84, 30}, {200, 50}, {101, 24}, {100, 12}] do
+        {_m, _d, pane_rect} = Enum.find(View.compose(pane_reads(), w, h), fn {m, _d, _r} -> m == Terminal end)
+
+        assert View.session_rect(w, h) == pane_rect,
+               "session_rect drifted from the pane placement at #{w}x#{h}"
+      end
+    end
+
+    test "an open composer shrinks both PTY authorities — neither draws under the compose box" do
+      # compose/3 subtracts the composer's rows from the body; center_rect/session_rect must too, or
+      # a PTY attached while `c` is open is two rows too tall.
+      input = %{kind: :compose, thread_id: 1, buffer: "one\ntwo", cursor: 7}
+
+      centre =
+        reads(%{
+          active_key: 0,
+          machine: :no_session,
+          stack: %{branch: nil, dirty: false, ahead: nil, behind: nil, status_summary: nil, commits: [], tools: []},
+          health: nil,
+          input: input
+        })
+
+      {_m, _d, term_rect} = Enum.find(View.compose(centre, 120, 40), fn {m, _d, _r} -> m == Terminal end)
+      assert View.center_rect(0, 120, 40, input) == term_rect
+
+      {_m, _d, pane_rect} =
+        Enum.find(View.compose(pane_reads(%{input: input}), 120, 40), fn {m, _d, _r} -> m == Terminal end)
+
+      assert View.session_rect(120, 40, input) == pane_rect
     end
 
     test "a short Tlön terminal never places a section (or the PTY) past the frame" do

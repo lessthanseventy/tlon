@@ -212,8 +212,8 @@ defmodule Console.Reads do
   # The session pane's PTY is sized to the pane's OWN rect (Console.View.session_rect — half the
   # centre), so the attached client draws neither past the frame nor short of it. Spawn dims; the
   # live resize-on-window-change is the kitty pass.
-  def session_pane_dims(%{w: w, h: h}) do
-    rect = View.session_rect(w, h)
+  def session_pane_dims(%{w: w, h: h} = state) do
+    rect = View.session_rect(w, h, Map.get(state, :input))
     {max(rect.w, 1), max(rect.h, 1)}
   end
 
@@ -604,8 +604,8 @@ defmodule Console.Reads do
   # Size the PTY to EXACTLY the center Terminal's content rect (Console.View.center_rect), so pi never
   # draws past the frame (a wider PTY spills; a shorter one leaves a dead band). The tertius band
   # already shrinks that rect (its own section, not the terminal's), so no separate reserve is needed.
-  def center_dims(%{active_key: active_key, w: w, h: h}) do
-    rect = View.center_rect(active_key, w, h)
+  def center_dims(%{active_key: active_key, w: w, h: h} = state) do
+    rect = View.center_rect(active_key, w, h, Map.get(state, :input))
     {max(rect.w, 1), max(rect.h, 1)}
   end
 
