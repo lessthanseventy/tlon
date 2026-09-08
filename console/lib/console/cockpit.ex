@@ -19,6 +19,7 @@ defmodule Console.Cockpit do
   alias Console.Board
   alias Console.Cockpit.Author
   alias Console.Cockpit.Boards
+  alias Console.Cockpit.Drawer
   alias Console.Cockpit.Recovery
   alias Console.Delivery
   alias Console.Keymap
@@ -185,9 +186,11 @@ defmodule Console.Cockpit do
             last_right: nil,
             # The open overlay menu (right-click workspace context menu / icon picker), or nil.
             menu: nil,
-            # The open full-screen board (`:tickets` / `:notes`, Slice 3.5), or nil.
-            board: nil,
-            # The Tickets kanban cursor `{col, row}` (Slice D3) — reset when a board opens.
+            # The open DRAWER pane (`Console.Cockpit.Drawer` — UX slice 1), or nil when it's shut.
+            drawer: nil,
+            # The pane the next `Alt+d` reopens on — the drawer remembers where you were.
+            last_drawer: :memory,
+            # The Tickets kanban cursor `{col, row}` (Slice D3) — the drawer's TICKETS pane.
             board_cursor: {0, 0},
             # The STACK-zoom embedded lazygit (Slice 4): `%{thread_id, path}` while a full-screen
             # `lazygit` PTY is up over the focused thread's worktree, else nil. The terminal itself
@@ -342,14 +345,14 @@ defmodule Console.Cockpit do
     {:noreply, state}
   end
 
-  # A full-screen board (Tickets/Notes) — Esc closes; an ACTIVE input (a new-ticket/note title) takes
-  # the keys (input: nil guard fails → falls to the normal dispatch below); else the board key handler
-  # drives the kanban cursor + verbs.
-  def handle_cast({:dispatch, %Event{type: :key, data: %{key: :escape}}}, %{board: b, input: nil} = state)
-      when not is_nil(b), do: {:noreply, render(%{state | board: nil})}
-
-  def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{board: b, input: nil} = state) when not is_nil(b),
-    do: overlay_reply(Boards.handle_board_key(key, state), state)
+  # The open DRAWER owns the keys (UX slice 1, task 4): its own table, ahead of the general
+  # dispatch, so nothing falls through to the frame it covers. An ACTIVE input (a new-ticket/note
+  # title) takes them back — the `input: nil` guard fails and the normal dispatch below runs the
+  # modal.
+  def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{drawer: d, input: nil} = state) when not is_nil(d) do
+    {next, effect} = Keymap.handle_drawer(key, keymap_state(state))
+    apply_effect(effect, reset_scrolls(state, drop_derived(next)))
+  end
 
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, state) do
     # Any keypress clears a prior flash (a spawn/create result), so it shows until you act again.
@@ -361,24 +364,11 @@ defmodule Console.Cockpit do
     # `author_workspaces` (D2.2): the author face's own workspace list, derived per keypress like
     # `composer_thread_id` — `Console.Workspaces.all/0` is a cached GenServer call (no DB hit), so this
     # keeps `Console.Keymap` a pure reducer with no server call of its own.
-    keymap_state =
-      %{state | flash: nil}
-      # A live PTY only "owns" the keys when it's the shown center — with the thread stack up
-      # (center_view :chat, Slice 3) keys drive the stack (j/k/z/Z), never a hidden terminal.
-      |> Map.put(:center_live?, state.center_view != :chat and Reads.center_terminal(state) != nil)
-      # handle_tlon needs center_view to route center-focus keys to the STACK (not forward to tmux).
-      |> Map.put(:center_view, state.center_view)
-      # Two-step center: nil = the thread LIST (j/k move · ⏎ open), an id = that CONVERSATION (j/k
-      # scroll · esc back). The keymap branches chat keys on it.
-      |> Map.put(:opened_thread, state.opened_thread)
-      |> Map.put(:composer_thread_id, Reads.composer_thread_id(state))
-      |> Map.put(:tlon_layout, Reads.tlon_layout(state))
-      |> Map.put(:author_workspaces, Console.Workspaces.all())
+    keymap_state = keymap_state(state)
 
     {next, effect} = Keymap.handle(key, keymap_state)
 
-    next =
-      reset_scrolls(state, Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :author_workspaces]))
+    next = reset_scrolls(state, drop_derived(next))
 
     apply_effect(effect, next)
   end
@@ -412,9 +402,14 @@ defmodule Console.Cockpit do
       state.menu ->
         handle_menu_click(Mouse.hit_panel(state.placements, x, y), y, %{state | last_left: {x, y}})
 
-      # A full-screen board is view-only for now — any click dismisses it (like Esc).
-      state.board ->
-        {:noreply, render(%{state | board: nil, last_left: {x, y}})}
+      # The open drawer: a click inside it picks off the pane it covers (the overlay placements are
+      # last, so hit-test them first); a click outside — the rail, the bars — closes it, like Esc.
+      state.drawer ->
+        state = %{state | last_left: {x, y}}
+
+        if Drawer.covers?(state, x, y),
+          do: dispatch_click(Mouse.hit_panel(Enum.reverse(state.placements), x, y), x, y, state),
+          else: {:noreply, render(Drawer.close(state))}
 
       true ->
         dispatch_click(Mouse.hit_panel(state.placements, x, y), x, y, %{state | last_left: {x, y}})
@@ -773,9 +768,9 @@ defmodule Console.Cockpit do
     {:noreply, render(%{state | flash: message})}
   end
 
-  # The spine's Tickets/Notes tools (Slice 3.5): open the full-screen board.
+  # The Tickets/Notes tools (Slice 3.5): the boards are drawer panes now — open it on that pane.
   defp apply_pick({:open_board, kind}, state),
-    do: {:noreply, render(%{state | board: kind, board_cursor: {0, 0}, menu: nil})}
+    do: {:noreply, render(%{Drawer.open(state, kind) | board_cursor: {0, 0}, menu: nil})}
 
   # Click a thread row in the list → open its conversation (two-step center).
   defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)
@@ -1018,10 +1013,21 @@ defmodule Console.Cockpit do
     case Reads.enter_verb(state, Reads.tlon_layout(state)) do
       {:pick, verb} -> apply_pick(verb, state)
       :lazygit -> open_lazygit(state)
+      :ticket_promote -> apply_effect(:ticket_promote, state)
       :detail -> {:noreply, render(put_in(state.focus.detail?, true))}
       :none -> {:noreply, state}
     end
   end
+
+  # The drawer's TICKETS pane (the old full-screen kanban's verbs): the cursor moves over the LIVE
+  # columns and the advance writes through — both need the server read, so the keymap only names them.
+  defp apply_effect({:ticket_move, dir}, state), do: {:noreply, render(Boards.move_cursor(state, dir))}
+
+  defp apply_effect(:ticket_advance, state),
+    do: flashing(state, "ticket advance", fn -> {:noreply, render(Boards.advance_selected_ticket(state))} end)
+
+  defp apply_effect(:ticket_promote, state),
+    do: flashing(state, "ticket promote", fn -> {:noreply, render(Boards.promote_selected_ticket(state))} end)
 
   # Enter on the Orbis survey (D0.2) — the same space-switch a click on the row runs.
   defp apply_effect({:switch_space, key}, state), do: apply_pick({:switch_space, key}, state)
@@ -1197,6 +1203,25 @@ defmodule Console.Cockpit do
     end
   end
 
+  # The slice of cockpit state the keymap reads: the state itself plus the reads DERIVED per
+  # keypress (never stored — `drop_derived/1` takes them off again on the way back).
+  defp keymap_state(state) do
+    %{state | flash: nil}
+    # A live PTY only "owns" the keys when it's the shown center — with the thread stack up
+    # (center_view :chat, Slice 3) keys drive the stack (j/k/z/Z), never a hidden terminal.
+    |> Map.put(:center_live?, state.center_view != :chat and Reads.center_terminal(state) != nil)
+    # handle_tlon needs center_view to route center-focus keys to the STACK (not forward to tmux).
+    |> Map.put(:center_view, state.center_view)
+    # Two-step center: nil = the thread LIST (j/k move · ⏎ open), an id = that CONVERSATION (j/k
+    # scroll · esc back). The keymap branches chat keys on it.
+    |> Map.put(:opened_thread, state.opened_thread)
+    |> Map.put(:composer_thread_id, Reads.composer_thread_id(state))
+    |> Map.put(:tlon_layout, Reads.tlon_layout(state))
+    |> Map.put(:author_workspaces, Console.Workspaces.all())
+  end
+
+  defp drop_derived(next), do: Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :author_workspaces])
+
   # Arm one coalesced render if none is armed. The first terminal event in a burst schedules
   # the :render; the rest see the flag set and do nothing — the single :render picks up the
   # latest terminal state, whatever arrived in the ~8ms window.
@@ -1239,12 +1264,14 @@ defmodule Console.Cockpit do
     # SAME read the frame painted, without a second Board.sidebar/0 round-trip per keypress.
     state = %{state | sidebar: reads.sidebar}
 
-    # A full-screen board covers the layout; the overlay menu paints LAST (on top of everything). Both
-    # ride in `placements` so hit_panel can route clicks to them.
+    # The drawer covers the centre; the overlay menu paints LAST (on top of everything). Both ride in
+    # `placements` so hit_panel can route clicks to them. The drawer resolves its panes' data from
+    # THIS frame's reads, so it can't drift from what the frame underneath would have shown.
     placements =
       View.compose(reads, state.w, state.h) ++
         lazygit_placements(state) ++
-        Boards.board_placements(state) ++ Author.menu_placements(state.menu, state.w, state.h)
+        Drawer.placements(Map.put(state, :reads, reads), state.w, state.h) ++
+        Author.menu_placements(state.menu, state.w, state.h)
 
     placements
     |> Board.compose(state.w, state.h)

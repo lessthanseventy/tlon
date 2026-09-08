@@ -15,6 +15,9 @@ defmodule Console.Panel.Health do
   def topics(_assigns), do: []
 
   @impl Console.Panel
+  # No probe yet (a fresh cockpit, or a failed read) — say so, don't crash the pane.
+  def render(nil, rect), do: Console.Panel.clip([line("health probe hasn't run yet", :dim)], rect)
+
   def render(data, rect), do: Console.Panel.clip(rows(data), rect)
 
   defp rows(data) do

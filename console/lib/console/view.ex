@@ -91,7 +91,7 @@ defmodule Console.View do
 
     # In Tlön nav mode one sidebar pane is focused — its border lights up (the lazygit "active
     # pane" cue). Every other box, and every other space, stays neutral.
-    focused = focused_section(reads[:focus])
+    focused = focused_section(reads)
 
     # Slice 3.4: the rail stacks every panel, so there's no carousel and no border tab strip — every
     # box carries a plain digit-first title.
@@ -186,11 +186,14 @@ defmodule Console.View do
 
   # The pane the Tlön focus sits on — only in nav mode (out of the terminal), so the frame lights the
   # instant you Ctrl+Space out. nil while in the terminal (the terminal is the active pane then).
-  # UX slice 1: the left column is the rail alone; the drawer's panes join the walk when it opens.
-  defp focused_section(%Focus{in_terminal?: false} = focus),
+  # UX slice 1: the left column is the rail alone; while the drawer is open ITS pane has the focus
+  # (the rail isn't walkable then), so the footer's hints are the open pane's own.
+  defp focused_section(%{drawer: key}) when not is_nil(key), do: Console.Cockpit.Drawer.panel(key)
+
+  defp focused_section(%{focus: %Focus{in_terminal?: false} = focus}),
     do: Focus.focused_pane(focus, %{left: [Panel.Rail], right: [], sections: %{}})
 
-  defp focused_section(_focus), do: nil
+  defp focused_section(_reads), do: nil
 
   # Nav v2: no pane digits (the numbers are gone from the frames) — every box just carries `nil`.
   defp no_digits(boxes), do: Enum.map(boxes, fn {section, rect} -> {section, rect, nil} end)
@@ -309,6 +312,14 @@ defmodule Console.View do
   end
 
   @doc """
+  The frame's CENTER region: everything right of the rail, between the two bars (an open composer
+  shortens it, like every body rect). The drawer covers exactly this — the rail and the bars stay
+  on screen, and the PTYs underneath keep the sizes `center_rect/4` and `session_rect/3` give them.
+  """
+  @spec center_region(pos_integer(), pos_integer(), map() | nil) :: Panel.rect()
+  def center_region(w, h, input \\ nil), do: wide_columns(w, body_height(w, h, input)).center
+
+  @doc """
   The content rect the right SESSION pane's PTY renders into — the same split `compose/3` places the
   pane into, so the attached tmux client is sized to exactly what's on screen (one authority, like
   `center_rect/3` for the centre).
@@ -334,9 +345,12 @@ defmodule Console.View do
     %{x: x + 2, y: y + 1, w: max(w - 4, 1), h: max(h - 2, 1)}
   end
 
+  @doc false
   # A keyed surface section reads its data directly; a bare module resolves via data_for/2. The
   # 4-arity variant injects the focused pane's `selected` cursor into its data (nil elsewhere).
-  defp content_for(section, reads, rect, slice) do
+  # Public for the drawer (`Console.Cockpit.Drawer`), which places the same panels over the centre
+  # and must resolve their data the one way the frame does.
+  def content_for(section, reads, rect, slice) do
     {panel, data, rect} = content_for(section, reads, rect)
     {panel, data |> merge_slice(slice) |> follow_cursor(rect), rect}
   end
@@ -382,7 +396,10 @@ defmodule Console.View do
   def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
   def data_for(Panel.NewThread, r), do: %{input: r[:input]}
   def data_for(Panel.Reply, r), do: %{input: r[:input]}
-  def data_for(Panel.Triage, r), do: r.triage
+  def data_for(Panel.Triage, r), do: r[:triage]
+  # HEALTH is a drawer pane now (the footer's old health segment) — the same probe read the
+  # composer's /status readout flattens.
+  def data_for(Panel.Health, r), do: r[:health]
   def data_for(Panel.Memory, r), do: r[:memory]
   def data_for(Panel.Detail, r), do: r[:detail]
   # The stand-in's line is its own (Panel.Placeholder.copy/0) — nothing to resolve from the reads.

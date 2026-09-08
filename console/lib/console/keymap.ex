@@ -46,6 +46,9 @@ defmodule Console.Keymap do
     * `:toggle_center_view` (`v`, chat⇄terminal) and `:toggle_session_pane` (Alt+\\).
     * `:tlon_enter` — Enter on a rail pane (space switch / lazygit zoom / detail, cockpit-resolved).
     * `:yank` — `y` in nav: the focused pane's semantic text to the clipboard.
+    * `{:ticket_move, dir}` / `:ticket_advance` — the drawer's TICKETS pane: move the kanban cursor
+      over the live columns, advance the selected ticket's status (both need the server read the
+      cockpit holds, so the reducer only names them).
     * `{:habit_action, :approve | :reject}` — `a`/`r` on the Memory pane's pending habit.
     * `{:cycle_coworker_model, profile}` — advance the active space's coworker driver model one
       step round `Console.Profiles.model_ring/0` and persist it (the `m` verb; only in a space with
@@ -108,6 +111,7 @@ defmodule Console.Keymap do
   `workspace_field/2`, same as the `a`/`x`/`d` clauses) — the Settings modal's model-ring-cycle /
   yolo-flip, now reached from here. This absorbs Settings; Chunk 2b deletes the `,` modal.
   """
+  alias Console.Cockpit.Drawer
   alias Console.Profiles
   alias Console.Space
   alias Console.Tlon.Focus
@@ -160,6 +164,8 @@ defmodule Console.Keymap do
           | {:edit_workspace, term(), map()}
           | {:coworker_knob, String.t(), :model | :yolo}
           | :tlon_enter
+          | {:ticket_move, String.t()}
+          | :ticket_advance
           | :stack_delete_arm
           | :tlon_delete_arm
           | {:tlon_delete, term()}
@@ -354,6 +360,16 @@ defmodule Console.Keymap do
 
   # Any other key while typing (function keys, …) is ignored, not acted on.
   def handle(_key, %{input: %{}} = state), do: {state, :none}
+
+  # The DRAWER owns every key while it is open (UX slice 1, task 4) — like the overlay menu and the
+  # old full-screen boards, nothing leaks to the frame underneath. It sits below the input modal, so
+  # typing a new ticket's title still takes the keys back. `Alt+d` closes it from inside
+  # (`handle_drawer/2`); the clause below opens it.
+  def handle(key, %{drawer: d} = state) when not is_nil(d), do: handle_drawer(key, state)
+
+  # Alt+d opens the drawer on the pane it last showed — global, from TERM as well as NAV.
+  def handle(%{key: :char, char: "d", alt: true} = k, %{drawer: nil} = state) when not is_map_key(k, :ctrl),
+    do: {Drawer.open(clear_leader(state), state.last_drawer), :repaint}
 
   # Alt+g arms LOCK — below the modal by design: the modal's catch-all swallows it while typing,
   # so composing can never silently freeze under a lock.
@@ -783,6 +799,73 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "c"} = k, state), do: command(k, state)
   defp handle_tlon(%{key: :char, char: "m"} = k, state), do: command(k, state)
   defp handle_tlon(_key, state), do: {state, :none}
+
+  @doc """
+  The drawer's key table (UX slice 1, task 4). `Esc` / `Alt+d` close it (an open detail closes
+  first); `1`-`9` and `h`/`l` walk the tab strip; `j`/`k` move the open pane's own cursor and
+  `Enter` runs its verb through the cockpit (`:tlon_enter`). The pane-specific verbs are the ones
+  its `Console.Panel.hints/1` advertise — MEMORY's `s`/`y`/`d`/`a`/`r`, TICKETS' `n`/`p`/`H`/`L`,
+  NOTES' `n`. Everything else is swallowed: the drawer covers the centre, so no key may fall through
+  to it.
+  """
+  @spec handle_drawer(map(), map()) :: {map(), effect()}
+
+  # The armed two-key delete (a MEMORY fact) — must precede every other clause, exactly as it does
+  # in `handle_tlon/2`, so a stale keypress can never confirm one.
+  def handle_drawer(%{key: :char, char: "d"}, %{tlon_delete: target} = state) when not is_nil(target),
+    do: {%{state | tlon_delete: nil}, {:tlon_delete, target}}
+
+  def handle_drawer(_key, %{tlon_delete: target} = state) when not is_nil(target),
+    do: {%{state | tlon_delete: nil}, :repaint}
+
+  # Esc steps back one level: an open detail first, then the drawer itself.
+  def handle_drawer(%{key: :escape}, %{focus: %Focus{detail?: true}} = state),
+    do: {focus_intent(state, :close_detail), :repaint}
+
+  def handle_drawer(%{key: :escape}, state), do: {Drawer.close(state), :repaint}
+
+  def handle_drawer(%{key: :char, char: "d", alt: true} = k, state) when not is_map_key(k, :ctrl),
+    do: {Drawer.close(state), :repaint}
+
+  # 1-9 jump straight to a pane; a digit past the strip is a no-op, never a blank drawer.
+  def handle_drawer(%{key: :char, char: d} = k, state) when is_bare(k) and d in ~w(1 2 3 4 5 6 7 8 9) do
+    case Drawer.at(String.to_integer(d) - 1) do
+      nil -> {state, :none}
+      key -> {Drawer.open(state, key), :repaint}
+    end
+  end
+
+  def handle_drawer(%{key: :char, char: "l"}, state), do: {Drawer.open(state, Drawer.step(state.drawer, +1)), :repaint}
+  def handle_drawer(%{key: :char, char: "h"}, state), do: {Drawer.open(state, Drawer.step(state.drawer, -1)), :repaint}
+
+  # TICKETS is a grid, so its cursor needs a horizontal move too — `H`/`L`, since `h`/`l` walk the
+  # strip. The cockpit owns the move (the live columns are a server read); the keymap stays pure.
+  def handle_drawer(%{key: :char, char: c}, %{drawer: :tickets} = state) when c in ~w(H L),
+    do: {state, {:ticket_move, if(c == "H", do: "h", else: "l")}}
+
+  def handle_drawer(key, %{drawer: :tickets} = state) when is_vertical(key),
+    do: {state, {:ticket_move, if(vertical(key) == 1, do: "j", else: "k")}}
+
+  def handle_drawer(%{key: :char, char: "p"}, %{drawer: :tickets} = state), do: {state, :ticket_advance}
+
+  # `n` on a board files/jots one — the same create inputs the New menu opens.
+  def handle_drawer(%{key: :char, char: "n"}, %{drawer: :tickets} = state),
+    do: {%{state | input: %{kind: :new_ticket, buffer: "", cursor: 0}}, :repaint}
+
+  def handle_drawer(%{key: :char, char: "n"}, %{drawer: :notes} = state),
+    do: {%{state | input: %{kind: :new_note, buffer: "", cursor: 0}}, :repaint}
+
+  # j/k move the open pane's own item cursor (stored per pane, so each keeps its place).
+  def handle_drawer(key, state) when is_vertical(key), do: {focus_intent(state, item_intent(vertical(key))), :repaint}
+
+  # Enter is contextual — the cockpit resolves the open pane (lazygit zoom / a detail / a promote).
+  def handle_drawer(%{key: :enter}, state), do: {state, :tlon_enter}
+  def handle_drawer(%{key: :char, char: "s"}, state), do: {focus_intent(state, :section_next), :repaint}
+  def handle_drawer(%{key: :char, char: "y"}, state), do: {state, :yank}
+  def handle_drawer(%{key: :char, char: "d"}, state), do: {state, :tlon_delete_arm}
+  def handle_drawer(%{key: :char, char: "a"}, state), do: {state, {:habit_action, :approve}}
+  def handle_drawer(%{key: :char, char: "r"}, state), do: {state, {:habit_action, :reject}}
+  def handle_drawer(_key, state), do: {state, :none}
 
   defp focus_intent(state, intent), do: %{state | focus: Focus.handle(state.focus, state.tlon_layout, intent)}
 

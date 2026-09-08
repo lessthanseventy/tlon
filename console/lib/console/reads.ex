@@ -7,6 +7,7 @@ defmodule Console.Reads do
   (`Console.Staffing`) run before it in the preamble. Every read degrades through `Console.Safe`.
   """
 
+  alias Console.Cockpit.Drawer
   alias Console.Panel
   alias Console.Safe
   alias Console.Server.Board
@@ -251,6 +252,17 @@ defmodule Console.Reads do
   # The focus walks what the frame PAINTS — UX slice 1 leaves one box on the left, the rail, so the
   # left column is `[Panel.Rail]`. The funes panes (NOW·CREW·MEMORY·STACK) come back into the walk
   # with the drawer that hosts them.
+  # While the DRAWER is open its nine panes ARE the walk (UX slice 1, task 4) — the rail isn't
+  # walkable then, the drawer covers the centre and owns the keys.
+  def tlon_layout(%{drawer: key} = state) when not is_nil(key) do
+    %{
+      left: Drawer.pane_modules(),
+      right: [],
+      sections: %{Panel.Memory => memory_sections(state)},
+      counts: pane_counts(state)
+    }
+  end
+
   def tlon_layout(%{active_key: key} = state) when Space.workspace?(key) do
     case Space.fetch(key) do
       # A stale/removed active_key mid-render (Space.fetch/1 returns nil on a miss) — degrade to
@@ -274,13 +286,16 @@ defmodule Console.Reads do
   defp memory_sections(%{memory: %{habits: habits}}) when habits != [], do: 2
   defp memory_sections(_state), do: 1
 
+  # `sidebar`/`stack`/`memory` are cockpit-state keys the drawer's layout also reads; a state that
+  # hasn't cached one yet counts zero rows rather than crashing the keypress.
+
   # The navigable item count per pane, for j/k clamping. Commits = the commit-log length; Memory is
   # sectioned — j/k walks the ACTIVE section's list (pinned=0, habits=1), so its count follows
   # focus.section. Panes without a list are absent (0 → j/k is a no-op there).
   defp pane_counts(state) do
     %{
       Panel.Rail => length(Panel.Rail.entries(rail_data(state))),
-      Panel.Stack => length((state.stack || @empty_stack).commits),
+      Panel.Stack => length((state[:stack] || @empty_stack).commits),
       Panel.Memory => memory_section_count(state)
     }
   end
@@ -296,13 +311,16 @@ defmodule Console.Reads do
   lazygit; a pane with a detail arms the detail mode; nothing focused (or nothing under the
   cursor) is `:none`, so Enter can never arm a detail that has nothing to show.
   """
-  @spec enter_verb(map(), map()) :: {:pick, tuple()} | :lazygit | :detail | :none
+  @spec enter_verb(map(), map()) :: {:pick, tuple()} | :lazygit | :ticket_promote | :detail | :none
   def enter_verb(state, layout) do
     case Focus.focused_pane(state.focus, layout) do
       Panel.Rail -> rail_verb(state, layout)
       Panel.Stack -> :lazygit
-      nil -> :none
-      _pane -> :detail
+      Panel.TicketBoard -> :ticket_promote
+      # A pane with a detail arms the detail mode — but only when one actually resolved, so Enter
+      # can never arm a mode with nothing to show (the next Esc would silently spend it).
+      Panel.Memory -> if(tlon_detail(state, layout), do: :detail, else: :none)
+      _pane -> :none
     end
   end
 
@@ -314,9 +332,9 @@ defmodule Console.Reads do
     end
   end
 
-  defp memory_section_count(%{memory: nil}), do: 0
-  defp memory_section_count(%{focus: %{section: 1}, memory: m}), do: length(m.habits)
-  defp memory_section_count(%{memory: m}), do: length(m.pinned)
+  defp memory_section_count(%{focus: %{section: 1}, memory: m}) when not is_nil(m), do: length(m.habits)
+  defp memory_section_count(%{memory: m}) when not is_nil(m), do: length(m.pinned)
+  defp memory_section_count(_state), do: 0
 
   # MAIN's detail for the focused pane's current selection, or nil (this pane has no detail, or
   # nothing is selected) → the terminal stays. Dispatch per pane; Commits resolves the selected
@@ -660,7 +678,14 @@ defmodule Console.Reads do
       memory: if(Space.workspace?(state.active_key), do: state.memory),
       # The center's face (reshape slice D).
       center_view: state.center_view,
-      triage: Safe.read(:triage, nil, fn -> if(state.active_key == :orbis, do: triage_read(threads)) end),
+      # The open drawer pane (UX slice 1) — the View reads it for the footer's hints.
+      drawer: state[:drawer],
+      # TRIAGE is a drawer pane now as well as Orbis' rollup — read it when one of the two shows it
+      # (it briefs every thread, so it stays off the per-frame path the rest of the time).
+      triage:
+        Safe.read(:triage, nil, fn ->
+          if(state.active_key == :orbis or state[:drawer] == :triage, do: triage_read(threads))
+        end),
       scrolls: state.scrolls,
       input: state.input,
       flash: state.flash,

@@ -1,9 +1,9 @@
 defmodule Console.Cockpit.Boards do
   @moduledoc """
-  The full-screen Tickets and Notes boards: what covers the frame while one is open, and the
-  Tickets kanban's keys (cursor, advance, file, promote-to-thread). Reads/writes go through
-  `Server.Tickets` / `Server.Notes`, degraded by `Console.Safe`; a handler answers the next
-  cockpit state and the cockpit repaints it.
+  The Tickets and Notes boards: the rows each one shows, and the Tickets kanban's own verbs (cursor,
+  advance, promote-to-thread). Both are DRAWER panes since UX slice 1 (`Console.Cockpit.Drawer`) —
+  this module is what they read and what their verbs do, not where they sit. Reads/writes go through
+  `Server.Tickets` / `Server.Notes`, degraded by `Console.Safe`.
   """
 
   alias Console.Panel
@@ -14,63 +14,47 @@ defmodule Console.Cockpit.Boards do
   alias Console.Space
   alias Console.Staffing
 
-  @doc "The full-screen board's placements: a frame-covering border + the board panel (painted after the layout, before the menu)."
-  def board_placements(%{board: nil}), do: []
-
-  def board_placements(%{board: kind, w: w, h: h} = state) do
-    rect = %{x: 0, y: 0, w: w, h: max(h - 1, 2)}
-    inset = %{x: 2, y: 1, w: max(w - 4, 1), h: max(h - 3, 1)}
-    {panel, data, title} = board_content(kind, state)
-
-    [
-      {Panel.Border, %{focused: true, digit: nil, title: "#{title}  ·  esc to close", tabs: nil, hint: nil}, rect},
-      {panel, data, inset}
-    ]
-  end
-
-  defp board_content(:tickets, state) do
+  @doc "A board pane's data: the workspace's tickets under the kanban cursor, or its notes."
+  @spec board_data(:tickets | :notes, map()) :: map()
+  def board_data(:tickets, state) do
     id = board_workspace_id(state)
     tickets = Safe.value(fn -> id && id |> Tickets.in_workspace() |> Enum.map(&ticket_row/1) end, nil) || []
 
-    {Panel.TicketBoard, %{tickets: tickets, cursor: state.board_cursor},
-     "TICKETS · h/l·j/k move · p advance · n new · ⏎ promote"}
+    %{tickets: tickets, cursor: state[:board_cursor] || {0, 0}}
   end
 
-  defp board_content(:notes, state) do
+  def board_data(:notes, state) do
     id = board_workspace_id(state)
-    notes = Safe.value(fn -> id && Console.Server.Notes.for_scope("workspace", id) end, nil) || []
-    {Panel.NoteBoard, %{notes: notes}, "NOTES"}
+    %{notes: Safe.value(fn -> id && Console.Server.Notes.for_scope("workspace", id) end, nil) || []}
   end
 
   @ticket_statuses ~w(backlog todo doing done)
 
-  @doc """
-  The Tickets kanban keys: h/l/j/k move the `{col, row}` cursor, `p` advances the selected ticket's
-  status, `n` files a new one (opens the `:new_ticket` input), Enter promotes it to a thread. The
-  Notes board only knows `n`. Anything else is `:ignore`d (Esc is the cockpit's — it closes).
-  """
-  @spec handle_board_key(map(), map()) :: map() | :ignore
-  def handle_board_key(%{key: :char, char: "n"}, %{board: :tickets} = state),
-    do: %{state | input: %{kind: :new_ticket, buffer: "", cursor: 0}}
+  @doc "Move the kanban cursor one step (the drawer's `H`/`L`/`j`/`k` on the TICKETS pane)."
+  @spec move_cursor(map(), String.t()) :: map()
+  def move_cursor(state, dir), do: %{state | board_cursor: move_grid(state.board_cursor, dir, ticket_columns(state))}
 
-  def handle_board_key(%{key: :char, char: "n"}, %{board: :notes} = state),
-    do: %{state | input: %{kind: :new_note, buffer: "", cursor: 0}}
+  @doc "Advance the selected ticket one column (`p`), flashing the new status."
+  @spec advance_selected_ticket(map()) :: map()
+  def advance_selected_ticket(state) do
+    case selected_ticket(state, ticket_columns(state)) do
+      %{status: status} = ticket ->
+        next = next_status(status)
+        _ = Safe.value(fn -> Tickets.update(ticket, %{status: next}) end, nil)
+        %{state | flash: "ticket ##{ticket.id} → #{next}"}
 
-  def handle_board_key(%{key: :char, char: c}, %{board: :tickets} = state) when c in ~w(h l j k),
-    do: %{state | board_cursor: move_grid(state.board_cursor, c, ticket_columns(state))}
-
-  def handle_board_key(%{key: :char, char: "p"}, %{board: :tickets} = state), do: advance_selected_ticket(state)
-
-  def handle_board_key(%{key: :enter}, %{board: :tickets} = state), do: promote_selected_ticket(state)
-
-  def handle_board_key(_key, _state), do: :ignore
+      _ ->
+        %{state | flash: "no ticket selected"}
+    end
+  end
 
   # The active workspace's tickets grouped into kanban columns (structs — the render maps to rows off
   # the same in_workspace order, so the cursor indexes the same grid).
-  defp ticket_columns(state) do
+  @doc false
+  def ticket_columns(state) do
     id = board_workspace_id(state)
     tickets = Safe.value(fn -> id && Tickets.in_workspace(id) end, nil) || []
-    Console.Panel.TicketBoard.by_column(tickets)
+    Panel.TicketBoard.by_column(tickets)
   end
 
   defp selected_ticket(%{board_cursor: {col, row}}, cols), do: cols |> Enum.at(col, []) |> Enum.at(row)
@@ -94,32 +78,23 @@ defmodule Console.Cockpit.Boards do
     end
   end
 
-  defp advance_selected_ticket(state) do
-    case selected_ticket(state, ticket_columns(state)) do
-      %{status: status} = ticket ->
-        next = next_status(status)
-        _ = Safe.value(fn -> Tickets.update(ticket, %{status: next}) end, nil)
-        %{state | flash: "ticket ##{ticket.id} → #{next}"}
-
-      _ ->
-        state
-    end
-  end
-
-  defp promote_selected_ticket(state) do
+  @doc "Promote the selected ticket to a thread (`Enter`), staffing it like any new thread."
+  @spec promote_selected_ticket(map()) :: map()
+  def promote_selected_ticket(state) do
     case selected_ticket(state, ticket_columns(state)) do
       %{id: id, title: title} = ticket ->
         with {:ok, thread} <-
                Channel.open_thread(%{title: title, workspace_id: Space.active_workspace_id(state), scope: "machine"}),
              {:ok, _} <- Safe.value(fn -> Tickets.promote(ticket, thread.id) end, nil) do
           _ = Staffing.spawn_onto(thread.id, Reads.center_dims(state))
-          %{state | board: nil, focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
+          # The promoted thread is the point — close the drawer so it's on screen.
+          %{Console.Cockpit.Drawer.close(state) | focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
         else
           _ -> %{state | flash: "couldn't promote the ticket"}
         end
 
       _ ->
-        state
+        %{state | flash: "no ticket selected"}
     end
   end
 

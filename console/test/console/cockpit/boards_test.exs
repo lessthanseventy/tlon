@@ -1,5 +1,9 @@
 defmodule Console.Cockpit.BoardsTest do
-  @moduledoc "The Tickets kanban's pure math: cursor movement over the column grid, the status advance."
+  @moduledoc """
+  The Tickets kanban's pure math: cursor movement over the column grid, the status advance. The
+  board KEYS moved to the drawer's own table with the boards (UX slice 1, task 4) — they're
+  asserted in `Console.KeymapTest`'s "the drawer (Alt+d)" block now.
+  """
   use ExUnit.Case, async: true
 
   alias Console.Cockpit.Boards
@@ -37,17 +41,5 @@ defmodule Console.Cockpit.BoardsTest do
     test "an unknown status stays put" do
       assert Boards.next_status("weird") == "weird"
     end
-  end
-
-  test "an unbound key on a board is ignored (no repaint), Esc is the cockpit's" do
-    assert Boards.handle_board_key(%{key: :char, char: "z"}, %{board: :tickets}) == :ignore
-    assert Boards.handle_board_key(%{key: :escape}, %{board: :notes}) == :ignore
-  end
-
-  test "n opens the matching create input" do
-    assert %{input: %{kind: :new_ticket}} =
-             Boards.handle_board_key(%{key: :char, char: "n"}, %{board: :tickets, input: nil})
-
-    assert %{input: %{kind: :new_note}} = Boards.handle_board_key(%{key: :char, char: "n"}, %{board: :notes, input: nil})
   end
 end

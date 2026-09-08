@@ -14,6 +14,7 @@ defmodule Console.KeymapTest do
   use ExUnit.Case, async: true
 
   alias Console.Keymap
+  alias Console.Panel.Stack
   alias Console.Tlon.Focus
 
   # Workspace fixture: the hardcoded fallback Workspace is gone (reshape slice A); suites
@@ -1504,6 +1505,108 @@ defmodule Console.KeymapTest do
       {next, :none} = Keymap.handle(char("g", alt: true), s)
       refute Map.get(next, :lock?, false)
       assert next.input.buffer == "hi"
+    end
+  end
+
+  # UX slice 1, task 4: the drawer — Alt+d over the centre, its own key table while open.
+  describe "the drawer (Alt+d)" do
+    alias Console.Cockpit.Drawer
+
+    # The layout the focus SM walks while the drawer is open: its nine panes as one column.
+    defp drawer_layout(counts \\ %{}) do
+      %{left: Drawer.pane_modules(), right: [], sections: %{Console.Panel.Memory => 2}, counts: counts}
+    end
+
+    defp drawer(overrides) do
+      tlon(
+        %Focus{in_terminal?: true},
+        Map.merge(%{drawer: nil, last_drawer: :memory, tlon_layout: drawer_layout()}, overrides)
+      )
+    end
+
+    test "Alt+d opens the drawer on its last pane and Alt+d / Esc close it" do
+      {s1, :repaint} = Keymap.handle(char("d", alt: true), drawer(%{last_drawer: :stack}))
+      assert s1.drawer == :stack
+      # the drawer has the focus by definition — the keys are its own, not the terminal's
+      refute s1.focus.in_terminal?
+      assert Drawer.at(s1.focus.pane) == :stack
+
+      {s2, :repaint} = Keymap.handle(key(:escape), s1)
+      assert s2.drawer == nil and s2.last_drawer == :stack
+      assert s2.focus.in_terminal?
+
+      {s3, :repaint} = Keymap.handle(char("d", alt: true), s2)
+      {s4, :repaint} = Keymap.handle(char("d", alt: true), s3)
+      assert s4.drawer == nil and s4.last_drawer == :stack
+    end
+
+    test "h/l walk the panes, clamped at both ends, and 1-9 jump straight to one" do
+      s = drawer(%{drawer: :now, focus: %Focus{in_terminal?: false, pane: 0}})
+
+      assert {%{drawer: :now}, :repaint} = Keymap.handle(char("h"), s)
+      {right, :repaint} = Keymap.handle(char("l"), s)
+      assert right.drawer == :crew
+      assert Drawer.at(right.focus.pane) == :crew
+
+      {jumped, :repaint} = Keymap.handle(char("4"), s)
+      assert jumped.drawer == :stack
+      assert Drawer.at(jumped.focus.pane) == :stack
+
+      # past the last pane: nothing moves
+      assert {%{drawer: :now}, :none} = Keymap.handle(char("0"), s)
+    end
+
+    test "j/k move the focused pane's own cursor" do
+      s =
+        drawer(%{
+          drawer: :stack,
+          focus: %Focus{in_terminal?: false, pane: Drawer.index(:stack)},
+          tlon_layout: drawer_layout(%{Stack => 3})
+        })
+
+      {down, :repaint} = Keymap.handle(char("j"), s)
+      assert down.focus.cursors[Stack] == 1
+      {up, :repaint} = Keymap.handle(char("k"), down)
+      assert up.focus.cursors[Stack] == 0
+    end
+
+    test "Enter is the cockpit's contextual verb, and s/y/d/a/r reach the pane's own" do
+      s = drawer(%{drawer: :memory, focus: %Focus{in_terminal?: false, pane: Drawer.index(:memory)}})
+
+      assert {_s, :tlon_enter} = Keymap.handle(key(:enter), s)
+      assert {_s, :yank} = Keymap.handle(char("y"), s)
+      assert {_s, :tlon_delete_arm} = Keymap.handle(char("d"), s)
+      assert {_s, {:habit_action, :approve}} = Keymap.handle(char("a"), s)
+      assert {_s, {:habit_action, :reject}} = Keymap.handle(char("r"), s)
+      {sectioned, :repaint} = Keymap.handle(char("s"), s)
+      assert sectioned.focus.section == 1
+    end
+
+    test "the TICKETS pane keeps its board verbs: n files, p advances, H/L walk the columns" do
+      s = drawer(%{drawer: :tickets, focus: %Focus{in_terminal?: false, pane: Drawer.index(:tickets)}})
+
+      assert {%{input: %{kind: :new_ticket}}, :repaint} = Keymap.handle(char("n"), s)
+      assert {_s, :ticket_advance} = Keymap.handle(char("p"), s)
+      assert {_s, {:ticket_move, "h"}} = Keymap.handle(char("H"), s)
+      assert {_s, {:ticket_move, "l"}} = Keymap.handle(char("L"), s)
+      assert {_s, {:ticket_move, "j"}} = Keymap.handle(char("j"), s)
+    end
+
+    test "the NOTES pane's n jots a note" do
+      s = drawer(%{drawer: :notes, focus: %Focus{in_terminal?: false, pane: Drawer.index(:notes)}})
+      assert {%{input: %{kind: :new_note}}, :repaint} = Keymap.handle(char("n"), s)
+    end
+
+    test "an unbound key is swallowed — it never leaks to the frame underneath" do
+      s = drawer(%{drawer: :memory, center_live?: true})
+      assert {^s, :none} = Keymap.handle(char("z"), s)
+    end
+
+    test "typing a new ticket's title takes the keys back from the drawer" do
+      s = drawer(%{drawer: :tickets, input: %{kind: :new_ticket, buffer: "", cursor: 0}})
+      {typed, :repaint} = Keymap.handle(char("h"), s)
+      assert typed.input.buffer == "h"
+      assert typed.drawer == :tickets
     end
   end
 end
