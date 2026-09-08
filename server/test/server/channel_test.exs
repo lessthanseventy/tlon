@@ -324,6 +324,30 @@ defmodule Server.ChannelTest do
       assert Channel.machine_thread(wsc.id) == nil
     end
 
+    # The cockpit's centre reads the WORKSPACE's threads, every scope — the rail lists them all,
+    # and opening a project-scope thread from it must find a card (2026-09-08: it fell to an empty
+    # list). `scope` is legacy; workspace → (channel) → thread is the model.
+    test "workspace_threads/1 — every open thread in the workspace as blocks, any scope, newest activity first", %{
+      wsa: wsa
+    } do
+      {:ok, project} = Channel.open_thread(%{title: "old project thread", workspace_id: wsa.id})
+      {:ok, _} = Channel.post(%{thread_id: project.id, author: "andrew", body: "hello"})
+      {:ok, machine} = Channel.open_thread(%{title: "general", scope: "machine", workspace_id: wsa.id})
+
+      {:ok, _closed} =
+        %{title: "done", workspace_id: wsa.id}
+        |> Channel.open_thread()
+        |> then(fn {:ok, t} -> Channel.close_thread(t) end)
+
+      blocks = Channel.workspace_threads(wsa.id)
+      titles = Enum.map(blocks, & &1.thread.title)
+      assert "old project thread" in titles
+      assert "general" in titles
+      refute "done" in titles
+      assert Enum.map(Enum.find(blocks, &(&1.thread.id == project.id)).messages, & &1.body) == ["hello"]
+      _ = machine
+    end
+
     test "machine_threads/1 filters to one workspace; the other's threads are absent", %{wsa: wsa, wsb: wsb} do
       {:ok, _ta} = Channel.open_thread(%{title: "a-thread", scope: "machine", workspace_id: wsa.id})
       {:ok, _tb} = Channel.open_thread(%{title: "b-thread", scope: "machine", workspace_id: wsb.id})

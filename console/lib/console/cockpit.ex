@@ -1274,7 +1274,7 @@ defmodule Console.Cockpit do
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
     # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
     # order by this, not the project-scope `chorus`. This is the ONE ordering the cockpit navigates.
-    stack_blocks = Safe.read(:stack, [], fn -> Channel.machine_threads(Space.active_workspace_id(state)) end)
+    stack_blocks = Safe.read(:stack, [], fn -> stack_blocks(Space.active_workspace_id(state)) end)
     threads = Enum.map(stack_blocks, & &1.thread)
     focused = Reads.focused_thread(threads, state.focused_id)
     state = %{state | threads: threads, focused_id: focused && focused.id}
@@ -1285,6 +1285,10 @@ defmodule Console.Cockpit do
     # SAME read the frame painted, without a second Board.sidebar/0 round-trip per keypress.
     paint(%{state | sidebar: reads.sidebar, reads: reads}, reads)
   end
+
+  # The centre's threads: the workspace's, every scope — the rail's set. No workspace → nothing.
+  defp stack_blocks(nil), do: []
+  defp stack_blocks(workspace_id), do: Channel.workspace_threads(workspace_id)
 
   # The paint half of a frame, shared with repaint_input/1. The drawer covers the centre; the
   # overlay menu paints LAST (on top of everything). Both ride in `placements` so hit_panel can

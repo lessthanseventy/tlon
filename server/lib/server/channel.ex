@@ -249,6 +249,15 @@ defmodule Server.Channel do
     |> thread_blocks(per_thread)
   end
 
+  @doc """
+  Every OPEN thread in a workspace as THREAD BLOCKS, any scope — the cockpit's centre stack, the
+  same set the rail lists (2026-09-08: the stack read machine-scope only, so a project-scope
+  thread opened from the rail had no card). Most-recent-activity first, like `machine_threads/2`.
+  """
+  def workspace_threads(workspace_id, per_thread \\ 20) do
+    thread_blocks(from(t in Thread, where: t.workspace_id == ^workspace_id and t.state == "open"), per_thread)
+  end
+
   @doc "A thread by id, or nil — the load path for the cross-thread `close_thread` verb."
   def thread(id), do: Repo.get(Thread, id)
 
