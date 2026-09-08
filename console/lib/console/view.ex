@@ -380,8 +380,8 @@ defmodule Console.View do
   def data_for(Panel.Triage, r), do: r.triage
   def data_for(Panel.Memory, r), do: r[:memory]
   def data_for(Panel.Detail, r), do: r[:detail]
-  # `s` is what the frame advertises for starting a coworker on the open thread.
-  def data_for(Panel.Placeholder, _r), do: %{verb: "s"}
+  # The stand-in's line is its own (Panel.Placeholder.copy/0) — nothing to resolve from the reads.
+  def data_for(Panel.Placeholder, _r), do: %{}
   def data_for(_other, _r), do: nil
 
   # Inject the panel's current scroll offset into scrollable panels' data (nil data left alone — a

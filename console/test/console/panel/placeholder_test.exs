@@ -9,17 +9,20 @@ defmodule Console.Panel.PlaceholderTest do
 
   alias Console.Panel.Placeholder
 
-  defp rect(w \\ 40, h \\ 10), do: %{x: 0, y: 0, w: w, h: h}
+  defp rect(w \\ 60, h \\ 10), do: %{x: 0, y: 0, w: w, h: h}
 
-  test "one centred line naming the verb" do
-    rows = Placeholder.render(%{verb: "s"}, rect())
+  test "one centred line, and it names no verb that doesn't exist" do
+    rows = Placeholder.render(%{}, rect())
 
-    assert text(rows) =~ "no live session — s spawns one"
+    assert text(rows) =~ Placeholder.copy()
+    # `s` is :section_next in Tlön nav and nothing spawns on demand — the old copy promised both.
+    refute text(rows) =~ "spawns one"
+    refute text(rows) =~ "Enter to spawn"
     assert Enum.count(rows, &(&1 != [])) == 1
   end
 
   test "the line is centred in the box, vertically and horizontally" do
-    rows = Placeholder.render(%{verb: "s"}, rect(60, 9))
+    rows = Placeholder.render(%{}, rect(60, 9))
     {row, index} = Enum.find(Enum.with_index(rows), fn {row, _i} -> row != [] end)
 
     assert index == 4
@@ -29,7 +32,7 @@ defmodule Console.Panel.PlaceholderTest do
   end
 
   test "a box too small to hold the line clips instead of overflowing" do
-    rows = Placeholder.render(%{verb: "s"}, rect(10, 1))
+    rows = Placeholder.render(%{}, rect(10, 1))
 
     assert length(rows) == 1
     assert String.length(row_text(hd(rows))) <= 10

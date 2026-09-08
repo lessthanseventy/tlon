@@ -14,7 +14,6 @@ defmodule Console.Panel.Terminal do
   @behaviour Console.Panel
 
   import Bitwise
-  import Console.Panel, only: [line: 2]
 
   # Fallback colours when the emulator reports nil (use the terminal-native pair).
   @default_fg 0xC5C8C6
@@ -34,9 +33,9 @@ defmodule Console.Panel.Terminal do
   def topics(_assigns), do: []
 
   @impl Console.Panel
-  def render(:no_session, rect) do
-    Console.Panel.clip([line("no live session — Enter to spawn one here", :dim)], rect)
-  end
+  # The empty state is Panel.Placeholder's — one copy source for both faces, so the pane and the
+  # centre can never say different (or untrue) things about a missing PTY.
+  def render(:no_session, rect), do: Console.Panel.Placeholder.render(%{}, rect)
 
   def render(%{cells: cells} = render_state, rect) do
     default_fg = rgb_int(render_state[:foreground]) || @default_fg

@@ -194,9 +194,14 @@ defmodule Console.BoardTest do
       assert {"i", {:rgb, 0x0A0A0A, 0xC8C8C8}} = Enum.at(row, 1)
     end
 
-    test "terminal panel shows a placeholder when there is no session" do
-      rows = Terminal.render(:no_session, %{x: 0, y: 0, w: 40, h: 4})
-      assert Enum.map_join(rows, "\n", &text/1) =~ "Enter to spawn"
+    test "terminal panel shows the empty state when there is no session — no dead verb" do
+      rows = Terminal.render(:no_session, %{x: 0, y: 0, w: 60, h: 4})
+      shown = Enum.map_join(rows, "\n", &text/1)
+
+      # ONE copy source (Panel.Placeholder) so the two empty states can't drift apart, and no verb
+      # that doesn't exist: `Enter` never spawned anything here.
+      assert shown =~ Console.Panel.Placeholder.copy()
+      refute shown =~ "Enter to spawn"
     end
 
     test "HOME dashboard — the header + a boxed workspace card with its dot tally" do

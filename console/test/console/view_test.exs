@@ -257,7 +257,7 @@ defmodule Console.ViewTest do
     test "a thread open with no live session: the terminal's place carries the spawn verb, equally split" do
       placements = View.compose(chat_reads(%{}, 9), 120, 40)
 
-      assert {Panel.Placeholder, %{verb: "s"}, right} = Enum.find(placements, &match?({Panel.Placeholder, _, _}, &1))
+      assert {Panel.Placeholder, %{}, right} = Enum.find(placements, &match?({Panel.Placeholder, _, _}, &1))
       stack = stack_rect(placements)
 
       refute placed?(placements, Panel.Terminal)
