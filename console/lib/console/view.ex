@@ -375,36 +375,28 @@ defmodule Console.View do
   # The top bar's read (UX slice 1): where you are, what you're on, who is on it, is the server up.
   # The thread/stage/lead the old footer info row carried moved HERE — the footer is hints only now.
   defp top_data(reads, space) do
-    lead = lead_of(reads)
+    card = opened_card(reads)
+    lead = card && lead_of(reads, card.id)
 
     %{
       workspace: space.label,
-      thread: reads.focused_title,
-      stage: stage_of(reads),
+      thread: card && card[:title],
+      stage: card && card[:stage],
       lead: lead && lead.agent,
       warm?: lead != nil and lead.warm? == true,
-      link: link_state()
+      link: reads[:link] || :up
     }
   end
 
-  # The focused thread's stage, off the same thread_stack cards the center renders.
-  defp stage_of(%{focused_id: id, thread_stack: %{cards: cards}}) when not is_nil(id) do
-    Enum.find_value(cards, fn card -> if card.id == id, do: card[:stage] end)
-  end
+  # The OPEN thread's card (design 2026-09-08 §2), never the rail's selection cursor — nothing open,
+  # nothing named. Same thread_stack read the center's list⇄conversation switch uses, so the bar and
+  # the center can never disagree about what is open.
+  defp opened_card(%{thread_stack: %{opened: id, cards: cards}}) when not is_nil(id), do: Enum.find(cards, &(&1.id == id))
 
-  defp stage_of(_reads), do: nil
+  defp opened_card(_reads), do: nil
 
-  # The roster row working the focused thread (agent + warmth), or nil.
-  defp lead_of(%{focused_id: id, roster: roster}) when not is_nil(id), do: Enum.find(roster, &(&1.thread_id == id))
-
-  defp lead_of(_reads), do: nil
-
-  # Only the remote backend can lose its server; an embedded one is reachable by definition.
-  defp link_state do
-    if Console.Backend.impl() == Console.Backend.Remote and not Console.Backend.Link.up?(),
-      do: :down,
-      else: :up
-  end
+  # The roster row working that thread (agent + warmth), or nil.
+  defp lead_of(reads, id), do: Enum.find(reads[:roster] || [], &(&1.thread_id == id))
 
   defp status_data(reads, focused) do
     %{

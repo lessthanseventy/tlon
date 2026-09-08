@@ -617,6 +617,9 @@ defmodule Console.Reads do
       leader_pending?: state.leader_pending?,
       # LOCK mode (design 2026-08-23) — the footer's loudest chip.
       lock?: state.lock?,
+      # The top bar's server-link alarm. An ambient read, so it belongs here and not in the pure
+      # View.compose/3.
+      link: Safe.read(:link, :up, fn -> link_state() end),
       # The Workspace space's focus, so the View can light the focused sidebar pane and the status bar
       # can show NAV/TERM. nil elsewhere — no other space navigates panes this way.
       focus: if(Space.workspace?(state.active_key), do: state.focus),
@@ -633,6 +636,13 @@ defmodule Console.Reads do
           if(Space.workspace?(state.active_key) and state.focus.detail?, do: tlon_detail(state, tlon_layout))
         end)
     }
+  end
+
+  # Only the remote backend can lose its server; an embedded one is reachable by definition.
+  defp link_state do
+    if Console.Backend.impl() == Console.Backend.Remote and not Console.Backend.Link.up?(),
+      do: :down,
+      else: :up
   end
 
   # Sessions is supervised (Console.Supervisor) but the cockpit is NOT — `Sessions.terminal/1`

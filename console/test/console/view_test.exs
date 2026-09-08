@@ -408,8 +408,67 @@ defmodule Console.ViewTest do
       assert data.stage == "build"
       assert data.lead == "hronir"
       assert data.warm? == true
-      # The local backend is always reachable — the link segment only fires against a remote server.
+      # The link is an ambient read resolved in Console.Reads.frame/3 — compose/3 only forwards it.
       assert data.link == :up
+    end
+
+    test "a down link rides the frame read through to the bar" do
+      boxes = View.compose(reads(%{link: :down}), 120, 40)
+
+      assert {Panel.TopBar, %{link: :down}, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
+    end
+
+    # Design 2026-09-08 §2: the top bar carries the OPEN thread, not the rail's selection cursor.
+    test "the top bar names the OPENED thread, not the one the cursor sits on" do
+      roster = [%{agent: "hronir", thread_id: 7, thread_title: "review PR 42", pane_ref: nil, warm?: true}]
+
+      cards = [
+        %{id: 7, title: "review PR 42", lead: nil, stage: "build", awaiting: nil, active?: false, messages: []},
+        %{id: 9, title: "flaky test hunt", lead: nil, stage: "triage", awaiting: nil, active?: true, messages: []}
+      ]
+
+      boxes =
+        View.compose(
+          reads(%{
+            focused_id: 9,
+            focused_title: "flaky test hunt",
+            roster: roster,
+            thread_stack: %{cards: cards, opened: 7}
+          }),
+          120,
+          40
+        )
+
+      assert {Panel.TopBar, data, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
+      assert data.thread == "review PR 42"
+      assert data.stage == "build"
+      assert data.lead == "hronir"
+    end
+
+    test "nothing opened: no thread segment at all — the cursor is not a fallback" do
+      roster = [%{agent: "hronir", thread_id: 9, thread_title: "flaky test hunt", pane_ref: nil, warm?: true}]
+
+      cards = [
+        %{id: 9, title: "flaky test hunt", lead: nil, stage: "triage", awaiting: nil, active?: true, messages: []}
+      ]
+
+      boxes =
+        View.compose(
+          reads(%{
+            focused_id: 9,
+            focused_title: "flaky test hunt",
+            roster: roster,
+            thread_stack: %{cards: cards, opened: nil}
+          }),
+          120,
+          40
+        )
+
+      assert {Panel.TopBar, data, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
+      assert data.thread == nil
+      assert data.stage == nil
+      assert data.lead == nil
+      refute data.warm?
     end
 
     test "an open composer still sits directly above the (now one-row) footer" do
