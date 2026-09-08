@@ -33,7 +33,6 @@ defmodule Console.BoardTest do
   alias Console.Panel.Activity
   alias Console.Panel.Border
   alias Console.Panel.Health
-  alias Console.Panel.Overview
   alias Console.Panel.Rail
   alias Console.Panel.Roster
   alias Console.Panel.Stack
@@ -224,29 +223,6 @@ defmodule Console.BoardTest do
       assert shown =~ Console.Panel.Placeholder.copy()
       refute shown =~ "Enter to spawn"
     end
-
-    test "HOME dashboard — the header + a boxed workspace card with its dot tally" do
-      workspaces = [
-        %{
-          id: 1,
-          name: "Tlön",
-          summary: %{open: 2, stalled: 1, done: 3, conflicts: 4},
-          leaves: [%{id: 1, title: "a thread", lead: "hronir", status: :open}]
-        }
-      ]
-
-      rows = Overview.render(%{workspaces: workspaces}, %{x: 0, y: 0, w: 60, h: 40})
-      joined = Enum.map_join(rows, "\n", &text/1)
-
-      assert joined =~ "HOME"
-      assert joined =~ "Tlön"
-      assert joined =~ "2 open"
-      assert joined =~ "1 stalled"
-      assert joined =~ "3 done"
-      # the card is boxed and the thread row surfaces
-      assert joined =~ "╭─"
-      assert joined =~ "a thread"
-    end
   end
 
   describe "panel pick — click a row to select (pure decision, design §8)" do
@@ -256,23 +232,6 @@ defmodule Console.BoardTest do
       assert {:focus_thread, 1} = Roster.pick(data, rect, 0)
       assert {:focus_thread, 2} = Roster.pick(data, rect, 1)
       assert Roster.pick(data, rect, 99) == nil
-    end
-
-    test "chorus: clicking a workspace row zooms to ITS OWN workspace id; the survey header + blank do not" do
-      workspaces = [
-        %{id: 3, name: "Tlön", summary: %{open: 0, stalled: 0, done: 0, conflicts: 0}, leaves: []}
-      ]
-
-      data = %{workspaces: workspaces, scroll: 0}
-      rect = %{x: 0, y: 0, w: 60, h: 40}
-      # the 3-row HOME header (0–2) selects nothing
-      assert Overview.pick(data, rect, 0) == nil
-      assert Overview.pick(data, rect, 2) == nil
-      # the workspace's boxed card starts at row 3 → zoom to its own id
-      assert {:switch_space, 3} = Overview.pick(data, rect, 3)
-      assert {:switch_space, 3} = Overview.pick(data, rect, 5)
-      # a click far past the last workspace selects nothing
-      assert Overview.pick(data, rect, 30) == nil
     end
   end
 

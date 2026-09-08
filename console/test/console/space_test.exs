@@ -58,7 +58,7 @@ defmodule Console.SpaceTest do
       # Center bands (2026-09-01): the Terminal/thread-stack, the persistent new-thread input, then the
       # tertius orchestrator line.
       assert tlon.surface == [{Terminal, :machine}, NewThread, Tertius]
-      # Slice 3.4: the funes panels stack in the left RAIL (NOW·CREW·MEMORY·STACK); the Sidebar
+      # Slice 3.4: the funes panels stack in the left RAIL (NOW·CREW·MEMORY·STACK); the old Sidebar
       # renders as the thin spine (split out in View.compose); the right rail is retired.
       assert tlon.left == [Activity, Crew, Memory, Stack]
       assert tlon.right == []
@@ -126,7 +126,7 @@ defmodule Console.SpaceTest do
 
   describe "workspace?/1" do
     test "is the mode predicate: any integer key is a Workspace, anything else is not" do
-      refute Space.workspace?(:orbis)
+      refute Space.workspace?(:stale)
       refute Space.workspace?(nil)
       assert Space.workspace?(1)
       assert Space.workspace?(0)

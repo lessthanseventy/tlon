@@ -30,8 +30,6 @@ defmodule Console.View do
   # The center Terminal and StatusBar/Border never overflow.
   @scrollable [
     Panel.Rail,
-    Panel.Sidebar,
-    Panel.Overview,
     Panel.ThreadStack,
     Panel.Crew,
     Panel.Roster,
@@ -287,7 +285,7 @@ defmodule Console.View do
   @doc """
   The content rect the center Terminal renders into for a `space_key`/`w`×`h` cockpit — the single
   source of truth the embedded PTY sizes to, so pi never draws wider or taller than the visible
-  area. Orbis carries no center Terminal (its surface is `[Overview]`, the survey) → this falls back
+  area. A missing space carries no center Terminal → this falls back
   to the full center column. `input` is the cockpit's open input (nil = none), so an open composer
   shortens the rect the same way it shortens the frame. A Workspace's NewThread/Tertius bands (`Console.Space`) share the column
   with its Terminal, so its box is smaller — found via the SAME `boxed/2` stacking `compose/3` uses, not a
@@ -368,17 +366,10 @@ defmodule Console.View do
   @doc "Resolve the data a panel is fed from the assembled reads (keeps spaces plain data)."
   def data_for(Panel.Rail, r), do: %{groups: r[:sidebar] || [], active_key: r.active_key, opened: opened_id(r)}
 
-  def data_for(Panel.Sidebar, r),
-    do: %{groups: r[:sidebar] || [], active_key: r.active_key, graphics?: r[:graphics?] == true}
-
   def data_for(Panel.Roster, r), do: %{sessions: r.roster}
 
-  def data_for(Panel.Overview, r),
-    do: %{workspaces: r[:workspaces] || [], survey_cursor: r[:survey_cursor], orbis_focus: r[:orbis_focus]}
-
-  # The author face's own workspace list — `Console.Workspaces.all/0` directly (not the survey's rollup
-  # cache), since a thread-less workspace (a fresh "blank" template) is real here even when
-  # `Console.Orbis.rollup/0` has nothing to show (D2.2). `edit` (D2.4 Chunk 2a) is nil unless `e`
+  # CONFIG's workspace list — `Console.Workspaces.all/0` directly, so a thread-less workspace (a
+  # fresh "blank" template) is real here (D2.2). `edit` (D2.4 Chunk 2a) is nil unless `e`
   # opened the field editor — `Panel.Author` switches its render on its presence.
   def data_for(Panel.Author, r),
     do: %{workspaces: author_workspaces(), cursor: r[:author_cursor] || 0, edit: r[:author_edit]}

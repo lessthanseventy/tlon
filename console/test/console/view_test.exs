@@ -73,7 +73,7 @@ defmodule Console.ViewTest do
   end
 
   # UX slice 1, task 2: ONE rail (workspaces + the active workspace's threads) at x 0 — the thin
-  # spine (Panel.Sidebar) and the funes rail (space.left) are no longer placed; the drawer hosts
+  # spine (the old Sidebar, deleted) and the funes rail (space.left) are no longer placed; the drawer hosts
   # those panes from task 4.
   describe "the rail replaces the Slack sidebar (UX slice 1)" do
     defp rail_of(placements), do: Enum.find(placements, &match?({Panel.Rail, _, _}, &1))
@@ -94,7 +94,6 @@ defmodule Console.ViewTest do
       assert data.groups == groups
       assert data.active_key == 0
       assert %{x: 0, y: 1} = rail_box(placements)
-      refute Enum.any?(placements, &match?({Panel.Sidebar, _, _}, &1))
       refute Enum.any?(placements, &match?({Panel.Spaces, _, _}, &1))
     end
 
@@ -663,8 +662,8 @@ defmodule Console.ViewTest do
       assert data.pane_hints == []
     end
 
-    test "orbis: mode nil (the shared table)" do
-      data = status_of(View.compose(reads(%{active_key: :orbis, focus: nil}), 120, 40))
+    test "off a workspace key: mode nil (the shared table)" do
+      data = status_of(View.compose(reads(%{active_key: :stale, focus: nil}), 120, 40))
       assert data.mode == nil
       assert data.workspace? == false
     end

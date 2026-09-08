@@ -224,7 +224,7 @@ defmodule Console.Reads do
 
   # The terminal that owns the keys, by space: a Workspace → the embedded tmux client (still the single
   # `:machine` registry entry in Slice 1 — C2 keys the terminal per workspace id). nil elsewhere (Orbis
-  # has no center Terminal — its surface is the Overview).
+  # has no center Terminal — a stale key, or the server-down sentinel).
   def center_terminal(%{active_key: key}) when Space.workspace?(key), do: terminal(:machine)
   def center_terminal(_state), do: nil
 
@@ -458,7 +458,7 @@ defmodule Console.Reads do
   # Expire cached probes once @probe_ms has passed; render's ensure_probes refills lazily.
   def maybe_expire_probes(state) do
     if System.monotonic_time(:millisecond) - state.probed_at >= @probe_ms do
-      %{state | stack: nil, health: nil, memory: nil, leaves: nil, gates: nil}
+      %{state | stack: nil, health: nil, memory: nil, gates: nil}
     else
       state
     end
@@ -476,13 +476,6 @@ defmodule Console.Reads do
         ws_thread_ids: workspace_thread_id_set(key),
         probed_at: System.monotonic_time(:millisecond)
     }
-  end
-
-  # Orbis' survey only needs the rollup, not the git/nix/df battery — fill just the cached leaves
-  # rollup on the SAME @probe_ms throttle so `orbis_workspaces/1` reads the cache, never gathers server
-  # per-frame.
-  def ensure_probes(%{active_key: :orbis, leaves: nil} = state) do
-    %{state | leaves: Console.Orbis.rollup(), probed_at: System.monotonic_time(:millisecond)}
   end
 
   def ensure_probes(state), do: state
@@ -573,17 +566,6 @@ defmodule Console.Reads do
     }
   end
 
-  # The Orbis survey (Overview center): the per-WORKSPACE rollup grouping. Reads the cached
-  # `state.leaves` rollup the @probe_ms throttle fills — its `workspaces` key. Empty list when server
-  # is down / the cache is cold / there are no workspaces. Public: a pure read seam (unit-tested
-  # against a known cache).
-  def orbis_workspaces(state) do
-    case state.leaves do
-      %{workspaces: workspaces} -> workspaces
-      _ -> []
-    end
-  end
-
   # TRIAGE reads: cross-thread blockers, failed checks, and unassigned threads.
   # Gathers from all open threads — a server Board aggregate.
   # Each section is `%{shown: [...], more: count}` so the panel can render "+N more".
@@ -654,17 +636,9 @@ defmodule Console.Reads do
       # The rail's read-model: workspace groups with their unified thread list (+ crew working
       # flags), each thread carrying the warmth of its live session.
       sidebar: Safe.read(:sidebar, [], fn -> sidebar_read(roster) end),
-      # Kitty host? → the Sidebar blanks its fallback glyph so the icon PNG covers cleanly (no bleed).
+      # Kitty host? → the rail blanks its fallback glyph so an icon PNG covers cleanly (no bleed).
       graphics?: Console.Graphics.kitty?(),
-      workspaces:
-        Safe.read(:workspaces, [], fn -> if(state.active_key == :orbis, do: orbis_workspaces(state), else: []) end),
-      # The survey's focus + per-row cursor, so Overview can wash the cursor row :selected — only
-      # meaningful in Orbis (a meaningless-but-harmless read elsewhere).
-      orbis_focus: state.orbis_focus,
-      survey_cursor: state.survey_cursor,
-      # Orbis' author face (D2.1/D2.2): which center panel to render, and its own cursor.
-      # Meaningless-but-harmless outside Orbis.
-      orbis_face: state.orbis_face,
+      # CONFIG (the Author, in the drawer): its own cursor.
       author_cursor: state.author_cursor,
       # The field editor (D2.4 Chunk 2a): nil unless `e` opened it. Meaningless-but-harmless
       # outside Orbis' author face.
@@ -684,7 +658,7 @@ defmodule Console.Reads do
       # (it briefs every thread, so it stays off the per-frame path the rest of the time).
       triage:
         Safe.read(:triage, nil, fn ->
-          if(state.active_key == :orbis or state[:drawer] == :triage, do: triage_read(threads))
+          if(state[:drawer] == :triage, do: triage_read(threads))
         end),
       scrolls: state.scrolls,
       input: state.input,

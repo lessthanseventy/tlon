@@ -24,7 +24,7 @@ defmodule Console.CockpitWorkspacesTest do
     :ok
   end
 
-  defp state(overrides), do: Map.merge(%{active_key: :orbis, author_cursor: 0, flash: nil, input: nil}, overrides)
+  defp state(overrides), do: Map.merge(%{active_key: 0, author_cursor: 0, flash: nil, input: nil}, overrides)
 
   describe "register_workspace!/3 — the author face's `n` verb (D2.3)" do
     test "a valid template + name registers a workspace, clears the input, and flashes success" do
@@ -94,9 +94,9 @@ defmodule Console.CockpitWorkspacesTest do
 
     test "removing a workspace that ISN'T active leaves active_key untouched" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      next = Author.remove_workspace!(state(%{active_key: :orbis}), w.id)
+      next = Author.remove_workspace!(state(%{active_key: 0}), w.id)
 
-      assert next.active_key == :orbis
+      assert next.active_key == 0
     end
 
     test "author_cursor clamps to the shrunk list" do

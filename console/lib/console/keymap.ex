@@ -19,10 +19,9 @@ defmodule Console.Keymap do
   `center_live?` (derived per keypress by the cockpit — true when a live terminal is in the
   center), `composer_thread_id` (also derived per keypress — the thread the `c` verb composes
   onto: the focused thread, or the machine thread in Tlön), `leader_pending?` (the prefix is
-  armed), `input` (the typing modal), `orbis_focus` (`:survey | :threads` — which cursor Orbis'
-  `j/k` drives; `h`/`l` toggle it), `survey_cursor` (the Orbis survey's per-row cursor, clamped to
-  the live workspace count), and `leaves` (the cached `Console.Orbis.rollup/0`, read-only here for its
-  `workspaces` list — the same cache the cockpit's `orbis_workspaces/1` reads). A `key_event` is the
+  armed), `input` (the typing modal), `drawer` (the open drawer pane, nil when shut), and
+  `author_workspaces` (the live workspace list, threaded in per keypress — the space ring and
+  CONFIG read it). A `key_event` is the
   `Raxol.Core.Events.Event` `data` map, e.g. `%{key: :up}` or `%{key: :char, char: "j"}`.
 
   Effects (every one the reducer emits — the cockpit's `apply_effect/2` must cover each):
@@ -53,13 +52,10 @@ defmodule Console.Keymap do
     * `{:cycle_coworker_model, profile}` — advance the active space's coworker driver model one
       step round `Console.Profiles.model_ring/0` and persist it (the `m` verb; only in a space with
       a coworker).
-    * `{:switch_space, key}` — Enter on the Orbis survey (`orbis_focus == :survey`) zooms into the
-      cursor row's workspace id — the same effect a survey-row click emits (D0.2).
+    * `{:switch_space, key}` — a rail row / Enter on a workspace row switches to it.
     * `{:switch_workspace_pos, n}` / `{:select_tab, n}` — Alt+Shift+digit / Alt+digit.
-    * `{:toggle_orbis_face}` — `a` (Orbis, bare) flips `orbis_face` survey↔author (D2.1); Esc in
-      the author face emits the same effect to step back to the survey.
-    * `{:register_workspace, template_key, name}` — Enter on the `:new_workspace` input (the author
-      face's `n` verb) — register a workspace from a template + the typed name (D2.3).
+    * `{:register_workspace, template_key, name}` — Enter on the `:new_workspace` input (CONFIG's
+      `n` verb) — register a workspace from a template + the typed name (D2.3).
     * `{:arm_delete, id, name}` — `d` on the author face's cursor row arms a delete confirm (D2.5).
     * `{:remove_workspace, id}` — the second `d` while armed on the SAME id confirms the delete.
     * `{:edit_workspace, id, attrs}` — the field editor's `h`/`l` rings (type/scope) and the paths/
@@ -81,9 +77,9 @@ defmodule Console.Keymap do
   cursor, like a normal text box. In the composer, Shift+Enter inserts a newline (multiline
   bodies) instead of submitting.
 
-  Orbis' AUTHOR face (D2, Chunk 1): `orbis_face :: :survey | :author` (default `:survey`) picks
-  which center panel `Console.View` renders — `a` toggles it on, Esc steps back off. `author_cursor`
-  is the author list's own per-row cursor (mirrors `survey_cursor`), clamped against
+  CONFIG (the Author, in the drawer since UX slice 1 task 5; `Alt+d` then its tab, or the settings
+  verb): `handle_drawer/2` routes every key to `config/2` while `drawer == :config`. `author_cursor`
+  is the workspace list's own per-row cursor, clamped against
   `author_workspaces` — the live `Console.Workspaces.all/0` list, threaded in per keypress (like
   `composer_thread_id`) so this module stays a pure reducer with no server call of its own.
   `pending_delete` (id | nil) is the two-key delete confirm's arm.
@@ -105,8 +101,8 @@ defmodule Console.Keymap do
 
   The roster sub-list ALSO carries `knob :: :model | :yolo` (D2.4 Chunk 2b, default `:model`,
   read tolerantly via `Map.get/3` so older literal states don't need it) — meaningless outside
-  `mode: :sub, field: 3` (roster), same "meaningless-but-harmless elsewhere" idiom as
-  `orbis_focus`. There `Tab` flips it; `Enter`/`Space` emit
+  `mode: :sub, field: 3` (roster) — meaningless-but-harmless elsewhere. There `Tab` flips it;
+  `Enter`/`Space` emit
   `{:coworker_knob, name, knob}` for the sub-selected entry (`name` resolved off the LIVE roster,
   `workspace_field/2`, same as the `a`/`x`/`d` clauses) — the Settings modal's model-ring-cycle /
   yolo-flip, now reached from here. This absorbs Settings; Chunk 2b deletes the `,` modal.

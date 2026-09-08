@@ -133,17 +133,8 @@ defmodule Console.Cockpit do
             # The last frame's reads: a keystroke that only edits `input` repaints from these
             # instead of re-reading the world (typing_only?/2).
             reads: nil,
-            # Orbis' focus toggle (`h`/`l`) — which cursor its j/k drives: the survey's per-row
-            # cursor (default, so a fresh Orbis opens ready to zoom a workspace) or the thread list.
-            orbis_focus: :survey,
-            # The Orbis survey's per-row cursor (j/k), clamped to the live workspace count at keypress
-            # time (Console.Keymap) — `Enter`/click resolve it to that row's workspace id.
-            survey_cursor: 0,
-            # Orbis' second face (D2.1): `:survey` (Overview, the default) or `:author` (Panel.Author
-            # — create/delete server workspaces). `a` toggles; Esc in `:author` steps back.
-            orbis_face: :survey,
-            # The author face's own per-row cursor (j/k), clamped to `Console.Workspaces.all/0`'s length
-            # at keypress time — mirrors `survey_cursor`.
+            # CONFIG's (the Author's) per-row cursor (j/k), clamped to `Console.Workspaces.all/0`'s
+            # length at keypress time.
             author_cursor: 0,
             # The author face's delete confirm arm (D2.5): the workspace id a `d` press armed, or nil.
             # A second `d` on this SAME id confirms; any other key cancels (Console.Keymap).
@@ -221,9 +212,6 @@ defmodule Console.Cockpit do
             # The Memory pane's read (coverage + pinned + pending habits), cached with stack/health;
             # invalidated on a habit approve/reject so the pane reflects the write immediately.
             memory: nil,
-            # The Orbis rollup (`Console.Orbis.rollup/0`) the survey reads, cached on the probe cadence so
-            # the keymap's survey cursor can clamp against it at keypress time.
-            leaves: nil,
             # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
             # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`. Seeded from
             # the durable logs so a fresh cockpit's NOW isn't blank until new events flow (the ring
@@ -720,10 +708,9 @@ defmodule Console.Cockpit do
 
   @doc false
   # The workspace a right click landed on, per the panel under the cursor. The rail carries the
-  # workspace rows since the spine left the frame; Panel.Sidebar keeps its door for the drawer.
+  # workspace rows since the spine left the frame.
   # Pure — the right-click `handle_cast` clause turns it into a menu.
   def context_workspace({Panel.Rail, data, rect}, y), do: Panel.Rail.workspace_at(data, rect, y - rect.y)
-  def context_workspace({Panel.Sidebar, data, rect}, y), do: Panel.Sidebar.workspace_at(data, rect, y - rect.y)
   def context_workspace(_hit, _y), do: nil
 
   defp dispatch_click(nil, _x, _y, state), do: {:noreply, state}

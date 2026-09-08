@@ -15,7 +15,7 @@ defmodule Console.CockpitTest do
 
   describe "reset_scrolls/2" do
     test "a space switch drops every panel's scroll offset; otherwise they persist" do
-      prev = %{active_key: :orbis, scrolls: %{a: 3}}
+      prev = %{active_key: 2, scrolls: %{a: 3}}
       assert Cockpit.reset_scrolls(prev, %{prev | active_key: 1}).scrolls == %{}
       assert Cockpit.reset_scrolls(prev, %{prev | scrolls: %{a: 4}}).scrolls == %{a: 4}
     end

@@ -74,11 +74,8 @@ defmodule Console.Space do
       # toggleable right session pane (Alt+digit switches tmux windows). Center = the
       # Terminal/thread-stack + the new-thread band + the permanent Tertius band below.
       surface: [{Terminal, :machine}, NewThread, Tertius],
-      # Slice 3.4: the funes panels move OFF the (now-retired) right rail into the left rail, stacked
-      # top-down — NOW (attention/activity) · CREW · MEMORY · STACK — no more `[`/`]` carousel. The
-      # Sidebar renders as the thin far-left SPINE (workspace switcher + global tools), split out of
-      # this list in `View.compose`. The center thread-stack IS the thread list; HEALTH stays in the
-      # footer + /status.
+      # The funes panels — NOW (attention/activity) · CREW · MEMORY · STACK — are the drawer's since
+      # UX slice 1; `left` is kept as the space's declared set, the frame paints the Rail instead.
       left: [Activity, Crew, Memory, Stack],
       right: [],
       coworker: lead_coworker(workspace.roster),

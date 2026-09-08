@@ -4,9 +4,9 @@ defmodule Console.Panel.Author do
   view (D2, Chunk 1); `e` on the cursor workspace opens the in-place FIELD EDITOR (D2.4 Chunk 2a),
   `data[:edit]` present. List: one row per `Console.Workspaces.all/0` workspace (name · type · path/roster
   counts), the `author_cursor` row washed `:selected` — same wash idiom as
-  `Console.Panel.Overview`. Data is `%{workspaces: [%{id, name, type, paths, roster, scope}],
-  cursor, edit}` (`cursor`/`edit` View-injected). Replaces Overview as Orbis' center only while
-  `orbis_face == :author` (`Console.View.compose/3`).
+  the old Overview. Data is `%{workspaces: [%{id, name, type, paths, roster, scope}],
+  cursor, edit}` (`cursor`/`edit` View-injected). Hosted by the drawer as CONFIG
+  (`Console.Cockpit.Drawer`, UX slice 1 task 5).
 
   The editor is a vertical 4-row field list (0 type · 1 scope · 2 paths · 3 roster), the `field`
   cursor washed `:selected`; fields 0/1 show the ring value inline (h/l cycles it, applied

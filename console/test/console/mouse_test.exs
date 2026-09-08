@@ -8,7 +8,7 @@ defmodule Console.MouseTest do
 
   alias Console.Mouse
   alias Console.Panel.Border
-  alias Console.Panel.Sidebar
+  alias Console.Panel.Rail
   alias Console.Panel.StatusBar
   alias Console.Panel.Terminal
 
@@ -17,7 +17,7 @@ defmodule Console.MouseTest do
   defp placements do
     [
       {Border, nil, %{x: 0, y: 0, w: 30, h: 38}},
-      {Sidebar, %{groups: []}, %{x: 2, y: 1, w: 26, h: 36}},
+      {Rail, %{groups: []}, %{x: 2, y: 1, w: 26, h: 36}},
       {Border, nil, %{x: 31, y: 0, w: 58, h: 38}},
       {Terminal, :no_session, %{x: 33, y: 1, w: 54, h: 36}},
       {StatusBar, nil, %{x: 0, y: 38, w: 120, h: 2}}
@@ -26,7 +26,7 @@ defmodule Console.MouseTest do
 
   describe "hit_panel/3" do
     test "a cell inside a content placement's rect hits that panel" do
-      assert {Sidebar, _, _} = Mouse.hit_panel(placements(), 5, 5)
+      assert {Rail, _, _} = Mouse.hit_panel(placements(), 5, 5)
       assert {Terminal, _, _} = Mouse.hit_panel(placements(), 60, 10)
     end
 

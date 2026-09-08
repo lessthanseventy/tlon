@@ -125,8 +125,8 @@ defmodule Console.ReadsTest do
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == :none
     end
 
-    test "Enter outside a workspace (no pane focused) does nothing" do
-      state = rail_state(%{active_key: :orbis})
+    test "Enter off a workspace key (no pane focused) does nothing" do
+      state = rail_state(%{active_key: 999})
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == :none
     end
   end
@@ -139,7 +139,7 @@ defmodule Console.ReadsTest do
       assert Reads.session_thread(%{open | session_pane: true}) == 7
       assert Reads.session_thread(%{open | session_pane: false}) == nil
       assert Reads.session_thread(%{open | center_view: :terminal}) == nil
-      assert Reads.session_thread(%{open | active_key: :orbis}) == nil
+      assert Reads.session_thread(%{open | active_key: :stale}) == nil
       assert Reads.session_thread(%{open | opened_thread: nil}) == nil
     end
 
@@ -229,24 +229,6 @@ defmodule Console.ReadsTest do
     test "a nil health read (probe not run) says so instead of crashing" do
       assert %{title: "status", lines: [{line, _style}]} = Reads.status_detail_content(nil)
       assert line =~ "health"
-    end
-  end
-
-  describe "orbis_workspaces/1: the survey reads the CACHED rollup, never re-gathers funes" do
-    test "returns the cached rollup's workspaces — no live funes gather" do
-      # ensure_probes fills state.leaves with the full rollup (workspaces key included) on the @probe_ms
-      # throttle; the survey must read THAT, so a known cache flows straight through untouched.
-      cached = %{
-        summary: %{open: 1, stalled: 0, done: 0, conflicts: 0},
-        rows: [%{id: 1}],
-        workspaces: [%{workspace: "Tlön", summary: %{open: 1, stalled: 0, done: 0, conflicts: 0}, leaves: [%{id: 1}]}]
-      }
-
-      assert Reads.orbis_workspaces(%{leaves: cached}) == cached.workspaces
-    end
-
-    test "a cold / funes-down cache (nil leaves) is an empty survey, not a crash" do
-      assert Reads.orbis_workspaces(%{leaves: nil}) == []
     end
   end
 end
