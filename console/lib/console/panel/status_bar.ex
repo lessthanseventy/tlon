@@ -5,8 +5,8 @@ defmodule Console.Panel.StatusBar do
   on it belongs to `Console.Panel.TopBar` now.
 
   While an input is open (compose, new ticket/note/workspace/path/roster) or a flash/leader prefix
-  is live, that state takes the row instead — the row the frame gives it is 1 high, so only the
-  face's first line lands.
+  is live, that state takes the row instead: the prompt on the left, its verbs right-aligned on the
+  SAME row, the least important verb dropped first when the frame is too narrow for all of them.
   """
   @behaviour Console.Panel
 
@@ -24,37 +24,36 @@ defmodule Console.Panel.StatusBar do
     {"^␣↑↓", "thread"},
     {"^␣q", "quit"}
   ]
-  @leader_hints [{"^␣ …", :header}, {"  prefix armed — Esc cancels", :dim}]
+  # What the armed prefix accepts next — @hints without the ^␣ prefix, since the prefix is already
+  # down. Esc leads: the escape hatch is the one verb that must survive a narrow frame.
+  @leader_hints [
+    {"Esc", "cancel"},
+    {"n", "new"},
+    {"c", "reply"},
+    {"⏎", "spawn"},
+    {"Tab", "space"},
+    {"↑↓", "thread"},
+    {"q", "quit"}
+  ]
 
   @impl Panel
   def topics(_assigns), do: []
 
   # Composer mode: the buffer itself renders in the growable compose box above this footer
   # (`Console.Panel.Composer` — full buffer, wrap + grow); the footer keeps the mode chip and the
-  # composer hints.
+  # composer verbs.
   @impl Panel
   def render(%{input: %{kind: :compose}}, rect) do
     prompt = [{" COMPOSE ", :tab}]
 
-    hints = [
-      {"⏎", :header},
-      {" reply", :dim},
-      {"   ", :dim},
-      {"⇧⏎", :header},
-      {" newline", :dim},
-      {"  ", :dim},
-      {"←→↑↓", :header},
-      {" move", :dim},
-      {"  ", :dim},
-      {"Esc", :header},
-      {" cancel", :dim}
-    ]
-
-    Panel.clip([prompt, hints], rect)
+    Panel.clip(
+      [prompt_row(prompt, [{"⏎", "reply"}, {"Esc", "cancel"}, {"⇧⏎", "newline"}, {"←→↑↓", "move"}], rect.w)],
+      rect
+    )
   end
 
-  # Title input mode: the info line becomes the prompt, split at the cursor (a caret marks it),
-  # and the hints line names only the keys that do anything while typing.
+  # Title input mode: the row becomes the prompt, split at the cursor (a caret marks it), with only
+  # the keys that do anything while typing right-aligned beside it.
   @impl Panel
   # :new_thread renders in the permanent Panel.NewThread band (like :orchestrate in Tertius), so it is
   # NOT matched here — it falls through to the normal footer. Ticket/note stay modal in the footer.
@@ -71,26 +70,15 @@ defmodule Console.Panel.StatusBar do
       {after_, :normal}
     ]
 
-    hints = [
-      {"⏎", :header},
-      {" create", :dim},
-      {"   ", :dim},
-      {"←→", :header},
-      {" move", :dim},
-      {"  ", :dim},
-      {"Esc", :header},
-      {" cancel", :dim}
-    ]
-
-    Panel.clip([prompt, hints], rect)
+    Panel.clip([prompt_row(prompt, [{"⏎", "create"}, {"Esc", "cancel"}, {"←→", "move"}], rect.w)], rect)
   end
 
   # NOTE: the tertius orchestrate input renders in the permanent `Console.Panel.Tertius` band (the
   # bottom of the center), NOT here — an :orchestrate input falls through to the normal footer below,
   # so the input never shows twice.
 
-  # The author face's create-workspace prompt (D2.3): the info line becomes the prompt over the typed
-  # name, prefixed by the armed template — h/l cycles it, named in the hints.
+  # The author face's create-workspace prompt (D2.3): the row becomes the prompt over the typed
+  # name, prefixed by the armed template — h/l cycles it, named in the verbs.
   @impl Panel
   def render(%{input: %{kind: :new_workspace, template: template} = input}, rect) do
     {before, after_} = cursor_split(input)
@@ -104,25 +92,12 @@ defmodule Console.Panel.StatusBar do
       {after_, :normal}
     ]
 
-    hints = [
-      {"⏎", :header},
-      {" create", :dim},
-      {"   ", :dim},
-      {"←→", :header},
-      {" move", :dim},
-      {"  ", :dim},
-      {"h/l", :header},
-      {" template", :dim},
-      {"  ", :dim},
-      {"Esc", :header},
-      {" cancel", :dim}
-    ]
-
-    Panel.clip([prompt, hints], rect)
+    verbs = [{"⏎", "create"}, {"Esc", "cancel"}, {"h/l", "template"}, {"←→", "move"}]
+    Panel.clip([prompt_row(prompt, verbs, rect.w)], rect)
   end
 
-  # The field editor's paths sub-list `a` add (D2.4 Chunk 2b): the info line becomes the prompt
-  # over the typed path.
+  # The field editor's paths sub-list `a` add (D2.4 Chunk 2b): the row becomes the prompt over the
+  # typed path.
   @impl Panel
   def render(%{input: %{kind: :new_path} = input}, rect) do
     {before, after_} = cursor_split(input)
@@ -136,22 +111,11 @@ defmodule Console.Panel.StatusBar do
       {after_, :normal}
     ]
 
-    hints = [
-      {"⏎", :header},
-      {" add", :dim},
-      {"   ", :dim},
-      {"←→", :header},
-      {" move", :dim},
-      {"  ", :dim},
-      {"Esc", :header},
-      {" cancel", :dim}
-    ]
-
-    Panel.clip([prompt, hints], rect)
+    Panel.clip([prompt_row(prompt, [{"⏎", "add"}, {"Esc", "cancel"}, {"←→", "move"}], rect.w)], rect)
   end
 
-  # The field editor's roster sub-list `a` add (D2.4 Chunk 2c): the info line becomes the prompt
-  # over the typed name, prefixed by the armed archetype — h/l cycles it, named in the hints.
+  # The field editor's roster sub-list `a` add (D2.4 Chunk 2c): the row becomes the prompt over the
+  # typed name, prefixed by the armed archetype — h/l cycles it, named in the verbs.
   @impl Panel
   def render(%{input: %{kind: :new_roster, archetype: archetype} = input}, rect) do
     {before, after_} = cursor_split(input)
@@ -165,37 +129,24 @@ defmodule Console.Panel.StatusBar do
       {after_, :normal}
     ]
 
-    hints = [
-      {"⏎", :header},
-      {" add", :dim},
-      {"   ", :dim},
-      {"←→", :header},
-      {" move", :dim},
-      {"  ", :dim},
-      {"h/l", :header},
-      {" archetype", :dim},
-      {"  ", :dim},
-      {"Esc", :header},
-      {" cancel", :dim}
-    ]
-
-    Panel.clip([prompt, hints], rect)
+    verbs = [{"⏎", "add"}, {"Esc", "cancel"}, {"h/l", "archetype"}, {"←→", "move"}]
+    Panel.clip([prompt_row(prompt, verbs, rect.w)], rect)
   end
 
   # A transient result line (a spawn's pane id, or its failure reason) — the operator's feedback
   # that `n`/`s` did something. Shown until the next keypress clears it.
   @impl Panel
-  def render(%{flash: flash}, rect) when is_binary(flash) do
+  def render(%{flash: flash} = data, rect) when is_binary(flash) do
     info = [{" ", :normal}, {"▸ ", :accent}, {flash, :normal}]
-    Panel.clip([Panel.justify(info, [], rect.w), hints_row()], rect)
+    Panel.clip([prompt_row(info, assemble_hints(data), rect.w)], rect)
   end
 
-  # The prefix is armed (Ctrl+Space was pressed, awaiting the next key) — show the prefix state
-  # instead of the command hints, so the operator knows the next key is console's, not the terminal's.
+  # The prefix is armed (Ctrl+Space was pressed, awaiting the next key) — the state plus what the
+  # next key can be, so the operator knows the key is console's, not the terminal's.
   @impl Panel
   def render(%{leader_pending?: true}, rect) do
     info = [{" ", :normal}, {"▸ ^␣ ", :accent}, {"prefix armed", :normal}]
-    Panel.clip([Panel.justify(info, [], rect.w), hints_row(@leader_hints)], rect)
+    Panel.clip([prompt_row(info, @leader_hints, rect.w)], rect)
   end
 
   # The default face: hints only. The old info row (mode chip, space, thread, counts) moved to
@@ -223,8 +174,6 @@ defmodule Console.Panel.StatusBar do
     {before_line, after_line}
   end
 
-  defp hints_row, do: hints_row(@hints)
-
   # The contextual footer (design 2026-08-23): mode → space → pane, mode-first because clip/2
   # trims from the right — pane verbs drop first on a narrow frame, the mode chip survives.
   # Keyed on workspace-ness (mode/workspace? from View.status_data), NEVER the space label — a renamed
@@ -242,6 +191,30 @@ defmodule Console.Panel.StatusBar do
 
   defp space_seg(%{mode: :nav, workspace?: true}), do: [{"c", "reply"}, {"n", "new"}, {"v", "term"}, {"m", "model"}]
   defp space_seg(_data), do: []
+
+  # A face's own row: prompt left, verbs right-aligned, as many as fit. The row is one line high,
+  # so a verb that doesn't fit is GONE — hence the drop-from-the-tail order (verbs are listed
+  # most-load-bearing first).
+  defp prompt_row(prompt, verbs, w), do: Panel.justify(prompt, fit_verbs(prompt, verbs, w), w)
+
+  defp fit_verbs(_prompt, [], _w), do: []
+
+  defp fit_verbs(prompt, verbs, w) do
+    runs = verbs_row(verbs)
+
+    if w - Panel.row_width(prompt) - Panel.row_width(runs) >= 1,
+      do: runs,
+      else: fit_verbs(prompt, Enum.drop(verbs, -1), w)
+  end
+
+  # Right-aligned verbs: no trailing separator (it would push the last verb off the edge), one
+  # trailing space so the row does not butt against the frame.
+  defp verbs_row(verbs) do
+    verbs
+    |> Enum.map_intersperse([{"  ", :dim}], fn {key, label} -> [{key, :header}, {" #{label}", :dim}] end)
+    |> List.flatten()
+    |> Kernel.++([{" ", :normal}])
+  end
 
   defp hints_row(hints) do
     Enum.flat_map(hints, fn

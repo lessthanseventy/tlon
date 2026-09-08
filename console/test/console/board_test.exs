@@ -286,13 +286,15 @@ defmodule Console.BoardTest do
       refute joined =~ "threads "
     end
 
-    test "composing shows the mode chip and the composer hints — the buffer lives in the compose box" do
+    # UX slice 1: one row — the chip and the composer verbs share it.
+    test "composing shows the mode chip and the composer verbs — the buffer lives in the compose box" do
       data = status(%{input: %{kind: :compose, thread_id: 2, buffer: "ship it"}})
-      assert [info, hints] = StatusBar.render(data, %{x: 0, y: 0, w: 120, h: 2})
-      assert text(info) =~ "COMPOSE"
-      refute text(info) =~ "ship it"
-      assert text(hints) =~ "reply"
-      assert text(hints) =~ "newline"
+      assert [row] = StatusBar.render(data, %{x: 0, y: 0, w: 120, h: 1})
+      joined = text(row)
+      assert joined =~ "COMPOSE"
+      refute joined =~ "ship it"
+      assert joined =~ "reply"
+      assert joined =~ "newline"
     end
   end
 
