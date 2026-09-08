@@ -45,11 +45,8 @@ defmodule Console.Panel.StatusBar do
   @impl Panel
   def render(%{input: %{kind: :compose}}, rect) do
     prompt = [{" COMPOSE ", :tab}]
-
-    Panel.clip(
-      [prompt_row(prompt, [{"⏎", "reply"}, {"Esc", "cancel"}, {"⇧⏎", "newline"}, {"←→↑↓", "move"}], rect.w)],
-      rect
-    )
+    verbs = [{"⏎", "reply"}, {"Esc", "cancel"}, {"⇧⏎", "newline"}, {"←→↑↓", "move"}]
+    Panel.clip([prompt_row(prompt, verbs, rect.w)], rect)
   end
 
   # Title input mode: the row becomes the prompt, split at the cursor (a caret marks it), with only
