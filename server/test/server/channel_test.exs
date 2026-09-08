@@ -587,6 +587,35 @@ defmodule Server.ChannelTest do
       assert {:error, :root_machine_thread} = Channel.delete_thread(root)
       assert {:ok, _} = Channel.delete_thread(leaf)
     end
+
+    # The operator's delete (the facade) cleans the thread's worktree up when it is safe to, and
+    # says what it did — a worktree with unmerged work is kept and named (Andrew, 2026-09-08).
+    test "Server.delete_thread/1 removes a clean worktree and reports it" do
+      %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      {:ok, thread} = Channel.open_thread(%{title: "tidy", workspace_id: ws.id, project_id: p.id})
+      {:ok, wt} = Server.worktree_for_thread(thread)
+      assert {:ok, %Thread{}, {:removed, ^wt}} = Server.delete_thread(thread.id)
+      refute File.exists?(wt)
+      assert Repo.get(Thread, thread.id) == nil
+      _ = repo
+    end
+
+    test "Server.delete_thread/1 keeps a worktree with unmerged commits and names the branch" do
+      %{ws: ws, project: p} = Server.TestRepoDir.with_project()
+      {:ok, thread} = Channel.open_thread(%{title: "busy", workspace_id: ws.id, project_id: p.id})
+      {:ok, wt} = Server.worktree_for_thread(thread)
+      File.write!(Path.join(wt, "w.txt"), "x\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "w.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "w"])
+      assert {:ok, %Thread{}, {:kept, reason}} = Server.delete_thread(thread.id)
+      assert reason =~ "work/t#{thread.id}"
+      assert File.exists?(wt)
+    end
+
+    test "Server.delete_thread/1 with no worktree reports :none" do
+      {:ok, thread} = Channel.open_thread(%{title: "plain"})
+      assert {:ok, %Thread{}, :none} = Server.delete_thread(thread.id)
+    end
   end
 
   defp errors_on(changeset) do

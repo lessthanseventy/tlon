@@ -111,9 +111,24 @@ defmodule Server.Workline do
     if Server.Channel.root_machine_thread?(thread) do
       {:error, :root_machine_thread}
     else
-      do_promote(thread, promote_slug(thread))
+      with {:ok, tracked} <- do_promote(thread, promote_slug(thread)) do
+        rename_worktree(thread, tracked)
+        {:ok, tracked}
+      end
     end
   end
+
+  # The coworker has been committing on `work/t<id>` in `.worktrees/t<id>`; the slug is the
+  # workline's name for both, so the checkout moves across. Best-effort: no repo, no worktree
+  # yet, or a git refusal leaves the thread promoted and the checkout where it was.
+  defp rename_worktree(%Thread{slug: nil} = before, %Thread{slug: slug}) when is_binary(slug) do
+    case Server.repo_for_thread(before) do
+      {:ok, repo} -> Server.Worktree.rename(repo, Server.Worktree.name_for(before), slug)
+      {:error, _} -> :none
+    end
+  end
+
+  defp rename_worktree(_before, _after), do: :none
 
   # Mirror flip/1: the stage landing and its ledger row commit together or not at all.
   # Re-reads INSIDE the transaction — two near-simultaneous callers (a cc hook and a pi

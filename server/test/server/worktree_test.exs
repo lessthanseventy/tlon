@@ -98,14 +98,66 @@ defmodule Server.WorktreeTest do
       assert File.exists?(Path.join(wt, ".git"))
     end
 
-    test "a thread with NO slug falls back to the project repo itself", %{repo: repo, ws: ws, project: p} do
+    # Andrew, 2026-09-08: "the minute it starts writing code it needs to be in a worktree" — a
+    # thread with no slug (chat-born, or the machine thread) gets one named by its id, never the
+    # main tree.
+    test "a thread with NO slug gets a t<id> worktree — never the main tree", %{repo: repo, ws: ws, project: p} do
       thread = struct!(Server.Thread, %{id: 2, workspace_id: ws.id, project_id: p.id, slug: nil, title: "t"})
-      assert {:ok, ^repo} = Server.worktree_for_thread(thread)
+      assert {:ok, wt} = Server.worktree_for_thread(thread)
+      assert wt == Worktree.path(repo, "t2")
+      assert File.exists?(Path.join(wt, ".git"))
+    end
+
+    test "name_for/1 is the slug when there is one, else t<id>" do
+      assert Worktree.name_for(%Server.Thread{id: 9, slug: "redis-cache"}) == "redis-cache"
+      assert Worktree.name_for(%Server.Thread{id: 9, slug: nil}) == "t9"
     end
 
     test "no repo-bearing project anywhere → {:error, :no_repo}" do
       thread = struct!(Server.Thread, %{id: 3, workspace_id: nil, project_id: nil, slug: "x", title: "t"})
       assert {:error, :no_repo} = Server.worktree_for_thread(thread)
+    end
+  end
+
+  describe "remove/2 and rename/3 — the cleanup and promotion paths" do
+    test "remove/2 drops a clean, unmerged-nothing worktree and its branch", %{repo: repo} do
+      {:ok, wt} = Worktree.ensure(repo, "tidy")
+      assert {:removed, ^wt} = Worktree.remove(repo, "tidy")
+      refute File.exists?(wt)
+      {out, 0} = System.cmd("git", ["-C", repo, "branch", "--list", "work/tidy"])
+      assert String.trim(out) == ""
+    end
+
+    test "remove/2 KEEPS a worktree whose branch has unmerged commits, and says so", %{repo: repo, git: git} do
+      {:ok, wt} = Worktree.ensure(repo, "busy")
+      File.write!(Path.join(wt, "work.txt"), "unmerged\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "work.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"])
+      assert {:kept, reason} = Worktree.remove(repo, "busy")
+      assert reason =~ "work/busy"
+      assert File.exists?(wt)
+      {out, 0} = git.(["branch", "--list", "work/busy"])
+      assert String.trim(out) != ""
+    end
+
+    test "remove/2 on a worktree that never existed is :none", %{repo: repo} do
+      assert :none = Worktree.remove(repo, "ghost")
+    end
+
+    test "rename/3 moves the checkout and renames the branch (promotion: t<id> → slug)", %{repo: repo, git: git} do
+      {:ok, old} = Worktree.ensure(repo, "t7")
+      assert {:ok, new} = Worktree.rename(repo, "t7", "redis-cache")
+      assert new == Worktree.path(repo, "redis-cache")
+      refute File.exists?(old)
+      assert File.exists?(Path.join(new, ".git"))
+      {out, 0} = git.(["branch", "--list", "work/redis-cache"])
+      assert String.trim(out) != ""
+      {out, 0} = git.(["branch", "--list", "work/t7"])
+      assert String.trim(out) == ""
+    end
+
+    test "rename/3 with no source worktree is a no-op :none", %{repo: repo} do
+      assert :none = Worktree.rename(repo, "t8", "whatever")
     end
   end
 end

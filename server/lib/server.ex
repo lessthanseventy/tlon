@@ -80,15 +80,14 @@ defmodule Server do
   end
 
   @doc """
-  Resolve a thread to the working dir a STACK-zoom lazygit (or crew) should open against (Slice 4):
-  its project's repo, then — for a workline thread (one with a `slug`) — a lazily-ensured per-thread
-  `git worktree` at `.worktrees/<slug>`. A thread with no slug falls back to the repo itself (lazygit
-  at the project repo, per the plan). `{:ok, path}`, `{:error, :no_repo | :no_thread | reason}`.
+  Resolve a thread to the working dir its coworker (and a STACK-zoom lazygit) works in: its
+  project's repo, then a lazily-ensured per-thread `git worktree` at `.worktrees/<name>` —
+  `Server.Worktree.name_for/1`: the slug, else `t<id>`. Never the main tree (2026-09-08).
+  `{:ok, path}`, `{:error, :no_repo | :no_thread | reason}`.
   """
-  def worktree_for_thread(%Server.Thread{slug: slug} = thread) do
+  def worktree_for_thread(%Server.Thread{} = thread) do
     case repo_for_thread(thread) do
-      {:ok, repo} when is_nil(slug) -> {:ok, repo}
-      {:ok, repo} -> Server.Worktree.ensure(repo, slug)
+      {:ok, repo} -> Server.Worktree.ensure(repo, Server.Worktree.name_for(thread))
       {:error, _} = error -> error
     end
   end
@@ -153,13 +152,33 @@ defmodule Server do
   end
 
   @doc """
-  Hard-delete a thread by id (the cockpit's `d` on a THREADS row) — loads fresh, so a stale
-  row can't be acted on. `{:ok, thread}` · `{:error, :not_found}` · `{:error, :root_machine_thread}`.
+  Hard-delete a thread by id (the cockpit's `d` on a thread row) — loads fresh, so a stale row
+  can't be acted on — and clean its worktree up when that is safe (`Server.Worktree.remove/2`:
+  a clean checkout with nothing unmerged goes; anything else is kept and named). `{:ok, thread,
+  :none | {:removed, path} | {:kept, reason}}` · `{:error, :not_found | :root_machine_thread}`.
   """
   def delete_thread(id) do
     case Server.Channel.thread(id) do
-      nil -> {:error, :not_found}
-      thread -> Server.Channel.delete_thread(thread)
+      nil ->
+        {:error, :not_found}
+
+      thread ->
+        # resolve the checkout BEFORE the row goes — the path derives from the thread
+        target = worktree_target(thread)
+
+        with {:ok, deleted} <- Server.Channel.delete_thread(thread) do
+          {:ok, deleted, cleanup_worktree(target)}
+        end
     end
   end
+
+  defp worktree_target(thread) do
+    case repo_for_thread(thread) do
+      {:ok, repo} -> {repo, Server.Worktree.name_for(thread)}
+      {:error, _} -> nil
+    end
+  end
+
+  defp cleanup_worktree(nil), do: :none
+  defp cleanup_worktree({repo, name}), do: Server.Worktree.remove(repo, name)
 end

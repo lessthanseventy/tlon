@@ -243,6 +243,20 @@ defmodule Server.WorklineTest do
       assert Enum.any?(bodies, &(&1 =~ "BUILD"))
     end
 
+    test "promotion renames the thread's t<id> worktree to the slug's, branch included" do
+      %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      {:ok, plain} = Channel.open_thread(%{title: "Rename Me", workspace_id: ws.id, project_id: p.id})
+      {:ok, old} = Server.worktree_for_thread(plain)
+      assert old == Server.Worktree.path(repo, "t#{plain.id}")
+
+      assert {:ok, tracked} = Workline.promote(plain)
+      assert tracked.slug == "rename-me"
+      refute File.exists?(old)
+      assert File.exists?(Path.join(Server.Worktree.path(repo, "rename-me"), ".git"))
+      {out, 0} = System.cmd("git", ["-C", repo, "branch", "--list", "work/rename-me"])
+      assert String.trim(out) != ""
+    end
+
     test "an already-tracked thread is a no-op — no second event" do
       thread = open!(%{slug: "already-tracked"})
       assert {:ok, same} = Workline.promote(thread)

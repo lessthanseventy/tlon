@@ -93,6 +93,23 @@ defmodule Server.MCP.SpawnTest do
       assert {:error, {:no_thread, 999_999}} = Spawn.join(999_999, "codex")
     end
 
+    # A coworker never writes in the main tree (Andrew, 2026-09-08): the block carries the
+    # thread's worktree, ensured on the spot, for the boot script to cd into.
+    test "the exports carry TLON_CWD = the thread's ensured worktree when its workspace has a repo" do
+      %{repo: repo, ws: ws, project: p} = Server.TestRepoDir.with_project()
+      {:ok, thread} = Channel.open_thread(%{title: "wt", workspace_id: ws.id, project_id: p.id})
+      assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")
+      wt = Server.Worktree.path(repo, "t#{thread.id}")
+      assert ex =~ ~s(TLON_CWD="#{wt}")
+      assert File.exists?(Path.join(wt, ".git"))
+    end
+
+    test "no repo anywhere → no TLON_CWD line, and the spawn still succeeds" do
+      {:ok, thread} = Channel.open_thread(%{title: "no repo"})
+      assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")
+      refute ex =~ "TLON_CWD"
+    end
+
     test "join/3 with assign: false mints a valid token/exports without staffing the thread" do
       {:ok, %{thread: existing, agent: lead}} = Spawn.ensure({:open, "leaded"}, "claude-machine", mandate: "machine")
 

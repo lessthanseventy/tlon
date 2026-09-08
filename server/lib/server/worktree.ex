@@ -21,6 +21,14 @@ defmodule Server.Worktree do
   @doc "The branch a thread's code lives on. Matches `Server.Workline.Artifacts.Git`."
   def branch(slug), do: "work/#{slug}"
 
+  @doc """
+  A thread's worktree name: its workline slug, else `t<id>`. Every thread a coworker joins gets a
+  worktree (Andrew, 2026-09-08: "the minute it starts writing code it needs to be in a worktree"),
+  and a slug only exists once a thread is promoted — `rename/3` moves the checkout across then.
+  """
+  def name_for(%{slug: slug}) when is_binary(slug) and slug != "", do: slug
+  def name_for(%{id: id}), do: "t#{id}"
+
   @doc "Where the thread's worktree checkout lives (pure) — `<repo>/.worktrees/<slug>`."
   def path(repo_path, slug), do: Path.join([repo_path, ".worktrees", slug])
 
@@ -34,6 +42,71 @@ defmodule Server.Worktree do
       not Regex.match?(@slug, to_string(slug)) -> {:error, :bad_slug}
       not git_repo?(repo_path) -> {:error, :not_a_repo}
       true -> do_ensure(repo_path, slug)
+    end
+  end
+
+  @doc """
+  Tear a thread's worktree down when its thread is deleted. The checkout goes when it is clean
+  and its branch carries nothing unmerged; otherwise both stay and the reason names the branch —
+  real work nobody asked to lose. `{:removed, path}` · `{:kept, reason}` · `:none` (never existed).
+  """
+  def remove(repo_path, slug) do
+    wt = path(repo_path, slug)
+    branch = branch(slug)
+
+    cond do
+      not File.exists?(Path.join(wt, ".git")) ->
+        :none
+
+      dirty?(wt) ->
+        {:kept, "#{branch} has uncommitted changes at #{wt}"}
+
+      unmerged?(repo_path, branch) ->
+        {:kept, "#{branch} has unmerged commits — merge or delete it yourself"}
+
+      true ->
+        with {_out, 0} <- git(repo_path, ["worktree", "remove", wt]),
+             {_out, 0} <- git(repo_path, ["branch", "-D", branch]) do
+          {:removed, wt}
+        else
+          {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
+        end
+    end
+  end
+
+  @doc """
+  Promotion: the `t<id>` checkout becomes the slug's — `git worktree move` + `git branch -m`, so
+  the branch the coworker has been committing to IS `work/<slug>`. `{:ok, new_path}` · `:none`
+  (no source worktree) · `{:error, reason}`.
+  """
+  def rename(repo_path, from, to) do
+    old = path(repo_path, from)
+    new = path(repo_path, to)
+
+    cond do
+      not File.exists?(Path.join(old, ".git")) -> :none
+      not Regex.match?(@slug, to_string(to)) -> {:error, :bad_slug}
+      true -> do_rename(repo_path, old, new, branch(from), branch(to))
+    end
+  end
+
+  defp do_rename(repo_path, old, new, from_branch, to_branch) do
+    with {_out, 0} <- git(repo_path, ["worktree", "move", old, new]),
+         {_out, 0} <- git(repo_path, ["branch", "-m", from_branch, to_branch]) do
+      {:ok, new}
+    else
+      {out, _} -> {:error, "git refused: #{String.slice(out, 0, 200)}"}
+    end
+  end
+
+  defp dirty?(wt), do: match?({out, 0} when out != "", git(wt, ["status", "--porcelain"]))
+
+  # Commits on the branch that no OTHER branch reaches — the "unmerged" that matters for a delete.
+  # (`--not --branches` would include the branch itself; excluding it first makes the set honest.)
+  defp unmerged?(repo_path, branch) do
+    case git(repo_path, ["log", "--oneline", branch, "--not", "--exclude=#{branch}", "--branches"]) do
+      {out, 0} -> String.trim(out) != ""
+      _ -> true
     end
   end
 

@@ -148,6 +148,15 @@ defmodule Server.MCP.Spawn do
     export TLON_MCP_URL="http://127.0.0.1:#{port}/mcp"
     export TLON_THREAD="#{thread.id}"
     export TLON_AUTHOR="#{agent.name}"\
-    """
+    """ <> cwd_export(thread)
+  end
+
+  # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in
+  # the main tree (2026-09-08). A workspace with no repo exports nothing; the pane starts wherever.
+  defp cwd_export(thread) do
+    case Server.worktree_for_thread(thread) do
+      {:ok, path} -> "\nexport TLON_CWD=\"#{path}\""
+      {:error, _} -> ""
+    end
   end
 end
