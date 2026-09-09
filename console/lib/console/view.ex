@@ -381,7 +381,7 @@ defmodule Console.View do
   # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
   def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
   def data_for(Panel.NewThread, r), do: %{input: r[:input]}
-  def data_for(Panel.Reply, r), do: %{input: r[:input], drawer: r[:drawer]}
+  def data_for(Panel.Reply, r), do: %{input: r[:input]}
   def data_for(Panel.Triage, r), do: r[:triage]
   # HEALTH is a drawer pane now (the footer's old health segment) — the same probe read the
   # composer's /status readout flattens.

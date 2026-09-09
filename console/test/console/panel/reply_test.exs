@@ -1,6 +1,5 @@
 defmodule Console.Panel.ReplyTest do
-  # The persistent per-thread reply band: born focused (no idle placeholder), the live buffer, and
-  # the caret whenever the box actually has the keys.
+  # The persistent per-thread reply band: born focused (no idle placeholder), the live buffer + caret.
   use ExUnit.Case, async: true
 
   import Console.PanelText, only: [text: 1]
@@ -15,17 +14,9 @@ defmodule Console.Panel.ReplyTest do
     assert out =~ "on it"
   end
 
-  test "shows a caret — the box is born focused with the thread" do
+  test "shows a caret (it is always focused)" do
     out = %{input: %{kind: :reply, thread_id: 7, buffer: ""}} |> Reply.render(@rect) |> text()
     assert out =~ "▎"
-  end
-
-  test "with the drawer open the caret goes but the draft stays — the keys are the drawer's" do
-    data = %{input: %{kind: :reply, thread_id: 7, buffer: "half typed"}, drawer: :stack}
-    out = data |> Reply.render(@rect) |> text()
-
-    assert out =~ "half typed"
-    refute out =~ "▎"
   end
 
   test "grows to multiple rows for a multi-line buffer" do
