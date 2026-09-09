@@ -36,7 +36,6 @@ defmodule Console.ViewTest do
         scrolls: %{},
         input: nil,
         flash: nil,
-        leader_pending?: false,
         tlon_layout: nil,
         detail: nil
       },

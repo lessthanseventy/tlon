@@ -118,144 +118,7 @@ defmodule Console.Cockpit do
         # — the Tlön selection highlights live instead of only on mouseup. See @mouse_motion_enable.
         IO.write(@mouse_motion_enable)
 
-        state =
-          render(%{
-            driver: driver,
-            w: max(:termbox2_nif.tb_width(), 1),
-            h: max(:termbox2_nif.tb_height(), 1),
-            # the first workspace; `0` is the server-down sentinel (a Workspace key with no space)
-            active_key: (Space.first_workspace() || %{key: 0}).key,
-            focused_id: nil,
-            threads: [],
-            # The rail's last painted rows (`reads.sidebar`) — what the keyboard resolves against.
-            sidebar: [],
-            # The last frame's reads: a keystroke that only edits `input` repaints from these
-            # instead of re-reading the world (typing_only?/2).
-            reads: nil,
-            # CONFIG's (the Author's) per-row cursor (j/k), clamped to `Console.Workspaces.all/0`'s
-            # length at keypress time.
-            author_cursor: 0,
-            # The author face's delete confirm arm (D2.5): the workspace id a `d` press armed, or nil.
-            # A second `d` on this SAME id confirms; any other key cancels (Console.Keymap).
-            pending_delete: nil,
-            # Tlön nav's delete confirm arm: the `{kind, payload, label}` a `d` press resolved
-            # (MEMORY fact / LEAVES leaf), or nil. Second `d` confirms; any other key cancels.
-            tlon_delete: nil,
-            # The tertius y/n confirm arm (Slice 3.5): `%{action, ctx, summary}` when a consequential
-            # verb (open work / approve a gate) is routed and waiting on the operator, else nil. `y`
-            # fires `Console.Orchestrator.confirm/2`; any other key cancels (Console.Keymap gate).
-            pending_confirm: nil,
-            # The /status readout (reshape slice D): a %{title, lines} MAIN detail while the
-            # composer command has it open, else nil. Cleared by any pane Enter (:tlon_enter);
-            # Esc closes it through the ordinary detail mode.
-            status_detail: nil,
-            # The Workspace center's face: the THREAD STACK (:chat, the default now — Slice 3, no
-            # more `v`-to-find-it) or the live PTY (:terminal, still reachable). The stack is home.
-            center_view: :chat,
-            # Two-step center (2026-09-01): nil = the thread LIST; an id = that thread's CONVERSATION
-            # (scrollable, text-selectable). Enter opens, Esc goes back — replaces the fold/zoom stack.
-            opened_thread: nil,
-            # The open channel's id (channels slice 1b); nil = the active workspace's #general.
-            open_channel: nil,
-            # The list cursor's thread id, recomputed each render (focused-if-in-stack else first) and
-            # stashed so open/move effects can target it between renders.
-            stack_focus: nil,
-            # The field editor's own state (D2.4 Chunk 2a): `%{id, field, sub, mode}` while `e` has
-            # opened it, else nil. VIEW cursors only — the workspace's data lives in server and is
-            # re-read from `Console.Workspaces.all/0` every render (Console.Keymap).
-            author_edit: nil,
-            subscribed_thread: nil,
-            # The open switcher / command palette (UX slice 2): `%{kind, query, cursor}` while `^⇧K`
-            # or `^⇧P` has one up, else nil. Its rows are derived per keypress (`picker_items`),
-            # never stored — the corpus is the frame's own reads.
-            picker: nil,
-            # LOCK mode (design 2026-08-23): Alt+g total-passthrough to the center — every other
-            # key, Alt chords included, forwards raw so readline/emacs keep their bindings.
-            lock?: false,
-            # Tlön's lazygit focus (which sidebar column/pane/section, and whether we're in the
-            # center tmux terminal). Persistent across keypresses — the keymap reads+advances it,
-            # only in the Tlön space. Defaults in-terminal, so Tlön opens with keys going to tmux.
-            focus: Focus.new(),
-            # The last acted-on left-click cell — raxol's event_translator gives mouse events NO
-            # press/release action, so a click arrives as TWO identical `:left` events; we act on the
-            # first and swallow the immediate duplicate (the release). Any other mouse event clears it.
-            last_left: nil,
-            # Right-click also arrives as a press+release pair (no action) — dedup the same way, else
-            # the release re-hits the just-opened menu and closes it.
-            last_right: nil,
-            # The open overlay menu (right-click workspace context menu / icon picker), or nil.
-            menu: nil,
-            # The open DRAWER pane (`Console.Cockpit.Drawer` — UX slice 1), or nil when it's shut.
-            drawer: nil,
-            # The pane the next `Alt+d` reopens on — the drawer remembers where you were.
-            last_drawer: :memory,
-            # The Tickets kanban cursor `{col, row}` (Slice D3) — the drawer's TICKETS pane.
-            board_cursor: {0, 0},
-            # The STACK-zoom embedded lazygit (Slice 4): `%{thread_id, path}` while a full-screen
-            # `lazygit` PTY is up over the focused thread's worktree, else nil. The terminal itself
-            # lives in `Console.Sessions` keyed `{:lazygit, thread_id}`; this only marks the overlay.
-            lazygit: nil,
-            # The right SESSION PANE's mode: `:auto` (follow the coworker — the pane is up whenever the
-            # OPEN thread's lead PTY is live), or `true`/`false` forcing it on/off. The terminal lives
-            # in `Console.Sessions` keyed `{:session, thread_id}`. Alt+\ cycles the three.
-            session_pane: :auto,
-            paste_buffer: nil,
-            input: nil,
-            flash: nil,
-            # The tertius band's receipt log (Slice 3): the last few dispatches, newest-first.
-            receipts: [],
-            # Hot-reload trigger tracking: `console:reload` (a separate process) recompiles + touches
-            # `.reload`; the cockpit reloads Console.* modules on the next tick. `:unset` until the
-            # first tick records the baseline (so boot never reloads). Edit → reload without restart.
-            reload_seen: :unset,
-            scrolls: %{},
-            placements: [],
-            render_scheduled?: false,
-            stack: nil,
-            health: nil,
-            # The Memory pane's read (coverage + pinned + pending habits), cached with stack/health;
-            # invalidated on a habit approve/reject so the pane reflects the write immediately.
-            memory: nil,
-            # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
-            # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`. Seeded from
-            # the durable logs so a fresh cockpit's NOW isn't blank until new events flow (the ring
-            # itself is in-memory — this backfill is the restart fix); live Bus events prepend onto it.
-            activity: Reads.seed_activity(),
-            # The active workspace's thread ids (cached on the probe cadence) — the global activity
-            # feed is filtered to these so NOW shows only this workspace's events. nil = unfiltered.
-            ws_thread_ids: nil,
-            # The NOW pane's standing ATTENTION list (Slice 4D): parked worklines awaiting the
-            # operator, cached with the other probes (@probe_ms) so the pane never reads server
-            # per-frame. Filled by `gates_read/0` in a workspace; nil→[] elsewhere.
-            gates: [],
-            # Recently-seen `{tag, id}` keys (capped ~100) — the first-sight gate. A tagged event on
-            # the FOCUSED thread arrives TWICE (its thread topic + the global activity topic), so this
-            # dedupes side effects (notify/nudge/append) to exactly once. See `fresh?/3`.
-            seen_events: [],
-            probed_at: 0,
-            machine_retry_at: nil,
-            # The standing center coworker's own machine thread — captured once, at its
-            # first successful spawn (`ensure_center`), so `ensure_thread_sessions` can
-            # tell it apart from an ordinary staffed machine thread it should spawn a session for.
-            standing_thread_id: nil,
-            # Per-thread spawn backoff (mirrors `machine_retry_at`) — thread_id => monotonic
-            # retry-at, so a thread whose session keeps failing to spawn isn't retried every render.
-            thread_spawn_retry: %{},
-            # The two-phase opening-turn inject (see `ensure_thread_sessions`). `opening_text_at`:
-            # thread_id => monotonic ms when the turn's TEXT was typed into the fresh `t<id>`
-            # window; the Enter follows @opening_submit_delay_ms later so a booting TUI doesn't
-            # swallow it. `opening_injected`: thread ids already SUBMITTED (done, never re-touched).
-            opening_text_at: %{},
-            opening_injected: MapSet.new(),
-            # Threads already told "parked: leaf cap reached" — the note posts once, not per render.
-            parked_noted: MapSet.new(),
-            # Explicit thinking presence: thread_id => %{agent => started_at}. Seeded from the
-            # store (reconcile-on-connect), then maintained by the server:presence Bus events.
-            thinking: Reads.thinking_snapshot(),
-            # Transmitted kitty-graphics ids (design 2026-08-23 §Images) — the sync/2 cache so a
-            # placement already on the tty isn't re-transmitted every frame.
-            graphics: MapSet.new()
-          })
+        state = render(initial_state(driver))
 
         Process.send_after(self(), :tick, @tick_ms)
         {:ok, state}
@@ -263,6 +126,156 @@ defmodule Console.Cockpit do
       other ->
         {:stop, {:tb_init_failed, other}}
     end
+  end
+
+  @doc """
+  The cockpit's state at boot, before the first render — every key the frame reads, in one place.
+
+  Extracted from `init/1` so it can be TESTED: `Console.Reads.frame/3` reads a dozen of these
+  directly, and a key deleted here but still read there is a KeyError inside `Safe.logged/3`,
+  which swallows it and returns the previous state — so the cockpit boots, stays alive, and paints
+  nothing at all, forever. That is exactly what shipped past a green suite on 2026-09-08 when
+  `leader_pending?` was retired.
+  """
+  @spec initial_state(pid()) :: map()
+  def initial_state(driver) do
+    %{
+      driver: driver,
+      w: max(:termbox2_nif.tb_width(), 1),
+      h: max(:termbox2_nif.tb_height(), 1),
+      # the first workspace; `0` is the server-down sentinel (a Workspace key with no space)
+      active_key: (Space.first_workspace() || %{key: 0}).key,
+      focused_id: nil,
+      threads: [],
+      # The rail's last painted rows (`reads.sidebar`) — what the keyboard resolves against.
+      sidebar: [],
+      # The last frame's reads: a keystroke that only edits `input` repaints from these
+      # instead of re-reading the world (typing_only?/2).
+      reads: nil,
+      # CONFIG's (the Author's) per-row cursor (j/k), clamped to `Console.Workspaces.all/0`'s
+      # length at keypress time.
+      author_cursor: 0,
+      # The author face's delete confirm arm (D2.5): the workspace id a `d` press armed, or nil.
+      # A second `d` on this SAME id confirms; any other key cancels (Console.Keymap).
+      pending_delete: nil,
+      # Tlön nav's delete confirm arm: the `{kind, payload, label}` a `d` press resolved
+      # (MEMORY fact / LEAVES leaf), or nil. Second `d` confirms; any other key cancels.
+      tlon_delete: nil,
+      # The tertius y/n confirm arm (Slice 3.5): `%{action, ctx, summary}` when a consequential
+      # verb (open work / approve a gate) is routed and waiting on the operator, else nil. `y`
+      # fires `Console.Orchestrator.confirm/2`; any other key cancels (Console.Keymap gate).
+      pending_confirm: nil,
+      # The /status readout (reshape slice D): a %{title, lines} MAIN detail while the
+      # composer command has it open, else nil. Cleared by any pane Enter (:tlon_enter);
+      # Esc closes it through the ordinary detail mode.
+      status_detail: nil,
+      # The Workspace center's face: the THREAD STACK (:chat, the default now — Slice 3, no
+      # more `v`-to-find-it) or the live PTY (:terminal, still reachable). The stack is home.
+      center_view: :chat,
+      # Two-step center (2026-09-01): nil = the thread LIST; an id = that thread's CONVERSATION
+      # (scrollable, text-selectable). Enter opens, Esc goes back — replaces the fold/zoom stack.
+      opened_thread: nil,
+      # The open channel's id (channels slice 1b); nil = the active workspace's #general.
+      open_channel: nil,
+      # The list cursor's thread id, recomputed each render (focused-if-in-stack else first) and
+      # stashed so open/move effects can target it between renders.
+      stack_focus: nil,
+      # The field editor's own state (D2.4 Chunk 2a): `%{id, field, sub, mode}` while `e` has
+      # opened it, else nil. VIEW cursors only — the workspace's data lives in server and is
+      # re-read from `Console.Workspaces.all/0` every render (Console.Keymap).
+      author_edit: nil,
+      subscribed_thread: nil,
+      # The open switcher / command palette (UX slice 2): `%{kind, query, cursor}` while `^⇧K`
+      # or `^⇧P` has one up, else nil. Its rows are derived per keypress (`picker_items`),
+      # never stored — the corpus is the frame's own reads.
+      picker: nil,
+      # LOCK mode (design 2026-08-23): Alt+g total-passthrough to the center — every other
+      # key, Alt chords included, forwards raw so readline/emacs keep their bindings.
+      lock?: false,
+      # Tlön's lazygit focus (which sidebar column/pane/section, and whether we're in the
+      # center tmux terminal). Persistent across keypresses — the keymap reads+advances it,
+      # only in the Tlön space. Defaults in-terminal, so Tlön opens with keys going to tmux.
+      focus: Focus.new(),
+      # The last acted-on left-click cell — raxol's event_translator gives mouse events NO
+      # press/release action, so a click arrives as TWO identical `:left` events; we act on the
+      # first and swallow the immediate duplicate (the release). Any other mouse event clears it.
+      last_left: nil,
+      # Right-click also arrives as a press+release pair (no action) — dedup the same way, else
+      # the release re-hits the just-opened menu and closes it.
+      last_right: nil,
+      # The open overlay menu (right-click workspace context menu / icon picker), or nil.
+      menu: nil,
+      # The open DRAWER pane (`Console.Cockpit.Drawer` — UX slice 1), or nil when it's shut.
+      drawer: nil,
+      # The pane the next `Alt+d` reopens on — the drawer remembers where you were.
+      last_drawer: :memory,
+      # The Tickets kanban cursor `{col, row}` (Slice D3) — the drawer's TICKETS pane.
+      board_cursor: {0, 0},
+      # The STACK-zoom embedded lazygit (Slice 4): `%{thread_id, path}` while a full-screen
+      # `lazygit` PTY is up over the focused thread's worktree, else nil. The terminal itself
+      # lives in `Console.Sessions` keyed `{:lazygit, thread_id}`; this only marks the overlay.
+      lazygit: nil,
+      # The right SESSION PANE's mode: `:auto` (follow the coworker — the pane is up whenever the
+      # OPEN thread's lead PTY is live), or `true`/`false` forcing it on/off. The terminal lives
+      # in `Console.Sessions` keyed `{:session, thread_id}`. Alt+\ cycles the three.
+      session_pane: :auto,
+      paste_buffer: nil,
+      input: nil,
+      flash: nil,
+      # The tertius band's receipt log (Slice 3): the last few dispatches, newest-first.
+      receipts: [],
+      # Hot-reload trigger tracking: `console:reload` (a separate process) recompiles + touches
+      # `.reload`; the cockpit reloads Console.* modules on the next tick. `:unset` until the
+      # first tick records the baseline (so boot never reloads). Edit → reload without restart.
+      reload_seen: :unset,
+      scrolls: %{},
+      placements: [],
+      render_scheduled?: false,
+      stack: nil,
+      health: nil,
+      # The Memory pane's read (coverage + pinned + pending habits), cached with stack/health;
+      # invalidated on a habit approve/reject so the pane reflects the write immediately.
+      memory: nil,
+      # The server activity feed's bounded buffer (Tlön right sidebar + the footer pulse):
+      # `{tag, row}` Bus events, newest-first, capped at 50 by `push_activity/3`. Seeded from
+      # the durable logs so a fresh cockpit's NOW isn't blank until new events flow (the ring
+      # itself is in-memory — this backfill is the restart fix); live Bus events prepend onto it.
+      activity: Reads.seed_activity(),
+      # The active workspace's thread ids (cached on the probe cadence) — the global activity
+      # feed is filtered to these so NOW shows only this workspace's events. nil = unfiltered.
+      ws_thread_ids: nil,
+      # The NOW pane's standing ATTENTION list (Slice 4D): parked worklines awaiting the
+      # operator, cached with the other probes (@probe_ms) so the pane never reads server
+      # per-frame. Filled by `gates_read/0` in a workspace; nil→[] elsewhere.
+      gates: [],
+      # Recently-seen `{tag, id}` keys (capped ~100) — the first-sight gate. A tagged event on
+      # the FOCUSED thread arrives TWICE (its thread topic + the global activity topic), so this
+      # dedupes side effects (notify/nudge/append) to exactly once. See `fresh?/3`.
+      seen_events: [],
+      probed_at: 0,
+      machine_retry_at: nil,
+      # The standing center coworker's own machine thread — captured once, at its
+      # first successful spawn (`ensure_center`), so `ensure_thread_sessions` can
+      # tell it apart from an ordinary staffed machine thread it should spawn a session for.
+      standing_thread_id: nil,
+      # Per-thread spawn backoff (mirrors `machine_retry_at`) — thread_id => monotonic
+      # retry-at, so a thread whose session keeps failing to spawn isn't retried every render.
+      thread_spawn_retry: %{},
+      # The two-phase opening-turn inject (see `ensure_thread_sessions`). `opening_text_at`:
+      # thread_id => monotonic ms when the turn's TEXT was typed into the fresh `t<id>`
+      # window; the Enter follows @opening_submit_delay_ms later so a booting TUI doesn't
+      # swallow it. `opening_injected`: thread ids already SUBMITTED (done, never re-touched).
+      opening_text_at: %{},
+      opening_injected: MapSet.new(),
+      # Threads already told "parked: leaf cap reached" — the note posts once, not per render.
+      parked_noted: MapSet.new(),
+      # Explicit thinking presence: thread_id => %{agent => started_at}. Seeded from the
+      # store (reconcile-on-connect), then maintained by the server:presence Bus events.
+      thinking: Reads.thinking_snapshot(),
+      # Transmitted kitty-graphics ids (design 2026-08-23 §Images) — the sync/2 cache so a
+      # placement already on the tty isn't re-transmitted every frame.
+      graphics: MapSet.new()
+    }
   end
 
   # termbox2's tb_init enables DECCKM (application cursor keys), so arrows arrive as SS3 (ESC O A)
@@ -354,7 +367,6 @@ defmodule Console.Cockpit do
     # Any keypress clears a prior flash (a spawn/create result), so it shows until you act again.
     # `center_live?` and `composer_thread_id` are derived per keypress and handed to the keymap so
     # it knows whether to forward to the PTY / which thread `c` targets. They are NOT stored —
-    # dropped on the way back; the cockpit keeps only `leader_pending?`.
     # `focus` rides in `state` (persistent); `tlon_layout` is derived per keypress, like the two
     # above, and dropped on the way back — the keymap reads it to navigate, the cockpit never stores it.
     # `live_workspaces` (D2.2): the live workspace list — CONFIG and the space ring read it, derived per keypress like

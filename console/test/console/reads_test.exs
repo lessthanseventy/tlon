@@ -253,4 +253,22 @@ defmodule Console.ReadsTest do
       assert line =~ "health"
     end
   end
+
+  describe "frame/3 — the whole read-model, against the state the cockpit actually boots with" do
+    test "does not raise on the cockpit's own boot state — every key it reads must exist" do
+      # The gap that let a green suite ship a cockpit that could not paint (2026-09-08): frame/3
+      # reads a dozen keys straight off cockpit state, nothing asserted they exist, and
+      # `leader_pending?` was deleted from the state while frame/3 still read it. The KeyError landed
+      # inside Safe.logged/3, which returns the PREVIOUS state — so the cockpit booted, stayed alive,
+      # and painted nothing, with the trace only in ~/.cache/tlon/crash.log.
+      state = Console.Cockpit.initial_state(self())
+
+      reads = Reads.frame(state, [], nil)
+
+      assert is_map(reads)
+      assert Map.has_key?(reads, :active_key)
+      assert Map.has_key?(reads, :sidebar)
+      assert Map.has_key?(reads, :input)
+    end
+  end
 end

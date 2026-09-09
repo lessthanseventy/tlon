@@ -706,7 +706,6 @@ defmodule Console.Reads do
       input: state.input,
       flash: state.flash,
       receipts: state.receipts,
-      leader_pending?: state.leader_pending?,
       # LOCK mode (design 2026-08-23) — the footer's loudest chip.
       lock?: state.lock?,
       # The top bar's server-link alarm. An ambient read, so it belongs here and not in the pure

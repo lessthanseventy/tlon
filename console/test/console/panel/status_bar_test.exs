@@ -18,7 +18,6 @@ defmodule Console.Panel.StatusBarTest do
       %{
         input: nil,
         flash: nil,
-        leader_pending?: false,
         mode: nil,
         workspace?: false,
         pane_hints: []
