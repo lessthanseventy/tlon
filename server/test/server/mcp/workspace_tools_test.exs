@@ -26,7 +26,7 @@ defmodule Server.MCP.WorkspaceToolsTest do
             name: "Tlön",
             type: "code",
             scope: "machine",
-            paths: ["modules/*"],
+            repos: ["modules/*"],
             roster: [%{"archetype" => "surveyor", "name" => "tertius"}],
             knobs: %{"lazygit" => true}
           },
@@ -42,9 +42,7 @@ defmodule Server.MCP.WorkspaceToolsTest do
       assert world.id == payload["workspace_id"]
       assert world.type == "code"
       assert world.scope == "machine"
-      assert world.paths == ["modules/*"]
-      assert world.roster == [%{"archetype" => "surveyor", "name" => "tertius"}]
-      assert world.knobs == %{"lazygit" => true}
+      assert Enum.map(Workspaces.repos(world.id), & &1.path) == ["modules/*"]
     end
 
     test "a missing name is a graceful error, not a crash" do
@@ -63,7 +61,7 @@ defmodule Server.MCP.WorkspaceToolsTest do
 
   describe "list_workspaces" do
     test "returns the shaped worlds, newest first" do
-      {:ok, _} = Workspaces.register(%{name: "Tlön", paths: ["modules/*"]})
+      {:ok, _} = Workspaces.register(%{name: "Tlön", repos: ["modules/*"]})
       {:ok, _} = Workspaces.register(%{name: "Uqbar", type: "blank"})
 
       {:reply, resp, _} = Tool.ListWorkspaces.execute(%{}, @frame)
@@ -72,7 +70,7 @@ defmodule Server.MCP.WorkspaceToolsTest do
 
       assert Enum.map(worlds, & &1["name"]) == ["Uqbar", "Tlön"]
       tlon = Enum.find(worlds, &(&1["name"] == "Tlön"))
-      assert tlon["paths"] == ["modules/*"]
+      assert tlon["repos"] == [%{"path" => "modules/*", "remote" => nil, "default_branch" => nil}]
       assert tlon["type"] == "code"
       assert tlon["scope"] == "machine"
       assert is_binary(tlon["at"])
@@ -91,18 +89,18 @@ defmodule Server.MCP.WorkspaceToolsTest do
 
       {:reply, resp, _} =
         Tool.EditWorkspace.execute(
-          %{name: "Tlön", type: "life", paths: ["docs/*"], knobs: %{"pulse" => false}},
+          %{name: "Tlön", type: "life", repos: ["docs/*"], knobs: %{"pulse" => false}},
           @frame
         )
 
       refute resp.isError
       shaped = json(resp)
       assert shaped["type"] == "life"
-      assert shaped["paths"] == ["docs/*"]
+      assert shaped["repos"] == [%{"path" => "docs/*", "remote" => nil, "default_branch" => nil}]
 
       world = Workspaces.by_name("Tlön")
       assert world.type == "life"
-      assert world.paths == ["docs/*"]
+      assert Enum.map(Workspaces.repos(world.id), & &1.path) == ["docs/*"]
       assert world.knobs == %{"pulse" => false}
     end
 

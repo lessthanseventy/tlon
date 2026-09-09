@@ -1,7 +1,7 @@
 defmodule Server.MCP.Tool.RegisterWorkspace do
   @moduledoc """
   Register a WORKSPACE — a first-class composition (workspaces/orbis Slice 1): a git-tracked
-  scope (`paths`), a `roster` of archetype instances, and free-form `knobs` that console
+  scope (`repos`), a `roster` of archetype instances, and free-form `knobs` that console
   reads to drive its picker/survey/spawn. Unlike the thread-scoped tools this is
   machine-GLOBAL — it takes no identity, it writes the shared `workspace` table via
   `Server.Workspaces`. `name` is unique; a duplicate is a graceful error, not a crash.
@@ -14,7 +14,7 @@ defmodule Server.MCP.Tool.RegisterWorkspace do
     field :name, :string, required: true, description: "The workspace's unique name"
     field :type, :enum, values: ["code", "life", "blank"], default: "code"
     field :scope, :enum, values: ["project", "machine"], default: "machine"
-    field :paths, {:list, :string}, default: [], description: "Git-tracked scope globs"
+    field :repos, {:list, :string}, default: [], description: "Git-tracked scope: repo paths or globs"
     field :roster, {:list, :map}, default: [], description: "Archetype instances: {archetype,name,model?,knobs}"
     field :knobs, :map, default: %{}, description: "Free-form per-workspace settings"
   end
@@ -44,9 +44,10 @@ end
 
 defmodule Server.MCP.Tool.EditWorkspace do
   @moduledoc """
-  Edit a WORKSPACE's mutable fields (`type`/`scope`/`paths`/`roster`/`knobs`), identified by
+  Edit a WORKSPACE's mutable fields (`type`/`scope`/`repos`/`roster`/`knobs`), identified by
   its unique `name` — a workspace's identity is immutable, so name is the handle, not a
   field this rewrites. Machine-global; a missing workspace is refused rather than created.
+  `repos` REPLACES the workspace's scope rows (UX slice 5), the way the old `paths` list did.
   """
   use Server.MCP.Tool
 
@@ -57,7 +58,7 @@ defmodule Server.MCP.Tool.EditWorkspace do
     field :name, :string, required: true, description: "The workspace to edit (its unique name)"
     field :type, :enum, values: ["code", "life", "blank"]
     field :scope, :enum, values: ["project", "machine"]
-    field :paths, {:list, :string}, description: "Git-tracked scope globs"
+    field :repos, {:list, :string}, description: "Git-tracked scope: REPLACES the repo list"
     field :roster, {:list, :map}, description: "Archetype instances: {archetype,name,model?,knobs}"
     field :knobs, :map, description: "Free-form per-workspace settings"
   end
@@ -65,8 +66,16 @@ defmodule Server.MCP.Tool.EditWorkspace do
   @impl true
   def execute(params, frame) do
     case Workspaces.by_name(params[:name]) do
-      nil -> fail(frame, "no such workspace: #{params[:name]}")
-      workspace -> reply(frame, Workspaces.edit(workspace, params), &MCP.Brief.workspace/1)
+      nil ->
+        fail(frame, "no such workspace: #{params[:name]}")
+
+      workspace ->
+        # `repos` is not a workspace column any more (UX slice 5) — it is rows. Passing a list still
+        # REPLACES the scope, exactly as the old `paths` overwrite did, so an agent that edits a
+        # workspace has not quietly lost the ability to say what it works on.
+        if repos = params[:repos], do: Workspaces.replace_repos(workspace.id, repos)
+
+        reply(frame, Workspaces.edit(workspace, Map.delete(params, :repos)), &MCP.Brief.workspace/1)
     end
   end
 end

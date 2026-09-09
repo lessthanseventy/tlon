@@ -190,10 +190,10 @@ defmodule Server.MCP.Brief do
     do: %{"id" => n.id, "scope" => n.scope, "scope_id" => n.scope_id, "body" => n.body, "author" => n.author}
 
   @doc """
-  A WORLD — a composition console reads to drive its picker/survey/spawn. Machine-
-  global (no thread scope): `paths`/`roster`/`knobs` round-trip as the JSON the
-  columns hold — a list of globs, a list of `{archetype,name,model?,knobs}` maps,
-  and a free-form map.
+  A WORKSPACE — a composition console reads to drive its picker/survey/spawn. Machine-global
+  (no thread scope). `repos` is the git-tracked scope as ROWS (UX slice 5: a `path` plus the
+  `remote` and `default_branch` a bare glob had nowhere to record); `roster`/`knobs` still
+  round-trip as the JSON their columns hold.
   """
   def workspace(%Workspace{} = w) do
     %{
@@ -201,12 +201,15 @@ defmodule Server.MCP.Brief do
       "name" => w.name,
       "type" => w.type,
       "scope" => w.scope,
-      "paths" => w.paths,
+      "repos" => Enum.map(Server.Workspaces.repos(w.id), &workspace_repo/1),
       "roster" => w.roster,
       "knobs" => w.knobs,
       "at" => at(w.created_at)
     }
   end
+
+  defp workspace_repo(%Server.WorkspaceRepo{} = r),
+    do: %{"path" => r.path, "remote" => r.remote, "default_branch" => r.default_branch}
 
   defp at(nil), do: nil
   defp at(%DateTime{} = dt), do: DateTime.to_iso8601(dt)

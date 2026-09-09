@@ -29,7 +29,7 @@ defmodule Server.Bootstrap do
     name: "ficciones",
     type: "code",
     scope: "machine",
-    paths: ["modules/*"],
+    repos: ["modules/*"],
     roster: [
       %{"archetype" => "surveyor", "name" => "tertius"},
       %{"archetype" => "builder", "name" => "hronir"},
@@ -169,6 +169,5 @@ defmodule Server.Bootstrap do
   end
 
   # The workspace's git-tracked globs become the default project's repos (name defaults to the glob).
-  defp workspace_repos(%Workspace{paths: paths}) when is_list(paths), do: Enum.map(paths, &%{"path" => &1})
-  defp workspace_repos(_ws), do: []
+  defp workspace_repos(%Workspace{} = ws), do: Enum.map(Workspaces.repos(ws.id), &%{"path" => &1.path, "name" => &1.path})
 end

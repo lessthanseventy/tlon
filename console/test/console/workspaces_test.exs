@@ -56,7 +56,7 @@ defmodule Console.WorkspacesTest do
         name: "Tlön",
         type: "code",
         scope: "machine",
-        paths: ["modules/*"],
+        repos: ["modules/*"],
         roster: [%{"archetype" => "surveyor", "name" => "tertius"}]
       })
 
@@ -64,14 +64,17 @@ defmodule Console.WorkspacesTest do
 
     assert [workspace] = Console.Workspaces.all(pid)
 
-    assert workspace == %{
-             id: registered.id,
+    assert %{
              name: "Tlön",
              type: "code",
              scope: "machine",
-             paths: ["modules/*"],
+             repos: [%{path: "modules/*", remote: nil, default_branch: nil}],
              roster: [%{"archetype" => "surveyor", "name" => "tertius"}]
-           }
+           } = workspace
+
+    assert workspace.id == registered.id
+    # the shape is exactly these keys — a stray column leaking into the cache is a regression
+    assert workspace |> Map.keys() |> Enum.sort() == [:id, :name, :repos, :roster, :scope, :type]
   end
 
   test "cached workspaces carry the funes id" do

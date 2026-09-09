@@ -2,6 +2,8 @@ defmodule Server.WorkspaceTest do
   # `Server.Workspace` schema + changesets (workspaces/orbis Slice 1). The DB is the guard
   # (§10): the closed sets on `type`/`scope` raise at insert, never re-checked here.
   # JSON columns round-trip through SQLite, so assertions read back through the DB.
+  # The git-tracked scope is NOT a column any more — it is `workspace_repo` rows (UX slice 5),
+  # covered in `Server.WorkspacesTest`.
   use ExUnit.Case, async: false
 
   alias Server.Repo
@@ -19,7 +21,6 @@ defmodule Server.WorkspaceTest do
           name: "Tlön",
           type: "code",
           scope: "machine",
-          paths: ["modules/*"],
           roster: [%{"archetype" => "surveyor", "name" => "tertius"}],
           knobs: %{"accent" => "cyan"}
         }
@@ -30,20 +31,18 @@ defmodule Server.WorkspaceTest do
       assert reloaded.name == "Tlön"
       assert reloaded.type == "code"
       assert reloaded.scope == "machine"
-      assert reloaded.paths == ["modules/*"]
       assert reloaded.roster == [%{"archetype" => "surveyor", "name" => "tertius"}]
       assert reloaded.knobs == %{"accent" => "cyan"}
       assert %DateTime{} = reloaded.created_at
     end
 
-    test "defaults type/scope/paths/roster/knobs at the DB when omitted" do
+    test "defaults type/scope/roster/knobs at the DB when omitted" do
       {:ok, workspace} =
         %{name: "Bare"} |> Workspace.register_changeset() |> Repo.insert()
 
       reloaded = Repo.get!(Workspace, workspace.id)
       assert reloaded.type == "code"
       assert reloaded.scope == "machine"
-      assert reloaded.paths == []
       assert reloaded.roster == []
       assert reloaded.knobs == %{}
     end
@@ -62,17 +61,17 @@ defmodule Server.WorkspaceTest do
   describe "edit_changeset/2" do
     setup do
       {:ok, workspace} =
-        %{name: "Tlön", paths: ["a"]} |> Workspace.register_changeset() |> Repo.insert()
+        %{name: "Tlön", roster: [%{"name" => "a"}]} |> Workspace.register_changeset() |> Repo.insert()
 
       %{workspace: workspace}
     end
 
     test "casts mutable fields but not name/created_at", %{workspace: workspace} do
-      cs = Workspace.edit_changeset(workspace, %{name: "Renamed", paths: ["b"], knobs: %{"k" => 1}})
+      cs = Workspace.edit_changeset(workspace, %{name: "Renamed", roster: [%{"name" => "b"}], knobs: %{"k" => 1}})
 
       refute Ecto.Changeset.get_change(cs, :name)
       refute Ecto.Changeset.get_change(cs, :created_at)
-      assert Ecto.Changeset.get_change(cs, :paths) == ["b"]
+      assert Ecto.Changeset.get_change(cs, :roster) == [%{"name" => "b"}]
       assert Ecto.Changeset.get_change(cs, :knobs) == %{"k" => 1}
     end
   end

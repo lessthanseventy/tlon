@@ -19,7 +19,7 @@ defmodule Console.Panel.AuthorTest do
           id: 1,
           name: "Tlön",
           type: "code",
-          paths: ["modules/*"],
+          repos: [%{id: 1, path: "modules/*", remote: nil, default_branch: nil}],
           roster: [%{"archetype" => "surveyor"}],
           scope: "machine"
         }
@@ -32,7 +32,7 @@ defmodule Console.Panel.AuthorTest do
     assert text =~ "ORBIS · author"
     assert text =~ "Tlön"
     assert text =~ "code"
-    assert text =~ "1 paths"
+    assert text =~ "1 repos"
     assert text =~ "1 roster"
     assert text =~ "n new"
     assert text =~ "d delete"
@@ -48,8 +48,8 @@ defmodule Console.Panel.AuthorTest do
   test "the cursor row washes :selected; every other row doesn't" do
     data = %{
       workspaces: [
-        %{id: 1, name: "Tlön", type: "code", paths: [], roster: []},
-        %{id: 2, name: "Freedonia", type: "blank", paths: [], roster: []}
+        %{id: 1, name: "Tlön", type: "code", repos: [], roster: []},
+        %{id: 2, name: "Freedonia", type: "blank", repos: [], roster: []}
       ],
       cursor: 1
     }
@@ -63,11 +63,11 @@ defmodule Console.Panel.AuthorTest do
     refute Enum.any?(tlon, fn {_t, s} -> s == :selected end)
   end
 
-  test "a missing type/paths/roster degrades gracefully instead of crashing" do
+  test "a missing type/repos/roster degrades gracefully instead of crashing" do
     data = %{workspaces: [%{id: 1, name: "Bare"}], cursor: 0}
     text = data |> Author.render(@rect) |> lines() |> Enum.join("\n")
     assert text =~ "Bare"
-    assert text =~ "0 paths"
+    assert text =~ "0 repos"
     assert text =~ "0 roster"
   end
 
@@ -82,7 +82,7 @@ defmodule Console.Panel.AuthorTest do
       name: "Freedonia",
       type: "code",
       scope: "project",
-      paths: ["modules/*"],
+      repos: [%{id: 1, path: "modules/*", remote: nil, default_branch: nil}],
       roster: [%{"archetype" => "surveyor", "name" => "surveyor"}]
     }
 
@@ -90,14 +90,14 @@ defmodule Console.Panel.AuthorTest do
       Map.merge(%{workspaces: [@workspace], cursor: 0, edit: edit}, overrides)
     end
 
-    test "renders the workspace's name (immutable, no field for it) and the type/scope/paths/roster rows" do
+    test "renders the workspace's name (immutable, no field for it) and the type/scope/repos/roster rows" do
       data = edit_data(%{id: 22, field: 0, sub: 0, mode: :field})
       text = data |> Author.render(@rect) |> lines() |> Enum.join("\n")
 
       assert text =~ "Freedonia"
       assert text =~ "code"
       assert text =~ "project"
-      assert text =~ "1 paths"
+      assert text =~ "1 repos"
       assert text =~ "1 roster"
       assert text =~ "immutable"
     end
@@ -131,21 +131,24 @@ defmodule Console.Panel.AuthorTest do
     end
   end
 
-  describe "the paths sub-list (D2.4 Chunk 2b: mode: :sub, field: 2)" do
-    @workspace_with_paths %{
+  describe "the repos sub-list (D2.4 Chunk 2b; rows since UX slice 5: mode: :sub, field: 2)" do
+    @workspace_with_repos %{
       id: 22,
       name: "Freedonia",
       type: "code",
       scope: "project",
-      paths: ["modules/aleph", "modules/funes"],
+      repos: [
+        %{id: 1, path: "modules/aleph", remote: nil, default_branch: nil},
+        %{id: 2, path: "modules/funes", remote: "git@github.com:a/funes.git", default_branch: "main"}
+      ],
       roster: []
     }
 
     defp sub_data(edit) do
-      %{workspaces: [@workspace_with_paths], cursor: 0, edit: edit}
+      %{workspaces: [@workspace_with_repos], cursor: 0, edit: edit}
     end
 
-    test "renders one row per path, the sub cursor washed :selected" do
+    test "renders one row per repo, the sub cursor washed :selected" do
       data = sub_data(%{id: 22, field: 2, sub: 1, mode: :sub})
       rows = Author.render(data, @rect)
 
@@ -156,11 +159,11 @@ defmodule Console.Panel.AuthorTest do
       refute Enum.any?(aleph_row, fn {_t, s} -> s == :selected end)
     end
 
-    test "an empty paths list renders a placeholder, no crash" do
+    test "an empty repo list renders a placeholder, no crash" do
       data = sub_data(%{id: 22, field: 2, sub: 0, mode: :sub})
-      data = put_in(data.workspaces, [%{@workspace_with_paths | paths: []}])
+      data = put_in(data.workspaces, [%{@workspace_with_repos | repos: []}])
       text = data |> Author.render(@rect) |> lines() |> Enum.join("\n")
-      assert text =~ "no paths yet"
+      assert text =~ "no repos yet"
     end
 
     test "sub-list hints name j/k, a add, x/d remove, Esc back" do
@@ -172,6 +175,16 @@ defmodule Console.Panel.AuthorTest do
       assert text =~ "x/d remove"
       assert text =~ "Esc back"
     end
+
+    test "a repo row shows its remote and branch, and — where they are unanswered" do
+      data = sub_data(%{id: 22, field: 2, sub: 0, mode: :sub})
+      text = data |> Author.render(@rect) |> lines() |> Enum.join("\n")
+
+      # the migrated glob: two columns nobody has answered yet, shown as a value not a gap
+      assert text =~ "modules/aleph  — · —"
+      # the one that has been answered
+      assert text =~ "git@github.com:a/funes.git · main"
+    end
   end
 
   describe "the roster sub-list (D2.4 Chunk 2c: mode: :sub, field: 3)" do
@@ -180,7 +193,7 @@ defmodule Console.Panel.AuthorTest do
       name: "Freedonia",
       type: "code",
       scope: "machine",
-      paths: [],
+      repos: [],
       roster: [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}]
     }
 

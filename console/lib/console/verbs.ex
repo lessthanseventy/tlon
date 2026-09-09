@@ -254,7 +254,7 @@ defmodule Console.Verbs do
       group: :drawer,
       keys: "e",
       label: "edit workspace",
-      doc: "on CONFIG: open the cursor workspace's field editor (type · scope · paths · roster)",
+      doc: "on CONFIG: open the cursor workspace's field editor (type · scope · repos · roster)",
       event: nil
     },
 

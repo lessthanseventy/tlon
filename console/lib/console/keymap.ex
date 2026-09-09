@@ -76,7 +76,9 @@ defmodule Console.Keymap do
       `n` verb) — register a workspace from a template + the typed name (D2.3).
     * `{:arm_delete, id, name}` — `d` on the author face's cursor row arms a delete confirm (D2.5).
     * `{:remove_workspace, id}` — the second `d` while armed on the SAME id confirms the delete.
-    * `{:edit_workspace, id, attrs}` — the field editor's `h`/`l` rings (type/scope) and the paths/
+    * `{:add_repo, id, buffer}` / `{:remove_repo, id, repo_id}` — CONFIG's repos sub-list (UX
+      slice 5); the scope is rows now, so adding one is not a whole-list workspace edit.
+    * `{:edit_workspace, id, attrs}` — the field editor's `h`/`l` rings (type/scope) and the
       roster sub-list's `a`/`x`/`d` (D2.4 Chunk 2a) — apply one attrs map to a workspace immediately.
     * `{:coworker_knob, name, knob}` — the roster sub-list's `Tab`-selected knob (`:model` |
       `:yolo`), applied by `Enter`/`Space` to the sub-selected coworker (D2.4 Chunk 2b).
@@ -104,13 +106,13 @@ defmodule Console.Keymap do
 
   The field editor (D2.4 Chunk 2a): `author_edit :: nil | %{id, field, sub, mode}` — `e` on the
   list's cursor workspace opens it at `field: 0` (type), `mode: :field`. `mode` (`:field | :sub`) is
-  an addition beyond the plan's 3-key shape — the field list and a field's sub-list (paths/roster
+  an addition beyond the plan's 3-key shape — the field list and a field's sub-list (repos/roster
   entries) both drive `j`/`k` over a DIFFERENT cursor (`field` vs `sub`) and need a bit to tell
   which is live; everything else matches the plan verbatim. `field` cycles the 4 rows (0 type · 1
-  scope · 2 paths · 3 roster) with `j`/`k`, clamped no-wrap. On fields 0/1, `h`/`l` cycle a ring
+  scope · 2 repos · 3 roster) with `j`/`k`, clamped no-wrap. On fields 0/1, `h`/`l` cycle a ring
   (`@type_ring`/`@scope_ring`) and emit `{:edit_workspace, id, attrs}` immediately — no draft/commit
   step. On fields 2/3, `Enter` drops into the sub-list (`mode: :sub`, `sub` resets to 0); there
-  `j`/`k` move `sub` (clamped to the live paths/roster length), `a` opens an add buffer
+  `j`/`k` move `sub` (clamped to the live repos/roster length), `a` opens an add buffer
   (`state.input` kind `:new_path` or `:new_roster` — the latter also carries an `archetype` ring
   cycled by `h`/`l`, mirroring `:new_workspace`'s `template`), `x`/`d` removes the `sub`-selected entry
   immediately, and `Esc` steps back to `mode: :field`. `Esc` on `mode: :field` clears `author_edit`
@@ -179,6 +181,8 @@ defmodule Console.Keymap do
           | :tlon_enter
           | {:picker_pick, map()}
           | {:ticket_move, String.t()}
+          | {:add_repo, integer(), String.t()}
+          | {:remove_repo, integer(), integer()}
           | {:ticket_reorder, :up | :down}
           | :ticket_blocker_menu
           | :ticket_advance
@@ -307,10 +311,12 @@ defmodule Console.Keymap do
   def handle(%{key: :enter}, %{input: %{kind: :new_workspace, template: template, buffer: buffer}} = state),
     do: {%{state | input: nil}, {:register_workspace, template, buffer}}
 
-  # A non-blank path appends to the edited workspace's LIVE paths list (live_workspaces, threaded per
+  # A non-blank buffer adds a REPO ROW to the edited workspace (UX slice 5). The buffer is
+  # `path [remote [branch]]` — whitespace-split by the cockpit — so the two columns a bare glob
+  # never had a place for are reachable without inventing a second prompt.
   # keypress) and applies immediately. Blank already fell into the empty-buffer clause above.
   def handle(%{key: :enter}, %{input: %{kind: :new_path, workspace_id: id, buffer: buffer}} = state),
-    do: {%{state | input: nil}, {:edit_workspace, id, %{paths: workspace_field(state, id, :paths) ++ [buffer]}}}
+    do: {%{state | input: nil}, {:add_repo, id, buffer}}
 
   # A non-blank name appends a wire-shaped roster entry (`%{"archetype" => .., "name" => ..}`,
   # matching `WorkspaceTemplates.new_workspace_attrs/2`'s shape) to the edited workspace's LIVE roster and
@@ -808,7 +814,7 @@ defmodule Console.Keymap do
 
   # Field-list mode: h/l cycle the type (field 0) / scope (field 1) ring against the LIVE workspace
   # (live_workspaces, threaded per keypress) and emit the edit immediately — no draft/commit step.
-  # Fields 2/3 (paths/roster) have no ring — a no-op, matching the plan's "otherwise no-op".
+  # Fields 2/3 (repos/roster) have no ring — a no-op, matching the plan's "otherwise no-op".
   defp config(%{key: :char, char: "h"}, %{author_edit: %{mode: :field} = edit} = state),
     do: {state, field_ring_edit(state, edit, -1)}
 
@@ -818,7 +824,7 @@ defmodule Console.Keymap do
   # Esc in field-list mode clears author_edit — back to the list.
   defp config(%{key: :escape}, %{author_edit: %{mode: :field}} = state), do: {put_author_edit(state, nil), :repaint}
 
-  # Field-list mode: Enter on fields 2/3 (paths/roster) drops into the sub-list. Fields 0/1's
+  # Field-list mode: Enter on fields 2/3 (repos/roster) drops into the sub-list. Fields 0/1's
   # rings already apply via h/l — nothing for Enter to open, a no-op.
   defp config(%{key: :enter}, %{author_edit: %{mode: :field, field: f} = edit} = state) when f in [2, 3],
     do: {put_author_edit(state, %{edit | mode: :sub, sub: 0}), :repaint}
@@ -826,21 +832,26 @@ defmodule Console.Keymap do
   defp config(%{key: :enter}, %{author_edit: %{mode: :field}} = state), do: {state, :none}
 
   # Sub-list mode (D2.4 Chunk 2b/2c): j/k move `sub`, clamped to the field's LIVE list length
-  # (paths/roster off live_workspaces, threaded per keypress — never stale).
+  # (repos/roster off live_workspaces, threaded per keypress — never stale).
   defp config(key, %{author_edit: %{mode: :sub} = edit} = state) when is_vertical(key),
     do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, vertical(key))}), :repaint}
 
-  # Sub-list mode, field 2 (paths): `a` opens a `:new_path` add buffer (state.input, kind-agnostic
+  # Sub-list mode, field 2 (repos): `a` opens a `:new_path` add buffer (state.input, kind-agnostic
   # reuse of the printable-insert/Enter/Esc machinery, mirrors `:new_workspace`).
   defp config(%{key: :char, char: "a"}, %{author_edit: %{mode: :sub, field: 2, id: id}} = state),
     do: {%{state | input: %{kind: :new_path, buffer: "", cursor: 0, workspace_id: id}}, :repaint}
 
-  # Sub-list mode, field 2 (paths): x/d removes the sub-selected path immediately — no confirm
+  # Sub-list mode, field 2 (repos): x/d removes the sub-selected ROW by id immediately — no confirm
   # (unlike the list's whole-workspace delete, an add re-creates it; the two-key arm is reserved for
-  # destroying a WORKSPACE).
+  # destroying a WORKSPACE). By id, not index: the row is what the server deletes, and an index
+  # racing a concurrent edit would delete the wrong one.
   defp config(%{key: :char, char: c}, %{author_edit: %{mode: :sub, field: 2, id: id, sub: sub}} = state)
-       when c in ["x", "d"],
-       do: {state, {:edit_workspace, id, %{paths: List.delete_at(workspace_field(state, id, :paths), sub)}}}
+       when c in ["x", "d"] do
+    case state |> workspace_field(id, :repos) |> Enum.at(sub) do
+      %{id: repo_id} -> {state, {:remove_repo, id, repo_id}}
+      _ -> {state, :none}
+    end
+  end
 
   # Sub-list mode, field 3 (roster): `a` opens a `:new_roster` add flow — the same `state.input`
   # kit as `:new_path`, plus an `archetype` ring (Profiles.archetypes/0's keys, cycled by h/l
@@ -858,7 +869,7 @@ defmodule Console.Keymap do
   end
 
   # Sub-list mode, field 3 (roster): x/d removes the sub-selected entry immediately — same no-confirm
-  # reasoning as field 2's paths removal.
+  # reasoning as field 2's repo removal.
   defp config(%{key: :char, char: c}, %{author_edit: %{mode: :sub, field: 3, id: id, sub: sub}} = state)
        when c in ["x", "d"],
        do: {state, {:edit_workspace, id, %{roster: List.delete_at(workspace_field(state, id, :roster), sub)}}}
@@ -1016,7 +1027,7 @@ defmodule Console.Keymap do
     (sub + dir) |> max(0) |> min(max_idx)
   end
 
-  defp sub_key(2), do: :paths
+  defp sub_key(2), do: :repos
   defp sub_key(3), do: :roster
 
   # The roster sub-editor's knob (D2.4 Chunk 2b) — tolerant read (default :model) so a state built
@@ -1034,7 +1045,7 @@ defmodule Console.Keymap do
     end
   end
 
-  # The CURRENT value of one list-shaped field (`:paths`/`:roster`) off the LIVE workspace
+  # The CURRENT value of one list-shaped field (`:repos`/`:roster`) off the LIVE workspace
   # (live_workspaces, threaded per keypress — never stale). A vanished workspace (deleted mid-edit)
   # degrades to `[]` rather than crashing the reducer.
   defp workspace_field(state, id, key) do

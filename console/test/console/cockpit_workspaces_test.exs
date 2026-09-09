@@ -124,15 +124,14 @@ defmodule Console.CockpitWorkspacesTest do
       assert [%{name: "Freedonia", type: "life"}] = Workspaces.all()
     end
 
-    test "scope, paths, and roster all apply through the same wrapper" do
+    test "scope and roster apply through the same wrapper (repos are their own verbs now)" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
       Author.edit_workspace!(state(%{}), w.id, %{scope: "machine"})
-      Author.edit_workspace!(state(%{}), w.id, %{paths: ["a", "b"]})
       next = Author.edit_workspace!(state(%{}), w.id, %{roster: [%{"archetype" => "assistant", "name" => "amy"}]})
 
       assert next.flash =~ "updated"
 
-      assert [%{scope: "machine", paths: ["a", "b"], roster: [%{"archetype" => "assistant", "name" => "amy"}]}] =
+      assert [%{scope: "machine", roster: [%{"archetype" => "assistant", "name" => "amy"}]}] =
                Workspaces.all()
     end
 
@@ -220,6 +219,60 @@ defmodule Console.CockpitWorkspacesTest do
     test "an already-gone workspace flashes, never crashes" do
       next = Author.apply_coworker_knob!(roster_edit_state(999_999), "amy", :model)
       assert next.flash =~ "roster entry not found"
+    end
+  end
+
+  describe "the repos sub-list writes ROWS (UX slice 5)" do
+    test "`a` adds a repo ROW — one prompt, all three columns" do
+      {:ok, w} = Workspaces.register(%{name: "Freedonia"})
+
+      next = Author.add_repo!(state(%{}), w.id, "modules/* git@github.com:a/b.git main")
+
+      assert next.flash =~ "added modules/*"
+
+      assert [%{path: "modules/*", remote: "git@github.com:a/b.git", default_branch: "main"}] =
+               Workspaces.repos(w.id)
+    end
+
+    test "a path alone leaves remote and branch UNANSWERED rather than inventing them" do
+      {:ok, w} = Workspaces.register(%{name: "Freedonia"})
+      Author.add_repo!(state(%{}), w.id, "modules/*")
+
+      assert [%{path: "modules/*", remote: nil, default_branch: nil}] = Workspaces.repos(w.id)
+    end
+
+    test "a blank buffer adds nothing" do
+      {:ok, w} = Workspaces.register(%{name: "Freedonia"})
+      Author.add_repo!(state(%{}), w.id, "   ")
+
+      assert Workspaces.repos(w.id) == []
+    end
+
+    test "a duplicate path flashes the changeset error instead of crashing" do
+      {:ok, w} = Workspaces.register(%{name: "Freedonia", repos: ["modules/*"]})
+
+      next = Author.add_repo!(state(%{}), w.id, "modules/*")
+
+      assert next.flash =~ "couldn't add modules/*"
+      assert length(Workspaces.repos(w.id)) == 1
+    end
+
+    test "`x`/`d` removes the row it names, by id" do
+      {:ok, w} = Workspaces.register(%{name: "Freedonia", repos: ["a", "b"]})
+      [a, b] = Workspaces.repos(w.id)
+
+      next = Author.remove_repo!(state(%{}), w.id, a.id)
+
+      assert next.flash =~ "removed a"
+      assert Enum.map(Workspaces.repos(w.id), & &1.id) == [b.id]
+    end
+
+    test "removing a row that is already gone flashes, never crashes" do
+      {:ok, w} = Workspaces.register(%{name: "Freedonia"})
+
+      next = Author.remove_repo!(state(%{}), w.id, 999_999)
+
+      assert next.flash =~ "already gone"
     end
   end
 end

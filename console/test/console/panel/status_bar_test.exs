@@ -176,10 +176,10 @@ defmodule Console.Panel.StatusBarTest do
       assert line =~ "Esc cancel"
     end
 
-    test "the new-path face" do
+    test "the new-repo face" do
       line = face(%{input: %{kind: :new_path, buffer: "modules/*", cursor: 9}})
 
-      assert line =~ "NEW PATH"
+      assert line =~ "NEW REPO"
       assert line =~ "modules/*"
       assert line =~ "⏎ add"
       assert line =~ "Esc cancel"

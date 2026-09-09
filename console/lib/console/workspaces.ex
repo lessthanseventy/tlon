@@ -21,6 +21,7 @@ defmodule Console.Workspaces do
   """
   use GenServer
 
+  alias Console.Server.Workspaces
   alias Server.Bus
 
   require Logger
@@ -28,14 +29,16 @@ defmodule Console.Workspaces do
   @workspace_events [:workspace_registered, :workspace_edited, :workspace_removed]
   # The console-shaped subset lifted off each `Server.Workspace` — dropping `knobs`/`created_at`.
   # Taken by key (not a struct match) so console needn't reference the server's unexported struct.
-  @fields [:id, :name, :type, :paths, :roster, :scope]
+  # `repos` is NOT here: it is rows now (UX slice 5), joined on in `load/1` and added by `shape/2`.
+  @fields [:id, :name, :type, :roster, :scope]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   @doc """
-  The cached workspaces as console-shaped `%{id, name, type, paths, roster, scope}` maps.
+  The cached workspaces as console-shaped `%{id, name, type, roster, scope, repos}` maps —
+  `repos` a list of `%{id, path, remote, default_branch}` (UX slice 5).
 
   Cache down (boot race, or the test env where this GenServer never runs) degrades to
   the caller-process fixture `Process.get(:aleph_workspaces, [])` — the seam tests push a
@@ -83,12 +86,21 @@ defmodule Console.Workspaces do
   # Load + shape the workspace list; on any server error keep `fallback` (init: `[]`; a
   # reload: the prior cache) so a DB blip never takes the cockpit down.
   defp load(fallback) do
-    Enum.map(Console.Server.Workspaces.all(), &shape/1)
+    workspaces = Workspaces.all()
+    # ONE read for every workspace's repos, not one per row: this runs on every workspaces
+    # announcement, and a query per workspace is how a twelve-workspace survey gets slow.
+    by_ws = workspaces |> Enum.map(& &1.id) |> Workspaces.repos_by_workspace()
+
+    Enum.map(workspaces, &shape(&1, Map.get(by_ws, &1.id, [])))
   rescue
     _ -> fallback
   catch
     :exit, _ -> fallback
   end
 
-  defp shape(workspace), do: Map.take(workspace, @fields)
+  defp shape(workspace, repos) do
+    workspace
+    |> Map.take(@fields)
+    |> Map.put(:repos, Enum.map(repos, &Map.take(&1, [:id, :path, :remote, :default_branch])))
+  end
 end

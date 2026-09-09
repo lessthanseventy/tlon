@@ -1,14 +1,17 @@
 defmodule Server.Workspace do
   @moduledoc """
-  A workspace (workspaces/orbis Slice 1): a first-class composition — a git-tracked scope
-  (`paths`), a `roster` of archetype instances, and free-form `knobs` — that console
-  reads to drive its picker/survey/spawn. Compositions are DATA (this table),
-  capabilities are nix (the archetype templates); disjoint, so the two never conflict.
+  A workspace (workspaces/orbis Slice 1): a first-class composition — a git-tracked scope, a
+  roster of archetype instances, and free-form `knobs` — that console reads to drive its
+  picker/survey/spawn. Compositions are DATA (this table), capabilities are nix (the archetype
+  templates); disjoint, so the two never conflict.
 
   `type` (code|life|blank) and `scope` (project|machine) are closed sets the DB
   CHECKs guard (§10) — the schema does not mirror them, a bad value raises at insert.
-  `paths`/`roster`/`knobs` are JSON columns (`Server.JSONColumn`): a list, a list of
-  maps, and a map respectively.
+  `roster`/`knobs` are JSON columns (`Server.JSONColumn`): a list of maps and a map.
+
+  The git-tracked scope is NOT here: it is `Server.WorkspaceRepo` rows (UX slice 5), reached
+  through `Server.Workspaces.repos/1`. `paths` was a JSON list of bare strings with nowhere to
+  record a remote or a default branch.
   """
   use Ecto.Schema
 
@@ -18,13 +21,12 @@ defmodule Server.Workspace do
     field :name, :string
     field :type, :string
     field :scope, :string
-    field :paths, Server.JSONColumn
     field :roster, Server.JSONColumn
     field :knobs, Server.JSONColumn
     field :created_at, :utc_datetime
   end
 
-  @mutable [:type, :scope, :paths, :roster, :knobs]
+  @mutable [:type, :scope, :roster, :knobs]
 
   @doc """
   Register a workspace. `name` is required and unique (DB); `type`/`scope` are the DB's
@@ -43,7 +45,7 @@ defmodule Server.Workspace do
   end
 
   @doc """
-  Edit a workspace's mutable fields (`type`/`scope`/`paths`/`roster`/`knobs`). `name` and
+  Edit a workspace's mutable fields (`type`/`scope`/`roster`/`knobs`). `name` and
   `created_at` are immutable — a workspace's identity and birth are not re-cast here.
   """
   def edit_changeset(%__MODULE__{} = workspace, attrs) do

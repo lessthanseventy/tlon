@@ -30,8 +30,8 @@ defmodule Console.KeymapTest do
   # two workspaces for the space ring — the cockpit threads the live cache in as `live_workspaces`
   defp two_workspaces,
     do: [
-      %{id: 1, name: "Tlön", roster: [], type: "code", paths: [], scope: "machine"},
-      %{id: 2, name: "Freedonia", roster: [], type: "code", paths: [], scope: "machine"}
+      %{id: 1, name: "Tlön", roster: [], type: "code", repos: [], scope: "machine"},
+      %{id: 2, name: "Freedonia", roster: [], type: "code", repos: [], scope: "machine"}
     ]
 
   defp state(overrides \\ %{}) do
@@ -287,7 +287,7 @@ defmodule Console.KeymapTest do
     end
 
     test "h/l on field 0 (type) emits {:edit_workspace, id, %{type: next}}, cycling the ring, wrapping" do
-      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "machine", paths: [], roster: []}]
+      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "machine", repos: [], roster: []}]
       s = editor_state(%{live_workspaces: workspaces, author_edit: %{id: 22, field: 0, sub: 0, mode: :field}})
 
       assert {_s, {:edit_workspace, 22, %{type: "life"}}} = Keymap.handle(char("l"), s)
@@ -300,7 +300,7 @@ defmodule Console.KeymapTest do
     test "h/l on field 1 (scope) emits {:edit_workspace, id, %{scope: next}}" do
       # A 2-element ring: from "project" (index 0) BOTH directions land on "machine" (index 1) —
       # only a 3+ element ring (type) shows h/l diverge, asserted above.
-      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "project", paths: [], roster: []}]
+      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "project", repos: [], roster: []}]
       s = editor_state(%{live_workspaces: workspaces, author_edit: %{id: 22, field: 1, sub: 0, mode: :field}})
 
       assert {_s, {:edit_workspace, 22, %{scope: "machine"}}} = Keymap.handle(char("l"), s)
@@ -311,7 +311,7 @@ defmodule Console.KeymapTest do
       assert {_s, {:edit_workspace, 22, %{scope: "project"}}} = Keymap.handle(char("h"), machine)
     end
 
-    test "h/l on field 2/3 (paths/roster) are a no-op — those rings don't apply to lists" do
+    test "h/l on field 2/3 (repos/roster) are a no-op — those rings don't apply to lists" do
       s = editor_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :field}})
       assert {^s, :none} = Keymap.handle(char("h"), s)
       assert {^s, :none} = Keymap.handle(char("l"), s)
@@ -341,35 +341,42 @@ defmodule Console.KeymapTest do
     end
   end
 
-  describe "editing a workspace's paths — the field 2 sub-list, add/remove (D2.4 Chunk 2b)" do
-    @workspace_with_paths %{id: 22, name: "Freedonia", type: "code", scope: "machine", paths: ["a", "b"], roster: []}
+  describe "editing a workspace's repos — the field 2 sub-list, add/remove (D2.4 Chunk 2b; rows since UX slice 5)" do
+    @workspace_with_repos %{
+      id: 22,
+      name: "Freedonia",
+      type: "code",
+      scope: "machine",
+      repos: [%{id: 7, path: "a"}, %{id: 8, path: "b"}],
+      roster: []
+    }
 
-    defp paths_state(overrides),
-      do: state(Map.merge(%{drawer: :config, live_workspaces: [@workspace_with_paths]}, overrides))
+    defp repos_state(overrides),
+      do: state(Map.merge(%{drawer: :config, live_workspaces: [@workspace_with_repos]}, overrides))
 
     test "Enter on field 2 drops into the sub-list: mode: :sub, sub: 0" do
-      s = paths_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :field}})
+      s = repos_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :field}})
       assert {%{author_edit: %{mode: :sub, sub: 0, field: 2}}, :repaint} = Keymap.handle(key(:enter), s)
     end
 
     test "Enter on field 0/1 (rings) stays in field-list mode — nothing to drop into" do
-      s = paths_state(%{author_edit: %{id: 22, field: 0, sub: 0, mode: :field}})
+      s = repos_state(%{author_edit: %{id: 22, field: 0, sub: 0, mode: :field}})
       assert {^s, :none} = Keymap.handle(key(:enter), s)
     end
 
-    test "j/k move sub, clamped to the paths length — no wrap" do
-      s = paths_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
+    test "j/k move sub, clamped to the repo-row count — no wrap" do
+      s = repos_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
       assert {%{author_edit: %{sub: 1}}, :repaint} = Keymap.handle(char("j"), s)
 
-      top = paths_state(%{author_edit: %{id: 22, field: 2, sub: 1, mode: :sub}})
+      top = repos_state(%{author_edit: %{id: 22, field: 2, sub: 1, mode: :sub}})
       assert {%{author_edit: %{sub: 1}}, :repaint} = Keymap.handle(char("j"), top)
 
-      bottom = paths_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
+      bottom = repos_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
       assert {%{author_edit: %{sub: 0}}, :repaint} = Keymap.handle(char("k"), bottom)
     end
 
     test "a opens a :new_path input buffer for the edited workspace" do
-      s = paths_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
+      s = repos_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
 
       assert {%{input: %{kind: :new_path, buffer: "", cursor: 0, workspace_id: 22}}, :repaint} =
                Keymap.handle(char("a"), s)
@@ -380,15 +387,15 @@ defmodule Console.KeymapTest do
       assert {%{input: %{buffer: "mod"}}, :repaint} = Keymap.handle(char("d"), s)
     end
 
-    test "Enter on a non-empty :new_path buffer emits {:edit_workspace, id, %{paths: existing ++ [buf]}}" do
+    test "Enter on a non-empty :new_path buffer emits {:add_repo, id, buffer} — a ROW, not a list overwrite" do
       s =
         state(%{
           drawer: :config,
-          live_workspaces: [@workspace_with_paths],
+          live_workspaces: [@workspace_with_repos],
           input: %{kind: :new_path, buffer: "c", cursor: 1, workspace_id: 22}
         })
 
-      assert {%{input: nil}, {:edit_workspace, 22, %{paths: ["a", "b", "c"]}}} = Keymap.handle(key(:enter), s)
+      assert {%{input: nil}, {:add_repo, 22, "c"}} = Keymap.handle(key(:enter), s)
     end
 
     test "Enter on a blank :new_path buffer no-ops — same cancel-not-create precedent" do
@@ -401,14 +408,19 @@ defmodule Console.KeymapTest do
       assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
     end
 
-    test "x or d removes the sub-selected path: {:edit_workspace, id, %{paths: List.delete_at(paths, sub)}}" do
-      s = paths_state(%{author_edit: %{id: 22, field: 2, sub: 1, mode: :sub}})
-      assert {^s, {:edit_workspace, 22, %{paths: ["a"]}}} = Keymap.handle(char("x"), s)
-      assert {^s, {:edit_workspace, 22, %{paths: ["a"]}}} = Keymap.handle(char("d"), s)
+    test "x or d removes the sub-selected repo BY ROW ID, not by index" do
+      s = repos_state(%{author_edit: %{id: 22, field: 2, sub: 1, mode: :sub}})
+      assert {^s, {:remove_repo, 22, 8}} = Keymap.handle(char("x"), s)
+      assert {^s, {:remove_repo, 22, 8}} = Keymap.handle(char("d"), s)
+    end
+
+    test "x or d on a vanished row is a no-op, never a delete aimed at nothing" do
+      s = repos_state(%{author_edit: %{id: 22, field: 2, sub: 9, mode: :sub}})
+      assert {^s, :none} = Keymap.handle(char("x"), s)
     end
 
     test "Esc in sub-list mode steps back to field-list mode, field unchanged" do
-      s = paths_state(%{author_edit: %{id: 22, field: 2, sub: 1, mode: :sub}})
+      s = repos_state(%{author_edit: %{id: 22, field: 2, sub: 1, mode: :sub}})
       assert {%{author_edit: %{mode: :field, field: 2}}, :repaint} = Keymap.handle(key(:escape), s)
     end
   end
@@ -420,7 +432,7 @@ defmodule Console.KeymapTest do
       name: "Freedonia",
       type: "code",
       scope: "machine",
-      paths: [],
+      repos: [],
       roster: [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}]
     }
 
@@ -519,7 +531,7 @@ defmodule Console.KeymapTest do
       name: "Freedonia",
       type: "code",
       scope: "machine",
-      paths: [],
+      repos: [],
       roster: [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}]
     }
 
@@ -547,7 +559,7 @@ defmodule Console.KeymapTest do
 
     # (Tab is unbound in the drawer — it used to fall through to the space switch — so the effect
     # is :none; the assertion is about the edit state.)
-    test "Tab in the paths sub-list (field 2) is untouched by the knob clause (author_edit unchanged)" do
+    test "Tab in the repos sub-list (field 2) is untouched by the knob clause (author_edit unchanged)" do
       s = roster_knob_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :sub}})
       {next, :none} = Keymap.handle(key(:tab), s)
       assert next.author_edit == s.author_edit

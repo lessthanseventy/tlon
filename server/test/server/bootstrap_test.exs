@@ -163,11 +163,11 @@ defmodule Server.BootstrapTest do
       assert count == 1
     end
 
-    test "the default project's repos come from the workspace paths" do
-      {:ok, ws} = Workspaces.register(%{name: "Paths", paths: ["a/*", "b/*"]})
+    test "the default project's repos come from the workspace's repo rows" do
+      {:ok, ws} = Workspaces.register(%{name: "Paths", repos: ["a/*", "b/*"]})
       {:ok, _} = Bootstrap.ensure()
       general = Server.Projects.by_name(ws.id, "general")
-      assert general.repos == [%{"path" => "a/*"}, %{"path" => "b/*"}]
+      assert general.repos == [%{"path" => "a/*", "name" => "a/*"}, %{"path" => "b/*", "name" => "b/*"}]
     end
   end
 end

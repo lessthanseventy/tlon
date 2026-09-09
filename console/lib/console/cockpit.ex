@@ -1185,6 +1185,11 @@ defmodule Console.Cockpit do
 
   # The field editor's h/l rings and paths/roster sub-list add/remove (D2.4 Chunk 2a) landed: apply
   # the attrs map immediately — no draft/commit step, matching Settings' per-change apply.
+  # CONFIG's repos sub-list (UX slice 5): the scope is ROWS now, so an add/remove is its own verb
+  # rather than a whole-list `edit_workspace` overwrite that could clobber a concurrent edit.
+  defp apply_effect({:add_repo, id, buffer}, state), do: {:noreply, render(Author.add_repo!(state, id, buffer))}
+
+  defp apply_effect({:remove_repo, id, repo_id}, state), do: {:noreply, render(Author.remove_repo!(state, id, repo_id))}
   defp apply_effect({:edit_workspace, id, attrs}, state), do: {:noreply, render(Author.edit_workspace!(state, id, attrs))}
 
   # The roster sub-editor's Tab-armed knob landed on Enter/Space (D2.4 Chunk 2b, absorbs Settings):

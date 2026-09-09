@@ -342,7 +342,7 @@ defmodule Console.Cockpit.Author do
 
   defp reclamp_author_edit_sub(state), do: state
 
-  defp sub_list_field(2), do: :paths
+  defp sub_list_field(2), do: :repos
   defp sub_list_field(3), do: :roster
 
   @doc false
@@ -401,5 +401,42 @@ defmodule Console.Cockpit.Author do
     next = Profiles.next_model(current && current.model)
     Console.Config.put_coworker_model(profile_name, next)
     "coworker driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
+  end
+
+  @doc false
+  # CONFIG's repos sub-list `a` (UX slice 5). The buffer is `path [remote [branch]]`: one prompt for
+  # all three columns rather than a second and a third, and whitespace is not legal in any of them
+  # anyway. A blank buffer adds nothing — Enter on an empty box already closes it upstream.
+  def add_repo!(state, id, buffer) do
+    Safe.flash_on_error(state, "add repo", fn ->
+      case String.split(buffer || "", ~r/\s+/, trim: true) do
+        [] ->
+          state
+
+        [path | rest] ->
+          attrs = %{path: path, remote: Enum.at(rest, 0), default_branch: Enum.at(rest, 1)}
+
+          case Workspaces.add_repo(id, attrs) do
+            {:ok, repo} -> reclamp_author_edit_sub(%{state | flash: "added #{repo.path}"})
+            {:error, changeset} -> %{state | flash: "couldn't add #{path} — #{changeset_error(changeset)}"}
+          end
+      end
+    end)
+  end
+
+  @doc false
+  # CONFIG's repos sub-list `x`/`d`. Addressed by ROW id, so a list that shifted under the cursor
+  # cannot make this delete a different repo than the one the cursor was on.
+  def remove_repo!(state, _id, repo_id) do
+    Safe.flash_on_error(state, "remove repo", fn ->
+      case Workspaces.get_repo(repo_id) do
+        nil ->
+          %{state | flash: "that repo is already gone"}
+
+        repo ->
+          {:ok, _} = Workspaces.remove_repo(repo)
+          reclamp_author_edit_sub(%{state | flash: "removed #{repo.path}"})
+      end
+    end)
   end
 end

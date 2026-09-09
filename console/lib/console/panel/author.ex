@@ -4,16 +4,17 @@ defmodule Console.Panel.Author do
   view (D2, Chunk 1); `e` on the cursor workspace opens the in-place FIELD EDITOR (D2.4 Chunk 2a),
   `data[:edit]` present. List: one row per `Console.Workspaces.all/0` workspace (name · type · path/roster
   counts), the `author_cursor` row washed `:selected` — same wash idiom as
-  the old Overview. Data is `%{workspaces: [%{id, name, type, paths, roster, scope}],
+  the old Overview. Data is `%{workspaces: [%{id, name, type, repos, roster, scope}],
   cursor, edit}` (`cursor`/`edit` View-injected). Hosted by the drawer as CONFIG
   (`Console.Cockpit.Drawer`, UX slice 1 task 5).
 
-  The editor is a vertical 4-row field list (0 type · 1 scope · 2 paths · 3 roster), the `field`
+  The editor is a vertical 4-row field list (0 type · 1 scope · 2 repos · 3 roster), the `field`
   cursor washed `:selected`; fields 0/1 show the ring value inline (h/l cycles it, applied
   immediately — no draft/commit). `name` has no field — it's immutable
   (`Server.Workspace.edit_changeset` drops it), called out in the header instead. `Enter` on field 2/3
-  (`edit.mode == :sub`) swaps in that field's sub-list — one row per path/roster entry (roster:
-  `archetype · name`), the `sub` cursor washed `:selected` — instead of the field list.
+  (`edit.mode == :sub`) swaps in that field's sub-list — one row per repo (`path · remote ·
+  default_branch`, UX slice 5) or roster entry (`archetype · name`), the `sub` cursor washed
+  `:selected` — instead of the field list.
 
   The roster sub-list (D2.4 Chunk 2b, absorbs the Settings modal) ALSO renders each entry's
   effective model and yolo — the two knobs Settings used to own. Model resolves
@@ -41,7 +42,7 @@ defmodule Console.Panel.Author do
   @impl Console.Panel
   def render(%{workspaces: workspaces} = data, rect) do
     case {Map.get(data, :edit), Enum.find(workspaces, &(&1.id == data[:edit][:id]))} do
-      {%{mode: :sub, field: 2} = edit, %{} = workspace} -> render_paths_sub(workspace, edit, rect)
+      {%{mode: :sub, field: 2} = edit, %{} = workspace} -> render_repos_sub(workspace, edit, rect)
       {%{mode: :sub, field: 3} = edit, %{} = workspace} -> render_roster_sub(workspace, edit, rect)
       {%{} = edit, %{} = workspace} -> render_editor(workspace, edit, rect)
       _ -> render_list(workspaces, Map.get(data, :cursor, 0), rect)
@@ -63,7 +64,7 @@ defmodule Console.Panel.Author do
   end
 
   # The field list (fields 0/1's rings inline; 2/3 show counts — their own row swaps in a
-  # sub-list, `render_paths_sub`/`render_roster_sub`, when `edit.mode == :sub`).
+  # sub-list, `render_repos_sub`/`render_roster_sub`, when `edit.mode == :sub`).
   defp render_editor(workspace, edit, rect) do
     header = [
       line("ORBIS · author · edit", :header),
@@ -74,7 +75,7 @@ defmodule Console.Panel.Author do
     body = [
       field_row("type", Map.get(workspace, :type) || "?", edit.field == 0),
       field_row("scope", Map.get(workspace, :scope) || "?", edit.field == 1),
-      field_row("paths", "#{length(Map.get(workspace, :paths) || [])} paths", edit.field == 2),
+      field_row("repos", "#{length(Map.get(workspace, :repos) || [])} repos", edit.field == 2),
       field_row("roster", "#{length(Map.get(workspace, :roster) || [])} roster", edit.field == 3)
     ]
 
@@ -89,26 +90,35 @@ defmodule Console.Panel.Author do
     [gutter, {String.pad_trailing(label, 8), :dim}, {value, style}]
   end
 
-  # Field 2's sub-list (D2.4 Chunk 2b): one row per path, the `sub` cursor washed :selected — same
-  # gutter/wash idiom as the list/field views.
-  defp render_paths_sub(workspace, edit, rect) do
-    header = [line("ORBIS · author · edit · paths", :header), blank()]
-    paths = Map.get(workspace, :paths) || []
+  # Field 2's sub-list (D2.4 Chunk 2b; ROWS since UX slice 5): one row per repo — `path`, then the
+  # `remote` and `default_branch` a bare glob had nowhere to record. An unanswered column reads `—`
+  # so "not set" is visibly a value and not a rendering gap. `sub` cursor washed :selected.
+  defp render_repos_sub(workspace, edit, rect) do
+    header = [line("ORBIS · author · edit · repos", :header), blank()]
+    repos = Map.get(workspace, :repos) || []
 
     body =
-      case paths do
-        [] -> [line("no paths yet — a to add one", :dim)]
-        ps -> ps |> Enum.with_index() |> Enum.map(fn {p, i} -> sub_row(p, i == edit.sub) end)
+      case repos do
+        [] -> [line("no repos yet — a to add one (path [remote [branch]])", :dim)]
+        rs -> rs |> Enum.with_index() |> Enum.map(fn {r, i} -> repo_row(r, i == edit.sub) end)
       end
 
     footer = [blank(), line(@sub_hints, :dim)]
     Console.Panel.clip(header ++ body ++ footer, rect)
   end
 
-  defp sub_row(text, selected?) do
+  defp repo_row(repo, selected?) do
     style = if selected?, do: :selected, else: :normal
     gutter = if selected?, do: {"▸ ", :accent}, else: {"  ", :normal}
-    [gutter, {text, style}]
+
+    [
+      gutter,
+      {Map.get(repo, :path) || "?", style},
+      {"  ", :normal},
+      {Map.get(repo, :remote) || "—", :dim},
+      {" · ", :dim},
+      {Map.get(repo, :default_branch) || "—", :dim}
+    ]
   end
 
   # Field 3's sub-list (D2.4 Chunk 2b/2c): one row per roster entry (`archetype · name`, the server
@@ -172,7 +182,7 @@ defmodule Console.Panel.Author do
   defp workspace_row(w, selected?) do
     style = if selected?, do: :selected, else: :normal
     gutter = if selected?, do: {"▸ ", :accent}, else: {"  ", :normal}
-    paths = Map.get(w, :paths) || []
+    repos = Map.get(w, :repos) || []
     roster = Map.get(w, :roster) || []
 
     [
@@ -181,7 +191,7 @@ defmodule Console.Panel.Author do
       {"  ", :normal},
       {Map.get(w, :type) || "?", :dim},
       {"  ", :normal},
-      {"#{length(paths)} paths", :dim},
+      {"#{length(repos)} repos", :dim},
       {" · ", :dim},
       {"#{length(roster)} roster", :dim}
     ]

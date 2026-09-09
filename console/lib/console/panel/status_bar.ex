@@ -80,14 +80,15 @@ defmodule Console.Panel.StatusBar do
     Panel.clip([prompt_row(prompt, verbs, rect.w)], rect)
   end
 
-  # The field editor's paths sub-list `a` add (D2.4 Chunk 2b): the row becomes the prompt over the
-  # typed path.
+  # The field editor's repos sub-list `a` add (D2.4 Chunk 2b; rows since UX slice 5): the row
+  # becomes the prompt over the typed `path [remote [branch]]` — one prompt for all three columns,
+  # which the label has to say or nobody would guess the second and third words matter.
   @impl Panel
   def render(%{input: %{kind: :new_path} = input}, rect) do
     {before, after_} = cursor_split(input)
 
     prompt = [
-      {" NEW PATH ", :tab},
+      {" NEW REPO ", :tab},
       {"  ", :normal},
       {"▸ ", :accent},
       {before, :buf},

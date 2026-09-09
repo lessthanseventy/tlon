@@ -28,7 +28,8 @@ defmodule Server.DoctorTest do
                "ticket_link",
                "ticket_thread",
                "todo",
-               "workspace"
+               "workspace",
+               "workspace_repo"
              ]
   end
 
