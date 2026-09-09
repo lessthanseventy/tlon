@@ -70,19 +70,40 @@ defmodule Console.Panel.TicketBoardTest do
 
       shown = text(TicketBoard.render(%{tickets: [blocked, clear], cursor: nil}, rect()))
 
-      assert shown =~ "⊘ blocked"
-      # exactly one badge — the point of the mark is that it is rare
-      assert length(String.split(shown, "⊘ blocked")) - 1 == 1
+      assert shown =~ "⊘"
+      # exactly one mark — the point of it is that it is rare
+      assert length(String.split(shown, "⊘")) - 1 == 1
     end
 
     test "a card with no blocked? key at all renders without a badge" do
       card = %{id: 1, title: "legacy row", status: "todo", priority: "med", assignee: nil}
-      refute text(TicketBoard.render(%{tickets: [card], cursor: nil}, rect())) =~ "blocked"
+      refute text(TicketBoard.render(%{tickets: [card], cursor: nil}, rect())) =~ "⊘"
     end
 
-    test "the footer advertises the reorder keys" do
+    test "the badge survives a NARROW column — the title gives, never the mark" do
+      # The bug the first live board showed: the badge was appended after a full-length title and
+      # zip_columns trimmed it off the right, so a blocked ticket rendered with no mark on it at all.
+      long = %{
+        id: 12,
+        title: "a title long enough to fill the whole column on its own",
+        status: "todo",
+        priority: "med",
+        assignee: nil,
+        blocked?: true
+      }
+
+      shown = text(TicketBoard.render(%{tickets: [long], cursor: nil}, rect()))
+
+      assert shown =~ "⊘"
+      # the title is what gave way
+      refute shown =~ "on its own"
+    end
+
+    test "the footer advertises the reorder and blocked-by keys" do
       caps = %{} |> TicketBoard.hints() |> Enum.map(&elem(&1, 0))
+
       assert "J/K" in caps
+      assert "b" in caps
     end
   end
 end

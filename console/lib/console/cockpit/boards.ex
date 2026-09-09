@@ -45,11 +45,26 @@ defmodule Console.Cockpit.Boards do
       %{status: status} = ticket ->
         next = next_status(status)
         _ = Safe.value(fn -> Tickets.update(ticket, %{status: next}) end, nil)
-        %{state | flash: "ticket ##{ticket.id} → #{next}"}
+
+        # The cursor follows the card into its new COLUMN, the way a reorder follows it within one.
+        # Without this the highlight is left on an empty row and the next `p` silently does nothing —
+        # which is what p·p·p to push a ticket to done actually feels like.
+        %{state | flash: "ticket ##{ticket.id} → #{next}", board_cursor: locate(state, ticket.id)}
 
       _ ->
         %{state | flash: "no ticket selected"}
     end
+  end
+
+  # Where a ticket sits on the board NOW, as a {col, row} — read back after the write rather than
+  # guessed, because its row in the new column depends on that whole column's order.
+  defp locate(state, ticket_id) do
+    found =
+      for {column, col} <- Enum.with_index(ticket_columns(state)),
+          {%{id: ^ticket_id}, row} <- Enum.with_index(column),
+          do: {col, row}
+
+    List.first(found) || state.board_cursor
   end
 
   # The active workspace's tickets grouped into kanban columns (structs — the render maps to rows off

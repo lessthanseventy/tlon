@@ -49,30 +49,43 @@ defmodule Console.Panel.TicketBoard do
 
   # One column's rows: a coloured header with the count, then a gutter-card per ticket (selected one
   # washed), or a dim placeholder. Not yet width-fitted — zip_columns pads each to col_w.
-  defp column_rows(status, tickets, ci, cursor, _col_w) do
+  defp column_rows(status, tickets, ci, cursor, col_w) do
     header = [[{String.upcase(status), @status_color[status]}, {" (#{length(tickets)})", :dim}], []]
 
     cards =
       case tickets do
         [] -> [[{"  —", :dim}]]
-        ts -> ts |> Enum.with_index() |> Enum.flat_map(fn {t, ri} -> ticket_card(t, {ci, ri} == cursor) end)
+        ts -> ts |> Enum.with_index() |> Enum.flat_map(fn {t, ri} -> ticket_card(t, {ci, ri} == cursor, col_w) end)
       end
 
     header ++ cards
   end
 
-  defp ticket_card(t, selected?) do
+  defp ticket_card(t, selected?, col_w) do
     prio = priority_mark(t[:priority])
     who = if t[:assignee], do: " @#{t.assignee}", else: ""
     title_style = if selected?, do: :selected, else: :normal
-    header = [{"#{prio} ", :accent}, {"##{t.id} #{t.title}", title_style}, {who, :dim}] ++ blocked_badge(t, selected?)
-    Card.gutter_card(header, [], status_atom(t.status))
+    badge = blocked_badge(t, selected?)
+
+    # The badge is the card's POINT — reserve its width and clip the TITLE, never the badge. The
+    # column is narrow and `zip_columns` trims from the right, so a badge appended after a
+    # full-length title is simply cut off: the first live board showed a blocked ticket unmarked.
+    lead = [{"#{prio} ", :accent}]
+    room = col_w - Panel.row_width(lead) - Panel.row_width(badge) - String.length(who) - 3
+    title = clip_text("##{t.id} #{t.title}", room)
+
+    Card.gutter_card(lead ++ [{title, title_style}, {who, :dim}] ++ badge, [], status_atom(t.status))
   end
+
+  defp clip_text(text, room) when room > 0, do: String.slice(text, 0, room)
+  defp clip_text(_text, _room), do: ""
 
   # A ticket nothing is waiting on carries no badge at all — the point of the mark is that it is
   # rare. `blocked?` is a read of the LINKS (a done blocker stops blocking), never a field, so a
   # card cannot claim to be blocked by something already finished.
-  defp blocked_badge(%{blocked?: true}, selected?), do: [{"  ⊘ blocked", if(selected?, do: :selected, else: :st_blocked)}]
+  # One glyph, not a word: the column is ~27 cells wide and the rail already teaches that a badge
+  # is a mark, not a sentence.
+  defp blocked_badge(%{blocked?: true}, selected?), do: [{" ⊘", if(selected?, do: :selected, else: :st_blocked)}]
 
   defp blocked_badge(_ticket, _selected?), do: []
 
