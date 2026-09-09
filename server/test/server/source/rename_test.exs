@@ -59,4 +59,16 @@ defmodule Server.Source.RenameTest do
     assert out ==
              "defmodule Odd do\n\n\n  def   live_workspaces( s ),   do:   s   # keep\n\n  def two, do: live_workspaces(1)\nend\n"
   end
+
+  test "comments: true renames whole-word mentions in comments, not substrings or strings" do
+    src =
+      "# author_workspaces feeds the ring; author_workspaces_extra is another thing\n" <>
+        "def author_workspaces, do: \"author_workspaces\"\n"
+
+    out = Rename.run(src, "author_workspaces", "live_workspaces", comments: true)
+
+    assert out ==
+             "# live_workspaces feeds the ring; author_workspaces_extra is another thing\n" <>
+               "def live_workspaces, do: \"author_workspaces\"\n"
+  end
 end
