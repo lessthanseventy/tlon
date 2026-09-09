@@ -112,6 +112,10 @@ tools scoped to their worktree. Use it for every Elixir edit and search:
   sibling clause to anchor to. Placement follows the code: a `defp` lands with the other private
   functions, a `def` with the public ones. (A new *clause* of an existing function is
   `insert-after` — name its sibling.)
+- `stmt insert-after|insert-before|replace|delete|list FILE name/arity HEAD MATCH [CODE] [--nth N]`
+  — ONE statement inside a clause body, addressed the way a clause is: name the clause, then the
+  statement by what is WRITTEN. Reaches a line in a `do` block, a step in a `with`, and a `case`
+  ARM alike. `list` prints what is there; a miss prints it too.
 - `write FILE CODE` (`-` reads stdin) — a whole file: a NEW module, or a rewrite so total that
   patching is the wrong tool. Refuses Elixir that doesn't parse before it reaches disk. Reach for
   this instead of the `Write` tool for `.ex`/`.exs`.
