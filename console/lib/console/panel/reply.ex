@@ -5,8 +5,9 @@ defmodule Console.Panel.Reply do
   gets a reply"; opening a thread focuses this directly, no `c` verb).
 
   Unlike `Console.Panel.NewThread`, there's no idle face: the box is born focused with the open
-  thread, so it always renders the live buffer + `▎` caret. Enter posts and keeps it focused (buffer
-  cleared); Esc steps back to the thread list. Data is `%{input: %{kind: :reply, thread_id, buffer}}`.
+  thread, so it always renders the live buffer, and the `▎` caret whenever it actually has the keys
+  (the open drawer takes them). Enter posts and keeps it focused (buffer cleared); Esc steps back to
+  the thread list. Data is `%{input: %{kind: :reply, thread_id, buffer}, drawer: pane | nil}`.
   Pure render — the `Console.Text.wrap` height math is shared with `Console.View`'s band override.
   """
   @behaviour Console.Panel
@@ -17,17 +18,21 @@ defmodule Console.Panel.Reply do
   @prefix_base "↳ reply to #"
 
   @impl Console.Panel
-  def render(%{input: %{kind: :reply, thread_id: id, buffer: buffer}}, rect) do
+  def render(%{input: %{kind: :reply, thread_id: id, buffer: buffer}} = data, rect) do
     prefix = "#{@prefix_base}#{id} ▸ "
     indent = String.duplicate(" ", String.length(prefix))
     lines = wrapped_lines(buffer, wrap_width(rect.w, id))
     last = length(lines) - 1
+    # The drawer sits OVER the conversation and owns the keys while it is open (`Alt+d` from inside
+    # the box), so the caret would be claiming a focus the box does not have. Drop it —
+    # the draft stays on screen and visibly is not where the typing goes.
+    focused? = is_nil(data[:drawer])
 
     lines
     |> Enum.with_index()
     |> Enum.map(fn {line, i} ->
       lead = if i == 0, do: {prefix, :accent}, else: {indent, :normal}
-      caret = if i == last, do: [{"▎", :accent}], else: []
+      caret = if i == last and focused?, do: [{"▎", :accent}], else: []
       [lead, {line, :normal}] ++ caret
     end)
     |> Console.Panel.clip(rect)

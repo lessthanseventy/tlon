@@ -25,6 +25,13 @@ defmodule Console.Keymap do
   so they cost the coworker's shell nothing. They precede the input modal, the drawer and the
   picker itself, so they open from anywhere and each closes what it opened.
 
+  **`Alt+d` and `Alt+\\` are global for the same reason** — the drawer and the session pane are
+  layout, not text, so neither has any business waiting for you to leave the reply box. That box is
+  the only PERSISTENT input (it is focused the whole time a thread is open), so ordering it above
+  the drawer clause made `Alt+d` dead inside a thread; the drawer clause now precedes `:reply` and
+  still follows the transient modals its own verbs open. `Alt+g` (LOCK), `Alt+n`/`Alt+c` and the
+  Alt+digits stay BELOW the modal on purpose — each would freeze, replace or orphan a live draft.
+
   `state` is the slice of cockpit state keys touch: `active_key`, `focused_id`, `threads`,
   `center_live?` (derived per keypress by the cockpit — true when a live terminal is in the
   center), `composer_thread_id` (also derived per keypress — the thread the `c` verb composes
@@ -234,6 +241,29 @@ defmodule Console.Keymap do
   # not the reply. Esc hands the keys back to whatever was underneath, draft intact.
   def handle(key, %{picker: picker} = state) when not is_nil(picker), do: handle_picker(key, state)
 
+  # The DRAWER owns every key while it is open (UX slice 1 task 4) — like the picker above it,
+  # nothing leaks to the frame underneath, and Esc / `Alt+d` hand the keys back with the draft
+  # intact. It precedes the PERSISTENT reply box (`:reply`, focused the whole time a thread is
+  # open): that box sitting ABOVE the drawer clause is why `Alt+d` did nothing inside a thread,
+  # and why opening the drawer there would have left it undriveable. It still FOLLOWS the
+  # TRANSIENT modals the drawer's own verbs open (`:new_ticket`, `:new_path`, …), so typing a new
+  # ticket's title takes the keys back.
+  def handle(key, %{drawer: d, input: nil} = state) when not is_nil(d), do: handle_drawer(key, state)
+
+  def handle(key, %{drawer: d, input: %{kind: :reply}} = state) when not is_nil(d), do: handle_drawer(key, state)
+
+  # `Alt+d` (open the drawer on its last pane) and `Alt+\` (toggle the session pane) are global for
+  # the same reason the two chords above are: neither touches the draft, so there is nothing to gain
+  # by making you leave the reply box first. The other Alt chords deliberately stay BELOW the input
+  # modal — `Alt+g` because arming LOCK mid-compose would silently freeze the box, `Alt+n`/`Alt+c`
+  # because they open a DIFFERENT modal over the draft, and the digits because switching workspace
+  # would leave the draft pointing at another workspace's thread.
+  def handle(%{key: :char, char: "d", alt: true} = k, %{drawer: nil} = state) when not is_map_key(k, :ctrl),
+    do: {Drawer.open(state, state.last_drawer), :repaint}
+
+  def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
+      when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {state, :toggle_session_pane}
+
   def handle(%{key: :escape}, %{input: %{kind: :reply}} = state), do: {%{state | input: nil}, :close_thread_view}
 
   def handle(%{key: :escape}, %{input: %{}} = state), do: {%{state | input: nil}, :repaint}
@@ -391,16 +421,6 @@ defmodule Console.Keymap do
   # Any other key while typing (function keys, …) is ignored, not acted on.
   def handle(_key, %{input: %{}} = state), do: {state, :none}
 
-  # The DRAWER owns every key while it is open (UX slice 1, task 4) — like the overlay menu and the
-  # old full-screen boards, nothing leaks to the frame underneath. It sits below the input modal, so
-  # typing a new ticket's title still takes the keys back. `Alt+d` closes it from inside
-  # (`handle_drawer/2`); the clause below opens it.
-  def handle(key, %{drawer: d} = state) when not is_nil(d), do: handle_drawer(key, state)
-
-  # Alt+d opens the drawer on the pane it last showed — global, from TERM as well as NAV.
-  def handle(%{key: :char, char: "d", alt: true} = k, %{drawer: nil} = state) when not is_map_key(k, :ctrl),
-    do: {Drawer.open(state, state.last_drawer), :repaint}
-
   # Alt+g arms LOCK — below the modal by design: the modal's catch-all swallows it while typing,
   # so composing can never silently freeze under a lock.
   def handle(%{key: :char, char: "g", alt: true} = k, state) when not is_map_key(k, :ctrl),
@@ -430,11 +450,6 @@ defmodule Console.Keymap do
 
   def handle(%{key: :char, char: "c", alt: true} = k, state) when not is_map_key(k, :ctrl),
     do: command(%{key: :char, char: "c"}, state)
-
-  # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
-  # beside the stack. Workspace-only (there's no thread stack elsewhere); global across TERM/NAV.
-  def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
-      when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {state, :toggle_session_pane}
 
   # Tlön: the lazygit focus model (design 2026-08-20). The center is a live tmux client, so
   # `Ctrl+Space` is a STICKY toggle in/out of it — NOT the arm-next-key leader other spaces use.

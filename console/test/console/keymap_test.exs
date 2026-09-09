@@ -1475,4 +1475,75 @@ defmodule Console.KeymapTest do
       assert {^s, {:ticket_move, "k"}} = Keymap.handle_drawer(char("k"), s)
     end
   end
+
+  describe "the drawer over an open thread — the `Alt+d`-is-dead-in-the-reply-box bug" do
+    # The reply box is the only PERSISTENT input: it is focused the whole time a thread is open, so
+    # while it sat above the drawer clauses `Alt+d` could not reach them at all — the drawer was
+    # openable from the thread LIST and nowhere else.
+    defp reply_drawer(over \\ %{}),
+      do:
+        stack_ctx(
+          Map.merge(
+            %{
+              opened_thread: 2,
+              input: %{kind: :reply, thread_id: 2, buffer: "half typed", cursor: 10},
+              drawer: nil,
+              last_drawer: :stack,
+              tlon_layout: %{left: Console.Cockpit.Drawer.pane_modules(), right: [], sections: %{}, counts: %{}}
+            },
+            over
+          )
+        )
+
+    test "Alt+d opens the drawer from inside the reply box, draft untouched" do
+      {next, :repaint} = Keymap.handle(char("d", alt: true), reply_drawer())
+
+      assert next.drawer == :stack
+      assert next.input == %{kind: :reply, thread_id: 2, buffer: "half typed", cursor: 10}
+    end
+
+    test "with the drawer open the DRAWER owns the keys — a letter walks the strip, it does not type" do
+      {open, :repaint} = Keymap.handle(char("d", alt: true), reply_drawer())
+      {walked, :repaint} = Keymap.handle(char("l"), open)
+
+      assert walked.drawer == :roster
+      assert walked.input.buffer == "half typed"
+    end
+
+    test "Alt+d closes it again and the draft is still there to type into" do
+      {open, :repaint} = Keymap.handle(char("d", alt: true), reply_drawer())
+      {shut, :repaint} = Keymap.handle(char("d", alt: true), open)
+
+      assert shut.drawer == nil and shut.last_drawer == :stack
+      assert {%{input: %{buffer: "half typedx"}}, :repaint} = Keymap.handle(char("x"), shut)
+    end
+
+    test "Esc closes the DRAWER first, not the thread view — one Esc, one level" do
+      {open, :repaint} = Keymap.handle(char("d", alt: true), reply_drawer())
+
+      assert {%{drawer: nil, input: %{buffer: "half typed"}}, :repaint} = Keymap.handle(key(:escape), open)
+    end
+
+    test "a transient modal the drawer's own verb opens still takes the keys back" do
+      s = reply_drawer(%{drawer: :tickets, input: %{kind: :new_ticket, buffer: "", cursor: 0}})
+
+      assert {%{input: %{buffer: "l"}, drawer: :tickets}, :repaint} = Keymap.handle(char("l"), s)
+    end
+
+    test "Alt+\\\\ toggles the session pane from inside the reply box too" do
+      assert {_s, :toggle_session_pane} = Keymap.handle(char("\\", alt: true), reply_drawer())
+    end
+
+    test "Alt+g, Alt+n and Alt+digit stay SWALLOWED while the box is live — each would break a draft" do
+      s = reply_drawer()
+
+      # LOCK would make the box a passthrough terminal mid-sentence. The fixture carries no `lock?`
+      # key at all, so an unchanged state is proof the arm never fired.
+      assert {^s, :none} = Keymap.handle(char("g", alt: true), s)
+      # a second modal would take the screen from the draft
+      assert {^s, :none} = Keymap.handle(char("n", alt: true), s)
+      # a workspace switch would leave the draft pointing at another workspace's thread
+      assert {^s, :none} = Keymap.handle(char("2", alt: true, shift: true), s)
+    end
+  end
 end
