@@ -25,6 +25,8 @@ defmodule Server.DoctorTest do
                "session",
                "thread",
                "ticket",
+               "ticket_link",
+               "ticket_thread",
                "todo",
                "workspace"
              ]

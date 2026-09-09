@@ -177,7 +177,11 @@ defmodule Server.MCP.Brief do
       "priority" => t.priority,
       "labels" => t.labels,
       "assignee" => t.assignee,
-      "promoted_thread_id" => t.promoted_thread_id
+      # UX slice 4: a ticket ties to MANY threads, so the single promoted_thread_id is gone. The
+      # promoted one is named on its own because it is the tie a caller usually means.
+      "promoted_thread_id" => promoted_thread_id(t.id),
+      "thread_ids" => Enum.map(Server.Tickets.threads_of(t.id), &elem(&1, 1)),
+      "blocked_by" => Server.Tickets.blockers(t.id)
     }
   end
 
@@ -206,4 +210,11 @@ defmodule Server.MCP.Brief do
 
   defp at(nil), do: nil
   defp at(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+
+  defp promoted_thread_id(ticket_id) do
+    case Enum.find(Server.Tickets.threads_of(ticket_id), &(elem(&1, 0) == "promoted")) do
+      {_kind, thread_id} -> thread_id
+      nil -> nil
+    end
+  end
 end

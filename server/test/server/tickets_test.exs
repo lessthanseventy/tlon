@@ -60,8 +60,11 @@ defmodule Server.TicketsTest do
       {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "build the thing"})
       {:ok, thread} = Channel.open_thread(%{title: "build the thing", workspace_id: ws.id})
       {:ok, promoted} = Tickets.promote(t, thread.id)
-      assert promoted.promoted_thread_id == thread.id
+
       assert promoted.status == "doing"
+      # UX slice 4: the tie is a ticket_thread row of kind `promoted`, not a column — a ticket can
+      # be tied to several threads, so there is nowhere on the ticket to put one.
+      assert Tickets.threads_of(t.id) == [{"promoted", thread.id}]
     end
 
     test "remove deletes and announces", %{workspace: ws} do
@@ -70,6 +73,82 @@ defmodule Server.TicketsTest do
       assert {:ok, _} = Tickets.remove(t)
       assert Tickets.get(t.id) == nil
       assert_receive {:ticket_removed, %Ticket{}}
+    end
+  end
+
+  describe "links and ties (UX slice 4)" do
+    setup %{workspace: ws} do
+      {:ok, a} = Tickets.file(%{workspace_id: ws.id, title: "a"})
+      {:ok, b} = Tickets.file(%{workspace_id: ws.id, title: "b"})
+      {:ok, a: a, b: b}
+    end
+
+    test "blocked-by is the INVERSE read of blocks, not a second row", %{a: a, b: b} do
+      {:ok, _} = Tickets.link(a.id, b.id, "blocks")
+
+      # one row, read from both ends
+      assert [%{kind: "blocks", direction: :out, ticket_id: to}] = Tickets.links_of(a.id)
+      assert to == b.id
+      assert [%{kind: "blocks", direction: :in, ticket_id: from}] = Tickets.links_of(b.id)
+      assert from == a.id
+
+      assert Tickets.blockers(b.id) == [a.id]
+      assert Tickets.blockers(a.id) == []
+    end
+
+    test "a DONE blocker stops blocking — a finished ticket blocks nothing", %{a: a, b: b} do
+      {:ok, _} = Tickets.link(a.id, b.id, "blocks")
+      assert Tickets.blockers(b.id) == [a.id]
+
+      {:ok, _} = Tickets.update(a, %{status: "done"})
+      assert Tickets.blockers(b.id) == []
+    end
+
+    test "blocked_in_workspace answers the whole board in one query", %{workspace: ws, a: a, b: b} do
+      {:ok, _} = Tickets.link(a.id, b.id, "blocks")
+      blocked = Tickets.blocked_in_workspace(ws.id)
+
+      assert MapSet.member?(blocked, b.id)
+      refute MapSet.member?(blocked, a.id)
+    end
+
+    test "a ticket cannot link to itself", %{a: a} do
+      assert {:error, changeset} = Tickets.link(a.id, a.id, "blocks")
+      assert {:to_id, {"a ticket cannot link to itself", _}} = List.keyfind(changeset.errors, :to_id, 0)
+    end
+
+    test "linking twice is idempotent, not an error", %{a: a, b: b} do
+      {:ok, _} = Tickets.link(a.id, b.id, "relates")
+      assert {:ok, _} = Tickets.link(a.id, b.id, "relates")
+      assert length(Tickets.links_of(a.id)) == 1
+    end
+
+    test "unlink removes it; one that was never there is still :ok", %{a: a, b: b} do
+      {:ok, _} = Tickets.link(a.id, b.id, "blocks")
+      assert :ok = Tickets.unlink(a.id, b.id, "blocks")
+      assert Tickets.links_of(a.id) == []
+      assert :ok = Tickets.unlink(a.id, b.id, "blocks")
+    end
+
+    test "a ticket ties to MANY threads, promoted first", %{workspace: ws, a: a} do
+      {:ok, one} = Channel.open_thread(%{title: "one", workspace_id: ws.id})
+      {:ok, two} = Channel.open_thread(%{title: "two", workspace_id: ws.id})
+
+      {:ok, _} = Tickets.tie(a, two.id, "relates")
+      {:ok, _} = Tickets.promote(a, one.id)
+
+      assert Tickets.threads_of(a.id) == [{"promoted", one.id}, {"relates", two.id}]
+      assert Tickets.tickets_of_thread(two.id) == [{"relates", a.id}]
+    end
+
+    test "closed_at follows status: done stamps it, leaving done clears it", %{a: a} do
+      assert a.closed_at == nil
+
+      {:ok, done} = Tickets.update(a, %{status: "done"})
+      assert done.closed_at
+
+      {:ok, reopened} = Tickets.update(done, %{status: "todo"})
+      assert reopened.closed_at == nil
     end
   end
 end
