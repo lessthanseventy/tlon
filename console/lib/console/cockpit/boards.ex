@@ -134,6 +134,26 @@ defmodule Console.Cockpit.Boards do
     end
   end
 
+  @doc """
+  Open the "blocked by…" menu over the selected card (`b`). The menu is placed at the board rather
+  than at a click, so it appears where the eye already is.
+  """
+  @spec open_blocker_menu(map()) :: map()
+  def open_blocker_menu(state) do
+    id = board_workspace_id(state)
+
+    case selected_ticket(state, ticket_columns(state)) do
+      %{} = ticket ->
+        others = Safe.value(fn -> id && Tickets.in_workspace(id) end, nil) || []
+        blocking = Safe.value(fn -> Tickets.blockers(ticket.id) end, nil) || []
+        menu = Console.Cockpit.Author.blocker_menu(ticket, others, blocking, div(state.w, 3), div(state.h, 4))
+        %{state | menu: menu}
+
+      _ ->
+        %{state | flash: "no ticket selected"}
+    end
+  end
+
   # The cursor follows the card it just moved, clamped — otherwise a reorder leaves the highlight
   # on whatever swapped INTO the old row, and a second press moves the wrong ticket.
   defp follow({col, row}, :up), do: {col, max(row - 1, 0)}

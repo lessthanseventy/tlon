@@ -173,6 +173,7 @@ defmodule Console.Keymap do
           | {:picker_pick, map()}
           | {:ticket_move, String.t()}
           | {:ticket_reorder, :up | :down}
+          | :ticket_blocker_menu
           | :ticket_advance
           | :stack_delete_arm
           | :tlon_delete_arm
@@ -725,6 +726,10 @@ defmodule Console.Keymap do
   # `J`/`K` reorder the selected ticket within its column and persist it (UX slice 4). Above the
   # `H`/`L` column clause so the shifted pair is read as a pair, and above the generic `is_vertical`
   # move below, which would otherwise take them as plain j/k.
+  # `b` on a card opens the "blocked by…" menu (UX slice 4) — cockpit-resolved, because the other
+  # tickets it offers and which of them already block are server reads the keymap does not hold.
+  defp drawer_common(%{key: :char, char: "b"}, %{drawer: :tickets} = state), do: {state, :ticket_blocker_menu}
+
   defp drawer_common(%{key: :char, char: "J"}, %{drawer: :tickets} = state), do: {state, {:ticket_reorder, :down}}
   defp drawer_common(%{key: :char, char: "K"}, %{drawer: :tickets} = state), do: {state, {:ticket_reorder, :up}}
 

@@ -12,6 +12,7 @@ defmodule Console.Cockpit.Author do
   alias Console.Profiles
   alias Console.Safe
   alias Console.Server.Channels
+  alias Console.Server.Tickets
   alias Console.Server.Workspaces
   alias Console.WorkspaceTemplates
 
@@ -73,6 +74,23 @@ defmodule Console.Cockpit.Author do
         else: []
 
     %{title: "##{channel.name}", x: x, y: y, cursor: 0, items: [%{label: "New channel…", action: :new_channel} | delete]}
+  end
+
+  @doc """
+  The TICKETS board's `b` menu (UX slice 4): pick which OTHER ticket blocks this one. Phrased as
+  "Blocked by #N" because that is how the operator thinks about it; the row it writes is the
+  inverse — `link(other, ticket, "blocks")` — since a link is stored one way and read both.
+  Already-blocking tickets are offered as an unlink, so the same menu adds and removes.
+  """
+  def blocker_menu(ticket, others, blocking, x, y) do
+    items =
+      for other <- others, other.id != ticket.id do
+        if other.id in blocking,
+          do: %{label: "Unblock — ##{other.id} #{other.title}", action: {:unblock, ticket, other}},
+          else: %{label: "Blocked by ##{other.id} #{other.title}", action: {:block, ticket, other}}
+      end
+
+    %{title: "##{ticket.id} #{ticket.title}", x: x, y: y, cursor: 0, items: items ++ [%{label: "Cancel", action: :close}]}
   end
 
   defp confirm_delete_channel_menu(channel, x, y) do
@@ -153,6 +171,22 @@ defmodule Console.Cockpit.Author do
     do: %{state | menu: confirm_delete_channel_menu(channel, x, y)}
 
   defp menu_action({:confirm_delete_channel, channel}, state), do: %{delete_channel(state, channel) | menu: nil}
+
+  # A block is written from the BLOCKER's end (`other blocks ticket`) — one row, read both ways.
+  defp menu_action({:block, ticket, other}, state) do
+    flash =
+      case Safe.value(fn -> Tickets.link(other.id, ticket.id, "blocks") end, nil) do
+        {:ok, _} -> "##{ticket.id} is blocked by ##{other.id}"
+        _ -> "couldn't link ##{ticket.id}"
+      end
+
+    %{state | menu: nil, flash: flash}
+  end
+
+  defp menu_action({:unblock, ticket, other}, state) do
+    _ = Safe.value(fn -> Tickets.unlink(other.id, ticket.id, "blocks") end, nil)
+    %{state | menu: nil, flash: "##{ticket.id} no longer blocked by ##{other.id}"}
+  end
 
   defp menu_action(_unknown, state), do: %{state | menu: nil}
 

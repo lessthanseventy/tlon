@@ -79,4 +79,41 @@ defmodule Console.Cockpit.AuthorTest do
       assert Author.changeset_error(cs) == "name has already been taken; type is invalid"
     end
   end
+
+  describe "the blocked-by menu (UX slice 4)" do
+    setup do
+      ticket = %{id: 1, title: "waiting"}
+      others = [%{id: 1, title: "waiting"}, %{id: 2, title: "the blocker"}, %{id: 3, title: "another"}]
+      {:ok, ticket: ticket, others: others}
+    end
+
+    test "offers every OTHER ticket as a blocker, never itself", %{ticket: t, others: others} do
+      menu = Author.blocker_menu(t, others, [], 0, 0)
+      labels = Enum.map(menu.items, & &1.label)
+
+      assert "Blocked by #2 the blocker" in labels
+      assert "Blocked by #3 another" in labels
+      refute Enum.any?(labels, &String.contains?(&1, "#1"))
+    end
+
+    test "a ticket that already blocks is offered as an UNBLOCK — one menu, both directions", %{ticket: t, others: others} do
+      menu = Author.blocker_menu(t, others, [2], 0, 0)
+      labels = Enum.map(menu.items, & &1.label)
+
+      assert "Unblock — #2 the blocker" in labels
+      assert "Blocked by #3 another" in labels
+    end
+
+    test "picking one writes the link from the BLOCKER's end", %{ticket: t, others: others} do
+      menu = Author.blocker_menu(t, others, [], 0, 0)
+      pick = Enum.find(menu.items, &(&1.label == "Blocked by #2 the blocker"))
+
+      # `other blocks ticket` — stored one way, read both
+      assert {:block, ^t, %{id: 2}} = pick.action
+    end
+
+    test "it always offers a way out", %{ticket: t, others: others} do
+      assert %{label: "Cancel", action: :close} = List.last(Author.blocker_menu(t, others, [], 0, 0).items)
+    end
+  end
 end

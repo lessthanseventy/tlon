@@ -1140,6 +1140,8 @@ defmodule Console.Cockpit do
   # columns and the advance writes through — both need the server read, so the keymap only names them.
   defp apply_effect({:ticket_move, dir}, state), do: {:noreply, render(Boards.move_cursor(state, dir))}
 
+  defp apply_effect(:ticket_blocker_menu, state), do: {:noreply, render(Boards.open_blocker_menu(state))}
+
   defp apply_effect({:ticket_reorder, direction}, state),
     do: {:noreply, render(Boards.reorder_selected_ticket(state, direction))}
 

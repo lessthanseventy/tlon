@@ -23,7 +23,8 @@ defmodule Console.Panel.TicketBoard do
 
   @impl Panel
   # `h`/`l` walk the drawer's tab strip, so the kanban's own column move is `H`/`L`.
-  def hints(_data), do: [{"H/L·j/k", "move"}, {"J/K", "reorder"}, {"p", "advance"}, {"n", "new"}, {"⏎", "promote"}]
+  def hints(_data),
+    do: [{"H/L·j/k", "move"}, {"J/K", "reorder"}, {"b", "blocked by"}, {"p", "advance"}, {"n", "new"}, {"⏎", "promote"}]
 
   @doc "Tickets grouped by status, in column order — the cockpit indexes its cursor into this."
   def by_column(tickets) do

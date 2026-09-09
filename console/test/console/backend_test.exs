@@ -137,6 +137,11 @@ defmodule Console.Backend.LinkTest do
     # raises badarg on :nonode@nohost. It raised out of init/1, failed the child, failed
     # Console.Application, and the cockpit painted NOTHING — a blank screen, the reason only in a
     # redirected stderr log. The test env IS :nonode@nohost, so this is the exact state.
+    # The bug this pins (2026-09-08): `Node.set_cookie/1` is `:erlang.set_cookie(node(), c)`, which
+    # raises badarg on :nonode@nohost. It raised out of init/1, failed the child, failed
+    # Console.Application, and the cockpit painted NOTHING — a blank screen, the reason only in a
+    # redirected stderr log. The node is an ARGUMENT so this does not depend on whether a sibling
+    # test in the same VM has already started distribution.
     dir = Path.join(System.tmp_dir!(), "tlon-cookie-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     file = Path.join(dir, "cookie")
@@ -144,9 +149,7 @@ defmodule Console.Backend.LinkTest do
     System.put_env("TLON_COOKIE_FILE", file)
 
     try do
-      assert node() == :nonode@nohost
-
-      log = ExUnit.CaptureLog.capture_log(fn -> assert Link.set_cookie() end)
+      log = ExUnit.CaptureLog.capture_log(fn -> assert Link.set_cookie(:nonode@nohost) end)
       assert log =~ "not distributed"
     after
       System.delete_env("TLON_COOKIE_FILE")

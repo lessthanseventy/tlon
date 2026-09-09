@@ -121,8 +121,8 @@ defmodule Console.Backend.Link do
   end
 
   @doc false
-  def set_cookie do
-    case {node(), cookie()} do
+  def set_cookie(node \\ node()) do
+    case {node, cookie()} do
       # `Node.set_cookie/1` is `:erlang.set_cookie(node(), c)`, and on :nonode@nohost that raises
       # badarg — which took the whole application down and left the cockpit painting NOTHING, with
       # the reason buried in a redirected stderr log. Distribution not being up yet is a state the
