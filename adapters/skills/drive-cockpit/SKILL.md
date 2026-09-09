@@ -18,7 +18,8 @@ mise run console:run:tmux
 That variant runs the cockpit inside the `tlon` tmux server (session `cockpit`, `-A` attaches).
 The plain `console:run` runs on the bare terminal on purpose: the cockpit draws icons with the
 kitty graphics protocol and reads keys with the kitty keyboard protocol, and tmux passes
-neither through — so under tmux the WS tiles and icons are blank and Ctrl+Space is `C-Space`.
+neither through — so under tmux the WS tiles and icons are blank, and `C-Space` never reaches the
+cockpit (it only decodes Ctrl+Space as the kitty CSI-u sequence): send the bytes instead, see below.
 Drive layout, text and flow in tmux; judge icons and glyph alignment on the bare terminal.
 
 - `-L tlon` is a dedicated tmux server so the cockpit's own coworker servers (`console-workspace-*`)
@@ -42,6 +43,7 @@ scripts/cockpit-tmux.sh type 'hello there'  # literal text into the focused inpu
 scripts/cockpit-tmux.sh cap                 # just read
 scripts/cockpit-tmux.sh idle 10             # wait up to 10 s for a slow repaint
 scripts/cockpit-tmux.sh size 79 30          # the narrow layout
+tmux -L tlon send-keys -t cockpit -l $'\e[32;5u'   # Ctrl+Space (nav toggle) — the CSI-u bytes, not C-Space
 ```
 
 Raw tmux, when the helper is not enough. Read the frame:
