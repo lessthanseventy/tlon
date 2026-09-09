@@ -20,7 +20,7 @@ defmodule Console.Keymap do
   center), `composer_thread_id` (also derived per keypress — the thread the `c` verb composes
   onto: the focused thread, or the machine thread in Tlön), `leader_pending?` (the prefix is
   armed), `input` (the typing modal), `drawer` (the open drawer pane, nil when shut), and
-  `author_workspaces` (the live workspace list, threaded in per keypress — the space ring and
+  `live_workspaces` (the live workspace list, threaded in per keypress — the space ring and
   CONFIG read it). A `key_event` is the
   `Raxol.Core.Events.Event` `data` map, e.g. `%{key: :up}` or `%{key: :char, char: "j"}`.
 
@@ -52,7 +52,6 @@ defmodule Console.Keymap do
     * `{:cycle_coworker_model, profile}` — advance the active space's coworker driver model one
       step round `Console.Profiles.model_ring/0` and persist it (the `m` verb; only in a space with
       a coworker).
-    * `{:switch_space, key}` — a rail row / Enter on a workspace row switches to it.
     * `{:switch_workspace_pos, n}` / `{:select_tab, n}` — Alt+Shift+digit / Alt+digit.
     * `{:register_workspace, template_key, name}` — Enter on the `:new_workspace` input (CONFIG's
       `n` verb) — register a workspace from a template + the typed name (D2.3).
@@ -80,7 +79,7 @@ defmodule Console.Keymap do
   CONFIG (the Author, in the drawer since UX slice 1 task 5; `Alt+d` then its tab, or the settings
   verb): `handle_drawer/2` routes every key to `config/2` while `drawer == :config`. `author_cursor`
   is the workspace list's own per-row cursor, clamped against
-  `author_workspaces` — the live `Console.Workspaces.all/0` list, threaded in per keypress (like
+  `live_workspaces` — the live `Console.Workspaces.all/0` list, threaded in per keypress (like
   `composer_thread_id`) so this module stays a pure reducer with no server call of its own.
   `pending_delete` (id | nil) is the two-key delete confirm's arm.
 
@@ -150,7 +149,6 @@ defmodule Console.Keymap do
           | {:scroll_conversation, integer()}
           | {:cycle_coworker_model, String.t()}
           | {:habit_action, :approve | :reject}
-          | {:switch_space, atom() | non_neg_integer()}
           | {:switch_workspace_pos, pos_integer()}
           | {:select_tab, pos_integer()}
           | {:register_workspace, atom(), String.t()}
@@ -242,7 +240,7 @@ defmodule Console.Keymap do
   def handle(%{key: :enter}, %{input: %{kind: :new_workspace, template: template, buffer: buffer}} = state),
     do: {%{state | input: nil}, {:register_workspace, template, buffer}}
 
-  # A non-blank path appends to the edited workspace's LIVE paths list (author_workspaces, threaded per
+  # A non-blank path appends to the edited workspace's LIVE paths list (live_workspaces, threaded per
   # keypress) and applies immediately. Blank already fell into the empty-buffer clause above.
   def handle(%{key: :enter}, %{input: %{kind: :new_path, workspace_id: id, buffer: buffer}} = state),
     do: {%{state | input: nil}, {:edit_workspace, id, %{paths: workspace_field(state, id, :paths) ++ [buffer]}}}
@@ -700,7 +698,7 @@ defmodule Console.Keymap do
   # `e` on the list's cursor workspace opens the editor at field 0. A no-op on an
   # empty list, or while ALREADY editing (never re-arms onto a different cursor workspace mid-edit).
   defp config(%{key: :char, char: "e"}, state) do
-    case {author_edit(state), Enum.at(author_workspaces(state), author_cursor(state))} do
+    case {author_edit(state), Enum.at(live_workspaces(state), author_cursor(state))} do
       {nil, %{id: id}} ->
         {Map.put(state, :author_edit, %{id: id, field: 0, sub: 0, mode: :field, knob: :model}), :repaint}
 
@@ -714,7 +712,7 @@ defmodule Console.Keymap do
     do: {put_author_edit(state, %{edit | field: (edit.field + vertical(key)) |> max(0) |> min(3)}), :repaint}
 
   # Field-list mode: h/l cycle the type (field 0) / scope (field 1) ring against the LIVE workspace
-  # (author_workspaces, threaded per keypress) and emit the edit immediately — no draft/commit step.
+  # (live_workspaces, threaded per keypress) and emit the edit immediately — no draft/commit step.
   # Fields 2/3 (paths/roster) have no ring — a no-op, matching the plan's "otherwise no-op".
   defp config(%{key: :char, char: "h"}, %{author_edit: %{mode: :field} = edit} = state),
     do: {state, field_ring_edit(state, edit, -1)}
@@ -733,7 +731,7 @@ defmodule Console.Keymap do
   defp config(%{key: :enter}, %{author_edit: %{mode: :field}} = state), do: {state, :none}
 
   # Sub-list mode (D2.4 Chunk 2b/2c): j/k move `sub`, clamped to the field's LIVE list length
-  # (paths/roster off author_workspaces, threaded per keypress — never stale).
+  # (paths/roster off live_workspaces, threaded per keypress — never stale).
   defp config(key, %{author_edit: %{mode: :sub} = edit} = state) when is_vertical(key),
     do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, vertical(key))}), :repaint}
 
@@ -799,7 +797,7 @@ defmodule Console.Keymap do
   # `d` on the cursor workspace arms the delete confirm (D2.5) — the FIRST press; the armed-state
   # clauses above own the second press and every cancel. A no-op on an empty list.
   defp config(%{key: :char, char: "d"}, state) do
-    case Enum.at(author_workspaces(state), author_cursor(state)) do
+    case Enum.at(live_workspaces(state), author_cursor(state)) do
       %{id: id, name: name} -> {state, {:arm_delete, id, name}}
       _ -> {state, :none}
     end
@@ -849,7 +847,7 @@ defmodule Console.Keymap do
   defp switch(state, dir) do
     # the ring is the keypress's own workspace list (the cockpit threads the cache in), so the
     # keymap stays pure and a test can hand it two workspaces
-    spaces = Space.all(author_workspaces(state))
+    spaces = Space.all(live_workspaces(state))
 
     case if(dir == :next, do: Space.next(state.active_key, spaces), else: Space.prev(state.active_key, spaces)) do
       nil -> {state, :none}
@@ -871,10 +869,9 @@ defmodule Console.Keymap do
   defp stack_jump(state, :first), do: {%{state | focused_id: hd(state.threads).id}, :repaint}
   defp stack_jump(state, :last), do: {%{state | focused_id: List.last(state.threads).id}, :repaint}
 
-  # Clamp `author_cursor` into `0..length(author_workspaces) - 1` — same edge-clamp discipline as
-  # `move_survey/2`.
+  # Clamp `author_cursor` into `0..length(live_workspaces) - 1` — edge-clamp, no wrap.
   defp move_author_cursor(state, dir) do
-    max_idx = max(length(author_workspaces(state)) - 1, 0)
+    max_idx = max(length(live_workspaces(state)) - 1, 0)
     cursor = (author_cursor(state) + dir) |> max(0) |> min(max_idx)
     {Map.put(state, :author_cursor, cursor), :repaint}
   end
@@ -901,12 +898,12 @@ defmodule Console.Keymap do
   defp author_edit(state), do: Map.get(state, :author_edit)
   defp put_author_edit(state, edit), do: Map.put(state, :author_edit, edit)
 
-  # h/l on field 0 (type) / field 1 (scope): find the CURRENT workspace (author_workspaces, threaded per
+  # h/l on field 0 (type) / field 1 (scope): find the CURRENT workspace (live_workspaces, threaded per
   # keypress — never stale), step its ring value by `dir` (wrapping — a ring, not a clamp, same
   # idiom as `cycle_template/2`), and emit the edit. A workspace that's vanished (deleted mid-edit,
   # the Bus race is real but rare) or a field with no ring (2/3) is a no-op.
   defp field_ring_edit(state, %{id: id, field: field}, dir) when field in [0, 1] do
-    case Enum.find(author_workspaces(state), &(&1.id == id)) do
+    case Enum.find(live_workspaces(state), &(&1.id == id)) do
       %{} = workspace ->
         {key, ring} = if field == 0, do: {:type, @type_ring}, else: {:scope, @scope_ring}
         current = Map.get(workspace, key)
@@ -922,7 +919,7 @@ defmodule Console.Keymap do
   defp field_ring_edit(_state, _edit, _dir), do: :none
 
   # Sub-list mode's j/k: clamp `sub` into `0..length(field's live list) - 1`, no wrap — same
-  # edge-clamp discipline as `move_author_cursor/2`/`move_survey/2`.
+  # edge-clamp discipline as `move_author_cursor/2`.
   defp move_sub(state, %{id: id, field: field, sub: sub}, dir) do
     max_idx = state |> workspace_field(id, sub_key(field)) |> length() |> Kernel.-(1) |> max(0)
     (sub + dir) |> max(0) |> min(max_idx)
@@ -947,16 +944,16 @@ defmodule Console.Keymap do
   end
 
   # The CURRENT value of one list-shaped field (`:paths`/`:roster`) off the LIVE workspace
-  # (author_workspaces, threaded per keypress — never stale). A vanished workspace (deleted mid-edit)
+  # (live_workspaces, threaded per keypress — never stale). A vanished workspace (deleted mid-edit)
   # degrades to `[]` rather than crashing the reducer.
   defp workspace_field(state, id, key) do
-    case Enum.find(author_workspaces(state), &(&1.id == id)) do
+    case Enum.find(live_workspaces(state), &(&1.id == id)) do
       nil -> []
       workspace -> Map.get(workspace, key) || []
     end
   end
 
-  defp author_workspaces(state), do: Map.get(state, :author_workspaces, [])
+  defp live_workspaces(state), do: Map.get(state, :live_workspaces, [])
 
   # Input-buffer cursor math (graphemes, not bytes). `input.cursor` defaults to the buffer's end when
   # absent (a state built before this field existed, or by an older test).

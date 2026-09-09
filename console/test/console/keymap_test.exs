@@ -26,7 +26,7 @@ defmodule Console.KeymapTest do
   # The slice of cockpit state the keymap reads. Threads are anything with an `.id`.
   # `center_live?` and `composer_thread_id` are derived per keypress by the cockpit; here they're
   # set explicitly per test (`composer_thread_id` defaults to the focused thread).
-  # two workspaces for the space ring — the cockpit threads the live cache in as `author_workspaces`
+  # two workspaces for the space ring — the cockpit threads the live cache in as `live_workspaces`
   defp two_workspaces,
     do: [
       %{id: 1, name: "Tlön", roster: [], type: "code", paths: [], scope: "machine"},
@@ -49,7 +49,7 @@ defmodule Console.KeymapTest do
           drawer: nil,
           last_drawer: :memory,
           author_cursor: 0,
-          author_workspaces: [],
+          live_workspaces: [],
           pending_delete: nil,
           # The field editor's own state (D2.4 Chunk 2a) — nil off the edit screen; the "editing a
           # workspace" describe block below sets it.
@@ -132,12 +132,12 @@ defmodule Console.KeymapTest do
     end
 
     test "Tab moves to the next workspace and repaints" do
-      s = state(%{active_key: 1, author_workspaces: two_workspaces()})
+      s = state(%{active_key: 1, live_workspaces: two_workspaces()})
       assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab), s)
     end
 
     test "Shift-Tab moves to the previous workspace (wraps)" do
-      s = state(%{active_key: 1, author_workspaces: two_workspaces()})
+      s = state(%{active_key: 1, live_workspaces: two_workspaces()})
       assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab, shift: true), s)
     end
 
@@ -169,9 +169,9 @@ defmodule Console.KeymapTest do
     @two_author_workspaces [%{id: 11, name: "Tlön"}, %{id: 22, name: "Freedonia"}]
 
     defp author_state(overrides),
-      do: state(Map.merge(%{drawer: :config, author_workspaces: @two_author_workspaces}, overrides))
+      do: state(Map.merge(%{drawer: :config, live_workspaces: @two_author_workspaces}, overrides))
 
-    test "j/k (and ↑/↓) move author_cursor, clamped 0..length(author_workspaces)-1 — no wrap" do
+    test "j/k (and ↑/↓) move author_cursor, clamped 0..length(live_workspaces)-1 — no wrap" do
       s = author_state(%{author_cursor: 0})
       assert {%{author_cursor: 1}, :repaint} = Keymap.handle(char("j"), s)
       assert {%{author_cursor: 1}, :repaint} = Keymap.handle(key(:down), s)
@@ -243,7 +243,7 @@ defmodule Console.KeymapTest do
 
   describe "deleting a workspace — the author face's `d` verb, two-key confirm (D2.5)" do
     defp author_state2(overrides),
-      do: state(Map.merge(%{drawer: :config, author_workspaces: @two_author_workspaces}, overrides))
+      do: state(Map.merge(%{drawer: :config, live_workspaces: @two_author_workspaces}, overrides))
 
     test "d on the cursor workspace arms the confirm: {:arm_delete, id, name}" do
       s = author_state2(%{author_cursor: 1})
@@ -264,7 +264,7 @@ defmodule Console.KeymapTest do
 
   describe "editing a workspace — `e` opens the field editor, h/l cycle type/scope rings (D2.4 Chunk 2a)" do
     defp editor_state(overrides),
-      do: state(Map.merge(%{drawer: :config, author_workspaces: @two_author_workspaces}, overrides))
+      do: state(Map.merge(%{drawer: :config, live_workspaces: @two_author_workspaces}, overrides))
 
     test "e on the author cursor workspace opens author_edit at field 0, sub 0" do
       s = editor_state(%{author_cursor: 1})
@@ -272,7 +272,7 @@ defmodule Console.KeymapTest do
     end
 
     test "e on an empty workspace list is a no-op" do
-      s = editor_state(%{author_workspaces: [], author_cursor: 0})
+      s = editor_state(%{live_workspaces: [], author_cursor: 0})
       assert {^s, :none} = Keymap.handle(char("e"), s)
     end
 
@@ -296,12 +296,12 @@ defmodule Console.KeymapTest do
 
     test "h/l on field 0 (type) emits {:edit_workspace, id, %{type: next}}, cycling the ring, wrapping" do
       workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "machine", paths: [], roster: []}]
-      s = editor_state(%{author_workspaces: workspaces, author_edit: %{id: 22, field: 0, sub: 0, mode: :field}})
+      s = editor_state(%{live_workspaces: workspaces, author_edit: %{id: 22, field: 0, sub: 0, mode: :field}})
 
       assert {_s, {:edit_workspace, 22, %{type: "life"}}} = Keymap.handle(char("l"), s)
       assert {_s, {:edit_workspace, 22, %{type: "blank"}}} = Keymap.handle(char("h"), s)
 
-      blank = %{s | author_workspaces: [%{Enum.at(workspaces, 0) | type: "blank"}]}
+      blank = %{s | live_workspaces: [%{Enum.at(workspaces, 0) | type: "blank"}]}
       assert {_s, {:edit_workspace, 22, %{type: "code"}}} = Keymap.handle(char("l"), blank)
     end
 
@@ -309,12 +309,12 @@ defmodule Console.KeymapTest do
       # A 2-element ring: from "project" (index 0) BOTH directions land on "machine" (index 1) —
       # only a 3+ element ring (type) shows h/l diverge, asserted above.
       workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "project", paths: [], roster: []}]
-      s = editor_state(%{author_workspaces: workspaces, author_edit: %{id: 22, field: 1, sub: 0, mode: :field}})
+      s = editor_state(%{live_workspaces: workspaces, author_edit: %{id: 22, field: 1, sub: 0, mode: :field}})
 
       assert {_s, {:edit_workspace, 22, %{scope: "machine"}}} = Keymap.handle(char("l"), s)
       assert {_s, {:edit_workspace, 22, %{scope: "machine"}}} = Keymap.handle(char("h"), s)
 
-      machine = %{s | author_workspaces: [%{Enum.at(workspaces, 0) | scope: "machine"}]}
+      machine = %{s | live_workspaces: [%{Enum.at(workspaces, 0) | scope: "machine"}]}
       assert {_s, {:edit_workspace, 22, %{scope: "project"}}} = Keymap.handle(char("l"), machine)
       assert {_s, {:edit_workspace, 22, %{scope: "project"}}} = Keymap.handle(char("h"), machine)
     end
@@ -353,7 +353,7 @@ defmodule Console.KeymapTest do
     @workspace_with_paths %{id: 22, name: "Freedonia", type: "code", scope: "machine", paths: ["a", "b"], roster: []}
 
     defp paths_state(overrides),
-      do: state(Map.merge(%{drawer: :config, author_workspaces: [@workspace_with_paths]}, overrides))
+      do: state(Map.merge(%{drawer: :config, live_workspaces: [@workspace_with_paths]}, overrides))
 
     test "Enter on field 2 drops into the sub-list: mode: :sub, sub: 0" do
       s = paths_state(%{author_edit: %{id: 22, field: 2, sub: 0, mode: :field}})
@@ -392,7 +392,7 @@ defmodule Console.KeymapTest do
       s =
         state(%{
           drawer: :config,
-          author_workspaces: [@workspace_with_paths],
+          live_workspaces: [@workspace_with_paths],
           input: %{kind: :new_path, buffer: "c", cursor: 1, workspace_id: 22}
         })
 
@@ -433,7 +433,7 @@ defmodule Console.KeymapTest do
     }
 
     defp roster_state(overrides),
-      do: state(Map.merge(%{drawer: :config, author_workspaces: [@workspace_with_roster]}, overrides))
+      do: state(Map.merge(%{drawer: :config, live_workspaces: [@workspace_with_roster]}, overrides))
 
     test "Enter on field 3 drops into the sub-list: mode: :sub, sub: 0" do
       s = roster_state(%{author_edit: %{id: 22, field: 3, sub: 0, mode: :field}})
@@ -484,7 +484,7 @@ defmodule Console.KeymapTest do
       s =
         state(%{
           drawer: :config,
-          author_workspaces: [@workspace_with_roster],
+          live_workspaces: [@workspace_with_roster],
           input: %{kind: :new_roster, buffer: "amy", cursor: 3, workspace_id: 22, archetype: :assistant}
         })
 
@@ -532,7 +532,7 @@ defmodule Console.KeymapTest do
     }
 
     defp roster_knob_state(overrides),
-      do: state(Map.merge(%{drawer: :config, author_workspaces: [@workspace_with_roster]}, overrides))
+      do: state(Map.merge(%{drawer: :config, live_workspaces: [@workspace_with_roster]}, overrides))
 
     test "Tab flips the armed knob :model <-> :yolo" do
       s = roster_knob_state(%{author_edit: %{id: 22, field: 3, sub: 0, mode: :sub, knob: :model}})
@@ -575,7 +575,7 @@ defmodule Console.KeymapTest do
     test "Enter on an empty roster is a no-op, never crashes" do
       s =
         roster_knob_state(%{
-          author_workspaces: [%{@workspace_with_roster | roster: []}],
+          live_workspaces: [%{@workspace_with_roster | roster: []}],
           author_edit: %{id: 22, field: 3, sub: 0, mode: :sub, knob: :model}
         })
 
@@ -627,7 +627,7 @@ defmodule Console.KeymapTest do
     end
 
     test "^B Tab switches workspaces" do
-      s = state(%{center_live?: true, active_key: 1, author_workspaces: two_workspaces()})
+      s = state(%{center_live?: true, active_key: 1, live_workspaces: two_workspaces()})
       assert {%{active_key: 2, leader_pending?: false}, :repaint} = via_leader(key(:tab), s)
     end
 
@@ -1183,21 +1183,21 @@ defmodule Console.KeymapTest do
 
     # Workspaces are the only spaces (UX slice 1, task 5): the ring is the keypress's workspace list.
     test "in nav mode, Tab and Shift+Tab walk the workspace ring, wrapping" do
-      s = tlon(nav_focus(), %{active_key: 1, author_workspaces: two_workspaces()})
+      s = tlon(nav_focus(), %{active_key: 1, live_workspaces: two_workspaces()})
       assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab), s)
       assert {%{active_key: 2}, :repaint} = Keymap.handle(key(:tab, shift: true), s)
       assert {%{active_key: 1}, :repaint} = Keymap.handle(key(:tab), %{s | active_key: 2})
     end
 
     test "in nav mode, with no workspaces Tab goes nowhere (server down is not a crash)" do
-      s = tlon(nav_focus(), %{active_key: 0, author_workspaces: []})
+      s = tlon(nav_focus(), %{active_key: 0, live_workspaces: []})
       assert {^s, :none} = Keymap.handle(key(:tab), s)
     end
 
     # UX slice 1, task 2: the rail advertises `[ ]` — bind it to the space ring Tab already walks,
     # so every key the rail's hints name actually does something.
     test "in nav mode, [ and ] walk the space ring like Shift+Tab / Tab" do
-      s = tlon(nav_focus(), %{active_key: 1, author_workspaces: two_workspaces()})
+      s = tlon(nav_focus(), %{active_key: 1, live_workspaces: two_workspaces()})
       assert {%{active_key: 2}, :repaint} = Keymap.handle(char("]"), s)
       assert {%{active_key: 2}, :repaint} = Keymap.handle(char("["), s)
     end

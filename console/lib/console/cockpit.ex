@@ -37,7 +37,6 @@ defmodule Console.Cockpit do
   alias Console.Tlon.Focus
   alias Console.Tmux
   alias Console.View
-  alias Console.WorkspaceTemplates
   alias Ghostty.KeyEvent
   alias Raxol.Core.Events.Event
   alias Server.Bus
@@ -353,7 +352,7 @@ defmodule Console.Cockpit do
     # dropped on the way back; the cockpit keeps only `leader_pending?`.
     # `focus` rides in `state` (persistent); `tlon_layout` is derived per keypress, like the two
     # above, and dropped on the way back — the keymap reads it to navigate, the cockpit never stores it.
-    # `author_workspaces` (D2.2): the author face's own workspace list, derived per keypress like
+    # `live_workspaces` (D2.2): the live workspace list — CONFIG and the space ring read it, derived per keypress like
     # `composer_thread_id` — `Console.Workspaces.all/0` is a cached GenServer call (no DB hit), so this
     # keeps `Console.Keymap` a pure reducer with no server call of its own.
     keymap_state = keymap_state(state)
@@ -765,28 +764,6 @@ defmodule Console.Cockpit do
     {:noreply, render(next)}
   end
 
-  # The spine's `+` tile (Slice 3.4): open the new-workspace input directly — the SAME flow the Orbis
-  # author face's `n` opens (template ring on h/l, Enter → {:register_workspace, …}), reused from
-  # anywhere so add-a-workspace isn't buried in the god-view.
-  defp apply_pick({:new_workspace}, state) do
-    input = %{kind: :new_workspace, buffer: "", cursor: 0, template: List.first(WorkspaceTemplates.names())}
-    {:noreply, render(%{state | input: input})}
-  end
-
-  # The settings verb: the drawer's CONFIG pane — the Author, where workspaces are created/edited/
-  # removed (roster, repos, knobs).
-  defp apply_pick({:settings}, state), do: {:noreply, render(Drawer.open(state, :config))}
-
-  # A picked-but-not-yet-wired surface (the spine's Tickets/Notes tools, Slice 3.5): a transient
-  # footer note, honest that it's coming, rather than a dead click.
-  defp apply_pick({:flash, message}, state) do
-    {:noreply, render(%{state | flash: message})}
-  end
-
-  # The Tickets/Notes tools (Slice 3.5): the boards are drawer panes now — open it on that pane.
-  defp apply_pick({:open_board, kind}, state),
-    do: {:noreply, render(%{Drawer.open(state, kind) | board_cursor: {0, 0}, menu: nil})}
-
   # Click a thread row in the list → open its conversation (two-step center).
   defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)
 
@@ -1045,9 +1022,6 @@ defmodule Console.Cockpit do
   defp apply_effect(:ticket_promote, state),
     do: flashing(state, "ticket promote", fn -> {:noreply, render(Boards.promote_selected_ticket(state))} end)
 
-  # Enter on the Orbis survey (D0.2) — the same space-switch a click on the row runs.
-  defp apply_effect({:switch_space, key}, state), do: apply_pick({:switch_space, key}, state)
-
   # Nav v2 (Andrew 2026-08-31): Alt+Shift+N → switch to the Nth workspace (1-based, ordered like the
   # spine); past the end is a no-op.
   defp apply_effect({:switch_workspace_pos, n}, state) do
@@ -1069,9 +1043,7 @@ defmodule Console.Cockpit do
 
   defp apply_effect({:select_tab, _n}, state), do: {:noreply, state}
 
-  # `a` (or Esc from the author face) landed: flip Orbis' face and repaint (D2.1).
-
-  # The author face's `n` verb landed: register a workspace from the armed template + typed name.
+  # CONFIG's `n` verb landed: register a workspace from the armed template + typed name.
   defp apply_effect({:register_workspace, template, name}, state),
     do: {:noreply, render(Author.register_workspace!(state, template, name))}
 
@@ -1238,10 +1210,10 @@ defmodule Console.Cockpit do
     |> Map.put(:opened_thread, state.opened_thread)
     |> Map.put(:composer_thread_id, Reads.composer_thread_id(state))
     |> Map.put(:tlon_layout, Reads.tlon_layout(state))
-    |> Map.put(:author_workspaces, Console.Workspaces.all())
+    |> Map.put(:live_workspaces, Console.Workspaces.all())
   end
 
-  defp drop_derived(next), do: Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :author_workspaces])
+  defp drop_derived(next), do: Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :live_workspaces])
 
   # Arm one coalesced render if none is armed. The first terminal event in a burst schedules
   # the :render; the rest see the flag set and do nothing — the single :render picks up the
