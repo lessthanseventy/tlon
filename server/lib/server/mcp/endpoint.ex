@@ -57,6 +57,10 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.SearchHistory, name: "search_history")
   component(Server.MCP.Tool.SearchFacts, name: "search_facts")
   component(Server.MCP.Tool.MachineOverview, name: "machine_overview")
+  # The source verbs (docs/plans/2026-09-08-elixir-repo-tools-design.md): edits and introspection
+  # over the thread's own worktree. A reviewer's profile excludes the edit verbs.
+  component(Server.MCP.Tool.RenameIdentifier, name: "rename_identifier")
+  component(Server.MCP.Tool.OutlineFile, name: "outline_file")
   component(Server.MCP.Tool.RegisterWorkspace, name: "register_workspace")
   component(Server.MCP.Tool.ListWorkspaces, name: "list_workspaces")
   component(Server.MCP.Tool.EditWorkspace, name: "edit_workspace")

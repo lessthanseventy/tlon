@@ -109,7 +109,10 @@ defmodule Server.MCP.ServerTest do
                "list_tickets",
                "update_ticket",
                "write_note",
-               "get_notes"
+               "get_notes",
+               # the source verbs (repo tools design, 2026-09-08)
+               "rename_identifier",
+               "outline_file"
              ])
 
     # -- register: claims a session for the token's OWN (thread, agent) — no
