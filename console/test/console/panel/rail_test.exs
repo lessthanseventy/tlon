@@ -22,19 +22,39 @@ defmodule Console.Panel.RailTest do
         groups: [
           %{
             workspace: %{id: 1, name: "Tlön"},
-            threads: [
-              thread(%{id: 9, title: "general", warm?: true, awaiting: "andrew", unread?: true}),
-              thread(%{id: 8, title: "aleph", unread?: true, working: true})
+            channels: [
+              %{
+                id: 10,
+                name: "general",
+                kind: "general",
+                threads: [
+                  thread(%{id: 9, title: "general", warm?: true, awaiting: "andrew", unread?: true}),
+                  thread(%{id: 8, title: "aleph", unread?: true, working: true})
+                ]
+              },
+              %{id: 11, name: "ideas", kind: "topic", threads: [thread(%{id: 7, title: "folded", working: true})]}
             ]
           },
-          %{workspace: %{id: 2, name: "ficciones"}, threads: [thread(%{id: 5, title: "hidden"})]}
+          %{
+            workspace: %{id: 2, name: "ficciones"},
+            channels: [%{id: 12, name: "general", kind: "general", threads: [thread(%{id: 5, title: "hidden"})]}]
+          }
         ],
         active_key: 1,
+        open_channel: nil,
         opened: 9
       },
       over
     )
   end
+
+  # one workspace, #general only, these threads
+  defp solo(threads),
+    do: %{
+      groups: [
+        %{workspace: %{id: 1, name: "Tlön"}, channels: [%{id: 10, name: "general", kind: "general", threads: threads}]}
+      ]
+    }
 
   defp rows(over \\ %{}), do: Rail.render(data(over), @rect)
   defp row_with(rows, substr), do: Enum.find(rows, fn row -> row_text(row) =~ substr end)
@@ -51,20 +71,26 @@ defmodule Console.Panel.RailTest do
       assert Enum.any?(texts, &(&1 =~ "aleph" and &1 =~ "•" and not (&1 =~ "!")))
     end
 
-    test "only the active workspace's threads are listed" do
+    test "only the active workspace's channels are listed, and only the OPEN channel's threads" do
       refute text(rows()) =~ "hidden"
-      refute text(rows(%{active_key: 2})) =~ "general"
+      refute text(rows(%{active_key: 2})) =~ "aleph"
       assert text(rows(%{active_key: 2})) =~ "hidden"
+      # #ideas is folded: its thread is hidden, its strongest badge shows on the channel row
+      assert row_text(row_with(rows(), "#ideas")) =~ "…"
+      refute text(rows()) =~ "folded"
+      # open it: its thread unfolds, #general folds
+      assert text(rows(%{open_channel: 11})) =~ "folded"
+      refute text(rows(%{open_channel: 11})) =~ "aleph"
     end
 
     test "a working thread with nothing else pending gets the working badge alone" do
-      rows = rows(%{groups: [%{workspace: %{id: 1, name: "Tlön"}, threads: [thread(%{title: "build", working: true})]}]})
+      rows = rows(solo([thread(%{title: "build", working: true})]))
 
       assert row_text(row_with(rows, "build")) =~ "…"
     end
 
     test "a quiet thread carries no badge at all" do
-      rows = rows(%{groups: [%{workspace: %{id: 1, name: "Tlön"}, threads: [thread(%{title: "quiet"})]}]})
+      rows = rows(solo([thread(%{title: "quiet"})]))
       row = row_text(row_with(rows, "quiet"))
 
       refute row =~ "!"
@@ -73,7 +99,7 @@ defmodule Console.Panel.RailTest do
     end
 
     test "warmth is a dot per thread — ● warm, ○ cold (the pair Roster and the top bar use)" do
-      assert row_text(row_with(rows(), "general")) =~ "●"
+      assert row_text(row_with(rows(), " general")) =~ "●"
       assert row_text(row_with(rows(), "aleph")) =~ "○"
     end
 
@@ -88,17 +114,17 @@ defmodule Console.Panel.RailTest do
       rows = rows()
       styles = fn substr -> rows |> row_with(substr) |> Enum.map(fn {_t, s} -> s end) end
 
-      assert :selected in styles.("general")
+      assert :selected in styles.(" general")
       assert :selected in styles.("Tlön")
       refute :selected in styles.("aleph")
       refute :selected in styles.("ficciones")
     end
 
     test "the nav cursor marks its row without stealing the active face" do
-      # cursor 1 = the first thread under the active workspace (row 0 is the workspace itself).
-      rows = rows(%{selected: 1, opened: nil})
+      # cursor 2 = the first thread under #general (row 0 the workspace, row 1 the channel).
+      rows = rows(%{selected: 2, opened: nil})
 
-      assert :accent in (rows |> row_with("general") |> Enum.map(fn {_t, s} -> s end))
+      assert :accent in (rows |> row_with(" general") |> Enum.map(fn {_t, s} -> s end))
     end
 
     test "an empty read renders a prompt, not a crash" do
@@ -112,7 +138,16 @@ defmodule Console.Panel.RailTest do
 
       rows =
         Rail.render(
-          data(%{groups: [%{workspace: %{id: 1, name: "T"}, threads: [thread(%{title: long, awaiting: "andrew"})]}]}),
+          data(%{
+            groups: [
+              %{
+                workspace: %{id: 1, name: "T"},
+                channels: [
+                  %{id: 1, name: "general", kind: "general", threads: [thread(%{title: long, awaiting: "andrew"})]}
+                ]
+              }
+            ]
+          }),
           rect
         )
 
@@ -124,7 +159,7 @@ defmodule Console.Panel.RailTest do
 
     test "rows clip to the rail's width" do
       long = String.duplicate("x", 80)
-      rows = rows(%{groups: [%{workspace: %{id: 1, name: "Tlön"}, threads: [thread(%{title: long})]}]})
+      rows = rows(solo([thread(%{title: long})]))
 
       assert Enum.all?(rows, &(Console.Panel.row_width(&1) <= @rect.w))
     end
@@ -132,11 +167,13 @@ defmodule Console.Panel.RailTest do
 
   describe "pick" do
     test "a thread row opens that thread; a workspace row switches to it" do
-      # row 0 = the active workspace, rows 1..2 its threads, row 3 the next workspace.
+      # row 0 = the active workspace, 1 = #general, 2..3 its threads, 4 = #ideas, 5 = the next workspace.
       assert Rail.pick(data(), @rect, 0) == {:switch_space, 1}
-      assert Rail.pick(data(), @rect, 1) == {:open_thread_view, 9}
-      assert Rail.pick(data(), @rect, 2) == {:open_thread_view, 8}
-      assert Rail.pick(data(), @rect, 3) == {:switch_space, 2}
+      assert Rail.pick(data(), @rect, 1) == {:open_channel, 10}
+      assert Rail.pick(data(), @rect, 2) == {:open_thread_view, 9}
+      assert Rail.pick(data(), @rect, 3) == {:open_thread_view, 8}
+      assert Rail.pick(data(), @rect, 4) == {:open_channel, 11}
+      assert Rail.pick(data(), @rect, 5) == {:switch_space, 2}
     end
 
     test "a click past the last row picks nothing" do
@@ -144,22 +181,23 @@ defmodule Console.Panel.RailTest do
     end
   end
 
-  describe "workspace_at/3 — the right-click context menu's target" do
-    test "a workspace row answers its workspace; a thread row answers nothing" do
-      assert Rail.workspace_at(data(), @rect, 0) == %{id: 1, name: "Tlön"}
-      assert Rail.workspace_at(data(), @rect, 1) == nil
-      assert Rail.workspace_at(data(), @rect, 3) == %{id: 2, name: "ficciones"}
-      assert Rail.workspace_at(data(), @rect, 99) == nil
-      assert Rail.workspace_at(%{}, @rect, 0) == nil
+  describe "entry_at/3 — the right-click context menu's target" do
+    test "every row answers its entry: workspace, channel or thread" do
+      assert Rail.entry_at(data(), @rect, 0) == {:workspace, %{id: 1, name: "Tlön"}}
+      assert {:channel, %{id: 10}} = Rail.entry_at(data(), @rect, 1)
+      assert {:thread, %{id: 9}} = Rail.entry_at(data(), @rect, 2)
+      assert Rail.entry_at(data(), @rect, 5) == {:workspace, %{id: 2, name: "ficciones"}}
+      assert Rail.entry_at(data(), @rect, 99) == nil
+      assert Rail.entry_at(%{}, @rect, 0) == nil
     end
 
     test "a scrolled rail resolves the row under the CURSOR, not the unscrolled list" do
-      assert Rail.workspace_at(data(%{scroll: 3}), @rect, 0) == %{id: 2, name: "ficciones"}
+      assert Rail.entry_at(data(%{scroll: 5}), @rect, 0) == {:workspace, %{id: 2, name: "ficciones"}}
     end
   end
 
   test "hints name only keys that work" do
-    assert Rail.hints(data()) == [{"j/k", "row"}, {"⏎", "open"}, {"[ ]", "space"}]
+    assert Rail.hints(data()) == [{"j/k", "row"}, {"⏎", "open"}, {"m", "move"}, {"#", "channel"}, {"d", "delete"}]
   end
 
   test "topics cover threads, sessions and workspaces" do

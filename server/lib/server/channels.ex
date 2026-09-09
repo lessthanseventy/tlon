@@ -40,9 +40,13 @@ defmodule Server.Channels do
     _ = general(workspace_id)
 
     Repo.all(
-      from c in ChannelRow,
+      from(c in ChannelRow,
         where: c.workspace_id == ^workspace_id,
-        order_by: [asc: fragment("CASE WHEN ? = 'general' THEN 0 ELSE 1 END", c.kind), asc: c.name]
+        order_by: [
+          asc: fragment("CASE WHEN ? = 'general' THEN 0 ELSE 1 END", c.kind),
+          asc: c.name
+        ]
+      )
     )
   end
 
@@ -59,7 +63,8 @@ defmodule Server.Channels do
   end
 
   @doc "Move a thread into another channel of its own workspace."
-  @spec move(Thread.t(), integer()) :: {:ok, Thread.t()} | {:error, :no_channel | :other_workspace | Ecto.Changeset.t()}
+  @spec move(Thread.t(), integer()) ::
+          {:ok, Thread.t()} | {:error, :no_channel | :other_workspace | Ecto.Changeset.t()}
   def move(%Thread{} = thread, channel_id) do
     case get(channel_id) do
       nil ->
@@ -76,13 +81,25 @@ defmodule Server.Channels do
     end
   end
 
-  @doc "Delete a topic channel; its threads go home to #general. #general is refused."
-  @spec delete(ChannelRow.t()) :: {:ok, ChannelRow.t()} | {:error, :general}
+  @doc "Delete a topic channel (a row, or its id); its threads go home to #general. #general is refused."
+  @spec delete(ChannelRow.t() | integer()) :: {:ok, ChannelRow.t()} | {:error, :general | :no_channel}
+  # by id — the console holds sidebar maps, not rows
+  def delete(id) when is_integer(id) do
+    case get(id) do
+      %ChannelRow{} = channel -> delete(channel)
+      nil -> {:error, :no_channel}
+    end
+  end
+
   def delete(%ChannelRow{kind: "general"}), do: {:error, :general}
 
   def delete(%ChannelRow{} = channel) do
     home = general(channel.workspace_id)
-    Repo.update_all(from(t in Thread, where: t.channel_id == ^channel.id), set: [channel_id: home.id])
+
+    Repo.update_all(from(t in Thread, where: t.channel_id == ^channel.id),
+      set: [channel_id: home.id]
+    )
+
     channel |> Repo.delete() |> Bus.announce(:channel_deleted)
   end
 end

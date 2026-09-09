@@ -364,7 +364,8 @@ defmodule Console.View do
   defp merge_slice(data, _slice), do: data
 
   @doc "Resolve the data a panel is fed from the assembled reads (keeps spaces plain data)."
-  def data_for(Panel.Rail, r), do: %{groups: r[:sidebar] || [], active_key: r.active_key, opened: opened_id(r)}
+  def data_for(Panel.Rail, r),
+    do: %{groups: r[:sidebar] || [], active_key: r.active_key, open_channel: r[:open_channel], opened: opened_id(r)}
 
   def data_for(Panel.Roster, r), do: %{sessions: r.roster}
 

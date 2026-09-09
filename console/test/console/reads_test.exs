@@ -74,9 +74,22 @@ defmodule Console.ReadsTest do
   # UX slice 1, task 2: the rail is the only left pane, so the focus's j/k count and Enter both
   # resolve against the SAME stashed sidebar read the frame rendered from.
   describe "the rail's keyboard: tlon_layout/1 counts and enter_verb/2" do
+    # channels slice 1b: each group's threads also grouped by channel; the rail lists the channels
+    # and, under the OPEN one (#general by default), its threads.
     @sidebar [
-      %{workspace: %{id: 0, name: "Tlön"}, threads: [%{id: 9, title: "general"}, %{id: 8, title: "aleph"}]},
-      %{workspace: %{id: 1, name: "ficciones"}, threads: [%{id: 5, title: "hidden"}]}
+      %{
+        workspace: %{id: 0, name: "Tlön"},
+        threads: [%{id: 9, title: "general"}, %{id: 8, title: "aleph"}],
+        channels: [
+          %{id: 1, name: "general", kind: "general", threads: [%{id: 9, title: "general"}, %{id: 8, title: "aleph"}]},
+          %{id: 2, name: "ideas", kind: "topic", threads: []}
+        ]
+      },
+      %{
+        workspace: %{id: 1, name: "ficciones"},
+        threads: [%{id: 5, title: "hidden"}],
+        channels: [%{id: 3, name: "general", kind: "general", threads: [%{id: 5, title: "hidden"}]}]
+      }
     ]
 
     defp rail_state(over \\ %{}) do
@@ -100,9 +113,15 @@ defmodule Console.ReadsTest do
     test "the layout counts the rail's rows — the active workspace's threads, not every group's" do
       layout = Reads.tlon_layout(rail_state())
 
-      # workspace 0, its two threads, workspace 1 (collapsed).
-      assert layout.counts[Rail] == 4
+      # workspace 0, #general (open) with its two threads, #ideas (folded), workspace 1 (collapsed).
+      assert layout.counts[Rail] == 6
       assert layout.left == [Rail]
+    end
+
+    test "the open channel picks which threads the rail counts" do
+      assert Reads.tlon_layout(rail_state(%{open_channel: 2})).counts[Rail] == 4
+      # a channel that no longer exists falls back to #general
+      assert Reads.tlon_layout(rail_state(%{open_channel: 99})).counts[Rail] == 6
     end
 
     test "an empty sidebar read counts zero rows, so j/k is a no-op instead of a crash" do
@@ -114,9 +133,12 @@ defmodule Console.ReadsTest do
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:switch_space, 0}}
 
       state = at(1)
+      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:open_channel, 1}}
+
+      state = at(2)
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:open_thread_view, 9}}
 
-      state = at(3)
+      state = at(5)
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:switch_space, 1}}
     end
 

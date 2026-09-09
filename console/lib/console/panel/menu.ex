@@ -18,6 +18,7 @@ defmodule Console.Panel.Menu do
 
     items
     |> Enum.with_index()
+    |> Enum.drop(offset(data, rect))
     |> Enum.map(fn {item, i} -> row(item, i == cursor, rect.w) end)
     |> Console.Panel.clip(rect)
   end
@@ -37,8 +38,8 @@ defmodule Console.Panel.Menu do
   end
 
   @impl Console.Panel
-  def pick(%{items: items}, _rect, local_y) do
-    case Enum.at(items, local_y) do
+  def pick(%{items: items} = data, rect, local_y) do
+    case Enum.at(items, offset(data, rect) + local_y) do
       %{action: action} -> {:menu_pick, action}
       _ -> nil
     end
@@ -46,6 +47,10 @@ defmodule Console.Panel.Menu do
 
   def pick(_data, _rect, _local_y), do: nil
 
-  @doc "The widest label — the Cockpit sizes the overlay box to this."
-  def width(%{items: items}), do: items |> Enum.map(&String.length(&1.label)) |> Enum.max(fn -> 0 end)
+  # More items than rows: the list scrolls so the cursor row is always on screen (a long channel
+  # list, a short frame); nothing is ever drawn past the box.
+  defp offset(data, rect), do: max((data[:cursor] || 0) - rect.h + 1, 0)
+
+  @doc "The widest row (the 2-cell lead + the label) — the Cockpit sizes the overlay box to this."
+  def width(%{items: items}), do: items |> Enum.map(&(String.length(&1.label) + 2)) |> Enum.max(fn -> 0 end)
 end

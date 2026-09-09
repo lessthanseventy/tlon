@@ -10,6 +10,7 @@ defmodule Console.Server do
 
   defmodule Board, do: use(Facade, target: Server.Board)
   defmodule Channel, do: use(Facade, target: Server.Channel, local: [operator?: 1])
+  defmodule Channels, do: use(Facade, target: Server.Channels)
   defmodule Dossier, do: use(Facade, target: Server.Dossier)
   defmodule Staff, do: use(Facade, target: Server.Staff)
   defmodule Notes, do: use(Facade, target: Server.Notes)

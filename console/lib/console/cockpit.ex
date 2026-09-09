@@ -155,6 +155,8 @@ defmodule Console.Cockpit do
             # Two-step center (2026-09-01): nil = the thread LIST; an id = that thread's CONVERSATION
             # (scrollable, text-selectable). Enter opens, Esc goes back — replaces the fold/zoom stack.
             opened_thread: nil,
+            # The open channel's id (channels slice 1b); nil = the active workspace's #general.
+            open_channel: nil,
             # The list cursor's thread id, recomputed each render (focused-if-in-stack else first) and
             # stashed so open/move effects can target it between renders.
             stack_focus: nil,
@@ -429,10 +431,8 @@ defmodule Console.Cockpit do
     else
       state = %{state | last_right: {x, y}}
 
-      case context_workspace(Mouse.hit_panel(state.placements, x, y), y) do
-        %{id: _} = ws -> {:noreply, render(%{state | menu: Author.workspace_menu(ws, x, y)})}
-        nil -> {:noreply, render(%{state | menu: nil})}
-      end
+      {:noreply,
+       render(%{state | menu: context_menu(context_entry(Mouse.hit_panel(state.placements, x, y), y), state, x, y)})}
     end
   end
 
@@ -712,13 +712,33 @@ defmodule Console.Cockpit do
   def delete_flash({:ok, thread, {:kept, reason}}), do: "deleted “#{thread.title}” — worktree kept: #{reason}"
   def delete_flash({:error, :root_machine_thread}), do: "can't delete the root thread"
   def delete_flash({:error, reason}), do: "delete refused: #{inspect(reason)}"
+  # the channel a thread is listed under, off the last painted sidebar (nil before the first frame)
+  defp channel_of(state, thread_id) do
+    Enum.find_value(Reads.channels(state), fn channel ->
+      if Enum.any?(channel[:threads] || [], &(&1.id == thread_id)), do: channel.id
+    end)
+  end
+
+  # The frame cell of the rail's cursor row (where a keyboard-opened menu anchors), or nil.
+  defp rail_cursor_cell(state) do
+    with {Panel.Rail, data, rect} <- Enum.find(state.placements, &match?({Panel.Rail, _, _}, &1)),
+         cursor when is_integer(cursor) <- data[:selected] do
+      {rect.x + 2, rect.y + cursor - Panel.scroll_offset(data)}
+    else
+      _ -> nil
+    end
+  end
 
   @doc false
-  # The workspace a right click landed on, per the panel under the cursor. The rail carries the
-  # workspace rows since the spine left the frame.
-  # Pure — the right-click `handle_cast` clause turns it into a menu.
-  def context_workspace({Panel.Rail, data, rect}, y), do: Panel.Rail.workspace_at(data, rect, y - rect.y)
-  def context_workspace(_hit, _y), do: nil
+  # The rail entry a right click landed on — a workspace, a channel or a thread — or nil. Pure; the
+  # right-click `handle_cast` clause turns it into a menu (`context_menu/4`).
+  def context_entry({Panel.Rail, data, rect}, y), do: Panel.Rail.entry_at(data, rect, y - rect.y)
+  def context_entry(_hit, _y), do: nil
+
+  defp context_menu({:workspace, ws}, _state, x, y), do: Author.workspace_menu(ws, x, y)
+  defp context_menu({:channel, channel}, _state, x, y), do: Author.channel_menu(channel, x, y)
+  defp context_menu({:thread, thread}, state, x, y), do: Author.thread_menu(thread, Reads.channels(state), x, y)
+  defp context_menu(nil, _state, _x, _y), do: nil
 
   defp dispatch_click(nil, _x, _y, state), do: {:noreply, state}
 
@@ -760,9 +780,12 @@ defmodule Console.Cockpit do
   end
 
   defp apply_pick({:switch_space, key}, state) do
-    next = reset_scrolls(state, %{state | active_key: key, flash: nil})
+    next = reset_scrolls(state, %{state | active_key: key, open_channel: nil, flash: nil})
     {:noreply, render(next)}
   end
+
+  # Open a channel (rail row / Enter): the rail unfolds its threads and the centre lists them.
+  defp apply_pick({:open_channel, id}, state), do: {:noreply, render(%{state | open_channel: id, flash: nil})}
 
   # Click a thread row in the list → open its conversation (two-step center).
   defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)
@@ -955,8 +978,47 @@ defmodule Console.Cockpit do
     # box is live the instant the conversation shows — no `c` verb. `:close_thread_view` tears it down.
     input = %{kind: :reply, thread_id: id, buffer: "", cursor: 0}
     _ = drop_stale_session(state, id)
-    {:noreply, render(%{state | opened_thread: id, focused_id: id, stack_focus: id, scrolls: scrolls, input: input})}
+    # opening a thread opens ITS channel, wherever the open came from (a card, a mention, the rail)
+    open_channel = channel_of(state, id) || state.open_channel
+
+    {:noreply,
+     render(%{
+       state
+       | opened_thread: id,
+         focused_id: id,
+         stack_focus: id,
+         scrolls: scrolls,
+         input: input,
+         open_channel: open_channel
+     })}
   end
+
+  # `m` in nav: on a rail thread it is the move-to-channel menu, anchored at the row; anywhere
+  # else it keeps its older meaning, cycling the coworker's model.
+  defp apply_effect(:rail_move, state) do
+    case {Reads.rail_selection(state), rail_cursor_cell(state)} do
+      {{:thread, thread}, {x, y}} ->
+        {:noreply, render(%{state | menu: Author.thread_menu(thread, Reads.channels(state), x, y)})}
+
+      _ ->
+        case Space.fetch(state.active_key) do
+          %{coworker: profile} when not is_nil(profile) -> apply_effect({:cycle_coworker_model, profile}, state)
+          _ -> {:noreply, state}
+        end
+    end
+  end
+
+  defp apply_effect(:new_channel_prompt, state),
+    do: {:noreply, render(%{state | input: %{kind: :new_channel, buffer: "", cursor: 0}})}
+
+  defp apply_effect({:create_channel, name}, state),
+    do: flashing(state, "new channel", fn -> {:noreply, render(Author.create_channel(state, name))} end)
+
+  defp apply_effect({:tlon_delete, {:channel, channel, _label}}, state),
+    do:
+      flashing(state, "delete channel", fn ->
+        {:noreply, render(%{Author.delete_channel(state, channel) | tlon_delete: nil})}
+      end)
 
   defp apply_effect(:open_focused_thread, %{stack_focus: id} = state) when is_integer(id),
     do: apply_effect({:open_thread_view, id}, state)
@@ -1246,7 +1308,7 @@ defmodule Console.Cockpit do
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
     # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
     # order by this, not the project-scope `chorus`. This is the ONE ordering the cockpit navigates.
-    stack_blocks = Safe.read(:stack, [], fn -> stack_blocks(Space.active_workspace_id(state)) end)
+    stack_blocks = Safe.read(:stack, [], fn -> stack_blocks(Space.active_workspace_id(state), state) end)
     threads = Enum.map(stack_blocks, & &1.thread)
     focused = Reads.focused_thread(threads, state.focused_id)
     state = %{state | threads: threads, focused_id: focused && focused.id}
@@ -1258,9 +1320,22 @@ defmodule Console.Cockpit do
     paint(%{state | sidebar: reads.sidebar, reads: reads}, reads)
   end
 
-  # The centre's threads: the workspace's, every scope — the rail's set. No workspace → nothing.
-  defp stack_blocks(nil), do: []
-  defp stack_blocks(workspace_id), do: Channel.workspace_threads(workspace_id)
+  # The centre's threads: the workspace's, every scope, cut to the OPEN channel (a pre-channel
+  # thread with no channel_id belongs to #general). No workspace → nothing; no sidebar painted yet
+  # (the first frame) → the whole workspace.
+  defp stack_blocks(nil, _state), do: []
+
+  defp stack_blocks(workspace_id, state) do
+    blocks = Channel.workspace_threads(workspace_id)
+
+    case Reads.open_channel(state) do
+      %{id: id, kind: kind} ->
+        Enum.filter(blocks, &(&1.thread.channel_id == id or (is_nil(&1.thread.channel_id) and kind == "general")))
+
+      nil ->
+        blocks
+    end
+  end
 
   # The paint half of a frame, shared with repaint_input/1. The drawer covers the centre; the
   # overlay menu paints LAST (on top of everything). Both ride in `placements` so hit_panel can

@@ -31,7 +31,18 @@ defmodule Console.Panel.MenuTest do
     assert Menu.pick(@data, %{x: 0, y: 0, w: 20, h: 5}, 9) == nil
   end
 
-  test "width is the widest label" do
-    assert Menu.width(@data) == String.length("Set icon…")
+  test "width is the widest row (lead + label)" do
+    assert Menu.width(@data) == String.length("Set icon…") + 2
+  end
+
+  test "more items than rows: the list scrolls so the cursor row is on screen, and pick follows" do
+    rect = %{x: 0, y: 0, w: 20, h: 2}
+    data = %{@data | cursor: 2}
+    lines = data |> Menu.render(rect) |> Enum.map(&row_text/1)
+
+    assert length(lines) == 2
+    assert Enum.at(lines, 0) =~ "Configure"
+    assert Enum.at(lines, 1) =~ "▸" and Enum.at(lines, 1) =~ "Delete"
+    assert {:menu_pick, {:delete_ws, _}} = Menu.pick(data, rect, 1)
   end
 end

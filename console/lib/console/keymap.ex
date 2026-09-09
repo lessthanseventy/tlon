@@ -230,6 +230,10 @@ defmodule Console.Keymap do
   def handle(%{key: :enter}, %{input: %{kind: :new_note, buffer: buffer}} = state),
     do: {%{state | input: nil}, {:write_note, buffer}}
 
+  # A topic channel in the active workspace (channels slice 1b; the `#` verb / a rail menu).
+  def handle(%{key: :enter}, %{input: %{kind: :new_channel, buffer: buffer}} = state),
+    do: {%{state | input: nil}, {:create_channel, buffer}}
+
   # The tertius command line (Slice 1): Enter dispatches the typed meta-intent to the orchestrator,
   # which routes + executes it and hands back a receipt (the cockpit flashes it).
   def handle(%{key: :enter}, %{input: %{kind: :orchestrate, buffer: buffer}} = state),
@@ -603,7 +607,10 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "v"}, state), do: {state, :toggle_center_view}
   defp handle_tlon(%{key: :char, char: "n"} = k, state), do: command(k, state)
   defp handle_tlon(%{key: :char, char: "c"} = k, state), do: command(k, state)
-  defp handle_tlon(%{key: :char, char: "m"} = k, state), do: command(k, state)
+  # `m` — move the rail's thread to another channel (a menu); off the rail it cycles the coworker's
+  # model as before. `#` — a new channel. Both cockpit-resolved (the rail's rows are a read).
+  defp handle_tlon(%{key: :char, char: "m"}, state), do: {state, :rail_move}
+  defp handle_tlon(%{key: :char, char: "#"}, state), do: {state, :new_channel_prompt}
   defp handle_tlon(_key, state), do: {state, :none}
 
   @doc """

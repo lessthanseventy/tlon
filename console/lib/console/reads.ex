@@ -96,13 +96,43 @@ defmodule Console.Reads do
 
   def selected_habit(_state), do: nil
 
-  # What `d` would delete under the current focus: a MEMORY pinned fact (forget). The label rides
-  # along for the arm flash.
+  # What `d` would delete under the current focus: a MEMORY pinned fact (forget), a rail thread, or
+  # a rail topic channel (its threads go home to #general). The label rides along for the arm flash.
   def tlon_delete_target(state) do
-    case selected_pinned_fact(state) do
-      nil -> nil
-      fact -> {:fact, fact, "forget fact ##{fact.id}"}
+    case {selected_pinned_fact(state), rail_selection(state)} do
+      {%{} = fact, _} -> {:fact, fact, "forget fact ##{fact.id}"}
+      {nil, {:thread, %{id: id, title: title}}} -> {:thread, id, "delete “#{title}”"}
+      {nil, {:channel, %{kind: "topic"} = channel}} -> {:channel, channel, "delete ##{channel.name}"}
+      _ -> nil
     end
+  end
+
+  @doc "The rail entry under the nav cursor while the rail is the focused pane, else nil."
+  @spec rail_selection(map()) :: {:workspace | :channel | :thread, map()} | nil
+  def rail_selection(%{active_key: key, focus: %{in_terminal?: false} = focus} = state) when Space.workspace?(key) do
+    layout = tlon_layout(state)
+
+    if Focus.focused_pane(focus, layout) == Panel.Rail,
+      do: state |> rail_data() |> Panel.Rail.entries() |> Enum.at(Focus.cursor(focus, layout))
+  end
+
+  def rail_selection(_state), do: nil
+
+  @doc "The active workspace's channels, off the last painted sidebar (`[]` before the first frame)."
+  @spec channels(map()) :: [map()]
+  def channels(state) do
+    case Enum.find(state[:sidebar] || [], &(&1.workspace.id == state.active_key)) do
+      %{channels: channels} -> channels
+      _ -> []
+    end
+  end
+
+  @doc "The open channel (`state.open_channel` if it still exists, else #general), or nil before the first frame."
+  @spec open_channel(map()) :: map() | nil
+  def open_channel(state) do
+    channels = channels(state)
+    id = Panel.Rail.open_channel_id(channels, state[:open_channel])
+    Enum.find(channels, &(&1.id == id))
   end
 
   # The pinned fact the focus points at — selected_habit's twin for the pinned section (0).
@@ -303,7 +333,8 @@ defmodule Console.Reads do
   # The rail renders from `reads.sidebar`; `do_render/1` stashes that same read on state so the
   # keyboard (j/k's count, Enter's row) resolves against what is painted, with no second
   # `Board.sidebar/0` round-trip per keypress.
-  defp rail_data(state), do: %{groups: state[:sidebar] || [], active_key: state.active_key}
+  defp rail_data(state),
+    do: %{groups: state[:sidebar] || [], active_key: state.active_key, open_channel: state[:open_channel]}
 
   @doc """
   What Enter means on the focused pane — the pure half of the cockpit's `:tlon_enter`. The rail
@@ -327,6 +358,7 @@ defmodule Console.Reads do
   defp rail_verb(state, layout) do
     case state |> rail_data() |> Panel.Rail.entries() |> Enum.at(Focus.cursor(state.focus, layout)) do
       {:thread, %{id: id}} -> {:pick, {:open_thread_view, id}}
+      {:channel, %{id: id}} -> {:pick, {:open_channel, id}}
       {:workspace, %{id: id}} -> {:pick, {:switch_space, id}}
       _ -> :none
     end
@@ -645,6 +677,7 @@ defmodule Console.Reads do
       # The rail's read-model: workspace groups with their unified thread list (+ crew working
       # flags), each thread carrying the warmth of its live session.
       sidebar: Safe.read(:sidebar, [], fn -> sidebar_read(roster) end),
+      open_channel: state[:open_channel],
       # The open thread's worktree path (display only; the spawn ensures it) for the top bar.
       cwd: Safe.read(:cwd, nil, fn -> cwd_read(state.opened_thread) end),
       # CONFIG (the Author, in the drawer): its own cursor.
@@ -706,10 +739,12 @@ defmodule Console.Reads do
   defp sidebar_read(roster) do
     warm = for session <- roster, session.warm?, into: MapSet.new(), do: session.thread_id
 
+    warmed = fn threads -> Enum.map(threads, &Map.put(&1, :warm?, MapSet.member?(warm, &1.id))) end
+
     for group <- Board.sidebar() do
-      Map.update(group, :threads, [], fn threads ->
-        Enum.map(threads, &Map.put(&1, :warm?, MapSet.member?(warm, &1.id)))
-      end)
+      group
+      |> Map.update(:threads, [], warmed)
+      |> Map.update(:channels, [], fn channels -> Enum.map(channels, &Map.update(&1, :threads, [], warmed)) end)
     end
   end
 
