@@ -89,12 +89,12 @@ defmodule Server.BoardSidebarTest do
     {:ok, _workspace} = Bootstrap.ensure()
     # open_thread now assigns the workspace's builder (hronir) as lead automatically (the lead invariant).
     {:ok, thread} = Channel.open_thread(%{title: "busy thread"})
-    :ok = Thinking.thinking(thread.id, "hronir-machine")
+    :ok = Thinking.thinking(thread.id, "hronir")
 
     [%{threads: threads, crew: crew}] = Board.sidebar()
     row = Enum.find(threads, &(&1.id == thread.id))
     assert row.working == true
-    assert row.lead == "hronir-machine"
+    assert row.lead == "hronir"
 
     hronir = Enum.find(crew, &(&1.name == "hronir"))
     assert hronir.working == true

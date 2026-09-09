@@ -47,7 +47,10 @@ defmodule Server do
       Crew,
       # Structs read by consumers (pattern-matched, never changeset-built from outside).
       Thread,
-      Message
+      Message,
+      # The BENCH boundary type (UX slice 5): a workspace's coworkers, handed out by
+      # `Workspaces.bench/1` in place of the raw maps eight modules each used to interpret.
+      Coworker
     ]
 
   alias Server.Workline.Ledger

@@ -51,16 +51,16 @@ defmodule Console.OrchestratorTest do
     end
 
     test "post to a coworker leading a thread posts + names the wake", %{ctx: ctx, workspace_id: ws} do
-      {:ok, agent} = Staff.register_agent(%{name: "hronir-machine", mandate: "build", engine: "fresh"})
+      {:ok, agent} = Staff.register_agent(%{name: "hronir", mandate: "build", engine: "fresh"})
       {:ok, thread} = Channel.open_thread(%{title: "the work", workspace_id: ws, scope: "machine"})
-      {:ok, _} = Channel.assign_lead(thread.id, "hronir-machine")
+      {:ok, _} = Channel.assign_lead(thread.id, "hronir")
       _ = agent
 
-      assert {:ok, receipt} = Orchestrator.dispatch({:post, "hronir-machine", "ship it"}, ctx)
+      assert {:ok, receipt} = Orchestrator.dispatch({:post, "hronir", "ship it"}, ctx)
       assert receipt =~ "posted to ##{thread.id}"
-      assert receipt =~ "woke @hronir-machine"
+      assert receipt =~ "woke @hronir"
 
-      assert [%{body: "@hronir-machine ship it", author: "andrew"}] =
+      assert [%{body: "@hronir ship it", author: "andrew"}] =
                Repo.all(from(m in Server.Message, where: m.thread_id == ^thread.id))
     end
 

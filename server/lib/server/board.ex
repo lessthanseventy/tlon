@@ -97,7 +97,7 @@ defmodule Server.Board do
         # UX slice 1b: the same rows grouped by channel, #general first; a row whose channel is
         # nil (pre-migration) reads as #general.
         channels: channel_groups(workspace.id, rows),
-        crew: crew_rows(workspace.roster, working_agents)
+        crew: crew_rows(Server.Workspaces.bench(workspace.id), working_agents)
       }
     end
   end
@@ -151,20 +151,15 @@ defmodule Server.Board do
     |> Map.new()
   end
 
-  # A roster name matches a working agent bare or with the harness "-machine" suffix.
-  defp crew_rows(roster, working_agents) when is_list(roster) do
-    Enum.map(roster, fn entry ->
-      name = entry["name"] || entry[:name]
-
-      %{
-        name: name,
-        archetype: entry["archetype"] || entry[:archetype],
-        working: name in working_agents or "#{name}-machine" in working_agents
-      }
+  # A bench seat matches a working agent by NAME, full stop: since the `-machine` suffix retired
+  # (UX slice 5) the coworker's name IS its agent name, so there is no second spelling to also try.
+  defp crew_rows(bench, working_agents) when is_list(bench) do
+    Enum.map(bench, fn %Server.Coworker{} = c ->
+      %{name: c.name, archetype: c.archetype, working: c.name in working_agents, lead: c.lead?}
     end)
   end
 
-  defp crew_rows(_roster, _working), do: []
+  defp crew_rows(_bench, _working), do: []
 
   @doc """
   The IN SCOPE brief for a thread — read fresh from the DB (the argument is just an

@@ -48,8 +48,8 @@ defmodule Console.VerbsTest do
 
   defp two_workspaces,
     do: [
-      %{id: 0, name: "Tlön", roster: [], type: "code", paths: [], scope: "machine"},
-      %{id: 1, name: "Freedonia", roster: [], type: "code", paths: [], scope: "machine"}
+      %{id: 0, name: "Tlön", bench: [], type: "code", repos: [], scope: "machine"},
+      %{id: 1, name: "Freedonia", bench: [], type: "code", repos: [], scope: "machine"}
     ]
 
   defp reaches?(event) do

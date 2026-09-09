@@ -14,7 +14,7 @@ defmodule Console.Crew do
 
   The per-thread window name (`crew_window/2`) is a PURE function of (role, thread id), so this
   spawner and the mention router agree on `r<tid>` deterministically — that is what lets a spawned
-  window be the target the cockpit routes `@reviewer-machine` to.
+  window be the target the cockpit routes `@reviewer` to.
 
   Pure tmux command builders (`spawn_argv/3`, `kill_argv/2`, `boot_script/2`) live below; the IO
   wrappers (`spawn/4`, `kill/2`) mint identity, materialise the profile, shell out to tmux, and
@@ -33,7 +33,7 @@ defmodule Console.Crew do
   alias Console.Tmux
 
   @roles %{
-    "reviewer" => %{handle: "reviewer-machine", window_prefix: "r", profile: "reviewer"}
+    "reviewer" => %{handle: "reviewer", window_prefix: "r", profile: "reviewer"}
   }
 
   @doc "The MVP crew: role key → %{handle, window_prefix, profile}."
@@ -160,7 +160,7 @@ defmodule Console.Crew do
   end
 
   # `Server.Crew` behaviour — the doors the server's spawn_crew/kill_crew tools land in. Thin delegates to
-  # the IO wrappers above; the leader's handle in `opening_turn/2` is claude-machine (MVP lead).
+  # the IO wrappers above; the leader's handle in `opening_turn/2` is claude (MVP lead).
   # spawn/4 (not spawn/3) — a local spawn/3 call is ambiguous with Kernel.spawn/3.
   @impl Server.Crew
   def spawn_role(role_key, thread_id, task), do: spawn(role_key, thread_id, task, [])
@@ -169,9 +169,9 @@ defmodule Console.Crew do
   def kill_role(role_key, thread_id), do: kill(role_key, thread_id)
 
   # The opening assignment the leader hands the reviewer. Names the leader handle so the reviewer's
-  # @<leader> ESCALATE resolves — MVP leader is claude-machine (the task thread's staffed lead).
+  # @<leader> ESCALATE resolves — MVP leader is claude (the task thread's staffed lead).
   defp opening_turn(thread_id, task) do
-    "You are reviewing on server thread ##{thread_id}. Leader handle: claude-machine. " <>
+    "You are reviewing on server thread ##{thread_id}. Leader handle: claude. " <>
       "Task: #{task}. Read the diff (git diff/show), post findings, and escalate any fix per your protocol."
   end
 

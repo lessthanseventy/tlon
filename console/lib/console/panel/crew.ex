@@ -40,7 +40,7 @@ defmodule Console.Panel.Crew do
         %{archetype: arch, name: name} = Profiles.roster_entry(entry),
         arch != nil do
       profile = safe_instantiate(arch, name)
-      {status, seat_tid, elapsed_s} = seat(windows, name, "#{name}-machine", led_by, thinking, now_s)
+      {status, seat_tid, elapsed_s} = seat(windows, name, name, led_by, thinking, now_s)
 
       %{
         name: name,

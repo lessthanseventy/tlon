@@ -22,7 +22,6 @@ defmodule Server.Channel do
   alias Server.Staff
   alias Server.Thread
   alias Server.Todo
-  alias Server.Workspace
 
   # The closed thread-scope set (CHECK-guarded in the DB — see the thread_scope migration).
   # Every scope filter pins one of these, so a future third scope is a grep for the attribute,
@@ -52,36 +51,18 @@ defmodule Server.Channel do
   defp default_channel_id(workspace_id), do: Server.Channels.general(workspace_id).id
 
   @doc """
-  The agent_id of a workspace's designated lead — its first `builder` (manager) roster coworker,
-  registered on demand. nil when there is no workspace, no roster, or a blank roster (the thread
-  then opens leaderless, healed when a coworker is first staffed). The lead invariant's resolver.
+  The agent_id of a workspace's designated lead. nil when there is no workspace or its bench is
+  empty (the thread then opens leaderless, healed when a coworker is first staffed). The lead
+  invariant's resolver — and now ONE query, not a JSON scan plus a lazy `"<name>-machine"`
+  registration: `Server.Coworker.lead/1` owns the rule, so this and the cockpit cannot disagree
+  about who leads (they did: this preferred a builder, the cockpit took the first seat).
   """
   def designated_lead(nil), do: nil
 
   def designated_lead(workspace_id) do
-    with %Workspace{roster: roster} <- Repo.get(Workspace, workspace_id),
-         %{} = entry <- lead_entry(roster),
-         name when is_binary(name) <- entry["name"],
-         {:ok, agent} <- ensure_lead_agent("#{name}-machine", entry["archetype"]) do
-      agent.id
-    else
-      _ -> nil
-    end
-  end
-
-  # The lead is the first `builder`-archetype roster coworker (the manager persona); absent that, the
-  # first roster entry — better a lead than none. nil for a blank/malformed roster.
-  defp lead_entry(roster) when is_list(roster),
-    do: Enum.find(roster, &(is_map(&1) and &1["archetype"] == "builder")) || List.first(roster)
-
-  defp lead_entry(_), do: nil
-
-  # register-or-get the lead's durable agent (mandate defaults to its archetype, engine local) — a
-  # roster coworker is the standing bench, so it exists as an agent from the first thread it leads.
-  defp ensure_lead_agent(handle, archetype) do
-    case Staff.agent_by_name(handle) do
-      %Agent{} = agent -> {:ok, agent}
-      nil -> Staff.register_agent(%{name: handle, mandate: archetype || "general", engine: "local"})
+    case Server.Workspaces.lead(workspace_id) do
+      %Server.Coworker{agent_id: agent_id} -> agent_id
+      nil -> nil
     end
   end
 

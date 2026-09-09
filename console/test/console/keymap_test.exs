@@ -30,8 +30,8 @@ defmodule Console.KeymapTest do
   # two workspaces for the space ring — the cockpit threads the live cache in as `live_workspaces`
   defp two_workspaces,
     do: [
-      %{id: 1, name: "Tlön", roster: [], type: "code", repos: [], scope: "machine"},
-      %{id: 2, name: "Freedonia", roster: [], type: "code", repos: [], scope: "machine"}
+      %{id: 1, name: "Tlön", bench: [], type: "code", repos: [], scope: "machine"},
+      %{id: 2, name: "Freedonia", bench: [], type: "code", repos: [], scope: "machine"}
     ]
 
   defp state(overrides \\ %{}) do
@@ -287,7 +287,7 @@ defmodule Console.KeymapTest do
     end
 
     test "h/l on field 0 (type) emits {:edit_workspace, id, %{type: next}}, cycling the ring, wrapping" do
-      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "machine", repos: [], roster: []}]
+      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "machine", repos: [], bench: []}]
       s = editor_state(%{live_workspaces: workspaces, author_edit: %{id: 22, field: 0, sub: 0, mode: :field}})
 
       assert {_s, {:edit_workspace, 22, %{type: "life"}}} = Keymap.handle(char("l"), s)
@@ -300,7 +300,7 @@ defmodule Console.KeymapTest do
     test "h/l on field 1 (scope) emits {:edit_workspace, id, %{scope: next}}" do
       # A 2-element ring: from "project" (index 0) BOTH directions land on "machine" (index 1) —
       # only a 3+ element ring (type) shows h/l diverge, asserted above.
-      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "project", repos: [], roster: []}]
+      workspaces = [%{id: 22, name: "Freedonia", type: "code", scope: "project", repos: [], bench: []}]
       s = editor_state(%{live_workspaces: workspaces, author_edit: %{id: 22, field: 1, sub: 0, mode: :field}})
 
       assert {_s, {:edit_workspace, 22, %{scope: "machine"}}} = Keymap.handle(char("l"), s)
@@ -348,7 +348,7 @@ defmodule Console.KeymapTest do
       type: "code",
       scope: "machine",
       repos: [%{id: 7, path: "a"}, %{id: 8, path: "b"}],
-      roster: []
+      bench: []
     }
 
     defp repos_state(overrides),
@@ -425,7 +425,7 @@ defmodule Console.KeymapTest do
     end
   end
 
-  describe "editing a workspace's roster — the field 3 sub-list, add/remove (D2.4 Chunk 2c)" do
+  describe "editing a workspace's bench — the field 3 sub-list, seat/unseat (D2.4 Chunk 2c; rows since UX slice 5)" do
     @archetypes Map.keys(Console.Profiles.archetypes())
     @workspace_with_roster %{
       id: 22,
@@ -433,7 +433,10 @@ defmodule Console.KeymapTest do
       type: "code",
       scope: "machine",
       repos: [],
-      roster: [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}]
+      bench: [
+        %Server.Coworker{id: 7, agent_id: 70, archetype: "surveyor", name: "tertius"},
+        %Server.Coworker{id: 8, agent_id: 80, archetype: "builder", name: "hronir"}
+      ]
     }
 
     defp roster_state(overrides),
@@ -484,7 +487,7 @@ defmodule Console.KeymapTest do
       assert {%{input: %{buffer: "amy"}}, :repaint} = Keymap.handle(char("y"), s)
     end
 
-    test "Enter on a non-empty :new_roster buffer emits {:edit_workspace, id, %{roster: existing ++ [entry]}}" do
+    test "Enter on a non-empty :new_roster buffer SEATS a coworker — a row, not a list overwrite" do
       s =
         state(%{
           drawer: :config,
@@ -492,13 +495,7 @@ defmodule Console.KeymapTest do
           input: %{kind: :new_roster, buffer: "amy", cursor: 3, workspace_id: 22, archetype: :assistant}
         })
 
-      assert {%{input: nil}, {:edit_workspace, 22, %{roster: roster}}} = Keymap.handle(key(:enter), s)
-
-      assert roster == [
-               %{"archetype" => "surveyor", "name" => "tertius"},
-               %{"archetype" => "builder", "name" => "hronir"},
-               %{"archetype" => "assistant", "name" => "amy"}
-             ]
+      assert {%{input: nil}, {:seat, 22, %{name: "amy", archetype: "assistant"}}} = Keymap.handle(key(:enter), s)
     end
 
     test "Enter on a blank :new_roster buffer no-ops — same cancel-not-create precedent" do
@@ -511,12 +508,16 @@ defmodule Console.KeymapTest do
       assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
     end
 
-    test "x or d removes the sub-selected roster entry: {:edit_workspace, id, %{roster: List.delete_at(...)}}" do
+    test "x or d UNSEATS the sub-selected coworker BY ROW ID, not by index" do
       s = roster_state(%{author_edit: %{id: 22, field: 3, sub: 1, mode: :sub}})
-      expected = [%{"archetype" => "surveyor", "name" => "tertius"}]
 
-      assert {^s, {:edit_workspace, 22, %{roster: ^expected}}} = Keymap.handle(char("x"), s)
-      assert {^s, {:edit_workspace, 22, %{roster: ^expected}}} = Keymap.handle(char("d"), s)
+      assert {^s, {:unseat, 22, 8}} = Keymap.handle(char("x"), s)
+      assert {^s, {:unseat, 22, 8}} = Keymap.handle(char("d"), s)
+    end
+
+    test "x or d on a vanished seat is a no-op, never an unseat aimed at nothing" do
+      s = roster_state(%{author_edit: %{id: 22, field: 3, sub: 9, mode: :sub}})
+      assert {^s, :none} = Keymap.handle(char("x"), s)
     end
 
     test "Esc in sub-list mode steps back to field-list mode, field unchanged" do
@@ -532,7 +533,10 @@ defmodule Console.KeymapTest do
       type: "code",
       scope: "machine",
       repos: [],
-      roster: [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}]
+      bench: [
+        %Server.Coworker{id: 7, agent_id: 70, archetype: "surveyor", name: "tertius"},
+        %Server.Coworker{id: 8, agent_id: 80, archetype: "builder", name: "hronir"}
+      ]
     }
 
     defp roster_knob_state(overrides),
@@ -579,7 +583,7 @@ defmodule Console.KeymapTest do
     test "Enter on an empty roster is a no-op, never crashes" do
       s =
         roster_knob_state(%{
-          live_workspaces: [%{@workspace_with_roster | roster: []}],
+          live_workspaces: [%{@workspace_with_roster | bench: []}],
           author_edit: %{id: 22, field: 3, sub: 0, mode: :sub, knob: :model}
         })
 
@@ -1060,14 +1064,16 @@ defmodule Console.KeymapTest do
   end
 
   describe "the `m` verb — cycle the coworker driver model (the SETTINGS knob)" do
-    test "in a coworker space (Tlön), bare `m` emits the cycle effect for that profile" do
+    # The fixture bench is surveyor `tertius` then builder `hronir`, and the centre coworker is the
+    # LEAD — the first builder (UX slice 5's one derivation), not merely the first seat.
+    test "in a coworker space (Tlön), bare `m` emits the cycle effect for the LEAD's profile" do
       s = state(%{active_key: 0})
-      assert {^s, {:cycle_coworker_model, "tertius"}} = Keymap.handle(char("m"), s)
+      assert {^s, {:cycle_coworker_model, "hronir"}} = Keymap.handle(char("m"), s)
     end
 
     test "reachable bare when the centre is not a live terminal" do
       s = state(%{active_key: 0, center_live?: false})
-      assert {^s, {:cycle_coworker_model, "tertius"}} = Keymap.handle(char("m"), s)
+      assert {^s, {:cycle_coworker_model, "hronir"}} = Keymap.handle(char("m"), s)
     end
 
     test "in a space without a coworker (a key no space has), `m` is a no-op" do

@@ -5,7 +5,7 @@ defmodule Console.Staffing do
   workspace's private tmux session, embedded as a `Console.Terminal`), tail = one tmux window per
   entry, each launched by its archetype's harness driver; a staffed machine thread gets its own
   leaf window (tagged `@funes_thread <id>`) with a two-phase opening turn. Server handle
-  `<name>-machine`, tmux window `<name>` (`Console.Profiles.roster_entry/1`).
+  `<name>` — agent, handle and tmux window all spell it the same since UX slice 5.
 
   Every tmux call rides `Console.Tmux` (`:tlon_cmd`); identity minting rides `:tlon_join` — the
   two seams the suite drives the real dispatch through. Spawns back off on failure rather than
@@ -77,7 +77,7 @@ defmodule Console.Staffing do
 
   def ensure_workspace_roster(%{active_key: key} = state, spaces) when Space.workspace?(key) do
     case Space.fetch(key, spaces) do
-      %Space{roster: [lead | rest]} -> state |> ensure_center(key, lead) |> ensure_windows(key, rest)
+      %Space{bench: [lead | rest]} -> state |> ensure_center(key, lead) |> ensure_windows(key, rest)
       _ -> state
     end
   end
@@ -147,7 +147,7 @@ defmodule Console.Staffing do
   defp spawn_window(workspace_id, %Profile{name: name} = profile) do
     _ = materialise_profile(profile)
     command = Harness.driver(profile.harness).launch_command(profile)
-    spawn_harness_window(workspace_id, "#{name}-machine", name, Reads.machine_thread_id(workspace_id), command)
+    spawn_harness_window(workspace_id, name, name, Reads.machine_thread_id(workspace_id), command)
   end
 
   @doc """
@@ -165,7 +165,7 @@ defmodule Console.Staffing do
   def ensure_thread_sessions(%{active_key: key} = state, spaces) when Space.workspace?(key) do
     tabs = Tmux.list_windows(key)
     now = System.monotonic_time(:millisecond)
-    roster = Space.roster(key, spaces)
+    roster = Space.bench(key, spaces)
     threads = Console.Server.staffed_machine_threads()
     # Window names spawned THIS pass join the taken set, so two new leaves with the same title in
     # one render can't collide on a name (the tag targets by name once, right after new-window).
@@ -294,7 +294,7 @@ defmodule Console.Staffing do
   # Does the cockpit staff a per-thread leaf window for this lead? Any WORKER roster handle
   # (claude or pi harness) qualifies — the predicate `delivery_target` and the spawn pass share,
   # so routing and spawning can never disagree about who owns a thread's turns.
-  def leaf_staffed?(lead, workspace_id), do: lead in Profiles.leaf_handles(Space.roster(workspace_id))
+  def leaf_staffed?(lead, workspace_id), do: lead in Profiles.leaf_handles(Space.bench(workspace_id))
 
   # Two-phase, so a just-booted leaf window submits its opening turn instead of leaving it typed
   # but unsent: stage 1 types the text; stage 2, once the text has settled for
@@ -446,7 +446,7 @@ defmodule Console.Staffing do
 
     with %Profile{} = profile <- Profiles.instantiate(%{archetype: arch, name: name}),
          {:ok, _dir} <- materialise_profile(profile),
-         {:ok, exports} <- machine_exports(workspace_id, "#{name}-machine"),
+         {:ok, exports} <- machine_exports(workspace_id, name),
          # kitty: false — tmux wants its Ctrl+B prefix as legacy \x02, not CSI-u (see Terminal.init).
          {:ok, pid} <-
            safe_spawn_harness(:machine, exports, launcher: profile_launcher(workspace_id, name, profile), kitty: false) do
@@ -466,7 +466,7 @@ defmodule Console.Staffing do
   @spec lead_window_name(term()) :: String.t() | nil
   def lead_window_name(workspace_id) do
     case Space.fetch(workspace_id) do
-      %Space{roster: [lead | _]} -> Profiles.roster_entry(lead).name
+      %Space{bench: [lead | _]} -> Profiles.roster_entry(lead).name
       _ -> nil
     end
   end

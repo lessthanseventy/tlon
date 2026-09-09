@@ -22,10 +22,10 @@ defmodule Console.CockpitThreadSessionsTest do
     %{
       id: 99,
       name: "Freedonia",
-      roster: [
-        %{"archetype" => "surveyor", "name" => "rufus"},
-        %{"archetype" => "builder", "name" => "hronir"},
-        %{"archetype" => "planner", "name" => "borges"}
+      bench: [
+        %Server.Coworker{archetype: "surveyor", name: "rufus"},
+        %Server.Coworker{archetype: "builder", name: "hronir"},
+        %Server.Coworker{archetype: "planner", name: "borges"}
       ]
     }
   ]
@@ -33,7 +33,7 @@ defmodule Console.CockpitThreadSessionsTest do
   setup_all do
     Console.TestRepo.boot!("cockpit-thread-sessions")
 
-    for handle <- ["rufus-machine", "hronir-machine", "borges-machine"] do
+    for handle <- ["rufus", "hronir", "borges"] do
       {:ok, _} = Staff.register_agent(%{name: handle, mandate: "machine", engine: "test"})
     end
 
@@ -102,16 +102,16 @@ defmodule Console.CockpitThreadSessionsTest do
     System.put_env("TLON_ENV", "work")
     on_exit(fn -> System.delete_env("TLON_ENV") end)
 
-    thread = staffed_thread("borges-machine")
+    thread = staffed_thread("borges")
 
     Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
-    assert_receive {:join, tid, "borges-machine", opts}
+    assert_receive {:join, tid, "borges", opts}
     assert tid == thread.id
     assert opts[:mandate] == "machine"
 
     # Slice C: a HUMAN window name (`<archetype>-<title-slug>`), not `t<id>` …
-    window = "planner-task-for-borges-machine"
+    window = "planner-task-for-borges"
     assert_receive {:tmux, ["-L", "console-workspace-99", "new-window", "-d", "-t", "w99", "-n", ^window, script]}
     assert script =~ "PI_CODING_AGENT_DIR"
     refute script =~ "modules/adapters/claude-code/launch.sh"
@@ -125,13 +125,13 @@ defmodule Console.CockpitThreadSessionsTest do
   end
 
   test "a claude-harness worker lead still gets its claude leaf window (regression)" do
-    thread = staffed_thread("hronir-machine")
+    thread = staffed_thread("hronir")
 
     Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
-    assert_receive {:join, _tid, "hronir-machine", _opts}
+    assert_receive {:join, _tid, "hronir", _opts}
 
-    window = "builder-task-for-hronir-machine"
+    window = "builder-task-for-hronir"
     assert_receive {:tmux, ["-L", "console-workspace-99", "new-window", "-d", "-t", "w99", "-n", ^window, script]}
     assert script =~ "modules/adapters/claude-code/launch.sh"
     refute script =~ "PI_CODING_AGENT_DIR"
@@ -144,7 +144,7 @@ defmodule Console.CockpitThreadSessionsTest do
   end
 
   test "a live `@funes_thread`-tagged window suppresses a respawn — the routing map, not the name, is the identity" do
-    thread = staffed_thread("borges-machine")
+    thread = staffed_thread("borges")
     test_pid = self()
 
     Application.put_env(:console, :tlon_cmd, fn "tmux", args, _opts ->
@@ -161,7 +161,7 @@ defmodule Console.CockpitThreadSessionsTest do
   end
 
   test "a meta (surveyor) lead never gets a leaf window — the vantage is not a worker" do
-    staffed_thread("rufus-machine")
+    staffed_thread("rufus")
 
     Staffing.ensure_thread_sessions(state(), Space.all(@workspaces))
 
@@ -169,7 +169,7 @@ defmodule Console.CockpitThreadSessionsTest do
   end
 
   test "a restart can't replay the opening turn — the phase lives on the window (@funes_opening)" do
-    thread = staffed_thread("borges-machine")
+    thread = staffed_thread("borges")
     test_pid = self()
 
     # A DONE-tagged live leaf + a fresh cockpit (empty opening state): nothing is typed or sent.
@@ -186,7 +186,7 @@ defmodule Console.CockpitThreadSessionsTest do
   end
 
   test "a TYPED-tagged leaf after a restart submits immediately and tags done (text settled long ago)" do
-    thread = staffed_thread("borges-machine")
+    thread = staffed_thread("borges")
     test_pid = self()
 
     Application.put_env(:console, :tlon_cmd, fn "tmux", args, _opts ->
@@ -214,7 +214,7 @@ defmodule Console.CockpitThreadSessionsTest do
       File.rm(cfg)
     end)
 
-    thread = staffed_thread("borges-machine")
+    thread = staffed_thread("borges")
     test_pid = self()
 
     # One live leaf already occupies the only seat.
@@ -234,7 +234,7 @@ defmodule Console.CockpitThreadSessionsTest do
   end
 
   test "an orphan leaf window (thread closed/cleared while aleph was down) is swept" do
-    thread = staffed_thread("borges-machine")
+    thread = staffed_thread("borges")
     test_pid = self()
 
     # One live tagged leaf (kept), one tagged for a vanished thread, one legacy t<id> orphan —
@@ -256,7 +256,7 @@ defmodule Console.CockpitThreadSessionsTest do
   end
 
   test "the standing thread is excluded — the center already runs it" do
-    thread = staffed_thread("borges-machine")
+    thread = staffed_thread("borges")
 
     Staffing.ensure_thread_sessions(%{state() | standing_thread_id: thread.id}, Space.all(@workspaces))
 

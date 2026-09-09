@@ -7,7 +7,7 @@ defmodule Console.Mention do
 
   The handle → window mapping (`coworkers/1`) is the one piece of structural knowledge here — it is
   DERIVED from the active workspace's roster (`Console.Space`), not a compile-time table: each roster entry
-  named `n` becomes handle `"n-machine"` → window `n`, matching the window name the Cockpit's
+  named `n` is handle AND window `n` (UX slice 5 retired the `-machine` suffix), matching the window name the Cockpit's
   roster-driven spawn code creates (C2.3). Every call here that resolves handles takes the roster as
   an explicit arg — callers source it from `Space.fetch/1`/`Space.first_workspace/0` (server-down/no-workspace
   → `[]`, no handles resolve, nobody is woken).
@@ -23,16 +23,12 @@ defmodule Console.Mention do
   alias Console.Crew
 
   @doc """
-  The active handle → window map for `roster` (entries `%{"name" => n}`/`%{name: n}`, string or atom
-  keyed) — each name `n` becomes handle `"n-machine"` mapped to window `n`.
+  The active handle → window map for a BENCH (`Server.Coworker` seats) — each name maps to itself,
+  because handle and window are the same string since the `-machine` suffix retired (UX slice 5).
+  The map survives as the "is this one of ours?" lookup every resolve does.
   """
-  @spec coworkers([map()]) :: %{String.t() => String.t()}
-  def coworkers(roster \\ []) do
-    Map.new(roster, fn entry ->
-      name = entry["name"] || entry[:name]
-      {"#{name}-machine", name}
-    end)
-  end
+  @spec coworkers([Server.Coworker.t()]) :: %{String.t() => String.t()}
+  def coworkers(bench \\ []), do: Map.new(bench, &{&1.name, &1.name})
 
   @doc "The {handle, window} pairs @-mentioned in `body` (deduped, first-seen order), resolved against `roster`."
   @spec mentions(String.t() | nil, [map()]) :: [{String.t(), String.t()}]

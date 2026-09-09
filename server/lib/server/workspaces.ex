@@ -8,20 +8,24 @@ defmodule Server.Workspaces do
   import Ecto.Query
 
   alias Server.Bus
+  alias Server.Coworker
   alias Server.Repo
   alias Server.Workspace
+  alias Server.WorkspaceAgent
   alias Server.WorkspaceRepo
 
   @doc "Register a workspace. `{:ok, workspace}` or `{:error, changeset}` (e.g. a duplicate name)."
   def register(attrs) do
     {repos, attrs} = pop_repos(attrs)
+    {bench, attrs} = pop_bench(attrs)
 
     with {:ok, workspace} <- attrs |> Workspace.register_changeset() |> Repo.insert() do
       # every workspace is born with #general (UX slice 1b)
       _ = Server.Channels.general(workspace.id)
-      # …and with its scope as rows (UX slice 5). A template/seed hands them over at birth so a
-      # fresh workspace is never a workspace with nowhere to work.
+      # …and with its scope and its bench as rows (UX slice 5). A template/seed hands both over at
+      # birth so a fresh workspace is never a workspace with nowhere to work and nobody to work.
       Enum.each(repos, &add_repo(workspace.id, &1))
+      bench |> Enum.with_index() |> Enum.each(fn {entry, i} -> seat(workspace.id, Map.put(entry, :sort, i)) end)
       Bus.announce({:ok, workspace}, :workspace_registered)
     end
   end
@@ -178,4 +182,133 @@ defmodule Server.Workspaces do
   @doc "One repo row by id, or nil — the CONFIG pane's delete resolves the row it is deleting."
   @spec get_repo(integer()) :: WorkspaceRepo.t() | nil
   def get_repo(id), do: Repo.get(WorkspaceRepo, id)
+
+  @doc """
+  A workspace's BENCH — the coworkers it employs, as `Server.Coworker` structs with `lead?` already
+  stamped, in the order the operator arranged them. This is THE roster read: nothing else should be
+  joining `workspace_agent` to `agent` and deciding for itself who the lead is.
+  """
+  @spec bench(integer()) :: [Coworker.t()]
+  def bench(workspace_id), do: workspace_id |> bench_query() |> Repo.all() |> to_bench()
+
+  @doc """
+  The benches of many workspaces at once, as `%{workspace_id => [coworker]}` — the whole picker in
+  ONE query, for the same reason `repos_by_workspace/1` exists.
+  """
+  @spec bench_by_workspace([integer()]) :: %{integer() => [Coworker.t()]}
+  def bench_by_workspace(workspace_ids) do
+    from(wa in WorkspaceAgent,
+      join: a in Server.Agent,
+      on: a.id == wa.agent_id,
+      where: wa.workspace_id in ^workspace_ids,
+      order_by: [asc: wa.sort, asc: wa.id],
+      select: {wa.workspace_id, %{id: wa.id, agent_id: a.id, name: a.name, archetype: wa.archetype, sort: wa.sort}}
+    )
+    |> Repo.all()
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Map.new(fn {ws_id, rows} -> {ws_id, to_bench(rows)} end)
+  end
+
+  @doc "A workspace's lead coworker, or nil — `Server.Coworker.lead/1` over its bench, the ONE derivation."
+  @spec lead(integer() | nil) :: Coworker.t() | nil
+  def lead(nil), do: nil
+  def lead(workspace_id), do: workspace_id |> bench() |> Coworker.lead()
+
+  @doc """
+  Seat a coworker on a workspace's bench, registering the `agent` if this handle is new — a bench
+  you can name is a bench you can point at, so the agent exists from the moment it is seated rather
+  than the first time something needs it. `{:ok, coworker}` or `{:error, changeset}`.
+  """
+  @spec seat(integer(), map()) :: {:ok, Coworker.t()} | {:error, Ecto.Changeset.t()}
+  def seat(workspace_id, attrs) do
+    attrs = Map.new(attrs)
+    name = attrs[:name] || attrs["name"]
+    archetype = attrs[:archetype] || attrs["archetype"]
+
+    with {:ok, agent} <- ensure_agent(name, archetype),
+         {:ok, row} <-
+           %{
+             workspace_id: workspace_id,
+             agent_id: agent.id,
+             archetype: archetype,
+             sort: attrs[:sort] || next_seat_sort(workspace_id)
+           }
+           |> WorkspaceAgent.seat_changeset()
+           |> Repo.insert() do
+      announce_workspace({:ok, row}, workspace_id)
+      {:ok, %Coworker{id: row.id, agent_id: agent.id, name: agent.name, archetype: row.archetype, sort: row.sort}}
+    end
+  end
+
+  @doc "Unseat a coworker by its bench-row id. The AGENT survives — it is durable identity, and other threads point at it."
+  @spec unseat(integer()) :: {:ok, WorkspaceAgent.t()} | {:error, :no_such_seat}
+  def unseat(seat_id) do
+    case Repo.get(WorkspaceAgent, seat_id) do
+      nil ->
+        {:error, :no_such_seat}
+
+      %WorkspaceAgent{} = row ->
+        {:ok, _} = Repo.delete(row)
+        announce_workspace({:ok, row}, row.workspace_id)
+        {:ok, row}
+    end
+  end
+
+  @doc """
+  Replace a workspace's whole bench with `entries` (`%{name, archetype}` maps, string- or
+  atom-keyed). The overwrite semantics the old `roster` JSON column had, kept for the MCP edit tool.
+  """
+  @spec replace_bench(integer(), [map()]) :: :ok
+  def replace_bench(workspace_id, entries) do
+    Repo.delete_all(from wa in WorkspaceAgent, where: wa.workspace_id == ^workspace_id)
+
+    entries
+    |> List.wrap()
+    |> Enum.with_index()
+    |> Enum.each(fn {entry, i} -> seat(workspace_id, entry |> Map.new() |> Map.put(:sort, i)) end)
+
+    :ok
+  end
+
+  defp bench_query(workspace_id) do
+    from(wa in WorkspaceAgent,
+      join: a in Server.Agent,
+      on: a.id == wa.agent_id,
+      where: wa.workspace_id == ^workspace_id,
+      order_by: [asc: wa.sort, asc: wa.id],
+      select: %{id: wa.id, agent_id: a.id, name: a.name, archetype: wa.archetype, sort: wa.sort}
+    )
+  end
+
+  defp to_bench(rows), do: rows |> Enum.map(&struct(Coworker, &1)) |> Coworker.mark_lead()
+
+  # A handle is an agent: find it or register it. `mandate` defaults to the archetype and `engine` to
+  # local, which is what the lazy `-machine` registration supplied before the suffix retired.
+  defp ensure_agent(nil, _archetype), do: {:error, Ecto.Changeset.add_error(%Ecto.Changeset{}, :name, "is required")}
+
+  defp ensure_agent(name, archetype) do
+    case Server.Staff.agent_by_name(name) do
+      %Server.Agent{} = agent -> {:ok, agent}
+      nil -> Server.Staff.register_agent(%{name: name, mandate: archetype || "general", engine: "local"})
+    end
+  end
+
+  defp next_seat_sort(workspace_id) do
+    (Repo.one(from wa in WorkspaceAgent, where: wa.workspace_id == ^workspace_id, select: max(wa.sort)) || -1) + 1
+  end
+
+  # `roster:` in the register attrs is the workspace's bench at birth — a list of
+  # `%{archetype, name}` maps in either key style (the seed and the templates each use one). Not a
+  # workspace column any more, so it comes out before the changeset sees it.
+  defp pop_bench(attrs) do
+    attrs = Map.new(attrs)
+    {bench, attrs} = Map.pop(attrs, :roster, Map.get(attrs, "roster", []))
+
+    {bench |> List.wrap() |> Enum.map(&normalize_seat/1), Map.delete(attrs, "roster")}
+  end
+
+  defp normalize_seat(%{} = entry) do
+    entry = Map.new(entry)
+    %{name: entry[:name] || entry["name"], archetype: entry[:archetype] || entry["archetype"]}
+  end
 end

@@ -25,35 +25,35 @@ defmodule Console.DeliveryTest do
 
   describe "delivery_target/3" do
     test "the standing coworker's own thread routes globally" do
-      assert Delivery.delivery_target(%{thread_id: 1}, state(), "hronir-machine") == {:route, nil}
+      assert Delivery.delivery_target(%{thread_id: 1}, state(), "hronir") == {:route, nil}
     end
 
     test "no lead, or a meta (surveyor) lead, routes globally — there is no leaf window to redirect onto" do
       assert Delivery.delivery_target(%{thread_id: 2}, state(), nil) == {:route, nil}
-      assert Delivery.delivery_target(%{thread_id: 2}, state(), "tertius-machine") == {:route, nil}
+      assert Delivery.delivery_target(%{thread_id: 2}, state(), "tertius") == {:route, nil}
     end
 
     test "a worker-led thread whose leaf is live and past its opening turn routes onto that window" do
       windows("1\t0\ttertius\t\t\n0\t1\tbuilder-fix\t2\tdone\n")
-      assert Delivery.delivery_target(%{thread_id: 2}, state(), "hronir-machine") == {:route, "builder-fix"}
+      assert Delivery.delivery_target(%{thread_id: 2}, state(), "hronir") == {:route, "builder-fix"}
     end
 
     test "a worker-led thread mid-spawn (no window yet) or pre-opening (typed, not submitted) is skipped" do
       windows("1\t0\ttertius\t\t\n")
-      assert Delivery.delivery_target(%{thread_id: 2}, state(), "hronir-machine") == :skip
+      assert Delivery.delivery_target(%{thread_id: 2}, state(), "hronir") == :skip
 
       windows("1\t0\ttertius\t\t\n0\t1\tbuilder-fix\t2\ttyped\n")
-      assert Delivery.delivery_target(%{thread_id: 2}, state(), "hronir-machine") == :skip
+      assert Delivery.delivery_target(%{thread_id: 2}, state(), "hronir") == :skip
     end
 
     test "process memory of a submitted opening (opening_injected) also counts as past it" do
       windows("1\t0\ttertius\t\t\n0\t1\tbuilder-fix\t2\t\n")
       st = state(%{opening_injected: MapSet.new([2])})
-      assert Delivery.delivery_target(%{thread_id: 2}, st, "hronir-machine") == {:route, "builder-fix"}
+      assert Delivery.delivery_target(%{thread_id: 2}, st, "hronir") == {:route, "builder-fix"}
     end
 
     test "a row without a thread routes globally" do
-      assert Delivery.delivery_target(%{}, state(), "hronir-machine") == {:route, nil}
+      assert Delivery.delivery_target(%{}, state(), "hronir") == {:route, nil}
     end
   end
 

@@ -330,20 +330,17 @@ defmodule Console.Cockpit.Author do
   # Only reachable when `author_edit` is actually mid-edit on a paths/roster sub-list (field 2/3) —
   # elsewhere (the type/scope rings, or no editor open) this is a no-op via the fallback clause.
   defp reclamp_author_edit_sub(%{author_edit: %{id: id, field: field} = edit} = state) when field in [2, 3] do
-    case Workspaces.get(id) do
-      nil ->
-        state
-
-      workspace ->
-        len = workspace |> Map.get(sub_list_field(field)) |> length()
-        %{state | author_edit: %{edit | sub: edit.sub |> min(max(len - 1, 0)) |> max(0)}}
-    end
+    # The live ROWS, not a workspace struct: since UX slice 5 the scope and the bench are their own
+    # tables, and `Map.get(%Server.Workspace{}, :repos)` quietly answers nil (a struct is a map with
+    # fixed keys, and `Map.get` does not raise) — which then raised inside `length/1` and was
+    # swallowed by `Safe`, leaving the cursor un-clamped with nothing said.
+    len = length(sub_list_rows(field, id))
+    %{state | author_edit: %{edit | sub: edit.sub |> min(max(len - 1, 0)) |> max(0)}}
   end
 
   defp reclamp_author_edit_sub(state), do: state
-
-  defp sub_list_field(2), do: :repos
-  defp sub_list_field(3), do: :roster
+  defp sub_list_rows(2, workspace_id), do: Workspaces.repos(workspace_id)
+  defp sub_list_rows(3, workspace_id), do: Workspaces.bench(workspace_id)
 
   @doc false
   # The roster sub-editor's Tab+Enter/Space knob (D2.4 Chunk 2b — absorbs the Settings modal):
@@ -361,12 +358,7 @@ defmodule Console.Cockpit.Author do
     end)
   end
 
-  defp roster_entry_for(%{author_edit: %{id: id}}, name) do
-    case Workspaces.get(id) do
-      nil -> nil
-      workspace -> Enum.find(workspace.roster || [], &(&1["name"] == name))
-    end
-  end
+  defp roster_entry_for(%{author_edit: %{id: id}}, name), do: id |> Workspaces.bench() |> Enum.find(&(&1.name == name))
 
   defp roster_entry_for(_state, _name), do: nil
 
@@ -377,8 +369,7 @@ defmodule Console.Cockpit.Author do
     "#{norm.name} driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
   end
 
-  defp apply_knob(entry, :yolo) do
-    name = entry["name"]
+  defp apply_knob(%Server.Coworker{name: name}, :yolo) do
     next = Console.Config.coworker_yolo(name) != true
     Console.Config.put_coworker_yolo(name, next)
     policy = if next, do: "yolo (auto-approve)", else: "ask"
@@ -436,6 +427,30 @@ defmodule Console.Cockpit.Author do
         repo ->
           {:ok, _} = Workspaces.remove_repo(repo)
           reclamp_author_edit_sub(%{state | flash: "removed #{repo.path}"})
+      end
+    end)
+  end
+
+  @doc false
+  # CONFIG's bench sub-list `a` (UX slice 5): seat a coworker. Registers its agent if the handle is
+  # new — the bench IS the agent table now, so there is no "on demand" left to defer it to.
+  def seat!(state, id, attrs) do
+    Safe.flash_on_error(state, "seat", fn ->
+      case Workspaces.seat(id, attrs) do
+        {:ok, coworker} -> reclamp_author_edit_sub(%{state | flash: "seated #{coworker.name}"})
+        {:error, changeset} -> %{state | flash: "couldn't seat #{attrs[:name]} — #{changeset_error(changeset)}"}
+      end
+    end)
+  end
+
+  @doc false
+  # CONFIG's bench sub-list `x`/`d`: unseat by ROW id. The AGENT survives — it is durable identity
+  # that threads and sessions point at, and a bench edit is not a reason to destroy one.
+  def unseat!(state, _id, seat_id) do
+    Safe.flash_on_error(state, "unseat", fn ->
+      case Workspaces.unseat(seat_id) do
+        {:ok, _seat} -> reclamp_author_edit_sub(%{state | flash: "unseated"})
+        {:error, :no_such_seat} -> %{state | flash: "that seat is already gone"}
       end
     end)
   end

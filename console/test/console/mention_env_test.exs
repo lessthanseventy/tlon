@@ -9,7 +9,10 @@ defmodule Console.MentionEnvTest do
   alias Console.Mention
 
   # The seed roster (Console.Space's fallback Tlön workspace) — mirrors mention_test.exs's fixture.
-  @roster [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}]
+  @roster [
+    %Server.Coworker{archetype: "surveyor", name: "tertius"},
+    %Server.Coworker{archetype: "builder", name: "hronir"}
+  ]
 
   setup do
     on_exit(fn -> System.delete_env("TLON_MENTION_LABEL") end)
@@ -20,15 +23,15 @@ defmodule Console.MentionEnvTest do
     test "labels the injected turn 'someone' instead of the real handle" do
       System.put_env("TLON_MENTION_LABEL", "anon")
 
-      assert Mention.route(%{author: "tertius-machine", body: "@hronir-machine who are you", thread_id: 1}, [], @roster) ==
-               [{"hronir", "[tlon thread #1] someone: @hronir-machine who are you"}]
+      assert Mention.route(%{author: "tertius", body: "@hronir who are you", thread_id: 1}, [], @roster) ==
+               [{"hronir", "[tlon thread #1] someone: @hronir who are you"}]
     end
 
     test "any other value keeps the real label" do
       System.put_env("TLON_MENTION_LABEL", "real")
 
-      assert Mention.route(%{author: "tertius-machine", body: "@hronir-machine hi", thread_id: 1}, [], @roster) ==
-               [{"hronir", "[tlon thread #1] tertius-machine: @hronir-machine hi"}]
+      assert Mention.route(%{author: "tertius", body: "@hronir hi", thread_id: 1}, [], @roster) ==
+               [{"hronir", "[tlon thread #1] tertius: @hronir hi"}]
     end
   end
 end

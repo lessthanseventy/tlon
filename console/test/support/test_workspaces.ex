@@ -14,10 +14,10 @@ defmodule Console.TestWorkspaces do
     name: "Tlön",
     type: "code",
     scope: "machine",
-    paths: ["modules/*"],
-    roster: [
-      %{"archetype" => "surveyor", "name" => "tertius"},
-      %{"archetype" => "builder", "name" => "hronir"}
+    repos: ["modules/*"],
+    bench: [
+      %Server.Coworker{archetype: "surveyor", name: "tertius"},
+      %Server.Coworker{archetype: "builder", name: "hronir"}
     ]
   }
 

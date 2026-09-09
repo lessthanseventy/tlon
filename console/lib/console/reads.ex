@@ -82,7 +82,7 @@ defmodule Console.Reads do
   end
 
   defp typing_agent(thinking) when map_size(thinking) == 0, do: nil
-  defp typing_agent(thinking), do: thinking |> Map.keys() |> List.first() |> String.replace_suffix("-machine", "")
+  defp typing_agent(thinking), do: thinking |> Map.keys() |> List.first()
 
   # The pending habit the focus points at, or nil unless: a Workspace space, nav mode, Memory pane,
   # habits section (1), with a habit under the clamped cursor.
@@ -179,10 +179,10 @@ defmodule Console.Reads do
       end)
 
     titles = Map.new(state.threads, &{&1.id, &1.title})
-    roster = Space.roster(Space.active_workspace_id(state))
+    bench = Space.bench(Space.active_workspace_id(state))
 
     %{
-      coworkers: Panel.Crew.coworkers(roster, tabs, led_by, titles, state.thinking, System.os_time(:second)),
+      coworkers: Panel.Crew.coworkers(bench, tabs, led_by, titles, state.thinking, System.os_time(:second)),
       leaves: {Enum.count(tabs, &Tmux.leaf_window?/1), Console.Config.max_leaves()}
     }
   end

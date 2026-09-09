@@ -183,12 +183,12 @@ defmodule Server.WorklineTest do
         name: "ReviewWorkspace",
         type: "code",
         scope: "machine",
-        paths: [],
+        repos: [],
         roster: [%{"archetype" => "reviewer", "name" => "menard"}]
       })
 
-    {:ok, _} =
-      Server.Staff.register_agent(%{name: "menard-machine", mandate: "review", engine: "sonnet"})
+    # seating the bench already registered `menard` — the agent is the bench (UX slice 5)
+    assert Server.Staff.agent_by_name("menard")
 
     thread = open!(%{slug: "restaffed", workspace_id: workspace.id})
     {:ok, thread} = Workline.advance(thread, artifacts: AllPresent)
@@ -199,7 +199,7 @@ defmodule Server.WorklineTest do
     {:ok, at_review} = Workline.advance(thread, artifacts: AllPresent)
 
     assert at_review.stage == "review"
-    assert Channel.thread_lead(thread.id) == "menard-machine"
+    assert Channel.thread_lead(thread.id) == "menard"
   end
 
   test "entering review with no reviewer in the roster leaves the lead alone" do

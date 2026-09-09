@@ -202,7 +202,7 @@ defmodule Server.MCP.Brief do
       "type" => w.type,
       "scope" => w.scope,
       "repos" => Enum.map(Server.Workspaces.repos(w.id), &workspace_repo/1),
-      "roster" => w.roster,
+      "roster" => w.id |> Server.Workspaces.bench() |> Enum.map(&Server.Coworker.to_wire/1),
       "knobs" => w.knobs,
       "at" => at(w.created_at)
     }

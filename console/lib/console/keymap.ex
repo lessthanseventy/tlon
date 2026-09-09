@@ -78,6 +78,8 @@ defmodule Console.Keymap do
     * `{:remove_workspace, id}` — the second `d` while armed on the SAME id confirms the delete.
     * `{:add_repo, id, buffer}` / `{:remove_repo, id, repo_id}` — CONFIG's repos sub-list (UX
       slice 5); the scope is rows now, so adding one is not a whole-list workspace edit.
+    * `{:seat, id, attrs}` / `{:unseat, id, seat_id}` — CONFIG's bench sub-list, for the same
+      reason. Seating registers the coworker's agent; unseating leaves it standing.
     * `{:edit_workspace, id, attrs}` — the field editor's `h`/`l` rings (type/scope) and the
       roster sub-list's `a`/`x`/`d` (D2.4 Chunk 2a) — apply one attrs map to a workspace immediately.
     * `{:coworker_knob, name, knob}` — the roster sub-list's `Tab`-selected knob (`:model` |
@@ -106,13 +108,13 @@ defmodule Console.Keymap do
 
   The field editor (D2.4 Chunk 2a): `author_edit :: nil | %{id, field, sub, mode}` — `e` on the
   list's cursor workspace opens it at `field: 0` (type), `mode: :field`. `mode` (`:field | :sub`) is
-  an addition beyond the plan's 3-key shape — the field list and a field's sub-list (repos/roster
+  an addition beyond the plan's 3-key shape — the field list and a field's sub-list (repos/bench
   entries) both drive `j`/`k` over a DIFFERENT cursor (`field` vs `sub`) and need a bit to tell
   which is live; everything else matches the plan verbatim. `field` cycles the 4 rows (0 type · 1
-  scope · 2 repos · 3 roster) with `j`/`k`, clamped no-wrap. On fields 0/1, `h`/`l` cycle a ring
+  scope · 2 repos · 3 bench) with `j`/`k`, clamped no-wrap. On fields 0/1, `h`/`l` cycle a ring
   (`@type_ring`/`@scope_ring`) and emit `{:edit_workspace, id, attrs}` immediately — no draft/commit
   step. On fields 2/3, `Enter` drops into the sub-list (`mode: :sub`, `sub` resets to 0); there
-  `j`/`k` move `sub` (clamped to the live repos/roster length), `a` opens an add buffer
+  `j`/`k` move `sub` (clamped to the live repos/bench length), `a` opens an add buffer
   (`state.input` kind `:new_path` or `:new_roster` — the latter also carries an `archetype` ring
   cycled by `h`/`l`, mirroring `:new_workspace`'s `template`), `x`/`d` removes the `sub`-selected entry
   immediately, and `Esc` steps back to `mode: :field`. `Esc` on `mode: :field` clears `author_edit`
@@ -121,7 +123,7 @@ defmodule Console.Keymap do
 
   The roster sub-list ALSO carries `knob :: :model | :yolo` (D2.4 Chunk 2b, default `:model`,
   read tolerantly via `Map.get/3` so older literal states don't need it) — meaningless outside
-  `mode: :sub, field: 3` (roster) — meaningless-but-harmless elsewhere. There `Tab` flips it;
+  `mode: :sub, field: 3` (the bench) — meaningless-but-harmless elsewhere. There `Tab` flips it;
   `Enter`/`Space` emit
   `{:coworker_knob, name, knob}` for the sub-selected entry (`name` resolved off the LIVE roster,
   `workspace_field/2`, same as the `a`/`x`/`d` clauses) — the Settings modal's model-ring-cycle /
@@ -182,6 +184,8 @@ defmodule Console.Keymap do
           | {:picker_pick, map()}
           | {:ticket_move, String.t()}
           | {:add_repo, integer(), String.t()}
+          | {:seat, integer(), map()}
+          | {:unseat, integer(), integer()}
           | {:remove_repo, integer(), integer()}
           | {:ticket_reorder, :up | :down}
           | :ticket_blocker_menu
@@ -321,10 +325,8 @@ defmodule Console.Keymap do
   # A non-blank name appends a wire-shaped roster entry (`%{"archetype" => .., "name" => ..}`,
   # matching `WorkspaceTemplates.new_workspace_attrs/2`'s shape) to the edited workspace's LIVE roster and
   # applies immediately. Blank already fell into the empty-buffer clause above.
-  def handle(%{key: :enter}, %{input: %{kind: :new_roster, workspace_id: id, archetype: arch, buffer: buffer}} = state) do
-    entry = %{"archetype" => Atom.to_string(arch), "name" => buffer}
-    {%{state | input: nil}, {:edit_workspace, id, %{roster: workspace_field(state, id, :roster) ++ [entry]}}}
-  end
+  def handle(%{key: :enter}, %{input: %{kind: :new_roster, workspace_id: id, archetype: arch, buffer: buffer}} = state),
+    do: {%{state | input: nil}, {:seat, id, %{name: buffer, archetype: Atom.to_string(arch)}}}
 
   # Slash commands are the composer's other door (reshape slice D): /status is the full HEALTH
   # readout (the panel demoted to a footer line), never posted as a chat message.
@@ -814,7 +816,7 @@ defmodule Console.Keymap do
 
   # Field-list mode: h/l cycle the type (field 0) / scope (field 1) ring against the LIVE workspace
   # (live_workspaces, threaded per keypress) and emit the edit immediately — no draft/commit step.
-  # Fields 2/3 (repos/roster) have no ring — a no-op, matching the plan's "otherwise no-op".
+  # Fields 2/3 (repos/bench) have no ring — a no-op, matching the plan's "otherwise no-op".
   defp config(%{key: :char, char: "h"}, %{author_edit: %{mode: :field} = edit} = state),
     do: {state, field_ring_edit(state, edit, -1)}
 
@@ -824,7 +826,7 @@ defmodule Console.Keymap do
   # Esc in field-list mode clears author_edit — back to the list.
   defp config(%{key: :escape}, %{author_edit: %{mode: :field}} = state), do: {put_author_edit(state, nil), :repaint}
 
-  # Field-list mode: Enter on fields 2/3 (repos/roster) drops into the sub-list. Fields 0/1's
+  # Field-list mode: Enter on fields 2/3 (repos/bench) drops into the sub-list. Fields 0/1's
   # rings already apply via h/l — nothing for Enter to open, a no-op.
   defp config(%{key: :enter}, %{author_edit: %{mode: :field, field: f} = edit} = state) when f in [2, 3],
     do: {put_author_edit(state, %{edit | mode: :sub, sub: 0}), :repaint}
@@ -832,7 +834,7 @@ defmodule Console.Keymap do
   defp config(%{key: :enter}, %{author_edit: %{mode: :field}} = state), do: {state, :none}
 
   # Sub-list mode (D2.4 Chunk 2b/2c): j/k move `sub`, clamped to the field's LIVE list length
-  # (repos/roster off live_workspaces, threaded per keypress — never stale).
+  # (repos/bench off live_workspaces, threaded per keypress — never stale).
   defp config(key, %{author_edit: %{mode: :sub} = edit} = state) when is_vertical(key),
     do: {put_author_edit(state, %{edit | sub: move_sub(state, edit, vertical(key))}), :repaint}
 
@@ -868,20 +870,25 @@ defmodule Console.Keymap do
     {%{state | input: input}, :repaint}
   end
 
-  # Sub-list mode, field 3 (roster): x/d removes the sub-selected entry immediately — same no-confirm
-  # reasoning as field 2's repo removal.
+  # Sub-list mode, field 3 (bench): x/d UNSEATS the sub-selected coworker by its ROW id — same
+  # no-confirm reasoning as field 2's repo removal, same by-id discipline. Unseating does not
+  # delete the AGENT: that is durable identity other threads point at.
   defp config(%{key: :char, char: c}, %{author_edit: %{mode: :sub, field: 3, id: id, sub: sub}} = state)
-       when c in ["x", "d"],
-       do: {state, {:edit_workspace, id, %{roster: List.delete_at(workspace_field(state, id, :roster), sub)}}}
+       when c in ["x", "d"] do
+    case state |> workspace_field(id, :bench) |> Enum.at(sub) do
+      %Server.Coworker{id: seat_id} -> {state, {:unseat, id, seat_id}}
+      _ -> {state, :none}
+    end
+  end
 
   # Sub-list mode, field 3 (roster) only: `Tab` flips the knob (:model <-> :yolo) Enter/Space
-  # applies (D2.4 Chunk 2b, absorbs Settings' field-flip). Guarded to field 3 (paths has no knob)
+  # applies (D2.4 Chunk 2b, absorbs Settings' field-flip). Guarded to field 3 (repos have no knob)
   # and must precede the generic Tab-switches-space clauses below.
   defp config(%{key: :tab}, %{author_edit: %{mode: :sub, field: 3} = edit} = state),
     do: {put_author_edit(state, Map.put(edit, :knob, flip_knob(edit_knob(edit)))), :repaint}
 
   # Sub-list mode, field 3 (roster) only: Enter/Space applies the active knob to the sub-selected
-  # coworker (the Settings modal's apply, now here) — `name` off the LIVE roster (workspace_field/2,
+  # coworker (the Settings modal's apply, now here) — `name` off the LIVE bench (workspace_field/2,
   # same source `a`/`x`/`d` read). A vanished entry (sub past the shrunk list) is a no-op.
   defp config(key, %{author_edit: %{mode: :sub, field: 3}} = state) when is_apply_key(key), do: roster_knob_apply(state)
 
@@ -1028,7 +1035,7 @@ defmodule Console.Keymap do
   end
 
   defp sub_key(2), do: :repos
-  defp sub_key(3), do: :roster
+  defp sub_key(3), do: :bench
 
   # The roster sub-editor's knob (D2.4 Chunk 2b) — tolerant read (default :model) so a state built
   # before this field existed (an older test's literal author_edit) still works.
@@ -1039,13 +1046,13 @@ defmodule Console.Keymap do
   # Resolve the sub-selected roster entry's `name` off the LIVE workspace and emit the apply effect —
   # a vanished entry (deleted mid-edit, or `sub` past the shrunk list) is a no-op, not a crash.
   defp roster_knob_apply(%{author_edit: %{id: id, sub: sub} = edit} = state) do
-    case state |> workspace_field(id, :roster) |> Enum.at(sub) do
-      %{"name" => name} -> {state, {:coworker_knob, name, edit_knob(edit)}}
+    case state |> workspace_field(id, :bench) |> Enum.at(sub) do
+      %Server.Coworker{name: name} -> {state, {:coworker_knob, name, edit_knob(edit)}}
       _ -> {state, :none}
     end
   end
 
-  # The CURRENT value of one list-shaped field (`:repos`/`:roster`) off the LIVE workspace
+  # The CURRENT value of one list-shaped field (`:repos`/`:bench`) off the LIVE workspace
   # (live_workspaces, threaded per keypress — never stale). A vanished workspace (deleted mid-edit)
   # degrades to `[]` rather than crashing the reducer.
   defp workspace_field(state, id, key) do

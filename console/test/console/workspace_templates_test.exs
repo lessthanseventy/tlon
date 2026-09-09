@@ -28,7 +28,7 @@ defmodule Console.WorkspaceTemplatesTest do
     assert_raise KeyError, fn -> WorkspaceTemplates.template(:nope) end
   end
 
-  test "new_workspace_attrs builds register_workspace attrs from a template + name (string-keyed roster)" do
+  test "new_workspace_attrs builds register_workspace attrs from a template + name (string-keyed bench entries)" do
     attrs = WorkspaceTemplates.new_workspace_attrs(:code, "Ficciones2")
 
     assert attrs.name == "Ficciones2"

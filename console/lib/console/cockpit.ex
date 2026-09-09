@@ -1190,6 +1190,10 @@ defmodule Console.Cockpit do
   defp apply_effect({:add_repo, id, buffer}, state), do: {:noreply, render(Author.add_repo!(state, id, buffer))}
 
   defp apply_effect({:remove_repo, id, repo_id}, state), do: {:noreply, render(Author.remove_repo!(state, id, repo_id))}
+  # CONFIG's bench sub-list (UX slice 5), the same shape as the repos verbs above.
+  defp apply_effect({:seat, id, attrs}, state), do: {:noreply, render(Author.seat!(state, id, attrs))}
+
+  defp apply_effect({:unseat, id, seat_id}, state), do: {:noreply, render(Author.unseat!(state, id, seat_id))}
   defp apply_effect({:edit_workspace, id, attrs}, state), do: {:noreply, render(Author.edit_workspace!(state, id, attrs))}
 
   # The roster sub-editor's Tab-armed knob landed on Enter/Space (D2.4 Chunk 2b, absorbs Settings):

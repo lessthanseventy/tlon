@@ -68,8 +68,8 @@ defmodule Console.Panel.ActivityTest do
 
     assert text =~ "shipped the panel"
 
-    assert {"▸ ", :event_msg, "claude-machine: hello"} =
-             Activity.summarize({:message_posted, %{author: "claude-machine", body: "hello"}})
+    assert {"▸ ", :event_msg, "claude: hello"} =
+             Activity.summarize({:message_posted, %{author: "claude", body: "hello"}})
 
     assert {"◆ ", :event_warn, text} = Activity.summarize({:issue_raised, %{summary: "flaky test", found_by: "pi"}})
     assert text =~ "flaky test"

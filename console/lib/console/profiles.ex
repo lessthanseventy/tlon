@@ -77,7 +77,7 @@ defmodule Console.Profiles do
   ## The `tertius` coworker
 
   One coworker profile: `tertius`, the Tlön center — the Orbis Tertius meta agent
-  (`tertius-machine`), glm-5.2, on the root machine thread. Design:
+  (`tertius`), glm-5.2, on the root machine thread. Design:
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`.
 
   - **Machine-scope tlon citizen.** Its MCP (`@tertius_mcp`) binds every token to scope
@@ -367,7 +367,7 @@ defmodule Console.Profiles do
 
   # The tertius persona → `system_prompt.md` (`--append-system-prompt`). The vantage-not-worker role.
   @tertius_role """
-  You are tertius-machine, the ORCHESTRATOR for the Tlön machine workspace. Your home is the ROOT
+  You are tertius, the ORCHESTRATOR for the Tlön machine workspace. Your home is the ROOT
   machine thread — the operator's single vantage over every work thread. You are a MANAGER, not a
   builder: you route intake, staff leads, and keep attention flowing. You do NOT do the work
   yourself, and you never write code.
@@ -541,7 +541,7 @@ defmodule Console.Profiles do
   # ONE content source — no more full `%Profile{}` structs duplicating the templates. Order is
   # significant (settings-modal rows, `names/0`): tertius first, then reviewer.
   #
-  #   * tertius — the Tlön CENTER (Orbis Tertius meta agent `tertius-machine`; its tmux socket is
+  #   * tertius — the Tlön CENTER (Orbis Tertius meta agent `tertius`; its tmux socket is
   #     per Workspace, `Console.Tmux.socket/1` — not name-derived off this profile).
   #     NO model override — it inherits the surveyor archetype's @glm default, so its materialisation
   #     stays BYTE-IDENTICAL to the pre-archetype profile (it is the only live Slice-0 spawn;
@@ -633,6 +633,8 @@ defmodule Console.Profiles do
   is keyed by.
   """
   @spec roster_entry(map()) :: %{archetype: atom() | nil, name: String.t() | nil}
+  def roster_entry(%Server.Coworker{} = seat), do: %{archetype: normalize_archetype(seat.archetype), name: seat.name}
+
   def roster_entry(entry) do
     %{
       archetype: normalize_archetype(entry["archetype"] || entry[:archetype]),
@@ -649,7 +651,9 @@ defmodule Console.Profiles do
   def meta?(archetype), do: archetype in @meta_archetypes
 
   @doc """
-  The server handles of a roster's WORKER (non-meta, registry-known) entries — `"<name>-machine"`.
+  The server handles of a bench's WORKER (non-meta, registry-known) seats. Since the `-machine`
+  suffix retired (UX slice 5) a handle IS the coworker's name — there is no transformation here,
+  and that is the point.
   The set a thread lead is checked against to decide "does this leaf get its own per-thread
   session" (any harness — Slice A replaced the claude-only `claude_code_handles/1` gate).
   """
@@ -658,19 +662,19 @@ defmodule Console.Profiles do
     roster
     |> Enum.map(&roster_entry/1)
     |> Enum.filter(fn %{archetype: a} -> a != nil and not meta?(a) end)
-    |> Enum.map(fn %{name: n} -> "#{n}-machine" end)
+    |> Enum.map(fn %{name: n} -> n end)
   end
 
   @doc """
-  The instantiated WORKER `%Profile{}` behind a leaf lead handle (`"<name>-machine"`), resolved
-  against `roster` — nil for a meta or roster-unknown lead (those get no per-thread session).
+  The instantiated WORKER `%Profile{}` behind a leaf lead handle, resolved against `roster` — nil
+  for a meta or bench-unknown lead (those get no per-thread session).
   The cockpit dispatches the leaf spawn on this profile's `harness`.
   """
   @spec leaf_profile(String.t(), [map()]) :: Profile.t() | nil
   def leaf_profile(handle, roster) do
     roster
     |> Enum.map(&roster_entry/1)
-    |> Enum.find(fn %{archetype: a, name: n} -> a != nil and not meta?(a) and "#{n}-machine" == handle end)
+    |> Enum.find(fn %{archetype: a, name: n} -> a != nil and not meta?(a) and n == handle end)
     |> case do
       nil -> nil
       entry -> instantiate(entry)
@@ -684,11 +688,12 @@ defmodule Console.Profiles do
   # compiled registry forces the load as an ordinary call, exhaustion-safe (a bounded set).
   defp normalize_archetype(a) when is_binary(a), do: Enum.find(Map.keys(@archetypes), &(Atom.to_string(&1) == a))
 
-  # The server handle convention: profile name + "-machine" (profile "tertius" → "tertius-machine").
+  # The handle IS the profile name (UX slice 5 retired the "-machine" suffix; the agent row, the
+  # tmux window and the mention all spell it the same way now).
   # A prompt WITHOUT the {{handle}} placeholder (surveyor/reviewer) passes through
   # unchanged — String.replace is a no-op, so those personas stay byte-identical. Every
   # archetype carries a prompt (Elixir 1.20's type checker proved a nil clause dead).
-  defp personalize(prompt, name), do: String.replace(prompt, "{{handle}}", "#{name}-machine")
+  defp personalize(prompt, name), do: String.replace(prompt, "{{handle}}", name)
 
   @doc "The ring entry after `current` (matched on provider+model), wrapping; unknown → the ring head."
   @spec next_model(map() | nil) :: map()

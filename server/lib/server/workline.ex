@@ -333,14 +333,14 @@ defmodule Server.Workline do
   defp restaff_reviewer(%Thread{workspace_id: nil} = thread), do: restaff_miss(thread, "no workspace bound")
 
   defp restaff_reviewer(thread) do
-    with %{roster: roster} when is_list(roster) <- Repo.get(Server.Workspace, thread.workspace_id),
-         %{"name" => name} <- Enum.find(roster, &(&1["archetype"] == "reviewer" || &1[:archetype] == "reviewer")),
-         {:ok, restaffed} <- Server.Channel.assign_lead(thread.id, "#{name}-machine") do
-      post_brief(restaffed, "→ #{name}-machine leads (review stage)")
+    with %Server.Coworker{name: name} <-
+           thread.workspace_id |> Server.Workspaces.bench() |> Enum.find(&(&1.archetype == "reviewer")),
+         {:ok, restaffed} <- Server.Channel.assign_lead(thread.id, name) do
+      post_brief(restaffed, "→ #{name} leads (review stage)")
       restaffed
     else
       {:error, reason} -> restaff_miss(thread, inspect(reason))
-      _ -> restaff_miss(thread, "no reviewer in the workspace's roster")
+      _ -> restaff_miss(thread, "no reviewer on the workspace's bench")
     end
   rescue
     e -> restaff_miss(thread, Exception.message(e))

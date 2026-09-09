@@ -65,7 +65,7 @@ defmodule Console.Delivery do
   def teardown_closed_leaf(_tag, _row, _state), do: :ok
 
   @doc """
-  @-mention delivery: a posted message naming a coworker (`@tertius-machine`) is injected as a turn
+  @-mention delivery: a posted message naming a coworker (`@tertius`) is injected as a turn
   into that coworker's tmux window, so a cold pane gets woken instead of silently accumulating an
   unread thread. Pure routing lives in `Console.Mention`; this is the edge — best-effort tmux
   send-keys, never a crash on a missing window.
@@ -80,7 +80,7 @@ defmodule Console.Delivery do
 
       {:route, staffed} ->
         for {window, text} <-
-              Console.Mention.route(row, [lead: lead, staffed_window: staffed], Space.roster(workspace_id)),
+              Console.Mention.route(row, [lead: lead, staffed_window: staffed], Space.bench(workspace_id)),
             index = tlon_window_index(workspace_id, window),
             not is_nil(index) do
           inject_turn(workspace_id, index, text)

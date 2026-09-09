@@ -5,6 +5,7 @@ defmodule Server.WorkspacesTest do
   use ExUnit.Case, async: false
 
   alias Server.Bus
+  alias Server.Coworker
   alias Server.Workspace
   alias Server.Workspaces
 
@@ -54,11 +55,11 @@ defmodule Server.WorkspacesTest do
   describe "edit/2" do
     test "updates mutable fields and announces" do
       Bus.subscribe_workspaces()
-      {:ok, workspace} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "a"}]})
+      {:ok, workspace} = Workspaces.register(%{name: "Tlön", scope: "machine"})
 
-      {:ok, edited} = Workspaces.edit(workspace, %{roster: [%{"name" => "b"}], knobs: %{"accent" => "cyan"}})
+      {:ok, edited} = Workspaces.edit(workspace, %{scope: "project", knobs: %{"accent" => "cyan"}})
 
-      assert edited.roster == [%{"name" => "b"}]
+      assert edited.scope == "project"
       assert Workspaces.get(workspace.id).knobs == %{"accent" => "cyan"}
       assert_receive {:workspace_edited, %Workspace{}}
     end
@@ -165,6 +166,113 @@ defmodule Server.WorkspacesTest do
 
       assert Enum.map(by_ws[a.id], & &1.path) == ["a/*"]
       assert Enum.map(by_ws[b.id], & &1.path) == ["b/*", "b2/*"]
+    end
+  end
+
+  describe "the bench (UX slice 5) — the roster as workspace_agent rows" do
+    test "the bench comes back as Coworker seats, in order, with the lead stamped" do
+      {:ok, ws} =
+        Workspaces.register(%{
+          name: "Tlön",
+          roster: [
+            %{"archetype" => "surveyor", "name" => "tertius"},
+            %{"archetype" => "builder", "name" => "hronir"}
+          ]
+        })
+
+      assert [
+               %Coworker{name: "tertius", archetype: "surveyor", lead?: false},
+               %Coworker{name: "hronir", archetype: "builder", lead?: true}
+             ] = Workspaces.bench(ws.id)
+    end
+
+    test "seating a coworker registers its agent — the bench IS the agent table" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön"})
+
+      refute Server.Staff.agent_by_name("amy")
+      {:ok, seat} = Workspaces.seat(ws.id, %{name: "amy", archetype: "assistant"})
+
+      agent = Server.Staff.agent_by_name("amy")
+      assert agent, "seating registered the agent eagerly"
+      assert seat.agent_id == agent.id
+      # the handle is the agent's own name: no "-machine" to append or strip anywhere
+      assert agent.name == "amy"
+    end
+
+    test "seating an EXISTING agent reuses it rather than failing on the unique name" do
+      {:ok, a} = Workspaces.register(%{name: "A", roster: [%{"name" => "amy", "archetype" => "builder"}]})
+      {:ok, b} = Workspaces.register(%{name: "B"})
+
+      {:ok, seat} = Workspaces.seat(b.id, %{name: "amy", archetype: "reviewer"})
+
+      [%Coworker{agent_id: first}] = Workspaces.bench(a.id)
+      assert seat.agent_id == first, "one durable identity, seated on two benches"
+      # …and the archetype is per-SEAT: a builder here, a reviewer there
+      assert [%Coworker{archetype: "reviewer"}] = Workspaces.bench(b.id)
+    end
+
+    test "the same coworker cannot be seated twice on one bench" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}]})
+
+      assert {:error, %Ecto.Changeset{}} = Workspaces.seat(ws.id, %{name: "amy"})
+    end
+
+    test "unseating leaves the AGENT standing — it is durable identity other threads point at" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}]})
+      [seat] = Workspaces.bench(ws.id)
+
+      {:ok, _} = Workspaces.unseat(seat.id)
+
+      assert Workspaces.bench(ws.id) == []
+      assert Server.Staff.agent_by_name("amy"), "the agent survives an unseat"
+    end
+
+    test "unseating a seat that is already gone is an error, not a crash" do
+      assert {:error, :no_such_seat} = Workspaces.unseat(999_999)
+    end
+
+    test "lead/1 is the first BUILDER, else the first seat, else nil" do
+      {:ok, mixed} =
+        Workspaces.register(%{
+          name: "mixed",
+          roster: [%{"archetype" => "surveyor", "name" => "t"}, %{"archetype" => "builder", "name" => "h"}]
+        })
+
+      {:ok, no_builder} = Workspaces.register(%{name: "nb", roster: [%{"archetype" => "surveyor", "name" => "s"}]})
+      {:ok, empty} = Workspaces.register(%{name: "empty"})
+
+      assert %Coworker{name: "h"} = Workspaces.lead(mixed.id)
+      assert %Coworker{name: "s"} = Workspaces.lead(no_builder.id)
+      assert Workspaces.lead(empty.id) == nil
+      assert Workspaces.lead(nil) == nil
+    end
+
+    test "replace_bench overwrites the whole bench — the old JSON column's semantics, kept" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "a"}, %{"name" => "b"}]})
+
+      :ok = Workspaces.replace_bench(ws.id, [%{"name" => "c", "archetype" => "builder"}])
+
+      assert ["c"] = ws.id |> Workspaces.bench() |> Enum.map(& &1.name)
+    end
+
+    test "removing a workspace takes its bench rows with it, but not the agents" do
+      {:ok, _keep} = Workspaces.register(%{name: "keep"})
+      {:ok, doomed} = Workspaces.register(%{name: "doomed", roster: [%{"name" => "amy"}]})
+
+      {:ok, _} = Workspaces.remove(doomed)
+
+      assert Workspaces.bench(doomed.id) == []
+      assert Server.Staff.agent_by_name("amy")
+    end
+
+    test "bench_by_workspace answers the whole picker in one read" do
+      {:ok, a} = Workspaces.register(%{name: "A", roster: [%{"name" => "amy"}]})
+      {:ok, b} = Workspaces.register(%{name: "B", roster: [%{"name" => "bob"}, %{"name" => "cy"}]})
+
+      by_ws = Workspaces.bench_by_workspace([a.id, b.id])
+
+      assert Enum.map(by_ws[a.id], & &1.name) == ["amy"]
+      assert Enum.map(by_ws[b.id], & &1.name) == ["bob", "cy"]
     end
   end
 end

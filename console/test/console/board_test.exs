@@ -66,7 +66,7 @@ defmodule Console.BoardTest do
         active_key: 0,
         focused_id: 1,
         focused_title: "review PR 329",
-        roster: @roster,
+        bench: @roster,
         threads: @threads,
         chorus: [],
         health: nil,
@@ -98,7 +98,7 @@ defmodule Console.BoardTest do
   end
 
   describe "panels render styled rows" do
-    test "roster: one row per session, warmth marked (title lives on the frame now)" do
+    test "bench: one row per session, warmth marked (title lives on the frame now)" do
       rect = %{x: 0, y: 0, w: 40, h: 10}
       assert [sandra, robert] = Roster.render(%{sessions: @roster}, rect)
       assert row_text(sandra) =~ "Sandra"
@@ -225,7 +225,7 @@ defmodule Console.BoardTest do
   end
 
   describe "panel pick — click a row to select (pure decision, design §8)" do
-    test "roster: a session row focuses the thread it's working (no header chrome — rows start at 0)" do
+    test "bench: a session row focuses the thread it's working (no header chrome — rows start at 0)" do
       data = %{sessions: @roster, scroll: 0}
       rect = %{x: 0, y: 0, w: 40, h: 10}
       assert {:focus_thread, 1} = Roster.pick(data, rect, 0)

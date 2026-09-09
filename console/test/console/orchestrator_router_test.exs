@@ -8,8 +8,8 @@ defmodule Console.Orchestrator.RouterTest do
 
   describe "tell — post to a coworker" do
     test "strips a leading @ and splits handle from body" do
-      assert Router.route("tell @pi-machine prioritize the delete verbs") ==
-               {:post, "pi-machine", "prioritize the delete verbs"}
+      assert Router.route("tell @pi prioritize the delete verbs") ==
+               {:post, "pi", "prioritize the delete verbs"}
     end
 
     test "works without the @" do
@@ -69,7 +69,7 @@ defmodule Console.Orchestrator.RouterTest do
     end
 
     test "matching is case-insensitive but preserves the body" do
-      assert Router.route("TELL @pi-machine Do The Thing") == {:post, "pi-machine", "Do The Thing"}
+      assert Router.route("TELL @pi Do The Thing") == {:post, "pi", "Do The Thing"}
     end
 
     test "leading/trailing whitespace is trimmed" do

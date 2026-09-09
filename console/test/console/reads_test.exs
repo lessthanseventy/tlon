@@ -19,7 +19,7 @@ defmodule Console.ReadsTest do
         %{thread: %{id: 2, title: "two", stage: "build", awaiting: "gate"}, messages: [:m2]}
       ]
 
-      cards = Reads.thread_cards(blocks, 2, 1, %{2 => %{"hronir-machine" => 1}})
+      cards = Reads.thread_cards(blocks, 2, 1, %{2 => %{"hronir" => 1}})
 
       assert [%{id: 1, active?: false, typing: nil, messages: [:m1]}, %{id: 2, active?: true, messages: []}] = cards
       assert Enum.at(cards, 1).typing == "hronir"

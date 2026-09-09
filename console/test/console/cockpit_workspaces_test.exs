@@ -124,15 +124,17 @@ defmodule Console.CockpitWorkspacesTest do
       assert [%{name: "Freedonia", type: "life"}] = Workspaces.all()
     end
 
-    test "scope and roster apply through the same wrapper (repos are their own verbs now)" do
+    test "scope applies through the wrapper; repos and the bench are their own verbs now" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
-      Author.edit_workspace!(state(%{}), w.id, %{scope: "machine"})
-      next = Author.edit_workspace!(state(%{}), w.id, %{roster: [%{"archetype" => "assistant", "name" => "amy"}]})
+      next = Author.edit_workspace!(state(%{}), w.id, %{scope: "machine"})
 
       assert next.flash =~ "updated"
+      assert [%{scope: "machine"}] = Workspaces.all()
 
-      assert [%{scope: "machine", roster: [%{"archetype" => "assistant", "name" => "amy"}]}] =
-               Workspaces.all()
+      # Neither the scope rows nor the bench go through `edit_workspace!` any more — they are not
+      # workspace columns, so a whole-list overwrite is not how either is edited (UX slice 5).
+      Author.seat!(state(%{}), w.id, %{name: "amy", archetype: "assistant"})
+      assert [%Server.Coworker{archetype: "assistant", name: "amy"}] = Workspaces.bench(w.id)
     end
 
     test "a missing workspace (already gone) flashes, never crashes" do

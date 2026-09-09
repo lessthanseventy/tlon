@@ -247,7 +247,7 @@ defmodule Console.ProfilesTest do
   describe "the tertius profile — the Orbis Tertius meta agent (the center)" do
     test "carries the ORCHESTRATOR persona as its system_prompt (intake · staff · surface, Slice 4D)" do
       p = Profiles.fetch("tertius")
-      assert p.system_prompt =~ "tertius-machine"
+      assert p.system_prompt =~ "tertius"
       assert p.system_prompt =~ "ORCHESTRATOR"
       assert p.system_prompt =~ "root"
       # The delegation toolset the mandate names — staffing, not building.
@@ -256,7 +256,7 @@ defmodule Console.ProfilesTest do
     end
 
     test "render carries the persona through to the materialised files" do
-      assert Profiles.render(Profiles.fetch("tertius"), @base_settings, @base_mcp).system_prompt =~ "tertius-machine"
+      assert Profiles.render(Profiles.fetch("tertius"), @base_settings, @base_mcp).system_prompt =~ "tertius"
     end
 
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
@@ -320,7 +320,7 @@ defmodule Console.ProfilesTest do
 
     test "a profile with a persona writes system_prompt.md (the tertius meta agent)", %{base: base, root: root} do
       dir = Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
-      assert File.read!(Path.join(dir, "system_prompt.md")) =~ "tertius-machine"
+      assert File.read!(Path.join(dir, "system_prompt.md")) =~ "tertius"
     end
 
     test "writes the coworker's persistence-free tmux.conf — fresh on rebuild, never resurrected",
@@ -428,7 +428,7 @@ defmodule Console.ProfilesTest do
     end
 
     test "archetype/1 fetches one template by its atom key" do
-      assert Profiles.archetype(:surveyor).system_prompt =~ "tertius-machine"
+      assert Profiles.archetype(:surveyor).system_prompt =~ "tertius"
       # the four new prompts carry the {{handle}} placeholder (personalized at instantiate time),
       # not a hardcoded `<role>-machine` self-identity.
       assert Profiles.archetype(:builder).system_prompt =~ "{{handle}}"
@@ -452,7 +452,7 @@ defmodule Console.ProfilesTest do
     end
 
     test "roster_entry normalizes string- and atom-keyed entries; a string archetype → its atom" do
-      assert Profiles.roster_entry(%{"archetype" => "builder", "name" => "hronir"}) == %{
+      assert Profiles.roster_entry(%Server.Coworker{archetype: "builder", name: "hronir"}) == %{
                archetype: :builder,
                name: "hronir"
              }
@@ -462,22 +462,25 @@ defmodule Console.ProfilesTest do
 
     test "leaf_handles returns <name>-machine for WORKER entries only — never the meta surveyor" do
       roster = [
-        %{"archetype" => "surveyor", "name" => "tertius"},
-        %{"archetype" => "builder", "name" => "hronir"},
-        %{"archetype" => "planner", "name" => "borges"},
-        %{"archetype" => "nonesuch", "name" => "ghost"}
+        %Server.Coworker{archetype: "surveyor", name: "tertius"},
+        %Server.Coworker{archetype: "builder", name: "hronir"},
+        %Server.Coworker{archetype: "planner", name: "borges"},
+        %Server.Coworker{archetype: "nonesuch", name: "ghost"}
       ]
 
-      assert Profiles.leaf_handles(roster) == ["hronir-machine", "borges-machine"]
+      assert Profiles.leaf_handles(roster) == ["hronir", "borges"]
       assert Profiles.leaf_handles([]) == []
     end
 
     test "leaf_profile resolves a worker lead handle to its instantiated profile; meta/unknown → nil" do
-      roster = [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "planner", "name" => "borges"}]
+      roster = [
+        %Server.Coworker{archetype: "surveyor", name: "tertius"},
+        %Server.Coworker{archetype: "planner", name: "borges"}
+      ]
 
-      assert %Profile{archetype: :planner} = Profiles.leaf_profile("borges-machine", roster)
-      assert Profiles.leaf_profile("tertius-machine", roster) == nil
-      assert Profiles.leaf_profile("stranger-machine", roster) == nil
+      assert %Profile{archetype: :planner} = Profiles.leaf_profile("borges", roster)
+      assert Profiles.leaf_profile("tertius", roster) == nil
+      assert Profiles.leaf_profile("stranger", roster) == nil
     end
 
     test "roster-entry model overrides the archetype default" do
@@ -491,17 +494,17 @@ defmodule Console.ProfilesTest do
       assert a.name != b.name and a.archetype == b.archetype
     end
 
-    test "personalizes the prompt with the instance handle — no placeholder or role-machine leak" do
+    test "personalizes the prompt with the instance handle — no placeholder or role leak" do
       prompt = Profiles.instantiate(%{archetype: :builder, name: "atlas"}).system_prompt
-      assert prompt =~ "atlas-machine"
+      assert prompt =~ "atlas"
       refute prompt =~ "{{handle}}"
-      refute prompt =~ "builder-machine"
+      refute prompt =~ "builder"
     end
 
-    test "instancing the reviewer archetype under another name states its own handle, not reviewer-machine" do
+    test "instancing the reviewer archetype under another name states its own handle, not reviewer" do
       prompt = Profiles.instantiate(%{archetype: :reviewer, name: "vera"}).system_prompt
-      assert prompt =~ "vera-machine"
-      refute prompt =~ "reviewer-machine"
+      assert prompt =~ "vera"
+      refute prompt =~ "reviewer"
       refute prompt =~ "{{handle}}"
     end
 
@@ -521,7 +524,7 @@ defmodule Console.ProfilesTest do
     test "fetch('tertius') materialises byte-identically to pre-refactor (the live Tlön spawn)" do
       r = Profiles.render(Profiles.fetch("tertius"), %{}, %{})
       assert r.system_prompt == Profiles.archetype(:surveyor).system_prompt
-      assert r.system_prompt =~ "tertius-machine"
+      assert r.system_prompt =~ "tertius"
       assert r.settings["defaultModel"] == "glm-5.2"
       assert r.settings["defaultProvider"] == "ollama-cloud"
       assert r.settings["defaultThinkingLevel"] == "medium"

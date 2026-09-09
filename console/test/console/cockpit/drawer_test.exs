@@ -35,7 +35,7 @@ defmodule Console.Cockpit.DrawerTest do
     reads =
       state
       |> Map.take([:active_key, :memory, :stack, :health, :detail])
-      |> Map.merge(%{crew: nil, roster: [], triage: nil, activity: [], gates: [], scrolls: %{}})
+      |> Map.merge(%{crew: nil, bench: [], triage: nil, activity: [], gates: [], scrolls: %{}})
 
     Map.put(state, :reads, reads)
   end

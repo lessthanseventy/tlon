@@ -19,13 +19,13 @@ defmodule Server.BootstrapTest do
     assert {:ok, workspace} = Bootstrap.ensure()
     assert workspace.name == "ficciones"
     assert workspace.scope == "machine"
-    assert Enum.map(workspace.roster, & &1["name"]) == ["tertius", "hronir", "reviewer", "planner"]
+    assert Enum.map(Workspaces.bench(workspace.id), & &1.name) == ["tertius", "hronir", "reviewer", "planner"]
     assert [%{id: id}] = Workspaces.all()
     assert id == workspace.id
   end
 
   test "an existing workspace is left untouched — no second seed, name preserved" do
-    {:ok, tlon} = Workspaces.register(%{name: "Tlön", type: "code", scope: "machine", paths: [], roster: []})
+    {:ok, tlon} = Workspaces.register(%{name: "Tlön", type: "code", scope: "machine", repos: [], roster: []})
 
     assert {:ok, workspace} = Bootstrap.ensure()
     assert workspace.id == tlon.id
@@ -58,7 +58,7 @@ defmodule Server.BootstrapTest do
 
   test "threads in a live non-default workspace are untouched" do
     {:ok, _default} = Bootstrap.ensure()
-    {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "project", paths: [], roster: []})
+    {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "project", repos: [], roster: []})
     {:ok, thread} = Channel.open_thread(%{title: "housed"})
     Repo.update_all(Thread, set: [workspace_id: other.id])
 
@@ -80,7 +80,7 @@ defmodule Server.BootstrapTest do
 
     test "an explicit workspace_id is respected" do
       {:ok, _default} = Bootstrap.ensure()
-      {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "project", paths: [], roster: []})
+      {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "project", repos: [], roster: []})
 
       {:ok, thread} = Channel.open_thread(%{title: "placed", workspace_id: other.id})
       assert thread.workspace_id == other.id
@@ -140,7 +140,7 @@ defmodule Server.BootstrapTest do
   describe "machine root per workspace (the cockpit re-scope invariant)" do
     test "every workspace gets exactly one open, stage-less machine root" do
       {:ok, default} = Bootstrap.ensure()
-      {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "machine", repos: [], roster: []})
       {:ok, _} = Bootstrap.ensure()
 
       for ws <- [default, other] do

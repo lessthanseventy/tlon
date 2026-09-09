@@ -27,8 +27,8 @@ defmodule Console.SpaceTest do
     name: "Tlön",
     type: "code",
     scope: "machine",
-    paths: ["modules/*"],
-    roster: [%{"archetype" => "surveyor", "name" => "tertius"}]
+    repos: ["modules/*"],
+    bench: [%Server.Coworker{archetype: "surveyor", name: "tertius"}]
   }
 
   test "funes down → no spaces at all; no fake Workspace, no Home (UX slice 1, task 5)" do
@@ -62,10 +62,10 @@ defmodule Console.SpaceTest do
       # renders as the thin spine (split out in View.compose); the right rail is retired.
       assert tlon.left == [Activity, Crew, Memory, Stack]
       assert tlon.right == []
-      # The roster lead's name (string-keyed JSON) becomes the center coworker.
+      # The bench lead's name becomes the center coworker (one seat here, so it leads).
       assert tlon.coworker == "tertius"
-      # The full roster rides along too (C2/C3 read it), not just the derived coworker name.
-      assert tlon.roster == @tlon.roster
+      # The full bench rides along too (C2/C3 read it), not just the derived coworker name.
+      assert tlon.bench == @tlon.bench
     end
 
     test "empty workspaces → nothing, no fabricated Workspace" do
@@ -73,7 +73,7 @@ defmodule Console.SpaceTest do
     end
 
     test "two workspaces → [1, 2], keyed by funes id" do
-      freedonia = %{@tlon | id: 2, name: "Freedonia", roster: [%{"archetype" => "surveyor", "name" => "rufus"}]}
+      freedonia = %{@tlon | id: 2, name: "Freedonia", bench: [%Server.Coworker{archetype: "surveyor", name: "rufus"}]}
 
       spaces = Space.all([@tlon, freedonia])
       assert Enum.map(spaces, & &1.key) == [1, 2]
@@ -87,16 +87,22 @@ defmodule Console.SpaceTest do
     test "a workspace space is keyed by its funes id" do
       spaces =
         Space.all([
-          %{id: 7, name: "Tlön", roster: [%{"name" => "tertius"}], type: "code", paths: [], scope: "machine"}
+          %{id: 7, name: "Tlön", bench: [%Server.Coworker{name: "tertius"}], type: "code", repos: [], scope: "machine"}
         ])
 
       assert [%{key: 7, label: "Tlön", id: 7}] = spaces
     end
 
-    test "a roster with atom keys still yields the lead coworker (defensive)" do
-      atomish = %{@tlon | roster: [%{archetype: "surveyor", name: "tertius"}]}
-      tlon = Enum.find(Space.all([atomish]), &(&1.key == 1))
-      assert tlon.coworker == "tertius"
+    test "the lead is the first BUILDER seat, not merely the first seat" do
+      # One derivation now (`Server.Coworker.lead/1`): this used to take the first seat while the
+      # server preferred a builder, so the rail and the thread could name different leads.
+      bench = [
+        %Server.Coworker{archetype: "surveyor", name: "tertius"},
+        %Server.Coworker{archetype: "builder", name: "hronir"}
+      ]
+
+      tlon = Enum.find(Space.all([%{@tlon | bench: bench}]), &(&1.key == 1))
+      assert tlon.coworker == "hronir"
     end
   end
 
@@ -133,11 +139,11 @@ defmodule Console.SpaceTest do
     end
   end
 
-  describe "roster/2 and active_workspace_id/1" do
-    test "roster is the workspace's cast, [] for a missing workspace" do
+  describe "bench/2 and active_workspace_id/1" do
+    test "the bench is the workspace's cast, [] for a missing workspace" do
       spaces = Space.all([@tlon])
-      assert Space.roster(@tlon.id, spaces) == @tlon.roster
-      assert Space.roster(999, spaces) == []
+      assert Space.bench(@tlon.id, spaces) == @tlon.bench
+      assert Space.bench(999, spaces) == []
     end
 
     test "active_workspace_id is the active key when it names a Workspace" do

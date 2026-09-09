@@ -29,16 +29,19 @@ defmodule Console.Workspaces do
   @workspace_events [:workspace_registered, :workspace_edited, :workspace_removed]
   # The console-shaped subset lifted off each `Server.Workspace` — dropping `knobs`/`created_at`.
   # Taken by key (not a struct match) so console needn't reference the server's unexported struct.
-  # `repos` is NOT here: it is rows now (UX slice 5), joined on in `load/1` and added by `shape/2`.
-  @fields [:id, :name, :type, :roster, :scope]
+  # Neither `repos` nor `bench` is here: both are rows now (UX slice 5), read in `load/1` and
+  # added by `shape/3`. The bench arrives as `%Server.Coworker{}` structs — the boundary type, not
+  # raw maps, so no consumer re-derives a handle or a lead.
+  @fields [:id, :name, :type, :scope]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.get(opts, :name, __MODULE__))
   end
 
   @doc """
-  The cached workspaces as console-shaped `%{id, name, type, roster, scope, repos}` maps —
-  `repos` a list of `%{id, path, remote, default_branch}` (UX slice 5).
+  The cached workspaces as console-shaped `%{id, name, type, scope, repos, bench}` maps —
+  `repos` a list of `%{id, path, remote, default_branch}` and `bench` a list of
+  `%Server.Coworker{}` (UX slice 5).
 
   Cache down (boot race, or the test env where this GenServer never runs) degrades to
   the caller-process fixture `Process.get(:aleph_workspaces, [])` — the seam tests push a
@@ -87,20 +90,23 @@ defmodule Console.Workspaces do
   # reload: the prior cache) so a DB blip never takes the cockpit down.
   defp load(fallback) do
     workspaces = Workspaces.all()
-    # ONE read for every workspace's repos, not one per row: this runs on every workspaces
-    # announcement, and a query per workspace is how a twelve-workspace survey gets slow.
-    by_ws = workspaces |> Enum.map(& &1.id) |> Workspaces.repos_by_workspace()
+    ids = Enum.map(workspaces, & &1.id)
+    # ONE read each for the repos and the bench, not one per workspace: this runs on every
+    # workspaces announcement, and a query per row is how a twelve-workspace survey gets slow.
+    repos = Workspaces.repos_by_workspace(ids)
+    bench = Workspaces.bench_by_workspace(ids)
 
-    Enum.map(workspaces, &shape(&1, Map.get(by_ws, &1.id, [])))
+    Enum.map(workspaces, &shape(&1, Map.get(repos, &1.id, []), Map.get(bench, &1.id, [])))
   rescue
     _ -> fallback
   catch
     :exit, _ -> fallback
   end
 
-  defp shape(workspace, repos) do
+  defp shape(workspace, repos, bench) do
     workspace
     |> Map.take(@fields)
     |> Map.put(:repos, Enum.map(repos, &Map.take(&1, [:id, :path, :remote, :default_branch])))
+    |> Map.put(:bench, bench)
   end
 end

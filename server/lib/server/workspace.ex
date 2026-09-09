@@ -1,17 +1,19 @@
 defmodule Server.Workspace do
   @moduledoc """
-  A workspace (workspaces/orbis Slice 1): a first-class composition — a git-tracked scope, a
-  roster of archetype instances, and free-form `knobs` — that console reads to drive its
-  picker/survey/spawn. Compositions are DATA (this table), capabilities are nix (the archetype
-  templates); disjoint, so the two never conflict.
+  A workspace (workspaces/orbis Slice 1): a first-class composition — a git-tracked scope, a bench
+  of coworkers, and free-form `knobs` — that console reads to drive its picker/survey/spawn.
+  Compositions are DATA (this table), capabilities are nix (the archetype templates); disjoint, so
+  the two never conflict.
 
-  `type` (code|life|blank) and `scope` (project|machine) are closed sets the DB
-  CHECKs guard (§10) — the schema does not mirror them, a bad value raises at insert.
-  `roster`/`knobs` are JSON columns (`Server.JSONColumn`): a list of maps and a map.
+  `type` (code|life|blank) and `scope` (project|machine) are closed sets the DB CHECKs guard (§10) —
+  the schema does not mirror them, a bad value raises at insert. `knobs` is a JSON column
+  (`Server.JSONColumn`).
 
-  The git-tracked scope is NOT here: it is `Server.WorkspaceRepo` rows (UX slice 5), reached
-  through `Server.Workspaces.repos/1`. `paths` was a JSON list of bare strings with nowhere to
-  record a remote or a default branch.
+  Neither the scope nor the bench is here any more (UX slice 5): they are `Server.WorkspaceRepo` and
+  `Server.WorkspaceAgent` rows, read through `Server.Workspaces.repos/1` and `bench/1`. `paths` was
+  a list of bare strings with nowhere to record a remote; `roster` was a list of `{archetype, name}`
+  maps beside an `agent` table that was already the durable identity — two benches, one of them
+  unqueryable.
   """
   use Ecto.Schema
 
@@ -21,12 +23,11 @@ defmodule Server.Workspace do
     field :name, :string
     field :type, :string
     field :scope, :string
-    field :roster, Server.JSONColumn
     field :knobs, Server.JSONColumn
     field :created_at, :utc_datetime
   end
 
-  @mutable [:type, :scope, :roster, :knobs]
+  @mutable [:type, :scope, :knobs]
 
   @doc """
   Register a workspace. `name` is required and unique (DB); `type`/`scope` are the DB's

@@ -70,12 +70,13 @@ defmodule Server.MCP.Tool.EditWorkspace do
         fail(frame, "no such workspace: #{params[:name]}")
 
       workspace ->
-        # `repos` is not a workspace column any more (UX slice 5) — it is rows. Passing a list still
-        # REPLACES the scope, exactly as the old `paths` overwrite did, so an agent that edits a
-        # workspace has not quietly lost the ability to say what it works on.
+        # Neither `repos` nor `roster` is a workspace column any more (UX slice 5) — both are rows.
+        # Passing a list still REPLACES that list, exactly as the old JSON overwrite did, so an agent
+        # that could say what a workspace works on and who works there has not quietly lost either.
         if repos = params[:repos], do: Workspaces.replace_repos(workspace.id, repos)
+        if roster = params[:roster], do: Workspaces.replace_bench(workspace.id, roster)
 
-        reply(frame, Workspaces.edit(workspace, Map.delete(params, :repos)), &MCP.Brief.workspace/1)
+        reply(frame, Workspaces.edit(workspace, Map.drop(params, [:repos, :roster])), &MCP.Brief.workspace/1)
     end
   end
 end

@@ -11,7 +11,7 @@ defmodule Console.CrewTest do
 
   describe "roles/0 and role/1" do
     test "reviewer is a known role with its handle, window prefix, and profile" do
-      assert %{handle: "reviewer-machine", window_prefix: "r", profile: "reviewer"} =
+      assert %{handle: "reviewer", window_prefix: "r", profile: "reviewer"} =
                Crew.role("reviewer")
     end
 
@@ -40,11 +40,11 @@ defmodule Console.CrewTest do
 
   describe "handle_role/1 (reverse: a funes handle → its role key)" do
     test "resolves the reviewer handle" do
-      assert Crew.handle_role("reviewer-machine") == "reviewer"
+      assert Crew.handle_role("reviewer") == "reviewer"
     end
 
     test "a non-crew handle is nil" do
-      assert Crew.handle_role("claude-machine") == nil
+      assert Crew.handle_role("claude") == nil
     end
   end
 
@@ -85,7 +85,7 @@ defmodule Console.CrewTest do
       Application.put_env(:console, :crew_cmd, fn
         "tmux", ["-L", _, "capture-pane" | _] = argv, _opts ->
           send(test_pid, {:tmux, argv})
-          {"funes: registered — reviewer-machine on 1", 0}
+          {"funes: registered — reviewer on 1", 0}
 
         "tmux", argv, _opts ->
           send(test_pid, {:tmux, argv})
@@ -110,14 +110,14 @@ defmodule Console.CrewTest do
       :ok
     end
 
-    test "mints reviewer-machine identity on the thread and spawns the r<id> window" do
+    test "mints reviewer identity on the thread and spawns the r<id> window" do
       assert {:ok, "r42"} = Crew.spawn("reviewer", 42, "review HEAD~1", inject: false)
-      assert_receive {:join, 42, "reviewer-machine", opts}
+      assert_receive {:join, 42, "reviewer", opts}
       assert opts[:mandate] == "machine"
       # the reviewer must NOT hijack the task thread's staffed lead (Staff.assign is single-slot)
       assert opts[:assign] == false
       assert_receive {:tmux, ["-L", _sock, "new-window", "-d", "-t", "w0", "-n", "r42", script]}
-      assert script =~ ~s(export TLON_AUTHOR="reviewer-machine")
+      assert script =~ ~s(export TLON_AUTHOR="reviewer")
       assert script =~ "\nexec "
       # a bare harness launch via the profile's driver (Slice D: the anthropic-model reviewer at
       # home rides the official claude launcher), NOT profile_launcher's tmux new-session wrapper —
@@ -156,7 +156,7 @@ defmodule Console.CrewTest do
 
       assert_receive {:tmux, ["-L", sock, "send-keys", "-l", "-t", "w0:r42", text]}
       assert text =~ "thread ##{42}"
-      assert text =~ "claude-machine"
+      assert text =~ "claude"
       assert text =~ "review HEAD~1"
 
       assert_receive {:tmux, ["-L", ^sock, "send-keys", "-t", "w0:r42", "Enter"]}
@@ -172,7 +172,7 @@ defmodule Console.CrewTest do
         "tmux", ["-L", _, "capture-pane" | _] = argv, _opts ->
           send(test_pid, {:tmux, argv})
           :counters.add(polls, 1, 1)
-          if :counters.get(polls, 1) >= 2, do: {"funes: registered — reviewer-machine on 1", 0}, else: {"booting…", 0}
+          if :counters.get(polls, 1) >= 2, do: {"funes: registered — reviewer on 1", 0}, else: {"booting…", 0}
 
         "tmux", argv, _opts ->
           send(test_pid, {:tmux, argv})
@@ -213,7 +213,7 @@ defmodule Console.CrewTest do
       Application.put_env(:console, :crew_cmd, fn
         "tmux", ["-L", _, "capture-pane" | _] = argv, _opts ->
           send(test_pid, {:tmux, argv})
-          {"funes: registered — reviewer-machine on 1", 0}
+          {"funes: registered — reviewer on 1", 0}
 
         "tmux", argv, _opts ->
           send(test_pid, {:tmux, argv})
@@ -240,7 +240,7 @@ defmodule Console.CrewTest do
 
     test "spawn_role/3 delegates to spawn/4 — mints identity and spawns the window" do
       assert {:ok, "r7"} = Crew.spawn_role("reviewer", 7, "review the diff")
-      assert_receive {:join, 7, "reviewer-machine", _opts}
+      assert_receive {:join, 7, "reviewer", _opts}
       assert_receive {:tmux, ["-L", _, "new-window", "-d", "-t", "w0", "-n", "r7" | _]}
     end
 

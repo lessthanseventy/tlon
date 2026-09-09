@@ -24,7 +24,7 @@ defmodule Console.Space do
   alias Console.Panel.Tertius
 
   @enforce_keys [:key, :label, :surface]
-  defstruct [:key, :label, :surface, :id, left: [], right: [], coworker: nil, roster: []]
+  defstruct [:key, :label, :surface, :id, left: [], right: [], coworker: nil, bench: []]
 
   @type surface :: [module() | {module(), atom()}]
   @type t :: %__MODULE__{
@@ -38,9 +38,10 @@ defmodule Console.Space do
           # The name of the pi coworker profile this space spawns into its center, or nil for a space
           # with no machine coworker (Console.Profiles). Tlön → "tertius".
           coworker: String.t() | nil,
-          # The workspace's full roster (Phase C2/C3 drive the cast from this; carried here so callers
+          # The workspace's full BENCH as `Server.Coworker` structs (Phase C2/C3 drive the cast from
+          # this; carried here so callers
           # don't need a second read).
-          roster: [map()]
+          bench: [Server.Coworker.t()]
         }
 
   @doc """
@@ -61,10 +62,10 @@ defmodule Console.Space do
   # here (reshape slice A); the picker is empty.
   defp workspace_spaces(workspaces), do: Enum.map(workspaces, &space_from_workspace/1)
 
-  # A Workspace space built from a server workspace (console-shaped `%{id, name, roster, ...}`). Keyed by the
+  # A Workspace space built from a server workspace (console-shaped `%{id, name, bench, ...}`). Keyed by the
   # server workspace id (Phase C1) — not a name slug — so a rename can't break the active session and
   # two workspaces can never collide on key. surface/left/right/coworker reproduce the Slice-0 Tlön
-  # struct exactly; the coworker is the roster lead's name.
+  # struct exactly; the coworker is the bench lead's name.
   defp space_from_workspace(workspace) do
     %__MODULE__{
       key: workspace.id,
@@ -78,8 +79,8 @@ defmodule Console.Space do
       # UX slice 1; `left` is kept as the space's declared set, the frame paints the Rail instead.
       left: [Activity, Crew, Memory, Stack],
       right: [],
-      coworker: lead_coworker(workspace.roster),
-      roster: workspace.roster
+      coworker: lead_coworker(workspace.bench),
+      bench: workspace.bench
     }
   end
 
@@ -92,9 +93,14 @@ defmodule Console.Space do
     :exit, _ -> []
   end
 
-  # The roster lead → center coworker: the first entry's name, tolerating string (JSON) or atom keys.
-  defp lead_coworker([entry | _]), do: entry["name"] || entry[:name]
-  defp lead_coworker(_), do: nil
+  # The bench lead → center coworker. `Server.Coworker.lead/1` is the ONE derivation of that rule;
+  # this used to take the first seat while the server preferred a builder, and they disagreed.
+  defp lead_coworker(bench) do
+    case Server.Coworker.lead(bench) do
+      %Server.Coworker{name: name} -> name
+      nil -> nil
+    end
+  end
 
   @doc """
   The mode predicate: is `key` a Workspace space? Replaces the ~40
@@ -136,14 +142,14 @@ defmodule Console.Space do
   def fetch(key, spaces), do: Enum.find(spaces, &(&1.key == key))
 
   @doc """
-  A Workspace's roster (the cast `Console.Mention.route/3` resolves against and the spawn pass
-  staffs from) — `[]` when the workspace is missing (server down / no roster: nobody resolves,
+  A Workspace's BENCH (the cast `Console.Mention.route/3` resolves against and the spawn pass
+  staffs from) — `[]` when the workspace is missing (server down / empty bench: nobody resolves,
   nobody wakes). `spaces` defaults to the live cache; tests inject a list.
   """
-  @spec roster(non_neg_integer() | nil, [t()]) :: [map()]
-  def roster(workspace_id, spaces \\ all()) do
+  @spec bench(non_neg_integer() | nil, [t()]) :: [Server.Coworker.t()]
+  def bench(workspace_id, spaces \\ all()) do
     case fetch(workspace_id, spaces) do
-      %__MODULE__{roster: roster} -> roster
+      %__MODULE__{bench: bench} -> bench
       _ -> []
     end
   end

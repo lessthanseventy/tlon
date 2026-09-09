@@ -20,7 +20,7 @@ defmodule Console.Panel.AuthorTest do
           name: "Tlön",
           type: "code",
           repos: [%{id: 1, path: "modules/*", remote: nil, default_branch: nil}],
-          roster: [%{"archetype" => "surveyor"}],
+          bench: [%Server.Coworker{archetype: "surveyor", name: "?"}],
           scope: "machine"
         }
       ],
@@ -33,7 +33,7 @@ defmodule Console.Panel.AuthorTest do
     assert text =~ "Tlön"
     assert text =~ "code"
     assert text =~ "1 repos"
-    assert text =~ "1 roster"
+    assert text =~ "1 coworkers"
     assert text =~ "n new"
     assert text =~ "d delete"
     assert text =~ "a survey"
@@ -48,8 +48,8 @@ defmodule Console.Panel.AuthorTest do
   test "the cursor row washes :selected; every other row doesn't" do
     data = %{
       workspaces: [
-        %{id: 1, name: "Tlön", type: "code", repos: [], roster: []},
-        %{id: 2, name: "Freedonia", type: "blank", repos: [], roster: []}
+        %{id: 1, name: "Tlön", type: "code", repos: [], bench: []},
+        %{id: 2, name: "Freedonia", type: "blank", repos: [], bench: []}
       ],
       cursor: 1
     }
@@ -63,12 +63,12 @@ defmodule Console.Panel.AuthorTest do
     refute Enum.any?(tlon, fn {_t, s} -> s == :selected end)
   end
 
-  test "a missing type/repos/roster degrades gracefully instead of crashing" do
+  test "a missing type/repos/bench degrades gracefully instead of crashing" do
     data = %{workspaces: [%{id: 1, name: "Bare"}], cursor: 0}
     text = data |> Author.render(@rect) |> lines() |> Enum.join("\n")
     assert text =~ "Bare"
     assert text =~ "0 repos"
-    assert text =~ "0 roster"
+    assert text =~ "0 coworkers"
   end
 
   test "pick/3 is a no-op for now — no editor yet (Chunk 2)" do
@@ -83,14 +83,14 @@ defmodule Console.Panel.AuthorTest do
       type: "code",
       scope: "project",
       repos: [%{id: 1, path: "modules/*", remote: nil, default_branch: nil}],
-      roster: [%{"archetype" => "surveyor", "name" => "surveyor"}]
+      bench: [%Server.Coworker{archetype: "surveyor", name: "surveyor"}]
     }
 
     defp edit_data(edit, overrides \\ %{}) do
       Map.merge(%{workspaces: [@workspace], cursor: 0, edit: edit}, overrides)
     end
 
-    test "renders the workspace's name (immutable, no field for it) and the type/scope/repos/roster rows" do
+    test "renders the workspace's name (immutable, no field for it) and the type/scope/repos/bench rows" do
       data = edit_data(%{id: 22, field: 0, sub: 0, mode: :field})
       text = data |> Author.render(@rect) |> lines() |> Enum.join("\n")
 
@@ -98,7 +98,7 @@ defmodule Console.Panel.AuthorTest do
       assert text =~ "code"
       assert text =~ "project"
       assert text =~ "1 repos"
-      assert text =~ "1 roster"
+      assert text =~ "1 coworkers"
       assert text =~ "immutable"
     end
 
@@ -141,7 +141,7 @@ defmodule Console.Panel.AuthorTest do
         %{id: 1, path: "modules/aleph", remote: nil, default_branch: nil},
         %{id: 2, path: "modules/funes", remote: "git@github.com:a/funes.git", default_branch: "main"}
       ],
-      roster: []
+      bench: []
     }
 
     defp sub_data(edit) do
@@ -187,21 +187,24 @@ defmodule Console.Panel.AuthorTest do
     end
   end
 
-  describe "the roster sub-list (D2.4 Chunk 2c: mode: :sub, field: 3)" do
+  describe "the bench sub-list (D2.4 Chunk 2c; %Coworker{} seats since UX slice 5: mode: :sub, field: 3)" do
     @workspace_with_roster %{
       id: 22,
       name: "Freedonia",
       type: "code",
       scope: "machine",
       repos: [],
-      roster: [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}]
+      bench: [
+        %Server.Coworker{archetype: "surveyor", name: "tertius"},
+        %Server.Coworker{archetype: "builder", name: "hronir"}
+      ]
     }
 
     defp roster_sub_data(edit, overrides \\ %{}) do
       Map.merge(%{workspaces: [@workspace_with_roster], cursor: 0, edit: edit}, overrides)
     end
 
-    test "renders one row per roster entry (archetype · name), the sub cursor washed :selected" do
+    test "renders one row per bench seat (archetype · name), the sub cursor washed :selected" do
       data = roster_sub_data(%{id: 22, field: 3, sub: 1, mode: :sub})
       rows = Author.render(data, @rect)
 
@@ -213,11 +216,11 @@ defmodule Console.Panel.AuthorTest do
       refute Enum.any?(tertius_row, fn {_t, s} -> s == :selected end)
     end
 
-    test "an empty roster renders a placeholder, no crash" do
+    test "an empty bench renders a placeholder, no crash" do
       data = roster_sub_data(%{id: 22, field: 3, sub: 0, mode: :sub})
-      data = put_in(data.workspaces, [%{@workspace_with_roster | roster: []}])
+      data = put_in(data.workspaces, [%{@workspace_with_roster | bench: []}])
       text = data |> Author.render(@rect) |> lines() |> Enum.join("\n")
-      assert text =~ "no roster yet"
+      assert text =~ "nobody on the bench yet"
     end
 
     test "sub-list hints name j/k, a add, x/d remove, Esc back" do

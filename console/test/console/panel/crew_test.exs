@@ -9,8 +9,8 @@ defmodule Console.Panel.CrewTest do
   describe "coworkers/6" do
     @now 1_000_000
     @roster [
-      %{"archetype" => "surveyor", "name" => "tertius"},
-      %{"archetype" => "builder", "name" => "hronir"}
+      %Server.Coworker{archetype: "surveyor", name: "tertius"},
+      %Server.Coworker{archetype: "builder", name: "hronir"}
     ]
     @titles %{7 => "fix the bug", 9 => "write the doc"}
 
@@ -30,14 +30,14 @@ defmodule Console.Panel.CrewTest do
         %{name: "t7", thread_id: 7, activity: @now - 2}
       ]
 
-      coworkers = Crew.coworkers(@roster, windows, %{"hronir-machine" => [7]}, @titles, %{}, @now)
+      coworkers = Crew.coworkers(@roster, windows, %{"hronir" => [7]}, @titles, %{}, @now)
 
       assert %{status: :working, seat: "fix the bug"} = by_name(coworkers, "hronir")
     end
 
     test "a declared thinking beats the tmux inference and seats the declared thread" do
       windows = [%{name: "hronir", thread_id: nil, activity: @now - 2}]
-      thinking = %{9 => %{"hronir-machine" => @now - 1}}
+      thinking = %{9 => %{"hronir" => @now - 1}}
 
       coworkers = Crew.coworkers(@roster, windows, %{}, @titles, thinking, @now)
 
@@ -52,7 +52,7 @@ defmodule Console.Panel.CrewTest do
     end
 
     test "profile fields ride along; an unknown archetype drops" do
-      roster = @roster ++ [%{"archetype" => "gardener", "name" => "x"}]
+      roster = @roster ++ [%Server.Coworker{archetype: "gardener", name: "x"}]
       coworkers = Crew.coworkers(roster, [], %{}, %{}, %{}, @now)
 
       assert length(coworkers) == 2

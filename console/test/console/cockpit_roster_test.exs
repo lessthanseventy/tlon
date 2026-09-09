@@ -65,10 +65,10 @@ defmodule Console.CockpitRosterTest do
     :ok
   end
 
-  test "the seed cast's builder tail entry spawns a claude window: handle hronir-machine, window hronir" do
+  test "the seed cast's builder tail entry spawns a claude window: handle hronir, window hronir" do
     assert %{} = Staffing.ensure_workspace_roster(%{active_key: 0})
 
-    assert_receive {:join, _tid, "hronir-machine", opts}
+    assert_receive {:join, _tid, "hronir", opts}
     assert opts[:mandate] == "machine"
 
     assert_receive {:tmux, ["-L", "console-workspace-0", "new-window", "-d", "-t", "w0", "-n", "hronir", script]}
@@ -91,16 +91,16 @@ defmodule Console.CockpitRosterTest do
       %{
         id: 99,
         name: "Freedonia",
-        roster: [
-          %{"archetype" => "surveyor", "name" => "rufus"},
-          %{"archetype" => "planner", "name" => "borges"}
+        bench: [
+          %Server.Coworker{archetype: "surveyor", name: "rufus"},
+          %Server.Coworker{archetype: "planner", name: "borges"}
         ]
       }
     ]
 
     Staffing.ensure_workspace_roster(%{active_key: 99}, Space.all(workspaces))
 
-    assert_receive {:join, _tid, "borges-machine", opts}
+    assert_receive {:join, _tid, "borges", opts}
     assert opts[:mandate] == "machine"
 
     assert_receive {:tmux, ["-L", "console-workspace-99", "new-window", "-d", "-t", "w99", "-n", "borges", script]}

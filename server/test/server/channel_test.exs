@@ -260,24 +260,25 @@ defmodule Server.ChannelTest do
   end
 
   describe "the lead invariant — every thread opens with a lead (lead-as-manager)" do
-    test "a thread opens led by the workspace's builder coworker (registered on demand)" do
+    test "a thread opens led by the workspace's builder coworker (seated, so already an agent)" do
       {:ok, ws} =
         Workspaces.register(%{
           name: "led",
           type: "code",
           scope: "machine",
-          paths: [],
+          repos: [],
           roster: [
             %{"archetype" => "surveyor", "name" => "tertius"},
             %{"archetype" => "builder", "name" => "hronir"}
           ]
         })
 
-      assert Staff.agent_by_name("hronir-machine") == nil
+      # Seating a coworker registers its agent (UX slice 5) — a bench you cannot point at is not a
+      # bench, so the lead exists before any thread asks for it rather than after.
+      assert Staff.agent_by_name("hronir"), "seating the bench registered the agent"
       {:ok, thread} = Channel.open_thread(%{title: "needs a lead", workspace_id: ws.id})
 
-      assert Channel.thread_lead(thread.id) == "hronir-machine"
-      assert Staff.agent_by_name("hronir-machine"), "the designated lead was registered on demand"
+      assert Channel.thread_lead(thread.id) == "hronir"
     end
 
     test "an explicit agent_id is honored over the default" do
@@ -286,7 +287,7 @@ defmodule Server.ChannelTest do
           name: "led2",
           type: "code",
           scope: "machine",
-          paths: [],
+          repos: [],
           roster: [%{"archetype" => "builder", "name" => "hronir"}]
         })
 
@@ -297,7 +298,7 @@ defmodule Server.ChannelTest do
     end
 
     test "a workspace with an empty roster opens threads leaderless — no crash" do
-      {:ok, ws} = Workspaces.register(%{name: "empty", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, ws} = Workspaces.register(%{name: "empty", type: "code", scope: "machine", repos: [], roster: []})
       {:ok, thread} = Channel.open_thread(%{title: "no roster", workspace_id: ws.id})
 
       assert Channel.thread_lead(thread.id) == nil
@@ -306,8 +307,8 @@ defmodule Server.ChannelTest do
 
   describe "workspace-scoped machine threads (the cockpit re-scope)" do
     setup do
-      {:ok, wsa} = Workspaces.register(%{name: "wsa", type: "code", scope: "machine", paths: [], roster: []})
-      {:ok, wsb} = Workspaces.register(%{name: "wsb", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, wsa} = Workspaces.register(%{name: "wsa", type: "code", scope: "machine", repos: [], roster: []})
+      {:ok, wsb} = Workspaces.register(%{name: "wsb", type: "code", scope: "machine", repos: [], roster: []})
       {:ok, wsa: wsa, wsb: wsb}
     end
 
@@ -320,7 +321,7 @@ defmodule Server.ChannelTest do
       assert Channel.machine_thread(wsa.id).id == root_a.id
       assert Channel.machine_thread(wsb.id).id == root_b.id
       # A workspace with no machine thread yet resolves to nil (Bootstrap fills this).
-      {:ok, wsc} = Workspaces.register(%{name: "wsc", type: "code", scope: "machine", paths: [], roster: []})
+      {:ok, wsc} = Workspaces.register(%{name: "wsc", type: "code", scope: "machine", repos: [], roster: []})
       assert Channel.machine_thread(wsc.id) == nil
     end
 

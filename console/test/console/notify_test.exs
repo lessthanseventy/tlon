@@ -13,8 +13,8 @@ defmodule Console.NotifyTest do
     end
 
     test "a raised issue carries who found it" do
-      assert {_title, "pi-machine: tests flaky"} =
-               Notify.for_event(:issue_raised, %{summary: "tests flaky", found_by: "pi-machine"})
+      assert {_title, "pi: tests flaky"} =
+               Notify.for_event(:issue_raised, %{summary: "tests flaky", found_by: "pi"})
     end
 
     test "a session ending is a completion" do
@@ -39,9 +39,9 @@ defmodule Console.NotifyTest do
 
     test "a preloaded agent shows its name" do
       assert {_title, body} =
-               Notify.for_event(:session_ended, %{agent: %{name: "pi-machine"}, thread_id: 9})
+               Notify.for_event(:session_ended, %{agent: %{name: "pi"}, thread_id: 9})
 
-      assert body =~ "pi-machine"
+      assert body =~ "pi"
     end
 
     test "repaint-only noise notifies nobody" do
