@@ -107,6 +107,10 @@ defmodule Console.Backend.Link do
         {:error, reason} -> Logger.warning("console node could not start distribution as #{name}: #{inspect(reason)}")
       end
     end
+  rescue
+    # The moduledoc promises this never crashes, and it has to be true of anything that runs here:
+    # a raise fails this child, fails Console.Application, and the operator gets a blank screen.
+    error -> Logger.warning("console node could not set up distribution: #{Exception.message(error)}")
   end
 
   defp default_node_name do
@@ -116,10 +120,21 @@ defmodule Console.Backend.Link do
     end
   end
 
-  defp set_cookie do
-    case cookie() do
-      nil -> Logger.warning("no server cookie at #{cookie_file()} — the link will not authenticate")
-      c -> Node.set_cookie(c)
+  @doc false
+  def set_cookie do
+    case {node(), cookie()} do
+      # `Node.set_cookie/1` is `:erlang.set_cookie(node(), c)`, and on :nonode@nohost that raises
+      # badarg — which took the whole application down and left the cockpit painting NOTHING, with
+      # the reason buried in a redirected stderr log. Distribution not being up yet is a state the
+      # connect loop already handles; it is not a reason to fail to boot.
+      {:nonode@nohost, _cookie} ->
+        Logger.warning("console node is not distributed yet — cookie unset; the connect loop will retry")
+
+      {_node, nil} ->
+        Logger.warning("no server cookie at #{cookie_file()} — the link will not authenticate")
+
+      {_node, c} ->
+        Node.set_cookie(c)
     end
   end
 
