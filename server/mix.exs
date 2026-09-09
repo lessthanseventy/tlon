@@ -68,6 +68,9 @@ defmodule Server.MixProject do
     [
       # Compile-time module-boundary checks (lib/funes.ex). runtime: false — pure tooling.
       {:boundary, "~> 0.10", runtime: false},
+      # AST-aware source edits (Server.Source): a rename that survives a reflow, for the operator's
+      # mix tasks and the coworkers' tools alike — a runtime dep, not a dev one (Andrew, 2026-09-08)
+      {:sourceror, "~> 1.12"},
       {:ecto_sql, "~> 3.12"},
       {:ecto_sqlite3, ">= 0.17.0"},
       # The switchboard's liveness layer (§10): PubSub fans a posted message out to
