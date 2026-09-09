@@ -645,8 +645,6 @@ defmodule Console.Reads do
       # The rail's read-model: workspace groups with their unified thread list (+ crew working
       # flags), each thread carrying the warmth of its live session.
       sidebar: Safe.read(:sidebar, [], fn -> sidebar_read(roster) end),
-      # Kitty host? → the rail blanks its fallback glyph so an icon PNG covers cleanly (no bleed).
-      graphics?: Console.Graphics.kitty?(),
       # The open thread's worktree path (display only; the spawn ensures it) for the top bar.
       cwd: Safe.read(:cwd, nil, fn -> cwd_read(state.opened_thread) end),
       # CONFIG (the Author, in the drawer): its own cursor.

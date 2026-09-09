@@ -40,7 +40,7 @@ defmodule Console.Panel.Roster do
   # ● warm / ○ cold, then the agent and the thread they're on.
   defp row(%{agent: agent, thread_title: title} = s) do
     warm? = Map.get(s, :warm?, false)
-    dot = if warm?, do: {"●", :warm}, else: {"○", :dim}
+    dot = Console.Panel.warmth_dot(warm?)
     [dot, {" ", :normal}, {agent, :accent}, {" · ", :dim}, {title, :normal}]
   end
 end

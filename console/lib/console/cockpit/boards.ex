@@ -100,7 +100,7 @@ defmodule Console.Cockpit.Boards do
 
   defp ticket_row(t), do: %{id: t.id, title: t.title, status: t.status, priority: t.priority, assignee: t.assignee}
 
-  # The workspace whose tickets/notes the board shows: the active one, or the default (Orbis falls
-  # back to the first workspace via active_workspace_id/1).
+  # The workspace whose tickets/notes the board shows: the active one (a stale key falls back to
+  # the first workspace via active_workspace_id/1).
   defp board_workspace_id(state), do: Space.active_workspace_id(state)
 end

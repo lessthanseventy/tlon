@@ -114,11 +114,12 @@ defmodule Console.Panel.Rail do
     end
   end
 
-  # ● warm / ○ cold — the pair Panel.Roster and the top bar use. The face only STYLES the dot;
-  # the glyph follows warmth alone, so an open-but-cold thread can never read warm here while
-  # the top bar reads it cold.
-  defp dot(%{warm?: true}, face), do: {"●", dot_style(face, :warm)}
-  defp dot(_thread, face), do: {"○", dot_style(face, :dim)}
+  # The face only STYLES the dot; the glyph follows warmth alone (Panel.warmth_dot/1), so an
+  # open-but-cold thread can never read warm here while the top bar reads it cold.
+  defp dot(thread, face) do
+    {glyph, style} = Panel.warmth_dot(thread[:warm?] == true)
+    {glyph, dot_style(face, style)}
+  end
 
   defp dot_style(:active, _style), do: :selected
   defp dot_style(_face, style), do: style

@@ -37,9 +37,7 @@ defmodule Console.Sessions do
     # execs WITHOUT resetting signals (pty_nif.zig) — so a harness inherits it and every subprocess it
     # spawns (pi/bun's `bash` tool) fails `waitpid` with ECHILD, breaking its shell. Resetting here
     # gives the harness a clean TTY signal state. (Upstream ghostty_ex gap; this is the launcher-side fix.)
-    script =
-      "export TERM=xterm-256color\n" <>
-        exports <> "\n" <> Console.Staffing.cd_worktree() <> "\nexec env --default-signal " <> launcher
+    script = Console.Staffing.boot_script(exports, "env --default-signal " <> launcher)
 
     ensure(thread_id, Keyword.merge([cmd: "/bin/bash", args: ["-lc", script]], opts))
   end

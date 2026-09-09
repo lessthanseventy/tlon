@@ -63,9 +63,8 @@ defmodule Console.Panel.TopBar do
   defp stage_seg(stage) when is_binary(stage) and stage != "", do: [{"  [", :dim}, {stage, :accent}, {"]", :dim}]
   defp stage_seg(_stage), do: []
 
-  # ● warm / ○ cold — the same pair Panel.Roster uses for a session's warmth.
   defp lead_seg(lead, warm?) when is_binary(lead) and lead != "" do
-    dot = if warm?, do: {"●", :warm}, else: {"○", :dim}
+    dot = Panel.warmth_dot(warm?)
     [dot, {" ", :normal}, {lead, :accent}, {" ", :normal}]
   end
 

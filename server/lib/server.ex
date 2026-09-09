@@ -86,10 +86,7 @@ defmodule Server do
   `{:ok, path}`, `{:error, :no_repo | :no_thread | reason}`.
   """
   def worktree_for_thread(%Server.Thread{} = thread) do
-    case repo_for_thread(thread) do
-      {:ok, repo} -> Server.Worktree.ensure(repo, Server.Worktree.name_for(thread))
-      {:error, _} = error -> error
-    end
+    with {:ok, repo, name} <- repo_and_name(thread), do: Server.Worktree.ensure(repo, name)
   end
 
   def worktree_for_thread(thread_id) when is_integer(thread_id) do
@@ -99,12 +96,17 @@ defmodule Server do
     end
   end
 
+  # A thread's repo + its worktree name, the pair every worktree door resolves first.
+  defp repo_and_name(thread) do
+    with {:ok, repo} <- repo_for_thread(thread), do: {:ok, repo, Server.Worktree.name_for(thread)}
+  end
+
   @doc """
   Where a thread's coworker works, as a PATH ONLY — no git, nothing ensured — for a display that
   runs every frame (the cockpit's top bar). `{:ok, path}` or `{:error, :no_repo | :no_thread}`.
   """
   def cwd_for_thread(%Server.Thread{} = thread) do
-    with {:ok, repo} <- repo_for_thread(thread), do: {:ok, Server.Worktree.path(repo, Server.Worktree.name_for(thread))}
+    with {:ok, repo, name} <- repo_and_name(thread), do: {:ok, Server.Worktree.path(repo, name)}
   end
 
   def cwd_for_thread(thread_id) when is_integer(thread_id) do
@@ -188,8 +190,8 @@ defmodule Server do
   end
 
   defp worktree_target(thread) do
-    case repo_for_thread(thread) do
-      {:ok, repo} -> {repo, Server.Worktree.name_for(thread)}
+    case repo_and_name(thread) do
+      {:ok, repo, name} -> {repo, name}
       {:error, _} -> nil
     end
   end

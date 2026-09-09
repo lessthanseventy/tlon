@@ -1,7 +1,7 @@
 defmodule Console.Cockpit.Author do
   @moduledoc """
   The operator's authoring verbs over workspaces: the right-click context menu (icon picker,
-  configure, the two-step delete) and the Orbis author face's writes — register / remove / edit a
+  configure, the two-step delete) and CONFIG's writes (the drawer's Author pane) — register / remove / edit a
   workspace, a coworker's model or yolo knob. Every write goes to `Server.Workspaces` /
   `Console.Config` and answers the next cockpit state (a flash on failure, never a crash); the
   cockpit repaints it.

@@ -188,4 +188,9 @@ defmodule Console.Panel do
     gap = w - row_width(runs)
     if gap > 0, do: runs ++ [{String.duplicate(" ", gap), style}], else: runs
   end
+
+  @doc "● warm / ○ cold — the one warmth glyph every panel draws (roster, top bar, rail)."
+  @spec warmth_dot(boolean()) :: Console.Panel.run()
+  def warmth_dot(true), do: {"●", :warm}
+  def warmth_dot(_cold), do: {"○", :dim}
 end
