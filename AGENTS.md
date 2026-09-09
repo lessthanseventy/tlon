@@ -97,19 +97,42 @@ you named change). It is three doors onto one library — mix tasks, the `menard
 Claude Code, and the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb`
 tools scoped to their worktree. Use it for every Elixir edit and search:
 
-- `clause replace|delete|insert_after|insert_before FILE [Mod.]name/arity HEAD [CODE]` — one
-  clause, addressed by its head as written (guard included). In a file with several modules,
-  qualify the name (`Menard.MCP.Clause.execute/2`); a bare name they share is refused.
+- `clause replace|delete|insert-after|insert-before FILE [Mod.]name/arity HEAD [CODE]` — one
+  clause, addressed by its head as written (guard included, parens optional). In a file with
+  several modules, qualify the name (`Menard.MCP.Clause.execute/2`); a bare name they share is
+  refused. A miss lists the heads that exist — read it, don't guess again.
+- `clause rewrite … HEAD CODE` — the WHOLE clause, head included. The verb for changing args,
+  adding a guard, destructuring a parameter; `replace` only ever swaps a body.
+- `clause insert-at FILE (Mod.Name|-) [top|bottom] CODE` — a whole new FUNCTION, which has no
+  sibling clause to anchor to. Placement follows the code: a `defp` lands with the other private
+  functions, a `def` with the public ones. (A new *clause* of an existing function is
+  `insert-after` — name its sibling.)
+- `write FILE CODE` (`-` reads stdin) — a whole file: a NEW module, or a rewrite so total that
+  patching is the wrong tool. Refuses Elixir that doesn't parse before it reaches disk. Reach for
+  this instead of the `Write` tool for `.ex`/`.exs`.
 - `rename OLD NEW FILES…` — an identifier across files (heads, calls, captures, variables).
 - `find calls|defs|aliases TARGET FILES…` — grep that knows the code; strings and comments never match.
 - `outline FILE` — read a module's shape before editing it.
 - `run check|test|format|compile [--in DIR]` — one structured answer, failures with the test's source.
 
 CLI: `mise run menard -- VERB …` (always compiles the current code; the MCP server runs the code
-it started with — restart Claude after changing Menard). Python/sed string patches on `.ex` files
-fail on reformatting and land in the wrong module; the `Edit` tool is for small literal changes
-(a doc line, a test assertion) and for non-Elixir files, which Menard does not cover (TypeScript,
-Lua, Nix).
+it started with — restart Claude after changing Menard). Dashes and underscores both work at both
+doors. `mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape
+hatch for editing Menard WITH Menard, where a half-applied edit otherwise locks the tool out of
+finishing it.
+
+Python/sed string patches on `.ex` files fail on reformatting and land in the wrong module; the
+`Edit` tool is for small literal changes (a doc line, a test assertion) and for non-Elixir files,
+which Menard does not cover (TypeScript, Lua, Nix). Menard has no verb yet for a module attribute,
+a `case` arm, a macro block like `schema do`, or adding a whole module to an existing file —
+those are still `Edit`.
+
+**Formatting is automatic, not a chore.** A `PostToolUse` hook (`.claude/settings.json` →
+`scripts/format-elixir.sh`) runs the file's OWN project formatter on every `Write`/`Edit` of an
+`.ex`/`.exs` — including plugins, so `console`'s Styler (which rewrites code, not just whitespace)
+runs there too. Menard's own verbs format after every edit. So the formatter's output is what your
+next read shows, and `mix format --check-formatted` at the gate should never be the first time you
+learn a file was unformatted.
 
 ## How to work — the four rules
 
