@@ -9,6 +9,7 @@ defmodule Server.Workspaces do
 
   alias Server.Bus
   alias Server.Coworker
+  alias Server.Policy
   alias Server.Repo
   alias Server.Workspace
   alias Server.WorkspaceAgent
@@ -248,6 +249,11 @@ defmodule Server.Workspaces do
         {:error, :no_such_seat}
 
       %WorkspaceAgent{} = row ->
+        # The policy goes with the seat. Left behind it is dead data that comes back to life the
+        # moment the coworker is re-seated — an operator who unseats to revoke a yolo flag would
+        # silently get it back.
+        Repo.delete_all(from p in Policy, where: p.workspace_id == ^row.workspace_id and p.agent_id == ^row.agent_id)
+
         {:ok, _} = Repo.delete(row)
         announce_workspace({:ok, row}, row.workspace_id)
         {:ok, row}
@@ -310,5 +316,38 @@ defmodule Server.Workspaces do
   defp normalize_seat(%{} = entry) do
     entry = Map.new(entry)
     %{name: entry[:name] || entry["name"], archetype: entry[:archetype] || entry["archetype"]}
+  end
+
+  @doc "The policy for one coworker in one workspace, or nil (inherit everything)."
+  @spec policy(integer(), integer()) :: Policy.t() | nil
+  def policy(workspace_id, agent_id), do: Repo.get_by(Policy, workspace_id: workspace_id, agent_id: agent_id)
+
+  @doc "A workspace's policies as `%{agent_id => policy}` — one query for a whole CONFIG pane."
+  @spec policies(integer()) :: %{integer() => Policy.t()}
+  def policies(workspace_id) do
+    from(p in Policy, where: p.workspace_id == ^workspace_id)
+    |> Repo.all()
+    |> Map.new(&{&1.agent_id, &1})
+  end
+
+  @doc """
+  Merge `attrs` into a (workspace, agent) policy, creating the row if it is the first knob set.
+  Setting every knob back to nil DELETES the row: an empty policy and no policy mean the same
+  thing, and keeping the empty one would leave "inherit" looking like a decision.
+  """
+  @spec set_policy(integer(), integer(), map()) :: {:ok, Policy.t() | nil} | {:error, Ecto.Changeset.t()}
+  def set_policy(workspace_id, agent_id, attrs) do
+    existing = policy(workspace_id, agent_id) || %Policy{workspace_id: workspace_id, agent_id: agent_id}
+
+    with {:ok, saved} <- existing |> Policy.changeset(attrs) |> Repo.insert_or_update() do
+      if Policy.empty?(saved) do
+        Repo.delete(saved)
+        announce_workspace({:ok, saved}, workspace_id)
+        {:ok, nil}
+      else
+        announce_workspace({:ok, saved}, workspace_id)
+        {:ok, saved}
+      end
+    end
   end
 end

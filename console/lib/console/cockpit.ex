@@ -92,6 +92,10 @@ defmodule Console.Cockpit do
     Bus.subscribe_activity()
     Bus.subscribe_habits()
 
+    # One-shot: the coworker knobs that lived in config.json become workspace_policy rows (UX
+    # slice 5). Absorbs its own failures — an import must never be why the cockpit will not boot.
+    _ = Console.PolicyImport.run()
+
     case :termbox2_nif.tb_init() do
       0 ->
         # Trap exits so a crash anywhere — this server, or the linked Driver — runs terminate/2,

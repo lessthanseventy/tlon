@@ -481,7 +481,7 @@ defmodule Console.Staffing do
   # the restart.
   def profile_launcher(workspace_id, lead_name, %Profile{} = profile) do
     pi = pi_command(profile)
-    dir = Profiles.config_dir(profile.name)
+    dir = Profiles.config_dir(profile)
     reload_cmd = {"ADAPTERS_RELOAD_CMD", pi <> " --continue"}
     env_flags = Enum.map_join([reload_cmd], " ", fn {k, v} -> "-e #{sh_single_quote(k <> "=" <> v)}" end)
 

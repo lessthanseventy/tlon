@@ -17,17 +17,15 @@ defmodule Console.Panel.Author do
   `:selected` — instead of the field list.
 
   The bench sub-list (D2.4 Chunk 2b, absorbs the Settings modal) ALSO renders each seat's
-  effective model and yolo — the two knobs Settings used to own. Model resolves
-  Config-or-archetype-default via `Profiles.instantiate/1` (the same precedence the `m` verb and
-  Settings used); yolo reads `Console.Config.coworker_yolo/1` directly. On the sub-selected row, the
-  knob `Tab` has armed (`edit.knob`) washes `:accent` — the cue for what `Enter`/`Space` will
-  change.
+  effective model and its ask-vs-allow default — the two knobs Settings used to own, now
+  `workspace_policy` rows keyed workspace × agent (UX slice 5). Both read through the same
+  precedence a real spawn uses (`Profiles.instantiate/2`). On the sub-selected row, the knob `Tab`
+  has armed (`edit.knob`) washes `:accent` — the cue for what `Enter`/`Space` will change.
   """
   @behaviour Console.Panel
 
   import Console.Panel, only: [line: 2, blank: 0]
 
-  alias Console.Config
   alias Console.Profiles
   alias Server.Bus
 
@@ -132,7 +130,7 @@ defmodule Console.Panel.Author do
     body =
       case bench do
         [] -> [line("nobody on the bench yet — a to seat someone", :dim)]
-        seats -> seats |> Enum.with_index() |> Enum.map(fn {c, i} -> bench_row(c, i == edit.sub, knob) end)
+        seats -> seats |> Enum.with_index() |> Enum.map(fn {c, i} -> bench_row(edit.id, c, i == edit.sub, knob) end)
       end
 
     footer = [blank(), line(@roster_hints, :dim)]
@@ -141,7 +139,7 @@ defmodule Console.Panel.Author do
 
   # One bench row: archetype · name, then the model/yolo knobs (D2.4 Chunk 2b, absorbs Settings).
   # On the sub-selected row the ARMED knob (`Tab`) washes :accent — what Enter/Space will change.
-  defp bench_row(%Server.Coworker{} = seat, selected?, knob) do
+  defp bench_row(workspace_id, %Server.Coworker{} = seat, selected?, knob) do
     style = if selected?, do: :selected, else: :normal
     gutter = if selected?, do: {"▸ ", :accent}, else: {"  ", :normal}
     norm = Profiles.roster_entry(seat)
@@ -151,26 +149,37 @@ defmodule Console.Panel.Author do
       gutter,
       {"#{seat.archetype} · #{seat.name}#{lead}", style},
       {"  ", :normal},
-      {format_model(effective_model(norm)), knob_style(selected?, knob, :model)},
+      {format_model(effective_model(norm, workspace_id)), knob_style(selected?, knob, :model)},
       {"  ", :normal},
-      {yolo_label(Config.coworker_yolo(norm.name)), knob_style(selected?, knob, :yolo)}
+      {yolo_label(ask_default(workspace_id, seat)), knob_style(selected?, knob, :yolo)}
     ]
   end
 
   defp knob_style(true, k, k), do: :accent
   defp knob_style(_selected?, _armed, _field), do: :dim
 
-  # Config-or-archetype-default, same precedence `instantiate/1` folds in for a real spawn. An
-  # unresolvable archetype/name (bad wire data) degrades to nil rather than raising mid-render.
-  defp effective_model(%{archetype: nil}), do: nil
-  defp effective_model(%{name: nil}), do: nil
-  defp effective_model(norm), do: Profiles.instantiate(norm).model
+  defp effective_model(norm, workspace_id) do
+    case norm do
+      %{archetype: nil} -> nil
+      %{name: nil} -> nil
+      _ -> Profiles.instantiate(norm, workspace_id).model
+    end
+  end
 
   defp format_model(%{provider: prov, model: model}), do: "#{prov}/#{model}"
   defp format_model(_), do: "?"
 
   defp yolo_label(true), do: "yolo"
   defp yolo_label(_), do: "ask"
+
+  defp ask_default(workspace_id, %Server.Coworker{agent_id: agent_id}) do
+    case Console.Server.Workspaces.policy(workspace_id, agent_id) do
+      %Server.Policy{ask_default: "allow"} -> true
+      _ -> false
+    end
+  rescue
+    _ -> false
+  end
 
   # No click target yet — the editor is keyboard-only (Chunk 2a/b/c). Kept as an explicit no-op
   # (not left unimplemented), same idiom as the list's pre-Chunk-2 pick/3.

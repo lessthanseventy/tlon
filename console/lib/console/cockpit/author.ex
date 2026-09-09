@@ -342,6 +342,12 @@ defmodule Console.Cockpit.Author do
   defp sub_list_rows(2, workspace_id), do: Workspaces.repos(workspace_id)
   defp sub_list_rows(3, workspace_id), do: Workspaces.bench(workspace_id)
 
+  # The bench sub-editor knob (D2.4 Chunk 2b, absorbs Settings): cycle the sub-selected coworker's
+  # model ring, or flip its ask-vs-allow default. Both write a `workspace_policy` row for THIS
+  # workspace × agent and apply on the coworker's next spawn.
+  #
+  # The seat comes off the LIVE bench, not the effect's bare name: its archetype is the model ring's
+  # fallback and its agent_id is what a policy is keyed by.
   @doc false
   # The roster sub-editor's Tab+Enter/Space knob (D2.4 Chunk 2b — absorbs the Settings modal):
   # cycle the sub-selected coworker's model ring, or flip its yolo policy, writing Console.Config
@@ -349,31 +355,32 @@ defmodule Console.Cockpit.Author do
   # Settings). Looks the roster entry up off the LIVE workspace (Workspaces.get, like edit_workspace!) rather
   # than trust the effect's bare name, so the entry's archetype (the model ring's default-fallback
   # source) is available.
-  def apply_coworker_knob!(state, name, knob) do
+  def apply_coworker_knob!(%{author_edit: %{id: workspace_id}} = state, name, knob) do
     Safe.flash_on_error(state, "settings write", fn ->
       case roster_entry_for(state, name) do
-        nil -> %{state | flash: "#{name}: roster entry not found"}
-        entry -> %{state | flash: apply_knob(entry, knob)}
+        nil -> %{state | flash: "#{name}: not on this bench"}
+        seat -> %{state | flash: apply_knob(workspace_id, seat, knob)}
       end
     end)
   end
 
+  # No editor open means no workspace to key a policy by — a knob without a pairing is a no-op.
+  def apply_coworker_knob!(state, _name, _knob), do: state
+
   defp roster_entry_for(%{author_edit: %{id: id}}, name), do: id |> Workspaces.bench() |> Enum.find(&(&1.name == name))
 
-  defp roster_entry_for(_state, _name), do: nil
-
-  defp apply_knob(entry, :model) do
-    norm = Profiles.roster_entry(entry)
-    next = Profiles.next_model(Profiles.instantiate(norm).model)
-    Console.Config.put_coworker_model(norm.name, next)
-    "#{norm.name} driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
+  defp apply_knob(workspace_id, %Server.Coworker{} = seat, :model) do
+    norm = Profiles.roster_entry(seat)
+    next = Profiles.next_model(Profiles.instantiate(norm, workspace_id).model)
+    {:ok, _} = Workspaces.set_policy(workspace_id, seat.agent_id, %{model: wire_model(next)})
+    "#{seat.name} driver → #{next.provider}/#{next.model} — applies on next spawn (console:reset)"
   end
 
-  defp apply_knob(%Server.Coworker{name: name}, :yolo) do
-    next = Console.Config.coworker_yolo(name) != true
-    Console.Config.put_coworker_yolo(name, next)
-    policy = if next, do: "yolo (auto-approve)", else: "ask"
-    "#{name} permissions → #{policy} — applies on next spawn (console:reset)"
+  defp apply_knob(workspace_id, %Server.Coworker{} = seat, :yolo) do
+    next = if current_ask_default(workspace_id, seat) == "allow", do: "ask", else: "allow"
+    {:ok, _} = Workspaces.set_policy(workspace_id, seat.agent_id, %{ask_default: next})
+    label = if next == "allow", do: "yolo (auto-approve)", else: "ask"
+    "#{seat.name} permissions → #{label} — applies on next spawn (console:reset)"
   end
 
   @doc """
@@ -454,4 +461,14 @@ defmodule Console.Cockpit.Author do
       end
     end)
   end
+
+  defp current_ask_default(workspace_id, %Server.Coworker{agent_id: agent_id}) do
+    case Workspaces.policy(workspace_id, agent_id) do
+      %Server.Policy{ask_default: value} -> value
+      nil -> nil
+    end
+  end
+
+  defp wire_model(%{provider: p, model: m} = next),
+    do: %{"provider" => p, "model" => m, "thinking" => next[:thinking] || "medium"}
 end

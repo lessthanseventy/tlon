@@ -86,12 +86,12 @@ defmodule Console.StaffingTest do
     test "runs on the workspace's PRIVATE tmux server (id-derived), with the profile's persistence-free config" do
       cmd = Staffing.profile_launcher(1, "tertius", @profile)
       assert cmd =~ "tmux -L console-workspace-1 "
-      assert cmd =~ "-f #{Console.Profiles.config_dir("tlon")}/tmux.conf"
+      assert cmd =~ "-f #{Console.Profiles.config_dir(@profile)}/tmux.conf"
     end
 
     test "points pi at the profile's config dir and carries the funes identity into the session env" do
       cmd = Staffing.profile_launcher(1, "tertius", @profile)
-      assert cmd =~ "PI_CODING_AGENT_DIR=#{Console.Profiles.config_dir("tlon")}"
+      assert cmd =~ "PI_CODING_AGENT_DIR=#{Console.Profiles.config_dir(@profile)}"
       # The tlon coworker is a funes citizen (machine scope, @tlon_funes_mcp reads ${TLON_MCP_URL}),
       # so the identity is `-e`'d into the tmux SESSION env — durable across a pi respawn, not just
       # pi's one-shot process env. (Supersedes the old "self-contained, no funes env" design.)
@@ -104,13 +104,13 @@ defmodule Console.StaffingTest do
       cmd = Staffing.profile_launcher(1, "tertius", @profile)
 
       assert cmd =~
-               "ADAPTERS_RELOAD_CMD=env PI_CODING_AGENT_DIR=#{Console.Profiles.config_dir("tlon")} mise exec -- pi --continue"
+               "ADAPTERS_RELOAD_CMD=env PI_CODING_AGENT_DIR=#{Console.Profiles.config_dir(@profile)} mise exec -- pi --continue"
     end
 
     test "a profile with a persona adds --append-system-prompt; without one, none" do
       refute Staffing.profile_launcher(1, "tertius", @profile) =~ "--append-system-prompt"
       withp = Staffing.profile_launcher(1, "tertius", %Console.Profile{name: "tlon", system_prompt: "be terse"})
-      assert withp =~ "--append-system-prompt #{Console.Profiles.config_dir("tlon")}/system_prompt.md"
+      assert withp =~ "--append-system-prompt #{Console.Profiles.config_dir(@profile)}/system_prompt.md"
     end
 
     test "still launches pi as window 0's command" do

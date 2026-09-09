@@ -275,4 +275,78 @@ defmodule Server.WorkspacesTest do
       assert Enum.map(by_ws[b.id], & &1.name) == ["bob", "cy"]
     end
   end
+
+  describe "policy (UX slice 5) — what a coworker may do in a workspace" do
+    test "no row means inherit — nil, not a fabricated default" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}]})
+      [seat] = Workspaces.bench(ws.id)
+
+      assert Workspaces.policy(ws.id, seat.agent_id) == nil
+    end
+
+    test "set_policy creates the row on the first knob, then merges into it" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}]})
+      [seat] = Workspaces.bench(ws.id)
+
+      {:ok, _} = Workspaces.set_policy(ws.id, seat.agent_id, %{ask_default: "allow"})
+      {:ok, policy} = Workspaces.set_policy(ws.id, seat.agent_id, %{network: "deny"})
+
+      assert policy.ask_default == "allow", "the second write merged rather than replaced"
+      assert policy.network == "deny"
+    end
+
+    test "setting every knob back to nil DELETES the row — empty and absent mean the same thing" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}]})
+      [seat] = Workspaces.bench(ws.id)
+
+      {:ok, _} = Workspaces.set_policy(ws.id, seat.agent_id, %{ask_default: "allow"})
+      {:ok, nil} = Workspaces.set_policy(ws.id, seat.agent_id, %{ask_default: nil})
+
+      assert Workspaces.policy(ws.id, seat.agent_id) == nil
+    end
+
+    test "the same coworker is policed per WORKSPACE — that is the whole point of the key" do
+      {:ok, a} = Workspaces.register(%{name: "A", roster: [%{"name" => "amy"}]})
+      {:ok, b} = Workspaces.register(%{name: "B", roster: [%{"name" => "amy"}]})
+      [seat_a] = Workspaces.bench(a.id)
+      [seat_b] = Workspaces.bench(b.id)
+
+      assert seat_a.agent_id == seat_b.agent_id, "one durable identity on two benches"
+
+      {:ok, _} = Workspaces.set_policy(a.id, seat_a.agent_id, %{ask_default: "allow"})
+
+      assert Workspaces.policy(a.id, seat_a.agent_id).ask_default == "allow"
+      assert Workspaces.policy(b.id, seat_b.agent_id) == nil
+    end
+
+    test "a value outside the closed set is refused by the DATABASE, not re-checked here" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}]})
+      [seat] = Workspaces.bench(ws.id)
+
+      assert_raise Ecto.ConstraintError, fn ->
+        Workspaces.set_policy(ws.id, seat.agent_id, %{shell: "sometimes"})
+      end
+    end
+
+    test "unseating a coworker takes its policy with it" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}]})
+      [seat] = Workspaces.bench(ws.id)
+      {:ok, _} = Workspaces.set_policy(ws.id, seat.agent_id, %{ask_default: "allow"})
+
+      {:ok, _} = Workspaces.unseat(seat.id)
+
+      assert Workspaces.policies(ws.id) == %{}
+    end
+
+    test "policies/1 answers a whole pane in one read" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"name" => "amy"}, %{"name" => "bob"}]})
+      [amy, bob] = Workspaces.bench(ws.id)
+      {:ok, _} = Workspaces.set_policy(ws.id, amy.agent_id, %{ask_default: "allow"})
+
+      by_agent = Workspaces.policies(ws.id)
+
+      assert by_agent[amy.agent_id].ask_default == "allow"
+      refute Map.has_key?(by_agent, bob.agent_id)
+    end
+  end
 end

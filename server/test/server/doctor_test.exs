@@ -30,6 +30,7 @@ defmodule Server.DoctorTest do
                "todo",
                "workspace",
                "workspace_agent",
+               "workspace_policy",
                "workspace_repo"
              ]
   end

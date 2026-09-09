@@ -17,6 +17,10 @@ defmodule Console.Profile do
     * **sandbox** — `sandbox` (a pi-sandbox `sandbox.json` map, or `nil` for unconfined). Scoped to
       the profile because pi-sandbox reads `sandbox.json` from `PI_CODING_AGENT_DIR`.
 
+  `workspace_id` is which workspace this instance belongs to. It rides on the profile so
+  `config_dir/1` can key the materialised dir by it and `Server.Policy` can differ per workspace —
+  the same coworker name may be trusted differently in two of them.
+
   A profile is a small DIFF from the base `~/.pi/agent` config, not a full re-declaration — the base
   (extensions, skills, model catalog, auth) stays the single source of truth; the profile drops,
   replaces, and overlays.
@@ -24,6 +28,7 @@ defmodule Console.Profile do
   @enforce_keys [:name]
   defstruct name: nil,
             archetype: nil,
+            workspace_id: nil,
             harness: :pi,
             drop_extensions: [],
             add_extensions: [],
@@ -36,6 +41,7 @@ defmodule Console.Profile do
   @type t :: %__MODULE__{
           name: String.t(),
           archetype: atom(),
+          workspace_id: integer() | nil,
           harness: :pi | :claude_code,
           drop_extensions: [String.t()],
           add_extensions: [String.t()],
@@ -91,6 +97,7 @@ defmodule Console.Profiles do
     catastrophic-command + secret-path floor still holds.
   """
   alias Console.Profile
+  alias Console.Server.Workspaces
 
   # Single-user machine — the repo the coworker writes in (matches flake.nix's `repo`). Used for the
   # Tlön sandbox's write allowlist.
@@ -558,16 +565,19 @@ defmodule Console.Profiles do
 
   @doc """
   Look a profile up by name, or nil. Resolves the name to its seed roster ENTRY, then
-  `instantiate/1` mints the `%Profile{}` from the archetype registry — so name-keyed `fetch/1` and
-  the roster path share ONE content source. `instantiate/1` folds in the runtime overrides
-  (`Console.Config` `coworkers.<name>.model`/`.yolo` — what the SETTINGS panel writes), so they flow
-  everywhere the profile does: the materialised settings.json AND the launcher's `--model` flag, on
-  the next coworker spawn. An unknown name (not in the roster) → `nil`.
+  `instantiate/2` mints the `%Profile{}` from the archetype registry — so name-keyed `fetch` and
+  the bench path share ONE content source.
+
+  `workspace_id` folds in that workspace policy (`Server.Policy`: the model and the ask-vs-allow
+  default the CONFIG pane writes), so it flows everywhere the profile does — the materialised
+  settings.json AND the launcher flag — on the next coworker spawn. Without one the archetype
+  default stands: a policy belongs to a PAIRING, so guessing a workspace would be worse than
+  inheriting.
   """
-  @spec fetch(String.t()) :: Profile.t() | nil
-  def fetch(name) do
+  @spec fetch(String.t(), integer() | nil) :: Profile.t() | nil
+  def fetch(name, workspace_id \\ nil) do
     with %{} = entry <- Enum.find(@seed_roster, &(&1.name == name)) do
-      instantiate(entry)
+      instantiate(entry, workspace_id)
     end
   end
 
@@ -606,13 +616,15 @@ defmodule Console.Profiles do
   """
   @spec instantiate(%{required(:archetype) => atom(), required(:name) => String.t(), optional(any()) => any()}) ::
           Profile.t()
-  def instantiate(%{archetype: key, name: name} = entry) do
+  def instantiate(%{archetype: key, name: name} = entry, workspace_id \\ nil) do
     t = archetype(key)
-    model = entry[:model] || Console.Config.coworker_model(name) || t.model
+    policy = policy_for(workspace_id, name)
+    model = entry[:model] || policy[:model] || t.model
 
     %Profile{
       name: name,
       archetype: key,
+      workspace_id: workspace_id,
       # Slice D: the harness is an environment-resolved BINDING from the model (anthropic model at
       # home → the official claude_code harness; else pi), not an archetype trait. A template
       # `harness:` key stays an explicit pin (the escape hatch).
@@ -621,10 +633,38 @@ defmodule Console.Profiles do
       mcp: t.mcp,
       model: model,
       sandbox: t.sandbox,
-      permissions: apply_yolo_override(t.permissions, Console.Config.coworker_yolo(name)),
+      permissions: apply_yolo_override(t.permissions, policy[:yolo]),
       system_prompt: personalize(t.system_prompt, name)
     }
   end
+
+  # The (workspace, coworker) policy as a plain map, or `%{}` — the knobs this module folds in.
+  # Workspace-less (a render preview with no space in hand) means no policy: the archetype default,
+  # never another workspace's answer.
+  defp policy_for(nil, _name), do: %{}
+
+  defp policy_for(workspace_id, name) do
+    with %Server.Coworker{agent_id: agent_id} <-
+           workspace_id |> Workspaces.bench() |> Enum.find(&(&1.name == name)),
+         %Server.Policy{} = p <- Workspaces.policy(workspace_id, agent_id) do
+      %{model: p.model && atomize_model(p.model), yolo: yolo_of(p.ask_default)}
+    else
+      _ -> %{}
+    end
+  rescue
+    _ -> %{}
+  end
+
+  defp yolo_of("allow"), do: true
+  defp yolo_of("ask"), do: false
+  defp yolo_of(_), do: nil
+
+  # The policy's model round-trips as a JSON object; the profile wants the atom-keyed shape.
+  defp atomize_model(%{"provider" => p, "model" => m} = j),
+    do: %{provider: p, model: m, thinking: j["thinking"] || "medium"}
+
+  defp atomize_model(%{provider: _} = m), do: m
+  defp atomize_model(_), do: nil
 
   @doc """
   Normalize a `workspace.roster[]` entry to `instantiate/1`'s input shape `%{archetype: atom, name:
@@ -758,9 +798,18 @@ defmodule Console.Profiles do
   @spec repo() :: String.t()
   def repo, do: @repo
 
-  @doc "The config dir a profile materialises into (its `PI_CODING_AGENT_DIR`)."
-  @spec config_dir(String.t()) :: String.t()
-  def config_dir(name), do: Path.join([base_dir_root(), "profiles", name])
+  @doc """
+  The config dir a profile materialises into (its `PI_CODING_AGENT_DIR`), keyed by workspace so
+  two workspaces can run the same coworker name under different policy. A workspace-less profile
+  keeps the flat path.
+  """
+  @spec config_dir(Profile.t()) :: String.t()
+  def config_dir(profile) do
+    case profile do
+      %Profile{workspace_id: nil, name: n} -> Path.join([base_dir_root(), "profiles", n])
+      %Profile{workspace_id: id, name: n} -> Path.join([base_dir_root(), "profiles", "w#{id}", n])
+    end
+  end
 
   @doc "The persistence-free tmux config a coworker's server boots from (see `@coworker_tmux_conf`)."
   @spec tmux_conf() :: String.t()

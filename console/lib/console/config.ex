@@ -118,7 +118,10 @@ defmodule Console.Config do
   end
 
   # Atomic: write beside the target then rename, so a crash mid-write never truncates the file.
-  defp write!(map, path) do
+  @doc """
+  Write the settings map atomically (tmp + rename), so a crash mid-write cannot truncate it.
+  """
+  def write!(map, path) do
     File.mkdir_p!(Path.dirname(path))
     tmp = path <> ".tmp"
     File.write!(tmp, Jason.encode!(map, pretty: true) <> "\n")

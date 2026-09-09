@@ -69,8 +69,8 @@ defmodule Console.Harness.ClaudeCode do
 
   defp role_env(%Profile{system_prompt: nil}), do: ""
 
-  defp role_env(%Profile{name: name}),
-    do: "TLON_ROLE_PROMPT_FILE=#{Path.join(Profiles.config_dir(name), "system_prompt.md")} "
+  defp role_env(%Profile{} = profile),
+    do: "TLON_ROLE_PROMPT_FILE=#{Path.join(Profiles.config_dir(profile), "system_prompt.md")} "
 
   # The write FENCE under the claude harness: a profile whose pi-permission policy denies the
   # file writers (the reviewer) must be structurally fenced here too — pi-permission-system
@@ -102,7 +102,7 @@ defmodule Console.Harness.Pi do
   @impl true
   def launch_command(%Profile{} = profile) do
     base = Application.get_env(:console, :spawn_launcher, "mise exec -- pi")
-    dir = Profiles.config_dir(profile.name)
+    dir = Profiles.config_dir(profile)
     prompt = if profile.system_prompt, do: " --append-system-prompt #{Path.join(dir, "system_prompt.md")}", else: ""
 
     model =

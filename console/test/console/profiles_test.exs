@@ -199,42 +199,25 @@ defmodule Console.ProfilesTest do
       assert Profiles.fetch("tertius").model == %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}
     end
 
-    test "an operator model override takes precedence over the archetype default (not shadowed by a seed model)" do
+    test "a workspace-less fetch inherits the archetype default — a policy belongs to a pairing" do
       # The seed entry must NOT pin a model, or entry[:model] shadows the SETTINGS override the `m`
       # verb writes. Use a NON-glm tuple so this fails if the override is ignored (glm == default).
-      override = %{provider: "ollama-cloud", model: "kimi-k2.7-code", thinking: "medium"}
-      dir = Path.join(System.tmp_dir!(), "aleph-prof-ovr-#{System.unique_integer([:positive])}")
-      path = Path.join(dir, "config.json")
-      Console.Config.put_coworker_model("tertius", override, path)
-
       previous = Application.get_env(:console, :config_path)
-      Application.put_env(:console, :config_path, path)
+      Application.put_env(:console, :config_path, nil)
+      on_exit(fn -> Application.put_env(:console, :config_path, previous) end)
 
-      on_exit(fn ->
-        Application.put_env(:console, :config_path, previous)
-        File.rm_rf!(dir)
-      end)
-
-      assert Profiles.fetch("tertius").model == override
+      # No workspace, no policy: a policy belongs to a PAIRING, so a workspace-less fetch inherits the
+      # archetype default rather than guessing which workspace was meant (UX slice 5).
+      assert Profiles.fetch("tertius").model == Profiles.archetype(:surveyor).model
     end
 
-    test "an operator yolo override flips permissions.yoloMode but leaves the deny-floor intact" do
-      dir = Path.join(System.tmp_dir!(), "aleph-prof-yolo-#{System.unique_integer([:positive])}")
-      path = Path.join(dir, "config.json")
-      Console.Config.put_coworker_yolo("tertius", false, path)
-
-      previous = Application.get_env(:console, :config_path)
-      Application.put_env(:console, :config_path, path)
-
-      on_exit(fn ->
-        Application.put_env(:console, :config_path, previous)
-        File.rm_rf!(dir)
-      end)
-
+    test "the deny-floor is compiled in — no policy layer can re-permit sudo or the secret paths" do
       perms = Profiles.fetch("tertius").permissions
-      # the operator flipped autonomous-yolo off (a human will answer asks)...
-      assert perms["yoloMode"] == false
-      # ...but the deny-floor is compiled-in, never operator-editable
+
+      # yolo is the ask-vs-allow default, a workspace_policy row now; without one the archetype
+      # stands...
+      assert perms["yoloMode"] == true
+      # ...and the deny-floor is compiled-in, never operator-editable at any layer
       assert perms["permission"]["bash"]["sudo *"] == "deny"
       assert perms["permission"]["path"]["~/.ssh/*"] == "deny"
     end

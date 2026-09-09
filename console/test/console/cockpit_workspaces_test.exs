@@ -176,51 +176,52 @@ defmodule Console.CockpitWorkspacesTest do
     defp roster_edit_state(id, overrides \\ %{}),
       do: state(Map.merge(%{author_edit: %{id: id, field: 3, sub: 0, mode: :sub, knob: :model}}, overrides))
 
-    test ":model cycles the coworker's model ring one step and persists via Config", %{path: path} do
+    test ":model cycles the ring one step and persists as a workspace_policy row" do
       {:ok, w} =
         Workspaces.register(%{name: "Freedonia", type: "blank", roster: [%{"archetype" => "surveyor", "name" => "amy"}]})
 
+      [seat] = Workspaces.bench(w.id)
       next = Author.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
 
       assert next.flash =~ "amy driver"
       assert next.flash =~ "applies on next spawn"
-      override = Console.Config.coworker_model("amy", path)
-      assert override
-      # cycling again lands on the FOLLOWING ring entry — proves it's a cycle, not a fixed write.
-      next2 = Author.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
-      assert Console.Config.coworker_model("amy", path) == Console.Profiles.next_model(override)
-      assert next2.flash =~ "amy driver"
+
+      first = Workspaces.policy(w.id, seat.agent_id).model
+      assert first
+
+      # cycling again lands on the FOLLOWING ring entry — proves it is a cycle, not a fixed write
+      Author.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
+      second = Workspaces.policy(w.id, seat.agent_id).model
+      refute second == first
     end
 
-    test ":yolo flips the coworker's permission policy and persists via Config", %{path: path} do
+    test ":yolo flips the ask-vs-allow default on the workspace_policy row" do
       {:ok, w} =
         Workspaces.register(%{name: "Freedonia", type: "blank", roster: [%{"archetype" => "surveyor", "name" => "amy"}]})
 
-      next =
-        Author.apply_coworker_knob!(
-          roster_edit_state(w.id, %{author_edit: %{id: w.id, field: 3, sub: 0, mode: :sub, knob: :yolo}}),
-          "amy",
-          :yolo
-        )
+      [seat] = Workspaces.bench(w.id)
+      yolo_state = roster_edit_state(w.id, %{author_edit: %{id: w.id, field: 3, sub: 0, mode: :sub, knob: :yolo}})
+
+      next = Author.apply_coworker_knob!(yolo_state, "amy", :yolo)
 
       assert next.flash =~ "amy permissions"
-      assert Console.Config.coworker_yolo("amy", path) == true
+      assert Workspaces.policy(w.id, seat.agent_id).ask_default == "allow"
 
-      next2 = Author.apply_coworker_knob!(next, "amy", :yolo)
-      assert Console.Config.coworker_yolo("amy", path) == false
+      next2 = Author.apply_coworker_knob!(yolo_state, "amy", :yolo)
+      assert Workspaces.policy(w.id, seat.agent_id).ask_default == "ask"
       assert next2.flash =~ "ask"
     end
 
-    test "a roster entry that's vanished (renamed/removed mid-edit) flashes, never crashes" do
+    test "a seat that's vanished (renamed/unseated mid-edit) flashes, never crashes" do
       {:ok, w} = Workspaces.register(%{name: "Freedonia", type: "blank"})
       next = Author.apply_coworker_knob!(roster_edit_state(w.id), "ghost", :model)
 
-      assert next.flash =~ "roster entry not found"
+      assert next.flash =~ "not on this bench"
     end
 
     test "an already-gone workspace flashes, never crashes" do
       next = Author.apply_coworker_knob!(roster_edit_state(999_999), "amy", :model)
-      assert next.flash =~ "roster entry not found"
+      assert next.flash =~ "not on this bench"
     end
   end
 
