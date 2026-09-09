@@ -4,7 +4,7 @@
 # Included by mise.toml ([task_config] includes); each top-level table is a task.
 
 ["menard"]
-description = "menard: any verb — `mise run menard -- rename OLD NEW [--atoms] [--comments] FILES` · `clause replace|delete|insert-after|insert-before FILE name/arity HEAD [CODE]` · `outline FILE` · `diagnostics [--in DIR]` · `inspect [--in DIR] callers|exports|deps` · `run [--in DIR] check|test|format|compile`"
+description = "menard: any verb (--frozen runs the last build, for editing menard itself) — `mise run menard -- rename OLD NEW [--atoms] [--comments] FILES` · `write FILE CODE` · `clause replace|rewrite|delete|insert-after|insert-before FILE name/arity HEAD [CODE]` · `clause insert-at FILE (Mod|-) [top|bottom] CODE` · `outline FILE` · `diagnostics [--in DIR]` · `inspect [--in DIR] callers|exports|deps` · `run [--in DIR] check|test|format|compile`"
 dir = "modules/menard"
 run = "bin/menard"
 
