@@ -56,12 +56,31 @@ defmodule Console.Panel.StatusBarTest do
     data = base(%{mode: :nav, workspace?: true, pane_hints: [{"j/k", "commits"}, {"⏎", "diff"}]})
     [hints] = StatusBar.render(data, rect())
     line = text([hints])
-    assert line =~ "Alt+0"
+    assert line =~ "^␣ term"
+    assert line =~ "^⇧P commands"
     assert line =~ "c reply"
     assert line =~ "n new"
     assert line =~ "m model"
     assert line =~ "j/k commits"
-    assert line =~ "⏎ diff"
+
+    # The row is ONE line and clips from the right, so the pane's own verbs give first — that
+    # ordering (mode → space → pane, most load-bearing first) is the design. Adding `^⇧P` to the
+    # space segment costs the LAST pane hint at 120 columns; the palette earns the space by being
+    # the one key that finds every other.
+    refute line =~ "⏎ diff"
+  end
+
+  # The row is ONE line and clips from the right, so the pane's own verbs give first — that
+  # ordering (mode → space → pane, most load-bearing first) is the design. Adding `^⇧P` to the
+  # space segment costs the last pane hint at 120 columns; the palette earns the space by being
+  # the one key that finds every other.
+  test "a narrow frame drops the tail pane verb, never the mode chip or the palette chord" do
+    data = base(%{mode: :nav, workspace?: true, pane_hints: [{"j/k", "commits"}, {"⏎", "diff"}]})
+    line = text([hd(StatusBar.render(data, rect()))])
+
+    assert line =~ "^␣ term"
+    assert line =~ "^⇧P commands"
+    refute line =~ "⏎ diff"
   end
 
   test "NAV mode advertises the drawer — the one key that opens the panes the rail no longer holds" do
@@ -97,9 +116,13 @@ defmodule Console.Panel.StatusBarTest do
     refute line =~ "post"
   end
 
-  test "a non-workspace space (mode nil) keeps the shared leader table" do
-    [hints] = StatusBar.render(base(%{}), rect())
-    assert text([hints]) =~ "^␣n new"
+  # The fallback face, before a mode resolves: the two global chords, because they work from
+  # anywhere and the palette is how every other key is found. (It used to advertise `^␣n`-style
+  # verbs of an arm-the-next-key leader that was retired in UX slice 2.)
+  test "a non-workspace space (mode nil) names the global chords" do
+    line = text([hd(StatusBar.render(base(%{}), rect()))])
+    assert line =~ "^⇧K go to"
+    assert line =~ "^⇧P commands"
   end
 
   test "hints keyed on workspace-ness, never the label: a renamed workspace still gets workspace hints" do
@@ -181,12 +204,13 @@ defmodule Console.Panel.StatusBarTest do
       assert line =~ "c reply"
     end
 
-    test "the armed prefix names the state AND what the next key can be" do
+    # The retired leader had a face of its own here ("prefix armed" plus what the next key could
+    # be). With no prefix to arm, that state cannot happen, and the ordinary hints row stands.
+    test "a leader_pending? flag no longer selects a face of its own" do
       line = face(%{leader_pending?: true})
 
-      assert line =~ "prefix armed"
-      assert line =~ "Esc cancel"
-      assert line =~ "n new"
+      refute line =~ "prefix armed"
+      assert line =~ "^⇧K"
     end
 
     test "too narrow for the verbs: the prompt survives and the row stays one line" do

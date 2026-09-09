@@ -265,8 +265,8 @@ defmodule Console.BoardTest do
     test "the footer is a single hints row" do
       assert [hints] = StatusBar.render(status(), %{x: 0, y: 0, w: 120, h: 1})
       joined = row_text(hints)
-      assert joined =~ "quit"
-      assert joined =~ "thread"
+      assert joined =~ "go to"
+      assert joined =~ "commands"
       refute joined =~ "threads "
     end
 

@@ -7,21 +7,32 @@ defmodule Console.Keymap do
 
   **Input model — tmux-style** (see `docs/plans/2026-08-16-aleph-tmux-style-input.md`): the center
   surface owns the keys by default. A **live terminal** in the center forwards every key to its PTY
-  (the terminal is "normal mode"); console's own commands are reached through a `Ctrl+Space` **leader**
-  that arms the *next* key as an console command. NOT Ctrl+B: that's tmux's prefix, and the Tlön
-  center is literal tmux — Ctrl+B forwards like any other key so `C-b 2` reaches the real thing.
-  When there's no live terminal (Orbis' chorus, or a placeholder before a session spawns), console's
-  nav bindings are **bare** — the same command table, reached without the prefix. One command
-  table, two doors. (Ctrl+Space arrives as Kitty CSI-u `\\e[32;5u` → `%{key: :space, ctrl: true}`
-  under the disambiguate mode the cockpit arms on the host.)
+  (the terminal is "normal mode"); `Ctrl+Space` is the STICKY toggle in and out of it, handled by
+  `handle_tlon/2`. NOT Ctrl+B: that's tmux's prefix, and the Tlön center is literal tmux — Ctrl+B
+  forwards like any other key so `C-b 2` reaches the real thing. (Ctrl+Space arrives as Kitty CSI-u
+  `\\e[32;5u` → `%{key: :space, ctrl: true}` under the disambiguate mode the cockpit arms on the host.)
+
+  **The arm-the-next-key leader is GONE** (UX slice 2). It was unreachable: the routing clause
+  `handle(key, %{active_key: k, focus: %Focus{}}) when Space.workspace?(k)` sends every live
+  keypress to `handle_tlon/2`, `Space.workspace?/1` is `is_integer/1` (satisfied even by the
+  server-down sentinel `0`), and the cockpit always carries a `Focus` — so the prefix clauses below
+  it were reached only by tests. Its verbs live in `Console.Verbs`, listed with a sentence each in
+  the `^⇧P` command palette, which is the discoverable door a hidden prefix never was.
+
+  **Two global chords** open the overlays of slice 2: `^⇧K` the switcher (go to any workspace,
+  channel or thread) and `^⇧P` the palette. Ctrl+Shift+letter because nothing in a terminal binds
+  it — a legacy terminal cannot encode it at all, only the Kitty CSI-u this cockpit already arms —
+  so they cost the coworker's shell nothing. They precede the input modal, the drawer and the
+  picker itself, so they open from anywhere and each closes what it opened.
 
   `state` is the slice of cockpit state keys touch: `active_key`, `focused_id`, `threads`,
   `center_live?` (derived per keypress by the cockpit — true when a live terminal is in the
   center), `composer_thread_id` (also derived per keypress — the thread the `c` verb composes
-  onto: the focused thread, or the machine thread in Tlön), `leader_pending?` (the prefix is
-  armed), `input` (the typing modal), `drawer` (the open drawer pane, nil when shut), and
-  `live_workspaces` (the live workspace list, threaded in per keypress — the space ring and
-  CONFIG read it). A `key_event` is the
+  onto: the focused thread, or the machine thread in Tlön), `input` (the typing modal), `drawer`
+  (the open drawer pane, nil when shut), `picker` (the open switcher/palette, nil when shut) with
+  `picker_items` (its live rows, threaded in per keypress so the cursor clamps against the list on
+  screen), and `live_workspaces` (the live workspace list, threaded in per keypress — the space
+  ring and CONFIG read it). A `key_event` is the
   `Raxol.Core.Events.Event` `data` map, e.g. `%{key: :up}` or `%{key: :char, char: "j"}`.
 
   Effects (every one the reducer emits — the cockpit's `apply_effect/2` must cover each):
@@ -107,6 +118,7 @@ defmodule Console.Keymap do
   yolo-flip, now reached from here. This absorbs Settings; Chunk 2b deletes the `,` modal.
   """
   alias Console.Cockpit.Drawer
+  alias Console.Picker
   alias Console.Profiles
   alias Console.Space
   alias Console.Tlon.Focus
@@ -157,6 +169,7 @@ defmodule Console.Keymap do
           | {:edit_workspace, term(), map()}
           | {:coworker_knob, String.t(), :model | :yolo}
           | :tlon_enter
+          | {:picker_pick, map()}
           | {:ticket_move, String.t()}
           | :ticket_advance
           | :stack_delete_arm
@@ -201,6 +214,23 @@ defmodule Console.Keymap do
   # The persistent reply box (2026-09-01): Esc doesn't just drop the input, it steps the whole
   # center back to the thread LIST (`:close_thread_view` clears `opened_thread`) AND drops the draft,
   # so no half-typed reply leaks into the next thread. Precedes the generic Esc below.
+  # `^⇧K` (go to) / `^⇧P` (commands) — the two global chords of UX slice 2. Ctrl+Shift+<letter>
+  # because NOTHING in a terminal binds it: a legacy terminal cannot even encode the combination,
+  # only the Kitty CSI-u this cockpit already arms (`\e[107;6u` / `\e[112;6u`), so taking these
+  # costs the coworker's shell nothing — unlike Slack's own Ctrl+K, which is readline's kill-line.
+  # They sit above the input modal, the drawer AND the picker itself, so they open from anywhere
+  # and each closes what it opened. Some hosts report the SHIFTED letter, hence both cases.
+  def handle(%{key: :char, char: c, ctrl: true, shift: true}, state) when c in ["k", "K"],
+    do: {toggle_picker(state, :switcher), :repaint}
+
+  def handle(%{key: :char, char: c, ctrl: true, shift: true}, state) when c in ["p", "P"],
+    do: {toggle_picker(state, :palette), :repaint}
+
+  # An open PICKER owns every key — it has a query box of its own, so it must precede the input
+  # modal: `^⇧K` from inside the reply box opens the switcher and typing then goes to the switcher,
+  # not the reply. Esc hands the keys back to whatever was underneath, draft intact.
+  def handle(key, %{picker: picker} = state) when not is_nil(picker), do: handle_picker(key, state)
+
   def handle(%{key: :escape}, %{input: %{kind: :reply}} = state), do: {%{state | input: nil}, :close_thread_view}
 
   def handle(%{key: :escape}, %{input: %{}} = state), do: {%{state | input: nil}, :repaint}
@@ -366,7 +396,7 @@ defmodule Console.Keymap do
 
   # Alt+d opens the drawer on the pane it last showed — global, from TERM as well as NAV.
   def handle(%{key: :char, char: "d", alt: true} = k, %{drawer: nil} = state) when not is_map_key(k, :ctrl),
-    do: {Drawer.open(clear_leader(state), state.last_drawer), :repaint}
+    do: {Drawer.open(state, state.last_drawer), :repaint}
 
   # Alt+g arms LOCK — below the modal by design: the modal's catch-all swallows it while typing,
   # so composing can never silently freeze under a lock.
@@ -375,36 +405,33 @@ defmodule Console.Keymap do
 
   # Global Alt chords (design 2026-08-23): work from ANY mode — TERM included — and switch
   # mode implicitly. Workspace-only for movement (there's no pane grid elsewhere); n/c everywhere.
-  # Must precede the Tlön routing clause (which would forward them to tmux from TERM). Each clears
-  # an armed leader (`clear_leader/1`) — these sit above the leader-consumption clause, so without
-  # it Ctrl+Space then an Alt chord would leave the prefix stuck.
+  # Must precede the Tlön routing clause (which would forward them to tmux from TERM).
   # Nav v2 (Andrew 2026-08-31): Alt+Shift+digit → switch to the Nth WORKSPACE; Alt+digit (no shift) →
   # select tmux TAB N in the active workspace. `0` is the 10th. The shift clause is first (more
   # specific). (These replace the old Alt+digit focus-pane jump — pane digits are gone.)
   def handle(%{key: :char, char: d, alt: true, shift: true} = k, %{active_key: key} = state)
       when Space.workspace?(key) and d in ~w(0 1 2 3 4 5 6 7 8 9) and not is_map_key(k, :ctrl),
-      do: {clear_leader(state), {:switch_workspace_pos, digit_pos(d)}}
+      do: {state, {:switch_workspace_pos, digit_pos(d)}}
 
   def handle(%{key: :char, char: d, alt: true} = k, %{active_key: key} = state)
       when Space.workspace?(key) and d in ~w(0 1 2 3 4 5 6 7 8 9) and not is_map_key(k, :ctrl),
-      do: {clear_leader(state), {:select_tab, digit_pos(d)}}
+      do: {state, {:select_tab, digit_pos(d)}}
 
   def handle(%{key: :char, char: c, alt: true} = k, %{active_key: key, focus: %Focus{}} = state)
-      when Space.workspace?(key) and c in ~w(h j k l) and not is_map_key(k, :ctrl),
-      do: {state |> clear_leader() |> alt_move(c), :repaint}
+      when Space.workspace?(key) and c in ~w(h j k l) and not is_map_key(k, :ctrl), do: {alt_move(state, c), :repaint}
 
   # Alt+n / Alt+c reach the shared command table with the modifier stripped (its clauses are
   # modifier-guarded on purpose — a bare-shaped key is the door).
   def handle(%{key: :char, char: "n", alt: true} = k, state) when not is_map_key(k, :ctrl),
-    do: command(%{key: :char, char: "n"}, clear_leader(state))
+    do: command(%{key: :char, char: "n"}, state)
 
   def handle(%{key: :char, char: "c", alt: true} = k, state) when not is_map_key(k, :ctrl),
-    do: command(%{key: :char, char: "c"}, clear_leader(state))
+    do: command(%{key: :char, char: "c"}, state)
 
   # Alt+\ toggles the right SESSION PANE (2026-08-31): show/hide the selected thread's live lead PTY
   # beside the stack. Workspace-only (there's no thread stack elsewhere); global across TERM/NAV.
   def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
-      when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {clear_leader(state), :toggle_session_pane}
+      when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {state, :toggle_session_pane}
 
   # Tlön: the lazygit focus model (design 2026-08-20). The center is a live tmux client, so
   # `Ctrl+Space` is a STICKY toggle in/out of it — NOT the arm-next-key leader other spaces use.
@@ -413,27 +440,6 @@ defmodule Console.Keymap do
   # `focus` (persistent) and `tlon_layout` (derived per keypress, like center_live?) are supplied by
   # the cockpit only for this space; the guard keeps every other space on the leader path below.
   def handle(key, %{active_key: k, focus: %Focus{}} = state) when Space.workspace?(k), do: handle_tlon(key, state)
-
-  # leader pending: Ctrl+Space was pressed; the next key is an console command.
-  # Ctrl+Space again → send a LITERAL Ctrl+Space through (the prefix-twice convention), so an
-  # app that binds it (emacs set-mark!) still gets it. Only with a live terminal to receive it.
-  def handle(%{key: :space, ctrl: true}, %{leader_pending?: true, center_live?: true} = state),
-    do: {%{state | leader_pending?: false}, {:forward, %{key: :space, ctrl: true}}}
-
-  def handle(%{key: :space, ctrl: true}, %{leader_pending?: true} = state), do: {%{state | leader_pending?: false}, :none}
-
-  # Esc cancels a pending prefix without acting — the escape hatch from a half-armed leader.
-  def handle(%{key: :escape}, %{leader_pending?: true} = state), do: {%{state | leader_pending?: false}, :repaint}
-
-  # Any other key while the prefix is armed → run the command, then clear the prefix. The command
-  # table (`command/2`) is the single source of console's bindings, shared with the bare-key path.
-  def handle(key, %{leader_pending?: true} = state) do
-    {next, effect} = command(key, state)
-    {%{next | leader_pending?: false}, effect}
-  end
-
-  # the leader: Ctrl+Space arms the next key as an console command.
-  def handle(%{key: :space, ctrl: true}, state), do: {%{state | leader_pending?: true}, :repaint}
 
   # default: the center surface owns the keys.
   # A live terminal in the center → every key forwards to its PTY. The terminal is "normal mode";
@@ -446,6 +452,60 @@ defmodule Console.Keymap do
 
   # console's command table — one source of bindings, reached two ways: bare in a nav-default
   # space, or via the Ctrl+Space leader from inside a running terminal.
+
+  # The PICKER's key table (UX slice 2). Letters TYPE — it is a query box — so the cursor moves on
+  # ↑↓, ^p/^n and Tab only, which is Slack's quick switcher exactly. `picker_items` is the live row
+  # list, threaded in per keypress by the cockpit (the `live_workspaces` pattern), so the cursor is
+  # clamped against the list actually on screen without this module reading anything.
+  defp handle_picker(%{key: :escape}, state), do: {%{state | picker: nil}, :repaint}
+
+  defp handle_picker(%{key: :enter}, %{picker: picker} = state) do
+    case Picker.selected(picker_items(state), picker) do
+      nil -> {%{state | picker: nil}, :repaint}
+      item -> {%{state | picker: nil}, {:picker_pick, item}}
+    end
+  end
+
+  defp handle_picker(%{key: :backspace}, %{picker: picker} = state),
+    do: {%{state | picker: Picker.backspace(picker)}, :repaint}
+
+  # ^u clears the query without closing — readline's reflex, and the fast way to re-aim a search.
+  defp handle_picker(%{key: :char, char: "u", ctrl: true}, %{picker: picker} = state),
+    do: {%{state | picker: Picker.clear_query(picker)}, :repaint}
+
+  defp handle_picker(%{key: :up}, state), do: move_picker(state, -1)
+  defp handle_picker(%{key: :down}, state), do: move_picker(state, 1)
+
+  # ^p/^n are the readline aliases, for hosts that do not deliver arrows (a nested tmux/SSH hop);
+  # both must precede the printable-insert clause below, which would otherwise type the letter.
+  defp handle_picker(%{key: :char, char: "p", ctrl: true}, state), do: move_picker(state, -1)
+  defp handle_picker(%{key: :char, char: "n", ctrl: true}, state), do: move_picker(state, 1)
+  defp handle_picker(%{key: :tab, shift: true}, state), do: move_picker(state, -1)
+  defp handle_picker(%{key: :tab}, state), do: move_picker(state, 1)
+
+  defp handle_picker(%{key: :char, char: c} = key, %{picker: picker} = state)
+       when is_binary(c) and not is_map_key(key, :alt) and not is_map_key(key, :ctrl),
+       do: {%{state | picker: Picker.type(picker, c)}, :repaint}
+
+  # A space can arrive as %{key: :space} with no char under CSI-u disambiguation — same reason the
+  # input modal carries this clause.
+  defp handle_picker(%{key: :space}, %{picker: picker} = state),
+    do: {%{state | picker: Picker.type(picker, " ")}, :repaint}
+
+  # Anything else is swallowed: the picker covers the frame, so no key may fall through to it.
+  defp handle_picker(_key, state), do: {state, :none}
+
+  defp move_picker(%{picker: picker} = state, delta),
+    do: {%{state | picker: Picker.move(picker, delta, length(picker_items(state)))}, :repaint}
+
+  # Absent in a state built by a test that does not exercise the list; an empty corpus is the right
+  # reading of "no rows", not a crash.
+  defp picker_items(state), do: Map.get(state, :picker_items) || []
+
+  # The chord that opened a picker closes it; the OTHER chord swaps corpus without a trip through
+  # Esc, so ^⇧K and ^⇧P behave like two tabs of one overlay.
+  defp toggle_picker(%{picker: %{kind: kind}} = state, kind), do: %{state | picker: nil}
+  defp toggle_picker(state, kind), do: %{state | picker: Picker.open(kind)}
 
   defp command(%{key: :char, char: "q"}, state), do: {state, :quit}
 
@@ -835,10 +895,6 @@ defmodule Console.Keymap do
   # A digit key to a 1-based position: "1".."9" → 1..9, "0" → 10 (the super+1..0 idiom).
   defp digit_pos("0"), do: 10
   defp digit_pos(d), do: String.to_integer(d)
-
-  # A global Alt chord consumes any armed leader — without this, Ctrl+Space then an Alt chord
-  # leaves the prefix stuck (the next Ctrl+Space would silently disarm instead of arming).
-  defp clear_leader(state), do: Map.put(state, :leader_pending?, false)
 
   # Alt+h/j/k/l: directional pane movement, implicit nav (Focus intents no-op in-terminal, so
   # drop out of the terminal first).

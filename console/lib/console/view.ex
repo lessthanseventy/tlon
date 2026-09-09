@@ -450,7 +450,6 @@ defmodule Console.View do
       # A transient result line (a spawn's pane id or failure), shown until the next keypress.
       flash: reads[:flash],
       # True for the one keypress after Ctrl+Space — the hints line shows the armed-prefix state.
-      leader_pending?: reads[:leader_pending?],
       # The contextual footer's keys (design 2026-08-23) — workspace-ness, never the label.
       mode: footer_mode(reads),
       workspace?: Space.workspace?(reads.active_key),

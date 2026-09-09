@@ -7,7 +7,8 @@ defmodule Console.KeymapTest do
 
   **Input model — tmux-style** (see `docs/plans/2026-08-16-aleph-tmux-style-input.md`): a live
   terminal in the center forwards every key by default; aleph's commands are reached through a
-  `Ctrl+Space` leader (Ctrl+B belongs to tmux in the Tlön center and forwards like any key). With no live terminal, the same commands are bare. `center_live?` is derived by
+  `Ctrl+Space` STICKY toggle (Ctrl+B belongs to tmux in the Tlön center and forwards like any key).
+  With no live terminal the same commands are bare. `center_live?` is derived by
   the cockpit; the tests set it directly. Every binding is asserted here so a regression like
   "Ctrl+C quit aleph again" or "arrows stopped moving focus" is caught headlessly.
   """
@@ -38,12 +39,11 @@ defmodule Console.KeymapTest do
       Map.merge(
         %{
           # the server-down sentinel: a Workspace key with no space (no focus struct either, so
-          # keys reach the command table directly — the leader's path)
+          # keys reach the command table directly, bare)
           active_key: 0,
           focused_id: 2,
           threads: [%{id: 1}, %{id: 2}, %{id: 3}],
           center_live?: false,
-          leader_pending?: false,
           input: nil,
           # the drawer (UX slice 1): CONFIG hosts the Author — its tests open it explicitly
           drawer: nil,
@@ -62,6 +62,9 @@ defmodule Console.KeymapTest do
   end
 
   defp key(k, opts \\ []), do: Enum.into(opts, %{key: k})
+
+  # Ctrl+Space: the STICKY term↔nav toggle in a workspace (it stopped being a leader in slice 2).
+  defp ctrl_space, do: key(:space, ctrl: true)
   defp char(c, opts \\ []), do: Enum.into(opts, %{key: :char, char: c})
 
   # A workspace state with the thread stack as the focused center — the handle_tlon path.
@@ -78,14 +81,6 @@ defmodule Console.KeymapTest do
     state(Map.merge(base, over))
   end
 
-  defp leader, do: key(:space, ctrl: true)
-
-  # A helper: press the leader, then a key, against `state`. Asserts the leader arms the prefix.
-  defp via_leader(next_key, s) do
-    {armed, :repaint} = Keymap.handle(leader(), s)
-    Keymap.handle(next_key, armed)
-  end
-
   describe "Shift+Space normalizes to a plain space" do
     test "in the composer it inserts a space, not a dropped key" do
       s = state(%{input: %{kind: :compose, thread_id: 1, buffer: "a", cursor: 1}})
@@ -98,16 +93,13 @@ defmodule Console.KeymapTest do
       assert {^s, {:forward, %{key: :char, char: " "}}} = Keymap.handle(key(:space, shift: true), s)
     end
 
-    test "Ctrl+Space is untouched — it still arms the leader" do
-      assert {%{leader_pending?: true}, :repaint} = Keymap.handle(key(:space, ctrl: true), state(%{center_live?: true}))
+    test "Ctrl+Space is untouched — it still reaches the terminal as itself" do
+      s = state(%{center_live?: true})
+      assert {^s, {:forward, %{key: :space, ctrl: true}}} = Keymap.handle(key(:space, ctrl: true), s)
     end
   end
 
-  describe "the leader (Ctrl+Space)" do
-    test "Ctrl+Space arms the next key as an aleph command (sets leader_pending?, repaints)" do
-      assert {%{leader_pending?: true}, :repaint} = Keymap.handle(leader(), state())
-    end
-
+  describe "Ctrl+Space, Ctrl+B, Ctrl+C" do
     test "Ctrl+C never quits — it is unbound in nav context (no live terminal)" do
       s = state(%{center_live?: false})
       assert {^s, :none} = Keymap.handle(char("c", ctrl: true), s)
@@ -610,61 +602,40 @@ defmodule Console.KeymapTest do
     end
   end
 
-  describe "commands via the Ctrl+Space leader (reachable from inside a running terminal)" do
-    test "^B q quits even when a terminal is live" do
+  # The arm-the-next-key leader is RETIRED (UX slice 2). It had been unreachable: every live
+  # keypress enters through handle_tlon (Space.workspace?/1 is is_integer/1, satisfied even by the
+  # server-down sentinel 0, and the cockpit always carries a Focus), so the prefix clauses were
+  # reached only by tests like the ones this block replaces. Its verbs are in Console.Verbs, each
+  # with a sentence, behind ^⇧P.
+  describe "the retired Ctrl+Space leader" do
+    test "Ctrl+Space arms nothing — no prefix state is left behind" do
+      {next, _effect} = Keymap.handle(key(:space, ctrl: true), state(%{center_live?: true}))
+      refute Map.has_key?(next, :leader_pending?)
+    end
+
+    test "with a live terminal it forwards as an ordinary key" do
       s = state(%{center_live?: true})
-      assert {%{leader_pending?: false}, :quit} = via_leader(char("q"), s)
+      assert {^s, {:forward, %{key: :space, ctrl: true}}} = Keymap.handle(key(:space, ctrl: true), s)
     end
 
-    test "^B j moves thread focus without forwarding the j to the terminal" do
-      s = state(%{center_live?: true, focused_id: 2})
-      assert {%{focused_id: 3, leader_pending?: false}, :repaint} = via_leader(char("j"), s)
-    end
-
-    test "^B k moves thread focus backward" do
-      s = state(%{center_live?: true, focused_id: 2})
-      assert {%{focused_id: 1, leader_pending?: false}, :repaint} = via_leader(char("k"), s)
-    end
-
-    test "^B Tab switches workspaces" do
-      s = state(%{center_live?: true, active_key: 1, live_workspaces: two_workspaces()})
-      assert {%{active_key: 2, leader_pending?: false}, :repaint} = via_leader(key(:tab), s)
-    end
-
-    test "^B Enter is a no-op since the Slice 0 collapse (no enter-or-spawn verb)" do
-      # The leader lives in the Tlön terminal; there Enter has no top-level verb.
-      s = state(%{center_live?: true, focused_id: 2, active_key: 0})
-      assert {%{leader_pending?: false}, :none} = via_leader(key(:enter), s)
-    end
-
-    test "^B n opens the title input modal (Orbis)" do
-      s = state(%{center_live?: true})
-
-      assert {%{input: %{kind: :new_thread, buffer: ""}, leader_pending?: false}, :repaint} =
-               via_leader(char("n"), s)
-    end
-
-    test "leader twice sends a LITERAL Ctrl+Space through to the terminal (prefix-twice)" do
-      s = state(%{center_live?: true})
-
-      assert {%{leader_pending?: false}, {:forward, %{key: :space, ctrl: true}}} =
-               via_leader(leader(), s)
-    end
-
-    test "leader twice with no live terminal just drops the prefix (nowhere to send it)" do
+    test "with no live terminal it is simply unbound" do
       s = state(%{center_live?: false})
-      assert {%{leader_pending?: false}, :none} = via_leader(leader(), s)
+      assert {^s, :none} = Keymap.handle(key(:space, ctrl: true), s)
     end
 
-    test "^B Esc cancels the pending prefix without acting" do
-      s = state(%{center_live?: true})
-      {armed, :repaint} = Keymap.handle(leader(), s)
-      assert {%{leader_pending?: false}, :repaint} = Keymap.handle(key(:escape), armed)
+    test "the verbs it used to reach are still bare in a nav-default state" do
+      s = state(%{center_live?: false})
+
+      assert {_quit, :quit} = Keymap.handle(char("q"), s)
+      assert {%{input: %{kind: :new_thread}}, :repaint} = Keymap.handle(char("n"), s)
+      assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("j"), s)
     end
 
-    test "^B then an unbound key clears the prefix and no-ops" do
-      s = state(%{center_live?: true})
-      assert {%{leader_pending?: false}, :none} = via_leader(key(:f5), s)
+    test "and each of them is in the palette, so retiring the prefix hid nothing" do
+      labels = Enum.map(Console.Verbs.all(), & &1.label)
+      assert "quit" in labels
+      assert "new thread" in labels
+      assert "term / nav" in labels
     end
   end
 
@@ -721,7 +692,7 @@ defmodule Console.KeymapTest do
       assert {%{input: %{kind: :orchestrate, buffer: ""}}, :repaint} = Keymap.handle(char(":"), state())
     end
 
-    test ": forwards to the terminal when one is live (reach it via the leader)" do
+    test ": forwards to the terminal when one is live — the centre owns the key" do
       s = state(%{center_live?: true})
       assert {^s, {:forward, %{key: :char, char: ":"}}} = Keymap.handle(char(":"), s)
     end
@@ -746,7 +717,7 @@ defmodule Console.KeymapTest do
       assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
     end
 
-    test "z forwards to the terminal when one is live (reach fold via the leader)" do
+    test "z forwards to the terminal when one is live — the centre owns the key" do
       s = state(%{center_live?: true})
       assert {^s, {:forward, %{key: :char, char: "z"}}} = Keymap.handle(char("z"), s)
     end
@@ -891,11 +862,11 @@ defmodule Console.KeymapTest do
       assert {^s, {:forward, %{key: :char, char: "c"}}} = Keymap.handle(char("c"), s)
     end
 
-    test "^B c opens a composer even when a terminal is live" do
+    test "Alt+c opens a composer even when a terminal is live — the chord is the door now" do
       s = state(%{center_live?: true, focused_id: 2})
 
-      assert {%{input: %{kind: :compose, thread_id: 2, buffer: ""}, leader_pending?: false}, :repaint} =
-               via_leader(char("c"), s)
+      assert {%{input: %{kind: :compose, thread_id: 2, buffer: ""}}, :repaint} =
+               Keymap.handle(char("c", alt: true), s)
     end
 
     test "printable keys accumulate into the buffer, not acted on locally" do
@@ -1082,9 +1053,9 @@ defmodule Console.KeymapTest do
       assert {^s, {:cycle_coworker_model, "tertius"}} = Keymap.handle(char("m"), s)
     end
 
-    test "reachable via the leader from inside the live terminal" do
-      s = state(%{active_key: 0, center_live?: true})
-      assert {%{leader_pending?: false}, {:cycle_coworker_model, "tertius"}} = via_leader(char("m"), s)
+    test "reachable bare when the centre is not a live terminal" do
+      s = state(%{active_key: 0, center_live?: false})
+      assert {^s, {:cycle_coworker_model, "tertius"}} = Keymap.handle(char("m"), s)
     end
 
     test "in a space without a coworker (a key no space has), `m` is a no-op" do
@@ -1098,7 +1069,7 @@ defmodule Console.KeymapTest do
       assert {^s, :none} = Keymap.handle(char("m", alt: true), s)
     end
 
-    test "with a live terminal and no leader, `m` types into the terminal like any key" do
+    test "with a live terminal, `m` types into the terminal like any key" do
       s = state(%{active_key: 0, center_live?: true})
       k = char("m")
       assert {^s, {:forward, ^k}} = Keymap.handle(k, s)
@@ -1143,13 +1114,12 @@ defmodule Console.KeymapTest do
     defp nav_focus(overrides \\ %{}), do: struct(Focus.new(), Map.merge(%{in_terminal?: false}, overrides))
 
     test "Ctrl+Space toggles OUT of the terminal into nav mode — it does not arm the leader" do
-      {next, :repaint} = Keymap.handle(leader(), tlon())
+      {next, :repaint} = Keymap.handle(ctrl_space(), tlon())
       assert next.focus.in_terminal? == false
-      assert next.leader_pending? == false
     end
 
     test "Ctrl+Space again toggles back INTO the terminal" do
-      {next, :repaint} = Keymap.handle(leader(), tlon(nav_focus()))
+      {next, :repaint} = Keymap.handle(ctrl_space(), tlon(nav_focus()))
       assert next.focus.in_terminal? == true
     end
 
@@ -1293,9 +1263,9 @@ defmodule Console.KeymapTest do
       assert next.input.buffer == "l"
     end
 
-    test "off a workspace key (a stale one) a present focus struct is ignored — Ctrl+Space arms the leader as before" do
+    test "off a workspace key (a stale one) a present focus struct is ignored — the key forwards" do
       s = state(%{active_key: :stale, center_live?: true, focus: Focus.new()})
-      assert {%{leader_pending?: true}, :repaint} = Keymap.handle(leader(), s)
+      assert {^s, {:forward, %{key: :space, ctrl: true}}} = Keymap.handle(key(:space, ctrl: true), s)
     end
   end
 
@@ -1342,11 +1312,9 @@ defmodule Console.KeymapTest do
       assert {^s, :none} = Keymap.handle(char("4"), s)
     end
 
-    test "a global Alt chord consumes an armed leader — no stuck prefix" do
-      s = state(%{leader_pending?: true})
-      {next, :repaint} = Keymap.handle(char("n", alt: true), s)
+    test "a global Alt chord reaches the shared command table with the modifier stripped" do
+      {next, :repaint} = Keymap.handle(char("n", alt: true), state())
       assert next.input.kind == :new_thread
-      assert next.leader_pending? == false
     end
   end
 

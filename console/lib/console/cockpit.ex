@@ -165,7 +165,10 @@ defmodule Console.Cockpit do
             # re-read from `Console.Workspaces.all/0` every render (Console.Keymap).
             author_edit: nil,
             subscribed_thread: nil,
-            leader_pending?: false,
+            # The open switcher / command palette (UX slice 2): `%{kind, query, cursor}` while `^⇧K`
+            # or `^⇧P` has one up, else nil. Its rows are derived per keypress (`picker_items`),
+            # never stored — the corpus is the frame's own reads.
+            picker: nil,
             # LOCK mode (design 2026-08-23): Alt+g total-passthrough to the center — every other
             # key, Alt chords included, forwards raw so readline/emacs keep their bindings.
             lock?: false,
@@ -393,6 +396,11 @@ defmodule Console.Cockpit do
     cond do
       {x, y} == state.last_left ->
         {:noreply, %{state | last_left: nil}}
+
+      # The picker paints over everything, so it takes the click first: a hit on a row picks it,
+      # anywhere else closes the overlay (click-away), exactly like the menu below.
+      state.picker ->
+        handle_picker_click(Mouse.hit_panel(Enum.reverse(state.placements), x, y), y, %{state | last_left: {x, y}})
 
       # An open overlay menu captures the click: a hit on a menu row runs its action; anywhere else
       # dismisses it (click-away), without falling through to the panel underneath.
@@ -796,10 +804,27 @@ defmodule Console.Cockpit do
   def reset_scrolls(%{active_key: a}, %{active_key: a2} = next) when a != a2, do: %{next | scrolls: %{}}
   def reset_scrolls(_prev, next), do: next
 
+  # Switching workspace for a jump: the same reset a rail click does, and a no-op when the target is
+  # already the active one (so a jump inside this workspace keeps its scroll offsets).
+  defp switch_to_workspace(%{active_key: key} = state, key), do: state
+
+  defp switch_to_workspace(state, workspace_id),
+    do: reset_scrolls(state, %{state | active_key: workspace_id, open_channel: nil, flash: nil})
+
   defp handle_menu_click({Panel.Menu, data, rect}, y, state),
     do: {:noreply, render(Author.apply_menu(Panel.Menu.pick(data, rect, y - rect.y), state))}
 
   defp handle_menu_click(_hit, _y, state), do: {:noreply, render(%{state | menu: nil})}
+
+  defp handle_picker_click({Panel.Picker, data, rect}, y, state) do
+    case Panel.Picker.pick(data, rect, y - rect.y) do
+      {:picker_pick, item} -> apply_effect({:picker_pick, item}, %{state | picker: nil})
+      _miss -> {:noreply, render(state)}
+    end
+  end
+
+  # A click anywhere outside the overlay closes it, the same click-away the menu has.
+  defp handle_picker_click(_hit, _y, state), do: {:noreply, render(%{state | picker: nil})}
 
   # An overlay's key handler answers the next state, or `:ignore` for a swallowed key (no repaint).
   defp overlay_reply(:ignore, state), do: {:noreply, state}
@@ -1022,6 +1047,31 @@ defmodule Console.Cockpit do
 
   defp apply_effect(:open_focused_thread, %{stack_focus: id} = state) when is_integer(id),
     do: apply_effect({:open_thread_view, id}, state)
+
+  # The picker's Enter (UX slice 2). A switcher row JUMPS: it switches workspace first when the
+  # target lives in another one, then opens the channel or the thread (opening a thread already
+  # opens its channel). A palette row REPLAYS its key event through the keymap, so a verb picked
+  # from the list and the same verb pressed as a key are the same code path and cannot drift.
+  defp apply_effect({:picker_pick, %{kind: :workspace, workspace_id: id}}, state),
+    do: apply_pick({:switch_space, id}, state)
+
+  defp apply_effect({:picker_pick, %{kind: :channel, workspace_id: ws, channel_id: id}}, state),
+    do: apply_pick({:open_channel, id}, switch_to_workspace(state, ws))
+
+  defp apply_effect({:picker_pick, %{kind: :thread, workspace_id: ws, thread_id: id}}, state),
+    do: apply_effect({:open_thread_view, id}, switch_to_workspace(state, ws))
+
+  # A doc-only row (no single key, or a consequential verb the palette refuses to fire) names its
+  # keycap instead of doing nothing silently.
+  defp apply_effect({:picker_pick, %{kind: :verb, event: nil} = row}, state),
+    do: {:noreply, render(%{state | flash: "#{row.keys} — press it in the frame"})}
+
+  defp apply_effect({:picker_pick, %{kind: :verb, event: event}}, state) do
+    {next, effect} = Keymap.handle(event, keymap_state(state))
+    apply_effect(effect, drop_derived(next))
+  end
+
+  defp apply_effect({:picker_pick, _row}, state), do: {:noreply, render(state)}
 
   defp apply_effect(:open_focused_thread, state), do: {:noreply, state}
 
@@ -1262,7 +1312,7 @@ defmodule Console.Cockpit do
   # keypress (never stored — `drop_derived/1` takes them off again on the way back).
   defp keymap_state(state) do
     %{state | flash: nil}
-    # A live PTY only "owns" the keys when it's the shown center — with the thread stack up
+    # A live PTY only "owns" the keys when it is the shown center — with the thread stack up
     # (center_view :chat, Slice 3) keys drive the stack (j/k/z/Z), never a hidden terminal.
     |> Map.put(:center_live?, state.center_view != :chat and Reads.center_terminal(state) != nil)
     # handle_tlon needs center_view to route center-focus keys to the STACK (not forward to tmux).
@@ -1273,9 +1323,46 @@ defmodule Console.Cockpit do
     |> Map.put(:composer_thread_id, Reads.composer_thread_id(state))
     |> Map.put(:tlon_layout, Reads.tlon_layout(state))
     |> Map.put(:live_workspaces, Console.Workspaces.all())
+    # The open picker's live rows (UX slice 2), derived per keypress like the reads above: the keymap
+    # clamps its cursor against them and Enter resolves one, without this pure reducer fetching a list.
+    # Nil while the picker is shut, so a closed overlay costs nothing.
+    |> Map.put(:picker_items, picker_items(state))
   end
 
-  defp drop_derived(next), do: Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :live_workspaces])
+  defp drop_derived(next),
+    do: Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :live_workspaces, :picker_items])
+
+  # The picker's rows for THIS keypress, off the last painted frame's reads — the switcher matches
+  # the rail's own sidebar groups, so it can never show a thread the rail does not.
+  defp picker_items(%{picker: nil}), do: nil
+  defp picker_items(%{picker: picker} = state), do: Console.Picker.entries(picker, state)
+
+  # The picker overlay paints LAST, over everything including the drawer and a context menu: it is
+  # the one surface that is always reachable, so it is always on top. A centred box, sized to its
+  # widest row within the frame, tall enough for the query line, the rule and a page of rows.
+  defp picker_placements(%{picker: nil}), do: []
+
+  defp picker_placements(%{picker: picker, w: w, h: h} = state) do
+    items = Console.Picker.entries(picker, state)
+    data = %{items: items, query: picker.query, cursor: picker.cursor}
+
+    box_w = data |> Panel.Picker.width() |> max(40) |> min(w - 4) |> max(1)
+    box_h = (length(items) + 4) |> max(6) |> min(h - 4) |> max(3)
+    rect = %{x: (w - box_w) |> div(2) |> max(0), y: (h - box_h) |> div(3) |> max(1), w: box_w, h: box_h}
+
+    border = %{
+      focused: true,
+      digit: nil,
+      title: Console.Picker.title(picker),
+      tabs: nil,
+      hint: Console.Picker.hint(picker)
+    }
+
+    [
+      {Panel.Border, border, rect},
+      {Panel.Picker, data, %{x: rect.x + 2, y: rect.y + 1, w: max(rect.w - 4, 1), h: max(rect.h - 2, 1)}}
+    ]
+  end
 
   # Arm one coalesced render if none is armed. The first terminal event in a burst schedules
   # the :render; the rest see the flag set and do nothing — the single :render picks up the
@@ -1346,7 +1433,8 @@ defmodule Console.Cockpit do
       View.compose(reads, state.w, state.h) ++
         lazygit_placements(state) ++
         Drawer.placements(Map.put(state, :reads, reads), state.w, state.h) ++
-        Author.menu_placements(state.menu, state.w, state.h)
+        Author.menu_placements(state.menu, state.w, state.h) ++
+        picker_placements(state)
 
     placements
     |> Board.compose(state.w, state.h)

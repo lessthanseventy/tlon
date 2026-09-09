@@ -4,36 +4,23 @@ defmodule Console.Panel.StatusBar do
   space verbs → the focused pane's own), keycaps lit against dim labels. Where you are and who is
   on it belongs to `Console.Panel.TopBar` now.
 
-  While an input is open (compose, new ticket/note/workspace/path/roster) or a flash/leader prefix
-  is live, that state takes the row instead: the prompt on the left, its verbs right-aligned on the
-  SAME row, the least important verb dropped first when the frame is too narrow for all of them.
+  While an input is open (compose, new ticket/note/workspace/path/roster) or a flash is live, that
+  state takes the row instead: the prompt on the left, its verbs right-aligned on the SAME row, the
+  least important verb dropped first when the frame is too narrow for all of them.
   """
   @behaviour Console.Panel
 
   alias Console.Panel
 
-  # {keycap, label} pairs — keycaps lit in amber, labels dim. The tmux-style model: the center
-  # owns the keys by default, so console's commands are reached through the ^B leader. (In a
-  # nav-default space — no live terminal — these are also bare; the hints name the universal path.)
+  # {keycap, label} pairs — keycaps lit in amber, labels dim. The fallback face, shown before a
+  # mode resolves: the two global chords first, since they are the ones that work from anywhere and
+  # the palette is how you find every other key. (The ^␣-prefixed table this replaced advertised an
+  # arm-the-next-key leader that was retired in UX slice 2 — it had been unreachable for months.)
   @hints [
-    {"^␣", "console"},
-    {"^␣n", "new"},
-    {"^␣c", "reply"},
-    {"^␣⏎", "spawn"},
-    {"^␣Tab", "space"},
-    {"^␣↑↓", "thread"},
-    {"^␣q", "quit"}
-  ]
-  # What the armed prefix accepts next — @hints without the ^␣ prefix, since the prefix is already
-  # down. Esc leads: the escape hatch is the one verb that must survive a narrow frame.
-  @leader_hints [
-    {"Esc", "cancel"},
-    {"n", "new"},
-    {"c", "reply"},
-    {"⏎", "spawn"},
-    {"Tab", "space"},
-    {"↑↓", "thread"},
-    {"q", "quit"}
+    {"^⇧K", "go to"},
+    {"^⇧P", "commands"},
+    {"Alt+d", "drawer"},
+    {"^␣", "term"}
   ]
 
   @impl Panel
@@ -138,14 +125,6 @@ defmodule Console.Panel.StatusBar do
     Panel.clip([prompt_row(info, assemble_hints(data), rect.w)], rect)
   end
 
-  # The prefix is armed (Ctrl+Space was pressed, awaiting the next key) — the state plus what the
-  # next key can be, so the operator knows the key is console's, not the terminal's.
-  @impl Panel
-  def render(%{leader_pending?: true}, rect) do
-    info = [{" ", :normal}, {"▸ ^␣ ", :accent}, {"prefix armed", :normal}]
-    Panel.clip([prompt_row(info, @leader_hints, rect.w)], rect)
-  end
-
   # The default face: hints only. The old info row (mode chip, space, thread, counts) moved to
   # Panel.TopBar with UX slice 1; HEALTH goes to the drawer.
   @impl Panel
@@ -183,7 +162,9 @@ defmodule Console.Panel.StatusBar do
   end
 
   defp mode_seg(:term), do: [{"Alt+#", "panes"}, {"^␣", "nav"}]
-  defp mode_seg(:nav), do: [{"Alt+0", "term"}, {"q", "quit"}]
+  # `^␣` is the way back into the terminal (the sticky toggle) — the old "Alt+0" here named a key
+  # that selects tmux tab 10, which is not what it claimed to do.
+  defp mode_seg(:nav), do: [{"^␣", "term"}, {"q", "quit"}]
   defp mode_seg(:lock), do: [{"Alt+g", "unlock"}]
   # The open drawer owns every key (Console.Cockpit.Drawer): only its own verbs, plus the open
   # pane's, are live — the NAV face's would be dead hints under it.
@@ -191,6 +172,7 @@ defmodule Console.Panel.StatusBar do
 
   defp space_seg(%{mode: :nav, workspace?: true} = data) do
     [
+      {"^⇧P", "commands"},
       {"Alt+d", "drawer"},
       {"c", "reply"},
       {"n", "new"},
