@@ -545,4 +545,38 @@ defmodule Console.ProfilesTest do
       assert reviewer.model.model == "claude-sonnet-5"
     end
   end
+
+  describe "the config dir is keyed by workspace (UX slice 5)" do
+    test "materialises into config_dir — the path the launcher actually points pi at" do
+      profile = %Profile{name: "amy", archetype: :builder, workspace_id: 7}
+
+      assert Profiles.config_dir(profile) =~ "/profiles/w7/amy"
+    end
+
+    test "a workspace-less profile keeps the flat dir" do
+      profile = %Profile{name: "amy", archetype: :builder}
+
+      refute Profiles.config_dir(profile) =~ "/w"
+      assert Profiles.config_dir(profile) =~ "/profiles/amy"
+    end
+
+    test "materialise! writes WHERE config_dir says — the two cannot disagree" do
+      root = Path.join(System.tmp_dir!(), "mat_#{System.unique_integer([:positive])}")
+      base = Path.join(root, "agent")
+      File.mkdir_p!(base)
+      File.write!(Path.join(base, "settings.json"), "{}")
+      File.write!(Path.join(base, "mcp.json"), ~s({"mcpServers":{}}))
+      on_exit(fn -> File.rm_rf!(root) end)
+
+      previous = System.get_env("PI_CODING_AGENT_DIR")
+      System.put_env("PI_CODING_AGENT_DIR", base)
+      on_exit(fn -> if previous, do: System.put_env("PI_CODING_AGENT_DIR", previous) end)
+
+      profile = %Profile{name: "amy", archetype: :builder, workspace_id: 7}
+      dir = Profiles.materialise!(profile)
+
+      assert dir == Profiles.config_dir(profile)
+      assert File.exists?(Path.join(dir, "settings.json"))
+    end
+  end
 end

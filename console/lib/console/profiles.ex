@@ -825,7 +825,12 @@ defmodule Console.Profiles do
   def materialise!(%Profile{} = p, opts \\ []) do
     base = opts[:base] || Path.join(base_dir_root(), "agent")
     root = opts[:root] || Path.join(base_dir_root(), "profiles")
-    dir = Path.join(root, p.name)
+    # The dir MUST be `config_dir/1`: the launcher points pi at that path, and materialising anywhere
+    # else writes a config the coworker never reads. pi-permission-system fail-closes on a missing
+    # config, so the two disagreeing is a coworker that silently will not start (2026-09-09: after
+    # config_dir became workspace-keyed, this still wrote the flat path).
+
+    dir = if opts[:root], do: Path.join(root, p.name), else: config_dir(p)
     File.mkdir_p!(dir)
 
     base_settings = read_json(Path.join(base, "settings.json"), %{})
