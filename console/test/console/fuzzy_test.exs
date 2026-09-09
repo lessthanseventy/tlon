@@ -9,13 +9,13 @@ defmodule Console.FuzzyTest do
     end
 
     test "a subsequence matches, a non-subsequence does not" do
-      assert Fuzzy.match("cockpit slice", "cps") != nil
+      assert Fuzzy.match("cockpit slice", "cps")
       assert Fuzzy.match("cockpit slice", "spc") == nil
     end
 
     test "is case-insensitive both ways" do
-      assert Fuzzy.match("Cockpit", "ck") != nil
-      assert Fuzzy.match("cockpit", "CK") != nil
+      assert Fuzzy.match("Cockpit", "ck")
+      assert Fuzzy.match("cockpit", "CK")
     end
 
     test "a word-start run outranks the same letters scattered mid-word" do

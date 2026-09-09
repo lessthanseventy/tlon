@@ -34,9 +34,9 @@ defmodule Console.Fuzzy do
   """
   @spec match(String.t(), String.t()) :: integer() | nil
   def match(subject, query) do
-    case String.downcase(query) |> String.graphemes() do
+    case query |> String.downcase() |> String.graphemes() do
       [] -> 0
-      q -> walk(String.downcase(subject) |> String.graphemes(), q, nil, 0, 0, nil)
+      q -> subject |> String.downcase() |> String.graphemes() |> walk(q, nil, 0, 0, nil)
     end
   end
 
@@ -48,8 +48,7 @@ defmodule Console.Fuzzy do
   defp walk([c | rest], [c | q_rest], prev, i, score, prev_char),
     do: walk(rest, q_rest, i, i + 1, score + hit_bonus(prev, i, prev_char), c)
 
-  defp walk([c | rest], query, prev, i, score, _prev_char),
-    do: walk(rest, query, prev, i + 1, score - @penalty_gap, c)
+  defp walk([c | rest], query, prev, i, score, _prev_char), do: walk(rest, query, prev, i + 1, score - @penalty_gap, c)
 
   defp hit_bonus(prev, i, prev_char) do
     cond do
