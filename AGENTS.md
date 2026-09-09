@@ -97,12 +97,17 @@ you named change). It is three doors onto one library — mix tasks, the `menard
 Claude Code, and the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb`
 tools scoped to their worktree. Use it for every Elixir edit and search:
 
-- `clause replace|delete|insert-after|insert-before FILE [Mod.]name/arity HEAD [CODE]` — one
-  clause, addressed by its head as written (guard included, parens optional). In a file with
+- `clause replace|delete|insert-after|insert-before FILE [Mod.]name/arity HEAD [CODE] [--nth N]` —
+  one clause, addressed by its head as written (guard included, parens optional). In a file with
   several modules, qualify the name (`Menard.MCP.Clause.execute/2`); a bare name they share is
-  refused. A miss lists the heads that exist — read it, don't guess again.
+  refused. A miss lists the heads that exist — read it, don't guess again. Two clauses CAN share a
+  head (an insert beside its twin); that is refused with both line numbers, and `--nth` says which.
 - `clause rewrite … HEAD CODE` — the WHOLE clause, head included. The verb for changing args,
-  adding a guard, destructuring a parameter; `replace` only ever swaps a body.
+  adding a guard, destructuring a parameter; `replace` only ever swaps a body. `CODE` may lead with
+  the clause's comment, which then replaces the one already there.
+- `clause doc|comment FILE name/arity HEAD [TEXT]` — the `@doc` above a clause, or the `#` comment
+  above it. Prose in, `#`/heredoc added; no TEXT deletes it. Both are string literals no other verb
+  reaches — this is why a docstring or a `why` used to mean editing the file as text.
 - `clause insert-at FILE (Mod.Name|-) [top|bottom] CODE` — a whole new FUNCTION, which has no
   sibling clause to anchor to. Placement follows the code: a `defp` lands with the other private
   functions, a `def` with the public ones. (A new *clause* of an existing function is
@@ -116,8 +121,11 @@ tools scoped to their worktree. Use it for every Elixir edit and search:
 - `attr get|set|delete|list FILE NAME [VALUE]` — module attributes: `@hints`, `@colors`, `@panes`.
   A name that repeats per clause (`@doc`, `@impl`, `@spec`) is refused — those belong to the clause
   verbs, which already carry them.
-- `block get|replace|list FILE NAME [CODE] [--label X]` — a macro's `do` block (`schema do`,
-  `describe "…" do`). `--label` is its first string argument.
+- `block get|replace|add|relabel|list FILE NAME [CODE] [--label X] [--in PARENT]` — a macro's `do`
+  block (`schema do`, `describe "…" do`). `--label` is its first string argument; `--in` names a
+  parent to append inside, either a labelled block or a MODULE. `relabel FILE NAME OLD NEW` renames
+  a `test`/`describe` label. A schema field lives here (`block replace FILE schema … --label <table>`),
+  not in the clause verbs.
 - `directive add|remove|list FILE alias|import|require|use MOD [OPTS]` — placed in Elixir's
   conventional order (use → import → alias → require, alphabetised), so the next format pass does
   not move it.

@@ -4,7 +4,7 @@
 # Included by mise.toml ([task_config] includes); each top-level table is a task.
 
 ["menard"]
-description = "menard: any verb (--frozen runs the last build, for editing menard itself) — `mise run menard -- rename OLD NEW [--atoms] [--comments] FILES` · `write FILE CODE` · `clause replace|rewrite|delete|insert-after|insert-before FILE name/arity HEAD [CODE]` · `clause insert-at FILE (Mod|-) [top|bottom] CODE` · `attr get|set|delete|list FILE NAME [VALUE]` · `block get|replace|list FILE NAME [CODE]` · `directive add|remove|list FILE KIND MOD` · `module add|list FILE [CODE]` · `deps FILE name/arity` · `clause visibility FILE name/arity public|private` · `outline FILE` · `diagnostics [--in DIR]` · `inspect [--in DIR] callers|exports|deps` · `run [--in DIR] check|test|format|compile`"
+description = "menard: any verb (--frozen runs the last build, for editing menard itself) — `mise run menard -- rename OLD NEW [--atoms] [--comments] FILES` · `write FILE CODE` · `clause replace|rewrite|delete|insert-after|insert-before FILE name/arity HEAD [CODE] [--nth N]` · `clause insert-at FILE (Mod|-) [top|bottom] CODE` · `attr get|set|delete|list FILE NAME [VALUE]` · `block get|replace|add|relabel|list FILE NAME [CODE]` · `directive add|remove|list FILE KIND MOD` · `module add|list FILE [CODE]` · `deps FILE name/arity` · `clause doc|comment FILE name/arity HEAD [TEXT]` · `clause visibility FILE name/arity public|private` · `outline FILE` · `diagnostics [--in DIR]` · `inspect [--in DIR] callers|exports|deps` · `run [--in DIR] check|test|format|compile`"
 dir = "modules/menard"
 run = "bin/menard"
 
