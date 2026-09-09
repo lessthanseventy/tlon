@@ -402,7 +402,9 @@ defmodule Console.Staffing do
   """
   @spec boot_script(String.t(), String.t()) :: String.t()
   def boot_script(exports, command),
-    do: "export TERM=xterm-256color\n" <> exports <> "\n" <> cd_worktree() <> "\nexec " <> command
+    do:
+      close_inherited_fds() <>
+        "\nexport TERM=xterm-256color\n" <> exports <> "\n" <> cd_worktree() <> "\nexec " <> command
 
   @doc """
   The line every harness boot takes after sourcing the exports: into the thread's worktree
@@ -411,6 +413,16 @@ defmodule Console.Staffing do
   """
   @spec cd_worktree() :: String.t()
   def cd_worktree, do: ~s([ -n "$TLON_CWD" ] && cd "$TLON_CWD")
+
+  @doc """
+  The boot script's first line: close every fd above stderr. The centre's PTY is libghostty's
+  `forkpty` + `execvp` (no fd hygiene), so the child starts with the beam's listening sockets —
+  and one of them, `mix console.run`'s build-lock port, rode into a coworker's tmux server on
+  2026-09-08: tmux held the port without accepting, every later `mix` in modules/console hung
+  in SYN-SENT probing "is the lock holder alive". Nothing a coworker runs needs a beam fd.
+  """
+  @spec close_inherited_fds() :: String.t()
+  def close_inherited_fds, do: ~s|for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done 2>/dev/null|
 
   # The identity minter for a tail-window spawn — defaults to the live server join (mints in-node
   # against the Repo/tokens), overridable via `:console, :tlon_join` so a test drives `ensure_windows`
