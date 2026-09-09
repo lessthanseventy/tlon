@@ -1552,6 +1552,37 @@ defmodule Console.KeymapTest do
       assert {_s, :toggle_session_pane} = Keymap.handle(char("\\", alt: true), reply_drawer())
     end
 
+    test "Ctrl+Space toggles term↔nav from inside the reply box — the way OUT of the terminal" do
+      s = reply_drawer()
+
+      {next, :repaint} = Keymap.handle(ctrl_space(), s)
+
+      refute next.focus.in_terminal?
+      assert next.input.buffer == "half typed", "the draft is focus, not text — it survives"
+    end
+
+    test "with the drawer open, Ctrl+Space belongs to the drawer, not the terminal toggle" do
+      {open, :repaint} = Keymap.handle(char("d", alt: true), reply_drawer())
+
+      assert {^open, :none} = Keymap.handle(ctrl_space(), open)
+    end
+
+    test "the LEGACY NUL encoding of Ctrl+Space toggles too — tmux never sends the Kitty form" do
+      # raxol decodes a bare NUL as a ctrl-modified space CHAR; the Kitty CSI-u form is :space.
+      legacy = %{key: :char, char: " ", ctrl: true}
+      s = reply_drawer(%{input: nil})
+
+      {next, :repaint} = Keymap.handle(legacy, s)
+      refute next.focus.in_terminal?
+    end
+
+    test "the legacy encoding does not type a space into the reply box" do
+      s = reply_drawer()
+
+      {next, :repaint} = Keymap.handle(%{key: :char, char: " ", ctrl: true}, s)
+      assert next.input.buffer == "half typed", "ctrl+space is a toggle, never text"
+    end
+
     test "Alt+g, Alt+n and Alt+digit stay SWALLOWED while the box is live — each would break a draft" do
       s = reply_drawer()
 

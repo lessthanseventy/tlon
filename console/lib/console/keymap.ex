@@ -217,6 +217,13 @@ defmodule Console.Keymap do
   def handle(%{key: :space, shift: true} = key, state) when not is_map_key(key, :ctrl),
     do: handle(%{key: :char, char: " "}, state)
 
+  # Ctrl+Space arrives in TWO encodings and the cockpit only understood one. Under the Kitty
+  # disambiguate mode it is `\e[32;5u` → %{key: :space, ctrl: true}; without it — which is every
+  # tmux-hosted cockpit, since tmux sends the legacy byte whatever `extended-keys` says — it is a
+  # bare NUL, which raxol decodes as a ctrl-modified SPACE CHAR. Normalize to the canonical form up
+  # front, the same way Shift+Space is normalized above, so one key means one thing downstream.
+  def handle(%{key: :char, char: " ", ctrl: true}, state), do: handle(%{key: :space, ctrl: true}, state)
+
   # tertius y/n confirm gate (Slice 3.5): a consequential verb (open work / approve a gate) was
   # routed and is armed, waiting on the operator — the whole point is that a command line you talk into
   # NEVER fires a consequential action without a yes. While `pending_confirm` is set every key belongs
@@ -271,6 +278,12 @@ defmodule Console.Keymap do
 
   def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
       when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {state, :toggle_session_pane}
+
+  # Ctrl+Space — the sticky term↔nav toggle — is global for the same reason: it moves FOCUS, never
+  # text, so the draft is untouched. It sat below the input modal, and the reply box is focused the
+  # whole time a thread is open, so the one key that gets you out of the terminal was dead there.
+  def handle(%{key: :space, ctrl: true}, %{active_key: k, focus: %Focus{}} = state) when Space.workspace?(k),
+    do: {focus_intent(state, :toggle_terminal), :repaint}
 
   def handle(%{key: :escape}, %{input: %{kind: :reply}} = state), do: {%{state | input: nil}, :close_thread_view}
 
@@ -594,11 +607,6 @@ defmodule Console.Keymap do
 
   defp handle_tlon(_key, %{tlon_delete: target} = state) when not is_nil(target),
     do: {%{state | tlon_delete: nil}, :repaint}
-
-  # Tlön focus routing. Ctrl+Space toggles the terminal; in the terminal every key forwards;
-  # out of it the nav keys drive the focus SM and the bare commands (quit, space-switch, composer,
-  # driver ring) stay reachable. Anything else no-ops — nav mode never leaks a key to tmux.
-  defp handle_tlon(%{key: :space, ctrl: true}, state), do: {focus_intent(state, :toggle_terminal), :repaint}
 
   # The thread stack is the shown center (center_view :chat, Slice 3) and it's the focused surface
   # (in_terminal? — the center owns the keys): drive the STACK directly instead of forwarding to a
