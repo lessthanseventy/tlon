@@ -62,4 +62,27 @@ defmodule Console.Panel.TicketBoardTest do
     tickets = [%{id: 1, status: "doing"}, %{id: 2, status: "backlog"}]
     assert [[%{id: 2}], [], [%{id: 1}], []] = TicketBoard.by_column(tickets)
   end
+
+  describe "blocked badges (UX slice 4)" do
+    test "a blocked card carries the badge; an unblocked one carries none" do
+      blocked = %{id: 1, title: "waiting", status: "todo", priority: "med", assignee: nil, blocked?: true}
+      clear = %{id: 2, title: "ready", status: "todo", priority: "med", assignee: nil, blocked?: false}
+
+      shown = text(TicketBoard.render(%{tickets: [blocked, clear], cursor: nil}, rect()))
+
+      assert shown =~ "⊘ blocked"
+      # exactly one badge — the point of the mark is that it is rare
+      assert length(String.split(shown, "⊘ blocked")) - 1 == 1
+    end
+
+    test "a card with no blocked? key at all renders without a badge" do
+      card = %{id: 1, title: "legacy row", status: "todo", priority: "med", assignee: nil}
+      refute text(TicketBoard.render(%{tickets: [card], cursor: nil}, rect())) =~ "blocked"
+    end
+
+    test "the footer advertises the reorder keys" do
+      caps = %{} |> TicketBoard.hints() |> Enum.map(&elem(&1, 0))
+      assert "J/K" in caps
+    end
+  end
 end

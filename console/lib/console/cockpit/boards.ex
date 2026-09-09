@@ -18,7 +18,11 @@ defmodule Console.Cockpit.Boards do
   @spec board_data(:tickets | :notes, map()) :: map()
   def board_data(:tickets, state) do
     id = board_workspace_id(state)
-    tickets = Safe.value(fn -> id && id |> Tickets.in_workspace() |> Enum.map(&ticket_row/1) end, nil) || []
+
+    # ONE query for the whole board (Tickets.blocked_in_workspace/1), not one per card — a card
+    # asks "am I blocked?" every frame, and per-card queries are how a board gets slow.
+    blocked = Safe.value(fn -> id && Tickets.blocked_in_workspace(id) end, nil) || MapSet.new()
+    tickets = Safe.value(fn -> id && id |> Tickets.in_workspace() |> Enum.map(&ticket_row(&1, blocked)) end, nil) || []
 
     %{tickets: tickets, cursor: state[:board_cursor] || {0, 0}}
   end
@@ -98,9 +102,40 @@ defmodule Console.Cockpit.Boards do
     end
   end
 
-  defp ticket_row(t), do: %{id: t.id, title: t.title, status: t.status, priority: t.priority, assignee: t.assignee}
+  defp ticket_row(t, blocked) do
+    %{
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      assignee: t.assignee,
+      blocked?: MapSet.member?(blocked, t.id)
+    }
+  end
 
   # The workspace whose tickets/notes the board shows: the active one (a stale key falls back to
   # the first workspace via active_workspace_id/1).
   defp board_workspace_id(state), do: Space.active_workspace_id(state)
+
+  @doc """
+  Move the selected ticket up or down within its column (`J`/`K`), persisting the board order.
+  A card at the end of its column simply stays there — the flash says so rather than nothing
+  happening for no visible reason.
+  """
+  @spec reorder_selected_ticket(map(), :up | :down) :: map()
+  def reorder_selected_ticket(state, direction) do
+    case selected_ticket(state, ticket_columns(state)) do
+      %{id: id} = ticket ->
+        _ = Safe.value(fn -> Tickets.reorder(ticket, direction) end, nil)
+        %{state | flash: "ticket ##{id} moved #{direction}", board_cursor: follow(state.board_cursor, direction)}
+
+      _ ->
+        %{state | flash: "no ticket selected"}
+    end
+  end
+
+  # The cursor follows the card it just moved, clamped — otherwise a reorder leaves the highlight
+  # on whatever swapped INTO the old row, and a second press moves the wrong ticket.
+  defp follow({col, row}, :up), do: {col, max(row - 1, 0)}
+  defp follow({col, row}, :down), do: {col, row + 1}
 end

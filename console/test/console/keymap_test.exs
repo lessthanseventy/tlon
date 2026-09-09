@@ -1451,4 +1451,28 @@ defmodule Console.KeymapTest do
       assert typed.drawer == :tickets
     end
   end
+
+  describe "the TICKETS pane's reorder keys (UX slice 4)" do
+    test "J and K reorder the selected ticket within its column" do
+      s = state(%{drawer: :tickets})
+
+      assert {^s, {:ticket_reorder, :down}} = Keymap.handle_drawer(char("J"), s)
+      assert {^s, {:ticket_reorder, :up}} = Keymap.handle_drawer(char("K"), s)
+    end
+
+    test "they are the TICKETS pane's own — another pane still takes j/k as a cursor move" do
+      s = state(%{drawer: :memory})
+
+      # `J` is not a vertical key anywhere (only j/k and the arrows are), so off the TICKETS pane it
+      # is simply unbound — never a reorder aimed at a board that is not on screen.
+      assert {^s, :none} = Keymap.handle_drawer(char("J"), s)
+    end
+
+    test "lowercase j/k still move the kanban cursor, not the card" do
+      s = state(%{drawer: :tickets})
+
+      assert {^s, {:ticket_move, "j"}} = Keymap.handle_drawer(char("j"), s)
+      assert {^s, {:ticket_move, "k"}} = Keymap.handle_drawer(char("k"), s)
+    end
+  end
 end

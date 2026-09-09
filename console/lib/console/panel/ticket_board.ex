@@ -2,8 +2,13 @@ defmodule Console.Panel.TicketBoard do
   @moduledoc """
   The Tickets **kanban** (Slice D3, 2026-09-01): the workspace's lightweight tracker as side-by-side
   status columns (backlog · todo · doing · done), each a stack of gutter-cards. A `{col, row}` cursor
-  (or nil) highlights the selected ticket; the cockpit drives it (h/l/j/k move · p advance · n file ·
-  Esc close). Pure render: `%{tickets: [%{id, title, status, priority, assignee}], cursor: {c, r} | nil}`.
+  (or nil) highlights the selected ticket; the cockpit drives it (H/L·j/k move · J/K reorder ·
+  p advance · n file · ⏎ promote · Esc close). Pure render:
+  `%{tickets: [%{id, title, status, priority, assignee, blocked?}], cursor: {c, r} | nil}`.
+
+  A card carries `⊘ blocked` when an unfinished ticket `blocks` it (UX slice 4). That is a read of
+  the links — `Server.Tickets.blocked_in_workspace/1`, one query for the whole board — not a field
+  on the ticket, so a card can never claim to be blocked by something already done.
   """
   @behaviour Console.Panel
 
@@ -18,7 +23,7 @@ defmodule Console.Panel.TicketBoard do
 
   @impl Panel
   # `h`/`l` walk the drawer's tab strip, so the kanban's own column move is `H`/`L`.
-  def hints(_data), do: [{"H/L·j/k", "move"}, {"p", "advance"}, {"n", "new"}, {"⏎", "promote"}]
+  def hints(_data), do: [{"H/L·j/k", "move"}, {"J/K", "reorder"}, {"p", "advance"}, {"n", "new"}, {"⏎", "promote"}]
 
   @doc "Tickets grouped by status, in column order — the cockpit indexes its cursor into this."
   def by_column(tickets) do
@@ -59,9 +64,16 @@ defmodule Console.Panel.TicketBoard do
     prio = priority_mark(t[:priority])
     who = if t[:assignee], do: " @#{t.assignee}", else: ""
     title_style = if selected?, do: :selected, else: :normal
-    header = [{"#{prio} ", :accent}, {"##{t.id} #{t.title}", title_style}, {who, :dim}]
+    header = [{"#{prio} ", :accent}, {"##{t.id} #{t.title}", title_style}, {who, :dim}] ++ blocked_badge(t, selected?)
     Card.gutter_card(header, [], status_atom(t.status))
   end
+
+  # A ticket nothing is waiting on carries no badge at all — the point of the mark is that it is
+  # rare. `blocked?` is a read of the LINKS (a done blocker stops blocking), never a field, so a
+  # card cannot claim to be blocked by something already finished.
+  defp blocked_badge(%{blocked?: true}, selected?), do: [{"  ⊘ blocked", if(selected?, do: :selected, else: :st_blocked)}]
+
+  defp blocked_badge(_ticket, _selected?), do: []
 
   # Zip N columns into rows: pad each column's rows to col_w, pad short columns with blanks, then
   # concatenate the i-th row of every column so they render side by side.

@@ -56,9 +56,10 @@ defmodule Console.Keymap do
     * `:toggle_center_view` (`v`, chat⇄terminal) and `:toggle_session_pane` (Alt+\\).
     * `:tlon_enter` — Enter on a rail pane (space switch / lazygit zoom / detail, cockpit-resolved).
     * `:yank` — `y` in nav: the focused pane's semantic text to the clipboard.
-    * `{:ticket_move, dir}` / `:ticket_advance` — the drawer's TICKETS pane: move the kanban cursor
-      over the live columns, advance the selected ticket's status (both need the server read the
-      cockpit holds, so the reducer only names them).
+    * `{:ticket_move, dir}` / `:ticket_advance` / `{:ticket_reorder, :up | :down}` — the drawer's
+      TICKETS pane: move the kanban cursor over the live columns, advance the selected ticket's
+      status, reorder it within its column (all need the server read the cockpit holds, so the
+      reducer only names them).
     * `{:habit_action, :approve | :reject}` — `a`/`r` on the Memory pane's pending habit.
     * `{:cycle_coworker_model, profile}` — advance the active space's coworker driver model one
       step round `Console.Profiles.model_ring/0` and persist it (the `m` verb; only in a space with
@@ -171,6 +172,7 @@ defmodule Console.Keymap do
           | :tlon_enter
           | {:picker_pick, map()}
           | {:ticket_move, String.t()}
+          | {:ticket_reorder, :up | :down}
           | :ticket_advance
           | :stack_delete_arm
           | :tlon_delete_arm
@@ -720,6 +722,12 @@ defmodule Console.Keymap do
 
   # TICKETS is a grid, so its cursor needs a horizontal move too — `H`/`L`, since `h`/`l` walk the
   # strip. The cockpit owns the move (the live columns are a server read); the keymap stays pure.
+  # `J`/`K` reorder the selected ticket within its column and persist it (UX slice 4). Above the
+  # `H`/`L` column clause so the shifted pair is read as a pair, and above the generic `is_vertical`
+  # move below, which would otherwise take them as plain j/k.
+  defp drawer_common(%{key: :char, char: "J"}, %{drawer: :tickets} = state), do: {state, {:ticket_reorder, :down}}
+  defp drawer_common(%{key: :char, char: "K"}, %{drawer: :tickets} = state), do: {state, {:ticket_reorder, :up}}
+
   defp drawer_common(%{key: :char, char: c}, %{drawer: :tickets} = state) when c in ~w(H L),
     do: {state, {:ticket_move, if(c == "H", do: "h", else: "l")}}
 
