@@ -1,0 +1,169 @@
+# tasks/server.toml — the server: its loop, release, service, and the checks that gate it. Included by mise.toml ([task_config] includes);
+# each top-level table is a task. `mise tasks` lists them all.
+
+["server:test"]
+description = "server: run the test suite (the TDD loop)"
+dir = "modules/server"
+run = "mix test"
+
+["server:check"]
+description = "server: the precommit gate — format + warnings-as-errors + credo + tests + deterministic steering evals"
+dir = "modules/server"
+# Two invocations: precommit runs in :test (start_repo off), the eval needs the dev boot +
+# its own ephemeral db — the deterministic set is offline/fast, judged mode is server:eval.
+run = "mix precommit && mix server.eval --deterministic"
+
+["server:eval"]
+description = "server: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes"
+dir = "modules/server"
+run = "mix server.eval"
+
+["server:setup"]
+description = "server: fetch deps, create + migrate a repo-local scratch db"
+dir = "modules/server"
+run = "mix deps.get && TLON_DB=.dev/tlon.db mix ecto.create --quiet && TLON_DB=.dev/tlon.db mix ecto.migrate"
+
+["server:doctor"]
+description = "server: the 2am report against the scratch db"
+dir = "modules/server"
+run = "TLON_DB=.dev/tlon.db mix server.doctor"
+
+# The seed is what makes a wiped/fresh world know itself: priv/seed/repo_knowledge.exs (curated)
+# + priv/seed/promoted_facts.exs (learnings graduated via promote-fact). Server.Seed.ensure/0 runs
+# on every boot too; these are the by-hand paths against the dev scratch db (server:doctor's db).
+["server:seed"]
+description = "server: apply the seed (base facts + baseline projects) to the scratch db — idempotent, keyed on intent"
+dir = "modules/server"
+run = "TLON_DB=.dev/tlon.db mix server.seed"
+
+["server:promote-fact"]
+description = "server: graduate a banked fact into the wipe-proof seed — usage: mise run server:promote-fact -- <fact-id> [--intent seed:slug] (scratch db)"
+dir = "modules/server"
+run = "TLON_DB=.dev/tlon.db mix server.promote_fact"
+
+# Boot server with its sovereign channel on, loopback-only, against the scratch db — so
+# a hand-spawned pi pane has something to register with. `Server.MCP.Spawn.env("title",
+# "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
+["server:serve"]
+description = "server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
+dir = "modules/server"
+run = "TLON_DB=.dev/tlon.db TLON_START_MCP=1 iex -S mix"
+
+# `server:serve` above is the DEV path (hand-run iex on the scratch db); these run the
+# same server as a self-contained release, headless, on the REAL db, kept up by the
+# home-manager systemd --user service. A release bundles ERTS, so the unit runs one
+# absolute path with nothing on PATH, and `remote`/`rpc` reach the LIVE node.
+["server:release"]
+description = "server: build the self-contained release the always-up service runs (prod)"
+dir = "modules/server"
+run = "MIX_ENV=prod mix release --overwrite"
+
+["server:restart"]
+description = "server: rebuild the release + restart the always-up service (redeploy a server change)"
+depends = ["server:release"]
+run = "systemctl --user restart tlon && systemctl --user --no-pager status tlon | head -12"
+
+["server:console"]
+description = "server: remote iex INTO the running service node — inspect/mint against the live channel"
+dir = "modules/server"
+run = "_build/prod/rel/server/bin/server remote"
+
+["server:logs"]
+description = "server: follow the always-up service's logs"
+run = "journalctl --user -u tlon -n 80 -f"
+
+# Operate/script access to the LIVE channel from the shell — the human+Claude-Code peer
+# to the agents' MCP tools. Goes through `bin/server rpc` INTO the running service node:
+# a token minted anywhere else dies with its node, and roster/presence is in-memory
+# there. Thin and deliberate — operate access, NOT a second cockpit (the console is the rich surface).
+["server:spawn"]
+description = "server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane"
+run = "scripts/tlon-cli.sh spawn"
+
+["server:ledger"]
+description = "server: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
+dir = "modules/server"
+run = "TLON_DB=.dev/tlon.db mix server.ledger"
+
+["workline:verify"]
+description = "workline: the deterministic verifier — run check + flake:check, record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
+run = "scripts/workline-verify.sh"
+
+["server:cli"]
+description = "server: the CLI passthrough — mise run server:cli -- <subcommand> [args] (workline/approve/post/…)"
+run = "scripts/tlon-cli.sh"
+
+["server:roster"]
+description = "server: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service"
+run = "scripts/tlon-cli.sh roster"
+
+["server:dossier"]
+description = "server: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool"
+run = "scripts/tlon-cli.sh dossier"
+
+["server:post"]
+description = "server: post to a thread as the operator from the shell — parity with the agents' post_message"
+run = "scripts/tlon-cli.sh post"
+
+# Launch Claude Code as a citizen of a server thread. No arg → a fresh thread; a numeric thread-id →
+# JOIN it (resume across a /clear). Scopes the `tlon` MCP server (fresh token per
+# connect) + the SessionStart brief hook to THIS session via --mcp-config/--settings —
+# no ~/.claude mutation, so a plain `claude` stays untouched.
+["server:claude"]
+description = "launch Claude Code as a citizen of a server thread — `server:claude` (fresh thread) or `server:claude -- <id>` (join)"
+run = "modules/adapters/claude-code/launch.sh"
+
+["cap"]
+description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
+run = "scripts/cap.sh"
+
+["cap:clean"]
+description = "Sweep all captured run logs (.logs/) — they self-cap at CAP_KEEP (40), this clears them now"
+run = "rm -rf .logs && echo 'swept .logs/'"
+
+["ollama:usage"]
+description = "ollama.com: read the plan/rate-limit dashboard (session + weekly caps, per-model request counts) via /api/usage — the insight layer for model choice"
+run = "scripts/ollama-usage.sh"
+
+["watch"]
+description = "Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md)"
+run = "scripts/watch.sh"
+
+# The `[w]atchexec` bracket is the trick: `pkill -f`/`pgrep -f` match a process's ENTIRE
+# argv, so a naive `pkill -f watchexec` would match its own argv and signal ITSELF.
+# `[w]atchexec` never appears literally in its own command line, so it only matches real
+# watchexec processes; `--project-origin $root` scopes it to this repo.
+["watch:stop"]
+description = "Stop ficciones file-watchers left running in the background (safe: never signals its own shell)"
+run = '''
+root="$(git rev-parse --show-toplevel)"
+pids="$(pgrep -f "[w]atchexec.*--project-origin $root" || true)"
+if [ -n "$pids" ]; then echo "stopping watchexec: $pids"; kill $pids; else echo "no ficciones watchers running"; fi
+'''
+
+["server:watch"]
+description = "server: re-run the suite on every change under modules/server (cap signal)"
+dir = "modules/server"
+run = "../../scripts/watch.sh mise exec -- mix test"
+
+["server:dev"]
+description = "server: a scratch server NODE (funes-dev@127.0.0.1, ../server/.dev/tlon.db, MCP :4041) in iex — hack on the server with the live service untouched; attach a cockpit with `TLON_NODE=funes-dev@127.0.0.1 mise run console:run`"
+dir = "modules/server"
+run = """
+db=.dev/tlon.db
+# never the service's file: two BEAM nodes on one SQLite file is `database is locked`
+case "$(readlink -f "$db" 2>/dev/null)" in "$(readlink -f "$HOME/.local/share/funes/wb.db" 2>/dev/null)") echo "server:dev refuses the service's db" >&2; exit 1;; esac
+TLON_DB=$db mix ecto.migrate || exit $?
+TLON_DB=$db TLON_START_MCP=1 TLON_MCP_PORT=4041 TLON_START_SWITCHBOARD=1 TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" \
+  iex --name funes-dev@127.0.0.1 --cookie "$(tr -d '[:space:]' < "${TLON_COOKIE_FILE:-$HOME/.local/share/tlon/cookie}")" -S mix
+"""
+
+# The seams no compiler covers: a script calling a module that no longer exists, a mise task a
+# guide names but mise.toml lost, a pi config file the adapter reads but the flake stopped writing.
+["check:names"]
+description = "names-exist gate: every Server.*/Console.* module, mix task, mise task and ~/.pi/agent file the glue names must exist (grep, offline, fast)"
+run = "scripts/check-names.sh"
+
+["check"]
+description = "Everything green: the names gate + the server + console + adapters (pi + consult + fmt + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests)"
+depends = ["check:names", "server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:fmt:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check"]

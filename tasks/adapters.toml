@@ -1,0 +1,77 @@
+# tasks/adapters.toml — the adapters (pi/claude/lsp) and lspd. Included by mise.toml ([task_config] includes);
+# each top-level table is a task. `mise tasks` lists them all.
+
+["adapters:pi:watch"]
+description = "adapters/pi renderer: re-run the suite on every change (cap signal)"
+dir = "modules/adapters/pi"
+run = "../../scripts/watch.sh bun test"
+
+["adapters:pi:test"]
+description = "adapters/pi renderer: the brief renderer unit suite (bun test) — the TDD loop"
+dir = "modules/adapters/pi"
+run = "bun test"
+
+["adapters:pi:check"]
+description = "adapters/pi renderer: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/pi"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+["adapters:consult:watch"]
+description = "adapters/consult: re-run the suite on every change (cap signal)"
+dir = "modules/adapters/consult"
+run = "../../scripts/watch.sh bun test"
+
+["adapters:consult:test"]
+description = "adapters/consult: the delegation unit suite (bun test) — the TDD loop"
+dir = "modules/adapters/consult"
+run = "bun test"
+
+["adapters:consult:check"]
+description = "adapters/consult: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/consult"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+["adapters:fmt:check"]
+description = "adapters/fmt: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/fmt"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+["adapters:lsp:check"]
+description = "adapters/lsp: the pi shim's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/lsp"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+["adapters:lspd:check"]
+description = "adapters/lspd: the sidecar daemon's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/lspd"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+# Run the LSP sidecar in the foreground (dev). --watch reloads daemon code on edit (restarts the
+# daemon, not pi — Expert cold-starts once). Normal use needs no task: the pi shim auto-spawns the
+# daemon on first tool call. A systemd --user unit for real supervision is the remaining design step.
+["lspd"]
+description = "adapters/lspd: run the LSP sidecar daemon in the foreground (bun --watch, dev)"
+dir = "modules/adapters/lspd"
+run = "bun --watch run src/server.ts"
+
+["adapters:reload:check"]
+description = "adapters/reload: the precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/reload"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+["adapters:footer:check"]
+description = "adapters/footer: the statusline's precommit gate — install (frozen), typecheck, tests"
+dir = "modules/adapters/footer"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+# The safety gate the `reload` tool runs before respawning pi: every adapters pi extension must
+# typecheck (a syntax error would respawn pi into code it can't load). Fast — tsc only, no tests
+# or install; runs from the repo root, one package at a time.
+["adapters:typecheck"]
+description = "adapters: typecheck every pi extension (fast — the `reload` safety gate)"
+run = """
+set -e
+for d in pi consult fmt lsp lspd reload footer; do
+  ( cd "modules/adapters/$d" && bun run typecheck )
+done
+"""

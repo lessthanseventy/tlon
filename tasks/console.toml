@@ -1,0 +1,119 @@
+# tasks/console.toml — the console (cockpit): run, reload, drive, its gates. Included by mise.toml ([task_config] includes);
+# each top-level table is a task. `mise tasks` lists them all.
+
+["console:test"]
+description = "console: run the test suite (the render path, headless)"
+dir = "modules/console"
+run = "mix test"
+
+["console:reload"]
+description = "console: HOT-RELOAD — recompile + signal the running cockpit to swap in new code (no restart, state kept). Run in a SECOND terminal after editing; render/keymap/panel edits land on the next tick. A state-shape change still needs console:run."
+dir = "modules/console"
+run = "mix compile && touch .reload && echo 'console:reload — recompiled + signaled; the cockpit swaps in the new code on its next tick (~0.5s)'"
+
+["console:check"]
+description = "console: the precommit gate — format + warnings-as-errors + tests"
+dir = "modules/console"
+run = "mix precommit"
+
+["console:setup"]
+description = "console: fetch deps, create + migrate the shared server db (via Server.Repo)"
+dir = "modules/console"
+run = "mix deps.get && TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet && TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo"
+
+["console:seed"]
+description = "console: seed the shared db with sample threads/agents/sessions for the cockpit"
+dir = "modules/console"
+run = "TLON_DB=../server/.dev/tlon.db mix console.seed"
+
+# The cockpit reads the SAME db server's own tasks use, so posting from another shell
+# shows up live. Run in ghostty.
+["console:run"]
+description = "console: launch the live cockpit in THIS terminal (run in ghostty) — a CLIENT of the always-up tlon service (one brain); console:run:local embeds a server on the scratch db instead"
+dir = "modules/console"
+# One brain (docs/plans/2026-09-08-one-brain-client-server-plan.md): the cockpit is a node that
+# :erpc's into the service (funes@127.0.0.1, ~/.local/share/tlon/cookie); the service owns the
+# db, MCP and the switchboard, and the coworkers are ITS clients — so nothing here migrates a db
+# or reaps coworkers. console-reap.sh still clears a stale cockpit process.
+run = """
+# Directly on the terminal, NOT inside tmux: the cockpit draws its icons with the kitty graphics
+# protocol and reads keys with the kitty keyboard protocol, and tmux passes neither through (blank
+# WS tiles, missing icons, odd Ctrl+Space — 2026-09-08). console:run:tmux is the drivable variant.
+if ! systemctl --user is-active --quiet tlon; then
+  echo "console:run: the tlon service is not running — systemctl --user start tlon (or mise run server:restart); for an embedded server on the scratch db use console:run:local" >&2
+  exit 1
+fi
+KEEP_COWORKERS=1 ../../scripts/console-reap.sh || exit $?
+# fd 2 goes to a log, not the tty: the embedded terminal's NIF (libghostty-vt) writes its own
+# warnings to stderr, and termbox2 only repaints cells IT changed, so any stray write to the
+# screen sits there corrupting the frame until that cell happens to redraw. The cockpit's own
+# crash notice goes to stdout after the tty is restored (Console.Cockpit.Recovery).
+stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
+TLON_BACKEND=remote TLON_NODE="${TLON_NODE:-funes@127.0.0.1}" TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" mix console.run 2>>"$stderr_log"
+"""
+
+["console:run:tmux"]
+description = "console: the cockpit inside the tlon tmux server (session cockpit, -A attaches) so Claude can drive it (drive-cockpit skill) — icons and kitty keys degrade under tmux; the plain console:run is the one to look at"
+dir = "modules/console"
+run = """
+case "${TMUX:-}" in *"/tlon,"*) exec mise run console:run ;; *) exec tmux -L tlon new-session -A -s cockpit -c "$PWD" "mise run console:run" ;; esac
+"""
+
+["console:run:local"]
+description = "console: the cockpit with an EMBEDDED server on the scratch db (../server/.dev/tlon.db, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run"
+dir = "modules/console"
+run = """
+../../scripts/console-reap.sh || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
+stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
+TLON_BACKEND=local TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run 2>>"$stderr_log"
+"""
+
+# Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
+# hot-reload; tmux continuum can restore an unwired tlon session), not a real bug.
+# Resets the RUNTIME only (cockpit + Tlön panes + compiled artifacts) — it NEVER touches
+# the db, so threads/messages/consults survive. To wipe data, use `console:reset:db`.
+# Follow with `console:run` for a fresh cockpit.
+["console:reset"]
+description = "console: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, kill every coworker tmux server (+ any legacy default-server tlon session), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use console:reset:db to wipe data."
+dir = "modules/console"
+run = """
+../../scripts/console-reap.sh || true
+mix clean >/dev/null 2>&1 && echo "console:reset — mix clean (fresh compile on next console:run)"
+echo "--- env now ---"
+for p in 4040 4041; do if ss -tlnH "sport = :$p" 2>/dev/null | grep -q .; then echo "  port $p: LISTENING"; else echo "  port $p: free"; fi; done
+left="$(ls "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"/console-workspace-* 2>/dev/null | xargs -rn1 basename | xargs echo)"
+if [ -n "$left" ]; then echo "  coworker tmux servers still up: $left"; else echo "  coworker tmux servers: none (clean)"; fi
+echo "console:reset — done. Run 'mise run console:run' for a fresh, wired cockpit."
+"""
+
+# The escape hatch: one gesture = guaranteed-fresh cockpit. `console:reset` (mix clean) THEN `console:run`
+# (reap every stale tmux server/session + the zombie cockpit/port, migrate, launch), so
+# you never have to remember the two-step or wonder whether continuum restored something stale. This
+# is the "I don't trust what's live" button — slower than a bare `console:run` (it forces a full
+# recompile), so it's the deliberate reach, not the default. `console:run` stays the fast daily launch.
+["console:fresh"]
+description = "console: NUKE + launch — full clean (mix clean, kill every stale tmux server/session, reap the cockpit + port 4041) then a fresh compile-and-boot. The 'guarantee I'm running the latest code' escape hatch; slower than console:run (full recompile). Data (threads/messages) is UNTOUCHED — use console:reset:db to wipe."
+dir = "modules/console"
+run = """
+mix clean >/dev/null 2>&1 && echo "console:fresh — mix clean (forcing a full recompile)"
+mise run console:run
+"""
+
+# The DATA wipe `console:reset` deliberately is NOT — separate + explicitly named so a fresh
+# db is never a reflex. Drops → recreates → migrates the dev scratch db, destroying every
+# dogfood thread/message/consult in it. Only the dev db (../server/.dev/tlon.db); the
+# always-up service db is untouched. Use when the schema state is wedged or you want a clean
+# slate, not for "stale code" symptoms (that's `console:reset`).
+["console:reset:db"]
+description = "console: WIPE the dev scratch db (drop → recreate → migrate) — DESTROYS all dogfood threads/messages/consults. The data reset console:reset deliberately does NOT do; only the dev db, never the service db."
+dir = "modules/console"
+run = """
+printf 'This WIPES the dev db — every dogfood thread/message/consult is gone.\\nType RESET to confirm: '
+read -r confirm
+if [ "$confirm" != "RESET" ]; then echo "console:reset:db — aborted (nothing wiped)."; exit 1; fi
+TLON_DB=../server/.dev/tlon.db mix ecto.drop -r Server.Repo || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet || exit $?
+TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
+echo "console:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
+"""

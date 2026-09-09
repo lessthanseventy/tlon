@@ -18,7 +18,7 @@ control loop, not two, and no second way to run anything:
 - `mise run home:switch` — install/update this machine into the user profile via home-manager.
 
 mise owns dev runtimes; Nix owns packaging and the system. **If a command belongs in the loop, it becomes
-a task in `mise.toml`** — never a prose instruction that drifts out of sync with what actually runs.
+a task in `tasks/<group>.toml` (mise.toml includes them)** — never a prose instruction that drifts out of sync with what actually runs.
 
 ### Picking a pi model — the routing, as tasks ("litellm but not")
 
