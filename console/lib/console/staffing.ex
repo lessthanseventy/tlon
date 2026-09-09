@@ -390,10 +390,22 @@ defmodule Console.Staffing do
       script = boot_script(exports, command)
       # `-d`: spawn the window in the background — a coworker starting must NOT yank the operator
       # off whatever window they're on.
-      Tmux.run(workspace_id, ["new-window", "-d", "-t", Tmux.session(workspace_id), "-n", window, script])
+      Tmux.run(workspace_id, [
+        "new-window",
+        "-d",
+        "-t",
+        Tmux.session(workspace_id),
+        "-n",
+        window,
+        "/bin/sh -c " <> sh_single_quote(script)
+      ])
     end
   end
 
+  # A harness window's boot script, written in POSIX sh — so it must be RUN by sh. tmux hands a
+  # window command to its `default-shell`, which is the operator's login shell (zsh here), and the
+  # fd-closing loop is not zsh-safe: under zsh the window dies with status 127 and no output, which
+  # looks exactly like a coworker that will not start. Callers wrap it in `/bin/sh -c`.
   @doc """
   A harness window's boot script: set TERM (so the harness produces colour), source the server
   `exports` block (so `${TLON_MCP_URL}` etc. reach its env), then `exec` the bare launcher.

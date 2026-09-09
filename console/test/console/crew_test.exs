@@ -61,7 +61,7 @@ defmodule Console.CrewTest do
                "w0",
                "-n",
                "r42",
-               "boot-script-here"
+               "/bin/sh -c 'boot-script-here'"
              ]
     end
 

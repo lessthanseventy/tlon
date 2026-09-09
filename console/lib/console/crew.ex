@@ -71,7 +71,17 @@ defmodule Console.Crew do
   @spec spawn_argv(String.t(), integer() | String.t(), String.t()) :: [String.t()]
   def spawn_argv(role_key, thread_id, script) do
     ws = workspace_id()
-    Tmux.argv(ws, ["new-window", "-d", "-t", Tmux.session(ws), "-n", crew_window(role_key, thread_id), script])
+
+    Tmux.argv(ws, [
+      "new-window",
+      "-d",
+      "-t",
+      Tmux.session(ws),
+      "-n",
+      crew_window(role_key, thread_id),
+      # POSIX sh, not tmux's default-shell: the boot script is sh and dies silently under zsh.
+      "/bin/sh -c " <> sh_single_quote(script)
+    ])
   end
 
   @doc "The `tmux` argv to tear down a role's per-thread window."
@@ -210,4 +220,6 @@ defmodule Console.Crew do
         false
     end
   end
+
+  defp sh_single_quote(s), do: "'" <> String.replace(s, "'", "'\\''") <> "'"
 end
