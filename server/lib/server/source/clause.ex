@@ -51,6 +51,16 @@ defmodule Server.Source.Clause do
     end
   end
 
+  @doc "Insert `code` as a new clause on the line before the addressed one, at its indent."
+  @spec insert_before(String.t(), String.t(), String.t(), String.t()) :: String.t() | {:error, String.t()}
+  def insert_before(source, name_arity, head, code) do
+    with {:ok, %{range: %{start: [line: a, column: _]}, indent: indent}} <- find(source, name_arity, head) do
+      body = code |> String.split("\n") |> Enum.map_join("\n", &(indent <> &1))
+      at = %{start: [line: a, column: 1], end: [line: a, column: 1]}
+      Sourceror.patch_string(source, [%{range: at, change: body <> "\n", preserve_indentation: false}])
+    end
+  end
+
   # -- locating a clause ----------------------------------------------------
 
   defp find(source, name_arity, head) do

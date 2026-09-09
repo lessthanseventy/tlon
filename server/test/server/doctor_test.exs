@@ -12,6 +12,7 @@ defmodule Server.DoctorTest do
     assert Doctor.tables() ==
              [
                "agent",
+               "channel",
                "collection",
                "event",
                "fact",

@@ -13,7 +13,11 @@ defmodule Server.Workspaces do
 
   @doc "Register a workspace. `{:ok, workspace}` or `{:error, changeset}` (e.g. a duplicate name)."
   def register(attrs) do
-    attrs |> Workspace.register_changeset() |> Repo.insert() |> Bus.announce(:workspace_registered)
+    with {:ok, workspace} <- attrs |> Workspace.register_changeset() |> Repo.insert() do
+      # every workspace is born with #general (UX slice 1b)
+      _ = Server.Channels.general(workspace.id)
+      Bus.announce({:ok, workspace}, :workspace_registered)
+    end
   end
 
   @doc "Every workspace, newest-first (by id) — the read console's Orbis survey/picker maps over."
@@ -51,9 +55,15 @@ defmodule Server.Workspaces do
   end
 
   defp rehouse_and_delete(workspace, heir) do
+    # the heir's #general takes the threads (a channel belongs to one workspace); then the
+    # removed workspace's channels go, so its row can
+    home = Server.Channels.general(heir.id)
+
     Repo.update_all(from(t in Server.Thread, where: t.workspace_id == ^workspace.id),
-      set: [workspace_id: heir.id]
+      set: [workspace_id: heir.id, channel_id: home.id]
     )
+
+    Repo.delete_all(from(c in Server.ChannelRow, where: c.workspace_id == ^workspace.id))
 
     # A delete refusal must roll the rehousing back with it — without this, a future
     # table gaining a workspace FK would silently move threads while the workspace survives.

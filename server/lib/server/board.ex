@@ -94,8 +94,20 @@ defmodule Server.Board do
         # `icon` is the operator's chosen display icon (`knobs["icon"]`, nil = show the number).
         workspace: %{id: workspace.id, name: workspace.name, icon: (workspace.knobs || %{})["icon"]},
         threads: rows,
+        # UX slice 1b: the same rows grouped by channel, #general first; a row whose channel is
+        # nil (pre-migration) reads as #general.
+        channels: channel_groups(workspace.id, rows),
         crew: crew_rows(workspace.roster, working_agents)
       }
+    end
+  end
+
+  defp channel_groups(workspace_id, rows) do
+    general = Server.Channels.general(workspace_id)
+
+    for channel <- Server.Channels.in_workspace(workspace_id) do
+      mine = Enum.filter(rows, &((&1.channel_id || general.id) == channel.id))
+      %{id: channel.id, name: channel.name, kind: channel.kind, threads: mine}
     end
   end
 
@@ -103,6 +115,7 @@ defmodule Server.Board do
     %{
       id: thread.id,
       workspace_id: thread.workspace_id,
+      channel_id: thread.channel_id,
       title: thread.title,
       root: thread.id == root_id,
       stage: thread.stage,

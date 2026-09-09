@@ -41,6 +41,11 @@ defmodule Server.Source.ClauseTest do
     assert out =~ "def go(:a), do: 1\n  def go(:c), do: 3\n"
   end
 
+  test "insert_before adds a clause right before the addressed one, at its indent" do
+    out = Clause.insert_before(@src, "go/1", ":a", "def go(nil), do: 0")
+    assert out =~ "# first\n  def go(nil), do: 0\n  def go(:a), do: 1"
+  end
+
   test "an unknown clause is an error naming the candidates" do
     assert {:error, msg} = Clause.replace_body(@src, "go/1", ":zzz", "1")
     assert msg =~ "go/1" and msg =~ ":a"

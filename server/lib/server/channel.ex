@@ -34,6 +34,8 @@ defmodule Server.Channel do
   `scope` defaults to `"project"`; the Tlön machine-coworker path opens with `"machine"`.)
   def open_thread(attrs) do
     attrs = Map.put_new_lazy(attrs, :workspace_id, &Server.Bootstrap.default_workspace_id/0)
+    # a thread lives in a channel (UX slice 1b): the named one, else the workspace's #general
+    attrs = Map.put_new_lazy(attrs, :channel_id, fn -> default_channel_id(attrs.workspace_id) end)
 
     # The lead invariant: a thread is born with a lead (its workspace's designated manager) unless
     # the caller names one. Enforced HERE, the one creation path, so it holds for operator, MCP, and
@@ -44,6 +46,10 @@ defmodule Server.Channel do
     |> Repo.insert()
     |> Server.Bus.announce(:thread_opened)
   end
+
+  # the workspace's #general, or nil when the thread has no workspace (a test fixture)
+  defp default_channel_id(nil), do: nil
+  defp default_channel_id(workspace_id), do: Server.Channels.general(workspace_id).id
 
   @doc """
   The agent_id of a workspace's designated lead — its first `builder` (manager) roster coworker,

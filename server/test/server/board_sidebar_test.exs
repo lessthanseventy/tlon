@@ -101,4 +101,19 @@ defmodule Server.BoardSidebarTest do
     tertius = Enum.find(crew, &(&1.name == "tertius"))
     assert tertius.working == false
   end
+
+  # Channels (UX slice 1b): a workspace group also carries its channels, each with ITS threads —
+  # #general first — and every row names its channel_id. The flat `threads` list stays.
+  test "a workspace group carries its channels, each with its own threads, #general first" do
+    {:ok, %{id: wid}} = Bootstrap.ensure()
+    {:ok, infra} = Server.Channels.create(wid, "infra")
+    {:ok, disk} = Channel.open_thread(%{title: "disk full", workspace_id: wid, channel_id: infra.id})
+
+    [%{channels: channels, threads: flat}] = Board.sidebar()
+    assert ["general", "infra"] = Enum.map(channels, & &1.name)
+    infra_group = Enum.find(channels, &(&1.id == infra.id))
+    assert [%{id: disk_id, channel_id: cid}] = infra_group.threads
+    assert disk_id == disk.id and cid == infra.id
+    assert Enum.any?(flat, &(&1.id == disk.id))
+  end
 end

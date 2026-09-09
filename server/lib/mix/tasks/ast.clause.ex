@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Ast.Clause do
-  @shortdoc "Edit one clause: mix ast.clause (replace|delete|insert-after) FILE name/arity HEAD [CODE]"
+  @shortdoc "Edit one clause: mix ast.clause (replace|delete|insert-after|insert-before) FILE name/arity HEAD [CODE]"
   @moduledoc """
   `mix ast.clause replace lib/a.ex go/1 ':b' '20'` — swap the clause's body.
   `mix ast.clause delete lib/a.ex go/1 ':a'` — remove the clause (and its glued comment).
@@ -20,7 +20,8 @@ defmodule Mix.Tasks.Ast.Clause do
       ["replace", file, na, head, code] -> write(file, Clause.replace_body(File.read!(file), na, head, code))
       ["delete", file, na, head] -> write(file, Clause.delete(File.read!(file), na, head))
       ["insert-after", file, na, head, code] -> write(file, Clause.insert_after(File.read!(file), na, head, code))
-      _ -> Mix.raise("usage: mix ast.clause (replace|delete|insert-after) FILE name/arity HEAD [CODE]")
+      ["insert-before", file, na, head, code] -> write(file, Clause.insert_before(File.read!(file), na, head, code))
+      _ -> Mix.raise("usage: mix ast.clause (replace|delete|insert-after|insert-before) FILE name/arity HEAD [CODE]")
     end
   end
 

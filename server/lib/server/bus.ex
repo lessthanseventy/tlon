@@ -122,7 +122,21 @@ defmodule Server.Bus do
     publish([tickets_topic(), activity_topic()], event)
   end
 
-  @thread_tags [:thread_opened, :thread_closed, :thread_deleted, :thread_assigned, :workline_advanced, :workline_gated]
+  # Channels (UX slice 1b) live on the workspaces topic — the rail redraws on both; a moved
+  # thread is a thread event.
+  def broadcast({tag, %Server.ChannelRow{}} = event) when tag in [:channel_created, :channel_deleted] do
+    publish([workspaces_topic(), activity_topic()], event)
+  end
+
+  @thread_tags [
+    :thread_opened,
+    :thread_closed,
+    :thread_deleted,
+    :thread_assigned,
+    :thread_moved,
+    :workline_advanced,
+    :workline_gated
+  ]
 
   def broadcast({tag, thread} = event) when tag in @thread_tags do
     publish([threads_topic() | thread_topics(thread.id)], event)

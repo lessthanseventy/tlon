@@ -24,6 +24,9 @@ defmodule Server do
       Dossier,
       # Compositions: the workspaces context console reads to drive its picker/survey/spawn.
       Workspaces,
+      # Channels (UX slice 1b): workspace → channels → threads; create/move/delete + the row struct.
+      Channels,
+      ChannelRow,
       # The container tier (2026-08-30): projects, the lightweight ticket tracker, notes —
       # peer contexts to Workspaces the console reads/writes for the god line + CRUD screens.
       Projects,

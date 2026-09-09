@@ -29,6 +29,8 @@ defmodule Server.TestDB do
     Server.Thread,
     Server.Agent,
     Server.Project,
+    # channel.workspace_id → workspace (threads point at channels, so after Thread)
+    Server.ChannelRow,
     Server.Workspace
   ]
 
