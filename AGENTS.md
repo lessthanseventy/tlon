@@ -90,6 +90,27 @@ automatically**, and you only spend a turn when something actually breaks. Kill 
 the change is done. This is the intended inner loop here — not "edit, then manually run tests,
 then read 1800 lines," every time.
 
+### Edit Elixir with Menard, not sed/python/grep
+
+`modules/menard` is the repo's AST-aware toolbox for Elixir (Sourceror patches: only the bytes
+you named change). It is three doors onto one library — mix tasks, the `menard` stdio MCP in
+Claude Code, and the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb`
+tools scoped to their worktree. Use it for every Elixir edit and search:
+
+- `clause replace|delete|insert_after|insert_before FILE [Mod.]name/arity HEAD [CODE]` — one
+  clause, addressed by its head as written (guard included). In a file with several modules,
+  qualify the name (`Menard.MCP.Clause.execute/2`); a bare name they share is refused.
+- `rename OLD NEW FILES…` — an identifier across files (heads, calls, captures, variables).
+- `find calls|defs|aliases TARGET FILES…` — grep that knows the code; strings and comments never match.
+- `outline FILE` — read a module's shape before editing it.
+- `run check|test|format|compile [--in DIR]` — one structured answer, failures with the test's source.
+
+CLI: `mise run menard -- VERB …` (always compiles the current code; the MCP server runs the code
+it started with — restart Claude after changing Menard). Python/sed string patches on `.ex` files
+fail on reformatting and land in the wrong module; the `Edit` tool is for small literal changes
+(a doc line, a test assertion) and for non-Elixir files, which Menard does not cover (TypeScript,
+Lua, Nix).
+
 ## How to work — the four rules
 
 Every agent on this machine, in any repo, works by the four rules in `modules/agents/how-to-work.md`:
