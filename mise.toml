@@ -23,7 +23,7 @@ bun = "1.3.14"
 # empty-file case and fails the render.
 OLLAMA_API_KEY = "{{ exec(command='p=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agenix/ollama-api-key\"; v=\"$(cat \"$p\" 2>/dev/null)\" || true; if [ -n \"$v\" ]; then printf %s \"$v\"; else printf %s \"$OLLAMA_API_KEY\"; fi') }}"
 
-# Tasks live in tasks/<group>.toml (server, console, adapters, desktop, pi); mise includes them
+# Tasks live in tasks/<group>.toml (server, console, adapters, desktop, pi, menard); mise includes them
 # here — `mise tasks` is still the one list.
 [task_config]
-includes = ["tasks/server.toml", "tasks/console.toml", "tasks/adapters.toml", "tasks/desktop.toml", "tasks/pi.toml"]
+includes = ["tasks/server.toml", "tasks/console.toml", "tasks/adapters.toml", "tasks/desktop.toml", "tasks/pi.toml", "tasks/menard.toml"]

@@ -1,0 +1,14 @@
+# tasks/menard.toml — Menard, the Elixir repo tools (modules/menard): AST-aware edits and
+# introspection that run from menard's own project, so they work while the app being edited
+# does not compile. Paths are relative to where you stand; `--in DIR` for the run/inspect verbs.
+# Included by mise.toml ([task_config] includes); each top-level table is a task.
+
+["menard"]
+description = "menard: any verb — `mise run menard -- rename OLD NEW [--atoms] [--comments] FILES` · `clause replace|delete|insert-after|insert-before FILE name/arity HEAD [CODE]` · `outline FILE` · `diagnostics [--in DIR]` · `inspect [--in DIR] callers|exports|deps` · `run [--in DIR] check|test|format|compile`"
+dir = "modules/menard"
+run = "bin/menard"
+
+["menard:check"]
+description = "menard: its own gate — format + warnings-as-errors + tests"
+dir = "modules/menard"
+run = "mix format --check-formatted && mix compile --warnings-as-errors && mix test"

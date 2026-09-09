@@ -57,9 +57,11 @@ defmodule Server.Source.ToolsTest do
   end
 
   test "run verbs execute in the worktree and answer one structured result", %{thread: t, wt: wt} do
-    # a worktree of a bare test repo has no mix project: the verb reports the failure honestly
-    assert {:ok, %{ok: false, exit: exit}} = Tools.run(t, :format, ["demo.ex"])
-    assert is_integer(exit)
+    # format works on any file (the demo is already formatted → nothing changed) …
+    assert {:ok, %{ok: true, changed: []}} = Tools.run(t, :format, ["demo.ex"])
+    # … while compile needs a mix project, which a bare test repo is not: the verb says so, honestly
+    assert {:ok, %{ok: false, exit: exit}} = Tools.run(t, :compile, [])
+    assert is_integer(exit) and exit != 0
     _ = wt
   end
 end

@@ -1,6 +1,6 @@
 defmodule Server.MCP.Tool.RenameIdentifier do
   @moduledoc """
-  Rename an identifier across files in THIS thread's worktree, AST-aware (`Server.Source.Rename`):
+  Rename an identifier across files in THIS thread's worktree, AST-aware (`Menard.Rename`):
   every def head, call, capture and variable named `old` becomes `new`; strings stay; `atoms`
   also renames `:old`/`old:`, `comments` the whole-word mentions in `#` comments. Only the
   identifier's bytes move. Paths are relative to the worktree and may not leave it.
@@ -42,7 +42,7 @@ end
 
 defmodule Server.MCP.Tool.OutlineFile do
   @moduledoc """
-  A file in THIS thread's worktree as an outline (`Server.Source.Outline`): its modules, each
+  A file in THIS thread's worktree as an outline (`Menard.Outline`): its modules, each
   with the moduledoc's first line, its line span, and its defs — kind, name/arity, the @doc line
   and @spec, the lines the clause spans. Read this before editing; it is cheaper than the file.
   """
@@ -68,7 +68,7 @@ end
 
 defmodule Server.MCP.Tool.EditClause do
   @moduledoc """
-  Edit ONE clause of a function in a file in THIS thread's worktree (`Server.Source.Clause`):
+  Edit ONE clause of a function in a file in THIS thread's worktree (`Menard.Clause`):
   `verb` is `replace` (the body becomes `code`), `delete`, or `insert_after` (`code` is the new
   clause, placed right after). Address the clause by `name_arity` ("go/1") and `head` — its args
   as written plus any guard ("x when is_integer(x)"). A miss lists the heads that exist. Only the

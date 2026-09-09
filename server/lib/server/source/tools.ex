@@ -3,13 +3,13 @@ defmodule Server.Source.Tools do
   The coworkers' source verbs, scoped to the calling thread's worktree: every path is resolved
   under `Server.worktree_for_thread/1` and a path that escapes it is refused — an agent edits its
   own tree and nothing else. Pure over the thread + paths; `Server.MCP.Tool.RenameIdentifier` /
-  `OutlineFile` are thin callers. Renames are `Server.Source.Rename` patches (only the identifier
-  moves); outlines are `Server.Source.Outline`.
+  `OutlineFile` are thin callers. Renames are `Menard.Rename` patches (only the identifier
+  moves); outlines are `Menard.Outline`.
   """
 
-  alias Server.Source.Clause
-  alias Server.Source.Outline
-  alias Server.Source.Rename
+  alias Menard.Clause
+  alias Menard.Outline
+  alias Menard.Rename
 
   @spec rename(Server.Thread.t(), [String.t()], String.t(), String.t(), keyword()) ::
           {:ok, %{changed: [String.t()], unchanged: [String.t()]}} | {:error, String.t()}
@@ -59,14 +59,14 @@ defmodule Server.Source.Tools do
 
   @doc """
   A run verb in the worktree — `:check` (`mix precommit`), `:test` (args: files/lines), `:format`
-  (args: files), `:compile` — via `mix ast.run`, whose one JSON line is the answer.
+  (args: files), `:compile` — via `mix menard.run --in <worktree>`, whose one JSON line is the answer.
   """
   @spec run(Server.Thread.t(), :check | :test | :format | :compile, [String.t()]) :: {:ok, map()} | {:error, String.t()}
   def run(thread, verb, args) when verb in [:check, :test, :format, :compile] do
     with {:ok, root} <- root(thread) do
       {out, status} =
-        System.cmd("mix", ["ast.run", Atom.to_string(verb) | args],
-          cd: root,
+        System.cmd("mix", ["menard.run", "--in", root, Atom.to_string(verb) | args],
+          cd: menard_dir(),
           stderr_to_stdout: true,
           env: [{"MIX_ENV", "dev"}]
         )
@@ -79,6 +79,9 @@ defmodule Server.Source.Tools do
       end
     end
   end
+
+  # menard's own project: its mix tasks run from there and act on the worktree via --in
+  defp menard_dir, do: Application.get_env(:server, :menard_dir, Path.expand("../menard", File.cwd!()))
 
   defp root(thread) do
     case Server.worktree_for_thread(thread) do
