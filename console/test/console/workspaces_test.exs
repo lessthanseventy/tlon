@@ -37,6 +37,7 @@ defmodule Console.WorkspacesTest do
 
   setup do
     # A clean workspace table per test — this is the only suite writing rows.
+    Repo.delete_all(Server.ChannelRow)
     Repo.delete_all(Workspace)
     :ok
   end

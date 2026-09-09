@@ -33,6 +33,8 @@ defmodule Console.TestRepo do
     Server.Thread,
     Server.Agent,
     Server.Project,
+    # channel.workspace_id → workspace (UX slice 1b)
+    Server.ChannelRow,
     Server.Workspace
   ]
 

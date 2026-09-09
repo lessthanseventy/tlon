@@ -20,6 +20,7 @@ defmodule Console.CockpitWorkspacesTest do
 
   setup do
     # A clean workspace table per test — this suite writes rows (mirrors Console.WorkspacesTest).
+    Repo.delete_all(Server.ChannelRow)
     Repo.delete_all(Workspace)
     :ok
   end
