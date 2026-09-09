@@ -134,7 +134,7 @@ defmodule Console.Staffing do
       |> Enum.map(&Profiles.roster_entry/1)
       |> Enum.reject(&MapSet.member?(existing, &1.name))
       |> Enum.each(fn %{archetype: arch, name: name} ->
-        spawn_window(workspace_id, Profiles.instantiate(%{archetype: arch, name: name}))
+        spawn_window(workspace_id, Profiles.instantiate(%{archetype: arch, name: name}, workspace_id))
       end)
     end
 
@@ -444,7 +444,7 @@ defmodule Console.Staffing do
   defp spawn_center(workspace_id, lead) do
     %{archetype: arch, name: name} = Profiles.roster_entry(lead)
 
-    with %Profile{} = profile <- Profiles.instantiate(%{archetype: arch, name: name}),
+    with %Profile{} = profile <- Profiles.instantiate(%{archetype: arch, name: name}, workspace_id),
          {:ok, _dir} <- materialise_profile(profile),
          {:ok, exports} <- machine_exports(workspace_id, name),
          # kitty: false — tmux wants its Ctrl+B prefix as legacy \x02, not CSI-u (see Terminal.init).
