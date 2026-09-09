@@ -112,7 +112,9 @@ defmodule Server.MCP.ServerTest do
                "get_notes",
                # the source verbs (repo tools design, 2026-09-08)
                "rename_identifier",
-               "outline_file"
+               "outline_file",
+               "edit_clause",
+               "run_verb"
              ])
 
     # -- register: claims a session for the token's OWN (thread, agent) — no

@@ -65,3 +65,69 @@ defmodule Server.MCP.Tool.OutlineFile do
     end)
   end
 end
+
+defmodule Server.MCP.Tool.EditClause do
+  @moduledoc """
+  Edit ONE clause of a function in a file in THIS thread's worktree (`Server.Source.Clause`):
+  `verb` is `replace` (the body becomes `code`), `delete`, or `insert_after` (`code` is the new
+  clause, placed right after). Address the clause by `name_arity` ("go/1") and `head` — its args
+  as written plus any guard ("x when is_integer(x)"). A miss lists the heads that exist. Only the
+  clause's bytes change; the file is left formatted by the caller's next format/check.
+  """
+  use Server.MCP.Tool
+
+  alias Server.MCP.Tool.RenameIdentifier
+  alias Server.Source.Tools
+
+  schema do
+    field :verb, :enum, values: ["replace", "delete", "insert_after"], required: true
+    field :file, :string, required: true, description: "A path relative to the worktree"
+    field :name_arity, :string, required: true, description: ~s|e.g. "go/1"|
+
+    field :head, :string,
+      required: true,
+      description: ~s|the clause's args as written, e.g. ":b" or "x when is_integer(x)"|
+
+    field :code, :string, description: "replace: the new body; insert_after: the new clause"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    RenameIdentifier.with_thread(frame, fn thread ->
+      verb = String.to_existing_atom(params.verb)
+
+      case Tools.clause(thread, verb, params.file, params.name_arity, params.head, params[:code]) do
+        {:ok, result} -> ok(frame, result)
+        {:error, message} -> fail(frame, message)
+      end
+    end)
+  end
+end
+
+defmodule Server.MCP.Tool.RunVerb do
+  @moduledoc """
+  Run a verb in THIS thread's worktree and get ONE structured answer: `check` (the app's gate),
+  `test` (args: files, `file:line`), `format` (args: files; reports what changed), `compile`
+  (warnings as diagnostics). `ok` says whether it passed; `tail` is the last lines of output.
+  Prefer this to a shell chain: the answer is data, and the gate is the same one the operator runs.
+  """
+  use Server.MCP.Tool
+
+  alias Server.MCP.Tool.RenameIdentifier
+  alias Server.Source.Tools
+
+  schema do
+    field :verb, :enum, values: ["check", "test", "format", "compile"], required: true
+    field :args, {:list, :string}, description: "test: files or file:line; format: files"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    RenameIdentifier.with_thread(frame, fn thread ->
+      case Tools.run(thread, String.to_existing_atom(params.verb), params[:args] || []) do
+        {:ok, result} -> ok(frame, result)
+        {:error, message} -> fail(frame, message)
+      end
+    end)
+  end
+end

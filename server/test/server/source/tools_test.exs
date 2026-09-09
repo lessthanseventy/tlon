@@ -44,4 +44,22 @@ defmodule Server.Source.ToolsTest do
     assert {:error, msg} = Tools.outline(bare, "x.ex")
     assert msg =~ "no repo"
   end
+
+  test "clause verbs edit one clause inside the worktree", %{thread: t, wt: wt} do
+    assert {:ok, %{file: "demo.ex"}} = Tools.clause(t, :replace, "demo.ex", "old_name/1", "x", "x + 1")
+    assert File.read!(Path.join(wt, "demo.ex")) =~ "def old_name(x), do: x + 1"
+    assert {:ok, _} = Tools.clause(t, :insert_after, "demo.ex", "two/0", "", "def three, do: 3")
+    assert File.read!(Path.join(wt, "demo.ex")) =~ "def three, do: 3"
+    assert {:ok, _} = Tools.clause(t, :delete, "demo.ex", "three/0", "", nil)
+    refute File.read!(Path.join(wt, "demo.ex")) =~ "three"
+    assert {:error, msg} = Tools.clause(t, :replace, "demo.ex", "old_name/1", "zzz", "1")
+    assert msg =~ "have:"
+  end
+
+  test "run verbs execute in the worktree and answer one structured result", %{thread: t, wt: wt} do
+    # a worktree of a bare test repo has no mix project: the verb reports the failure honestly
+    assert {:ok, %{ok: false, exit: exit}} = Tools.run(t, :format, ["demo.ex"])
+    assert is_integer(exit)
+    _ = wt
+  end
 end

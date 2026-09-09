@@ -338,7 +338,7 @@ defmodule Console.Profiles do
 
   # A reviewer reads and never edits: the source EDIT verbs are cut from its surface (the
   # introspection ones — outline_file — stay). Repo tools design, 2026-09-08.
-  @reviewer_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 ++ ["rename_identifier"]))
+  @reviewer_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 ++ ["rename_identifier", "edit_clause"]))
 
   # tertius's surface is the ORCHESTRATOR toolset (Slice 4D): the base machine-citizen tools PLUS the
   # cross-thread read `machine_overview` AND the staffing verbs a manager routes with — `staff_child`

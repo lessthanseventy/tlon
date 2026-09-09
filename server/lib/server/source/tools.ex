@@ -7,6 +7,7 @@ defmodule Server.Source.Tools do
   moves); outlines are `Server.Source.Outline`.
   """
 
+  alias Server.Source.Clause
   alias Server.Source.Outline
   alias Server.Source.Rename
 
@@ -29,6 +30,53 @@ defmodule Server.Source.Tools do
          {:ok, source} <- read(abs),
          {:ok, modules} <- parsed(Outline.run(source), rel) do
       {:ok, %{file: rel, modules: modules}}
+    end
+  end
+
+  @doc "One clause verb on a file in the worktree: `:replace` / `:insert_after` (with `code`) / `:delete`."
+  @spec clause(
+          Server.Thread.t(),
+          :replace | :delete | :insert_after,
+          String.t(),
+          String.t(),
+          String.t(),
+          String.t() | nil
+        ) ::
+          {:ok, %{file: String.t()}} | {:error, String.t()}
+  def clause(thread, verb, file, name_arity, head, code) do
+    with {:ok, root} <- root(thread),
+         {:ok, [{rel, abs}]} <- resolve_all(root, [file]),
+         {:ok, source} <- read(abs),
+         out when is_binary(out) <- clause_edit(verb, source, name_arity, head, code) do
+      File.write!(abs, out)
+      {:ok, %{file: rel}}
+    end
+  end
+
+  defp clause_edit(:replace, source, na, head, code), do: Clause.replace_body(source, na, head, code || "")
+  defp clause_edit(:delete, source, na, head, _code), do: Clause.delete(source, na, head)
+  defp clause_edit(:insert_after, source, na, head, code), do: Clause.insert_after(source, na, head, code || "")
+
+  @doc """
+  A run verb in the worktree — `:check` (`mix precommit`), `:test` (args: files/lines), `:format`
+  (args: files), `:compile` — via `mix ast.run`, whose one JSON line is the answer.
+  """
+  @spec run(Server.Thread.t(), :check | :test | :format | :compile, [String.t()]) :: {:ok, map()} | {:error, String.t()}
+  def run(thread, verb, args) when verb in [:check, :test, :format, :compile] do
+    with {:ok, root} <- root(thread) do
+      {out, status} =
+        System.cmd("mix", ["ast.run", Atom.to_string(verb) | args],
+          cd: root,
+          stderr_to_stdout: true,
+          env: [{"MIX_ENV", "dev"}]
+        )
+
+      last = out |> String.trim() |> String.split("\n") |> List.last()
+
+      case JSON.decode(last || "") do
+        {:ok, %{"ok" => ok} = row} -> {:ok, row |> Map.new(fn {k, v} -> {String.to_atom(k), v} end) |> Map.put(:ok, ok)}
+        _ -> {:ok, %{ok: false, exit: status, tail: out |> String.split("\n") |> Enum.take(-12) |> Enum.join("\n")}}
+      end
     end
   end
 
