@@ -19,13 +19,20 @@ defmodule Server.Tickets do
 
   @doc "File a ticket. `{:ok, ticket}` or `{:error, changeset}`."
   def file(attrs) do
-    attrs |> Ticket.file_changeset() |> Repo.insert() |> Bus.announce(:ticket_filed)
+    attrs
+    |> Map.new()
+    |> Map.put_new_lazy(:sort, fn -> next_sort(attrs[:workspace_id] || attrs["workspace_id"]) end)
+    |> Ticket.file_changeset()
+    |> Repo.insert()
+    |> Bus.announce(:ticket_filed)
   end
 
-  @doc "Tickets in a workspace, newest-first — the board maps over these."
-  def in_workspace(workspace_id) do
-    Repo.all(from t in Ticket, where: t.workspace_id == ^workspace_id, order_by: [desc: t.id])
-  end
+  @doc """
+  Tickets in a workspace in BOARD order: `sort` descending, newest first as the tie-break. Higher
+  `sort` sits nearer the top of its column — that is what `reorder/2` moves and what persists.
+  """
+  def in_workspace(workspace_id),
+    do: Repo.all(from t in Ticket, where: t.workspace_id == ^workspace_id, order_by: [desc: t.sort, desc: t.id])
 
   @doc "Open (not-done) tickets in a workspace — the capture net minus the archive."
   def open_in_workspace(workspace_id) do
@@ -192,4 +199,43 @@ defmodule Server.Tickets do
   end
 
   defp announce_ticket(result, _ticket_id), do: result
+
+  @doc """
+  Move a ticket up or down within its status column, and persist it. Swaps `sort` with the
+  neighbour rather than renumbering the column, so a move is two writes whatever the column holds.
+  `:ok` when there is no neighbour — the end of a list is not an error.
+  """
+  @spec reorder(Ticket.t(), :up | :down) :: :ok
+  def reorder(%Ticket{} = ticket, direction) do
+    case neighbour(ticket, direction) do
+      %Ticket{} = other ->
+        # The changesets directly, not `update/2`: `import Ecto.Query` brings its own `update/2`
+        # into scope, and a reorder is ONE board change — announcing it twice would repaint twice.
+        {:ok, moved} = ticket |> Ticket.update_changeset(%{sort: other.sort}) |> Repo.update()
+        {:ok, _swapped} = other |> Ticket.update_changeset(%{sort: ticket.sort}) |> Repo.update()
+        Bus.announce({:ok, moved}, :ticket_updated)
+        :ok
+
+      nil ->
+        :ok
+    end
+  end
+
+  # The ticket immediately above (`:up` — the next HIGHER sort) or below in the same column.
+  defp neighbour(%Ticket{} = t, direction) do
+    base = from(o in Ticket, where: o.workspace_id == ^t.workspace_id and o.status == ^t.status and o.id != ^t.id)
+
+    case direction do
+      :up -> base |> where([o], o.sort > ^t.sort) |> order_by([o], asc: o.sort) |> limit(1) |> Repo.one()
+      :down -> base |> where([o], o.sort < ^t.sort) |> order_by([o], desc: o.sort) |> limit(1) |> Repo.one()
+    end
+  end
+
+  # A new ticket lands at the TOP of its column — a 2-second capture you cannot see is a capture
+  # that did not happen.
+  defp next_sort(nil), do: 0
+
+  defp next_sort(workspace_id) do
+    (Repo.one(from t in Ticket, where: t.workspace_id == ^workspace_id, select: max(t.sort)) || 0) + 1
+  end
 end

@@ -151,4 +151,43 @@ defmodule Server.TicketsTest do
       assert reopened.closed_at == nil
     end
   end
+
+  describe "board order (UX slice 4)" do
+    test "a new ticket lands at the TOP of its column", %{workspace: ws} do
+      {:ok, _first} = Tickets.file(%{workspace_id: ws.id, title: "first"})
+      {:ok, _second} = Tickets.file(%{workspace_id: ws.id, title: "second"})
+
+      assert ["second", "first"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
+    end
+
+    test "reorder swaps a ticket with its neighbour, and it persists", %{workspace: ws} do
+      {:ok, _bottom} = Tickets.file(%{workspace_id: ws.id, title: "bottom"})
+      {:ok, top} = Tickets.file(%{workspace_id: ws.id, title: "top"})
+
+      assert ["top", "bottom"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
+
+      assert :ok = Tickets.reorder(Tickets.get(top.id), :down)
+      assert ["bottom", "top"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
+
+      assert :ok = Tickets.reorder(Tickets.get(top.id), :up)
+      assert ["top", "bottom"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
+    end
+
+    test "reordering past the end of a column is :ok, not an error", %{workspace: ws} do
+      {:ok, only} = Tickets.file(%{workspace_id: ws.id, title: "only"})
+
+      assert :ok = Tickets.reorder(only, :up)
+      assert :ok = Tickets.reorder(only, :down)
+    end
+
+    test "a reorder only sees its OWN column — a neighbour in another status is not one", %{workspace: ws} do
+      {:ok, a} = Tickets.file(%{workspace_id: ws.id, title: "a"})
+      {:ok, b} = Tickets.file(%{workspace_id: ws.id, title: "b"})
+      {:ok, _} = Tickets.update(b, %{status: "doing"})
+
+      # `a` is alone in backlog now, so there is nothing to swap with
+      assert :ok = Tickets.reorder(Tickets.get(a.id), :up)
+      assert Tickets.get(a.id).sort == a.sort
+    end
+  end
 end
