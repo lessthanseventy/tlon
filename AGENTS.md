@@ -110,6 +110,22 @@ tools scoped to their worktree. Use it for every Elixir edit and search:
 - `write FILE CODE` (`-` reads stdin) — a whole file: a NEW module, or a rewrite so total that
   patching is the wrong tool. Refuses Elixir that doesn't parse before it reaches disk. Reach for
   this instead of the `Write` tool for `.ex`/`.exs`.
+- `clause visibility FILE name/arity public|private` — EVERY clause of a function at once, since a
+  half-flipped one does not compile. Going private drops an attached `@doc` (Elixir discards it and
+  warns).
+- `attr get|set|delete|list FILE NAME [VALUE]` — module attributes: `@hints`, `@colors`, `@panes`.
+  A name that repeats per clause (`@doc`, `@impl`, `@spec`) is refused — those belong to the clause
+  verbs, which already carry them.
+- `block get|replace|list FILE NAME [CODE] [--label X]` — a macro's `do` block (`schema do`,
+  `describe "…" do`). `--label` is its first string argument.
+- `directive add|remove|list FILE alias|import|require|use MOD [OPTS]` — placed in Elixir's
+  conventional order (use → import → alias → require, alphabetised), so the next format pass does
+  not move it.
+- `module add|list FILE [CODE]` — a whole `defmodule` in a file that already has one.
+- `deps FILE name/arity` — what a function references: local calls (with who ELSE calls them),
+  remote calls, the modules whose aliases must travel, the attributes that will not. The read
+  before moving code. There is no `move` verb on purpose — a move is this report plus insert-at,
+  directive add, delete, find calls and run compile.
 - `rename OLD NEW FILES…` — an identifier across files (heads, calls, captures, variables).
 - `find calls|defs|aliases TARGET FILES…` — grep that knows the code; strings and comments never match.
 - `outline FILE` — read a module's shape before editing it.
@@ -123,9 +139,8 @@ finishing it.
 
 Python/sed string patches on `.ex` files fail on reformatting and land in the wrong module; the
 `Edit` tool is for small literal changes (a doc line, a test assertion) and for non-Elixir files,
-which Menard does not cover (TypeScript, Lua, Nix). Menard has no verb yet for a module attribute,
-a `case` arm, a macro block like `schema do`, or adding a whole module to an existing file —
-those are still `Edit`.
+which Menard does not cover (TypeScript, Lua, Nix). What Menard still has no verb for: a `case`
+arm, and a `@spec` above a clause `rewrite` changes the signature of.
 
 **Formatting is automatic, not a chore.** A `PostToolUse` hook (`.claude/settings.json` →
 `scripts/format-elixir.sh`) runs the file's OWN project formatter on every `Write`/`Edit` of an
