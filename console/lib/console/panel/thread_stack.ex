@@ -76,20 +76,30 @@ defmodule Console.Panel.ThreadStack do
         lines -> lines
       end
 
-    header = [[{"‹ ", :accent}, {"##{card.id} #{card.title}", :header}] ++ chips(card), blank()]
-    # The reply input is its own persistent band below this panel now (Panel.Reply) — the conversation
-    # just carries the backlog + a back-hint; the old inline `↳ reply… (c)` stub is retired.
+    header = [[{"‹ ", :accent}, {"##{card.id} #{card.title}", :header}] ++ chips(card, typing: false), blank()]
     footer = [blank(), line("#{@indent}esc · back to threads", :dim)]
 
-    Console.Panel.clip(header ++ body ++ footer, rect)
+    Console.Panel.clip(header ++ body ++ typing_line(card) ++ footer, rect)
   end
 
-  defp chips(card) do
+  # Under the last message, not in the header: the indicator promises a message, so it belongs
+  # where that message will land.
+  defp typing_line(%{typing: who}) when is_binary(who), do: [line("#{@indent}#{who} is typing…", :st_working)]
+  defp typing_line(_card), do: []
+
+  # On the one-line LIST row the typing signal has nowhere to go but the row. In the CONVERSATION it
+  # belongs at the bottom instead — under the last message, where the message it promises will
+  # actually appear — so that caller asks for `typing: false` and renders `typing_line/1` itself.
+  defp chips(card, opts \\ []) do
     lead = if card[:lead], do: [{"  @#{card.lead}", :label}], else: []
     stage = if card[:stage], do: [{" · #{card.stage}", :dim}], else: []
     awaiting = if card[:awaiting] in [nil, ""], do: [], else: [{" · ⏸ #{card.awaiting}", :accent}]
-    # A live "…typing" signal while the lead is composing (declared thinking presence).
-    typing = if card[:typing], do: [{" · #{card.typing} is typing…", :st_working}], else: []
+
+    typing =
+      if card[:typing] && Keyword.get(opts, :typing, true),
+        do: [{" · #{card.typing} is typing…", :st_working}],
+        else: []
+
     lead ++ stage ++ awaiting ++ typing
   end
 

@@ -97,4 +97,37 @@ defmodule Console.Panel.ThreadStackTest do
       assert ThreadStack.pick(%{cards: [card(%{id: 1})], opened: 1}, rect(), 3) == nil
     end
   end
+
+  describe "the typing indicator (2026-09-10)" do
+    test "the typing indicator sits under the last message, not in the header" do
+      card = %{
+        id: 9,
+        title: "general",
+        active?: true,
+        lead: "hronir",
+        typing: "hronir",
+        messages: [%{author: "andrew", body: "tell me a joke"}]
+      }
+
+      rows = ThreadStack.render(%{cards: [card], opened: 9}, %{x: 0, y: 0, w: 60, h: 20})
+      text = Enum.map(rows, fn row -> Enum.map_join(row, "", &elem(&1, 0)) end)
+
+      typing_at = Enum.find_index(text, &(&1 =~ "is typing"))
+      message_at = Enum.find_index(text, &(&1 =~ "tell me a joke"))
+      header_at = Enum.find_index(text, &(&1 =~ "#9 general"))
+
+      assert typing_at > message_at, "the indicator promises a message — it belongs where that lands"
+      assert typing_at > header_at
+      refute Enum.at(text, header_at) =~ "is typing"
+    end
+
+    test "the one-line LIST row keeps the typing chip — it has nowhere else to put it" do
+      card = %{id: 9, title: "general", active?: true, lead: "hronir", typing: "hronir"}
+
+      rows = ThreadStack.render(%{cards: [card]}, %{x: 0, y: 0, w: 80, h: 10})
+      text = Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, "", &elem(&1, 0)) end)
+
+      assert text =~ "is typing"
+    end
+  end
 end
