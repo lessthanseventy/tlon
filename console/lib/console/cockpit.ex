@@ -1548,6 +1548,19 @@ defmodule Console.Cockpit do
       {cols, rows} = Reads.center_dims(state)
       Terminal.resize(term, cols, rows)
     end
+
+    resize_session_terminal(state)
+  end
+
+  # The SESSION pane PTY was sized once at spawn and never again, so any later layout change — a
+  # window resize, the reply box growing — left it drawing at the old width and running off the
+  # right edge instead of reflowing. Same treatment as the centre.
+  defp resize_session_terminal(state) do
+    with id when is_integer(id) <- Reads.session_thread(state),
+         term when is_pid(term) <- Reads.terminal({:session, id}) do
+      {cols, rows} = Reads.session_pane_dims(state)
+      Terminal.resize(term, cols, rows)
+    end
   end
 
   # Follow the focused thread's Bus topic so its dossier/chat repaint on new activity.
