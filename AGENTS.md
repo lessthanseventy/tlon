@@ -154,12 +154,21 @@ Python/sed string patches on `.ex` files fail on reformatting and land in the wr
 which Menard does not cover (TypeScript, Lua, Nix). What Menard still has no verb for: a `case`
 arm, and a `@spec` above a clause `rewrite` changes the signature of.
 
-**Formatting is automatic, not a chore.** A `PostToolUse` hook (`.claude/settings.json` →
-`scripts/format-elixir.sh`) runs the file's OWN project formatter on every `Write`/`Edit` of an
-`.ex`/`.exs` — including plugins, so `console`'s Styler (which rewrites code, not just whitespace)
-runs there too. Menard's own verbs format after every edit. So the formatter's output is what your
-next read shows, and `mix format --check-formatted` at the gate should never be the first time you
-learn a file was unformatted.
+**Both of those are hooks now, not honour-system.** Menard ships them — `modules/menard/hooks/`,
+declared in its plugin manifest and wired into `.claude/settings.json` by path so the repo works
+without an install step:
+
+- `menard-only.sh` (`PreToolUse`) **blocks** `Edit`/`Write` on any `.ex`/`.exs` holding a
+  `defmodule`. New files, `_build/`, `deps/`, `config/*.exs` and `.formatter.exs` pass — menard
+  has no verbs for a bare keyword list. It deliberately does **not** watch `Bash`: a shell command
+  has no structured target, so deciding whether it writes to a module means pattern-matching the
+  command text, which fires on any command that merely *quotes* the pattern. A `sed -i` on a
+  module is still wrong; that rule lives here, not in a guess.
+- `format-elixir.sh` (`PostToolUse`) runs the file's OWN project formatter on every write of an
+  `.ex`/`.exs` — including plugins, so `console`'s Styler (which rewrites code, not just
+  whitespace) runs there too. Menard's own verbs format after every edit. The formatter's output
+  is what your next read shows, and `mix format --check-formatted` at the gate should never be the
+  first time you learn a file was unformatted.
 
 ## How to work — the four rules
 
