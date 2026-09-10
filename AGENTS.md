@@ -105,9 +105,9 @@ tools scoped to their worktree. Use it for every Elixir edit and search:
 - `clause rewrite … HEAD CODE` — the WHOLE clause, head included. The verb for changing args,
   adding a guard, destructuring a parameter; `replace` only ever swaps a body. `CODE` may lead with
   the clause's comment, which then replaces the one already there.
-- `clause doc|comment FILE name/arity HEAD [TEXT]` — the `@doc` above a clause, or the `#` comment
-  above it. Prose in, `#`/heredoc added; no TEXT deletes it. Both are string literals no other verb
-  reaches — this is why a docstring or a `why` used to mean editing the file as text.
+- `clause doc|comment FILE name/arity HEAD [TEXT]` · `attr comment FILE NAME [TEXT]` — the `@doc`
+  above a clause, or the `#` comment above a clause or a table. Prose in, `#`/heredoc added; no
+  TEXT deletes it. String literals no other verb reaches.
 - `clause insert-at FILE (Mod.Name|-) [top|bottom] CODE` — a whole new FUNCTION, which has no
   sibling clause to anchor to. Placement follows the code: a `defp` lands with the other private
   functions, a `def` with the public ones. (A new *clause* of an existing function is

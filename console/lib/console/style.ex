@@ -12,6 +12,8 @@ defmodule Console.Style do
 
   alias Console.Palette, as: P
 
+  # Every style the cockpit can ask for. A panel names one of these; the palette decides what it
+  # looks like, so a re-theme never touches a panel.
   @colors %{
     normal: {P.body(), P.ground()},
     header: {P.key(), P.ground()},
