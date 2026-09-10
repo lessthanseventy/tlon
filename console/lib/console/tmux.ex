@@ -20,7 +20,8 @@ defmodule Console.Tmux do
           index: String.t(),
           thread_id: integer() | nil,
           opening: String.t() | nil,
-          activity: integer() | nil
+          activity: integer() | nil,
+          pane_pid: integer() | nil
         }
 
   @type runner :: (String.t(), [String.t()], keyword() -> {String.t(), non_neg_integer()})
@@ -55,7 +56,7 @@ defmodule Console.Tmux do
     runner.("tmux", argv(id, args), stderr_to_stdout: true)
   end
 
-  @list_format "\#{window_active}\t\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{window_activity}"
+  @list_format "\#{window_active}\t\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{window_activity}\t\#{pane_pid}"
 
   @doc "The session's windows as tabs, straight from tmux (a session not up yet is `[]`)."
   @spec list_windows(term() | nil, keyword()) :: [tab()]
@@ -79,15 +80,9 @@ defmodule Console.Tmux do
     out
     |> String.split("\n", trim: true)
     |> Enum.flat_map(fn line ->
-      case String.split(line, "\t", parts: 6) do
+      case String.split(line, "\t", parts: 7) do
         [active, index, name | rest] when rest != [] or name != "" ->
-          [thread, opening, activity] =
-            case rest do
-              [t, o, a] -> [t, o, a]
-              [t, o] -> [t, o, ""]
-              [t] -> [t, "", ""]
-              [] -> ["", "", ""]
-            end
+          [thread, opening, activity, pane_pid] = Enum.map(0..3, &Enum.at(rest, &1, ""))
 
           [
             %{
@@ -96,7 +91,8 @@ defmodule Console.Tmux do
               index: index,
               thread_id: int_or_nil(thread),
               opening: if(opening in ["typed", "done"], do: opening),
-              activity: int_or_nil(activity)
+              activity: int_or_nil(activity),
+              pane_pid: int_or_nil(pane_pid)
             }
           ]
 

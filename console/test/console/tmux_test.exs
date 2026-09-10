@@ -127,28 +127,49 @@ defmodule Console.TmuxTest do
       out = "1\t1\tpi\t\t\t\n0\t2\tclaude\t\t\t\n0\t3\treviewer-fix-the-bug\t7\tdone\t1755900000\n"
 
       assert Tmux.parse_windows(out) == [
-               %{name: "pi", active?: true, index: "1", thread_id: nil, opening: nil, activity: nil},
-               %{name: "claude", active?: false, index: "2", thread_id: nil, opening: nil, activity: nil},
+               %{name: "pi", active?: true, index: "1", thread_id: nil, opening: nil, activity: nil, pane_pid: nil},
+               %{name: "claude", active?: false, index: "2", thread_id: nil, opening: nil, activity: nil, pane_pid: nil},
                %{
                  name: "reviewer-fix-the-bug",
                  active?: false,
                  index: "3",
                  thread_id: 7,
                  opening: "done",
-                 activity: 1_755_900_000
+                 activity: 1_755_900_000,
+                 pane_pid: nil
                }
              ]
     end
 
     test "shorter lines (no thread/opening/activity tags) still parse — missing fields nil" do
       assert Tmux.parse_windows("1\t1\tpi\n") ==
-               [%{name: "pi", active?: true, index: "1", thread_id: nil, opening: nil, activity: nil}]
+               [%{name: "pi", active?: true, index: "1", thread_id: nil, opening: nil, activity: nil, pane_pid: nil}]
 
       assert Tmux.parse_windows("0\t4\tplanner-x\t9\n") ==
-               [%{name: "planner-x", active?: false, index: "4", thread_id: 9, opening: nil, activity: nil}]
+               [
+                 %{
+                   name: "planner-x",
+                   active?: false,
+                   index: "4",
+                   thread_id: 9,
+                   opening: nil,
+                   activity: nil,
+                   pane_pid: nil
+                 }
+               ]
 
       assert Tmux.parse_windows("0\t4\tplanner-x\t9\tdone\n") ==
-               [%{name: "planner-x", active?: false, index: "4", thread_id: 9, opening: "done", activity: nil}]
+               [
+                 %{
+                   name: "planner-x",
+                   active?: false,
+                   index: "4",
+                   thread_id: 9,
+                   opening: "done",
+                   activity: nil,
+                   pane_pid: nil
+                 }
+               ]
     end
 
     test "empty output (session not up yet) is an empty strip, not a crash" do
@@ -157,7 +178,7 @@ defmodule Console.TmuxTest do
 
     test "a malformed line is dropped, not guessed" do
       assert Tmux.parse_windows("garbage\n1\t1\tpi\n") ==
-               [%{name: "pi", active?: true, index: "1", thread_id: nil, opening: nil, activity: nil}]
+               [%{name: "pi", active?: true, index: "1", thread_id: nil, opening: nil, activity: nil, pane_pid: nil}]
     end
   end
 end

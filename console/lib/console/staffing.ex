@@ -77,12 +77,39 @@ defmodule Console.Staffing do
 
   def ensure_workspace_roster(%{active_key: key} = state, spaces) when Space.workspace?(key) do
     case Space.fetch(key, spaces) do
-      %Space{bench: [lead | rest]} -> state |> ensure_center(key, lead) |> ensure_windows(key, rest)
-      _ -> state
+      %Space{bench: [lead | rest] = bench} ->
+        reap_stale(key, bench)
+        state |> ensure_center(key, lead) |> ensure_windows(key, rest)
+
+      _ ->
+        state
     end
   end
 
   def ensure_workspace_roster(state, _spaces), do: state
+  # Tear down a coworker whose identity no longer matches the bench, so the spawn passes below
+  # rebuild it. Killing the CENTRE's window is not enough on its own: `profile_launcher/3` starts it
+  # with `new-session -A`, which ATTACHES to a session that still has other windows instead of
+  # running its command — so a stale centre is replaced by dropping the whole workspace server, and
+  # a stale tail window by dropping just that window.
+  defp reap_stale(workspace_id, bench) do
+    handles = Enum.map(bench, & &1.name)
+    centre = List.first(handles)
+    stale = workspace_id |> Tmux.list_windows() |> stale_coworkers(handles)
+
+    cond do
+      stale == [] ->
+        :ok
+
+      Enum.any?(stale, &(&1.name == centre)) ->
+        Tmux.run(workspace_id, ["kill-server"])
+
+      true ->
+        for tab <- stale, do: Tmux.kill_window(workspace_id, tab.index)
+    end
+
+    :ok
+  end
 
   # The roster LEAD: a pi session working ON the box on a persistent "machine" thread (so its work
   # is triageable) — pi by design, claude stays the deliberate escalation (AGENTS.md routing).
@@ -535,4 +562,48 @@ defmodule Console.Staffing do
 
   defp safe_spawn_harness(key, exports, opts),
     do: Safe.value(fn -> Sessions.spawn_harness(key, exports, opts) end, {:error, :sessions_down})
+
+  @doc """
+  The coworker windows whose identity has gone stale: their live process still holds a `TLON_AUTHOR`
+  that is no longer a handle on this workspace's bench. A rename on the server does exactly that —
+  the process keeps minting under the old handle, every `post_message` 400s, and nothing notices,
+  because the WINDOW name never changed.
+
+  Conservative by construction: a window is stale only when its author is READ successfully and is
+  positively absent from the bench. An unreadable `/proc` (a pane that just died, a process we
+  cannot see) is left alone — killing a coworker we failed to identify would be worse than leaving
+  one that is fine.
+  """
+  @spec stale_coworkers([Tmux.tab()], [String.t()], (Tmux.tab() -> String.t() | nil)) :: [Tmux.tab()]
+  def stale_coworkers(tabs, bench_handles, read_author \\ &pane_author/1) do
+    handles = MapSet.new(bench_handles)
+
+    Enum.filter(tabs, fn tab ->
+      case read_author.(tab) do
+        nil -> false
+        author -> not MapSet.member?(handles, author)
+      end
+    end)
+  end
+
+  @doc false
+  # The `TLON_AUTHOR` a pane's process was started with, read off its environment — the only place
+  # the identity actually lives. nil when it cannot be read.
+  @spec pane_author(Tmux.tab()) :: String.t() | nil
+  def pane_author(%{pane_pid: pid}) when is_integer(pid) do
+    case File.read("/proc/#{pid}/environ") do
+      {:ok, env} ->
+        env
+        |> String.split(<<0>>, trim: true)
+        |> Enum.find_value(fn
+          "TLON_AUTHOR=" <> author -> author
+          _other -> nil
+        end)
+
+      _unreadable ->
+        nil
+    end
+  end
+
+  def pane_author(_tab), do: nil
 end
