@@ -163,8 +163,15 @@ plugins, so `console`'s Styler runs there too.
 gotchas no error message can teach. Read it before your first Elixir edit; it is menard's own
 file, so it travels with the plugin rather than living here.
 
-Ficciones wires the two hooks into `.claude/settings.json` **by path**, so the repo works with no
-install step. `.claude-plugin/marketplace.json` at the root publishes menard for anywhere else.
+The hooks come from the **installed plugin**, not from this repo's `.claude/settings.json` — the
+by-path wiring that predated the plugin is gone, because two registrations of the same hook is the
+duplication menard exists to prevent. `.claude-plugin/marketplace.json` at the root publishes it:
+
+    /plugin marketplace add ~/projects/ficciones
+    /plugin install menard@ficciones
+
+A clone without that install has **no guard**, and `Edit` on a module will go through. The rule
+holds anyway — it is in `modules/menard/AGENTS.md`, which is where an agent should be reading it.
 
 ## How to work — the four rules
 
