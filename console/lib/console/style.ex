@@ -26,10 +26,11 @@ defmodule Console.Style do
   @dim P.dim()
   @sep P.sep()
   @sel P.sel()
+  @sel_ink P.selInk()
 
   # Chip fields carry dark text, so their background must be BRIGHT to pop — body amber is a
-  # burnt mid-tone that leaves black text muddy next to the green chip; the chip amber lifts
-  # the field to ~the green's luminance (black-on-it 14.3:1 vs 11.5) while staying gold.
+  # burnt mid-tone that leaves black text muddy next to the green chip. The chip amber lifts the
+  # field clear of the body (black-on-it 8.7:1) without the glare of the old #FFD000.
   @chip P.chip()
 
   # Chip TEXT ink. Must NOT be 0x000000: under TB_OUTPUT_TRUECOLOR color 0 is termbox's "default"
@@ -50,10 +51,13 @@ defmodule Console.Style do
     dim: {@dim, @bg},
     meta: {@lilac, @bg},
     separator: {@sep, @bg},
-    selected: {P.cream(), @sel},
-    selected_accent: {P.white(), @sel},
+    # Selection is inverse video in VIOLET, the way the active thing is inverse video in amber —
+    # so "what I picked" and "where I am" never read as the same chip.
+    selected: {@sel_ink, @sel},
+    # A selected row that is also attention: the same inverse video, in the operator's pink.
+    selected_accent: {@ink, @pink},
     # Status-line chips: inverse-video tabs, dark text on a bright field.
-    tab: {P.white(), @sel},
+    tab: {@sel_ink, @sel},
     stat: {@ink, @chip},
     stat_live: {@ink, @green},
     # LOCK's chip — total keyboard passthrough deserves the loudest, most alarming color on hand.
