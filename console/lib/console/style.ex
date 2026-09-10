@@ -25,8 +25,6 @@ defmodule Console.Style do
   @red P.red()
   @dim P.dim()
   @sep P.sep()
-  @sel P.sel()
-  @sel_ink P.selInk()
 
   # Chip fields carry dark text, so their background must be BRIGHT to pop — body amber is a
   # burnt mid-tone that leaves black text muddy next to the green chip. The chip amber lifts the
@@ -51,13 +49,14 @@ defmodule Console.Style do
     dim: {@dim, @bg},
     meta: {@lilac, @bg},
     separator: {@sep, @bg},
-    # Selection is inverse video in VIOLET, the way the active thing is inverse video in amber —
-    # so "what I picked" and "where I am" never read as the same chip.
-    selected: {@sel_ink, @sel},
-    # A selected row that is also attention: the same inverse video, in the operator's pink.
+    # `:selected` is the row CURSOR — one per list, gone when you look away — so it is the amber
+    # field, like every other "where I am" on the machine. The violet field (sel/selInk) is for a
+    # SELECTION you pick and leave behind; a TUI list has no such state, so it does not appear here.
+    selected: {@ink, @chip},
+    # A cursor row that is also attention: the same inverse video, in the operator's pink.
     selected_accent: {@ink, @pink},
     # Status-line chips: inverse-video tabs, dark text on a bright field.
-    tab: {@sel_ink, @sel},
+    tab: {@ink, @chip},
     stat: {@ink, @chip},
     stat_live: {@ink, @green},
     # LOCK's chip — total keyboard passthrough deserves the loudest, most alarming color on hand.
