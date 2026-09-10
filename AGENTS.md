@@ -92,77 +92,30 @@ then read 1800 lines," every time.
 
 ### Edit Elixir with Menard, not sed/python/grep
 
-`modules/menard` is the repo's AST-aware toolbox for Elixir (Sourceror patches: only the bytes
-you named change). It is three doors onto one library — mix tasks, the `menard` stdio MCP in
-Claude Code, and the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb`
-tools scoped to their worktree. Use it for every Elixir edit and search:
+`modules/menard` is the repo's AST-aware toolbox for Elixir (Sourceror patches: only the bytes you
+named change). **`modules/menard/AGENTS.md` is the reference** — which verb for which shape, what
+each guarantees, and the gotchas no error message can teach. It ships with the plugin, so it is the
+one copy; this section is only the doors into it from here.
 
-- `clause replace|delete|insert-after|insert-before FILE [Mod.]name/arity HEAD [CODE] [--nth N]` —
-  one clause, addressed by its head as written (guard included, parens optional). In a file with
-  several modules, qualify the name (`Menard.MCP.Clause.execute/2`); a bare name they share is
-  refused. A miss lists the heads that exist — read it, don't guess again. Two clauses CAN share a
-  head (an insert beside its twin); that is refused with both line numbers, and `--nth` says which.
-- `clause rewrite … HEAD CODE` — the WHOLE clause, head included. The verb for changing args,
-  adding a guard, destructuring a parameter; `replace` only ever swaps a body. `CODE` may lead with
-  the clause's comment, which then replaces the one already there.
-- `clause doc|comment FILE name/arity HEAD [TEXT]` · `attr comment FILE NAME [TEXT]` — the `@doc`
-  above a clause, or the `#` comment above a clause or a table. Prose in, `#`/heredoc added; no
-  TEXT deletes it. String literals no other verb reaches.
-- `clause insert-at FILE (Mod.Name|-) [top|bottom] CODE` — a whole new FUNCTION, which has no
-  sibling clause to anchor to. Placement follows the code: a `defp` lands with the other private
-  functions, a `def` with the public ones. (A new *clause* of an existing function is
-  `insert-after` — name its sibling.)
-- `stmt insert-after|insert-before|replace|delete|list FILE name/arity HEAD MATCH [CODE] [--nth N]`
-  — ONE statement inside a clause body, addressed the way a clause is: name the clause, then the
-  statement by what is WRITTEN. Reaches a line in a `do` block, a step in a `with`, and a `case`
-  ARM alike. `list` prints what is there; a miss prints it too.
-- `write FILE CODE` (`-` reads stdin) — a whole file: a NEW module, or a rewrite so total that
-  patching is the wrong tool. Refuses Elixir that doesn't parse before it reaches disk. Reach for
-  this instead of the `Write` tool for `.ex`/`.exs`.
-- `clause visibility FILE name/arity public|private` — EVERY clause of a function at once, since a
-  half-flipped one does not compile. Going private drops an attached `@doc` (Elixir discards it and
-  warns).
-- `attr get|set|delete|list FILE NAME [VALUE]` — module attributes: `@hints`, `@colors`, `@panes`.
-  A name that repeats per clause (`@doc`, `@impl`, `@spec`) is refused — those belong to the clause
-  verbs, which already carry them.
-- `block get|replace|add|relabel|list FILE NAME [CODE] [--label X] [--in PARENT]` — a macro's `do`
-  block (`schema do`, `describe "…" do`). `--label` is its first string argument; `--in` names a
-  parent to append inside, either a labelled block or a MODULE. `relabel FILE NAME OLD NEW` renames
-  a `test`/`describe` label. A schema field lives here (`block replace FILE schema … --label <table>`),
-  not in the clause verbs.
-- `directive add|remove|list FILE alias|import|require|use MOD [OPTS]` — placed in Elixir's
-  conventional order (use → import → alias → require, alphabetised), so the next format pass does
-  not move it.
-- `module add|list FILE [CODE]` — a whole `defmodule` in a file that already has one.
-- `deps FILE name/arity` — what a function references: local calls (with who ELSE calls them),
-  remote calls, the modules whose aliases must travel, the attributes that will not. The read
-  before moving code. There is no `move` verb on purpose — a move is this report plus insert-at,
-  directive add, delete, find calls and run compile.
-- `rename OLD NEW FILES…` — an identifier across files (heads, calls, captures, variables).
-- `find calls|defs|aliases TARGET FILES…` — grep that knows the code; strings and comments never match.
-- `outline FILE` — read a module's shape before editing it.
-- `run check|test|format|compile [--in DIR]` — one structured answer, failures with the test's source.
+Three doors onto one library:
 
-CLI: `mise run menard -- VERB …` (always compiles the current code; the MCP server runs the code
-it started with — restart Claude after changing Menard). Dashes and underscores both work at both
-doors. `mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape
-hatch for editing Menard WITH Menard, where a half-applied edit otherwise locks the tool out of
-finishing it.
+- `mise run menard -- VERB …` — always compiles the current code. Dashes and underscores both work.
+- the `menard` stdio **MCP** in Claude Code — runs the code it started with, so **restart Claude
+  after changing Menard**.
+- the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb` tools, scoped to
+  their worktree.
 
-Python/sed string patches on `.ex` files fail on reformatting and land in the wrong module; the
-`Edit` tool is for small literal changes (a doc line, a test assertion) and for non-Elixir files,
-which Menard does not cover (TypeScript, Lua, Nix). What Menard still has no verb for: a `case`
-arm, and a `@spec` above a clause `rewrite` changes the signature of.
+`mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape hatch for
+editing Menard WITH Menard, where a half-applied edit otherwise locks the tool out of finishing it.
 
-Both are hooks, shipped by the menard **plugin**: a `PreToolUse` guard that blocks `Edit`/`Write`
-on a module, and a `PostToolUse` formatter that runs the file's own project formatter on every
-write — `console`'s Styler included. They are not in `.claude/settings.json`, so a clone without
-the plugin gets no block; the rule holds regardless.
+The `Edit` tool is for the languages Menard does not cover — TypeScript, Lua, Nix. On a module it
+is blocked outright, by a `PreToolUse` guard the plugin ships alongside a `PostToolUse` formatter
+that runs the file's own project formatter on every write (`console`'s Styler included). Neither is
+in `.claude/settings.json`, so a clone without the plugin gets no block; the rule holds regardless.
 
     /plugin marketplace add ~/projects/ficciones && /plugin install menard@ficciones
 
-**`modules/menard/AGENTS.md` is the working reference** — which verb for which shape, and the
-gotchas no error can teach. Read it before your first Elixir edit.
+Still missing a verb: a `@spec` above a clause whose signature `rewrite` changes.
 
 ## How to work — the four rules
 
