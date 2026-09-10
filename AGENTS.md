@@ -154,24 +154,15 @@ Python/sed string patches on `.ex` files fail on reformatting and land in the wr
 which Menard does not cover (TypeScript, Lua, Nix). What Menard still has no verb for: a `case`
 arm, and a `@spec` above a clause `rewrite` changes the signature of.
 
-**Both of those are hooks now, not honour-system.** Menard ships them (`modules/menard/hooks/`,
-declared in its plugin manifest): a `PreToolUse` guard that blocks `Edit`/`Write` on a module, and
-a `PostToolUse` formatter that runs the file's OWN project formatter on every write — including
-plugins, so `console`'s Styler runs there too.
+Both are hooks, shipped by the menard **plugin**: a `PreToolUse` guard that blocks `Edit`/`Write`
+on a module, and a `PostToolUse` formatter that runs the file's own project formatter on every
+write — `console`'s Styler included. They are not in `.claude/settings.json`, so a clone without
+the plugin gets no block; the rule holds regardless.
+
+    /plugin marketplace add ~/projects/ficciones && /plugin install menard@ficciones
 
 **`modules/menard/AGENTS.md` is the working reference** — which verb for which shape, and the
-gotchas no error message can teach. Read it before your first Elixir edit; it is menard's own
-file, so it travels with the plugin rather than living here.
-
-The hooks come from the **installed plugin**, not from this repo's `.claude/settings.json` — the
-by-path wiring that predated the plugin is gone, because two registrations of the same hook is the
-duplication menard exists to prevent. `.claude-plugin/marketplace.json` at the root publishes it:
-
-    /plugin marketplace add ~/projects/ficciones
-    /plugin install menard@ficciones
-
-A clone without that install has **no guard**, and `Edit` on a module will go through. The rule
-holds anyway — it is in `modules/menard/AGENTS.md`, which is where an agent should be reading it.
+gotchas no error can teach. Read it before your first Elixir edit.
 
 ## How to work — the four rules
 
