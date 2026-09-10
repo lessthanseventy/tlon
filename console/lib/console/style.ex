@@ -5,25 +5,12 @@ defmodule Console.Style do
   not a hunt through every panel (design §3: panels are thin; presentation is centralized).
 
   Colors are 24-bit RGB for termbox2's `TB_OUTPUT_TRUECOLOR` (see `Mix.Tasks.Console.Run`);
-  `@bg` is `0x000000`, which truecolor maps to the terminal's own background. The values
-  themselves are `Console.Palette` — generated, shared with every other surface on the box.
+  the ground is `0x000000`, which truecolor maps to the terminal's own background. The values
+  are `Console.Palette` — generated, shared with every other surface on the box, and named by
+  ROLE: what a style MEANS, never a colour.
   """
 
-  # Every hue comes from Console.Palette (generated from modules/desktop/theme/palette.nix —
-  # the one palette the whole machine shares, plan doc §5b). The rule, same as the shell's:
-  # body text AMBER on black; green is the LIVE highlight; pink flags agents/the operator;
-  # cyan is keys/labels/code; lilac is secondary text; the active thing is inverse video
-  # (amber field, near-black ink). Green used to be the body here — that was the drift.
   alias Console.Palette, as: P
-
-  # Chip fields carry dark text, so their background must be BRIGHT to pop — body amber is a
-  # burnt mid-tone that leaves black text muddy next to the green chip. The chip amber lifts the
-  # field clear of the body (black-on-it 8.7:1) without the glare of the old #FFD000.
-
-  # Chip TEXT ink. Must NOT be 0x000000: under TB_OUTPUT_TRUECOLOR color 0 is termbox's "default"
-  # sentinel — fine as a background (→ terminal bg), but as a FOREGROUND it falls through to the
-  # terminal's default fg (light), so `{@bg, chip}` rendered as white-on-chip, not the intended
-  # black. A non-zero near-black keeps the dark text the bright fields were tuned for.
 
   @colors %{
     normal: {P.body(), P.ground()},

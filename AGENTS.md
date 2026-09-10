@@ -195,8 +195,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   weaker model keeps getting wrong; until then that guidance lives in the module's file. Keep every one
   terse and actionable to the same standard as comments: orientation, the exact commands, the law, the
   gotchas, a pointer to the one deeper doc — no lore. Skeleton: **what it is → Law → dev loop → Verify.**
-  The tree: `AGENTS.md` (here) · `modules/server/AGENTS.md` · `modules/console/AGENTS.md` ·
-  `modules/adapters/AGENTS.md` (+ `consult`/`fmt`/`lsp`).
+  `find . -name AGENTS.md` lists them; a copy of that list here only ever goes stale, and had.
 - **Keep docs in sync with the code, in the same commit.** A change that makes a module's `AGENTS.md`
   or a load-bearing comment stale updates it in that change — stale guidance is worse than none,
   because a weaker model trusts it. Nothing mechanical can catch this (staleness is semantic, invisible
