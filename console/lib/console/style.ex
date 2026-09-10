@@ -16,87 +16,74 @@ defmodule Console.Style do
   # (amber field, near-black ink). Green used to be the body here — that was the drift.
   alias Console.Palette, as: P
 
-  @bg P.bg()
-  @amber P.amber()
-  @green P.green()
-  @cyan P.cyan()
-  @pink P.pink()
-  @lilac P.lilac()
-  @red P.red()
-  @dim P.dim()
-  @sep P.sep()
-
   # Chip fields carry dark text, so their background must be BRIGHT to pop — body amber is a
   # burnt mid-tone that leaves black text muddy next to the green chip. The chip amber lifts the
   # field clear of the body (black-on-it 8.7:1) without the glare of the old #FFD000.
-  @chip P.chip()
 
   # Chip TEXT ink. Must NOT be 0x000000: under TB_OUTPUT_TRUECOLOR color 0 is termbox's "default"
   # sentinel — fine as a background (→ terminal bg), but as a FOREGROUND it falls through to the
   # terminal's default fg (light), so `{@bg, chip}` rendered as white-on-chip, not the intended
   # black. A non-zero near-black keeps the dark text the bright fields were tuned for.
-  @ink P.ink()
 
   @colors %{
-    normal: {@amber, @bg},
-    header: {@cyan, @bg},
-    label: {@cyan, @bg},
-    accent: {@pink, @bg},
-    # The operator's voice in chat — pink, its OWN key (not :accent) so re-theming the operator
+    normal: {P.body(), P.ground()},
+    header: {P.key(), P.ground()},
+    label: {P.key(), P.ground()},
+    accent: {P.attention(), P.ground()},
+    # The operator's voice in chat — its OWN key (not :accent) so re-theming the operator
     # doesn't entangle with the cursor/thinking chrome.
-    operator: {@pink, @bg},
-    warm: {@amber, @bg},
-    dim: {@dim, @bg},
-    meta: {@lilac, @bg},
-    separator: {@sep, @bg},
-    # `:selected` is the row CURSOR — one per list, gone when you look away — so it is the amber
-    # field, like every other "where I am" on the machine. The violet field (sel/selInk) is for a
+    operator: {P.attention(), P.ground()},
+    warm: {P.body(), P.ground()},
+    dim: {P.inactive(), P.ground()},
+    meta: {P.meta(), P.ground()},
+    separator: {P.structure(), P.ground()},
+    # `:selected` is the row CURSOR — one per list, gone when you look away — so it is the cursor
+    # field, like every other "where I am" on the machine. The violet selection field is for a
     # SELECTION you pick and leave behind; a TUI list has no such state, so it does not appear here.
-    selected: {@ink, @chip},
-    # A cursor row that is also attention: the same inverse video, in the operator's pink.
-    selected_accent: {@ink, @pink},
+    selected: {P.field_ink(), P.cursor_field()},
+    # A cursor row that is also attention: the same inverse video, in the operator's colour.
+    selected_accent: {P.field_ink(), P.attention_field()},
     # Status-line chips: inverse-video tabs, dark text on a bright field.
-    tab: {@ink, @chip},
-    stat: {@ink, @chip},
-    stat_live: {@ink, @green},
-    # LOCK's chip — total keyboard passthrough deserves the loudest, most alarming color on hand.
-    stat_warn: {@ink, @red},
-    # A commit diff in MAIN (Commits pane detail): additions green, deletions red, hunk headers
-    # cyan. File/meta lines borrow :label and :dim from above.
-    diff_add: {@green, @bg},
-    diff_del: {@red, @bg},
-    diff_hunk: {@cyan, @bg},
+    tab: {P.field_ink(), P.cursor_field()},
+    stat: {P.field_ink(), P.cursor_field()},
+    stat_live: {P.field_ink(), P.live_field()},
+    # LOCK's chip — total keyboard passthrough deserves the loudest colour on hand.
+    stat_warn: {P.field_ink(), P.alarm_field()},
+    # A commit diff in MAIN (Commits pane detail). These are the CATEGORICAL tier: add/delete/hunk
+    # are a diff convention, not machine state — an addition is not "running".
+    diff_add: {P.cat_green(), P.ground()},
+    diff_del: {P.cat_red(), P.ground()},
+    diff_hunk: {P.cat_cyan(), P.ground()},
     # Semantic event styles (the server activity feed + footer pulse): a fact banked or a check
-    # passing reads live-green, a failure red, a posted message cyan; work landed and an
-    # issue/question raised both read body amber — icon carries the done/warn distinction.
-    event_ok: {@green, @bg},
-    event_bad: {@red, @bg},
-    event_msg: {@cyan, @bg},
-    event_done: {@amber, @bg},
-    event_warn: {@amber, @bg},
-    # Slice D visual system — STATUS colors (the signal tier: card gutters + status dots).
-    st_working: {P.green(), @bg},
-    st_blocked: {P.red(), @bg},
-    st_await: {P.pink(), @bg},
-    st_open: {P.amber(), @bg},
-    st_done: {P.moss(), @bg},
-    st_idle: {P.dim(), @bg},
-    # IDENTITY colors (the splash tier: same entity → same hue). Per coworker archetype, reused as
-    # the workspace-hue cycle. surveyor cyan, builder green, reviewer amber, planner pink,
-    # assistant violet.
-    arch_surveyor: {P.cyan(), @bg},
-    arch_builder: {P.green(), @bg},
-    arch_reviewer: {P.amber(), @bg},
-    arch_planner: {P.pink(), @bg},
-    arch_assistant: {P.violet(), @bg},
-    # Markdown rendering in the chat (Console.Markdown) — no bold attr in this palette, so
-    # emphasis maps to COLOUR: **bold** white, `code`/fences cyan, # headings the chip amber,
-    # *italic* lilac, rules the structure orange.
-    md_bold: {P.white(), @bg},
-    md_italic: {@lilac, @bg},
-    md_code: {@cyan, @bg},
-    md_head: {@chip, @bg},
-    md_rule: {@sep, @bg}
+    # passing reads live, a failure alarm, a posted message reads as a key; work landed and an
+    # issue/question raised both read body — icon carries the done/warn distinction.
+    event_ok: {P.live(), P.ground()},
+    event_bad: {P.alarm(), P.ground()},
+    event_msg: {P.key(), P.ground()},
+    event_done: {P.body(), P.ground()},
+    event_warn: {P.body(), P.ground()},
+    # STATUS tier (the signal tier: card gutters + status dots).
+    st_working: {P.st_working(), P.ground()},
+    st_blocked: {P.st_blocked(), P.ground()},
+    st_await: {P.st_await(), P.ground()},
+    st_open: {P.st_open(), P.ground()},
+    st_done: {P.st_done(), P.ground()},
+    st_idle: {P.st_idle(), P.ground()},
+    # IDENTITY tier (the splash tier: same entity → same hue), per coworker archetype, reused as
+    # the workspace-hue cycle.
+    arch_surveyor: {P.arch_surveyor(), P.ground()},
+    arch_builder: {P.arch_builder(), P.ground()},
+    arch_reviewer: {P.arch_reviewer(), P.ground()},
+    arch_planner: {P.arch_planner(), P.ground()},
+    arch_assistant: {P.arch_assistant(), P.ground()},
+    # Markdown in the chat (Console.Markdown) — no bold attr in this palette, so emphasis maps to
+    # COLOUR: **bold** max-contrast, `code`/fences the key colour, # headings the cursor field,
+    # *italic* secondary, rules the structure.
+    md_bold: {P.max_contrast(), P.ground()},
+    md_italic: {P.meta(), P.ground()},
+    md_code: {P.key(), P.ground()},
+    md_head: {P.cursor_field(), P.ground()},
+    md_rule: {P.structure(), P.ground()}
   }
 
   @doc """
@@ -105,9 +92,10 @@ defmodule Console.Style do
   path the embedded terminal uses, where each cell carries its own colour from the VT engine.
   """
   @spec fg_bg(atom() | {:rgb, non_neg_integer(), non_neg_integer()}) :: {non_neg_integer(), non_neg_integer()}
+
   def fg_bg({:rgb, fg, bg}), do: {fg, bg}
   def fg_bg(style), do: Map.get(@colors, style, @colors.normal)
 
   @doc "The default background (terminal-native black under truecolor)."
-  def bg, do: @bg
+  def bg, do: P.ground()
 end
