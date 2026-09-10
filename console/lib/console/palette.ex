@@ -14,7 +14,7 @@ defmodule Console.Palette do
   def chip, do: 0xFFB000
   def cyan, do: 0x33C7FF
   def dim, do: 0xB8994C
-  def ember, do: 0xFF6305
+  def ember, do: 0xFF6E06
   def emberDim, do: 0x9E3B00
   def green, do: 0x33FF00
   def grey, do: 0xC7C7C7
@@ -28,7 +28,7 @@ defmodule Console.Palette do
   def selInk, do: 0x1A0A2E
   def selSoft, do: 0x2E0057
   def sep, do: 0xB5651D
-  def surface0, do: 0x0A0A0A
+  def surface0, do: 0x0D0D0D
   def surface1, do: 0x0E0E0E
   def surface2, do: 0x141414
   def surface3, do: 0x1A1A1A
