@@ -11,7 +11,7 @@ defmodule Console.Palette do
   def amberTint1, do: 0x1A1200
   def amberTint2, do: 0x332800
   def bg, do: 0x000000
-  def chip, do: 0xD9A400
+  def chip, do: 0xFFB000
   def cyan, do: 0x33C7FF
   def dim, do: 0xB8994C
   def ember, do: 0xFF6305
