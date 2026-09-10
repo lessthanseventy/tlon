@@ -154,21 +154,17 @@ Python/sed string patches on `.ex` files fail on reformatting and land in the wr
 which Menard does not cover (TypeScript, Lua, Nix). What Menard still has no verb for: a `case`
 arm, and a `@spec` above a clause `rewrite` changes the signature of.
 
-**Both of those are hooks now, not honour-system.** Menard ships them — `modules/menard/hooks/`,
-declared in its plugin manifest and wired into `.claude/settings.json` by path so the repo works
-without an install step:
+**Both of those are hooks now, not honour-system.** Menard ships them (`modules/menard/hooks/`,
+declared in its plugin manifest): a `PreToolUse` guard that blocks `Edit`/`Write` on a module, and
+a `PostToolUse` formatter that runs the file's OWN project formatter on every write — including
+plugins, so `console`'s Styler runs there too.
 
-- `menard-only.sh` (`PreToolUse`) **blocks** `Edit`/`Write` on any `.ex`/`.exs` holding a
-  `defmodule`. New files, `_build/`, `deps/`, `config/*.exs` and `.formatter.exs` pass — menard
-  has no verbs for a bare keyword list. It deliberately does **not** watch `Bash`: a shell command
-  has no structured target, so deciding whether it writes to a module means pattern-matching the
-  command text, which fires on any command that merely *quotes* the pattern. A `sed -i` on a
-  module is still wrong; that rule lives here, not in a guess.
-- `format-elixir.sh` (`PostToolUse`) runs the file's OWN project formatter on every write of an
-  `.ex`/`.exs` — including plugins, so `console`'s Styler (which rewrites code, not just
-  whitespace) runs there too. Menard's own verbs format after every edit. The formatter's output
-  is what your next read shows, and `mix format --check-formatted` at the gate should never be the
-  first time you learn a file was unformatted.
+**`modules/menard/AGENTS.md` is the working reference** — which verb for which shape, and the
+gotchas no error message can teach. Read it before your first Elixir edit; it is menard's own
+file, so it travels with the plugin rather than living here.
+
+Ficciones wires the two hooks into `.claude/settings.json` **by path**, so the repo works with no
+install step. `.claude-plugin/marketplace.json` at the root publishes menard for anywhere else.
 
 ## How to work — the four rules
 
