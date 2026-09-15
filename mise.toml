@@ -23,8 +23,8 @@ bun = "1.3.14"
 # empty-file case and fails the render.
 OLLAMA_API_KEY = "{{ exec(command='p=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agenix/ollama-api-key\"; v=\"$(cat \"$p\" 2>/dev/null)\" || true; if [ -n \"$v\" ]; then printf %s \"$v\"; else printf %s \"$OLLAMA_API_KEY\"; fi') }}"
 
-# Tasks live in tasks/<group>.toml (server, console, adapters, desktop, pi); menard keeps its own
-# beside the tool, since it ships as a standalone plugin. mise includes them all
-# here — `mise tasks` is still the one list.
+# Tasks live in tasks/<group>.toml (server, console, adapters, desktop, pi, menard). menard's live
+# HERE and not beside the tool: menard ships as a standalone repo, and this wiring — where its
+# checkout is — is ficciones', not menard's.
 [task_config]
-includes = ["tasks/server.toml", "tasks/console.toml", "tasks/adapters.toml", "tasks/desktop.toml", "tasks/pi.toml", "modules/menard/tasks.toml"]
+includes = ["tasks/server.toml", "tasks/console.toml", "tasks/adapters.toml", "tasks/desktop.toml", "tasks/pi.toml", "tasks/menard.toml"]
