@@ -30,14 +30,15 @@ defmodule Server.Doctor do
   end
 
   @doc """
-  User tables present, the migration ledger excluded.
+  User tables present — the migration ledger and Oban's own tables excluded.
   """
   @spec tables() :: [String.t()]
   def tables do
     %{rows: rows} =
       Repo.query!("""
       SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> 'schema_migrations'
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+        AND table_name <> 'schema_migrations' AND table_name NOT LIKE 'oban\\_%' ESCAPE '\\'
       ORDER BY table_name
       """)
 

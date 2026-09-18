@@ -1,7 +1,15 @@
 import Config
 
+# Oban never runs jobs on its own in test — a test performs them.
+config :server, Oban, testing: :manual
+
 # The suite's own database on the local Postgres, created fresh per run by test_helper.
 config :server, Server.Repo, database: "tlon_test", pool_size: 5
+
+# The web endpoint is started by the suite that tests it (no listener); fixed secrets.
+config :server, Server.Web.Endpoint,
+  secret_key_base: String.duplicate("t", 64),
+  server: false
 
 # Bootstrap (seed + repair) is driven explicitly by its own suite; an app-boot
 # run against the harness-owned repo would race the per-test TestDB.clean!.

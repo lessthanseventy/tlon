@@ -20,7 +20,7 @@ defmodule Server.MCP.GatewayTest do
 
   setup do
     Server.TestDB.clean!()
-    start_supervised!({MCP.Endpoint, transport: :streamable_http})
+    start_supervised!({MCP.Endpoint, transport: {:streamable_http, start: true}})
     start_supervised!({Bandit, plug: {Server.MCP.Gateway, []}, ip: {127, 0, 0, 1}, port: @port})
 
     {:ok, thread} = Channel.open_thread(%{title: "vision consult"})

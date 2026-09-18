@@ -58,3 +58,18 @@ end
 if config_env() != :test do
   config :server, arbiter: Server.Arbiter.Remote, crew: Server.Crew.Remote
 end
+
+# The web UI (one-brain piece D): opt-in like MCP — TLON_START_WEB=1, TLON_WEB_PORT (4042),
+# loopback only; reachable remotely over tailscale alone. Its secret is derived from the same
+# world secret the MCP tokens use, so a fresh box needs nothing more.
+if config_env() != :test do
+  config :server, Server.Web.Endpoint,
+    http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("TLON_WEB_PORT") || "4042")],
+    secret_key_base:
+      Base.encode64(:crypto.hash(:sha512, "tlon-web:" <> (System.get_env("TLON_WEB_SECRET") || Server.MCP.Secret.get()))),
+    server: System.get_env("TLON_START_WEB") in ~w(1 true yes)
+
+  # Oban runs where the switchboard runs (the service); a scratch node without it stays quiet.
+  config :server, start_oban: System.get_env("TLON_START_OBAN") in ~w(1 true yes)
+  config :server, start_web: System.get_env("TLON_START_WEB") in ~w(1 true yes)
+end

@@ -76,6 +76,13 @@ defmodule Server.MixProject do
       # Postgres is the store (one-brain piece C); ecto_sqlite3 stays ONLY for `mix server.import_sqlite`,
       # the one-shot copy of the SQLite corpus — it goes when the import has run on every box.
       {:postgrex, "~> 0.22"},
+      # The web UI (one-brain piece D): Phoenix + LiveView on a second loopback Bandit listener.
+      {:phoenix, "~> 1.8"},
+      {:phoenix_live_view, "~> 1.2"},
+      {:phoenix_html, "~> 4.3"},
+      # Background work (one-brain piece E): Oban on the same Postgres.
+      {:oban, "~> 2.23"},
+      {:lazy_html, ">= 0.1.0", only: :test},
       {:ecto_sqlite3, ">= 0.17.0"},
       # The switchboard's liveness layer (§10): PubSub fans a posted message out to
       # internal consumers. SQLite stays the truth; this only makes it live.

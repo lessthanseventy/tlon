@@ -17,6 +17,10 @@ defmodule Server.Application do
     # dangling thread→workspace refs; its start_link runs the work synchronously and
     # returns :ignore, so children after it (consult mirror, MCP/Bandit) start only once
     # seed+repair are done — nothing serves against an unseeded db.
+    # One-brain E: Oban on the store's Postgres (cron drain, later the sweeps); D: the web UI's
+    # own Bandit listener. Both opt-in per node like MCP — the service flips them on.
+    # get_env, not fetch_env!: a root app that embeds :server (the console) never evaluates this
+    # app's config.exs, and the child list is built before the flag is consulted
     children =
       [
         {Phoenix.PubSub, name: Server.PubSub},
@@ -32,7 +36,9 @@ defmodule Server.Application do
         maybe(:start_switchboard, false, Server.Switchboard.Runner) ++
         maybe(:start_mcp, false, mcp_children()) ++
         maybe(:memory_pass, false, {Server.Memory.TurnPass, []}) ++
-        maybe(:maintain, false, {Server.Maintain.Monitor, []})
+        maybe(:maintain, false, {Server.Maintain.Monitor, []}) ++
+        maybe(:start_oban, false, {Oban, Application.get_env(:server, Oban, [])}) ++
+        maybe(:start_web, false, Server.Web.Endpoint)
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Server.Supervisor)
   end
@@ -47,7 +53,10 @@ defmodule Server.Application do
   defp mcp_children do
     [
       # Server.MCP.Tokens is stateless (signed tokens, no registry) — nothing to supervise.
-      {Server.MCP.Endpoint, transport: :streamable_http},
+      # `start: true` is explicit: without it anubis asks "is a Phoenix HTTP server running?" and,
+      # since the web endpoint (piece D) exists with its own listener flag, would answer no and
+      # return :ignore — the MCP channel then 500s on every request (2026-09-18).
+      {Server.MCP.Endpoint, transport: {:streamable_http, start: true}},
       # The Gateway routes POST /mint (a fresh-token mint for an adapter's per-connect auth)
       # and forwards everything else to the anubis MCP transport. Loopback only — a personal
       # machine binds no further than 127.0.0.1. See Server.MCP.Gateway for why /mint exists.
