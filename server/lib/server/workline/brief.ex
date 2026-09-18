@@ -20,7 +20,7 @@ defmodule Server.Workline.Brief do
     String.trim("""
     ▶ #{String.upcase(t.stage)} — workline #{t.slug}
     Read: #{read_list(t)}
-    #{playbook(t)}
+    #{playbook(t)}#{routing_note(t)}
     Exit: commit #{owed(t)}, then call advance_stage.#{gate_note(t.stage)}
     """)
   end
@@ -29,6 +29,25 @@ defmodule Server.Workline.Brief do
   def gate_message(%Thread{} = t) do
     "⏸ workline #{t.slug} is parked at #{t.stage} — this transition is the operator's. " <>
       "Approve with: mise run server:cli -- approve #{t.id} (tlon-cli approve #{t.id})."
+  end
+
+  # Capability-fit routing (Aider's architect/editor split, survey §4 adopt #7): the workspace's
+  # `knobs["model_routing"]` names a model per stage — reasoning for spec/review, a precise cheap
+  # one for plan expansion and diffs — and the brief says which, so the knob is the routing axis
+  # the coworker actually sees. Absent knob, no line: the bucket axis (tasks/pi.toml) stands alone.
+  defp routing_note(%Thread{workspace_id: nil}), do: ""
+
+  defp routing_note(%Thread{workspace_id: wid, stage: stage}) do
+    case Server.Workspaces.get(wid) do
+      %{knobs: %{"model_routing" => %{} = routing}} ->
+        case Map.get(routing, stage) do
+          nil -> ""
+          model -> "\nModel for this stage: #{model} (workspace knob model_routing.#{stage})."
+        end
+
+      _ ->
+        ""
+    end
   end
 
   defp playbook(%{stage: "spec"}),

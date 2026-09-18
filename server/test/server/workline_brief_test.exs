@@ -27,6 +27,23 @@ defmodule Server.WorklineBriefTest do
     struct!(Thread, Map.merge(%{id: 1, title: "fix the composer", slug: "composer-wrap", stage: stage}, extra))
   end
 
+  test "a workspace's model_routing knob names the stage's model in the brief; no knob, no line" do
+    {:ok, ws} =
+      Server.Workspaces.register(%{
+        name: "routed",
+        type: "code",
+        scope: "project",
+        repos: [],
+        roster: [],
+        knobs: %{"model_routing" => %{"spec" => "claude/opus", "build" => "ollama/kimi-k2.7-code"}}
+      })
+
+    t = %Thread{slug: "r", stage: "spec", workspace_id: ws.id}
+    assert Brief.stage_message(t) =~ "Model for this stage: claude/opus (workspace knob model_routing.spec)"
+    refute Brief.stage_message(%{t | stage: "plan"}) =~ "Model for this stage"
+    refute Brief.stage_message(%{t | workspace_id: nil}) =~ "Model for this stage"
+  end
+
   test "every working stage's brief names its owed exit artifact and the advance verb" do
     owed = %{
       "spec" => "work/composer-wrap/spec.md",
