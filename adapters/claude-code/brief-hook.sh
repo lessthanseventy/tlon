@@ -24,4 +24,5 @@ if ! brief="$("$here/../../../scripts/tlon-cli.sh" dossier "$thread")"; then
 fi
 [ -n "$brief" ] || exit 0
 
-printf '# tlon — your thread #%s\n\n%s\n' "$thread" "$brief"
+# Seancing: the brief is a budgeted VIEW of the record; the record answers past every cap.
+printf '# tlon — your thread #%s\n\n_This brief is a budgeted view. The record answers past every cap: get_facts, get_messages, search_history, search_facts._\n\n%s\n' "$thread" "$brief"

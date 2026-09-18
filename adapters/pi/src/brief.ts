@@ -128,6 +128,9 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string):
   // copy a wrong one from an example. AGENTS.md "commit as who you are" reads from here.
   if (model) lines.push(`You are ${model} (pi).`);
   lines.push(staleness(d, now));
+  // Seancing (Gas Town/Beads): the brief is the budgeted VIEW of the record, not the record.
+  // Say so, or a fresh session treats the cap as the whole truth.
+  lines.push("_This brief is a budgeted view. The record answers past every cap: get_facts, get_messages, search_history, search_facts._");
 
   if (d.todos.shown.length > 0) {
     lines.push("", "## Plan  (→ is NEXT, the first open step)");
