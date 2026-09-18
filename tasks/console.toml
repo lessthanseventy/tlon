@@ -19,12 +19,12 @@ run = "mix precommit"
 ["console:setup"]
 description = "console: fetch deps, create + migrate the shared server db (via Server.Repo)"
 dir = "modules/console"
-run = "mix deps.get && TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet && TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo"
+run = "mix deps.get && TLON_DATABASE=tlon_dev mix ecto.create -r Server.Repo --quiet && TLON_DATABASE=tlon_dev mix ecto.migrate -r Server.Repo"
 
 ["console:seed"]
 description = "console: seed the shared db with sample threads/agents/sessions for the cockpit"
 dir = "modules/console"
-run = "TLON_DB=../server/.dev/tlon.db mix console.seed"
+run = "TLON_DATABASE=tlon_dev mix console.seed"
 
 # The cockpit reads the SAME db server's own tasks use, so posting from another shell
 # shows up live. Run in ghostty.
@@ -64,9 +64,9 @@ description = "console: the cockpit with an EMBEDDED server on the scratch db (.
 dir = "modules/console"
 run = """
 ../../scripts/console-reap.sh || exit $?
-TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
+TLON_DATABASE=tlon_dev mix ecto.migrate -r Server.Repo || exit $?
 stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
-TLON_BACKEND=local TLON_DB=../server/.dev/tlon.db TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run 2>>"$stderr_log"
+TLON_BACKEND=local TLON_DATABASE=tlon_dev TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 TLON_MAINTAIN=1 mix console.run 2>>"$stderr_log"
 """
 
 # Fixes "stale code" symptoms — almost always a lingering process/session (BEAM doesn't
@@ -112,8 +112,8 @@ run = """
 printf 'This WIPES the dev db — every dogfood thread/message/consult is gone.\\nType RESET to confirm: '
 read -r confirm
 if [ "$confirm" != "RESET" ]; then echo "console:reset:db — aborted (nothing wiped)."; exit 1; fi
-TLON_DB=../server/.dev/tlon.db mix ecto.drop -r Server.Repo || exit $?
-TLON_DB=../server/.dev/tlon.db mix ecto.create -r Server.Repo --quiet || exit $?
-TLON_DB=../server/.dev/tlon.db mix ecto.migrate -r Server.Repo || exit $?
+TLON_DATABASE=tlon_dev mix ecto.drop -r Server.Repo || exit $?
+TLON_DATABASE=tlon_dev mix ecto.create -r Server.Repo --quiet || exit $?
+TLON_DATABASE=tlon_dev mix ecto.migrate -r Server.Repo || exit $?
 echo "console:reset:db — dev db wiped, recreated, and migrated (fresh + empty)."
 """

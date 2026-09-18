@@ -21,12 +21,12 @@ run = "mix server.eval"
 ["server:setup"]
 description = "server: fetch deps, create + migrate a repo-local scratch db"
 dir = "modules/server"
-run = "mix deps.get && TLON_DB=.dev/tlon.db mix ecto.create --quiet && TLON_DB=.dev/tlon.db mix ecto.migrate"
+run = "mix deps.get && mix ecto.create --quiet && mix ecto.migrate"
 
 ["server:doctor"]
 description = "server: the 2am report against the scratch db"
 dir = "modules/server"
-run = "TLON_DB=.dev/tlon.db mix server.doctor"
+run = "mix server.doctor"
 
 # The seed is what makes a wiped/fresh world know itself: priv/seed/repo_knowledge.exs (curated)
 # + priv/seed/promoted_facts.exs (learnings graduated via promote-fact). Server.Seed.ensure/0 runs
@@ -34,12 +34,12 @@ run = "TLON_DB=.dev/tlon.db mix server.doctor"
 ["server:seed"]
 description = "server: apply the seed (base facts + baseline projects) to the scratch db — idempotent, keyed on intent"
 dir = "modules/server"
-run = "TLON_DB=.dev/tlon.db mix server.seed"
+run = "mix server.seed"
 
 ["server:promote-fact"]
 description = "server: graduate a banked fact into the wipe-proof seed — usage: mise run server:promote-fact -- <fact-id> [--intent seed:slug] (scratch db)"
 dir = "modules/server"
-run = "TLON_DB=.dev/tlon.db mix server.promote_fact"
+run = "mix server.promote_fact"
 
 # Boot server with its sovereign channel on, loopback-only, against the scratch db — so
 # a hand-spawned pi pane has something to register with. `Server.MCP.Spawn.env("title",
@@ -47,7 +47,7 @@ run = "TLON_DB=.dev/tlon.db mix server.promote_fact"
 ["server:serve"]
 description = "server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
 dir = "modules/server"
-run = "TLON_DB=.dev/tlon.db TLON_START_MCP=1 iex -S mix"
+run = "TLON_START_MCP=1 iex -S mix"
 
 # `server:serve` above is the DEV path (hand-run iex on the scratch db); these run the
 # same server as a self-contained release, headless, on the REAL db, kept up by the
@@ -83,7 +83,7 @@ run = "scripts/tlon-cli.sh spawn"
 ["server:ledger"]
 description = "server: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
 dir = "modules/server"
-run = "TLON_DB=.dev/tlon.db mix server.ledger"
+run = "mix server.ledger"
 
 ["workline:verify"]
 description = "workline: the deterministic verifier — run check + flake:check, record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
@@ -147,14 +147,13 @@ dir = "modules/server"
 run = "../../scripts/watch.sh mise exec -- mix test"
 
 ["server:dev"]
-description = "server: a scratch server NODE (funes-dev@127.0.0.1, ../server/.dev/tlon.db, MCP :4041) in iex — hack on the server with the live service untouched; attach a cockpit with `TLON_NODE=funes-dev@127.0.0.1 mise run console:run`"
+description = "server: a scratch server NODE (funes-dev@127.0.0.1, database tlon_dev, MCP :4041) in iex — hack on the server with the live service untouched; attach a cockpit with `TLON_NODE=funes-dev@127.0.0.1 mise run console:run`"
 dir = "modules/server"
 run = """
-db=.dev/tlon.db
-# never the service's file: two BEAM nodes on one SQLite file is `database is locked`
-case "$(readlink -f "$db" 2>/dev/null)" in "$(readlink -f "$HOME/.local/share/funes/wb.db" 2>/dev/null)") echo "server:dev refuses the service's db" >&2; exit 1;; esac
-TLON_DB=$db mix ecto.migrate || exit $?
-TLON_DB=$db TLON_START_MCP=1 TLON_MCP_PORT=4041 TLON_START_SWITCHBOARD=1 TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" \
+# never the service's database: TLON_DATABASE names the scratch one (config/dev.exs: tlon_dev)
+[ "${TLON_DATABASE:-tlon_dev}" != "tlon" ] || { echo "server:dev refuses the service's database" >&2; exit 1; }
+mix ecto.create --quiet && mix ecto.migrate || exit $?
+TLON_START_MCP=1 TLON_MCP_PORT=4041 TLON_START_SWITCHBOARD=1 TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" \
   iex --name funes-dev@127.0.0.1 --cookie "$(tr -d '[:space:]' < "${TLON_COOKIE_FILE:-$HOME/.local/share/tlon/cookie}")" -S mix
 """
 

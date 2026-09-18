@@ -1,14 +1,12 @@
 import Config
 
-# Resolve funes' SQLite path the SAME way funes' own config/runtime.exs does, so the cockpit
-# and the human's `mise run funes:*` tasks read and write ONE file. Precedence:
-#   1. TLON_DB (aleph's mise tasks export the repo-local .dev DB here)
-#   2. $XDG_DATA_HOME/funes/wb.db, else ~/.local/share/funes/wb.db
+# Resolve the store the SAME way the server's own config/runtime.exs does, so the cockpit and
+# the human's `mise run server:*` tasks read and write ONE database.
 # Skipped under :test (aleph tests keep funes' Repo down — see config/test.exs).
 # Which brain (docs/plans/2026-09-08-one-brain-client-server-plan.md): `TLON_BACKEND=remote`
 # makes the cockpit a client of the always-up server node (`TLON_NODE`, default the release's
 # funes@127.0.0.1) over distribution; the embedded :server app then starts nothing but PubSub.
-# `local` (today's default until plan A phase 4) embeds the server on TLON_DB as before.
+# `local` embeds the server on TLON_DATABASE (default the service's `tlon`).
 remote? = System.get_env("TLON_BACKEND", "local") == "remote"
 
 if config_env() != :test do
@@ -21,17 +19,13 @@ if config_env() != :test do
 end
 
 if config_env() != :test and not remote? do
-  database =
-    System.get_env("TLON_DB") ||
-      Path.join([
-        System.get_env("XDG_DATA_HOME") ||
-          Path.join(System.get_env("HOME") || ".", ".local/share"),
-        "funes",
-        "wb.db"
-      ])
+  # The embedded (local-backend) cockpit shares the service's store: Postgres `tlon` over the
+  # socket, or TLON_DATABASE / TLON_DATABASE_URL to point elsewhere (a scratch `tlon_dev`).
+  case System.get_env("TLON_DATABASE_URL") do
+    nil -> config :server, Server.Repo, database: System.get_env("TLON_DATABASE") || "tlon", socket_dir: "/run/postgresql"
+    url -> config :server, Server.Repo, url: url
+  end
 
-  File.mkdir_p!(Path.dirname(database))
-  config :server, Server.Repo, database: database
   config :server, maintain: System.get_env("TLON_MAINTAIN") in ~w(1 true yes)
 
   # Mirror funes' own runtime flags: a dependency's config/*.exs is NOT evaluated when aleph

@@ -14,7 +14,7 @@ defmodule Console.TestRepo do
   """
   use Boundary, top_level?: true, check: [out: false]
 
-  alias Ecto.Adapters.SQLite3
+  alias Ecto.Adapters.Postgres
   alias Server.Repo
 
   # Children before parents, so `delete_all` never trips a foreign key. Mirrors
@@ -39,23 +39,28 @@ defmodule Console.TestRepo do
   ]
 
   @doc """
-  Boot a fresh, migrated scratch db for the calling suite. Call from `setup_all`; the Repo is
-  stopped and the file removed on exit. `name` only labels the temp file.
+  Boot a fresh, migrated scratch database for the calling suite. Call from `setup_all`; the Repo is
+  stopped and the database dropped on exit. `name` labels it.
   """
   @spec boot!(String.t()) :: :ok
   def boot!(name) do
-    db = Path.join(System.tmp_dir!(), "console-#{name}-#{System.unique_integer([:positive])}.db")
-    Application.put_env(:server, Repo, Keyword.merge(Application.get_env(:server, Repo, []), database: db, pool_size: 1))
+    db = "tlon_console_#{name}_#{System.unique_integer([:positive])}"
+
+    Application.put_env(
+      :server,
+      Repo,
+      Keyword.merge(Application.get_env(:server, Repo, []), database: db, socket_dir: "/run/postgresql", pool_size: 5)
+    )
 
     config = Repo.config()
-    _ = SQLite3.storage_down(config)
-    :ok = SQLite3.storage_up(config)
+    _ = Postgres.storage_down(config)
+    :ok = Postgres.storage_up(config)
     {:ok, _repo} = Repo.start_link()
     Ecto.Migrator.run(Repo, migrations(), :up, all: true, log: false)
 
     ExUnit.Callbacks.on_exit(fn ->
       if Process.whereis(Repo), do: Repo.stop()
-      _ = SQLite3.storage_down(config)
+      _ = Postgres.storage_down(config)
     end)
 
     :ok

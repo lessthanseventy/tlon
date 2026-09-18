@@ -5,10 +5,8 @@ import Config
 # logs stay at :warning and above.
 config :logger, level: :warning
 
-config :server, Server.Repo,
-  journal_mode: :wal,
-  busy_timeout: 100,
-  foreign_keys: :on
+# Postgres on the local socket (one-brain piece C); the database name comes from runtime.exs.
+config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 5
 
 # The arbiter: the switchboard actuates a wake by writing into the session's embedded ghostty
 # terminal (Console.Arbiter), and spawns a fresh one for a cold thread the same way the `s` verb does.
