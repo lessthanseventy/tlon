@@ -210,14 +210,15 @@ defmodule Server.Channel do
   would be killed and respawned every render. No ordering guarantee — the cockpit does its own
   dedup against live tmux windows and its own retry backoff.
   """
-  def staffed_machine_threads do
-    Repo.all(
-      from t in Thread,
-        join: a in Agent,
-        on: a.id == t.agent_id,
-        where: t.scope == ^@machine_scope and t.state == "open" and not is_nil(t.agent_id),
-        select: %{id: t.id, lead: a.name, title: t.title}
+  def staffed_machine_threads(workspace_id \\ nil) do
+    from(t in Thread,
+      join: a in Agent,
+      on: a.id == t.agent_id,
+      where: t.scope == ^@machine_scope and t.state == "open" and not is_nil(t.agent_id),
+      select: %{id: t.id, lead: a.name, title: t.title, workspace_id: t.workspace_id}
     )
+    |> scope_workspace(workspace_id)
+    |> Repo.all()
   end
 
   @doc """

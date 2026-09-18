@@ -20,8 +20,7 @@ defmodule Console.DeliveryTest do
     end)
   end
 
-  defp state(overrides \\ %{}),
-    do: Map.merge(%{active_key: 0, standing_thread_id: 1, opening_injected: MapSet.new()}, overrides)
+  defp state(overrides \\ %{}), do: Map.merge(%{active_key: 0, standing_thread_id: 1}, overrides)
 
   describe "delivery_target/3" do
     test "the standing coworker's own thread routes globally" do
@@ -46,29 +45,22 @@ defmodule Console.DeliveryTest do
       assert Delivery.delivery_target(%{thread_id: 2}, state(), "hronir") == :skip
     end
 
-    test "process memory of a submitted opening (opening_injected) also counts as past it" do
-      windows("1\t0\ttertius\t\t\n0\t1\tbuilder-fix\t2\t\n")
-      st = state(%{opening_injected: MapSet.new([2])})
-      assert Delivery.delivery_target(%{thread_id: 2}, st, "hronir") == {:route, "builder-fix"}
-    end
-
     test "a row without a thread routes globally" do
       assert Delivery.delivery_target(%{}, state(), "hronir") == {:route, nil}
     end
   end
 
-  describe "staffed_leaf_window/3 (pure)" do
+  describe "staffed_leaf_window/2 (pure)" do
     @tabs [
       %{name: "tertius", active?: true, index: "0", thread_id: nil, opening: nil, activity: nil},
       %{name: "builder-fix", active?: false, index: "1", thread_id: 2, opening: "done", activity: nil},
       %{name: "t3", active?: false, index: "2", thread_id: nil, opening: nil, activity: nil}
     ]
 
-    test "resolves by tag (done) or by process memory; nil otherwise" do
-      assert Delivery.staffed_leaf_window(2, @tabs, MapSet.new()) == "builder-fix"
-      assert Delivery.staffed_leaf_window(3, @tabs, MapSet.new()) == nil
-      assert Delivery.staffed_leaf_window(3, @tabs, MapSet.new([3])) == "t3"
-      assert Delivery.staffed_leaf_window(9, @tabs, MapSet.new([9])) == nil
+    test "resolves by the done tag; nil otherwise" do
+      assert Delivery.staffed_leaf_window(2, @tabs) == "builder-fix"
+      assert Delivery.staffed_leaf_window(3, @tabs) == nil
+      assert Delivery.staffed_leaf_window(9, @tabs) == nil
     end
   end
 end

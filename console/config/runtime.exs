@@ -30,6 +30,8 @@ if config_env() != :test and not remote? do
   # is the root app, so without these the memory pass / workline root are
   # silently unreachable for aleph-embedded funes (the 4041 node).
   config :server, memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes)
+  # the embedded server runs its jobs too (the staffing pass spawns this cockpit's coworkers)
+  config :server, start_oban: true
 
   if workline_root = System.get_env("TLON_WORKLINE_ROOT") do
     config :server, workline_root: workline_root

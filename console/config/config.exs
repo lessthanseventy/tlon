@@ -5,18 +5,32 @@ import Config
 # logs stay at :warning and above.
 config :logger, level: :warning
 
+# Oban, for the embedded (local-backend) cockpit — the server's own config.exs is not evaluated
+# when the console is the root app, so the queues and the cron are re-declared here, the same as
+# the service's: the drain, the Maintain sweeps, the staffing pass (one-brain B/3, E). runtime.exs
+# flips `start_oban` on under the local backend.
+config :server, Oban,
+  engine: Oban.Engines.Basic,
+  repo: Server.Repo,
+  queues: [default: 5, maintain: 1, staff: 1],
+  plugins: [
+    {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
+    {Oban.Plugins.Cron,
+     crontab: [
+       {"* * * * *", Server.Jobs.Drain},
+       {"*/30 * * * *", Server.Jobs.Maintain},
+       {"* * * * *", Server.Jobs.Staff}
+     ]}
+  ]
+
 # Postgres on the local socket (one-brain piece C); the database name comes from runtime.exs.
 config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 5
 
-# The arbiter: the switchboard actuates a wake by writing into the session's embedded ghostty
-# terminal (Console.Arbiter), and spawns a fresh one for a cold thread the same way the `s` verb does.
-# funes calls this through the behaviour seam (§8) — it never imports aleph.
-config :server, :arbiter, Console.Arbiter
-
-# The crew backend (funes crew MVP): funes' spawn_crew/kill_crew tools dispatch through Server.Crew
-# to Console.Crew, which spawns a role's window on the tlon server IN this live node — the leader
-# staffs a reviewer without booting a second BEAM. Same behaviour seam as :arbiter above.
-config :server, :crew, Console.Crew
+# The terminal backends are the server's own tmux ones (one-brain B/2): a wake is send-keys into
+# the thread's window on the workspace's tmux server — the same window the cockpit embeds — and a
+# crew role is a window beside it. In-node here; the same modules run in the always-up service.
+config :server, :arbiter, Server.Arbiter.Tmux
+config :server, :crew, Server.Crew.Tmux
 
 # The engine-credit presence backend: the hand toggle (Server.Presence.clock_out/1 from the
 # console) — when the scarce Claude window is spent, the switchboard stops poking Claude
@@ -35,12 +49,18 @@ config :server, ecto_repos: [Server.Repo]
 # at exactly the endpoint aleph serves. Override with TLON_MCP_PORT in aleph's runtime if 4041
 # is taken.
 config :server, mcp_port: 4041
+
+# The profile registry lives in the server now (one-brain B/2); on a cockpit that is a CLIENT of
+# the service it reads workspace policy through the facade (erpc), and a coworker it launches
+# itself runs pi through mise, the way this interactive shell does.
+config :server, profiles_workspaces: Console.Server.Workspaces
+config :server, spawn_launcher_pi: "mise exec -- pi"
 config :server, start_mcp: true
 
 # aleph is the dogfood HUB (tlön topology A): it runs the full funes workspace in one interactive node,
 # so the switchboard's wake loop and the MCP channel start here, and sessions are embedded ghostty
 # terminals aleph owns (not tmux). The presence gate the wake needs (warmth AND engine-credit)
-# exists; the live poke over those terminals arrives with Console.Arbiter.
+# exists; the live poke is Server.Arbiter.Tmux's send-keys.
 config :server, start_switchboard: true
 
 import_config "#{config_env()}.exs"

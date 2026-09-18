@@ -258,21 +258,10 @@ defmodule Console.Cockpit do
       seen_events: [],
       probed_at: 0,
       machine_retry_at: nil,
-      # The standing center coworker's own machine thread — captured once, at its
-      # first successful spawn (`ensure_center`), so `ensure_thread_sessions` can
-      # tell it apart from an ordinary staffed machine thread it should spawn a session for.
+      # The standing center coworker's own machine thread — captured once, at its first
+      # successful attach (`ensure_center`), so the delivery router routes it globally rather
+      # than onto a leaf (the server's staffing pass never spawns one for it).
       standing_thread_id: nil,
-      # Per-thread spawn backoff (mirrors `machine_retry_at`) — thread_id => monotonic
-      # retry-at, so a thread whose session keeps failing to spawn isn't retried every render.
-      thread_spawn_retry: %{},
-      # The two-phase opening-turn inject (see `ensure_thread_sessions`). `opening_text_at`:
-      # thread_id => monotonic ms when the turn's TEXT was typed into the fresh `t<id>`
-      # window; the Enter follows @opening_submit_delay_ms later so a booting TUI doesn't
-      # swallow it. `opening_injected`: thread ids already SUBMITTED (done, never re-touched).
-      opening_text_at: %{},
-      opening_injected: MapSet.new(),
-      # Threads already told "parked: leaf cap reached" — the note posts once, not per render.
-      parked_noted: MapSet.new(),
       # Explicit thinking presence: thread_id => %{agent => started_at}. Seeded from the
       # store (reconcile-on-connect), then maintained by the server:presence Bus events.
       thinking: Reads.thinking_snapshot(),
@@ -934,8 +923,8 @@ defmodule Console.Cockpit do
          }) do
       {:ok, thread} ->
         # Post the opening message; do NOT spawn a PTY here. The thread is staffed (the lead
-        # invariant), so the render preamble's `ensure_thread_sessions` spawns its LEAD in a window
-        # and two-phase-injects this operator message — the proven wake path. `spawn_onto` used to
+        # invariant), so the server's staffing pass (Server.Staffing, each minute) spawns its LEAD
+        # in a window and injects this operator message — the proven wake path. `spawn_onto` used to
         # fire here too, spawning a generic "pi" as an invisible per-thread terminal that never got
         # the message (the "agent booted idle" bug) and doubled the real lead's spawn.
         _ = Channel.post(%{thread_id: thread.id, author: operator, body: text})
@@ -1419,7 +1408,6 @@ defmodule Console.Cockpit do
     # was handed, so a tmux/server hiccup skips that step this frame instead of losing the frame.
     state = Safe.read(:probes, state, fn -> Reads.ensure_probes(state) end)
     state = Safe.read(:workspace_roster, state, fn -> Staffing.ensure_workspace_roster(state) end)
-    state = Safe.read(:thread_sessions, state, fn -> Staffing.ensure_thread_sessions(state) end)
     state = Safe.read(:session_pane, state, fn -> ensure_session(state) end)
 
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's

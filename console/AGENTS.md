@@ -12,10 +12,11 @@ launch it, sit at it, quit it.
 
 **The cast is data, not constants.** Each workspace's roster (`Server.Workspaces`) names coworkers by
 archetype — `surveyor` (tertius, the center), `builder` (hronir, the lead), reviewer/planner/… — and
-the cockpit spawns them from it (`Console.Staffing.ensure_workspace_roster/2`): server handle
-`<name>-machine`, tmux window `<name>`, on the workspace's private tmux server
-`console-workspace-<id>` (session `w<id>`, persistence-free config from the coworker's profile dir,
-`Console.Profiles`). Staffed threads get per-thread `t<id>` windows; crew roles get `r<id>`.
+the SERVER spawns them from it (`Server.Staffing`, on Oban's cron each minute — one-brain B/3):
+tmux window `<name>`, on the workspace's private tmux server `console-workspace-<id>` (session
+`w<id>`, persistence-free config from the coworker's profile dir, `Server.Profiles`). Staffed
+threads get per-thread leaf windows (tagged `@funes_thread <id>`); crew roles get `r<id>`. The
+cockpit ATTACHES: `Console.Staffing.ensure_workspace_roster/2` embeds the centre (`new-session -A`).
 
 ## Run it
 
@@ -69,7 +70,7 @@ The cockpit is shell-shaped (`docs/plans/2026-09-08-cockpit-ux-principles-design
   and `apply_effect`; `Console.Cockpit.Recovery` is the run loop around it. The decisions live in
   pure modules — `Console.Keymap` (the reducer), `Console.View` (composition), the panels,
   `Console.Mention`, `Console.SessionPane` — and the preamble's work in named ones: `Console.Reads`
-  (the frame's data), `Console.Staffing` (find-or-spawn), `Console.Delivery` (event → coworker),
+  (the frame's data), `Console.Staffing` (the centre attach), `Console.Delivery` (event → coworker),
   `Console.Cockpit.Author` / `.Boards` (menus, workspace CRUD, the boards), `Console.Tmux` (naming
   + the `:tlon_cmd` seam), `Console.Safe` (the degrade guards). Those are what the suite covers. A
   suite that needs the real `Server` contexts boots a scratch db through `Console.TestRepo`

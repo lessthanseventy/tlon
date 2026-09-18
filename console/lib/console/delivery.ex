@@ -99,8 +99,8 @@ defmodule Console.Delivery do
     * a worker-led staffed thread that's live AND past its opening turn → route onto its leaf, so
       replies reach the session working THAT thread — not the standing coworker (otherwise both
       would answer the same post).
-    * a worker-led staffed thread mid-spawn / pre-opening → `:skip`: the spawn pass owns the
-      opening turn (two-phase, race-safe); waking here would double it.
+    * a worker-led staffed thread mid-spawn / pre-opening → `:skip`: the server's staffing pass
+      owns the opening turn; waking here would double it.
     * no staffed lead, or a meta/unknown lead (no leaf window for it) → route globally.
   """
   @spec delivery_target(map(), map(), String.t() | nil) :: :skip | {:route, String.t() | nil}
@@ -111,7 +111,7 @@ defmodule Console.Delivery do
     cond do
       tid == standing -> {:route, nil}
       is_nil(lead) or not Staffing.leaf_staffed?(lead, workspace_id) -> {:route, nil}
-      window = staffed_leaf_window(tid, Tmux.list_windows(workspace_id), state.opening_injected) -> {:route, window}
+      window = staffed_leaf_window(tid, Tmux.list_windows(workspace_id)) -> {:route, window}
       true -> :skip
     end
   end
@@ -121,18 +121,15 @@ defmodule Console.Delivery do
   @doc """
   The live window NAME of a staffed thread's leaf session once its opening turn has been submitted
   — the `staffed_window` redirect `Console.Mention.route/3` rewrites the lead onto. Resolved via
-  the `@funes_thread` routing map; the submitted check reads the window's own `@funes_opening` tag
-  first, so a restarted cockpit (empty `opening_injected`) keeps delivering to already-running
-  leaves instead of `:skip`ping them forever. nil while mid-spawn / pre-opening.
+  the `@funes_thread` routing map; the submitted check is the window's own `@funes_opening` tag
+  (the server's pass stamps it), so a restarted cockpit keeps delivering to already-running
+  leaves. nil while mid-spawn / pre-opening.
   """
-  @spec staffed_leaf_window(integer(), [Tmux.tab()], MapSet.t()) :: String.t() | nil
-  def staffed_leaf_window(tid, tabs, opening_injected) do
+  @spec staffed_leaf_window(integer(), [Tmux.tab()]) :: String.t() | nil
+  def staffed_leaf_window(tid, tabs) do
     case Tmux.leaf_tab(tabs, tid) do
-      %{name: name} = tab ->
-        if tab[:opening] == "done" or MapSet.member?(opening_injected, tid), do: name
-
-      _ ->
-        nil
+      %{name: name, opening: "done"} -> name
+      _ -> nil
     end
   end
 

@@ -8,7 +8,7 @@ config :phoenix, :json_library, JSON
 config :server, Oban,
   engine: Oban.Engines.Basic,
   repo: Server.Repo,
-  queues: [default: 5, maintain: 1],
+  queues: [default: 5, maintain: 1, staff: 1],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
     {Oban.Plugins.Cron,
@@ -17,7 +17,9 @@ config :server, Oban,
        # was live is delivered the moment one appears, not only on the next boot
        {"* * * * *", Server.Jobs.Drain},
        # the control-band sweeps (stale gates nagged, stalled worklines flagged), every half hour
-       {"*/30 * * * *", Server.Jobs.Maintain}
+       {"*/30 * * * *", Server.Jobs.Maintain},
+       # the staffing pass (one-brain B/3): centre, tail and leaves of every workspace, each minute
+       {"* * * * *", Server.Jobs.Staff}
      ]}
   ]
 
