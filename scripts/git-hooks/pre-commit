@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Branch fencing (field survey §4 adopt #1, after Copilot's `copilot/*`-only rule): a pane the
+# server spawned — TLON_THREAD in its env — may only commit on a `work/*` branch, the thread
+# worktrees' branches (Server.Worktree.branch/1). Governance as a hook the coworker cannot
+# talk its way past, not a request in a brief. A human terminal has no TLON_THREAD and is
+# unaffected. Shared by every worktree through core.hooksPath.
+set -u
+[ -n "${TLON_THREAD:-}" ] || exit 0
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo DETACHED)"
+case "$branch" in
+  work/*) exit 0 ;;
+esac
+echo "tlon: refusing to commit on '$branch' from thread #$TLON_THREAD — a coworker commits only on its work/<slug> branch (its worktree)." >&2
+exit 1

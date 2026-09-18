@@ -1,7 +1,9 @@
 defmodule Server.CommitsTest do
   # The commit ↔ thread join: a `Tlon-Thread: <id>` trailer, stamped by scripts/git-hooks/
-  # prepare-commit-msg from TLON_THREAD, read back by `git log --grep`. Real git, temp repos; the
-  # hook itself is exercised (core.hooksPath → scripts/git-hooks) so the write side is tested too.
+  # prepare-commit-msg from TLON_THREAD, read back by `git log --grep`; and the branch FENCE
+  # (pre-commit): a pane with TLON_THREAD commits only on work/*. Real git, temp repos, the real
+  # hooks (core.hooksPath → scripts/git-hooks), so the write side is tested too. The fixture sits
+  # on `work/fixture`, where a coworker's commits are allowed.
   use ExUnit.Case, async: false
 
   alias Server.Commits
@@ -12,7 +14,7 @@ defmodule Server.CommitsTest do
     tmp = Path.join(System.tmp_dir!(), "commits-test-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     git = fn args, env -> System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true, env: env) end
-    {_, 0} = git.(["init", "-q"], [])
+    {_, 0} = git.(["init", "-q", "-b", "main"], [])
     {_, 0} = git.(["config", "user.email", "test@test"], [])
     {_, 0} = git.(["config", "user.name", "test"], [])
     {_, 0} = git.(["config", "core.hooksPath", @hooks], [])
@@ -23,6 +25,9 @@ defmodule Server.CommitsTest do
       {_, 0} = git.(["add", file], [])
       {_, 0} = git.(["commit", "-qm", msg], env)
     end
+
+    commit.("seed", "seed", [])
+    {_, 0} = git.(["checkout", "-qb", "work/fixture"], [])
 
     on_exit(fn -> File.rm_rf!(tmp) end)
     %{repo: tmp, git: git, commit: commit}
@@ -52,17 +57,33 @@ defmodule Server.CommitsTest do
   end
 
   test "the join survives an amend and a rebase onto another branch", %{repo: repo, git: git, commit: commit} do
-    commit.("seed", "seed", [])
-    # init.defaultBranch is the box's choice; ask rather than assume `master`.
-    {main, 0} = git.(["rev-parse", "--abbrev-ref", "HEAD"], [])
-    main = String.trim(main)
     {_, 0} = git.(["checkout", "-qb", "work/t9"], [])
     commit.("a", "on the branch", [{"TLON_THREAD", "9"}])
     {_, 0} = git.(["commit", "-q", "--amend", "-m", "on the branch, amended"], [{"TLON_THREAD", "9"}])
-    {_, 0} = git.(["checkout", "-q", main], [])
+    {_, 0} = git.(["checkout", "-q", "main"], [])
     commit.("b", "main moved", [])
-    {_, 0} = git.(["rebase", "-q", main, "work/t9"], [])
+    {_, 0} = git.(["rebase", "-q", "main", "work/t9"], [])
     assert {:ok, [%{subject: "on the branch, amended"}]} = Commits.list(repo, 9)
+  end
+
+  test "branch fencing: a pane with TLON_THREAD commits only on work/*; a human terminal anywhere", %{
+    repo: repo,
+    git: git
+  } do
+    {_, 0} = git.(["checkout", "-q", "main"], [])
+    File.write!(Path.join(repo, "a"), "a\n")
+    {_, 0} = git.(["add", "a"], [])
+    {out, code} = git.(["commit", "-qm", "on main from a pane"], [{"TLON_THREAD", "3"}])
+    assert code != 0
+    assert out =~ "refusing to commit"
+    # the same commit from a human terminal lands
+    {_, 0} = git.(["commit", "-qm", "on main from a human"], [])
+    # and the pane commits fine on its own work/ branch
+    {_, 0} = git.(["checkout", "-qb", "work/t3"], [])
+    File.write!(Path.join(repo, "b"), "b\n")
+    {_, 0} = git.(["add", "b"], [])
+    {_, 0} = git.(["commit", "-qm", "on the branch"], [{"TLON_THREAD", "3"}])
+    assert {:ok, [%{subject: "on the branch"}]} = Commits.list(repo, 3)
   end
 
   test "an unreadable repo is an error, and for_thread turns no-repo into an empty section", %{repo: repo} do

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Branch fencing, push side (see pre-commit): a pane with TLON_THREAD may push only `work/*`
+# refs. Reads the refs being pushed from stdin, as git hands them to pre-push.
+set -u
+[ -n "${TLON_THREAD:-}" ] || exit 0
+rc=0
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    refs/heads/work/*) ;;
+    "") ;;
+    *) echo "tlon: refusing to push '$remote_ref' from thread #$TLON_THREAD — a coworker pushes only work/<slug> branches." >&2; rc=1 ;;
+  esac
+done
+exit $rc
