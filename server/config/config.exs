@@ -1,18 +1,9 @@
 import Config
 
-# ecto_sqlite3 serializes arrays and maps through a JSON library that defaults to Jason — a
-# transitive dev/test dep the prod release does not ship. Every JSON column here is a
-# Server.JSONColumn already; this covers the adapter's own path (a literal list in a query).
-config :ecto_sqlite3, json_library: JSON
-
-# The §4 write contract, applied at the adapter: WAL so one writer never blocks
-# readers, a *bounded* busy_timeout so a held lock fails fast and retryably, and
-# foreign keys on so references are real. The database path is set per-env.
-config :server, Server.Repo,
-  journal_mode: :wal,
-  busy_timeout: 100,
-  foreign_keys: :on
-
+# Postgres is the store (one-brain piece C, 2026-09-18): the §4 write contract — readers never
+# blocked by a writer, real foreign keys, a bounded wait on a lock — is the engine's own.
+# Connection details are per-env (dev/test below, runtime.exs for the release).
+config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 5
 config :server, ecto_repos: [Server.Repo]
 
 import_config "#{config_env()}.exs"

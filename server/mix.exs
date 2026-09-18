@@ -73,6 +73,9 @@ defmodule Server.MixProject do
       # (Server.Source.Tools) call it — a runtime dep (Andrew, 2026-09-08)
       {:menard, path: "../menard"},
       {:ecto_sql, "~> 3.12"},
+      # Postgres is the store (one-brain piece C); ecto_sqlite3 stays ONLY for `mix server.import_sqlite`,
+      # the one-shot copy of the SQLite corpus — it goes when the import has run on every box.
+      {:postgrex, "~> 0.22"},
       {:ecto_sqlite3, ">= 0.17.0"},
       # The switchboard's liveness layer (§10): PubSub fans a posted message out to
       # internal consumers. SQLite stays the truth; this only makes it live.

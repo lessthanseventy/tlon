@@ -1,17 +1,13 @@
 import Config
 
-# The database path is resolved from the environment only — no distro-isms, no
-# hardcoded home. TLON_DB overrides; otherwise the XDG data dir, defaulting to
-# ~/.local/share. Test manages its own path (config/test.exs), so skip it here.
+# The store: Postgres on the local socket. TLON_DATABASE_URL names another (a remote, a
+# password); otherwise TLON_DATABASE (default `tlon`) over peer auth at /run/postgresql. Test
+# manages its own database (config/test.exs), so skip it here.
 if config_env() != :test do
-  data_home =
-    System.get_env("XDG_DATA_HOME") ||
-      Path.join(System.get_env("HOME") || ".", ".local/share")
-
-  database = System.get_env("TLON_DB") || Path.join([data_home, "tlon", "wb.db"])
-  File.mkdir_p!(Path.dirname(database))
-
-  config :server, Server.Repo, database: database
+  case System.get_env("TLON_DATABASE_URL") do
+    nil -> config :server, Server.Repo, database: System.get_env("TLON_DATABASE") || "tlon", socket_dir: "/run/postgresql"
+    url -> config :server, Server.Repo, url: url
+  end
 end
 
 # Where workline artifact checks run git (`Server.Workline.Artifacts.Git`) — the workspace's
