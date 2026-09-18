@@ -1,8 +1,8 @@
-defmodule Console.LeafWindowTest do
+defmodule Server.LeafWindowTest do
   @moduledoc "Human leaf-window names (Slice C): slugging, truncation, collision disambiguation."
   use ExUnit.Case, async: true
 
-  alias Console.LeafWindow
+  alias Server.LeafWindow
 
   test "archetype + slugged title" do
     assert LeafWindow.name(:reviewer, "let's review this PR") == "reviewer-let-s-review-this-pr"

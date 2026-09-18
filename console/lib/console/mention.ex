@@ -20,7 +20,7 @@ defmodule Console.Mention do
       thread.
   """
 
-  alias Console.Crew
+  alias Server.Crew
 
   @doc """
   The active handle → window map for a BENCH (`Server.Coworker` seats) — each name maps to itself,

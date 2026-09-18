@@ -1,9 +1,5 @@
 import Config
 
-# Point the operator settings file away from the real ~/.config so the box's own overrides can
-# never leak into test assertions; Console.Config tests pass explicit paths.
-config :console, config_path: "/nonexistent/aleph-test-config.json"
-
 # The suites probe the degrade-and-log seams on purpose (BoomProbe render raises, read-seam
 # fallbacks) — keep that noise out of the operator's real ~/.cache/aleph/crash.log.
 config :console, crash_log_path: Path.join(System.tmp_dir!(), "aleph-test-crash.log")
@@ -14,8 +10,14 @@ config :console, crash_log_path: Path.join(System.tmp_dir!(), "aleph-test-crash.
 # deterministic hardcoded [:orbis, :tlon] fallback. workspaces_test.exs starts its own local pids.
 config :console, start_workspaces: false
 
+config :server, Oban, testing: :manual
+
 # No Repo → nothing for boot integrity to check; keep the one-shot out of the tree.
 config :server, bootstrap: false
+
+# Point the operator settings file away from the real ~/.config so the box's own overrides can
+# never leak into test assertions; Console.Config tests pass explicit paths.
+config :server, operator_config_path: "/nonexistent/aleph-test-config.json"
 config :server, start_mcp: false
 
 # aleph's own tests exercise the pure render path (panels → lines → composition) headlessly,

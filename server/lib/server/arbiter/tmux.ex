@@ -1,17 +1,17 @@
 defmodule Server.Arbiter.Tmux do
   @moduledoc """
   The server's OWN terminal backend (one-brain piece B, slice 1): spawn a coworker and wake it
-  with no cockpit open. Until now `Server.Arbiter.Remote` reached the connected console's
-  `Console.Arbiter` and returned `{:error, :no_cockpit}` otherwise — so a cold lead could not be
-  rotated unless the TUI was up. This backend puts the coworker where the console would have: a
-  window in the workspace's private tmux session (`Server.Tmux` naming), tagged `@funes_thread
-  <id>`, so a console that opens later adopts it as the thread's leaf instead of spawning a
-  second one, and asterion attaches to it.
+  with no cockpit open. Before slice 1 the switchboard reached the connected console's arbiter
+  over distribution and gave up with no cockpit — so a cold lead could not be rotated unless
+  the TUI was up. This backend puts the coworker where the console would have: a window in the
+  workspace's private tmux session (`Server.Tmux` naming), tagged `@funes_thread <id>`, so a
+  console that opens later adopts it as the thread's leaf instead of spawning a second one, and
+  asterion attaches to it. Since B/2 it is the ONE arbiter, in the service and in the console
+  alike (the console's embedded centre is an attach to the same window).
 
-  What it does NOT do (deliberately, this slice): the console's roster centre, per-archetype
-  profiles, the leaf-cap budget and the opening-turn two-phase inject stay in `Console.Staffing`
-  — this spawns the thread's LEAD with the harness its agent engine names, from the adapters'
-  own launchers, and wakes by tag. The rest of piece B moves those in later slices.
+  What it does NOT do (this slice): the roster centre, the per-archetype profile drivers, the
+  leaf-cap budget and the opening-turn inject — those are the staffing pass (B/3). This spawns
+  the thread's LEAD with the harness its agent engine names and wakes by tag.
   """
   @behaviour Server.Arbiter
 
@@ -97,8 +97,9 @@ defmodule Server.Arbiter.Tmux do
   defp lead_name(%Thread{agent_id: nil}), do: nil
   defp lead_name(%Thread{agent_id: id}), do: with(%Agent{name: n} <- Repo.get(Agent, id), do: n)
 
-  defp workspace_id(%Thread{workspace_id: nil}), do: Server.Bootstrap.default_workspace_id()
-  defp workspace_id(%Thread{workspace_id: ws}), do: ws
+  @doc "The workspace whose tmux server a thread's coworkers run on (the default one for an unplaced thread)."
+  def workspace_id(%Thread{workspace_id: nil}), do: Server.Bootstrap.default_workspace_id()
+  def workspace_id(%Thread{workspace_id: ws}), do: ws
 
   # The exports block names the pane's identity — the same regex the console used.
   defp identity(exports) do

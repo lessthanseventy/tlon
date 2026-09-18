@@ -5,8 +5,8 @@ defmodule Server.Arbiter do
   backend the design never names. Elixir decides *who* to wake; the arbiter *actuates*.
 
   The backend is chosen by config — `config :server, :arbiter, SomeModule` (a `Server.Arbiter`
-  behaviour). On the console hub that is `Console.Arbiter`, which writes to the ghostty terminal console
-  owns for the session's thread; the server's tests use `Server.Arbiter.Test`. **No backend configured is
+  behaviour). Since one-brain B that is `Server.Arbiter.Tmux` everywhere — send-keys into the
+  thread's window on the workspace's tmux server; the server's tests use `Server.Arbiter.Test`. **No backend configured is
   a valid state** (the always-up service runs the durable channel without a display): `wake`/`spawn`
   return `{:error, :no_arbiter}` and the switchboard leaves the message a pending durable row —
   degrade honestly, no ceremony backend, no crash.

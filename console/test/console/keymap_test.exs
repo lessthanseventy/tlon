@@ -426,7 +426,7 @@ defmodule Console.KeymapTest do
   end
 
   describe "editing a workspace's bench — the field 3 sub-list, seat/unseat (D2.4 Chunk 2c; rows since UX slice 5)" do
-    @archetypes Map.keys(Console.Profiles.archetypes())
+    @archetypes Map.keys(Server.Profiles.archetypes())
     @workspace_with_roster %{
       id: 22,
       name: "Freedonia",

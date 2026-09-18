@@ -1,6 +1,6 @@
 defmodule Console.WorkspaceTemplatesTest do
   # The nix-owned workspace-archetype registry (capabilities): starter type/repos/roster the author
-  # face's "new workspace" composes a funes row from. Distinct from Console.Profiles' coworker archetypes.
+  # face's "new workspace" composes a funes row from. Distinct from Server.Profiles' coworker archetypes.
   use ExUnit.Case, async: true
 
   alias Console.WorkspaceTemplates

@@ -51,14 +51,12 @@ if config_env() != :test do
   config :server, start_switchboard: System.get_env("TLON_START_SWITCHBOARD") in ~w(1 true yes)
 end
 
-# The terminal backends when this node is the always-up server and the cockpit is a client
-# (docs/plans/2026-09-08-one-brain-client-server-plan.md phase 3): the connected cockpit's
-# Console.Arbiter / Console.Crew over distribution, `{:error, :no_cockpit}` when none is — the
-# same degrade as no backend. Only the release evaluates this file; the embedded console (Local
-# backend) is the root app there and sets both to its own modules in its config. Guarded out
-# of :test (the suite uses Server.Arbiter.Test).
+# The terminal backends: the server's own tmux ones (one-brain piece B, slices 1–2). A wake is
+# send-keys into the thread's window on the workspace's tmux server, a spawn a new window there,
+# a crew role a window beside the lead — with or without a cockpit connected. Guarded out of
+# :test (the suite uses Server.Arbiter.Test / Server.Crew.Test).
 if config_env() != :test do
-  config :server, arbiter: Server.Arbiter.Remote, crew: Server.Crew.Remote
+  config :server, arbiter: Server.Arbiter.Tmux, crew: Server.Crew.Tmux
 end
 
 # The web UI (one-brain piece D): opt-in like MCP — TLON_START_WEB=1, TLON_WEB_PORT (4042),

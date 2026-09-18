@@ -1,9 +1,9 @@
-defmodule Console.ProfilesTest do
+defmodule Server.ProfilesTest do
   @moduledoc "The coworker-profile registry, the pure render seam, and the materialiser (into a tmp dir)."
   use ExUnit.Case, async: true
 
-  alias Console.Profile
-  alias Console.Profiles
+  alias Server.Profile
+  alias Server.Profiles
 
   @base_settings %{
     "extensions" => [
@@ -178,21 +178,23 @@ defmodule Console.ProfilesTest do
       assert Profiles.repo() =~ ~r{ficciones$}
     end
 
-    test "an operator override (Console.Config) is merged over the compiled model" do
+    test "an operator override (the settings file) is merged over the compiled model" do
       dir = Path.join(System.tmp_dir!(), "aleph-prof-cfg-#{System.unique_integer([:positive])}")
       path = Path.join(dir, "config.json")
+      File.mkdir_p!(dir)
 
-      Console.Config.put_coworker_model(
-        "tertius",
-        %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"},
-        path
+      File.write!(
+        path,
+        Jason.encode!(%{
+          "coworkers" => %{"tertius" => %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}}
+        })
       )
 
-      previous = Application.get_env(:console, :config_path)
-      Application.put_env(:console, :config_path, path)
+      previous = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
 
       on_exit(fn ->
-        Application.put_env(:console, :config_path, previous)
+        Application.put_env(:server, :operator_config_path, previous)
         File.rm_rf!(dir)
       end)
 
@@ -202,9 +204,9 @@ defmodule Console.ProfilesTest do
     test "a workspace-less fetch inherits the archetype default — a policy belongs to a pairing" do
       # The seed entry must NOT pin a model, or entry[:model] shadows the SETTINGS override the `m`
       # verb writes. Use a NON-glm tuple so this fails if the override is ignored (glm == default).
-      previous = Application.get_env(:console, :config_path)
-      Application.put_env(:console, :config_path, nil)
-      on_exit(fn -> Application.put_env(:console, :config_path, previous) end)
+      previous = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, nil)
+      on_exit(fn -> Application.put_env(:server, :operator_config_path, previous) end)
 
       # No workspace, no policy: a policy belongs to a PAIRING, so a workspace-less fetch inherits the
       # archetype default rather than guessing which workspace was meant (UX slice 5).

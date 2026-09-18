@@ -10,7 +10,7 @@ defmodule Console.Tmux do
   cosmetic; a legacy `t<id>` name still resolves), crew roles are `r<id>`.
 
   Every call routes through `run/3`: the runner defaults to `System.cmd/3`, overridable through
-  `:console, :tlon_cmd` (the test seam) or a per-call `runner:` (`Console.Crew` passes its own
+  `:console, :tlon_cmd` (the test seam) or a per-call `runner:` (`Server.Crew.Tmux` passes its own
   `:crew_cmd` runner so its seam stays distinct).
   """
 

@@ -52,7 +52,19 @@ defmodule Server do
       # `Workspaces.bench/1` in place of the raw maps eight modules each used to interpret.
       Coworker,
       # What a coworker may do in a workspace — read by the profile materialiser.
-      Policy
+      Policy,
+      # One-brain piece B, slice 2: the coworker-profile registry + materialiser, the harness
+      # drivers, leaf window names, the tmux naming contract and the operator's settings file
+      # moved here from the console, so the SERVICE spawns the same coworker the cockpit would.
+      Profile,
+      Profiles,
+      Harness,
+      Harness.Driver,
+      Harness.Pi,
+      Harness.ClaudeCode,
+      LeafWindow,
+      Tmux,
+      OperatorConfig
     ]
 
   alias Server.Workline.Ledger

@@ -1,16 +1,16 @@
 defmodule Console.WorkspaceTemplates do
   @moduledoc """
-  The **workspace-archetype registry** — nix-owned *capabilities* (compiled, like `Console.Profiles`'
+  The **workspace-archetype registry** — nix-owned *capabilities* (compiled, like `Server.Profiles`'
   coworker archetypes, not runtime-editable). A template is the STARTER shape the author face's
   "new workspace" composes a server `workspace` row from: a `type`, default `repos`, a starter `roster` of
   coworker-archetype entries, and `knobs`. The operator names it and edits from there; the created
   row is a *composition* (server-owned, runtime-editable) — the config seam the reshape settled.
 
-  Distinct from `Console.Profiles.@archetypes`: those template a single COWORKER; these template a
+  Distinct from `Server.Profiles.@archetypes`: those template a single COWORKER; these template a
   whole WORKSPACE (which references coworker archetypes by atom in its `roster`).
   """
 
-  # roster entries reference the coworker archetype registry (`Console.Profiles`) by atom; `name` is a
+  # roster entries reference the coworker archetype registry (`Server.Profiles`) by atom; `name` is a
   # generic role placeholder the operator renames in the author face.
   @templates %{
     code: %{

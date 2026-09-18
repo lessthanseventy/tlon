@@ -93,7 +93,7 @@ defmodule Console.Backend.Link do
   # ── distribution ─────────────────────────────────────────────────────────────────────────
   # The node name carries the OS pid (console-12345@127.0.0.1): two cockpits — a stale one and
   # a fresh `console:run` — must never fight over one name (they did, 2026-09-08, and the loser
-  # crashed the app). Server.CockpitNode finds any `console*@` node. A failure to start
+  # crashed the app). the service sees any `console*@` node. A failure to start
   # distribution is logged and retried with the connect loop, never a crash: the cockpit still
   # renders, with the server-down state, and comes up the moment the node does.
   defp ensure_distribution(opts) do

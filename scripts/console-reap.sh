@@ -20,7 +20,7 @@ PORT="${TLON_MCP_PORT:-4041}"
 
 # 0. kill the coworker tmux servers
 # Each workspace's coworkers run on a private server (`tmux -L console-workspace-<id>`, see
-# Console.Crew), whose socket lives in tmux's socket dir. Killing the server frees the inherited
+# Server.Crew.Tmux), whose socket lives in tmux's socket dir. Killing the server frees the inherited
 # port fd; step 1 then reaps whatever still listens.
 sockdir="${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)"
 # One brain (docs/plans/2026-09-08-one-brain-client-server-plan.md): under the remote backend the

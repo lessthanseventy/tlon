@@ -12,8 +12,8 @@ defmodule Console.Panel.Crew do
   import Console.Panel, only: [blank: 0]
 
   alias Console.Presence
-  alias Console.Profiles
   alias Server.Bus
+  alias Server.Profiles
 
   @type coworker :: %{
           name: String.t(),

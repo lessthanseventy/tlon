@@ -162,11 +162,11 @@ defmodule Console.CockpitWorkspacesTest do
   describe "apply_coworker_knob!/3 — the roster sub-editor's Tab+Enter knob (D2.4 Chunk 2b, absorbs Settings)" do
     setup do
       path = Path.join(System.tmp_dir!(), "aleph_coworker_knob_test_#{System.unique_integer([:positive])}.json")
-      previous = Application.get_env(:console, :config_path)
-      Application.put_env(:console, :config_path, path)
+      previous = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
 
       on_exit(fn ->
-        Application.put_env(:console, :config_path, previous)
+        Application.put_env(:server, :operator_config_path, previous)
         File.rm(path)
       end)
 

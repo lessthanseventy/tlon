@@ -36,7 +36,7 @@ defmodule Console.Space do
           left: [module()],
           right: [module()],
           # The name of the pi coworker profile this space spawns into its center, or nil for a space
-          # with no machine coworker (Console.Profiles). Tlön → "tertius".
+          # with no machine coworker (Server.Profiles). Tlön → "tertius".
           coworker: String.t() | nil,
           # The workspace's full BENCH as `Server.Coworker` structs (Phase C2/C3 drive the cast from
           # this; carried here so callers

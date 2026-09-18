@@ -69,7 +69,7 @@ defmodule Console.Keymap do
       reducer only names them).
     * `{:habit_action, :approve | :reject}` — `a`/`r` on the Memory pane's pending habit.
     * `{:cycle_coworker_model, profile}` — advance the active space's coworker driver model one
-      step round `Console.Profiles.model_ring/0` and persist it (the `m` verb; only in a space with
+      step round `Server.Profiles.model_ring/0` and persist it (the `m` verb; only in a space with
       a coworker).
     * `{:switch_workspace_pos, n}` / `{:select_tab, n}` — Alt+Shift+digit / Alt+digit.
     * `{:register_workspace, template_key, name}` — Enter on the `:new_workspace` input (CONFIG's
@@ -131,10 +131,10 @@ defmodule Console.Keymap do
   """
   alias Console.Cockpit.Drawer
   alias Console.Picker
-  alias Console.Profiles
   alias Console.Space
   alias Console.Tlon.Focus
   alias Console.WorkspaceTemplates
+  alias Server.Profiles
 
   # `Space.workspace?/1` is a `defguard` (usable in clause-head `when`s), which requires the module,
   # not just an alias.

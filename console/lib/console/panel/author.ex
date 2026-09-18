@@ -26,8 +26,8 @@ defmodule Console.Panel.Author do
 
   import Console.Panel, only: [line: 2, blank: 0]
 
-  alias Console.Profiles
   alias Server.Bus
+  alias Server.Profiles
 
   @hints "j/k row · n new · e edit · d delete · a survey"
   @edit_hints "j/k field · h/l cycle · Enter list · Esc back"

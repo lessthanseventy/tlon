@@ -1,4 +1,4 @@
-# Point the coworker-profile materialiser (Console.Profiles.base_dir_root/0) at a throwaway dir so no
+# Point the coworker-profile materialiser (Server.Profiles.base_dir_root/0) at a throwaway dir so no
 # test writes into the real `~/.pi/profiles` — both a hygiene fix (Crew.spawn materialises a profile
 # as a side effect) and what lets the suite run under a sandbox with a read-only home. Set ONCE here,
 # before any test resolves the root, and never mutated afterwards, so `async: true` tests don't race
