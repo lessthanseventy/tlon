@@ -36,11 +36,21 @@ defmodule Server.Arbiter.Remote do
   @moduledoc "The arbiter is the connected cockpit's `Console.Arbiter`, reached over distribution."
   @behaviour Server.Arbiter
 
-  @impl true
-  def wake(session, prompt), do: Server.CockpitNode.call(Console.Arbiter, :wake, [session, prompt])
+  alias Server.Arbiter.Tmux
 
   @impl true
-  def spawn(exports), do: Server.CockpitNode.call(Console.Arbiter, :spawn, [exports])
+  def wake(session, prompt),
+    do: fallback(Server.CockpitNode.call(Console.Arbiter, :wake, [session, prompt]), fn -> Tmux.wake(session, prompt) end)
+
+  @impl true
+  def spawn(exports),
+    do: fallback(Server.CockpitNode.call(Console.Arbiter, :spawn, [exports]), fn -> Tmux.spawn(exports) end)
+
+  # No cockpit connected is the always-up service's NORMAL state (piece B, slice 1): the server's
+  # own tmux backend takes over, so a cold lead is rotated and a spawn lands with the TUI closed.
+  # When a cockpit IS connected it keeps the seat — one owner of the tmux session at a time.
+  defp fallback({:error, :no_cockpit}, tmux), do: tmux.()
+  defp fallback(other, _tmux), do: other
 end
 
 defmodule Server.Crew.Remote do
