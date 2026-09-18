@@ -89,6 +89,10 @@ run = "mix server.ledger"
 description = "workline: the deterministic verifier — run check + flake:check, record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
 run = "scripts/workline-verify.sh"
 
+["server:web"]
+description = "server: open the web UI (one-brain D) — loopback :4042 on the live service"
+run = "xdg-open http://127.0.0.1:4042/"
+
 ["server:cli"]
 description = "server: the CLI passthrough — mise run server:cli -- <subcommand> [args] (workline/approve/post/…)"
 run = "scripts/tlon-cli.sh"
