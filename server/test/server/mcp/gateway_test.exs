@@ -136,6 +136,18 @@ defmodule Server.MCP.GatewayTest do
   end
 
   test "a workline's brief carries the gate, and the Claude Code Stop hook bounces a stop on a missing artifact" do
+    # the artifact check runs git under the workline root: a throwaway repo, never this checkout
+    tmp = Path.join(System.tmp_dir!(), "tlon-gateway-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(tmp)
+    {_, 0} = System.cmd("git", ["-C", tmp, "init", "-q"], stderr_to_stdout: true)
+    previous = Application.get_env(:server, :workline_root)
+    Application.put_env(:server, :workline_root, tmp)
+
+    on_exit(fn ->
+      Application.put_env(:server, :workline_root, previous)
+      File.rm_rf!(tmp)
+    end)
+
     {:ok, wl} = Server.Workline.open(%{title: "gate me", slug: "gate-me"})
     {200, brief} = get_json("/api/threads/#{wl.id}")
     assert %{"stage" => "intent", "artifact_ok" => false, "why" => why} = brief["workline"]
