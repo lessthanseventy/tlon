@@ -31,6 +31,8 @@ defmodule Server.Thread do
     belongs_to :parent, Server.Thread, foreign_key: :parent_thread_id
     # the channel the thread lives in (UX slice 1b); nil in the DB means #general (see the migration)
     field :channel_id, :integer
+    # the last message the memory pass extracted from (Server.Memory.TurnPass); nil = never
+    field :memory_pass_last_id, :integer
   end
 
   @doc ~s{A new thread, opened now. Title is required; state is not caller-settable. `scope`

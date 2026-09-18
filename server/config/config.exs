@@ -15,7 +15,9 @@ config :server, Oban,
      crontab: [
        # the switchboard's durability path, once a minute — a message posted while no recipient
        # was live is delivered the moment one appears, not only on the next boot
-       {"* * * * *", Server.Jobs.Drain}
+       {"* * * * *", Server.Jobs.Drain},
+       # the control-band sweeps (stale gates nagged, stalled worklines flagged), every half hour
+       {"*/30 * * * *", Server.Jobs.Maintain}
      ]}
   ]
 
@@ -30,6 +32,9 @@ config :server, Server.Web.Endpoint,
   render_errors: [formats: [html: Server.Web.ErrorHTML], layout: false],
   pubsub_server: Server.PubSub,
   live_view: [signing_salt: "tlon-live-view"],
+  # the listener is loopback, so the origin check guards nothing — but a tab at localhost or the
+  # box's tailscale name reconnecting every minute logged "Could not check origin" (2026-09-18)
+  check_origin: ["//127.0.0.1", "//localhost", "//ivysaur", "//*.ts.net"],
   http: [ip: {127, 0, 0, 1}, port: 4042],
   server: false
 

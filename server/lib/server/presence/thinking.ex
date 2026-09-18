@@ -15,6 +15,7 @@ defmodule Server.Presence.Thinking do
   use GenServer
 
   alias Server.Bus
+  alias Server.Memory.TurnPass
 
   @default_max_seconds 600
   @sweep_interval_ms 60_000
@@ -102,6 +103,9 @@ defmodule Server.Presence.Thinking do
 
       {_started_at, entries} ->
         Bus.broadcast({:presence_idle, %{thread_id: thread_id, agent: agent}})
+
+        # the turn ended: queue its memory pass (a no-op unless the pass is on and Oban runs here)
+        _ = TurnPass.schedule(thread_id)
         %{state | entries: entries}
     end
   end

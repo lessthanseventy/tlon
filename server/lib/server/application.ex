@@ -17,7 +17,8 @@ defmodule Server.Application do
     # dangling thread→workspace refs; its start_link runs the work synchronously and
     # returns :ignore, so children after it (consult mirror, MCP/Bandit) start only once
     # seed+repair are done — nothing serves against an unseeded db.
-    # One-brain E: Oban on the store's Postgres (cron drain, later the sweeps); D: the web UI's
+    # One-brain E: Oban on the store's Postgres (the cron drain, the Maintain sweeps, the memory
+    # pass — the two GenServer loops those were are gone, E/2); D: the web UI's
     # own Bandit listener. Both opt-in per node like MCP — the service flips them on.
     # get_env, not fetch_env!: a root app that embeds :server (the console) never evaluates this
     # app's config.exs, and the child list is built before the flag is consulted
@@ -35,8 +36,6 @@ defmodule Server.Application do
         maybe(:start_consult_mirror, true, Server.Consult.Mirror) ++
         maybe(:start_switchboard, false, Server.Switchboard.Runner) ++
         maybe(:start_mcp, false, mcp_children()) ++
-        maybe(:memory_pass, false, {Server.Memory.TurnPass, []}) ++
-        maybe(:maintain, false, {Server.Maintain.Monitor, []}) ++
         maybe(:start_oban, false, {Oban, Application.get_env(:server, Oban, [])}) ++
         maybe(:start_web, false, Server.Web.Endpoint)
 

@@ -1,10 +1,12 @@
 defmodule Server.MaintainTest do
-  # Worklines slice 6: the Maintain back-edge. Deterministic monitors detect control-band
+  # Worklines slice 6: the Maintain back-edge. Deterministic sweeps detect control-band
   # breaches and act with NO human in the invocation path — but everything they open lands
-  # GATED (machine-born), so the loop closes without ever acting unsupervised.
+  # GATED (machine-born), so the loop closes without ever acting unsupervised. One-brain E/2:
+  # the sweeps are an Oban job (`Server.Jobs.Maintain`), performed by hand here.
   use ExUnit.Case, async: false
+  use Oban.Testing, repo: Server.Repo
 
-  alias Server.Maintain.Monitor
+  alias Server.Jobs.Maintain
   alias Server.Message
   alias Server.Repo
   alias Server.Thread
@@ -24,12 +26,9 @@ defmodule Server.MaintainTest do
     :ok
   end
 
-  defp start_monitor(opts) do
-    defaults = [name: nil, sweep_interval_ms: to_timeout(hour: 1), gate_stale_ms: 0, stalled_ms: 0]
-    start_supervised!({Monitor, Keyword.merge(defaults, opts)})
-  end
-
-  defp drain(pid), do: Monitor.drain(pid)
+  # Bands at zero so anything open is stale now; `renag_ms` a day so a second sweep is quiet.
+  defp sweep(args \\ %{}),
+    do: perform_job(Maintain, Map.merge(%{gate_stale_ms: 0, stalled_ms: 0, renag_ms: to_timeout(day: 1)}, args))
 
   test "flag opens a machine-born workline already parked at the intent gate, evidence first" do
     {:ok, flagged} = Workline.flag(%{title: "maintain: x stalled", slug: "maint-x"}, "breach: no advance in 3d")
@@ -82,12 +81,9 @@ defmodule Server.MaintainTest do
 
   test "a stale parked gate gets a reminder post, once per nag interval" do
     thread = open_parked_gate("stale-gate")
-    monitor = start_monitor(renag_ms: to_timeout(day: 1))
 
-    send(monitor, :sweep)
-    :ok = drain(monitor)
-    send(monitor, :sweep)
-    :ok = drain(monitor)
+    assert :ok = sweep()
+    assert :ok = sweep()
 
     reminders =
       Message |> Repo.all() |> Enum.filter(&(&1.thread_id == thread.id and &1.body =~ "still parked"))
@@ -97,12 +93,9 @@ defmodule Server.MaintainTest do
 
   test "a stalled workline is flagged as a machine-born intent, once per slug" do
     {:ok, stalled} = Workline.open(%{title: "going nowhere", slug: "stuck"})
-    monitor = start_monitor([])
 
-    send(monitor, :sweep)
-    :ok = drain(monitor)
-    send(monitor, :sweep)
-    :ok = drain(monitor)
+    assert :ok = sweep()
+    assert :ok = sweep()
 
     flags = Thread |> Repo.all() |> Enum.filter(&(&1.slug == "maint-stuck"))
     assert [flag] = flags
@@ -113,13 +106,25 @@ defmodule Server.MaintainTest do
 
   test "a merged workline never breaches" do
     thread = walk_to_merged("done-line")
-    monitor = start_monitor([])
 
-    send(monitor, :sweep)
-    :ok = drain(monitor)
+    assert :ok = sweep()
 
     assert Thread |> Repo.all() |> Enum.filter(&(&1.slug == "maint-done-line")) == []
     assert Repo.get!(Thread, thread.id).stage == "merged"
+  end
+
+  test "the default bands leave a fresh workline alone" do
+    {:ok, _} = Workline.open(%{title: "just opened", slug: "fresh"})
+
+    assert :ok = perform_job(Maintain, %{})
+
+    assert Thread |> Repo.all() |> Enum.filter(&(&1.slug == "maint-fresh")) == []
+  end
+
+  test "the sweeps are on the half-hour cron" do
+    plugins = Application.fetch_env!(:server, Oban)[:plugins]
+    {_, cron} = Enum.find(plugins, &match?({Oban.Plugins.Cron, _}, &1))
+    assert {"*/30 * * * *", Maintain} in cron[:crontab]
   end
 
   defp open_parked_gate(slug) do

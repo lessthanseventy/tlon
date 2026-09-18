@@ -26,10 +26,8 @@ if config_env() != :test and not remote? do
     url -> config :server, Server.Repo, url: url
   end
 
-  config :server, maintain: System.get_env("TLON_MAINTAIN") in ~w(1 true yes)
-
   # Mirror funes' own runtime flags: a dependency's config/*.exs is NOT evaluated when aleph
-  # is the root app, so without these the memory pass / maintain monitor / workline root are
+  # is the root app, so without these the memory pass / workline root are
   # silently unreachable for aleph-embedded funes (the 4041 node).
   config :server, memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes)
 

@@ -22,12 +22,9 @@ if root = System.get_env("TLON_WORKLINE_ROOT") do
   config :server, workline_root: root
 end
 
-# The Maintain monitor is opt-in the same way: control-band sweeps that
-# nag stale gates and flag stalled worklines as gated machine-born intents.
-config :server, maintain: System.get_env("TLON_MAINTAIN") in ~w(1 true yes)
-
-# The post-response memory pass is opt-in: presence_idle → cheap
-# extractor → banked facts. Off by default so a dev shell never shells a model unasked.
+# The post-response memory pass is opt-in: presence_idle → a queued pass → cheap extractor →
+# banked facts. Off by default so a dev shell never shells a model unasked. (The Maintain
+# sweeps need no flag: they run on Oban's cron wherever Oban runs, E/2.)
 config :server, memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes)
 
 # The operator's handle — who the human IS on this machine's channel. Local
