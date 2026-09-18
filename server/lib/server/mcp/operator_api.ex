@@ -11,11 +11,13 @@ defmodule Server.MCP.OperatorAPI do
       GET  /api/roster                  Staff.roster
       GET  /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
       GET  /api/threads/:id/messages    Channel.recent_messages (?limit=, default 50)
+      GET  /api/threads/:id/terminal    where its coworker runs: {socket, session, window}, 404 if none
       POST /api/threads/:id/messages    {"body"} → Channel.post as the operator; 201 + the message
   """
 
   import Plug.Conn
 
+  alias Server.Arbiter.Tmux
   alias Server.Board
   alias Server.Channel
   alias Server.MCP.Brief
@@ -30,6 +32,7 @@ defmodule Server.MCP.OperatorAPI do
       {"GET", ["roster"]} -> json(conn, 200, Enum.map(Staff.roster(), &roster_row/1))
       {"GET", ["threads", id]} -> with_thread(conn, id, &json(conn, 200, &1 |> Board.brief() |> Brief.scope()))
       {"GET", ["threads", id, "messages"]} -> with_thread(conn, id, &messages(conn, &1))
+      {"GET", ["threads", id, "terminal"]} -> with_thread(conn, id, &terminal(conn, &1))
       {"POST", ["threads", id, "messages"]} -> with_thread(conn, id, &post(conn, &1))
       _ -> json(conn, 404, %{error: "no such route"})
     end
@@ -43,6 +46,15 @@ defmodule Server.MCP.OperatorAPI do
       end
 
     json(conn, 200, thread |> Channel.recent_messages(limit) |> Enum.map(&Brief.message/1))
+  end
+
+  # Where the thread's coworker runs, for a client that attaches (asterion): the tmux socket,
+  # session and window — resolved by the server, so no client derives the naming. 404 = no window.
+  defp terminal(conn, thread) do
+    case Tmux.terminal_target(thread) do
+      nil -> json(conn, 404, %{error: "thread #{thread.id} has no live terminal"})
+      target -> json(conn, 200, target)
+    end
   end
 
   # Post as the operator — the same call `server:post` makes; Channel.post's Bus broadcast is

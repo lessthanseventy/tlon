@@ -121,6 +121,20 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  test "GET /api/threads/:id/terminal is where the coworker runs, 404 when nothing does" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "tmuxed", type: "code", scope: "project", repos: [], roster: []})
+    {:ok, t} = Channel.open_thread(%{title: "where am i", workspace_id: ws.id})
+    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"", 1} end)
+    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+    assert {404, _} = get_json("/api/threads/#{t.id}/terminal")
+    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"1\tt#{t.id}\t#{t.id}\t7\n", 0} end)
+
+    assert {200, %{"socket" => socket, "session" => session, "window" => window}} =
+             get_json("/api/threads/#{t.id}/terminal")
+
+    assert socket == "console-workspace-#{ws.id}" and session == "w#{ws.id}" and window == "t#{t.id}"
+  end
+
   test "a workline's brief carries the gate, and the Claude Code Stop hook bounces a stop on a missing artifact" do
     {:ok, wl} = Server.Workline.open(%{title: "gate me", slug: "gate-me"})
     {200, brief} = get_json("/api/threads/#{wl.id}")
