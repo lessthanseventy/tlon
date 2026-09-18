@@ -16,6 +16,7 @@ control loop, not two, and no second way to run anything:
 - `mise run flake:check` — the machine-level Nix gate.
 - `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
 - `mise run home:switch` — install/update this machine into the user profile via home-manager.
+- `mise run machine:update` — apply the checkout to the live machine: home:switch, then restart the shell and the server (the one update verb).
 
 mise owns dev runtimes; Nix owns packaging and the system. **If a command belongs in the loop, it becomes
 a task in `tasks/<group>.toml` (mise.toml includes them)** — never a prose instruction that drifts out of sync with what actually runs.
