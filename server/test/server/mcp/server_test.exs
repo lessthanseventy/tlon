@@ -100,6 +100,7 @@ defmodule Server.MCP.ServerTest do
                "search_history",
                "search_facts",
                "machine_overview",
+               "consult_oracle",
                "register_workspace",
                "list_workspaces",
                "edit_workspace",
@@ -772,5 +773,32 @@ defmodule Server.MCP.ServerTest do
     Enum.find_value(headers, fn {k, v} ->
       if String.downcase(to_string(k)) == name, do: to_string(v)
     end)
+  end
+
+  test "consult_oracle asks the OTHER bucket's CLI and posts the exchange to the thread as `oracle`",
+       %{token: token, thread: thread} do
+    # Carl is not a Claude-plan agent, so the oracle is the Claude side; its CLI is stubbed with
+    # echo, which prints its argv back — so the answer carries the prompt we sent.
+    previous = Application.get_env(:server, :oracle_claude_cmd)
+    Application.put_env(:server, :oracle_claude_cmd, "echo")
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:server, :oracle_claude_cmd, previous),
+        else: Application.delete_env(:server, :oracle_claude_cmd)
+    end)
+
+    session = handshake(token)
+
+    result =
+      call(token, session, 40, "consult_oracle", %{"question" => "is SQLite enough here?", "context" => "one operator"})
+
+    assert result["isError"] != true
+    %{"side" => "claude", "answer" => answer} = decode_tool_json(result)
+    assert answer =~ "is SQLite enough here?"
+    assert answer =~ "--model opus"
+
+    posted = Channel.recent_messages(thread, 5)
+    assert Enum.any?(posted, &(&1.author == "oracle" and &1.body =~ "asked (claude)"))
   end
 end

@@ -57,6 +57,8 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.SearchHistory, name: "search_history")
   component(Server.MCP.Tool.SearchFacts, name: "search_facts")
   component(Server.MCP.Tool.MachineOverview, name: "machine_overview")
+  # The Oracle: a second read from the OTHER subscription bucket (field survey §4 adopt #6).
+  component(Server.MCP.Tool.ConsultOracle, name: "consult_oracle")
   # The source verbs (docs/plans/2026-09-08-elixir-repo-tools-design.md): edits and introspection
   # over the thread's own worktree. A reviewer's profile excludes the edit verbs.
   component(Server.MCP.Tool.RenameIdentifier, name: "rename_identifier")
