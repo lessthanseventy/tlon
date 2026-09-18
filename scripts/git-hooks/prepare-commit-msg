@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Stamp a coworker's commit with the thread it was made for.
+#
+# A pane the server spawned carries TLON_THREAD / TLON_AUTHOR in its env (Server.MCP.Spawn). The
+# trailer joins the commit to the conversation that produced it — Server.Commits reads it back
+# with `git log --grep`, so the dossier lists a thread's commits and a sha leads to its thread.
+# A trailer rides the message through rebase, amend and cherry-pick, which is why it is a
+# trailer and not a database keyed on patch-id.
+#
+# Hooks live in the repo's common dir (core.hooksPath), so every worktree under .worktrees/
+# gets this. A plain human terminal has no TLON_THREAD and gets no trailer: that commit was not
+# a thread's work. Never fail the commit.
+set -u
+
+msg="$1"
+[ -n "${TLON_THREAD:-}" ] || exit 0
+[ -f "$msg" ] || exit 0
+
+args=(--in-place --if-exists doNothing --trailer "Tlon-Thread: $TLON_THREAD")
+[ -n "${TLON_AUTHOR:-}" ] && args+=(--trailer "Tlon-Author: $TLON_AUTHOR")
+git interpret-trailers "${args[@]}" "$msg" 2>/dev/null || true
+exit 0
