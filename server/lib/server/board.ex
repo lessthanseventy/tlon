@@ -22,8 +22,10 @@ defmodule Server.Board do
   alias Server.Message
   alias Server.Presence.Thinking
   alias Server.Recall
+  alias Server.References
   alias Server.Repo
   alias Server.Thread
+  alias Server.Workline
   alias Server.Workspace
 
   @cap 5
@@ -171,6 +173,16 @@ defmodule Server.Board do
   def brief(%Thread{} = thread) do
     thread = Repo.get!(Thread, thread.id)
     todos = Dossier.open_todos_for_thread(thread)
+    recent = Channel.recent_messages(thread, @cap)
+
+    # WORKLINE — stage, gate, and whether the stage's owed artifact is committed: what a coworker's
+    # stop-hook asks before it lets a turn end (survey §4 adopt #3), and what the editor flags.
+    workline =
+      case Workline.owed_status(thread) do
+        :none -> nil
+        {:ok, why} -> %{stage: thread.stage, awaiting: thread.awaiting, artifact_ok: true, why: why}
+        {:error, why} -> %{stage: thread.stage, awaiting: thread.awaiting, artifact_ok: false, why: why}
+      end
 
     %{
       thread: thread,
@@ -191,7 +203,10 @@ defmodule Server.Board do
       checks: Dossier.recent_checks_for_thread(thread),
       # COMMITS — the thread's commits in its repo, joined by the `Tlon-Thread` trailer (Server.Commits).
       commits: Commits.for_thread(thread),
-      recent: Channel.recent_messages(thread, @cap)
+      workline: workline,
+      # CITED — the threads the recent messages point at with `#N`, resolved (Server.References).
+      cited: References.cited(recent, thread.id),
+      recent: recent
     }
   end
 

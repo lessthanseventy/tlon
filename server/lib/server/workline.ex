@@ -363,4 +363,23 @@ defmodule Server.Workline do
   end
 
   defp next(stage), do: Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
+
+  @doc """
+  Is the current stage's owed artifact there? The coworker-side gate (the Claude Code Stop hook,
+  the `/api/threads/:id` brief) asks this without advancing. `:none` for a plain thread or a
+  merged workline, `{:ok, why}` when committed, `{:error, why}` when missing — `why` in the
+  checker's words (`Server.Workline.Artifacts`).
+  """
+  def owed_status(thread, opts \\ [])
+  def owed_status(%Thread{stage: nil}, _opts), do: :none
+  def owed_status(%Thread{stage: "merged"}, _opts), do: :none
+
+  def owed_status(%Thread{} = thread, opts) do
+    checker = Keyword.get(opts, :artifacts, Git)
+
+    case verified_artifact(thread, checker) do
+      :ok -> {:ok, "#{thread.stage} artifact committed"}
+      {:error, {:artifact_missing, why}} -> {:error, why}
+    end
+  end
 end

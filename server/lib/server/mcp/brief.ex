@@ -34,6 +34,8 @@ defmodule Server.MCP.Brief do
       "blockers" => capped(scope.blockers, &issue/1),
       "checks" => capped(scope.checks, &check/1),
       "commits" => capped(scope.commits, &commit/1),
+      "workline" => workline(scope.workline),
+      "cited" => Enum.map(scope.cited, &cited/1),
       "recent" => Enum.map(scope.recent, &message/1)
     }
   end
@@ -46,6 +48,30 @@ defmodule Server.MCP.Brief do
   @doc "A commit the thread made — `Server.Commits` row; the sha is cut to 12 like the artifact checker's."
   def commit(%{sha: sha, subject: subject, author: author, at: at}) do
     %{"sha" => String.slice(sha, 0, 12), "subject" => subject, "author" => author, "at" => at}
+  end
+
+  @doc "The workline gate as the brief carries it — nil for a plain thread."
+  def workline(nil), do: nil
+
+  def workline(%{stage: stage, awaiting: awaiting, artifact_ok: ok, why: why}) do
+    %{"stage" => stage, "awaiting" => awaiting, "artifact_ok" => ok, "why" => why}
+  end
+
+  @doc "A thread another message cited with `#N`, resolved."
+  def cited(%{id: id, title: title, stage: stage, lead: lead}) do
+    %{"id" => id, "title" => title, "stage" => stage, "lead" => lead}
+  end
+
+  @doc "A playbook — name, summary, steps, success, where it came from."
+  def playbook(%Server.Playbook{} = p) do
+    %{
+      "name" => p.name,
+      "summary" => p.summary,
+      "steps" => p.steps,
+      "success" => p.success,
+      "author" => p.author,
+      "source_thread_id" => p.source_thread_id
+    }
   end
 
   @doc "A fact with its read-time certainty rank."
