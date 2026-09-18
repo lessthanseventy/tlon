@@ -15,6 +15,7 @@ defmodule Server.Board do
 
   alias Server.Agent
   alias Server.Channel
+  alias Server.Commits
   alias Server.Dossier
   alias Server.Event
   alias Server.Fact
@@ -188,6 +189,8 @@ defmodule Server.Board do
       blockers: Dossier.open_issues_for_thread(thread),
       # CHECKS — the recent MEASURED verifications (last check red or green), not a self-report.
       checks: Dossier.recent_checks_for_thread(thread),
+      # COMMITS — the thread's commits in its repo, joined by the `Tlon-Thread` trailer (Server.Commits).
+      commits: Commits.for_thread(thread),
       recent: Channel.recent_messages(thread, @cap)
     }
   end

@@ -33,6 +33,7 @@ defmodule Server.MCP.Brief do
       "unknowns" => capped(scope.unknowns, &question/1),
       "blockers" => capped(scope.blockers, &issue/1),
       "checks" => capped(scope.checks, &check/1),
+      "commits" => capped(scope.commits, &commit/1),
       "recent" => Enum.map(scope.recent, &message/1)
     }
   end
@@ -40,6 +41,11 @@ defmodule Server.MCP.Brief do
   @doc "A %{shown, more} cap, rendered with its count intact."
   def capped(%{shown: shown, more: more}, render) do
     %{"shown" => Enum.map(shown, render), "more" => more}
+  end
+
+  @doc "A commit the thread made — `Server.Commits` row; the sha is cut to 12 like the artifact checker's."
+  def commit(%{sha: sha, subject: subject, author: author, at: at}) do
+    %{"sha" => String.slice(sha, 0, 12), "subject" => subject, "author" => author, "at" => at}
   end
 
   @doc "A fact with its read-time certainty rank."

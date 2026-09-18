@@ -99,7 +99,17 @@ export interface Dossier {
   done: Capped<DoneEntry>;
   blockers: Capped<Blocker>;
   checks: Capped<Check>;
+  // The thread's commits, joined by the `Tlon-Thread` trailer. Optional: a server from before
+  // the join still renders.
+  commits?: Capped<Commit>;
   chatter: ChatterMessage[];
+}
+
+export interface Commit {
+  sha: string;
+  subject: string;
+  author: string;
+  at: string;
 }
 
 // The operator's handle, so a stated fact reads as HIS words. The server trusts only this
@@ -150,6 +160,12 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string):
     lines.push("", "## Checks  (measured — ✓ passed, ✗ failed at that exit)");
     for (const c of d.checks.shown) lines.push(renderCheck(c));
     pushMore(lines, d.checks.more, "checks");
+  }
+
+  if (d.commits && d.commits.shown.length > 0) {
+    lines.push("", "## Commits  (this thread's, in its repo)");
+    for (const c of d.commits.shown) lines.push(`- ${c.sha} ${c.subject} — ${c.author}`);
+    pushMore(lines, d.commits.more, "commits");
   }
 
   if (d.done.shown.length > 0) {
