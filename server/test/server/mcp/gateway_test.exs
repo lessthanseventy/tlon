@@ -101,4 +101,63 @@ defmodule Server.MCP.GatewayTest do
 
     {status, decoded}
   end
+
+  defp get_json(path) do
+    {:ok, {{_http, status, _reason}, _headers, body}} =
+      :httpc.request(:get, {~c"http://127.0.0.1:48641" ++ String.to_charlist(path), []}, [], body_format: :binary)
+
+    {status, JSON.decode!(body)}
+  end
+
+  defp post_json(path, map) do
+    {:ok, {{_http, status, _reason}, _headers, body}} =
+      :httpc.request(
+        :post,
+        {~c"http://127.0.0.1:48641" ++ String.to_charlist(path), [], ~c"application/json", JSON.encode!(map)},
+        [],
+        body_format: :binary
+      )
+
+    {status, JSON.decode!(body)}
+  end
+
+  describe "/api — the operator's door (Server.MCP.OperatorAPI)" do
+    test "GET /api/sidebar is Board.sidebar as JSON, and carries the open thread", %{thread: t} do
+      # the sidebar groups by workspace, so the row needs one to be grouped under
+      # the sidebar groups by workspace, so a row needs one to be grouped under — and a thread with
+      # NO workspace (the fixture's) lands in the default (oldest) one rather than being dropped
+      {:ok, ws} = Server.Workspaces.register(%{name: "asterion", type: "code", scope: "project", repos: [], roster: []})
+      {:ok, mine} = Channel.open_thread(%{title: "from the editor", workspace_id: ws.id})
+      {200, body} = get_json("/api/sidebar")
+      assert is_list(body)
+      titles = for group <- body, row <- group["threads"], do: row["title"]
+      assert mine.title in titles
+      assert t.title in titles
+    end
+
+    test "GET /api/threads/:id is the brief an agent's get_dossier gets — COMMITS included", %{thread: t} do
+      {200, body} = get_json("/api/threads/#{t.id}")
+      assert body["goal"] == t.title
+      assert %{"shown" => _, "more" => _} = body["commits"]
+    end
+
+    test "POST /api/threads/:id/messages posts AS THE OPERATOR, then GET lists it", %{thread: t} do
+      {201, posted} = post_json("/api/threads/#{t.id}/messages", %{body: "ship it"})
+      assert posted["author"] == Application.get_env(:server, :operator, "andrew")
+      assert posted["body"] == "ship it"
+      {200, messages} = get_json("/api/threads/#{t.id}/messages?limit=5")
+      assert Enum.any?(messages, &(&1["id"] == posted["id"]))
+    end
+
+    test "GET /api/roster is Staff.roster with a plain `warm` key" do
+      {200, body} = get_json("/api/roster")
+      assert is_list(body)
+    end
+
+    test "an unknown thread is a 404, an empty body a 400, an unknown route a 404", %{thread: t} do
+      assert {404, _} = get_json("/api/threads/999999")
+      assert {400, _} = post_json("/api/threads/#{t.id}/messages", %{body: ""})
+      assert {404, _} = get_json("/api/nope")
+    end
+  end
 end

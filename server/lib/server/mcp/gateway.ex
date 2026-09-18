@@ -34,6 +34,7 @@ defmodule Server.MCP.Gateway do
 
   alias Anubis.Server.Transport.StreamableHTTP.Plug, as: AnubisTransport
   alias Server.MCP.Endpoint, as: McpServer
+  alias Server.MCP.OperatorAPI
   alias Server.MCP.Spawn
 
   @impl true
@@ -45,6 +46,7 @@ defmodule Server.MCP.Gateway do
   def call(conn, anubis_opts) do
     case conn.path_info do
       ["mint"] -> mint(conn)
+      ["api" | rest] -> OperatorAPI.call(conn, rest)
       _ -> AnubisTransport.call(conn, anubis_opts)
     end
   end
