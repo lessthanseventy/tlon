@@ -133,9 +133,39 @@ defmodule Server.Worktree do
         else: ["worktree", "add", "-b", branch, wt]
 
     case git(repo_path, args) do
-      {_out, 0} -> {:ok, wt}
-      {out, _} -> {:error, "git worktree add refused: #{String.slice(out, 0, 200)}"}
+      {_out, 0} ->
+        link_deps(repo_path, wt)
+        {:ok, wt}
+
+      {out, _} ->
+        {:error, "git worktree add refused: #{String.slice(out, 0, 200)}"}
     end
+  end
+
+  # Dependency dirs are gitignored, so a fresh worktree has none and the first `mix compile` /
+  # `npm` there is minutes (survey §1: CCManager's .worktreeinclude, parallel-code's symlinks).
+  # Share them by SYMLINK from the main tree — `deps` and `node_modules` are content-addressed by
+  # their lockfiles and safe to share; `_build` is NOT (compiled artifacts of a different branch),
+  # so each worktree builds its own. Best-effort: a missing dir in the main tree is skipped.
+  @shared_deps [
+    "deps",
+    "node_modules",
+    "modules/server/deps",
+    "modules/menard/deps",
+    "modules/desktop/shell/node_modules"
+  ]
+
+  defp link_deps(repo_path, wt) do
+    for rel <- @shared_deps,
+        src = Path.join(repo_path, rel),
+        dst = Path.join(wt, rel),
+        File.dir?(src),
+        not File.exists?(dst) do
+      File.mkdir_p!(Path.dirname(dst))
+      File.ln_s(src, dst)
+    end
+
+    :ok
   end
 
   # Repo-local ignore of the tool-managed checkout dir — `.git/info/exclude`, not a tracked

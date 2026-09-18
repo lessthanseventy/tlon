@@ -160,4 +160,16 @@ defmodule Server.WorktreeTest do
       assert :none = Worktree.rename(repo, "t8", "whatever")
     end
   end
+
+  test "a new worktree symlinks the main tree's gitignored dependency dirs (deps, node_modules), never _build", %{
+    repo: repo
+  } do
+    for d <- ["deps", "node_modules", "_build"], do: File.mkdir_p!(Path.join(repo, d))
+    File.write!(Path.join(repo, ".gitignore"), "deps\nnode_modules\n_build\n")
+    assert {:ok, wt} = Worktree.ensure(repo, "linked")
+    assert {:ok, target} = File.read_link(Path.join(wt, "deps"))
+    assert target == Path.join(repo, "deps")
+    assert {:ok, _} = File.read_link(Path.join(wt, "node_modules"))
+    refute File.exists?(Path.join(wt, "_build"))
+  end
 end
