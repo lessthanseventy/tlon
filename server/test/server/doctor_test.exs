@@ -20,6 +20,7 @@ defmodule Server.DoctorTest do
                "issue",
                "message",
                "note",
+               "playbook",
                "project",
                "question",
                "session",

@@ -122,6 +122,11 @@ defmodule Server.Bus do
     publish([tickets_topic(), activity_topic()], event)
   end
 
+  # Playbooks ride the workspaces topic (they are workspace-level procedure, not thread state).
+  def broadcast({tag, %Server.Playbook{}} = event) when tag in [:playbook_defined, :playbook_edited] do
+    publish([workspaces_topic(), activity_topic()], event)
+  end
+
   # Channels (UX slice 1b) live on the workspaces topic — the rail redraws on both; a moved
   # thread is a thread event.
   def broadcast({tag, %Server.ChannelRow{}} = event) when tag in [:channel_created, :channel_deleted] do

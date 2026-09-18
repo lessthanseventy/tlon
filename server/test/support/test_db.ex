@@ -24,6 +24,8 @@ defmodule Server.TestDB do
     Server.Todo,
     Server.Question,
     Server.Habit,
+    # playbook.source_thread_id → thread, so before Thread
+    Server.Playbook,
     Server.Message,
     Server.Session,
     Server.Thread,
