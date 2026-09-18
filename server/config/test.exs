@@ -23,11 +23,6 @@ config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 2
 # never leak into test assertions; tests that want one pass an explicit path.
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
 
-# Where workline artifacts are written and COMMITTED. Unset it falls back to the cwd — which is
-# inside the ficciones checkout, so a test that approves a gate committed intent.md into the real
-# repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
-config :server, workline_root: "/nonexistent/tlon-test-workline"
-
 # The consult mirror is off in tests: the pure maybe_mirror tests call it directly, and the
 # round-trip test starts it explicitly. An always-on subscriber would double-mirror.
 config :server, start_consult_mirror: false
@@ -40,3 +35,8 @@ config :server, start_repo: false
 # A fixed signing key for the stateless MCP tokens, so tests mint/resolve deterministically with
 # no secret-file IO (Server.MCP.Secret reads this before touching disk).
 config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b"
+
+# Where workline artifacts are written and COMMITTED. Unset it falls back to the cwd — which is
+# inside the ficciones checkout, so a test that approves a gate committed intent.md into the real
+# repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
+config :server, workline_root: "/nonexistent/tlon-test-workline"
