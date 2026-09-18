@@ -3,10 +3,15 @@ import Config
 # The store: Postgres on the local socket. TLON_DATABASE_URL names another (a remote, a
 # password); otherwise TLON_DATABASE (default `tlon`) over peer auth at /run/postgresql. Test
 # manages its own database (config/test.exs), so skip it here.
+# In :prod the default is the service's `tlon`; in :dev the default stays dev.exs's `tlon_dev`
+# (2026-09-18: a dev-env `server:check` wrote eval threads into the LIVE store when this block
+# defaulted every env to `tlon`) — TLON_DATABASE / TLON_DATABASE_URL override either.
 if config_env() != :test do
-  case System.get_env("TLON_DATABASE_URL") do
-    nil -> config :server, Server.Repo, database: System.get_env("TLON_DATABASE") || "tlon", socket_dir: "/run/postgresql"
-    url -> config :server, Server.Repo, url: url
+  case {System.get_env("TLON_DATABASE_URL"), System.get_env("TLON_DATABASE"), config_env()} do
+    {url, _, _} when is_binary(url) -> config :server, Server.Repo, url: url
+    {nil, db, _} when is_binary(db) -> config :server, Server.Repo, database: db, socket_dir: "/run/postgresql"
+    {nil, nil, :prod} -> config :server, Server.Repo, database: "tlon", socket_dir: "/run/postgresql"
+    _ -> :ok
   end
 end
 
