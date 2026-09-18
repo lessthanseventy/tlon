@@ -76,9 +76,11 @@ defmodule Server.BoardSidebarTest do
   test "a thread whose workspace is GONE lands in the default group — never dropped" do
     {:ok, workspace} = Bootstrap.ensure()
     {:ok, thread} = Channel.open_thread(%{title: "orphan"})
-    Server.Repo.query!("PRAGMA foreign_keys = OFF")
-    Server.Repo.query!("UPDATE thread SET workspace_id = 999 WHERE id = ?", [thread.id])
-    Server.Repo.query!("PRAGMA foreign_keys = ON")
+    # the FK is a constraint trigger on Postgres; disabling it for the one UPDATE is how the
+    # drift this repairs is reproduced (a superuser-only move, which the local role is)
+    Server.Repo.query!("ALTER TABLE thread DISABLE TRIGGER ALL")
+    Server.Repo.query!("UPDATE thread SET workspace_id = 999 WHERE id = $1", [thread.id])
+    Server.Repo.query!("ALTER TABLE thread ENABLE TRIGGER ALL")
 
     [%{workspace: %{id: default_id}, threads: threads}] = Board.sidebar()
     assert default_id == workspace.id

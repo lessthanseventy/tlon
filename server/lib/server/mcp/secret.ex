@@ -45,12 +45,18 @@ defmodule Server.MCP.Secret do
     end
   end
 
-  # Beside the world's db file, so the trust domain is the db. Falls back to a repo-local path if
-  # the db path is unset or in-memory (nothing durable to sit beside).
   defp secret_path do
+    # Named after the database (the trust domain is the db), under the XDG data dir — a Postgres
+    # database is a name, not a file, so there is no "beside" to sit at (one-brain piece C).
     case Application.get_env(:server, Server.Repo)[:database] do
-      db when is_binary(db) and db not in [":memory:", ""] -> db <> ".token_secret"
-      _ -> Path.join(System.tmp_dir!(), "tlon.token_secret")
+      db when is_binary(db) and db not in [":memory:", ""] ->
+        data_home =
+          System.get_env("XDG_DATA_HOME") || Path.join(System.get_env("HOME") || System.tmp_dir!(), ".local/share")
+
+        Path.join([data_home, "tlon", Path.basename(db) <> ".token_secret"])
+
+      _ ->
+        Path.join(System.tmp_dir!(), "tlon.token_secret")
     end
   end
 end

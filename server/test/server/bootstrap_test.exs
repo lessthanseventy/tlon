@@ -44,12 +44,13 @@ defmodule Server.BootstrapTest do
   test "threads pointing at a dead workspace are repaired to the default" do
     {:ok, workspace} = Bootstrap.ensure()
     {:ok, thread} = Channel.open_thread(%{title: "orphan"})
-    # The live-db drift this repairs was born under a suspended FK pragma (table
-    # rebuilds, pre-integrity removes); reproduce it the same way. pool_size is 1
-    # in test, so the pragma toggles the one real connection.
-    Repo.query!("PRAGMA foreign_keys = OFF")
-    Repo.query!("UPDATE thread SET workspace_id = 999 WHERE id = ?", [thread.id])
-    Repo.query!("PRAGMA foreign_keys = ON")
+    # The live-db drift this repairs was born under suspended FKs (table rebuilds, pre-integrity
+    # removes); reproduce it the same way.
+    # the FK is a constraint trigger on Postgres; disabling it for the one UPDATE is how the
+    # drift this repairs is reproduced (a superuser-only move, which the local role is)
+    Repo.query!("ALTER TABLE thread DISABLE TRIGGER ALL")
+    Repo.query!("UPDATE thread SET workspace_id = 999 WHERE id = $1", [thread.id])
+    Repo.query!("ALTER TABLE thread ENABLE TRIGGER ALL")
 
     assert {:ok, %{id: workspace_id}} = Bootstrap.ensure()
     assert workspace_id == workspace.id

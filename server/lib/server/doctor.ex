@@ -21,21 +21,24 @@ defmodule Server.Doctor do
   """
   @spec integrity_check() :: String.t()
   def integrity_check do
-    case Repo.query!("PRAGMA integrity_check").rows do
-      [["ok"]] -> "ok"
-      rows -> Enum.map_join(rows, "; ", fn [problem] -> problem end)
+    # Postgres has no PRAGMA integrity_check; the honest equivalent at 2am is "can the store answer
+    # and are its relations all there" — a failed query raises, which the caller reports.
+    case Repo.query!("SELECT count(*) FROM pg_class WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace").rows do
+      [[n]] when n > 0 -> "ok"
+      _ -> "no tables in schema public"
     end
   end
 
-  @doc "User tables present, sqlite internals and the migration ledger excluded."
+  @doc """
+  User tables present, the migration ledger excluded.
+  """
   @spec tables() :: [String.t()]
   def tables do
     %{rows: rows} =
       Repo.query!("""
-      SELECT name FROM sqlite_master
-      WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'
-        AND name NOT LIKE '%\\_fts' ESCAPE '\\' AND name NOT LIKE '%\\_fts\\_%' ESCAPE '\\'
-      ORDER BY name
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> 'schema_migrations'
+      ORDER BY table_name
       """)
 
     Enum.map(rows, fn [name] -> name end)

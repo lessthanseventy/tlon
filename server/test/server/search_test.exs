@@ -25,7 +25,8 @@ defmodule Server.SearchTest do
       %{shown: shown, more: more} = Search.history("busy_timeout")
       assert length(shown) == 1
       assert hd(shown).author == "andrew"
-      assert hd(shown).snippet =~ "busy_timeout"
+      # Postgres tokenises busy_timeout as two words and marks each; the snippet carries both
+      assert hd(shown).snippet =~ "busy" and hd(shown).snippet =~ "timeout"
       assert hd(shown).thread_id == thread.id
       assert more == 0
     end
