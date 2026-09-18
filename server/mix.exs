@@ -82,6 +82,9 @@ defmodule Server.MixProject do
       {:phoenix_html, "~> 4.3"},
       # Background work (one-brain piece E): Oban on the same Postgres.
       {:oban, "~> 2.23"},
+      # Oban's notifier/peers encode with Jason (not the stdlib JSON) — the release must ship it
+      # (2026-09-18: the service crash-looped on Oban.Sonar without it).
+      {:jason, "~> 1.4"},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:ecto_sqlite3, ">= 0.17.0"},
       # The switchboard's liveness layer (§10): PubSub fans a posted message out to
