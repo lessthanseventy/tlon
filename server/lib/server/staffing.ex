@@ -62,11 +62,12 @@ defmodule Server.Staffing do
       [] ->
         :ok
 
-      bench ->
-        lead = Coworker.lead(bench)
+      # The CENTRE is the bench's HEAD — the seat the operator put first (tertius, the surveyor);
+      # the workspace's LEAD (`Coworker.lead/1`, the builder) is who leads threads, a different job.
+      [centre | _] = bench ->
         tabs = reap_stale(workspace_id, bench, Tmux.list_windows(workspace_id))
-        tabs = ensure_centre(workspace_id, lead, tabs)
-        ensure_tail(workspace_id, lead, bench, tabs)
+        tabs = ensure_centre(workspace_id, centre, tabs)
+        ensure_tail(workspace_id, centre, bench, tabs)
         ensure_leaves(workspace_id, bench, tabs)
         :ok
     end
@@ -77,7 +78,7 @@ defmodule Server.Staffing do
   # in place); a stale tail window is just killed.
   defp reap_stale(workspace_id, bench, tabs) do
     handles = Enum.map(bench, & &1.name)
-    centre = Coworker.lead(bench).name
+    centre = hd(bench).name
     stale = stale_coworkers(tabs, handles)
 
     cond do

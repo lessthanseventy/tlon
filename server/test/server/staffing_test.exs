@@ -46,7 +46,7 @@ defmodule Server.StaffingTest do
     %{ws: ws, standing: standing, sock: "console-workspace-#{ws.id}", session: "w#{ws.id}"}
   end
 
-  # A fake tmux: `windows` is what list-windows prints (the centre `hronir` on 0 by default);
+  # A fake tmux: `windows` is what list-windows prints (the centre `rufus` on 0 in most fixtures);
   # everything else succeeds; a capture-pane reports the registered footer (harness ready).
   defp tmux(windows) do
     test_pid = self()
@@ -72,18 +72,18 @@ defmodule Server.StaffingTest do
     thread
   end
 
-  test "the centre absent: the lead's pi opens the session (new-session, the profile's tmux.conf, identity in the env)",
+  test "the centre absent: the bench head's pi opens the session (new-session, the profile's tmux.conf, identity in the env)",
        %{ws: ws, standing: standing, sock: sock, session: session} do
     tmux("")
     assert :ok = Staffing.pass(ws.id)
 
-    assert_receive {:join, tid, "hronir", opts}
+    assert_receive {:join, tid, "rufus", opts}
     assert tid == standing.id
     assert opts[:mandate] == "machine"
-    assert_receive {:tmux, ["-L", ^sock, "-f", conf, "new-session", "-d", "-s", ^session, "-n", "hronir" | rest]}
+    assert_receive {:tmux, ["-L", ^sock, "-f", conf, "new-session", "-d", "-s", ^session, "-n", "rufus" | rest]}
     assert conf =~ "tmux.conf"
     assert "-e" in rest
-    assert Enum.any?(rest, &String.starts_with?(&1, "TLON_AUTHOR=hronir"))
+    assert Enum.any?(rest, &String.starts_with?(&1, "TLON_AUTHOR=rufus"))
     assert List.last(rest) =~ "PI_CODING_AGENT_DIR"
     assert_receive {:tmux, ["-L", ^sock, "set-option", "-g", "allow-passthrough", "on"]}
   end
@@ -100,16 +100,16 @@ defmodule Server.StaffingTest do
     sock: sock,
     session: session
   } do
-    tmux("0\thronir\t\t\t1\n")
+    tmux("0\trufus\t\t\t1\n")
     assert :ok = Staffing.pass(ws.id)
 
     refute_received {:tmux, ["-L", _, "new-session" | _]}
-    assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", "rufus", rufus]}
-    assert rufus =~ "PI_CODING_AGENT_DIR"
+    assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", "hronir", hronir]}
     assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", "borges", borges]}
-    # at home the anthropic-model planner rides the official claude launcher
+    # at home the anthropic-model builder and planner ride the official claude launcher
+    assert hronir =~ "modules/adapters/claude-code/launch.sh"
     assert borges =~ "modules/adapters/claude-code/launch.sh"
-    assert_receive {:join, _tid, "rufus", _}
+    assert_receive {:join, _tid, "hronir", _}
     assert_receive {:join, _tid, "borges", _}
   end
 
@@ -117,7 +117,7 @@ defmodule Server.StaffingTest do
        %{ws: ws, sock: sock, session: session} do
     thread = staffed_thread(ws, "borges")
     {:ok, _} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "plan the\nrelease"})
-    tmux("0\thronir\t\t\t1\n1\trufus\t\t\t2\n2\tborges\t\t\t3\n")
+    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n")
 
     assert :ok = Staffing.pass(ws.id)
 
@@ -147,7 +147,7 @@ defmodule Server.StaffingTest do
         elem(Channel.open_thread(%{title: "general", scope: "machine", workspace_id: ws.id}), 1)
 
     {:ok, _} = Channel.assign_lead(standing.id, "hronir")
-    tmux("0\thronir\t\t\t1\n1\trufus\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-x\t#{borges.id}\tdone\t4\n")
+    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-x\t#{borges.id}\tdone\t4\n")
 
     assert :ok = Staffing.pass(ws.id)
 
@@ -160,7 +160,7 @@ defmodule Server.StaffingTest do
     session: session
   } do
     thread = staffed_thread(ws, "borges")
-    tmux("0\thronir\t\t\t1\n1\trufus\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-x\t#{thread.id}\ttyped\t4\n")
+    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-x\t#{thread.id}\ttyped\t4\n")
 
     assert :ok = Staffing.pass(ws.id)
 
@@ -184,7 +184,7 @@ defmodule Server.StaffingTest do
     thread = staffed_thread(ws, "borges")
     # one live leaf (of a thread that is still open+staffed) already holds the only seat
     other = staffed_thread(ws, "hronir", "busy")
-    tmux("0\thronir\t\t\t1\n1\trufus\t\t\t2\n2\tborges\t\t\t3\n3\tbuilder-busy\t#{other.id}\tdone\t4\n")
+    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tbuilder-busy\t#{other.id}\tdone\t4\n")
 
     assert :ok = Staffing.pass(ws.id)
     assert :ok = Staffing.pass(ws.id)
@@ -199,7 +199,7 @@ defmodule Server.StaffingTest do
     thread = staffed_thread(ws, "borges")
 
     tmux(
-      "0\thronir\t\t\t1\n1\trufus\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-live\t#{thread.id}\tdone\t4\n4\treviewer-stale\t999888\tdone\t5\n5\tt777666\t\t\t6\n"
+      "0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-live\t#{thread.id}\tdone\t4\n4\treviewer-stale\t999888\tdone\t5\n5\tt777666\t\t\t6\n"
     )
 
     assert :ok = Staffing.pass(ws.id)
