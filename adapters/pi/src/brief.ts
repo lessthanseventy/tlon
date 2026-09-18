@@ -102,6 +102,9 @@ export interface Dossier {
   // The thread's commits, joined by the `Tlon-Thread` trailer. Optional: a server from before
   // the join still renders.
   commits?: Capped<Commit>;
+  // The workline gate (nil for a plain thread) and the threads the tail cites with #N.
+  workline?: { stage: string; awaiting: string | null; artifact_ok: boolean; why: string } | null;
+  cited?: { id: number; title: string; stage: string | null; lead: string | null }[];
   chatter: ChatterMessage[];
 }
 
@@ -163,6 +166,17 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string):
     lines.push("", "## Checks  (measured — ✓ passed, ✗ failed at that exit)");
     for (const c of d.checks.shown) lines.push(renderCheck(c));
     pushMore(lines, d.checks.more, "checks");
+  }
+
+  if (d.workline) {
+    const w = d.workline;
+    lines.push("", `## Workline  (stage ${w.stage}${w.awaiting ? ` · awaiting ${w.awaiting}` : ""})`);
+    lines.push(w.artifact_ok ? `- ✓ ${w.why}` : `- ✗ ${w.why} — commit it before you stop`);
+  }
+
+  if (d.cited && d.cited.length > 0) {
+    lines.push("", "## Cited threads");
+    for (const c of d.cited) lines.push(`- #${c.id} ${c.title}${c.stage ? ` [${c.stage}]` : ""}${c.lead ? ` · ${c.lead}` : ""}`);
   }
 
   if (d.commits && d.commits.shown.length > 0) {
