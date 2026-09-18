@@ -24,7 +24,7 @@ defmodule Server.Arbiter.Tmux do
   def wake(%{thread_id: thread_id} = session, prompt) do
     with %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
          ws when not is_nil(ws) <- workspace_id(thread),
-         %{index: index} <- window_for(ws, thread, session[:agent]) || {:error, :no_window} do
+         %{index: index} <- window_for(ws, thread, agent_name(session)) || {:error, :no_window} do
       _ = Tmux.send_text(ws, index, sanitize(prompt))
       # a second burst: a TUI that takes the text swallows an Enter in the same write
       Process.sleep(Application.get_env(:server, :tmux_submit_delay_ms, 300))
@@ -93,6 +93,12 @@ defmodule Server.Arbiter.Tmux do
     tabs = Tmux.list_windows(ws)
     Tmux.leaf_tab(tabs, id) || (agent && Tmux.named(tabs, agent))
   end
+
+  # The recipient's handle: a plain map carries `agent`; a `%Server.Session{}` (the drain's rows)
+  # carries `agent_id` — `session[:agent]` on the struct raised and discarded every drain (2026-09-18).
+  defp agent_name(%{agent: name}) when is_binary(name), do: name
+  defp agent_name(%{agent_id: id}) when is_integer(id), do: with(%Agent{name: n} <- Repo.get(Agent, id), do: n)
+  defp agent_name(_session), do: nil
 
   defp lead_name(%Thread{agent_id: nil}), do: nil
   defp lead_name(%Thread{agent_id: id}), do: with(%Agent{name: n} <- Repo.get(Agent, id), do: n)

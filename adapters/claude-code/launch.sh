@@ -96,4 +96,13 @@ if [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ]; then
   exit 0
 fi
 
+# Nobody is at the keyboard when the service spawns this window (one-brain B/3): pre-accept
+# Claude Code's folder-trust dialog for the directory it starts in, or the pane sits on the
+# prompt forever. The dirs Tlön spawns into are the operator's own repos and their worktrees.
+if command -v jq >/dev/null 2>&1; then
+  cj="$HOME/.claude.json"
+  [ -s "$cj" ] || echo '{}' > "$cj"
+  jq --arg d "$PWD" '.projects[$d] = ((.projects[$d] // {}) + {hasTrustDialogAccepted: true})' "$cj" > "$cj.tmp" && mv "$cj.tmp" "$cj"
+fi
+
 exec claude --permission-mode auto --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "$@"

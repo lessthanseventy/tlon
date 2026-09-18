@@ -125,4 +125,14 @@ defmodule Server.Arbiter.TmuxTest do
 
     assert pane =~ "ping from the server"
   end
+
+  test "wake: a %Server.Session{} row (the drain's shape) resolves its agent by id", %{thread: t} do
+    Application.put_env(:server, :tmux_submit_delay_ms, 0)
+    Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"0\tclaude-code\t\t\t9\n", 0}}))
+    agent = Staff.agent_by_name("claude-code")
+    {:ok, session} = Staff.start_session(%{thread_id: t.id, agent_id: agent.id, pane_ref: "%0"})
+    assert :ok = Arbiter.Tmux.wake(session, "hi")
+    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", target, "hi"]}
+    assert target =~ ":0"
+  end
 end
