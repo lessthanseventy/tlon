@@ -38,6 +38,12 @@ defmodule Server.Web.Styles do
   form.compose button { background: var(--cursor-field); color: var(--field-ink); border: 0; font: inherit; font-weight: bold; padding: 0 1rem; cursor: pointer; }
   ::selection { background: var(--sel-field); color: var(--sel-ink); }
   code { color: var(--key); }
+  .nav { display: flex; gap: .75rem; margin-bottom: .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--structure); }
+  .nav a.current { background: var(--cursor-field); color: var(--field-ink); padding: 0 .3em; }
+  .row { padding: .15rem 0; }
+  .row button, main > button { background: var(--card); color: var(--key); border: 1px solid var(--structure); font: inherit; padding: 0 .5rem; cursor: pointer; margin-left: .5rem; }
+  .columns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+  .prio { font-size: .8em; color: var(--meta); } .prio.high { color: var(--alarm); }
   """
 
   def css, do: @css

@@ -94,6 +94,7 @@ defmodule Server.Web.HomeLive do
     ~H"""
     <div class="frame">
       <nav class="rail">
+        <Server.Web.PanelsLive.nav panel={:threads} />
         <div :for={g <- @groups}>
           <div class="ws">{g.workspace.icon || "▪"} {g.workspace.name}</div>
           <.link

@@ -17,5 +17,10 @@ defmodule Server.Web.Router do
 
     live("/", HomeLive, :index)
     live("/threads/:id", HomeLive, :thread)
+    # the other panels (D/2): one LiveView, the action names the panel
+    live("/triage", PanelsLive, :triage)
+    live("/roster", PanelsLive, :roster)
+    live("/tickets", PanelsLive, :tickets)
+    live("/health", PanelsLive, :health)
   end
 end
