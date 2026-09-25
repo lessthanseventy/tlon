@@ -74,6 +74,25 @@ defmodule Server.Projects do
     end
   end
 
+  @doc "Move a thread into another project of its own workspace."
+  @spec move_thread(Server.Thread.t(), integer()) ::
+          {:ok, Server.Thread.t()} | {:error, :no_project | :other_workspace | Ecto.Changeset.t()}
+  def move_thread(%Server.Thread{} = thread, project_id) do
+    case get(project_id) do
+      nil ->
+        {:error, :no_project}
+
+      %Project{workspace_id: wid} when wid != thread.workspace_id ->
+        {:error, :other_workspace}
+
+      _project ->
+        thread
+        |> Ecto.Changeset.change(project_id: project_id)
+        |> Repo.update()
+        |> Bus.announce(:thread_moved)
+    end
+  end
+
   @doc """
   Resolve a thread to the repo dir its work lives in (the worktree/lazygit base). The thread's own
   `repo` when it names one; else its project's first repo (or `:no_repo` — never silently borrows

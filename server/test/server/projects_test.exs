@@ -212,4 +212,24 @@ defmodule Server.ProjectsTest do
       assert {:error, :no_repo} = Projects.repo_for_thread(t)
     end
   end
+
+  describe "move_thread/2" do
+    test "a thread moves to another project of its workspace", %{workspace: ws} do
+      {:ok, from} = Projects.register(%{workspace_id: ws.id, name: "tlon"})
+      {:ok, to} = Projects.register(%{workspace_id: ws.id, name: "ficciones"})
+      {:ok, thread} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id, project_id: from.id})
+
+      assert {:ok, %{project_id: to_id}} = Projects.move_thread(thread, to.id)
+      assert to_id == to.id
+    end
+
+    test "a thread never moves to another workspace's project, or to none", %{workspace: ws} do
+      {:ok, other} = Workspaces.register(%{name: "Elsewhere"})
+      {:ok, theirs} = Projects.register(%{workspace_id: other.id, name: "theirs"})
+      {:ok, thread} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id})
+
+      assert {:error, :other_workspace} = Projects.move_thread(thread, theirs.id)
+      assert {:error, :no_project} = Projects.move_thread(thread, -1)
+    end
+  end
 end
