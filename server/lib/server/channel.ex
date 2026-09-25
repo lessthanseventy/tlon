@@ -294,6 +294,24 @@ defmodule Server.Channel do
     |> Server.Bus.announce(:thread_opened)
   end
 
+  @doc """
+  Reopen `thread_id` if it is closed — what an operator reply to a history thread does first, so the
+  reply wakes a lead instead of landing in a thread nothing staffs. `{:reopened, thread}`, `:open`
+  when it already was, `:no_thread`, or `{:error, changeset}`.
+  """
+  def reopen_if_closed(thread_id) do
+    case thread(thread_id) do
+      nil ->
+        :no_thread
+
+      %Thread{state: "closed"} = closed ->
+        with {:ok, reopened} <- reopen_thread(closed), do: {:reopened, reopened}
+
+      %Thread{} ->
+        :open
+    end
+  end
+
   @doc "A thread by id, or nil — the load path for the cross-thread `close_thread` verb."
   def thread(id), do: Repo.get(Thread, id)
 

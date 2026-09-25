@@ -974,9 +974,11 @@ defmodule Console.Cockpit do
   # The `c` verb landed: post the composer's body to the focused thread AS THE OPERATOR (config
   # `:server, :operator`), so a posted message is the human's voice, not an agent's. The Bus
   # announce repaints the chorus live, so the message lands visibly; a failure flashes in the footer.
+  # A reply to a closed thread (one opened from history) reopens it first, so its lead is staffed.
   defp apply_effect({:post_message, thread_id, body}, state) do
     flashing(state, "post", fn ->
       operator = Console.Config.operator()
+      posted = if match?({:reopened, _}, Channel.reopen_if_closed(thread_id)), do: "reopened · posted", else: "posted"
 
       # Through Server.Attention.respond (piece A): with a coworker waiting on a dialog, a body
       # naming one of its options (`y`, `n`, `2`, `Yes`) answers it in the pane; anything else posts.
@@ -985,7 +987,7 @@ defmodule Console.Cockpit do
           {:noreply, render(%{state | flash: "answered"})}
 
         {:ok, _message} ->
-          {:noreply, render(%{state | flash: "posted"})}
+          {:noreply, render(%{state | flash: posted})}
 
         {:error, _changeset} ->
           {:noreply, render(%{state | flash: "couldn't post — is the thread open?"})}

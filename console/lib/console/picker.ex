@@ -9,7 +9,8 @@ defmodule Console.Picker do
     * `:palette` (`^⇧P`) — `Console.Verbs`, every verb with its key and a sentence saying what it
       does. Picking one REPLAYS its key event through the keymap.
     * `:history` (`^⇧H`) — every CLOSED thread (`Server.Channel.closed_threads/0`, the imported
-      conversations among them), matched on title and project. Picking one opens it.
+      conversations among them), matched on title and project. Picking one opens it; replying to it
+      reopens it.
 
   Each reads a corpus that already exists — the switcher off the rail's own `sidebar` read, so it
   costs no server call and can never disagree with what the rail is showing; the palette off a

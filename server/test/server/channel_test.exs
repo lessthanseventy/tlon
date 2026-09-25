@@ -704,5 +704,14 @@ defmodule Server.ChannelTest do
       assert id == thread.id
       assert Channel.thread_block(-1) == nil
     end
+
+    test "reopen_if_closed/1 reopens only a closed thread — the operator replying to history" do
+      {:ok, thread} = Channel.open_thread(%{title: "was done"})
+      assert Channel.reopen_if_closed(thread.id) == :open
+
+      {:ok, _} = Channel.close_thread(thread)
+      assert {:reopened, %Thread{state: "open"}} = Channel.reopen_if_closed(thread.id)
+      assert Channel.reopen_if_closed(-1) == :no_thread
+    end
   end
 end
