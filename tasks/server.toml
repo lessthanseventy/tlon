@@ -109,6 +109,10 @@ run = "scripts/tlon-cli.sh dossier"
 description = "server: post to a thread as the operator from the shell — parity with the agents' post_message"
 run = "scripts/tlon-cli.sh post"
 
+["server:import-claude"]
+description = "server: import Claude Code's transcripts (~/.claude/projects) as closed, searchable threads on the LIVE service — idempotent per session"
+run = "modules/server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.Import.ClaudeSessions.import_dir(\"~/.claude/projects\", Server.Bootstrap.default_workspace_id()))'"
+
 # Launch Claude Code as a citizen of a server thread. No arg → a fresh thread; a numeric thread-id →
 # JOIN it (resume across a /clear). Scopes the `tlon` MCP server (fresh token per
 # connect) + the SessionStart brief hook to THIS session via --mcp-config/--settings —
