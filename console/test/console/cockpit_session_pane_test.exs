@@ -44,4 +44,13 @@ defmodule Console.CockpitSessionPaneTest do
   test "nothing open: nothing to drop" do
     assert Cockpit.drop_stale_session(%{opened_thread: nil}, 9201) == :ok
   end
+
+  test "leaving a thread ends the lazygit of its git pane too" do
+    {:ok, pid} = Sessions.ensure({:lazygit, 9201}, cmd: "/bin/cat", cols: 20, rows: 4)
+    ref = Process.monitor(pid)
+    on_exit(fn -> Sessions.close({:lazygit, 9201}) end)
+
+    assert Cockpit.drop_stale_session(%{opened_thread: 9201}, 9202) == :ok
+    assert_receive {:DOWN, ^ref, :process, ^pid, _reason}, 1000
+  end
 end

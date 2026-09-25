@@ -1,7 +1,7 @@
 # A git toolbox for agents + lazygit beside the thread — design
 
 **Date:** 2026-09-25
-**Status:** designed; nothing built. Sequenced in §5, each step gated by a check.
+**Status:** step 1 built (live pass open); steps 2–4 not started. Sequenced in §5, each step gated by a check.
 **Asked:** Andrew, on Claude Code's changed-files panel: *"let's steal it, but put lazygit there
 instead of just the thin claude code changed files view. and let's build a way for claude code and
 friends to … drive lazygit around and make patches and shit. A menardalike that forces all git stuff
@@ -35,17 +35,12 @@ What exists: `Console.Lazygit` builds the command, and the STACK zoom opens lazy
 `Console.Terminal` PTY on `Server.Worktree`'s checkout (`cockpit.ex` `open_lazygit/1`). It is a
 zoom you open and close.
 
-What changes: in a thread, lazygit lives in a **right-hand column** beside the conversation, the
-place Claude Code puts its changed-files list. It opens on the thread's worktree when the thread
-has one, stays running while you move around the thread, and is killed when you leave it (the same
-`safe_session_ensure({:lazygit, id}, …)` lifecycle, now keyed to the thread view instead of the
-zoom).
-
-- Focus moves into it with the existing `Ctrl+Space` TERM↔NAV leader, so no new input model. The
-  keymap rule holds: the reply box is persistent, so pane keys are live only while it has focus.
-- Narrow frames drop the column and keep the zoom; the width cut-off is decided on the live pass,
-  not here.
-- A thread with no worktree shows no column.
+**Built 2026-09-25:** the right column splits in two — the coworker's session above, lazygit
+below — when the open thread's worktree exists (viewing a thread never creates one; the pane goes
+off with the session pane, `Alt+\`). The pane is a live view, like the session pane above it.
+`Alt+z` (global, so it works from the reply box) zooms the same PTY full-frame with the keys;
+`Ctrl+Space` hands it back. Leaving the thread ends it. `View.right_rects/4` is the one authority
+for both PTY sizes. The live pass (`drive-cockpit`) is still open.
 
 ## 2 · The toolbox
 
@@ -97,7 +92,7 @@ time bites in practice.
 
 ## 5 · The sequence
 
-1. **The pane.** lazygit in the thread's right column, TERM↔NAV focus, killed on leaving the thread.
+1. **The pane.** lazygit under the session pane, `Alt+z` to zoom, killed on leaving the thread.
    *Check:* console suite green; a live pass through `drive-cockpit`: open a staffed thread, the
    pane shows its worktree, a file an agent writes shows up in lazygit within 3 s.
 2. **`pen` read verbs + `commit`.** `status`, `diff` (hunk ids), `log`, `show`, `commit` with

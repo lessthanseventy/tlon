@@ -454,6 +454,28 @@ defmodule Console.BoardTest do
       assert Rail in mods
       refute Roster in mods
     end
+
+    test "a thread with a worktree splits the right column: the coworker above, lazygit below, each PTY sized to its rect" do
+      for {w, h} <- [{120, 40}, {200, 50}, {101, 24}] do
+        terms =
+          %{git_pane: 7, git: :no_session}
+          |> pane_reads()
+          |> View.compose(w, h)
+          |> Enum.filter(fn {m, _d, _r} -> m == Terminal end)
+          |> Enum.sort_by(fn {_m, _d, r} -> r.y end)
+
+        assert [{_, _, top}, {_, _, bottom}] = terms
+        assert {top.x, top.w} == {bottom.x, bottom.w}
+        assert bottom.y > top.y + top.h
+
+        assert View.right_rects(w, h, nil, true) == %{session: top, git: bottom}, "right_rects drifted at #{w}x#{h}"
+      end
+    end
+
+    test "the pane forced off takes lazygit with it — no right column, no git pane" do
+      r = pane_reads(%{session_pane: nil, session_pane_mode: false, git_pane: 7, git: :no_session})
+      assert [] = Enum.filter(View.compose(r, 120, 40), fn {m, _d, _r} -> m == Terminal end)
+    end
   end
 
   describe "responsive layout" do

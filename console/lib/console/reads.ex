@@ -232,6 +232,30 @@ defmodule Console.Reads do
   def cycle_session_pane(false), do: true
   def cycle_session_pane(true), do: :auto
 
+  @doc """
+  The git pane under the session pane: `{thread_id, worktree}` for the open thread when its worktree
+  exists on disk (viewing a thread never creates one), else nil. Off with the session pane.
+  `worktree` is injectable so the read stays pure under test.
+  """
+  def git_pane(state, worktree \\ &existing_worktree/1) do
+    with id when is_integer(id) <- session_thread(state),
+         path when is_binary(path) <- worktree.(id) do
+      {id, path}
+    else
+      _ -> nil
+    end
+  end
+
+  defp existing_worktree(id) do
+    with true <- Console.Lazygit.available?(),
+         {:ok, path} <- Console.Server.cwd_for_thread(id),
+         true <- File.dir?(path) do
+      path
+    else
+      _ -> nil
+    end
+  end
+
   # The session pane's embedded terminal render-state — the selected thread's live lead PTY, keyed
   # `{:session, id}` in Console.Sessions, or `:no_session` until spawned. LIVE seam: `ensure_session`
   # spawns/attaches the PTY (render + key routing are Andrew's kitty pass).
@@ -242,11 +266,17 @@ defmodule Console.Reads do
     end
   end
 
-  # The session pane's PTY is sized to the pane's OWN rect (Console.View.session_rect — half the
-  # centre), so the attached client draws neither past the frame nor short of it. Spawn dims; the
-  # live resize-on-window-change is the kitty pass.
+  # The session pane's PTY is sized to the pane's OWN rect (Console.View.right_rects — the top half of
+  # the right column when the git pane shares it), so the attached client draws neither past the
+  # frame nor short of it.
   def session_pane_dims(%{w: w, h: h} = state) do
-    rect = View.session_rect(w, h, Map.get(state, :input))
+    rect = View.right_rects(w, h, Map.get(state, :input), git_pane(state) != nil).session
+    {max(rect.w, 1), max(rect.h, 1)}
+  end
+
+  @doc "The git pane's PTY size — the lower half of the right column, from the same split `compose/3` makes."
+  def git_pane_dims(%{w: w, h: h} = state) do
+    rect = View.right_rects(w, h, Map.get(state, :input), true).git
     {max(rect.w, 1), max(rect.h, 1)}
   end
 
@@ -686,6 +716,8 @@ defmodule Console.Reads do
     tlon_layout =
       Safe.read(:tlon_layout, nil, fn -> if(Space.workspace?(state.active_key), do: tlon_layout(state)) end)
 
+    git = Safe.read(:git_pane, nil, fn -> git_pane(state) end)
+
     %{
       active_key: state.active_key,
       focused_id: focused && focused.id,
@@ -750,6 +782,10 @@ defmodule Console.Reads do
       # The mode behind that target (:auto | true | false) — the footer names the one Alt+\ is on.
       session_pane_mode: state.session_pane,
       session: Safe.read(:session, :no_session, fn -> session_read(state) end),
+      # The git pane under it: the open thread's id when its worktree exists, and lazygit's
+      # render-state. View.compose splits the right column when it is set.
+      git_pane: git && elem(git, 0),
+      git: if(git, do: render_state_of(terminal({:lazygit, elem(git, 0)})), else: :no_session),
       detail:
         Safe.read(:detail, nil, fn ->
           if(Space.workspace?(state.active_key) and state.focus.detail?, do: tlon_detail(state, tlon_layout))

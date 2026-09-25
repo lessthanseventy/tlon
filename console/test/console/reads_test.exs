@@ -195,6 +195,17 @@ defmodule Console.ReadsTest do
       assert Reads.session_pane_dims(%{w: 120, h: 40}) == {43, 36}
       assert Reads.session_pane_dims(%{w: 3, h: 2}) == {1, 1}
     end
+
+    test "the git pane: the open thread and its worktree — only when the worktree exists and the pane is not off" do
+      open = %{session_pane: :auto, active_key: 0, center_view: :chat, opened_thread: 7}
+      worktree = fn 7 -> "/repo/.worktrees/t7" end
+      none = fn _id -> nil end
+
+      assert Reads.git_pane(open, worktree) == {7, "/repo/.worktrees/t7"}
+      assert Reads.git_pane(open, none) == nil
+      assert Reads.git_pane(%{open | session_pane: false}, worktree) == nil
+      assert Reads.git_pane(%{open | center_view: :terminal}, worktree) == nil
+    end
   end
 
   describe "fact_detail/1 and habit_detail/1" do

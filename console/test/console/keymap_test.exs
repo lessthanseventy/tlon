@@ -1609,5 +1609,9 @@ defmodule Console.KeymapTest do
       # a workspace switch would leave the draft pointing at another workspace's thread
       assert {^s, :none} = Keymap.handle(char("2", alt: true, shift: true), s)
     end
+
+    test "Alt+z zooms the thread's lazygit from inside the reply box" do
+      assert {_s, :zoom_git} = Keymap.handle(char("z", alt: true), reply_drawer())
+    end
   end
 end

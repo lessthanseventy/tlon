@@ -6,7 +6,8 @@ a left rail of **workspaces** (Home — the god-view survey — first, then one 
 workspace, plus the Tickets and Notes boards), a center that is either the workspace's **thread
 stack** (a list of threads → one thread's conversation with its reply box) or the workspace's
 embedded **tmux center** (the roster lead, a real `tmux attach`), a toggleable **session pane** that
-embeds the selected thread's lead window, and overlays (the STACK-zoom lazygit, the context menu).
+embeds the selected thread's lead window with a **git pane** under it (lazygit on the thread's
+worktree, when it has one), and overlays (the lazygit zoom — `Alt+z` or STACK `⏎` — the context menu).
 It renders the server's read models and embeds real terminals via `ghostty`. Not a service: you
 launch it, sit at it, quit it.
 

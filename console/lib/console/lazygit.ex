@@ -1,10 +1,10 @@
 defmodule Console.Lazygit do
   @moduledoc """
-  Launch spec for the STACK-zoom embedded lazygit (Slice 4). A thread's git lives on branch
-  `work/<slug>` in a per-thread worktree (`Server.Worktree`); zooming STACK opens `lazygit` there
-  in a `Console.Terminal` PTY, driven with the same `Ctrl+Space` TERM↔NAV leader as any embedded
-  app — no new input model. This module ONLY builds the command; the cockpit owns the terminal
-  lifecycle (spawn on zoom, kill on collapse).
+  Launch spec for the embedded lazygit. A thread's git lives on branch `work/<slug>` in a per-thread
+  worktree (`Server.Worktree`); lazygit runs there in a `Console.Terminal` PTY, keyed `{:lazygit, id}`.
+  One PTY, two places: the git pane under the session pane (live while the thread is open), and the
+  full-frame zoom (`Alt+z`, or `Enter` on STACK) that takes the keys until `Ctrl+Space`. This module
+  ONLY builds the command; the cockpit owns the terminal lifecycle.
   """
 
   @doc "Whether lazygit is installed (on PATH). The zoom degrades to a flash when it isn't."

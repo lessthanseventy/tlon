@@ -71,7 +71,7 @@ defmodule Console.View do
             no_digits(boxed(rail, cols.rail)) ++
               no_digits(boxed(center_panels, cols.center, new_thread_overrides(reads, cols.center.w)))
 
-          if right, do: base ++ no_digits(boxed([right], cols.right)), else: base
+          if right, do: base ++ no_digits(boxed(right_sections(right, reads), cols.right)), else: base
 
         :narrow ->
           no_digits(boxed(rail ++ center_panels, %{x: 0, y: @top_h, w: w, h: body_h}))
@@ -206,6 +206,7 @@ defmodule Console.View do
   # bare frame.
   # The right session pane's frame title (the open thread's live lead PTY).
   defp section_title({Panel.Terminal, :session}), do: "SESSION"
+  defp section_title({Panel.Terminal, :git}), do: "LAZYGIT · Alt+z zoom"
   # Same box, same name — only the contents differ (no live PTY to attach yet).
   defp section_title(Panel.Placeholder), do: "SESSION"
   defp section_title({panel, _read_key}), do: section_title(panel)
@@ -247,6 +248,11 @@ defmodule Console.View do
       true -> nil
     end
   end
+
+  # The right column's sections: the coworker's pane, and under it lazygit on the thread's worktree
+  # when there is one (design 2026-09-25, git toolbox §1) — both live at once, split in half.
+  defp right_sections(right, %{git_pane: id}) when is_integer(id), do: [right, {Panel.Terminal, :git}]
+  defp right_sections(right, _reads), do: [right]
 
   # The pane sits beside the CONVERSATION (design 2026-09-08 §2) — never beside the machine terminal,
   # which owns the whole centre.
@@ -320,6 +326,25 @@ defmodule Console.View do
   """
   @spec session_rect(pos_integer(), pos_integer(), map() | nil) :: Panel.rect()
   def session_rect(w, h, input \\ nil), do: inset(wide_columns(w, body_height(w, h, input), true).right)
+
+  @doc """
+  Both right-column PTY rects from the one split `compose/3` makes: `%{session: rect, git: rect | nil}`.
+  With `git?` the column holds the coworker above and lazygit below; without, the session has it all.
+  """
+  @spec right_rects(pos_integer(), pos_integer(), map() | nil, boolean()) :: %{
+          session: Panel.rect(),
+          git: Panel.rect() | nil
+        }
+  def right_rects(w, h, input, git?) do
+    right = wide_columns(w, body_height(w, h, input), true).right
+
+    if git? do
+      [{_, top}, {_, bottom}] = boxed([{Panel.Terminal, :session}, {Panel.Terminal, :git}], right)
+      %{session: inset(top), git: inset(bottom)}
+    else
+      %{session: inset(right), git: nil}
+    end
+  end
 
   # The body both rects live in — the frame less the two bars AND the open composer, exactly as
   # `compose/3` computes it, so a PTY attached while `c` is open isn't sized over the compose box.

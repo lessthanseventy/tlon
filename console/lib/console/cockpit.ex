@@ -343,7 +343,7 @@ defmodule Console.Cockpit do
   # leader, reused) collapses the zoom; quitting lazygit (its `q`) ends the PTY and the tick
   # reconciles the vanished terminal. Precedes the board/menu clauses — a lazygit zoom owns the frame.
   def handle_cast({:dispatch, %Event{type: :key, data: %{key: :space, ctrl: true}}}, %{lazygit: lg} = state)
-      when not is_nil(lg), do: {:noreply, render(%{state | lazygit: nil})}
+      when not is_nil(lg), do: {:noreply, render(fit_lazygit(%{state | lazygit: nil}))}
 
   def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{lazygit: %{thread_id: id}} = state) do
     with term when is_pid(term) <- Reads.terminal({:lazygit, id}),
@@ -885,11 +885,11 @@ defmodule Console.Cockpit do
 
   defp spawn_lazygit(state, id, cwd) do
     {cmd, args} = Console.Lazygit.command(cwd)
-    {cols, rows} = {max(state.w - 2, 1), max(state.h - 3, 1)}
+    {cols, rows} = lazygit_zoom_dims(state)
 
     case safe_session_ensure({:lazygit, id}, cmd: cmd, args: args, cols: cols, rows: rows) do
       # The zoom is full-frame and owns the keys — the drawer that launched it steps out of the way.
-      {:ok, _pid} -> {:noreply, render(%{Drawer.close(state) | lazygit: %{thread_id: id, path: cwd}})}
+      {:ok, _pid} -> {:noreply, render(fit_lazygit(%{Drawer.close(state) | lazygit: %{thread_id: id, path: cwd}}))}
       _ -> {:noreply, render(%{state | flash: "couldn't start lazygit"})}
     end
   end
@@ -1126,6 +1126,18 @@ defmodule Console.Cockpit do
   # view; elsewhere it's a harmless mode change.
   defp apply_effect(:toggle_session_pane, state),
     do: {:noreply, render(%{state | session_pane: Reads.cycle_session_pane(state.session_pane)})}
+
+  # Alt+z: the git pane's lazygit, full-frame and taking the keys (Ctrl+Space hands it back).
+  defp apply_effect(:zoom_git, state) do
+    case Reads.git_pane(state) do
+      {id, path} ->
+        state = ensure_git_pane(state)
+        {:noreply, render(fit_lazygit(%{Drawer.close(state) | lazygit: %{thread_id: id, path: path}}))}
+
+      nil ->
+        {:noreply, render(%{state | flash: "no worktree for this thread — nothing to open lazygit on"})}
+    end
+  end
 
   # The `m` verb landed: advance the coworker's driver model one step round the ring and persist
   # it (Console.Config). Honest about scope: the RUNNING coworker keeps its model — the override
@@ -1436,6 +1448,8 @@ defmodule Console.Cockpit do
     state = Safe.read(:workspace_roster, state, fn -> Staffing.ensure_workspace_roster(state) end)
     state = Safe.read(:session_pane, state, fn -> ensure_session(state) end)
 
+    state = Safe.read(:git_pane, state, fn -> ensure_git_pane(state) end)
+
     # The thread-stack blocks (Slice 3): machine-scope threads + their messages — the Tlön cockpit's
     # threads ARE machine-scope, so the stack AND the cockpit's nav (`j`/`k`/`↑`/`↓` via `move/2`)
     # order by this, not the project-scope `chorus`. This is the ONE ordering the cockpit navigates.
@@ -1546,14 +1560,60 @@ defmodule Console.Cockpit do
     state
   end
 
+  # The git pane's lazygit (git toolbox design §1): spawned on the open thread's worktree when it
+  # exists, sized to the lower half of the right column. The same PTY is what Alt+z zooms.
+  defp ensure_git_pane(state) do
+    with {id, path} <- Reads.git_pane(state),
+         nil <- lazygit_pid(id) do
+      {cmd, args} = Console.Lazygit.command(path)
+      {cols, rows} = Reads.git_pane_dims(state)
+      _ = safe_session_ensure({:lazygit, id}, cmd: cmd, args: args, cols: cols, rows: rows)
+    end
+
+    state
+  end
+
+  defp lazygit_pid(id) do
+    case Reads.terminal({:lazygit, id}) do
+      pid when is_pid(pid) -> pid
+      _ -> nil
+    end
+  end
+
+  # One lazygit PTY serves both the pane and the zoom, so it is resized whenever it changes place:
+  # full-frame while zoomed, the pane's half otherwise.
+  defp fit_lazygit(%{lazygit: %{thread_id: id}} = state) do
+    with term when is_pid(term) <- lazygit_pid(id) do
+      {cols, rows} = lazygit_zoom_dims(state)
+      Terminal.resize(term, cols, rows)
+    end
+
+    state
+  end
+
+  defp fit_lazygit(state) do
+    with {id, _path} <- Reads.git_pane(state),
+         term when is_pid(term) <- lazygit_pid(id) do
+      {cols, rows} = Reads.git_pane_dims(state)
+      Terminal.resize(term, cols, rows)
+    end
+
+    state
+  end
+
+  defp lazygit_zoom_dims(state), do: {max(state.w - 2, 1), max(state.h - 3, 1)}
+
+  # One open thread, one set of pane PTYs: the SESSION terminal (and the per-thread tmux view session
+  # it attaches to) and the git pane's lazygit belong to the OPEN conversation, so the centre moving
+  # off a thread ends them — nothing else tears these down, and a left-behind PTY holds a client on
+  # the workspace session.
   @doc false
-  # One open thread, one pane PTY: the SESSION terminal (and the per-thread tmux view session it
-  # attaches to) belongs to the OPEN conversation, so the centre moving off a thread ends it —
-  # nothing else tears these down, and a left-behind PTY holds a client on the workspace session.
   def drop_stale_session(%{opened_thread: id}, id), do: :ok
 
-  def drop_stale_session(%{opened_thread: old}, _next) when is_integer(old),
-    do: Safe.value(fn -> Sessions.close({:session, old}) end, :ok)
+  def drop_stale_session(%{opened_thread: old}, _next) when is_integer(old) do
+    Safe.value(fn -> Sessions.close({:session, old}) end, :ok)
+    Safe.value(fn -> Sessions.close({:lazygit, old}) end, :ok)
+  end
 
   def drop_stale_session(_state, _next), do: :ok
 
@@ -1587,6 +1647,8 @@ defmodule Console.Cockpit do
     end
 
     resize_session_terminal(state)
+
+    fit_lazygit(state)
   end
 
   # The SESSION pane PTY was sized once at spawn and never again, so any later layout change — a

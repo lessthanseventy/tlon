@@ -61,6 +61,7 @@ defmodule Console.Keymap do
     * `:stack_delete_arm` — `d` on a thread card arms the two-key delete; `:tlon_delete_arm` /
       `{:tlon_delete, target}` — the rail's `d` arm and its confirmed arm-time target.
     * `:toggle_center_view` (`v`, chat⇄terminal) and `:toggle_session_pane` (Alt+\\).
+    * `:zoom_git` (Alt+z) — the open thread's lazygit, full-frame; Ctrl+Space hands it back to its pane.
     * `:tlon_enter` — Enter on a rail pane (space switch / lazygit zoom / detail, cockpit-resolved).
     * `:yank` — `y` in nav: the focused pane's semantic text to the clipboard.
     * `{:ticket_move, dir}` / `:ticket_advance` / `{:ticket_reorder, :up | :down}` — the drawer's
@@ -165,6 +166,7 @@ defmodule Console.Keymap do
           | {:orchestrate, String.t()}
           | {:confirm_orchestrate, map()}
           | :toggle_session_pane
+          | :zoom_git
           | :toggle_center_view
           | {:post_message, term(), String.t()}
           | {:show_status, term()}
@@ -281,6 +283,10 @@ defmodule Console.Keymap do
 
   def handle(%{key: :char, char: "\\", alt: true} = k, %{active_key: key} = state)
       when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {state, :toggle_session_pane}
+
+  # Alt+z zooms the open thread's lazygit — global like Alt+\, since it moves the view, never the draft.
+  def handle(%{key: :char, char: "z", alt: true} = k, %{active_key: key} = state)
+      when Space.workspace?(key) and not is_map_key(k, :ctrl), do: {state, :zoom_git}
 
   # Ctrl+Space — the sticky term↔nav toggle — is global for the same reason: it moves FOCUS, never
   # text, so the draft is untouched. It sat below the input modal, and the reply box is focused the
