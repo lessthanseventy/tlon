@@ -68,10 +68,10 @@ defmodule Server.MixProject do
     [
       # Compile-time module-boundary checks (lib/funes.ex). runtime: false — pure tooling.
       {:boundary, "~> 0.10", runtime: false},
-      # Menard (github.com/lessthanseventy/menard): AST-aware source edits + introspection on
-      # Sourceror; the coworkers' source verbs (Server.Source.Tools) call it — a runtime dep
-      # (Andrew, 2026-09-08). Pinned by ref, never a path: a nix build sees only this checkout.
-      {:menard, github: "lessthanseventy/menard", tag: "v0.3.0"},
+      # Menard (hex.pm/packages/menard): AST-aware source edits + introspection on Sourceror; the
+      # coworkers' source verbs (Server.Source.Tools) call it — a runtime dep. From hex, never a
+      # path: a nix build sees only this checkout.
+      {:menard, "~> 0.5"},
       {:ecto_sql, "~> 3.12"},
       # Postgres is the store (one-brain piece C); ecto_sqlite3 stays ONLY for `mix server.import_sqlite`,
       # the one-shot copy of the SQLite corpus — it goes when the import has run on every box.
