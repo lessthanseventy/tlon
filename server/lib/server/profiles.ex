@@ -89,8 +89,9 @@ defmodule Server.Profiles do
   - **Machine-scope tlon citizen.** Its MCP (`@tertius_mcp`) binds every token to scope
     `machine` (via `tlon-cli.sh bearer`), so its posts/facts/dones stay on machine threads, off
     project threads (DB scope CHECK). `directTools` are the record/read verbs + `machine_overview`
-    (the cross-leaf read); `excludeTools` cuts the cross-thread verbs (`consult_peer`, `open_thread`,
-    `close_thread`) for self-containment. Model-to-model consultation is `/consult`+`/fresh`.
+    (the cross-leaf read); `excludeTools` cuts `register` and `consult_peer` (the orchestrator keeps
+    `open_thread`/`close_thread`), and under Claude Code the same list rides as deny rules
+    (`Server.Harness.ClaudeCode`).
   - **Driver.** Sonnet, so at home it runs on the Claude Code harness like every other coworker; a
     workspace policy `model` is how it goes back to pi.
   - **Sandboxed + yolo permissions.** `@tlon_sandbox` + `@tlon_permissions`: `yoloMode` auto-approves

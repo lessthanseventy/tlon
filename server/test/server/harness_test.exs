@@ -96,8 +96,8 @@ defmodule Server.HarnessTest do
       builder = Profiles.instantiate(%{archetype: :builder, name: "hronir"})
 
       assert reviewer.harness == :claude_code
-      assert Harness.driver(:claude_code).launch_command(reviewer) =~ "TLON_PERMISSIONS_DENY=Write,Edit,NotebookEdit"
-      refute Harness.driver(:claude_code).launch_command(builder) =~ "TLON_PERMISSIONS_DENY"
+      assert Harness.driver(:claude_code).launch_command(reviewer) =~ "TLON_PERMISSIONS_DENY=Write,Edit,NotebookEdit,"
+      refute Harness.driver(:claude_code).launch_command(builder) =~ "NotebookEdit"
     end
 
     test "claude_code: no persona → the bare launcher, no env prefix" do
@@ -114,6 +114,22 @@ defmodule Server.HarnessTest do
       assert cmd =~ "PI_CODING_AGENT_DIR="
       assert cmd =~ "--append-system-prompt"
       assert cmd =~ "--model ollama-cloud/glm-5.2 --thinking medium"
+    end
+
+    test "claude_code: the profile's MCP excludeTools become deny rules — the same surface as under pi" do
+      deny = fn name, archetype ->
+        cmd = Harness.driver(:claude_code).launch_command(Profiles.instantiate(%{archetype: archetype, name: name}))
+        [_, list] = Regex.run(~r/TLON_PERMISSIONS_DENY=(\S+)/, cmd)
+        String.split(list, ",")
+      end
+
+      reviewer = deny.("vera", :reviewer)
+      assert "mcp__tlon__edit_clause" in reviewer and "mcp__tlon__rename_identifier" in reviewer
+      assert "mcp__tlon__consult_peer" in deny.("hronir", :builder)
+
+      tertius = deny.("tertius", :surveyor)
+      assert "mcp__tlon__consult_peer" in tertius
+      refute "mcp__tlon__open_thread" in tertius, "the orchestrator keeps the verbs it routes with"
     end
   end
 end

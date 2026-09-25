@@ -72,18 +72,28 @@ defmodule Server.Harness.ClaudeCode do
   defp role_env(%Profile{} = profile),
     do: "TLON_ROLE_PROMPT_FILE=#{Path.join(Profiles.config_dir(profile), "system_prompt.md")} "
 
-  # The write FENCE under the claude harness: a profile whose pi-permission policy denies the
-  # file writers (the reviewer) must be structurally fenced here too — pi-permission-system
-  # config is invisible to Claude Code, so without this the deny was persona-only ("please don't
-  # write") the moment the reviewer bound to claude_code at home. launch.sh merges the list into
-  # its --settings as permissions.deny.
-  defp deny_env(%Profile{permissions: %{"permission" => perm}}) when is_map(perm) do
-    if perm["write"] == "deny" or perm["edit"] == "deny",
-      do: "TLON_PERMISSIONS_DENY=Write,Edit,NotebookEdit ",
-      else: ""
+  # The FENCE under the claude harness: pi-permission-system config and the pi MCP adapter's
+  # `excludeTools` are invisible to Claude Code, so a profile's write-deny (the reviewer) and its
+  # cut MCP tools must be structural deny rules here, or they are persona-only ("please don't").
+  # launch.sh merges the list into its --settings as permissions.deny.
+  defp deny_env(%Profile{} = p) do
+    case write_denies(p) ++ mcp_denies(p) do
+      [] -> ""
+      tools -> "TLON_PERMISSIONS_DENY=#{Enum.join(tools, ",")} "
+    end
   end
 
-  defp deny_env(_p), do: ""
+  defp write_denies(%Profile{permissions: %{"permission" => perm}}) when is_map(perm) do
+    if perm["write"] == "deny" or perm["edit"] == "deny", do: ~w(Write Edit NotebookEdit), else: []
+  end
+
+  defp write_denies(_p), do: []
+
+  defp mcp_denies(%Profile{mcp: mcp}) when is_map(mcp) do
+    for {server, %{"excludeTools" => tools}} <- mcp, tool <- tools, do: "mcp__#{server}__#{tool}"
+  end
+
+  defp mcp_denies(_p), do: []
 end
 
 defmodule Server.Harness.Pi do
