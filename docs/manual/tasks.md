@@ -74,7 +74,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `pi:balanced` | pi agent: balanced everyday driver — glm-5.2 (Claude/GPT-alike, 976K ctx) |
 | `pi:code` | pi agent: coding-heavy — kimi-k2.7-code (code-specialized, ~30% fewer thinking tokens) |
 | `pi:deep` | pi agent: deep reasoning — deepseek-v4-pro, thinking:high (the hard 10%, before you'd reach for Claude) |
-| `pi:fast` | pi agent: quick/cheap throwaway — deepseek-v4-flash, thinking:low (1M ctx, fast tier) |
+| `pi:fast` | pi agent: quick/cheap throwaway — deepseek-v4.1-flash, thinking:low (fast tier) |
 | `pi:local` | pi agent: free/offline grunt — qwen3-coder on the local ollama daemon (no cloud budget) |
 | `pi:update` | pi agent: update installed npm EXTENSIONS to the latest the flake's package list allows (pi owns the mutable npm/ install, not nix). Does NOT move pi itself — that is pi:upgrade. |
 | `pi:upgrade` | pi agent: upgrade pi ITSELF — bump the flake's release pin + hash (latest, or `-- <version>`), sync adapters/pi deps, home:switch, then pi:update for the extensions |
