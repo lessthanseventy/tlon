@@ -22,6 +22,16 @@ defmodule Server.Secrets do
     {"private key", ~r/-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/}
   ]
 
+  @doc """
+  The first credential shape `text` matches, as `{:secret, label}`, or `:ok`. A commit SHA or a
+  base64 blob is not a credential shape, so it passes.
+
+      iex> Server.Secrets.scan("prod key AKIAIOSFODNN7EXAMPLE lives here")
+      {:secret, "AWS access key"}
+
+      iex> Server.Secrets.scan("fixed in 3f265da0c1b2e4f6a7d8c9b0a1e2f3d4c5b6a7e8")
+      :ok
+  """
   @spec scan(String.t() | nil) :: :ok | {:secret, String.t()}
   def scan(nil), do: :ok
 

@@ -647,17 +647,20 @@ defmodule Console.Keymap do
   defp handle_tlon(
          %{key: :char, char: "g"},
          %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
-       ), do: stack_jump(state, :first)
+       ),
+       do: stack_jump(state, :first)
 
   defp handle_tlon(
          %{key: :char, char: "G"},
          %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
-       ), do: stack_jump(state, :last)
+       ),
+       do: stack_jump(state, :last)
 
   defp handle_tlon(
          %{key: :enter},
          %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
-       ), do: {state, :open_focused_thread}
+       ),
+       do: {state, :open_focused_thread}
 
   # CONVERSATION mode (a thread opened): j/k scroll it; Esc goes back to the list.
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state) when is_vertical(key),

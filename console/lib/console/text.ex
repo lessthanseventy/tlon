@@ -89,10 +89,22 @@ defmodule Console.Text do
   defp blank_line?(line), do: String.trim(line) == ""
 
   @doc """
-  A ticking elapsed-time label: `"45s"` under a minute, `"3m12s"` under an hour, `"1h05m"`
-  beyond — deliberately sub-minute-precise (unlike `Console.Stack.relative_time/2`'s "5 minutes
-  ago" bucketing) so a presence indicator visibly counts up between renders instead of reading
-  as frozen. Negative input (clock skew) clamps to `"0s"`.
+  A ticking elapsed-time label, deliberately sub-minute-precise (unlike
+  `Console.Stack.relative_time/2`'s "5 minutes ago" bucketing) so a presence indicator visibly counts
+  up between renders instead of reading as frozen. Past an hour it drops the seconds; negative input
+  (clock skew) clamps to `"0s"`.
+
+      iex> Console.Text.duration(45)
+      "45s"
+
+      iex> Console.Text.duration(72)
+      "1m12s"
+
+      iex> Console.Text.duration(3900)
+      "1h5m"
+
+      iex> Console.Text.duration(-5)
+      "0s"
   """
   @spec duration(integer()) :: String.t()
   def duration(seconds) when seconds < 0, do: duration(0)

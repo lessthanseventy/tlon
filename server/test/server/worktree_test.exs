@@ -6,6 +6,8 @@ defmodule Server.WorktreeTest do
 
   alias Server.Worktree
 
+  doctest Server.Worktree
+
   setup do
     tmp = Path.join(System.tmp_dir!(), "worktree-test-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
@@ -20,16 +22,6 @@ defmodule Server.WorktreeTest do
 
     on_exit(fn -> File.rm_rf!(tmp) end)
     %{repo: tmp, git: git}
-  end
-
-  describe "pure helpers" do
-    test "branch/1 matches the workline's work/<slug> convention" do
-      assert Worktree.branch("redis-cache") == "work/redis-cache"
-    end
-
-    test "path/2 places the checkout under <repo>/.worktrees/<slug>" do
-      assert Worktree.path("/r", "redis-cache") == "/r/.worktrees/redis-cache"
-    end
   end
 
   describe "ensure/2" do
@@ -110,11 +102,6 @@ defmodule Server.WorktreeTest do
       assert {:ok, wt} = Server.worktree_for_thread(thread)
       assert wt == Worktree.path(repo, "t2")
       assert File.exists?(Path.join(wt, ".git"))
-    end
-
-    test "name_for/1 is the slug when there is one, else t<id>" do
-      assert Worktree.name_for(%Server.Thread{id: 9, slug: "redis-cache"}) == "redis-cache"
-      assert Worktree.name_for(%Server.Thread{id: 9, slug: nil}) == "t9"
     end
 
     test "no repo-bearing project anywhere → {:error, :no_repo}" do

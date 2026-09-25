@@ -18,18 +18,34 @@ defmodule Server.Worktree do
   # re-checked here so a bad slug can never traverse out of `.worktrees/`.
   @slug ~r/\A[a-z0-9][a-z0-9-]*\z/
 
-  @doc "The branch a thread's code lives on. Matches `Server.Workline.Artifacts.Git`."
+  @doc """
+  The branch a thread's code lives on. Matches `Server.Workline.Artifacts.Git`.
+
+      iex> Server.Worktree.branch("redis-cache")
+      "work/redis-cache"
+  """
   def branch(slug), do: "work/#{slug}"
 
   @doc """
   A thread's worktree name: its workline slug, else `t<id>`. Every thread a coworker joins gets a
   worktree (Andrew, 2026-09-08: "the minute it starts writing code it needs to be in a worktree"),
   and a slug only exists once a thread is promoted — `rename/3` moves the checkout across then.
+
+      iex> Server.Worktree.name_for(%{id: 9, slug: "redis-cache"})
+      "redis-cache"
+
+      iex> Server.Worktree.name_for(%{id: 9, slug: nil})
+      "t9"
   """
   def name_for(%{slug: slug}) when is_binary(slug) and slug != "", do: slug
   def name_for(%{id: id}), do: "t#{id}"
 
-  @doc "Where the thread's worktree checkout lives (pure) — `<repo>/.worktrees/<slug>`."
+  @doc """
+  Where the thread's worktree checkout lives (pure) — `<repo>/.worktrees/<slug>`.
+
+      iex> Server.Worktree.path("/r", "redis-cache")
+      "/r/.worktrees/redis-cache"
+  """
   def path(repo_path, slug), do: Path.join([repo_path, ".worktrees", slug])
 
   @doc """

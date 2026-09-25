@@ -31,6 +31,12 @@ defmodule Console.Fuzzy do
   @doc """
   Score `subject` against `query`, or `nil` when the query is not a subsequence of it. Higher is
   a better match; an empty query is 0 (everything matches, nothing is preferred).
+
+      iex> Console.Fuzzy.match("anything", "")
+      0
+
+      iex> Console.Fuzzy.match("cockpit slice", "spc")
+      nil
   """
   @spec match(String.t(), String.t()) :: integer() | nil
   def match(subject, query) do
@@ -65,6 +71,18 @@ defmodule Console.Fuzzy do
   Rank `entries` against `query`, dropping the ones that don't match. `subject` extracts the text
   to match (default: the entry itself). Ties break on the shorter subject, then on the input
   order — so an unfiltered list is exactly the list handed in.
+
+      iex> Console.Fuzzy.filter(~w(cockpit slice ticket), "ck")
+      ["cockpit", "ticket"]
+
+      iex> Console.Fuzzy.filter(["cab-extra", "cab"], "cab")
+      ["cab", "cab-extra"]
+
+      iex> Console.Fuzzy.filter(~w(gamma alpha beta), "")
+      ["gamma", "alpha", "beta"]
+
+      iex> Console.Fuzzy.filter([%{text: "cockpit"}, %{text: "notes"}], "ck", & &1.text)
+      [%{text: "cockpit"}]
   """
   @spec filter([e], String.t(), (e -> String.t())) :: [e] when e: term()
   def filter(entries, query, subject \\ & &1)

@@ -10,10 +10,16 @@ defmodule Console.Lazygit do
   @doc "Whether lazygit is installed (on PATH). The zoom degrades to a flash when it isn't."
   def available?, do: System.find_executable("lazygit") != nil
 
-  @doc ~S"""
-  The PTY command to run lazygit in `cwd` — `{"/bin/bash", ["-lc", "cd … && exec lazygit"]}`.
-  A login shell so PATH/env resolve like the harness terminals; `exec` so lazygit becomes the PTY's
-  own process (quitting it ends the pane). `cwd` is single-quoted so spaces/specials can't split it.
+  @doc """
+  The PTY command to run lazygit in `cwd`: a login shell so PATH/env resolve like the harness
+  terminals, and `exec` so lazygit becomes the PTY's own process (quitting it ends the pane). `cwd`
+  is single-quoted, so spaces and quotes can't split it or break out.
+
+      iex> Console.Lazygit.command("/tmp/a dir/wt")
+      {"/bin/bash", ["-lc", "cd '/tmp/a dir/wt' && exec lazygit"]}
+
+      iex> Console.Lazygit.command("/tmp/it's")
+      {"/bin/bash", ["-lc", "cd '/tmp/it'\\\\''s' && exec lazygit"]}
   """
   def command(cwd) do
     {"/bin/bash", ["-lc", "cd #{shell_quote(cwd)} && exec lazygit"]}

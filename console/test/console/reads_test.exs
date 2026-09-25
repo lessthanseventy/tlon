@@ -8,6 +8,8 @@ defmodule Console.ReadsTest do
   alias Console.Panel.Rail
   alias Console.Reads
 
+  doctest Console.Reads
+
   setup do
     Console.TestWorkspaces.put()
   end
@@ -183,12 +185,6 @@ defmodule Console.ReadsTest do
       open = %{session_pane: :auto, active_key: 0, center_view: :chat, opened_thread: 9_309}
       # nothing is holding a PTY for that id, so :auto resolves to no pane
       assert Reads.session_pane_target(open) == nil
-    end
-
-    test "Alt+\\ cycles the mode :auto → off → on → :auto" do
-      assert Reads.cycle_session_pane(:auto) == false
-      assert Reads.cycle_session_pane(false) == true
-      assert Reads.cycle_session_pane(true) == :auto
     end
 
     test "dims are the pane's own half of the centre, never zero" do

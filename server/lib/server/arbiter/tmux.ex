@@ -128,7 +128,12 @@ defmodule Server.Arbiter.Tmux do
       Path.join(Profiles.tlon_root(), "adapters")
   end
 
-  @doc "Collapse a prompt to one clean line (the console's rule: poking an agent is not a production write)."
+  @doc """
+  Collapse a prompt to one clean line (the console's rule: poking an agent is not a production write).
+
+      iex> Server.Arbiter.Tmux.sanitize("  run the\\n\\tgate  ")
+      "run the gate"
+  """
   def sanitize(prompt),
     do: prompt |> String.replace(~r/[[:cntrl:]]/, " ") |> String.replace(~r/\s+/, " ") |> String.trim()
 

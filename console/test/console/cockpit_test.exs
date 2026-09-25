@@ -7,6 +7,8 @@ defmodule Console.CockpitTest do
   alias Console.Cockpit
   alias Console.Panel.Rail
 
+  doctest Console.Cockpit
+
   # Workspace fixture: the hardcoded fallback Workspace is gone (reshape slice A); suites
   # that render or drive a Workspace push one through the Console.Workspaces cache-down seam.
   setup do
@@ -18,13 +20,6 @@ defmodule Console.CockpitTest do
       prev = %{active_key: 2, scrolls: %{a: 3}}
       assert Cockpit.reset_scrolls(prev, %{prev | active_key: 1}).scrolls == %{}
       assert Cockpit.reset_scrolls(prev, %{prev | scrolls: %{a: 4}}).scrolls == %{a: 4}
-    end
-  end
-
-  describe "thread_title/1 — a title from the opening message" do
-    test "first line, trimmed, capped at 60 chars" do
-      assert Cockpit.thread_title("  fix the gate  \nmore detail") == "fix the gate"
-      assert Cockpit.thread_title(String.duplicate("x", 80)) == String.duplicate("x", 60)
     end
   end
 
@@ -85,16 +80,6 @@ defmodule Console.CockpitTest do
       refute Cockpit.typing_only?(before, %{before | input: %{kind: :reply, buffer: "ab"}})
       closed = %{input: nil, flash: nil, focus: :x, reads: %{}}
       refute Cockpit.typing_only?(closed, closed)
-    end
-  end
-
-  describe "delete_flash/1 — the thread and what became of its worktree" do
-    test "says gone, kept (with the reason), or nothing about a worktree it never had" do
-      t = %{title: "busy"}
-      assert Cockpit.delete_flash({:ok, t, :none}) == "deleted “busy”"
-      assert Cockpit.delete_flash({:ok, t, {:removed, "/x/.worktrees/t1"}}) == "deleted “busy” and its worktree"
-      assert Cockpit.delete_flash({:ok, t, {:kept, "work/t1 has unmerged commits"}}) =~ "worktree kept: work/t1"
-      assert Cockpit.delete_flash({:error, :root_machine_thread}) =~ "root"
     end
   end
 end

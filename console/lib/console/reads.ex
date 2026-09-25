@@ -227,7 +227,18 @@ defmodule Console.Reads do
   # pane it is itself gating.
   defp live_session?(id), do: is_pid(terminal({:session, id}))
 
-  @doc "Alt+\\ walks the pane's mode: `:auto` (follow the coworker) → off → on → `:auto`."
+  @doc """
+  Alt+\\ walks the pane's mode: `:auto` (follow the coworker) → off → on → `:auto`.
+
+      iex> Console.Reads.cycle_session_pane(:auto)
+      false
+
+      iex> Console.Reads.cycle_session_pane(false)
+      true
+
+      iex> Console.Reads.cycle_session_pane(true)
+      :auto
+  """
   def cycle_session_pane(:auto), do: false
   def cycle_session_pane(false), do: true
   def cycle_session_pane(true), do: :auto

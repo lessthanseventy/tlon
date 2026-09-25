@@ -9,6 +9,8 @@ defmodule Server.Arbiter.TmuxTest do
   alias Server.Staff
   alias Server.Tmux
 
+  doctest Server.Arbiter.Tmux
+
   setup do
     Server.TestDB.clean!()
     {:ok, ws} = Server.Workspaces.register(%{name: "tmuxed", type: "code", scope: "project", repos: [], roster: []})

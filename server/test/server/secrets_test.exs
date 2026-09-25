@@ -5,6 +5,8 @@ defmodule Server.SecretsTest do
 
   alias Server.Secrets
 
+  doctest Server.Secrets
+
   test "passes ordinary technical text — no false positives on shas, hex, or prose" do
     assert Secrets.scan("exqlite sets busy_timeout via a NIF; see commit 3fa9c2e") == :ok
     assert Secrets.scan("the digest is a4f08c4b1db9e7f0c2a1 and the base64 is Zm9vYmFyYmF6") == :ok

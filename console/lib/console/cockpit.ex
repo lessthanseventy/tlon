@@ -730,8 +730,22 @@ defmodule Console.Cockpit do
   defp repaint_on_scroll(:scrolled, state), do: {:noreply, render(state)}
   defp repaint_on_scroll(:forwarded, state), do: {:noreply, state}
 
-  # The delete's one line: the thread, then what became of its worktree — gone, kept (and why),
-  # or there was none. Pure, for the test.
+  @doc """
+  The one line a thread delete leaves: the thread, then what became of its worktree — gone, kept
+  (and why), or there was none.
+
+      iex> Console.Cockpit.delete_flash({:ok, %{title: "busy"}, :none})
+      "deleted “busy”"
+
+      iex> Console.Cockpit.delete_flash({:ok, %{title: "busy"}, {:removed, "/x/.worktrees/t1"}})
+      "deleted “busy” and its worktree"
+
+      iex> Console.Cockpit.delete_flash({:ok, %{title: "busy"}, {:kept, "work/t1 has unmerged commits"}})
+      "deleted “busy” — worktree kept: work/t1 has unmerged commits"
+
+      iex> Console.Cockpit.delete_flash({:error, :root_machine_thread})
+      "can't delete the root thread"
+  """
   def delete_flash({:ok, thread, :none}), do: "deleted “#{thread.title}”"
   def delete_flash({:ok, thread, {:removed, _path}}), do: "deleted “#{thread.title}” and its worktree"
   def delete_flash({:ok, thread, {:kept, reason}}), do: "deleted “#{thread.title}” — worktree kept: #{reason}"
@@ -1653,8 +1667,15 @@ defmodule Console.Cockpit do
   def toggle_center_view(%{center_view: :chat} = state), do: %{state | center_view: :terminal}
   def toggle_center_view(state), do: %{state | center_view: :chat}
 
-  # A thread title from its opening message — first line, trimmed to a glanceable length.
-  @doc false
+  @doc """
+  A thread title from its opening message: the first line, trimmed, capped at 60 characters.
+
+      iex> Console.Cockpit.thread_title("  fix the gate  \\nmore detail")
+      "fix the gate"
+
+      iex> Console.Cockpit.thread_title(String.duplicate("x", 80)) |> String.length()
+      60
+  """
   def thread_title(text) do
     text |> String.split("\n", parts: 2) |> List.first() |> String.trim() |> String.slice(0, 60)
   end

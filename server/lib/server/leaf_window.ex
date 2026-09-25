@@ -14,6 +14,18 @@ defmodule Server.LeafWindow do
   The window name for a leaf: `<archetype>-<slug>`, the slug truncated to ~#{@max_slug} chars on a
   word boundary where possible. `taken` (existing window names) adds a `-2`/`-3`… disambiguator
   only on collision. A blank/unsluggable title falls back to the bare archetype.
+
+      iex> Server.LeafWindow.name(:reviewer, "let's review this PR")
+      "reviewer-let-s-review-this-pr"
+
+      iex> Server.LeafWindow.name(:builder, "implement the per-thread agents design end to end")
+      "builder-implement-the-per-thread"
+
+      iex> Server.LeafWindow.name(:planner, "???")
+      "planner"
+
+      iex> Server.LeafWindow.name(:reviewer, "review", ["reviewer-review", "reviewer-review-2"])
+      "reviewer-review-3"
   """
   @spec name(atom() | String.t(), String.t() | nil, [String.t()]) :: String.t()
   def name(archetype, title, taken \\ []) do
