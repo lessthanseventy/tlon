@@ -730,7 +730,7 @@ defmodule Console.Reads do
       # (it briefs every thread, so it stays off the per-frame path the rest of the time).
       triage:
         Safe.read(:triage, nil, fn ->
-          if(state[:drawer] == :triage, do: triage_read(threads))
+          drawer_triage_read(state, threads)
         end),
       scrolls: state.scrolls,
       input: state.input,
@@ -756,9 +756,17 @@ defmodule Console.Reads do
       session: Safe.read(:session, :no_session, fn -> session_read(state) end),
       detail:
         Safe.read(:detail, nil, fn ->
-          if(Space.workspace?(state.active_key) and state.focus.detail?, do: tlon_detail(state, tlon_layout))
+          detail_read(state, tlon_layout)
         end)
     }
+  end
+
+  defp drawer_triage_read(state, threads) do
+    if state[:drawer] == :triage, do: triage_read(threads)
+  end
+
+  defp detail_read(state, tlon_layout) do
+    if Space.workspace?(state.active_key) and state.focus.detail?, do: tlon_detail(state, tlon_layout)
   end
 
   # `Server.Board.sidebar/0`'s groups, each thread given the `warm?` of its live session — read off
