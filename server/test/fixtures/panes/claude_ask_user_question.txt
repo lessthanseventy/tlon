@@ -1,0 +1,24 @@
+  ▝▝ ▝▝    ~/projects/ficciones/.worktrees/t85 · /rc
+
+
+● agents-md: no CLAUDE.md found; AGENTS.md loaded:
+  /home/andrew/projects/ficciones/.worktrees/t85/AGENTS.md
+
+❯ New message on thread 85 from andrew: Do not edit anything. Use your
+  AskUserQuestion tool once to ask me: Should I proceed with the check? — with
+  exactly two options, Yes and No. Wait for my answer, then reply in this
+  thread with the answer you received, nothing else.
+────────────────────────────────────────────────────────────────────────────────
+ ☐ Check
+
+Should I proceed with the check?
+
+❯ 1. Yes
+     Proceed with the check.
+  2. No
+     Do not proceed.
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

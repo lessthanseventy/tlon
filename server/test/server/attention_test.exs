@@ -53,6 +53,16 @@ defmodule Server.AttentionTest do
     Repo.all(from m in Message, where: m.thread_id == ^thread_id and m.kind == "prompt", order_by: m.id)
   end
 
+  @claude_ask File.read!("test/fixtures/panes/claude_ask_user_question.txt")
+
+  test "Claude Code, live capture (thread #85, 2026-09-25): AskUserQuestion is a dialog too — the question and its numbered options" do
+    assert %{harness: "claude", summary: "Should I proceed with the check?", options: options} =
+             Attention.detect(@claude_ask)
+
+    assert Enum.map(options, & &1.key) == ~w(1 2 3 4)
+    assert %{key: "1", label: "Yes"} in options
+  end
+
   test "respond/3 reopens a closed thread before posting — the one door reopens too", %{thread: t} do
     {:ok, closed} = Channel.close_thread(t)
     assert closed.state == "closed"
