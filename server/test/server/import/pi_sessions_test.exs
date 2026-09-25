@@ -107,4 +107,51 @@ defmodule Server.Import.PiSessionsTest do
     assert {:ok, %{imported: 1, skipped: 3}} = PiSessions.import_dir(ctx.dir, ctx.ws.id)
     assert {:ok, %{imported: 0, skipped: 4}} = PiSessions.import_dir(ctx.dir, ctx.ws.id)
   end
+
+  test "a session with no title of its own is named by the model", ctx do
+    cli = Path.join(ctx.dir, "title-cli")
+    File.mkdir_p!(ctx.dir)
+    File.write!(cli, "#!/bin/sh\necho '\"Stack panel grouped by day.\"'\n")
+    File.chmod!(cli, 0o755)
+    Application.put_env(:server, :import_title_cmd, cli)
+    on_exit(fn -> Application.put_env(:server, :import_title_cmd, "/nonexistent/tlon-test-title-cli") end)
+
+    transcript(ctx.dir, "agent", "p1", "/p/exc", [
+      user(
+        "this Stack panel is pretty useless /tmp/pi-clipboard-9fdd.png can we bundle it by day?",
+        "2026-09-09T01:00:01.000Z"
+      ),
+      said("Grouping by day.", "2026-09-09T01:00:02.000Z")
+    ])
+
+    assert {:ok, %{imported: 1}} = PiSessions.import_dir(ctx.dir, ctx.ws.id)
+    assert %{title: "Stack panel grouped by day"} = Repo.one!(Thread)
+  end
+
+  test "with no model, the first line stands in — clipboard paths and image markers dropped, cut at a word", ctx do
+    transcript(ctx.dir, "agent", "p1", "/p/exc", [
+      user(
+        "/tmp/pi-clipboard-8bf8.png [Image #3] this Stack panel is backwards, it should be commit desc and then the hash and who",
+        "2026-09-09T01:00:01.000Z"
+      ),
+      said("Flipping it.", "2026-09-09T01:00:02.000Z")
+    ])
+
+    assert {:ok, %{imported: 1}} = PiSessions.import_dir(ctx.dir, ctx.ws.id)
+    assert %{title: "this Stack panel is backwards, it should be commit desc and…"} = Repo.one!(Thread)
+  end
+
+  test "a session lands in the workspace whose project holds its cwd, not the one it was imported into", ctx do
+    {:ok, other} = Workspaces.register(%{name: "Riverside"})
+    {:ok, river} = Projects.register(%{workspace_id: other.id, name: "river", repos: [%{"path" => "/p/river"}]})
+
+    transcript(ctx.dir, "agent", "p1", "/p/river/lib", [
+      user("why do webhook retries double-post?", "2026-09-09T01:00:01.000Z"),
+      said("The 502 lands mid-body.", "2026-09-09T01:00:02.000Z")
+    ])
+
+    assert {:ok, %{imported: 1}} = PiSessions.import_dir(ctx.dir, ctx.ws.id)
+    assert %{workspace_id: workspace_id, project_id: project_id} = Repo.one!(Thread)
+    assert {workspace_id, project_id} == {other.id, river.id}
+  end
 end

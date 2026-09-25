@@ -9,12 +9,16 @@ defmodule Server.Import.ClaudeSessions do
   History never wakes anyone: rows go in directly (no `Channel.post`, no Bus), delivered, on a
   closed and unstaffed thread. Idempotent per session: the thread's first message is a `tlon`
   receipt naming the session id, and a session with a receipt is skipped. A thread lands on the
-  project and repo whose checkout holds the session's cwd, else the workspace's default project.
+  project and repo whose checkout holds the session's cwd — in whichever workspace holds that project —
+  else the given workspace's default project. A session with no title of its own (pi records none) is
+  named by a cheap model from its opening, else by its cleaned first line.
   """
 
   import Ecto.Query
 
   alias Server.Message
+  alias Server.ModelCli
+  alias Server.Project
   alias Server.Projects
   alias Server.Repo
   alias Server.Thread
@@ -43,7 +47,7 @@ defmodule Server.Import.ClaudeSessions do
 
     case turns(entries) do
       [{:operator, first, _} | _] = turns ->
-        if !(machine?(first) or smoke_test?(turns)), do: session(path, entries, first, turns)
+        if !(machine?(first) or smoke_test?(turns)), do: session(path, entries, turns)
 
       _ ->
         nil
@@ -61,7 +65,7 @@ defmodule Server.Import.ClaudeSessions do
     end)
   end
 
-  defp session(path, entries, first, turns) do
+  defp session(path, entries, turns) do
     # pi opens its transcript with a `session` entry; Claude Code has none
     header = Enum.find(entries, &(&1["type"] == "session"))
 
@@ -69,7 +73,7 @@ defmodule Server.Import.ClaudeSessions do
       source: if(header, do: :pi, else: :claude_code),
       id: (header && header["id"]) || Path.basename(path, ".jsonl"),
       cwd: Enum.find_value(entries, & &1["cwd"]),
-      title: Enum.find_value(Enum.reverse(entries), &title/1) || String.slice(first, 0, 60),
+      title: Enum.find_value(Enum.reverse(entries), &title/1),
       started_at: at(hd(entries)["timestamp"] || Enum.find_value(entries, & &1["timestamp"])),
       turns: turns
     }
@@ -168,7 +172,8 @@ defmodule Server.Import.ClaudeSessions do
   (`Server.Import.PiSessions`).
   """
   def import_glob(glob, workspace_id) do
-    projects = Projects.in_workspace(workspace_id)
+    # every workspace's projects: an excessibility session belongs to the workspace that holds excessibility
+    projects = Repo.all(Project)
     fallback = Projects.default(workspace_id)
     paths = glob |> List.wrap() |> Enum.flat_map(&Path.wildcard/1)
     sessions = paths |> Enum.reject(&live?/1) |> Enum.map(&parse/1) |> Enum.reject(&is_nil/1) |> longest_copies()
@@ -220,11 +225,13 @@ defmodule Server.Import.ClaudeSessions do
 
   defp insert(session, workspace_id, {project, repo}) do
     operator = Application.get_env(:server, :operator, "andrew")
+    workspace_id = (project && project.workspace_id) || workspace_id
+    title = title_for(session)
 
     Repo.transaction(fn ->
       thread =
         Repo.insert!(%Thread{
-          title: session.title,
+          title: title,
           state: "closed",
           scope: "machine",
           born: "operator",
@@ -258,4 +265,65 @@ defmodule Server.Import.ClaudeSessions do
 
   defp cap(body) when byte_size(body) <= @body_cap, do: body
   defp cap(body), do: String.slice(body, 0, @body_cap) <> "\n… (cut at import)"
+
+  # The session's own title, else a cheap model's name for its opening (config :import_title_cmd /
+  # :import_title_model, the ollama bucket by default), else its cleaned first line.
+  defp title_for(%{title: title}) when is_binary(title) and title != "", do: title
+
+  defp title_for(%{turns: [{:operator, first, _} | _] = turns}) do
+    with {:ok, out} <-
+           ModelCli.prompt(
+             title_prompt(turns),
+             :import_title_cmd,
+             :import_title_model,
+             {"pi", "ollama-cloud/deepseek-v4.1-flash"}
+           ),
+         title when is_binary(title) <- model_title(out) do
+      title
+    else
+      _ -> first_line_title(first)
+    end
+  end
+
+  defp title_prompt(turns) do
+    opening =
+      turns |> Enum.take(3) |> Enum.map_join("\n\n", fn {who, text, _at} -> "#{who}: #{String.slice(text, 0, 800)}" end)
+
+    "Name this conversation in 3 to 6 words, sentence case, no quotes, no trailing period. " <>
+      "Reply with the title only.\n\n" <> opening
+  end
+
+  # The LAST non-empty line, unquoted: a CLI's warnings come first on the merged stream, the reply last.
+  # nil when that is not a title (an API error, a paragraph), so the first line stands in.
+  defp model_title(out) do
+    line =
+      out
+      |> String.split("\n", trim: true)
+      |> Enum.map(&String.trim/1)
+      |> List.last("")
+      |> String.trim("\"")
+      |> String.trim("*")
+      |> String.trim_trailing(".")
+      |> String.trim()
+
+    if line != "" and String.length(line) <= 80, do: line
+  end
+
+  # A first line is a clipboard path or an image marker as often as a subject — drop those, then cut at a word.
+  @doc false
+  def first_line_title(text) do
+    clean =
+      text
+      |> String.replace(~r{/tmp/\S+}, "")
+      |> String.replace(~r/\[Image #\d+\]/, "")
+      |> String.replace(~r/\s+/, " ")
+      |> String.trim()
+
+    if String.length(clean) <= 60 do
+      clean
+    else
+      cut = String.slice(clean, 0, 60)
+      (cut |> String.split(" ") |> Enum.drop(-1) |> Enum.join(" ") |> then(&if(&1 == "", do: cut, else: &1))) <> "…"
+    end
+  end
 end
