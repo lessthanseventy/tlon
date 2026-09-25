@@ -71,23 +71,36 @@ defmodule Console.Panel.TopBarTest do
     assert row_text(row) =~ "server down"
   end
 
-  describe "hit/2 — what a click at a column means, off the drawn segments" do
+  test "a frame too narrow for every tab keeps the open one and counts the rest — never clips it away" do
+    narrow = data(%{open_project: 2})
+    [row] = render(narrow, 32)
+    text = row_text(row)
+
+    assert text =~ "ficciones"
+    assert text =~ "+1"
+    refute text =~ "Tlön"
+
+    {at, _} = :binary.match(text, "ficciones")
+    assert TopBar.hit(narrow, String.length(binary_part(text, 0, at)), 32) == {:project, 2}
+  end
+
+  describe "hit/3 — what a click at a column means, off the drawn segments" do
     test "the arrows step the workspace ring; the name is the workspace (its menu); a tab is its project" do
-      assert TopBar.hit(data(), 1) == {:workspace_step, :prev}
-      assert TopBar.hit(data(), 4) == :workspace
-      assert TopBar.hit(data(), 11) == {:workspace_step, :next}
+      assert TopBar.hit(data(), 1, 80) == {:workspace_step, :prev}
+      assert TopBar.hit(data(), 4, 80) == :workspace
+      assert TopBar.hit(data(), 11, 80) == {:workspace_step, :next}
 
       [row] = render(data())
       text = row_text(row)
       {tlon, _} = :binary.match(text, "Tlön")
       {fic, _} = :binary.match(text, "ficciones")
-      assert TopBar.hit(data(), String.length(binary_part(text, 0, tlon))) == {:project, 1}
-      assert TopBar.hit(data(), String.length(binary_part(text, 0, fic))) == {:project, 2}
+      assert TopBar.hit(data(), String.length(binary_part(text, 0, tlon)), 80) == {:project, 1}
+      assert TopBar.hit(data(), String.length(binary_part(text, 0, fic)), 80) == {:project, 2}
     end
 
     test "the gap, and past the tabs, is nothing" do
-      assert TopBar.hit(data(), 14) == nil
-      assert TopBar.hit(data(), 79) == nil
+      assert TopBar.hit(data(), 14, 80) == nil
+      assert TopBar.hit(data(), 79, 80) == nil
     end
   end
 end

@@ -97,13 +97,21 @@ defmodule Console.Reads do
 
   def selected_habit(_state), do: nil
 
-  # What `d` would delete under the current focus: a MEMORY pinned fact (forget) or a rail thread. The
-  # label rides along for the arm flash.
+  # What `d` would delete under the current focus: a MEMORY pinned fact (forget) or a rail thread —
+  # or, for the lobby, a refusal said up front. The label rides along for the arm flash.
   def tlon_delete_target(state) do
     case {selected_pinned_fact(state), rail_selection(state)} do
-      {%{} = fact, _} -> {:fact, fact, "forget fact ##{fact.id}"}
-      {nil, {:thread, %{id: id, title: title}}} -> {:thread, id, "delete “#{title}”"}
-      _ -> nil
+      {%{} = fact, _} ->
+        {:fact, fact, "forget fact ##{fact.id}"}
+
+      {nil, {:thread, %{root: true}}} ->
+        {:refused, "the lobby can't be deleted — it is where this workspace's centre sits"}
+
+      {nil, {:thread, %{id: id, title: title}}} ->
+        {:thread, id, "delete “#{title}”"}
+
+      _ ->
+        nil
     end
   end
 
