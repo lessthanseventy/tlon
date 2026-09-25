@@ -203,12 +203,15 @@ defmodule Server.Attention do
   # ---- answering ----------------------------------------------------------------------------
 
   @doc """
-  The one door for an operator post. When the thread has an open prompt and `body` starts with
-  one of its options (the key, or the label — `y`, `n`, `2`, `yes`), it is an answer: keys into
-  the pane, a delivered reply on the thread, the prompt resolved. Anything else is a plain post,
-  which the switchboard holds until the prompt is resolved.
+  The one door for an operator post. A closed thread reopens. When the thread has an open prompt
+  and `body` starts with one of its options (the key, or the label — `y`, `n`, `2`, `yes`), it is
+  an answer: keys into the pane, a delivered reply on the thread, the prompt resolved. Anything
+  else is a plain post, which the switchboard holds until the prompt is resolved.
   """
   def respond(thread_id, author, body) when is_binary(body) do
+    # a reply to a closed thread (one opened from history) reopens it first, so its lead is staffed
+    _ = Channel.reopen_if_closed(thread_id)
+
     case open_prompt(thread_id) do
       %Message{} = prompt ->
         case pick(prompt, body) do

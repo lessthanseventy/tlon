@@ -12,7 +12,8 @@ defmodule Server.MCP.OperatorAPI do
       GET  /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
       GET  /api/threads/:id/messages    Channel.recent_messages (?limit=, default 50)
       GET  /api/threads/:id/terminal    where its coworker runs: {socket, session, window}, 404 if none
-      POST /api/threads/:id/messages    {"body"} → Channel.post as the operator; 201 + the message
+      POST /api/threads/:id/messages    {"body"} → Attention.respond as the operator: answers an open
+                                        prompt, reopens a closed thread, else posts; 201 + the message
   """
 
   import Plug.Conn
@@ -57,12 +58,15 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  # Post as the operator — the same call `server:post` makes; Channel.post's Bus broadcast is
-  # what wakes the thread's lead. `author` is not a parameter: this door IS the operator.
+  # Post as the operator through the one door (`Server.Attention.respond/3`, the same call the
+  # console reply box and `server:post` make): a body naming an option of an open prompt answers
+  # the coworker's dialog in its pane (the 201 carries `reply_to` = the prompt), a closed thread
+  # reopens, anything else posts and the Bus wakes the thread's lead. `author` is not a
+  # parameter: this door IS the operator.
   defp post(conn, thread) do
     with {:ok, raw, conn} <- read_body(conn),
          {:ok, %{"body" => body}} when is_binary(body) and body != "" <- JSON.decode(raw),
-         {:ok, message} <- Channel.post(%{thread_id: thread.id, author: operator(), body: body}) do
+         {:ok, message} <- Server.Attention.respond(thread.id, operator(), body) do
       json(conn, 201, Brief.message(message))
     else
       _ -> json(conn, 400, %{error: ~s(expected {"body": "…"})})

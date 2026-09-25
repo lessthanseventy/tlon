@@ -121,6 +121,46 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  test "POST /api/threads/:id/messages is the operator's one door: `y` answers an open prompt, a closed thread reopens",
+       %{thread: t} do
+    # the prompt row as Server.Attention opens it; the pane is a recording fake
+    test_pid = self()
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      send(test_pid, {:tmux, args})
+      {"", 0}
+    end)
+
+    Application.put_env(:server, :attention_settle_ms, 0)
+    on_exit(fn -> for k <- [:tmux_cmd, :attention_settle_ms], do: Application.delete_env(:server, k) end)
+
+    {:ok, prompt} =
+      %{
+        thread_id: t.id,
+        author: "tlon",
+        body: "⚑ waiting on you — bash: env",
+        kind: "prompt",
+        payload: %{
+          "harness" => "pi",
+          "summary" => "bash: env",
+          "window" => "t#{t.id}",
+          "workspace_id" => 1,
+          "options" => [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]
+        }
+      }
+      |> Server.Message.post_changeset()
+      |> Server.Repo.insert()
+
+    {201, answer} = post_json("/api/threads/#{t.id}/messages", %{body: "y"})
+    assert answer["reply_to"] == prompt.id
+    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", _, "yy"]}
+    assert Server.Repo.get!(Server.Message, prompt.id).resolution == "answered: y"
+
+    {:ok, _} = Channel.close_thread(Server.Repo.get!(Server.Thread, t.id))
+    {201, _} = post_json("/api/threads/#{t.id}/messages", %{body: "back to this"})
+    assert Server.Repo.get!(Server.Thread, t.id).state == "open"
+  end
+
   test "GET /api/threads/:id/terminal is where the coworker runs, 404 when nothing does" do
     {:ok, ws} = Server.Workspaces.register(%{name: "tmuxed", type: "code", scope: "project", repos: [], roster: []})
     {:ok, t} = Channel.open_thread(%{title: "where am i", workspace_id: ws.id})

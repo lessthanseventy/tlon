@@ -53,6 +53,13 @@ defmodule Server.AttentionTest do
     Repo.all(from m in Message, where: m.thread_id == ^thread_id and m.kind == "prompt", order_by: m.id)
   end
 
+  test "respond/3 reopens a closed thread before posting — the one door reopens too", %{thread: t} do
+    {:ok, closed} = Channel.close_thread(t)
+    assert closed.state == "closed"
+    assert {:ok, %Message{}} = Attention.respond(t.id, "andrew", "picking this back up")
+    assert Repo.get!(Server.Thread, t.id).state == "open"
+  end
+
   describe "detect/1 — a harness's own dialog, read off the pane" do
     test "pi-permission-system: the cursor-marked options and the command it asks about" do
       assert %{harness: "pi", summary: "bash: env", options: options} = Attention.detect(@pi)
