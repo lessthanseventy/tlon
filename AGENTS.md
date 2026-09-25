@@ -28,7 +28,7 @@ bucket that can still do it well.** pi (the harness) rides the ollama bucket; Cl
 bucket — kept as two tools so a switch never drains the wrong one.
 
 Inside the ollama bucket the routing is not a proxy — it's five mise tasks, each a named model profile
-(the loop *is* the aliasing layer). Bare `pi` already starts on `ollama-cloud/deepseek-v4-flash` — the
+(the loop *is* the aliasing layer). Bare `pi` already starts on `ollama-cloud/deepseek-v4.1-flash` — the
  efficient-MoE default that drains the short rate-limit window far slower than a reasoning model
  (run `mise run ollama:usage` to see the session/weekly caps and per-model request counts); these pin an
 alternate, and in-session `Ctrl+P` cycles the same ring. Pass a one-shot with `-- -p "…"`.
@@ -38,7 +38,7 @@ alternate, and in-session `Ctrl+P` cycles the same ring. Pass a one-shot with `-
 | `mise run pi:balanced` | glm-5.2 | The strong default — Claude/GPT-alike, 976K ctx. Reach for it when the cheap default can't do the job, before escalating to pi:deep. |
 | `mise run pi:deep`     | deepseek-v4-pro `thinking:high` | Hard reasoning/logic — the escalate-before-you'd-miss-Claude tier. |
 | `mise run pi:code`     | kimi-k2.7-code | Coding-heavy work; code-specialized, fewer thinking tokens. |
-| `mise run pi:fast`     | deepseek-v4-flash `thinking:low` | The same model as the bare default but `thinking:low` — quick/cheap throwaway, 1M ctx, fast tier. |
+| `mise run pi:fast`     | deepseek-v4.1-flash `thinking:low` | The same model as the bare default but `thinking:low` — quick/cheap throwaway, fast tier. |
 | `mise run pi:local`    | qwen3-coder (local daemon) | Free/offline grunt, tight iteration loops — zero cloud budget. |
 
 Every launcher also makes the harness a **server citizen**: it opens a fresh server thread (or JOINs one
@@ -47,7 +47,7 @@ in `server:roster` and briefs from the thread. `mise run server:claude [thread-i
 Claude Code (its own MCP adapter, `headersHelper`-authed). If the server channel is down, the harness
 still launches — just not as a citizen.
 
-The bare default is `deepseek-v4-flash`, not glm-5.2, precisely because glm-5.2 is a reasoning model
+The bare default is `deepseek-v4.1-flash`, not glm-5.2, precisely because glm-5.2 is a reasoning model
 whose thinking tokens drain the short rate-limit window fast — run `mise run ollama:usage` to watch
 the session cap move per model. Two things that bite: **glm-5.2 is a reasoning model** (separate
 `reasoning` + `content` fields) — give it token headroom or `content` comes back empty while thinking

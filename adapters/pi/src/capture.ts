@@ -36,7 +36,7 @@ const MAX_DELTA_CHARS = 16_000;
 // MoE, large enough context for a bounded delta, cheap enough to run on a cadence. The single
 // source of truth for BOTH harness reflexes — pi's extension.ts (overridable via server-recall.json)
 // and claude-code's cc-capture.ts (fixed) — so the two never drift.
-export const DEFAULT_CAPTURE_MODEL = "deepseek-v4-flash";
+export const DEFAULT_CAPTURE_MODEL = "deepseek-v4.1-flash";
 
 // The entries added since the watermark (an index into the running entry list). Returns the slice
 // to capture and the new watermark to store once it's captured.

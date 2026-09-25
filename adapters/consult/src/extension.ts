@@ -41,9 +41,8 @@ const PROVIDER = "ollama-cloud";
 // it's part of the prompt and the default model is used.
 const KNOWN_MODELS = [
   "glm-5.2",
-  "glm-5.1",
   "deepseek-v4-pro",
-  "deepseek-v4-flash",
+  "deepseek-v4.1-flash",
   "kimi-k2.7-code",
   "minimax-m3",
   "qwen3-coder",
