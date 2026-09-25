@@ -60,29 +60,6 @@ never banked. Claude Code exposes a `SessionEnd` hook (fires on session terminat
 zero-floor "flush" mode to capture that tail. `SessionEnd` is the cleaner fit (it fires after
 all turns complete). Deferred — not wired yet; the per-turn Stop reflex covers the common case.
 
-## The heartbeat (server thread #3, 2026-08-27)
-
-[`heartbeat-hook.sh`](heartbeat-hook.sh) is a `PostToolUse` hook — it fires after every tool
-call. It execs [`cc-heartbeat.ts`](../pi/src/cc-heartbeat.ts) (bun), which mirrors pi's
-`extension.ts` turn_start/turn_end interval: a cadence-gated "here's what's happening" message
-posted to the thread during a long single turn, so an agent doesn't go silent (just "thinking")
-until Stop. Presence only ever declares twice — thinking at `UserPromptSubmit`, idle at `Stop` —
-which reads as frozen on one long turn; the heartbeat is the fix.
-
-Since Claude Code gives each hook fire a fresh process (no long-lived closure to hold an interval
-in, unlike pi), the cadence lives in a state file
-(`${XDG_STATE_HOME:-~/.local/state}/tlon-cc-heartbeat/<session_id>`) instead: every `PostToolUse`
-call asks "has it been ≥45s since the last post (or since the turn started)?" — `activity.ts`'s
-`nextHeartbeatState`/`heartbeatDue` answer that, shared verbatim with pi's side so the two
-harnesses' cadence never drifts apart.
-
-The message itself is mechanically derived (which tool, what target — `activityFrom`, no LLM),
-then phrased into one personable line by the same out-of-band sidecar completion `capture.ts`
-already uses (`phraseHeartbeat`, ollama-cloud flash, no agent turn needed) — a coworker's quick
-aside, not a status report. Any hiccup in the sidecar call (unreachable, no key, an empty or
-rambling completion) falls back to a plain mechanical line (`fallbackLine`) — unlike the capture
-reflex, a heartbeat is never silently dropped, since the message IS the deliverable here.
-
 ## Install
 
 There is nothing to install: nothing is merged into `~/.claude`. Wiring is **per session** —

@@ -145,7 +145,7 @@ export class TlonClient {
     await this.#callTool("presence_idle", {});
   }
 
-  // Post to this connection's thread — the heartbeat check-in's vehicle (thread #3).
+  // Post to this connection's thread.
   async postMessage(body: string): Promise<void> {
     await this.#callTool("post_message", { body });
   }

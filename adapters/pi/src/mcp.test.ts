@@ -100,7 +100,7 @@ test("presenceThinking / presenceIdle call their argless self-thread tools", asy
   expect(called).toEqual(["presence_thinking", "presence_idle"]);
 });
 
-// postMessage backs the heartbeat check-in (thread #3): pin the tool name + body arg go
+// postMessage: pin the tool name + body arg go
 // out exactly as the PostMessage tool expects.
 test("postMessage calls post_message with the body", async () => {
   const calls: Array<{ name: string; args: unknown }> = [];
@@ -136,9 +136,9 @@ test("postMessage calls post_message with the body", async () => {
 
   const c = new TlonClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
   await c.connect();
-  await c.postMessage("still on it — running mix test");
+  await c.postMessage("README split is on work/t15");
 
-  expect(calls).toEqual([{ name: "post_message", args: { body: "still on it — running mix test" } }]);
+  expect(calls).toEqual([{ name: "post_message", args: { body: "README split is on work/t15" } }]);
 });
 
 // identityFromEnv — the one parse of the TLON_* identity, shared by the extension and every

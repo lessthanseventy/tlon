@@ -11,7 +11,7 @@ import { env } from "node:process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { lastToolActivity, phraseHeartbeat, sawSuccessfulCommit } from "./activity.ts";
+import { sawSuccessfulCommit } from "./activity.ts";
 import { renderBrief, type Dossier } from "./brief.ts";
 import { TlonClient, TlonRejected, TlonUnreachable, identityFromEnv } from "./mcp.ts";
 import { detectCorrection } from "./recall.ts";
@@ -102,29 +102,8 @@ export default function adapters(pi: ExtensionAPI): void {
   let turnCount = 0;
   let capturing = false;
 
-  // The heartbeat (thread #3, 2026-08-27): "here's what's happening" check-ins on a
-  // cadence during a long single turn, instead of silence until turn_end. turnStartedAt seeds
-  // the elapsed-time the sidecar's prompt (and the mechanical fallback) names; heartbeatTimer
-  // is armed in turn_start and disarmed in turn_end, so it can never tick after (or across) a
-  // turn boundary — a stray post from a finished turn would misread as still-running.
-  const HEARTBEAT_INTERVAL_MS = 45_000;
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   // Auto-track latch (reshape slice B): once this session has promoted its thread, stop scanning.
   let threadTracked = false;
-  let turnStartedAt = 0;
-
-  const runHeartbeat = async (ctx: ExtensionContext): Promise<void> => {
-    if (!client) return;
-    try {
-      const activity = lastToolActivity(ctx.sessionManager.buildContextEntries());
-      const elapsedSeconds = (Date.now() - turnStartedAt) / 1000;
-      const line = await phraseHeartbeat(activity, elapsedSeconds, completeText);
-      await client.connect();
-      await client.postMessage(line);
-    } catch {
-      // best-effort — a heartbeat failure must never interrupt the turn
-    }
-  };
 
   // Capture the delta since the watermark (bounded — a few turns, never the full window): extract
   // durable facts out-of-band via a cheap model, bank them DERIVED, raise any open questions.
@@ -230,11 +209,7 @@ export default function adapters(pi: ExtensionAPI): void {
   // Thinking presence (the cockpit's typing indicator): declare at turn start, clear at turn
   // end. Best-effort both ways — presence is a nicety and must never disturb the session; a
   // crash that skips the idle is cleared by the server's own max-age sweep.
-  pi.on("turn_start", async (_event, ctx) => {
-    turnStartedAt = Date.now();
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
-    if (client) heartbeatTimer = setInterval(() => void runHeartbeat(ctx), HEARTBEAT_INTERVAL_MS);
-
+  pi.on("turn_start", async () => {
     if (!client) return;
     try {
       await client.connect();
@@ -245,10 +220,6 @@ export default function adapters(pi: ExtensionAPI): void {
   });
 
   pi.on("turn_end", async (_event, ctx) => {
-    if (heartbeatTimer) {
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
-    }
     if (!client) return;
     try {
       await client.connect();

@@ -1,6 +1,6 @@
-// adapters — the claude-code adapter's auto-track hook (reshape slice B). Same shape as
-// cc-heartbeat.ts: claude-machine has no persistent extension process, so a PostToolUse hook is a
-// fresh bun process per tool call. When the tool call that just finished was a successful
+// adapters — the claude-code adapter's auto-track hook (reshape slice B). Claude Code has
+// no persistent extension process like pi's, so a PostToolUse hook is a fresh bun process per
+// tool call. When the tool call that just finished was a successful
 // `git … commit`, this connection's thread promotes into the stage machine via `track_thread` —
 // the ticket condenses out of the work. The server is idempotent, so firing on every commit is
 // safe; no state file needed.
