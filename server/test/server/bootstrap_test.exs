@@ -196,4 +196,62 @@ defmodule Server.BootstrapTest do
       assert general.repos == [%{"path" => "a/*", "name" => "a/*"}, %{"path" => "b/*", "name" => "b/*"}]
     end
   end
+
+  describe "the machine seed" do
+    setup do
+      path = Path.join(System.tmp_dir!(), "tlon-machine-seed-#{System.unique_integer([:positive])}.exs")
+
+      write = fn projects ->
+        File.write!(path, """
+        %{
+          workspaces: [
+            %{name: "Machine", scope: "machine", roster: [%{"archetype" => "surveyor", "name" => "tertius"}],
+              projects: #{inspect(projects)}},
+            %{name: "Accessibility", projects: [%{name: "excessibility", repos: ["~/projects/excessibility"]}]}
+          ],
+          facts: [%{intent: "machine:operator-vision", kind: "constraint", provenance: "stated", text: "The operator has low vision."}]
+        }
+        """)
+      end
+
+      write.([%{name: "Tlön", repos: ["~/projects/tlon", "~/projects/menard"]}])
+      Application.put_env(:server, :machine_seed_path, path)
+
+      on_exit(fn ->
+        Application.put_env(:server, :machine_seed_path, "/nonexistent/tlon-test-seed.exs")
+        File.rm(path)
+      end)
+
+      %{write: write}
+    end
+
+    test "its workspaces register in file order and the first is the default, never the fallback" do
+      {:ok, default} = Bootstrap.ensure()
+
+      assert default.name == "Machine"
+      assert Workspaces.all() |> Enum.sort_by(& &1.id) |> Enum.map(& &1.name) == ["Machine", "Accessibility"]
+      assert Enum.map(Workspaces.bench(default.id), & &1.name) == ["tertius"]
+
+      assert [%{name: "Tlön", repos: [%{"name" => "tlon", "path" => "~/projects/tlon"}, %{"name" => "menard"}]}] =
+               Server.Projects.in_workspace(default.id)
+
+      assert Server.Projects.default(default.id).name == "Tlön"
+    end
+
+    test "a second boot adds nothing; a project added to the file joins its workspace", %{write: write} do
+      {:ok, default} = Bootstrap.ensure()
+      {:ok, _} = Bootstrap.ensure()
+      assert length(Workspaces.all()) == 2
+
+      write.([%{name: "Tlön", repos: ["~/projects/tlon"]}, %{name: "ficciones", repos: ["~/projects/ficciones"]}])
+      {:ok, _} = Bootstrap.ensure()
+
+      assert Enum.map(Server.Projects.in_workspace(default.id), & &1.name) == ["Tlön", "ficciones"]
+    end
+
+    test "its facts are banked with the product seed" do
+      {:ok, _} = Bootstrap.ensure()
+      assert Repo.get_by(Server.Fact, intent: "machine:operator-vision")
+    end
+  end
 end
