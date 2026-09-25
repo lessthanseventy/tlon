@@ -33,11 +33,11 @@ defmodule Server.WorkspacesTest do
   end
 
   describe "all/0" do
-    test "lists workspaces newest-first" do
+    test "lists workspaces oldest first — the order they were declared in, so the first is where the cockpit opens" do
       {:ok, _a} = Workspaces.register(%{name: "First"})
       {:ok, _b} = Workspaces.register(%{name: "Second"})
 
-      assert ["Second", "First"] == Enum.map(Workspaces.all(), & &1.name)
+      assert ["First", "Second"] == Enum.map(Workspaces.all(), & &1.name)
     end
   end
 

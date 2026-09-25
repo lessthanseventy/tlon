@@ -229,7 +229,7 @@ defmodule Server.BootstrapTest do
       {:ok, default} = Bootstrap.ensure()
 
       assert default.name == "Machine"
-      assert Workspaces.all() |> Enum.sort_by(& &1.id) |> Enum.map(& &1.name) == ["Machine", "Accessibility"]
+      assert Enum.map(Workspaces.all(), & &1.name) == ["Machine", "Accessibility"]
       assert Enum.map(Workspaces.bench(default.id), & &1.name) == ["tertius"]
 
       assert [%{name: "Tlön", repos: [%{"name" => "tlon", "path" => "~/projects/tlon"}, %{"name" => "menard"}]}] =
