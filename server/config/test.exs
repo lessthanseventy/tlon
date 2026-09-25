@@ -20,6 +20,9 @@ config :server, bootstrap: false
 # degrades to keyword relevance instantly instead of reaching a real ollama.
 config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
 
+# Test transcripts are written moments before they are imported; nothing here is a live session.
+config :server, import_live_window_s: 0
+
 # Point the operator settings file away from the real ~/.config so the box's own overrides can
 # never leak into test assertions; tests that want one pass an explicit path.
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
@@ -41,6 +44,3 @@ config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b
 # inside the ficciones checkout, so a test that approves a gate committed intent.md into the real
 # repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
 config :server, workline_root: "/nonexistent/tlon-test-workline"
-
-# Test transcripts are written moments before they are imported; nothing here is a live session.
-config :server, import_live_window_s: 0
