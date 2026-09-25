@@ -102,6 +102,19 @@ defmodule Server.Dossier do
     Repo.all(from f in Fact, where: f.thread_id == ^thread.id and is_nil(f.forgotten_at), order_by: [desc: f.id])
   end
 
+  @doc "What the thread's project learned on its OTHER threads, newest first; `[]` with no project."
+  def facts_for_project(%Thread{project_id: nil}), do: []
+
+  def facts_for_project(%Thread{} = thread) do
+    Repo.all(
+      from f in Fact,
+        join: t in Thread,
+        on: t.id == f.thread_id,
+        where: t.project_id == ^thread.project_id and t.id != ^thread.id and is_nil(f.forgotten_at),
+        order_by: [desc: f.id]
+    )
+  end
+
   @doc "A fact by id, or nil — the load path for `recheck_fact`, scope-checked by its tool."
   def fact(id), do: Repo.get(Fact, id)
 

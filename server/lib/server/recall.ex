@@ -74,11 +74,11 @@ defmodule Server.Recall do
   end
 
   @doc """
-  Assemble a thread's working set from the DB: the pinned operator constraints plus the thread's
-  facts, each scored by strength (from its touch events) × relevance to `:query` (keyword bm25
-  soft-OR'd with cosine over `:query_embedding`/an ollama embedding of the query; uniform with no
-  query), cut to the token budget. `Server.Board.brief/1` derives the query from the thread's title
-  and the operator's latest message.
+  Assemble a thread's working set from the DB: the pinned operator constraints, the thread's facts
+  and its project's facts from other threads, each scored by strength (from its touch events) ×
+  relevance to `:query` (keyword bm25 soft-OR'd with cosine over `:query_embedding`/an ollama
+  embedding of the query; uniform with no query), cut to the token budget. `Server.Board.brief/1`
+  derives the query from the thread's title and the operator's latest message.
   """
   @spec working_set_for_thread(Thread.t(), keyword()) :: [candidate()]
   def working_set_for_thread(%Thread{} = thread, opts \\ []) do
@@ -90,13 +90,13 @@ defmodule Server.Recall do
     pinned_ids = MapSet.new(constraints, & &1.id)
     thread_facts = Dossier.facts_for_thread(thread)
 
-    # `:include_pinned` (default true) prepends the GLOBAL operator-constraint set — the session-
-    # start "pinned + thread facts" working set. A thread's LEARNINGS pane passes false: it ranks the
-    # thread's OWN facts only (a thread's own stated constraints are still pinned via `pinned_ids`),
-    # so one thread's dossier never shows another thread's constraints.
+    # `:include_pinned` (default true) is the brief's working set: the GLOBAL operator constraints, the
+    # thread's facts, and what its project learned on other threads, all ranked against one budget. A
+    # thread's LEARNINGS pane passes false: it ranks the thread's OWN facts only (its own stated
+    # constraints are still pinned via `pinned_ids`), so one thread's dossier never shows another's.
     facts =
       if Keyword.get(opts, :include_pinned, true),
-        do: Enum.uniq_by(constraints ++ thread_facts, & &1.id),
+        do: Enum.uniq_by(constraints ++ thread_facts ++ Dossier.facts_for_project(thread), & &1.id),
         else: thread_facts
 
     ids = Enum.map(facts, & &1.id)

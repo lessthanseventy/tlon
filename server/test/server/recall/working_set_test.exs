@@ -15,6 +15,23 @@ defmodule Server.Recall.WorkingSetTest do
 
   defp ids(ws), do: Enum.map(ws, & &1.id)
 
+  test "a thread's working set carries what its PROJECT learned on other threads, and no other project's" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "scoped"})
+    {:ok, tlon} = Server.Projects.register(%{workspace_id: ws.id, name: "tlon", repos: []})
+    {:ok, machine} = Server.Projects.register(%{workspace_id: ws.id, name: "machine", repos: []})
+    {:ok, earlier} = Channel.open_thread(%{title: "earlier", workspace_id: ws.id, project_id: tlon.id})
+    {:ok, now} = Channel.open_thread(%{title: "now", workspace_id: ws.id, project_id: tlon.id})
+    {:ok, elsewhere} = Channel.open_thread(%{title: "elsewhere", workspace_id: ws.id, project_id: machine.id})
+
+    {:ok, fact} =
+      Dossier.bank_fact(%{thread_id: earlier.id, kind: "learned", text: "menard edits Elixir", provenance: "derived"})
+
+    assert fact.id in ids(Recall.working_set_for_thread(now, budget: 10_000))
+    refute fact.id in ids(Recall.working_set_for_thread(elsewhere, budget: 10_000))
+    # the LEARNINGS pane stays the thread's own
+    refute fact.id in Enum.map(Recall.thread_learnings(now).shown, & &1.id)
+  end
+
   describe "coverage/0 — the Memory-pane observability read" do
     test "counts facts, embeddings, and the floor against the budget", %{thread: thread} do
       {:ok, msg} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "always use mise"})
