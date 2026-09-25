@@ -32,7 +32,7 @@ dir = "adapters/consult"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
 # menard's pi adapter lives in ~/projects/menard (standalone repo). Its gate is
-# `mise run test` there (bun test in pi/). No ficciones-side package to check.
+# `mise run test` there (bun test in pi/). No tlon-side package to check.
 
 ["adapters:lsp:check"]
 description = "adapters/lsp: the pi shim's precommit gate — install (frozen), typecheck, tests"

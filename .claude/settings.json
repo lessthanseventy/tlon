@@ -1,0 +1,59 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "allowLocalBinding": true,
+      "allowedDomains": [
+        "cache.nixos.org",
+        "channels.nixos.org",
+        "nixos.org",
+        "github.com",
+        "*.github.com",
+        "*.githubusercontent.com",
+        "hex.pm",
+        "*.hex.pm",
+        "registry.npmjs.org",
+        "mise.jdx.dev",
+        "ollama.com",
+        "registry.ollama.ai"
+      ]
+    },
+    "filesystem": {
+      "allowWrite": [
+        "~/.cache",
+        "~/.local/share",
+        "~/.local/state",
+        "~/.mix",
+        "~/.hex",
+        "~/.bun",
+        "~/.claude/projects/-home-andrew-projects-tlon/memory"
+      ]
+    },
+    "excludedCommands": [
+      "nix"
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(mise run *)",
+      "Bash(mise tasks)",
+      "Bash(mise tasks *)",
+      "Bash(mise exec *)",
+      "Bash(mise ls)",
+      "Bash(mix *)",
+      "Bash(sqlite3 *)",
+      "Bash(bun *)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(nix eval *)",
+      "Bash(nix build *)",
+      "Bash(nix flake check *)",
+      "Bash(nix flake show *)"
+    ]
+  }
+}

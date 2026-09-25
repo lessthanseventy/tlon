@@ -102,7 +102,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `server:roster` | server: who's on the clock — every live session, warm/cold (Staff.roster), against the LIVE service |
 | `server:seed` | server: apply the seed (base facts + baseline projects) to the scratch db — idempotent, keyed on intent |
 | `server:serve` | server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens |
-| `server:setup` | server: fetch deps, create + migrate a repo-local scratch db |
+| `server:setup` | server: fetch deps, create + migrate a repo-local scratch db, and point git at the repo's hooks (a coworker commits only on work/*) |
 | `server:spawn` | server: mint a fresh pane's env (open thread + staff agent + token) against the LIVE service — paste the export block into a pi pane |
 | `server:test` | server: run the test suite (the TDD loop) |
 | `server:watch` | server: re-run the suite on every change under server (cap signal) |
@@ -112,7 +112,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
-| `watch:stop` | Stop ficciones file-watchers left running in the background (safe: never signals its own shell) |
+| `watch:stop` | Stop tlon file-watchers left running in the background (safe: never signals its own shell) |
 
 ## workline
 

@@ -19,9 +19,9 @@ dir = "server"
 run = "mix server.eval"
 
 ["server:setup"]
-description = "server: fetch deps, create + migrate a repo-local scratch db"
+description = "server: fetch deps, create + migrate a repo-local scratch db, and point git at the repo's hooks (a coworker commits only on work/*)"
 dir = "server"
-run = "mix deps.get && mix ecto.create --quiet && mix ecto.migrate"
+run = "git config core.hooksPath scripts/git-hooks && mix deps.get && mix ecto.create --quiet && mix ecto.migrate"
 
 ["server:doctor"]
 description = "server: the 2am report against the scratch db"
@@ -146,11 +146,11 @@ run = "scripts/watch.sh"
 # `[w]atchexec` never appears literally in its own command line, so it only matches real
 # watchexec processes; `--project-origin $root` scopes it to this repo.
 ["watch:stop"]
-description = "Stop ficciones file-watchers left running in the background (safe: never signals its own shell)"
+description = "Stop tlon file-watchers left running in the background (safe: never signals its own shell)"
 run = '''
 root="$(git rev-parse --show-toplevel)"
 pids="$(pgrep -f "[w]atchexec.*--project-origin $root" || true)"
-if [ -n "$pids" ]; then echo "stopping watchexec: $pids"; kill $pids; else echo "no ficciones watchers running"; fi
+if [ -n "$pids" ]; then echo "stopping watchexec: $pids"; kill $pids; else echo "no tlon watchers running"; fi
 '''
 
 ["server:watch"]
