@@ -513,6 +513,18 @@ defmodule Console.ViewTest do
       assert data.link == :up
     end
 
+    test "an open reply holds the keys: the footer names the reply's verbs and the rail is not lit" do
+      focus = %Focus{in_terminal?: false, column: :left, pane: 0, cursors: %{}}
+      input = %{kind: :reply, thread_id: 7, buffer: "", cursor: 0}
+      boxes = View.compose(reads(%{focus: focus, input: input}), 120, 40)
+
+      assert {Panel.StatusBar, %{mode: {:input, :reply}}, _} = Enum.find(boxes, &match?({Panel.StatusBar, _, _}, &1))
+      assert {Panel.Border, %{focused: false}, _} = Enum.find(boxes, &match?({Panel.Border, %{title: "RAIL"}, _}, &1))
+
+      nav = View.compose(reads(%{focus: focus}), 120, 40)
+      assert {Panel.Border, %{focused: true}, _} = Enum.find(nav, &match?({Panel.Border, %{title: "RAIL"}, _}, &1))
+    end
+
     test "a down link rides the frame read through to the bar" do
       boxes = View.compose(reads(%{link: :down}), 120, 40)
 

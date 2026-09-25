@@ -171,6 +171,12 @@ defmodule Console.Panel.StatusBar do
   # pane's, are live — the NAV face's would be dead hints under it.
   defp mode_seg(:drawer), do: [{"esc", "close"}, {"h/l", "pane"}]
 
+  defp mode_seg({:input, :reply}),
+    do: [{"⏎", "send"}, {"⇧⏎", "newline"}, {"⇞⇟", "scroll"}, {"esc", "close"}, {"Alt+d", "drawer"}, {"^⇧K", "go to"}]
+
+  defp mode_seg({:input, :new_thread}), do: [{"⏎", "start"}, {"Tab", "project"}, {"esc", "cancel"}]
+  defp mode_seg({:input, :orchestrate}), do: [{"⏎", "send"}, {"esc", "cancel"}]
+
   defp space_seg(%{mode: :nav, workspace?: true} = data) do
     [
       {"^⇧P", "commands"},
@@ -178,7 +184,6 @@ defmodule Console.Panel.StatusBar do
       {"c", "reply"},
       {"n", "new"},
       {"v", "term"},
-      {"m", "model"},
       {"Alt+\\", pane_mode(data[:session_pane_mode])}
     ]
   end

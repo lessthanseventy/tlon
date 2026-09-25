@@ -985,9 +985,7 @@ defmodule Console.Cockpit do
         # fire here too, spawning a generic "pi" as an invisible per-thread terminal that never got
         # the message (the "agent booted idle" bug) and doubled the real lead's spawn.
         _ = Channel.post(%{thread_id: thread.id, author: operator, body: text})
-
-        {:noreply,
-         render(%{state | focused_id: thread.id, flash: "→ started “#{thread_title(text)}” · waking its lead"})}
+        apply_effect({:open_thread_view, thread.id}, %{state | flash: started_flash(thread, text)})
 
       {:error, _changeset} ->
         {:noreply, render(%{state | flash: "couldn't create the thread"})}
@@ -1352,6 +1350,14 @@ defmodule Console.Cockpit do
         {:noreply, render(%{state | flash: "nothing to yank here"})}
     end
   end
+
+  # A workspace with no bench gives a new thread no lead: say so, and where one is seated, rather
+  # than promise a wake that nobody will answer.
+  defp started_flash(%{agent_id: nil}, text),
+    do:
+      "→ started “#{thread_title(text)}” · no one is on this workspace's bench — seat a coworker in the drawer's CONFIG"
+
+  defp started_flash(_thread, text), do: "→ started “#{thread_title(text)}” · waking its lead"
 
   defp act_on_habit(state, habit, action) do
     {verb, result} =

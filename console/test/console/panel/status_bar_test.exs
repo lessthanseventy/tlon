@@ -59,27 +59,30 @@ defmodule Console.Panel.StatusBarTest do
     assert line =~ "^⇧P commands"
     assert line =~ "c reply"
     assert line =~ "n new"
-    assert line =~ "m model"
     assert line =~ "j/k commits"
-
-    # The row is ONE line and clips from the right, so the pane's own verbs give first — that
-    # ordering (mode → space → pane, most load-bearing first) is the design. Adding `^⇧P` to the
-    # space segment costs the LAST pane hint at 120 columns; the palette earns the space by being
-    # the one key that finds every other.
-    refute line =~ "⏎ diff"
+    # `m` is the rail's move verb; the model cycle it used to name here writes a file nothing reads
+    refute line =~ "m model"
   end
 
   # The row is ONE line and clips from the right, so the pane's own verbs give first — that
-  # ordering (mode → space → pane, most load-bearing first) is the design. Adding `^⇧P` to the
-  # space segment costs the last pane hint at 120 columns; the palette earns the space by being
-  # the one key that finds every other.
+  # ordering (mode → space → pane, most load-bearing first) is the design.
   test "a narrow frame drops the tail pane verb, never the mode chip or the palette chord" do
     data = base(%{mode: :nav, workspace?: true, pane_hints: [{"j/k", "commits"}, {"⏎", "diff"}]})
-    line = text([hd(StatusBar.render(data, rect()))])
+    line = text([hd(StatusBar.render(data, %{rect() | w: 100}))])
 
     assert line =~ "^␣ term"
     assert line =~ "^⇧P commands"
     refute line =~ "⏎ diff"
+  end
+
+  test "an input drawn in its own band names its verbs, not the nav face's dead ones" do
+    [reply] = StatusBar.render(base(%{mode: {:input, :reply}, workspace?: true}), rect())
+    assert text([reply]) =~ "⏎ send"
+    assert text([reply]) =~ "esc close"
+    refute text([reply]) =~ "j/k"
+
+    [title] = StatusBar.render(base(%{mode: {:input, :new_thread}, workspace?: true}), rect())
+    assert text([title]) =~ "Tab project"
   end
 
   test "NAV mode advertises the drawer — the one key that opens the panes the rail no longer holds" do
