@@ -33,40 +33,42 @@ defmodule Server.Import.ClaudeSessions do
   ]
   @body_cap 6_000
 
-  @doc "One transcript → `%{id, cwd, title, started_at, turns}`, or nil when it holds no human prompt."
+  @doc """
+  One transcript → `%{source, id, cwd, title, started_at, turns}`, or nil when it holds no human
+  prompt or a program drove it.
+  """
   def parse(path) do
-    entries =
-      path
-      |> File.stream!()
-      |> Enum.flat_map(fn line ->
-        case JSON.decode(line) do
-          {:ok, %{} = e} -> [e]
-          _ -> []
-        end
-      end)
+    entries = decode(path)
 
+    case turns(entries) do
+      [{:operator, first, _} | _] = turns -> if machine?(first), do: nil, else: session(path, entries, first, turns)
+      _ -> nil
+    end
+  end
+
+  defp decode(path) do
+    path
+    |> File.stream!()
+    |> Enum.flat_map(fn line ->
+      case JSON.decode(line) do
+        {:ok, %{} = e} -> [e]
+        _ -> []
+      end
+    end)
+  end
+
+  defp session(path, entries, first, turns) do
     # pi opens its transcript with a `session` entry; Claude Code has none
     header = Enum.find(entries, &(&1["type"] == "session"))
-    turns = turns(entries)
 
-    case turns do
-      [{:operator, first, _} | _] ->
-        if machine?(first) do
-          nil
-        else
-          %{
-            source: if(header, do: :pi, else: :claude_code),
-            id: (header && header["id"]) || Path.basename(path, ".jsonl"),
-            cwd: Enum.find_value(entries, & &1["cwd"]),
-            title: Enum.find_value(Enum.reverse(entries), &title/1) || String.slice(first, 0, 60),
-            started_at: at(hd(entries)["timestamp"] || Enum.find_value(entries, & &1["timestamp"])),
-            turns: turns
-          }
-        end
-
-      _ ->
-        nil
-    end
+    %{
+      source: if(header, do: :pi, else: :claude_code),
+      id: (header && header["id"]) || Path.basename(path, ".jsonl"),
+      cwd: Enum.find_value(entries, & &1["cwd"]),
+      title: Enum.find_value(Enum.reverse(entries), &title/1) || String.slice(first, 0, 60),
+      started_at: at(hd(entries)["timestamp"] || Enum.find_value(entries, & &1["timestamp"])),
+      turns: turns
+    }
   end
 
   # pi-research drives pi with a prompt that is a path into its own install
