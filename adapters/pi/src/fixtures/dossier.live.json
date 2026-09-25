@@ -1,0 +1,64 @@
+{
+  "blockers": {
+    "more": 0,
+    "shown": []
+  },
+  "checks": {
+    "more": 0,
+    "shown": []
+  },
+  "cited": [],
+  "commits": {
+    "more": 0,
+    "shown": []
+  },
+  "done": {
+    "more": 0,
+    "shown": []
+  },
+  "goal": "orient: what is excessibility",
+  "lead": "hronir",
+  "learnings": {
+    "more": 0,
+    "shown": [
+      {
+        "at": "2026-09-25T09:20:21Z",
+        "certainty": "checked",
+        "check_cmd": "head -200 README.md && cat mix.exs",
+        "id": 25,
+        "kind": "learned",
+        "provenance": "derived",
+        "text": "Excessibility is an accessibility snapshot-testing library."
+      }
+    ]
+  },
+  "next": null,
+  "recent": [
+    {
+      "at": "2026-09-25T09:19:28Z",
+      "author": "andrew",
+      "body": "Read-only task, do not edit anything: read the README and mix.exs of this repo, ",
+      "consult": false,
+      "id": 16,
+      "reply_to": null
+    },
+    {
+      "at": "2026-09-25T09:20:17Z",
+      "author": "hronir",
+      "body": "Read the README and mix.exs — here's the summary.\n\n**What Excessibility does (3 ",
+      "consult": false,
+      "id": 17,
+      "reply_to": 16
+    }
+  ],
+  "thread_id": 15,
+  "todos": {
+    "more": 0,
+    "shown": []
+  },
+  "unknowns": {
+    "more": 0,
+    "shown": []
+  },
+  "workline": null
+}

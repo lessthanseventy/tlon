@@ -10,7 +10,7 @@ const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString(
 function dossier(over: Partial<Dossier> = {}): Dossier {
   return {
     thread_id: 7,
-    north_star: "review PR 329",
+    goal: "review PR 329",
     lead: "Carl",
     todos: { shown: [], more: 0 },
     next: null,
@@ -19,7 +19,7 @@ function dossier(over: Partial<Dossier> = {}): Dossier {
     done: { shown: [], more: 0 },
     blockers: { shown: [], more: 0 },
     checks: { shown: [], more: 0 },
-    chatter: [],
+    recent: [],
     ...over,
   };
 }
@@ -299,7 +299,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
   test("recent chatter is carried so a fresh session has the conversation", () => {
     const out = renderBrief(
       dossier({
-        chatter: [
+        recent: [
           { id: 1, author: "andrew", body: "start with the drain race", reply_to: null, at: minsAgo(20) },
         ],
       }),
@@ -312,7 +312,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
   test("a consult ask renders as a request for an answer, not ambient chatter", () => {
     const out = renderBrief(
       dossier({
-        chatter: [
+        recent: [
           { id: 1, author: "pi", body: "is this design sound?", reply_to: null, at: minsAgo(5), consult: true },
         ],
       }),
@@ -320,5 +320,18 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
     );
     expect(out).toContain("pi is consulting you — reply to answer");
     expect(out).toContain("is this design sound?");
+  });
+});
+
+// The shape a live server returned (thread 15, 2026-09-25), bodies trimmed. The hand-built
+// fixture above drifted from the server (north_star/chatter vs goal/recent) and every pi
+// coworker lost its brief to a TypeError; this one is the server's own output.
+import live from "./fixtures/dossier.live.json";
+
+describe("renderBrief — the live server's dossier", () => {
+  test("renders the goal and the recent messages without throwing", () => {
+    const out = renderBrief(live as unknown as Dossier, NOW);
+    expect(out).toContain("# Brief: orient: what is excessibility");
+    expect(out).toContain("- andrew: Read-only task");
   });
 });

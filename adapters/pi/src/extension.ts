@@ -300,7 +300,7 @@ export default function adapters(pi: ExtensionAPI): void {
 // The widget: the live at-a-glance the human driving pi directly sees — the same dossier
 // the cockpit shows (pi doc §2b): the goal, the open todos (and which is next), the blockers.
 function updateWidget(ctx: ExtensionContext, d: Dossier): void {
-  const lines = [`tlon · ${d.north_star ?? "(untitled)"} — ${d.lead ?? "unstaffed"}`];
+  const lines = [`tlon · ${d.goal ?? "(untitled)"} — ${d.lead ?? "unstaffed"}`];
   const todos = d.todos.shown.length + d.todos.more;
   if (todos > 0) {
     lines.push(`todos (${todos})${d.next ? ` → next: ${d.next.text}` : ""}`);

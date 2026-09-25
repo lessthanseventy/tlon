@@ -90,7 +90,7 @@ export interface Capped<T> {
 
 export interface Dossier {
   thread_id: number;
-  north_star: string | null;
+  goal: string | null;
   lead: string | null;
   todos: Capped<Todo>;
   next: Todo | null;
@@ -105,7 +105,7 @@ export interface Dossier {
   // The workline gate (nil for a plain thread) and the threads the tail cites with #N.
   workline?: { stage: string; awaiting: string | null; artifact_ok: boolean; why: string } | null;
   cited?: { id: number; title: string; stage: string | null; lead: string | null }[];
-  chatter: ChatterMessage[];
+  recent: ChatterMessage[];
 }
 
 export interface Commit {
@@ -124,7 +124,7 @@ const CHATTER_TAIL = 5;
 export function renderBrief(d: Dossier, now: Date = new Date(), model?: string): string {
   const lines: string[] = [];
 
-  const goal = d.north_star ?? "(untitled thread)";
+  const goal = d.goal ?? "(untitled thread)";
   lines.push(`# Brief: ${goal}`);
   lines.push(`Lead: ${d.lead ?? "unstaffed"}  ·  thread ${d.thread_id}`);
   // The session states who it is, so a model signs its commits with its OWN name and can't
@@ -191,9 +191,9 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string):
     pushMore(lines, d.done.more, "done");
   }
 
-  if (d.chatter.length > 0) {
+  if (d.recent.length > 0) {
     lines.push("", "## Recent chatter");
-    for (const m of d.chatter.slice(-CHATTER_TAIL)) lines.push(renderChatter(m));
+    for (const m of d.recent.slice(-CHATTER_TAIL)) lines.push(renderChatter(m));
   }
 
   // A standing nudge, not state — the one behavior that keeps a thread from going cold. The
@@ -275,7 +275,7 @@ function newestAt(d: Dossier): Date | null {
   for (const c of d.checks.shown) collect(c.at);
   for (const e of d.done.shown) collect(e.at);
   for (const t of d.todos.shown) collect(t.at);
-  for (const m of d.chatter) collect(m.at);
+  for (const m of d.recent) collect(m.at);
   if (stamps.length === 0) return null;
   return new Date(Math.max(...stamps));
 }
