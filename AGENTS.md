@@ -93,18 +93,21 @@ then read 1800 lines," every time.
 
 ### Edit Elixir with Menard, not sed/python/grep
 
-`modules/menard` is the repo's AST-aware toolbox for Elixir (Sourceror patches: only the bytes you
-named change). **`modules/menard/AGENTS.md` is the reference** — which verb for which shape, what
-each guarantees, and the gotchas no error message can teach. It ships with the plugin, so it is the
-one copy; this section is only the doors into it from here.
+Menard ([its own repo](https://github.com/lessthanseventy/menard), checked out at `~/projects/menard`)
+is the AST-aware toolbox for Elixir (Sourceror patches: only the bytes you named change).
+**[Its `AGENTS.md`](https://github.com/lessthanseventy/menard/blob/main/AGENTS.md) is the
+reference** — which verb for which shape, what each guarantees, and the gotchas no error message can
+teach. It ships with the plugin, so it is the one copy; this section is only the doors into it from here.
 
 Three doors onto one library:
 
-- `mise run menard -- VERB …` — always compiles the current code. Dashes and underscores both work.
+- `mise run menard -- VERB …` — runs the `~/projects/menard` checkout, always compiling its current
+  code. Dashes and underscores both work.
 - the `menard` stdio **MCP** in Claude Code — runs the code it started with, so **restart Claude
   after changing Menard**.
 - the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb` tools, scoped to
-  their worktree.
+  their worktree — the server's own dep, pinned by git ref in `modules/server/mix.exs`; bump the
+  ref to give them a newer menard.
 
 `mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape hatch for
 editing Menard WITH Menard, where a half-applied edit otherwise locks the tool out of finishing it.
@@ -114,7 +117,7 @@ is blocked outright, by a `PreToolUse` guard the plugin ships alongside a `PostT
 that runs the file's own project formatter on every write (`console`'s Styler included). Neither is
 in `.claude/settings.json`, so a clone without the plugin gets no block; the rule holds regardless.
 
-    /plugin marketplace add ~/projects/ficciones && /plugin install menard@ficciones
+    /plugin marketplace add lessthanseventy/menard && /plugin install menard@menard
 
 Still missing a verb: a `@spec` above a clause whose signature `rewrite` changes.
 

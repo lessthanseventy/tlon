@@ -151,7 +151,6 @@ defmodule Server.Worktree do
     "deps",
     "node_modules",
     "modules/server/deps",
-    "modules/menard/deps",
     "modules/desktop/shell/node_modules"
   ]
 

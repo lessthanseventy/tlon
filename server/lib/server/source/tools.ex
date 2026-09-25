@@ -59,29 +59,12 @@ defmodule Server.Source.Tools do
 
   @doc """
   A run verb in the worktree — `:check` (`mix precommit`), `:test` (args: files/lines), `:format`
-  (args: files), `:compile` — via `mix menard.run --in <worktree>`, whose one JSON line is the answer.
+  (args: files), `:compile` — as `Menard.Run.result/3`'s one structured map.
   """
   @spec run(Server.Thread.t(), :check | :test | :format | :compile, [String.t()]) :: {:ok, map()} | {:error, String.t()}
   def run(thread, verb, args) when verb in [:check, :test, :format, :compile] do
-    with {:ok, root} <- root(thread) do
-      {out, status} =
-        System.cmd("mix", ["menard.run", "--in", root, Atom.to_string(verb) | args],
-          cd: menard_dir(),
-          stderr_to_stdout: true,
-          env: [{"MIX_ENV", "dev"}]
-        )
-
-      last = out |> String.trim() |> String.split("\n") |> List.last()
-
-      case JSON.decode(last || "") do
-        {:ok, %{"ok" => ok} = row} -> {:ok, row |> Map.new(fn {k, v} -> {String.to_atom(k), v} end) |> Map.put(:ok, ok)}
-        _ -> {:ok, %{ok: false, exit: status, tail: out |> String.split("\n") |> Enum.take(-12) |> Enum.join("\n")}}
-      end
-    end
+    with {:ok, root} <- root(thread), do: {:ok, Menard.Run.result(root, Atom.to_string(verb), args)}
   end
-
-  # menard's own project: its mix tasks run from there and act on the worktree via --in
-  defp menard_dir, do: Application.get_env(:server, :menard_dir, Path.expand("../menard", File.cwd!()))
 
   defp root(thread) do
     case Server.worktree_for_thread(thread) do
