@@ -539,6 +539,8 @@ defmodule Console.Cockpit do
   end
 
   def handle_info({:workline_advanced, _thread}, state), do: {:noreply, render(state)}
+  # A prompt resolved (answered in the pane, superseded, window gone): the badge and the thread repaint.
+  def handle_info({:prompt_resolved, _row}, state), do: {:noreply, render(state)}
 
   # Habit review events refresh the Habits panel (Tlön). No desktop notification — a proposed
   # habit is a quiet queue entry for review, not an interrupt.
@@ -976,9 +978,17 @@ defmodule Console.Cockpit do
     flashing(state, "post", fn ->
       operator = Console.Config.operator()
 
-      case Channel.post(%{thread_id: thread_id, author: operator, body: body}) do
-        {:ok, _message} -> {:noreply, render(%{state | flash: "posted"})}
-        {:error, _changeset} -> {:noreply, render(%{state | flash: "couldn't post — is the thread open?"})}
+      # Through Server.Attention.respond (piece A): with a coworker waiting on a dialog, a body
+      # naming one of its options (`y`, `n`, `2`, `Yes`) answers it in the pane; anything else posts.
+      case Console.Server.Attention.respond(thread_id, operator, body) do
+        {:ok, %{kind: "chat", reply_to: reply_to}} when is_integer(reply_to) ->
+          {:noreply, render(%{state | flash: "answered"})}
+
+        {:ok, _message} ->
+          {:noreply, render(%{state | flash: "posted"})}
+
+        {:error, _changeset} ->
+          {:noreply, render(%{state | flash: "couldn't post — is the thread open?"})}
       end
     end)
   end

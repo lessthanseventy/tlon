@@ -19,4 +19,5 @@ defmodule Console.Server do
   defmodule Doctor, do: use(Facade, target: Server.Doctor)
   defmodule Presence.Thinking, do: use(Facade, target: Server.Presence.Thinking)
   defmodule MCP.Spawn, do: use(Facade, target: Server.MCP.Spawn)
+  defmodule Attention, do: use(Facade, target: Server.Attention)
 end

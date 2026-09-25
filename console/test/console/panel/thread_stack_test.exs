@@ -16,6 +16,40 @@ defmodule Console.Panel.ThreadStackTest do
     )
   end
 
+  test "an open prompt renders the ask and its options; a resolved one is a receipt" do
+    options = [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]
+
+    cards = [
+      card(%{
+        id: 42,
+        title: "orient",
+        messages: [
+          %{
+            author: "tlon",
+            body: "…",
+            kind: "prompt",
+            payload: %{"summary" => "bash: env", "options" => options},
+            resolved_at: nil,
+            resolution: nil
+          },
+          %{
+            author: "tlon",
+            body: "…",
+            kind: "prompt",
+            payload: %{"summary" => "bash: ls", "options" => options},
+            resolved_at: ~U[2026-09-25 10:00:00Z],
+            resolution: "answered: y"
+          }
+        ]
+      })
+    ]
+
+    out = %{cards: cards, opened: 42} |> ThreadStack.render(rect()) |> text()
+    assert out =~ "⚑ waiting on you — bash: env"
+    assert out =~ "(y) Yes · (n) No"
+    assert out =~ "⚑ bash: ls — answered: y"
+  end
+
   test "an empty stack renders a placeholder" do
     assert %{cards: []} |> ThreadStack.render(rect()) |> text() =~ "no threads yet"
   end

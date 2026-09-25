@@ -115,6 +115,21 @@ defmodule Console.Panel.ThreadStack do
     |> Enum.concat()
   end
 
+  # A coworker waiting on the operator (Server.Attention): the ask, then its options on one line —
+  # the reply box answers with a key. Once resolved it reads as a quiet receipt.
+  defp message_rows(%{kind: "prompt", payload: %{"summary" => summary, "options" => options}, resolved_at: nil}, w) do
+    keys = Enum.map_join(options, " · ", &"(#{&1["key"]}) #{&1["label"]}")
+
+    [
+      [{"⚑ waiting on you — #{summary}", :st_await}]
+      | Enum.map(Console.Text.wrap(keys, max(w - String.length(@indent), 1)), &[{@indent <> &1, :dim}])
+    ]
+  end
+
+  defp message_rows(%{kind: "prompt", payload: %{"summary" => summary}, resolution: resolution}, _w) do
+    [[{"⚑ #{summary} — #{resolution}", :dim}]]
+  end
+
   # A message as a chat bubble: the author on its own line, then the body rendered as MARKDOWN
   # (Console.Markdown — bold/code/lists/headings), each row indented under the author. Reads like a
   # chat, not a wall of text: the old `one_line/1` flattened the whole body onto one wrapped line.

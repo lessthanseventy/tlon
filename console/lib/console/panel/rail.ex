@@ -141,6 +141,8 @@ defmodule Console.Panel.Rail do
   # One badge, by priority: waiting on you, then unread, then working.
   defp badge(thread, face) do
     cond do
+      # a coworker waiting on a dialog (Server.Attention) is "awaiting you" exactly like a parked gate
+      is_map(thread[:prompt]) -> [{"!", badge_style(face, :st_await)}]
       is_binary(thread[:awaiting]) and thread[:awaiting] != "" -> [{"!", badge_style(face, :st_await)}]
       thread[:unread?] == true -> [{"•", badge_style(face, :accent)}]
       thread[:working] == true -> [{"…", badge_style(face, :st_working)}]

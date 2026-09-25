@@ -59,6 +59,20 @@ defmodule Console.Panel.RailTest do
   defp rows(over \\ %{}), do: Rail.render(data(over), @rect)
   defp row_with(rows, substr), do: Enum.find(rows, fn row -> row_text(row) =~ substr end)
 
+  test "a coworker waiting on a dialog is awaiting you — the ! badge, before unread and working" do
+    rows =
+      rows(
+        solo([
+          thread(%{title: "orient", prompt: %{id: 7, summary: "bash: env", options: []}, unread?: true, working: true})
+        ])
+      )
+
+    row = row_text(row_with(rows, "orient"))
+
+    assert row =~ "!"
+    refute row =~ "•"
+  end
+
   describe "render" do
     test "workspaces, then the ACTIVE one's threads; one badge per row by priority" do
       texts = Enum.map(rows(), &row_text/1)
