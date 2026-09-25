@@ -41,6 +41,46 @@ defmodule Server.Import.ClaudeSessionsTest do
       "message" => %{"role" => "user", "content" => [%{"type" => "tool_result"}]}
     }
 
+  test "a switchboard wake is not a conversation: its text already lives in the thread it woke", ctx do
+    transcript(ctx.dir, "s1", [
+      user("[tlon thread #9] andrew: make me laugh", "2026-09-01T10:00:00Z"),
+      said("no", "2026-09-01T10:00:01Z")
+    ])
+
+    transcript(ctx.dir, "s2", [
+      user("[funes thread #2] andrew: finish the joke", "2026-09-01T10:00:00Z"),
+      said("no", "2026-09-01T10:00:01Z")
+    ])
+
+    assert {:ok, %{imported: 0, skipped: 2}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
+  end
+
+  test "a resumed or forked session is one conversation: only its longest copy is imported", ctx do
+    shared = [user("redesign the dashboard", "2026-09-01T10:00:00Z"), said("On it.", "2026-09-01T10:00:05Z")]
+
+    transcript(
+      ctx.dir,
+      "branch",
+      shared ++ [user("abandoned turn", "2026-09-01T10:01:00Z"), said("x", "2026-09-01T10:01:01Z")]
+    )
+
+    transcript(
+      ctx.dir,
+      "trunk",
+      shared ++
+        [
+          user("keep going", "2026-09-01T10:02:00Z"),
+          said("Done.", "2026-09-01T10:02:01Z"),
+          user("commit", "2026-09-01T10:03:00Z"),
+          said("Committed.", "2026-09-01T10:03:01Z")
+        ]
+    )
+
+    assert {:ok, %{imported: 1, skipped: 1}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
+    thread = Repo.one!(Thread)
+    assert Repo.exists?(from m in Message, where: m.thread_id == ^thread.id and m.body == "Committed.")
+  end
+
   test "a session from outside every repo lands on the workspace's default project, whatever its name", ctx do
     {:ok, machine} = Projects.register(%{workspace_id: ctx.ws.id, name: "machine", repos: []})
     {:ok, _} = Workspaces.edit(ctx.ws, %{default_project_id: machine.id})

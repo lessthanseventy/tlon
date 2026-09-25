@@ -19,7 +19,15 @@ defmodule Server.Import.ClaudeSessions do
 
   # Sessions a program drove (the memory extractor, eval arms, the switchboard's wake) — not a
   # conversation with the operator.
-  @machine_openers ["You extract", "You are a strict evaluator", "New message on thread", "ARM:", "[server thread"]
+  @machine_openers [
+    "You extract",
+    "You are a strict evaluator",
+    "New message on thread",
+    "ARM:",
+    "[server thread",
+    "[tlon thread",
+    "[funes thread"
+  ]
   @body_cap 6_000
 
   @doc "One transcript → `%{id, cwd, title, started_at, turns}`, or nil when it holds no human prompt."
@@ -122,21 +130,25 @@ defmodule Server.Import.ClaudeSessions do
   def import_dir(dir, workspace_id) do
     projects = Projects.in_workspace(workspace_id)
     fallback = Projects.default(workspace_id)
+    paths = dir |> Path.expand() |> Path.join("*/*.jsonl") |> Path.wildcard()
+    sessions = paths |> Enum.map(&parse/1) |> Enum.reject(&is_nil/1) |> longest_copies()
 
-    dir
-    |> Path.expand()
-    |> Path.join("*/*.jsonl")
-    |> Path.wildcard()
-    |> Enum.reduce(%{imported: 0, skipped: 0}, fn path, tally ->
-      with %{} = session <- parse(path),
-           false <- imported?(session.id),
-           {:ok, _} <- insert(session, workspace_id, project_for(session.cwd, projects, fallback)) do
-        Map.update!(tally, :imported, &(&1 + 1))
-      else
-        _ -> Map.update!(tally, :skipped, &(&1 + 1))
-      end
-    end)
-    |> then(&{:ok, &1})
+    imported =
+      Enum.count(sessions, fn session ->
+        not imported?(session.id) and
+          match?({:ok, _}, insert(session, workspace_id, project_for(session.cwd, projects, fallback)))
+      end)
+
+    {:ok, %{imported: imported, skipped: length(paths) - imported}}
+  end
+
+  # A resumed or forked session copies the conversation it came from into a new file, so one
+  # opening turn (same text, same time) heads several transcripts; the longest is the conversation.
+  defp longest_copies(sessions) do
+    sessions
+    |> Enum.group_by(fn %{turns: [{:operator, text, at} | _]} -> {text, at} end)
+    |> Enum.map(fn {_opening, copies} -> Enum.max_by(copies, &length(&1.turns)) end)
+    |> Enum.sort_by(& &1.started_at, DateTime)
   end
 
   defp receipt(id), do: "↳ imported from Claude Code session #{id}"
