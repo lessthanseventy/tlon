@@ -28,7 +28,7 @@ scripts="$(ls scripts/*.sh | grep -v '/check-names.sh$')"
 
 # Everything modules/adapters ships as source, minus each package's node_modules.
 adapter_sources() { find modules/adapters -path '*/node_modules' -prune -o -type f \( -name '*.ts' -o -name '*.sh' \) -print; }
-guides() { find . -path '*/node_modules' -prune -o -path ./.git -prune -o -path ./docs -prune -o \( -name AGENTS.md -o -name README.md \) -print; }
+guides() { find . -path '*/node_modules' -prune -o -path ./.worktrees -prune -o -path ./.git -prune -o -path ./docs -prune -o \( -name AGENTS.md -o -name README.md \) -print; }
 
 # ---- (a) Elixir modules -----------------------------------------------------------------------
 defined="$(grep -rhoE 'defmodule +[A-Z][A-Za-z0-9_.]*' modules/server/lib modules/console/lib | awk '{print $2}' | sort -u)"
