@@ -136,7 +136,7 @@ defmodule Server.Import.ClaudeSessions do
     imported =
       Enum.count(sessions, fn session ->
         not imported?(session.id) and
-          match?({:ok, _}, insert(session, workspace_id, project_for(session.cwd, projects, fallback)))
+          match?({:ok, _}, insert(session, workspace_id, home_for(session.cwd, projects, fallback)))
       end)
 
     {:ok, %{imported: imported, skipped: length(paths) - imported}}
@@ -158,19 +158,19 @@ defmodule Server.Import.ClaudeSessions do
   end
 
   # The deepest repo that contains the cwd, so ~/projects/ficciones/modules/x lands on ficciones.
-  defp project_for(nil, _projects, fallback), do: fallback
+  defp home_for(nil, _projects, fallback), do: {fallback, nil}
 
-  defp project_for(cwd, projects, fallback) do
+  defp home_for(cwd, projects, fallback) do
     projects
     |> Enum.flat_map(fn p ->
-      for %{"path" => path} <- p.repos || [], not String.contains?(path, "*"), do: {Path.expand(path), p}
+      for %{"path" => path} <- p.repos || [], not String.contains?(path, "*"), do: {Path.expand(path), p, path}
     end)
-    |> Enum.filter(fn {root, _} -> cwd == root or String.starts_with?(cwd, root <> "/") end)
-    |> Enum.max_by(fn {root, _} -> String.length(root) end, fn -> {nil, fallback} end)
-    |> elem(1)
+    |> Enum.filter(fn {root, _, _} -> cwd == root or String.starts_with?(cwd, root <> "/") end)
+    |> Enum.max_by(fn {root, _, _} -> String.length(root) end, fn -> {nil, fallback, nil} end)
+    |> then(fn {_root, project, path} -> {project, path} end)
   end
 
-  defp insert(session, workspace_id, project) do
+  defp insert(session, workspace_id, {project, repo}) do
     operator = Application.get_env(:server, :operator, "andrew")
 
     Repo.transaction(fn ->
@@ -182,6 +182,7 @@ defmodule Server.Import.ClaudeSessions do
           born: "operator",
           workspace_id: workspace_id,
           project_id: project && project.id,
+          repo: repo,
           created_at: session.started_at
         })
 

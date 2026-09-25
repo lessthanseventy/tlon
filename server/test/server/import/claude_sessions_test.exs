@@ -41,6 +41,25 @@ defmodule Server.Import.ClaudeSessionsTest do
       "message" => %{"role" => "user", "content" => [%{"type" => "tool_result"}]}
     }
 
+  test "the thread records which of its project's repos the session ran in", ctx do
+    repos = [%{"name" => "ficciones", "path" => "/p/ficciones"}, %{"name" => "mix_master", "path" => "/p/mix_master"}]
+    {:ok, tlon} = Projects.register(%{workspace_id: ctx.ws.id, name: "tlon", repos: repos})
+
+    transcript(ctx.dir, "s1", [
+      %{
+        "type" => "user",
+        "cwd" => "/p/mix_master/lib",
+        "timestamp" => "2026-09-01T10:00:00Z",
+        "message" => %{"role" => "user", "content" => "fix the board"}
+      },
+      said("Fixed.", "2026-09-01T10:00:01Z")
+    ])
+
+    assert {:ok, %{imported: 1}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
+    assert %{project_id: pid, repo: "/p/mix_master"} = Repo.one!(Thread)
+    assert pid == tlon.id
+  end
+
   test "a switchboard wake is not a conversation: its text already lives in the thread it woke", ctx do
     transcript(ctx.dir, "s1", [
       user("[tlon thread #9] andrew: make me laugh", "2026-09-01T10:00:00Z"),
