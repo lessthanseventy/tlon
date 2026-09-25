@@ -46,6 +46,8 @@ defmodule Console.Cockpit do
   require Space
 
   @doc "Start the cockpit and block until the operator quits — the entry point `mix console.run` calls."
+  @clear_screen "\e[2J"
+
   @spec run() :: :ok
   defdelegate run, to: Recovery
 
@@ -121,6 +123,11 @@ defmodule Console.Cockpit do
         # Enable button-motion tracking (\e[?1002h) so a drag streams motion, not just press/release
         # — the Tlön selection highlights live instead of only on mouseup. See @mouse_motion_enable.
         IO.write(@mouse_motion_enable)
+
+        # termbox2 paints only what differs from a front buffer it assumes blank, so a cell the frame
+        # leaves empty kept whatever the shell printed there (the stray "e" of mise's task echo in the
+        # rail gutter). Blank the real screen to match before the first paint.
+        IO.write(@clear_screen)
 
         state = render(initial_state(driver))
 
