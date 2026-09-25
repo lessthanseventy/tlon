@@ -1,7 +1,8 @@
 defmodule Console.Panel.Rail do
   @moduledoc """
   The always-on left rail (UX slice 1, design 2026-09-08 §2; channels slice 1b): **workspaces as
-  a short list, under the active one its channels, and under the OPEN channel its threads** —
+  a short list, under the active one its channels, and under the OPEN channel its threads** (grouped
+  under a heading per project once they span more than one) —
   Slack's sidebar with warmth. It replaces both the icon spine
   and the funes rail; the situational panes it displaced live in the drawer.
 
@@ -59,12 +60,12 @@ defmodule Console.Panel.Rail do
   def hints(_data), do: [{"j/k", "row"}, {"⏎", "open"}, {"m", "move"}, {"#", "channel"}, {"d", "delete"}]
 
   @doc "The entry under `local_y` (the right-click context menu's target), or nil."
-  @spec entry_at(map(), Panel.rect(), non_neg_integer()) :: {:workspace | :channel | :thread, map()} | nil
+  @spec entry_at(map(), Panel.rect(), non_neg_integer()) :: {:workspace | :channel | :project | :thread, map()} | nil
   def entry_at(%{groups: _} = data, _rect, local_y), do: data |> entries() |> Enum.at(Panel.scroll_offset(data) + local_y)
   def entry_at(_data, _rect, _local_y), do: nil
 
-  @doc "The rail's rows as data: every workspace; the ACTIVE one's channels; the OPEN channel's threads."
-  @spec entries(map()) :: [{:workspace, map()} | {:channel, map()} | {:thread, map()}]
+  @doc "The rail's rows as data: every workspace; the ACTIVE one's channels; the OPEN channel's threads, under a heading per project once they span more than one."
+  @spec entries(map()) :: [{:workspace, map()} | {:channel, map()} | {:project, map()} | {:thread, map()}]
   def entries(%{groups: groups} = data) do
     Enum.flat_map(groups, fn group ->
       workspace = group.workspace
@@ -75,13 +76,29 @@ defmodule Console.Panel.Rail do
         {:workspace, workspace}
         | Enum.flat_map(channels, fn channel ->
             threads = if channel.id == open, do: channel[:threads] || [], else: []
-            [{:channel, channel} | Enum.map(threads, &{:thread, &1})]
+            [{:channel, channel} | by_project(threads, group[:projects] || [])]
           end)
       ]
     end)
   end
 
   def entries(_data), do: []
+
+  # Threads under a heading per project, in the workspace's project order, once more than one
+  # project has threads here. Newest-first order holds within a project; a project with no thread
+  # in the channel gets no heading. Threads on a project the read doesn't know trail at the end.
+  defp by_project(threads, projects) do
+    groups = Enum.group_by(threads, & &1[:project_id])
+
+    if map_size(groups) < 2 do
+      Enum.map(threads, &{:thread, &1})
+    else
+      known = for p <- projects, rows = groups[p.id], rows != nil, do: [{:project, p} | Enum.map(rows, &{:thread, &1})]
+      ids = MapSet.new(projects, & &1.id)
+      stray = for t <- threads, not MapSet.member?(ids, t[:project_id]), do: {:thread, t}
+      List.flatten(known) ++ stray
+    end
+  end
 
   @doc "The id of the open channel among `channels`: the chosen one if it is still there, else #general."
   @spec open_channel_id([map()], integer() | nil) :: integer() | nil
@@ -98,6 +115,7 @@ defmodule Console.Panel.Rail do
   defp face({:workspace, %{id: id}}, data, i), do: face(id == data[:active_key], i == data[:selected])
   defp face({:channel, %{id: id}}, data, i), do: face(id == open_id(data), i == data[:selected])
   defp face({:thread, %{id: id}}, data, i), do: face(id == data[:opened], i == data[:selected])
+  defp face({:project, _project}, data, i), do: face(false, i == data[:selected])
 
   defp open_id(data) do
     case Enum.find(data.groups, &(&1.workspace.id == data[:active_key])) do
@@ -125,6 +143,12 @@ defmodule Console.Panel.Rail do
     gap = max(w - Panel.row_width(runs) - width(badge), 0)
 
     runs ++ [{String.duplicate(" ", gap), fill(face)}] ++ badge
+  end
+
+  # a heading, not a destination: the project's name under the channel, above its threads
+  defp row({:project, project}, face, w) do
+    name = clip(project[:name] || "?", max(w - 2, 1))
+    pad([{"  ", fill(face)}, {name, project_style(face)}], w, fill(face))
   end
 
   defp row({:thread, thread}, face, w) do
@@ -173,6 +197,9 @@ defmodule Console.Panel.Rail do
   defp channel_style(:active), do: :selected
   defp channel_style(:cursor), do: :accent
   defp channel_style(:idle), do: :header
+
+  defp project_style(:cursor), do: :accent
+  defp project_style(_face), do: :dim
 
   defp workspace_style(:active), do: :selected
   defp workspace_style(:cursor), do: :accent

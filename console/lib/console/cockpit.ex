@@ -753,6 +753,7 @@ defmodule Console.Cockpit do
   defp context_menu({:workspace, ws}, _state, x, y), do: Author.workspace_menu(ws, x, y)
   defp context_menu({:channel, channel}, _state, x, y), do: Author.channel_menu(channel, x, y)
   defp context_menu({:thread, thread}, state, x, y), do: Author.thread_menu(thread, Reads.channels(state), x, y)
+  defp context_menu({:project, _project}, _state, _x, _y), do: nil
   defp context_menu(nil, _state, _x, _y), do: nil
 
   defp dispatch_click(nil, _x, _y, state), do: {:noreply, state}

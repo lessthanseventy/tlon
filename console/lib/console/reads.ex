@@ -109,7 +109,7 @@ defmodule Console.Reads do
   end
 
   @doc "The rail entry under the nav cursor while the rail is the focused pane, else nil."
-  @spec rail_selection(map()) :: {:workspace | :channel | :thread, map()} | nil
+  @spec rail_selection(map()) :: {:workspace | :channel | :project | :thread, map()} | nil
   def rail_selection(%{active_key: key, focus: %{in_terminal?: false} = focus} = state) when Space.workspace?(key) do
     layout = tlon_layout(state)
 

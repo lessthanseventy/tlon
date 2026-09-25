@@ -210,6 +210,55 @@ defmodule Console.Panel.RailTest do
     end
   end
 
+  describe "projects — the open channel's threads under their project" do
+    defp by_project do
+      %{
+        groups: [
+          %{
+            workspace: %{id: 1, name: "Tlön"},
+            projects: [%{id: 1, name: "Tlön"}, %{id: 6, name: "Machine"}, %{id: 7, name: "DeuceSeven"}],
+            channels: [
+              %{
+                id: 10,
+                name: "general",
+                kind: "general",
+                threads: [
+                  thread(%{id: 9, title: "general", project_id: 6}),
+                  thread(%{id: 81, title: "stale menard", project_id: 1}),
+                  thread(%{id: 15, title: "bluetooth", project_id: 6})
+                ]
+              }
+            ]
+          }
+        ],
+        active_key: 1
+      }
+    end
+
+    test "a channel's threads group under their project, in the workspace's project order; empty projects are not listed" do
+      assert [
+               {:workspace, _},
+               {:channel, _},
+               {:project, %{name: "Tlön"}},
+               {:thread, %{id: 81}},
+               {:project, %{name: "Machine"}},
+               {:thread, %{id: 9}},
+               {:thread, %{id: 15}}
+             ] = Rail.entries(by_project())
+    end
+
+    test "a project row is a heading: it renders its name and picks nothing" do
+      out = by_project() |> Rail.render(@rect) |> text()
+      assert out =~ "Machine"
+      refute out =~ "DeuceSeven"
+      assert Rail.pick(by_project(), @rect, 2) == nil
+    end
+
+    test "one project (or none known) adds no heading — the flat list stays flat" do
+      refute Enum.any?(Rail.entries(data()), &match?({:project, _}, &1))
+    end
+  end
+
   test "hints name only keys that work" do
     assert Rail.hints(data()) == [{"j/k", "row"}, {"⏎", "open"}, {"m", "move"}, {"#", "channel"}, {"d", "delete"}]
   end
