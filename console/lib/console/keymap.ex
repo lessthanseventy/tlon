@@ -239,7 +239,7 @@ defmodule Console.Keymap do
   # The persistent reply box (2026-09-01): Esc doesn't just drop the input, it steps the whole
   # center back to the thread LIST (`:close_thread_view` clears `opened_thread`) AND drops the draft,
   # so no half-typed reply leaks into the next thread. Precedes the generic Esc below.
-  # `^⇧K` (go to) / `^⇧P` (commands) — the two global chords of UX slice 2. Ctrl+Shift+<letter>
+  # `^⇧K` (go to) / `^⇧P` (commands) / `^⇧H` (history) — the global picker chords. Ctrl+Shift+<letter>
   # because NOTHING in a terminal binds it: a legacy terminal cannot even encode the combination,
   # only the Kitty CSI-u this cockpit already arms (`\e[107;6u` / `\e[112;6u`), so taking these
   # costs the coworker's shell nothing — unlike Slack's own Ctrl+K, which is readline's kill-line.
@@ -250,6 +250,9 @@ defmodule Console.Keymap do
 
   def handle(%{key: :char, char: c, ctrl: true, shift: true}, state) when c in ["p", "P"],
     do: {toggle_picker(state, :palette), :repaint}
+
+  def handle(%{key: :char, char: c, ctrl: true, shift: true}, state) when c in ["h", "H"],
+    do: {toggle_picker(state, :history), :repaint}
 
   # An open PICKER owns every key — it has a query box of its own, so it must precede the input
   # modal: `^⇧K` from inside the reply box opens the switcher and typing then goes to the switcher,

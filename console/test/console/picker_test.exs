@@ -135,7 +135,45 @@ defmodule Console.PickerTest do
   test "each kind names itself and says how it is driven" do
     assert Picker.title(:switcher) == "GO TO"
     assert Picker.title(Picker.open(:palette)) == "COMMANDS"
+    assert Picker.title(:history) == "HISTORY"
     assert Picker.hint(:switcher) =~ "jump"
     assert Picker.hint(:palette) =~ "run"
+    assert Picker.hint(:history) =~ "open"
+  end
+
+  describe "the history corpus" do
+    defp history_state do
+      state(%{
+        history: [
+          %{
+            id: 53,
+            title: "Caelestia to Astral migration",
+            workspace_id: 1,
+            project: "ficciones",
+            at: ~U[2026-09-10 12:00:00Z]
+          },
+          %{id: 54, title: "orient: what is excessibility", workspace_id: 2, project: nil, at: ~U[2026-09-01 08:00:00Z]}
+        ]
+      })
+    end
+
+    test "is the closed threads, each a jump to its workspace and thread" do
+      [row | _] = :history |> Picker.open() |> Picker.entries(history_state())
+
+      assert row.kind == :thread
+      assert row.label == "Caelestia to Astral migration"
+      assert row.context =~ "ficciones"
+      assert row.context =~ "2026-09-10"
+      assert {row.workspace_id, row.thread_id} == {1, 53}
+    end
+
+    test "filters by title and project" do
+      assert labels(%{Picker.open(:history) | query: "astral"}, history_state()) == ["Caelestia to Astral migration"]
+      assert labels(%{Picker.open(:history) | query: "excess"}, history_state()) == ["orient: what is excessibility"]
+    end
+
+    test "no history read yet (the first frame) yields no rows rather than crashing" do
+      assert labels(Picker.open(:history), state()) == []
+    end
   end
 end

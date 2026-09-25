@@ -44,6 +44,13 @@ defmodule Console.Verbs do
     },
     %{
       group: :global,
+      keys: "^⇧H",
+      label: "history",
+      doc: "browse closed threads (the imported conversations too) — type to filter, ⏎ opens one",
+      event: %{key: :char, char: "h", ctrl: true, shift: true}
+    },
+    %{
+      group: :global,
       keys: "Alt+d",
       label: "drawer",
       doc:

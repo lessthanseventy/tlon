@@ -1432,8 +1432,13 @@ defmodule Console.Cockpit do
     reads = Reads.frame(state, stack_blocks, focused)
     # The rail's rows, stashed for the keyboard: j/k's count and Enter's row resolve against the
     # SAME read the frame painted, without a second Board.sidebar/0 round-trip per keypress.
+    state = Map.put(state, :history, history_read(state))
     paint(%{state | sidebar: reads.sidebar, reads: reads}, reads)
   end
+
+  # The history picker's corpus, read only while that picker is up — a shut overlay costs nothing.
+  defp history_read(%{picker: %{kind: :history}}), do: Safe.read(:history, [], fn -> Channel.closed_threads() end)
+  defp history_read(_state), do: nil
 
   # The centre's threads: the workspace's, every scope, cut to the OPEN channel (a pre-channel
   # thread with no channel_id belongs to #general). No workspace → nothing; no sidebar painted yet
@@ -1443,12 +1448,30 @@ defmodule Console.Cockpit do
   defp stack_blocks(workspace_id, state) do
     blocks = Channel.workspace_threads(workspace_id)
 
-    case Reads.open_channel(state) do
-      %{id: id, kind: kind} ->
-        Enum.filter(blocks, &(&1.thread.channel_id == id or (is_nil(&1.thread.channel_id) and kind == "general")))
+    shown =
+      case Reads.open_channel(state) do
+        %{id: id, kind: kind} ->
+          Enum.filter(blocks, &(&1.thread.channel_id == id or (is_nil(&1.thread.channel_id) and kind == "general")))
 
-      nil ->
-        blocks
+        nil ->
+          blocks
+      end
+
+    with_opened(shown, state.opened_thread)
+  end
+
+  # A thread opened from history is closed, so the open-only read above never carries it: add its
+  # block, or the centre would show nothing for the conversation you just picked.
+  defp with_opened(blocks, nil), do: blocks
+
+  defp with_opened(blocks, id) do
+    if Enum.any?(blocks, &(&1.thread.id == id)) do
+      blocks
+    else
+      case Channel.thread_block(id) do
+        %{} = block -> blocks ++ [block]
+        nil -> blocks
+      end
     end
   end
 
