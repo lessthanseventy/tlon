@@ -23,14 +23,19 @@ defmodule Server.Projects do
   end
 
   @doc """
-  The project a new thread in this workspace defaults to: the one its newest project-bearing
-  thread belongs to, or nil when no thread has one yet.
+  The project a new thread in this workspace defaults to: the one the operator last posted in, or
+  nil when he has posted in none. By message, not by thread: the machine opens threads too (an
+  import's memory thread), and those are not the operator using a project.
   """
   def last_used(workspace_id) do
+    operator = Application.get_env(:server, :operator, "andrew")
+
     Repo.one(
-      from t in Server.Thread,
-        where: t.workspace_id == ^workspace_id and not is_nil(t.project_id),
-        order_by: [desc: t.id],
+      from m in Server.Message,
+        join: t in Server.Thread,
+        on: t.id == m.thread_id,
+        where: t.workspace_id == ^workspace_id and not is_nil(t.project_id) and m.author == ^operator,
+        order_by: [desc: m.created_at, desc: m.id],
         limit: 1,
         select: t.project_id
     )

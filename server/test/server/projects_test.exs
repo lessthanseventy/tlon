@@ -60,7 +60,7 @@ defmodule Server.ProjectsTest do
       assert Projects.by_name(ws.id, "nope") == nil
     end
 
-    test "last_used/1 is the project of the workspace's newest thread that has one" do
+    test "last_used/1 is the project the operator last posted in, in this workspace" do
       {:ok, ws} = Workspaces.register(%{name: "Last used"})
       {:ok, other_ws} = Workspaces.register(%{name: "Away"})
       {:ok, a} = Projects.register(%{workspace_id: ws.id, name: "ficciones"})
@@ -69,12 +69,17 @@ defmodule Server.ProjectsTest do
 
       assert Projects.last_used(ws.id) == nil
 
-      {:ok, _} = Server.Channel.open_thread(%{title: "one", workspace_id: ws.id, project_id: a.id})
-      {:ok, _} = Server.Channel.open_thread(%{title: "two", workspace_id: ws.id, project_id: b.id})
+      {:ok, one} = Server.Channel.open_thread(%{title: "one", workspace_id: ws.id, project_id: a.id})
+      {:ok, two} = Server.Channel.open_thread(%{title: "two", workspace_id: ws.id, project_id: b.id})
       {:ok, _} = Server.Channel.open_thread(%{title: "no project", workspace_id: ws.id})
-      {:ok, _} = Server.Channel.open_thread(%{title: "away", workspace_id: other_ws.id, project_id: away.id})
+      {:ok, far} = Server.Channel.open_thread(%{title: "away", workspace_id: other_ws.id, project_id: away.id})
+      {:ok, _} = Server.Channel.post(%{thread_id: two.id, author: "andrew", body: "first"})
+      {:ok, _} = Server.Channel.post(%{thread_id: one.id, author: "andrew", body: "then this"})
+      {:ok, _} = Server.Channel.post(%{thread_id: far.id, author: "andrew", body: "elsewhere"})
+      # a thread the machine made later (an import's memory thread) is not "used"
+      {:ok, _} = Server.Channel.open_thread(%{title: "Claude Code memory", workspace_id: ws.id, project_id: b.id})
 
-      assert Projects.last_used(ws.id) == b.id
+      assert Projects.last_used(ws.id) == a.id
     end
   end
 
