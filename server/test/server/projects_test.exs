@@ -143,4 +143,19 @@ defmodule Server.ProjectsTest do
       assert {:error, :no_repo} = Projects.repo_for_workspace(nil)
     end
   end
+
+  describe "repo_for_thread/1 — a scope glob is not a checkout" do
+    test "a glob path (modules/*) resolves to :no_repo, never a worktree under $HOME", %{workspace: ws} do
+      {:ok, p} =
+        Projects.register(%{
+          workspace_id: ws.id,
+          name: "general",
+          repos: [%{"name" => "modules/*", "path" => "modules/*"}]
+        })
+
+      {:ok, t} = Server.Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+
+      assert {:error, :no_repo} = Projects.repo_for_thread(t)
+    end
+  end
 end

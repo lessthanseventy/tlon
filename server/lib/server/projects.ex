@@ -88,7 +88,10 @@ defmodule Server.Projects do
   def repo_for_workspace(_), do: {:error, :no_repo}
 
   # The first repo's `~`-expanded path, or `:no_repo`. Repos are a JSON list of `%{"path" => …}`.
-  defp primary_repo_path(%Project{repos: [%{"path" => path} | _]}) when is_binary(path), do: {:ok, Path.expand(path)}
+  defp primary_repo_path(%Project{repos: [%{"path" => path} | _]}) when is_binary(path) do
+    # a workspace scope glob ("modules/*") is not a checkout; expanded, it rooted worktrees in $HOME
+    if String.contains?(path, "*"), do: {:error, :no_repo}, else: {:ok, Path.expand(path)}
+  end
 
   defp primary_repo_path(_project), do: {:error, :no_repo}
 end
