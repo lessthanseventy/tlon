@@ -10,7 +10,7 @@ defmodule Console.Cockpit.Author do
   alias Console.Keymap
   alias Console.Panel
   alias Console.Safe
-  alias Console.Server.Channels
+  alias Console.Server.Projects
   alias Console.Server.Tickets
   alias Console.Server.Workspaces
   alias Console.WorkspaceTemplates
@@ -54,32 +54,16 @@ defmodule Console.Cockpit.Author do
   end
 
   @doc """
-  A rail thread's context menu (channels slice 1b): move it to any OTHER channel of its
-  workspace. `channels` is the sidebar's list for the workspace; its own channel is left out.
+  A rail thread's context menu: move it to any OTHER project of its workspace. `projects` is the
+  sidebar's list for the workspace; the thread's own project is left out.
   """
-  def thread_menu(thread, channels, x, y) do
+  def thread_menu(thread, projects, x, y) do
     moves =
-      for channel <- channels, channel.id != thread[:channel_id] do
-        %{label: "Move to ##{channel.name}", action: {:move_thread, thread, channel}}
+      for project <- projects, project.id != thread[:project_id] do
+        %{label: "Move to #{project.name}", action: {:move_thread, thread, project}}
       end
 
     %{title: thread.title, x: x, y: y, cursor: 0, items: moves ++ [%{label: "Cancel", action: :close}]}
-  end
-
-  @doc "A rail channel's context menu: a new channel in its workspace; delete (topic channels only)."
-  def channel_menu(channel, x, y) do
-    delete =
-      if channel[:kind] == "topic",
-        do: [%{label: "Delete ##{channel.name}", action: {:delete_channel, channel}, danger: true}],
-        else: []
-
-    %{
-      title: "##{channel.name}",
-      x: x,
-      y: y,
-      cursor: 0,
-      items: [%{label: "New channel…", action: :new_channel} | delete]
-    }
   end
 
   @doc """
@@ -102,23 +86,6 @@ defmodule Console.Cockpit.Author do
       y: y,
       cursor: 0,
       items: items ++ [%{label: "Cancel", action: :close}]
-    }
-  end
-
-  defp confirm_delete_channel_menu(channel, x, y) do
-    %{
-      title: "delete?",
-      x: x,
-      y: y,
-      cursor: 1,
-      items: [
-        %{
-          label: "Delete ##{channel.name} (threads → #general)",
-          action: {:confirm_delete_channel, channel},
-          danger: true
-        },
-        %{label: "Cancel", action: :close}
-      ]
     }
   end
 
@@ -166,23 +133,16 @@ defmodule Console.Cockpit.Author do
 
   defp menu_action({:set_icon, ws, icon}, state), do: %{set_workspace_icon(state, ws.id, icon) | menu: nil}
 
-  # Channels (slice 1b). A move is a thread event, so the rail re-reads on its own.
-  defp menu_action({:move_thread, thread, channel}, state) do
+  # A move is a thread event, so the rail re-reads on its own.
+  defp menu_action({:move_thread, thread, project}, state) do
     flash =
-      case Safe.value(fn -> Channels.move(Console.Server.Channel.thread(thread.id), channel.id) end, nil) do
-        {:ok, _} -> "moved “#{thread.title}” to ##{channel.name}"
+      case Safe.value(fn -> Projects.move_thread(Console.Server.Channel.thread(thread.id), project.id) end, nil) do
+        {:ok, _} -> "moved “#{thread.title}” to #{project.name}"
         _ -> "couldn't move “#{thread.title}”"
       end
 
-    %{state | menu: nil, flash: flash, open_channel: channel.id}
+    %{state | menu: nil, flash: flash, open_project: project.id}
   end
-
-  defp menu_action(:new_channel, state), do: %{state | menu: nil, input: %{kind: :new_channel, buffer: "", cursor: 0}}
-
-  defp menu_action({:delete_channel, channel}, %{menu: %{x: x, y: y}} = state),
-    do: %{state | menu: confirm_delete_channel_menu(channel, x, y)}
-
-  defp menu_action({:confirm_delete_channel, channel}, state), do: %{delete_channel(state, channel) | menu: nil}
 
   # A block is written from the BLOCKER's end (`other blocks ticket`) — one row, read both ways.
   defp menu_action({:block, ticket, other}, state) do
@@ -201,26 +161,6 @@ defmodule Console.Cockpit.Author do
   end
 
   defp menu_action(_unknown, state), do: %{state | menu: nil}
-
-  @doc "Delete a topic channel (its threads go home to #general); the open channel falls back to #general."
-  def delete_channel(state, channel) do
-    case Safe.value(fn -> Channels.delete(channel.id) end, nil) do
-      {:ok, _} -> %{state | flash: "deleted ##{channel.name} — its threads are in #general", open_channel: nil}
-      {:error, :general} -> %{state | flash: "#general can't be deleted"}
-      _ -> %{state | flash: "couldn't delete ##{channel.name}"}
-    end
-  end
-
-  @doc "Create a topic channel in the active workspace and open it."
-  def create_channel(state, name) do
-    name = name |> String.trim() |> String.trim_leading("#")
-
-    case Safe.value(fn -> Channels.create(Console.Space.active_workspace_id(state), name) end, nil) do
-      {:ok, channel} -> %{state | flash: "created ##{channel.name}", open_channel: channel.id}
-      {:error, %{errors: errors}} -> %{state | flash: "couldn't create ##{name}: #{inspect(Keyword.keys(errors))}"}
-      _ -> %{state | flash: "couldn't create ##{name}"}
-    end
-  end
 
   # Merge the chosen icon into the workspace's knobs (nil clears it → back to the number).
   defp set_workspace_icon(state, id, icon) do

@@ -1198,12 +1198,12 @@ defmodule Console.KeymapTest do
       assert {^s, :none} = Keymap.handle(key(:tab), s)
     end
 
-    # UX slice 1, task 2: the rail advertises `[ ]` — bind it to the space ring Tab already walks,
-    # so every key the rail's hints name actually does something.
-    test "in nav mode, [ and ] walk the space ring like Shift+Tab / Tab" do
+    # The rail lists one project at a time and advertises `[ ]` for walking them; Tab keeps the
+    # workspace ring. The cockpit resolves the step against the painted sidebar.
+    test "in nav mode, [ and ] step the open project, leaving the workspace alone" do
       s = tlon(nav_focus(), %{active_key: 1, live_workspaces: two_workspaces()})
-      assert {%{active_key: 2}, :repaint} = Keymap.handle(char("]"), s)
-      assert {%{active_key: 2}, :repaint} = Keymap.handle(char("["), s)
+      assert {^s, {:switch_project, :next}} = Keymap.handle(char("]"), s)
+      assert {^s, {:switch_project, :prev}} = Keymap.handle(char("["), s)
     end
 
     test "in nav mode, j/k move the item cursor within the focused pane, clamped to its count" do

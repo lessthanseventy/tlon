@@ -102,13 +102,9 @@ defmodule Console.ViewTest do
       assert {Panel.Rail, %{opened: nil}, _} = rail_of(View.compose(reads(%{}), 120, 40))
     end
 
-    test "a fifth of the frame, floored at 22 columns (and never past a third)" do
-      assert %{w: 24} = rail_box(View.compose(reads(%{}), 120, 40))
-      assert 24 == max(22, div(120, 5))
-      # At the wide threshold a fifth is under the floor, so the floor wins. The third-of-the-frame
-      # cap never binds at a wide width (a fifth is always under a third) — it is kept as the guard
-      # for the narrow/derived sizes `center_rect/3` can be asked for, and is not exercised here.
-      assert %{w: 22} = rail_box(View.compose(reads(%{}), 82, 40))
+    test "about 30 columns: a third of a smaller frame, never past 32" do
+      assert %{w: 32} = rail_box(View.compose(reads(%{}), 120, 40))
+      assert %{w: 27} = rail_box(View.compose(reads(%{}), 82, 40))
     end
 
     test "the center starts one column right of the rail" do
@@ -122,14 +118,14 @@ defmodule Console.ViewTest do
       assert Enum.all?(boxes, &(&1.x >= rail.x + rail.w + 1))
     end
 
-    # The rail's j/k cursor is an ABSOLUTE row index and the scroll window is taken over the same
-    # absolute rows, so the window has to follow the cursor or j walks it off the visible rail.
+    # The rail's j/k cursor is an entry index, two rows per thread, and the scroll window is taken
+    # over rows, so the window has to follow both of the cursor's rows or j walks it off the rail.
     test "the scroll window follows the j/k cursor: down past the last visible row scrolls" do
       focus = %Focus{in_terminal?: false, column: :left, pane: 0, cursors: %{Panel.Rail => 40}}
       placements = View.compose(reads(%{focus: focus, tlon_layout: layout(%{Panel.Rail => 60})}), 120, 40)
 
       assert {Panel.Rail, %{scroll: scroll, selected: 40}, rect} = rail_of(placements)
-      assert scroll == 40 - rect.h + 1
+      assert scroll == Panel.Rail.row_of(40) + 1 - rect.h + 1
       assert scroll > 0
     end
 
@@ -150,7 +146,7 @@ defmodule Console.ViewTest do
           40
         )
 
-      assert {Panel.Rail, %{scroll: 2}, _rect} = rail_of(placements)
+      assert {Panel.Rail, %{scroll: 4}, _rect} = rail_of(placements)
     end
 
     test "a missing sidebar read degrades to empty groups, not a crash" do

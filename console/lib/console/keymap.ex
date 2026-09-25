@@ -19,8 +19,8 @@ defmodule Console.Keymap do
   it were reached only by tests. Its verbs live in `Console.Verbs`, listed with a sentence each in
   the `^⇧P` command palette, which is the discoverable door a hidden prefix never was.
 
-  **Two global chords** open the overlays of slice 2: `^⇧K` the switcher (go to any workspace,
-  channel or thread) and `^⇧P` the palette. Ctrl+Shift+letter because nothing in a terminal binds
+  **Two global chords** open the overlays of slice 2: `^⇧K` the switcher (go to any workspace
+  or thread) and `^⇧P` the palette. Ctrl+Shift+letter because nothing in a terminal binds
   it — a legacy terminal cannot encode it at all, only the Kitty CSI-u this cockpit already arms —
   so they cost the coworker's shell nothing. They precede the input modal, the drawer and the
   picker itself, so they open from anywhere and each closes what it opened.
@@ -336,10 +336,6 @@ defmodule Console.Keymap do
 
   def handle(%{key: :enter}, %{input: %{kind: :new_note, buffer: buffer}} = state),
     do: {%{state | input: nil}, {:write_note, buffer}}
-
-  # A topic channel in the active workspace (channels slice 1b; the `#` verb / a rail menu).
-  def handle(%{key: :enter}, %{input: %{kind: :new_channel, buffer: buffer}} = state),
-    do: {%{state | input: nil}, {:create_channel, buffer}}
 
   # The tertius command line (Slice 1): Enter dispatches the typed meta-intent to the orchestrator,
   # which routes + executes it and hands back a receipt (the cockpit flashes it).
@@ -718,9 +714,9 @@ defmodule Console.Keymap do
   # sections — Shift+Tab must precede the bare :tab clause below, which also matches it.
   defp handle_tlon(%{key: :tab, shift: true}, state), do: switch(state, :prev)
   defp handle_tlon(%{key: :tab}, state), do: switch(state, :next)
-  # `[`/`]` are the rail's own advertised space keys — the same ring Tab walks.
-  defp handle_tlon(%{key: :char, char: "["}, state), do: switch(state, :prev)
-  defp handle_tlon(%{key: :char, char: "]"}, state), do: switch(state, :next)
+  # `[`/`]` walk the open workspace's projects — the rail lists one at a time; Tab walks workspaces.
+  defp handle_tlon(%{key: :char, char: "["}, state), do: {state, {:switch_project, :prev}}
+  defp handle_tlon(%{key: :char, char: "]"}, state), do: {state, {:switch_project, :next}}
   # `s` took over section-cycle (freed by Tab) — habits approve/reject needs focus.section == 1,
   # so the section must stay reachable.
   defp handle_tlon(%{key: :char, char: "s"}, state), do: {focus_intent(state, :section_next), :repaint}
@@ -729,10 +725,9 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: "v"}, state), do: {state, :toggle_center_view}
   defp handle_tlon(%{key: :char, char: "n"} = k, state), do: command(k, state)
   defp handle_tlon(%{key: :char, char: "c"} = k, state), do: command(k, state)
-  # `m` — move the rail's thread to another channel (a menu); off the rail it cycles the coworker's
-  # model as before. `#` — a new channel. Both cockpit-resolved (the rail's rows are a read).
+  # `m` — move the rail's thread to another project (a menu); off the rail it cycles the coworker's
+  # model as before. Cockpit-resolved (the rail's rows are a read).
   defp handle_tlon(%{key: :char, char: "m"}, state), do: {state, :rail_move}
-  defp handle_tlon(%{key: :char, char: "#"}, state), do: {state, :new_channel_prompt}
   defp handle_tlon(_key, state), do: {state, :none}
 
   @doc """

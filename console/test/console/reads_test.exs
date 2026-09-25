@@ -76,21 +76,21 @@ defmodule Console.ReadsTest do
   # UX slice 1, task 2: the rail is the only left pane, so the focus's j/k count and Enter both
   # resolve against the SAME stashed sidebar read the frame rendered from.
   describe "the rail's keyboard: tlon_layout/1 counts and enter_verb/2" do
-    # channels slice 1b: each group's threads also grouped by channel; the rail lists the channels
-    # and, under the OPEN one (#general by default), its threads.
+    # The rail lists the OPEN project's threads of the active workspace, and its lobby.
     @sidebar [
       %{
-        workspace: %{id: 0, name: "Tlön"},
-        threads: [%{id: 9, title: "general"}, %{id: 8, title: "aleph"}],
-        channels: [
-          %{id: 1, name: "general", kind: "general", threads: [%{id: 9, title: "general"}, %{id: 8, title: "aleph"}]},
-          %{id: 2, name: "ideas", kind: "topic", threads: []}
+        workspace: %{id: 0, name: "Machine"},
+        projects: [%{id: 1, name: "Tlön"}, %{id: 2, name: "ficciones"}],
+        threads: [
+          %{id: 9, title: "lobby", root: true, project_id: 1},
+          %{id: 8, title: "aleph", project_id: 1},
+          %{id: 7, title: "shell", project_id: 2}
         ]
       },
       %{
-        workspace: %{id: 1, name: "ficciones"},
-        threads: [%{id: 5, title: "hidden"}],
-        channels: [%{id: 3, name: "general", kind: "general", threads: [%{id: 5, title: "hidden"}]}]
+        workspace: %{id: 1, name: "Accessibility"},
+        projects: [%{id: 3, name: "excessibility"}],
+        threads: [%{id: 5, title: "hidden", project_id: 3}]
       }
     ]
 
@@ -112,36 +112,29 @@ defmodule Console.ReadsTest do
       %{state | focus: %{state.focus | cursors: %{Rail => cursor}}}
     end
 
-    test "the layout counts the rail's rows — the active workspace's threads, not every group's" do
+    test "the layout counts the rail's threads — the open project's and the lobby, not every group's" do
       layout = Reads.tlon_layout(rail_state())
 
-      # workspace 0, #general (open) with its two threads, #ideas (folded), workspace 1 (collapsed).
-      assert layout.counts[Rail] == 6
+      assert layout.counts[Rail] == 2
       assert layout.left == [Rail]
     end
 
-    test "the open channel picks which threads the rail counts" do
-      assert Reads.tlon_layout(rail_state(%{open_channel: 2})).counts[Rail] == 4
-      # a channel that no longer exists falls back to #general
-      assert Reads.tlon_layout(rail_state(%{open_channel: 99})).counts[Rail] == 6
+    test "the open project picks which threads the rail counts; a gone one falls back to the first" do
+      assert Reads.tlon_layout(rail_state(%{open_project: 2})).counts[Rail] == 2
+      assert Reads.rail_ids(rail_state(%{open_project: 2})) == [9, 7]
+      assert Reads.rail_ids(rail_state(%{open_project: 99})) == [9, 8]
     end
 
     test "an empty sidebar read counts zero rows, so j/k is a no-op instead of a crash" do
       assert Reads.tlon_layout(rail_state(%{sidebar: []})).counts[Rail] == 0
     end
 
-    test "Enter on the rail is a pick verb — a thread opens, a workspace switches; never a detail" do
+    test "Enter on the rail opens the thread under the cursor; never a detail" do
       state = at(0)
-      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:switch_space, 0}}
-
-      state = at(1)
-      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:open_channel, 1}}
-
-      state = at(2)
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:open_thread_view, 9}}
 
-      state = at(5)
-      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:switch_space, 1}}
+      state = at(1)
+      assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:open_thread_view, 8}}
     end
 
     test "Enter with nothing to land on does nothing — it never arms the detail mode" do
@@ -188,7 +181,7 @@ defmodule Console.ReadsTest do
     end
 
     test "dims are the pane's own half of the centre, never zero" do
-      assert Reads.session_pane_dims(%{w: 120, h: 40}) == {43, 36}
+      assert Reads.session_pane_dims(%{w: 120, h: 40}) == {39, 36}
       assert Reads.session_pane_dims(%{w: 3, h: 2}) == {1, 1}
     end
 
