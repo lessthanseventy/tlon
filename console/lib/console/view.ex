@@ -446,21 +446,36 @@ defmodule Console.View do
     :exit, _ -> []
   end
 
-  # The top bar's read (UX slice 1): where you are, what you're on, who is on it, is the server up.
-  # The thread/stage/lead the old footer info row carried moved HERE — the footer is hints only now.
+  # The top bar's read: the workspace and its project tabs (each with its loudest thread's badge,
+  # the rail's own ranking), whether another workspace has something waiting, and the open thread's
+  # worktree and lead. Off the same sidebar read the rail paints, so bar and rail agree.
   defp top_data(reads, space) do
     card = opened_card(reads)
     lead = card && lead_of(reads, card.id)
+    groups = reads[:sidebar] || []
+    {mine, others} = Enum.split_with(groups, &(&1.workspace.id == reads.active_key))
+    threads = Enum.flat_map(mine, &(&1[:threads] || []))
+    projects = Enum.flat_map(mine, &(&1[:projects] || []))
 
     %{
       workspace: space.label,
-      thread: card && card[:title],
-      stage: card && card[:stage],
+      workspace_id: reads.active_key,
+      elsewhere?: Enum.any?(others, fn g -> Enum.any?(g[:threads] || [], &(Panel.Rail.attention(&1) == 0)) end),
+      projects: Enum.map(projects, &Map.put(&1, :badge, project_badge(threads, &1.id))),
+      open_project: Panel.Rail.open_project_id(projects, reads[:open_project]),
       cwd: card && reads[:cwd],
       lead: lead && lead.agent,
       warm?: lead != nil and lead.warm? == true,
       link: reads[:link] || :up
     }
+  end
+
+  defp project_badge(threads, project_id) do
+    threads
+    |> Enum.filter(&(&1[:project_id] == project_id))
+    |> Enum.map(&Panel.Rail.attention/1)
+    |> Enum.min(fn -> 3 end)
+    |> Panel.Rail.glyph()
   end
 
   # The OPEN thread's card (design 2026-09-08 §2), never the rail's selection cursor — nothing open,

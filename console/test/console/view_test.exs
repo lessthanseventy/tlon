@@ -486,7 +486,7 @@ defmodule Console.ViewTest do
       assert Enum.all?(body, &(&1.y >= 1 and &1.y + &1.h <= 39))
     end
 
-    test "the top bar reads the space, the focused thread and its lead's warmth" do
+    test "the top bar reads the space and the open thread's lead and warmth" do
       roster = [%{agent: "hronir", thread_id: 7, thread_title: "review PR 42", pane_ref: nil, warm?: true}]
 
       cards = [
@@ -506,8 +506,7 @@ defmodule Console.ViewTest do
         )
 
       assert {Panel.TopBar, data, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
-      assert data.thread == "review PR 42"
-      assert data.stage == "build"
+      assert data.workspace == "Tlön"
       assert data.lead == "hronir"
       assert data.warm? == true
       # The link is an ambient read resolved in Console.Reads.frame/3 — compose/3 only forwards it.
@@ -521,7 +520,7 @@ defmodule Console.ViewTest do
     end
 
     # Design 2026-09-08 §2: the top bar carries the OPEN thread, not the rail's selection cursor.
-    test "the top bar names the OPENED thread, not the one the cursor sits on" do
+    test "the top bar's lead is the OPENED thread's, not the one the cursor sits on" do
       roster = [%{agent: "hronir", thread_id: 7, thread_title: "review PR 42", pane_ref: nil, warm?: true}]
 
       cards = [
@@ -542,12 +541,10 @@ defmodule Console.ViewTest do
         )
 
       assert {Panel.TopBar, data, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
-      assert data.thread == "review PR 42"
-      assert data.stage == "build"
       assert data.lead == "hronir"
     end
 
-    test "nothing opened: no thread segment at all — the cursor is not a fallback" do
+    test "nothing opened: no lead at all — the cursor is not a fallback" do
       roster = [%{agent: "hronir", thread_id: 9, thread_title: "flaky test hunt", pane_ref: nil, warm?: true}]
 
       cards = [
@@ -567,10 +564,30 @@ defmodule Console.ViewTest do
         )
 
       assert {Panel.TopBar, data, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
-      assert data.thread == nil
-      assert data.stage == nil
       assert data.lead == nil
       refute data.warm?
+    end
+
+    test "the tabs are the active workspace's projects, each with its loudest thread's badge" do
+      sidebar = [
+        %{
+          workspace: %{id: 0, name: "Tlön"},
+          projects: [%{id: 1, name: "tlon"}, %{id: 2, name: "ficciones"}],
+          threads: [
+            %{id: 7, title: "asks", project_id: 1, prompt: %{summary: "y?"}},
+            %{id: 8, title: "busy", project_id: 1, working: true},
+            %{id: 9, title: "quiet", project_id: 2}
+          ]
+        },
+        %{workspace: %{id: 5, name: "Elsewhere"}, projects: [], threads: [%{id: 3, title: "x", awaiting: "andrew"}]}
+      ]
+
+      boxes = View.compose(reads(%{sidebar: sidebar, open_project: 2}), 120, 40)
+
+      assert {Panel.TopBar, data, _} = Enum.find(boxes, &match?({Panel.TopBar, _, _}, &1))
+      assert [%{id: 1, badge: {"!", :st_await}}, %{id: 2, badge: nil}] = data.projects
+      assert data.open_project == 2
+      assert data.elsewhere? == true
     end
 
     test "the narrow layout gets the same two bars and keeps the body between them" do

@@ -38,8 +38,11 @@ cockpit ATTACHES: `Console.Staffing.ensure_workspace_roster/2` embeds the centre
 
 The cockpit is shell-shaped (`docs/plans/2026-09-08-cockpit-ux-principles-design.md` §2):
 
-- **Row 0** is `Panel.TopBar` — workspace chip · open thread and `[stage]` · its `.worktrees/<name>` ·
-  the lead with ● warm / ○ cold · a `server down` alarm that outranks the title on a narrow frame.
+- **Row 0** is `Panel.TopBar` — `‹ workspace ›` (a `!` when another workspace has a thread waiting
+  on you), then its projects as tabs, the open one inverse, each with its loudest thread's badge;
+  on the right the open thread's `.worktrees/<name>` and lead with ● warm / ○ cold, and a `server
+  down` alarm that outranks everything on a narrow frame. Click an arrow or a tab to switch;
+  right-click the workspace name for its menu. The thread's title is the conversation's header.
 - **The rail** (`Panel.Rail`, left, always on, ~30 columns) — the OPEN PROJECT's threads in the
   active workspace plus the workspace's lobby, one flat list ranked waiting on you (`!`) > working
   (`…`) > unread (`•`) > quiet, two rows per thread (title, then lead · state · age). Only the open

@@ -453,7 +453,7 @@ defmodule Console.Cockpit do
       state = %{state | last_right: {x, y}}
 
       {:noreply,
-       render(%{state | menu: context_menu(context_entry(Mouse.hit_panel(state.placements, x, y), y), state, x, y)})}
+       render(%{state | menu: context_menu(context_entry(Mouse.hit_panel(state.placements, x, y), x, y), state, x, y)})}
     end
   end
 
@@ -770,11 +770,18 @@ defmodule Console.Cockpit do
   end
 
   @doc false
-  # The rail thread a right click landed on, or nil. Pure; the
-  # right-click `handle_cast` clause turns it into a menu (`context_menu/4`).
-  def context_entry({Panel.Rail, data, rect}, y), do: Panel.Rail.entry_at(data, rect, y - rect.y)
-  def context_entry(_hit, _y), do: nil
+  # What a right click landed on — a rail thread, or the top bar's workspace name — or nil. Pure;
+  # the right-click `handle_cast` clause turns it into a menu (`context_menu/4`).
+  def context_entry({Panel.Rail, data, rect}, _x, y), do: Panel.Rail.entry_at(data, rect, y - rect.y)
 
+  def context_entry({Panel.TopBar, data, rect}, x, _y) do
+    if Panel.TopBar.hit(data, x - rect.x) == :workspace,
+      do: {:workspace, %{id: data[:workspace_id], name: data[:workspace]}}
+  end
+
+  def context_entry(_hit, _x, _y), do: nil
+
+  defp context_menu({:workspace, ws}, _state, x, y), do: Author.workspace_menu(ws, x, y)
   defp context_menu({:thread, thread}, state, x, y), do: Author.thread_menu(thread, Reads.projects(state), x, y)
   defp context_menu(nil, _state, _x, _y), do: nil
 
@@ -806,6 +813,15 @@ defmodule Console.Cockpit do
   defp dispatch_click({Panel.Tertius, _data, _rect}, _x, _y, state),
     do: {:noreply, render(%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}})}
 
+  # The top bar: an arrow steps the workspace ring, a tab opens its project.
+  defp dispatch_click({Panel.TopBar, data, rect}, x, _y, state) do
+    case Panel.TopBar.hit(data, x - rect.x) do
+      {:workspace_step, dir} -> apply_pick({:workspace_step, dir}, state)
+      {:project, id} -> apply_pick({:open_project, id}, state)
+      _ -> {:noreply, state}
+    end
+  end
+
   defp dispatch_click({panel, data, rect}, _x, y, state),
     do: apply_pick(Panel.pick(panel, data, rect, y - rect.y), state)
 
@@ -822,6 +838,17 @@ defmodule Console.Cockpit do
     next = reset_scrolls(state, %{state | active_key: key, open_project: nil, flash: nil})
     {:noreply, render(next)}
   end
+
+  defp apply_pick({:workspace_step, dir}, state) do
+    spaces = Space.all()
+
+    case if(dir == :next, do: Space.next(state.active_key, spaces), else: Space.prev(state.active_key, spaces)) do
+      nil -> {:noreply, state}
+      space -> apply_pick({:switch_space, space.key}, state)
+    end
+  end
+
+  defp apply_pick({:open_project, id}, state), do: {:noreply, render(%{state | open_project: id, flash: nil})}
 
   # Click a thread row in the list → open its conversation (two-step center).
   defp apply_pick({:open_thread_view, id}, state), do: apply_effect({:open_thread_view, id}, state)

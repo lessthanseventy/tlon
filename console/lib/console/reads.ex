@@ -704,17 +704,28 @@ defmodule Console.Reads do
 
   @doc """
   The active workspace's projects (`%{id, name}`, oldest first) and the one a new thread defaults to —
-  the last used (`Server.Projects.last_used/1`), else the first. nil with no workspace or no projects.
+  the project the rail has open, else the last used (`Server.Projects.last_used/1`), else the first.
+  nil with no workspace or no projects.
   The keymap's Tab cycles over it; the new-thread band names its pick.
   """
   def project_choice(state) do
     with ws when is_integer(ws) <- Space.active_workspace_id(state),
          [_ | _] = projects <- Safe.read(:projects, [], fn -> Projects.in_workspace(ws) end) do
       rows = Enum.map(projects, &%{id: &1.id, name: &1.name})
-      last = Safe.read(:last_project, nil, fn -> Projects.last_used(ws) end)
-      %{projects: rows, default: if(Enum.any?(rows, &(&1.id == last)), do: last, else: hd(rows).id)}
+      %{projects: rows, default: default_project(rows, open_project(state), ws)}
     else
       _ -> nil
+    end
+  end
+
+  # The project the rail has open, when it is one of these; else the last one posted in; else the first.
+  defp default_project(rows, open, ws) do
+    last = Safe.read(:last_project, nil, fn -> Projects.last_used(ws) end)
+
+    cond do
+      Enum.any?(rows, &(&1.id == open)) -> open
+      Enum.any?(rows, &(&1.id == last)) -> last
+      true -> hd(rows).id
     end
   end
 

@@ -1,6 +1,7 @@
 defmodule Console.Panel.TopBarTest do
   @moduledoc """
-  The frame's top line (UX slice 1): where am I, what am I on, who is on it, is the server up.
+  The frame's top line: `‹ workspace ›`, its project tabs with their loudest badge, and on the
+  right the open thread's worktree and lead — the server-down alarm outranking all of it.
   """
   use ExUnit.Case, async: true
 
@@ -8,101 +9,85 @@ defmodule Console.Panel.TopBarTest do
 
   alias Console.Panel.TopBar
 
-  test "one row: workspace · thread and stage · coworker and warmth · link" do
-    data = %{workspace: "Tlön", thread: "review PR 42", stage: "build", lead: "hronir", warm?: true, link: :up}
-    [row] = TopBar.render(data, %{x: 0, y: 0, w: 80, h: 1})
+  @projects [%{id: 1, name: "Tlön", badge: {"!", :st_await}}, %{id: 2, name: "ficciones", badge: nil}]
+
+  defp data(over \\ %{}),
+    do: Map.merge(%{workspace: "Machine", workspace_id: 1, projects: @projects, open_project: 1, link: :up}, over)
+
+  defp render(data, w \\ 80), do: TopBar.render(data, %{x: 0, y: 0, w: w, h: 1})
+
+  test "the workspace between arrows, then its projects as tabs, each with its loudest badge" do
+    [row] = render(data())
+    assert row_text(row) =~ ~r/^ ‹ Machine › +Tlön ! +ficciones /
+  end
+
+  test "the open project's tab is inverse, badge included; the others are not" do
+    [row] = render(data())
+    assert {" Tlön", :selected} in row
+    assert {" !", :selected_accent} in row
+    assert {" ficciones", :normal} in row
+
+    [row] = render(data(%{open_project: 2}))
+    assert {" ficciones", :selected} in row
+    assert {" !", :st_await} in row
+  end
+
+  test "another workspace waiting on you marks the chip with a !" do
+    [row] = render(data(%{elsewhere?: true}))
+    assert row_text(row) =~ " › !"
+    [row] = render(data())
+    refute row_text(row) =~ " › !"
+  end
+
+  test "the open thread's worktree, shortened, and its lead with a warmth dot sit on the right" do
+    [row] = render(data(%{cwd: "/home/a/projects/tlon/.worktrees/t12", lead: "hronir", warm?: true}), 90)
     text = row_text(row)
 
-    assert text =~ "Tlön"
-    assert text =~ "review PR 42"
-    assert text =~ "build"
-    assert text =~ "hronir"
-    assert text =~ "●"
+    assert text =~ ~r/\.worktrees\/t12  ● hronir $/
+    refute text =~ "/home/a"
+    [cold] = render(data(%{lead: "hronir", warm?: false}))
+    assert row_text(cold) =~ "○ hronir"
   end
 
-  test "the workspace renders as a padded tab chip, like the old footer's" do
-    [row] = TopBar.render(%{workspace: "Tlön", link: :up}, %{x: 0, y: 0, w: 60, h: 1})
-
-    assert Enum.any?(row, &match?({" Tlön ", :tab}, &1))
-  end
-
-  test "a cold coworker gets the hollow dot" do
-    data = %{workspace: "Tlön", thread: "t", lead: "hronir", warm?: false, link: :up}
-    [row] = TopBar.render(data, %{x: 0, y: 0, w: 80, h: 1})
-    assert row_text(row) =~ "○ hronir"
-  end
-
-  test "a down link is named, and nothing crashes on an empty workspace" do
-    [row] = TopBar.render(%{link: :down}, %{x: 0, y: 0, w: 40, h: 1})
-    assert row_text(row) =~ "server down"
-  end
-
-  test "no thread, no stage, no lead — one row, no stray separators" do
-    [row] = TopBar.render(%{workspace: "Tlön", link: :up}, %{x: 0, y: 0, w: 60, h: 1})
-    text = row_text(row)
-
-    assert text =~ "Tlön"
-    refute text =~ "·"
-  end
-
-  # The invariant the retired board_test guarded on the old footer info row: the justified fill is
-  # neutral, so a chip/selection background never floods the whole bar.
   test "the row fills the width and the justified gap is neutral" do
-    data = %{workspace: "Tlön", thread: "review PR 42", stage: "build", lead: "hronir", warm?: true, link: :up}
-    [row] = TopBar.render(data, %{x: 0, y: 0, w: 120, h: 1})
-
+    [row] = render(data(%{lead: "hronir", warm?: true}), 120)
     assert Console.Panel.row_width(row) == 120
-
-    refute Enum.any?(row, fn {t, s} ->
-             s != :normal and String.trim(t) == "" and String.length(t) >= 3
-           end)
+    refute Enum.any?(row, fn {t, s} -> s != :normal and String.trim(t) == "" and String.length(t) >= 3 end)
   end
 
-  # Design 2026-09-08 §2: the alarm outranks the thread title. A narrow frame reserves the
-  # alarm's width and clips the title into the remainder, dropping the lead first.
-  test "a narrow frame keeps the server-down alarm and clips the title instead" do
-    data = %{workspace: "Tlön", thread: String.duplicate("t", 60), lead: "hronir", warm?: true, link: :down}
-    [row] = TopBar.render(data, %{x: 0, y: 0, w: 40, h: 1})
+  test "a narrow frame keeps the server-down alarm and clips the tabs instead" do
+    many = Enum.map(1..8, &%{id: &1, name: "project-#{&1}", badge: nil})
+    [row] = render(data(%{projects: many, lead: "hronir", link: :down}), 40)
     text = row_text(row)
 
     assert text =~ "server down"
-    assert text =~ "t"
     refute text =~ "hronir"
     assert Console.Panel.row_width(row) <= 40
   end
 
-  test "a narrow frame with the link up keeps the title — nothing to outrank it" do
-    data = %{workspace: "Tlön", thread: String.duplicate("t", 60), lead: "hronir", warm?: true, link: :up}
-    [row] = TopBar.render(data, %{x: 0, y: 0, w: 40, h: 1})
-
-    assert row_text(row) =~ "tttt"
-    assert Console.Panel.row_width(row) <= 40
+  test "nothing crashes on an empty read" do
+    [row] = render(%{link: :down}, 40)
+    assert row_text(row) =~ "‹ — ›"
+    assert row_text(row) =~ "server down"
   end
 
-  test "the row is exactly one line, clipped to the rect width" do
-    data = %{workspace: String.duplicate("w", 50), thread: String.duplicate("t", 50), lead: "x", warm?: true, link: :up}
-    assert [row] = TopBar.render(data, %{x: 0, y: 0, w: 30, h: 1})
-    assert Console.Panel.row_width(row) <= 30
-  end
+  describe "hit/2 — what a click at a column means, off the drawn segments" do
+    test "the arrows step the workspace ring; the name is the workspace (its menu); a tab is its project" do
+      assert TopBar.hit(data(), 1) == {:workspace_step, :prev}
+      assert TopBar.hit(data(), 4) == :workspace
+      assert TopBar.hit(data(), 11) == {:workspace_step, :next}
 
-  # The worktree the open thread's coworker works in — shown so "which tree am I in" is never a
-  # question (Andrew, 2026-09-08). Shortened to its last two segments; absent when no repo.
-  test "the open thread's worktree shows, shortened, after the stage" do
-    data = %{
-      workspace: "Tlön",
-      thread: "review PR 42",
-      stage: "build",
-      cwd: "/home/a/projects/ficciones/.worktrees/review-pr-42",
-      link: :up
-    }
+      [row] = render(data())
+      text = row_text(row)
+      {tlon, _} = :binary.match(text, "Tlön")
+      {fic, _} = :binary.match(text, "ficciones")
+      assert TopBar.hit(data(), String.length(binary_part(text, 0, tlon))) == {:project, 1}
+      assert TopBar.hit(data(), String.length(binary_part(text, 0, fic))) == {:project, 2}
+    end
 
-    [row] = TopBar.render(data, %{x: 0, y: 0, w: 100, h: 1})
-    assert row_text(row) =~ "review PR 42  [build]  .worktrees/review-pr-42"
-    refute row_text(row) =~ "/home/a"
-  end
-
-  test "no worktree → no path segment" do
-    [row] = TopBar.render(%{workspace: "Tlön", thread: "t", cwd: nil, link: :up}, %{x: 0, y: 0, w: 60, h: 1})
-    refute row_text(row) =~ ".worktrees"
+    test "the gap, and past the tabs, is nothing" do
+      assert TopBar.hit(data(), 14) == nil
+      assert TopBar.hit(data(), 79) == nil
+    end
   end
 end
