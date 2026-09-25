@@ -25,11 +25,17 @@ idle() {
   done
   printf '%s\n' "$cur"
 }
+# The cockpit repaints on its own tick, often >300 ms after a key; settling straight away compares
+# two copies of the OLD frame. Wait (up to 2 s — some keys change nothing) for the frame to move.
+after() {
+  local before="$1" deadline=$(( $(date +%s%3N) + 2000 ))
+  while [ "$(cap)" = "$before" ] && [ "$(date +%s%3N)" -lt "$deadline" ]; do sleep 0.05; done
+}
 case "${1:-}" in
   cap)  cap ;;
   idle) idle "${2:-5}" ;;
-  send) shift; "${T[@]}" send-keys -t "$TARGET" "$@"; idle 5 ;;
-  type) shift; "${T[@]}" send-keys -t "$TARGET" -l "$*"; idle 5 ;;
+  send) shift; b="$(cap)"; "${T[@]}" send-keys -t "$TARGET" "$@"; after "$b"; idle 5 ;;
+  type) shift; b="$(cap)"; "${T[@]}" send-keys -t "$TARGET" -l "$*"; after "$b"; idle 5 ;;
   size) "${T[@]}" resize-window -t "$TARGET" -x "$2" -y "$3"; idle 3 ;;
   *) sed -n '2,12p' "$0"; exit 2 ;;
 esac
