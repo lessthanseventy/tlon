@@ -44,7 +44,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `console:run` | console: launch the live cockpit in THIS terminal (run in ghostty) — a CLIENT of the always-up tlon service (one brain); console:run:local embeds a server on the scratch db instead |
 | `console:run:local` | console: the cockpit with an EMBEDDED server on the scratch db (../server/.dev/tlon.db, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run |
 | `console:run:tmux` | console: the cockpit inside the tlon tmux server (session cockpit, -A attaches) so Claude can drive it (drive-cockpit skill) — icons and kitty keys degrade under tmux; the plain console:run is the one to look at |
-| `console:seed` | console: seed the shared db with sample threads/agents/sessions for the cockpit |
+| `console:seed` | console: seed the dev db with workspaces, projects and threads shaped like the live machine (some waiting on you) |
 | `console:setup` | console: fetch deps, create + migrate the shared server db (via Server.Repo) |
 | `console:test` | console: run the test suite (the render path, headless) |
 

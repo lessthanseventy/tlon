@@ -22,7 +22,7 @@ dir = "console"
 run = "mix deps.get && TLON_DATABASE=tlon_dev mix ecto.create -r Server.Repo --quiet && TLON_DATABASE=tlon_dev mix ecto.migrate -r Server.Repo"
 
 ["console:seed"]
-description = "console: seed the shared db with sample threads/agents/sessions for the cockpit"
+description = "console: seed the dev db with workspaces, projects and threads shaped like the live machine (some waiting on you)"
 dir = "console"
 run = "TLON_DATABASE=tlon_dev mix console.seed"
 
