@@ -7,12 +7,9 @@ defmodule Console.Cockpit.Boards do
   """
 
   alias Console.Panel
-  alias Console.Reads
   alias Console.Safe
-  alias Console.Server.Channel
   alias Console.Server.Tickets
   alias Console.Space
-  alias Console.Staffing
 
   @doc "A board pane's data: the workspace's tickets under the kanban cursor, or its notes."
   @spec board_data(:tickets | :notes, map()) :: map()
@@ -97,19 +94,25 @@ defmodule Console.Cockpit.Boards do
     end
   end
 
-  @doc "Promote the selected ticket to a thread (`Enter`), staffing it like any new thread."
+  @doc """
+  Start work on the selected ticket (`Enter`): `Server.Tickets.start_thread/1`, then focus the thread.
+  """
   @spec promote_selected_ticket(map()) :: map()
   def promote_selected_ticket(state) do
     case selected_ticket(state, ticket_columns(state)) do
-      %{id: id, title: title} = ticket ->
-        with {:ok, thread} <-
-               Channel.open_thread(%{title: title, workspace_id: Space.active_workspace_id(state), scope: "machine"}),
-             {:ok, _} <- Safe.value(fn -> Tickets.promote(ticket, thread.id) end, nil) do
-          _ = Staffing.spawn_onto(thread.id, Reads.center_dims(state))
-          # The promoted thread is the point — close the drawer so it's on screen.
-          %{Console.Cockpit.Drawer.close(state) | focused_id: thread.id, flash: "promoted ticket ##{id} → thread"}
-        else
-          _ -> %{state | flash: "couldn't promote the ticket"}
+      %{id: id} = ticket ->
+        # The server opens the thread on the ticket's project and posts the ticket as the opening ask;
+        # that post is what staffs the lead, so nothing is spawned from here.
+        case Safe.value(fn -> Tickets.start_thread(ticket) end, nil) do
+          {:ok, thread} ->
+            %{
+              Console.Cockpit.Drawer.close(state)
+              | focused_id: thread.id,
+                flash: "ticket ##{id} → thread · waking its lead"
+            }
+
+          _ ->
+            %{state | flash: "couldn't promote the ticket"}
         end
 
       _ ->

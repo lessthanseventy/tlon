@@ -74,6 +74,27 @@ defmodule Server.TicketsTest do
       assert Tickets.get(t.id) == nil
       assert_receive {:ticket_removed, %Ticket{}}
     end
+
+    test "start_thread opens a thread on the ticket's project whose opening post is the ticket, and promotes it" do
+      {:ok, ws} = Workspaces.register(%{name: "Start"})
+      {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "tlon", repos: []})
+
+      {:ok, t} =
+        Tickets.file(%{workspace_id: ws.id, project_id: p.id, title: "unbind ctrl+enter", body: "ghostty eats it"})
+
+      assert {:ok, thread} = Tickets.start_thread(t)
+      assert %{title: "unbind ctrl+enter", project_id: pid, workspace_id: wid, state: "open"} = thread
+      assert {pid, wid} == {p.id, ws.id}
+
+      assert [%{author: "andrew", body: body}] = Channel.thread_messages(thread)
+      assert body =~ "unbind ctrl+enter"
+      assert body =~ "ghostty eats it"
+      assert body =~ "ticket ##{t.id}"
+
+      assert %{status: "doing"} = Tickets.get(t.id)
+      assert [{"promoted", tid}] = Tickets.threads_of(t.id)
+      assert tid == thread.id
+    end
   end
 
   describe "links and ties (UX slice 4)" do

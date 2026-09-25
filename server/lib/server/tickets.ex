@@ -59,6 +59,28 @@ defmodule Server.Tickets do
   end
 
   @doc """
+  Start work on a ticket: a thread on the ticket's project whose opening post is the ticket (the
+  operator's post, so its lead is staffed like any ask), and the ticket promoted into it. The
+  cockpit's Enter on a ticket calls it. `{:ok, thread}` or `{:error, reason}`.
+  """
+  def start_thread(%Ticket{} = ticket) do
+    operator = Application.get_env(:server, :operator, "andrew")
+    ask = Enum.join(Enum.reject([ticket.title, ticket.body, "(ticket ##{ticket.id})"], &(&1 in [nil, ""])), "\n\n")
+
+    with {:ok, thread} <-
+           Server.Channel.open_thread(%{
+             title: ticket.title,
+             workspace_id: ticket.workspace_id,
+             project_id: ticket.project_id,
+             scope: "machine"
+           }),
+         {:ok, _} <- promote(ticket, thread.id),
+         {:ok, _} <- Server.Attention.respond(thread.id, operator, ask) do
+      {:ok, thread}
+    end
+  end
+
+  @doc """
   Tie a ticket to a thread — `promoted` (work started here) or `relates`. Many-to-many: a ticket
   may be tied to several threads and a thread to several tickets. Tying twice with the same kind is
   idempotent, not an error, because the caller is usually a coworker re-reporting the same fact.
