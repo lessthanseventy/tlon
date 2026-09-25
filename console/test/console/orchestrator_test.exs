@@ -47,7 +47,9 @@ defmodule Console.OrchestratorTest do
     test "note writes a workspace-scoped note with a receipt", %{ctx: ctx, workspace_id: ws} do
       assert {:ok, receipt} = Orchestrator.dispatch({:note, "leads are managers"}, ctx)
       assert receipt =~ "noted #"
-      assert [%{body: "leads are managers", scope: "workspace", scope_id: ^ws}] = Server.Notes.for_scope("workspace", ws)
+
+      assert [%{body: "leads are managers", scope: "workspace", scope_id: ^ws}] =
+               Server.Notes.for_scope("workspace", ws)
     end
 
     test "post to a coworker leading a thread posts + names the wake", %{ctx: ctx, workspace_id: ws} do

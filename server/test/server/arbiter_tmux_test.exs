@@ -134,7 +134,10 @@ defmodule Server.Arbiter.TmuxTest do
     assert {:error, :no_window} = Arbiter.Tmux.wake(%{thread_id: t.id, agent: "claude-code"}, "hi")
   end
 
-  test "terminal_target resolves the leaf for a client that wants to attach; nil when nothing runs", %{ws: ws, thread: t} do
+  test "terminal_target resolves the leaf for a client that wants to attach; nil when nothing runs", %{
+    ws: ws,
+    thread: t
+  } do
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"3\tt#{t.id}\t\t9\n", 0}}))
     assert %{socket: s, session: "w" <> _, window: w} = Arbiter.Tmux.terminal_target(t)
     assert s == Tmux.socket(ws.id) and w == "t#{t.id}"

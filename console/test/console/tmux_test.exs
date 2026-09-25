@@ -128,7 +128,15 @@ defmodule Console.TmuxTest do
 
       assert Tmux.parse_windows(out) == [
                %{name: "pi", active?: true, index: "1", thread_id: nil, opening: nil, activity: nil, pane_pid: nil},
-               %{name: "claude", active?: false, index: "2", thread_id: nil, opening: nil, activity: nil, pane_pid: nil},
+               %{
+                 name: "claude",
+                 active?: false,
+                 index: "2",
+                 thread_id: nil,
+                 opening: nil,
+                 activity: nil,
+                 pane_pid: nil
+               },
                %{
                  name: "reviewer-fix-the-bug",
                  active?: false,

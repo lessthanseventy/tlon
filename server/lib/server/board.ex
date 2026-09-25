@@ -221,7 +221,10 @@ defmodule Server.Board do
   defp recall_query(%Thread{} = thread) do
     latest = Channel.latest_operator_message(thread.id)
 
-    case [thread.title, latest && latest.body] |> Enum.join(" ") |> String.trim() do
+    [thread.title, latest && latest.body]
+    |> Enum.join(" ")
+    |> String.trim()
+    |> case do
       "" -> nil
       query -> query
     end

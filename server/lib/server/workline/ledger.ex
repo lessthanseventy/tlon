@@ -56,6 +56,7 @@ defmodule Server.Workline.Ledger do
       Enum.map(worklines, fn w ->
         gate = if w.awaiting, do: " ⏸awaiting #{w.awaiting}", else: ""
         born = if w.born == "machine", do: " (machine-born)", else: ""
+
         "##{w.id} #{w.slug} · #{w.stage}#{gate}#{born} · #{length(w.transitions)} advances · opened #{date(w.opened_at)}"
       end)
 

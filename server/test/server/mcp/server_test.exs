@@ -641,7 +641,9 @@ defmodule Server.MCP.ServerTest do
     session = handshake(token)
 
     filed =
-      token |> call(session, 2, "file_ticket", %{"title" => "auth is fucked", "priority" => "high"}) |> decode_tool_json()
+      token
+      |> call(session, 2, "file_ticket", %{"title" => "auth is fucked", "priority" => "high"})
+      |> decode_tool_json()
 
     assert %{"id" => id, "status" => "backlog", "priority" => "high"} = filed
     assert is_integer(id)
@@ -696,7 +698,10 @@ defmodule Server.MCP.ServerTest do
   end
 
   defp request(id, method, params \\ nil) do
-    then(%{"jsonrpc" => "2.0", "id" => id, "method" => method}, &if(params, do: Map.put(&1, "params", params), else: &1))
+    then(
+      %{"jsonrpc" => "2.0", "id" => id, "method" => method},
+      &if(params, do: Map.put(&1, "params", params), else: &1)
+    )
   end
 
   defp notification(method) do

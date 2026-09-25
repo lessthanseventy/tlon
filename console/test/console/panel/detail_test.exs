@@ -17,7 +17,11 @@ defmodule Console.Panel.DetailTest do
   end
 
   test "renders the title, a rule, then the styled lines" do
-    data = %{title: "commit abc · fix", lines: [{"+added", :diff_add}, {"-gone", :diff_del}, {"@@ -1 +1 @@", :diff_hunk}]}
+    data = %{
+      title: "commit abc · fix",
+      lines: [{"+added", :diff_add}, {"-gone", :diff_del}, {"@@ -1 +1 @@", :diff_hunk}]
+    }
+
     rows = Detail.render(data, @rect)
     joined = lines(rows)
 

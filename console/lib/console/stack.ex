@@ -121,7 +121,7 @@ defmodule Console.Stack do
   @doc "Current branch name, or nil if not in a git repo."
   def branch(dir \\ ".") do
     case cmd("git", ["-C", dir, "branch", "--show-current"]) do
-      {:ok, out} -> out |> String.trim() |> then(&if &1 == "", do: nil, else: &1)
+      {:ok, out} -> out |> String.trim() |> then(&if &1 != "", do: &1)
       :error -> nil
     end
   end

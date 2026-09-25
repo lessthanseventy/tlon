@@ -46,7 +46,10 @@ defmodule Console.Orchestrator do
   end
 
   def dispatch({:query, :roster}, _ctx) do
-    case Console.Server.staffed_machine_threads() |> Enum.map(& &1.lead) |> Enum.uniq() do
+    Console.Server.staffed_machine_threads()
+    |> Enum.map(& &1.lead)
+    |> Enum.uniq()
+    |> case do
       [] -> {:ok, "no coworkers leading an open thread"}
       names -> {:ok, "on the clock: " <> Enum.join(names, ", ")}
     end

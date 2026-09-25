@@ -64,7 +64,9 @@ defmodule Console.Panel.ThreadStack do
     cursor = if card.active?, do: {"▌ ", :accent}, else: {"  ", :normal}
     id_style = if card.active?, do: :header, else: :dim
     title_style = if card.active?, do: :header, else: :normal
-    [cursor, {"##{card.id} ", id_style}, {String.slice(card.title || "", 0, max(w - 24, 8)), title_style}] ++ chips(card)
+
+    [cursor, {"##{card.id} ", id_style}, {String.slice(card.title || "", 0, max(w - 24, 8)), title_style}] ++
+      chips(card)
   end
 
   # -- conversation --------------------------------------------------------

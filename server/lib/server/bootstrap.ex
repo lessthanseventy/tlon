@@ -177,5 +177,6 @@ defmodule Server.Bootstrap do
   end
 
   # The workspace's git-tracked globs become the default project's repos (name defaults to the glob).
-  defp workspace_repos(%Workspace{} = ws), do: Enum.map(Workspaces.repos(ws.id), &%{"path" => &1.path, "name" => &1.path})
+  defp workspace_repos(%Workspace{} = ws),
+    do: Enum.map(Workspaces.repos(ws.id), &%{"path" => &1.path, "name" => &1.path})
 end

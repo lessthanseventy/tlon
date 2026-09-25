@@ -196,7 +196,7 @@ defmodule Console.View do
     %{
       focused: not is_nil(focused) and section == focused,
       digit: digit,
-      title: if(tabs, do: nil, else: section_title(section)),
+      title: if(!tabs, do: section_title(section)),
       tabs: tabs,
       hint: if(tabs, do: "[ ] cycle")
     }
@@ -434,7 +434,8 @@ defmodule Console.View do
   # The OPEN thread's card (design 2026-09-08 §2), never the rail's selection cursor — nothing open,
   # nothing named. Same thread_stack read the center's list⇄conversation switch uses, so the bar and
   # the center can never disagree about what is open.
-  defp opened_card(%{thread_stack: %{opened: id, cards: cards}}) when not is_nil(id), do: Enum.find(cards, &(&1.id == id))
+  defp opened_card(%{thread_stack: %{opened: id, cards: cards}}) when not is_nil(id),
+    do: Enum.find(cards, &(&1.id == id))
 
   defp opened_card(_reads), do: nil
 

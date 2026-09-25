@@ -76,7 +76,9 @@ defmodule Console.Panel.Stack do
   defp tracking_suffix(ahead, behind) do
     parts =
       []
-      |> then(fn ps -> if ahead && ahead > 0, do: [{" ↑", :warm}, {Integer.to_string(ahead), :normal} | ps], else: ps end)
+      |> then(fn ps ->
+        if ahead && ahead > 0, do: [{" ↑", :warm}, {Integer.to_string(ahead), :normal} | ps], else: ps
+      end)
       |> then(fn ps ->
         if behind && behind > 0, do: [{" ↓", :label}, {Integer.to_string(behind), :normal} | ps], else: ps
       end)
@@ -87,7 +89,9 @@ defmodule Console.Panel.Stack do
   defp status_row(summary) do
     parts =
       []
-      |> then(fn ps -> if summary.staged > 0, do: [{"+" <> Integer.to_string(summary.staged), :warm} | ps], else: ps end)
+      |> then(fn ps ->
+        if summary.staged > 0, do: [{"+" <> Integer.to_string(summary.staged), :warm} | ps], else: ps
+      end)
       |> then(fn ps ->
         if summary.unstaged > 0, do: [{"~" <> Integer.to_string(summary.unstaged), :normal} | ps], else: ps
       end)

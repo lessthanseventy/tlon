@@ -116,7 +116,8 @@ defmodule Server.Tmux do
   end
 
   @doc "The boot script's first line: close every fd above stderr."
-  def close_inherited_fds, do: ~s|for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done 2>/dev/null|
+  def close_inherited_fds,
+    do: ~s|for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done 2>/dev/null|
 
   @doc "The line every harness boot takes after sourcing the exports: into the thread's worktree, guarded."
   def cd_worktree, do: ~s([ -n "$TLON_CWD" ] && cd "$TLON_CWD")

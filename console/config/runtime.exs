@@ -22,8 +22,11 @@ if config_env() != :test and not remote? do
   # The embedded (local-backend) cockpit shares the service's store: Postgres `tlon` over the
   # socket, or TLON_DATABASE / TLON_DATABASE_URL to point elsewhere (a scratch `tlon_dev`).
   case System.get_env("TLON_DATABASE_URL") do
-    nil -> config :server, Server.Repo, database: System.get_env("TLON_DATABASE") || "tlon", socket_dir: "/run/postgresql"
-    url -> config :server, Server.Repo, url: url
+    nil ->
+      config :server, Server.Repo, database: System.get_env("TLON_DATABASE") || "tlon", socket_dir: "/run/postgresql"
+
+    url ->
+      config :server, Server.Repo, url: url
   end
 
   # Mirror funes' own runtime flags: a dependency's config/*.exs is NOT evaluated when aleph

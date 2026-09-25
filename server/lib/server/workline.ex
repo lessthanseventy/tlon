@@ -156,7 +156,10 @@ defmodule Server.Workline do
 
   # Runs inside do_promote's transaction: stage+slug landing and the ledger row are one write.
   defp land_promotion(fresh, slug) do
-    case fresh |> Thread.promote_changeset("build", slug) |> Repo.update() do
+    fresh
+    |> Thread.promote_changeset("build", slug)
+    |> Repo.update()
+    |> case do
       {:ok, tracked} ->
         {:ok, _event} =
           Dossier.record_event(%{

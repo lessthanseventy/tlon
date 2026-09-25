@@ -44,7 +44,11 @@ defmodule Server.Import.MemoryTest do
     notes = Path.join(dir, "MEMORY.md")
     File.write!(notes, "# Deuce Seven - Trading Bot\n\n## Project Structure\n- Elixir umbrella app, four apps\n")
     index = Path.join(ctx.dir, "MEMORY.md")
-    File.write!(index, "# Memory index\n\n- [Fix or file](fix-or-file.md) — never note\n- [Store](store.md) — postgres\n")
+
+    File.write!(
+      index,
+      "# Memory index\n\n- [Fix or file](fix-or-file.md) — never note\n- [Store](store.md) — postgres\n"
+    )
 
     assert {:ok, %{banked: 1}} = Memory.import_files([notes, index], ctx.tlon)
 

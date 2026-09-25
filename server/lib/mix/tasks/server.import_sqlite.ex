@@ -69,7 +69,10 @@ defmodule Mix.Tasks.Server.ImportSqlite do
 
     for row <- rows do
       values =
-        idx |> Enum.map(&Enum.at(row, &1)) |> Enum.zip(pg_cols) |> Enum.map(fn {v, c} -> convert(v, c, times, bools) end)
+        idx
+        |> Enum.map(&Enum.at(row, &1))
+        |> Enum.zip(pg_cols)
+        |> Enum.map(fn {v, c} -> convert(v, c, times, bools) end)
 
       Repo.query!(sql, values)
     end

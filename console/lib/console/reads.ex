@@ -357,7 +357,11 @@ defmodule Console.Reads do
   end
 
   defp rail_verb(state, layout) do
-    case state |> rail_data() |> Panel.Rail.entries() |> Enum.at(Focus.cursor(state.focus, layout)) do
+    state
+    |> rail_data()
+    |> Panel.Rail.entries()
+    |> Enum.at(Focus.cursor(state.focus, layout))
+    |> case do
       {:thread, %{id: id}} -> {:pick, {:open_thread_view, id}}
       {:channel, %{id: id}} -> {:pick, {:open_channel, id}}
       {:workspace, %{id: id}} -> {:pick, {:switch_space, id}}

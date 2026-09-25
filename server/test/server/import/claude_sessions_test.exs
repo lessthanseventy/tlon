@@ -29,7 +29,12 @@ defmodule Server.Import.ClaudeSessionsTest do
   end
 
   defp user(text, ts),
-    do: %{"type" => "user", "cwd" => "/p/exc/lib", "timestamp" => ts, "message" => %{"role" => "user", "content" => text}}
+    do: %{
+      "type" => "user",
+      "cwd" => "/p/exc/lib",
+      "timestamp" => ts,
+      "message" => %{"role" => "user", "content" => text}
+    }
 
   defp said(text, ts),
     do: %{"type" => "assistant", "timestamp" => ts, "message" => %{"content" => [%{"type" => "text", "text" => text}]}}

@@ -35,7 +35,9 @@ defmodule Console.Panel.NewThreadTest do
     idle = %{input: nil, project: "excessibility"} |> NewThread.render(@rect) |> text()
     assert idle =~ "start a new thread in excessibility"
 
-    typing = %{input: %{kind: :new_thread, buffer: "fix"}, project: "excessibility"} |> NewThread.render(@rect) |> text()
+    typing =
+      %{input: %{kind: :new_thread, buffer: "fix"}, project: "excessibility"} |> NewThread.render(@rect) |> text()
+
     assert typing =~ "excessibility ▸ fix"
   end
 

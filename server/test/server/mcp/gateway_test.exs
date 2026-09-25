@@ -93,9 +93,7 @@ defmodule Server.MCP.GatewayTest do
       :httpc.request(:post, {url, [], ~c"application/json", body}, [], body_format: :binary)
 
     decoded =
-      if resp_body in [nil, "", []] do
-        nil
-      else
+      if resp_body not in [nil, "", []] do
         JSON.decode!(to_string(resp_body))
       end
 
@@ -201,7 +199,9 @@ defmodule Server.MCP.GatewayTest do
 
     assert out =~ "owed artifact is not committed"
     # a bounced turn is let through — never a forever loop
-    {_, 0} = System.cmd("bash", ["-c", "echo '{\"stop_hook_active\":true}' | #{hook}"], env: env, stderr_to_stdout: true)
+    {_, 0} =
+      System.cmd("bash", ["-c", "echo '{\"stop_hook_active\":true}' | #{hook}"], env: env, stderr_to_stdout: true)
+
     # and a plain thread is a no-op
     {:ok, plain} = Channel.open_thread(%{title: "plain"})
 

@@ -329,7 +329,8 @@ defmodule Console.Cockpit do
     {:noreply, %{state | paste_buffer: nil}}
   end
 
-  def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{paste_buffer: buffer} = state) when not is_nil(buffer) do
+  def handle_cast({:dispatch, %Event{type: :key, data: key}}, %{paste_buffer: buffer} = state)
+      when not is_nil(buffer) do
     {:noreply, %{state | paste_buffer: Console.PasteBuffer.accumulate(buffer, key)}}
   end
 
@@ -530,7 +531,9 @@ defmodule Console.Cockpit do
   # ambient — just repaint so stage chips/counts stay live.
   def handle_info({:workline_gated, thread}, state) do
     Delivery.desktop_notify(:workline_gated, thread)
-    {:noreply, render(%{state | flash: "⏸ workline “#{thread.title}” parked at #{thread.stage} — approve #{thread.id}"})}
+
+    {:noreply,
+     render(%{state | flash: "⏸ workline “#{thread.title}” parked at #{thread.stage} — approve #{thread.id}"})}
   end
 
   # Entering verify dispatches the DETERMINISTIC verifier (scripts/workline-verify.sh):
@@ -791,7 +794,8 @@ defmodule Console.Cockpit do
   defp dispatch_click({Panel.Tertius, _data, _rect}, _x, _y, state),
     do: {:noreply, render(%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}})}
 
-  defp dispatch_click({panel, data, rect}, _x, y, state), do: apply_pick(Panel.pick(panel, data, rect, y - rect.y), state)
+  defp dispatch_click({panel, data, rect}, _x, y, state),
+    do: apply_pick(Panel.pick(panel, data, rect, y - rect.y), state)
 
   defp apply_pick(nil, state), do: {:noreply, state}
 
@@ -941,7 +945,9 @@ defmodule Console.Cockpit do
         # fire here too, spawning a generic "pi" as an invisible per-thread terminal that never got
         # the message (the "agent booted idle" bug) and doubled the real lead's spawn.
         _ = Channel.post(%{thread_id: thread.id, author: operator, body: text})
-        {:noreply, render(%{state | focused_id: thread.id, flash: "→ started “#{thread_title(text)}” · waking its lead"})}
+
+        {:noreply,
+         render(%{state | focused_id: thread.id, flash: "→ started “#{thread_title(text)}” · waking its lead"})}
 
       {:error, _changeset} ->
         {:noreply, render(%{state | flash: "couldn't create the thread"})}
@@ -1132,7 +1138,9 @@ defmodule Console.Cockpit do
   # applies wherever Profiles.fetch flows on the next spawn (console:reset, or kill the pi window).
   defp apply_effect({:cycle_coworker_model, profile_name}, state),
     do:
-      flashing(state, "settings write", fn -> {:noreply, render(%{state | flash: Author.cycle_model!(profile_name)})} end)
+      flashing(state, "settings write", fn ->
+        {:noreply, render(%{state | flash: Author.cycle_model!(profile_name)})}
+      end)
 
   # Enter in Tlön nav: on the RAIL, the row under the cursor speaks the click's own verb (open a
   # thread / switch workspace); on STACK, zoom the focused thread's worktree into an embedded
@@ -1210,7 +1218,9 @@ defmodule Console.Cockpit do
   defp apply_effect({:seat, id, attrs}, state), do: {:noreply, render(Author.seat!(state, id, attrs))}
 
   defp apply_effect({:unseat, id, seat_id}, state), do: {:noreply, render(Author.unseat!(state, id, seat_id))}
-  defp apply_effect({:edit_workspace, id, attrs}, state), do: {:noreply, render(Author.edit_workspace!(state, id, attrs))}
+
+  defp apply_effect({:edit_workspace, id, attrs}, state),
+    do: {:noreply, render(Author.edit_workspace!(state, id, attrs))}
 
   # The roster sub-editor's Tab-armed knob landed on Enter/Space (D2.4 Chunk 2b, absorbs Settings):
   # apply it via Console.Config.
@@ -1375,7 +1385,14 @@ defmodule Console.Cockpit do
 
   defp drop_derived(next),
     do:
-      Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :live_workspaces, :picker_items, :project_choice])
+      Map.drop(next, [
+        :center_live?,
+        :composer_thread_id,
+        :tlon_layout,
+        :live_workspaces,
+        :picker_items,
+        :project_choice
+      ])
 
   # The picker's rows for THIS keypress, off the last painted frame's reads — the switcher matches
   # the rail's own sidebar groups, so it can never show a thread the rail does not.
@@ -1634,7 +1651,9 @@ defmodule Console.Cockpit do
     # Each step in its own try: a wedged Driver stop (it can exceed its 500ms) must never skip
     # tb_shutdown — that skip leaves the shell in alt-screen + mouse-reporting, needing `reset`.
     Safe.value(
-      fn -> if is_pid(state.driver) and Process.alive?(state.driver), do: GenServer.stop(state.driver, :normal, 500) end,
+      fn ->
+        if is_pid(state.driver) and Process.alive?(state.driver), do: GenServer.stop(state.driver, :normal, 500)
+      end,
       :ok
     )
 

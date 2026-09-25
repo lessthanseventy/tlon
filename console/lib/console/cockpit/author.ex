@@ -73,7 +73,13 @@ defmodule Console.Cockpit.Author do
         do: [%{label: "Delete ##{channel.name}", action: {:delete_channel, channel}, danger: true}],
         else: []
 
-    %{title: "##{channel.name}", x: x, y: y, cursor: 0, items: [%{label: "New channel…", action: :new_channel} | delete]}
+    %{
+      title: "##{channel.name}",
+      x: x,
+      y: y,
+      cursor: 0,
+      items: [%{label: "New channel…", action: :new_channel} | delete]
+    }
   end
 
   @doc """
@@ -90,7 +96,13 @@ defmodule Console.Cockpit.Author do
           else: %{label: "Blocked by ##{other.id} #{other.title}", action: {:block, ticket, other}}
       end
 
-    %{title: "##{ticket.id} #{ticket.title}", x: x, y: y, cursor: 0, items: items ++ [%{label: "Cancel", action: :close}]}
+    %{
+      title: "##{ticket.id} #{ticket.title}",
+      x: x,
+      y: y,
+      cursor: 0,
+      items: items ++ [%{label: "Cancel", action: :close}]
+    }
   end
 
   defp confirm_delete_channel_menu(channel, x, y) do

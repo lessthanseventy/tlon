@@ -78,7 +78,12 @@ defmodule Server.SeedTest do
       {:ok, thread} = Server.Channel.open_thread(%{title: "t"})
 
       {:ok, fact} =
-        Server.Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "a real learning", provenance: "derived"})
+        Server.Dossier.bank_fact(%{
+          thread_id: thread.id,
+          kind: "learned",
+          text: "a real learning",
+          provenance: "derived"
+        })
 
       assert {:ok, intent, 1} = Seed.promote_fact(fact.id)
       assert intent == "seed:promoted:#{fact.id}"

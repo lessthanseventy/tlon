@@ -78,8 +78,11 @@ defmodule Server.MCP.Tool.PromotePlaybook do
     thread
     |> Playbooks.promote(Map.put(Map.new(params), :author, identity.agent))
     |> case do
-      {:error, :nothing_to_promote} -> fail(frame, "nothing to promote: no done todos on this thread and no steps given")
-      other -> reply(frame, other, &MCP.Brief.playbook/1)
+      {:error, :nothing_to_promote} ->
+        fail(frame, "nothing to promote: no done todos on this thread and no steps given")
+
+      other ->
+        reply(frame, other, &MCP.Brief.playbook/1)
     end
   end
 end

@@ -72,7 +72,9 @@ if config_env() != :test do
   config :server, Server.Web.Endpoint,
     http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("TLON_WEB_PORT") || "4042")],
     secret_key_base:
-      Base.encode64(:crypto.hash(:sha512, "tlon-web:" <> (System.get_env("TLON_WEB_SECRET") || Server.MCP.Secret.get()))),
+      Base.encode64(
+        :crypto.hash(:sha512, "tlon-web:" <> (System.get_env("TLON_WEB_SECRET") || Server.MCP.Secret.get()))
+      ),
     server: System.get_env("TLON_START_WEB") in ~w(1 true yes)
 
   # Oban runs where the switchboard runs (the service); a scratch node without it stays quiet.

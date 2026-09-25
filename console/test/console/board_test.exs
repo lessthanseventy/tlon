@@ -437,7 +437,9 @@ defmodule Console.BoardTest do
         Enum.each(View.compose(r, w, h), fn {mod, _d, rect} ->
           assert rect.x >= 0 and rect.y >= 0, "#{inspect(mod)} placed above/left of the frame at #{key} #{w}x#{h}"
           assert rect.x + rect.w <= w, "#{inspect(mod)} overflowed the frame width at #{key} #{w}x#{h}"
-          assert rect.y + rect.h <= h, "#{inspect(mod)} overflowed the frame height at #{key} #{w}x#{h}: #{inspect(rect)}"
+
+          assert rect.y + rect.h <= h,
+                 "#{inspect(mod)} overflowed the frame height at #{key} #{w}x#{h}: #{inspect(rect)}"
         end)
 
         cr = View.center_rect(key, w, h)

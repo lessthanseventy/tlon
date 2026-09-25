@@ -135,7 +135,8 @@ defmodule Console.Delivery do
 
   # The server handle of the coworker staffed on this message's thread (its lead), or nil.
   # Read in-process (console boots server); never crash the hub if the lookup fails.
-  defp thread_lead(%{thread_id: tid}) when not is_nil(tid), do: Safe.value(fn -> Console.Server.thread_lead(tid) end, nil)
+  defp thread_lead(%{thread_id: tid}) when not is_nil(tid),
+    do: Safe.value(fn -> Console.Server.thread_lead(tid) end, nil)
 
   defp thread_lead(_), do: nil
 

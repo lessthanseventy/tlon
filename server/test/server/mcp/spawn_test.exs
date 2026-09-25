@@ -58,7 +58,9 @@ defmodule Server.MCP.SpawnTest do
     end
 
     test "assign: true (or omitted, the default) still reassigns — no regression" do
-      {:ok, %{thread: thread, agent: lead}} = Spawn.ensure({:open, "task thread 2"}, "claude-machine", mandate: "machine")
+      {:ok, %{thread: thread, agent: lead}} =
+        Spawn.ensure({:open, "task thread 2"}, "claude-machine", mandate: "machine")
+
       assert Repo.get(Thread, thread.id).agent_id == lead.id
 
       assert {:ok, %{thread: t, agent: a}} = Spawn.ensure({:join, thread.id}, "someone-else", mandate: "machine")

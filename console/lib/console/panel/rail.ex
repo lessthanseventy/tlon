@@ -46,7 +46,10 @@ defmodule Console.Panel.Rail do
   # conversation, a workspace switches to it — the verbs the Cockpit already dispatches.
   @impl Panel
   def pick(%{groups: _} = data, _rect, local_y) do
-    case data |> entries() |> Enum.at(Panel.scroll_offset(data) + local_y) do
+    data
+    |> entries()
+    |> Enum.at(Panel.scroll_offset(data) + local_y)
+    |> case do
       {:thread, %{id: id}} -> {:open_thread_view, id}
       {:channel, %{id: id}} -> {:open_channel, id}
       {:workspace, %{id: id}} -> {:switch_space, id}
@@ -61,7 +64,9 @@ defmodule Console.Panel.Rail do
 
   @doc "The entry under `local_y` (the right-click context menu's target), or nil."
   @spec entry_at(map(), Panel.rect(), non_neg_integer()) :: {:workspace | :channel | :project | :thread, map()} | nil
-  def entry_at(%{groups: _} = data, _rect, local_y), do: data |> entries() |> Enum.at(Panel.scroll_offset(data) + local_y)
+  def entry_at(%{groups: _} = data, _rect, local_y),
+    do: data |> entries() |> Enum.at(Panel.scroll_offset(data) + local_y)
+
   def entry_at(_data, _rect, _local_y), do: nil
 
   @doc "The rail's rows as data: every workspace; the ACTIVE one's channels; the OPEN channel's threads, under a heading per project once they span more than one."

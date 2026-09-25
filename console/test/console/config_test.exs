@@ -22,14 +22,17 @@ defmodule Console.ConfigTest do
   end
 
   test "put_coworker_model persists and reads back in the Profile.model shape", %{path: path} do
-    :ok = Config.put_coworker_model("tlon", %{provider: "anthropic", model: "claude-opus-4-8", thinking: "medium"}, path)
+    :ok =
+      Config.put_coworker_model("tlon", %{provider: "anthropic", model: "claude-opus-4-8", thinking: "medium"}, path)
 
     assert Config.coworker_model("tlon", path) ==
              %{provider: "anthropic", model: "claude-opus-4-8", thinking: "medium"}
   end
 
   test "a second put replaces the first without disturbing other profiles", %{path: path} do
-    :ok = Config.put_coworker_model("tlon", %{provider: "anthropic", model: "claude-sonnet-5", thinking: "medium"}, path)
+    :ok =
+      Config.put_coworker_model("tlon", %{provider: "anthropic", model: "claude-sonnet-5", thinking: "medium"}, path)
+
     :ok = Config.put_coworker_model("desk", %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}, path)
     :ok = Config.put_coworker_model("tlon", %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}, path)
 

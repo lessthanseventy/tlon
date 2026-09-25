@@ -33,7 +33,8 @@ defmodule Server.BoardTest do
       {:ok, _fact} =
         Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "use sqlite", provenance: "derived"})
 
-      {:ok, _event} = Dossier.record_event(%{thread_id: thread.id, kind: "work_landed", detail: %{"summary" => "landed"}})
+      {:ok, _event} =
+        Dossier.record_event(%{thread_id: thread.id, kind: "work_landed", detail: %{"summary" => "landed"}})
 
       feed = Board.recent_activity(50)
       tags = Enum.map(feed, fn {tag, _row} -> tag end)
@@ -47,7 +48,9 @@ defmodule Server.BoardTest do
 
     test "forgotten facts are left out of the seed" do
       {:ok, thread} = Channel.open_thread(%{title: "forget"})
-      {:ok, fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "temporary", provenance: "derived"})
+
+      {:ok, fact} =
+        Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "temporary", provenance: "derived"})
 
       fact
       |> Ecto.Changeset.change(forgotten_at: DateTime.truncate(DateTime.utc_now(), :second))
