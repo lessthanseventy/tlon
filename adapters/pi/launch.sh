@@ -9,7 +9,7 @@
 set -euo pipefail
 
 adapter="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo="$(cd "$adapter/../../.." && pwd)"
+repo="$(cd "$adapter/../.." && pwd)"
 cli="$repo/scripts/tlon-cli.sh"
 
 provider="" model="" thinking=""

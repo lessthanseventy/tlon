@@ -14,7 +14,7 @@
 set -euo pipefail
 
 adapter="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo="$(cd "$adapter/../../.." && pwd)"
+repo="$(cd "$adapter/../.." && pwd)"
 cli="$repo/scripts/tlon-cli.sh"
 
 # If the environment already carries a server identity (e.g. the console's Tlön pane exported it

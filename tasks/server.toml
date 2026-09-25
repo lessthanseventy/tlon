@@ -156,7 +156,7 @@ if [ -n "$pids" ]; then echo "stopping watchexec: $pids"; kill $pids; else echo 
 ["server:watch"]
 description = "server: re-run the suite on every change under server (cap signal)"
 dir = "server"
-run = "../../scripts/watch.sh mise exec -- mix test"
+run = "../scripts/watch.sh mise exec -- mix test"
 
 ["server:dev"]
 description = "server: a scratch server NODE (funes-dev@127.0.0.1, database tlon_dev, MCP :4041) in iex — hack on the server with the live service untouched; attach a cockpit with `TLON_NODE=funes-dev@127.0.0.1 mise run console:run`"

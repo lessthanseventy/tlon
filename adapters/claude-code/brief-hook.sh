@@ -18,7 +18,7 @@ thread="${TLON_THREAD:-}"
 [ -n "$thread" ] || exit 0
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if ! brief="$("$here/../../../scripts/tlon-cli.sh" dossier "$thread")"; then
+if ! brief="$("$here/../../scripts/tlon-cli.sh" dossier "$thread")"; then
   echo "tlon brief-hook: dossier for thread #$thread failed — session starts without a brief" >&2
   exit 0
 fi

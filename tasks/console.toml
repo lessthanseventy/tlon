@@ -43,7 +43,7 @@ if ! systemctl --user is-active --quiet tlon; then
   echo "console:run: the tlon service is not running — systemctl --user start tlon (or mise run server:restart); for an embedded server on the scratch db use console:run:local" >&2
   exit 1
 fi
-KEEP_COWORKERS=1 ../../scripts/console-reap.sh || exit $?
+KEEP_COWORKERS=1 ../scripts/console-reap.sh || exit $?
 # fd 2 goes to a log, not the tty: the embedded terminal's NIF (libghostty-vt) writes its own
 # warnings to stderr, and termbox2 only repaints cells IT changed, so any stray write to the
 # screen sits there corrupting the frame until that cell happens to redraw. The cockpit's own
@@ -63,7 +63,7 @@ case "${TMUX:-}" in *"/tlon,"*) exec mise run console:run ;; *) exec tmux -L tlo
 description = "console: the cockpit with an EMBEDDED server on the scratch db (../server/.dev/tlon.db, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run"
 dir = "console"
 run = """
-../../scripts/console-reap.sh || exit $?
+../scripts/console-reap.sh || exit $?
 TLON_DATABASE=tlon_dev mix ecto.migrate -r Server.Repo || exit $?
 stderr_log="${XDG_CACHE_HOME:-$HOME/.cache}/tlon/stderr.log"; mkdir -p "$(dirname "$stderr_log")"
 TLON_BACKEND=local TLON_DATABASE=tlon_dev TLON_WORKLINE_ROOT="$(git rev-parse --show-toplevel)" TLON_MEMORY_PASS=1 mix console.run 2>>"$stderr_log"
@@ -78,7 +78,7 @@ TLON_BACKEND=local TLON_DATABASE=tlon_dev TLON_WORKLINE_ROOT="$(git rev-parse --
 description = "console: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, kill every coworker tmux server (+ any legacy default-server tlon session), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use console:reset:db to wipe data."
 dir = "console"
 run = """
-../../scripts/console-reap.sh || true
+../scripts/console-reap.sh || true
 mix clean >/dev/null 2>&1 && echo "console:reset — mix clean (fresh compile on next console:run)"
 echo "--- env now ---"
 for p in 4040 4041; do if ss -tlnH "sport = :$p" 2>/dev/null | grep -q .; then echo "  port $p: LISTENING"; else echo "  port $p: free"; fi; done
