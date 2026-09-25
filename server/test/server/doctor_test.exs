@@ -80,4 +80,9 @@ defmodule Server.DoctorTest do
       Doctor.table_to_jsonl("collection; DROP TABLE collection")
     end
   end
+
+  setup do
+    Server.TestDB.clean!()
+    :ok
+  end
 end
