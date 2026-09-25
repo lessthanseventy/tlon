@@ -41,3 +41,6 @@ config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b
 # inside the ficciones checkout, so a test that approves a gate committed intent.md into the real
 # repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
 config :server, workline_root: "/nonexistent/tlon-test-workline"
+
+# Test transcripts are written moments before they are imported; nothing here is a live session.
+config :server, import_live_window_s: 0

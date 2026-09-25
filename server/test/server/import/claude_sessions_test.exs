@@ -41,6 +41,21 @@ defmodule Server.Import.ClaudeSessionsTest do
       "message" => %{"role" => "user", "content" => [%{"type" => "tool_result"}]}
     }
 
+  test "a transcript still being written is left for a later run, not frozen half-way", ctx do
+    Application.put_env(:server, :import_live_window_s, 3600)
+    on_exit(fn -> Application.put_env(:server, :import_live_window_s, 0) end)
+
+    path =
+      transcript(ctx.dir, "live", [user("keep going", "2026-09-01T10:00:00Z"), said("On it.", "2026-09-01T10:00:01Z")])
+
+    File.touch!(path, System.os_time(:second))
+
+    assert {:ok, %{imported: 0, skipped: 1}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
+
+    File.touch!(path, System.os_time(:second) - 2 * 3600)
+    assert {:ok, %{imported: 1}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
+  end
+
   test "the thread records which of its project's repos the session ran in", ctx do
     repos = [%{"name" => "ficciones", "path" => "/p/ficciones"}, %{"name" => "mix_master", "path" => "/p/mix_master"}]
     {:ok, tlon} = Projects.register(%{workspace_id: ctx.ws.id, name: "tlon", repos: repos})

@@ -163,7 +163,7 @@ defmodule Server.Import.ClaudeSessions do
     projects = Projects.in_workspace(workspace_id)
     fallback = Projects.default(workspace_id)
     paths = glob |> List.wrap() |> Enum.flat_map(&Path.wildcard/1)
-    sessions = paths |> Enum.map(&parse/1) |> Enum.reject(&is_nil/1) |> longest_copies()
+    sessions = paths |> Enum.reject(&live?/1) |> Enum.map(&parse/1) |> Enum.reject(&is_nil/1) |> longest_copies()
 
     imported =
       Enum.count(sessions, fn session ->
@@ -172,6 +172,13 @@ defmodule Server.Import.ClaudeSessions do
       end)
 
     {:ok, %{imported: imported, skipped: length(paths) - imported}}
+  end
+
+  # A transcript written to within the window is a session still running: imported now it would
+  # freeze half-way, and the receipt would stop every later run from finishing it.
+  defp live?(path) do
+    window = Application.get_env(:server, :import_live_window_s, 3600)
+    File.stat!(path, time: :posix).mtime > System.os_time(:second) - window
   end
 
   # A resumed or forked session copies the conversation it came from into a new file, so one
