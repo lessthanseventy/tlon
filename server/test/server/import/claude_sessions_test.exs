@@ -11,10 +11,10 @@ defmodule Server.Import.ClaudeSessionsTest do
   alias Server.Thread
   alias Server.Workspaces
 
-  @moduletag :tmp_dir
-
-  setup %{tmp_dir: dir} do
+  setup do
     Server.TestDB.clean!()
+    dir = Path.join(System.tmp_dir!(), "claude-sessions-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(dir) end)
     {:ok, ws} = Workspaces.register(%{name: "Home"})
     {:ok, general} = Projects.register(%{workspace_id: ws.id, name: "general", repos: [%{"path" => "/nowhere"}]})
     {:ok, repo} = Projects.register(%{workspace_id: ws.id, name: "exc", repos: [%{"path" => "/p/exc"}]})
