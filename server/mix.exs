@@ -104,7 +104,9 @@ defmodule Server.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       # A mix format plugin: one styling authority so directive order, alias
       # shape and pipe style are never a review comment again.
-      {:quokka, "~> 2.13", only: [:dev, :test], runtime: false}
+      {:quokka, "~> 2.13", only: [:dev, :test], runtime: false},
+      # iex> examples in @doc are formatted like the code around them
+      {:doctest_formatter, "~> 0.4", only: [:dev, :test], runtime: false}
     ]
   end
 end
