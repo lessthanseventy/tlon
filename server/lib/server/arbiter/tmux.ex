@@ -125,7 +125,7 @@ defmodule Server.Arbiter.Tmux do
 
   defp adapters_dir do
     Application.get_env(:server, :adapters_dir) || System.get_env("TLON_ADAPTERS_DIR") ||
-      Path.join(System.user_home!(), "projects/ficciones/modules/adapters")
+      Path.join(Profiles.tlon_root(), "adapters")
   end
 
   @doc "Collapse a prompt to one clean line (the console's rule: poking an agent is not a production write)."

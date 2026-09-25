@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { adapterForFile, findRootWith, ADAPTERS } from "./adapters.ts";
 import { frameMessage } from "./client.ts";
 
@@ -55,20 +56,15 @@ describe("adapterForFile — route a file to its language server", () => {
 });
 
 describe("findRootWith — walk up to a project marker", () => {
+  const repo = resolve(import.meta.dir, "../../..");
   test("mix.exs: finds the server root from a deep lib file", () => {
-    expect(findRootWith("/home/andrew/projects/ficciones/modules/server/lib/server/mcp/gateway.ex", "mix.exs")).toBe(
-      "/home/andrew/projects/ficciones/modules/server",
-    );
+    expect(findRootWith(`${repo}/server/lib/server/mcp/gateway.ex`, "mix.exs")).toBe(`${repo}/server`);
   });
   test("tsconfig.json: finds the adapters/consult root", () => {
-    expect(findRootWith("/home/andrew/projects/ficciones/modules/adapters/consult/src/extension.ts", "tsconfig.json")).toBe(
-      "/home/andrew/projects/ficciones/modules/adapters/consult",
-    );
+    expect(findRootWith(`${repo}/adapters/consult/src/extension.ts`, "tsconfig.json")).toBe(`${repo}/adapters/consult`);
   });
-  test("flake.nix: finds the repo root from flake.nix itself", () => {
-    expect(findRootWith("/home/andrew/projects/ficciones/flake.nix", "flake.nix")).toBe(
-      "/home/andrew/projects/ficciones",
-    );
+  test("mise.toml: finds the repo root from mise.toml itself", () => {
+    expect(findRootWith(`${repo}/mise.toml`, "mise.toml")).toBe(repo);
   });
   test("null when no marker is above the file", () => {
     expect(findRootWith("/tmp/orphan.ex", "mix.exs")).toBeNull();

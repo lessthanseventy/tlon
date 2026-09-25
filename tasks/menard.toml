@@ -3,7 +3,7 @@
 # does not compile. Paths are relative to where you stand; `--in DIR` for the run verbs.
 # Included by mise.toml ([task_config] includes). It lives HERE, not beside the tool, because
 # menard ships as a standalone repo: WHERE its checkout is, is ficciones' business, not menard's.
-# The CLI is scripts/menard.sh: menard at the commit modules/server/mix.lock pins, from its own
+# The CLI is scripts/menard.sh: menard at the commit server/mix.lock pins, from its own
 # checkout under ~/.cache, so CLI and library are one version, it keeps working while the server's
 # deps do not resolve, and editing ~/projects/menard never breaks it. `menard:check` gates the
 # ~/projects/menard dev checkout.

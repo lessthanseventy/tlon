@@ -3,23 +3,23 @@
 
 ["pi:balanced"]
 description = "pi agent: balanced everyday driver — glm-5.2 (Claude/GPT-alike, 976K ctx)"
-run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model glm-5.2"
+run = "adapters/pi/launch.sh --provider ollama-cloud --model glm-5.2"
 
 ["pi:deep"]
 description = "pi agent: deep reasoning — deepseek-v4-pro, thinking:high (the hard 10%, before you'd reach for Claude)"
-run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model deepseek-v4-pro --thinking high"
+run = "adapters/pi/launch.sh --provider ollama-cloud --model deepseek-v4-pro --thinking high"
 
 ["pi:code"]
 description = "pi agent: coding-heavy — kimi-k2.7-code (code-specialized, ~30% fewer thinking tokens)"
-run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model kimi-k2.7-code"
+run = "adapters/pi/launch.sh --provider ollama-cloud --model kimi-k2.7-code"
 
 ["pi:fast"]
 description = "pi agent: quick/cheap throwaway — deepseek-v4-flash, thinking:low (1M ctx, fast tier)"
-run = "modules/adapters/pi/launch.sh --provider ollama-cloud --model deepseek-v4-flash --thinking low"
+run = "adapters/pi/launch.sh --provider ollama-cloud --model deepseek-v4-flash --thinking low"
 
 ["pi:local"]
 description = "pi agent: free/offline grunt — qwen3-coder on the local ollama daemon (no cloud budget)"
-run = "modules/adapters/pi/launch.sh --provider ollama --model qwen3-coder"
+run = "adapters/pi/launch.sh --provider ollama --model qwen3-coder"
 
 # The flake pins WHICH extensions (manosWiring's `packages` list), but pi owns the mutable npm
 # install (~/.pi/agent/npm) and its VERSIONS — that dir is not nix-managed. So `home:switch` never
@@ -41,4 +41,4 @@ fi
 # home:switches, then runs pi:update so the extensions follow. PI_UPGRADE_NO_SWITCH=1 edits only.
 ["pi:upgrade"]
 description = "pi agent: upgrade pi ITSELF — bump the flake's release pin + hash (latest, or `-- <version>`), sync adapters/pi deps, home:switch, then pi:update for the extensions"
-run = "modules/adapters/pi/upgrade.sh"
+run = "adapters/pi/upgrade.sh"

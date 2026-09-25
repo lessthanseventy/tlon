@@ -71,7 +71,7 @@ defmodule Server.Crew.TmuxTest do
     assert script =~ ~s(export TLON_AUTHOR="reviewer")
     assert script =~ "\nexec "
     # the anthropic-model reviewer at home rides the official claude launcher, never a nested tmux
-    assert script =~ "modules/adapters/claude-code/launch.sh"
+    assert script =~ "adapters/claude-code/launch.sh"
     refute script =~ "new-session"
   end
 

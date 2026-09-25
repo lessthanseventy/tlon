@@ -6,7 +6,7 @@ defmodule Server.Tickets do
   write announces on `Server.Bus`'s tickets topic so the board refreshes.
 
   Backend note: `local` is the only backend today. When a workspace points at Jira/GitHub, an
-  adapter (under `modules/adapters`) will implement the same file/list/update verbs behind a
+  adapter (under `adapters\/`) will implement the same file/list/update verbs behind a
   `TicketBackend` behaviour — introduced with that first adapter (YAGNI until a 2nd impl exists).
   """
   import Ecto.Query

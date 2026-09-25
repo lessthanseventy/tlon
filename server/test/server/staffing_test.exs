@@ -107,8 +107,8 @@ defmodule Server.StaffingTest do
     assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", "hronir", hronir]}
     assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", "borges", borges]}
     # at home the anthropic-model builder and planner ride the official claude launcher
-    assert hronir =~ "modules/adapters/claude-code/launch.sh"
-    assert borges =~ "modules/adapters/claude-code/launch.sh"
+    assert hronir =~ "adapters/claude-code/launch.sh"
+    assert borges =~ "adapters/claude-code/launch.sh"
     assert_receive {:join, _tid, "hronir", _}
     assert_receive {:join, _tid, "borges", _}
   end
@@ -126,7 +126,7 @@ defmodule Server.StaffingTest do
     assert tid == thread.id
     assert opts[:mandate] == "machine"
     assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", ^window, script]}
-    assert script =~ "modules/adapters/claude-code/launch.sh"
+    assert script =~ "adapters/claude-code/launch.sh"
     tag = "#{thread.id}"
     target = "#{session}:=#{window}"
     assert_receive {:tmux, ["-L", ^sock, "set-option", "-w", "-t", ^target, "@funes_thread", ^tag]}

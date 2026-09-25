@@ -620,7 +620,7 @@ defmodule Console.Cockpit do
   @receipt_cap 6
   # Hot-reload trigger: `mise run console:reload` recompiles (in its own process — no TUI corruption)
   # then touches this file; the cockpit reloads Console.* modules on the next tick. Relative to the
-  # cockpit's cwd (modules/console), which the console:reload task shares.
+  # cockpit's cwd (console/), which the console:reload task shares.
   @reload_trigger ".reload"
 
   # The thread-stack cards (Slice 3): each machine-thread block → a card. `nil` fold set means

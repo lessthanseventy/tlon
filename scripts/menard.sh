@@ -3,13 +3,13 @@
 # the coworkers' source tools run as a library — from a checkout of its own under ~/.cache.
 #
 # Not the live ~/projects/menard: that is where menard is developed, and a half-applied edit
-# there stopped every other session's verbs mid-task. Not modules/server/deps/menard either: the
+# there stopped every other session's verbs mid-task. Not server/deps/menard either: the
 # CLI has to keep working while the server's deps do not resolve.
 set -euo pipefail
 
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-sha=$(grep -oE '"menard": \{:git, "[^"]+", "[0-9a-f]{40}"' "$repo/modules/server/mix.lock" | grep -oE '[0-9a-f]{40}')
-[[ -n "$sha" ]] || { echo "menard.sh: no menard pin in modules/server/mix.lock" >&2; exit 2; }
+sha=$(grep -oE '"menard": \{:git, "[^"]+", "[0-9a-f]{40}"' "$repo/server/mix.lock" | grep -oE '[0-9a-f]{40}')
+[[ -n "$sha" ]] || { echo "menard.sh: no menard pin in server/mix.lock" >&2; exit 2; }
 
 dir="${XDG_CACHE_HOME:-$HOME/.cache}/ficciones/menard/$sha"
 if [[ ! -x "$dir/bin/menard" ]]; then

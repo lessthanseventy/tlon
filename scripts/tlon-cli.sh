@@ -33,7 +33,7 @@
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
 set -euo pipefail
 
-SERVER="$(dirname "$0")/../modules/server/_build/prod/rel/server/bin/server"
+SERVER="$(dirname "$0")/../server/_build/prod/rel/server/bin/server"
 # `bin/server rpc` boots a throwaway client node; with a scheduler per core busy-waiting it
 # cost ~2 s CPU for a 0.3 s call (the shell's 30 s agents poll: 7% of a core). One scheduler,
 # no spin: ~0.25 s CPU. Only these client nodes see it; the service node is started elsewhere.

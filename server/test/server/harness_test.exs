@@ -84,7 +84,7 @@ defmodule Server.HarnessTest do
       p = %Profile{name: "vera", archetype: :reviewer, model: @sonnet, system_prompt: "You review."}
       cmd = Harness.driver(:claude_code).launch_command(p)
 
-      assert cmd =~ "modules/adapters/claude-code/launch.sh"
+      assert cmd =~ "adapters/claude-code/launch.sh"
       assert cmd =~ "TLON_ROLE_PROMPT_FILE="
       assert cmd =~ "profiles/vera/system_prompt.md"
       assert cmd =~ "--model claude-sonnet-5"
@@ -133,7 +133,7 @@ defmodule Server.HarnessTest do
     end
 
     test "claude_code launch.sh: TLON_READ_DIRS open beside the worktree and are fenced against edits" do
-      launcher = Path.join(Profiles.repo(), "modules/adapters/claude-code/launch.sh")
+      launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
 
       env = [
         {"TLON_LAUNCH_DRYRUN", "1"},

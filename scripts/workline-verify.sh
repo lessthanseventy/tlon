@@ -36,7 +36,6 @@ run_gate() {
 
 fail=0
 run_gate "mise run check" mise run check || fail=1
-run_gate "mise run flake:check" mise run flake:check || fail=1
 
 if [ "$fail" -eq 0 ] && [ "$unrecorded" -eq 0 ]; then
   "$cli" advance "$tid"

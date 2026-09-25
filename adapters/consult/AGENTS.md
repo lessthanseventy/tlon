@@ -49,4 +49,4 @@ going dark until the answer. The delegate's final answer is injected back via
 
 `mise run check` (the shared gate) once wired; the extension loads live from the repo path
 (no build step — pi loads `./src/extension.ts` directly), so `home:switch` is what installs
-it. Typecheck: `cd modules/adapters/consult && bun install && bun run typecheck`.
+it. Typecheck: `cd adapters/consult && bun install && bun run typecheck`.

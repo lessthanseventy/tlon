@@ -27,4 +27,4 @@ OLLAMA_API_KEY = "{{ exec(command='p=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ag
 # HERE and not beside the tool: menard is its own repo (~/projects/menard), and this wiring —
 # where its checkout is — is ficciones', not menard's.
 [task_config]
-includes = ["tasks/server.toml", "tasks/console.toml", "tasks/adapters.toml", "tasks/desktop.toml", "tasks/pi.toml", "tasks/menard.toml"]
+includes = ["tasks/server.toml", "tasks/console.toml", "tasks/adapters.toml", "tasks/pi.toml", "tasks/menard.toml"]

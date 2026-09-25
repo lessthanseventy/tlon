@@ -8,7 +8,7 @@ defmodule Server.CommitsTest do
 
   alias Server.Commits
 
-  @hooks Path.expand("../../../../scripts/git-hooks", __DIR__)
+  @hooks Path.expand("../../../scripts/git-hooks", __DIR__)
 
   setup do
     tmp = Path.join(System.tmp_dir!(), "commits-test-#{System.unique_integer([:positive])}")

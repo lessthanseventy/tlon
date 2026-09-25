@@ -1,24 +1,22 @@
-# ficciones — boundaries for a session at the repo root
+# tlon — boundaries for a session at the repo root
 
-This repository is one person's whole machine: an installer, dotfiles, a desktop, and an AI stack, as
-Nix-shaped modules under `modules/`. It is named *ficciones* after the Borges collection that contains
-the "Funes" story — the repo contains the `server` module as the book contains the story, and each module
-is another story. Read `docs/plans/2026-08-14-machine-v2-and-funes-design.md` before reshaping anything
-here — it is the design and every decision behind it.
+Tlön, the dev product: `server/` (the always-up brain — threads, facts, worklines, staffing; its node
+is `funes@`), `console/` (the TTY cockpit over it) and `adapters/` (what makes pi and Claude Code
+citizens of the server). It runs on any box with Postgres and mise; the home machine wires it in from
+ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the secrets live. The
+design that split it out: ficciones' `docs/plans/2026-09-25-sovereign-repos-and-aleph-design.md`.
 
 ## The dev loop — one shared API
 
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — server compile-clean + tests; the green-before-commit gate.
+- `mise run check` — names gate + server, console and adapters gates + the task manual; the green-before-commit gate.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
-- `mise run flake:check` — the machine-level Nix gate.
 - `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
-- `mise run home:switch` — install/update this machine into the user profile via home-manager.
-- `mise run machine:update` — apply the checkout to the live machine: home:switch, then restart the shell and the server (the one update verb).
 
-mise owns dev runtimes; Nix owns packaging and the system. **If a command belongs in the loop, it becomes
+On the home machine, installing and updating the service is ficciones' job (its `home:switch` and
+`machine:update`); here you build and restart the release. mise owns the dev runtimes. **If a command belongs in the loop, it becomes
 a task in `tasks/<group>.toml` (mise.toml includes them)** — never a prose instruction that drifts out of sync with what actually runs.
 
 ### Picking a pi model — the routing, as tasks ("litellm but not")
@@ -55,7 +53,7 @@ the session cap move per model. Two things that bite: **glm-5.2 is a reasoning m
 `reasoning` + `content` fields) — give it token headroom or `content` comes back empty while thinking
 eats the budget; and **`kimi-k3` is
 deliberately absent** — ollama.com serves it as *extra* usage (HTTP 402), billed per-token on top of the
-$20 plan, so it's out of both `flake.nix` and the live Ctrl+P ring. Every model above is plan-covered.
+$20 plan, so it's out of both ficciones' `flake.nix` and the live Ctrl+P ring. Every model above is plan-covered.
 
 ### Run once, read the log — never re-run to see more
 
@@ -106,7 +104,7 @@ Three doors onto one library:
 - the `menard` stdio **MCP** in Claude Code — runs the code it started with, so **restart Claude
   after changing Menard**.
 - the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb` tools, scoped to
-  their worktree — the server's own dep, pinned by git ref in `modules/server/mix.exs`; bump the
+  their worktree — the server's own dep, pinned by git ref in `server/mix.exs`; bump the
   ref to give them a newer menard.
 
 `mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape hatch for
@@ -123,26 +121,21 @@ Still missing a verb: a `@spec` above a clause whose signature `rewrite` changes
 
 ## How to work — the four rules
 
-Every agent on this machine, in any repo, works by the four rules in `modules/agents/how-to-work.md`:
+Every agent on this machine, in any repo, works by the four rules in ficciones' `modules/agents/how-to-work.md`:
 think before coding (state assumptions, ask when readings diverge), the simplest thing that works,
-surgical changes, and goal-driven execution against a check you can run. The flake installs that file
+surgical changes, and goal-driven execution against a check you can run. ficciones' flake installs that file
 as `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`, so it is already in your context; this section
 exists so a reader of the repo knows where the law comes from and edits the one source.
 
 ## The rules most likely to be broken by accident
 
-- **Working inside `modules/server/`? That module has its own law.** Read `modules/server/AGENTS.md` and
-  `modules/server/docs/spec.md` first, and let them win. This root file governs the layer *around* the
+- **Working inside `server/`? That module has its own law.** Read `server/AGENTS.md` and
+  `server/docs/spec.md` first, and let them win. This root file governs the layer *around* the
   modules, not the modules' insides.
-- **`server` is a bounded module and the boundary is load-bearing.** It must never import up into machine
-  config — no reading a `theme` variable, no assuming `desktop`, no path into `hosts/`. The reason is the
+- **Nothing here reaches into the machine.** No reading ficciones' theme, no assuming its desktop, no
+  path into `~/projects/ficciones` for tlon's own files (`Server.Profiles.tlon_root/0` is where they are). The reason is the
   cohesion model: the *same* `server` runs on other machines, sovereign on each, talking only over its
-  channel. A reach upward welds it to this box and breaks that. The unit that travels is `modules/server/`.
-- **`nix` runs from the agent tools now** (Arch's nix, not Determinate — see the Nix machine-truth
-  memory). So `nix flake check`, `nix eval`, and `nix build .#server` are fair to run and verify directly.
-  What stays the human's are the **system-mutating** commands — `home-manager switch`, `nixos-rebuild
-  switch` on the host — because building the machine is a change the human owns. A claim that a build
-  works without having run it is the one thing this repo cannot afford.
+  channel. A reach upward welds it to this box and breaks that. The unit that travels is `server/`.
 - **A module is born when it has content.** Do not create empty placeholder directories to imply a
   structure that does not exist yet. The tree should not lie about what is built.
 - **An `AGENTS.md` is born the same way a comment is — when a scope needs context its parent doesn't
@@ -158,8 +151,6 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   because a weaker model trusts it. Nothing mechanical can catch this (staleness is semantic, invisible
   to compile/tests), so it's on you. (The `programs.rbw` comment that survived the rbw→agenix switch
   still describing the old design is the incident this comes from.)
-- **Adopt Nix gradually.** home-manager on Arch first, a disposable NixOS VM (`nixos-rebuild build-vm`)
-  as the testbed, metal last. Do not propose replacing the OS as a first step.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
   that wrote it — YOUR model, read from the brief's `You are … (pi)` line (or `$PI_MODEL`), never a
   name copied from an example or another model's commit. Format: `Co-Authored-By: <your model> (pi)
@@ -169,7 +160,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   this rule comes from.)
 - **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Both
   harnesses are affected: pi via the `pi-sandbox` extension (`~/.pi/agent/sandbox.json`, seeded at
-  `flake.nix`'s `piSandboxSeed`) and Claude Code via its own. pi-sandbox delegates to
+  ficciones' `flake.nix` (`piSandboxSeed`)) and Claude Code via its own. pi-sandbox delegates to
   `@carderne/sandbox-runtime`, a fork of Anthropic's, so **the `CLAUDE_CODE_*` and proxy env vars
   inside a pi bash call come from the fork — they are not evidence you're in Claude Code.** Two
   symptoms follow, and neither is a bug to chase:
@@ -199,19 +190,14 @@ exists so a reader of the repo knows where the law comes from and edits the one 
     replaces was…"*, *"before the fix / pre-B1.4"*, rename & migration history, "we tried X then…".
     Keep the current-state constraint even when it grew out of a past bug — just state the constraint,
     drop the incident. The git history holds the story; the code holds the present.
-- **Secrets: agenix for the machine, rbw for you.** A secret a non-interactive process needs — a
-  service, a spawned pane (e.g. `OLLAMA_API_KEY` for the Tlön pi) — lives age-encrypted in
-  `secrets/*.age` (agenix), decrypted at `home:switch` to `$XDG_RUNTIME_DIR/agenix/<name>` with *no*
-  runtime unlock. Human/interactive passwords live in Bitwarden via `rbw`. Never a plaintext key in the
-  repo, a dotfile, or the nix store. To add a machine secret: recipient pubkey → `secrets/secrets.nix`,
-  `agenix -e secrets/<name>.age`, `git add` it (nix can't see untracked files), reference it via
-  `age.secrets` in `flake.nix`.
+- **Secrets come from the machine.** tlon reads keys from the env or
+  `$XDG_RUNTIME_DIR/agenix/<name>` (mise.toml's `OLLAMA_API_KEY`); it never stores one. Never a
+  plaintext key in the repo.
 
 ## Verify
 
-`server` day-one step 1 exists and runs; verify with `mise run check` (tests + types) and `mise run
-flake:check` (Nix). `mise run check:names` (first in `check`) is the names-exist gate: every
-`Server.*`/`Console.*` module, mix task, mise task and `~/.pi/agent` file that scripts, `mise.toml`,
-`flake.nix`, the adapters or a guide name must actually exist — a rename that strands a reference
-fails here instead of at 2am. A claim that something works is backed by the command that proved it — and the agent
-and human run the *same* `mise` tasks, so "it works" means the shared task passed, not two private ones.
+`mise run check` is the gate. `mise run check:names` (first in it) is the names-exist gate: every
+`Server.*`/`Console.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
+guide name must actually exist — a rename that strands a reference fails here instead of at 2am. A
+claim that something works is backed by the command that proved it — and the agent and human run the
+*same* `mise` tasks, so "it works" means the shared task passed, not two private ones.

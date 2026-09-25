@@ -3,29 +3,29 @@
 
 ["server:test"]
 description = "server: run the test suite (the TDD loop)"
-dir = "modules/server"
+dir = "server"
 run = "mix test"
 
 ["server:check"]
 description = "server: the precommit gate — format + warnings-as-errors + credo + tests + deterministic steering evals"
-dir = "modules/server"
+dir = "server"
 # Two invocations: precommit runs in :test (start_repo off), the eval needs the dev boot +
 # its own ephemeral db — the deterministic set is offline/fast, judged mode is server:eval.
 run = "mix precommit && mix server.eval --deterministic"
 
 ["server:eval"]
 description = "server: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes"
-dir = "modules/server"
+dir = "server"
 run = "mix server.eval"
 
 ["server:setup"]
 description = "server: fetch deps, create + migrate a repo-local scratch db"
-dir = "modules/server"
+dir = "server"
 run = "mix deps.get && mix ecto.create --quiet && mix ecto.migrate"
 
 ["server:doctor"]
 description = "server: the 2am report against the scratch db"
-dir = "modules/server"
+dir = "server"
 run = "mix server.doctor"
 
 # The seed is what makes a wiped/fresh world know itself: priv/seed/repo_knowledge.exs (curated)
@@ -33,12 +33,12 @@ run = "mix server.doctor"
 # on every boot too; these are the by-hand paths against the dev scratch db (server:doctor's db).
 ["server:seed"]
 description = "server: apply the seed (base facts + baseline projects) to the scratch db — idempotent, keyed on intent"
-dir = "modules/server"
+dir = "server"
 run = "mix server.seed"
 
 ["server:promote-fact"]
 description = "server: graduate a banked fact into the wipe-proof seed — usage: mise run server:promote-fact -- <fact-id> [--intent seed:slug] (scratch db)"
-dir = "modules/server"
+dir = "server"
 run = "mix server.promote_fact"
 
 # Boot server with its sovereign channel on, loopback-only, against the scratch db — so
@@ -46,7 +46,7 @@ run = "mix server.promote_fact"
 # "Agent")` in the iex it drops you into prints the export TLON_* block to paste into the pane.
 ["server:serve"]
 description = "server: boot the sovereign MCP channel (loopback) against the scratch db + an iex to mint tokens"
-dir = "modules/server"
+dir = "server"
 run = "TLON_START_MCP=1 iex -S mix"
 
 # `server:serve` above is the DEV path (hand-run iex on the scratch db); these run the
@@ -55,7 +55,7 @@ run = "TLON_START_MCP=1 iex -S mix"
 # absolute path with nothing on PATH, and `remote`/`rpc` reach the LIVE node.
 ["server:release"]
 description = "server: build the self-contained release the always-up service runs (prod)"
-dir = "modules/server"
+dir = "server"
 run = "MIX_ENV=prod mix release --overwrite"
 
 ["server:restart"]
@@ -65,7 +65,7 @@ run = "systemctl --user restart tlon && systemctl --user --no-pager status tlon 
 
 ["server:console"]
 description = "server: remote iex INTO the running service node — inspect/mint against the live channel"
-dir = "modules/server"
+dir = "server"
 run = "_build/prod/rel/server/bin/server remote"
 
 ["server:logs"]
@@ -82,7 +82,7 @@ run = "scripts/tlon-cli.sh spawn"
 
 ["server:ledger"]
 description = "server: the workline value ledger — stages, gates, advances, tallies (reads the dev scratch db)"
-dir = "modules/server"
+dir = "server"
 run = "mix server.ledger"
 
 ["workline:verify"]
@@ -111,11 +111,11 @@ run = "scripts/tlon-cli.sh post"
 
 ["server:import-claude"]
 description = "server: import Claude Code's transcripts (~/.claude/projects) as closed, searchable threads on the LIVE service — idempotent per session"
-run = "modules/server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.Import.ClaudeSessions.import_dir(\"~/.claude/projects\", Server.Bootstrap.default_workspace_id()))'"
+run = "server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.Import.ClaudeSessions.import_dir(\"~/.claude/projects\", Server.Bootstrap.default_workspace_id()))'"
 
 ["server:import-pi"]
 description = "server: import pi's transcripts (~/.pi/agent + coworker profiles) as closed, searchable threads on the LIVE service — idempotent per session"
-run = "modules/server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.Import.PiSessions.import_dir(\"~/.pi\", Server.Bootstrap.default_workspace_id()))'"
+run = "server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.Import.PiSessions.import_dir(\"~/.pi\", Server.Bootstrap.default_workspace_id()))'"
 
 # Launch Claude Code as a citizen of a server thread. No arg → a fresh thread; a numeric thread-id →
 # JOIN it (resume across a /clear). Scopes the `tlon` MCP server (fresh token per
@@ -123,7 +123,7 @@ run = "modules/server/_build/prod/rel/server/bin/server rpc 'IO.inspect(Server.I
 # no ~/.claude mutation, so a plain `claude` stays untouched.
 ["server:claude"]
 description = "launch Claude Code as a citizen of a server thread — `server:claude` (fresh thread) or `server:claude -- <id>` (join)"
-run = "modules/adapters/claude-code/launch.sh"
+run = "adapters/claude-code/launch.sh"
 
 ["cap"]
 description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
@@ -154,13 +154,13 @@ if [ -n "$pids" ]; then echo "stopping watchexec: $pids"; kill $pids; else echo 
 '''
 
 ["server:watch"]
-description = "server: re-run the suite on every change under modules/server (cap signal)"
-dir = "modules/server"
+description = "server: re-run the suite on every change under server (cap signal)"
+dir = "server"
 run = "../../scripts/watch.sh mise exec -- mix test"
 
 ["server:dev"]
 description = "server: a scratch server NODE (funes-dev@127.0.0.1, database tlon_dev, MCP :4041) in iex — hack on the server with the live service untouched; attach a cockpit with `TLON_NODE=funes-dev@127.0.0.1 mise run console:run`"
-dir = "modules/server"
+dir = "server"
 run = """
 # never the service's database: TLON_DATABASE names the scratch one (config/dev.exs: tlon_dev)
 [ "${TLON_DATABASE:-tlon_dev}" != "tlon" ] || { echo "server:dev refuses the service's database" >&2; exit 1; }
@@ -178,3 +178,12 @@ run = "scripts/check-names.sh"
 ["check"]
 description = "Everything green: the names gate + the server + console + adapters (pi + consult + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests) + the manual's drift check"
 depends = ["check:names", "server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check", "manual:check"]
+
+# The task manual (docs/manual/tasks.md) comes from `mise tasks ls`, never by hand. `--check` diffs.
+["manual:gen"]
+description = "manual: regenerate docs/manual/tasks.md from mise tasks"
+run = "scripts/manual-gen.sh"
+
+["manual:check"]
+description = "manual: fail if the generated task manual drifts from its source (run manual:gen)"
+run = "scripts/manual-gen.sh --check"

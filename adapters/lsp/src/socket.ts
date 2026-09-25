@@ -19,7 +19,7 @@ import { Decoder, encode, type LspdRequest, type LspdResponse } from "../../lspd
 export class LspdConnectionError extends Error {}
 export class LspdTimeoutError extends Error {}
 
-// Must agree with the daemon's rendezvous (modules/adapters/lspd/src/server.ts) — including the
+// Must agree with the daemon's rendezvous (adapters/lspd/src/server.ts) — including the
 // ADAPTERS_LSPD_SOCK override the daemon honors; only the daemon reading it desynced the pair
 // (an overridden daemon listened on one path while every shim dialed the default).
 export function socketPath(): string {

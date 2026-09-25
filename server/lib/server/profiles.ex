@@ -216,20 +216,24 @@ defmodule Server.Profiles do
       ]
     },
     "filesystem" => %{
-      # Writes: the repo (edits), /tmp + the socket dir (adapters-lspd), caches. Never the nix store.
+      # Writes: the repo (edits), tlon's own checkout, /tmp + the socket dir (adapters-lspd),
+      # caches. Never the nix store.
       "allowWrite" => [
         @repo,
+        Path.expand("../../..", __DIR__),
         "/tmp",
         "$XDG_RUNTIME_DIR",
         "~/.pi",
         "~/.cache",
         "~/.local"
       ],
-      # Reads (prompt-by-default otherwise): the repo, plus /nix/store + ~/.nix-profile so pi reading
-      # its OWN install/docs/extensions — and any flake-managed binary's files — never triggers a
-      # useless prompt (the store is immutable + workspace-readable). Config/cache dirs round it out.
+      # Reads (prompt-by-default otherwise): the repo and tlon's checkout, plus /nix/store +
+      # ~/.nix-profile so pi reading its OWN install/docs/extensions — and any flake-managed
+      # binary's files — never triggers a useless prompt (the store is immutable +
+      # workspace-readable). Config/cache dirs round it out.
       "allowRead" => [
         @repo,
+        Path.expand("../../..", __DIR__),
         "/nix/store",
         "~/.nix-profile",
         "~/.config",
@@ -324,14 +328,14 @@ defmodule Server.Profiles do
   # The dense statusline (adapters/footer) — its OWN package, not adapters/pi, so dropping the server
   # adapter doesn't take the footer with it. Added explicitly so Tlön shows it at the next cockpit
   # restart even before the flake registers it into the base config (which needs a home:switch).
-  @footer_extension "#{@repo}/modules/adapters/footer/src/footer.ts"
+  @footer_extension Path.expand("../../../adapters/footer/src/footer.ts", __DIR__)
 
   # The machine-scope tlon surface (see § "The tertius coworker" in the moduledoc for why the tools
   # are cut this way). Base tool set; `@tertius_mcp` adds the cross-leaf read on top.
   @tlon_mcp %{
     "tlon" => %{
       "url" => "${TLON_MCP_URL}",
-      "headers" => %{"Authorization" => "!#{@repo}/scripts/tlon-cli.sh bearer"},
+      "headers" => %{"Authorization" => "!#{Path.expand("../../../scripts/tlon-cli.sh", __DIR__)} bearer"},
       "directTools" => [
         "post_message",
         "bank_fact",
@@ -799,6 +803,13 @@ defmodule Server.Profiles do
   """
   @spec repo() :: String.t()
   def repo, do: @repo
+
+  @doc """
+  Where tlon's own checkout is — the release is built in place, so the source directory at compile
+  time is the checkout. The launchers, adapters and `scripts/tlon-cli.sh` live here, not in `repo/0`.
+  """
+  @spec tlon_root() :: String.t()
+  def tlon_root, do: Path.expand("../../..", __DIR__)
 
   @doc """
   The config dir a profile materialises into (its `PI_CODING_AGENT_DIR`), keyed by workspace so

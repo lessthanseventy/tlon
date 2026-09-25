@@ -123,7 +123,7 @@ The **shell parity pack** — operate the live channel from the shell, our peer 
 - `mise run server:cli -- <subcommand>` — everything else the CLI knows (worklines, approve, …).
 
 The `home:switch` that installs the service is the human's (system-mutating); build + verify the
-release with `server:release` and `mise run flake:check`.
+release with `server:release`, and on the home machine with ficciones' `flake:check`.
 
 If a command belongs in the loop, it becomes a task in the root `mise.toml`. Do not invent a second way
 to run these.

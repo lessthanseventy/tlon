@@ -77,7 +77,7 @@ into `~/.pi/agent/settings.json`:
   "npm:pi-agent-browser-native", "npm:pi-multi-account", "npm:@gotgenes/pi-permission-system",
   "npm:@lincoln504/pi-research", "npm:pi-interactive-shell", "npm:@narumitw/pi-retry",
   "npm:@pi-unipi/notify"]` (pi-cc-header was retired; the flake prunes it).
-- `"skills"`: `".../modules/adapters/skills/*"`.
+- `"skills"`: `".../adapters/skills/*"`.
 - `~/.pi/agent/mcp.json` is flake-owned (`serverMcpJson` in `flake.nix`): its `mcpServers.tlon`
   entry points `pi-mcp-adapter` at `${TLON_MCP_URL}` with `Authorization` set to a `!command`
   (`scripts/tlon-cli.sh bearer`) that mints a fresh token per connect. There is no example

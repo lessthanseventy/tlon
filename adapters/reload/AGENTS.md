@@ -1,7 +1,7 @@
 # adapters/reload — restart the pi harness, resume the session
 
 One tool, `reload`, for the dogfood loop. pi loads its extensions **once, at process start**, so
-when you edit your own tooling (any `modules/adapters/**` extension) the running pi keeps executing
+when you edit your own tooling (any `adapters/**` extension) the running pi keeps executing
 the *old* code. And an agent can't restart the process it lives in and keep its train of thought.
 `reload` closes that gap: it respawns pi in place and **resumes the current session**, so you edit
 code → call `reload` → wake up in the same thread running the new code.

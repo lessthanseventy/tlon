@@ -141,7 +141,7 @@ defmodule Server.ProfilesTest do
 
     test "adds the generic footer back (its own package, not swept up by the adapters/pi drop)" do
       p = Profiles.fetch("tertius")
-      assert Enum.any?(p.add_extensions, &String.ends_with?(&1, "/modules/adapters/footer/src/footer.ts"))
+      assert Enum.any?(p.add_extensions, &String.ends_with?(&1, "/adapters/footer/src/footer.ts"))
       # and the footer path does NOT match the funes-adapter drop, so it isn't a fight
       refute Enum.any?(p.add_extensions, &String.contains?(&1, "/adapters/pi/"))
     end

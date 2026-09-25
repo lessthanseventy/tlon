@@ -3,7 +3,7 @@
 // usage with a visual bar, session I/O, git branch, sandbox, and server connection.
 //
 // A generic statusline: NOT a server concern, so it lives in its own adapters package (not
-// modules/adapters/pi, which the Tlön coworker profile drops to sever the server) — the
+// adapters/pi, which the Tlön coworker profile drops to sever the server) — the
 // footer loads for every pi, server-citizen or self-contained.
 //
 // Uses the footerData API for reactive git-branch updates and extension statuses, plus

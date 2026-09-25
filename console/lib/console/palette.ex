@@ -1,4 +1,4 @@
-# generated from modules/desktop/theme/palette.nix — edit THAT, never this file
+# The cockpit's palette (uqbar). tlon keeps it by hand; the machine theme does not write here.
 defmodule Console.Palette do
   @moduledoc """
   The machine palette for the cockpit, as 24-bit integers. `Console.Style` maps semantic

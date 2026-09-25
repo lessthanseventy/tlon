@@ -3,8 +3,8 @@
 # adapters' pi-* dep ranges to match, then home:switch and the extension update. `pi update`
 # alone only touches ~/.pi/agent/npm (extensions); the binary is nix's, so it moves here.
 #
-#   modules/adapters/pi/upgrade.sh            # latest GitHub release
-#   modules/adapters/pi/upgrade.sh 0.85.1     # a specific version
+#   adapters/pi/upgrade.sh            # latest GitHub release
+#   adapters/pi/upgrade.sh 0.85.1     # a specific version
 #   PI_UPGRADE_NO_SWITCH=1 ...                # edit the pins only, no home:switch
 set -euo pipefail
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
@@ -28,8 +28,8 @@ else
 fi
 
 # the adapters' pi-* deps track the same release
-sed -i -E "s|(\"@earendil-works/pi-(ai\|coding-agent\|tui)\": \"\^)[^\"]+|\1$want|" modules/adapters/pi/package.json
-(cd modules/adapters/pi && bun install --silent)   # bun.lock follows; adapters:pi:check is --frozen-lockfile
+sed -i -E "s|(\"@earendil-works/pi-(ai\|coding-agent\|tui)\": \"\^)[^\"]+|\1$want|" adapters/pi/package.json
+(cd adapters/pi && bun install --silent)   # bun.lock follows; adapters:pi:check is --frozen-lockfile
 echo "pi:upgrade — adapters/pi pi-* deps → ^$want (bun.lock refreshed)"
 
 if [ -z "${PI_UPGRADE_NO_SWITCH:-}" ]; then
