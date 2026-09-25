@@ -100,6 +100,13 @@ defmodule Console.Panel.Rail do
     end
   end
 
+  @doc "The badge for an attention rank — `{glyph, style}`, nil for a quiet thread. The top bar's tabs use it too."
+  @spec glyph(0..3) :: {String.t(), atom()} | nil
+  def glyph(0), do: {"!", :st_await}
+  def glyph(1), do: {"…", :st_working}
+  def glyph(2), do: {"•", :accent}
+  def glyph(3), do: nil
+
   defp waiting?(thread), do: is_map(thread[:prompt]) or (is_binary(thread[:awaiting]) and thread[:awaiting] != "")
 
   # :active = the open thread (inverse); :cursor = where j/k sits; :both = the cursor ON the open
@@ -131,11 +138,9 @@ defmodule Console.Panel.Rail do
   end
 
   defp badge(thread, face) do
-    cond do
-      waiting?(thread) -> {"!", badge_style(face, :st_await)}
-      thread[:working] == true -> {"…", badge_style(face, :st_working)}
-      thread[:unread?] == true -> {"•", badge_style(face, :accent)}
-      true -> {" ", fill(face)}
+    case glyph(attention(thread)) do
+      nil -> {" ", fill(face)}
+      {glyph, style} -> {glyph, badge_style(face, style)}
     end
   end
 

@@ -23,7 +23,7 @@ defmodule Console.CockpitTest do
     end
   end
 
-  describe "context_entry/2 — the right-click menu's target" do
+  describe "context_entry/3 — the right-click menu's target" do
     @rail_data %{
       groups: [
         %{
@@ -37,15 +37,30 @@ defmodule Console.CockpitTest do
     @rect %{x: 0, y: 1, w: 24, h: 20}
 
     test "either row of a rail thread answers that thread" do
-      assert {:thread, %{id: 9}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 1)
-      assert {:thread, %{id: 9}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 2)
-      assert {:thread, %{id: 12}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 3)
+      assert {:thread, %{id: 9}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 3, 1)
+      assert {:thread, %{id: 9}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 3, 2)
+      assert {:thread, %{id: 12}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 3, 3)
+    end
+
+    test "the top bar's workspace name answers the workspace — its menu's door; a tab does not" do
+      bar = %{
+        workspace: "Machine",
+        workspace_id: 0,
+        projects: [%{id: 1, name: "Tlön", badge: nil}],
+        open_project: 1,
+        link: :up
+      }
+
+      rect = %{x: 0, y: 0, w: 80, h: 1}
+
+      assert Cockpit.context_entry({Console.Panel.TopBar, bar, rect}, 5, 0) == {:workspace, %{id: 0, name: "Machine"}}
+      assert Cockpit.context_entry({Console.Panel.TopBar, bar, rect}, 16, 0) == nil
     end
 
     test "another panel, or a miss, answers nothing" do
-      assert Cockpit.context_entry({Rail, @rail_data, @rect}, 9) == nil
-      assert Cockpit.context_entry({Console.Panel.ThreadStack, %{}, @rect}, 1) == nil
-      assert Cockpit.context_entry(nil, 1) == nil
+      assert Cockpit.context_entry({Rail, @rail_data, @rect}, 3, 9) == nil
+      assert Cockpit.context_entry({Console.Panel.ThreadStack, %{}, @rect}, 3, 1) == nil
+      assert Cockpit.context_entry(nil, 3, 1) == nil
     end
   end
 
