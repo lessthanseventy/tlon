@@ -2,13 +2,13 @@
 # regenerated wholesale and never hand-edited, so a build or state directory would be
 # a second source of truth the moment it appeared.
 
-node_modules/
+node_modules
 .dev/
 .DS_Store
 
 # elixir / mix
 _build/
-deps/
+deps
 *.beam
 *.ez
 erl_crash.dump
