@@ -92,7 +92,7 @@ defmodule Server.StaffingTest do
     Server.Repo.delete_all(Server.Thread)
     tmux("")
     assert :ok = Staffing.pass(ws.id)
-    assert %{scope: "machine", title: "general"} = Channel.machine_thread(ws.id)
+    assert %{scope: "machine", title: "lobby"} = Channel.machine_thread(ws.id)
   end
 
   test "the centre up: no new-session; the tail seats get their windows, each by its harness", %{

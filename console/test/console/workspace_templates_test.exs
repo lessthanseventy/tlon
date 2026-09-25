@@ -9,10 +9,10 @@ defmodule Console.WorkspaceTemplatesTest do
     assert MapSet.new(WorkspaceTemplates.names()) == MapSet.new([:code, :life, :blank])
   end
 
-  test "the code template carries a full starter crew over modules/*" do
+  test "the code template carries a full starter crew and no repos yet" do
     t = WorkspaceTemplates.template(:code)
     assert t.type == "code"
-    assert t.repos == ["modules/*"]
+    assert t.repos == []
     # A real crew so a fresh workspace feels alive: orchestrator, lead, reviewer, planner.
     assert Enum.map(t.roster, & &1.archetype) == [:surveyor, :builder, :reviewer, :planner]
   end
@@ -34,7 +34,7 @@ defmodule Console.WorkspaceTemplatesTest do
     assert attrs.name == "Ficciones2"
     assert attrs.type == "code"
     assert attrs.scope == "machine"
-    assert attrs.repos == ["modules/*"]
+    assert attrs.repos == []
     # roster is the funes wire shape: string-keyed maps, matching the seed roster
     assert attrs.roster == [
              %{"archetype" => "surveyor", "name" => "surveyor"},

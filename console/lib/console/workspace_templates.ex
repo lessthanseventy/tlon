@@ -15,7 +15,7 @@ defmodule Console.WorkspaceTemplates do
   @templates %{
     code: %{
       type: "code",
-      repos: ["modules/*"],
+      repos: [],
       # A full starter crew so a fresh workspace feels alive: the orchestrator (surveyor), the lead
       # (builder), plus a reviewer + planner ready to be staffed.
       roster: [

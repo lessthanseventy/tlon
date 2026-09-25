@@ -17,7 +17,7 @@ defmodule Server.BootstrapTest do
 
   test "an empty workspace table seeds the default workspace" do
     assert {:ok, workspace} = Bootstrap.ensure()
-    assert workspace.name == "ficciones"
+    assert workspace.name == "Machine"
     assert workspace.scope == "machine"
     assert Enum.map(Workspaces.bench(workspace.id), & &1.name) == ["tertius", "hronir", "reviewer", "planner"]
     assert [%{id: id}] = Workspaces.all()
@@ -110,40 +110,40 @@ defmodule Server.BootstrapTest do
   end
 
   describe "project tier backfill (Workspace ▸ Project ▸ Thread)" do
-    test "every workspace gets a 'general' project" do
+    test "every workspace gets a default project named after it" do
       {:ok, workspace} = Bootstrap.ensure()
-      assert %Server.Project{name: "general"} = Server.Projects.by_name(workspace.id, "general")
+      assert %Server.Project{} = Server.Projects.by_name(workspace.id, workspace.name)
     end
 
-    test "a thread with no project is repaired to its workspace's general project" do
+    test "a thread with no project is repaired to its workspace's default project" do
       {:ok, workspace} = Bootstrap.ensure()
       {:ok, thread} = Channel.open_thread(%{title: "no project", workspace_id: workspace.id})
       assert thread.project_id == nil
 
       {:ok, _} = Bootstrap.ensure()
-      general = Server.Projects.by_name(workspace.id, "general")
+      general = Server.Projects.by_name(workspace.id, workspace.name)
       assert Repo.get(Thread, thread.id).project_id == general.id
     end
 
-    test "idempotent — a second ensure does not create a second general project" do
+    test "idempotent — a second ensure does not create a second default project" do
       {:ok, workspace} = Bootstrap.ensure()
       after_first = length(Server.Projects.in_workspace(workspace.id))
       {:ok, _} = Bootstrap.ensure()
       after_second = length(Server.Projects.in_workspace(workspace.id))
 
-      # `general` plus the seeded baseline projects (Server.Seed) — the exact count isn't the point;
+      # the default plus the seeded baseline projects (Server.Seed) — the exact count isn't the point;
       # the invariant is that a second ensure adds nothing.
       assert after_first == after_second
-      assert Server.Projects.by_name(workspace.id, "general")
+      assert Server.Projects.by_name(workspace.id, workspace.name)
     end
 
-    test "renaming the default project does not mint a second general" do
+    test "renaming the default project does not mint a second default" do
       {:ok, workspace} = Bootstrap.ensure()
-      general = Server.Projects.by_name(workspace.id, "general")
+      general = Server.Projects.by_name(workspace.id, workspace.name)
       {:ok, _} = Server.Projects.edit(general, %{name: "ficciones"})
 
       {:ok, _} = Bootstrap.ensure()
-      assert Server.Projects.by_name(workspace.id, "general") == nil
+      assert Server.Projects.by_name(workspace.id, workspace.name) == nil
 
       {:ok, thread} = Channel.open_thread(%{title: "no project", workspace_id: workspace.id})
       {:ok, _} = Bootstrap.ensure()
@@ -192,7 +192,7 @@ defmodule Server.BootstrapTest do
     test "the default project's repos come from the workspace's repo rows" do
       {:ok, ws} = Workspaces.register(%{name: "Paths", repos: ["a/*", "b/*"]})
       {:ok, _} = Bootstrap.ensure()
-      general = Server.Projects.by_name(ws.id, "general")
+      general = Server.Projects.by_name(ws.id, "Paths")
       assert general.repos == [%{"path" => "a/*", "name" => "a/*"}, %{"path" => "b/*", "name" => "b/*"}]
     end
   end

@@ -22,7 +22,7 @@ defmodule Server.BoardSidebarTest do
     {:ok, chat} = Channel.open_thread(%{title: "a chat thread"})
     {:ok, tracked} = Workline.open(%{title: "a tracked one", slug: "tracked-one"})
 
-    assert [%{workspace: %{id: workspace_id, name: "ficciones"}, threads: threads}] = Board.sidebar()
+    assert [%{workspace: %{id: workspace_id, name: "Machine"}, threads: threads}] = Board.sidebar()
     assert workspace_id == workspace.id
 
     by_id = Map.new(threads, &{&1.id, &1})
@@ -52,7 +52,7 @@ defmodule Server.BoardSidebarTest do
     groups = Board.sidebar()
 
     assert [
-             %{workspace: %{name: "ficciones"}, threads: default_threads},
+             %{workspace: %{name: "Machine"}, threads: default_threads},
              %{workspace: %{name: "otherland"}, threads: other_threads}
            ] = groups
 
@@ -121,12 +121,12 @@ defmodule Server.BoardSidebarTest do
 
   test "a row carries its project and the group lists the workspace's projects, oldest first" do
     {:ok, workspace} = Bootstrap.ensure()
-    {:ok, machine} = Server.Projects.register(%{workspace_id: workspace.id, name: "Machine", repos: []})
+    {:ok, machine} = Server.Projects.register(%{workspace_id: workspace.id, name: "ficciones", repos: []})
     {:ok, t} = Channel.open_thread(%{title: "bluetooth", workspace_id: workspace.id, project_id: machine.id})
 
     [%{projects: projects, threads: threads}] = Board.sidebar()
 
-    assert [%{name: "general"}, %{id: mid, name: "Machine"}] = projects
+    assert [%{name: "Machine"}, %{id: mid, name: "ficciones"}] = projects
     assert mid == machine.id
     assert %{project_id: ^mid} = Enum.find(threads, &(&1.id == t.id))
   end
