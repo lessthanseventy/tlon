@@ -60,7 +60,7 @@ case "${TMUX:-}" in *"/tlon,"*) exec mise run console:run ;; *) exec tmux -L tlo
 """
 
 ["console:run:local"]
-description = "console: the cockpit with an EMBEDDED server on the scratch db (../server/.dev/tlon.db, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run"
+description = "console: the cockpit with an EMBEDDED server on the dev db (tlon_dev, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run"
 dir = "console"
 run = """
 ../scripts/console-reap.sh || exit $?
