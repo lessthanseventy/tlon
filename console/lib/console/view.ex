@@ -183,6 +183,8 @@ defmodule Console.View do
   # UX slice 1: the left column is the rail alone; while the drawer is open ITS pane has the focus
   # (the rail isn't walkable then), so the footer's hints are the open pane's own.
   defp focused_section(%{drawer: key}) when not is_nil(key), do: Console.Cockpit.Drawer.panel(key)
+  # ...and no pane is focused while such an input holds the keys: a lit rail would claim j/k it cannot have.
+  defp focused_section(%{input: %{kind: kind}}) when kind in [:reply, :new_thread, :orchestrate], do: nil
 
   defp focused_section(%{focus: %Focus{in_terminal?: false} = focus}),
     do: Focus.focused_pane(focus, %{left: [Panel.Rail], right: [], sections: %{}})
@@ -512,6 +514,9 @@ defmodule Console.View do
   # The open drawer is its own mode: it owns every key, so the footer names ITS verbs (task 4).
   defp footer_mode(%{drawer: key}) when not is_nil(key), do: :drawer
   defp footer_mode(%{lock?: true}), do: :lock
+  # An input drawn in its own band (the reply box, the new-thread title, the tertius line) owns every
+  # key but the global chords, so the footer names ITS verbs — the nav face's would be dead there.
+  defp footer_mode(%{input: %{kind: kind}}) when kind in [:reply, :new_thread, :orchestrate], do: {:input, kind}
   defp footer_mode(%{focus: %Focus{in_terminal?: true}}), do: :term
   defp footer_mode(%{focus: %Focus{}}), do: :nav
   defp footer_mode(_reads), do: nil
