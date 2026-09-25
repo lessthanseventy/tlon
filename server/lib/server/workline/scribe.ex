@@ -13,9 +13,11 @@ defmodule Server.Workline.Scribe do
   alias Server.Thread
   alias Server.Workline.Artifacts
 
-  @doc "Write `work/<slug>/<filename>` and commit it. `{:ok, rel_path}` or `{:error, reason}`."
-  def commit(slug, filename, body, commit_message) do
-    root = Artifacts.Git.root()
+  @doc """
+  Write `work/<slug>/<filename>` in the thread's repo (`Artifacts.Git.root/1`) and commit it. `{:ok, rel_path}` or `{:error, reason}`.
+  """
+  def commit(%Thread{slug: slug} = thread, filename, body, commit_message) do
+    root = Artifacts.Git.root(thread)
     rel = Path.join(["work", slug, filename])
     abs = Path.join(root, rel)
 
@@ -44,7 +46,7 @@ defmodule Server.Workline.Scribe do
       {:error, _absent} ->
         body = "# #{thread.title}\n\n#{evidence(thread)}\n\n(machine-born intent, approved by the operator)\n"
 
-        case commit(slug, "intent.md", body, "workline #{slug}: intent.md (machine-born, operator-approved)") do
+        case commit(thread, "intent.md", body, "workline #{slug}: intent.md (machine-born, operator-approved)") do
           {:ok, _rel} -> :ok
           {:error, _} = error -> error
         end

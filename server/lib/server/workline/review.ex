@@ -15,8 +15,8 @@ defmodule Server.Workline.Review do
   outside the review stage, or `{:error, reason}` on a git fault. Identical resubmission is
   `{:ok, _}` — the artifact is already committed, which is the point.
   """
-  def submit(%Thread{stage: "review", slug: slug}, body, author) when is_binary(body) do
-    Scribe.commit(slug, "review.md", body, "workline #{slug}: review verdict (submit_review by #{author})")
+  def submit(%Thread{stage: "review", slug: slug} = thread, body, author) when is_binary(body) do
+    Scribe.commit(thread, "review.md", body, "workline #{slug}: review verdict (submit_review by #{author})")
   end
 
   def submit(%Thread{stage: stage}, _body, _author), do: {:error, {:not_in_review, stage}}

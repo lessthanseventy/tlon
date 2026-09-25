@@ -48,4 +48,31 @@ defmodule Server.WorklineReviewTest do
   test "submit is refused outside the review stage" do
     assert {:error, {:not_in_review, "build"}} = Review.submit(thread("build"), "early!", "menard-machine")
   end
+
+  test "a thread with a project checks and commits in THAT repo, not the workline root" do
+    other = Path.join(System.tmp_dir!(), "workline-other-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(other)
+    on_exit(fn -> File.rm_rf!(other) end)
+
+    for args <- [
+          ~w(init -q),
+          ~w(config user.email test@test),
+          ~w(config user.name test),
+          ~w(commit -q --allow-empty -m root),
+          ~w(branch work/fence-test)
+        ] do
+      {_, 0} = System.cmd("git", ["-C", other | args], stderr_to_stdout: true)
+    end
+
+    {:ok, ws} = Server.Workspaces.register(%{name: "Elsewhere"})
+
+    {:ok, project} =
+      Server.Projects.register(%{workspace_id: ws.id, name: "other", repos: [%{"name" => "other", "path" => other}]})
+
+    thread = struct!(thread(), %{project_id: project.id, workspace_id: ws.id})
+
+    assert {:ok, "work/fence-test @ " <> _} = Artifacts.Git.check(thread, :branch)
+    assert {:ok, _} = Review.submit(thread, "## Verdict: approve", "menard-machine")
+    assert File.exists?(Path.join(other, "work/fence-test/review.md"))
+  end
 end

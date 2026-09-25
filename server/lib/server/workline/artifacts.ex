@@ -14,8 +14,8 @@ defmodule Server.Workline.Artifacts.Git do
   @moduledoc """
   The real checker: files must be COMMITTED (git ls-files, not mere existence — an untracked
   intent.md is not an artifact), the branch is `work/<slug>`, verify evidence is a
-  `check_passed` event correlated `workline:<slug>:verify`. Repo root comes from
-  `config :server, :workline_root` (the workspace's git tree), default cwd.
+  `check_passed` event correlated `workline:<slug>:verify`. Git runs in the thread's own repo
+  (`root/1`), so a workline on another project is checked against that project.
   """
 
   @behaviour Server.Workline.Artifacts
@@ -29,18 +29,18 @@ defmodule Server.Workline.Artifacts.Git do
   def check(thread, {:file, name}) do
     rel = Path.join(["work", thread.slug, name])
 
-    case git(["ls-files", "--error-unmatch", rel]) do
+    case git(thread, ["ls-files", "--error-unmatch", rel]) do
       {_out, 0} -> {:ok, "committed #{rel}"}
-      {_out, _} -> sane_root_or(fn -> {:error, "#{rel} is not committed"} end)
+      {_out, _} -> sane_root_or(thread, fn -> {:error, "#{rel} is not committed"} end)
     end
   end
 
   def check(thread, :branch) do
     branch = "work/#{thread.slug}"
 
-    case git(["rev-parse", "--verify", "--quiet", branch]) do
+    case git(thread, ["rev-parse", "--verify", "--quiet", branch]) do
       {sha, 0} -> {:ok, "#{branch} @ #{String.slice(String.trim(sha), 0, 12)}"}
-      {_out, _} -> sane_root_or(fn -> {:error, "branch #{branch} does not exist"} end)
+      {_out, _} -> sane_root_or(thread, fn -> {:error, "branch #{branch} does not exist"} end)
     end
   end
 
@@ -58,17 +58,29 @@ defmodule Server.Workline.Artifacts.Git do
       else: {:error, "no check_passed correlated #{correlation}"}
   end
 
-  defp git(args), do: System.cmd("git", ["-C", root() | args], stderr_to_stdout: true)
+  defp git(thread, args), do: System.cmd("git", ["-C", root(thread) | args], stderr_to_stdout: true)
 
   # A failed check on a broken root would otherwise read as "not committed" — an actionable-
   # sounding but FALSE diagnosis that wedges every workline. Distinguish the environment fault.
-  defp sane_root_or(not_committed) do
-    case git(["rev-parse", "--git-dir"]) do
+  defp sane_root_or(thread, not_committed) do
+    case git(thread, ["rev-parse", "--git-dir"]) do
       {_out, 0} -> not_committed.()
-      {_out, _} -> {:error, "workline root #{root()} is not a git worktree — set TLON_WORKLINE_ROOT"}
+      {_out, _} -> {:error, "workline root #{root(thread)} is not a git worktree — set TLON_WORKLINE_ROOT"}
     end
   end
 
-  @doc "The workline git root — shared with Review.submit so both sides act on one tree."
+  @doc """
+  The fallback git root for a thread with no project: `config :server, :workline_root`, else cwd.
+  """
   def root, do: Application.get_env(:server, :workline_root) || File.cwd!()
+
+  @doc """
+  The git root a thread's artifacts live in: `Server.repo_for_thread/1` (its project's repo, else its workspace's), else `root/0`. Shared with `Scribe` so both sides act on one tree.
+  """
+  def root(thread) do
+    case Server.repo_for_thread(thread) do
+      {:ok, repo} -> repo
+      {:error, _} -> root()
+    end
+  end
 end
