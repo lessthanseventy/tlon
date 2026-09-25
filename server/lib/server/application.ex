@@ -2,6 +2,8 @@ defmodule Server.Application do
   @moduledoc false
   use Application
 
+  alias Server.Jobs.Alarm
+
   @impl true
   def start(_type, _args) do
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
@@ -40,6 +42,9 @@ defmodule Server.Application do
         maybe(:start_mcp, false, mcp_children()) ++
         maybe(:start_oban, false, {Oban, Application.get_env(:server, Oban, [])}) ++
         maybe(:start_web, false, Server.Web.Endpoint)
+
+    # A discarded job reaches the operator (Server.Jobs.Alarm) wherever Oban runs.
+    if Application.get_env(:server, :start_oban, false), do: Alarm.attach()
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Server.Supervisor)
   end
