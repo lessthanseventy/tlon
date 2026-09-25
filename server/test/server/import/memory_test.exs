@@ -38,6 +38,21 @@ defmodule Server.Import.MemoryTest do
     path
   end
 
+  test "an old-style memory with no frontmatter is still knowledge; an index of links is not", ctx do
+    dir = Path.join(ctx.dir, "-home-andrew-projects-deuce-seven/memory")
+    File.mkdir_p!(dir)
+    notes = Path.join(dir, "MEMORY.md")
+    File.write!(notes, "# Deuce Seven - Trading Bot\n\n## Project Structure\n- Elixir umbrella app, four apps\n")
+    index = Path.join(ctx.dir, "MEMORY.md")
+    File.write!(index, "# Memory index\n\n- [Fix or file](fix-or-file.md) — never note\n- [Store](store.md) — postgres\n")
+
+    assert {:ok, %{banked: 1}} = Memory.import_files([notes, index], ctx.tlon)
+
+    fact = Repo.get_by!(Fact, intent: "memory:-home-andrew-projects-deuce-seven/MEMORY")
+    assert %{kind: "learned"} = fact
+    assert fact.text =~ "Elixir umbrella app"
+  end
+
   test "a memory file becomes a derived fact on the project's closed memory thread", ctx do
     path = memory(ctx.dir, "fix-or-file", "feedback", "Fix it now, or file it.")
     other = memory(ctx.dir, "store-is-postgres", "project", "The store is Postgres.")

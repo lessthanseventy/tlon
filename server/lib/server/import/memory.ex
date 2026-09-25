@@ -1,10 +1,12 @@
 defmodule Server.Import.Memory do
   @moduledoc """
-  Claude Code's memory files (`~/.claude/projects/*/memory/*.md`: frontmatter `name`,
-  `description`, `metadata.type`, then a body) as facts on a project, so every coworker on that
-  project recalls what the operator's own Claude sessions learned. The facts hang off the
-  project's closed `Claude Code memory` thread (a fact is scoped by its thread), keyed by intent
-  `memory:<name>`: a re-import banks nothing twice and carries an edited file's new text.
+  Claude Code's memory files (`~/.claude/projects/*/memory/*.md`) as facts on a project, so every
+  coworker on that project recalls what the operator's own Claude sessions learned. A current
+  memory has frontmatter (`name`, `description`, `metadata.type`) and a body; an older one is plain
+  markdown, named by its folder and file (a new-style `MEMORY.md` is an index and is skipped). The
+  facts hang off the project's closed `Claude Code memory` thread (a fact is scoped by its thread),
+  keyed by intent `memory:<name>`: a re-import banks nothing twice and carries an edited file's new
+  text.
 
   All `derived` — they rank against the brief's budget instead of pinning into every brief. A
   `feedback`/`user` memory is a `constraint`, the rest `learned`.
@@ -38,21 +40,52 @@ defmodule Server.Import.Memory do
     |> then(&{:ok, &1})
   end
 
-  @doc "One memory file → `%{name, type, text}`, or nil without a `name` in its frontmatter."
+  @doc """
+  One memory file → `%{name, type, text}`, or nil for an index or a frontmatter with no `name`.
+  """
   def parse(path) do
-    with [_, front, body] <- Regex.run(~r/\A---\n(.*?)\n---\n(.*)\z/s, File.read!(path)),
-         [_, name] <- Regex.run(~r/^name:\s*(.+)$/m, front) do
-      description = field(front, "description")
-      text = String.trim("#{description}\n\n#{String.trim(body)}")
+    content = File.read!(path)
 
-      %{
-        name: String.trim(name),
-        type: field(front, "type"),
-        text: if(String.length(text) > @text_cap, do: String.slice(text, 0, @text_cap) <> " …", else: text)
-      }
-    else
-      _ -> nil
+    case Regex.run(~r/\A---\n(.*?)\n---\n(.*)\z/s, content) do
+      [_, front, body] -> with_frontmatter(front, body)
+      nil -> plain(path, content)
     end
+  end
+
+  defp with_frontmatter(front, body) do
+    case Regex.run(~r/^name:\s*(.+)$/m, front) do
+      [_, name] ->
+        %{
+          name: String.trim(name),
+          type: field(front, "type"),
+          text: cap("#{field(front, "description")}\n\n#{String.trim(body)}")
+        }
+
+      nil ->
+        nil
+    end
+  end
+
+  # An older memory is plain markdown, named by its folder (`-home-andrew-projects-x`) and file,
+  # since one folder's MEMORY.md is its notes. A new-style MEMORY.md is only an index of links.
+  defp plain(path, content) do
+    if index?(content) do
+      nil
+    else
+      folder = path |> Path.dirname() |> Path.dirname() |> Path.basename()
+      %{name: "#{folder}/#{Path.basename(path, ".md")}", type: nil, text: cap(content)}
+    end
+  end
+
+  defp index?(content) do
+    content
+    |> String.split("\n", trim: true)
+    |> Enum.all?(&(String.starts_with?(&1, "#") or String.starts_with?(&1, "- [")))
+  end
+
+  defp cap(text) do
+    text = String.trim(text)
+    if String.length(text) > @text_cap, do: String.slice(text, 0, @text_cap) <> " …", else: text
   end
 
   defp field(front, key) do
