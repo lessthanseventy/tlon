@@ -144,17 +144,19 @@ defmodule Console.Stack do
   def release do
     case :persistent_term.get({__MODULE__, :release}, nil) do
       nil ->
-        probed =
-          case cmd("git", ["-C", ".", "describe", "--tags", "--always", "--dirty"]) do
-            {:ok, out} -> out |> String.trim() |> then(&if(&1 == "", do: "?", else: &1))
-            :error -> "?"
-          end
-
+        probed = probe_release()
         :persistent_term.put({__MODULE__, :release}, probed)
         probed
 
       cached ->
         cached
+    end
+  end
+
+  defp probe_release do
+    case cmd("git", ["-C", ".", "describe", "--tags", "--always", "--dirty"]) do
+      {:ok, out} -> out |> String.trim() |> then(&if(&1 == "", do: "?", else: &1))
+      :error -> "?"
     end
   end
 
@@ -180,16 +182,18 @@ defmodule Console.Stack do
   `nix_behind/0` alongside it (each runs the full sweep again).
   """
   def nix_status do
-    Enum.reduce_while(nix_profile_paths(), {nil, nil}, fn path, _acc ->
-      case cmd("nix-env", ["--list-generations", "--profile", path]) do
-        {:ok, out} ->
-          result = parse_nix_gens(out)
-          if elem(result, 0) == nil, do: {:cont, {nil, nil}}, else: {:halt, result}
+    Enum.reduce_while(nix_profile_paths(), {nil, nil}, fn path, _acc -> nix_gens_at(path) end)
+  end
 
-        :error ->
-          {:cont, {nil, nil}}
-      end
-    end)
+  defp nix_gens_at(path) do
+    case cmd("nix-env", ["--list-generations", "--profile", path]) do
+      {:ok, out} ->
+        result = parse_nix_gens(out)
+        if elem(result, 0) == nil, do: {:cont, {nil, nil}}, else: {:halt, result}
+
+      :error ->
+        {:cont, {nil, nil}}
+    end
   end
 
   # Profile paths to try, in order: home-manager (non-NixOS), then the system default.
@@ -231,55 +235,46 @@ defmodule Console.Stack do
         out |> String.split("\n", trim: true) |> List.last() |> String.trim() |> parse_pct()
 
       :error ->
-        case cmd("df", ["-h", "/"]) do
-          {:ok, out} ->
-            out
-            |> String.split("\n", trim: true)
-            |> List.last()
-            |> String.split()
-            |> Enum.at(-2, "")
-            |> String.replace("%", "")
-            |> parse_pct()
+        disk_pct_df_h()
+    end
+  end
 
-          :error ->
-            nil
-        end
+  defp disk_pct_df_h do
+    case cmd("df", ["-h", "/"]) do
+      {:ok, out} ->
+        out
+        |> String.split("\n", trim: true)
+        |> List.last()
+        |> String.split()
+        |> Enum.at(-2, "")
+        |> String.replace("%", "")
+        |> parse_pct()
+
+      :error ->
+        nil
     end
   end
 
   @doc "Memory usage percentage (best-effort, reads from /proc/meminfo on Linux)."
   def mem_pct do
-    case File.read("/proc/meminfo") do
-      {:ok, content} ->
-        with {total, _} <- parse_mem_line(content, "MemTotal:"),
-             {available, _} <- parse_mem_line(content, "MemAvailable:") do
-          if total > 0, do: round((total - available) / total * 100)
-        else
-          _ -> nil
-        end
-
-      {:error, _} ->
-        nil
+    with {:ok, content} <- File.read("/proc/meminfo"),
+         {total, _} <- parse_mem_line(content, "MemTotal:"),
+         {available, _} <- parse_mem_line(content, "MemAvailable:"),
+         true <- total > 0 do
+      round((total - available) / total * 100)
+    else
+      _ -> nil
     end
   end
 
   @doc "System 1-minute load average, or nil. Best-effort, reads /proc/loadavg on Linux."
   def load_avg do
-    case File.read("/proc/loadavg") do
-      {:ok, content} ->
-        case String.split(content) do
-          [one_min | _] ->
-            case Float.parse(one_min) do
-              {f, _} -> Float.round(f, 2)
-              :error -> nil
-            end
-
-          _ ->
-            nil
-        end
-
-      {:error, _} ->
-        nil
+    with {:ok, content} <- File.read("/proc/loadavg"),
+         [one_min | _] <- String.split(content),
+         {f, _} <- Float.parse(one_min) do
+      Float.round(f, 2)
+    else
+      _ -> nil
     end
   end
 
