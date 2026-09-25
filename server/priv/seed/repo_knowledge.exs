@@ -1,13 +1,12 @@
-# Base self-knowledge + baseline projects for Tlön (the ficciones monorepo).
+# Base self-knowledge for Tlön — what any box running it should already know about the product.
 #
-# This is the reset-safe SEED: `Server.Seed` banks these facts and ensures these projects on boot
-# (via `Server.Bootstrap`) and on demand (`mix server.seed`), idempotently — each fact is keyed by
-# its stable `intent`, each project by (workspace, name), so re-running never duplicates. Edit this
-# file to change what a freshly-reset funes already knows about itself.
+# This is the reset-safe SEED: `Server.Seed` banks these facts on boot (via `Server.Bootstrap`) and on
+# demand (`mix server.seed`), idempotently — each fact is keyed by its stable `intent`, so re-running
+# never duplicates. A box's own workspaces and facts about its operator belong in the MACHINE seed
+# (`~/.config/tlon/seed.exs`), never here: this repo is public and machine-agnostic.
 #
 # A fact is a durable claim: `kind` + `provenance` (stated = the owner said it; derived = we produced
-# it). `constraint`/`stated` facts are the ALWAYS-LOADED pinned set — every thread sees them — which
-# is why the repo's self-knowledge lives there.
+# it). `constraint`/`stated` facts are the ALWAYS-LOADED pinned set — every thread sees them.
 
 %{
   facts: [
@@ -16,19 +15,19 @@
       kind: "constraint",
       provenance: "stated",
       text:
-        "Tlön (the name is from Borges) is this system: an agent-orchestration cockpit backed by a " <>
-          "knowledge substrate. The monorepo is 'ficciones', at ~/projects/ficciones."
+        "Tlön (the name is from Borges) is an agent-orchestration product: an always-up server (threads, " <>
+          "facts, worklines, staffing), a terminal cockpit over it, and adapters that make pi and Claude Code " <>
+          "citizens of it. Its repo is tlon; the machine that runs it wires it in from outside."
     },
     %{
       intent: "seed:module-layout",
       kind: "constraint",
       provenance: "stated",
       text:
-        "Module layout: modules/server is funes — the knowledge + coordination brain (Elixir, code " <>
-          "namespace Server.*, directory funes/); modules/console is aleph — the terminal cockpit (namespace " <>
-          "Console.*, directory aleph/); modules/adapters holds the pi/manos harness adapters. Naming layers: " <>
-          "the PRODUCT is Tlön, the OTP apps are server/console/adapters, and funes/aleph survive only as legacy " <>
-          "directory names and prose."
+        "The tlon repo: server/ (OTP app :server, Server.* — the store, MCP, switchboard, staffing, web UI), " <>
+          "console/ (Console.* — the TTY cockpit; it calls only what Server exports, enforced by :boundary) and " <>
+          "adapters/ (TypeScript: the pi extension, the Claude Code adapter, lsp, consult). funes and aleph are " <>
+          "legacy names that survive only in prose and in the node name funes@."
     },
     %{
       intent: "seed:coordination-model",
@@ -45,36 +44,38 @@
       kind: "constraint",
       provenance: "stated",
       text:
-        "Container hierarchy is Workspace ▸ Project ▸ Thread. A Workspace is a context (work/home/client) " <>
-          "and IS a tmux session; a Project is a named effort spanning 1+ repos, grouped within the session; a " <>
-          "Thread is a unit of work with a lead. A Ticket is a first-class, lightweight, workspace-scoped tracker " <>
-          "(no ceremony) that PROMOTES into a thread when work starts; a Note is funes-native freeform scratch."
+        "Container hierarchy is Workspace ▸ Project ▸ Thread. A Workspace is a context with its own bench of " <>
+          "coworkers and its own tmux server; a Project is a named effort over one or more repos; a Thread is a " <>
+          "unit of work with a lead, in a project. Each workspace has one standing thread, its lobby, where the " <>
+          "centre coworker sits. A Ticket is a lightweight workspace tracker that promotes into a thread; a Note " <>
+          "is freeform scratch."
     },
     %{
       intent: "seed:substrate",
       kind: "constraint",
       provenance: "stated",
       text:
-        "Substrate: tmux = the runtime (where live terminals run), funes = knowledge — orthogonal. A " <>
-          "workspace IS a tmux session (console-workspace-<id>), so coworkers survive the cockpit restarting. " <>
-          "God-view is a funes query across ALL workspaces, never a tmux attach."
+        "Substrate: tmux is the runtime (where live terminals run), the server is the knowledge — orthogonal. " <>
+          "Coworkers run on their workspace's tmux server (socket console-workspace-<id>, session w<id>), so they " <>
+          "survive the cockpit restarting. God-view is a server query across all workspaces, never a tmux attach."
     },
     %{
       intent: "seed:runtime-services",
       kind: "constraint",
       provenance: "stated",
       text:
-        "Runtime: the server runs as a systemd --user service (tlon.service) on port 4040; the console " <>
-          "cockpit runs on 4041. `mise run console:run` launches the cockpit; `mise run console:reload` hot-reloads " <>
-          "render/keymap/panel edits into the running cockpit without a restart."
+        "Runtime: the server runs as a systemd --user service (tlon.service, node funes@127.0.0.1) — MCP on " <>
+          "127.0.0.1:4040, the web UI on :4042, Oban for scheduled work. The cockpit (`mise run console:run`) is " <>
+          "an :erpc client of that node, one brain; `console:run:local` embeds a server on the dev db instead. " <>
+          "`mise run server:restart` rebuilds the release and restarts the service."
     },
     %{
       intent: "seed:persistence",
       kind: "constraint",
       provenance: "stated",
       text:
-        "Persistence is SQLite via Server.Repo; the path comes from the TLON_DB env var (else " <>
-          "~/.local/share/funes/wb.db). The dev scratch DB the cockpit reads is modules/server/.dev/tlon.db."
+        "The store is Postgres over the local socket: `tlon` (the service), `tlon_dev` (dev shells and " <>
+          "console:run:local), `tlon_test` (the suite). TLON_DATABASE or TLON_DATABASE_URL override."
     },
     %{
       intent: "seed:knowledge-model",
@@ -91,67 +92,39 @@
       kind: "constraint",
       provenance: "stated",
       text:
-        "Toolchain: run Elixir through mise (OTP 28, not bare OTP 27). The machine is configured by a Nix " <>
-          "flake + home-manager — `mise run home:switch` is the machine gate. Use pacman's nix, NOT Determinate " <>
-          "(it segfaults on this box)."
+        "Toolchain: run Elixir through mise (OTP 28). Every command in the loop is a mise task (tasks/*.toml, " <>
+          "`mise tasks` lists them) — the human and every agent drive the same ones."
     },
     %{
       intent: "seed:verification-gates",
       kind: "constraint",
       provenance: "stated",
       text:
-        "Verification: module unit suites are NOT 'every gate' — run flake:check / home:switch before " <>
-          "claiming ficciones work is green, or flag it unverified. Precommit compiles with " <>
-          "--warnings-as-errors; the console may only call EXPORTED Server modules (the :boundary compiler " <>
-          "enforces this — use the Server facade, never Server.Repo/Server.MCP.Tool from console)."
-    },
-    # --- 2026-09-01 direction (Andrew). These supersede the two-brain framing in seed:runtime-services
-    #     and seed:persistence as the TARGET; keep those as the current state until WS3 lands. ---
-    %{
-      intent: "seed:one-brain-direction",
-      kind: "decision",
-      provenance: "stated",
-      text:
-        "Architecture target (2026-09-01): converge on ONE always-up server as the single source of truth " <>
-          "— it owns the DB, MCP, and the future web UI (Phoenix) + Oban jobs. The cockpit becomes an RPC " <>
-          "client of it (distributed-Erlang :erpc into the server node), NOT an embedder — retiring today's " <>
-          "two brains (embedded :4041 on .dev/tlon.db vs systemd :4040 on wb.db). .dev DBs become test-only. " <>
-          "SQLite → Postgres is likely once Oban/web-UI land; build the client boundary first, migrate the store later."
+        "Verification: `mise run check` is the gate — the names check, the server, console and adapter checks, " <>
+          "and the task manual. Precommit compiles with --warnings-as-errors, and the console may call only " <>
+          "exported Server modules (the :boundary compiler enforces it)."
     },
     %{
       intent: "seed:coworker-lifecycle",
       kind: "decision",
       provenance: "stated",
       text:
-        "Coworker lifecycle (2026-09-01): a coworker comes online ON-DEMAND when the operator posts to its " <>
-          "thread — never an eager spawn of the whole roster. A WARM lead (a live session inside the ~1h warmth " <>
-          "window) is woken (cheap resume, cache hot). A COLD or offline lead gets a FRESH session seeded from " <>
-          "Board.brief (dossier catch-up), NEVER a /resume of a huge transcript — re-ingesting a stale context " <>
-          "burns a 5-hour window. Switchboard.has_live_session? must treat a cold session as absent, or it strands."
+        "Coworker lifecycle: the service's staffing pass (each minute) keeps every benched workspace's centre " <>
+          "and tail seats running; a thread's lead comes online when the operator posts to it. A WARM lead (a live " <>
+          "session inside the ~1h warmth window) is woken; a COLD one gets a FRESH session seeded from the " <>
+          "thread's brief, never a /resume of a huge transcript."
     },
     %{
       intent: "seed:bootstrap-knowledge-loop",
       kind: "constraint",
       provenance: "stated",
       text:
-        "This seed file (priv/seed/repo_knowledge.exs) IS Tlön's wipe-proof brain: Server.Seed re-applies it " <>
-          "idempotently on every boot, so a DB wipe restores all of it. The intent is to bootstrap a fresh world " <>
-          "with as much accumulated knowledge as possible — so genuinely useful learnings should be PROMOTED from " <>
-          "session-banked facts into this file (keyed by a stable seed:* intent) rather than left to die on the next wipe."
-    },
-    %{
-      intent: "seed:fix-or-file",
-      kind: "constraint",
-      provenance: "stated",
-      text:
-        "Never just note a problem. Every fault you hit gets one fate in the same session: fixed now (reproduced " <>
-          "first by a test that goes red, then its own small commit), or filed — a Tlön ticket when it is small and " <>
-          "later, a new Tlön thread on its project when it needs a conversation. A workaround is not a fix: when the " <>
-          "code fights you, fix the code. Leave everywhere better than you found it. A report says what was fixed and " <>
-          "which ticket or thread each deferred thing went to."
+        "Wipe-proof knowledge: this seed file holds the product's, the machine seed (~/.config/tlon/seed.exs, " <>
+          "written by the machine) holds the box's workspaces and its operator's facts, and Server.Seed applies " <>
+          "both on every boot. A genuinely useful session learning is PROMOTED (`mix server.promote_fact`) rather " <>
+          "than left to die on the next wipe."
     }
   ],
-  # Projects live in the store, not here: they are the operator's organisation of his repos (one
-  # workspace; a project spans repos; the workspace names its default), edited as data.
+  # Projects live in the machine seed and the store, not here.
   projects: []
 }
