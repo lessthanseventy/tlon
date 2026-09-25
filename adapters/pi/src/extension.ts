@@ -11,9 +11,8 @@ import { env } from "node:process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { sawSuccessfulCommit } from "./activity.ts";
 import { renderBrief, type Dossier } from "./brief.ts";
-import { TlonClient, TlonRejected, TlonUnreachable, identityFromEnv } from "./mcp.ts";
+import { TlonClient, TlonUnreachable, identityFromEnv } from "./mcp.ts";
 import { detectCorrection } from "./recall.ts";
 import {
   buildExtractionPrompt,
@@ -101,9 +100,6 @@ export default function adapters(pi: ExtensionAPI): void {
   let watermark = 0;
   let turnCount = 0;
   let capturing = false;
-
-  // Auto-track latch (reshape slice B): once this session has promoted its thread, stop scanning.
-  let threadTracked = false;
 
   // Capture the delta since the watermark (bounded — a few turns, never the full window): extract
   // durable facts out-of-band via a cheap model, bank them DERIVED, raise any open questions.
@@ -232,23 +228,6 @@ export default function adapters(pi: ExtensionAPI): void {
       updateWidget(ctx, (await client.getDossier()) as Dossier);
     } catch {
       // The footer is a nicety; a failed refresh must never interrupt or fail a turn.
-    }
-    // Auto-track (reshape slice B): a turn that landed a git commit promotes this thread into
-    // the stage machine — mechanically, so the ticket condenses out of the work. Once is enough
-    // per session (the server is idempotent anyway); best-effort like everything else here.
-    if (!threadTracked) {
-      try {
-        if (sawSuccessfulCommit(ctx.sessionManager.buildContextEntries())) {
-          await client.connect();
-          await client.trackThread();
-          threadTracked = true;
-        }
-      } catch (e) {
-        // A REFUSAL (e.g. the root machine thread — its standing coworkers commit constantly)
-        // latches too: retrying a doomed promote every turn_end forever helps no one. Only a
-        // transport failure (the server down) leaves the latch open for a later retry.
-        if (e instanceof TlonRejected) threadTracked = true;
-      }
     }
     // Cadence capture (slice C): every Nth turn, flush the delta. Bounded input, so it never
     // overflows the cheap extractor however full the frontier context is.

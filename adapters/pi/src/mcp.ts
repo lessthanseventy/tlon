@@ -150,12 +150,6 @@ export class TlonClient {
     await this.#callTool("post_message", { body });
   }
 
-  // Promote this connection's thread into the stage machine (reshape slice B). Idempotent
-  // server-side; called mechanically when a turn lands a git commit.
-  async trackThread(): Promise<void> {
-    await this.#callTool("track_thread", {});
-  }
-
   async #callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
     const { body } = await this.#post({
       jsonrpc: "2.0",
