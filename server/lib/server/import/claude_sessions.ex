@@ -19,7 +19,7 @@ defmodule Server.Import.ClaudeSessions do
 
   # Sessions a program drove (the memory extractor, eval arms, the switchboard's wake) — not a
   # conversation with the operator.
-  @machine_openers ["You extract", "New message on thread", "ARM:", "[server thread"]
+  @machine_openers ["You extract", "You are a strict evaluator", "New message on thread", "ARM:", "[server thread"]
   @body_cap 6_000
 
   @doc "One transcript → `%{id, cwd, title, started_at, turns}`, or nil when it holds no human prompt."
