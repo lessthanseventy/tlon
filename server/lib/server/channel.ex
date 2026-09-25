@@ -91,7 +91,11 @@ defmodule Server.Channel do
       |> Repo.update()
       |> Server.Bus.announce(:thread_closed)
 
-    with {:ok, _closed} <- result, do: report_to_parent(thread)
+    with {:ok, _closed} <- result do
+      Staff.end_thread_sessions(thread.id)
+      report_to_parent(thread)
+    end
+
     result
   end
 

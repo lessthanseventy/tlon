@@ -136,6 +136,13 @@ defmodule Server.Staff do
     session |> Session.end_changeset() |> Repo.update() |> Server.Bus.announce(:session_ended)
   end
 
+  @doc "End every live session on a thread — a closed thread has nobody on the clock."
+  def end_thread_sessions(thread_id) do
+    from(s in Session, where: s.thread_id == ^thread_id and is_nil(s.ended_at))
+    |> Repo.all()
+    |> Enum.each(&end_session/1)
+  end
+
   @doc """
   Bump sessions' `last_active_at` to `at`, FORWARD-ONLY — warmth's one write path,
   shared by the switchboard (delivery/authoring bumps) and the MCP channel (a tool

@@ -416,6 +416,18 @@ defmodule Server.ChannelTest do
       # The messages survive the close.
       assert thread |> Channel.thread_messages() |> Enum.map(& &1.body) == ["done"]
     end
+
+    test "ends the thread's live sessions — a closed thread has nobody on the clock" do
+      {:ok, thread} = Channel.open_thread(%{title: "wrap it up"})
+      {:ok, other} = Channel.open_thread(%{title: "still going"})
+      {:ok, agent} = Staff.register_agent(%{name: "Closer", mandate: "m", engine: "e"})
+      {:ok, _} = Staff.start_session(%{agent_id: agent.id, thread_id: thread.id, pane_ref: "w1"})
+      {:ok, _} = Staff.start_session(%{agent_id: agent.id, thread_id: other.id, pane_ref: "w2"})
+
+      {:ok, _} = Channel.close_thread(thread)
+
+      assert Enum.map(Staff.roster(), & &1.thread_id) == [other.id]
+    end
   end
 
   describe "parent/child threads + report-up on close (lead-as-manager, Slice 4D)" do
