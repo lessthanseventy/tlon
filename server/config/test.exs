@@ -5,7 +5,7 @@ config :server, Oban, testing: :manual
 
 # The suite's own database on the local Postgres, created fresh per run by test_helper.
 # TLON_TEST_DATABASE names another when two suites run at once (a second session, a worktree).
-config :server, Server.Repo, database: System.get_env("TLON_TEST_DATABASE") || "tlon_test", pool_size: 5
+config :server, Server.Repo, database: System.get_env("TLON_TEST_DATABASE") || "tlon_test", pool_size: 5, log: false
 
 # The web endpoint is started by the suite that tests it (no listener); fixed secrets.
 config :server, Server.Web.Endpoint,
