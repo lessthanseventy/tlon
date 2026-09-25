@@ -48,7 +48,8 @@ not left to mason or `~/.local/bin`. If a binary is missing, the tool surfaces a
 ## Law
 
 - **On demand, not on save.** A project-wide compile/typecheck per edit is too heavy;
-  `adapters/fmt` already formats on save. LSP gives what bash+mix can't (type info,
+  menard already formats on save (the pi/extension.ts `tool_result` hook). LSP gives what
+  bash+mix can't (type info,
   definitions, references, incremental diagnostics), surfaced when the agent asks.
 - **Never hang.** Every LSP request has a timeout (15s default, in `lspd/src/client.ts`);
   the shim's socket request has a longer one, so the daemon always answers first; a dead

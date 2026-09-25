@@ -31,10 +31,8 @@ description = "adapters/consult: the precommit gate — install (frozen), typech
 dir = "modules/adapters/consult"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 
-["adapters:fmt:check"]
-description = "adapters/fmt: the precommit gate — install (frozen), typecheck, tests"
-dir = "modules/adapters/fmt"
-run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+# menard's pi adapter lives in ~/projects/menard (standalone repo). Its gate is
+# `mise run test` there (bun test in pi/). No ficciones-side package to check.
 
 ["adapters:lsp:check"]
 description = "adapters/lsp: the pi shim's precommit gate — install (frozen), typecheck, tests"
@@ -71,7 +69,7 @@ run = "bun install --frozen-lockfile && bun run typecheck && bun test"
 description = "adapters: typecheck every pi extension (fast — the `reload` safety gate)"
 run = """
 set -e
-for d in pi consult fmt lsp lspd reload footer; do
+for d in pi consult lsp lspd reload footer; do
   ( cd "modules/adapters/$d" && bun run typecheck )
 done
 """

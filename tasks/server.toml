@@ -176,5 +176,5 @@ description = "names-exist gate: every Server.*/Console.* module, mix task, mise
 run = "scripts/check-names.sh"
 
 ["check"]
-description = "Everything green: the names gate + the server + console + adapters (pi + consult + fmt + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests) + the manual's drift check"
-depends = ["check:names", "server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:fmt:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check", "manual:check"]
+description = "Everything green: the names gate + the server + console + adapters (pi + consult + lsp + lspd + reload + footer) precommit gates (format + warnings + credo + types + tests) + the manual's drift check"
+depends = ["check:names", "server:check", "console:check", "adapters:pi:check", "adapters:consult:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check", "manual:check"]
