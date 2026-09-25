@@ -41,6 +41,24 @@ defmodule Server.Import.ClaudeSessionsTest do
       "message" => %{"role" => "user", "content" => [%{"type" => "tool_result"}]}
     }
 
+  test "a session from outside every repo lands on the workspace's default project, whatever its name", ctx do
+    {:ok, machine} = Projects.register(%{workspace_id: ctx.ws.id, name: "machine", repos: []})
+    {:ok, _} = Workspaces.edit(ctx.ws, %{default_project_id: machine.id})
+
+    transcript(ctx.dir, "s1", [
+      %{
+        "type" => "user",
+        "cwd" => "/home/someone",
+        "timestamp" => "2026-09-01T10:00:00Z",
+        "message" => %{"role" => "user", "content" => "bluetooth is broken"}
+      },
+      said("Try re-pairing.", "2026-09-01T10:00:01Z")
+    ])
+
+    assert {:ok, %{imported: 1}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
+    assert Repo.one!(Thread).project_id == machine.id
+  end
+
   test "a session becomes a closed thread on the cwd's project: prompts, then each turn's LAST reply", ctx do
     transcript(ctx.dir, "s1", [
       user("<command-name>/model</command-name>", "2026-09-01T10:00:00Z"),

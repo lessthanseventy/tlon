@@ -121,7 +121,7 @@ defmodule Server.Import.ClaudeSessions do
   """
   def import_dir(dir, workspace_id) do
     projects = Projects.in_workspace(workspace_id)
-    fallback = Enum.find(projects, &(&1.name == "general"))
+    fallback = Projects.default(workspace_id)
 
     dir
     |> Path.expand()
