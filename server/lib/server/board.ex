@@ -71,6 +71,7 @@ defmodule Server.Board do
     root_id = with %Thread{id: id} <- Channel.machine_thread(), do: id
     last_by_thread = last_message_at()
     leads = leads_by_thread()
+    prompts = Server.Attention.open_prompts_by_thread()
     workspaces = Repo.all(from w in Workspace, order_by: [asc: w.id])
     known = MapSet.new(workspaces, & &1.id)
     default_id = with %Workspace{id: id} <- List.first(workspaces), do: id
@@ -78,7 +79,7 @@ defmodule Server.Board do
     threads =
       from(t in Thread, where: t.state == "open")
       |> Repo.all()
-      |> Enum.map(&sidebar_row(&1, root_id, thinking, last_by_thread, leads))
+      |> Enum.map(&sidebar_row(&1, root_id, thinking, last_by_thread, leads, prompts))
 
     working_agents =
       thinking |> Map.values() |> List.flatten() |> MapSet.new(& &1.agent)
@@ -114,7 +115,7 @@ defmodule Server.Board do
     end
   end
 
-  defp sidebar_row(thread, root_id, thinking, last_by_thread, leads) do
+  defp sidebar_row(thread, root_id, thinking, last_by_thread, leads, prompts) do
     %{
       id: thread.id,
       workspace_id: thread.workspace_id,
@@ -123,6 +124,8 @@ defmodule Server.Board do
       root: thread.id == root_id,
       stage: thread.stage,
       awaiting: thread.awaiting,
+      # a coworker waiting on the operator (Server.Attention): `%{id, summary, options}` or nil
+      prompt: Map.get(prompts, thread.id),
       lead: Map.get(leads, thread.id),
       working: Map.get(thinking, thread.id, []) != [],
       last_at: Map.get(last_by_thread, thread.id) || thread.created_at

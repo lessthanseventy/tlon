@@ -69,6 +69,9 @@ defmodule Server.Bus do
 
   defp sub(topic), do: Phoenix.PubSub.subscribe(@pubsub, topic)
 
+  # A prompt closing is thread activity, not a new message: the rail badge and the thread repaint.
+  def broadcast({:prompt_resolved, m} = event), do: publish([activity_topic() | thread_topics(m.thread_id)], event)
+
   @doc """
   Broadcast a typed event to the topic(s) it belongs on. Routing is centralized here
   so the topic scheme has one home. Returns `:ok`.

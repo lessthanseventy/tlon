@@ -181,7 +181,11 @@ defmodule Server.MCP.Brief do
       "body" => m.body,
       "reply_to" => m.reply_to,
       "at" => at(m.created_at),
-      "consult" => m.consult_id != nil and m.mirrored == false
+      "consult" => m.consult_id != nil and m.mirrored == false,
+      # a `prompt` is a coworker waiting on the operator (Server.Attention): its options, and how it ended
+      "kind" => m.kind,
+      "payload" => m.payload,
+      "resolved_at" => at(m.resolved_at)
     }
   end
 

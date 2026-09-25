@@ -51,6 +51,12 @@ if config_env() != :test do
   config :server, start_switchboard: System.get_env("TLON_START_SWITCHBOARD") in ~w(1 true yes)
 end
 
+# The attention poller (master plan piece A): reads every coworker pane every few seconds and
+# turns a permission dialog into a `prompt` message on the thread. Service-only, like the rest.
+if config_env() != :test do
+  config :server, start_attention: System.get_env("TLON_START_ATTENTION") in ~w(1 true yes)
+end
+
 # The terminal backends: the server's own tmux ones (one-brain piece B, slices 1–2). A wake is
 # send-keys into the thread's window on the workspace's tmux server, a spawn a new window there,
 # a crew role a window beside the lead — with or without a cockpit connected. Guarded out of

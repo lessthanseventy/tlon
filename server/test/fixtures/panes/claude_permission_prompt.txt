@@ -1,0 +1,20 @@
+● I'll push the branch now.
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Bash command                                                                 │
+│                                                                              │
+│   git push -u origin work/orient-what-is-excessibility                       │
+│   Push the README split branch                                               │
+│                                                                              │
+│ Do you want to proceed?                                                      │
+│ ❯ 1. Yes                                                                     │
+│   2. Yes, and don't ask again for git push commands in this session          │
+│   3. No, and tell Claude what to do differently (esc)                        │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+  ╭────────────────────────────────────────────────────────────╮
+  │  ~/p/excessibility  ⎇ main ●  ✱ Sonnet 5                   │
+  │  󰧑  ctx 66,229 (7%)  ⏱  5h 10% (4h 12m)  ▦  wk 2% (3d 5h)  │
+  ╰────────────────────────────────────────────────────────────╯
+  ⏵⏵ auto mode on (shift+tab to cycle)

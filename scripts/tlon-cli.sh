@@ -180,8 +180,9 @@ case "$cmd" in
       end)
       import Ecto.Query
       counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
-      awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and not is_nil(t.awaiting), select: count(t.id))
-      threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting})
+      prompts = Server.Attention.open_prompts_by_thread()
+      awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and (not is_nil(t.awaiting) or t.id in ^Map.keys(prompts)), select: count(t.id))
+      threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting}) |> Enum.map(&Map.put(&1, :prompt, prompts[&1.id]))
       %{roster: roster, counts: counts, awaiting: awaiting, threads: threads} |> JSON.encode!() |> IO.puts()'
     ;;
 
@@ -220,8 +221,10 @@ case "$cmd" in
     body="$*"
     { int "$tid" && [ -n "$body" ]; } ||
       { echo 'usage: mise run server:post -- <thread-id> <message text…>' >&2; exit 2; }
-    # Post as the operator (default andrew) — parity with the agents' post_message.
-    exec "$SERVER" rpc "op = Application.get_env(:server, :operator, \"andrew\"); {:ok, m} = Server.Channel.post(%{thread_id: $tid, author: op, body: \"$(esc "$body")\"}); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
+    # Post as the operator (default andrew) — parity with the agents' post_message. Through
+    # Server.Attention.respond: a body naming an option of an open prompt (`y`, `n`, `2`) answers
+    # the coworker's dialog instead of queueing behind it.
+    exec "$SERVER" rpc "op = Application.get_env(:server, :operator, \"andrew\"); {:ok, m} = Server.Attention.respond($tid, op, \"$(esc "$body")\"); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
     ;;
 
   workline)

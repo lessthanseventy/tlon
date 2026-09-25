@@ -25,6 +25,12 @@ defmodule Server.Message do
     field :consult_id, :integer
     field :origin_thread_id, :integer
     field :mirrored, :boolean, default: false
+    # `chat` is a message; `prompt` is a coworker WAITING on the operator (Server.Attention) — the
+    # dialog's options ride `payload`, and `resolved_at`/`resolution` say how it ended.
+    field :kind, :string, default: "chat"
+    field :payload, :map
+    field :resolved_at, :utc_datetime
+    field :resolution, :string
     belongs_to :thread, Server.Thread
   end
 
@@ -42,10 +48,18 @@ defmodule Server.Message do
       :reply_to,
       :consult_id,
       :origin_thread_id,
-      :mirrored
+      :mirrored,
+      :kind,
+      :payload
     ])
     |> validate_required([:thread_id, :author, :body])
+    |> validate_inclusion(:kind, ["chat", "prompt"])
     |> Server.Secrets.validate_no_secret(:body)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
+  end
+
+  @doc "Close a `prompt`: how it ended — `answered: y`, `answered in the terminal`, `superseded`, `window closed`."
+  def resolve_changeset(%__MODULE__{kind: "prompt"} = prompt, resolution) when is_binary(resolution) do
+    change(prompt, resolved_at: DateTime.truncate(DateTime.utc_now(), :second), resolution: resolution)
   end
 end

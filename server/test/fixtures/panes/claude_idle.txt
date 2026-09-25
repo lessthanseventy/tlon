@@ -1,0 +1,24 @@
+
+ ▐▛███▛█   Claude Code v2.1.280
+▝▜██████▀  Sonnet 5 · Claude Max
+  ▝▝ ▝▝    ~/projects/ficciones/.worktrees/t9 · /rc
+
+  Get to finished work sooner with Opus 5.5. Switch anytime with /model.
+
+● agents-md: no CLAUDE.md found; AGENTS.md loaded:
+  /home/andrew/projects/ficciones/.worktrees/t9/AGENTS.md
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  ╭───────────────────────────────────────╮
+  │  ~/p/f/./t9  ⎇ work/t9 ●  ✱ Sonnet 5  │
+  │  󰧑  ctx 0 (0%)                        │
+  ╰───────────────────────────────────────╯
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

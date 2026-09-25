@@ -66,6 +66,14 @@ defmodule Server.Switchboard do
     # (a lead's report up to the human keeps the lead warm).
     touch_author(message)
 
+    # The pane is sitting on a dialog (Server.Attention): typing a message into it would answer
+    # the dialog with garbage. Hold; the drain re-delivers once the prompt is resolved.
+    if is_nil(message.delivered_at) and Server.Attention.waiting?(message.thread_id),
+      do: {:pending, message},
+      else: deliver_now(message)
+  end
+
+  defp deliver_now(%Message{} = message) do
     case recipients(message) do
       [] ->
         # Nobody warm+available is addressed — but if the thread's LEAD simply isn't running,

@@ -20,6 +20,7 @@ defmodule Server.Application do
     # One-brain E: Oban on the store's Postgres (the cron drain, the Maintain sweeps, the memory
     # pass — the two GenServer loops those were are gone, E/2); D: the web UI's
     # own Bandit listener. Both opt-in per node like MCP — the service flips them on.
+    # The attention poller (piece A) reads coworker panes for a waiting dialog — service-only too.
     # get_env, not fetch_env!: a root app that embeds :server (the console) never evaluates this
     # app's config.exs, and the child list is built before the flag is consulted
     children =
@@ -35,6 +36,7 @@ defmodule Server.Application do
         maybe(:bootstrap, true, Server.Bootstrap) ++
         maybe(:start_consult_mirror, true, Server.Consult.Mirror) ++
         maybe(:start_switchboard, false, Server.Switchboard.Runner) ++
+        maybe(:start_attention, false, Server.Attention.Poller) ++
         maybe(:start_mcp, false, mcp_children()) ++
         maybe(:start_oban, false, {Oban, Application.get_env(:server, Oban, [])}) ++
         maybe(:start_web, false, Server.Web.Endpoint)
