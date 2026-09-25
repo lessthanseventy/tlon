@@ -523,6 +523,11 @@ defmodule Console.ViewTest do
 
       nav = View.compose(reads(%{focus: focus}), 120, 40)
       assert {Panel.Border, %{focused: true}, _} = Enum.find(nav, &match?({Panel.Border, %{title: "RAIL"}, _}, &1))
+
+      # an overlay menu the cockpit paints on top holds the keys the same way
+      menu = View.compose(reads(%{focus: focus, overlay: :menu}), 120, 40)
+      assert {Panel.StatusBar, %{mode: :menu}, _} = Enum.find(menu, &match?({Panel.StatusBar, _, _}, &1))
+      assert {Panel.Border, %{focused: false}, _} = Enum.find(menu, &match?({Panel.Border, %{title: "RAIL"}, _}, &1))
     end
 
     test "a down link rides the frame read through to the bar" do

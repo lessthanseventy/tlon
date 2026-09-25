@@ -85,6 +85,12 @@ defmodule Console.Panel.StatusBarTest do
     assert text([title]) =~ "Tab project"
   end
 
+  test "the compose face says which thread it replies to" do
+    data = base(%{input: %{kind: :compose, thread_id: 8, buffer: "", cursor: 0}, input_title: "rail drive test"})
+    [row] = StatusBar.render(data, rect())
+    assert text([row]) =~ "COMPOSE  → rail drive test"
+  end
+
   test "NAV mode advertises the drawer — the one key that opens the panes the rail no longer holds" do
     [hints] = StatusBar.render(base(%{mode: :nav, workspace?: true}), rect())
     assert text([hints]) =~ "Alt+d drawer"

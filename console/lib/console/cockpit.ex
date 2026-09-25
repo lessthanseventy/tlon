@@ -203,10 +203,10 @@ defmodule Console.Cockpit do
       # LOCK mode (design 2026-08-23): Alt+g total-passthrough to the center — every other
       # key, Alt chords included, forwards raw so readline/emacs keep their bindings.
       lock?: false,
-      # Tlön's lazygit focus (which sidebar column/pane/section, and whether we're in the
-      # center tmux terminal). Persistent across keypresses — the keymap reads+advances it,
-      # only in the Tlön space. Defaults in-terminal, so Tlön opens with keys going to tmux.
-      focus: Focus.new(),
+      # Which pane holds the keys, and whether the centre does. Persistent across keypresses — the
+      # keymap reads+advances it. Opens on the rail: the centre starts as the chat view with nothing
+      # open, which has no keys of its own, so starting there swallowed the first Tab or `]`.
+      focus: %{Focus.new() | in_terminal?: false},
       # The last acted-on left-click cell — raxol's event_translator gives mouse events NO
       # press/release action, so a click arrives as TWO identical `:left` events; we act on the
       # first and swallow the immediate duplicate (the release). Any other mouse event clears it.
@@ -1574,7 +1574,7 @@ defmodule Console.Cockpit do
   # drift from what the frame underneath would have shown.
   defp paint(state, reads) do
     placements =
-      View.compose(reads, state.w, state.h) ++
+      View.compose(Map.put(reads, :overlay, overlay(state)), state.w, state.h) ++
         lazygit_placements(state) ++
         Drawer.placements(Map.put(state, :reads, reads), state.w, state.h) ++
         Author.menu_placements(state.menu, state.w, state.h) ++
@@ -1588,6 +1588,11 @@ defmodule Console.Cockpit do
 
     %{state | placements: placements}
   end
+
+  # An overlay the cockpit paints over the frame owns the keys, so the footer has to know it is up.
+  defp overlay(%{picker: picker}) when not is_nil(picker), do: :picker
+  defp overlay(%{menu: menu}) when not is_nil(menu), do: :menu
+  defp overlay(_state), do: nil
 
   # The kitty-graphics pass (design 2026-08-23): after the cell paint, place/refresh every
   # panel-declared image. Non-kitty hosts skip it wholesale (panels showed placeholder runs).

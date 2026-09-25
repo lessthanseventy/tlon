@@ -307,15 +307,17 @@ defmodule Console.Reads do
   def center_terminal(%{active_key: key}) when Space.workspace?(key), do: terminal(:machine)
   def center_terminal(_state), do: nil
 
-  # The thread `c` composes onto, derived per keypress (like center_live?): the focused project
-  # thread in Orbis; in a Workspace space, whoever you're actually LOOKING at (reshape slice D:
-  # the thread is the address, fixing the "who am I talking to" decoupling) — in chat view
-  # (Slice 3.3) that's the stack-focused card (the unfolded thread on screen); in terminal view
-  # it's the MACHINE thread. nil (no thread) makes `c` a no-op.
+  # The thread `c` composes onto, derived per keypress (like center_live?): whoever you are LOOKING
+  # at. In chat view that is the thread under the rail's cursor, else the open one, else the last
+  # focused; in terminal view it is the workspace's machine thread. nil makes `c` a no-op.
   @doc false
-  def composer_thread_id(%{active_key: key, center_view: :chat, stack_focus: focus})
-      when Space.workspace?(key) and not is_nil(focus) do
-    focus
+  def composer_thread_id(%{active_key: key, center_view: :chat} = state) when Space.workspace?(key) do
+    case {rail_selection(state), state[:opened_thread], state[:stack_focus]} do
+      {{:thread, %{id: id}}, _open, _focus} -> id
+      {nil, open, _focus} when is_integer(open) -> open
+      {nil, nil, focus} when not is_nil(focus) -> focus
+      _ -> machine_thread_id(Space.active_workspace_id(state))
+    end
   end
 
   def composer_thread_id(%{active_key: key} = state) when Space.workspace?(key),
