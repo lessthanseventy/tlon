@@ -1121,12 +1121,10 @@ defmodule Console.Cockpit do
     end
   end
 
-  defp apply_effect(:open_focused_thread, %{stack_focus: id} = state) when is_integer(id),
-    do: apply_effect({:open_thread_view, id}, state)
-
   # The picker's Enter (UX slice 2). A switcher row JUMPS: it switches workspace first when the
-  # target lives in another one, then opens the thread (and with it, its project). A palette row REPLAYS its key event through the keymap, so a verb picked
-  # from the list and the same verb pressed as a key are the same code path and cannot drift.
+  # target lives in another one, then opens the thread (and with it, its project). A palette row
+  # REPLAYS its key event through the keymap, so a verb picked from the list and the same verb
+  # pressed as a key are the same code path and cannot drift.
   defp apply_effect({:picker_pick, %{kind: :workspace, workspace_id: id}}, state),
     do: apply_pick({:switch_space, id}, state)
 
@@ -1145,12 +1143,19 @@ defmodule Console.Cockpit do
 
   defp apply_effect({:picker_pick, _row}, state), do: {:noreply, render(state)}
 
-  defp apply_effect(:open_focused_thread, state), do: {:noreply, state}
-
   defp apply_effect(:close_thread_view, state) do
     _ = drop_stale_session(state, nil)
+    # the centre only points at the rail now, so the keys go back to the rail
+    focus = %{state.focus | in_terminal?: false}
 
-    {:noreply, render(%{state | opened_thread: nil, input: nil, scrolls: Map.delete(state.scrolls, Panel.ThreadStack)})}
+    {:noreply,
+     render(%{
+       state
+       | opened_thread: nil,
+         input: nil,
+         focus: focus,
+         scrolls: Map.delete(state.scrolls, Panel.ThreadStack)
+     })}
   end
 
   # Scroll the open conversation by `n` rows (j/k in conversation mode); clamped at render.

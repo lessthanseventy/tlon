@@ -2,8 +2,8 @@
 
 The TTY cockpit over `server` (design: `docs/plans/2026-09-01-cockpit-homogenize-design.md`, which
 superseded the three-spaces layout of `2026-08-15-aleph-tui-design.md`). A full-screen terminal app:
-a left **rail** of the open project's threads, a center that is either the workspace's **thread
-stack** (a list of threads → one thread's conversation with its reply box) or the workspace's
+a left **rail** of the open project's threads, a center that is either the **open thread's
+conversation** with its reply box (never a list — the rail is the list) or the workspace's
 embedded **tmux center** (the roster lead, a real `tmux attach`), a toggleable **session pane** that
 embeds the selected thread's lead window with a **git pane** under it (lazygit on the thread's
 worktree, when it has one), and overlays (the lazygit zoom — `Alt+z` or STACK `⏎` — the context menu).

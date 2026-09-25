@@ -787,23 +787,19 @@ defmodule Console.KeymapTest do
   end
 
   describe "thread stack keyboard nav in a workspace (handle_tlon, center_view :chat)" do
-    test "j/k move the stack cursor instead of forwarding to a (hidden) terminal" do
-      assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("j"), stack_ctx())
-      assert {%{focused_id: 1}, :repaint} = Keymap.handle(char("k"), stack_ctx())
+    test "with nothing open, j/k and ↑/↓ walk the rail: focus drops to nav and the key acts there" do
+      rail = %{left: [:rail], right: [], sections: %{}, counts: %{rail: 3}}
+
+      for k <- [char("j"), key(:down)] do
+        assert {%{focus: %Focus{in_terminal?: false} = focus}, :repaint} =
+                 Keymap.handle(k, stack_ctx(%{tlon_layout: rail}))
+
+        assert focus.cursors[:rail] == 1
+      end
     end
 
-    test "↑/↓ also move the cursor" do
-      assert {%{focused_id: 3}, :repaint} = Keymap.handle(key(:down), stack_ctx())
-      assert {%{focused_id: 1}, :repaint} = Keymap.handle(key(:up), stack_ctx())
-    end
-
-    test "g/G jump to top/bottom" do
-      assert {%{focused_id: 1}, :repaint} = Keymap.handle(char("g"), stack_ctx())
-      assert {%{focused_id: 3}, :repaint} = Keymap.handle(char("G"), stack_ctx())
-    end
-
-    test "Enter opens the focused thread's conversation (two-step center)" do
-      assert {_s, :open_focused_thread} = Keymap.handle(key(:enter), stack_ctx())
+    test "with nothing open, Enter is the rail's Enter — it opens what the rail's cursor is on" do
+      assert {%{focus: %Focus{in_terminal?: false}}, :tlon_enter} = Keymap.handle(key(:enter), stack_ctx())
     end
 
     test "in conversation mode the reply box owns typing: j/k type, PgUp/PgDn scroll, Esc backs out" do
@@ -814,7 +810,7 @@ defmodule Console.KeymapTest do
       # Backlog scroll rides PgUp/PgDn (+ wheel, tested via the cockpit) — j/k are the buffer's now.
       assert {_s, {:scroll_conversation, -3}} = Keymap.handle(key(:page_up), s)
       assert {_s, {:scroll_conversation, 3}} = Keymap.handle(key(:page_down), s)
-      # Esc steps back to the list AND clears the reply so no draft leaks into the next thread.
+      # Esc closes the thread AND clears the reply so no draft leaks into the next thread.
       assert {%{input: nil}, :close_thread_view} = Keymap.handle(key(:escape), s)
     end
 
