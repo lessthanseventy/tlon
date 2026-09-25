@@ -22,6 +22,20 @@ defmodule Server.Projects do
     Repo.all(from p in Project, where: p.workspace_id == ^workspace_id, order_by: [asc: p.id])
   end
 
+  @doc """
+  The project a new thread in this workspace defaults to: the one its newest project-bearing
+  thread belongs to, or nil when no thread has one yet.
+  """
+  def last_used(workspace_id) do
+    Repo.one(
+      from t in Server.Thread,
+        where: t.workspace_id == ^workspace_id and not is_nil(t.project_id),
+        order_by: [desc: t.id],
+        limit: 1,
+        select: t.project_id
+    )
+  end
+
   @doc "A project by id, or nil."
   def get(id), do: Repo.get(Project, id)
 

@@ -687,9 +687,9 @@ defmodule Console.KeymapTest do
       assert {%{input: %{buffer: "fabl"}}, :repaint} = Keymap.handle(key(:backspace), s)
     end
 
-    test "Enter on a non-empty buffer submits {:create_thread, title} and leaves input mode" do
+    test "Enter on a non-empty buffer submits {:create_thread, title, project} and leaves input mode" do
       s = state(%{input: %{kind: :new_thread, buffer: "fable review"}})
-      assert {%{input: nil}, {:create_thread, "fable review"}} = Keymap.handle(key(:enter), s)
+      assert {%{input: nil}, {:create_thread, "fable review", nil}} = Keymap.handle(key(:enter), s)
     end
 
     test "Enter on an empty buffer cancels (never creates a blank thread)" do
@@ -700,6 +700,21 @@ defmodule Console.KeymapTest do
     test "Esc cancels input mode, creating nothing" do
       s = state(%{input: %{kind: :new_thread, buffer: "half typed"}})
       assert {%{input: nil}, :repaint} = Keymap.handle(key(:escape), s)
+    end
+
+    test "Tab in the new-thread box cycles the workspace's projects from the default, wrapping" do
+      choice = %{projects: [%{id: 1, name: "ficciones"}, %{id: 2, name: "excessibility"}], default: 1}
+      s = state(%{input: %{kind: :new_thread, buffer: "fix it"}, project_choice: choice})
+      {s, :repaint} = Keymap.handle(key(:tab), s)
+      assert s.input.project_id == 2
+      {s, :repaint} = Keymap.handle(key(:tab), s)
+      assert s.input.project_id == 1
+      assert {%{input: nil}, {:create_thread, "fix it", 1}} = Keymap.handle(key(:enter), s)
+    end
+
+    test "Tab with no projects in the workspace changes nothing" do
+      s = state(%{input: %{kind: :new_thread, buffer: "x"}, project_choice: %{projects: [], default: nil}})
+      assert {^s, :none} = Keymap.handle(key(:tab), s)
     end
   end
 
@@ -928,7 +943,7 @@ defmodule Console.KeymapTest do
 
     test "plain Enter in the new-thread input submits (creates the thread)" do
       s = state(%{input: %{kind: :new_thread, buffer: "fable"}})
-      assert {%{input: nil}, {:create_thread, "fable"}} = Keymap.handle(key(:enter), s)
+      assert {%{input: nil}, {:create_thread, "fable", nil}} = Keymap.handle(key(:enter), s)
     end
 
     test "Enter on a non-empty buffer posts {:post_message, thread_id, body} and leaves input mode" do

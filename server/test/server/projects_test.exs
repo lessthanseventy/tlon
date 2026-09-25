@@ -59,6 +59,23 @@ defmodule Server.ProjectsTest do
       assert id == p.id
       assert Projects.by_name(ws.id, "nope") == nil
     end
+
+    test "last_used/1 is the project of the workspace's newest thread that has one" do
+      {:ok, ws} = Workspaces.register(%{name: "Last used"})
+      {:ok, other_ws} = Workspaces.register(%{name: "Away"})
+      {:ok, a} = Projects.register(%{workspace_id: ws.id, name: "ficciones"})
+      {:ok, b} = Projects.register(%{workspace_id: ws.id, name: "excessibility"})
+      {:ok, away} = Projects.register(%{workspace_id: other_ws.id, name: "elsewhere"})
+
+      assert Projects.last_used(ws.id) == nil
+
+      {:ok, _} = Server.Channel.open_thread(%{title: "one", workspace_id: ws.id, project_id: a.id})
+      {:ok, _} = Server.Channel.open_thread(%{title: "two", workspace_id: ws.id, project_id: b.id})
+      {:ok, _} = Server.Channel.open_thread(%{title: "no project", workspace_id: ws.id})
+      {:ok, _} = Server.Channel.open_thread(%{title: "away", workspace_id: other_ws.id, project_id: away.id})
+
+      assert Projects.last_used(ws.id) == b.id
+    end
   end
 
   describe "edit/2 & remove/1" do

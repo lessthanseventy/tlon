@@ -30,4 +30,17 @@ defmodule Console.Panel.NewThreadTest do
     assert text(rows) =~ "line one"
     assert text(rows) =~ "line two"
   end
+
+  test "names the project the thread will open on, idle and typing" do
+    idle = %{input: nil, project: "excessibility"} |> NewThread.render(@rect) |> text()
+    assert idle =~ "start a new thread in excessibility"
+
+    typing = %{input: %{kind: :new_thread, buffer: "fix"}, project: "excessibility"} |> NewThread.render(@rect) |> text()
+    assert typing =~ "excessibility ▸ fix"
+  end
+
+  test "the wrap width follows the prefix the project makes — the View sizes the band with it" do
+    assert NewThread.wrap_width(60, "excessibility") == 60 - String.length("＋ excessibility ▸ ")
+    assert NewThread.wrap_width(60, nil) == 60 - String.length("＋ new thread ▸ ")
+  end
 end

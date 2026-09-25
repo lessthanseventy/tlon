@@ -912,15 +912,18 @@ defmodule Console.Cockpit do
     {:noreply, state}
   end
 
-  defp apply_effect({:create_thread, text}, state) do
+  defp apply_effect({:create_thread, text, project_id}, state) do
     # The typed text is the OPENING MESSAGE, not just a title: post it as the operator so the thread
     # reads as a real chat and its lead has something to answer (the "no messages yet / silent agent"
-    # bug). The title is a short slug of it. scope: "machine" so it shows in the stack.
+    # bug). The title is a short slug of it. scope: "machine" so it shows in the stack. The project
+    # decides where its coworker works: Tab's pick, else the workspace default.
     operator = Console.Config.operator()
+    project_id = project_id || get_in(Reads.project_choice(state) || %{}, [:default])
 
     case Channel.open_thread(%{
            title: thread_title(text),
            workspace_id: Space.active_workspace_id(state),
+           project_id: project_id,
            scope: "machine"
          }) do
       {:ok, thread} ->
@@ -1358,10 +1361,13 @@ defmodule Console.Cockpit do
     # clamps its cursor against them and Enter resolves one, without this pure reducer fetching a list.
     # Nil while the picker is shut, so a closed overlay costs nothing.
     |> Map.put(:picker_items, picker_items(state))
+    # The new-thread box's projects for Tab to cycle — read only while that box is open.
+    |> Map.put(:project_choice, if(match?(%{input: %{kind: :new_thread}}, state), do: Reads.project_choice(state)))
   end
 
   defp drop_derived(next),
-    do: Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :live_workspaces, :picker_items])
+    do:
+      Map.drop(next, [:center_live?, :composer_thread_id, :tlon_layout, :live_workspaces, :picker_items, :project_choice])
 
   # The picker's rows for THIS keypress, off the last painted frame's reads — the switcher matches
   # the rail's own sidebar groups, so it can never show a thread the rail does not.

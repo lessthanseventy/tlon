@@ -48,8 +48,8 @@ defmodule Console.Keymap do
     * `:quit` — tear down and stop.
     * `:none` — nothing to do.
     * `{:forward, key}` — send this key to the live center terminal.
-    * `{:create_thread, text}` — the new-thread band's Enter: open a thread with `text` as its
-      opening message (the `n` verb).
+    * `{:create_thread, text, project_id}` — the new-thread band's Enter: open a thread with `text`
+      as its opening message (the `n` verb), on the project Tab picked (nil: the workspace default).
     * `{:file_ticket, text}` / `{:write_note, text}` — the New menu's ticket/note inputs.
     * `{:post_message, thread_id, body}` — post the composer's/reply box's body to that thread as
       the operator; `{:show_status, thread_id}` is the composer's `/status` slash command.
@@ -159,7 +159,7 @@ defmodule Console.Keymap do
           :repaint
           | :quit
           | {:forward, map()}
-          | {:create_thread, String.t()}
+          | {:create_thread, String.t(), integer() | nil}
           | {:file_ticket, String.t()}
           | {:write_note, String.t()}
           | {:orchestrate, String.t()}
@@ -306,8 +306,22 @@ defmodule Console.Keymap do
   # Enter submits — but an empty buffer creates/posts nothing (cancel), never a blank thread/message.
   def handle(%{key: :enter}, %{input: %{buffer: ""}} = state), do: {%{state | input: nil}, :repaint}
 
-  def handle(%{key: :enter}, %{input: %{kind: :new_thread, buffer: buffer}} = state),
-    do: {%{state | input: nil}, {:create_thread, buffer}}
+  def handle(%{key: :enter}, %{input: %{kind: :new_thread, buffer: buffer} = input} = state),
+    do: {%{state | input: nil}, {:create_thread, buffer, Map.get(input, :project_id)}}
+
+  # Tab in the new-thread box picks the project the thread opens on (the project decides where its
+  # coworker works), starting from the default the cockpit threads in as `project_choice`.
+  def handle(%{key: :tab}, %{input: %{kind: :new_thread} = input} = state) do
+    case state[:project_choice] do
+      %{projects: [_ | _] = projects, default: default} ->
+        ids = Enum.map(projects, & &1.id)
+        at = Enum.find_index(ids, &(&1 == (Map.get(input, :project_id) || default))) || -1
+        {%{state | input: Map.put(input, :project_id, Enum.at(ids, rem(at + 1, length(ids))))}, :repaint}
+
+      _ ->
+        {state, :none}
+    end
+  end
 
   # The `new` menu's ticket/note branches (Slice C): file a workspace ticket / jot a workspace note —
   # first-class create for the two nouns that were previously only reachable via a tertius prefix.

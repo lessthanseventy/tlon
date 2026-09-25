@@ -12,6 +12,7 @@ defmodule Console.Reads do
   alias Console.Safe
   alias Console.Server.Board
   alias Console.Server.Channel
+  alias Console.Server.Projects
   alias Console.Server.Staff
   alias Console.Sessions
   alias Console.Space
@@ -651,6 +652,29 @@ defmodule Console.Reads do
     {max(rect.w, 1), max(rect.h, 1)}
   end
 
+  @doc """
+  The active workspace's projects (`%{id, name}`, oldest first) and the one a new thread defaults to —
+  the last used (`Server.Projects.last_used/1`), else the first. nil with no workspace or no projects.
+  The keymap's Tab cycles over it; the new-thread band names its pick.
+  """
+  def project_choice(state) do
+    with ws when is_integer(ws) <- Space.active_workspace_id(state),
+         [_ | _] = projects <- Safe.read(:projects, [], fn -> Projects.in_workspace(ws) end) do
+      rows = Enum.map(projects, &%{id: &1.id, name: &1.name})
+      last = Safe.read(:last_project, nil, fn -> Projects.last_used(ws) end)
+      %{projects: rows, default: if(Enum.any?(rows, &(&1.id == last)), do: last, else: hd(rows).id)}
+    else
+      _ -> nil
+    end
+  end
+
+  defp new_thread_project(state) do
+    with %{projects: projects, default: default} <- project_choice(state) do
+      id = get_in(state, [:input, :project_id]) || default
+      Enum.find_value(projects, &(&1.id == id && &1.name))
+    end
+  end
+
   @doc "The frame's read-model for `Console.View.compose/3` — one call per paint, off the preamble's state."
   def frame(state, stack_blocks, focused) do
     threads = state.threads
@@ -678,6 +702,8 @@ defmodule Console.Reads do
       # flags), each thread carrying the warmth of its live session.
       sidebar: Safe.read(:sidebar, [], fn -> sidebar_read(roster) end),
       open_channel: state[:open_channel],
+      # The project the new-thread band will open on — the one Tab picked, else the default.
+      new_thread_project: new_thread_project(state),
       # The open thread's worktree path (display only; the spawn ensures it) for the top bar.
       cwd: Safe.read(:cwd, nil, fn -> cwd_read(state.opened_thread) end),
       # CONFIG (the Author, in the drawer): its own cursor.

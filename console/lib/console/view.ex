@@ -150,10 +150,12 @@ defmodule Console.View do
 
   # The new-thread band grows with its buffer (Andrew 2026-09-01): a height override for the center
   # `boxed/3` = the wrapped line count + the 2-row frame, capped. The wrap width matches the panel's
-  # own (`Panel.NewThread.wrap_width/1`) over the band's inset content width, so height ↔ render agree.
-  defp new_thread_overrides(%{input: %{kind: :new_thread, buffer: buffer}}, center_w) do
+  # own (`Panel.NewThread.wrap_width/2`, project prefix included) over the band's inset content
+  # width, so height ↔ render agree.
+  defp new_thread_overrides(%{input: %{kind: :new_thread, buffer: buffer}} = reads, center_w) do
     content_w = max(center_w - 4, 8)
-    lines = buffer |> Panel.NewThread.wrapped_lines(Panel.NewThread.wrap_width(content_w)) |> length() |> max(1)
+    width = Panel.NewThread.wrap_width(content_w, reads[:new_thread_project])
+    lines = buffer |> Panel.NewThread.wrapped_lines(width) |> length() |> max(1)
 
     %{Panel.NewThread => min(lines + 2, 12)}
   end
@@ -380,7 +382,7 @@ defmodule Console.View do
   def data_for(Panel.Activity, r), do: %{events: r[:activity] || [], gates: r[:gates] || []}
   # The permanent tertius band (Slice 3): the orchestrator input + a short receipts log.
   def data_for(Panel.Tertius, r), do: %{receipts: r[:receipts] || [], input: r[:input]}
-  def data_for(Panel.NewThread, r), do: %{input: r[:input]}
+  def data_for(Panel.NewThread, r), do: %{input: r[:input], project: r[:new_thread_project]}
   def data_for(Panel.Reply, r), do: %{input: r[:input]}
   def data_for(Panel.Triage, r), do: r[:triage]
   # HEALTH is a drawer pane now (the footer's old health segment) — the same probe read the

@@ -271,6 +271,13 @@ defmodule Console.Verbs do
     %{group: :typing, keys: "esc", label: "cancel", doc: "drop the draft and step out of the input", event: nil},
     %{
       group: :typing,
+      keys: "Tab",
+      label: "project",
+      doc: "in the new-thread box: cycle the project the thread opens on (where its coworker works)",
+      event: nil
+    },
+    %{
+      group: :typing,
       keys: "^a ^e ^u ^k ^w",
       label: "line edit",
       doc: "readline's reflexes: home · end · kill to start · kill to end · kill the word behind",
