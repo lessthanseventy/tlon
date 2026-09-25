@@ -32,7 +32,7 @@ defmodule Console.Panel.ThreadStack do
 
   def render(%{cards: _cards}, rect) do
     Console.Panel.clip(
-      [blank(), line("  ← pick a thread on the rail — j/k, ⏎", :dim), line("    n starts a new one", :dim)],
+      [blank(), line("  pick a thread on the rail — j/k, ⏎", :dim), line("    n starts a new one", :dim)],
       rect
     )
   end

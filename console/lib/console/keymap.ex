@@ -57,8 +57,8 @@ defmodule Console.Keymap do
       on a routed consequential verb that is waiting for confirmation (`pending_confirm`).
     * `:close_thread_view` / `{:scroll_conversation, rows}` — the chat center: Esc closes the open
       thread, j/k (PgUp/PgDn with the reply box focused) scroll its backlog.
-    * `:stack_delete_arm` — `d` on a thread card arms the two-key delete; `:tlon_delete_arm` /
-      `{:tlon_delete, target}` — the rail's `d` arm and its confirmed arm-time target.
+    * `:tlon_delete_arm` / `{:tlon_delete, target}` — the rail's `d` arm and its confirmed
+      arm-time target.
     * `:toggle_center_view` (`v`, chat⇄terminal) and `:toggle_session_pane` (Alt+\\).
     * `:zoom_git` (Alt+z) — the open thread's lazygit, full-frame; Ctrl+Space hands it back to its pane.
     * `:tlon_enter` — Enter on a rail pane (space switch / lazygit zoom / detail, cockpit-resolved).
@@ -190,7 +190,6 @@ defmodule Console.Keymap do
           | {:ticket_reorder, :up | :down}
           | :ticket_blocker_menu
           | :ticket_advance
-          | :stack_delete_arm
           | :tlon_delete_arm
           | {:tlon_delete, term()}
           | :yank
@@ -652,17 +651,9 @@ defmodule Console.Keymap do
     do: {state, :close_thread_view}
 
   # `n` focuses the new-thread band while looking at the LIST (like j/k), not only via the Alt chords.
-  # `c` is retired from the chat flow: opening a thread now focuses its persistent reply box directly
-  # (the `:reply` input), so there's no compose verb to reach here. (`c` still opens a composer in
-  # Orbis / terminal view via the `command` clause, which routes through `composer_thread_id`.)
+  # `n` starts a thread from the centre too, not only from the rail.
   defp handle_tlon(%{key: :char, char: "n"} = k, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
     do: command(k, state)
-
-  # `d` arms the two-key delete for the FOCUSED thread card (the second `d` is caught by the armed
-  # clause at the top of handle_tlon). This restores thread-delete, lost when the MachineChat TUI and
-  # the LEAVES rail panel — the old delete surfaces — were retired.
-  defp handle_tlon(%{key: :char, char: "d"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
-    do: {state, :stack_delete_arm}
 
   # The center owns the keys only while a live PTY is actually SHOWN there (`center_live?`, derived per
   # keypress by the cockpit): the chat view has none, so an unlisted key is a no-op — never a forward

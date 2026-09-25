@@ -146,6 +146,12 @@ defmodule Console.ReadsTest do
       assert Reads.composer_thread_id(state) == 9
     end
 
+    test "d on the lobby is refused up front; on another thread it arms" do
+      assert {:refused, reason} = Reads.tlon_delete_target(at(0))
+      assert reason =~ "lobby"
+      assert {:thread, 8, _label} = Reads.tlon_delete_target(at(1))
+    end
+
     test "Enter with nothing to land on does nothing — it never arms the detail mode" do
       state = at(0, %{sidebar: []})
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == :none

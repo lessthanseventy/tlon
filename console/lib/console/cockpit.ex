@@ -744,12 +744,12 @@ defmodule Console.Cockpit do
       "deleted “busy” — worktree kept: work/t1 has unmerged commits"
 
       iex> Console.Cockpit.delete_flash({:error, :root_machine_thread})
-      "can't delete the root thread"
+      "the lobby can't be deleted"
   """
   def delete_flash({:ok, thread, :none}), do: "deleted “#{thread.title}”"
   def delete_flash({:ok, thread, {:removed, _path}}), do: "deleted “#{thread.title}” and its worktree"
   def delete_flash({:ok, thread, {:kept, reason}}), do: "deleted “#{thread.title}” — worktree kept: #{reason}"
-  def delete_flash({:error, :root_machine_thread}), do: "can't delete the root thread"
+  def delete_flash({:error, :root_machine_thread}), do: "the lobby can't be deleted"
   def delete_flash({:error, reason}), do: "delete refused: #{inspect(reason)}"
   # the project a thread belongs to, off the last painted sidebar (nil before the first frame)
   defp project_of(state, thread_id) do
@@ -775,7 +775,7 @@ defmodule Console.Cockpit do
   def context_entry({Panel.Rail, data, rect}, _x, y), do: Panel.Rail.entry_at(data, rect, y - rect.y)
 
   def context_entry({Panel.TopBar, data, rect}, x, _y) do
-    if Panel.TopBar.hit(data, x - rect.x) == :workspace,
+    if Panel.TopBar.hit(data, x - rect.x, rect.w) == :workspace,
       do: {:workspace, %{id: data[:workspace_id], name: data[:workspace]}}
   end
 
@@ -815,7 +815,7 @@ defmodule Console.Cockpit do
 
   # The top bar: an arrow steps the workspace ring, a tab opens its project.
   defp dispatch_click({Panel.TopBar, data, rect}, x, _y, state) do
-    case Panel.TopBar.hit(data, x - rect.x) do
+    case Panel.TopBar.hit(data, x - rect.x, rect.w) do
       {:workspace_step, dir} -> apply_pick({:workspace_step, dir}, state)
       {:project, id} -> apply_pick({:open_project, id}, state)
       _ -> {:noreply, state}
@@ -1299,25 +1299,14 @@ defmodule Console.Cockpit do
       nil ->
         {:noreply, render(%{state | flash: "nothing deletable under the cursor"})}
 
+      # refused up front: arming a delete the server will refuse only wastes the second `d`
+      {:refused, reason} ->
+        {:noreply, render(%{state | flash: reason})}
+
       {_kind, _payload, label} = target ->
         {:noreply, render(%{state | tlon_delete: target, flash: "press d again to #{label}"})}
     end
   end
-
-  # Arm the two-key delete for the focused thread CARD (chat stack). The root machine thread is
-  # refused by delete_thread itself; here we just resolve the title for the confirm label.
-  defp apply_effect(:stack_delete_arm, %{stack_focus: id} = state) when is_integer(id) do
-    case Enum.find(state.threads, &(&1.id == id)) do
-      %{title: title} ->
-        {:noreply,
-         render(%{state | tlon_delete: {:thread, id, "delete “#{title}”"}, flash: "press d again to delete “#{title}”"})}
-
-      _ ->
-        {:noreply, render(%{state | flash: "no thread focused"})}
-    end
-  end
-
-  defp apply_effect(:stack_delete_arm, state), do: {:noreply, render(%{state | flash: "no thread focused"})}
 
   defp apply_effect({:tlon_delete, {:thread, id, _label}}, state) do
     flashing(state, "delete", fn ->

@@ -29,10 +29,11 @@ defmodule Console.Panel.TopBar do
   What a click at column `x` means: `{:workspace_step, :prev | :next}` on an arrow, `:workspace`
   on the name (its right-click menu), `{:project, id}` on a tab, else nil.
   """
-  @spec hit(map(), non_neg_integer()) :: {:workspace_step, :prev | :next} | :workspace | {:project, integer()} | nil
-  def hit(data, x) do
+  @spec hit(map(), non_neg_integer(), pos_integer()) ::
+          {:workspace_step, :prev | :next} | :workspace | {:project, integer()} | nil
+  def hit(data, x, w) do
     data
-    |> segments()
+    |> segments(w)
     |> Enum.reduce_while(0, fn {runs, target}, from ->
       to = from + Panel.row_width(runs)
       if x < to, do: {:halt, {:hit, target}}, else: {:cont, to}
@@ -46,7 +47,7 @@ defmodule Console.Panel.TopBar do
   # The alarm outranks the tabs: when both sides won't fit, drop the right, reserve the alarm's
   # width and clip the left into the remainder — "server down" must not be what a narrow frame loses.
   defp row(data, w) do
-    left = data |> segments() |> Enum.flat_map(&elem(&1, 0))
+    left = data |> segments(w) |> Enum.flat_map(&elem(&1, 0))
     alarm = link_seg(data[:link])
     right = cwd_seg(data[:cwd]) ++ lead_seg(data[:lead], data[:warm?] == true)
 
@@ -62,18 +63,36 @@ defmodule Console.Panel.TopBar do
     end
   end
 
-  defp segments(data) do
-    workspace = [
+  # Every project as a tab while they fit beside the alarm; else the open one and a count of the rest,
+  # so a narrow frame can never clip away which project is open.
+  defp segments(data, w) do
+    projects = data[:projects] || []
+    open = data[:open_project]
+    full = workspace_segs(data) ++ tab_segs(projects, open)
+    budget = w - Panel.row_width(link_seg(data[:link])) - 1
+
+    if Panel.row_width(Enum.flat_map(full, &elem(&1, 0))) <= budget or length(projects) < 2 do
+      full
+    else
+      shown = Enum.filter(projects, &(&1.id == open))
+      workspace_segs(data) ++ tab_segs(shown, open) ++ [{[{"  +#{length(projects) - length(shown)}", :dim}], nil}]
+    end
+  end
+
+  defp workspace_segs(data) do
+    elsewhere = if data[:elsewhere?] == true, do: [{[{"!", :st_await}], nil}], else: []
+
+    [
       {[{" ‹ ", :tab}], {:workspace_step, :prev}},
       {[{data[:workspace] || "—", :tab}], :workspace},
       {[{" › ", :tab}], {:workspace_step, :next}}
-    ]
-
-    elsewhere = if data[:elsewhere?] == true, do: [{[{"!", :st_await}], nil}], else: []
-    tabs = Enum.flat_map(data[:projects] || [], &[{[{" ", :normal}], nil}, tab(&1, &1.id == data[:open_project])])
-
-    workspace ++ elsewhere ++ if(tabs == [], do: [], else: [{[{" ", :normal}], nil} | tabs])
+    ] ++ elsewhere
   end
+
+  defp tab_segs([], _open), do: []
+
+  defp tab_segs(projects, open),
+    do: [{[{" ", :normal}], nil} | Enum.flat_map(projects, &[{[{" ", :normal}], nil}, tab(&1, &1.id == open)])]
 
   defp tab(%{id: id, name: name} = project, open?) do
     style = if open?, do: :selected, else: :normal
