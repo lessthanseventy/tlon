@@ -1,127 +1,175 @@
 defmodule Mix.Tasks.Console.Seed do
-  @shortdoc "Seed the server DB with sample threads/agents/sessions/messages for the cockpit"
+  @shortdoc "Seed the dev DB with workspaces, projects and threads shaped like the live machine"
   @moduledoc """
-  Populate `TLON_DB` with a small, believable workspace so the cockpit has something to render and
-  react to. Idempotent: re-running won't duplicate agents, threads, or a thread's opening messages.
-  Writes only through the server's public API (never raw rows) — the same path agents and the human use.
+  Populate the dev db with the live machine's shape — workspaces holding projects holding threads,
+  some waiting on you — so the cockpit can be built and screenshotted against a full rail. Idempotent:
+  re-running won't duplicate a workspace, project, thread or a thread's messages. Writes only through
+  the server's public API (never raw rows) — the same path agents and the human use.
+
+  `working` is live presence (a coworker actually thinking), so no seed can fake it honestly; start a
+  coworker to see it. For a clean picture: `mise run console:reset:db && mise run console:seed`.
   """
   use Mix.Task
   use Boundary, classify_to: Console
 
   alias Console.Server.Channel
-  alias Console.Server.Dossier
-  alias Console.Server.Staff
+  alias Console.Server.Projects
+  alias Console.Server.Workspaces
 
   @requirements ["app.config"]
 
-  @agents [
-    %{name: "Sandra", mandate: "review & merge PRs", engine: "claude-opus-4-8"},
-    %{name: "Robert", mandate: "triage the inbox", engine: "claude-sonnet-5"},
-    %{name: "Carl", mandate: "hunt flaky tests", engine: "claude-haiku-4-5"}
-  ]
-
-  @threads [
-    %{title: "review PR 329", lead: "Sandra"},
-    %{title: "triage inbox", lead: "Robert"},
-    %{title: "flaky test hunt", lead: "Carl"}
+  @workspaces [
+    %{
+      name: "Machine",
+      roster: [%{"archetype" => "surveyor", "name" => "tertius"}, %{"archetype" => "builder", "name" => "hronir"}],
+      projects: [
+        %{
+          name: "Tlön",
+          repos: ["~/projects/tlon", "~/projects/menard"],
+          threads: [
+            %{
+              title: "Rail → project tabs",
+              prompt: "Allow mix ecto.reset on tlon_dev?",
+              chat: [
+                "the rail is a tree nobody reads — make it a flat list",
+                "on it; top bar gets the workspace switcher first"
+              ]
+            },
+            %{
+              title: "Title threads at creation",
+              chat: [
+                "imported pi threads are titled by their first line",
+                "a model pass at close, or at the third message?"
+              ]
+            },
+            %{title: "menard hex publish", chat: ["docs are green; hex.pm wants a description under 300 chars"]}
+          ]
+        },
+        %{
+          name: "ficciones",
+          repos: ["~/projects/ficciones"],
+          threads: [
+            %{
+              title: "Bluetooth mouse drops after suspend",
+              prompt: "Restart bluetooth.service?",
+              chat: ["the MX drops every resume since the 7.2 kernel"]
+            },
+            %{
+              title: "Hyprland 0.57 update",
+              chat: ["the lua dispatch names changed again", "patched in the flake; home:switch is green"]
+            }
+          ]
+        }
+      ]
+    },
+    %{
+      name: "Accessibility",
+      roster: [%{"archetype" => "builder", "name" => "hronir"}],
+      projects: [
+        %{
+          name: "excessibility",
+          repos: ["~/projects/excessibility"],
+          threads: [
+            %{
+              title: "phoenix_storybook source",
+              chat: ["Excessibility.Source is the seam — a storybook source renders each story"]
+            },
+            %{
+              title: "axe-core 5 upgrade",
+              prompt: "Bump the vendored axe.min.js?",
+              chat: ["axe 5 renames two rule ids we assert on"]
+            }
+          ]
+        },
+        %{
+          name: "a11y-with-phoenix-guide",
+          repos: ["~/projects/a11y-with-phoenix-guide"],
+          threads: [
+            %{
+              title: "Chapter 4: live regions",
+              chat: ["draft is up; the phx-update example needs a screen-reader recording"]
+            }
+          ]
+        }
+      ]
+    },
+    %{
+      name: "Riverside",
+      roster: [],
+      projects: [
+        %{
+          name: "ex_riverside",
+          repos: ["~/projects/ex_riverside"],
+          threads: [%{title: "Webhook retries", chat: ["retries double-post when the upstream 502s mid-body"]}]
+        }
+      ]
+    }
   ]
 
   @impl Mix.Task
   def run(_args) do
     {:ok, _} = Application.ensure_all_started(:console)
 
-    agents = Map.new(@agents, &{&1.name, ensure_agent(&1)})
+    counts =
+      for ws <- @workspaces do
+        workspace = ensure_workspace(ws)
 
-    Enum.each(@threads, fn %{title: title, lead: lead} ->
-      thread = ensure_thread(title)
-      Staff.assign(thread, agents[lead])
-      ensure_session(thread, agents[lead])
-      seed_chatter(thread, lead)
-      seed_brief(thread, lead)
-    end)
+        for p <- ws.projects, t <- p.threads, reduce: 0 do
+          n ->
+            project = ensure_project(workspace, p)
+            ensure_thread(workspace, project, t)
+            n + 1
+        end
+      end
 
-    Mix.shell().info("console: seeded #{length(@agents)} agents and #{length(@threads)} threads.")
+    Mix.shell().info("console: seeded #{length(@workspaces)} workspaces and #{Enum.sum(counts)} threads.")
   end
 
-  defp ensure_agent(%{name: name} = attrs) do
-    case Staff.agent_by_name(name) do
-      nil ->
-        {:ok, agent} = Staff.register_agent(attrs)
-        agent
+  defp ensure_workspace(%{name: name, roster: roster, projects: projects}) do
+    with nil <- Workspaces.by_name(name) do
+      repos = Enum.flat_map(projects, & &1.repos)
 
-      agent ->
-        agent
+      {:ok, workspace} =
+        Workspaces.register(%{name: name, type: "code", scope: "project", repos: repos, roster: roster})
+
+      workspace
     end
   end
 
-  defp ensure_thread(title) do
-    case Enum.find(Channel.open_threads(), &(&1.title == title)) do
-      nil ->
-        {:ok, thread} = Channel.open_thread(%{title: title})
-        thread
-
-      thread ->
-        thread
+  defp ensure_project(workspace, %{name: name, repos: repos}) do
+    with nil <- Projects.by_name(workspace.id, name) do
+      entries = Enum.map(repos, &%{"name" => Path.basename(&1), "path" => &1})
+      {:ok, project} = Projects.register(%{workspace_id: workspace.id, name: name, repos: entries})
+      project
     end
   end
 
-  # One live session per thread (no ended_at) so the roster shows it IN FLIGHT. pane_ref stays nil
-  # until you point it at a real tmux pane — the center then shows a placeholder, honestly.
-  defp ensure_session(thread, agent) do
-    if is_nil(Staff.session_for_thread(thread)) do
-      Staff.start_session(%{agent_id: agent.id, thread_id: thread.id})
+  defp ensure_thread(workspace, project, %{title: title} = t) do
+    existing = Enum.find(Channel.open_threads(), &(&1.title == title and &1.workspace_id == workspace.id))
+
+    if is_nil(existing) do
+      {:ok, thread} = Channel.open_thread(%{title: title, workspace_id: workspace.id, project_id: project.id})
+
+      Enum.each(Enum.with_index(t.chat), fn {body, i} ->
+        post(thread, if(rem(i, 2) == 0, do: "andrew", else: "hronir"), body)
+      end)
+
+      if t[:prompt], do: prompt(thread, t.prompt)
     end
   end
 
-  defp seed_chatter(thread, lead) do
-    if Channel.thread_messages(thread) == [] do
-      post(thread, lead, "picking this up")
-      post(thread, "you", "thanks — ping me if you get blocked")
-      post(thread, lead, "will do")
-    end
-  end
+  defp post(thread, author, body), do: Channel.post(%{thread_id: thread.id, author: author, body: body})
 
-  # Best-effort brief material (LEARNINGS / BLOCKERS / SHIPPED). Wrapped so an unknown required
-  # field can't abort the seed — the dossier just shows fewer sections.
-  defp seed_brief(thread, lead) do
-    # Idempotent: only seed brief material once (a fresh thread has no facts yet).
-    if Dossier.facts_for_thread(thread) == [], do: do_seed_brief(thread, lead)
-  end
+  # The shape Server.Attention writes when a coworker's pane stops on a dialog — the rail's `!`.
+  defp prompt(thread, summary) do
+    options = [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]
 
-  defp do_seed_brief(thread, lead) do
-    safe(fn ->
-      Dossier.bank_fact(%{
-        thread_id: thread.id,
-        kind: "learned",
-        text: "raxol_terminal renders the board",
-        provenance: "stated"
-      })
-    end)
-
-    safe(fn ->
-      Dossier.raise_issue(%{
-        thread_id: thread.id,
-        summary: "center tmux embed still pending",
-        found_by: lead
-      })
-    end)
-
-    safe(fn ->
-      Dossier.record_event(%{
-        thread_id: thread.id,
-        kind: "work_landed",
-        detail: %{"summary" => "the read-only render path"}
-      })
-    end)
-  end
-
-  defp post(thread, author, body) do
-    Channel.post(%{thread_id: thread.id, author: author, body: body})
-  end
-
-  defp safe(fun) do
-    fun.()
-  rescue
-    _ -> :ok
+    Channel.post(%{
+      thread_id: thread.id,
+      author: "tlon",
+      kind: "prompt",
+      body: "⚑ waiting on you — #{summary}\n(y) Yes · (n) No",
+      payload: %{"harness" => "claude", "summary" => summary, "options" => options}
+    })
   end
 end
