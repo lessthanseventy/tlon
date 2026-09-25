@@ -1,37 +1,3 @@
-defmodule Server.MCP.Tool.TrackThread do
-  @moduledoc """
-  Promote THIS connection's thread into the stage machine at "build" — tracking is
-  the lazy path (reshape slice B): the harness hooks call this mechanically on the
-  first successful `git commit`, so the ticket condenses out of the work. Agents may
-  also call it deliberately ("track this thread"). Idempotent; self-thread like every
-  write — no thread parameter exists to misdirect.
-  """
-  use Server.MCP.Tool
-
-  alias Server.Repo
-  alias Server.Thread
-  alias Server.Workline
-
-  schema do
-  end
-
-  @impl true
-  def execute(_params, frame) do
-    identity = Identity.from_frame(frame)
-
-    case Repo.get(Thread, identity.thread_id) do
-      nil -> fail(frame, "no thread ##{identity.thread_id}")
-      thread -> promoted(frame, Workline.promote(thread))
-    end
-  end
-
-  defp promoted(frame, {:error, :root_machine_thread}),
-    do: fail(frame, "refused: the root machine thread is not a work item")
-
-  defp promoted(frame, result),
-    do: reply(frame, result, fn tracked -> %{"stage" => tracked.stage, "slug" => tracked.slug} end)
-end
-
 defmodule Server.MCP.Tool.AdvanceStage do
   @moduledoc """
   Advance THIS thread's workline past its current stage (worklines slice 1) — the single

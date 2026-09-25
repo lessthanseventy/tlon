@@ -34,7 +34,6 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.ResolveQuestion, name: "resolve_question")
   component(Server.MCP.Tool.RecordCheck, name: "record_check")
   component(Server.MCP.Tool.RecheckFact, name: "recheck_fact")
-  component(Server.MCP.Tool.TrackThread, name: "track_thread")
   component(Server.MCP.Tool.OpenThread, name: "open_thread")
   component(Server.MCP.Tool.CloseThread, name: "close_thread")
   component(Server.MCP.Tool.AssignLead, name: "assign_lead")

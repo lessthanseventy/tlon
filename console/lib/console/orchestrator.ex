@@ -75,8 +75,8 @@ defmodule Console.Orchestrator do
   end
 
   @doc "Fire a consequential action after the operator confirms."
-  # No stage → an UNTRACKED plain thread (the `explore` verb): work that isn't a workline yet, tracked
-  # lazily on the first commit. A stage → a WORKLINE opened AT that stage (any-stage entry, Slice 4D).
+  # No stage → an UNTRACKED plain thread (the `explore` verb): it stays plain unless the operator
+  # tracks it. A stage → a WORKLINE opened AT that stage (any-stage entry, Slice 4D).
   def confirm({:open, nil, title}, ctx) do
     case Channel.open_thread(%{title: title, workspace_id: ctx.workspace_id}) do
       {:ok, t} -> {:ok, "→ opened ##{t.id} (untracked) “#{title}” ✓"}

@@ -98,12 +98,11 @@ defmodule Server.Workline do
   end
 
   @doc """
-  Promote a plain chat thread INTO the stage machine at `"build"` — tracking is the lazy
-  path (reshape slice B): when real work lands on an untracked thread (both harnesses call
-  this on the first successful `git commit`), the ticket condenses out of the work instead
-  of competing with it. Slug derives from the title; a collision or unslugifiable title
-  falls back to an id-suffixed name. Idempotent: an already-tracked thread is `{:ok, thread}`
-  untouched. The ROOT machine thread is refused — the standing home is not a work item.
+  Promote a plain chat thread INTO the stage machine at `"build"` — the operator's verb
+  (`tlon-cli track <id>`); nothing promotes on its own, so a plain thread stays a plain
+  conversation. Slug derives from the title; a collision or unslugifiable title falls back to
+  an id-suffixed name. Idempotent: an already-tracked thread is `{:ok, thread}` untouched. The
+  ROOT machine thread is refused — the standing home is not a work item.
   """
   def promote(%Thread{stage: stage} = thread) when not is_nil(stage), do: {:ok, thread}
 
@@ -131,10 +130,9 @@ defmodule Server.Workline do
   defp rename_worktree(_before, _after), do: :none
 
   # Mirror flip/1: the stage landing and its ledger row commit together or not at all.
-  # Re-reads INSIDE the transaction — two near-simultaneous callers (a cc hook and a pi
-  # turn_end on one thread) must not double-promote and skew the ledger with twin events.
-  # A changeset refusal (slug collision under the fallback's own TOCTOU) rolls back to a
-  # tuple, never a raise — the MCP tool surfaces it.
+  # Re-reads INSIDE the transaction — two near-simultaneous callers on one thread must not
+  # double-promote and skew the ledger with twin events. A changeset refusal (slug collision
+  # under the fallback's own TOCTOU) rolls back to a tuple, never a raise — the caller surfaces it.
   defp do_promote(thread, slug) do
     result =
       Repo.transaction(fn ->

@@ -191,10 +191,9 @@ defmodule Server.Channel do
   in flight, not the closed history.
   """
   def open_machine_threads do
-    # TRACKED child threads stay in: auto-promote gives a working child a stage on
-    # its first commit — filtering on `is_nil(stage)` here made exactly the leaves doing real
-    # work vanish from the meta agent's overview. Only ROOT resolution (machine_thread/0)
-    # still excludes staged threads: the root is never a work item.
+    # TRACKED child threads (worklines) stay in: filtering on `is_nil(stage)` here would drop
+    # exactly the leaves doing real work from the meta agent's overview. Only ROOT resolution
+    # (machine_thread/0) excludes staged threads: the root is never a work item.
     Repo.all(
       from t in Thread,
         where: t.state == "open" and t.scope == ^@machine_scope,

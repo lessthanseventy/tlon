@@ -27,6 +27,7 @@
 #   forget-fact <id>               operator tombstone — out of recall, row kept
 #   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
+#   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
@@ -249,6 +250,12 @@ case "$cmd" in
     exec "$SERVER" rpc "{:ok, e} = Server.Dossier.record_check(%{thread_id: $tid, cmd: \"$(esc "$cmd")\", exit: $code, tail: \"$(esc "$tail")\", correlation: \"workline:$(esc "$slug"):verify\"}); IO.puts(\"recorded ##{e.id} #{e.kind}\")"
     ;;
 
+  track)
+    tid="${1:-}"
+    int "$tid" || { echo 'usage: tlon-cli.sh track <thread-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.promote(t) do {:ok, w} -> IO.puts(\"tracked — thread #$tid is workline #{w.slug} at #{w.stage}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
+    ;;
+
   approve)
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh approve <thread-id>' >&2; exit 2; }
@@ -281,7 +288,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|workline|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac

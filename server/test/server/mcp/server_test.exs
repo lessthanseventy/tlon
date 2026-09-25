@@ -81,7 +81,6 @@ defmodule Server.MCP.ServerTest do
                "resolve_question",
                "record_check",
                "recheck_fact",
-               "track_thread",
                "open_thread",
                "close_thread",
                "staff_child",
@@ -356,34 +355,6 @@ defmodule Server.MCP.ServerTest do
     brief = decode_tool_json(call(token, session, 6, "get_dossier", %{}))
     assert Enum.any?(brief["checks"]["shown"], &(&1["cmd"] == "mix test" and &1["passed"] == false))
     assert Enum.any?(brief["checks"]["shown"], &(&1["cmd"] == "mise run check" and &1["passed"] == true))
-  end
-
-  test "track_thread — this connection's thread promotes into the stage machine (slice B)",
-       %{thread: thread, token: token} do
-    session = handshake(token)
-    call(token, session, 3, "register", %{})
-
-    result = call(token, session, 4, "track_thread", %{})
-    refute result["isError"]
-    assert %{"stage" => "build", "slug" => "review-pr-329"} = decode_tool_json(result)
-    assert Repo.get!(Thread, thread.id).stage == "build"
-
-    # Idempotent over the wire — the harness hooks fire it on every commit.
-    again = call(token, session, 5, "track_thread", %{})
-    refute again["isError"]
-    assert decode_tool_json(again)["slug"] == "review-pr-329"
-  end
-
-  test "track_thread refuses the ROOT machine thread", %{token: _token} do
-    {:ok, root} = Channel.open_thread(%{title: "machine root", scope: "machine"})
-    {:ok, agent} = Staff.register_agent(%{name: "tertius-machine", mandate: "survey", engine: "local"})
-    token = MCP.Tokens.mint(root, agent)
-
-    session = handshake(token)
-    result = call(token, session, 3, "track_thread", %{})
-
-    assert result["isError"]
-    assert Repo.get!(Thread, root.id).stage == nil
   end
 
   test "recheck_fact — re-verify a fact's OWN check_cmd over the wire (drift signal)",
