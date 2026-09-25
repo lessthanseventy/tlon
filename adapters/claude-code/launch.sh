@@ -54,15 +54,28 @@ mcp_json="{\"mcpServers\":{\"tlon\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\"
 # A write-fenced role (the console's claude_code driver sets TLON_PERMISSIONS_DENY, e.g.
 # "Write,Edit,NotebookEdit" for the reviewer) lands as a real permissions.deny in --settings —
 # a structural fence, not a persona request.
-perms_json=""
+deny_list=""
 if [ -n "${TLON_PERMISSIONS_DENY:-}" ]; then
-  deny_list=""
   IFS=',' read -ra _deny_tools <<<"$TLON_PERMISSIONS_DENY"
   for tool in "${_deny_tools[@]}"; do
     deny_list="$deny_list\"$tool\","
   done
-  perms_json=",\"permissions\":{\"deny\":[${deny_list%,}]}"
 fi
+# The project's other repos (TLON_READ_DIRS, colon-separated) open beside the worktree to READ;
+# an Edit rule covers every file-writing tool. `//` makes the rule path absolute.
+add_dirs=""
+if [ -n "${TLON_READ_DIRS:-}" ]; then
+  IFS=':' read -ra _read_dirs <<<"$TLON_READ_DIRS"
+  for dir in "${_read_dirs[@]}"; do
+    add_dirs="$add_dirs\"$dir\","
+    deny_list="$deny_list\"Edit(/$dir/**)\","
+  done
+fi
+perms=""
+[ -n "$add_dirs" ] && perms="\"additionalDirectories\":[${add_dirs%,}]"
+[ -n "$deny_list" ] && perms="${perms:+$perms,}\"deny\":[${deny_list%,}]"
+perms_json=""
+[ -n "$perms" ] && perms_json=",\"permissions\":{$perms}"
 
 # The workline gate (gate-hook.sh) runs FIRST on Stop: exit 2 bounces the stop once when the
 # stage's artifact is missing. Presence (thinking counts as working): UserPromptSubmit declares thinking, Stop clears it

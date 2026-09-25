@@ -142,6 +142,38 @@ defmodule Server.ProjectsTest do
       {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id})
       assert {:error, :no_repo} = Projects.repo_for_thread(t)
     end
+
+    test "a thread that names its repo works there, not in the project's first" do
+      {:ok, ws} = Workspaces.register(%{name: "own-repo"})
+
+      repos = [
+        %{"name" => "ficciones", "path" => "~/projects/ficciones"},
+        %{"name" => "menard", "path" => "~/projects/menard"}
+      ]
+
+      {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "tlon", repos: repos})
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id, repo: "~/projects/menard"})
+
+      assert {:ok, path} = Projects.repo_for_thread(t)
+      assert path == Path.expand("~/projects/menard")
+      assert Projects.read_dirs(t) == [Path.expand("~/projects/ficciones")]
+    end
+
+    test "read_dirs are the project's other checkouts: never the thread's own repo, never a glob" do
+      {:ok, ws} = Workspaces.register(%{name: "read-dirs"})
+
+      repos = [
+        %{"name" => "ficciones", "path" => "~/projects/ficciones"},
+        %{"name" => "scope", "path" => "modules/*"},
+        %{"name" => "mix_master", "path" => "/p/mix_master"}
+      ]
+
+      {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "tlon", repos: repos})
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+
+      assert Projects.read_dirs(t) == ["/p/mix_master"]
+      assert Projects.read_dirs(%{t | project_id: nil}) == []
+    end
   end
 
   describe "repo_for_workspace/1 — the STACK panel's per-workspace git dir" do

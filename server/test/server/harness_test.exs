@@ -131,5 +131,24 @@ defmodule Server.HarnessTest do
       assert "mcp__tlon__consult_peer" in tertius
       refute "mcp__tlon__open_thread" in tertius, "the orchestrator keeps the verbs it routes with"
     end
+
+    test "claude_code launch.sh: TLON_READ_DIRS open beside the worktree and are fenced against edits" do
+      launcher = Path.join(Profiles.repo(), "modules/adapters/claude-code/launch.sh")
+
+      env = [
+        {"TLON_LAUNCH_DRYRUN", "1"},
+        {"TLON_MCP_URL", "http://127.0.0.1:1/mcp"},
+        {"TLON_THREAD", "7"},
+        {"TLON_AUTHOR", "hronir"},
+        {"TLON_PERMISSIONS_DENY", "mcp__tlon__close_thread"},
+        {"TLON_READ_DIRS", "/p/b:/p/c"}
+      ]
+
+      {out, 0} = System.cmd("bash", [launcher], env: env)
+      [settings] = for "settings:   " <> json <- String.split(out, "\n"), do: JSON.decode!(json)
+
+      assert settings["permissions"]["additionalDirectories"] == ["/p/b", "/p/c"]
+      assert settings["permissions"]["deny"] == ["mcp__tlon__close_thread", "Edit(//p/b/**)", "Edit(//p/c/**)"]
+    end
   end
 end

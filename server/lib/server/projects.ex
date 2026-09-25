@@ -70,12 +70,14 @@ defmodule Server.Projects do
   end
 
   @doc """
-  Resolve a thread to the primary repo dir its work lives in (Slice 4 — the worktree/lazygit base).
-  An explicit `project_id` uses THAT project's first repo (or `:no_repo` — never silently borrows
+  Resolve a thread to the repo dir its work lives in (the worktree/lazygit base). The thread's own
+  `repo` when it names one; else its project's first repo (or `:no_repo` — never silently borrows
   another project's); a thread with no project falls back to the workspace's first repo-bearing
   project. `{:ok, expanded_path}` or `{:error, :no_repo}`. The path is `~`-expanded but not checked
   for existence — the caller (`Server.Worktree`) reports a bad tree honestly.
   """
+  def repo_for_thread(%Server.Thread{repo: repo}) when is_binary(repo), do: {:ok, Path.expand(repo)}
+
   def repo_for_thread(%Server.Thread{project_id: pid}) when not is_nil(pid) do
     pid |> get() |> primary_repo_path()
   end
@@ -92,6 +94,23 @@ defmodule Server.Projects do
   end
 
   def repo_for_thread(_thread), do: {:error, :no_repo}
+
+  @doc """
+  The thread's project's OTHER checkouts, `~`-expanded: what its coworker may read but not write
+  (the harness opens them beside the worktree). Never the thread's own repo, never a scope glob;
+  `[]` for a thread with no project.
+  """
+  def read_dirs(%Server.Thread{project_id: pid} = thread) when not is_nil(pid) do
+    own = with {:ok, path} <- repo_for_thread(thread), do: path
+
+    for %{"path" => path} <- get(pid).repos || [],
+        not String.contains?(path, "*"),
+        dir = Path.expand(path),
+        dir != own,
+        do: dir
+  end
+
+  def read_dirs(_thread), do: []
 
   @doc """
   The `~`-expanded path of a workspace's first repo-bearing project (its primary repo) — what the

@@ -23,9 +23,9 @@ defmodule Server.Thread do
     field :born, :string
     field :awaiting, :string
     belongs_to :workspace, Server.Workspace
-    # The middle tier (Workspace ▸ Project ▸ Thread, 2026-08-30). Optional/additive for now:
-    # existing threads still route by `workspace_id`; new threads carry a project.
     belongs_to :project, Server.Project
+    # which of the project's repos the thread works in, as the project spells its path; nil = its first
+    field :repo, :string
     # Lead-as-manager (Slice 4D): a lead-opened CHILD thread points back at its parent, so its
     # close reports up. Nil for top-level threads. Self-referential; unlink-not-cascade (Channel).
     belongs_to :parent, Server.Thread, foreign_key: :parent_thread_id
@@ -40,7 +40,7 @@ defmodule Server.Thread do
   project surfaces (chorus / open_threads) can filter it out — see the thread_scope migration.}
   def open_changeset(attrs) do
     %__MODULE__{}
-    |> cast(attrs, [:title, :scope, :workspace_id, :project_id, :parent_thread_id, :agent_id, :channel_id])
+    |> cast(attrs, [:title, :scope, :workspace_id, :project_id, :repo, :parent_thread_id, :agent_id, :channel_id])
     |> validate_required([:title])
     |> put_change(:state, "open")
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))

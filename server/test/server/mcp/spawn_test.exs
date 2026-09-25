@@ -124,6 +124,22 @@ defmodule Server.MCP.SpawnTest do
       assert {:ok, _binding} = Tokens.resolve(tok)
       assert Repo.get(Thread, existing.id).agent_id == lead.id
     end
+
+    test "the exports carry TLON_READ_DIRS = the project's other repos, for the harness to open read-only" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "rd"})
+
+      repos = [
+        %{"name" => "a", "path" => "/nonexistent/a"},
+        %{"name" => "b", "path" => "/p/b"},
+        %{"name" => "c", "path" => "/p/c"}
+      ]
+
+      {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "multi", repos: repos})
+      {:ok, thread} = Channel.open_thread(%{title: "rd", workspace_id: ws.id, project_id: p.id})
+
+      assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")
+      assert ex =~ ~s(TLON_READ_DIRS="/p/b:/p/c")
+    end
   end
 
   describe "mint_for/2 — a fresh token for an EXISTING (thread, agent)" do
