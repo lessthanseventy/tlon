@@ -646,4 +646,63 @@ defmodule Server.ChannelTest do
   defp errors_on(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
   end
+
+  defp led_workspace(name) do
+    {:ok, ws} =
+      Workspaces.register(%{
+        name: name,
+        type: "code",
+        scope: "machine",
+        repos: [],
+        roster: [%{"archetype" => "builder", "name" => "hronir"}]
+      })
+
+    ws
+  end
+
+  describe "history — closed threads, reading and reopening them" do
+    test "closed_threads/0 lists closed threads with their project, newest activity first — never open ones" do
+      ws = led_workspace("hist")
+      {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "excessibility"})
+      {:ok, older} = Channel.open_thread(%{title: "older talk", workspace_id: ws.id, project_id: project.id})
+      {:ok, newer} = Channel.open_thread(%{title: "newer talk", workspace_id: ws.id})
+      {:ok, _open} = Channel.open_thread(%{title: "still open", workspace_id: ws.id})
+      {:ok, _} = Channel.post(%{thread_id: older.id, author: "andrew", body: "first"})
+      {:ok, _} = Channel.post(%{thread_id: newer.id, author: "andrew", body: "second"})
+      {:ok, _} = Channel.close_thread(older)
+      {:ok, _} = Channel.close_thread(newer)
+
+      assert [%{id: n, title: "newer talk", project: nil}, %{id: o, title: "older talk", project: "excessibility"}] =
+               Channel.closed_threads()
+
+      assert {n, o} == {newer.id, older.id}
+    end
+
+    test "reopen_thread/1 opens a closed thread and gives a leaderless one the workspace's lead" do
+      ws = led_workspace("reopen")
+
+      thread =
+        Repo.insert!(%Thread{
+          title: "imported",
+          state: "closed",
+          scope: "machine",
+          workspace_id: ws.id,
+          created_at: DateTime.truncate(DateTime.utc_now(), :second)
+        })
+
+      assert {:ok, reopened} = Channel.reopen_thread(thread)
+      assert reopened.state == "open"
+      assert Channel.thread_lead(thread.id) == "hronir"
+    end
+
+    test "thread_block/1 is one thread's block whatever its state — a closed thread still reads" do
+      {:ok, thread} = Channel.open_thread(%{title: "read me later"})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "hello"})
+      {:ok, _} = Channel.close_thread(thread)
+
+      assert %{thread: %Thread{id: id}, messages: [%Message{body: "hello"}]} = Channel.thread_block(thread.id)
+      assert id == thread.id
+      assert Channel.thread_block(-1) == nil
+    end
+  end
 end

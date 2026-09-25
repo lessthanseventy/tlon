@@ -245,6 +245,55 @@ defmodule Server.Channel do
     thread_blocks(from(t in Thread, where: t.workspace_id == ^workspace_id and t.state == "open"), per_thread)
   end
 
+  @doc """
+  Every CLOSED thread, any workspace, newest activity first (its last message, else its birth) —
+  the history the cockpit browses (the imported Claude Code conversations among them).
+  `%{id, title, workspace_id, project, at}` per row; `project` is the project name or nil. Capped.
+  """
+  def closed_threads(limit \\ 200) do
+    last = from(m in Message, group_by: m.thread_id, select: %{thread_id: m.thread_id, at: max(m.created_at)})
+
+    Repo.all(
+      from t in Thread,
+        where: t.state == "closed",
+        left_join: l in subquery(last),
+        on: l.thread_id == t.id,
+        left_join: p in Server.Project,
+        on: p.id == t.project_id,
+        order_by: [desc: coalesce(l.at, t.created_at), desc: t.id],
+        limit: ^limit,
+        select: %{
+          id: t.id,
+          title: t.title,
+          workspace_id: t.workspace_id,
+          project: p.name,
+          at: coalesce(l.at, t.created_at)
+        }
+    )
+  end
+
+  @doc """
+  One thread as a THREAD BLOCK (`%{thread, messages}`, its latest `per_thread` messages), whatever
+  its state — how the cockpit shows a closed thread it opened from history. nil when no such thread.
+  """
+  def thread_block(thread_id, per_thread \\ 20) do
+    with %Thread{} = thread <- thread(thread_id) do
+      %{thread: thread, messages: recent_messages(thread, per_thread)}
+    end
+  end
+
+  @doc """
+  Reopen a closed thread. A thread with no lead (an imported conversation) takes its workspace's
+  designated lead, so the staffing pass has someone to wake. `{:ok, thread}` | `{:error, cs}`.
+  """
+  def reopen_thread(%Thread{} = thread) do
+    thread
+    |> Thread.state_changeset("open")
+    |> Ecto.Changeset.put_change(:agent_id, thread.agent_id || designated_lead(thread.workspace_id))
+    |> Repo.update()
+    |> Server.Bus.announce(:thread_opened)
+  end
+
   @doc "A thread by id, or nil — the load path for the cross-thread `close_thread` verb."
   def thread(id), do: Repo.get(Thread, id)
 
