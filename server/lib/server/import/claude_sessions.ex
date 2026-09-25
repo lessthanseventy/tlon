@@ -24,6 +24,7 @@ defmodule Server.Import.ClaudeSessions do
   @machine_openers [
     "You extract",
     "You are a strict evaluator",
+    "You are reviewing",
     "New message on thread",
     "ARM:",
     "[server thread",
@@ -41,8 +42,11 @@ defmodule Server.Import.ClaudeSessions do
     entries = decode(path)
 
     case turns(entries) do
-      [{:operator, first, _} | _] = turns -> if machine?(first), do: nil, else: session(path, entries, first, turns)
-      _ -> nil
+      [{:operator, first, _} | _] = turns ->
+        if machine?(first) or smoke_test?(turns), do: nil, else: session(path, entries, first, turns)
+
+      _ ->
+        nil
     end
   end
 
@@ -74,6 +78,10 @@ defmodule Server.Import.ClaudeSessions do
   # pi-research drives pi with a prompt that is a path into its own install
   defp machine?(first),
     do: Enum.any?(@machine_openers, &String.starts_with?(first, &1)) or String.starts_with?(first, Path.expand("~/.pi/"))
+
+  # "test", "q", "config": a session whose every prompt is one bare word was checking the harness
+  defp smoke_test?(turns),
+    do: Enum.all?(for({:operator, text, _} <- turns, do: text), &(not String.contains?(&1, [" ", "\n"])))
 
   defp title(%{"type" => "ai-title", "aiTitle" => t}) when is_binary(t), do: t
   defp title(%{"type" => type, "title" => t}) when type in ["ai-title", "custom-title"] and is_binary(t), do: t

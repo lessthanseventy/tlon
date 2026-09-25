@@ -52,6 +52,21 @@ defmodule Server.Import.PiSessionsTest do
       "message" => %{"role" => "toolResult", "content" => [%{"type" => "text", "text" => "ok"}]}
     }
 
+  test "a smoke test (every prompt a word or two) and a spawned reviewer are not conversations", ctx do
+    transcript(ctx.dir, "agent", "p1", "/p/exc", [
+      user("test", "2026-09-09T01:00:01.000Z"),
+      said("hi", "2026-09-09T01:00:02.000Z"),
+      user("q", "2026-09-09T01:00:03.000Z"),
+      said("bye", "2026-09-09T01:00:04.000Z")
+    ])
+
+    transcript(ctx.dir, "agent", "p2", "/p/exc", [
+      user("You are reviewing on funes thread #1. Leader handle: x", "2026-09-09T01:00:01.000Z")
+    ])
+
+    assert {:ok, %{imported: 0, skipped: 2}} = PiSessions.import_dir(ctx.dir, ctx.ws.id)
+  end
+
   test "a pi session becomes a closed thread on the cwd's project, pi answering", ctx do
     transcript(ctx.dir, "agent", "p1", "/p/exc", [
       user("could excessibility tie into phoenix_test?", "2026-09-09T01:14:58.000Z"),

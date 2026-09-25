@@ -165,7 +165,11 @@ defmodule Server.Import.ClaudeSessionsTest do
   end
 
   test "a re-run imports nothing twice; a machine-driven session is skipped", ctx do
-    transcript(ctx.dir, "s1", [user("hello", "2026-09-01T10:00:00Z"), said("hi", "2026-09-01T10:00:01Z")])
+    transcript(ctx.dir, "s1", [
+      user("hello, the build is red", "2026-09-01T10:00:00Z"),
+      said("hi", "2026-09-01T10:00:01Z")
+    ])
+
     transcript(ctx.dir, "s2", [user("You extract DURABLE knowledge…", "2026-09-01T10:00:00Z")])
 
     assert {:ok, %{imported: 1, skipped: 1}} = ClaudeSessions.import_dir(ctx.dir, ctx.ws.id)
