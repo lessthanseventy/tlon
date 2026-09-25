@@ -125,9 +125,9 @@ defmodule Server.Bootstrap do
     Repo.update_all(adrift, set: [workspace_id: id])
   end
 
-  # The project tier (2026-08-30): every workspace gets a `general` project, and every thread
-  # with no project moves to its workspace's `general`. Runs AFTER repair/1, so `workspace_id` is
-  # already real. Idempotent — an existing `general` and any thread already in a project are left.
+  # The project tier (2026-08-30): every workspace has a default project, and every thread with no
+  # project moves to it. Runs AFTER repair/1, so `workspace_id` is already real. Idempotent — a thread
+  # already in a project is left.
   defp repair_projects do
     defaults =
       Workspace
@@ -157,15 +157,23 @@ defmodule Server.Bootstrap do
     end
   end
 
+  # The workspace names its default (`default_project_id`). Unset — a fresh workspace, or its
+  # default was removed — it adopts its oldest project, or a new `general` when it has none.
   defp ensure_default_project(%Workspace{} = ws) do
-    case Projects.by_name(ws.id, @default_project) do
+    case Projects.default(ws.id) do
       %Project{} = project ->
         project
 
       nil ->
-        {:ok, project} = Projects.register(%{workspace_id: ws.id, name: @default_project, repos: workspace_repos(ws)})
+        project = List.first(Projects.in_workspace(ws.id)) || register_default_project(ws)
+        {:ok, _} = Workspaces.edit(ws, %{default_project_id: project.id})
         project
     end
+  end
+
+  defp register_default_project(ws) do
+    {:ok, project} = Projects.register(%{workspace_id: ws.id, name: @default_project, repos: workspace_repos(ws)})
+    project
   end
 
   # The workspace's git-tracked globs become the default project's repos (name defaults to the glob).

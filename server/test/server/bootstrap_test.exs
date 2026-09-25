@@ -136,6 +136,31 @@ defmodule Server.BootstrapTest do
       assert after_first == after_second
       assert Server.Projects.by_name(workspace.id, "general")
     end
+
+    test "renaming the default project does not mint a second general" do
+      {:ok, workspace} = Bootstrap.ensure()
+      general = Server.Projects.by_name(workspace.id, "general")
+      {:ok, _} = Server.Projects.edit(general, %{name: "ficciones"})
+
+      {:ok, _} = Bootstrap.ensure()
+      assert Server.Projects.by_name(workspace.id, "general") == nil
+
+      {:ok, thread} = Channel.open_thread(%{title: "no project", workspace_id: workspace.id})
+      {:ok, _} = Bootstrap.ensure()
+      assert Repo.get(Thread, thread.id).project_id == general.id
+    end
+
+    test "the workspace names its default project — unhoused threads go there" do
+      {:ok, workspace} = Bootstrap.ensure()
+      {:ok, machine} = Server.Projects.register(%{workspace_id: workspace.id, name: "machine", repos: []})
+      {:ok, _} = Workspaces.edit(workspace, %{default_project_id: machine.id})
+
+      {:ok, thread} = Channel.open_thread(%{title: "no project", workspace_id: workspace.id})
+      {:ok, _} = Bootstrap.ensure()
+
+      assert Server.Projects.default(workspace.id).id == machine.id
+      assert Repo.get(Thread, thread.id).project_id == machine.id
+    end
   end
 
   describe "machine root per workspace (the cockpit re-scope invariant)" do

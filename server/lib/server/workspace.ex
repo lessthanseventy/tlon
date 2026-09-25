@@ -24,10 +24,12 @@ defmodule Server.Workspace do
     field :type, :string
     field :scope, :string
     field :knobs, Server.JSONColumn
+    # where a thread with no project lands (boot repair, imports); set once, then only by hand
+    field :default_project_id, :integer
     field :created_at, :utc_datetime
   end
 
-  @mutable [:type, :scope, :knobs]
+  @mutable [:type, :scope, :knobs, :default_project_id]
 
   @doc """
   Register a workspace. `name` is required and unique (DB); `type`/`scope` are the DB's
@@ -46,7 +48,7 @@ defmodule Server.Workspace do
   end
 
   @doc """
-  Edit a workspace's mutable fields (`type`/`scope`/`roster`/`knobs`). `name` and
+  Edit a workspace's mutable fields (`type`/`scope`/`knobs`/`default_project_id`). `name` and
   `created_at` are immutable — a workspace's identity and birth are not re-cast here.
   """
   def edit_changeset(%__MODULE__{} = workspace, attrs) do

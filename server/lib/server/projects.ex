@@ -42,6 +42,16 @@ defmodule Server.Projects do
   @doc "A project by (workspace_id, name), or nil — the find-or-create + seed lookup."
   def by_name(workspace_id, name), do: Repo.get_by(Project, workspace_id: workspace_id, name: name)
 
+  @doc "The workspace's default project (where a thread with no project lands), or nil when unset."
+  def default(workspace_id) do
+    Repo.one(
+      from p in Project,
+        join: w in Server.Workspace,
+        on: w.default_project_id == p.id,
+        where: w.id == ^workspace_id
+    )
+  end
+
   @doc "Edit a project's mutable fields (`name`/`repos`/`knobs`). `{:ok, project}` or `{:error, changeset}`."
   def edit(%Project{} = project, attrs) do
     project |> Project.edit_changeset(attrs) |> Repo.update() |> Bus.announce(:project_edited)
