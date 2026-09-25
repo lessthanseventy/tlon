@@ -3,8 +3,8 @@ defmodule Console.Picker do
   The overlays of UX slice 2, which are one thing wearing three corpora: a **query**, a
   **cursor**, and a filtered list you pick from.
 
-    * `:switcher` (`^⇧K`) — every workspace, channel and thread in the cockpit, matched on its
-      whole path (`ficciones · #general · cockpit slice`), so typing a workspace narrows to its
+    * `:switcher` (`^⇧K`) — every workspace and open thread in the cockpit, matched on its
+      whole path (`Machine · Tlön · rail redesign`), so typing a workspace narrows to its
       threads. Picking one JUMPS: it switches workspace if it has to.
     * `:palette` (`^⇧P`) — `Console.Verbs`, every verb with its key and a sentence saying what it
       does. Picking one REPLAYS its key event through the keymap.
@@ -104,12 +104,13 @@ defmodule Console.Picker do
 
   # -- the switcher's corpus: the rail's own read, every workspace expanded ------------------
 
-  # The rail shows only the ACTIVE workspace's channels; the switcher shows them all, which is the
-  # point of it — the read already carries every group's channels, so this costs nothing extra.
+  # The rail shows one project of the ACTIVE workspace; the switcher shows every workspace's threads,
+  # which is the point of it — the read already carries every group, so this costs nothing extra.
   defp switcher_rows(groups) do
     Enum.flat_map(groups, fn group ->
       workspace = group[:workspace] || %{}
-      [workspace_row(workspace) | Enum.flat_map(group[:channels] || [], &channel_rows(&1, workspace))]
+      names = Map.new(group[:projects] || [], &{&1.id, &1.name})
+      [workspace_row(workspace) | Enum.map(group[:threads] || [], &thread_row(&1, workspace, names))]
     end)
   end
 
@@ -127,36 +128,19 @@ defmodule Console.Picker do
     }
   end
 
-  defp channel_rows(channel, workspace) do
+  defp thread_row(thread, workspace, project_names) do
     ws = workspace[:name] || "?"
-    name = "##{channel[:name] || "?"}"
-
-    row = %{
-      kind: :channel,
-      tag: "channel",
-      keys: nil,
-      label: name,
-      context: ws,
-      text: "#{ws} · #{name}",
-      workspace_id: workspace[:id],
-      channel_id: channel[:id]
-    }
-
-    [row | Enum.map(channel[:threads] || [], &thread_row(&1, channel, workspace, name, ws))]
-  end
-
-  defp thread_row(thread, channel, workspace, channel_name, ws) do
     title = thread[:title] || "(untitled)"
+    where = Enum.join([ws | List.wrap(project_names[thread[:project_id]])], " · ")
 
     %{
       kind: :thread,
       tag: "thread",
       keys: nil,
       label: title,
-      context: "#{ws} · #{channel_name}",
-      text: "#{ws} · #{channel_name} · #{title}",
+      context: where,
+      text: "#{where} · #{title}",
       workspace_id: workspace[:id],
-      channel_id: channel[:id],
       thread_id: thread[:id]
     }
   end

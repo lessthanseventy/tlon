@@ -32,7 +32,7 @@ defmodule Console.Verbs do
       group: :global,
       keys: "^⇧K",
       label: "go to",
-      doc: "jump to any workspace, channel or thread by name — type to filter, ⏎ jumps",
+      doc: "jump to any workspace or open thread by name — type to filter, ⏎ jumps",
       event: %{key: :char, char: "k", ctrl: true, shift: true}
     },
     %{
@@ -81,8 +81,8 @@ defmodule Console.Verbs do
     %{
       group: :global,
       keys: "]  [",
-      label: "workspace",
-      doc: "the next / previous workspace (Tab and ⇧Tab do the same)",
+      label: "project",
+      doc: "the open workspace's next / previous project (Tab and ⇧Tab walk workspaces)",
       event: %{key: :char, char: "]"}
     },
     %{
@@ -140,7 +140,7 @@ defmodule Console.Verbs do
       group: :centre,
       keys: "n",
       label: "new thread",
-      doc: "start a thread in the open channel — type a title, ⏎ creates it",
+      doc: "start a thread in the open project — type a title, ⏎ creates it",
       event: %{key: :char, char: "n"}
     },
     %{
@@ -193,7 +193,7 @@ defmodule Console.Verbs do
       event: nil
     },
 
-    # ── the rail: workspaces → channels → threads ──────────────────────────────────────────
+    # ── the rail: the open project's threads ───────────────────────────────────────────────
     %{
       group: :rail,
       keys: "h  l",
@@ -218,22 +218,15 @@ defmodule Console.Verbs do
     %{
       group: :rail,
       keys: "m",
-      label: "move to channel",
-      doc: "move the rail's thread into another channel (a menu of this workspace's channels)",
+      label: "move to project",
+      doc: "move the rail's thread into another project (a menu of this workspace's projects)",
       event: nil
-    },
-    %{
-      group: :rail,
-      keys: "#",
-      label: "new channel",
-      doc: "a new topic channel in the active workspace",
-      event: %{key: :char, char: "#"}
     },
     %{
       group: :rail,
       keys: "d  d",
       label: "delete",
-      doc: "delete the rail's thread, or a topic channel — twice to confirm (#general can't go)",
+      doc: "delete the rail's thread — twice to confirm (the lobby can't go)",
       event: nil
     },
 

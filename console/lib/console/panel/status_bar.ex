@@ -41,9 +41,9 @@ defmodule Console.Panel.StatusBar do
   @impl Panel
   # :new_thread renders in the permanent Panel.NewThread band (like :orchestrate in Tertius), so it is
   # NOT matched here — it falls through to the normal footer. Ticket/note stay modal in the footer.
-  def render(%{input: %{kind: kind} = input}, rect) when kind in [:new_ticket, :new_note, :new_channel] do
+  def render(%{input: %{kind: kind} = input}, rect) when kind in [:new_ticket, :new_note] do
     {before, after_} = cursor_split(input)
-    label = %{new_ticket: " NEW TICKET ", new_note: " NEW NOTE ", new_channel: " NEW CHANNEL "}[kind]
+    label = %{new_ticket: " NEW TICKET ", new_note: " NEW NOTE "}[kind]
 
     prompt = [
       {label, :tab},

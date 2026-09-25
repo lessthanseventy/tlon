@@ -1,223 +1,184 @@
 defmodule Console.Panel.Rail do
   @moduledoc """
-  The always-on left rail (UX slice 1, design 2026-09-08 §2; channels slice 1b): **workspaces as
-  a short list, under the active one its channels, and under the OPEN channel its threads** (grouped
-  under a heading per project once they span more than one) —
-  Slack's sidebar with warmth. It replaces both the icon spine
-  and the funes rail; the situational panes it displaced live in the drawer.
+  The always-on left rail: the OPEN PROJECT's threads in the active workspace, as one flat list
+  ranked by what needs you — waiting on you (`!`, a prompt or a parked gate), then working (`…`),
+  then unread (`•`), then the rest newest first. The workspace's lobby is listed in every project.
+  Workspace and project are chosen in the top bar, not here.
 
-  A thread row is `warmth dot · title · at most ONE badge`, the badge by priority
-  **waiting on you (`!`) > unread (`•`) > working (`…`)** — a row never carries two claims on your
-  attention. The ACTIVE workspace and the OPEN thread render inverse (the palette's "this is the
-  live one"); the nav cursor is an accent title, so "where I am" and "where the cursor is" never
-  collide.
+  Each thread is TWO rows: `▌! title`, then `○ lead · state` (the state is what it waits on, or
+  that it is working, or how long ago it last moved). Only the OPEN thread renders inverse; the nav
+  cursor is the `▌` gutter plus an accent title, so it stays visible on the open row too.
 
-  Data is `%{groups, active_key, open_channel, opened}` — `groups` is `Server.Board.sidebar/0`'s
-  read (`%{workspace: %{id, name}, channels: [%{id, name, kind, threads: [%{id, title, awaiting,
-  working, …}]}]}`) enriched per thread by `Console.Reads` with `warm?`, plus `selected` (the nav
-  cursor) injected by the View. `open_channel` nil means the workspace's #general. A closed
-  channel's row carries its threads' one badge, so attention never hides behind a fold. `unread?`
-  is honoured here and set once messages carry read state (design §4 lists it as a schema gap).
+  Data is `%{groups, active_key, open_project, opened}` — `groups` is `Server.Board.sidebar/0`'s
+  read (`%{workspace, projects: [%{id, name}], threads: [row]}`), each row enriched by
+  `Console.Reads` with `warm?` — plus `selected` (the cursor, an entry index) and `scroll` (in
+  rows) injected by the View, and `now` for the age (defaults to the clock).
   """
   @behaviour Console.Panel
 
-  import Console.Panel, only: [line: 2, pad: 3]
-
   alias Console.Panel
   alias Server.Bus
+
+  @rows_per_entry 2
 
   @impl Panel
   def topics(_assigns), do: [Bus.threads_topic(), Bus.sessions_topic(), Bus.workspaces_topic()]
 
   @impl Panel
   def render(%{groups: [_ | _]} = data, rect) do
-    rows =
-      data
-      |> entries()
-      |> Enum.with_index()
-      |> Enum.map(fn {entry, i} -> row(entry, face(entry, data, i), rect.w) end)
+    case entries(data) do
+      [] ->
+        Panel.clip([Panel.line(" no open threads here — n starts one", :dim)], rect)
 
-    Panel.clip(rows, rect)
+      entries ->
+        now = data[:now] || DateTime.utc_now()
+
+        entries
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {{:thread, thread}, i} -> rows(thread, face(thread, data, i), now, rect.w) end)
+        |> Panel.clip(rect)
+    end
   end
 
-  def render(_data, rect), do: Panel.clip([line("no workspaces — is server up?", :dim)], rect)
+  def render(_data, rect), do: Panel.clip([Panel.line(" no workspaces — is server up?", :dim)], rect)
 
-  # Click → the entry under `local_y`, off the same list render walks. A thread opens its
-  # conversation, a workspace switches to it — the verbs the Cockpit already dispatches.
   @impl Panel
-  def pick(%{groups: _} = data, _rect, local_y) do
-    data
-    |> entries()
-    |> Enum.at(Panel.scroll_offset(data) + local_y)
-    |> case do
+  def pick(data, rect, local_y) do
+    case entry_at(data, rect, local_y) do
       {:thread, %{id: id}} -> {:open_thread_view, id}
-      {:channel, %{id: id}} -> {:open_channel, id}
-      {:workspace, %{id: id}} -> {:switch_space, id}
       _ -> nil
     end
   end
 
-  def pick(_data, _rect, _local_y), do: nil
-
   @impl Panel
-  def hints(_data), do: [{"j/k", "row"}, {"⏎", "open"}, {"m", "move"}, {"#", "channel"}, {"d", "delete"}]
+  def hints(_data), do: [{"j/k", "thread"}, {"⏎", "open"}, {"[ ]", "project"}, {"m", "move"}, {"d", "delete"}]
 
-  @doc "The entry under `local_y` (the right-click context menu's target), or nil."
-  @spec entry_at(map(), Panel.rect(), non_neg_integer()) :: {:workspace | :channel | :project | :thread, map()} | nil
+  @doc "The entry under `local_y` (a click, the right-click menu's target), or nil."
+  @spec entry_at(map(), Panel.rect(), non_neg_integer()) :: {:thread, map()} | nil
   def entry_at(%{groups: _} = data, _rect, local_y),
-    do: data |> entries() |> Enum.at(Panel.scroll_offset(data) + local_y)
+    do: data |> entries() |> Enum.at(div(Panel.scroll_offset(data) + local_y, @rows_per_entry))
 
   def entry_at(_data, _rect, _local_y), do: nil
 
-  @doc "The rail's rows as data: every workspace; the ACTIVE one's channels; the OPEN channel's threads, under a heading per project once they span more than one."
-  @spec entries(map()) :: [{:workspace, map()} | {:channel, map()} | {:project, map()} | {:thread, map()}]
-  def entries(%{groups: groups} = data) do
-    Enum.flat_map(groups, fn group ->
-      workspace = group.workspace
-      channels = if workspace.id == data[:active_key], do: group[:channels] || [], else: []
-      open = open_channel_id(channels, data[:open_channel])
+  @doc "The screen row, from the rail's top, where entry `index` starts — how a cursor becomes rows."
+  @spec row_of(non_neg_integer()) :: non_neg_integer()
+  def row_of(index), do: index * @rows_per_entry
 
-      [
-        {:workspace, workspace}
-        | Enum.flat_map(channels, fn channel ->
-            threads = if channel.id == open, do: channel[:threads] || [], else: []
-            [{:channel, channel} | by_project(threads, group[:projects] || [])]
-          end)
-      ]
-    end)
+  @doc "The rail's entries: the active workspace's lobby and the open project's threads, most urgent first."
+  @spec entries(map()) :: [{:thread, map()}]
+  def entries(%{groups: groups} = data) do
+    case Enum.find(groups, &(&1.workspace.id == data[:active_key])) do
+      nil ->
+        []
+
+      group ->
+        project = open_project_id(group[:projects] || [], data[:open_project])
+
+        (group[:threads] || [])
+        |> Enum.filter(&(&1[:root] == true or is_nil(project) or &1[:project_id] == project))
+        |> Enum.sort_by(&{attention(&1), if(&1[:root] == true, do: 0, else: 1)})
+        |> Enum.map(&{:thread, &1})
+    end
   end
 
   def entries(_data), do: []
 
-  # Threads under a heading per project, in the workspace's project order, once more than one
-  # project has threads here. Newest-first order holds within a project; a project with no thread
-  # in the channel gets no heading. Threads on a project the read doesn't know trail at the end.
-  defp by_project(threads, projects) do
-    groups = Enum.group_by(threads, & &1[:project_id])
-
-    if map_size(groups) < 2 do
-      Enum.map(threads, &{:thread, &1})
-    else
-      known = for p <- projects, rows = groups[p.id], rows != nil, do: [{:project, p} | Enum.map(rows, &{:thread, &1})]
-      ids = MapSet.new(projects, & &1.id)
-      stray = for t <- threads, not MapSet.member?(ids, t[:project_id]), do: {:thread, t}
-      List.flatten(known) ++ stray
-    end
+  @doc "The id of the open project among `projects`: the chosen one if it is still there, else the first."
+  @spec open_project_id([map()], integer() | nil) :: integer() | nil
+  def open_project_id(projects, chosen) do
+    if Enum.any?(projects, &(&1.id == chosen)), do: chosen, else: projects |> List.first(%{}) |> Map.get(:id)
   end
 
-  @doc "The id of the open channel among `channels`: the chosen one if it is still there, else #general."
-  @spec open_channel_id([map()], integer() | nil) :: integer() | nil
-  def open_channel_id(channels, chosen) do
+  @doc "How loudly a thread claims the operator: 0 waiting on you, 1 working, 2 unread, 3 quiet."
+  @spec attention(map()) :: 0..3
+  def attention(thread) do
     cond do
-      Enum.any?(channels, &(&1.id == chosen)) -> chosen
-      general = Enum.find(channels, &(&1[:kind] == "general")) -> general.id
-      true -> nil
+      waiting?(thread) -> 0
+      thread[:working] == true -> 1
+      thread[:unread?] == true -> 2
+      true -> 3
     end
   end
 
-  # :active = the workspace you're in / the thread that's open (inverse video); :cursor = where j/k
-  # sits; :idle = everything else.
-  defp face({:workspace, %{id: id}}, data, i), do: face(id == data[:active_key], i == data[:selected])
-  defp face({:channel, %{id: id}}, data, i), do: face(id == open_id(data), i == data[:selected])
-  defp face({:thread, %{id: id}}, data, i), do: face(id == data[:opened], i == data[:selected])
-  defp face({:project, _project}, data, i), do: face(false, i == data[:selected])
+  defp waiting?(thread), do: is_map(thread[:prompt]) or (is_binary(thread[:awaiting]) and thread[:awaiting] != "")
 
-  defp open_id(data) do
-    case Enum.find(data.groups, &(&1.workspace.id == data[:active_key])) do
-      %{channels: channels} -> open_channel_id(channels, data[:open_channel])
-      _ -> nil
+  # :active = the open thread (inverse); :cursor = where j/k sits; :both = the cursor ON the open
+  # thread (inverse, and the gutter still marks it); :idle = the rest.
+  defp face(%{id: id}, data, i) do
+    case {id == data[:opened], i == data[:selected]} do
+      {true, true} -> :both
+      {true, false} -> :active
+      {false, true} -> :cursor
+      {false, false} -> :idle
     end
   end
 
-  defp face(true = _active?, _cursor?), do: :active
-  defp face(false, true = _cursor?), do: :cursor
-  defp face(false, false), do: :idle
-
-  defp row({:workspace, workspace}, face, w) do
-    name = clip(workspace[:name] || "?", max(w - 1, 1))
-
-    pad([{" ", fill(face)}, {name, workspace_style(face)}], w, fill(face))
-  end
-
-  # `#name`, and — folded — the strongest badge among its threads (the same priority as a thread's).
-  defp row({:channel, channel}, face, w) do
-    badge = channel[:threads] |> List.wrap() |> Enum.map(&badge(&1, face)) |> Enum.min_by(&badge_rank/1, fn -> [] end)
-    lead = [{" ", fill(face)}, {"#", channel_style(face)}]
-    name = clip(channel[:name] || "?", max(w - Panel.row_width(lead) - width(badge), 1))
-    runs = lead ++ [{name, channel_style(face)}]
-    gap = max(w - Panel.row_width(runs) - width(badge), 0)
-
-    runs ++ [{String.duplicate(" ", gap), fill(face)}] ++ badge
-  end
-
-  # a heading, not a destination: the project's name under the channel, above its threads
-  defp row({:project, project}, face, w) do
-    name = clip(project[:name] || "?", max(w - 2, 1))
-    pad([{"  ", fill(face)}, {name, project_style(face)}], w, fill(face))
-  end
-
-  defp row({:thread, thread}, face, w) do
+  defp rows(thread, face, now, w) do
+    gutter = if face in [:cursor, :both], do: {"▌", gutter_style(face)}, else: {" ", fill(face)}
     badge = badge(thread, face)
-    # The badge is the row's point — reserve its width and clip the TITLE, never the badge.
-    lead = [{"  ", fill(face)}, dot(thread, face), {" ", fill(face)}]
-    title = clip(thread[:title] || "", max(w - Panel.row_width(lead) - width(badge), 1))
-    runs = lead ++ [{title, title_style(face)}]
-    gap = max(w - Panel.row_width(runs) - width(badge), 0)
+    title = clip(thread[:title] || "", max(w - 3, 1))
+    {dot, dot_style} = Panel.warmth_dot(thread[:warm?] == true)
+    meta = clip("#{thread[:lead] || "no lead"} · #{state(thread, now)}", max(w - 5, 1))
 
-    runs ++ [{String.duplicate(" ", gap), fill(face)}] ++ badge
+    [
+      Panel.pad([gutter, badge, {" ", fill(face)}, {title, title_style(face)}], w, fill(face)),
+      Panel.pad(
+        [gutter, {"  ", fill(face)}, {dot, meta_style(face, dot_style)}, {" " <> meta, meta_style(face, :dim)}],
+        w,
+        fill(face)
+      )
+    ]
   end
 
-  # One badge, by priority: waiting on you, then unread, then working.
   defp badge(thread, face) do
     cond do
-      # a coworker waiting on a dialog (Server.Attention) is "awaiting you" exactly like a parked gate
-      is_map(thread[:prompt]) -> [{"!", badge_style(face, :st_await)}]
-      is_binary(thread[:awaiting]) and thread[:awaiting] != "" -> [{"!", badge_style(face, :st_await)}]
-      thread[:unread?] == true -> [{"•", badge_style(face, :accent)}]
-      thread[:working] == true -> [{"…", badge_style(face, :st_working)}]
-      true -> []
+      waiting?(thread) -> {"!", badge_style(face, :st_await)}
+      thread[:working] == true -> {"…", badge_style(face, :st_working)}
+      thread[:unread?] == true -> {"•", badge_style(face, :accent)}
+      true -> {" ", fill(face)}
     end
   end
 
-  # a channel folds to its threads' strongest badge — lower is louder
-  defp badge_rank([{"!", _}]), do: 0
-  defp badge_rank([{"•", _}]), do: 1
-  defp badge_rank([{"…", _}]), do: 2
-  defp badge_rank([]), do: 3
+  defp state(%{prompt: %{summary: summary}}, _now) when is_binary(summary), do: "waiting: #{summary}"
 
-  # The face only STYLES the dot; the glyph follows warmth alone (Panel.warmth_dot/1), so an
-  # open-but-cold thread can never read warm here while the top bar reads it cold.
-  defp dot(thread, face) do
-    {glyph, style} = Panel.warmth_dot(thread[:warm?] == true)
-    {glyph, dot_style(face, style)}
+  defp state(thread, now) do
+    cond do
+      waiting?(thread) -> "waiting on you"
+      thread[:working] == true -> "working"
+      true -> age(thread[:last_at], now)
+    end
   end
 
-  defp dot_style(:active, _style), do: :selected
-  defp dot_style(_face, style), do: style
+  @doc false
+  def age(%DateTime{} = at, %DateTime{} = now) do
+    s = max(DateTime.diff(now, at), 0)
 
-  # An inverse row is inverse all the way across, so its runs take the selection's own styles.
-  defp badge_style(:active, _style), do: :selected_accent
-  defp badge_style(_face, style), do: style
+    cond do
+      s < 60 -> "just now"
+      s < 3600 -> "#{div(s, 60)}m"
+      s < 86_400 -> "#{div(s, 3600)}h"
+      s < 1_209_600 -> "#{div(s, 86_400)}d"
+      true -> "#{div(s, 604_800)}w"
+    end
+  end
 
-  defp channel_style(:active), do: :selected
-  defp channel_style(:cursor), do: :accent
-  defp channel_style(:idle), do: :header
+  def age(_at, _now), do: ""
 
-  defp project_style(:cursor), do: :accent
-  defp project_style(_face), do: :dim
+  defp fill(face) when face in [:active, :both], do: :selected
+  defp fill(_face), do: :normal
 
-  defp workspace_style(:active), do: :selected
-  defp workspace_style(:cursor), do: :accent
-  defp workspace_style(:idle), do: :header
+  defp gutter_style(:both), do: :selected_accent
+  defp gutter_style(_face), do: :accent
 
-  defp title_style(:active), do: :selected
+  defp title_style(face) when face in [:active, :both], do: :selected
   defp title_style(:cursor), do: :accent
   defp title_style(:idle), do: :normal
 
-  defp fill(:active), do: :selected
-  defp fill(_face), do: :normal
+  defp meta_style(face, _style) when face in [:active, :both], do: :selected
+  defp meta_style(_face, style), do: style
 
-  defp width(runs), do: Panel.row_width(runs)
+  defp badge_style(face, _style) when face in [:active, :both], do: :selected_accent
+  defp badge_style(_face, style), do: style
 
   defp clip(text, w), do: String.slice(text, 0, w)
 end

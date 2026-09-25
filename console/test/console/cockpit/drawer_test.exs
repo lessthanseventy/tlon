@@ -48,8 +48,8 @@ defmodule Console.Cockpit.DrawerTest do
     test "one Border with the pane tabs over the CENTER rect only — never the rail or the bars" do
       [{Panel.Border, border, rect} | content] = Drawer.placements(state(%{drawer: :memory}), 120, 40)
 
-      # right of the rail (Console.View's rail_width/1 for w=120), between the two bars
-      assert rect.x == max(22, div(120, 5)) + 1
+      # right of the rail (Console.View's rail_width/1 is 32 at w=120), between the two bars
+      assert rect.x == 33
       assert rect.w == 120 - rect.x
       assert rect.y == 1
       assert rect.y + rect.h == 39
@@ -138,11 +138,11 @@ defmodule Console.Cockpit.DrawerTest do
   test "covers?/3 is true inside the drawer's rect and false over the rail and the bars" do
     state = state(%{drawer: :memory, w: 120, h: 40})
 
-    assert Drawer.covers?(state, 30, 10)
+    assert Drawer.covers?(state, 40, 10)
     refute Drawer.covers?(state, 3, 10), "the rail is never covered"
-    refute Drawer.covers?(state, 30, 0), "the top bar is never covered"
-    refute Drawer.covers?(state, 30, 39), "the footer is never covered"
-    refute Drawer.covers?(%{state | drawer: nil}, 30, 10)
+    refute Drawer.covers?(state, 40, 0), "the top bar is never covered"
+    refute Drawer.covers?(state, 40, 39), "the footer is never covered"
+    refute Drawer.covers?(%{state | drawer: nil}, 40, 10)
   end
 
   # The tab strip invites a click: a hit on a tab label on the drawer's top rule names its pane;

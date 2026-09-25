@@ -9,19 +9,17 @@ defmodule Console.PickerTest do
   @groups [
     %{
       workspace: %{id: 1, name: "ficciones"},
-      channels: [
-        %{
-          id: 10,
-          name: "general",
-          kind: "general",
-          threads: [%{id: 100, title: "cockpit slice two"}, %{id: 101, title: "menard gaps"}]
-        },
-        %{id: 11, name: "reviews", kind: "topic", threads: [%{id: 102, title: "palette review"}]}
+      projects: [%{id: 10, name: "tlon"}, %{id: 11, name: "desktop"}],
+      threads: [
+        %{id: 100, title: "cockpit slice two", project_id: 10},
+        %{id: 101, title: "menard gaps", project_id: 10},
+        %{id: 102, title: "palette review", project_id: 11}
       ]
     },
     %{
       workspace: %{id: 2, name: "freedonia"},
-      channels: [%{id: 20, name: "general", kind: "general", threads: [%{id: 200, title: "duck soup"}]}]
+      projects: [%{id: 20, name: "fredo"}],
+      threads: [%{id: 200, title: "duck soup", project_id: 20}]
     }
   ]
 
@@ -30,23 +28,23 @@ defmodule Console.PickerTest do
   defp labels(picker, state), do: picker |> Picker.entries(state) |> Enum.map(& &1.label)
 
   describe "the switcher's corpus" do
-    test "is every workspace, channel and thread — not just the active workspace's" do
+    test "is every workspace and open thread — not just the active workspace's" do
       shown = labels(Picker.open(:switcher), state())
 
       assert "ficciones" in shown
       assert "freedonia" in shown
-      assert "#reviews" in shown
+      assert "palette review" in shown
       # freedonia is NOT the active workspace, but its thread is still reachable — the point of it
       assert "duck soup" in shown
     end
 
-    test "a thread row carries the workspace and channel a jump has to switch to" do
+    test "a thread row carries the workspace a jump has to switch to, and names its project" do
       row = :switcher |> Picker.open() |> Picker.entries(state()) |> Enum.find(&(&1.label == "duck soup"))
 
       assert row.kind == :thread
       assert row.workspace_id == 2
-      assert row.channel_id == 20
       assert row.thread_id == 200
+      assert row.context == "freedonia · fredo"
     end
 
     test "matches on the whole path, so a workspace name narrows to its threads" do

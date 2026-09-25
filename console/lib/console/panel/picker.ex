@@ -4,7 +4,7 @@ defmodule Console.Panel.Picker do
   the centre inside a `Console.Panel.Border` carrying the title; this paints what is inside: the
   query line, a rule, then the filtered rows.
 
-  A row is `tag · [keycap] · label · context` — the tag dim (`thread`, `channel`, `global`,
+  A row is `tag · [keycap] · label · context` — the tag dim (`thread`, `workspace`, `global`,
   `drawer`), the keycap lit where there is one (the palette), the label bright, and the context
   dim and truncated last. Context is the half a footer keycap can never carry: for the switcher
   it is where the thread LIVES (`ficciones · #general`), for the palette it is the sentence saying

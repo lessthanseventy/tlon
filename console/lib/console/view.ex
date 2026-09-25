@@ -286,9 +286,9 @@ defmodule Console.View do
     end
   end
 
-  # Thin, but wide enough for a thread title: a fifth of the frame, floored at 22 columns so a rail
-  # row is readable, capped at a third so it can never crowd the conversation.
-  defp rail_width(w), do: w |> div(5) |> max(22) |> min(div(w, 3))
+  # A title and its lead line need about 30 columns; the rest of a wide frame belongs to the
+  # conversation. Floored at 22, never more than a third of a narrow frame.
+  defp rail_width(w), do: w |> div(3) |> max(22) |> min(32)
 
   @doc """
   The content rect the center Terminal renders into for a `space_key`/`w`×`h` cockpit — the single
@@ -371,17 +371,24 @@ defmodule Console.View do
   # and must resolve their data the one way the frame does.
   def content_for(section, reads, rect, slice) do
     {panel, data, rect} = content_for(section, reads, rect)
-    {panel, data |> merge_slice(slice) |> follow_cursor(rect), rect}
+    {panel, data |> merge_slice(slice) |> follow_cursor(rect, panel), rect}
   end
 
   # A pane whose j/k cursor is an ABSOLUTE row index (the rail) is windowed by `render_scroll` over
   # those same absolute rows, so the window must follow the cursor — else j walks the selection off
   # the visible rail and Enter acts on a row nobody can see. The wheel offset is the starting point;
   # it only moves as far as it must to keep the cursor on screen.
-  defp follow_cursor(%{selected: selected, scroll: scroll} = data, %{h: h}) when is_integer(selected) and h > 0,
-    do: %{data | scroll: scroll |> min(selected) |> max(selected - h + 1) |> max(0)}
+  defp follow_cursor(%{selected: selected, scroll: scroll} = data, %{h: h}, panel)
+       when is_integer(selected) and h > 0 do
+    {first, last} = cursor_rows(panel, selected)
+    %{data | scroll: scroll |> min(first) |> max(last - h + 1) |> max(0)}
+  end
 
-  defp follow_cursor(data, _rect), do: data
+  defp follow_cursor(data, _rect, _panel), do: data
+
+  # The rows a cursor at entry `selected` occupies: the rail draws each thread on two.
+  defp cursor_rows(Panel.Rail, selected), do: {Panel.Rail.row_of(selected), Panel.Rail.row_of(selected) + 1}
+  defp cursor_rows(_panel, selected), do: {selected, selected}
 
   defp content_for({panel, read_key}, reads, rect), do: {panel, scroll_data(panel, reads[read_key], reads), rect}
   defp content_for(panel, reads, rect), do: {panel, scroll_data(panel, data_for(panel, reads), reads), rect}
@@ -392,7 +399,7 @@ defmodule Console.View do
 
   @doc "Resolve the data a panel is fed from the assembled reads (keeps spaces plain data)."
   def data_for(Panel.Rail, r),
-    do: %{groups: r[:sidebar] || [], active_key: r.active_key, open_channel: r[:open_channel], opened: opened_id(r)}
+    do: %{groups: r[:sidebar] || [], active_key: r.active_key, open_project: r[:open_project], opened: opened_id(r)}
 
   def data_for(Panel.Roster, r), do: %{sessions: r.roster}
 

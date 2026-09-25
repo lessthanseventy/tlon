@@ -1,19 +1,33 @@
 defmodule Console.Panel.RailTest do
   @moduledoc """
-  The always-on left rail (UX slice 1, design 2026-09-08 §2): workspaces, and under the ACTIVE one
-  its threads. A thread row is warmth dot · title · at most ONE badge, by priority
-  waiting-on-you > unread > working.
+  The always-on left rail: the open project's threads in the active workspace, the lobby in every
+  project, ranked by what needs you — waiting, then working, then unread, then the rest. Two rows
+  per thread: `▌! title`, then `○ lead · state`.
   """
   use ExUnit.Case, async: true
 
-  import Console.PanelText, only: [row_text: 1, text: 1]
+  import Console.PanelText, only: [lines: 1, row_text: 1, text: 1]
 
   alias Console.Panel.Rail
 
-  @rect %{x: 0, y: 1, w: 24, h: 20}
+  @rect %{x: 0, y: 1, w: 30, h: 20}
+  @now ~U[2026-09-25 12:00:00Z]
 
   defp thread(over) do
-    Map.merge(%{id: 1, title: "a thread", warm?: false, awaiting: nil, unread?: false, working: false}, over)
+    Map.merge(
+      %{
+        id: 1,
+        title: "a thread",
+        project_id: 1,
+        root: false,
+        lead: "hronir",
+        warm?: false,
+        awaiting: nil,
+        working: false,
+        last_at: ~U[2026-09-25 09:00:00Z]
+      },
+      over
+    )
   end
 
   defp data(over \\ %{}) do
@@ -21,246 +35,153 @@ defmodule Console.Panel.RailTest do
       %{
         groups: [
           %{
-            workspace: %{id: 1, name: "Tlön"},
-            channels: [
-              %{
-                id: 10,
-                name: "general",
-                kind: "general",
-                threads: [
-                  thread(%{id: 9, title: "general", warm?: true, awaiting: "andrew", unread?: true}),
-                  thread(%{id: 8, title: "aleph", unread?: true, working: true})
-                ]
-              },
-              %{id: 11, name: "ideas", kind: "topic", threads: [thread(%{id: 7, title: "folded", working: true})]}
+            workspace: %{id: 1, name: "Machine"},
+            projects: [%{id: 1, name: "Tlön"}, %{id: 2, name: "ficciones"}],
+            threads: [
+              thread(%{id: 9, title: "lobby", root: true, lead: "tertius", project_id: 2}),
+              thread(%{id: 20, title: "quiet one"}),
+              thread(%{id: 21, title: "busy one", working: true}),
+              thread(%{id: 22, title: "asks you", prompt: %{id: 5, summary: "run mix ecto.reset?", options: []}}),
+              thread(%{id: 23, title: "elsewhere", project_id: 2})
             ]
           },
           %{
-            workspace: %{id: 2, name: "ficciones"},
-            channels: [%{id: 12, name: "general", kind: "general", threads: [thread(%{id: 5, title: "hidden"})]}]
+            workspace: %{id: 2, name: "Accessibility"},
+            projects: [%{id: 3, name: "excessibility"}],
+            threads: [thread(%{id: 30, title: "hidden", project_id: 3})]
           }
         ],
         active_key: 1,
-        open_channel: nil,
-        opened: 9
+        open_project: 1,
+        opened: nil,
+        now: @now
       },
       over
     )
   end
 
-  # one workspace, #general only, these threads
-  defp solo(threads),
-    do: %{
-      groups: [
-        %{workspace: %{id: 1, name: "Tlön"}, channels: [%{id: 10, name: "general", kind: "general", threads: threads}]}
-      ]
-    }
+  defp ids(data), do: Enum.map(Rail.entries(data), fn {:thread, t} -> t.id end)
+  defp rows_of(rows, title), do: rows |> Enum.chunk_every(2) |> Enum.find(fn [first, _] -> row_text(first) =~ title end)
 
-  defp rows(over \\ %{}), do: Rail.render(data(over), @rect)
-  defp row_with(rows, substr), do: Enum.find(rows, fn row -> row_text(row) =~ substr end)
+  describe "entries" do
+    test "the open project's threads and the lobby, most urgent first — waiting, working, then the rest" do
+      assert ids(data()) == [22, 21, 9, 20]
+    end
 
-  test "a coworker waiting on a dialog is awaiting you — the ! badge, before unread and working" do
-    rows =
-      rows(
-        solo([
-          thread(%{title: "orient", prompt: %{id: 7, summary: "bash: env", options: []}, unread?: true, working: true})
-        ])
-      )
+    test "another project, and another workspace, are not listed" do
+      refute 23 in ids(data())
+      refute 30 in ids(data())
+      assert ids(data(%{open_project: 2})) == [9, 23]
+    end
 
-    row = row_text(row_with(rows, "orient"))
+    test "a project the workspace no longer has falls back to its first" do
+      assert ids(data(%{open_project: 999})) == ids(data())
+      assert Rail.open_project_id([%{id: 4}, %{id: 5}], nil) == 4
+      assert Rail.open_project_id([], nil) == nil
+    end
 
-    assert row =~ "!"
-    refute row =~ "•"
+    test "attention ranks waiting (a prompt or a parked gate) over working over unread over quiet" do
+      assert Rail.attention(%{prompt: %{}}) == 0
+      assert Rail.attention(%{awaiting: "andrew", working: true}) == 0
+      assert Rail.attention(%{working: true, unread?: true}) == 1
+      assert Rail.attention(%{unread?: true}) == 2
+      assert Rail.attention(%{}) == 3
+    end
   end
 
   describe "render" do
-    test "workspaces, then the ACTIVE one's threads; one badge per row by priority" do
-      texts = Enum.map(rows(), &row_text/1)
+    test "two rows per thread: the badge and title, then the lead and what it is doing" do
+      rows = Rail.render(data(), @rect)
+      assert length(rows) == 8
 
-      assert Enum.any?(texts, &(&1 =~ "Tlön"))
-      assert Enum.any?(texts, &(&1 =~ "ficciones"))
-      # waiting on you beats unread
-      assert Enum.any?(texts, &(&1 =~ "general" and &1 =~ "!"))
-      # unread beats working
-      assert Enum.any?(texts, &(&1 =~ "aleph" and &1 =~ "•" and not (&1 =~ "!")))
+      assert [title, meta] = rows_of(rows, "asks you")
+      assert row_text(title) =~ "! asks you"
+      assert row_text(meta) =~ "hronir · waiting: run mix"
+
+      assert [busy, busy_meta] = rows_of(rows, "busy one")
+      assert row_text(busy) =~ "… busy one"
+      assert row_text(busy_meta) =~ "hronir · working"
     end
 
-    test "only the active workspace's channels are listed, and only the OPEN channel's threads" do
-      refute text(rows()) =~ "hidden"
-      refute text(rows(%{active_key: 2})) =~ "aleph"
-      assert text(rows(%{active_key: 2})) =~ "hidden"
-      # #ideas is folded: its thread is hidden, its strongest badge shows on the channel row
-      assert row_text(row_with(rows(), "#ideas")) =~ "…"
-      refute text(rows()) =~ "folded"
-      # open it: its thread unfolds, #general folds
-      assert text(rows(%{open_channel: 11})) =~ "folded"
-      refute text(rows(%{open_channel: 11})) =~ "aleph"
+    test "a quiet thread carries no badge and says how long ago it moved" do
+      [title, meta] = rows_of(Rail.render(data(), @rect), "quiet one")
+      refute row_text(title) =~ ~r/[!…•]/
+      assert row_text(meta) =~ "hronir · 3h"
     end
 
-    test "a working thread with nothing else pending gets the working badge alone" do
-      rows = rows(solo([thread(%{title: "build", working: true})]))
+    test "warmth is the dot on the second row — ● warm, ○ cold" do
+      warm = data(%{groups: [%{workspace: %{id: 1, name: "M"}, projects: [], threads: [thread(%{warm?: true})]}]})
+      assert [_, meta] = Rail.render(warm, @rect)
+      assert row_text(meta) =~ "●"
 
-      assert row_text(row_with(rows, "build")) =~ "…"
+      assert [_, cold] =
+               Rail.render(
+                 data(%{groups: [%{workspace: %{id: 1, name: "M"}, projects: [], threads: [thread(%{})]}]}),
+                 @rect
+               )
+
+      assert row_text(cold) =~ "○"
     end
 
-    test "a quiet thread carries no badge at all" do
-      rows = rows(solo([thread(%{title: "quiet"})]))
-      row = row_text(row_with(rows, "quiet"))
+    test "only the OPEN thread renders inverse, both of its rows" do
+      [title, meta] = rows_of(Rail.render(data(%{opened: 20}), @rect), "quiet one")
+      assert Enum.all?(title ++ meta, fn {_t, style} -> style in [:selected, :selected_accent] end)
 
-      refute row =~ "!"
-      refute row =~ "•"
-      refute row =~ "…"
+      [other, _] = rows_of(Rail.render(data(%{opened: 20}), @rect), "busy one")
+      refute Enum.any?(other, fn {_t, style} -> style == :selected end)
     end
 
-    test "warmth is a dot per thread — ● warm, ○ cold (the pair Roster and the top bar use)" do
-      assert row_text(row_with(rows(), " general")) =~ "●"
-      assert row_text(row_with(rows(), "aleph")) =~ "○"
+    test "the cursor is the ▌ gutter, and it still shows on the open thread" do
+      rows = Rail.render(data(%{selected: 3, opened: 20}), @rect)
+      [title, meta] = rows_of(rows, "quiet one")
+      assert String.starts_with?(row_text(title), "▌")
+      assert String.starts_with?(row_text(meta), "▌")
+      refute rows |> lines() |> Enum.take(6) |> Enum.any?(&String.starts_with?(&1, "▌"))
     end
 
-    test "the OPEN thread's dot is still its warmth — an open COLD thread reads ○, like the top bar" do
-      row = row_text(row_with(rows(%{opened: 8}), "aleph"))
+    test "rows clip to the rail's width, a long title included" do
+      long =
+        data(%{
+          groups: [
+            %{workspace: %{id: 1, name: "M"}, projects: [], threads: [thread(%{title: String.duplicate("x", 80)})]}
+          ]
+        })
 
-      assert row =~ "○"
-      refute row =~ "●"
+      assert Enum.all?(Rail.render(long, %{@rect | w: 22}), &(String.length(row_text(&1)) == 22))
     end
 
-    test "the OPEN thread and the ACTIVE workspace render as the selected face" do
-      rows = rows()
-      styles = fn substr -> rows |> row_with(substr) |> Enum.map(fn {_t, s} -> s end) end
-
-      assert :selected in styles.(" general")
-      assert :selected in styles.("Tlön")
-      refute :selected in styles.("aleph")
-      refute :selected in styles.("ficciones")
-    end
-
-    test "the nav cursor marks its row without stealing the active face" do
-      # cursor 2 = the first thread under #general (row 0 the workspace, row 1 the channel).
-      rows = rows(%{selected: 2, opened: nil})
-
-      assert :accent in (rows |> row_with(" general") |> Enum.map(fn {_t, s} -> s end))
-    end
-
-    test "an empty read renders a prompt, not a crash" do
-      assert [row] = Rail.render(%{groups: [], active_key: nil}, @rect)
-      assert row_text(row) =~ "no workspaces"
-    end
-
-    test "a long title at the floor width (22) still ends in its badge" do
-      long = String.duplicate("x", 80)
-      rect = %{@rect | w: 22}
-
-      rows =
-        Rail.render(
-          data(%{
-            groups: [
-              %{
-                workspace: %{id: 1, name: "T"},
-                channels: [
-                  %{id: 1, name: "general", kind: "general", threads: [thread(%{title: long, awaiting: "andrew"})]}
-                ]
-              }
-            ]
-          }),
-          rect
-        )
-
-      row = rows |> Enum.map(&row_text/1) |> Enum.find(&(&1 =~ "xxx"))
-
-      assert String.ends_with?(row, "!")
-      assert Console.Panel.row_width(row_with(rows, "xxx")) <= 22
-    end
-
-    test "rows clip to the rail's width" do
-      long = String.duplicate("x", 80)
-      rows = rows(solo([thread(%{title: long})]))
-
-      assert Enum.all?(rows, &(Console.Panel.row_width(&1) <= @rect.w))
+    test "an empty project says so; an empty read says the server may be down" do
+      empty = data(%{groups: [%{workspace: %{id: 1, name: "M"}, projects: [%{id: 1, name: "Tlön"}], threads: []}]})
+      assert empty |> Rail.render(@rect) |> text() =~ "no open threads here"
+      assert %{} |> Rail.render(@rect) |> text() =~ "is server up?"
     end
   end
 
-  describe "pick" do
-    test "a thread row opens that thread; a workspace row switches to it" do
-      # row 0 = the active workspace, 1 = #general, 2..3 its threads, 4 = #ideas, 5 = the next workspace.
-      assert Rail.pick(data(), @rect, 0) == {:switch_space, 1}
-      assert Rail.pick(data(), @rect, 1) == {:open_channel, 10}
-      assert Rail.pick(data(), @rect, 2) == {:open_thread_view, 9}
-      assert Rail.pick(data(), @rect, 3) == {:open_thread_view, 8}
-      assert Rail.pick(data(), @rect, 4) == {:open_channel, 11}
-      assert Rail.pick(data(), @rect, 5) == {:switch_space, 2}
-    end
-
-    test "a click past the last row picks nothing" do
+  describe "pick and entry_at — two rows answer one thread" do
+    test "either row of a thread opens it; past the last row picks nothing" do
+      assert Rail.pick(data(), @rect, 0) == {:open_thread_view, 22}
+      assert Rail.pick(data(), @rect, 1) == {:open_thread_view, 22}
+      assert Rail.pick(data(), @rect, 2) == {:open_thread_view, 21}
       assert Rail.pick(data(), @rect, 99) == nil
-    end
-  end
-
-  describe "entry_at/3 — the right-click context menu's target" do
-    test "every row answers its entry: workspace, channel or thread" do
-      assert Rail.entry_at(data(), @rect, 0) == {:workspace, %{id: 1, name: "Tlön"}}
-      assert {:channel, %{id: 10}} = Rail.entry_at(data(), @rect, 1)
-      assert {:thread, %{id: 9}} = Rail.entry_at(data(), @rect, 2)
-      assert Rail.entry_at(data(), @rect, 5) == {:workspace, %{id: 2, name: "ficciones"}}
-      assert Rail.entry_at(data(), @rect, 99) == nil
       assert Rail.entry_at(%{}, @rect, 0) == nil
     end
 
-    test "a scrolled rail resolves the row under the CURSOR, not the unscrolled list" do
-      assert Rail.entry_at(data(%{scroll: 5}), @rect, 0) == {:workspace, %{id: 2, name: "ficciones"}}
+    test "a scrolled rail resolves the row under the pointer, not the unscrolled list" do
+      assert {:thread, %{id: 9}} = Rail.entry_at(data(%{scroll: 4}), @rect, 0)
+      assert Rail.row_of(2) == 4
     end
   end
 
-  describe "projects — the open channel's threads under their project" do
-    defp by_project do
-      %{
-        groups: [
-          %{
-            workspace: %{id: 1, name: "Tlön"},
-            projects: [%{id: 1, name: "Tlön"}, %{id: 6, name: "Machine"}, %{id: 7, name: "DeuceSeven"}],
-            channels: [
-              %{
-                id: 10,
-                name: "general",
-                kind: "general",
-                threads: [
-                  thread(%{id: 9, title: "general", project_id: 6}),
-                  thread(%{id: 81, title: "stale menard", project_id: 1}),
-                  thread(%{id: 15, title: "bluetooth", project_id: 6})
-                ]
-              }
-            ]
-          }
-        ],
-        active_key: 1
-      }
-    end
-
-    test "a channel's threads group under their project, in the workspace's project order; empty projects are not listed" do
-      assert [
-               {:workspace, _},
-               {:channel, _},
-               {:project, %{name: "Tlön"}},
-               {:thread, %{id: 81}},
-               {:project, %{name: "Machine"}},
-               {:thread, %{id: 9}},
-               {:thread, %{id: 15}}
-             ] = Rail.entries(by_project())
-    end
-
-    test "a project row is a heading: it renders its name and picks nothing" do
-      out = by_project() |> Rail.render(@rect) |> text()
-      assert out =~ "Machine"
-      refute out =~ "DeuceSeven"
-      assert Rail.pick(by_project(), @rect, 2) == nil
-    end
-
-    test "one project (or none known) adds no heading — the flat list stays flat" do
-      refute Enum.any?(Rail.entries(data()), &match?({:project, _}, &1))
-    end
+  test "age reads in the largest unit that fits" do
+    assert Rail.age(~U[2026-09-25 11:59:30Z], @now) == "just now"
+    assert Rail.age(~U[2026-09-25 11:15:00Z], @now) == "45m"
+    assert Rail.age(~U[2026-09-22 12:00:00Z], @now) == "3d"
+    assert Rail.age(~U[2026-08-01 12:00:00Z], @now) == "7w"
+    assert Rail.age(nil, @now) == ""
   end
 
   test "hints name only keys that work" do
-    assert Rail.hints(data()) == [{"j/k", "row"}, {"⏎", "open"}, {"m", "move"}, {"#", "channel"}, {"d", "delete"}]
+    assert Rail.hints(data()) == [{"j/k", "thread"}, {"⏎", "open"}, {"[ ]", "project"}, {"m", "move"}, {"d", "delete"}]
   end
 
   test "topics cover threads, sessions and workspaces" do

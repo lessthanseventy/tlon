@@ -2,8 +2,7 @@
 
 The TTY cockpit over `server` (design: `docs/plans/2026-09-01-cockpit-homogenize-design.md`, which
 superseded the three-spaces layout of `2026-08-15-aleph-tui-design.md`). A full-screen terminal app:
-a left rail of **workspaces** (Home — the god-view survey — first, then one entry per server
-workspace, plus the Tickets and Notes boards), a center that is either the workspace's **thread
+a left **rail** of the open project's threads, a center that is either the workspace's **thread
 stack** (a list of threads → one thread's conversation with its reply box) or the workspace's
 embedded **tmux center** (the roster lead, a real `tmux attach`), a toggleable **session pane** that
 embeds the selected thread's lead window with a **git pane** under it (lazygit on the thread's
@@ -41,10 +40,12 @@ The cockpit is shell-shaped (`docs/plans/2026-09-08-cockpit-ux-principles-design
 
 - **Row 0** is `Panel.TopBar` — workspace chip · open thread and `[stage]` · its `.worktrees/<name>` ·
   the lead with ● warm / ○ cold · a `server down` alarm that outranks the title on a narrow frame.
-- **The rail** (`Panel.Rail`, left, always on) — every workspace, then the active one's threads with
-  a warmth dot and ONE badge (`!` awaiting you > `•` unread > `…` working). `j/k` walk it, `⏎` opens,
-  `[ ]`/Tab/Shift+Tab walk the workspace ring, right-click a workspace for its menu. Workspaces are
-  the only spaces — Home/Orbis is gone.
+- **The rail** (`Panel.Rail`, left, always on, ~30 columns) — the OPEN PROJECT's threads in the
+  active workspace plus the workspace's lobby, one flat list ranked waiting on you (`!`) > working
+  (`…`) > unread (`•`) > quiet, two rows per thread (title, then lead · state · age). Only the open
+  thread is inverse; the cursor is the `▌` gutter. `j/k` walk it, `⏎` opens, `[ ]` step the
+  project, Tab/Shift+Tab and `Alt+⇧N` walk workspaces, `m` moves a thread to another project.
+  Channels exist in the server but not in the cockpit.
 - **The centre** — the conversation, and beside it the coworker's terminal as two EQUAL panes when
   the open thread's lead has a live PTY and the frame is ≥100 cols. `Alt+\` cycles the pane's mode
   `auto → off → on`; the footer names it. With nothing live the right pane says so (no dead verb).

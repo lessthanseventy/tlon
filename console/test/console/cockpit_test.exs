@@ -23,26 +23,23 @@ defmodule Console.CockpitTest do
     end
   end
 
-  # UX slice 1, task 2: the workspace context menu's door moved with the spine — the RAIL carries
-  # the workspace rows now, so a right click resolves through it.
   describe "context_entry/2 — the right-click menu's target" do
     @rail_data %{
       groups: [
         %{
-          workspace: %{id: 0, name: "Tlön"},
-          channels: [%{id: 1, name: "general", kind: "general", threads: [%{id: 9, title: "general"}]}]
-        },
-        %{workspace: %{id: 1, name: "ficciones"}, channels: []}
+          workspace: %{id: 0, name: "Machine"},
+          projects: [%{id: 1, name: "Tlön"}],
+          threads: [%{id: 9, title: "lobby", root: true, project_id: 1}, %{id: 12, title: "rail", project_id: 1}]
+        }
       ],
       active_key: 0
     }
     @rect %{x: 0, y: 1, w: 24, h: 20}
 
-    test "a rail row answers its entry — workspace, channel or thread" do
-      assert Cockpit.context_entry({Rail, @rail_data, @rect}, 1) == {:workspace, %{id: 0, name: "Tlön"}}
-      assert {:channel, %{id: 1}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 2)
-      assert {:thread, %{id: 9}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 3)
-      assert Cockpit.context_entry({Rail, @rail_data, @rect}, 4) == {:workspace, %{id: 1, name: "ficciones"}}
+    test "either row of a rail thread answers that thread" do
+      assert {:thread, %{id: 9}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 1)
+      assert {:thread, %{id: 9}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 2)
+      assert {:thread, %{id: 12}} = Cockpit.context_entry({Rail, @rail_data, @rect}, 3)
     end
 
     test "another panel, or a miss, answers nothing" do
