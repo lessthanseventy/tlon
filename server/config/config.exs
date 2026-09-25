@@ -25,8 +25,10 @@ config :server, Oban,
 
 # Postgres is the store (one-brain piece C, 2026-09-18): the §4 write contract — readers never
 # blocked by a writer, real foreign keys, a bounded wait on a lock — is the engine's own.
-# Connection details are per-env (dev/test below, runtime.exs for the release).
-config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 5
+# Connection details are per-env (dev/test below, runtime.exs for the release). The pool covers
+# Oban's queue concurrency plus the always-on callers (switchboard, attention, web, MCP) —
+# test/server/repo_pool_test.exs holds that line.
+config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 12
 
 config :server, Server.Web.Endpoint,
   adapter: Bandit.PhoenixAdapter,
