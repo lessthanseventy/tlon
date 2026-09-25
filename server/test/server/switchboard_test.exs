@@ -288,19 +288,27 @@ defmodule Server.SwitchboardTest do
       assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
 
-    test "a message no live addressee can receive stays undelivered (the spawned session delivers it)" do
+    test "a message no live addressee can receive spawns a pane and becomes its opening turn, claimed" do
       # A thread with a lead assigned but whose session hasn't started: nobody live to
       # WAKE, so the post is pending — but the autonomous spawn (§4c.3) opens a pane, and
       # the message is delivered once that session registers and drains, not by this call.
+      # A thread with a lead assigned but whose session hasn't started: nobody live to WAKE — so the
+      # autonomous spawn (§4c.3) opens a pane and hands it THIS message as its opening turn, claimed so
+      # the drain never types it a second time once the session registers.
+      # A thread with a lead assigned but whose session hasn't started: nobody live to WAKE — so the
+      # autonomous spawn (§4c.3) opens a pane and hands it THIS message as its opening turn, claimed so
+      # the drain never types it a second time once the session registers.
       {:ok, thread} = Channel.open_thread(%{title: "unattended"})
       {:ok, sandra} = Staff.register_agent(%{name: "Sandra", mandate: "lead", engine: "deep"})
       {:ok, _} = Staff.assign(thread, sandra)
 
       {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "anyone?"})
-      Switchboard.deliver(m)
+      assert {:pending, _} = Switchboard.deliver(m)
 
-      refute_received {:woke, _, _}
-      assert Repo.get!(Message, m.id).delivered_at == nil
+      assert_receive {:spawned, _exports}, 1_000
+      expected = "New message on thread #{thread.id} from stakeholder: anyone?"
+      assert_receive {:woke, nil, ^expected}, 1_000
+      assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
   end
 
@@ -322,6 +330,10 @@ defmodule Server.SwitchboardTest do
       assert_received {:spawned, exports}
       assert exports =~ ~s(TLON_AUTHOR="Carl")
       assert exports =~ ~s(TLON_THREAD="#{thread.id}")
+      # …and the message is the pane's opening turn: claimed, then typed (waited for here, so the
+      # async turn never leaks into the next test's mailbox)
+      assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+      assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
 
     test "a clocked-out lead is NOT spawned — a fresh session it can't run is worse than waiting" do

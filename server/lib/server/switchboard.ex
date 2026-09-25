@@ -206,10 +206,45 @@ defmodule Server.Switchboard do
          true <- lead_addressed?(message, lead),
          false <- has_warm_session?(thread_id, agent_id),
          false <- Presence.clocked_out?(lead),
-         {:ok, %{exports: exports}} <- Spawn.join(thread_id, lead.name) do
-      Arbiter.spawn(exports)
+         {:ok, %{exports: exports}} <- Spawn.join(thread_id, lead.name),
+         {:ok, handle} <- Arbiter.spawn(exports) do
+      opening_turn(message, lead, handle)
     else
       _ -> :ok
+    end
+  end
+
+  # The spawned pane's OPENING TURN. A harness that registers only on its first prompt (Claude Code)
+  # would otherwise wait forever for a wake that waits for it to register. Off the caller's path:
+  # once the pane is ready (or the wait runs out), CLAIM the message — the claim is what keeps a
+  # concurrent drain from typing it a second time once the session does register — and wake the new
+  # window with it, exactly the poke a warm session would have got.
+  defp opening_turn(%Message{} = message, %Agent{name: agent}, handle) do
+    {:ok, _pid} =
+      Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+        await_ready(handle, Application.get_env(:server, :spawn_ready_timeout_ms, 20_000))
+
+        if claim([message.id]) > 0 do
+          poke(%{thread_id: message.thread_id, agent: agent, pane_ref: nil}, prompt(message))
+        end
+      end)
+
+    :ok
+  end
+
+  defp await_ready(handle, budget_ms) do
+    poll = Application.get_env(:server, :spawn_ready_poll_ms, 500)
+
+    cond do
+      Arbiter.ready?(handle) ->
+        true
+
+      budget_ms <= 0 ->
+        false
+
+      true ->
+        Process.sleep(poll)
+        await_ready(handle, budget_ms - max(poll, 1))
     end
   end
 

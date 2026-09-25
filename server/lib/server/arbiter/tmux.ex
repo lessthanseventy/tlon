@@ -169,4 +169,20 @@ defmodule Server.Arbiter.Tmux do
       do: Application.get_env(:server, :spawn_launcher_claude, Path.join(adapters_dir(), "claude-code/launch.sh")),
       else: Application.get_env(:server, :spawn_launcher_pi, "pi")
   end
+
+  @doc """
+  The pane shows an input line — pi's `tlon: registered` footer or a harness prompt `❯` — so the first
+  prompt typed into it lands in an input, not in a booting TUI that swallows it.
+  """
+  @impl true
+  def ready?(%{session: "w" <> id, window: window}) do
+    ws = String.to_integer(id)
+
+    case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, window)]) do
+      {out, 0} when is_binary(out) -> String.contains?(out, "registered") or String.contains?(out, "❯")
+      _ -> false
+    end
+  end
+
+  def ready?(_handle), do: true
 end

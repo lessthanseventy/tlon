@@ -38,6 +38,16 @@ defmodule Server.Arbiter.TmuxTest do
     end
   end
 
+  test "ready?: an input line on the pane — pi's registered footer or a harness prompt — else not yet" do
+    handle = %{socket: "console-workspace-1", session: "w1", window: "t7"}
+    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"booting…", 0} end)
+    refute Arbiter.Tmux.ready?(handle)
+    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"❯ \n⏵⏵ auto mode on", 0} end)
+    assert Arbiter.Tmux.ready?(handle)
+    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"tlon: registered — hronir on 7", 0} end)
+    assert Arbiter.Tmux.ready?(handle)
+  end
+
   test "spawn: a seat on the bench spawns with its PROFILE's harness — a builder at home is Claude Code, whatever the agent row says" do
     # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides
     # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides

@@ -22,6 +22,8 @@ defmodule Server.Arbiter do
   autonomous wake spawn through the same seam. `{:ok, handle}` or `{:error, term}`.
   """
   @callback spawn(exports :: String.t()) :: {:ok, term()} | {:error, term()}
+  @doc "Optional: is the spawned pane ready for its first prompt (an input line is up)? Absent = always."
+  @callback ready?(handle :: term()) :: boolean()
 
   @doc "The configured backend, or nil (the switchboard runs but does not poke when none is set)."
   def impl, do: Application.get_env(:server, :arbiter)
@@ -36,6 +38,20 @@ defmodule Server.Arbiter do
     case impl() do
       nil -> {:error, :no_arbiter}
       module -> apply(module, fun, args)
+    end
+  end
+
+  @doc """
+  Is a spawned handle's pane ready for its first prompt? Backends that can look (tmux) say so; one that
+  cannot — or none — is `true`, so a caller never waits on what it cannot observe.
+  """
+  def ready?(handle) do
+    case impl() do
+      nil ->
+        true
+
+      module ->
+        if Code.ensure_loaded?(module) and function_exported?(module, :ready?, 1), do: module.ready?(handle), else: true
     end
   end
 end
@@ -59,4 +75,7 @@ defmodule Server.Arbiter.Test do
     if pid = Application.get_env(:server, :test_pid), do: send(pid, {:spawned, exports})
     {:ok, :test}
   end
+
+  @impl true
+  def ready?(_handle), do: true
 end
