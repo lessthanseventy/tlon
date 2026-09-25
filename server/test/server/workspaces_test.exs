@@ -348,5 +348,17 @@ defmodule Server.WorkspacesTest do
       assert by_agent[amy.agent_id].ask_default == "allow"
       refute Map.has_key?(by_agent, bob.agent_id)
     end
+
+    test "a policy model outranks the archetype default, for that workspace only" do
+      {:ok, ws} = Workspaces.register(%{name: "Tlön", roster: [%{"archetype" => "surveyor", "name" => "tertius"}]})
+      [seat] = Workspaces.bench(ws.id)
+      glm = %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}
+      {:ok, _} = Workspaces.set_policy(ws.id, seat.agent_id, %{model: glm})
+
+      profile = Server.Profiles.fetch("tertius", ws.id)
+      assert profile.model == %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}
+      assert profile.harness == :pi, "a non-anthropic pin brings pi back — the harness follows the model"
+      assert Server.Profiles.fetch("tertius").model.model == "claude-sonnet-5"
+    end
   end
 end

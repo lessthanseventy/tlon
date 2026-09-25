@@ -162,12 +162,14 @@ defmodule Server.ProfilesTest do
       assert perms["permission"]["*"] == "allow"
     end
 
-    test "drives ollama-first (glm-5.2) — no pi-multi-account Claude impersonation by default" do
+    test "drives Sonnet, so at home it runs on the Claude Code harness" do
       assert Profiles.fetch("tertius").model == %{
-               provider: "ollama-cloud",
-               model: "glm-5.2",
+               provider: "anthropic",
+               model: "claude-sonnet-5",
                thinking: "medium"
              }
+
+      assert Server.Harness.resolve(Profiles.fetch("tertius").model, "home") == :claude_code
     end
 
     test "unknown profile → nil" do
@@ -176,29 +178,6 @@ defmodule Server.ProfilesTest do
 
     test "repo/0 is the ficciones root — the single path the Tlön claude-code window shares, not a second copy" do
       assert Profiles.repo() =~ ~r{ficciones$}
-    end
-
-    test "an operator override (the settings file) is merged over the compiled model" do
-      dir = Path.join(System.tmp_dir!(), "aleph-prof-cfg-#{System.unique_integer([:positive])}")
-      path = Path.join(dir, "config.json")
-      File.mkdir_p!(dir)
-
-      File.write!(
-        path,
-        Jason.encode!(%{
-          "coworkers" => %{"tertius" => %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}}
-        })
-      )
-
-      previous = Application.get_env(:server, :operator_config_path)
-      Application.put_env(:server, :operator_config_path, path)
-
-      on_exit(fn ->
-        Application.put_env(:server, :operator_config_path, previous)
-        File.rm_rf!(dir)
-      end)
-
-      assert Profiles.fetch("tertius").model == %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}
     end
 
     test "a workspace-less fetch inherits the archetype default — a policy belongs to a pairing" do
@@ -431,9 +410,9 @@ defmodule Server.ProfilesTest do
       assert p.mcp == Profiles.archetype(:builder).mcp
     end
 
-    test "builder instantiates as a claude_code harness; surveyor as pi" do
+    test "builder and surveyor both instantiate on the claude_code harness" do
       assert Profiles.instantiate(%{archetype: :builder, name: "hronir"}).harness == :claude_code
-      assert Profiles.instantiate(%{archetype: :surveyor, name: "tertius"}).harness == :pi
+      assert Profiles.instantiate(%{archetype: :surveyor, name: "tertius"}).harness == :claude_code
     end
 
     test "roster_entry normalizes string- and atom-keyed entries; a string archetype → its atom" do
@@ -502,16 +481,13 @@ defmodule Server.ProfilesTest do
   end
 
   describe "fetch/1 resolves through the archetype registry (back-compat)" do
-    # REGRESSION LOCK: tertius is the only live-spawned profile (Slice-0 Tlön center). Its rendered
-    # output MUST stay byte-identical across the archetype refactor. Golden values captured from the
-    # pre-refactor render (mix run --no-start): glm-5.2 / ollama-cloud / medium, machine_overview
-    # present, system_prompt == @tertius_role.
-    test "fetch('tertius') materialises byte-identically to pre-refactor (the live Tlön spawn)" do
+    # tertius is the live Tlön centre: its render carries the surveyor's model, role and tools.
+    test "fetch('tertius') materialises the surveyor archetype (the live Tlön spawn)" do
       r = Profiles.render(Profiles.fetch("tertius"), %{}, %{})
       assert r.system_prompt == Profiles.archetype(:surveyor).system_prompt
       assert r.system_prompt =~ "tertius"
-      assert r.settings["defaultModel"] == "glm-5.2"
-      assert r.settings["defaultProvider"] == "ollama-cloud"
+      assert r.settings["defaultModel"] == "claude-sonnet-5"
+      assert r.settings["defaultProvider"] == "anthropic"
       assert r.settings["defaultThinkingLevel"] == "medium"
       assert "machine_overview" in r.mcp["mcpServers"]["tlon"]["directTools"]
     end
@@ -525,11 +501,8 @@ defmodule Server.ProfilesTest do
              }
     end
 
-    test "the archetype model defaults are pinned both ways (surveyor→glm, the other five→sonnet)" do
-      # Guards the Task 1-2 review's "sonnet-vs-glm untested" gap.
-      assert Profiles.archetype(:surveyor).model.model == "glm-5.2"
-
-      for k <- ~w(reviewer planner builder researcher assistant)a do
+    test "every archetype defaults to claude-sonnet-5 — Claude Code is the one harness Tlön spawns" do
+      for k <- ~w(surveyor reviewer planner builder researcher assistant)a do
         assert Profiles.archetype(k).model.model == "claude-sonnet-5",
                "archetype #{k} should default to claude-sonnet-5"
       end

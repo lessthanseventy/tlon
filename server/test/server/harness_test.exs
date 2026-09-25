@@ -61,11 +61,11 @@ defmodule Server.HarnessTest do
   end
 
   describe "instantiate/1 binds the harness from model × environment" do
-    test "at home, every anthropic-model archetype rides claude_code; the glm surveyor rides pi" do
+    test "at home, every archetype (all anthropic-model) rides claude_code" do
       assert Profiles.instantiate(%{archetype: :builder, name: "hronir"}).harness == :claude_code
       assert Profiles.instantiate(%{archetype: :reviewer, name: "vera"}).harness == :claude_code
       assert Profiles.instantiate(%{archetype: :planner, name: "borges"}).harness == :claude_code
-      assert Profiles.instantiate(%{archetype: :surveyor, name: "tertius"}).harness == :pi
+      assert Profiles.instantiate(%{archetype: :surveyor, name: "tertius"}).harness == :claude_code
     end
 
     test "at work the same archetypes bind to pi — the personal sub is out of the loop" do

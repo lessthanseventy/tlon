@@ -83,7 +83,7 @@ defmodule Server.Profiles do
   ## The `tertius` coworker
 
   One coworker profile: `tertius`, the Tlön center — the Orbis Tertius meta agent
-  (`tertius`), glm-5.2, on the root machine thread. Design:
+  (`tertius`), on the root machine thread. Design:
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`.
 
   - **Machine-scope tlon citizen.** Its MCP (`@tertius_mcp`) binds every token to scope
@@ -91,7 +91,8 @@ defmodule Server.Profiles do
     project threads (DB scope CHECK). `directTools` are the record/read verbs + `machine_overview`
     (the cross-leaf read); `excludeTools` cuts the cross-thread verbs (`consult_peer`, `open_thread`,
     `close_thread`) for self-containment. Model-to-model consultation is `/consult`+`/fresh`.
-  - **Driver.** glm-5.2 (ollama). Real Claude is the `hronir` window, not a driver here.
+  - **Driver.** Sonnet, so at home it runs on the Claude Code harness like every other coworker; a
+    workspace policy `model` is how it goes back to pi.
   - **Sandboxed + yolo permissions.** `@tlon_sandbox` + `@tlon_permissions`: `yoloMode` auto-approves
     asks so an autonomous coworker never stalls, but yolo is deny-PRESERVING, so the
     catastrophic-command + secret-path floor still holds.
@@ -471,19 +472,17 @@ defmodule Server.Profiles do
     %{provider: "ollama-cloud", model: "deepseek-v4-pro", thinking: "high"}
   ]
 
-  # The two archetype-default drivers. `@glm` is the ollama-cloud synthesizer (surveyor); `@sonnet` is
-  # real Claude via the anthropic provider (auth.json + models-store.json carry it) — the design
-  # default for the disciplines that ship code/plans/research. Note this is NOT a model-ring entry:
-  # the SETTINGS `m` cycle stays ollama-only, but an archetype template may still default to Claude,
-  # and the operator can still retarget any instance via Console.Config or a roster-entry override.
-  @glm %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}
+  # Every archetype's default: real Claude, which at home resolves to the Claude Code harness
+  # (`Server.Harness.resolve/2`) — the one harness Tlön spawns for now. Not a model-ring entry: the
+  # SETTINGS `m` cycle stays ollama-only, and the operator can still retarget any instance via
+  # Console.Config or a roster-entry override (that is how a pi coworker comes back).
   @sonnet %{provider: "anthropic", model: "claude-sonnet-5", thinking: "medium"}
 
   # The archetype registry — role TEMPLATES keyed by archetype atom. A template is the `%Profile{}`
   # content fields minus `name` (`model`/`mcp`/`sandbox`/`permissions`/`system_prompt`/`add_extensions`);
   # `instantiate/1` (Task 3) stamps an instance `name` over one to mint a materialisation-ready profile.
   # Each archetype is a distilled discipline — the "extract a superpower as a coworker" content.
-  #   * surveyor  — the tertius meta/synthesis role (glm-5.2, machine_overview cross-leaf read).
+  #   * surveyor  — the tertius meta/synthesis role (machine_overview cross-leaf read).
   #   * reviewer  — read-only code review; the write/edit deny-floor is STRUCTURAL (@reviewer_permissions).
   #   * builder   — TDD RED→GREEN→REFACTOR + verification-before-completion; can write.
   #   * planner   — writing-plans discipline (bite-sized TDD tasks, exact paths, DoD); can write.
@@ -491,7 +490,7 @@ defmodule Server.Profiles do
   #   * assistant — general life-assistant over a non-code workspace's git-tracked paths (sandbox tunable).
   @archetypes %{
     surveyor: %{
-      model: @glm,
+      model: @sonnet,
       mcp: @tertius_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
@@ -550,14 +549,11 @@ defmodule Server.Profiles do
   #
   #   * tertius — the Tlön CENTER (Orbis Tertius meta agent `tertius`; its tmux socket is
   #     per Workspace, `Server.Tmux.socket/1` — not name-derived off this profile).
-  #     NO model override — it inherits the surveyor archetype's @glm default, so its materialisation
-  #     stays BYTE-IDENTICAL to the pre-archetype profile (it is the only live Slice-0 spawn;
-  #     regression-locked) WHILE leaving `Console.Config` (the SETTINGS `m` verb) free to retarget it: a
-  #     seed `model:` would be highest-precedence and shadow that override. Genuine Claude is the honest
-  #     `hronir` window, not a pi-multi-account impersonation.
+  #     NO model override — it inherits the surveyor archetype's default, leaving `Console.Config` (the
+  #     SETTINGS `m` verb) free to retarget it: a seed `model:` would be highest-precedence and shadow
+  #     that override.
   #   * reviewer — the read-only review gate. NO model override → it inherits the reviewer archetype's
-  #     Sonnet default (A2: the legacy glm-5.2 was incidental, reviewer isn't live-spawned, so this
-  #     intentionally flips glm-5.2 → claude-sonnet-5).
+  #     Sonnet default.
   @seed_roster [
     %{archetype: :surveyor, name: "tertius"},
     %{archetype: :reviewer, name: "reviewer"}
@@ -612,7 +608,8 @@ defmodule Server.Profiles do
   Build a materialisation-ready `%Profile{}` from a roster entry `%{archetype:, name:, model:, knobs:}`:
   identity (`name` → socket/config_dir/handle) is the instance name, content comes from the archetype
   template, and the system prompt is personalized with the instance handle. Model precedence (A3):
-  roster-entry `model` > `Server.OperatorConfig.coworker_model(name)` (the SETTINGS panel writes it) > archetype default.
+  roster-entry `model` > the (workspace, coworker) policy's `model` (`Server.Workspaces.set_policy/3`)
+  > archetype default. The harness follows the resolved model (`Server.Harness.resolve/2`).
   """
   @spec instantiate(%{required(:archetype) => atom(), required(:name) => String.t(), optional(any()) => any()}) ::
           Profile.t()
