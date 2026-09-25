@@ -23,6 +23,9 @@ config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 2
 # Test transcripts are written moments before they are imported; nothing here is a live session.
 config :server, import_live_window_s: 0
 
+# The machine seed (Server.Seed.machine/0) is the box's own file; tests that want one pass a path.
+config :server, machine_seed_path: "/nonexistent/tlon-test-seed.exs"
+
 # Point the operator settings file away from the real ~/.config so the box's own overrides can
 # never leak into test assertions; tests that want one pass an explicit path.
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"

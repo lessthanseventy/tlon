@@ -44,6 +44,9 @@ defmodule Server.Bootstrap do
   """
   @spec ensure() :: {:ok, Workspace.t()} | {:error, Ecto.Changeset.t()}
   def ensure do
+    # the machine's declared workspaces first: when it declares any, its first is the default, never @default
+    _ = Server.Seed.ensure_workspaces()
+
     with {:ok, workspace} <- default_workspace() do
       repair(workspace)
       repair_projects()

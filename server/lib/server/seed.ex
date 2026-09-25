@@ -10,6 +10,10 @@ defmodule Server.Seed do
   (`Server.Bootstrap` calls `ensure/0` after its integrity repair), and leaves the content in one
   editable file rather than scattered through code.
 
+  The MACHINE seed (`machine/0`, `~/.config/tlon/seed.exs`) is the box's half: its workspaces, their
+  projects and bench, and facts about its operator — written by the machine (ficciones), never kept
+  in this repo. `Server.Bootstrap` registers its workspaces before it would invent a default.
+
   An operator's manual `forget_fact` is respected: a tombstoned seed fact is NOT resurrected — the
   idempotency check is existence-by-intent, forgotten or not.
   """
@@ -20,6 +24,7 @@ defmodule Server.Seed do
   alias Server.Fact
   alias Server.Projects
   alias Server.Repo
+  alias Server.Workspaces
 
   require Logger
 
@@ -57,12 +62,15 @@ defmodule Server.Seed do
       :skipped
   end
 
-  @doc "Load the seed data (`%{facts: [...], projects: [...]}`) — the curated file with the promoted
-  facts appended. A promoted fact sharing a curated `intent` is harmless (ensure_facts dedups by intent)."
+  @doc """
+  Load the seed data (`%{facts: [...], projects: [...]}`) — the curated file with the promoted
+  facts and the machine seed's facts appended. A later fact sharing an `intent` is harmless (ensure_facts
+  dedups by intent).
+  """
   @spec load() :: map()
   def load do
     {data, _binding} = Code.eval_file(seed_file())
-    Map.update(data, :facts, promoted_facts(), &(&1 ++ promoted_facts()))
+    Map.update(data, :facts, promoted_facts(), &(&1 ++ promoted_facts() ++ (machine()[:facts] || [])))
   end
 
   @doc "The machine-appended promoted facts (`[]` when the file doesn't exist yet)."
@@ -177,4 +185,72 @@ defmodule Server.Seed do
       end
     end
   end
+
+  @doc """
+  The machine's own seed — this box's workspaces (repos, bench, projects) and facts about its
+  operator — which stay out of this repo: the machine writes it (ficciones' flake) at
+  `:machine_seed_path`. `%{}` when the file is absent or unreadable, so a fresh box still boots on
+  `Bootstrap`'s default workspace.
+  """
+  @spec machine() :: map()
+  def machine do
+    path = Path.expand(Application.get_env(:server, :machine_seed_path, "~/.config/tlon/seed.exs"))
+
+    if File.exists?(path) do
+      {data, _binding} = Code.eval_file(path)
+      data
+    else
+      %{}
+    end
+  rescue
+    e ->
+      Logger.warning("Server.Seed: machine seed skipped — #{Exception.message(e)}")
+      %{}
+  end
+
+  @doc """
+  Register the machine seed's missing workspaces, in file order, and any of their projects the store
+  lacks. Runs before `Bootstrap` would invent a default, so the first declared workspace is the
+  default. An existing workspace's bench and repos are the operator's — only missing projects are added.
+  Returns how many workspaces were registered.
+  """
+  @spec ensure_workspaces() :: non_neg_integer()
+  def ensure_workspaces do
+    Enum.count(machine()[:workspaces] || [], &ensure_workspace/1)
+  end
+
+  defp ensure_workspace(%{name: name} = attrs) do
+    projects = Enum.map(attrs[:projects] || [], &project_attrs/1)
+
+    {registered?, workspace} =
+      case Workspaces.by_name(name) do
+        nil -> {true, register_workspace(attrs, projects)}
+        workspace -> {false, workspace}
+      end
+
+    if workspace, do: Enum.each(projects, &ensure_project(workspace.id, &1))
+    registered? and workspace != nil
+  end
+
+  defp register_workspace(attrs, projects) do
+    repos = Enum.flat_map(projects, fn p -> Enum.map(p.repos, & &1["path"]) end)
+    base = %{type: "code", scope: "project", roster: []}
+
+    base
+    |> Map.merge(Map.take(attrs, [:name, :type, :scope, :roster]))
+    |> Map.put(:repos, repos)
+    |> Workspaces.register()
+    |> case do
+      {:ok, workspace} ->
+        workspace
+
+      {:error, changeset} ->
+        Logger.warning("Server.Seed: workspace #{inspect(attrs.name)} rejected — #{inspect(changeset.errors)}")
+        nil
+    end
+  end
+
+  # A project's repos are written as paths; the store keeps `%{"name", "path"}`, named by the directory.
+  defp project_attrs(%{name: name} = project),
+    do: %{name: name, repos: Enum.map(project[:repos] || [], &%{"name" => Path.basename(&1), "path" => &1})}
 end
