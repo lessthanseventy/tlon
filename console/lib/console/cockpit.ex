@@ -877,14 +877,18 @@ defmodule Console.Cockpit do
   defp open_lazygit(%{stack_focus: id} = state) do
     flashing(state, "lazygit", fn ->
       if Console.Lazygit.available?() do
-        case Console.Server.worktree_for_thread(id) do
-          {:ok, cwd} -> spawn_lazygit(state, id, cwd)
-          {:error, reason} -> {:noreply, render(%{state | flash: "no repo for this thread (#{inspect(reason)})"})}
-        end
+        open_lazygit_worktree(state, id)
       else
         {:noreply, render(%{state | flash: "lazygit is not installed"})}
       end
     end)
+  end
+
+  defp open_lazygit_worktree(state, id) do
+    case Console.Server.worktree_for_thread(id) do
+      {:ok, cwd} -> spawn_lazygit(state, id, cwd)
+      {:error, reason} -> {:noreply, render(%{state | flash: "no repo for this thread (#{inspect(reason)})"})}
+    end
   end
 
   defp spawn_lazygit(state, id, cwd) do
@@ -1233,23 +1237,8 @@ defmodule Console.Cockpit do
   defp apply_effect({:habit_action, action}, state) do
     flashing(state, "habit action", fn ->
       case Reads.selected_habit(state) do
-        nil ->
-          {:noreply, render(%{state | flash: "no habit selected — Tab to HABITS, j/k to pick"})}
-
-        habit ->
-          {verb, result} =
-            case action do
-              :approve -> {"approved", Console.Server.approve_habit(habit.id)}
-              :reject -> {"rejected", Console.Server.reject_habit(habit.id)}
-            end
-
-          flash =
-            case result do
-              {:ok, _} -> "habit #{verb}"
-              _ -> "couldn't #{action} habit"
-            end
-
-          {:noreply, render(%{state | memory: nil, flash: flash})}
+        nil -> {:noreply, render(%{state | flash: "no habit selected — Tab to HABITS, j/k to pick"})}
+        habit -> act_on_habit(state, habit, action)
       end
     end)
   end
@@ -1311,6 +1300,22 @@ defmodule Console.Cockpit do
       nil ->
         {:noreply, render(%{state | flash: "nothing to yank here"})}
     end
+  end
+
+  defp act_on_habit(state, habit, action) do
+    {verb, result} =
+      case action do
+        :approve -> {"approved", Console.Server.approve_habit(habit.id)}
+        :reject -> {"rejected", Console.Server.reject_habit(habit.id)}
+      end
+
+    flash =
+      case result do
+        {:ok, _} -> "habit #{verb}"
+        _ -> "couldn't #{action} habit"
+      end
+
+    {:noreply, render(%{state | memory: nil, flash: flash})}
   end
 
   defp orchestrate(text, state) do
