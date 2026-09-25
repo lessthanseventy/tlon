@@ -516,7 +516,7 @@ defmodule Console.MixProject do
       # back — a native terminal widget, NOT a captured-and-repainted view (which felt laggy).
       {:ghostty, "~> 0.4"},
       # One styling authority on mix format, same as funes.
-      {:styler, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:quokka, "~> 2.13", only: [:dev, :test], runtime: false}
     ]
   end
 end

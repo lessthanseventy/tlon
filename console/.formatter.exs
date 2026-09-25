@@ -1,4 +1,4 @@
 [
-  plugins: [Styler],
+  plugins: [Quokka],
   inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
 ]
