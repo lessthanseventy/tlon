@@ -31,13 +31,13 @@ defmodule Console.Panel.NewThread do
     |> Console.Panel.clip(rect)
   end
 
-  def render(data, rect), do: Console.Panel.clip([[{"＋ ", :st_working}, {placeholder(data[:project]), :dim}]], rect)
+  def render(data, rect), do: Console.Panel.clip([[{"+ ", :st_working}, {placeholder(data[:project]), :dim}]], rect)
 
-  defp prefix(nil), do: "＋ new thread ▸ "
-  defp prefix(project), do: "＋ #{project} ▸ "
+  defp prefix(nil), do: "+ new thread ▸ "
+  defp prefix(project), do: "+ #{project} ▸ "
 
-  defp placeholder(nil), do: "‹＋ start a new thread… — click to type›"
-  defp placeholder(project), do: "‹＋ start a new thread in #{project}… — click to type, Tab picks the project›"
+  defp placeholder(nil), do: "‹+ start a new thread… — click to type›"
+  defp placeholder(project), do: "‹+ start a new thread in #{project}… — click to type, Tab picks the project›"
 
   @doc "Wrap width for the buffer — the content width minus the prefix. Shared with the height calc."
   def wrap_width(content_w, project \\ nil), do: max(content_w - String.length(prefix(project)), 8)
