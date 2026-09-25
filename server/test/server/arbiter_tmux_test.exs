@@ -38,6 +38,43 @@ defmodule Server.Arbiter.TmuxTest do
     end
   end
 
+  test "spawn: a seat on the bench spawns with its PROFILE's harness — a builder at home is Claude Code, whatever the agent row says" do
+    # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides
+    # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides
+    pi_root = Path.join(System.tmp_dir!(), "tlon_arbiter_pi_#{System.unique_integer([:positive])}")
+    prior = System.get_env("PI_CODING_AGENT_DIR")
+    System.put_env("PI_CODING_AGENT_DIR", Path.join(pi_root, "agent"))
+
+    on_exit(fn ->
+      if prior, do: System.put_env("PI_CODING_AGENT_DIR", prior), else: System.delete_env("PI_CODING_AGENT_DIR")
+      File.rm_rf!(pi_root)
+    end)
+
+    # seating the bench registers the agent row (engine `local`)
+    {:ok, ws} =
+      Server.Workspaces.register(%{
+        name: "benched",
+        type: "code",
+        scope: "project",
+        repos: [],
+        roster: [%{archetype: "builder", name: "hronir"}]
+      })
+
+    agent = Staff.agent_by_name("hronir")
+    {:ok, thread} = Channel.open_thread(%{title: "spawn me", workspace_id: ws.id})
+    {:ok, thread} = Staff.assign(thread, agent)
+
+    exports =
+      ~s(export TLON_MCP_URL="http://127.0.0.1:4040/mcp"\nexport TLON_THREAD="#{thread.id}"\nexport TLON_AUTHOR="hronir")
+
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {"", 1}}))
+
+    assert {:ok, _} = Arbiter.Tmux.spawn(exports)
+    assert_received {:tmux, ["-L", _, "new-session", "-d", "-s", _, "-n", _, cmd]}
+    assert cmd =~ "claude-code/launch.sh"
+    refute cmd =~ "exec pi"
+  end
+
   test "spawn: no session yet → new-session -d with the leaf as window 0, tagged; the claude engine gets the claude launcher",
        %{ws: ws, thread: t, exports: exports} do
     Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {"", 1}}))

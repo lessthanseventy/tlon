@@ -16,9 +16,15 @@ defmodule Server.Arbiter.Tmux do
   @behaviour Server.Arbiter
 
   alias Server.Agent
+  alias Server.Harness
+  alias Server.Profile
+  alias Server.Profiles
   alias Server.Repo
   alias Server.Thread
   alias Server.Tmux
+  alias Server.Workspaces
+
+  require Logger
 
   @impl true
   def wake(%{thread_id: thread_id} = session, prompt) do
@@ -46,7 +52,7 @@ defmodule Server.Arbiter.Tmux do
          ws when not is_nil(ws) <- workspace_id(thread),
          :absent <- leaf_state(ws, thread_id) do
       window = "t#{thread_id}"
-      script = Tmux.boot_script(exports, launcher(author))
+      script = Tmux.boot_script(exports, launcher(ws, author))
       cmd = "/bin/sh -c " <> Tmux.sh_single_quote(script)
 
       args =
@@ -117,10 +123,42 @@ defmodule Server.Arbiter.Tmux do
     end
   end
 
-  # Which harness: the agent's engine (or name) carrying "claude" gets Claude Code's launcher, which
-  # reads TLON_* from the env and joins the thread; everyone else gets bare `pi`, whose adapters
-  # extension registers from the same env. Both overridable — vendor is never design.
-  defp launcher(author) do
+  defp adapters_dir do
+    Application.get_env(:server, :adapters_dir) || System.get_env("TLON_ADAPTERS_DIR") ||
+      Path.join(System.user_home!(), "projects/ficciones/modules/adapters")
+  end
+
+  @doc "Collapse a prompt to one clean line (the console's rule: poking an agent is not a production write)."
+  def sanitize(prompt),
+    do: prompt |> String.replace(~r/[[:cntrl:]]/, " ") |> String.replace(~r/\s+/, " ") |> String.trim()
+
+  # Which harness: the coworker's PROFILE decides (Claude Code first, 2026-09-25) — the same
+  # `Harness.driver(profile.harness).launch_command/1` the staffing pass spawns its leaves with, so a
+  # spawn-on-post and a staffing spawn can never disagree about a seat. Only an author with no seat
+  # on the workspace's bench falls back to `launcher_by_engine/1`.
+  defp launcher(ws, author) do
+    bench = Workspaces.bench(ws)
+
+    case Profiles.leaf_profile(author, bench) do
+      %Profile{} = profile ->
+        _ = Profiles.materialise!(profile)
+        Harness.driver(profile.harness).launch_command(profile)
+
+      nil ->
+        launcher_by_engine(author)
+    end
+  rescue
+    e ->
+      Logger.warning(
+        "arbiter: profile launcher for #{author} failed (#{Exception.message(e)}); falling back to the engine"
+      )
+
+      launcher_by_engine(author)
+  end
+
+  # A hand-registered agent with no seat on the bench: the engine (or name) carrying "claude" gets
+  # Claude Code's launcher, everyone else bare `pi`. Both overridable — vendor is never design.
+  defp launcher_by_engine(author) do
     engine =
       case Repo.get_by(Agent, name: author) do
         %Agent{engine: e} when is_binary(e) -> String.downcase(e <> " " <> author)
@@ -131,13 +169,4 @@ defmodule Server.Arbiter.Tmux do
       do: Application.get_env(:server, :spawn_launcher_claude, Path.join(adapters_dir(), "claude-code/launch.sh")),
       else: Application.get_env(:server, :spawn_launcher_pi, "pi")
   end
-
-  defp adapters_dir do
-    Application.get_env(:server, :adapters_dir) || System.get_env("TLON_ADAPTERS_DIR") ||
-      Path.join(System.user_home!(), "projects/ficciones/modules/adapters")
-  end
-
-  @doc "Collapse a prompt to one clean line (the console's rule: poking an agent is not a production write)."
-  def sanitize(prompt),
-    do: prompt |> String.replace(~r/[[:cntrl:]]/, " ") |> String.replace(~r/\s+/, " ") |> String.trim()
 end
