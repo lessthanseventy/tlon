@@ -68,7 +68,6 @@ defmodule Server.Board do
   """
   def sidebar do
     thinking = Thinking.thinking_all()
-    root_id = with %Thread{id: id} <- Channel.machine_thread(), do: id
     last_by_thread = last_message_at()
     leads = leads_by_thread()
     prompts = Server.Attention.open_prompts_by_thread()
@@ -76,10 +75,13 @@ defmodule Server.Board do
     known = MapSet.new(workspaces, & &1.id)
     default_id = with %Workspace{id: id} <- List.first(workspaces), do: id
 
+    # every workspace has its own lobby (its oldest open machine thread), so the root is per workspace
+    roots = for w <- workspaces, %Thread{id: id} <- [Channel.machine_thread(w.id)], into: MapSet.new(), do: id
+
     threads =
       from(t in Thread, where: t.state == "open")
       |> Repo.all()
-      |> Enum.map(&sidebar_row(&1, root_id, thinking, last_by_thread, leads, prompts))
+      |> Enum.map(&sidebar_row(&1, roots, thinking, last_by_thread, leads, prompts))
 
     working_agents =
       thinking |> Map.values() |> List.flatten() |> MapSet.new(& &1.agent)
@@ -117,14 +119,14 @@ defmodule Server.Board do
     end
   end
 
-  defp sidebar_row(thread, root_id, thinking, last_by_thread, leads, prompts) do
+  defp sidebar_row(thread, roots, thinking, last_by_thread, leads, prompts) do
     %{
       id: thread.id,
       workspace_id: thread.workspace_id,
       channel_id: thread.channel_id,
       project_id: thread.project_id,
       title: thread.title,
-      root: thread.id == root_id,
+      root: MapSet.member?(roots, thread.id),
       stage: thread.stage,
       awaiting: thread.awaiting,
       # a coworker waiting on the operator (Server.Attention): `%{id, summary, options}` or nil

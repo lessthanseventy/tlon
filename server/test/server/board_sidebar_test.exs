@@ -42,6 +42,19 @@ defmodule Server.BoardSidebarTest do
     assert first.root == true
   end
 
+  test "every workspace's own lobby is its root — flagged, and first in its group" do
+    {:ok, _machine} = Bootstrap.ensure()
+    {:ok, other} = Workspaces.register(%{name: "Accessibility", roster: []})
+    {:ok, _} = Bootstrap.ensure()
+    lobby = Channel.machine_thread(other.id)
+    {:ok, _newer} = Channel.open_thread(%{title: "newer work", workspace_id: other.id})
+
+    %{threads: [first | rest]} = Enum.find(Board.sidebar(), &(&1.workspace.id == other.id))
+    assert first.id == lobby.id
+    assert first.root == true
+    refute Enum.any?(rest, & &1.root)
+  end
+
   test "closed threads are omitted; a second workspace gets its own group" do
     {:ok, _default} = Bootstrap.ensure()
     {:ok, other} = Workspaces.register(%{name: "otherland", type: "code", scope: "project", paths: [], roster: []})
