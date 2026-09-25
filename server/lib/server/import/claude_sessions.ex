@@ -43,7 +43,7 @@ defmodule Server.Import.ClaudeSessions do
 
     case turns(entries) do
       [{:operator, first, _} | _] = turns ->
-        if machine?(first) or smoke_test?(turns), do: nil, else: session(path, entries, first, turns)
+        if !(machine?(first) or smoke_test?(turns)), do: session(path, entries, first, turns)
 
       _ ->
         nil
@@ -77,7 +77,8 @@ defmodule Server.Import.ClaudeSessions do
 
   # pi-research drives pi with a prompt that is a path into its own install
   defp machine?(first),
-    do: Enum.any?(@machine_openers, &String.starts_with?(first, &1)) or String.starts_with?(first, Path.expand("~/.pi/"))
+    do:
+      Enum.any?(@machine_openers, &String.starts_with?(first, &1)) or String.starts_with?(first, Path.expand("~/.pi/"))
 
   # "test", "q", "config": a session whose every prompt is one bare word was checking the harness
   defp smoke_test?(turns),
@@ -106,9 +107,8 @@ defmodule Server.Import.ClaudeSessions do
   defp prompt(%{"type" => "user", "message" => %{"role" => "user", "content" => content}} = e) do
     text = text_of(content)
 
-    if e["isMeta"] || e["isSidechain"] || text == "" || String.starts_with?(text, ["<", "[Request interrupted"]),
-      do: nil,
-      else: text
+    if !(e["isMeta"] || e["isSidechain"] || text == "" || String.starts_with?(text, ["<", "[Request interrupted"])),
+      do: text
   end
 
   defp prompt(%{"type" => "message", "message" => %{"role" => "user", "content" => content}}) do
@@ -122,7 +122,7 @@ defmodule Server.Import.ClaudeSessions do
 
   defp reply(%{"type" => "assistant", "message" => %{"content" => content}} = e) do
     text = text_of(content)
-    if e["isSidechain"] || text == "", do: nil, else: text
+    if !(e["isSidechain"] || text == ""), do: text
   end
 
   defp reply(%{"type" => "message", "message" => %{"role" => "assistant", "content" => content}}) do

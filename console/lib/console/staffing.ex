@@ -128,7 +128,10 @@ defmodule Console.Staffing do
          {:ok, exports} <- machine_exports(workspace_id, name),
          # kitty: false — tmux wants its Ctrl+B prefix as legacy \x02, not CSI-u (see Terminal.init).
          {:ok, pid} <-
-           safe_spawn_harness(:machine, exports, launcher: profile_launcher(workspace_id, name, profile), kitty: false) do
+           safe_spawn_harness(:machine, exports,
+             launcher: profile_launcher(workspace_id, name, profile),
+             kitty: false
+           ) do
       pid
     else
       _error -> nil

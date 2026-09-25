@@ -75,7 +75,8 @@ defmodule Server.Attention do
     first = Enum.find_index(stripped, &Regex.match?(@cc_option, &1))
 
     question =
-      if first, do: stripped |> Enum.take(first) |> Enum.reverse() |> Enum.find(&String.ends_with?(String.trim(&1), "?"))
+      if first,
+        do: stripped |> Enum.take(first) |> Enum.reverse() |> Enum.find(&String.ends_with?(String.trim(&1), "?"))
 
     if length(matches) >= 2 and Enum.any?(matches, &(elem(&1, 0) == "❯")) and is_binary(question) do
       %{

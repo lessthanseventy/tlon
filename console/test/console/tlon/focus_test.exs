@@ -128,7 +128,10 @@ defmodule Console.Tlon.FocusTest do
     test "item_prev retreats, clamping at 0" do
       s = nav() |> Focus.handle(@layout, :item_next) |> Focus.handle(@layout, :item_next)
       assert Focus.cursor(s, @layout) == 2
-      s = s |> Focus.handle(@layout, :item_prev) |> Focus.handle(@layout, :item_prev) |> Focus.handle(@layout, :item_prev)
+
+      s =
+        s |> Focus.handle(@layout, :item_prev) |> Focus.handle(@layout, :item_prev) |> Focus.handle(@layout, :item_prev)
+
       assert Focus.cursor(s, @layout) == 0
     end
 

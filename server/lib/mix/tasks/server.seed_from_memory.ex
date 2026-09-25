@@ -154,7 +154,9 @@ defmodule Mix.Tasks.Server.SeedFromMemory do
       Repo.delete_all(from t in Thread, where: t.id == ^tid)
     end
 
-    Mix.shell().info("reset: cleared habits" <> if(kill == [], do: "", else: ", dropped threads #{Enum.join(kill, ",")}"))
+    Mix.shell().info(
+      "reset: cleared habits" <> if(kill == [], do: "", else: ", dropped threads #{Enum.join(kill, ",")}")
+    )
   end
 
   # Clear a prior import so a re-run reflects the current files: drop this thread's facts + their

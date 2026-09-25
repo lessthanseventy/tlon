@@ -178,7 +178,11 @@ defmodule Console.CockpitWorkspacesTest do
 
     test ":model cycles the ring one step and persists as a workspace_policy row" do
       {:ok, w} =
-        Workspaces.register(%{name: "Freedonia", type: "blank", roster: [%{"archetype" => "surveyor", "name" => "amy"}]})
+        Workspaces.register(%{
+          name: "Freedonia",
+          type: "blank",
+          roster: [%{"archetype" => "surveyor", "name" => "amy"}]
+        })
 
       [seat] = Workspaces.bench(w.id)
       next = Author.apply_coworker_knob!(roster_edit_state(w.id), "amy", :model)
@@ -197,7 +201,11 @@ defmodule Console.CockpitWorkspacesTest do
 
     test ":yolo flips the ask-vs-allow default on the workspace_policy row" do
       {:ok, w} =
-        Workspaces.register(%{name: "Freedonia", type: "blank", roster: [%{"archetype" => "surveyor", "name" => "amy"}]})
+        Workspaces.register(%{
+          name: "Freedonia",
+          type: "blank",
+          roster: [%{"archetype" => "surveyor", "name" => "amy"}]
+        })
 
       [seat] = Workspaces.bench(w.id)
       yolo_state = roster_edit_state(w.id, %{author_edit: %{id: w.id, field: 3, sub: 0, mode: :sub, knob: :yolo}})

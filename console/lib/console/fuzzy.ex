@@ -34,7 +34,10 @@ defmodule Console.Fuzzy do
   """
   @spec match(String.t(), String.t()) :: integer() | nil
   def match(subject, query) do
-    case query |> String.downcase() |> String.graphemes() do
+    query
+    |> String.downcase()
+    |> String.graphemes()
+    |> case do
       [] -> 0
       q -> subject |> String.downcase() |> String.graphemes() |> walk(q, nil, 0, 0, nil)
     end

@@ -91,7 +91,11 @@ defmodule Server.WorktreeTest do
       %{ws: ws, project: project}
     end
 
-    test "a workline thread (has a slug) → a lazily-ensured .worktrees/<slug> checkout", %{repo: repo, ws: ws, project: p} do
+    test "a workline thread (has a slug) → a lazily-ensured .worktrees/<slug> checkout", %{
+      repo: repo,
+      ws: ws,
+      project: p
+    } do
       thread = struct!(Server.Thread, %{id: 1, workspace_id: ws.id, project_id: p.id, slug: "redis-cache", title: "t"})
       assert {:ok, wt} = Server.worktree_for_thread(thread)
       assert wt == Worktree.path(repo, "redis-cache")

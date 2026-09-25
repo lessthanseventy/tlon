@@ -9,21 +9,24 @@ defmodule Console.Panel.MemoryTest do
 
   @rect %{x: 0, y: 0, w: 60, h: 100}
 
-  defp fact(text), do: %{text: text, kind: "constraint", provenance: "stated", check_cmd: nil, incident: nil, taught: nil}
+  defp fact(text),
+    do: %{text: text, kind: "constraint", provenance: "stated", check_cmd: nil, incident: nil, taught: nil}
+
   defp habit(text, by), do: %{text: text, proposed_by: by, rationale: nil, id: 1}
 
   defp coverage, do: %{facts: 30, embedded: 23, pinned_count: 8, pinned_tokens: 1100, budget: 4000, model: "m"}
 
   defp data(extra \\ %{}) do
-    Map.merge(%{coverage: coverage(), pinned: [fact("prefer X"), fact("never Y")], habits: [habit("do Z", "glm")]}, extra)
+    Map.merge(
+      %{coverage: coverage(), pinned: [fact("prefer X"), fact("never Y")], habits: [habit("do Z", "glm")]},
+      extra
+    )
   end
 
   defp style_of(rows, needle) do
-    Enum.find_value(rows, fn row ->
-      case row do
-        [{t, s}] -> if String.contains?(t, needle), do: s
-        _ -> nil
-      end
+    Enum.find_value(rows, fn
+      [{t, s}] -> if String.contains?(t, needle), do: s
+      _ -> nil
     end)
   end
 

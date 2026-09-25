@@ -98,7 +98,8 @@ defmodule Server.Bus do
   # Habits are machine-wide (no thread_id key of their own), so they ride their own topic
   # plus the topic of the thread that PROPOSED them (source_thread_id, for provenance) when
   # there was one — letting the cockpit's review surface and that thread both hear it.
-  def broadcast({tag, %Server.Habit{} = habit} = event) when tag in [:habit_proposed, :habit_approved, :habit_rejected] do
+  def broadcast({tag, %Server.Habit{} = habit} = event)
+      when tag in [:habit_proposed, :habit_approved, :habit_rejected] do
     publish([habits_topic() | thread_topics(habit.source_thread_id)], event)
   end
 
@@ -111,7 +112,8 @@ defmodule Server.Bus do
 
   # Projects are workspace-scoped (no thread_id of their own): their own topic + the
   # cross-thread activity feed, like workspaces.
-  def broadcast({tag, %Server.Project{}} = event) when tag in [:project_registered, :project_edited, :project_removed] do
+  def broadcast({tag, %Server.Project{}} = event)
+      when tag in [:project_registered, :project_edited, :project_removed] do
     publish([projects_topic(), activity_topic()], event)
   end
 

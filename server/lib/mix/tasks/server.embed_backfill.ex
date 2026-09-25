@@ -32,7 +32,10 @@ defmodule Mix.Tasks.Server.EmbedBackfill do
       ids
       |> Enum.with_index(1)
       |> Enum.reduce({0, 0}, fn {id, n}, {ok, failed} ->
-        case Fact |> Repo.get(id) |> Recall.embed_fact() do
+        Fact
+        |> Repo.get(id)
+        |> Recall.embed_fact()
+        |> case do
           {:ok, _} ->
             {ok + 1, failed}
 

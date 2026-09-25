@@ -58,7 +58,9 @@ defmodule Server.SearchTest do
 
   describe "facts/2 — FTS over the fact corpus" do
     test "finds a banked fact by a word in its text" do
-      {:ok, _} = Dossier.bank_fact(%{kind: "learned", text: "raxol supports embedding via a PTY", provenance: "derived"})
+      {:ok, _} =
+        Dossier.bank_fact(%{kind: "learned", text: "raxol supports embedding via a PTY", provenance: "derived"})
+
       {:ok, _} = Dossier.bank_fact(%{kind: "learned", text: "an unrelated conclusion", provenance: "derived"})
 
       %{shown: shown, more: more} = Search.facts("embedding")

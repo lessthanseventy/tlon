@@ -96,7 +96,10 @@ defmodule Console.Cockpit.AuthorTest do
       refute Enum.any?(labels, &String.contains?(&1, "#1"))
     end
 
-    test "a ticket that already blocks is offered as an UNBLOCK — one menu, both directions", %{ticket: t, others: others} do
+    test "a ticket that already blocks is offered as an UNBLOCK — one menu, both directions", %{
+      ticket: t,
+      others: others
+    } do
       menu = Author.blocker_menu(t, others, [2], 0, 0)
       labels = Enum.map(menu.items, & &1.label)
 

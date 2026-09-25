@@ -15,21 +15,41 @@ defmodule Console.Orchestrator.Router do
     * anything else                 → `{:chat, text}`  (handed to the tertius agent, v2)
   """
 
-  @doc "Route a typed line to a dispatch action. Pure."
+  @prefix_routes [
+    {"tell ", :tell},
+    {"remember ", :note},
+    {"note ", :note},
+    {"file a ticket ", :ticket},
+    {"ticket: ", :ticket},
+    {"ticket ", :ticket},
+    {"spike ", {:open, "build"}},
+    {"explore ", {:open, nil}},
+    {"build ", {:open, "intent"}}
+  ]
+
+  @doc """
+  Route a typed line to a dispatch action. Pure.
+  """
   def route(text) do
     orig = String.trim(text)
     down = String.downcase(orig)
+    prefixed(orig, down) || unprefixed(orig, down)
+  end
 
+  # First matching prefix wins, so a longer prefix sits above a shorter one it starts with.
+  defp prefixed(orig, down) do
+    Enum.find_value(@prefix_routes, fn {prefix, kind} ->
+      if body = after_prefix(orig, down, prefix), do: prefixed_action(kind, body, orig)
+    end)
+  end
+
+  defp prefixed_action(:tell, body, orig), do: tell(body, orig)
+  defp prefixed_action(:note, body, _orig), do: {:note, body}
+  defp prefixed_action(:ticket, body, _orig), do: {:ticket, body}
+  defp prefixed_action({:open, kind}, body, _orig), do: {:open, kind, body}
+
+  defp unprefixed(orig, down) do
     cond do
-      body = after_prefix(orig, down, "tell ") -> tell(body, orig)
-      body = after_prefix(orig, down, "remember ") -> {:note, body}
-      body = after_prefix(orig, down, "note ") -> {:note, body}
-      body = after_prefix(orig, down, "file a ticket ") -> {:ticket, body}
-      body = after_prefix(orig, down, "ticket: ") -> {:ticket, body}
-      body = after_prefix(orig, down, "ticket ") -> {:ticket, body}
-      body = after_prefix(orig, down, "spike ") -> {:open, "build", body}
-      body = after_prefix(orig, down, "explore ") -> {:open, nil, body}
-      body = after_prefix(orig, down, "build ") -> {:open, "intent", body}
       n = approve_id(orig) -> {:approve, n}
       String.contains?(down, "blocked") -> {:query, :blocked}
       String.contains?(down, "free") or down == "roster" -> {:query, :roster}

@@ -654,8 +654,10 @@ defmodule Console.Keymap do
          %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
        ), do: stack_jump(state, :last)
 
-  defp handle_tlon(%{key: :enter}, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state),
-    do: {state, :open_focused_thread}
+  defp handle_tlon(
+         %{key: :enter},
+         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
+       ), do: {state, :open_focused_thread}
 
   # CONVERSATION mode (a thread opened): j/k scroll it; Esc goes back to the list.
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state) when is_vertical(key),
@@ -880,7 +882,10 @@ defmodule Console.Keymap do
   # racing a concurrent edit would delete the wrong one.
   defp config(%{key: :char, char: c}, %{author_edit: %{mode: :sub, field: 2, id: id, sub: sub}} = state)
        when c in ["x", "d"] do
-    case state |> workspace_field(id, :repos) |> Enum.at(sub) do
+    state
+    |> workspace_field(id, :repos)
+    |> Enum.at(sub)
+    |> case do
       %{id: repo_id} -> {state, {:remove_repo, id, repo_id}}
       _ -> {state, :none}
     end
@@ -906,7 +911,10 @@ defmodule Console.Keymap do
   # delete the AGENT: that is durable identity other threads point at.
   defp config(%{key: :char, char: c}, %{author_edit: %{mode: :sub, field: 3, id: id, sub: sub}} = state)
        when c in ["x", "d"] do
-    case state |> workspace_field(id, :bench) |> Enum.at(sub) do
+    state
+    |> workspace_field(id, :bench)
+    |> Enum.at(sub)
+    |> case do
       %Server.Coworker{id: seat_id} -> {state, {:unseat, id, seat_id}}
       _ -> {state, :none}
     end
@@ -1077,7 +1085,10 @@ defmodule Console.Keymap do
   # Resolve the sub-selected roster entry's `name` off the LIVE workspace and emit the apply effect —
   # a vanished entry (deleted mid-edit, or `sub` past the shrunk list) is a no-op, not a crash.
   defp roster_knob_apply(%{author_edit: %{id: id, sub: sub} = edit} = state) do
-    case state |> workspace_field(id, :bench) |> Enum.at(sub) do
+    state
+    |> workspace_field(id, :bench)
+    |> Enum.at(sub)
+    |> case do
       %Server.Coworker{name: name} -> {state, {:coworker_knob, name, edit_knob(edit)}}
       _ -> {state, :none}
     end

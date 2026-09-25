@@ -31,7 +31,8 @@ defmodule Server.WorklineReviewTest do
   defp thread(stage \\ "review"), do: struct!(Thread, %{id: 7, title: "t", slug: "fence-test", stage: stage})
 
   test "submit writes review.md, commits it, and the artifact checker then passes", %{root: root} do
-    assert {:ok, "work/fence-test/review.md"} = Review.submit(thread(), "## Verdict: approve\n\nclean", "menard-machine")
+    assert {:ok, "work/fence-test/review.md"} =
+             Review.submit(thread(), "## Verdict: approve\n\nclean", "menard-machine")
 
     assert File.read!(Path.join(root, "work/fence-test/review.md")) =~ "Verdict: approve"
     {out, 0} = System.cmd("git", ["-C", root, "log", "--oneline", "-1"], stderr_to_stdout: true)

@@ -306,7 +306,8 @@ defmodule Console.ViewTest do
     end
 
     test "pinned ON, the pane splits below the floor too — that split was asked for" do
-      placements = View.compose(chat_reads(%{session_pane: 7, session_pane_mode: true, session: :no_session}, 7), 90, 40)
+      placements =
+        View.compose(chat_reads(%{session_pane: 7, session_pane_mode: true, session: :no_session}, 7), 90, 40)
 
       assert {Panel.Terminal, _data, sess} = Enum.find(placements, &match?({Panel.Terminal, _, _}, &1))
       assert sess.x > stack_rect(placements).x

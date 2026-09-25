@@ -100,23 +100,24 @@ defmodule Console.Cockpit.Boards do
   @spec promote_selected_ticket(map()) :: map()
   def promote_selected_ticket(state) do
     case selected_ticket(state, ticket_columns(state)) do
-      %{id: id} = ticket ->
-        # The server opens the thread on the ticket's project and posts the ticket as the opening ask;
-        # that post is what staffs the lead, so nothing is spawned from here.
-        case Safe.value(fn -> Tickets.start_thread(ticket) end, nil) do
-          {:ok, thread} ->
-            %{
-              Console.Cockpit.Drawer.close(state)
-              | focused_id: thread.id,
-                flash: "ticket ##{id} → thread · waking its lead"
-            }
+      %{id: _} = ticket -> start_ticket_thread(state, ticket)
+      _ -> %{state | flash: "no ticket selected"}
+    end
+  end
 
-          _ ->
-            %{state | flash: "couldn't promote the ticket"}
-        end
+  # The server opens the thread on the ticket's project and posts the ticket as the opening ask;
+  # that post is what staffs the lead, so nothing is spawned from here.
+  defp start_ticket_thread(state, %{id: id} = ticket) do
+    case Safe.value(fn -> Tickets.start_thread(ticket) end, nil) do
+      {:ok, thread} ->
+        %{
+          Console.Cockpit.Drawer.close(state)
+          | focused_id: thread.id,
+            flash: "ticket ##{id} → thread · waking its lead"
+        }
 
       _ ->
-        %{state | flash: "no ticket selected"}
+        %{state | flash: "couldn't promote the ticket"}
     end
   end
 

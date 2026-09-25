@@ -18,7 +18,9 @@ defmodule Console.Backend.Remote do
       case e.original do
         # the link: not connected, or the server took longer than the timeout
         {:erpc, reason} when reason in [:noconnection, :timeout, :notsup] ->
-          raise Console.Backend.ServerDown, node: node_name(), reason: reason, mfa: {mod, fun, length(args)}
+          reraise Console.Backend.ServerDown,
+                  [node: node_name(), reason: reason, mfa: {mod, fun, length(args)}],
+                  __STACKTRACE__
 
         # a raise on the server comes back wrapped; re-raise it as itself so a call site's
         # `rescue` / Console.Safe sees the class it always saw

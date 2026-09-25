@@ -69,9 +69,7 @@ defmodule Server.Import.Memory do
   # An older memory is plain markdown, named by its folder (`-home-andrew-projects-x`) and file,
   # since one folder's MEMORY.md is its notes. A new-style MEMORY.md is only an index of links.
   defp plain(path, content) do
-    if index?(content) do
-      nil
-    else
+    if !index?(content) do
       folder = path |> Path.dirname() |> Path.dirname() |> Path.basename()
       %{name: "#{folder}/#{Path.basename(path, ".md")}", type: nil, text: cap(content)}
     end

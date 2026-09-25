@@ -30,7 +30,8 @@ defmodule Console.Panel.Tertius do
   end
 
   # The live orchestrate buffer with a trailing caret, or the idle placeholder.
-  defp input_row(%{kind: :orchestrate, buffer: buffer}), do: [{"tertius ▸ ", :accent}, {buffer, :normal}, {"▎", :accent}]
+  defp input_row(%{kind: :orchestrate, buffer: buffer}),
+    do: [{"tertius ▸ ", :accent}, {buffer, :normal}, {"▎", :accent}]
 
   defp input_row(_idle), do: [{"tertius ▸ ", :accent}, {@placeholder, :dim}]
 end

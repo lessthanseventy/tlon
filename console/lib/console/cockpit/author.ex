@@ -73,7 +73,13 @@ defmodule Console.Cockpit.Author do
         do: [%{label: "Delete ##{channel.name}", action: {:delete_channel, channel}, danger: true}],
         else: []
 
-    %{title: "##{channel.name}", x: x, y: y, cursor: 0, items: [%{label: "New channel…", action: :new_channel} | delete]}
+    %{
+      title: "##{channel.name}",
+      x: x,
+      y: y,
+      cursor: 0,
+      items: [%{label: "New channel…", action: :new_channel} | delete]
+    }
   end
 
   @doc """
@@ -90,7 +96,13 @@ defmodule Console.Cockpit.Author do
           else: %{label: "Blocked by ##{other.id} #{other.title}", action: {:block, ticket, other}}
       end
 
-    %{title: "##{ticket.id} #{ticket.title}", x: x, y: y, cursor: 0, items: items ++ [%{label: "Cancel", action: :close}]}
+    %{
+      title: "##{ticket.id} #{ticket.title}",
+      x: x,
+      y: y,
+      cursor: 0,
+      items: items ++ [%{label: "Cancel", action: :close}]
+    }
   end
 
   defp confirm_delete_channel_menu(channel, x, y) do
@@ -264,30 +276,31 @@ defmodule Console.Cockpit.Author do
 
   @doc false
   # Remove workspace `id` (D2.5's second `d`). Guards against stranding the cockpit on a deleted
-  # active workspace (falls back to the first remaining workspace) and clamps `author_cursor` to the shrunk list. A missing
-  # workspace (already gone) or a server hiccup flashes, never crashes.
+  # active workspace (falls back to the first remaining workspace) and clamps `author_cursor` to the
+  # shrunk list. A missing workspace (already gone) or a server hiccup flashes, never crashes.
   def remove_workspace!(state, id) do
     Safe.flash_on_error(state, "delete", fn ->
       case Workspaces.get(id) do
-        nil ->
-          %{state | flash: "workspace ##{id} already gone"}
-
-        workspace ->
-          case Workspaces.remove(workspace) do
-            {:ok, _} ->
-              state
-              |> Map.put(:active_key, if(state.active_key == id, do: first_remaining(id), else: state.active_key))
-              |> Map.put(:author_cursor, clamp_author_cursor(state.author_cursor))
-              |> Map.put(:flash, "deleted #{workspace.name}")
-
-            {:error, :last_workspace} ->
-              %{state | flash: "couldn't delete #{workspace.name} — the last workspace; threads must have a home"}
-
-            {:error, changeset} ->
-              %{state | flash: "couldn't delete #{workspace.name} — #{changeset_error(changeset)}"}
-          end
+        nil -> %{state | flash: "workspace ##{id} already gone"}
+        workspace -> remove_found_workspace(state, id, workspace)
       end
     end)
+  end
+
+  defp remove_found_workspace(state, id, workspace) do
+    case Workspaces.remove(workspace) do
+      {:ok, _} ->
+        state
+        |> Map.put(:active_key, if(state.active_key == id, do: first_remaining(id), else: state.active_key))
+        |> Map.put(:author_cursor, clamp_author_cursor(state.author_cursor))
+        |> Map.put(:flash, "deleted #{workspace.name}")
+
+      {:error, :last_workspace} ->
+        %{state | flash: "couldn't delete #{workspace.name} — the last workspace; threads must have a home"}
+
+      {:error, changeset} ->
+        %{state | flash: "couldn't delete #{workspace.name} — #{changeset_error(changeset)}"}
+    end
   end
 
   # Re-clamp the author cursor against the POST-delete count (one fewer row) — same edge-clamp
@@ -315,16 +328,17 @@ defmodule Console.Cockpit.Author do
   def edit_workspace!(state, id, attrs) do
     Safe.flash_on_error(state, "edit", fn ->
       case Workspaces.get(id) do
-        nil ->
-          %{state | flash: "workspace ##{id} already gone"}
-
-        workspace ->
-          case Workspaces.edit(workspace, attrs) do
-            {:ok, updated} -> reclamp_author_edit_sub(%{state | flash: "updated #{updated.name}"})
-            {:error, changeset} -> %{state | flash: "couldn't update #{workspace.name} — #{changeset_error(changeset)}"}
-          end
+        nil -> %{state | flash: "workspace ##{id} already gone"}
+        workspace -> edit_found_workspace(state, workspace, attrs)
       end
     end)
+  end
+
+  defp edit_found_workspace(state, workspace, attrs) do
+    case Workspaces.edit(workspace, attrs) do
+      {:ok, updated} -> reclamp_author_edit_sub(%{state | flash: "updated #{updated.name}"})
+      {:error, changeset} -> %{state | flash: "couldn't update #{workspace.name} — #{changeset_error(changeset)}"}
+    end
   end
 
   # Only reachable when `author_edit` is actually mid-edit on a paths/roster sub-list (field 2/3) —
@@ -408,18 +422,19 @@ defmodule Console.Cockpit.Author do
   def add_repo!(state, id, buffer) do
     Safe.flash_on_error(state, "add repo", fn ->
       case String.split(buffer || "", ~r/\s+/, trim: true) do
-        [] ->
-          state
-
-        [path | rest] ->
-          attrs = %{path: path, remote: Enum.at(rest, 0), default_branch: Enum.at(rest, 1)}
-
-          case Workspaces.add_repo(id, attrs) do
-            {:ok, repo} -> reclamp_author_edit_sub(%{state | flash: "added #{repo.path}"})
-            {:error, changeset} -> %{state | flash: "couldn't add #{path} — #{changeset_error(changeset)}"}
-          end
+        [] -> state
+        [path | rest] -> add_repo_row(state, id, path, rest)
       end
     end)
+  end
+
+  defp add_repo_row(state, id, path, rest) do
+    attrs = %{path: path, remote: Enum.at(rest, 0), default_branch: Enum.at(rest, 1)}
+
+    case Workspaces.add_repo(id, attrs) do
+      {:ok, repo} -> reclamp_author_edit_sub(%{state | flash: "added #{repo.path}"})
+      {:error, changeset} -> %{state | flash: "couldn't add #{path} — #{changeset_error(changeset)}"}
+    end
   end
 
   @doc false

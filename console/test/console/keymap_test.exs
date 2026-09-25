@@ -14,6 +14,7 @@ defmodule Console.KeymapTest do
   """
   use ExUnit.Case, async: true
 
+  alias Console.Cockpit.Drawer
   alias Console.Keymap
   alias Console.Panel.Stack
   alias Console.Tlon.Focus
@@ -1385,8 +1386,6 @@ defmodule Console.KeymapTest do
 
   # UX slice 1, task 4: the drawer — Alt+d over the centre, its own key table while open.
   describe "the drawer (Alt+d)" do
-    alias Console.Cockpit.Drawer
-
     # The layout the focus SM walks while the drawer is open: its nine panes as one column.
     defp drawer_layout(counts \\ %{}) do
       %{left: Drawer.pane_modules(), right: [], sections: %{Console.Panel.Memory => 2}, counts: counts}
@@ -1522,7 +1521,7 @@ defmodule Console.KeymapTest do
               input: %{kind: :reply, thread_id: 2, buffer: "half typed", cursor: 10},
               drawer: nil,
               last_drawer: :stack,
-              tlon_layout: %{left: Console.Cockpit.Drawer.pane_modules(), right: [], sections: %{}, counts: %{}}
+              tlon_layout: %{left: Drawer.pane_modules(), right: [], sections: %{}, counts: %{}}
             },
             over
           )

@@ -55,7 +55,10 @@ defmodule Console.TestRepo do
     config = Repo.config()
     _ = Postgres.storage_down(config)
     :ok = Postgres.storage_up(config)
-    {:ok, _repo} = Repo.start_link()
+    {:ok, repo} = Repo.start_link()
+    # Unlinked: setup_all's process exits before on_exit runs, and a linked Repo would be shutting down
+    # under that exit while on_exit stops it — a race that fails the whole suite after its tests ran.
+    Process.unlink(repo)
     Ecto.Migrator.run(Repo, migrations(), :up, all: true, log: false)
 
     ExUnit.Callbacks.on_exit(fn ->

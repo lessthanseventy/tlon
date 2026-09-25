@@ -41,7 +41,8 @@ defmodule Console.GhosttyKeyTest do
     # Iterate by codepoint so no literal key atom (`:o`, `:p`, …) is interned by this test — the trap
     # that let `to_existing_atom` crash the cockpit on a keypress whose atom existed nowhere. With
     # `to_atom` every printable maps; with `to_existing_atom` the first un-interned letter raises.
-    for c <- Enum.map(?a..?z, &<<&1>>) ++ Enum.map(?A..?Z, &<<&1>>) ++ Enum.map(?0..?9, &<<&1>>) do
+    # `fn`, not `&<<&1>>`: Quokka rewrites that capture into `&<<>>/1`, which does not compile.
+    for c <- Enum.map(Enum.concat([?a..?z, ?A..?Z, ?0..?9]), fn cp -> <<cp>> end) do
       assert %KeyEvent{utf8: ^c} = GhosttyKey.from_event(%{key: :char, char: c})
     end
   end

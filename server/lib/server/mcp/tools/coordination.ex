@@ -116,7 +116,10 @@ defmodule Server.MCP.Tool.AssignLead do
 
   schema do
     field :thread_id, :integer, required: true, description: "The thread to staff"
-    field :lead, :string, required: true, description: "Registered worker handle to assign as lead (e.g. hronir-machine)"
+
+    field :lead, :string,
+      required: true,
+      description: "Registered worker handle to assign as lead (e.g. hronir-machine)"
   end
 
   @impl true

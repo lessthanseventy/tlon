@@ -48,10 +48,16 @@ defmodule Server.Recall.StrengthTest do
 
     test "a failing recheck pulls strength below a passing one" do
       passed =
-        Strength.touches_for(%{created_at: @now, touches: [%{kind: "check_passed", at: @now}], superseded?: false}, @now)
+        Strength.touches_for(
+          %{created_at: @now, touches: [%{kind: "check_passed", at: @now}], superseded?: false},
+          @now
+        )
 
       failed =
-        Strength.touches_for(%{created_at: @now, touches: [%{kind: "check_failed", at: @now}], superseded?: false}, @now)
+        Strength.touches_for(
+          %{created_at: @now, touches: [%{kind: "check_failed", at: @now}], superseded?: false},
+          @now
+        )
 
       assert Strength.of(failed, @now) < Strength.of(passed, @now)
     end
