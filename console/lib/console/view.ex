@@ -178,6 +178,7 @@ defmodule Console.View do
   defp layout_for(w) when w >= @wide_min, do: :wide
   defp layout_for(_w), do: :narrow
 
+  defp focused_section(%{overlay: overlay}) when not is_nil(overlay), do: nil
   # The pane the Tlön focus sits on — only in nav mode (out of the terminal), so the frame lights the
   # instant you Ctrl+Space out. nil while in the terminal (the terminal is the active pane then).
   # UX slice 1: the left column is the rail alone; while the drawer is open ITS pane has the focus
@@ -499,6 +500,8 @@ defmodule Console.View do
     %{
       # When the operator is typing a new-thread title, the footer becomes the prompt.
       input: reads[:input],
+      # the thread a compose goes to, by title — the face must say who it replies to
+      input_title: input_title(reads),
       # A transient result line (a spawn's pane id or failure), shown until the next keypress.
       flash: reads[:flash],
       # True for the one keypress after Ctrl+Space — the hints line shows the armed-prefix state.
@@ -511,6 +514,15 @@ defmodule Console.View do
     }
   end
 
+  defp input_title(%{input: %{thread_id: id}} = reads) when is_integer(id) do
+    Enum.find_value(reads[:sidebar] || [], fn group ->
+      Enum.find_value(group[:threads] || [], &(&1.id == id && &1.title))
+    end)
+  end
+
+  defp input_title(_reads), do: nil
+
+  defp footer_mode(%{overlay: overlay}) when not is_nil(overlay), do: overlay
   # The open drawer is its own mode: it owns every key, so the footer names ITS verbs (task 4).
   defp footer_mode(%{drawer: key}) when not is_nil(key), do: :drawer
   defp footer_mode(%{lock?: true}), do: :lock

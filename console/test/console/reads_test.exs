@@ -137,6 +137,15 @@ defmodule Console.ReadsTest do
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == {:pick, {:open_thread_view, 8}}
     end
 
+    test "c composes to the thread under the rail's cursor, not a stale stack focus" do
+      state = Map.merge(at(1), %{center_view: :chat, stack_focus: 9, opened_thread: nil})
+      assert Reads.composer_thread_id(state) == 8
+
+      # off the rail (keys in the centre), it is the open thread
+      state = %{state | focus: %{state.focus | in_terminal?: true}, opened_thread: 9}
+      assert Reads.composer_thread_id(state) == 9
+    end
+
     test "Enter with nothing to land on does nothing — it never arms the detail mode" do
       state = at(0, %{sidebar: []})
       assert Reads.enter_verb(state, Reads.tlon_layout(state)) == :none

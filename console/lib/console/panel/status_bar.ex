@@ -30,8 +30,9 @@ defmodule Console.Panel.StatusBar do
   # (`Console.Panel.Composer` — full buffer, wrap + grow); the footer keeps the mode chip and the
   # composer verbs.
   @impl Panel
-  def render(%{input: %{kind: :compose}}, rect) do
-    prompt = [{" COMPOSE ", :tab}]
+  def render(%{input: %{kind: :compose}} = data, rect) do
+    title = data[:input_title]
+    prompt = [{" COMPOSE ", :tab}] ++ if(title, do: [{" → #{title}", :accent}], else: [])
     verbs = [{"⏎", "reply"}, {"Esc", "cancel"}, {"⇧⏎", "newline"}, {"←→↑↓", "move"}]
     Panel.clip([prompt_row(prompt, verbs, rect.w)], rect)
   end
@@ -170,6 +171,8 @@ defmodule Console.Panel.StatusBar do
   # The open drawer owns every key (Console.Cockpit.Drawer): only its own verbs, plus the open
   # pane's, are live — the NAV face's would be dead hints under it.
   defp mode_seg(:drawer), do: [{"esc", "close"}, {"h/l", "pane"}]
+  defp mode_seg(:menu), do: [{"⏎", "choose"}, {"j/k", "move"}, {"esc", "close"}]
+  defp mode_seg(:picker), do: [{"type", "filter"}, {"↑↓", "move"}, {"⏎", "go"}, {"esc", "close"}]
 
   defp mode_seg({:input, :reply}),
     do: [{"⏎", "send"}, {"⇧⏎", "newline"}, {"⇞⇟", "scroll"}, {"esc", "close"}, {"Alt+d", "drawer"}, {"^⇧K", "go to"}]
