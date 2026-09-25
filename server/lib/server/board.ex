@@ -101,6 +101,8 @@ defmodule Server.Board do
         # UX slice 1b: the same rows grouped by channel, #general first; a row whose channel is
         # nil (pre-migration) reads as #general.
         channels: channel_groups(workspace.id, rows),
+        # the rail groups a channel's threads under these, by each row's `project_id`
+        projects: Enum.map(Server.Projects.in_workspace(workspace.id), &%{id: &1.id, name: &1.name}),
         crew: crew_rows(Server.Workspaces.bench(workspace.id), working_agents)
       }
     end
@@ -120,6 +122,7 @@ defmodule Server.Board do
       id: thread.id,
       workspace_id: thread.workspace_id,
       channel_id: thread.channel_id,
+      project_id: thread.project_id,
       title: thread.title,
       root: thread.id == root_id,
       stage: thread.stage,

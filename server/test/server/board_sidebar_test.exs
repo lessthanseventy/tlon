@@ -118,4 +118,16 @@ defmodule Server.BoardSidebarTest do
     assert disk_id == disk.id and cid == infra.id
     assert Enum.any?(flat, &(&1.id == disk.id))
   end
+
+  test "a row carries its project and the group lists the workspace's projects, oldest first" do
+    {:ok, workspace} = Bootstrap.ensure()
+    {:ok, machine} = Server.Projects.register(%{workspace_id: workspace.id, name: "Machine", repos: []})
+    {:ok, t} = Channel.open_thread(%{title: "bluetooth", workspace_id: workspace.id, project_id: machine.id})
+
+    [%{projects: projects, threads: threads}] = Board.sidebar()
+
+    assert [%{name: "general"}, %{id: mid, name: "Machine"}] = projects
+    assert mid == machine.id
+    assert %{project_id: ^mid} = Enum.find(threads, &(&1.id == t.id))
+  end
 end
