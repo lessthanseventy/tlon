@@ -55,9 +55,8 @@ defmodule Console.Keymap do
       the operator; `{:show_status, thread_id}` is the composer's `/status` slash command.
     * `{:orchestrate, text}` — the tertius `:` line's Enter; `{:confirm_orchestrate, armed}` — `y`
       on a routed consequential verb that is waiting for confirmation (`pending_confirm`).
-    * `:open_focused_thread` / `:close_thread_view` / `{:scroll_conversation, rows}` — the
-      two-step chat center: Enter opens the cursor thread's conversation, Esc steps back to the
-      list, j/k (PgUp/PgDn with the reply box focused) scroll the open backlog.
+    * `:close_thread_view` / `{:scroll_conversation, rows}` — the chat center: Esc closes the open
+      thread, j/k (PgUp/PgDn with the reply box focused) scroll its backlog.
     * `:stack_delete_arm` — `d` on a thread card arms the two-key delete; `:tlon_delete_arm` /
       `{:tlon_delete, target}` — the rail's `d` arm and its confirmed arm-time target.
     * `:toggle_center_view` (`v`, chat⇄terminal) and `:toggle_session_pane` (Alt+\\).
@@ -170,7 +169,6 @@ defmodule Console.Keymap do
           | :toggle_center_view
           | {:post_message, term(), String.t()}
           | {:show_status, term()}
-          | :open_focused_thread
           | :close_thread_view
           | {:scroll_conversation, integer()}
           | {:cycle_coworker_model, String.t()}
@@ -635,30 +633,18 @@ defmodule Console.Keymap do
   defp handle_tlon(%{key: :char, char: ":"}, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state),
     do: {%{state | input: %{kind: :orchestrate, buffer: "", cursor: 0}}, :repaint}
 
-  # LIST mode (no thread opened): j/k move the cursor, g/G jump, Enter opens the focused thread's
-  # conversation. (Two-step center — the fold/zoom stack is retired.)
+  # Nothing open: the centre only points at the rail, so the keys that would walk a list there walk
+  # the rail instead — focus drops to nav and the same key acts on it.
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state)
-       when is_vertical(key), do: move_thread(state, vertical(key))
+       when is_vertical(key), do: handle_tlon(key, put_in(state.focus.in_terminal?, false))
 
   defp handle_tlon(
-         %{key: :char, char: "g"},
+         %{key: :enter} = key,
          %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
        ),
-       do: stack_jump(state, :first)
+       do: handle_tlon(key, put_in(state.focus.in_terminal?, false))
 
-  defp handle_tlon(
-         %{key: :char, char: "G"},
-         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
-       ),
-       do: stack_jump(state, :last)
-
-  defp handle_tlon(
-         %{key: :enter},
-         %{focus: %Focus{in_terminal?: true}, center_view: :chat, opened_thread: nil} = state
-       ),
-       do: {state, :open_focused_thread}
-
-  # CONVERSATION mode (a thread opened): j/k scroll it; Esc goes back to the list.
+  # A thread open: j/k scroll it; Esc closes it (the cockpit hands focus back to the rail).
   defp handle_tlon(key, %{focus: %Focus{in_terminal?: true}, center_view: :chat} = state) when is_vertical(key),
     do: {state, {:scroll_conversation, 3 * vertical(key)}}
 
@@ -1010,10 +996,6 @@ defmodule Console.Keymap do
     i = Enum.find_index(ids, &(&1 == state.focused_id)) || 0
     {%{state | focused_id: Enum.at(ids, min(max(i + dir, 0), length(ids) - 1))}, :repaint}
   end
-
-  defp stack_jump(%{threads: []} = state, _), do: {state, :none}
-  defp stack_jump(state, :first), do: {%{state | focused_id: hd(state.threads).id}, :repaint}
-  defp stack_jump(state, :last), do: {%{state | focused_id: List.last(state.threads).id}, :repaint}
 
   # Clamp `author_cursor` into `0..length(live_workspaces) - 1` — edge-clamp, no wrap.
   defp move_author_cursor(state, dir) do

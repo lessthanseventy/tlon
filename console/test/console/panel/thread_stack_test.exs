@@ -1,6 +1,6 @@
 defmodule Console.Panel.ThreadStackTest do
-  # The cockpit center (two-step, 2026-09-01): a LIST of thread rows (no thread opened), or ONE
-  # thread's CONVERSATION (opened: id) — scrollable, markdown, esc back. Pure render.
+  # The cockpit center: the OPEN thread's conversation — scrollable, markdown — and, with nothing
+  # open, a line pointing at the rail (the rail is the list). Pure render.
   use ExUnit.Case, async: true
 
   import Console.PanelText, only: [text: 1]
@@ -54,51 +54,23 @@ defmodule Console.Panel.ThreadStackTest do
     assert %{cards: []} |> ThreadStack.render(rect()) |> text() =~ "no threads yet"
   end
 
-  describe "list mode (no thread opened)" do
-    test "each thread is a single row — id, title, lead/stage chips; no messages" do
-      cards = [
-        card(%{
-          id: 39,
-          title: "build the thing",
-          lead: "kimi",
-          stage: "build",
-          messages: [%{author: "kimi", body: "hi"}]
-        }),
-        card(%{id: 40, title: "review PR"})
-      ]
+  describe "nothing open" do
+    test "the centre is not a list: it points at the rail, and shows no thread" do
+      cards = [card(%{id: 39, title: "build the thing", messages: [%{author: "kimi", body: "hi"}]})]
+      out = %{cards: cards, opened: nil} |> ThreadStack.render(rect()) |> text()
 
-      rows = ThreadStack.render(%{cards: cards}, rect())
-      assert length(rows) == 2
-      out = text(rows)
-      assert out =~ "#39 build the thing"
-      assert out =~ "@kimi"
-      assert out =~ "build"
-      # bodies are NOT shown in the list
+      assert out =~ "pick a thread on the rail"
+      refute out =~ "build the thing"
       refute out =~ "kimi: hi"
     end
 
-    test "the active (cursor) row is lit with the gutter" do
-      cards = [card(%{id: 1, active?: true}), card(%{id: 2, active?: false})]
-      [first, second] = ThreadStack.render(%{cards: cards}, rect())
-      assert Enum.any?(first, fn {t, s} -> t == "▌ " and s == :accent end)
-      refute Enum.any?(second, fn {t, s} -> t == "▌ " and s == :accent end)
-    end
-
-    test "a typing thread shows the typing chip" do
-      out = %{cards: [card(%{typing: "hronir"})]} |> ThreadStack.render(rect()) |> text()
-      assert out =~ "hronir is typing…"
-    end
-
-    test "a click on a row OPENS that thread (not fold)" do
-      cards = [card(%{id: 7}), card(%{id: 8})]
-      assert ThreadStack.pick(%{cards: cards}, rect(), 0) == {:open_thread_view, 7}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 1) == {:open_thread_view, 8}
-      assert ThreadStack.pick(%{cards: cards}, rect(), 9) == nil
+    test "its only verb is n" do
+      assert ThreadStack.hints(%{cards: [card(%{})], opened: nil}) == [{"n", "new"}]
     end
   end
 
   describe "conversation mode (a thread opened)" do
-    test "shows the opened thread's messages and an esc-back hint (the reply input is its own band now)" do
+    test "shows the opened thread's messages (the reply input is its own band, the esc hint the footer's)" do
       cards = [
         card(%{
           id: 42,
@@ -117,18 +89,18 @@ defmodule Console.Panel.ThreadStackTest do
       assert out =~ "hronir:"
       # the inline `↳ reply… (c)` stub is gone — replying is the persistent Panel.Reply band below
       refute out =~ "reply to #42"
-      assert out =~ "esc"
+      assert {"esc", "back"} in ThreadStack.hints(%{cards: cards, opened: 42})
       # the OTHER thread's row is not shown in conversation mode
       refute out =~ "#43 other"
     end
 
-    test "an opened id that no longer exists falls back to the list" do
+    test "an opened id that no longer exists falls back to pointing at the rail" do
       out = %{cards: [card(%{id: 1, title: "x"})], opened: 999} |> ThreadStack.render(rect()) |> text()
-      assert out =~ "#1 x"
+      assert out =~ "pick a thread on the rail"
     end
 
-    test "clicks are inert in conversation mode (so text selection works)" do
-      assert ThreadStack.pick(%{cards: [card(%{id: 1})], opened: 1}, rect(), 3) == nil
+    test "clicks are inert (so text selection works): the panel picks nothing" do
+      refute function_exported?(ThreadStack, :pick, 3)
     end
   end
 
@@ -153,15 +125,6 @@ defmodule Console.Panel.ThreadStackTest do
       assert typing_at > message_at, "the indicator promises a message — it belongs where that lands"
       assert typing_at > header_at
       refute Enum.at(text, header_at) =~ "is typing"
-    end
-
-    test "the one-line LIST row keeps the typing chip — it has nowhere else to put it" do
-      card = %{id: 9, title: "general", active?: true, lead: "hronir", typing: "hronir"}
-
-      rows = ThreadStack.render(%{cards: [card]}, %{x: 0, y: 0, w: 80, h: 10})
-      text = Enum.map_join(rows, "\n", fn row -> Enum.map_join(row, "", &elem(&1, 0)) end)
-
-      assert text =~ "is typing"
     end
   end
 end
