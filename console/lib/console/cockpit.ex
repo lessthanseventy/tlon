@@ -1581,6 +1581,7 @@ defmodule Console.Cockpit do
   # An overlay the cockpit paints over the frame owns the keys, so the footer has to know it is up.
   defp overlay(%{picker: picker}) when not is_nil(picker), do: :picker
   defp overlay(%{menu: menu}) when not is_nil(menu), do: :menu
+  defp overlay(%{lazygit: lazygit}) when not is_nil(lazygit), do: :lazygit
   defp overlay(_state), do: nil
 
   # The kitty-graphics pass (design 2026-08-23): after the cell paint, place/refresh every

@@ -171,6 +171,8 @@ defmodule Console.Panel.StatusBar do
   # The open drawer owns every key (Console.Cockpit.Drawer): only its own verbs, plus the open
   # pane's, are live — the NAV face's would be dead hints under it.
   defp mode_seg(:drawer), do: [{"esc", "close"}, {"h/l", "pane"}]
+  # The zoomed lazygit owns every key but Ctrl+Space, which hands it back to its pane.
+  defp mode_seg(:lazygit), do: [{"^␣", "back to the pane"}, {"?", "lazygit keys"}]
   defp mode_seg(:menu), do: [{"⏎", "choose"}, {"j/k", "move"}, {"esc", "close"}]
   defp mode_seg(:picker), do: [{"type", "filter"}, {"↑↓", "move"}, {"⏎", "go"}, {"esc", "close"}]
 

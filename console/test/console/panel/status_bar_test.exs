@@ -91,6 +91,12 @@ defmodule Console.Panel.StatusBarTest do
     assert text([row]) =~ "COMPOSE  → rail drive test"
   end
 
+  test "the zoomed lazygit's footer says how to hand it back, not the frame's dead verbs" do
+    [row] = StatusBar.render(base(%{mode: :lazygit, workspace?: true}), rect())
+    assert text([row]) =~ "^␣ back to the pane"
+    refute text([row]) =~ "j/k"
+  end
+
   test "NAV mode advertises the drawer — the one key that opens the panes the rail no longer holds" do
     [hints] = StatusBar.render(base(%{mode: :nav, workspace?: true}), rect())
     assert text([hints]) =~ "Alt+d drawer"
