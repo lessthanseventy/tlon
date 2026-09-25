@@ -13,7 +13,7 @@ defmodule Console.Panel.ActivityTest do
   end
 
   defp style_of(rows, needle) do
-    Enum.find_value(rows, fn row -> Enum.find_value(row, fn {t, s} -> if t =~ needle, do: s end) end)
+    rows |> List.flatten() |> Enum.find_value(fn {t, s} -> if t =~ needle, do: s end)
   end
 
   test "empty buffer renders an empty-state row (title lives on the frame now)" do

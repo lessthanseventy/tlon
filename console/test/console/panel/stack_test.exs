@@ -19,11 +19,9 @@ defmodule Console.Panel.StackTest do
 
   # The style each subject row is drawn in (the row whose text ends with the subject).
   defp subject_style(rows, subject) do
-    Enum.find_value(rows, fn row ->
-      case row do
-        [{text, style}] -> if String.contains?(text, subject), do: style
-        _ -> nil
-      end
+    Enum.find_value(rows, fn
+      [{text, style}] -> if String.contains?(text, subject), do: style
+      _ -> nil
     end)
   end
 

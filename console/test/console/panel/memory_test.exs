@@ -24,11 +24,9 @@ defmodule Console.Panel.MemoryTest do
   end
 
   defp style_of(rows, needle) do
-    Enum.find_value(rows, fn row ->
-      case row do
-        [{t, s}] -> if String.contains?(t, needle), do: s
-        _ -> nil
-      end
+    Enum.find_value(rows, fn
+      [{t, s}] -> if String.contains?(t, needle), do: s
+      _ -> nil
     end)
   end
 
