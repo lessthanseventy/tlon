@@ -138,11 +138,20 @@
           "idempotently on every boot, so a DB wipe restores all of it. The intent is to bootstrap a fresh world " <>
           "with as much accumulated knowledge as possible — so genuinely useful learnings should be PROMOTED from " <>
           "session-banked facts into this file (keyed by a stable seed:* intent) rather than left to die on the next wipe."
+    },
+    %{
+      intent: "seed:fix-or-file",
+      kind: "constraint",
+      provenance: "stated",
+      text:
+        "Never just note a problem. Every fault you hit gets one fate in the same session: fixed now (reproduced " <>
+          "first by a test that goes red, then its own small commit), or filed — a Tlön ticket when it is small and " <>
+          "later, a new Tlön thread on its project when it needs a conversation. A workaround is not a fix: when the " <>
+          "code fights you, fix the code. Leave everywhere better than you found it. A report says what was fixed and " <>
+          "which ticket or thread each deferred thing went to."
     }
   ],
-  # No seeded projects: ficciones is the monorepo (nix/home-manager + the Tlön app), and every
-  # workspace gets a `general` project from bootstrap. The side efforts that used to live here as
-  # ficciones projects — excessibility, ex_riverside, ex_cortex — are SEPARATE client WORKSPACES
-  # (2026-08-31, Andrew), not projects under ficciones.
+  # Projects live in the store, not here: they are the operator's organisation of his repos (one
+  # workspace; a project spans repos; the workspace names its default), edited as data.
   projects: []
 }
