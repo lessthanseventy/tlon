@@ -267,6 +267,14 @@ defmodule Console.Reads do
     end
   end
 
+  # The git pane's two frame reads: the open thread's id (nil = no pane) and lazygit's render-state.
+  defp git_read(state) do
+    case git_pane(state) do
+      {id, _path} -> {id, render_state_of(terminal({:lazygit, id}))}
+      nil -> {nil, :no_session}
+    end
+  end
+
   # The session pane's embedded terminal render-state — the selected thread's live lead PTY, keyed
   # `{:session, id}` in Console.Sessions, or `:no_session` until spawned. LIVE seam: `ensure_session`
   # spawns/attaches the PTY (render + key routing are Andrew's kitty pass).
@@ -731,7 +739,7 @@ defmodule Console.Reads do
     tlon_layout =
       Safe.read(:tlon_layout, nil, fn -> if(Space.workspace?(state.active_key), do: tlon_layout(state)) end)
 
-    git = Safe.read(:git_pane, nil, fn -> git_pane(state) end)
+    {git_id, git_view} = Safe.read(:git_pane, {nil, :no_session}, fn -> git_read(state) end)
 
     %{
       active_key: state.active_key,
@@ -799,8 +807,8 @@ defmodule Console.Reads do
       session: Safe.read(:session, :no_session, fn -> session_read(state) end),
       # The git pane under it: the open thread's id when its worktree exists, and lazygit's
       # render-state. View.compose splits the right column when it is set.
-      git_pane: git && elem(git, 0),
-      git: if(git, do: render_state_of(terminal({:lazygit, elem(git, 0)})), else: :no_session),
+      git_pane: git_id,
+      git: git_view,
       detail:
         Safe.read(:detail, nil, fn ->
           detail_read(state, tlon_layout)
