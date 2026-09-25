@@ -42,7 +42,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `console:reset` | console: reset the Tlön RUNTIME to known-good — reap the stale cockpit + port 4041, kill every coworker tmux server (+ any legacy default-server tlon session), mix clean (no stale beam/NIF), then report the env. Kills the cockpit + panes; the db (threads/messages) is UNTOUCHED — use console:reset:db to wipe data. |
 | `console:reset:db` | console: WIPE the dev scratch db (drop → recreate → migrate) — DESTROYS all dogfood threads/messages/consults. The data reset console:reset deliberately does NOT do; only the dev db, never the service db. |
 | `console:run` | console: launch the live cockpit in THIS terminal (run in ghostty) — a CLIENT of the always-up tlon service (one brain); console:run:local embeds a server on the scratch db instead |
-| `console:run:local` | console: the cockpit with an EMBEDDED server on the scratch db (../server/.dev/tlon.db, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run |
+| `console:run:local` | console: the cockpit with an EMBEDDED server on the dev db (tlon_dev, MCP :4041) — hacking on server code with a live cockpit and no service involved; the daily driver is console:run |
 | `console:run:tmux` | console: the cockpit inside the tlon tmux server (session cockpit, -A attaches) so Claude can drive it (drive-cockpit skill) — icons and kitty keys degrade under tmux; the plain console:run is the one to look at |
 | `console:seed` | console: seed the dev db with workspaces, projects and threads shaped like the live machine (some waiting on you) |
 | `console:setup` | console: fetch deps, create + migrate the shared server db (via Server.Repo) |

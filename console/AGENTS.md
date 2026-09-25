@@ -21,9 +21,10 @@ cockpit ATTACHES: `Console.Staffing.ensure_workspace_roster/2` embeds the centre
 
 ## Run it
 
-- `tlon` (or `mise run console:run`) — launch in ghostty. Runs `scripts/console-reap.sh` first: kills
-  every workspace's coworker tmux server (they never outlive the cockpit) and any stale listener on
-  4041, then migrates the dev db and boots.
+- `tlon` (or `mise run console:run`) — launch in ghostty: an `:erpc` client of the always-up
+  `tlon.service` (one brain), which owns the db, MCP and the coworkers. It refuses to start when the
+  service is down. `mise run console:run:local` instead embeds a server on `tlon_dev` (MCP :4041)
+  for hacking on server code with no service involved.
 - `mise run console:reload` — hot-reload after an edit (recompile + signal; render/keymap/panel
   changes land next tick, a state-shape change still needs `console:run`).
 - `mise run console:reset` — the runtime reset when the cockpit acts like stale code (a "crash" with
@@ -76,9 +77,8 @@ The cockpit is shell-shaped (`docs/plans/2026-09-08-cockpit-ux-principles-design
   + the `:tlon_cmd` seam), `Console.Safe` (the degrade guards). Those are what the suite covers. A
   suite that needs the real `Server` contexts boots a scratch db through `Console.TestRepo`
   (`async: false`).
-- **The console runs its OWN server on :4041 (`../server/.dev/tlon.db`)** — isolated from the always-up
-  service on :4040. Dogfood junk stays in the sandbox; it never touches the real channel. (WS3 in
-  `docs/plans/2026-09-01-ws3-cockpit-http-client-design.md` is the plan to collapse the two.)
+- **`console:run` talks to the service's db (`tlon`); `console:run:local` to `tlon_dev`.** Dogfood
+  junk belongs on the local one — `mise run console:seed` fills it with a believable machine.
 
 ## Gotchas that bite
 
