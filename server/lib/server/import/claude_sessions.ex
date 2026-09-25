@@ -3,11 +3,13 @@ defmodule Server.Import.ClaudeSessions do
   Claude Code's own transcripts (`~/.claude/projects/*/*.jsonl`) as CLOSED threads: each human
   prompt an operator message, each turn's last text reply a `claude-code` message, backdated to
   when it was said. The conversations that built Tlön become its searchable history
-  (`search_history`) and, through the memory pass, its facts.
+  (`search_history`) and, through the memory pass, its facts. The parser also reads pi's format
+  (a `session` header, `message` entries); `Server.Import.PiSessions` points it at `~/.pi`.
 
   History never wakes anyone: rows go in directly (no `Channel.post`, no Bus), delivered, on a
   closed and unstaffed thread. Idempotent per session: the thread's first message is a `tlon`
-  receipt naming the session id, and a session with a receipt is skipped.
+  receipt naming the session id, and a session with a receipt is skipped. A thread lands on the
+  project and repo whose checkout holds the session's cwd, else the workspace's default project.
   """
 
   import Ecto.Query
@@ -26,7 +28,8 @@ defmodule Server.Import.ClaudeSessions do
     "ARM:",
     "[server thread",
     "[tlon thread",
-    "[funes thread"
+    "[funes thread",
+    "you have "
   ]
   @body_cap 6_000
 
@@ -42,15 +45,18 @@ defmodule Server.Import.ClaudeSessions do
         end
       end)
 
+    # pi opens its transcript with a `session` entry; Claude Code has none
+    header = Enum.find(entries, &(&1["type"] == "session"))
     turns = turns(entries)
 
     case turns do
       [{:operator, first, _} | _] ->
-        if Enum.any?(@machine_openers, &String.starts_with?(first, &1)) do
+        if machine?(first) do
           nil
         else
           %{
-            id: Path.basename(path, ".jsonl"),
+            source: if(header, do: :pi, else: :claude_code),
+            id: (header && header["id"]) || Path.basename(path, ".jsonl"),
             cwd: Enum.find_value(entries, & &1["cwd"]),
             title: Enum.find_value(Enum.reverse(entries), &title/1) || String.slice(first, 0, 60),
             started_at: at(hd(entries)["timestamp"] || Enum.find_value(entries, & &1["timestamp"])),
@@ -62,6 +68,10 @@ defmodule Server.Import.ClaudeSessions do
         nil
     end
   end
+
+  # pi-research drives pi with a prompt that is a path into its own install
+  defp machine?(first),
+    do: Enum.any?(@machine_openers, &String.starts_with?(first, &1)) or String.starts_with?(first, Path.expand("~/.pi/"))
 
   defp title(%{"type" => "ai-title", "aiTitle" => t}) when is_binary(t), do: t
   defp title(%{"type" => type, "title" => t}) when type in ["ai-title", "custom-title"] and is_binary(t), do: t
@@ -91,11 +101,25 @@ defmodule Server.Import.ClaudeSessions do
       else: text
   end
 
+  defp prompt(%{"type" => "message", "message" => %{"role" => "user", "content" => content}}) do
+    case text_of(content) do
+      "" -> nil
+      text -> text
+    end
+  end
+
   defp prompt(_), do: nil
 
   defp reply(%{"type" => "assistant", "message" => %{"content" => content}} = e) do
     text = text_of(content)
     if e["isSidechain"] || text == "", do: nil, else: text
+  end
+
+  defp reply(%{"type" => "message", "message" => %{"role" => "assistant", "content" => content}}) do
+    case text_of(content) do
+      "" -> nil
+      text -> text
+    end
   end
 
   defp reply(_), do: nil
@@ -127,15 +151,21 @@ defmodule Server.Import.ClaudeSessions do
   Import every transcript under `dir` into `workspace_id`, each onto the project whose repo holds
   its cwd (else the workspace's default project). `{:ok, %{imported: n, skipped: n}}`.
   """
-  def import_dir(dir, workspace_id) do
+  def import_dir(dir, workspace_id), do: dir |> Path.expand() |> Path.join("*/*.jsonl") |> import_glob(workspace_id)
+
+  @doc """
+  `import_dir/2` over every transcript a glob (or list of globs) matches, Claude Code's or pi's
+  (`Server.Import.PiSessions`).
+  """
+  def import_glob(glob, workspace_id) do
     projects = Projects.in_workspace(workspace_id)
     fallback = Projects.default(workspace_id)
-    paths = dir |> Path.expand() |> Path.join("*/*.jsonl") |> Path.wildcard()
+    paths = glob |> List.wrap() |> Enum.flat_map(&Path.wildcard/1)
     sessions = paths |> Enum.map(&parse/1) |> Enum.reject(&is_nil/1) |> longest_copies()
 
     imported =
       Enum.count(sessions, fn session ->
-        not imported?(session.id) and
+        not imported?(session) and
           match?({:ok, _}, insert(session, workspace_id, home_for(session.cwd, projects, fallback)))
       end)
 
@@ -151,10 +181,11 @@ defmodule Server.Import.ClaudeSessions do
     |> Enum.sort_by(& &1.started_at, DateTime)
   end
 
-  defp receipt(id), do: "↳ imported from Claude Code session #{id}"
+  defp receipt(%{source: :pi, id: id}), do: "↳ imported from pi session #{id}"
+  defp receipt(%{id: id}), do: "↳ imported from Claude Code session #{id}"
 
-  defp imported?(id) do
-    Repo.exists?(from m in Message, where: m.author == "tlon" and m.body == ^receipt(id))
+  defp imported?(session) do
+    Repo.exists?(from m in Message, where: m.author == "tlon" and m.body == ^receipt(session))
   end
 
   # The deepest repo that contains the cwd, so ~/projects/ficciones/modules/x lands on ficciones.
@@ -187,10 +218,10 @@ defmodule Server.Import.ClaudeSessions do
         })
 
       rows =
-        Enum.map([{:tlon, receipt(session.id), session.started_at} | session.turns], fn {who, body, at} ->
+        Enum.map([{:tlon, receipt(session), session.started_at} | session.turns], fn {who, body, at} ->
           %{
             thread_id: thread.id,
-            author: author(who, operator),
+            author: author(who, operator, session.source),
             body: cap(body),
             created_at: at,
             delivered_at: at,
@@ -203,9 +234,10 @@ defmodule Server.Import.ClaudeSessions do
     end)
   end
 
-  defp author(:tlon, _), do: "tlon"
-  defp author(:operator, operator), do: operator
-  defp author(:claude, _), do: "claude-code"
+  defp author(:tlon, _operator, _source), do: "tlon"
+  defp author(:operator, operator, _source), do: operator
+  defp author(:claude, _operator, :pi), do: "pi"
+  defp author(:claude, _operator, _source), do: "claude-code"
 
   defp cap(body) when byte_size(body) <= @body_cap, do: body
   defp cap(body), do: String.slice(body, 0, @body_cap) <> "\n… (cut at import)"
