@@ -324,11 +324,11 @@ defmodule Server.Staffing do
   end
 
   # The workspace's standing machine thread — the centre's and the tail's root — find-or-created:
-  # the oldest open machine thread in the workspace, else a fresh "general" one.
+  # the oldest open machine thread in the workspace, else a fresh lobby (Bootstrap mints the same).
   defp standing_thread(workspace_id) do
     case Channel.machine_thread(workspace_id) do
       %Thread{} = t -> {:ok, t}
-      nil -> Channel.open_thread(%{title: "general", scope: "machine", workspace_id: workspace_id})
+      nil -> Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: workspace_id})
     end
   end
 

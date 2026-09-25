@@ -111,7 +111,7 @@ defmodule Server.SeedTest do
     {:ok, workspace} = Bootstrap.ensure()
     # Bootstrap already seeded once; count what a from-empty apply banks by clearing first.
     Repo.delete_all(Fact)
-    for p <- Projects.in_workspace(workspace.id), p.name != "general", do: Projects.remove(p)
+    for p <- Projects.in_workspace(workspace.id), p.name != workspace.name, do: Projects.remove(p)
 
     seed = Seed.load()
     %{facts: banked, projects: ensured} = Seed.ensure()

@@ -21,15 +21,14 @@ defmodule Server.Bootstrap do
 
   require Logger
 
-  # The default project every workspace gets (Workspace ▸ Project ▸ Thread, 2026-08-30) — the
-  # home for threads that predate the project tier or were opened without one.
-  @default_project "general"
+  # Each workspace's standing machine thread — where the operator talks to the centre.
+  @standing_title "lobby"
 
   @default %{
-    name: "ficciones",
+    name: "Machine",
     type: "code",
     scope: "machine",
-    repos: ["modules/*"],
+    repos: [],
     roster: [
       %{"archetype" => "surveyor", "name" => "tertius"},
       %{"archetype" => "builder", "name" => "hronir"},
@@ -140,16 +139,15 @@ defmodule Server.Bootstrap do
     end
   end
 
-  # Every workspace gets exactly one open, stage-less machine root — the coordination "general" chat
-  # the cockpit's center thread-stack scopes to (per-workspace re-scope, 2026-08-31). Runs AFTER
-  # repair_projects so the root can carry the default project. Idempotent: a workspace that already
-  # has a machine root is left untouched.
+  # Every workspace gets exactly one open, stage-less machine root — the standing thread the cockpit's
+  # centre scopes to. Runs AFTER repair_projects so the root can carry the default project. Idempotent:
+  # a workspace that already has a machine root is left untouched.
   defp repair_machine_roots do
     for ws <- Repo.all(Workspace), is_nil(Channel.machine_thread(ws.id)) do
       project = ensure_default_project(ws)
 
       Channel.open_thread(%{
-        title: @default_project,
+        title: @standing_title,
         scope: "machine",
         workspace_id: ws.id,
         project_id: project.id
@@ -158,7 +156,7 @@ defmodule Server.Bootstrap do
   end
 
   # The workspace names its default (`default_project_id`). Unset — a fresh workspace, or its
-  # default was removed — it adopts its oldest project, or a new `general` when it has none.
+  # default was removed — it adopts its oldest project, or a new one named after the workspace.
   defp ensure_default_project(%Workspace{} = ws) do
     case Projects.default(ws.id) do
       %Project{} = project ->
@@ -172,7 +170,7 @@ defmodule Server.Bootstrap do
   end
 
   defp register_default_project(ws) do
-    {:ok, project} = Projects.register(%{workspace_id: ws.id, name: @default_project, repos: workspace_repos(ws)})
+    {:ok, project} = Projects.register(%{workspace_id: ws.id, name: ws.name, repos: workspace_repos(ws)})
     project
   end
 
