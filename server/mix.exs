@@ -71,7 +71,7 @@ defmodule Server.MixProject do
       # Menard (github.com/lessthanseventy/menard): AST-aware source edits + introspection on
       # Sourceror; the coworkers' source verbs (Server.Source.Tools) call it — a runtime dep
       # (Andrew, 2026-09-08). Pinned by ref, never a path: a nix build sees only this checkout.
-      {:menard, github: "lessthanseventy/menard", ref: "e54b1d6a937ed170c6a5e940e6aabde36859da4a"},
+      {:menard, github: "lessthanseventy/menard", tag: "v0.2.0"},
       {:ecto_sql, "~> 3.12"},
       # Postgres is the store (one-brain piece C); ecto_sqlite3 stays ONLY for `mix server.import_sqlite`,
       # the one-shot copy of the SQLite corpus — it goes when the import has run on every box.

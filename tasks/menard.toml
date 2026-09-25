@@ -3,13 +3,14 @@
 # does not compile. Paths are relative to where you stand; `--in DIR` for the run verbs.
 # Included by mise.toml ([task_config] includes). It lives HERE, not beside the tool, because
 # menard ships as a standalone repo: WHERE its checkout is, is ficciones' business, not menard's.
-# The CLI runs from the ~/projects/menard checkout, with its own deps, so it keeps working while
-# the server's do not resolve; the server's library dep is pinned by git ref in its mix.exs.
+# The CLI is scripts/menard.sh: menard at the commit modules/server/mix.lock pins, from its own
+# checkout under ~/.cache, so CLI and library are one version, it keeps working while the server's
+# deps do not resolve, and editing ~/projects/menard never breaks it. `menard:check` gates the
+# ~/projects/menard dev checkout.
 
 ["menard"]
-description = "menard: any verb (--frozen runs the last build, for editing menard itself) — `mise run menard -- rename OLD NEW [--only functions|variables] [--atoms] [--comments] FILES` · `write FILE CODE` · `clause replace|rewrite|delete|insert-after|insert-before FILE name/arity HEAD [CODE] [--nth N]` · `clause insert-at FILE (Mod|-) [top|bottom] CODE` · `stmt insert-after|insert-before|replace|delete|list FILE name/arity HEAD MATCH [CODE]` · `attr get|set|delete|list FILE NAME [VALUE]` · `block get|replace|add|relabel|list FILE NAME [CODE]` · `directive add|remove|list FILE KIND MOD` · `module add|list FILE [CODE]` · `deps FILE name/arity` · `clause doc|comment FILE name/arity HEAD [TEXT]` · `clause visibility FILE name/arity public|private` · `outline FILE` · `run [--in DIR] check|test|format|compile`"
-dir = "{{env.HOME}}/projects/menard"
-run = "bin/menard"
+description = "menard: any verb — `mise run menard -- VERB …`; the verbs and when to use each are in menard's AGENTS.md (github.com/lessthanseventy/menard)"
+run = "scripts/menard.sh"
 
 ["menard:check"]
 description = "menard: its own gate — format + warnings-as-errors + tests"
