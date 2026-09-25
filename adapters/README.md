@@ -34,7 +34,7 @@ adapters/
   consult/             /consult and /fresh — delegate a prompt to a different model
   menard/             (in ~/projects/menard) the guard + format-on-save for Elixir —
                       menard is pi's Elixir toolchain, replacing the bare `mix format` that
-                      was adapters/fmt. Shipped from its own repo; `mise run install:pi` wires
+                      was adapters/fmt. Shipped from its own repo; its `install:pi` task wires
                       it on a box without ficciones.
   lsp/                 the pi shim for the five LSP tools (hover/definition/references/
                        symbols/diagnostics) + `impact`; forwards over a unix socket to…

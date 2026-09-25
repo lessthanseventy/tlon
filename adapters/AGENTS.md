@@ -96,10 +96,9 @@ Driven through the shared mise tasks (`mise tasks`), same as the rest of the rep
 - `mise run adapters:pi:check` — typecheck + tests, the precommit gate for this module.
 - `mise run server:serve` — boot server with its sovereign channel on, against the scratch db, so a
   hand-spawned pi pane has something to register with.
-- `mise run check` — the whole-repo gate: nine gates — `server:check`, `console:check`, and the
 - `mise run check` — the whole-repo gate: `server:check`, `console:check`, and the six
   adapters packages (`adapters:{pi,consult,lsp,lspd,reload,footer}:check`). menard's pi adapter
-  is checked in its own repo (`mise run test` in ~/projects/menard).
+  is checked in its own repo (its `test` task, in ~/projects/menard).
 
 ## Verify
 
