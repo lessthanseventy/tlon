@@ -27,8 +27,8 @@ end
 
 defmodule Server.MCP.Tool.ListWorkspaces do
   @moduledoc """
-  Every WORKSPACE, newest-first — the machine-global read console's Orbis survey/picker maps
-  over. Takes no identity: workspaces are not thread-scoped.
+  Every WORKSPACE, oldest first — the machine-global read the cockpit's workspace ring walks.
+  Takes no identity: workspaces are not thread-scoped.
   """
   use Server.MCP.Tool
 

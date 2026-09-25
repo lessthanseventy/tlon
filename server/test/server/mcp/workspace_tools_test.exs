@@ -60,7 +60,7 @@ defmodule Server.MCP.WorkspaceToolsTest do
   end
 
   describe "list_workspaces" do
-    test "returns the shaped worlds, newest first" do
+    test "returns the shaped worlds, oldest first" do
       {:ok, _} = Workspaces.register(%{name: "Tlön", repos: ["modules/*"]})
       {:ok, _} = Workspaces.register(%{name: "Uqbar", type: "blank"})
 
@@ -68,7 +68,7 @@ defmodule Server.MCP.WorkspaceToolsTest do
       refute resp.isError
       worlds = json(resp)
 
-      assert Enum.map(worlds, & &1["name"]) == ["Uqbar", "Tlön"]
+      assert Enum.map(worlds, & &1["name"]) == ["Tlön", "Uqbar"]
       tlon = Enum.find(worlds, &(&1["name"] == "Tlön"))
       assert tlon["repos"] == [%{"path" => "modules/*", "remote" => nil, "default_branch" => nil}]
       assert tlon["type"] == "code"

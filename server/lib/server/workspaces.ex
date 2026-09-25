@@ -31,9 +31,12 @@ defmodule Server.Workspaces do
     end
   end
 
-  @doc "Every workspace, newest-first (by id) — the read console's Orbis survey/picker maps over."
+  @doc """
+  Every workspace, oldest first (by id) — the machine seed's order, so its first workspace is where the
+  cockpit opens and where the workspace ring starts, as it is in `Server.Board.sidebar/0`.
+  """
   def all do
-    Repo.all(from w in Workspace, order_by: [desc: w.id])
+    Repo.all(from w in Workspace, order_by: [asc: w.id])
   end
 
   @doc "A workspace by id, or nil."
