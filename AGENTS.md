@@ -70,6 +70,14 @@ Catching yourself about to run the same command a second time with a different f
 signal to read the log, not repeat the call — the same escape hatch any SWE reaches for when a
 loop starts repeating itself.
 
+**Elixir tests and the gate go through Menard, not `cap`:** `mise run menard -- run test --in
+server [FILE[:LINE]]` and `mise run menard -- run check --in server` (`--in console` for the
+console). One run answers with one JSON line: `ok` and the counts when green; when red, every
+failure with its kind, `file:line` and message, a failing test's name, source and the assertion's
+left and right. It is this section's rule with the failures already parsed out, so there is nothing
+to grep for. `cap` stays the door for everything else: builds, scripts, `mise run server:check`'s
+evals.
+
 `cap` prints a distilled **signal** view (results, errors, warnings, counts) and drops the
 install/compile/debug noise; a green suite collapses to a couple of lines. Knobs when you need
 them: `CAP_TAIL=all` (the whole log inline, once), `CAP_TAIL=<n>`, `CAP_SIGNAL=<n>`. `mise run
@@ -110,12 +118,14 @@ Three doors onto one library:
 `mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape hatch for
 editing Menard WITH Menard, where a half-applied edit otherwise locks the tool out of finishing it.
 
-The `Edit` tool is for the languages Menard does not cover — TypeScript, Lua, Nix. On a module it
-is blocked outright, by a `PreToolUse` guard the plugin ships alongside a `PostToolUse` formatter
-that runs the file's own project formatter on every write (`console`'s Styler included). Neither is
-in `.claude/settings.json`, so a clone without the plugin gets no block; the rule holds regardless.
+The `Edit` tool is for the languages Menard does not cover — TypeScript, Lua, Nix. The plugin no
+longer blocks it on a module: `menard` is hook-only in Claude Code now, a `PostToolUse` formatter
+that runs the file's own project formatter on every write (`console`'s Styler included) and says
+what it changed. Its AST tools are the separate `manos` plugin. Neither is in
+`.claude/settings.json`; the rule holds regardless.
 
     /plugin marketplace add lessthanseventy/menard && /plugin install menard@menard
+    /plugin install manos@menard
 
 Still missing a verb: a `@spec` above a clause whose signature `rewrite` changes.
 
