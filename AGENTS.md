@@ -161,6 +161,8 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   because a weaker model trusts it. Nothing mechanical can catch this (staleness is semantic, invisible
   to compile/tests), so it's on you. (The `programs.rbw` comment that survived the rbw→agenix switch
   still describing the old design is the incident this comes from.)
+- **Commit each piece of work when it is done**: one commit per bug, feature or ticket, before
+  you start the next, so `git log` says what changed and why.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
   that wrote it — YOUR model, read from the brief's `You are … (pi)` line (or `$PI_MODEL`), never a
   name copied from an example or another model's commit. Format: `Co-Authored-By: <your model> (pi)
