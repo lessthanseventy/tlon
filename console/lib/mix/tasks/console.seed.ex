@@ -146,17 +146,18 @@ defmodule Mix.Tasks.Console.Seed do
 
   defp ensure_thread(workspace, project, %{title: title} = t) do
     existing = Enum.find(Channel.open_threads(), &(&1.title == title and &1.workspace_id == workspace.id))
-
-    if is_nil(existing) do
-      {:ok, thread} = Channel.open_thread(%{title: title, workspace_id: workspace.id, project_id: project.id})
-
-      Enum.each(Enum.with_index(t.chat), fn {body, i} ->
-        post(thread, if(rem(i, 2) == 0, do: "andrew", else: "hronir"), body)
-      end)
-
-      if t[:prompt], do: prompt(thread, t.prompt)
-    end
+    if is_nil(existing), do: open_seeded(workspace, project, t)
   end
+
+  defp open_seeded(workspace, project, %{title: title} = t) do
+    {:ok, thread} = Channel.open_thread(%{title: title, workspace_id: workspace.id, project_id: project.id})
+    Enum.each(Enum.with_index(t.chat), fn {body, i} -> post(thread, speaker(i), body) end)
+    if t[:prompt], do: prompt(thread, t.prompt)
+  end
+
+  # the seeded chat alternates: the operator, then the agent
+  defp speaker(i) when rem(i, 2) == 0, do: "andrew"
+  defp speaker(_i), do: "hronir"
 
   defp post(thread, author, body), do: Channel.post(%{thread_id: thread.id, author: author, body: body})
 

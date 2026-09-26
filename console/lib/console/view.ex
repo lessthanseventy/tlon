@@ -463,7 +463,7 @@ defmodule Console.View do
     %{
       workspace: space.label,
       workspace_id: reads.active_key,
-      elsewhere?: Enum.any?(others, fn g -> Enum.any?(g[:threads] || [], &(Panel.Rail.attention(&1) == 0)) end),
+      elsewhere?: waiting_elsewhere?(others),
       projects: Enum.map(projects, &Map.put(&1, :badge, project_badge(threads, &1.id))),
       open_project: Panel.Rail.open_project_id(projects, reads[:open_project]),
       cwd: card && reads[:cwd],
@@ -472,6 +472,10 @@ defmodule Console.View do
       link: reads[:link] || :up
     }
   end
+
+  # whether a workspace other than the active one has a thread waiting on the operator
+  defp waiting_elsewhere?(others),
+    do: Enum.any?(others, fn g -> Enum.any?(g[:threads] || [], &(Panel.Rail.attention(&1) == 0)) end)
 
   defp project_badge(threads, project_id) do
     threads
