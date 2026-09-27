@@ -70,7 +70,9 @@ defmodule Server.MixProject do
       {:boundary, "~> 0.10", runtime: false},
       # Menard (hex.pm/packages/menard): AST-aware source edits + introspection on Sourceror; the
       # coworkers' source verbs (Server.Source.Tools) call it — a runtime dep. From hex, never a
-      # path: a nix build sees only this checkout.
+      # path: a nix build sees only this checkout. Past 0.5, `Clause.replace_body/5` refuses a whole
+      # clause (0.5 took it for a rewrite): `clause_edit(:replace, …)` in Server.Source.Tools must
+      # send one to `Clause.rewrite/5` itself (menard's CHANGELOG, Unreleased).
       {:menard, "~> 0.5"},
       {:ecto_sql, "~> 3.12"},
       # Postgres is the store (one-brain piece C); ecto_sqlite3 stays ONLY for `mix server.import_sqlite`,
