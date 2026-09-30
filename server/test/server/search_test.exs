@@ -47,6 +47,17 @@ defmodule Server.SearchTest do
       assert shown |> Enum.map(& &1.snippet) |> Enum.map(&(&1 =~ "supervision")) == [true, false]
     end
 
+    test "a rare query word outweighs a common one, however often the common one repeats", %{thread: thread} do
+      for body <- ["daily standup, daily notes, daily review", "the daily sync ran long daily", "daily daily daily"] do
+        {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: body})
+      end
+
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "my commute is 45 minutes"})
+
+      assert %{shown: [first | _]} = Search.history("my daily commute")
+      assert first.snippet =~ "commute"
+    end
+
     test "a question in plain words finds the message that answers it", %{thread: thread} do
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "my commute is 45 minutes each way"})
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "lunch was good"})
