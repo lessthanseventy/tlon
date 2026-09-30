@@ -23,10 +23,12 @@ for name in ("mem0", "qdrant_client", "sentence_transformers"):
     sys.modules[name] = _Stub(name)
 
 os.environ.setdefault("GEMINI_API_KEY", "unused")  # AMB's CLI demands one even when Gemini is not used
+# The published leaderboard answers with Gemini 3.1 Pro and judges with Gemini 2.5 Flash-Lite; these
+# are the nearest plan-covered stand-ins (the strongest reasoner, and Google's small open model).
 os.environ.setdefault("OMB_ANSWER_LLM", "ollama")
-os.environ.setdefault("OMB_ANSWER_MODEL", "deepseek-v4.1-flash")
+os.environ.setdefault("OMB_ANSWER_MODEL", "deepseek-v4-pro")
 os.environ.setdefault("OMB_JUDGE_LLM", "ollama")
-os.environ.setdefault("OMB_JUDGE_MODEL", "gpt-oss:120b")
+os.environ.setdefault("OMB_JUDGE_MODEL", "gemma4:31b")
 
 from memory_bench import llm, memory  # noqa: E402
 from memory_bench.llm.base import LLM  # noqa: E402

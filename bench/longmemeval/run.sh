@@ -8,7 +8,8 @@ pin=03c1d0f
 [ -d "$amb" ] || git clone -q https://github.com/vectorize-io/agent-memory-benchmark "$amb"
 git -C "$amb" cat-file -e "$pin" 2>/dev/null || git -C "$amb" fetch -q origin
 git -C "$amb" checkout -q "$pin"
-(cd "$root/server" && TLON_DATABASE=tlon_bench mix ecto.create --quiet && TLON_DATABASE=tlon_bench mix ecto.migrate --quiet)
+export TLON_DATABASE="${TLON_DATABASE:-tlon_bench}"
+(cd "$root/server" && mix ecto.create --quiet && mix ecto.migrate --quiet)
 cd "$root"
 exec uv run --no-project --python 3.12 \
   --with typer --with rich --with rank-bm25 --with tiktoken --with python-dotenv --with google-genai --with scipy --with httpx \

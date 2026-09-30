@@ -1,6 +1,6 @@
 # The LongMemEval harness's door into this server's recall: one JSON request per stdin line, one
 # `@@TLON <json>` reply per stdout line (the marker, because dev Logger/Ecto also write to stdout).
-# Run from server/ with TLON_DATABASE=tlon_bench. TLON_BENCH_MODE picks what is measured:
+# Run from server/ with TLON_DATABASE naming a *_bench db (default tlon_bench). TLON_BENCH_MODE picks what is measured:
 #   messages — raw session turns ranked by Server.Search.history (the episodic channel)
 #   facts    — Server.Memory.TurnPass extracts facts per ≤20-message chunk, ranked by Server.Recall
 import Ecto.Query
@@ -21,7 +21,7 @@ unless is_binary(db) and String.ends_with?(db, "_bench"),
 mode = System.get_env("TLON_BENCH_MODE", "messages")
 Logger.configure(level: :warning)
 Application.put_env(:server, :memory_extractor_cmd, System.get_env("TLON_BENCH_EXTRACTOR_CMD", "pi"))
-Application.put_env(:server, :memory_extractor_model, System.get_env("TLON_BENCH_EXTRACTOR_MODEL", "deepseek-v4.1-flash"))
+Application.put_env(:server, :memory_extractor_model, System.get_env("TLON_BENCH_EXTRACTOR_MODEL", "ollama-cloud/deepseek-v4.1-flash"))
 
 at = fn
   nil -> DateTime.utc_now() |> DateTime.truncate(:second)
