@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# `mise run menard -- VERB …`: menard at the version the server's mix.lock pins — the same version
-# the coworkers' source tools run as a library — from a checkout of its own under ~/.cache.
-#
-# Not the live ~/projects/menard: that is where menard is developed, and a half-applied edit
-# there stopped every other session's verbs mid-task. Not server/deps/menard either: the
-# CLI has to keep working while the server's deps do not resolve.
+# `mise run menard -- VERB …`: menard at the committed HEAD of the ~/projects/menard dev checkout —
+# its newest work — run from a checkout of its own under ~/.cache. Never that checkout's working
+# tree: a half-applied edit there stopped every other session's verbs mid-task. Without the dev
+# checkout (another machine), the version server/mix.lock pins. Not server/deps/menard either:
+# the CLI has to keep working while the server's deps do not resolve.
 set -euo pipefail
 
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+sha=$(git -C "$HOME/projects/menard" rev-parse --verify -q HEAD || true)
 # A hex pin checks out its release tag; a git pin its commit.
-version=$(grep -oE '"menard": \{:hex, :menard, "[^"]+"' "$repo/server/mix.lock" | grep -oE '"[0-9][^"]*"$' | tr -d '"' || true)
-sha=${version:+v$version}
+[[ -n "$sha" ]] || version=$(grep -oE '"menard": \{:hex, :menard, "[^"]+"' "$repo/server/mix.lock" | grep -oE '"[0-9][^"]*"$' | tr -d '"' || true)
+[[ -n "$sha" ]] || sha=${version:+v$version}
 sha=${sha:-$(grep -oE '"menard": \{:git, "[^"]+", "[0-9a-f]{40}"' "$repo/server/mix.lock" | grep -oE '[0-9a-f]{40}' || true)}
 [[ -n "$sha" ]] || { echo "menard.sh: no menard pin in server/mix.lock" >&2; exit 2; }
 
