@@ -1,0 +1,5 @@
+# tasks/bench.toml — benchmarks of the server's memory against published suites. Included by mise.toml.
+
+["bench:longmemeval"]
+description = "bench: LongMemEval (agent-memory-benchmark's harness, ollama.com answers + judges) against server recall on the tlon_bench db — `-- -q 20`; TLON_BENCH_MODE=messages|facts, `-- --memory bm25` for the reference"
+run = "bench/longmemeval/run.sh"

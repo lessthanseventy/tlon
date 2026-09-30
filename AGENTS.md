@@ -14,6 +14,9 @@ control loop, not two, and no second way to run anything:
 - `mise run check` — names gate + server, console and adapters gates + the task manual; the green-before-commit gate.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
+- `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against
+  server recall on the throwaway `tlon_bench` db, never the live store; `bench/longmemeval/bridge.exs` says what each
+  `TLON_BENCH_MODE` measures, and `-- --memory bm25` runs the keyword reference on the same slice.
 
 On the home machine, installing and updating the service is ficciones' job (its `home:switch` and
 `machine:update`); here you build and restart the release. mise owns the dev runtimes. **If a command belongs in the loop, it becomes
