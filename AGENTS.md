@@ -110,8 +110,9 @@ teach. It ships with the plugin, so it is the one copy; this section is only the
 
 Three doors onto one library:
 
-- `mise run menard -- VERB …` — runs the `~/projects/menard` checkout, always compiling its current
-  code. Dashes and underscores both work.
+- `mise run menard -- VERB …` — runs the committed HEAD of `~/projects/menard` from its own checkout
+  under `~/.cache` (never the working tree's uncommitted edits; commit there to pick a change up), or
+  the `server/mix.lock` pin on a machine without the dev checkout. Dashes and underscores both work.
 - the `menard` stdio **MCP** in Claude Code — runs the code it started with, so **restart Claude
   after changing Menard**.
 - the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb` tools, scoped to
