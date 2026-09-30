@@ -77,5 +77,15 @@ defmodule Server.SearchTest do
       assert hd(shown).text =~ "embedding"
       assert more == 0
     end
+
+    test "a question in plain words finds the fact that answers it, more matched terms first" do
+      {:ok, _} = Dossier.bank_fact(%{kind: "learned", text: "the release runs on port 4040", provenance: "derived"})
+
+      {:ok, _} =
+        Dossier.bank_fact(%{kind: "learned", text: "the MCP channel listens on port 4040", provenance: "derived"})
+
+      %{shown: shown, more: 0} = Search.facts("Which port does the MCP channel listen on?")
+      assert Enum.map(shown, & &1.text) == ["the MCP channel listens on port 4040", "the release runs on port 4040"]
+    end
   end
 end
