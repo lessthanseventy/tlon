@@ -23,9 +23,11 @@ defmodule Server.Search do
   @doc """
   Search the message channel. Returns `%{shown: [%{message_id, thread_id, author, snippet, at}],
   more: n}`, `shown` ranked best-first and capped, `more` the count beyond the cut. A blank query
-  returns an empty cut, never an error.
+  returns an empty cut, never an error. `around: n` adds each hit's `window`: the hit and up to `n`
+  messages either side of it in its own thread, in order, as `%{message_id, author, body, at}` — a
+  message is half an exchange, and its answer or question is usually the next or last one.
   """
-  def history(query, limit \\ @cap) when is_binary(query) do
+  def history(query, limit \\ @cap, opts \\ []) when is_binary(query) do
     case any_terms(query) do
       "" ->
         %{shown: [], more: 0}
@@ -62,9 +64,11 @@ defmodule Server.Search do
           )
 
         shown =
-          Enum.map(rows, fn [id, thread_id, author, snippet, at] ->
+          rows
+          |> Enum.map(fn [id, thread_id, author, snippet, at] ->
             %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
           end)
+          |> with_window(Keyword.get(opts, :around, 0))
 
         %{shown: shown, more: max(count("message", "body_tsv", q, "") - length(shown), 0)}
     end
@@ -143,6 +147,28 @@ defmodule Server.Search do
   defp normalise(rows) do
     best = rows |> Enum.map(fn [_id, score] -> score end) |> Enum.max()
     if best == 0, do: Map.new(rows, fn [id, _] -> {id, 1.0} end), else: Map.new(rows, fn [id, s] -> {id, s / best} end)
+  end
+
+  defp with_window(shown, 0), do: shown
+
+  defp with_window(shown, n) do
+    Enum.map(shown, fn hit ->
+      %{rows: rows} =
+        Repo.query!(
+          """
+          (SELECT id, author, body, created_at FROM message
+           WHERE thread_id = $1 AND id < $2 ORDER BY id DESC LIMIT $3)
+          UNION ALL (SELECT id, author, body, created_at FROM message WHERE id = $2)
+          UNION ALL (SELECT id, author, body, created_at FROM message
+           WHERE thread_id = $1 AND id > $2 ORDER BY id LIMIT $3)
+          ORDER BY id
+          """,
+          [hit.thread_id, hit.message_id, n]
+        )
+
+      window = Enum.map(rows, fn [id, author, body, at] -> %{message_id: id, author: author, body: body, at: at} end)
+      Map.put(hit, :window, window)
+    end)
   end
 
   defp count(table, column, q, extra) do

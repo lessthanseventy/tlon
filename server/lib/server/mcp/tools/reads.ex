@@ -67,8 +67,8 @@ defmodule Server.MCP.Tool.SearchHistory do
   Search PAST conversations across the whole channel — episodic recall the curated brief does not
   hold. Full-text, bm25-ranked; a multi-word query ANDs its terms. Reach for it to answer "did we
   ever discuss X" or "what did we decide about Y" when it was never banked as a durable fact.
-  Returns a `%{shown, more}` cut: the best matches (message id, thread, author, a snippet) and a
-  count of the rest.
+  Returns a `%{shown, more}` cut: the best matches (message id, thread, author, a snippet, and with
+  `around` the exchange around it) and a count of the rest.
   """
   use Server.MCP.Tool
 
@@ -77,13 +77,19 @@ defmodule Server.MCP.Tool.SearchHistory do
   schema do
     field :query, :string,
       required: true,
-      description: "Words or a whole question; a message matching more of them ranks first"
+      description: "Words or a whole question; rarer words weigh more (BM25)"
 
     field :limit, :integer, description: "Max results to show (default 10)"
+
+    field :around, :integer,
+      description: "Turns of conversation to include either side of each hit, 0-3 (default 0: the snippet alone)"
   end
 
   @impl true
-  def execute(params, frame), do: ok(frame, Search.history(params[:query], params[:limit] || 10))
+  def execute(params, frame) do
+    around = (params[:around] || 0) |> max(0) |> min(3)
+    ok(frame, Search.history(params[:query], params[:limit] || 10, around: around))
+  end
 end
 
 defmodule Server.MCP.Tool.SearchFacts do

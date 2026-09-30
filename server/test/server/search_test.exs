@@ -58,6 +58,26 @@ defmodule Server.SearchTest do
       assert first.snippet =~ "commute"
     end
 
+    test "around: n gives each hit its conversation, n turns either side from its own thread", %{thread: thread} do
+      {:ok, other} = Channel.open_thread(%{title: "elsewhere"})
+
+      for {tid, body} <- [
+            {thread.id, "first"},
+            {thread.id, "what was the budget again?"},
+            {other.id, "noise between"},
+            {thread.id, "the budget is 400 dollars"},
+            {thread.id, "thanks"},
+            {thread.id, "last"}
+          ] do
+        {:ok, _} = Channel.post(%{thread_id: tid, author: "a", body: body})
+      end
+
+      assert %{shown: [hit]} = Search.history("dollars", 10, around: 1)
+      assert Enum.map(hit.window, & &1.body) == ["what was the budget again?", "the budget is 400 dollars", "thanks"]
+      assert %{shown: [plain]} = Search.history("dollars")
+      refute Map.has_key?(plain, :window)
+    end
+
     test "a question in plain words finds the message that answers it", %{thread: thread} do
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "my commute is 45 minutes each way"})
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "lunch was good"})
