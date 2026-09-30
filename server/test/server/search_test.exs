@@ -55,6 +55,13 @@ defmodule Server.SearchTest do
       assert hit.snippet =~ "commute"
     end
 
+    test "a term with a leading dash is searched for, never read as NOT", %{thread: thread} do
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "the supervision tree design"})
+
+      assert %{shown: [_]} = Search.history("-supervision")
+      assert %{shown: [_]} = Search.history("tree -supervision")
+    end
+
     test "special characters in the query don't crash FTS5", %{thread: thread} do
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "a normal message"})
       assert %{shown: _} = Search.history(~s("weird -query* AND OR))

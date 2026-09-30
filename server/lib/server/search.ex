@@ -135,13 +135,14 @@ defmodule Server.Search do
     n
   end
 
-  # The literal terms, OR-joined for websearch_to_tsquery (its `or` is the one operator it knows).
+  # The literal terms, OR-joined for websearch_to_tsquery. `or` is the one operator left for it to
+  # read: a leading `-` (its NOT) and quotes (its phrases) are stripped, so a word is always searched for.
   defp any_terms(query), do: query |> tokens() |> Enum.join(" or ")
 
   defp tokens(query) do
     query
     |> String.split(~r/\s+/, trim: true)
-    |> Enum.map(&String.replace(&1, "\"", ""))
+    |> Enum.map(&(&1 |> String.replace("\"", "") |> String.trim_leading("-")))
     |> Enum.reject(&(&1 == "" or String.downcase(&1) == "or"))
   end
 end
