@@ -13,6 +13,7 @@ defmodule Server.Recall do
   alias Server.Dossier
   alias Server.Event
   alias Server.Fact
+  alias Server.Message
   alias Server.Recall.Embedding
   alias Server.Recall.Strength
   alias Server.Repo
@@ -219,9 +220,31 @@ defmodule Server.Recall do
   best-effort — recall falls back to keyword + strength).
   """
   @spec embed_on_write(Fact.t()) :: Fact.t()
+  @spec embed_on_write(Message.t()) :: Message.t()
   def embed_on_write(%Fact{} = fact) do
     Task.Supervisor.start_child(Server.TaskSupervisor, fn -> embed_fact(fact) end)
     fact
+  end
+
+  def embed_on_write(%Message{} = message) do
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> embed_message(message) end)
+    message
+  end
+
+  @doc """
+  Best-effort: embed a message's body and store the vector, which semantic history search
+  (`Server.Search.history/3`) ranks by. A down embedder leaves it nil and search stays keyword-only.
+  """
+  @spec embed_message(Message.t()) :: {:ok, Message.t()} | {:error, term()}
+  def embed_message(%Message{} = message) do
+    model = embedding_model()
+
+    case Embedding.embed(message.body, model: model) do
+      {:ok, vector} -> message |> Ecto.Changeset.change(embedding: vector, embedding_model: model) |> Repo.update()
+      {:error, reason} -> {:error, reason}
+    end
+  rescue
+    e -> {:error, e}
   end
 
   defp embedding_model, do: get_in(Application.get_env(:server, :embedding, []), [:model]) || "nomic-embed-text"

@@ -1,29 +1,36 @@
 defmodule Server.Search do
   @moduledoc """
   Total recall (design: server-total-recall, slice A): full-text search over the message channel
-  (`history/2` — episodic recall of past sessions) and the fact corpus (`facts/2` — the ledger
+  (`history/3` — episodic recall of past sessions) and the fact corpus (`facts/2` — the ledger
   past the brief's cap). The curated brief answers "what should I inherit"; search answers "did we
-  ever touch X." Both rank over a generated `tsvector` (`history/2` by BM25 — a rare word outweighs
-  a common one, repeats saturate, a long message does not win by bulk; k1 = 1.2, b = 0.75 — and
-  `facts/2`, whose one-line facts gain little from it, by `ts_rank_cd`), return a `%{shown, more}`
-  cut-with-its-count (a cut without a count lies), and are read-only over the generated column the
-  baseline keeps in sync.
+  ever touch X." `history/3` fuses two rankings by reciprocal rank: BM25 over a generated `tsvector`
+  (a rare word outweighs a common one, repeats saturate, a long message does not win by bulk; k1 =
+  1.2, b = 0.75) and cosine over the messages' embeddings, so a message that shares the question's
+  meaning but none of its words is still found. `facts/2`, whose one-line facts gain little from
+  either, ranks by `ts_rank_cd`. Both return a `%{shown, more}` cut-with-its-count (a cut without a
+  count lies; `more` counts the keyword matches left out).
 
   The raw query is never interpreted as query syntax: every token is a literal term, and every
   search matches ANY of them (`websearch_to_tsquery` with `or`) — an agent searches with a whole
   question, and requiring every word of it matches almost nothing.
   """
+  alias Server.Recall.Embedding
   alias Server.Repo
 
   # The default cut — five is the brief's cap; search shows a few more since it's an explicit query.
   @cap 10
+
+  # Each ranker's candidates before fusion, and the standard reciprocal-rank-fusion constant.
+  @pool 50
+  @rrf_k 60
 
   @headline "StartSel=⟪, StopSel=⟫, MaxWords=12, MinWords=4, MaxFragments=1, FragmentDelimiter=…"
 
   @doc """
   Search the message channel. Returns `%{shown: [%{message_id, thread_id, author, snippet, at}],
   more: n}`, `shown` ranked best-first and capped, `more` the count beyond the cut. A blank query
-  returns an empty cut, never an error. `around: n` adds each hit's `window`: the hit and up to `n`
+  returns an empty cut, never an error. `query_embedding:` supplies the query's vector (else it is
+  embedded when any message has one). `around: n` adds each hit's `window`: the hit and up to `n`
   messages either side of it in its own thread, in order, as `%{message_id, author, body, at}` — a
   message is half an exchange, and its answer or question is usually the next or last one.
   """
@@ -33,7 +40,7 @@ defmodule Server.Search do
         %{shown: [], more: 0}
 
       q ->
-        %{rows: rows} =
+        %{rows: keyword} =
           Repo.query!(
             """
             WITH terms AS (
@@ -48,9 +55,7 @@ defmodule Server.Search do
               LATERAL (SELECT count(*)::float8 AS c FROM message
                        WHERE body_tsv @@ to_tsquery('simple', quote_literal(t.lex))) df
             )
-            SELECT m.id, m.thread_id, m.author,
-                   ts_headline('english', m.body, websearch_to_tsquery('english', $1), $3),
-                   m.created_at
+            SELECT m.id
             FROM message m CROSS JOIN stats s
             WHERE m.body_tsv @@ websearch_to_tsquery('english', $1)
             ORDER BY (
@@ -60,15 +65,15 @@ defmodule Server.Search do
             ) DESC, m.id DESC
             LIMIT $2
             """,
-            [q, limit, @headline]
+            [q, @pool]
           )
 
-        shown =
-          rows
-          |> Enum.map(fn [id, thread_id, author, snippet, at] ->
-            %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
-          end)
-          |> with_window(Keyword.get(opts, :around, 0))
+        ids =
+          [Enum.map(keyword, &hd/1), semantic_ranked(query, opts)]
+          |> fuse()
+          |> Enum.take(limit)
+
+        shown = ids |> details(q) |> with_window(Keyword.get(opts, :around, 0))
 
         %{shown: shown, more: max(count("message", "body_tsv", q, "") - length(shown), 0)}
     end
@@ -76,7 +81,7 @@ defmodule Server.Search do
 
   @doc """
   Search the fact corpus. Returns `%{shown: [%{fact_id, thread_id, kind, text, snippet, at}],
-  more: n}`, ranked + capped like `history/2`. Tombstoned (forgotten) facts are never returned
+  more: n}`, ranked + capped like `history/3`. Tombstoned (forgotten) facts are never returned
   nor counted.
   """
   def facts(query, limit \\ @cap) when is_binary(query) do
@@ -147,6 +152,64 @@ defmodule Server.Search do
   defp normalise(rows) do
     best = rows |> Enum.map(fn [_id, score] -> score end) |> Enum.max()
     if best == 0, do: Map.new(rows, fn [id, _] -> {id, 1.0} end), else: Map.new(rows, fn [id, s] -> {id, s / best} end)
+  end
+
+  # Every message with an embedding, ranked by cosine to the query's. The query is embedded only
+  # when there is something to compare it with, and a down embedder degrades to keyword alone within
+  # the same bound recall gives it. Cosine is computed here, not in SQL, so any Postgres will do.
+  defp semantic_ranked(query, opts) do
+    rows = Repo.query!("SELECT id, embedding FROM message WHERE embedding IS NOT NULL").rows
+    vec = rows != [] && (opts[:query_embedding] || query_vector(query))
+    if vec, do: by_cosine(rows, vec), else: []
+  end
+
+  defp by_cosine(rows, vec) do
+    rows
+    |> Enum.map(fn [id, json] -> {id, Embedding.cosine(vec, JSON.decode!(json))} end)
+    |> Enum.sort_by(&elem(&1, 1), :desc)
+    |> Enum.take(@pool)
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  defp query_vector(query) do
+    model = get_in(Application.get_env(:server, :embedding, []), [:model]) || "nomic-embed-text"
+
+    case Embedding.embed(query, model: model, timeout: 1_000) do
+      {:ok, vec} -> vec
+      {:error, _} -> nil
+    end
+  end
+
+  # Reciprocal rank fusion: each list votes 1 / (k + rank) for what it ranked, so a message both
+  # rankers put high beats one either put first alone, and no score scale has to be reconciled.
+  defp fuse(lists) do
+    lists
+    |> Enum.flat_map(fn ids ->
+      ids |> Enum.with_index(1) |> Enum.map(fn {id, rank} -> {id, 1 / (@rrf_k + rank)} end)
+    end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.sort_by(fn {id, votes} -> {-Enum.sum(votes), -id} end)
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  defp details([], _q), do: []
+
+  defp details(ids, q) do
+    %{rows: rows} =
+      Repo.query!(
+        """
+        SELECT id, thread_id, author, ts_headline('english', body, websearch_to_tsquery('english', $2), $3), created_at
+        FROM message WHERE id = ANY($1)
+        """,
+        [ids, q, @headline]
+      )
+
+    by_id = Map.new(rows, fn [id | _] = row -> {id, row} end)
+
+    Enum.map(ids, fn id ->
+      [id, thread_id, author, snippet, at] = by_id[id]
+      %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
+    end)
   end
 
   defp with_window(shown, 0), do: shown

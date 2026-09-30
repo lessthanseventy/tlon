@@ -77,7 +77,7 @@ defmodule Server.Channel do
       # Announce the durable row (liveness only, §10) — a broadcast with no
       # subscriber is a harmless no-op.
       Server.Bus.broadcast({:message_posted, message})
-      {:ok, message}
+      {:ok, Server.Recall.embed_on_write(message)}
     end
   end
 

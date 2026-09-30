@@ -77,7 +77,7 @@ defmodule Server.MCP.Tool.SearchHistory do
   schema do
     field :query, :string,
       required: true,
-      description: "Words or a whole question; rarer words weigh more (BM25)"
+      description: "Words or a whole question; ranked by its words (BM25) and its meaning together"
 
     field :limit, :integer, description: "Max results to show (default 10)"
 
