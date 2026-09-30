@@ -3,14 +3,15 @@ defmodule Server.Search do
   Total recall (design: server-total-recall, slice A): full-text search over the message channel
   (`history/2` — episodic recall of past sessions) and the fact corpus (`facts/2` — the ledger
   past the brief's cap). The curated brief answers "what should I inherit"; search answers "did we
-  ever touch X." Both rank (Postgres `ts_rank_cd` over a generated `tsvector`), return a
-  `%{shown, more}` cut-with-its-count (a cut without a count lies), and are read-only over the
-  generated column the baseline keeps in sync.
+  ever touch X." Both rank over a generated `tsvector` (`history/2` by BM25 — a rare word outweighs
+  a common one, repeats saturate, a long message does not win by bulk; k1 = 1.2, b = 0.75 — and
+  `facts/2`, whose one-line facts gain little from it, by `ts_rank_cd`), return a `%{shown, more}`
+  cut-with-its-count (a cut without a count lies), and are read-only over the generated column the
+  baseline keeps in sync.
 
   The raw query is never interpreted as query syntax: every token is a literal term, and every
-  search matches ANY of them (`websearch_to_tsquery` with `or`), ranked so a hit matching more of
-  them comes first — an agent searches with a whole question, and requiring every word of it
-  matches almost nothing.
+  search matches ANY of them (`websearch_to_tsquery` with `or`) — an agent searches with a whole
+  question, and requiring every word of it matches almost nothing.
   """
   alias Server.Repo
 
@@ -33,12 +34,28 @@ defmodule Server.Search do
         %{rows: rows} =
           Repo.query!(
             """
+            WITH terms AS (
+              SELECT DISTINCT lex FROM unnest(tsvector_to_array(to_tsvector('english', $1))) AS lex
+            ),
+            stats AS (
+              SELECT count(*)::float8 AS n, coalesce(avg(length(body_tsv)), 1)::float8 AS avgdl FROM message
+            ),
+            idf AS (
+              SELECT t.lex, ln(1 + (s.n - df.c + 0.5) / (df.c + 0.5)) AS w
+              FROM terms t CROSS JOIN stats s,
+              LATERAL (SELECT count(*)::float8 AS c FROM message
+                       WHERE body_tsv @@ to_tsquery('simple', quote_literal(t.lex))) df
+            )
             SELECT m.id, m.thread_id, m.author,
                    ts_headline('english', m.body, websearch_to_tsquery('english', $1), $3),
                    m.created_at
-            FROM message m
+            FROM message m CROSS JOIN stats s
             WHERE m.body_tsv @@ websearch_to_tsquery('english', $1)
-            ORDER BY ts_rank_cd(m.body_tsv, websearch_to_tsquery('english', $1)) DESC, m.id DESC
+            ORDER BY (
+              SELECT coalesce(sum(i.w * cardinality(v.positions) * 2.2 /
+                (cardinality(v.positions) + 1.2 * (0.25 + 0.75 * length(m.body_tsv) / s.avgdl))), 0)
+              FROM unnest(m.body_tsv) AS v(lexeme, positions, weights) JOIN idf i ON i.lex = v.lexeme
+            ) DESC, m.id DESC
             LIMIT $2
             """,
             [q, limit, @headline]
