@@ -3,12 +3,14 @@ defmodule Server.Search do
   Total recall (design: server-total-recall, slice A): full-text search over the message channel
   (`history/2` — episodic recall of past sessions) and the fact corpus (`facts/2` — the ledger
   past the brief's cap). The curated brief answers "what should I inherit"; search answers "did we
-  ever touch X." Both rank (Postgres `ts_rank_cd` over a generated `tsvector`, one-brain piece C —
-  was FTS5 bm25), return a `%{shown, more}` cut-with-its-count (a cut without a count lies), and
-  are read-only over the generated column the baseline keeps in sync.
+  ever touch X." Both rank (Postgres `ts_rank_cd` over a generated `tsvector`), return a
+  `%{shown, more}` cut-with-its-count (a cut without a count lies), and are read-only over the
+  generated column the baseline keeps in sync.
 
-  The raw query is never interpreted as query syntax: `plainto_tsquery` treats every token as a
-  literal term and ANDs them; `fact_relevance/2` ORs them (`websearch_to_tsquery` with `or`).
+  The raw query is never interpreted as query syntax: every token is a literal term. `history/2`
+  and `fact_relevance/2` match ANY term (`websearch_to_tsquery` with `or`), ranked so a hit matching
+  more of them comes first — an agent searches with a whole question, and requiring every word of
+  it matches almost nothing. `facts/2` ANDs them (`plainto_tsquery`).
   """
   alias Server.Repo
 
@@ -23,7 +25,7 @@ defmodule Server.Search do
   returns an empty cut, never an error.
   """
   def history(query, limit \\ @cap) when is_binary(query) do
-    case terms(query) do
+    case any_terms(query) do
       "" ->
         %{shown: [], more: 0}
 
@@ -32,11 +34,11 @@ defmodule Server.Search do
           Repo.query!(
             """
             SELECT m.id, m.thread_id, m.author,
-                   ts_headline('english', m.body, plainto_tsquery('english', $1), $3),
+                   ts_headline('english', m.body, websearch_to_tsquery('english', $1), $3),
                    m.created_at
             FROM message m
-            WHERE m.body_tsv @@ plainto_tsquery('english', $1)
-            ORDER BY ts_rank_cd(m.body_tsv, plainto_tsquery('english', $1)) DESC, m.id DESC
+            WHERE m.body_tsv @@ websearch_to_tsquery('english', $1)
+            ORDER BY ts_rank_cd(m.body_tsv, websearch_to_tsquery('english', $1)) DESC, m.id DESC
             LIMIT $2
             """,
             [q, limit, @headline]
@@ -47,7 +49,7 @@ defmodule Server.Search do
             %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
           end)
 
-        %{shown: shown, more: max(count("message", "body_tsv", q, "") - length(shown), 0)}
+        %{shown: shown, more: max(count("message", "body_tsv", q, "", "websearch_to_tsquery") - length(shown), 0)}
     end
   end
 
@@ -81,7 +83,10 @@ defmodule Server.Search do
             %{fact_id: id, thread_id: thread_id, kind: kind, text: text, snippet: snippet, at: at}
           end)
 
-        %{shown: shown, more: max(count("fact", "text_tsv", q, "AND forgotten_at IS NULL") - length(shown), 0)}
+        %{
+          shown: shown,
+          more: max(count("fact", "text_tsv", q, "AND forgotten_at IS NULL", "plainto_tsquery") - length(shown), 0)
+        }
     end
   end
 
@@ -123,9 +128,9 @@ defmodule Server.Search do
     if best == 0, do: Map.new(rows, fn [id, _] -> {id, 1.0} end), else: Map.new(rows, fn [id, s] -> {id, s / best} end)
   end
 
-  defp count(table, column, q, extra) do
+  defp count(table, column, q, extra, tsquery) do
     %{rows: [[n]]} =
-      Repo.query!("SELECT count(*) FROM #{table} WHERE #{column} @@ plainto_tsquery('english', $1) #{extra}", [q])
+      Repo.query!("SELECT count(*) FROM #{table} WHERE #{column} @@ #{tsquery}('english', $1) #{extra}", [q])
 
     n
   end
