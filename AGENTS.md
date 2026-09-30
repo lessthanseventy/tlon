@@ -115,8 +115,8 @@ Three doors onto one library:
 - the `menard` stdio **MCP** in Claude Code — runs the code it started with, so **restart Claude
   after changing Menard**.
 - the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb` tools, scoped to
-  their worktree — the server's own dep, pinned by git ref in `server/mix.exs`; bump the
-  ref to give them a newer menard.
+  their worktree — the server's own hex dep (`server/mix.exs`, locked in `server/mix.lock`); publish
+  menard and bump the lock to give them a newer one.
 
 `mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape hatch for
 editing Menard WITH Menard, where a half-applied edit otherwise locks the tool out of finishing it.
