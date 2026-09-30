@@ -2,7 +2,8 @@
 # `@@TLON <json>` reply per stdout line (the marker, because dev Logger/Ecto also write to stdout).
 # Run from server/ with TLON_DATABASE naming a *_bench db (default tlon_bench). TLON_BENCH_MODE picks what is measured:
 #   messages — raw session turns ranked by Server.Search.history (the episodic channel); with
-#              TLON_BENCH_AROUND=n, each hit's exchange, cut to the recall token budget
+#              TLON_BENCH_AROUND=n, each hit's exchange, cut to the recall token budget. Messages are
+#              embedded as on write (TLON_BENCH_EMBED=0 for keyword alone)
 #   facts    — Server.Memory.TurnPass extracts facts per ≤20-message chunk, ranked by Server.Recall
 import Ecto.Query
 
@@ -20,6 +21,7 @@ unless is_binary(db) and String.ends_with?(db, "_bench"),
   do: raise("bench wipes its database on every question; refusing #{inspect(db)} — set TLON_DATABASE=tlon_bench")
 
 mode = System.get_env("TLON_BENCH_MODE", "messages")
+embed? = System.get_env("TLON_BENCH_EMBED", "1") == "1"
 Logger.configure(level: :warning)
 Application.put_env(:server, :memory_extractor_cmd, System.get_env("TLON_BENCH_EXTRACTOR_CMD", "pi"))
 Application.put_env(:server, :memory_extractor_model, System.get_env("TLON_BENCH_EXTRACTOR_MODEL", "ollama-cloud/deepseek-v4.1-flash"))
@@ -37,15 +39,20 @@ ingest = fn %{"unit" => unit, "docs" => docs} ->
 
   for doc <- Enum.sort_by(docs, &(&1["timestamp"] || "")),
       chunk <- Enum.chunk_every(Enum.reject(doc["messages"], &(&1["content"] in [nil, ""])), 20) do
-    for m <- chunk do
-      Repo.insert!(%Message{
-        thread_id: thread.id,
-        author: m["role"],
-        body: m["content"],
-        created_at: at.(doc["timestamp"]),
-        payload: %{"session" => doc["id"]}
-      })
-    end
+    inserted =
+      for m <- chunk do
+        Repo.insert!(%Message{
+          thread_id: thread.id,
+          author: m["role"],
+          body: m["content"],
+          created_at: at.(doc["timestamp"]),
+          payload: %{"session" => doc["id"]}
+        })
+      end
+
+    # What Channel.post's embed-on-write does, awaited here so the question sees every vector.
+    if embed?,
+      do: inserted |> Task.async_stream(&Recall.embed_message/1, max_concurrency: 8, timeout: 60_000) |> Stream.run()
 
     if mode == "facts", do: TurnPass.run(thread.id, min_messages: 1)
   end
