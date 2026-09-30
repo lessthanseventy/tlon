@@ -1,16 +1,5 @@
-# tasks/menard.toml — Menard, the Elixir repo tools: AST-aware edits and
-# introspection that run from menard's own project, so they work while the app being edited
-# does not compile. Paths are relative to where you stand; `--in DIR` for the run verbs.
-# Included by mise.toml ([task_config] includes). It lives HERE, not beside the tool, because
-# menard ships as a standalone repo: WHERE its checkout is, is tlon's business, not menard's.
-# The CLI is scripts/menard.sh: the committed HEAD of ~/projects/menard (else the server/mix.lock
-# pin), from its own checkout under ~/.cache, so it keeps working while the server's deps do not
-# resolve and an uncommitted edit in ~/projects/menard never breaks it. `menard:check` gates the
-# ~/projects/menard dev checkout.
-
-["menard"]
-description = "menard: any verb — `mise run menard -- VERB …`; the verbs and when to use each are in menard's AGENTS.md (github.com/lessthanseventy/menard)"
-run = "scripts/menard.sh"
+# tasks/menard.toml — the gate of the ~/projects/menard dev checkout, Menard's Elixir repo tools.
+# Included by mise.toml. The CLI is not a task: agents call ~/projects/menard/bin/menard by path (AGENTS.md).
 
 ["menard:check"]
 description = "menard: its own gate — format + warnings-as-errors + tests"

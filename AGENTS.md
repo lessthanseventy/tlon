@@ -73,8 +73,8 @@ Catching yourself about to run the same command a second time with a different f
 signal to read the log, not repeat the call — the same escape hatch any SWE reaches for when a
 loop starts repeating itself.
 
-**Elixir tests and the gate go through Menard, not `cap`:** `mise run menard -- run test --in
-server [FILE[:LINE]]` and `mise run menard -- run check --in server` (`--in console` for the
+**Elixir tests and the gate go through Menard, not `cap`:** `~/projects/menard/bin/menard run test --in
+server [FILE[:LINE]]` and `~/projects/menard/bin/menard run check --in server` (`--in console` for the
 console). One run answers with one JSON line: `ok` and the counts when green; when red, every
 failure with its kind, `file:line` and message, a failing test's name, source and the assertion's
 left and right. It is this section's rule with the failures already parsed out, so there is nothing
@@ -110,16 +110,16 @@ teach. It ships with the plugin, so it is the one copy; this section is only the
 
 Three doors onto one library:
 
-- `mise run menard -- VERB …` — runs the committed HEAD of `~/projects/menard` from its own checkout
-  under `~/.cache` (never the working tree's uncommitted edits; commit there to pick a change up), or
-  the `server/mix.lock` pin on a machine without the dev checkout. Dashes and underscores both work.
+- `~/projects/menard/bin/menard VERB …` — the plugin's own CLI, by the path its refusals name: the
+  one way in, and the one the eval measures. It runs whatever that checkout holds, uncommitted edits
+  included, as it does for every project using the plugin. Dashes and underscores both work.
 - the `menard` stdio **MCP** in Claude Code — runs the code it started with, so **restart Claude
   after changing Menard**.
 - the coworkers' `rename_identifier` / `edit_clause` / `outline_file` / `run_verb` tools, scoped to
   their worktree — the server's own hex dep (`server/mix.exs`, locked in `server/mix.lock`); publish
   menard and bump the lock to give them a newer one.
 
-`mise run menard -- --frozen VERB …` runs the last build with no compile step — the escape hatch for
+`~/projects/menard/bin/menard --frozen VERB …` runs the last build with no compile step — the escape hatch for
 editing Menard WITH Menard, where a half-applied edit otherwise locks the tool out of finishing it.
 
 The `Edit` tool is for the languages Menard does not cover — TypeScript, Lua, Nix. The plugin no
