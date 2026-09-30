@@ -83,7 +83,8 @@ defmodule Server.MCP.Brief do
       "provenance" => f.provenance,
       "check_cmd" => f.check_cmd,
       "certainty" => certainty(f),
-      "at" => at(f.created_at)
+      "at" => at(f.created_at),
+      "observed" => at(f.observed_at)
     }
   end
 

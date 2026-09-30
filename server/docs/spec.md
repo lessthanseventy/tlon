@@ -222,7 +222,9 @@ event to fall back on. An attributed fact is judgement the system cannot derive,
 §4's rule says to ask for.
 
 - **`fact`** — durable things learned, the successor to the ledger. `kind` (decision, constraint,
-  learned), text, `at`, source session, and the incident that produced it. 297 entries exist today and
+  learned), text, `at`, source session, and the incident that produced it. A fact extracted from a
+  conversation also carries `observed_at`, when that conversation happened: an import or a late pass
+  can put it long before `at`, which stays the banking time the forgetting curve decays from. 297 entries exist today and
   they are the only thing that imports (§7).
 
   **`provenance`, two values, and a nullable `check`.** Settled between two sessions after a dissent.

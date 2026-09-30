@@ -60,6 +60,19 @@ defmodule Server.MemoryTurnPassTest do
     assert Repo.get!(Thread, thread.id).memory_pass_last_id == Repo.aggregate(Server.Message, :max, :id)
   end
 
+  test "a fact is observed when its conversation happened, and banked now" do
+    thread = thread_with_messages(3)
+    then = ~U[2023-05-20 10:00:00Z]
+    Repo.update_all(Server.Message, set: [created_at: then])
+
+    :ok = TurnPass.run(thread.id, extractor: StubExtractor, min_messages: 3)
+
+    assert [fact] = Repo.all(Fact)
+    assert fact.observed_at == then
+    assert DateTime.diff(DateTime.utc_now(), fact.created_at) < 60
+    assert Server.MCP.Brief.fact(fact)["observed"] == "2023-05-20T10:00:00Z"
+  end
+
   test "too few new messages → no extraction" do
     thread = thread_with_messages(1)
 
