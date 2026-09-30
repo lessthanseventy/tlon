@@ -96,7 +96,8 @@ retrieve = fn %{"query" => query, "k" => k} ->
         thread = Repo.one!(from(t in Thread, limit: 1))
 
         for %{fact: f} <- Recall.working_set_for_thread(thread, query: query, include_pinned: false) do
-          %{"id" => "fact-#{f.id}", "text" => "[#{f.kind}] #{f.text}"}
+          observed = if f.observed_at, do: "[#{DateTime.to_date(f.observed_at)}] ", else: ""
+          %{"id" => "fact-#{f.id}", "text" => "#{observed}[#{f.kind}] #{f.text}"}
         end
     end
 
