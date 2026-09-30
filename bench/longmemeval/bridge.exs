@@ -1,7 +1,8 @@
 # The LongMemEval harness's door into this server's recall: one JSON request per stdin line, one
 # `@@TLON <json>` reply per stdout line (the marker, because dev Logger/Ecto also write to stdout).
 # Run from server/ with TLON_DATABASE naming a *_bench db (default tlon_bench). TLON_BENCH_MODE picks what is measured:
-#   messages — raw session turns ranked by Server.Search.history (the episodic channel)
+#   messages — raw session turns ranked by Server.Search.history (the episodic channel); with
+#              TLON_BENCH_AROUND=n, each hit's exchange, cut to the recall token budget
 #   facts    — Server.Memory.TurnPass extracts facts per ≤20-message chunk, ranked by Server.Recall
 import Ecto.Query
 
@@ -52,14 +53,37 @@ ingest = fn %{"unit" => unit, "docs" => docs} ->
   %{"thread" => thread.id, "facts" => Repo.aggregate(Fact, :count)}
 end
 
+around = String.to_integer(System.get_env("TLON_BENCH_AROUND", "0"))
+budget = get_in(Application.get_env(:server, :recall, []), [:budget]) || 4000
+line = fn m -> "[#{DateTime.to_date(Map.get(m, :created_at) || m.at)}] #{m.author}: #{m.body}" end
+
 retrieve = fn %{"query" => query, "k" => k} ->
   hits =
     case mode do
-      "messages" ->
+      "messages" when around == 0 ->
         for %{message_id: id} <- Search.history(query, k).shown do
           m = Repo.get!(Message, id)
-          %{"id" => m.payload["session"], "text" => "[#{DateTime.to_date(m.created_at)}] #{m.author}: #{m.body}"}
+          %{"id" => m.payload["session"], "text" => line.(m)}
         end
+
+      # Each hit's exchange, in rank order, each message once, cut to the recall budget the way
+      # Server.Recall cuts facts: one that does not fit is skipped and a smaller one can still land.
+      "messages" ->
+        {docs, _seen, _left} =
+          Enum.reduce(Search.history(query, k, around: around).shown, {[], MapSet.new(), budget}, fn hit, {docs, seen, left} ->
+            fresh = Enum.reject(hit.window, &MapSet.member?(seen, &1.message_id))
+            text = Enum.map_join(fresh, "\n", line)
+            tokens = div(String.length(text), 4)
+
+            if fresh == [] or tokens > left do
+              {docs, seen, left}
+            else
+              session = Repo.get!(Message, hit.message_id).payload["session"]
+              {[%{"id" => session, "text" => text} | docs], MapSet.union(seen, MapSet.new(fresh, & &1.message_id)), left - tokens}
+            end
+          end)
+
+        Enum.reverse(docs)
 
       "facts" ->
         thread = Repo.one!(from(t in Thread, limit: 1))
