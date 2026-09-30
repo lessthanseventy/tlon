@@ -38,12 +38,21 @@ defmodule Server.SearchTest do
       assert %{shown: []} = Search.history("ephemeral")
     end
 
-    test "a multi-word query ANDs the terms", %{thread: thread} do
-      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "elixir supervision tree design"})
+    test "a multi-word query matches ANY term, the message matching more of them first", %{thread: thread} do
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "elixir only, no second term here"})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "elixir supervision tree design"})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "a", body: "nothing relevant"})
 
-      %{shown: shown} = Search.history("elixir supervision")
-      assert length(shown) == 1
+      %{shown: shown, more: 0} = Search.history("elixir supervision")
+      assert shown |> Enum.map(& &1.snippet) |> Enum.map(&(&1 =~ "supervision")) == [true, false]
+    end
+
+    test "a question in plain words finds the message that answers it", %{thread: thread} do
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "my commute is 45 minutes each way"})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "lunch was good"})
+
+      assert %{shown: [hit]} = Search.history("How long is my daily commute to work?")
+      assert hit.snippet =~ "commute"
     end
 
     test "special characters in the query don't crash FTS5", %{thread: thread} do
