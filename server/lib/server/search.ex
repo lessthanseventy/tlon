@@ -7,10 +7,10 @@ defmodule Server.Search do
   `%{shown, more}` cut-with-its-count (a cut without a count lies), and are read-only over the
   generated column the baseline keeps in sync.
 
-  The raw query is never interpreted as query syntax: every token is a literal term. `history/2`
-  and `fact_relevance/2` match ANY term (`websearch_to_tsquery` with `or`), ranked so a hit matching
-  more of them comes first — an agent searches with a whole question, and requiring every word of
-  it matches almost nothing. `facts/2` ANDs them (`plainto_tsquery`).
+  The raw query is never interpreted as query syntax: every token is a literal term, and every
+  search matches ANY of them (`websearch_to_tsquery` with `or`), ranked so a hit matching more of
+  them comes first — an agent searches with a whole question, and requiring every word of it
+  matches almost nothing.
   """
   alias Server.Repo
 
@@ -49,7 +49,7 @@ defmodule Server.Search do
             %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
           end)
 
-        %{shown: shown, more: max(count("message", "body_tsv", q, "", "websearch_to_tsquery") - length(shown), 0)}
+        %{shown: shown, more: max(count("message", "body_tsv", q, "") - length(shown), 0)}
     end
   end
 
@@ -59,7 +59,7 @@ defmodule Server.Search do
   nor counted.
   """
   def facts(query, limit \\ @cap) when is_binary(query) do
-    case terms(query) do
+    case any_terms(query) do
       "" ->
         %{shown: [], more: 0}
 
@@ -68,11 +68,11 @@ defmodule Server.Search do
           Repo.query!(
             """
             SELECT f.id, f.thread_id, f.kind, f.text,
-                   ts_headline('english', f.text, plainto_tsquery('english', $1), $3),
+                   ts_headline('english', f.text, websearch_to_tsquery('english', $1), $3),
                    f.created_at
             FROM fact f
-            WHERE f.text_tsv @@ plainto_tsquery('english', $1) AND f.forgotten_at IS NULL
-            ORDER BY ts_rank_cd(f.text_tsv, plainto_tsquery('english', $1)) DESC, f.id DESC
+            WHERE f.text_tsv @@ websearch_to_tsquery('english', $1) AND f.forgotten_at IS NULL
+            ORDER BY ts_rank_cd(f.text_tsv, websearch_to_tsquery('english', $1)) DESC, f.id DESC
             LIMIT $2
             """,
             [q, limit, @headline]
@@ -85,7 +85,7 @@ defmodule Server.Search do
 
         %{
           shown: shown,
-          more: max(count("fact", "text_tsv", q, "AND forgotten_at IS NULL", "plainto_tsquery") - length(shown), 0)
+          more: max(count("fact", "text_tsv", q, "AND forgotten_at IS NULL") - length(shown), 0)
         }
     end
   end
@@ -128,18 +128,14 @@ defmodule Server.Search do
     if best == 0, do: Map.new(rows, fn [id, _] -> {id, 1.0} end), else: Map.new(rows, fn [id, s] -> {id, s / best} end)
   end
 
-  defp count(table, column, q, extra, tsquery) do
+  defp count(table, column, q, extra) do
     %{rows: [[n]]} =
-      Repo.query!("SELECT count(*) FROM #{table} WHERE #{column} @@ #{tsquery}('english', $1) #{extra}", [q])
+      Repo.query!("SELECT count(*) FROM #{table} WHERE #{column} @@ websearch_to_tsquery('english', $1) #{extra}", [q])
 
     n
   end
 
-  # The literal terms, whitespace-joined: plainto_tsquery ANDs them and treats punctuation as text,
-  # so a user's `-`, `*`, `AND` or stray `"` is searched for, never interpreted.
-  defp terms(query), do: query |> tokens() |> Enum.join(" ")
-
-  # The same terms, OR-joined for websearch_to_tsquery (its `or` is the one operator it knows).
+  # The literal terms, OR-joined for websearch_to_tsquery (its `or` is the one operator it knows).
   defp any_terms(query), do: query |> tokens() |> Enum.join(" or ")
 
   defp tokens(query) do

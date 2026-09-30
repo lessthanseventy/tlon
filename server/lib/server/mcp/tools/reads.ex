@@ -97,7 +97,10 @@ defmodule Server.MCP.Tool.SearchFacts do
   alias Server.Search
 
   schema do
-    field :query, :string, required: true, description: "Words to search for (multiple words AND together)"
+    field :query, :string,
+      required: true,
+      description: "Words or a whole question; a fact matching more of them ranks first"
+
     field :limit, :integer, description: "Max results to show (default 10)"
   end
 
