@@ -20,6 +20,8 @@ defmodule Server.Fact do
     field :taught, :string
     field :supersedes, :id
     field :created_at, :utc_datetime
+    # When the conversation it came from happened (nil: not from a conversation, or unknown).
+    field :observed_at, :utc_datetime
     # Semantic-recall index (written AFTER the fact, off the write path) — the embedding vector and
     # the model that produced it, so a model swap is a detectable re-embed.
     field :embedding, Server.VectorColumn
@@ -68,7 +70,8 @@ defmodule Server.Fact do
       :incident,
       :taught,
       :supersedes,
-      :source_session_id
+      :source_session_id,
+      :observed_at
     ])
     |> validate_required([:kind, :text, :provenance])
     |> Server.Secrets.validate_no_secret(:text)

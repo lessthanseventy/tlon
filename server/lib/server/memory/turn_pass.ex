@@ -64,20 +64,21 @@ defmodule Server.Memory.TurnPass do
     existing = Dossier.facts_for_thread(%Thread{id: tid})
 
     case opts[:extractor].extract(messages, existing) do
-      {:ok, facts} -> facts |> Enum.take(@max_facts) |> Enum.each(&bank(tid, &1))
+      {:ok, facts} -> facts |> Enum.take(@max_facts) |> Enum.each(&bank(tid, &1, List.last(messages).created_at))
       {:error, _reason} -> :ok
     end
 
     :ok
   end
 
-  defp bank(tid, %{kind: kind, text: text} = fact) do
+  defp bank(tid, %{kind: kind, text: text} = fact, observed_at) do
     case Dossier.bank_fact(%{
            thread_id: tid,
            kind: kind,
            text: text,
            provenance: "derived",
-           intent: Map.get(fact, :intent)
+           intent: Map.get(fact, :intent),
+           observed_at: observed_at
          }) do
       {:ok, banked} -> Recall.embed_on_write(banked)
       {:error, _changeset} -> :ok
