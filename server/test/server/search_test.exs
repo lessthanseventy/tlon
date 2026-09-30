@@ -78,6 +78,29 @@ defmodule Server.SearchTest do
       refute Map.has_key?(plain, :window)
     end
 
+    test "with a query embedding, a message that shares its meaning but no word is found", %{thread: thread} do
+      {:ok, car} = Channel.post(%{thread_id: thread.id, author: "user", body: "the automobile needs new brakes"})
+      {:ok, lunch} = Channel.post(%{thread_id: thread.id, author: "user", body: "lunch was good"})
+      embed!(car, [1.0, 0.0, 0.0])
+      embed!(lunch, [0.0, 1.0, 0.0])
+
+      assert %{shown: [first | _]} = Search.history("car trouble", 10, query_embedding: [0.9, 0.1, 0.0])
+      assert first.message_id == car.id
+    end
+
+    test "a message ranked by both meaning and words beats one ranked by either alone", %{thread: thread} do
+      {:ok, both} = Channel.post(%{thread_id: thread.id, author: "a", body: "brakes on the car"})
+      {:ok, words} = Channel.post(%{thread_id: thread.id, author: "a", body: "a car wash coupon"})
+      {:ok, meaning} = Channel.post(%{thread_id: thread.id, author: "a", body: "the automobile"})
+      embed!(both, [0.8, 0.2, 0.0])
+      embed!(words, [0.0, 1.0, 0.0])
+      embed!(meaning, [1.0, 0.0, 0.0])
+
+      %{shown: shown} = Search.history("car", 10, query_embedding: [1.0, 0.0, 0.0])
+      assert hd(shown).message_id == both.id
+      assert MapSet.new(shown, & &1.message_id) == MapSet.new([both.id, words.id, meaning.id])
+    end
+
     test "a question in plain words finds the message that answers it", %{thread: thread} do
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "my commute is 45 minutes each way"})
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "user", body: "lunch was good"})
@@ -101,6 +124,10 @@ defmodule Server.SearchTest do
     test "an empty/whitespace query returns nothing, not an error" do
       assert %{shown: [], more: 0} = Search.history("   ")
     end
+  end
+
+  defp embed!(message, vector) do
+    message |> Ecto.Changeset.change(embedding: vector, embedding_model: "test") |> Repo.update!()
   end
 
   describe "facts/2 — FTS over the fact corpus" do

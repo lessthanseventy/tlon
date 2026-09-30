@@ -31,6 +31,9 @@ defmodule Server.Message do
     field :payload, :map
     field :resolved_at, :utc_datetime
     field :resolution, :string
+    # Written off the post path by Server.Recall.embed_on_write/1; nil until then, or with no embedder.
+    field :embedding, Server.VectorColumn
+    field :embedding_model, :string
     belongs_to :thread, Server.Thread
   end
 
