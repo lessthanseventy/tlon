@@ -26,7 +26,8 @@ defmodule Server.Message do
     field :origin_thread_id, :integer
     field :mirrored, :boolean, default: false
     # `chat` is a message; `prompt` is a coworker WAITING on the operator (Server.Attention) — the
-    # dialog's options ride `payload`, and `resolved_at`/`resolution` say how it ended.
+    # dialog's options ride `payload`, and `resolved_at`/`resolution` say how it ended. `stall` is a
+    # coworker mid-turn whose pane froze (Server.Attention.Stall), resolved the same way.
     field :kind, :string, default: "chat"
     field :payload, :map
     field :resolved_at, :utc_datetime
@@ -56,13 +57,14 @@ defmodule Server.Message do
       :payload
     ])
     |> validate_required([:thread_id, :author, :body])
-    |> validate_inclusion(:kind, ["chat", "prompt"])
+    |> validate_inclusion(:kind, ["chat", "prompt", "stall"])
     |> Server.Secrets.validate_no_secret(:body)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
   end
 
-  @doc "Close a `prompt`: how it ended — `answered: y`, `answered in the terminal`, `superseded`, `window closed`."
-  def resolve_changeset(%__MODULE__{kind: "prompt"} = prompt, resolution) when is_binary(resolution) do
+  @doc "Close a `prompt` or `stall`: how it ended — `answered: y`, `answered in the terminal`, `pane moved`, `window closed`."
+  def resolve_changeset(%__MODULE__{kind: kind} = prompt, resolution)
+      when kind in ["prompt", "stall"] and is_binary(resolution) do
     change(prompt, resolved_at: DateTime.truncate(DateTime.utc_now(), :second), resolution: resolution)
   end
 end

@@ -50,6 +50,14 @@ defmodule Console.Panel.ThreadStackTest do
     assert out =~ "⚑ bash: ls — answered: y"
   end
 
+  test "a resolved stall is a quiet receipt" do
+    stall = %{author: "tlon", body: "⚠ stalled — t9 is mid-turn and its pane has not changed for 5m", kind: "stall"}
+    resolved = Map.merge(stall, %{resolved_at: ~U[2026-09-30 10:00:00Z], resolution: "pane moved"})
+
+    out = %{cards: [card(%{id: 42, messages: [resolved]})], opened: 42} |> ThreadStack.render(rect()) |> text()
+    assert out =~ "⚠ stalled — t9 is mid-turn and its pane has not changed for 5m — pane moved"
+  end
+
   test "an empty stack renders a placeholder" do
     assert %{cards: []} |> ThreadStack.render(rect()) |> text() =~ "no threads yet"
   end
