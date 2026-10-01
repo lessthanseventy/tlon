@@ -94,6 +94,11 @@ defmodule Console.Panel.ThreadStack do
     [[{"⚑ #{summary} — #{resolution}", :dim}]]
   end
 
+  # A frozen pane (Server.Attention.Stall): open, it reads as tlon's post; resolved, a receipt.
+  defp message_rows(%{kind: "stall", body: body, resolution: resolution}, _w) when is_binary(resolution) do
+    [[{"#{body} — #{resolution}", :dim}]]
+  end
+
   # A message as a chat bubble: the author on its own line, then the body rendered as MARKDOWN
   # (Console.Markdown — bold/code/lists/headings), each row indented under the author. Reads like a
   # chat, not a wall of text: the old `one_line/1` flattened the whole body onto one wrapped line.
