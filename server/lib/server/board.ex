@@ -183,8 +183,8 @@ defmodule Server.Board do
     todos = Dossier.open_todos_for_thread(thread)
     recent = Channel.recent_messages(thread, @cap)
 
-    # WORKLINE — stage, gate, and whether the stage's owed artifact is committed: what a coworker's
-    # stop-hook asks before it lets a turn end (survey §4 adopt #3), and what the editor flags.
+    # WORKLINE — stage, gate, and whether the stage's owed artifact is committed: what the coworker
+    # reads before it ends a turn, and what the editor flags.
     workline =
       case Workline.owed_status(thread) do
         :none -> nil
