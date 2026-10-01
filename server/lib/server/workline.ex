@@ -366,8 +366,8 @@ defmodule Server.Workline do
   defp next(stage), do: Enum.at(@stages, Enum.find_index(@stages, &(&1 == stage)) + 1)
 
   @doc """
-  Is the current stage's owed artifact there? The coworker-side gate (the Claude Code Stop hook,
-  the `/api/threads/:id` brief) asks this without advancing. `:none` for a plain thread or a
+  Is the current stage's owed artifact there? The turn-end continuation
+  (`Server.Workline.Continuation`) and the `/api/threads/:id` brief ask this without advancing. `:none` for a plain thread or a
   merged workline, `{:ok, why}` when committed, `{:error, why}` when missing — `why` in the
   checker's words (`Server.Workline.Artifacts`).
   """

@@ -16,6 +16,7 @@ defmodule Server.Presence.Thinking do
 
   alias Server.Bus
   alias Server.Memory.TurnPass
+  alias Server.Workline.Continuation
 
   @default_max_seconds 600
   @sweep_interval_ms 60_000
@@ -56,7 +57,10 @@ defmodule Server.Presence.Thinking do
   end
 
   def handle_call({:idle, thread_id, agent}, _from, state) do
-    {:reply, :ok, clear(state, thread_id, agent)}
+    next = clear(state, thread_id, agent)
+    # a DECLARED turn end, never the stuck sweep: only a harness that finished a turn is continued
+    if next != state, do: _ = Continuation.schedule(thread_id)
+    {:reply, :ok, next}
   end
 
   def handle_call({:thinking_for, thread_id}, _from, state) do

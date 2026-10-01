@@ -173,7 +173,7 @@ defmodule Server.MCP.GatewayTest do
     assert socket == "console-workspace-#{ws.id}" and session == "w#{ws.id}" and window == "t#{t.id}"
   end
 
-  test "a workline's brief carries the gate, and the Claude Code Stop hook bounces a stop on a missing artifact" do
+  test "a workline's brief carries the gate" do
     # the artifact check runs git under the workline root: a throwaway repo, never this checkout
     tmp = Path.join(System.tmp_dir!(), "tlon-gateway-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
@@ -190,26 +190,6 @@ defmodule Server.MCP.GatewayTest do
     {200, brief} = get_json("/api/threads/#{wl.id}")
     assert %{"stage" => "intent", "artifact_ok" => false, "why" => why} = brief["workline"]
     assert why =~ "intent.md"
-
-    hook = Path.expand("../../../../adapters/claude-code/gate-hook.sh", __DIR__)
-    env = [{"TLON_THREAD", Integer.to_string(wl.id)}, {"TLON_MCP_URL", "http://127.0.0.1:48641/mcp"}]
-    # a first stop is refused with the reason on stderr
-    {out, 2} =
-      System.cmd("bash", ["-c", "echo '{\"stop_hook_active\":false}' | #{hook}"], env: env, stderr_to_stdout: true)
-
-    assert out =~ "owed artifact is not committed"
-    # a bounced turn is let through — never a forever loop
-    {_, 0} =
-      System.cmd("bash", ["-c", "echo '{\"stop_hook_active\":true}' | #{hook}"], env: env, stderr_to_stdout: true)
-
-    # and a plain thread is a no-op
-    {:ok, plain} = Channel.open_thread(%{title: "plain"})
-
-    {_, 0} =
-      System.cmd("bash", ["-c", "echo '{}' | #{hook}"],
-        env: [{"TLON_THREAD", Integer.to_string(plain.id)} | tl(env)],
-        stderr_to_stdout: true
-      )
   end
 
   describe "/api — the operator's door (Server.MCP.OperatorAPI)" do
