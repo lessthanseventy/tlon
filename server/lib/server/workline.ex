@@ -15,6 +15,8 @@ defmodule Server.Workline do
   already exist.
   """
 
+  import Ecto.Query
+
   alias Server.Dossier
   alias Server.Repo
   alias Server.Thread
@@ -209,7 +211,7 @@ defmodule Server.Workline do
 
     with :ok <- advanceable(thread),
          :ok <- verified_artifact(thread, checker) do
-      if gated?(thread), do: park(thread), else: flip(thread)
+      if gated?(thread), do: park(thread, checker), else: flip(thread)
     end
   end
 
@@ -293,11 +295,44 @@ defmodule Server.Workline do
   defp gated?(%Thread{stage: "intent", born: "machine"}), do: true
   defp gated?(%Thread{stage: stage}), do: stage in @gated
 
-  defp park(thread) do
+  defp park(thread, checker) do
     {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
     Server.Bus.broadcast({:workline_gated, parked})
-    post_brief(parked, Brief.gate_message(parked))
+    proof = if parked.stage == "review", do: proof(parked, artifacts: checker)
+    post_brief(parked, Brief.gate_message(parked, proof))
     {:awaiting, parked}
+  end
+
+  @doc """
+  The proof a workline carries into its merge gate, read now from git and the event log: each
+  stage's owed artifact up to the current one in the checker's words (verify's is `checks`), the
+  newest verify check per command with its measured exit (five, newest first), and the branch's
+  diff against HEAD. `%{artifacts: [{stage, {:ok | :error, why}}], checks: [%{cmd, exit}], diff:
+  {:ok | :error, text}}`. `opts[:artifacts]` swaps the checker.
+  """
+  def proof(%Thread{} = thread, opts \\ []) do
+    checker = Keyword.get(opts, :artifacts, Git)
+    upto = Enum.take(@stages, Enum.find_index(@stages, &(&1 == thread.stage)) + 1)
+
+    %{
+      artifacts:
+        for(stage <- upto, req = @owed[stage], req not in [nil, :checks], do: {stage, checker.check(thread, req)}),
+      checks: verify_checks(thread),
+      diff: Git.diffstat(thread)
+    }
+  end
+
+  defp verify_checks(thread) do
+    correlation = "workline:#{thread.slug}:verify"
+
+    from(e in Server.Event,
+      where: e.thread_id == ^thread.id and e.correlation == ^correlation and e.kind in ["check_passed", "check_failed"],
+      order_by: [desc: e.id]
+    )
+    |> Repo.all()
+    |> Enum.uniq_by(& &1.detail["cmd"])
+    |> Enum.take(5)
+    |> Enum.map(&%{cmd: &1.detail["cmd"], exit: &1.detail["exit"]})
   end
 
   # One transaction: the stage flip and its ledger row commit together or not at all.

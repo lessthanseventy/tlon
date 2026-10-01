@@ -25,11 +25,30 @@ defmodule Server.Workline.Brief do
     """)
   end
 
-  @doc "The parked-gate notice — what's waiting and the operator's completion verb."
-  def gate_message(%Thread{} = t) do
+  @doc """
+  The parked-gate notice — what's waiting and the operator's completion verb, then the
+  workline's proof (`Server.Workline.proof/2`) when one is given.
+  """
+  def gate_message(%Thread{} = t, proof \\ nil) do
     "⏸ workline #{t.slug} is parked at #{t.stage} — this transition is the operator's. " <>
-      "Approve with: mise run server:cli -- approve #{t.id} (tlon-cli approve #{t.id})."
+      "Approve with: mise run server:cli -- approve #{t.id} (tlon-cli approve #{t.id})." <> proof_lines(proof)
   end
+
+  defp proof_lines(nil), do: ""
+
+  defp proof_lines(%{artifacts: artifacts, checks: checks, diff: diff}) do
+    lines =
+      Enum.map(artifacts, fn {stage, {status, why}} -> "#{mark(status == :ok)} #{stage}: #{why}" end) ++
+        check_lines(checks) ++ ["diff: #{elem(diff, 1)}"]
+
+    "\nProof:\n" <> Enum.map_join(lines, "\n", &("  " <> &1))
+  end
+
+  defp check_lines([]), do: ["✗ no verify checks recorded"]
+  defp check_lines(checks), do: Enum.map(checks, &"#{mark(&1.exit == 0)} #{&1.cmd} (exit #{&1.exit})")
+
+  defp mark(true), do: "✓"
+  defp mark(false), do: "✗"
 
   # Capability-fit routing (Aider's architect/editor split, survey §4 adopt #7): the workspace's
   # `knobs["model_routing"]` names a model per stage — reasoning for spec/review, a precise cheap

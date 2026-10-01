@@ -58,6 +58,19 @@ defmodule Server.Workline.Artifacts.Git do
       else: {:error, "no check_passed correlated #{correlation}"}
   end
 
+  @doc """
+  The workline branch's change against the main tree's HEAD (`git diff --shortstat HEAD...work/<slug>`):
+  `{:ok, shortstat}`, or `{:error, why}` when there is no branch to diff.
+  """
+  def diffstat(thread) do
+    branch = "work/#{thread.slug}"
+
+    case git(thread, ["diff", "--shortstat", "HEAD..." <> branch]) do
+      {out, 0} -> {:ok, if(String.trim(out) == "", do: "no change against HEAD", else: String.trim(out))}
+      {_out, _} -> {:error, "no branch #{branch} to diff"}
+    end
+  end
+
   defp git(thread, args), do: System.cmd("git", ["-C", root(thread) | args], stderr_to_stdout: true)
 
   # A failed check on a broken root would otherwise read as "not committed" — an actionable-
