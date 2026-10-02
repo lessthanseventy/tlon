@@ -20,6 +20,7 @@
 #   roster                         who's on the clock (warm ●/cold ○)
 #   shell-status                   roster + open threads + counts as JSON, for the desktop shell
 #   shell-dossier <id>             a thread's brief as JSON, for the shell's AGENTS pane
+#   shell-thread <id>              a thread's last messages + its worker's pane, for the office's wide view
 #   ticket-file <ws> <proj|-> <title> [body…]   file a ticket (the shell's office)
 #   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
@@ -262,6 +263,25 @@ case "$cmd" in
         workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}), archetypes: archetypes, models: models} |> JSON.encode!() |> IO.puts()'
     ;;
 
+  shell-thread)
+    # A thread for the office's wide view, as JSON: its last 60 messages, and what its worker's
+    # pane shows right now (capture-pane of the thread's own window, or of the lead's window for a
+    # standing thread; null when none runs).
+    tid="${1:-}"
+    int "$tid" || { echo 'usage: tlon-cli.sh shell-thread <thread-id>' >&2; exit 2; }
+    exec "$SERVER" rpc '
+      t = Server.Repo.get!(Server.Thread, '"$tid"')
+      msgs = t |> Server.Channel.thread_messages() |> Enum.take(-60) |> Enum.map(&%{id: &1.id, author: &1.author, body: &1.body, at: &1.created_at, kind: &1.kind})
+      tabs = Server.Tmux.list_windows(t.workspace_id)
+      std = case Server.Channel.machine_thread(t.workspace_id) do nil -> false; m -> m.id == t.id end
+      tab = Server.Tmux.leaf_tab(tabs, t.id) || (std && Server.Tmux.named(tabs, Server.Channel.thread_lead(t.id) || ""))
+      peek = case tab do
+        %{index: i} -> case Server.Tmux.run(t.workspace_id, ["capture-pane", "-p", "-J", "-t", Server.Tmux.target(t.workspace_id, i)]) do {out, 0} -> String.trim_trailing(out); _ -> nil end
+        _ -> nil
+      end
+      %{messages: msgs, peek: peek, window: tab && tab.name} |> JSON.encode!() |> IO.puts()'
+    ;;
+
   ticket-file)
     # File a ticket from the shell's office: ticket-file <workspace-id> <project-id|-> <title> [body…]
     ws="${1:-}"; proj="${2:-}"; title="${3:-}"; shift 3 2>/dev/null || true
@@ -461,7 +481,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|shell-thread|ticket-file|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
