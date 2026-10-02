@@ -100,6 +100,11 @@ defmodule Server.HarnessTest do
       refute Harness.driver(:claude_code).launch_command(builder) =~ "NotebookEdit"
     end
 
+    test "claude_code: the model's thinking level rides as --effort" do
+      p = %Profile{name: "plain", model: %{provider: "anthropic", model: "claude-opus-5-5", thinking: "xhigh"}}
+      assert Harness.driver(:claude_code).launch_command(p) =~ "--model claude-opus-5-5 --effort xhigh"
+    end
+
     test "claude_code: no persona → the bare launcher, no env prefix" do
       p = %Profile{name: "plain", model: @sonnet}
       cmd = Harness.driver(:claude_code).launch_command(p)
