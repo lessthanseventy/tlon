@@ -245,7 +245,20 @@ case "$cmd" in
           live = Server.Tmux.leaf_tab(ws_tabs, t.id) != nil or (std and Server.Tmux.named(ws_tabs, leads[t.id] || "") != nil)
           Map.merge(t, %{prompt: prompts[t.id], lead: leads[t.id], live: live, standing: std})
         end)
-      %{roster: roster, counts: counts, awaiting: awaiting, threads: threads, bench: bench, projects: projects, tickets: tickets,
+      # notes, newest first, placed in a workspace by their scope (a global one in none); and the
+      # consults of the last three minutes as who asked whom, for the office to walk them over
+      proj_ws = Map.new(projects, &{&1.id, &1.workspace_id})
+      note_rows = Server.Repo.all(from n in Server.Note, order_by: [desc: n.id], limit: 40)
+      note_threads = for(n <- note_rows, n.scope == "thread", do: n.scope_id)
+      thread_ws = Server.Repo.all(from t in Server.Thread, where: t.id in ^note_threads, select: {t.id, t.workspace_id}) |> Map.new()
+      notes = Enum.map(note_rows, fn n ->
+        ws = case n.scope do "workspace" -> n.scope_id; "project" -> proj_ws[n.scope_id]; "thread" -> thread_ws[n.scope_id]; _ -> nil end
+        %{id: n.id, author: n.author, body: String.slice(n.body, 0, 400), workspace_id: ws, at: n.created_at}
+      end)
+      since = DateTime.add(DateTime.utc_now(), -180)
+      visits = Server.Repo.all(from m in Server.Message, join: t in Server.Thread, on: t.id == m.thread_id, join: a in Server.Agent, on: a.id == t.agent_id,
+        where: m.consult_id == m.id and m.created_at > ^since, select: %{from: m.author, to: a.name, workspace_id: t.workspace_id, at: m.created_at})
+      %{roster: roster, counts: counts, awaiting: awaiting, threads: threads, bench: bench, projects: projects, tickets: tickets, notes: notes, visits: visits,
         workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}), archetypes: archetypes, models: models} |> JSON.encode!() |> IO.puts()'
     ;;
 
