@@ -23,7 +23,8 @@ a thin bridge from that harness's lifecycle to the server's one sovereign channe
 - **`claude-code/`** — the Claude Code adapter (built). Same two doors, adapted to Claude Code's own
   mechanisms: the MCP tools via `mcpServers.tlon` `type:http` with a **`headersHelper`**
   (`scripts/tlon-cli.sh token`) that mints a FRESH token per connect — so unlike pi's static bearer,
-  auth survives a server restart — and the brief via a `SessionStart` hook (`brief-hook.sh`). Both are
+  auth survives a server restart — and, at `SessionStart`, `register` (`thinking-hook.sh start`, as pi
+  registers at its session_start) then the brief (`brief-hook.sh`). Both are
   scoped to the session by `server:claude`'s `--mcp-config`/`--settings` launch flags, so a plain
   `claude` is untouched and nothing is merged into `~/.claude`. See `claude-code/README.md`.
 

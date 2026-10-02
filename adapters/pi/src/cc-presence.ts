@@ -14,9 +14,11 @@ import { TlonClient, identityFromEnv } from "./mcp.ts";
 // Presence is a per-turn nicety; a declare that can't land fast isn't worth waiting on.
 const HOOK_TIMEOUT_MS = 5_000;
 
-// The declare verb from the hook's argv — anything but an explicit "idle" means thinking,
-// so a bare invocation (the UserPromptSubmit wiring) does the common thing.
-export function verbOf(args: string[]): "thinking" | "idle" {
+// The declare verb from the hook's argv — "start" (the SessionStart wiring) registers the
+// session, as pi's extension does at its session_start; "idle" clears; anything else means
+// thinking, so a bare invocation (the UserPromptSubmit wiring) does the common thing.
+export function verbOf(args: string[]): "start" | "thinking" | "idle" {
+  if (args[2] === "start") return "start";
   return args[2] === "idle" ? "idle" : "thinking";
 }
 
@@ -26,7 +28,10 @@ async function declare(): Promise<void> {
 
   const client = new TlonClient(identity);
   await client.connect();
-  if (verbOf(argv) === "idle") {
+  const verb = verbOf(argv);
+  if (verb === "start") {
+    await client.register(process.env.TMUX_PANE);
+  } else if (verb === "idle") {
     await client.presenceIdle();
   } else {
     await client.presenceThinking();

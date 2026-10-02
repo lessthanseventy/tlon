@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Claude Code presence hook — thinking counts as working. Wired by launch.sh as
-# UserPromptSubmit (declare thinking, bare invocation) and as Stop/SessionEnd with "idle"
-# (clear it; SessionEnd is the exit/crash safety net — the server's max-age sweep backstops the rest).
+# Claude Code presence hook — the session's place on the roster. Wired by launch.sh as
+# SessionStart with "start" (register the session, as pi does at its session_start: without it
+# the worker has no session row, so the roster and warmth never see it), UserPromptSubmit
+# (declare thinking, bare invocation) and Stop/SessionEnd with "idle" (clear it; SessionEnd is
+# the exit/crash safety net — the server's max-age sweep backstops the rest).
 #
 # Thin wrapper like capture-hook.sh: the logic is cc-presence.ts (bun, reuses mcp.ts's
 # TlonClient). Never blocks the session: any failure is a silent no-op, and a missing bun
