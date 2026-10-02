@@ -232,7 +232,19 @@ case "$cmd" in
       counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
       prompts = Server.Attention.open_prompts_by_thread()
       awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and (not is_nil(t.awaiting) or t.id in ^Map.keys(prompts)), select: count(t.id))
-      threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting, workspace_id: t.workspace_id}) |> Enum.map(&Map.put(&1, :prompt, prompts[&1.id]))
+      # each open thread with its lead, whether a tmux window is running it (asked of tmux: a Claude
+      # Code worker registers no session until it calls register, so the roster alone misses it),
+      # and whether it is the standing thread of its workspace
+      tabs = Map.new(ws_ids, &{&1, Server.Tmux.list_windows(&1)})
+      standing = Map.new(ws_ids, fn ws -> {ws, case Server.Channel.machine_thread(ws) do nil -> nil; t -> t.id end} end)
+      leads = Server.Repo.all(from t in Server.Thread, join: a in Server.Agent, on: a.id == t.agent_id, where: t.state == "open", select: {t.id, a.name}) |> Map.new()
+      threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting, workspace_id: t.workspace_id})
+        |> Enum.map(fn t ->
+          ws_tabs = Map.get(tabs, t.workspace_id, [])
+          std = standing[t.workspace_id] == t.id
+          live = Server.Tmux.leaf_tab(ws_tabs, t.id) != nil or (std and Server.Tmux.named(ws_tabs, leads[t.id] || "") != nil)
+          Map.merge(t, %{prompt: prompts[t.id], lead: leads[t.id], live: live, standing: std})
+        end)
       %{roster: roster, counts: counts, awaiting: awaiting, threads: threads, bench: bench, projects: projects, tickets: tickets,
         workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}), archetypes: archetypes, models: models} |> JSON.encode!() |> IO.puts()'
     ;;
