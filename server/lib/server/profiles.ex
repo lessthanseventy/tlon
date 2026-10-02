@@ -483,6 +483,13 @@ defmodule Server.Profiles do
   # Console.Config or a roster-entry override (that is how a pi coworker comes back).
   @sonnet %{provider: "anthropic", model: "claude-sonnet-5", thinking: "medium"}
 
+  # The Claude models a coworker may be set to (`model_choices/0`), beside the ollama ring.
+  @claude_choices [
+    %{provider: "anthropic", model: "claude-opus-5-5", thinking: "medium"},
+    @sonnet,
+    %{provider: "anthropic", model: "claude-fable-5-1", thinking: "medium"}
+  ]
+
   # The archetype registry — role TEMPLATES keyed by archetype atom. A template is the `%Profile{}`
   # content fields minus `name` (`model`/`mcp`/`sandbox`/`permissions`/`system_prompt`/`add_extensions`);
   # `instantiate/1` (Task 3) stamps an instance `name` over one to mint a materialisation-ready profile.
@@ -600,6 +607,19 @@ defmodule Server.Profiles do
   @doc "The model ring the settings verb cycles through, Claude-first."
   @spec model_ring() :: [map()]
   def model_ring, do: @model_ring
+
+  @doc """
+  Every model a coworker may be set to — the archetype defaults, then the ring, each once. The
+  shell's office offers these when it hires or retargets a coworker.
+  """
+  @spec model_choices() :: [map()]
+  def model_choices do
+    @archetypes
+    |> Map.values()
+    |> Enum.map(& &1.model)
+    |> Kernel.++(@claude_choices ++ @model_ring)
+    |> Enum.uniq()
+  end
 
   @doc "The archetype registry — a map of `archetype_atom => role template` (the Profile content minus a name)."
   @spec archetypes() :: %{atom() => map()}
