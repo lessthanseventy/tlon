@@ -25,6 +25,7 @@
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
 #   coworker-set <ws> <agent-id> <model> <effort> <ask>  retarget one (from its next session)
 #   workspace-new <name> [repo-path]            a new workspace, with a repo when given
+#   aside <ws> <agent-id> <question…>           ask a coworker one thing, outside any thread
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
@@ -267,6 +268,21 @@ case "$cmd" in
     exec "$SERVER" rpc "$(policy_expr "$ws" "$agent" "$model" "$effort" "$ask"); IO.puts(\"set coworker #$agent on workspace #$ws\")"
     ;;
 
+  aside)
+    # A one-shot question to a coworker, outside any thread: its own harness, model and persona,
+    # read-only tools, no saved session (Server.Harness.aside). The server builds the argv; it
+    # runs HERE, in the workspace's first repo, so the service never blocks on a model call.
+    ws="${1:-}"; agent="${2:-}"; shift 2 2>/dev/null || true; q="$*"
+    { int "$ws" && int "$agent" && [ -n "$q" ]; } ||
+      { echo 'usage: tlon-cli.sh aside <workspace-id> <agent-id> <question…>' >&2; exit 2; }
+    spec=$("$SERVER" rpc "case Enum.find(Server.Workspaces.bench($ws), &(&1.agent_id == $agent)) do nil -> IO.puts(\"{}\"); c -> p = Server.Profiles.instantiate(Server.Profiles.roster_entry(c), $ws); repo = List.first(Server.Workspaces.repos($ws)); %{argv: Server.Harness.aside(p, \"$(esc "$q")\"), cwd: repo && repo.path} |> JSON.encode!() |> IO.puts() end" | tail -1)
+    [ "$(jq -r '.argv | length' <<<"$spec")" -gt 0 ] 2>/dev/null ||
+      { echo "no coworker #$agent on workspace #$ws" >&2; exit 1; }
+    cwd=$(jq -r '.cwd // empty' <<<"$spec"); cwd="${cwd/#\~/$HOME}"; [ -d "$cwd" ] || cwd="$HOME"
+    eval "set -- $(jq -r '.argv | map(@sh) | join(" ")' <<<"$spec")"
+    cd "$cwd" && exec timeout 180 "$@" </dev/null
+    ;;
+
   workspace-new)
     # A new workspace, with a repo to work in when given: workspace-new <name> [repo-path]
     name="${1:-}"; repo="${2:-}"
@@ -380,7 +396,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|coworker-set|workspace-new|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|coworker-set|workspace-new|aside|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
