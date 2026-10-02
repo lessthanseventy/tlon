@@ -60,6 +60,7 @@ defmodule Server.Harness.ClaudeCode do
 
     model =
       case p.model do
+        %{provider: "anthropic", model: m, thinking: t} when is_binary(t) -> " --model #{m} --effort #{t}"
         %{provider: "anthropic", model: m} -> " --model #{m}"
         _ -> ""
       end
