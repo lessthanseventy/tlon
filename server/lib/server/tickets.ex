@@ -61,19 +61,17 @@ defmodule Server.Tickets do
   @doc """
   Start work on a ticket: a thread on the ticket's project whose opening post is the ticket (the
   operator's post, so its lead is staffed like any ask), and the ticket promoted into it. The
-  cockpit's Enter on a ticket calls it. `{:ok, thread}` or `{:error, reason}`.
+  cockpit's Enter on a ticket calls it. `agent_id` hands the thread to that coworker instead of the
+  workspace's lead. `{:ok, thread}` or `{:error, reason}`.
   """
-  def start_thread(%Ticket{} = ticket) do
+  def start_thread(%Ticket{} = ticket, agent_id \\ nil) do
     operator = Application.get_env(:server, :operator, "andrew")
     ask = Enum.join(Enum.reject([ticket.title, ticket.body, "(ticket ##{ticket.id})"], &(&1 in [nil, ""])), "\n\n")
 
     with {:ok, thread} <-
-           Server.Channel.open_thread(%{
-             title: ticket.title,
-             workspace_id: ticket.workspace_id,
-             project_id: ticket.project_id,
-             scope: "machine"
-           }),
+           %{title: ticket.title, workspace_id: ticket.workspace_id, project_id: ticket.project_id, scope: "machine"}
+           |> then(&if(agent_id, do: Map.put(&1, :agent_id, agent_id), else: &1))
+           |> Server.Channel.open_thread(),
          {:ok, _} <- promote(ticket, thread.id),
          {:ok, _} <- Server.Attention.respond(thread.id, operator, ask) do
       {:ok, thread}

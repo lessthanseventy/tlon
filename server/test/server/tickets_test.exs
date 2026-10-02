@@ -95,6 +95,19 @@ defmodule Server.TicketsTest do
       assert [{"promoted", tid}] = Tickets.threads_of(t.id)
       assert tid == thread.id
     end
+
+    test "start_thread staffs the named agent instead of the lead; without one, the lead" do
+      {:ok, ws} = Workspaces.register(%{name: "Hand"})
+      {:ok, lead} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, orbis} = Workspaces.seat(ws.id, %{name: "orbis", archetype: "reviewer"})
+      {:ok, handed} = Tickets.file(%{workspace_id: ws.id, title: "review the rail"})
+      {:ok, plain} = Tickets.file(%{workspace_id: ws.id, title: "build the rail"})
+
+      assert {:ok, %{agent_id: a}} = Tickets.start_thread(handed, orbis.agent_id)
+      assert a == orbis.agent_id
+      assert {:ok, %{agent_id: b}} = Tickets.start_thread(plain)
+      assert b == lead.agent_id
+    end
   end
 
   describe "links and ties (UX slice 4)" do
