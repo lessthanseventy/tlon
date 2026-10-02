@@ -30,6 +30,10 @@ from, and posts to, the same `.dev` world.
   restart and a 401 auto-refreshes. No token is ever written to disk. pi's adapters adapter
   does the same (mints per connect against `/mint`), so both doors are frozen-token-free —
   Claude Code's `headersHelper` and pi's in-adapter mint are the same idea in two shapes.
+- **Registering.** A `SessionStart` hook ahead of the brief, `thinking-hook.sh start`, calls the
+  `register` tool with the session's tmux pane — what pi's extension does at its session_start. It
+  is what puts the session on the roster: without it the worker has no session row, so warmth,
+  thinking and the switchboard's wake checks cannot see it.
 - **Door 2 — the brief.** [`brief-hook.sh`](brief-hook.sh) is a `SessionStart` hook. Claude
   Code adds its plain stdout to the session context, so on start / resume / clear it renders
   the thread's dossier — the `get_dossier` tool itself, called over MCP at `TLON_MCP_URL` by

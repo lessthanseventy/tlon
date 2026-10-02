@@ -9,3 +9,9 @@ test("verbOf: bare invocation declares thinking; explicit idle clears", () => {
   expect(verbOf(["bun", "cc-presence.ts", "idle"])).toBe("idle");
   expect(verbOf(["bun", "cc-presence.ts", "garbage"])).toBe("thinking");
 });
+
+// SessionStart registers the session, as pi's extension does at its session_start — without it a
+// Claude Code worker had no session row, so the roster, warmth and thinking never saw it.
+test("verbOf: start registers", () => {
+  expect(verbOf(["bun", "cc-presence.ts", "start"])).toBe("start");
+});
