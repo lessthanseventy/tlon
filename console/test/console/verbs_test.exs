@@ -77,14 +77,16 @@ defmodule Console.VerbsTest do
       assert dead == []
     end
 
-    test "the three chords open the overlays the table says they do" do
+    test "the four chords open the overlays the table says they do" do
       go_to = Enum.find(Verbs.all(), &(&1.keys == "^⇧K"))
       commands = Enum.find(Verbs.all(), &(&1.keys == "^⇧P"))
       history = Enum.find(Verbs.all(), &(&1.keys == "^⇧H"))
+      inbox = Enum.find(Verbs.all(), &(&1.keys == "^⇧I"))
 
       assert {%{picker: %{kind: :switcher}}, :repaint} = Keymap.handle(go_to.event, nav())
       assert {%{picker: %{kind: :palette}}, :repaint} = Keymap.handle(commands.event, nav())
       assert {%{picker: %{kind: :history}}, :repaint} = Keymap.handle(history.event, nav())
+      assert {%{picker: %{kind: :inbox}}, :repaint} = Keymap.handle(inbox.event, nav())
     end
   end
 

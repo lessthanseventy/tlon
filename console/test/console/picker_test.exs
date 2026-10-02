@@ -23,6 +23,25 @@ defmodule Console.PickerTest do
     }
   ]
 
+  @inbox_groups [
+    %{
+      workspace: %{id: 1, name: "ficciones"},
+      projects: [%{id: 10, name: "tlon"}],
+      threads: [
+        %{id: 100, title: "quiet thread", project_id: 10},
+        %{id: 101, title: "unread thread", project_id: 10, unread?: true}
+      ]
+    },
+    %{
+      workspace: %{id: 2, name: "freedonia"},
+      projects: [%{id: 20, name: "fredo"}],
+      threads: [
+        %{id: 200, title: "working thread", project_id: 20, working: true},
+        %{id: 201, title: "waiting thread", project_id: 20, prompt: %{summary: "pick one"}}
+      ]
+    }
+  ]
+
   defp state(over \\ %{}), do: Map.merge(%{sidebar: @groups, active_key: 1}, over)
 
   defp labels(picker, state), do: picker |> Picker.entries(state) |> Enum.map(& &1.label)
@@ -62,6 +81,46 @@ defmodule Console.PickerTest do
     test "an empty sidebar (server down, first frame) yields no rows rather than crashing" do
       assert Picker.entries(Picker.open(:switcher), %{}) == []
       assert Picker.entries(Picker.open(:switcher), state(%{sidebar: []})) == []
+    end
+  end
+
+  describe "the inbox's corpus" do
+    defp inbox_state(over \\ %{}), do: Map.merge(%{sidebar: @inbox_groups, active_key: 1}, over)
+
+    test "is every workspace's threads that need the operator, not just the active workspace's" do
+      shown = labels(Picker.open(:inbox), inbox_state())
+
+      assert "waiting thread" in shown
+      assert "working thread" in shown
+      assert "unread thread" in shown
+    end
+
+    test "drops a quiet thread — nothing waiting, working, or unread" do
+      refute "quiet thread" in labels(Picker.open(:inbox), inbox_state())
+    end
+
+    test "ranks waiting before working before unread" do
+      shown = labels(Picker.open(:inbox), inbox_state())
+      assert shown == ["waiting thread", "working thread", "unread thread"]
+    end
+
+    test "a row carries the workspace a jump has to switch to, and names its project" do
+      row = :inbox |> Picker.open() |> Picker.entries(inbox_state()) |> Enum.find(&(&1.label == "waiting thread"))
+
+      assert row.kind == :thread
+      assert row.workspace_id == 2
+      assert row.thread_id == 201
+      assert row.context == "freedonia · fredo"
+    end
+
+    test "a query narrows to what matches, dropping the rest" do
+      shown = :inbox |> Picker.open() |> Picker.type("working") |> labels(inbox_state())
+      assert shown == ["working thread"]
+    end
+
+    test "an empty sidebar (server down, first frame) yields no rows rather than crashing" do
+      assert Picker.entries(Picker.open(:inbox), %{}) == []
+      assert Picker.entries(Picker.open(:inbox), inbox_state(%{sidebar: []})) == []
     end
   end
 
@@ -134,9 +193,11 @@ defmodule Console.PickerTest do
     assert Picker.title(:switcher) == "GO TO"
     assert Picker.title(Picker.open(:palette)) == "COMMANDS"
     assert Picker.title(:history) == "HISTORY"
+    assert Picker.title(:inbox) == "INBOX"
     assert Picker.hint(:switcher) =~ "jump"
     assert Picker.hint(:palette) =~ "run"
     assert Picker.hint(:history) =~ "open"
+    assert Picker.hint(:inbox) =~ "jump"
   end
 
   describe "the history corpus" do
