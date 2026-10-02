@@ -79,6 +79,44 @@ defmodule Server.HarnessTest do
     end
   end
 
+  describe "aside/2 — a one-shot, read-only question to a coworker, outside any thread" do
+    test "claude_code: print mode, read-only tools, no session, its model, effort and persona" do
+      p = %Profile{
+        name: "hronir",
+        harness: :claude_code,
+        model: %{@sonnet | thinking: "high"},
+        system_prompt: "You are hronir."
+      }
+
+      [cmd | args] = Harness.aside(p, "where is the lead rule?")
+
+      assert cmd == "claude"
+      assert ["-p", "where is the lead rule?"] == Enum.take(args, 2)
+      assert_flag(args, "--tools", "Read,Grep,Glob")
+      assert_flag(args, "--permission-mode", "dontAsk")
+      assert "--no-session-persistence" in args
+      assert_flag(args, "--model", "claude-sonnet-5")
+      assert_flag(args, "--effort", "high")
+      assert flag(args, "--append-system-prompt") =~ "You are hronir."
+      assert flag(args, "--append-system-prompt") =~ "change nothing"
+    end
+
+    test "pi: print mode, read-only tools, no extensions or session, provider-qualified model" do
+      p = %Profile{name: "borges", harness: :pi, model: @glm, system_prompt: "You are borges."}
+      [_pi | args] = Harness.aside(p, "what is left?")
+
+      assert ["-p", "what is left?"] == Enum.take(args, 2)
+      assert_flag(args, "--tools", "read,grep,find,ls")
+      assert "--no-extensions" in args and "--no-session" in args
+      assert_flag(args, "--model", "ollama-cloud/glm-5.2")
+      assert_flag(args, "--thinking", "medium")
+      assert flag(args, "--append-system-prompt") =~ "You are borges."
+    end
+  end
+
+  defp flag(args, name), do: args |> Enum.drop_while(&(&1 != name)) |> Enum.at(1)
+  defp assert_flag(args, name, value), do: assert(flag(args, name) == value, "#{name} should be #{value}")
+
   describe "the driver contract" do
     test "claude_code: launch.sh with the persona file env + --model for an anthropic model" do
       p = %Profile{name: "vera", archetype: :reviewer, model: @sonnet, system_prompt: "You review."}
