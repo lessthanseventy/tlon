@@ -192,6 +192,25 @@ defmodule Server.Staffing do
     :ok
   end
 
+  @doc """
+  Hand a running thread to another coworker (the shell's office): restaff it, post the handoff as
+  the operator — which the new worker's leaf takes as its opening turn — and end the old worker's
+  leaf, which staffing would otherwise keep, so the next pass spawns the new one. `{:ok, thread}`, or
+  `Channel.assign_lead/2`'s error with nothing changed.
+  """
+  def hand_off(thread_id, handle) do
+    with {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
+      operator = Application.get_env(:server, :operator, "andrew")
+      body = "Handing this to @#{handle}: pick it up from the brief."
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: operator, body: body})
+
+      with %{index: index} <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id),
+           do: Tmux.kill_window(thread.workspace_id, index)
+
+      {:ok, thread}
+    end
+  end
+
   @doc "Is this tab a leaf whose thread is no longer open+staffed? The centre/tail/crew windows never are."
   def orphan_leaf?(%{thread_id: tid}, live_ids) when is_integer(tid), do: not MapSet.member?(live_ids, tid)
 
