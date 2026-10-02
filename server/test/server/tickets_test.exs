@@ -109,6 +109,15 @@ defmodule Server.TicketsTest do
       assert %{status: "todo"} = Tickets.get(t.id)
     end
 
+    test "closing the thread a ticket was started into marks the ticket done" do
+      {:ok, ws} = Workspaces.register(%{name: "Closing"})
+      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "ship it"})
+      {:ok, thread} = Tickets.start_thread(t)
+
+      assert {:ok, _} = Channel.close_thread(thread)
+      assert %{status: "done"} = Tickets.get(t.id)
+    end
+
     test "route with no manager on the bench starts the ticket with the lead" do
       {:ok, ws} = Workspaces.register(%{name: "Unmanaged"})
       {:ok, lead} = Workspaces.seat(ws.id, %{name: "hronir-u", archetype: "builder"})

@@ -93,6 +93,7 @@ defmodule Server.Channel do
 
     with {:ok, _closed} <- result do
       Staff.end_thread_sessions(thread.id)
+      Server.Tickets.done_for(thread.id)
       report_to_parent(thread)
     end
 

@@ -378,7 +378,8 @@ defmodule Server.Profiles do
   something they don't already know from the typing indicator? If yes, post it; if no, stay quiet.
   WHEN YOU NEED THE HUMAN TO DECIDE OR ANSWER, call `ask_operator(question)` — don't only ask in a
   message. A question left in chat reaches them as one more unread line; `ask_operator` reaches them
-  as waiting on them, and their reply clears it.\
+  as waiting on them, and their reply clears it. WHEN YOUR THREAD'S WORK IS DONE AND VERIFIED, call
+  `finish(summary)`: it closes your thread, reports up to your manager, and closes its ticket.\
   """
 
   # The tertius persona → `system_prompt.md` (`--append-system-prompt`). The vantage-not-worker role.

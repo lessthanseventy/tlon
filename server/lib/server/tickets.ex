@@ -58,6 +58,17 @@ defmodule Server.Tickets do
     end
   end
 
+  @doc "A thread closed: every ticket started into it (`promoted`) that is not done yet is done now."
+  def done_for(thread_id) do
+    from(t in Ticket,
+      join: tt in TicketThread,
+      on: tt.ticket_id == t.id,
+      where: tt.thread_id == ^thread_id and tt.kind == "promoted" and t.status != "done"
+    )
+    |> Repo.all()
+    |> Enum.each(&__MODULE__.update(&1, %{status: "done"}))
+  end
+
   @doc """
   Send a ticket to its workspace's manager — the bench's meta coworker (the surveyor) — as intake
   on the workspace's root thread: an operator post that @mentions them with the ticket and asks

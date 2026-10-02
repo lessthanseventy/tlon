@@ -33,6 +33,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.RaiseQuestion, name: "raise_question")
   component(Server.MCP.Tool.ResolveQuestion, name: "resolve_question")
   component(Server.MCP.Tool.AskOperator, name: "ask_operator")
+  component(Server.MCP.Tool.Finish, name: "finish")
   component(Server.MCP.Tool.RecordCheck, name: "record_check")
   component(Server.MCP.Tool.RecheckFact, name: "recheck_fact")
   component(Server.MCP.Tool.OpenThread, name: "open_thread")
