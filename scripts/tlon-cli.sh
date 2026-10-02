@@ -23,6 +23,7 @@
 #   shell-thread <id>              a thread's last messages + its worker's pane, for the office's wide view
 #   ticket-file <ws> <proj|-> <title> [body…]   file a ticket (the shell's office)
 #   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
+#   ticket-route <ticket>                       send a ticket to the workspace's manager to staff
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
 #   coworker-set <ws> <agent-id> <model> <effort> <ask>  retarget one (from its next session)
 #   workspace-new <name> [repo-path]            a new workspace, with a repo when given
@@ -34,6 +35,7 @@
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
+#   close-thread <id>              close a thread (its ticket is done; a child reports up)
 #   delete-thread <id>             operator hard delete (messages go too; facts survive unlinked)
 #   forget-fact <id>               operator tombstone — out of recall, row kept
 #   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution
@@ -229,7 +231,7 @@ case "$cmd" in
       archetypes = for {k, t} <- Enum.sort(Server.Profiles.archetypes()),
         do: %{name: k, meta: Server.Profiles.meta?(k), read_only: get_in(t, [:permissions, "permission", "write"]) == "deny", model: key.(t.model)}
       projects = for ws <- ws_ids, p <- Server.Projects.in_workspace(ws), do: %{id: p.id, workspace_id: ws, name: p.name}
-      tickets = for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing", do: %{id: t.id, workspace_id: ws, project_id: t.project_id, title: t.title, priority: t.priority}
+      tickets = for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing", do: %{id: t.id, workspace_id: ws, project_id: t.project_id, title: t.title, priority: t.priority, routed: t.status == "todo"}
       counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
       prompts = Server.Attention.open_prompts_by_thread()
       awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and (not is_nil(t.awaiting) or t.id in ^Map.keys(prompts)), select: count(t.id))
@@ -257,8 +259,12 @@ case "$cmd" in
         %{id: n.id, author: n.author, body: String.slice(n.body, 0, 400), workspace_id: ws, at: n.created_at}
       end)
       since = DateTime.add(DateTime.utc_now(), -180)
-      visits = Server.Repo.all(from m in Server.Message, join: t in Server.Thread, on: t.id == m.thread_id, join: a in Server.Agent, on: a.id == t.agent_id,
+      consults = Server.Repo.all(from m in Server.Message, join: t in Server.Thread, on: t.id == m.thread_id, join: a in Server.Agent, on: a.id == t.agent_id,
         where: m.consult_id == m.id and m.created_at > ^since, select: %{from: m.author, to: a.name, workspace_id: t.workspace_id, at: m.created_at})
+      # a manager staffing a child: they carry the work over to whoever they picked
+      handoffs = Server.Repo.all(from c in Server.Thread, join: p in Server.Thread, on: p.id == c.parent_thread_id, join: pa in Server.Agent, on: pa.id == p.agent_id,
+        join: ca in Server.Agent, on: ca.id == c.agent_id, where: c.created_at > ^since, select: %{from: pa.name, to: ca.name, workspace_id: c.workspace_id, at: c.created_at})
+      visits = consults ++ handoffs
       %{roster: roster, counts: counts, awaiting: awaiting, threads: threads, bench: bench, projects: projects, tickets: tickets, notes: notes, visits: visits,
         workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}), archetypes: archetypes, models: models} |> JSON.encode!() |> IO.puts()'
     ;;
@@ -282,6 +288,13 @@ case "$cmd" in
       %{messages: msgs, peek: peek, window: tab && tab.name} |> JSON.encode!() |> IO.puts()'
     ;;
 
+  close-thread)
+    # The operator closes a thread: its sessions end, a child reports up, its ticket is done.
+    tid="${1:-}"
+    int "$tid" || { echo 'usage: tlon-cli.sh close-thread <thread-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); System.halt(1); t -> {:ok, _} = Server.Channel.close_thread(t); IO.puts(\"closed thread #$tid — #{t.title}\") end"
+    ;;
+
   ticket-file)
     # File a ticket from the shell's office: ticket-file <workspace-id> <project-id|-> <title> [body…]
     ws="${1:-}"; proj="${2:-}"; title="${3:-}"; shift 3 2>/dev/null || true
@@ -289,6 +302,13 @@ case "$cmd" in
       { echo 'usage: tlon-cli.sh ticket-file <workspace-id> <project-id|-> <title> [body…]' >&2; exit 2; }
     [ "$proj" = "-" ] && proj=nil
     exec "$SERVER" rpc "case Server.Tickets.file(%{workspace_id: $ws, project_id: $proj, title: \"$(esc "$title")\", body: \"$(esc "$*")\"}) do {:ok, t} -> IO.puts(\"filed ticket ##{t.id} — #{t.title}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    ;;
+
+  ticket-route)
+    # Send a ticket to its workspace's manager to staff (Server.Tickets.route); no manager → the lead starts it.
+    tk="${1:-}"
+    int "$tk" || { echo 'usage: tlon-cli.sh ticket-route <ticket-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> case Server.Tickets.route(t) do {:ok, %{routed_to: m}} -> IO.puts(\"ticket #$tk sent to #{m}\"); {:ok, %{started: th}} -> IO.puts(\"no manager: ticket #$tk started as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end end"
     ;;
 
   ticket-start)
@@ -481,7 +501,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|shell-thread|ticket-file|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|shell-thread|close-thread|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
