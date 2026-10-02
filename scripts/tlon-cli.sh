@@ -26,6 +26,10 @@
 #   coworker-set <ws> <agent-id> <model> <effort> <ask>  retarget one (from its next session)
 #   workspace-new <name> [repo-path]            a new workspace, with a repo when given
 #   aside <ws> <agent-id> <question…>           ask a coworker one thing, outside any thread
+#   fire <seat-id>                              take a coworker off a bench (the agent survives)
+#   ticket-set <id> status|title|body <value…>  change a ticket; ticket-delete <id> removes one
+#   workspace-delete <id>                       delete one; its threads move to the oldest left
+#   hand-off <thread-id> <agent-name>           give a running thread to another coworker
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
@@ -217,7 +221,7 @@ case "$cmd" in
           archetype: seat && seat.archetype, lead: !!(seat && seat.lead?)}
       end)
       bench = for {ws, cs} <- benches, pols <- [Server.Workspaces.policies(ws)], c <- cs, p <- [pols[c.agent_id]],
-        do: %{workspace_id: ws, agent_id: c.agent_id, name: c.name, archetype: c.archetype, lead: c.lead?, model: p && p.model, ask: p && p.ask_default}
+        do: %{workspace_id: ws, seat_id: c.id, agent_id: c.agent_id, name: c.name, archetype: c.archetype, lead: c.lead?, model: p && p.model, ask: p && p.ask_default}
       env = Server.OperatorConfig.environment()
       key = fn m -> "#{m.provider}/#{m.model}" end
       models = for m <- Server.Profiles.model_choices(), do: %{key: key.(m), provider: m.provider, model: m.model, thinking: m.thinking, harness: Server.Harness.resolve(m, env)}
@@ -281,6 +285,42 @@ case "$cmd" in
     cwd=$(jq -r '.cwd // empty' <<<"$spec"); cwd="${cwd/#\~/$HOME}"; [ -d "$cwd" ] || cwd="$HOME"
     eval "set -- $(jq -r '.argv | map(@sh) | join(" ")' <<<"$spec")"
     cd "$cwd" && exec timeout 180 "$@" </dev/null
+    ;;
+
+  fire)
+    # Take a coworker off a workspace's bench by its seat (row) id; the agent itself survives.
+    seat="${1:-}"
+    int "$seat" || { echo 'usage: tlon-cli.sh fire <seat-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Workspaces.unseat($seat) do {:ok, _} -> IO.puts(\"unseated seat #$seat\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
+    ;;
+
+  ticket-set)
+    # Change one field of a ticket: ticket-set <id> status <backlog|todo|doing|done> | title <text…> | body <text…>
+    tk="${1:-}"; field="${2:-}"; shift 2 2>/dev/null || true; value="$*"
+    { int "$tk" && case "$field" in status|title|body) true ;; *) false ;; esac; } ||
+      { echo 'usage: tlon-cli.sh ticket-set <ticket-id> status|title|body <value…>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> case Server.Tickets.update(t, %{$field: \"$(esc "$value")\"}) do {:ok, _} -> IO.puts(\"ticket #$tk $field set\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end end"
+    ;;
+
+  ticket-delete)
+    tk="${1:-}"
+    int "$tk" || { echo 'usage: tlon-cli.sh ticket-delete <ticket-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> {:ok, _} = Server.Tickets.remove(t); IO.puts(\"deleted ticket #$tk\") end"
+    ;;
+
+  workspace-delete)
+    # Its threads move to the oldest remaining workspace; the last workspace is refused.
+    ws="${1:-}"
+    int "$ws" || { echo 'usage: tlon-cli.sh workspace-delete <workspace-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Workspaces.get($ws) do nil -> IO.puts(\"no workspace #$ws\"); System.halt(1); w -> case Server.Workspaces.remove(w) do {:ok, _} -> IO.puts(\"deleted workspace #{w.name}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end end"
+    ;;
+
+  hand-off)
+    # Hand a running thread to another coworker (Server.Staffing.hand_off), then staff it now
+    # rather than at the next minute's pass.
+    tid="${1:-}"; handle="${2:-}"
+    { int "$tid" && [ -n "$handle" ]; } || { echo 'usage: tlon-cli.sh hand-off <thread-id> <agent-name>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Staffing.hand_off($tid, \"$(esc "$handle")\") do {:ok, t} -> Task.start(fn -> Server.Staffing.pass(t.workspace_id) end); IO.puts(\"handed thread #$tid to $(esc "$handle")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
     ;;
 
   workspace-new)
@@ -396,7 +436,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|coworker-set|workspace-new|aside|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
