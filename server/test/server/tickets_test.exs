@@ -96,6 +96,29 @@ defmodule Server.TicketsTest do
       assert tid == thread.id
     end
 
+    test "route sends a ticket to the workspace's manager as intake on its root thread" do
+      {:ok, ws} = Workspaces.register(%{name: "Routed"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius-r", archetype: "surveyor"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir-r", archetype: "builder"})
+      {:ok, root} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "inbox design", body: "one inbox"})
+
+      assert {:ok, %{routed_to: "tertius-r"}} = Tickets.route(t)
+      assert %{author: "andrew", body: body} = List.last(Channel.thread_messages(root))
+      assert body =~ "@tertius-r" and body =~ "ticket ##{t.id}" and body =~ "inbox design"
+      assert %{status: "todo"} = Tickets.get(t.id)
+    end
+
+    test "route with no manager on the bench starts the ticket with the lead" do
+      {:ok, ws} = Workspaces.register(%{name: "Unmanaged"})
+      {:ok, lead} = Workspaces.seat(ws.id, %{name: "hronir-u", archetype: "builder"})
+      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "build it"})
+
+      assert {:ok, %{started: thread}} = Tickets.route(t)
+      assert thread.agent_id == lead.agent_id
+      assert %{status: "doing"} = Tickets.get(t.id)
+    end
+
     test "start_thread staffs the named agent instead of the lead; without one, the lead" do
       {:ok, ws} = Workspaces.register(%{name: "Hand"})
       {:ok, lead} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})

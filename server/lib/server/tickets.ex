@@ -59,6 +59,42 @@ defmodule Server.Tickets do
   end
 
   @doc """
+  Send a ticket to its workspace's manager — the bench's meta coworker (the surveyor) — as intake
+  on the workspace's root thread: an operator post that @mentions them with the ticket and asks
+  them to staff it (`staff_child` with the `ticket_id`, which moves the ticket into the thread they
+  open). The ticket is marked `todo`: handed over, not started. A workspace with no manager or no
+  root thread starts the ticket with its lead instead. `{:ok, %{routed_to: name}}` or
+  `{:ok, %{started: thread}}`, or `{:error, reason}`.
+  """
+  def route(%Ticket{} = ticket) do
+    case {manager(ticket.workspace_id), Server.Channel.machine_thread(ticket.workspace_id)} do
+      {%Server.Coworker{name: name}, %Server.Thread{} = root} ->
+        operator = Application.get_env(:server, :operator, "andrew")
+
+        intake =
+          Enum.join(
+            Enum.reject(
+              [
+                "@#{name} intake — ticket ##{ticket.id}: #{ticket.title}",
+                ticket.body,
+                "Triage it: decide plain thread or workline, then staff_child whoever fits (with ticket_id: #{ticket.id})."
+              ],
+              &(&1 in [nil, ""])
+            ),
+            "\n\n"
+          )
+
+        with {:ok, _} <- Server.Attention.respond(root.id, operator, intake),
+             {:ok, _} <- __MODULE__.update(ticket, %{status: "todo"}) do
+          {:ok, %{routed_to: name}}
+        end
+
+      _ ->
+        with {:ok, thread} <- start_thread(ticket), do: {:ok, %{started: thread}}
+    end
+  end
+
+  @doc """
   Start work on a ticket: a thread on the ticket's project whose opening post is the ticket (the
   operator's post, so its lead is staffed like any ask), and the ticket promoted into it. The
   cockpit's Enter on a ticket calls it. `agent_id` hands the thread to that coworker instead of the
@@ -257,5 +293,14 @@ defmodule Server.Tickets do
 
   defp next_sort(workspace_id) do
     (Repo.one(from t in Ticket, where: t.workspace_id == ^workspace_id, select: max(t.sort)) || 0) + 1
+  end
+
+  # The bench's manager: its meta seat, the one that routes and never works a thread.
+  defp manager(nil), do: nil
+
+  defp manager(workspace_id) do
+    workspace_id
+    |> Server.Workspaces.bench()
+    |> Enum.find(&Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype))
   end
 end
