@@ -33,6 +33,15 @@ defmodule Server.Workline do
     "verify" => :checks,
     "review" => {:file, "review.md"}
   }
+  # Who leads each stage, by bench archetype: the stage's kind of work picks its worker. intent and
+  # merged keep whoever has the thread.
+  @staff_by_stage %{
+    "spec" => "planner",
+    "plan" => "planner",
+    "build" => "builder",
+    "verify" => "builder",
+    "review" => "reviewer"
+  }
   # Stages whose EXIT waits on the operator; a machine-born intent gates its exit too.
   @gated ~w(spec review)
 
@@ -355,36 +364,11 @@ defmodule Server.Workline do
       end)
 
     # Restaff BEFORE broadcasting: subscribers acting on the advance must never observe the
-    # builder still leading a review stage.
-    flipped = if flipped.stage == "review", do: restaff_reviewer(flipped), else: flipped
+    # last stage's worker still leading this one.
+    flipped = restaff(flipped)
     Server.Bus.broadcast({:workline_advanced, flipped})
     post_brief(flipped, Brief.stage_message(flipped))
     {:ok, flipped}
-  end
-
-  # Entering review: the workspace's reviewer takes the lead — the builder never approves its own
-  # work by proxy. Best-effort (the stage already flipped and broadcast; a restaff fault must
-  # not fail the advance) — but a MISS is posted, never silent: the operator sees that the
-  # builder still holds a review it shouldn't.
-  defp restaff_reviewer(%Thread{workspace_id: nil} = thread), do: restaff_miss(thread, "no workspace bound")
-
-  defp restaff_reviewer(thread) do
-    with %Server.Coworker{name: name} <-
-           thread.workspace_id |> Server.Workspaces.bench() |> Enum.find(&(&1.archetype == "reviewer")),
-         {:ok, restaffed} <- Server.Channel.assign_lead(thread.id, name) do
-      post_brief(restaffed, "→ #{name} leads (review stage)")
-      restaffed
-    else
-      {:error, reason} -> restaff_miss(thread, inspect(reason))
-      _ -> restaff_miss(thread, "no reviewer on the workspace's bench")
-    end
-  rescue
-    e -> restaff_miss(thread, Exception.message(e))
-  end
-
-  defp restaff_miss(thread, why) do
-    post_brief(thread, "⚠ review stage could not restaff a reviewer (#{why}) — the current lead still holds it")
-    thread
   end
 
   # The brief IS the wake: a server-authored message rides the lead-wake path (slice 2).
@@ -418,4 +402,52 @@ defmodule Server.Workline do
       {:error, {:artifact_missing, why}} -> {:error, why}
     end
   end
+
+  # Each stage is led by its kind of worker from the workspace's bench, so a workline hands itself
+  # on as it moves. Best-effort (the stage already flipped; a restaff fault must not fail the
+  # advance). A workspace without that kind keeps the current lead — quietly, except at review:
+  # a builder holding its own review is posted, never silent.
+  defp restaff(%Thread{stage: stage} = thread) do
+    case @staff_by_stage[stage] do
+      nil -> thread
+      kind -> restaff(thread, kind)
+    end
+  end
+
+  defp restaff(%Thread{workspace_id: nil} = thread, kind), do: restaff_miss(thread, kind, "no workspace bound")
+
+  defp restaff(thread, kind) do
+    thread.workspace_id
+    |> Server.Workspaces.bench()
+    |> Enum.find(&(&1.archetype == kind))
+    |> case do
+      %Server.Coworker{name: name} -> hand_to(thread, kind, name)
+      _ -> restaff_miss(thread, kind, "no #{kind} on the workspace's bench")
+    end
+  rescue
+    e -> restaff_miss(thread, kind, Exception.message(e))
+  end
+
+  # Already theirs: nothing to hand over, and nothing to announce.
+  defp hand_to(thread, kind, name) do
+    if Server.Channel.thread_lead(thread.id) == name do
+      thread
+    else
+      case Server.Channel.assign_lead(thread.id, name) do
+        {:ok, restaffed} ->
+          post_brief(restaffed, "→ #{name} leads (#{thread.stage} stage)")
+          restaffed
+
+        {:error, reason} ->
+          restaff_miss(thread, kind, inspect(reason))
+      end
+    end
+  end
+
+  defp restaff_miss(thread, "reviewer", why) do
+    post_brief(thread, "⚠ review stage could not restaff a reviewer (#{why}) — the current lead still holds it")
+    thread
+  end
+
+  defp restaff_miss(thread, _kind, _why), do: thread
 end
