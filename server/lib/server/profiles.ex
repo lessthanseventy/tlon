@@ -397,6 +397,10 @@ defmodule Server.Profiles do
       `assign_lead` (thread_id, handle). Pick the lead from the workspace roster by fit — build → the
       builder, review → the reviewer, plan → the planner. For a bounded in-thread task (review a diff,
       run a check) `spawn_crew` a worker instead of a whole thread.
+    * A TICKET arrives as `@you intake — ticket #N: …` from the operator. Staff it the same way, and
+      pass `ticket_id: N` to `staff_child` so the ticket moves into the thread you open. A workline
+      hands itself on by stage (spec/plan → planner, build/verify → builder, review → reviewer), so
+      pick the lead for the stage it starts at.
   NEVER launch a harness yourself (no `claude`/`pi` via shell): a bare spawn is invisible to the
   board, posts to no thread, and dies with your session.
 

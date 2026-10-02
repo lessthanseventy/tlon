@@ -43,6 +43,9 @@ defmodule Server.MCP.Tool.StaffChild do
     field :title, :string, required: true, description: "What the child thread is for (its NORTH STAR)"
     field :lead, :string, required: true, description: "Registered worker handle to staff as lead (e.g. hronir-machine)"
     field :brief, :string, required: true, description: "The opening assignment, posted as the thread's first message"
+
+    field :ticket_id, :integer,
+      description: "The ticket this work is for, when it came from one — it moves into the new thread"
   end
 
   @impl true
@@ -55,7 +58,8 @@ defmodule Server.MCP.Tool.StaffChild do
     with {:agent, %Agent{}} <- {:agent, Staff.agent_by_name(params[:lead])},
          {:ok, thread} <- Channel.open_thread(child_attrs(params[:title], parent)),
          {:ok, _} <- Channel.assign_lead(thread.id, params[:lead]),
-         {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}) do
+         {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
+         :ok <- promote_ticket(params[:ticket_id], thread.id) do
       ok(frame, %{"thread_id" => thread.id, "lead" => params[:lead]})
     else
       {:agent, nil} ->
@@ -71,6 +75,20 @@ defmodule Server.MCP.Tool.StaffChild do
 
   defp child_attrs(title, nil), do: %{title: title}
   defp child_attrs(title, parent), do: %{title: title, parent_thread_id: parent.id, project_id: parent.project_id}
+
+  # The ticket the work came from moves into the new thread (status doing, tied to it). An unknown
+  # id is refused rather than ignored: the manager named a ticket that is not there.
+  defp promote_ticket(nil, _thread_id), do: :ok
+
+  defp promote_ticket(ticket_id, thread_id) do
+    case Server.Tickets.get(ticket_id) do
+      nil ->
+        {:error, "no ticket ##{ticket_id}"}
+
+      ticket ->
+        with {:ok, _} <- Server.Tickets.promote(ticket, thread_id), do: :ok
+    end
+  end
 end
 
 defmodule Server.MCP.Tool.CloseThread do

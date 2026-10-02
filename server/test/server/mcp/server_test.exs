@@ -618,6 +618,28 @@ defmodule Server.MCP.ServerTest do
     assert call(token, session, 6, "assign_lead", %{"thread_id" => target.id, "lead" => "ghost-machine"})["isError"]
   end
 
+  test "staff_child with a ticket_id moves that ticket into the thread it opens", %{token: token} do
+    {:ok, _} = Staff.register_agent(%{name: "yu-machine", mandate: "plan", engine: "fresh"})
+    {:ok, ws} = Server.Workspaces.register(%{name: "Ticketed"})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "inbox design"})
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r =
+      call(token, session, 4, "staff_child", %{
+        "title" => "inbox design",
+        "lead" => "yu-machine",
+        "brief" => "Plan the cross-workspace inbox.",
+        "ticket_id" => ticket.id
+      })
+
+    refute r["isError"]
+    tid = decode_tool_json(r)["thread_id"]
+    assert %{status: "doing"} = Server.Tickets.get(ticket.id)
+    assert [{"promoted", ^tid}] = Server.Tickets.threads_of(ticket.id)
+  end
+
   test "staff_child refuses an unregistered lead without opening a thread", %{token: token} do
     session = handshake(token)
     call(token, session, 3, "register", %{})
