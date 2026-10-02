@@ -276,6 +276,32 @@ defmodule Server.MCP.Tool.RaiseQuestion do
   end
 end
 
+defmodule Server.MCP.Tool.AskOperator do
+  @moduledoc """
+  Ask the operator something only they can answer — `ask_operator(question)`: a decision, a
+  preference, an approval. The question is posted on this thread and the thread parks on the
+  operator, so it reaches them as waiting on them (a toast, the inbox) instead of sitting as an
+  unread message; their reply clears it. Use it whenever you would otherwise end a message with a
+  question for them. A gap in the WORK that you can research is `raise_question`, not this.
+  """
+  use Server.MCP.Tool
+
+  alias Server.Attention
+
+  schema do
+    field :question, :string, required: true, description: "What you need the operator to decide or answer"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+
+    identity.thread_id
+    |> Attention.ask(identity.agent, params[:question])
+    |> then(&reply(frame, &1, fn message -> %{"message_id" => message.id, "awaiting" => "operator"} end))
+  end
+end
+
 defmodule Server.MCP.Tool.ResolveQuestion do
   @moduledoc """
   Resolve a question — `resolve_question(id, resolution)` (pi doc §5 slice 4). The

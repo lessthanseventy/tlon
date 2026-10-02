@@ -213,15 +213,47 @@ defmodule Server.Attention do
     # a reply to a closed thread (one opened from history) reopens it first, so its lead is staffed
     _ = Channel.reopen_if_closed(thread_id)
 
-    case open_prompt(thread_id) do
-      %Message{} = prompt ->
-        case pick(prompt, body) do
-          nil -> Channel.post(%{thread_id: thread_id, author: author, body: body})
-          {key, rest} -> answer(prompt, author, body, key, rest)
-        end
+    posted =
+      case open_prompt(thread_id) do
+        %Message{} = prompt ->
+          case pick(prompt, body) do
+            nil -> Channel.post(%{thread_id: thread_id, author: author, body: body})
+            {key, rest} -> answer(prompt, author, body, key, rest)
+          end
 
-      nil ->
-        Channel.post(%{thread_id: thread_id, author: author, body: body})
+        nil ->
+          Channel.post(%{thread_id: thread_id, author: author, body: body})
+      end
+
+    with {:ok, _} <- posted, do: answered(thread_id)
+    posted
+  end
+
+  @doc """
+  A worker's question for the operator — the `ask_operator` tool's door. The question is posted as
+  the worker and the thread parks on the operator (`awaiting`), the field every waiting-on-you
+  surface already reads (the cockpit's `!`, the shell's inbox, its toasts); the operator's reply
+  clears it (`respond/3`). `{:ok, message}`.
+  """
+  def ask(thread_id, author, text) do
+    operator = Application.get_env(:server, :operator, "andrew")
+
+    with {:ok, message} <- Channel.post(%{thread_id: thread_id, author: author, body: text}),
+         %Thread{} = thread <- Repo.get(Thread, thread_id),
+         {:ok, _} <- thread |> Ecto.Changeset.change(awaiting: operator) |> Repo.update() do
+      {:ok, message}
+    end
+  end
+
+  # A reply settles a plain thread's question. A workline's `awaiting` is its gate, which only an
+  # approval clears — a reply there is just a reply.
+  defp answered(thread_id) do
+    case Repo.get(Thread, thread_id) do
+      %Thread{stage: nil, awaiting: awaiting} = thread when not is_nil(awaiting) ->
+        thread |> Ecto.Changeset.change(awaiting: nil) |> Repo.update()
+
+      _ ->
+        :ok
     end
   end
 
