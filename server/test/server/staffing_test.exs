@@ -220,6 +220,31 @@ defmodule Server.StaffingTest do
     assert_receive {:tmux, ["-L", "console-workspace-" <> _ | _]}
   end
 
+  describe "hand_off/2 — a running thread goes to another coworker" do
+    test "restaffs it, posts the handoff as the operator, and ends the old worker's leaf so the next pass spawns the new one",
+         %{ws: ws, sock: sock} do
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-task\t#{thread.id}\tdone\t4\n")
+
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+
+      assert Channel.thread_lead(thread.id) == "hronir"
+      assert %{author: "andrew", body: body} = List.last(Channel.thread_messages(thread))
+      assert body =~ "@hronir"
+      assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", target]}
+      assert target =~ ":3"
+    end
+
+    test "an unknown coworker is refused and changes nothing", %{ws: ws} do
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t1\n")
+
+      assert {:error, :no_agent} = Staffing.hand_off(thread.id, "nobody")
+      assert Channel.thread_lead(thread.id) == "borges"
+      refute_received {:tmux, [_, _, "kill-window" | _]}
+    end
+  end
+
   describe "stale_coworkers/3 — a rename left a process minting under a handle the bench lost" do
     defp tab(name, author), do: {%{name: name, index: name, thread_id: nil, opening: nil, pane_pid: 1}, author}
 
