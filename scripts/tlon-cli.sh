@@ -174,11 +174,15 @@ case "$cmd" in
   shell-status)
     # One JSON blob for the desktop shell's AGENTS pane (modules/desktop/shell): the roster
     # plus thread counts by state and how many are awaiting the operator. Polled every ~30s.
+    # Each roster row carries its bench seat (archetype, lead) so the shell can seat leads apart.
     exec "$SERVER" rpc '
-      roster = Server.Staff.roster() |> Enum.map(fn r ->
-        %{agent: r.agent, thread_id: r.thread_id, title: r.thread_title, warm: r.warm?}
-      end)
       import Ecto.Query
+      benches = Server.Workspaces.bench_by_workspace(Server.Repo.all(from w in Server.Workspace, select: w.id)) |> Map.values() |> List.flatten() |> Enum.group_by(& &1.name)
+      roster = Server.Staff.roster() |> Enum.map(fn r ->
+        seats = Map.get(benches, r.agent, [])
+        %{agent: r.agent, thread_id: r.thread_id, title: r.thread_title, warm: r.warm?,
+          archetype: Enum.find_value(seats, & &1.archetype), lead: Enum.any?(seats, & &1.lead?)}
+      end)
       counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
       prompts = Server.Attention.open_prompts_by_thread()
       awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and (not is_nil(t.awaiting) or t.id in ^Map.keys(prompts)), select: count(t.id))
