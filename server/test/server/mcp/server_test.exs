@@ -80,6 +80,7 @@ defmodule Server.MCP.ServerTest do
                "raise_question",
                "resolve_question",
                "ask_operator",
+               "finish",
                "record_check",
                "recheck_fact",
                "open_thread",
@@ -616,6 +617,16 @@ defmodule Server.MCP.ServerTest do
     # A missing thread and an unregistered lead each refuse cleanly.
     assert call(token, session, 5, "assign_lead", %{"thread_id" => 999_999, "lead" => "menard-machine"})["isError"]
     assert call(token, session, 6, "assign_lead", %{"thread_id" => target.id, "lead" => "ghost-machine"})["isError"]
+  end
+
+  test "finish posts the summary and closes the caller's own thread", %{token: token, thread: thread} do
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    refute call(token, session, 4, "finish", %{"summary" => "inbox A shipped, tests green"})["isError"]
+
+    assert %Thread{state: "closed"} = Repo.get(Thread, thread.id)
+    assert %{body: "inbox A shipped, tests green"} = List.last(Channel.thread_messages(thread))
   end
 
   test "staff_child with a ticket_id moves that ticket into the thread it opens", %{token: token} do

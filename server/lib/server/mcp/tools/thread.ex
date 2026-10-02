@@ -302,6 +302,36 @@ defmodule Server.MCP.Tool.AskOperator do
   end
 end
 
+defmodule Server.MCP.Tool.Finish do
+  @moduledoc """
+  Close out your own thread — `finish(summary)`: when its work is done AND verified. The summary is
+  posted as your last word on the thread, then the thread closes: a child reports up to its
+  manager, and the ticket it came from is marked done. Only your own thread — closing another is
+  the manager's call. If you were wrong, the operator's next reply reopens it.
+  """
+  use Server.MCP.Tool
+
+  alias Server.Channel
+
+  schema do
+    field :summary, :string, required: true, description: "What was done and how it was verified"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+
+    with {:ok, _} <- Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params[:summary]}),
+         %Server.Thread{} = thread <- Channel.thread(identity.thread_id),
+         {:ok, closed} <- Channel.close_thread(thread) do
+      ok(frame, %{"closed" => closed.id})
+    else
+      nil -> fail(frame, "this connection's thread is gone")
+      other -> reply(frame, other, & &1)
+    end
+  end
+end
+
 defmodule Server.MCP.Tool.ResolveQuestion do
   @moduledoc """
   Resolve a question — `resolve_question(id, resolution)` (pi doc §5 slice 4). The
