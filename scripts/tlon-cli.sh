@@ -215,7 +215,7 @@ case "$cmd" in
         %{agent: r.agent, thread_id: r.thread_id, title: r.thread_title, warm: r.warm?, workspace_id: ws,
           archetype: seat && seat.archetype, lead: !!(seat && seat.lead?)}
       end)
-      bench = for {ws, cs} <- benches, pols = Server.Workspaces.policies(ws), c <- cs, p = pols[c.agent_id],
+      bench = for {ws, cs} <- benches, pols <- [Server.Workspaces.policies(ws)], c <- cs, p <- [pols[c.agent_id]],
         do: %{workspace_id: ws, agent_id: c.agent_id, name: c.name, archetype: c.archetype, lead: c.lead?, model: p && p.model, ask: p && p.ask_default}
       env = Server.OperatorConfig.environment()
       key = fn m -> "#{m.provider}/#{m.model}" end
