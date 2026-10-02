@@ -19,8 +19,9 @@ defmodule Console.Keymap do
   it were reached only by tests. Its verbs live in `Console.Verbs`, listed with a sentence each in
   the `^⇧P` command palette, which is the discoverable door a hidden prefix never was.
 
-  **Two global chords** open the overlays of slice 2: `^⇧K` the switcher (go to any workspace
-  or thread) and `^⇧P` the palette. Ctrl+Shift+letter because nothing in a terminal binds
+  **Global chords** open the overlays of slice 2: `^⇧K` the switcher (go to any workspace
+  or thread), `^⇧P` the palette, `^⇧H` history, and `^⇧I` the inbox (everything waiting, working,
+  or unread, across every workspace). Ctrl+Shift+letter because nothing in a terminal binds
   it — a legacy terminal cannot encode it at all, only the Kitty CSI-u this cockpit already arms —
   so they cost the coworker's shell nothing. They precede the input modal, the drawer and the
   picker itself, so they open from anywhere and each closes what it opened.
@@ -252,6 +253,9 @@ defmodule Console.Keymap do
 
   def handle(%{key: :char, char: c, ctrl: true, shift: true}, state) when c in ["h", "H"],
     do: {toggle_picker(state, :history), :repaint}
+
+  def handle(%{key: :char, char: c, ctrl: true, shift: true}, state) when c in ["i", "I"],
+    do: {toggle_picker(state, :inbox), :repaint}
 
   # An open PICKER owns every key — it has a query box of its own, so it must precede the input
   # modal: `^⇧K` from inside the reply box opens the switcher and typing then goes to the switcher,
