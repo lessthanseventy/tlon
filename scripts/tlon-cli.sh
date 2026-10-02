@@ -20,6 +20,9 @@
 #   roster                         who's on the clock (warm ●/cold ○)
 #   shell-status                   roster + open threads + counts as JSON, for the desktop shell
 #   shell-dossier <id>             a thread's brief as JSON, for the shell's AGENTS pane
+#   ticket-file <ws> <proj|-> <title> [body…]   file a ticket (the shell's office)
+#   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
+#   hire <ws> <name> <archetype>                seat a new coworker on a workspace's bench
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
@@ -172,22 +175,57 @@ case "$cmd" in
     ;;
 
   shell-status)
-    # One JSON blob for the desktop shell's AGENTS pane (modules/desktop/shell): the roster
-    # plus thread counts by state and how many are awaiting the operator. Polled every ~30s.
-    # Each roster row carries its bench seat (archetype, lead) so the shell can seat leads apart.
+    # One JSON blob for the desktop shell's office rail (modules/desktop/shell), polled every ~30s:
+    # the roster (each row with its thread's workspace and its bench seat), the open threads, the
+    # workspaces with their benches, projects and unstarted tickets, counts, and how many threads
+    # await the operator. The shell shows one workspace at a time and filters by workspace_id.
     exec "$SERVER" rpc '
       import Ecto.Query
-      benches = Server.Workspaces.bench_by_workspace(Server.Repo.all(from w in Server.Workspace, select: w.id)) |> Map.values() |> List.flatten() |> Enum.group_by(& &1.name)
-      roster = Server.Staff.roster() |> Enum.map(fn r ->
-        seats = Map.get(benches, r.agent, [])
-        %{agent: r.agent, thread_id: r.thread_id, title: r.thread_title, warm: r.warm?,
-          archetype: Enum.find_value(seats, & &1.archetype), lead: Enum.any?(seats, & &1.lead?)}
+      wss = Server.Workspaces.all()
+      ws_ids = Enum.map(wss, & &1.id)
+      benches = Server.Workspaces.bench_by_workspace(ws_ids)
+      roster0 = Server.Staff.roster()
+      tws = Server.Repo.all(from t in Server.Thread, where: t.id in ^Enum.map(roster0, & &1.thread_id), select: {t.id, t.workspace_id}) |> Map.new()
+      roster = Enum.map(roster0, fn r ->
+        ws = tws[r.thread_id]
+        seat = Enum.find(Map.get(benches, ws, []), &(&1.name == r.agent)) || Enum.find(List.flatten(Map.values(benches)), &(&1.name == r.agent))
+        %{agent: r.agent, thread_id: r.thread_id, title: r.thread_title, warm: r.warm?, workspace_id: ws,
+          archetype: seat && seat.archetype, lead: !!(seat && seat.lead?)}
       end)
+      bench = for {ws, cs} <- benches, c <- cs, do: %{workspace_id: ws, agent_id: c.agent_id, name: c.name, archetype: c.archetype, lead: c.lead?}
+      projects = for ws <- ws_ids, p <- Server.Projects.in_workspace(ws), do: %{id: p.id, workspace_id: ws, name: p.name}
+      tickets = for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing", do: %{id: t.id, workspace_id: ws, project_id: t.project_id, title: t.title, priority: t.priority}
       counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
       prompts = Server.Attention.open_prompts_by_thread()
       awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and (not is_nil(t.awaiting) or t.id in ^Map.keys(prompts)), select: count(t.id))
-      threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting}) |> Enum.map(&Map.put(&1, :prompt, prompts[&1.id]))
-      %{roster: roster, counts: counts, awaiting: awaiting, threads: threads} |> JSON.encode!() |> IO.puts()'
+      threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting, workspace_id: t.workspace_id}) |> Enum.map(&Map.put(&1, :prompt, prompts[&1.id]))
+      %{roster: roster, counts: counts, awaiting: awaiting, threads: threads, bench: bench, projects: projects, tickets: tickets,
+        workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}), archetypes: Server.Profiles.archetypes() |> Map.keys() |> Enum.sort()} |> JSON.encode!() |> IO.puts()'
+    ;;
+
+  ticket-file)
+    # File a ticket from the shell's office: ticket-file <workspace-id> <project-id|-> <title> [body…]
+    ws="${1:-}"; proj="${2:-}"; title="${3:-}"; shift 3 2>/dev/null || true
+    { int "$ws" && [ -n "$title" ] && { [ "$proj" = "-" ] || int "$proj"; }; } ||
+      { echo 'usage: tlon-cli.sh ticket-file <workspace-id> <project-id|-> <title> [body…]' >&2; exit 2; }
+    [ "$proj" = "-" ] && proj=nil
+    exec "$SERVER" rpc "case Server.Tickets.file(%{workspace_id: $ws, project_id: $proj, title: \"$(esc "$title")\", body: \"$(esc "$*")\"}) do {:ok, t} -> IO.puts(\"filed ticket ##{t.id} — #{t.title}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    ;;
+
+  ticket-start)
+    # Start work on a ticket, handed to a coworker (agent id) or else the workspace's lead.
+    tk="${1:-}"; agent="${2:-nil}"
+    { int "$tk" && { [ "$agent" = nil ] || int "$agent"; }; } ||
+      { echo 'usage: tlon-cli.sh ticket-start <ticket-id> [agent-id]' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> case Server.Tickets.start_thread(t, $agent) do {:ok, th} -> IO.puts(\"started ticket #$tk as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end end"
+    ;;
+
+  hire)
+    # Seat a new coworker on a workspace's bench: hire <workspace-id> <name> <archetype>
+    ws="${1:-}"; name="${2:-}"; arch="${3:-}"
+    { int "$ws" && [ -n "$name" ] && [ -n "$arch" ]; } ||
+      { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
     ;;
 
   shell-dossier)
@@ -295,7 +333,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
