@@ -23,14 +23,15 @@ defmodule Console.Picker do
   """
 
   alias Console.Fuzzy
+  alias Console.Panel.Rail
   alias Console.Verbs
 
-  @type kind :: :switcher | :palette | :history
+  @type kind :: :switcher | :palette | :history | :inbox
   @type t :: %{kind: kind(), query: String.t(), cursor: non_neg_integer()}
 
   @doc "A freshly opened picker: empty query, cursor on the first row."
   @spec open(kind()) :: t()
-  def open(kind) when kind in [:switcher, :palette, :history], do: %{kind: kind, query: "", cursor: 0}
+  def open(kind) when kind in [:switcher, :palette, :history, :inbox], do: %{kind: kind, query: "", cursor: 0}
 
   @doc "The overlay's title — what you are picking FROM."
   @spec title(t() | kind()) :: String.t()
@@ -38,6 +39,7 @@ defmodule Console.Picker do
   def title(:switcher), do: "GO TO"
   def title(:palette), do: "COMMANDS"
   def title(:history), do: "HISTORY"
+  def title(:inbox), do: "INBOX"
 
   @doc "The overlay's footer hint — how to drive it."
   @spec hint(t() | kind()) :: String.t()
@@ -45,6 +47,7 @@ defmodule Console.Picker do
   def hint(:switcher), do: "type to filter · ↑↓ move · ⏎ jump · esc close"
   def hint(:palette), do: "type to filter · ↑↓ move · ⏎ run · esc close"
   def hint(:history), do: "type to filter · ↑↓ move · ⏎ open · esc close"
+  def hint(:inbox), do: "type to filter · ↑↓ move · ⏎ jump · esc close"
 
   @doc """
   The picker's rows, filtered and ranked against its query. `state` is the cockpit's — the switcher
@@ -65,6 +68,14 @@ defmodule Console.Picker do
   def entries(%{kind: :palette, query: query}, _state) do
     Verbs.all()
     |> Enum.map(&verb_row/1)
+    |> Fuzzy.filter(query, & &1.text)
+  end
+
+  def entries(%{kind: :inbox, query: query}, state) do
+    state
+    |> Map.get(:sidebar)
+    |> List.wrap()
+    |> inbox_rows()
     |> Fuzzy.filter(query, & &1.text)
   end
 
@@ -144,6 +155,47 @@ defmodule Console.Picker do
       thread_id: thread[:id]
     }
   end
+
+  # -- the inbox's corpus: every workspace's threads, filtered to what needs the operator --------
+
+  # One flat list across every workspace — the point of it — ranked by what needs the operator
+  # first (`Rail.attention/1`, the same rank the rail itself sorts by), most recent within a rank.
+  defp inbox_rows(groups) do
+    groups
+    |> Enum.flat_map(fn group ->
+      workspace = group[:workspace] || %{}
+      names = Map.new(group[:projects] || [], &{&1.id, &1.name})
+
+      group[:threads]
+      |> List.wrap()
+      |> Enum.filter(&(Rail.attention(&1) < 3))
+      |> Enum.map(&inbox_row(&1, workspace, names))
+    end)
+    |> Enum.sort_by(&{&1.attention, &1.recency})
+  end
+
+  defp inbox_row(thread, workspace, project_names) do
+    ws = workspace[:name] || "?"
+    title = thread[:title] || "(untitled)"
+    where = Enum.join([ws | List.wrap(project_names[thread[:project_id]])], " · ")
+    {glyph, _style} = Rail.glyph(Rail.attention(thread)) || {"", nil}
+
+    %{
+      kind: :thread,
+      tag: glyph,
+      keys: nil,
+      label: title,
+      context: where,
+      text: "#{where} · #{title}",
+      workspace_id: workspace[:id],
+      thread_id: thread[:id],
+      attention: Rail.attention(thread),
+      recency: recency_key(thread[:last_at])
+    }
+  end
+
+  defp recency_key(%DateTime{} = at), do: -DateTime.to_unix(at)
+  defp recency_key(_at), do: 0
 
   defp verb_row(verb) do
     %{

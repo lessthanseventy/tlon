@@ -51,6 +51,13 @@ defmodule Console.Verbs do
     },
     %{
       group: :global,
+      keys: "^⇧I",
+      label: "inbox",
+      doc: "everything waiting, working, or unread across every workspace — type to filter, ⏎ jumps",
+      event: %{key: :char, char: "i", ctrl: true, shift: true}
+    },
+    %{
+      group: :global,
       keys: "Alt+d",
       label: "drawer",
       doc:
