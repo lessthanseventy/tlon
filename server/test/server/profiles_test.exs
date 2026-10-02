@@ -241,6 +241,18 @@ defmodule Server.ProfilesTest do
       assert Profiles.next_model(nil) == first
       assert Profiles.next_model(%{provider: "x", model: "y"}) == first
     end
+
+    test "model_choices: every archetype default, then the ring, each once" do
+      choices = Profiles.model_choices()
+      defaults = Profiles.archetypes() |> Map.values() |> Enum.map(& &1.model)
+
+      assert Enum.all?(defaults ++ Profiles.model_ring(), &(&1 in choices))
+      assert choices == Enum.uniq(choices)
+      assert hd(choices) in defaults
+
+      for m <- ~w(claude-opus-5-5 claude-sonnet-5 claude-fable-5-1),
+          do: assert(Enum.any?(choices, &(&1.provider == "anthropic" and &1.model == m)))
+    end
   end
 
   describe "materialise!/2 — writes the config dir from a base" do
