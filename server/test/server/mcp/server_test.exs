@@ -79,6 +79,7 @@ defmodule Server.MCP.ServerTest do
                "complete_todo",
                "raise_question",
                "resolve_question",
+               "ask_operator",
                "record_check",
                "recheck_fact",
                "open_thread",
@@ -429,6 +430,16 @@ defmodule Server.MCP.ServerTest do
     # resolved: it leaves UNKNOWNS
     brief2 = decode_tool_json(call(token, session, 7, "get_dossier", %{}))
     refute Enum.any?(brief2["unknowns"]["shown"], &(&1["text"] == "does raxol support embedding?"))
+  end
+
+  test "ask_operator posts the question and parks this thread on the operator", %{token: token, thread: thread} do
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    refute call(token, session, 4, "ask_operator", %{"question" => "A or B?"})["isError"]
+
+    assert %Server.Thread{awaiting: "andrew"} = Server.Repo.get(Server.Thread, thread.id)
+    assert %{body: "A or B?"} = List.last(Channel.thread_messages(thread))
   end
 
   test "resolve_question refuses a question on another thread — identity scoping", %{token: token} do
