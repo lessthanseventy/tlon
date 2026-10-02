@@ -8,6 +8,8 @@ defmodule Server.Harness.Driver do
       of the design contract; the cockpit wraps it in identity exports + `tmux new-window`).
   """
   @callback launch_command(Server.Profile.t()) :: String.t()
+  @doc "The argv of a one-shot, read-only aside: print mode on `question`, `system` appended."
+  @callback aside_argv(Server.Profile.t(), system :: String.t(), question :: String.t()) :: [String.t()]
 end
 
 defmodule Server.Harness do
@@ -37,6 +39,25 @@ defmodule Server.Harness do
   @doc "The driver module for a harness atom (raises on an unknown harness)."
   @spec driver(atom()) :: module()
   def driver(harness), do: Map.fetch!(@drivers, harness)
+
+  @doc """
+  The argv that asks a coworker one question aside, outside any thread: its own harness, model,
+  effort and persona, in print mode, with read-only tools and no saved session — it may read the
+  code to answer and can change nothing. The shell's office runs it when you talk to someone.
+  """
+  @spec aside(Server.Profile.t(), String.t()) :: [String.t()]
+  def aside(%Server.Profile{} = p, question) do
+    system =
+      [
+        p.system_prompt,
+        "This is a quick aside from the operator, outside any thread: answer in a few plain " <>
+          "sentences. You may read the code to answer; change nothing."
+      ]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.join("\n\n")
+
+    driver(p.harness).aside_argv(p, system, question)
+  end
 end
 
 defmodule Server.Harness.ClaudeCode do
@@ -66,6 +87,19 @@ defmodule Server.Harness.ClaudeCode do
       end
 
     if envs == "", do: launcher <> model, else: "env " <> envs <> launcher <> model
+  end
+
+  @impl true
+  def aside_argv(%Profile{} = p, system, question) do
+    model =
+      case p.model do
+        %{provider: "anthropic", model: m, thinking: t} when is_binary(t) -> ["--model", m, "--effort", t]
+        %{provider: "anthropic", model: m} -> ["--model", m]
+        _ -> []
+      end
+
+    ["claude", "-p", question, "--tools", "Read,Grep,Glob", "--permission-mode", "dontAsk", "--no-session-persistence"] ++
+      model ++ ["--append-system-prompt", system]
   end
 
   defp role_env(%Profile{system_prompt: nil}), do: ""
@@ -123,5 +157,19 @@ defmodule Server.Harness.Pi do
       end
 
     "env PI_CODING_AGENT_DIR=#{dir} #{base}#{prompt}#{model}"
+  end
+
+  @impl true
+  def aside_argv(%Profile{} = profile, system, question) do
+    base = Application.get_env(:server, :spawn_launcher_pi, "pi")
+
+    model =
+      case profile.model do
+        %{provider: prov, model: m, thinking: think} -> ["--model", "#{prov}/#{m}", "--thinking", think]
+        _ -> []
+      end
+
+    [base, "-p", question, "--no-extensions", "--no-session", "--tools", "read,grep,find,ls"] ++
+      model ++ ["--append-system-prompt", system]
   end
 end
