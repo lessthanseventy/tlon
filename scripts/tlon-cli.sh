@@ -22,7 +22,9 @@
 #   shell-dossier <id>             a thread's brief as JSON, for the shell's AGENTS pane
 #   ticket-file <ws> <proj|-> <title> [body…]   file a ticket (the shell's office)
 #   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
-#   hire <ws> <name> <archetype>                seat a new coworker on a workspace's bench
+#   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
+#   coworker-set <ws> <agent-id> <model> <effort> <ask>  retarget one (from its next session)
+#   workspace-new <name> [repo-path]            a new workspace, with a repo when given
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
@@ -55,6 +57,27 @@ esac
 # TLON_CLI_CURL swaps the HTTP client (a stub in tests — nothing here can reach a node from a
 # sandbox); every HTTP call goes through it.
 CURL="${TLON_CLI_CURL:-curl}"
+
+# A coworker's policy knobs as the shell sends them: a model key (provider/model), an effort and
+# ask|allow; `-` leaves a knob alone and `inherit` clears it back to the archetype default.
+knobs() {
+  case "$1" in -|inherit|*/*) ;; *) return 1 ;; esac
+  case "$2" in -|low|medium|high|xhigh|max) ;; *) return 1 ;; esac
+  case "$3" in -|ask|allow|inherit) ;; *) return 1 ;; esac
+}
+# The Elixir that writes those knobs: policy_expr <ws> <agent-id expr> <model> <effort> <ask>.
+# An effort with no model named retargets the coworker's current model (else its archetype's).
+policy_expr() {
+  local ws="$1" agent="$2" model="$3" effort="$4" ask="$5"
+  local m="nil" a="nil"
+  case "$ask" in ask|allow) a="\"$ask\"" ;; esac
+  case "$model" in
+    inherit) m="{:set, nil}" ;;
+    */*) m="{:set, Enum.find(Server.Profiles.model_choices(), &(\"#{&1.provider}/#{&1.model}\" == \"$(esc "$model")\"))}" ;;
+    -) m="nil" ;;
+  esac
+  printf '%s' "attrs = %{}; m = $m; cur = case Server.Workspaces.policy($ws, $agent) do %{model: %{} = pm} -> pm; _ -> nil end; m = if \"$effort\" != \"-\" and m == nil, do: {:set, cur || Server.Profiles.instantiate(Server.Profiles.roster_entry(Enum.find(Server.Workspaces.bench($ws), &(&1.agent_id == $agent))), $ws).model}, else: m; m = case m do {:set, %{} = x} when \"$effort\" != \"-\" -> {:set, Map.new(x, fn {k, v} -> {to_string(k), v} end) |> Map.put(\"thinking\", \"$effort\")}; {:set, %{} = x} -> {:set, Map.new(x, fn {k, v} -> {to_string(k), v} end)}; other -> other end; attrs = case m do {:set, v} -> Map.put(attrs, :model, v); nil -> attrs end; attrs = case \"$ask\" do \"inherit\" -> Map.put(attrs, :ask_default, nil); \"-\" -> attrs; _ -> Map.put(attrs, :ask_default, $a) end; if attrs != %{}, do: {:ok, _} = Server.Workspaces.set_policy($ws, $agent, attrs)"
+}
 
 # Escape a string for embedding as an Elixir "..." literal: backslash first, then quote,
 # then `#{` — gate output routinely contains interpolation syntax (compiler errors, test
@@ -192,7 +215,13 @@ case "$cmd" in
         %{agent: r.agent, thread_id: r.thread_id, title: r.thread_title, warm: r.warm?, workspace_id: ws,
           archetype: seat && seat.archetype, lead: !!(seat && seat.lead?)}
       end)
-      bench = for {ws, cs} <- benches, c <- cs, do: %{workspace_id: ws, agent_id: c.agent_id, name: c.name, archetype: c.archetype, lead: c.lead?}
+      bench = for {ws, cs} <- benches, pols = Server.Workspaces.policies(ws), c <- cs, p = pols[c.agent_id],
+        do: %{workspace_id: ws, agent_id: c.agent_id, name: c.name, archetype: c.archetype, lead: c.lead?, model: p && p.model, ask: p && p.ask_default}
+      env = Server.OperatorConfig.environment()
+      key = fn m -> "#{m.provider}/#{m.model}" end
+      models = for m <- Server.Profiles.model_choices(), do: %{key: key.(m), provider: m.provider, model: m.model, thinking: m.thinking, harness: Server.Harness.resolve(m, env)}
+      archetypes = for {k, t} <- Enum.sort(Server.Profiles.archetypes()),
+        do: %{name: k, meta: Server.Profiles.meta?(k), read_only: get_in(t, [:permissions, "permission", "write"]) == "deny", model: key.(t.model)}
       projects = for ws <- ws_ids, p <- Server.Projects.in_workspace(ws), do: %{id: p.id, workspace_id: ws, name: p.name}
       tickets = for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing", do: %{id: t.id, workspace_id: ws, project_id: t.project_id, title: t.title, priority: t.priority}
       counts = Server.Repo.all(from t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}) |> Map.new()
@@ -200,7 +229,7 @@ case "$cmd" in
       awaiting = Server.Repo.one(from t in Server.Thread, where: t.state == "open" and (not is_nil(t.awaiting) or t.id in ^Map.keys(prompts)), select: count(t.id))
       threads = Server.Repo.all(from t in Server.Thread, where: t.state == "open", order_by: [desc: t.id], select: %{id: t.id, title: t.title, stage: t.stage, awaiting: t.awaiting, workspace_id: t.workspace_id}) |> Enum.map(&Map.put(&1, :prompt, prompts[&1.id]))
       %{roster: roster, counts: counts, awaiting: awaiting, threads: threads, bench: bench, projects: projects, tickets: tickets,
-        workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}), archetypes: Server.Profiles.archetypes() |> Map.keys() |> Enum.sort()} |> JSON.encode!() |> IO.puts()'
+        workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}), archetypes: archetypes, models: models} |> JSON.encode!() |> IO.puts()'
     ;;
 
   ticket-file)
@@ -221,11 +250,29 @@ case "$cmd" in
     ;;
 
   hire)
-    # Seat a new coworker on a workspace's bench: hire <workspace-id> <name> <archetype>
-    ws="${1:-}"; name="${2:-}"; arch="${3:-}"
-    { int "$ws" && [ -n "$name" ] && [ -n "$arch" ]; } ||
-      { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    # Seat a new coworker on a workspace's bench, and its policy when given:
+    # hire <workspace-id> <name> <archetype> [<provider/model>|- [<effort>|- [ask|allow|-]]]
+    ws="${1:-}"; name="${2:-}"; arch="${3:-}"; model="${4:--}"; effort="${5:--}"; ask="${6:--}"
+    { int "$ws" && [ -n "$name" ] && [ -n "$arch" ] && knobs "$model" "$effort" "$ask"; } ||
+      { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype> [<provider/model>|- [low|medium|high|xhigh|max|- [ask|allow|-]]]' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> $(policy_expr "$ws" c.agent_id "$model" "$effort" "$ask"); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    ;;
+
+  coworker-set)
+    # Retarget a coworker in a workspace (from its next session): model, effort, ask/allow.
+    # `inherit` puts a knob back to the archetype default; `-` leaves it as it is.
+    ws="${1:-}"; agent="${2:-}"; model="${3:--}"; effort="${4:--}"; ask="${5:--}"
+    { int "$ws" && int "$agent" && knobs "$model" "$effort" "$ask"; } ||
+      { echo 'usage: tlon-cli.sh coworker-set <workspace-id> <agent-id> <provider/model>|inherit|- <effort>|- ask|allow|inherit|-' >&2; exit 2; }
+    exec "$SERVER" rpc "$(policy_expr "$ws" "$agent" "$model" "$effort" "$ask"); IO.puts(\"set coworker #$agent on workspace #$ws\")"
+    ;;
+
+  workspace-new)
+    # A new workspace, with a repo to work in when given: workspace-new <name> [repo-path]
+    name="${1:-}"; repo="${2:-}"
+    [ -n "$name" ] || { echo 'usage: tlon-cli.sh workspace-new <name> [repo-path]' >&2; exit 2; }
+    if [ -n "$repo" ]; then repos="[\"$(esc "$repo")\"]"; else repos="[]"; fi
+    exec "$SERVER" rpc "case Server.Workspaces.register(%{name: \"$(esc "$name")\", repos: $repos}) do {:ok, w} -> IO.puts(\"workspace ##{w.id} #{w.name}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
     ;;
 
   shell-dossier)
@@ -333,7 +380,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|ticket-file|ticket-start|hire|coworker-set|workspace-new|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
