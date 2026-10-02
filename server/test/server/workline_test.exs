@@ -202,6 +202,38 @@ defmodule Server.WorklineTest do
     assert Channel.thread_lead(thread.id) == "menard"
   end
 
+  test "each stage is staffed by its kind: spec and plan the planner, build and verify the builder, review the reviewer" do
+    {:ok, workspace} =
+      Server.Workspaces.register(%{
+        name: "StagedWorkspace",
+        type: "code",
+        scope: "machine",
+        repos: [],
+        roster: [
+          %{"archetype" => "planner", "name" => "yu"},
+          %{"archetype" => "builder", "name" => "daneri"},
+          %{"archetype" => "reviewer", "name" => "lonnrot"}
+        ]
+      })
+
+    thread = open!(%{slug: "staged", workspace_id: workspace.id})
+    {:ok, at_spec} = Workline.advance(thread, artifacts: AllPresent)
+    assert at_spec.stage == "spec" and Channel.thread_lead(thread.id) == "yu"
+
+    {:awaiting, thread} = Workline.advance(at_spec, artifacts: AllPresent)
+    {:ok, at_plan} = Workline.approve(thread, artifacts: AllPresent)
+    assert at_plan.stage == "plan" and Channel.thread_lead(thread.id) == "yu"
+
+    {:ok, at_build} = Workline.advance(at_plan, artifacts: AllPresent)
+    assert at_build.stage == "build" and Channel.thread_lead(thread.id) == "daneri"
+
+    {:ok, at_verify} = Workline.advance(at_build, artifacts: AllPresent)
+    assert at_verify.stage == "verify" and Channel.thread_lead(thread.id) == "daneri"
+
+    {:ok, at_review} = Workline.advance(at_verify, artifacts: AllPresent)
+    assert at_review.stage == "review" and Channel.thread_lead(thread.id) == "lonnrot"
+  end
+
   test "entering review with no reviewer in the roster leaves the lead alone" do
     thread = open!(%{slug: "no-reviewer"})
     {:ok, thread} = Workline.advance(thread, artifacts: AllPresent)
