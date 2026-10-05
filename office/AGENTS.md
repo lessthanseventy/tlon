@@ -7,7 +7,7 @@ board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no r
 - `kit/` — what every office surface shares: the snapshot's types (`types.ts`, the shape of
   `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
   whiteboard's columns), sprites and looks (`sprites.ts`), the colour roles (`palette.ts`), the
-  1x canvas and the **frame** a room hands a surface (`canvas.ts`), a bitmap font (`font.ts`), the
+  1x canvas and the **frame** a room hands a surface (`canvas.ts`), tlon's own bitmap font in two cuts (`font.ts`), the
   office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`),
   drawing people and Nina into a `Scene` (`draw.ts`), the furniture every room has (`furniture.ts`).
 - `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
@@ -26,8 +26,9 @@ board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no r
   shared; floorplans, furniture and spots belong to their room, so a bigger room can differ freely.
   Lift room code into the kit when a second room needs it, not before.
 - **WCAG 2.2 AA holds for what the TUI shows**, and `test/wcag.test.ts` measures it: every label
-  4.5:1 against what is behind it (the painter backs one that would not), text the terminal's size
-  and growing with its zoom, no state by colour alone, everything reachable by key.
+  4.5:1 against what is behind it (the painter backs one that would not), text on a type scale
+  (`typeFor` in `tui/paint.ts`: small asides, body names and headers, doubled call-outs) that grows
+  with the terminal's zoom, no two labels overprinting, no state by colour alone, everything reachable by key.
 - **No walk crosses furniture**: a room lists its footprints (`widePlan(w).blocks`) and
   `test/wide.test.ts` walks every route between every spot through them.
 - **Every colour is a `ROLE`, read at draw time.** A themed surface hands its roles in with

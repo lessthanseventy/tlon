@@ -3,7 +3,7 @@
 // desktop's sizes. Without, it is half blocks — two art pixels per cell — with the text as terminal
 // text on the cells. Either way clicks map back to the room's logical pixels.
 import type { Frame, Hit, Ink, Measure } from "../kit/canvas"
-import { FONT_ASCENT, FONT_H, FONT_W, glyph } from "../kit/font"
+import { BODY, SMALL, type Cut } from "../kit/font"
 import { contrast, rgb, ROLE } from "../kit/palette"
 import { png } from "./png"
 import { ESC, line, type Seg } from "./term"
@@ -27,16 +27,22 @@ export function geometry(W: number, H: number, termCols: number, termRows: numbe
 }
 
 /**
- * The room's text follows the terminal's: the bitmap font scaled to about 70% of the cell's height,
- * a step under the panes' text so it sits with the art, and growing when the terminal zooms (WCAG
- * 1.4.4). The desktop's size hints don't shrink it.
+ * The room's text grows with the terminal's: 1× in an 18 px cell, 2× at double the zoom (WCAG
+ * 1.4.4), every step together.
  */
-export const textScale = (g: Geometry) => Math.max(1, Math.round((g.ch * 0.7) / FONT_H))
+export const textScale = (g: Geometry) => Math.max(1, Math.round(g.ch / 18))
+/**
+ * The type scale, from a text's size hint: under 10 the small cut (asides: whiteboard items, the
+ * clock), 10..12 the body cut (names, headers, balloons), 13 and up the small cut doubled (call-outs).
+ */
+export function typeFor(size: number, zoom: number): { font: Cut; sc: number } {
+  return size < 10 ? { font: SMALL, sc: zoom } : size < 13 ? { font: BODY, sc: zoom } : { font: SMALL, sc: 2 * zoom }
+}
 /** text width (and line height) in the room's logical px: the bitmap font's in kitty mode, a cell a glyph in blocks */
 export function measureFor(g: Geometry): Measure {
-  const sc = textScale(g)
-  const m: Measure = (s) => (g.kitty ? s.length * FONT_W * sc : s.length * g.cw) / g.k
-  m.lineHeight = () => (g.kitty ? FONT_H * sc + 2 : g.ch) / g.k
+  const zoom = textScale(g)
+  const m: Measure = (s, size) => { const { font, sc } = typeFor(size, zoom); return (g.kitty ? s.length * font.w * sc : s.length * g.cw) / g.k }
+  m.lineHeight = (size) => { const { font, sc } = typeFor(size, zoom); return (g.kitty ? font.h * sc + 2 : g.ch) / g.k }
   return m
 }
 
@@ -50,15 +56,15 @@ export function backingFor(text: string) { return contrast(text, ROLE.ground) >=
  * balloons. Text whose colour falls under 4.5:1 against the art behind it gets a solid backing
  * (WCAG 1.4.3); `backed` collects each label's colour and the colour actually behind it.
  */
-export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number, scale: number, backed?: { text: string; behind: string }[]) {
+export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number, zoom: number, backed?: { text: string; behind: string }[]) {
   const fill = (x: number, y: number, fw: number, fh: number, c: string) => {
     const [r, g, b] = rgb(c)
     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + fh)); j++)
       for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + fw)); i++) { const o = (j * w + i) * 4; big[o] = r!; big[o + 1] = g!; big[o + 2] = b!; big[o + 3] = 255 }
   }
-  const write = (s: string, x: number, baseline: number, c: string, sc: number) => {
-    ;[...s].forEach((ch, n) => glyph(ch).forEach((bits, row) => {
-      for (let col = 0; col < FONT_W; col++) if ((bits >> (FONT_W - 1 - col)) & 1) fill(x + (n * FONT_W + col) * sc, baseline - (FONT_ASCENT - row) * sc, sc, sc, c)
+  const write = (s: string, x: number, baseline: number, c: string, font: Cut, sc: number) => {
+    ;[...s].forEach((ch, n) => font.glyph(ch).forEach((bits, row) => {
+      for (let col = 0; col < font.w; col++) if ((bits >> (font.w - 1 - col)) & 1) fill(x + (n * font.w + col) * sc, baseline - (font.ascent - row) * sc, sc, sc, c)
     }))
   }
   // the art's average colour under a box, as #rrggbb
@@ -70,12 +76,12 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
   }
   for (const i of ink) {
     if (i.t === "text") {
-      const sc = scale, tw = i.s.length * FONT_W * sc, th = FONT_H * sc
-      const x = i.align === "center" ? i.x * k - tw / 2 : i.x * k, base = i.y * k - sc
-      let bg = behind(x, base - FONT_ASCENT * sc, tw, th)
-      if (contrast(i.color, bg) < MIN_CONTRAST) { bg = backingFor(i.color); fill(x - sc, base - FONT_ASCENT * sc - sc, tw + 2 * sc, th + 2 * sc, bg) }
+      const { font, sc } = typeFor(i.size, zoom), tw = i.s.length * font.w * sc, th = font.h * sc
+      const x = Math.round(i.align === "center" ? i.x * k - tw / 2 : i.x * k), base = Math.round(i.y * k - sc)
+      let bg = behind(x, base - font.ascent * sc, tw, th)
+      if (contrast(i.color, bg) < MIN_CONTRAST) { bg = backingFor(i.color); fill(x - sc, base - font.ascent * sc - sc, tw + 2 * sc, th + 2 * sc, bg) }
       backed?.push({ text: i.color, behind: bg })
-      write(i.s, x, base, i.color, sc)
+      write(i.s, x, base, i.color, font, sc)
     } else if (i.t === "brackets") {
       const t = Math.max(1, Math.round(k / 2)), arm = 3 * k, x0 = i.x * k, y0 = i.y * k, x1 = (i.x + i.w) * k, y1 = (i.y + i.h) * k
       for (const [x, y, dx, dy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]] as const) {
@@ -83,11 +89,11 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
         fill(dx > 0 ? x : x - t, dy > 0 ? y : y - arm, t, arm, i.color)
       }
     } else {
-      const sc = scale, lh = (FONT_H + 2) * sc, pad = 3 * sc
-      const bw = Math.max(...i.lines.map((l) => l.length)) * FONT_W * sc + pad * 2, bh = i.lines.length * lh + pad * 2
+      const font = BODY, sc = zoom, lh = (font.h + 1) * sc, pad = 3 * sc
+      const bw = Math.max(...i.lines.map((l) => l.length)) * font.w * sc + pad * 2, bh = i.lines.length * lh + pad * 2
       const bx = Math.min(Math.max(i.cx * k - bw / 2, 2), w - bw - 2), by = Math.max(2, i.top * k - bh - 3 * k)
       fill(bx, by, bw, bh, ROLE.prose); fill(i.cx * k - k, by + bh, 2 * k, 2 * k, ROLE.prose)
-      i.lines.forEach((l, n) => write(l, bx + pad, by + pad + (n + 1) * lh - 2 * sc, ROLE.fieldInk, sc))
+      i.lines.forEach((l, n) => write(l, Math.round(bx + pad), Math.round(by + pad + n * lh + font.ascent * sc), ROLE.fieldInk, font, sc))
     }
   }
 }

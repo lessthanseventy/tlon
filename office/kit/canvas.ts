@@ -42,12 +42,6 @@ export function fit(measure: Measure, name: string, w: number, size: number) {
   while (n.length > 2 && measure(n, size) > w) n = n.slice(0, -1)
   return n === name ? name : `${n.slice(0, -1)}.`
 }
-/** `name tail` cut to `w` logical px: the name gives way, the tail stays */
-export function plate(measure: Measure, name: string, tail: string, w: number, size = 12) {
-  let n = name
-  while (n.length > 2 && measure(`${n} ${tail}`, size) > w) n = n.slice(0, -1)
-  return n === name ? `${name} ${tail}` : `${n.slice(0, -1)}.. ${tail}`
-}
 /** what someone said, as a balloon's few lines: ASCII (a toy font has no fallback), ~26 a line */
 export function balloonLines(said: string): string[] {
   const flat = said.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...")
