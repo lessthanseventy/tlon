@@ -88,13 +88,7 @@ defmodule Server.Office.Banter do
     total = weighted |> Enum.map(&elem(&1, 1)) |> Enum.sum()
 
     if total > 0 do
-      at = roll * total
-
-      {name, _, ask} =
-        Enum.reduce_while(weighted, 0, fn {_, w, _} = k, acc ->
-          if at < acc + w, do: {:halt, k}, else: {:cont, acc + w}
-        end)
-
+      {name, _, ask} = at(weighted, roll * total)
       {name, ask.(ctx, speaker)}
     end
   end
@@ -163,7 +157,7 @@ defmodule Server.Office.Banter do
       |> Server.Channel.recent_across()
       |> Enum.filter(&Server.Channel.operator?(&1.author))
       |> Enum.take(-5)
-      |> Enum.map(&"- \"#{clip(&1.body, 160)}\" (on \"#{&1.thread_title}\")")
+      |> Enum.map(&~s|- "#{clip(&1.body, 160)}" (on "#{&1.thread_title}")|)
 
     %{
       crew: crew,
@@ -202,4 +196,7 @@ defmodule Server.Office.Banter do
     me = self()
     Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:said, ws, write_line(ws)}) end)
   end
+
+  # the kind whose stretch of the weighted line holds `point`
+  defp at([{_, w, _} = k | rest], point), do: if(point < w or rest == [], do: k, else: at(rest, point - w))
 end
