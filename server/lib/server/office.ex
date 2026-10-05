@@ -60,6 +60,26 @@ defmodule Server.Office do
     %{messages: messages, peek: tab && peek(t.workspace_id, tab), window: tab && tab.name}
   end
 
+  @doc """
+  An aside: one question to a coworker outside any thread, as the command that asks it — its own
+  harness, model and persona, read-only, no saved session (`Server.Harness.aside/2`) — and the
+  directory to run it in (the workspace's first repo). The CALLER runs it, so a model call never
+  blocks the server.
+  """
+  @spec aside_spec(integer(), integer(), String.t()) ::
+          {:ok, %{argv: [String.t()], cwd: String.t() | nil}} | {:error, :not_on_bench}
+  def aside_spec(workspace_id, agent_id, question) do
+    case Enum.find(Server.Workspaces.bench(workspace_id), &(&1.agent_id == agent_id)) do
+      nil ->
+        {:error, :not_on_bench}
+
+      c ->
+        profile = c |> Server.Profiles.roster_entry() |> Server.Profiles.instantiate(workspace_id)
+        repo = List.first(Server.Workspaces.repos(workspace_id))
+        {:ok, %{argv: Server.Harness.aside(profile, question), cwd: repo && repo.path}}
+    end
+  end
+
   defp window_of(t) do
     tabs = Server.Tmux.list_windows(t.workspace_id)
 
