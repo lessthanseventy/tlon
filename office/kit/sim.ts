@@ -1,0 +1,216 @@
+// The office's life, room-agnostic: who walks where and when — people to their desks when they
+// work, to the lounge when idle, into your queue when a thread waits on you, over to whoever they
+// consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
+// `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
+import { needsYou } from "./crew"
+import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
+import type { Agents, Seat } from "./types"
+
+export type Kind = Fav | "desk" | "queue" | "roam" | "exit" | "visit" | "note"
+/** a place to be: where to stand, the row you walk along to get there, how you stand once there */
+export type Spot = { x: number; y: number; aisle: number; pose: Pose; face: Dir; kind: Kind }
+export type Pt = { x: number; y: number }
+export type Actor = {
+  seat: Seat; look: Look; x: number; y: number; path: Pt[]
+  spot: Spot; spotKey: string; pose: Pose; face: Dir; moving: boolean
+  until: number; emote: string | null; emoteUntil: number; leaving: boolean
+}
+export type CatMode = "walk" | "sit" | "sleep" | "play"
+export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number }
+
+/** Nina's places in a room: her nap, your desk, her yarn, her litter, her tower's two perches, the lounge */
+export type CatPlan = {
+  nap: Pt; desk: Pt; play: Pt; litter: Pt; perches: [Pt, Pt]; lounge: Pt[]; spots: Pt[]
+  /** the floor below a spot up off it (a desk, a perch, the litter box), or null */
+  via(p: Pt): Pt | null
+  /** the waypoints between two of her places — a door when they are in different rooms */
+  door(from: Pt, to: Pt): Pt[]
+}
+/** a room's geometry, as the sim needs it */
+export type Plan<L extends { people: Seat[] }> = {
+  layout(a: Agents): L
+  /** where someone works, if they have a seat */
+  home(l: L, agent: string): Spot | null
+  queue: Spot[]
+  lounge: Spot[]
+  exit: Spot
+  pen: Spot
+  /** beside whoever is visited */
+  visit(host: Actor): Spot
+  /** somewhere to stroll when the lounge is full */
+  roam(l: L): Spot
+  /** the waypoints from (x, row `from`) to a goal, kept off the furniture */
+  route(x: number, from: number, goal: Spot): Pt[]
+  cat: CatPlan
+}
+
+// one figure per person, whatever threads they are on
+export const keyOf = (r: Seat) => r.agent
+export const spotKey = (s: Spot) => `${s.kind}:${s.x}:${s.y}`
+const VISIT_MS = 60_000, NOTE_MS = 45_000
+const LOUNGING = new Set(["couch", "cooler", "coffee", "roam"])
+
+export class Sim<L extends { people: Seat[] }> {
+  protected cat: Cat
+  protected actors = new Map<string, Actor>()
+  protected tick = 0
+  private seeded = false
+  /** who you are talking to, by agent name: `text` null while they think, then what they said */
+  protected talk = new Map<string, { text: string | null; until: number }>()
+  private changed = true
+
+  constructor(protected plan: Plan<L>) {
+    this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0 }
+  }
+
+  /** a click on Nina: she purrs for a few seconds, and wakes if she was asleep */
+  pet() { this.cat.purr = this.tick + 30; this.cat.byYou = false; if (this.cat.mode === "sleep") { this.cat.mode = "sit"; this.cat.until = this.tick + 150 } this.changed = true }
+  /** someone was asked something (`text` null) or has answered; an answer shows for ~12 s */
+  say(agent: string, text: string | null) { this.talk.set(agent, { text, until: text === null ? Infinity : this.tick + 120 }); this.changed = true }
+  /** is anyone settled at a spot of this kind (the TV is on while someone is on the couch) */
+  protected using(kind: Kind) { return [...this.actors.values()].some((x) => x.spot.kind === kind && !x.moving) }
+
+  /** Nina: naps on your rug, sits and flicks her tail, wanders your floor and the lounge */
+  private stepCat(): boolean {
+    const c = this.cat, p = this.plan.cat
+    const at = (q: Pt) => c.x === q.x && c.y === q.y
+    if (c.path.length) {
+      if (this.tick % 2) return false
+      const to = c.path[0]!
+      c.x += Math.sign(to.x - c.x); c.y += Math.sign(to.y - c.y)
+      if (to.x !== c.x) c.face = Math.sign(to.x - c.x)
+      if (c.x === to.x && c.y === to.y) c.path.shift()
+      if (!c.path.length) {
+        const nap = at(p.nap) || (at(p.perches[0]) && Math.random() < 0.7)
+        c.mode = nap ? "sleep" : at(p.play) ? "play" : "sit"
+        if (at(p.play)) c.face = 1
+        c.until = this.tick + (at(p.litter) ? 60 : nap ? 600 : 150) + Math.floor(Math.random() * (at(p.litter) ? 40 : 300))
+      }
+      return true
+    }
+    if (c.mode === "play" && this.tick % 3 === 0) { c.yarn = (c.yarn + 1) % 4; return true }
+    // nobody leaves her lonely: you pat her when she is on your desk, and anyone idling in the
+    // lounge reaches down to her when she is close
+    if (this.tick >= c.purr) {
+      if (at(p.desk) && Math.random() < 0.02) { c.purr = this.tick + 30; c.byYou = true; return true }
+      if (c.mode !== "sleep") for (const a of this.actors.values()) {
+        if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || Math.random() > 0.004) continue
+        c.purr = this.tick + 30; c.byYou = false; a.emote = "♥"; a.emoteUntil = this.tick + 30
+        return true
+      }
+    }
+    if (this.tick < c.until || this.tick < c.purr) return false
+    const company = [...this.actors.values()].some((a) => !a.moving && LOUNGING.has(a.spot.kind))
+    const r = Math.random()
+    const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]!
+    const to = company && r < 0.3 ? pick(p.lounge)
+      : r < 0.45 ? p.nap : r < 0.55 ? p.desk : r < 0.7 ? pick(p.perches)
+        : r < 0.8 ? p.play : r < 0.85 ? p.litter : pick(p.spots)
+    const down = p.via(c), up = p.via(to)
+    c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]; c.mode = "walk"
+    return true
+  }
+
+  /**
+   * Advance one tick (100 ms): retarget everyone from the roster, then walk. True when the room
+   * looks different — someone moved, or the 400 ms animation frame turned — so the surface redraws
+   * only then.
+   */
+  step(a: Agents): boolean {
+    this.tick++
+    let changed = this.changed || this.tick % 4 === 0
+    this.changed = false
+    for (const [k, v] of this.talk) if (this.tick > v.until) { this.talk.delete(k); changed = true }
+    if (this.stepCat()) changed = true
+    const plan = this.plan, l = plan.layout(a)
+    const threadOf = (id: number) => a.threads.find((t) => t.id === id)
+    const asks = l.people.filter((p) => needsYou(threadOf(p.thread_id))).sort((p, q) => p.thread_id - q.thread_id)
+    const live = new Set(l.people.map(keyOf))
+    for (const r of l.people) {
+      const k = keyOf(r)
+      const actor = this.actors.get(k)
+      if (actor) { actor.seat = r; actor.leaving = false; continue }
+      const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
+      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false })
+    }
+    if (a.ok) this.seeded = true
+    for (const [k, actor] of this.actors) if (!live.has(k)) actor.leaving = true
+
+    // a consult walks the asker over to whoever they asked; a note walks its author to the board
+    const now = Date.now()
+    const visiting = new Map(a.visits.filter((v) => now - Date.parse(v.at) < VISIT_MS).map((v) => [v.from, v.to]))
+    const writing = new Set(a.notes.filter((n) => now - Date.parse(n.at) < NOTE_MS).map((n) => n.author))
+    let host: Actor | undefined
+    const held = new Set([...this.actors.values()].map((x) => x.spotKey))
+    for (const [k, actor] of this.actors) {
+      const slot = asks.findIndex((r) => keyOf(r) === k)
+      const home = plan.home(l, actor.seat.agent)
+      let goal: Spot
+      if (actor.leaving) goal = plan.exit
+      else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
+      else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
+      else if (writing.has(actor.seat.agent)) goal = plan.pen
+      else if (actor.seat.warm && home) goal = home
+      else goal = this.idleGoal(actor, held, l)
+      const gk = spotKey(goal)
+      if (gk !== actor.spotKey) {
+        held.delete(actor.spotKey); held.add(gk)
+        const from = actor.path.length === 0 && actor.spot.kind === "desk" ? actor.spot.aisle : actor.y
+        actor.path = plan.route(actor.x, from, goal)
+        actor.spot = goal; actor.spotKey = gk; actor.pose = "stand"
+        actor.until = this.tick + 80 + Math.floor(Math.random() * 120)
+      }
+      // someone you are talking to stops where they are and faces you until they have answered
+      if (this.talk.get(actor.seat.agent)?.text === null) { actor.moving = false; if (actor.pose === "stand") actor.face = "down" }
+      else this.walk(actor, goal.kind === "desk" || goal.kind === "queue" || !actor.look.slow ? 2 : 1)
+      if (actor.moving) changed = true
+      else if (goal.kind === "visit" || goal.kind === "note") {
+        // arrived: the two of them talk, or the pen moves
+        const e = goal.kind === "note" ? "✎" : "~"
+        if (actor.emote !== e) { actor.emote = e; changed = true }
+        actor.emoteUntil = this.tick + 5
+        const h = goal.kind === "visit" ? this.find(visiting.get(actor.seat.agent)!) : undefined
+        if (h && h.emote !== "~") { h.emote = "~"; h.emoteUntil = this.tick + 5; changed = true }
+      }
+      if (actor.leaving && !actor.moving && actor.path.length === 0) { this.actors.delete(k); changed = true; continue }
+      if (actor.emote && this.tick > actor.emoteUntil) { actor.emote = null; changed = true }
+      if (!actor.emote && !actor.moving && Math.random() < 0.006) {
+        const e: Record<string, string> = { board: "?", cooler: "~", coffee: "♥" }
+        actor.emote = e[actor.spot.kind] ?? actor.look.emote
+        actor.emoteUntil = this.tick + 25
+        changed = true
+      }
+    }
+    return changed
+  }
+
+  /** where someone is now, by name — at their desk before anywhere else */
+  private find(agent: string): Actor | undefined {
+    const all = [...this.actors.values()].filter((x) => x.seat.agent === agent && !x.leaving)
+    return all.find((x) => x.spot.kind === "desk") ?? all[0]
+  }
+
+  private idleGoal(actor: Actor, held: Set<string>, l: L): Spot {
+    const cur = actor.spot
+    const idle = cur.kind === "board" || cur.kind === "couch" || cur.kind === "cooler" || cur.kind === "coffee" || cur.kind === "roam"
+    if (idle && this.tick < actor.until) return cur
+    const free = this.plan.lounge.filter((s) => !held.has(spotKey(s)) && spotKey(s) !== actor.spotKey)
+    const fav = free.filter((s) => s.kind === actor.look.fav)
+    const pool = fav.length && Math.random() < 0.6 ? fav : free
+    return pool[Math.floor(Math.random() * pool.length)] ?? this.plan.roam(l)
+  }
+
+  private walk(actor: Actor, speed: number) {
+    actor.moving = false
+    let budget = speed
+    while (budget > 0 && actor.path.length) {
+      const p = actor.path[0]!
+      const dx = p.x - actor.x, dy = p.y - actor.y
+      if (dx === 0 && dy === 0) { actor.path.shift(); continue }
+      actor.moving = true
+      if (dx !== 0) { const s = Math.sign(dx) * Math.min(budget, Math.abs(dx)); actor.x += s; budget -= Math.abs(s); actor.face = dx < 0 ? "left" : "right" }
+      else { const s = Math.sign(dy) * Math.min(budget, Math.abs(dy)); actor.y += s; budget -= Math.abs(s); actor.face = dy < 0 ? "up" : "down" }
+    }
+    if (!actor.path.length) { actor.pose = actor.spot.pose; if (!actor.moving) actor.face = actor.spot.face }
+  }
+}
