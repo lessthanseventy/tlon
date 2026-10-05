@@ -1,43 +1,52 @@
-// The TUI's line to the server: the same tlon-cli verbs the desktop shell calls, run from this
-// checkout, so it works wherever the server does (Linux or macOS).
-import { resolve } from "node:path"
+// The TUI's line to the server: the operator API over loopback HTTP (Server.MCP.OperatorAPI) — the
+// always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
+// beside it: a compiled TUI runs anywhere the server answers.
 import { EMPTY, type Agents, type ThreadView } from "../kit/types"
 
-const CLI = resolve(import.meta.dir, "../../scripts/tlon-cli.sh")
+const BASE = (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/$/, "")
 
-/** run a verb; its last stdout line, or throw with what it said */
-async function run(...args: string[]): Promise<string> {
-  const p = Bun.spawn([CLI, ...args], { stdout: "pipe", stderr: "pipe" })
-  const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited])
-  if (code !== 0) throw new Error((err || out).trim().split("\n").pop() || `${args[0]} exited ${code}`)
-  return out.trim().split("\n").pop() ?? ""
+async function call(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; json: any }> {
+  const r = await fetch(`${BASE}/api${path}`, {
+    method,
+    headers: body === undefined ? {} : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
+  })
+  return { status: r.status, json: await r.json().catch(() => null) }
 }
 
 export async function status(): Promise<Agents> {
   try {
-    const j = JSON.parse(await run("shell-status"))
+    const { status, json: j } = await call("GET", "/office")
+    if (status !== 200 || !j) throw new Error(`office ${status}`)
     return {
       ok: true, roster: j.roster ?? [], threads: j.threads ?? [], counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
       bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [],
     }
   } catch {
-    return { ...EMPTY, note: "channel down" }
+    return { ...EMPTY, note: `channel down (${BASE})` }
   }
 }
 export async function thread(id: number): Promise<ThreadView | null> {
-  try { return JSON.parse(await run("shell-thread", String(id))) } catch { return null }
+  try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }
 }
 
-/** a write: what it said back (or why it failed), for the status line */
-async function write(what: string, ...args: string[]): Promise<string> {
-  try { return (await run(...args)) || `${what}: ok` } catch (e) { return `${what} failed: ${(e as Error).message}` }
+/** a write: a line for the status bar saying what happened, or why it didn't */
+async function write(what: string, path: string, body: unknown, ok: (j: any) => string): Promise<string> {
+  try {
+    const r = await call("POST", path, body)
+    return r.status < 300 ? ok(r.json) : `${what} failed: ${r.json?.error ?? r.status}`
+  } catch (e) {
+    return `${what} failed: ${(e as Error).message}`
+  }
 }
 /** post to a thread as the operator; a body naming an open prompt's option answers it */
-export const post = (id: number, body: string) => write(`reply to #${id}`, "post", String(id), body)
-export const ticketFile = (ws: number, title: string) => write("filing a ticket", "ticket-file", String(ws), "-", title, "")
+export const post = (id: number, body: string) => write(`reply to #${id}`, `/threads/${id}/messages`, { body }, () => `sent to #${id}`)
+export const ticketFile = (ws: number, title: string) => write("filing a ticket", "/tickets", { workspace_id: ws, title }, (j) => `filed ticket #${j.id}`)
 /** send a ticket to the workspace's manager to staff (no manager: its lead starts it) */
-export const ticketRoute = (id: number) => write(`sending #${id} to the manager`, "ticket-route", String(id))
+export const ticketRoute = (id: number) =>
+  write(`sending #${id} to the manager`, `/tickets/${id}/route`, {}, (j) => (j.routed_to ? `ticket #${id} sent to ${j.routed_to}` : `no manager: #${id} started as thread #${j.thread}`))
 /** start a ticket's thread with the workspace's lead */
-export const ticketStart = (id: number) => write(`starting #${id}`, "ticket-start", String(id))
+export const ticketStart = (id: number) => write(`starting #${id}`, `/tickets/${id}/start`, {}, (j) => `ticket #${id} started as thread #${j.thread}`)
 /** close a thread as done: its sessions end, its ticket is done, a child reports up */
-export const closeThread = (id: number) => write(`closing #${id}`, "close-thread", String(id))
+export const closeThread = (id: number) => write(`closing #${id}`, `/threads/${id}/close`, {}, (j) => `closed #${id} — ${j.title}`)

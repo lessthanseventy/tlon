@@ -1,5 +1,5 @@
-// The server's office snapshot as `scripts/tlon-cli.sh shell-status` emits it — what every office
-// surface reads.
+// The server's office snapshot as `Server.Office.status` returns it (`GET /api/office`, and
+// `scripts/tlon-cli.sh shell-status` for the desktop) — what every office surface reads.
 
 /** `prompt`: its coworker is sitting on a dialog (Server.Attention) — the ask, answered from the thread */
 /** `lead`: who it is staffed with; `live`: a tmux window is running it; `standing`: its workspace's lobby */

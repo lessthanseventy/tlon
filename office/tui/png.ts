@@ -1,5 +1,5 @@
 // RGBA → PNG, the smallest encoder that works: one IDAT, no filtering. The kitty image goes over
-// as PNG because ghostty (1.x) crashes inflating a large zlib-compressed raw image (o=z).
+// as PNG because ghostty (1.3 tip) crashes inflating some zlib-compressed raw images (o=z).
 import { deflateSync } from "node:zlib"
 
 const TABLE = new Uint32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0 })
