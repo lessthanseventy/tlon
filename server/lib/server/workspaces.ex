@@ -353,4 +353,61 @@ defmodule Server.Workspaces do
       end
     end
   end
+
+  @doc """
+  Retarget a coworker from the operator's door: `model` (a `"provider/model"` key from
+  `Server.Profiles.model_choices/0`), `effort` (its thinking level) and `ask` (`"ask"` |
+  `"allow"`). A value sets the knob, `:inherit` puts it back to the archetype's, a missing or nil
+  knob leaves it. Effort alone keeps the current model — the policy's, else the archetype's — at
+  the new level. Takes effect from the coworker's next session.
+  """
+  @spec retarget(integer(), integer(), map()) ::
+          {:ok, Policy.t() | nil} | {:error, :unknown_model | :not_on_bench | Ecto.Changeset.t()}
+  def retarget(workspace_id, agent_id, knobs) do
+    with {:ok, model} <- target_model(workspace_id, agent_id, knobs[:model], knobs[:effort]) do
+      attrs =
+        %{}
+        |> then(&if(model == :keep, do: &1, else: Map.put(&1, :model, model)))
+        |> then(&if(knobs[:ask] == :inherit, do: Map.put(&1, :ask_default, nil), else: &1))
+        |> then(&if(knobs[:ask] in ["ask", "allow"], do: Map.put(&1, :ask_default, knobs[:ask]), else: &1))
+
+      if attrs == %{}, do: {:ok, policy(workspace_id, agent_id)}, else: set_policy(workspace_id, agent_id, attrs)
+    end
+  end
+
+  # the model knob to write: :keep, nil (inherit), or a string-keyed model map with any effort applied
+  defp target_model(_ws, _agent, :inherit, _effort), do: {:ok, nil}
+  defp target_model(_ws, _agent, nil, nil), do: {:ok, :keep}
+
+  defp target_model(_ws, _agent, key, effort) when is_binary(key) do
+    case Enum.find(Server.Profiles.model_choices(), &("#{&1.provider}/#{&1.model}" == key)) do
+      nil -> {:error, :unknown_model}
+      m -> {:ok, with_effort(m, effort)}
+    end
+  end
+
+  defp target_model(ws, agent, nil, effort) do
+    case current_model(ws, agent) do
+      nil -> {:error, :not_on_bench}
+      m -> {:ok, with_effort(m, effort)}
+    end
+  end
+
+  defp current_model(ws, agent) do
+    case policy(ws, agent) do
+      %{model: %{} = m} ->
+        m
+
+      _ ->
+        case Enum.find(bench(ws), &(&1.agent_id == agent)) do
+          nil -> nil
+          c -> c |> Server.Profiles.roster_entry() |> Server.Profiles.instantiate(ws) |> Map.fetch!(:model)
+        end
+    end
+  end
+
+  defp with_effort(m, effort) do
+    m = Map.new(m, fn {k, v} -> {to_string(k), v} end)
+    if effort, do: Map.put(m, "thinking", effort), else: m
+  end
 end

@@ -119,6 +119,18 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  defp request_json(method, path, map) do
+    {:ok, {{_http, status, _reason}, _headers, body}} =
+      :httpc.request(
+        method,
+        {~c"http://127.0.0.1:48641" ++ String.to_charlist(path), [], ~c"application/json", JSON.encode!(map)},
+        [],
+        body_format: :binary
+      )
+
+    {status, JSON.decode!(body)}
+  end
+
   test "POST /api/threads/:id/messages is the operator's one door: `y` answers an open prompt, a closed thread reopens",
        %{thread: t} do
     # the prompt row as Server.Attention opens it; the pane is a recording fake
@@ -213,6 +225,69 @@ defmodule Server.MCP.GatewayTest do
       assert Server.Repo.get(Server.Thread, th.id).state == "closed"
       assert {404, _} = post_json("/api/tickets/999999/route", %{})
       assert {404, _} = post_json("/api/tickets/999999/start", %{})
+    end
+  end
+
+  describe "/api — the CLI's writes over HTTP (Server.MCP.OperatorAPI)" do
+    test "workspaces: create, hire, retarget, an aside's command, fire, delete" do
+      {:ok, _keep} = Server.Workspaces.register(%{name: "Keep"})
+      {201, ws} = post_json("/api/workspaces", %{name: "Office", repo: "/tmp/office-repo"})
+      assert ws["name"] == "Office"
+      assert {400, _} = post_json("/api/workspaces", %{})
+
+      {201, c} =
+        post_json("/api/workspaces/#{ws["id"]}/coworkers", %{name: "daneri", archetype: "builder", ask: "allow"})
+
+      assert c["name"] == "daneri" and is_integer(c["agent_id"]) and is_integer(c["seat_id"])
+      assert Server.Workspaces.policy(ws["id"], c["agent_id"]).ask_default == "allow"
+
+      {200, _} =
+        request_json(:patch, "/api/workspaces/#{ws["id"]}/coworkers/#{c["agent_id"]}", %{ask: "inherit", effort: "high"})
+
+      p = Server.Workspaces.policy(ws["id"], c["agent_id"])
+      assert p.ask_default == nil and p.model["thinking"] == "high"
+
+      assert {422, _} =
+               request_json(:patch, "/api/workspaces/#{ws["id"]}/coworkers/#{c["agent_id"]}", %{model: "nope/nada"})
+
+      {200, aside} =
+        post_json("/api/workspaces/#{ws["id"]}/coworkers/#{c["agent_id"]}/aside", %{question: "what is in main?"})
+
+      assert Enum.any?(aside["argv"], &String.contains?(&1, "what is in main?"))
+      assert aside["cwd"] == "/tmp/office-repo"
+
+      {200, _} = request_json(:delete, "/api/seats/#{c["seat_id"]}", %{})
+      assert Server.Workspaces.bench(ws["id"]) == []
+      {200, _} = request_json(:delete, "/api/workspaces/#{ws["id"]}", %{})
+      assert {404, _} = request_json(:delete, "/api/workspaces/#{ws["id"]}", %{})
+    end
+
+    test "tickets: change a field, delete" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {:ok, tk} = Server.Tickets.file(%{workspace_id: ws.id, title: "a"})
+      {200, t} = request_json(:patch, "/api/tickets/#{tk.id}", %{status: "done", title: "b"})
+      assert {t["status"], t["title"]} == {"done", "b"}
+      assert {422, _} = request_json(:patch, "/api/tickets/#{tk.id}", %{status: "frozen"})
+      {200, _} = request_json(:delete, "/api/tickets/#{tk.id}", %{})
+      assert {404, _} = request_json(:delete, "/api/tickets/#{tk.id}", %{})
+    end
+
+    test "threads: hand off, delete; a plain thread is no workline to advance", %{thread: t} do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder"})
+      {:ok, th} = Channel.open_thread(%{title: "pass it on", workspace_id: ws.id})
+      {200, h} = post_json("/api/threads/#{th.id}/hand-off", %{agent: "daneri"})
+      assert h["lead"] == "daneri"
+      assert {409, _} = post_json("/api/threads/#{t.id}/advance", %{})
+      {200, _} = request_json(:delete, "/api/threads/#{th.id}", %{})
+      assert Server.Repo.get(Server.Thread, th.id) == nil
+    end
+
+    test "a workline opens; facts and issues are 404 when there is none" do
+      {201, w} = post_json("/api/worklines", %{title: "the office API", slug: "office-api"})
+      assert w["stage"] == "intent"
+      assert {404, _} = request_json(:delete, "/api/facts/999999", %{})
+      assert {404, _} = post_json("/api/issues/999999/resolve", %{})
     end
   end
 

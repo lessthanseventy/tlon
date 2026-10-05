@@ -73,18 +73,10 @@ knobs() {
   case "$2" in -|low|medium|high|xhigh|max) ;; *) return 1 ;; esac
   case "$3" in -|ask|allow|inherit) ;; *) return 1 ;; esac
 }
-# The Elixir that writes those knobs: policy_expr <ws> <agent-id expr> <model> <effort> <ask>.
-# An effort with no model named retargets the coworker's current model (else its archetype's).
-policy_expr() {
-  local ws="$1" agent="$2" model="$3" effort="$4" ask="$5"
-  local m="nil" a="nil"
-  case "$ask" in ask|allow) a="\"$ask\"" ;; esac
-  case "$model" in
-    inherit) m="{:set, nil}" ;;
-    */*) m="{:set, Enum.find(Server.Profiles.model_choices(), &(\"#{&1.provider}/#{&1.model}\" == \"$(esc "$model")\"))}" ;;
-    -) m="nil" ;;
-  esac
-  printf '%s' "attrs = %{}; m = $m; cur = case Server.Workspaces.policy($ws, $agent) do %{model: %{} = pm} -> pm; _ -> nil end; m = if \"$effort\" != \"-\" and m == nil, do: {:set, cur || Server.Profiles.instantiate(Server.Profiles.roster_entry(Enum.find(Server.Workspaces.bench($ws), &(&1.agent_id == $agent))), $ws).model}, else: m; m = case m do {:set, %{} = x} when \"$effort\" != \"-\" -> {:set, Map.new(x, fn {k, v} -> {to_string(k), v} end) |> Map.put(\"thinking\", \"$effort\")}; {:set, %{} = x} -> {:set, Map.new(x, fn {k, v} -> {to_string(k), v} end)}; other -> other end; attrs = case m do {:set, v} -> Map.put(attrs, :model, v); nil -> attrs end; attrs = case \"$ask\" do \"inherit\" -> Map.put(attrs, :ask_default, nil); \"-\" -> attrs; _ -> Map.put(attrs, :ask_default, $a) end; if attrs != %{}, do: {:ok, _} = Server.Workspaces.set_policy($ws, $agent, attrs)"
+# A coworker knob as Server.Workspaces.retarget/3 takes it: `-` leaves it (nil), `inherit` puts it
+# back to the archetype's, anything else sets it.
+knob() {
+  case "$1" in -) printf nil ;; inherit) printf :inherit ;; *) printf '"%s"' "$(esc "$1")" ;; esac
 }
 
 # Escape a string for embedding as an Elixir "..." literal: backslash first, then quote,
@@ -256,7 +248,7 @@ case "$cmd" in
     ws="${1:-}"; name="${2:-}"; arch="${3:-}"; model="${4:--}"; effort="${5:--}"; ask="${6:--}"
     { int "$ws" && [ -n "$name" ] && [ -n "$arch" ] && knobs "$model" "$effort" "$ask"; } ||
       { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype> [<provider/model>|- [low|medium|high|xhigh|max|- [ask|allow|-]]]' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> $(policy_expr "$ws" c.agent_id "$model" "$effort" "$ask"); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
     ;;
 
   coworker-set)
@@ -265,7 +257,7 @@ case "$cmd" in
     ws="${1:-}"; agent="${2:-}"; model="${3:--}"; effort="${4:--}"; ask="${5:--}"
     { int "$ws" && int "$agent" && knobs "$model" "$effort" "$ask"; } ||
       { echo 'usage: tlon-cli.sh coworker-set <workspace-id> <agent-id> <provider/model>|inherit|- <effort>|- ask|allow|inherit|-' >&2; exit 2; }
-    exec "$SERVER" rpc "$(policy_expr "$ws" "$agent" "$model" "$effort" "$ask"); IO.puts(\"set coworker #$agent on workspace #$ws\")"
+    exec "$SERVER" rpc "case Server.Workspaces.retarget($ws, $agent, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}) do {:ok, _} -> IO.puts(\"set coworker #$agent on workspace #$ws\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
     ;;
 
   aside)
@@ -275,7 +267,7 @@ case "$cmd" in
     ws="${1:-}"; agent="${2:-}"; shift 2 2>/dev/null || true; q="$*"
     { int "$ws" && int "$agent" && [ -n "$q" ]; } ||
       { echo 'usage: tlon-cli.sh aside <workspace-id> <agent-id> <question…>' >&2; exit 2; }
-    spec=$("$SERVER" rpc "case Enum.find(Server.Workspaces.bench($ws), &(&1.agent_id == $agent)) do nil -> IO.puts(\"{}\"); c -> p = Server.Profiles.instantiate(Server.Profiles.roster_entry(c), $ws); repo = List.first(Server.Workspaces.repos($ws)); %{argv: Server.Harness.aside(p, \"$(esc "$q")\"), cwd: repo && repo.path} |> JSON.encode!() |> IO.puts() end" | tail -1)
+    spec=$("$SERVER" rpc "case Server.Office.aside_spec($ws, $agent, \"$(esc "$q")\") do {:ok, spec} -> spec |> JSON.encode!() |> IO.puts(); _ -> IO.puts(\"{}\") end" | tail -1)
     [ "$(jq -r '.argv | length' <<<"$spec")" -gt 0 ] 2>/dev/null ||
       { echo "no coworker #$agent on workspace #$ws" >&2; exit 1; }
     cwd=$(jq -r '.cwd // empty' <<<"$spec"); cwd="${cwd/#\~/$HOME}"; [ -d "$cwd" ] || cwd="$HOME"

@@ -38,6 +38,15 @@ defmodule Server.OfficeTest do
     end
   end
 
+  describe "aside_spec/3" do
+    test "the command that asks a coworker one thing, for the caller to run", %{ws: ws} do
+      {:ok, c} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      assert {:ok, %{argv: [_ | _] = argv}} = Office.aside_spec(ws.id, c.agent_id, "what is in main?")
+      assert Enum.any?(argv, &String.contains?(&1, "what is in main?"))
+      assert {:error, :not_on_bench} = Office.aside_spec(ws.id, 999_999, "x")
+    end
+  end
+
   describe "thread_view/1" do
     test "the thread's last messages, oldest first, and no pane when nothing runs it", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
