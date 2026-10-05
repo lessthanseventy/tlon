@@ -1,8 +1,9 @@
 # tlon — boundaries for a session at the repo root
 
 Tlön, the dev product: `server/` (the always-up brain — threads, facts, worklines, staffing; its node
-is `funes@`), `console/` (the TTY cockpit over it) and `adapters/` (what makes pi and Claude Code
-citizens of the server). It runs on any box with Postgres and mise; the home machine wires it in from
+is `funes@`), `console/` (the TTY cockpit over it), `adapters/` (what makes pi and Claude Code
+citizens of the server) and `office/` (the pixel-art room over it: a shared kit, its rooms, and a
+standalone TUI). It runs on any box with Postgres and mise; the home machine wires it in from
 ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the secrets live. The
 design that split it out: ficciones' `docs/plans/2026-09-25-sovereign-repos-and-aleph-design.md`.
 
@@ -11,7 +12,7 @@ design that split it out: ficciones' `docs/plans/2026-09-25-sovereign-repos-and-
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — names gate + server, console and adapters gates + the task manual; the green-before-commit gate.
+- `mise run check` — names gate + server, console, adapters and office gates + the task manual; the green-before-commit gate.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
 - `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against

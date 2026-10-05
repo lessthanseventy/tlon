@@ -1,0 +1,22 @@
+# tasks/office.toml — the office: its shared kit, its rooms, and the standalone TUI. Included by
+# mise.toml ([task_config] includes); each top-level table is a task.
+
+["office:run"]
+description = "office: the TUI — the rail room in a terminal over the live server (kitty graphics in ghostty/kitty/WezTerm, half blocks elsewhere; OFFICE_GRAPHICS=blocks|kitty to force)"
+dir = "office"
+run = "bun tui/main.ts"
+
+["office:watch"]
+description = "office: re-run the suite on every change (cap signal)"
+dir = "office"
+run = "../scripts/watch.sh bun test"
+
+["office:test"]
+description = "office: the kit, room and TUI unit suite (bun test)"
+dir = "office"
+run = "bun test"
+
+["office:check"]
+description = "office: the precommit gate — install (frozen), typecheck, tests"
+dir = "office"
+run = "bun install --frozen-lockfile && bun run typecheck && bun test"
