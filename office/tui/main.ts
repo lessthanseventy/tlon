@@ -19,7 +19,7 @@ import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } f
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 
 type Mode =
-  | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" }
+  | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
@@ -101,8 +101,10 @@ function openThread(): number | null {
   if (mode.kind === "person") { const name = mode.name, p = crewOf(view()).find((c) => c.name === name); return p?.thread ?? null }
   return null
 }
+let archived: data.Archive | null = null
 function open(m: Mode) {
   mode = m; sel = 0; confirm = null
+  if (m.kind === "archive" && ws !== null) { archived = null; data.archive(ws).then((a) => { archived = a; draw() }) }
   if (m.kind === "thread") picked = m.tid
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   const tid = openThread()
@@ -128,6 +130,7 @@ function act(x: Act) {
     case "cat": room().pet(); return draw()
     case "calendar": return open({ kind: "calendar" })
     case "terminal": return void zoomInto(x.tid)
+    case "archive": return open({ kind: "archive" })
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); roomChanged = true; imageDirty = true; draw() } return }
   }
 }
@@ -165,7 +168,7 @@ function detail(): { title: string; rows: Row[]; keys: string } {
   switch (mode.kind) {
     case "home": {
       const waiting = a.threads.filter(needsYou)
-      if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone, a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], keys: "tab crew · [ ] workspace · c crew · t tickets · n new ticket · o notes · a calendar · q quit" }
+      if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone, a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], keys: "tab crew · [ ] workspace · c crew · t tickets · n new ticket · o notes · f filing · a calendar · q quit" }
       return {
         title: `WAITING ON YOU · ${waiting.length}`,
         rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => open({ kind: "thread", tid: t.id }) })),
@@ -235,6 +238,15 @@ function detail(): { title: string; rows: Row[]; keys: string } {
       }
       rows.push({ segs: [dim("nothing scheduled yet")] })
       return { title: now.toLocaleString("en", { month: "long", year: "numeric" }).toUpperCase(), rows, keys: "esc back" }
+    }
+    case "archive": {
+      if (!archived) return { title: "FILING CABINET", rows: [{ segs: [dim("opening the drawers…")] }], keys: "esc back" }
+      const day = (s: string | null) => (s ? s.slice(0, 10) : "")
+      const rows: Row[] = [{ segs: [key(`TICKETS DONE · ${archived.tickets.length}`)] }]
+      for (const t of archived.tickets) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${day(t.closed_at)}`)] })
+      rows.push({ segs: [key(`THREADS CLOSED · ${archived.threads.length}`)] })
+      for (const t of archived.threads) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${t.stage ?? ""} ${day(t.at)}`)], open: () => open({ kind: "thread", tid: t.id }) })
+      return { title: "FILING CABINET", rows, keys: "j/k move · enter read a thread · esc back" }
     }
     case "notes":
       return { title: `NOTES · ${a.notes.length}`, rows: a.notes.map((n) => ({ segs: [{ s: `${n.author}: `, fg: shirtOf(a.bench.find((b) => b.name === n.author)?.archetype) }, plain(n.body.replace(/\s+/g, " "))] })), keys: "j/k move · esc back" }
@@ -336,6 +348,7 @@ function onKey(k: string) {
     case "c": return open({ kind: "crew" })
     case "t": return open({ kind: "column", col: 0 })
     case "o": return open({ kind: "notes" })
+    case "f": return open({ kind: "archive" })
     case "a": return open({ kind: "calendar" })
     case "n": return newTicket()
     case "p": room().pet(); return

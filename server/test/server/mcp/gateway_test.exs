@@ -202,6 +202,27 @@ defmodule Server.MCP.GatewayTest do
     assert File.exists?(Path.join(path, ".git"))
   end
 
+  test "GET /api/office/archive/:ws is the workspace's done tickets and closed threads, nothing open" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "archived", type: "code", scope: "project", repos: [], roster: []})
+
+    {:ok, other} =
+      Server.Workspaces.register(%{name: "elsewhere", type: "code", scope: "project", repos: [], roster: []})
+
+    {:ok, done} = Server.Tickets.file(%{workspace_id: ws.id, title: "shipped"})
+    {:ok, _} = Server.Tickets.update(done, %{status: "done"})
+    {:ok, _open} = Server.Tickets.file(%{workspace_id: ws.id, title: "still open"})
+    {:ok, closed} = Channel.open_thread(%{title: "wrapped up", workspace_id: ws.id})
+    {:ok, _} = Channel.close_thread(closed)
+    {:ok, _live} = Channel.open_thread(%{title: "going on", workspace_id: ws.id})
+    {:ok, theirs} = Channel.open_thread(%{title: "not ours", workspace_id: other.id})
+    {:ok, _} = Channel.close_thread(theirs)
+
+    assert {200, %{"tickets" => tickets, "threads" => threads}} = get_json("/api/office/archive/#{ws.id}")
+    assert Enum.map(tickets, & &1["title"]) == ["shipped"]
+    assert Enum.map(threads, & &1["title"]) == ["wrapped up"]
+    assert {404, _} = get_json("/api/office/archive/nope")
+  end
+
   test "a workline's brief carries the gate" do
     # the artifact check runs git under the workline root: a throwaway repo, never this checkout
     tmp = Path.join(System.tmp_dir!(), "tlon-gateway-#{System.unique_integer([:positive])}")

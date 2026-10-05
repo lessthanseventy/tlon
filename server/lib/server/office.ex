@@ -44,6 +44,39 @@ defmodule Server.Office do
   end
 
   @doc """
+  A workspace's finished work, for the office's filing cabinet: its done tickets (newest closed
+  first) and its closed threads (newest activity first — a thread keeps no close time), 60 of each.
+  """
+  @spec archive(integer()) :: map()
+  def archive(workspace_id) do
+    tickets =
+      Repo.all(
+        from t in Server.Ticket,
+          where: t.workspace_id == ^workspace_id and t.status == "done",
+          order_by: [desc: t.closed_at, desc: t.id],
+          limit: 60
+      )
+
+    last = from(m in Server.Message, group_by: m.thread_id, select: %{thread_id: m.thread_id, at: max(m.created_at)})
+
+    threads =
+      Repo.all(
+        from t in Server.Thread,
+          where: t.workspace_id == ^workspace_id and t.state == "closed",
+          left_join: l in subquery(last),
+          on: l.thread_id == t.id,
+          order_by: [desc: coalesce(l.at, t.created_at), desc: t.id],
+          limit: 60,
+          select: %{id: t.id, title: t.title, stage: t.stage, at: coalesce(l.at, t.created_at)}
+      )
+
+    %{
+      tickets: Enum.map(tickets, &%{id: &1.id, title: &1.title, closed_at: &1.closed_at}),
+      threads: threads
+    }
+  end
+
+  @doc """
   One thread up close: its last 60 messages, oldest first, and what its worker's pane shows now —
   the thread's own window, or the lead's window for a standing thread; `peek`/`window` nil when
   nothing runs it.

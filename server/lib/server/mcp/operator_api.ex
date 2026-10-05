@@ -11,6 +11,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/roster                  Staff.roster
       GET    /api/office                  Office.status (every workspace: roster, benches, threads, …)
       GET    /api/office/threads/:id      Office.thread_view (last messages + what its pane shows)
+      GET    /api/office/archive/:ws      Office.archive (a workspace's done tickets + closed threads)
 
       GET    /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
       GET    /api/threads/:id/messages    Channel.recent_messages (?limit=, default 50)
@@ -67,6 +68,13 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "sidebar", []), do: json(conn, 200, Board.sidebar())
   defp route(conn, "GET", "roster", []), do: json(conn, 200, Enum.map(Staff.roster(), &roster_row/1))
   defp route(conn, "GET", "office", []), do: json(conn, 200, Office.status())
+
+  defp route(conn, "GET", "office", ["archive", ws]) do
+    case Integer.parse(ws) do
+      {id, ""} -> json(conn, 200, Office.archive(id))
+      _ -> json(conn, 404, %{error: "no workspace #{ws}"})
+    end
+  end
 
   defp route(conn, "GET", "office", ["threads", id]),
     do: with_thread(conn, id, &json(conn, 200, Office.thread_view(&1)))

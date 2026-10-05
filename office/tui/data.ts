@@ -36,6 +36,11 @@ export async function terminal(id: number): Promise<Target | null> {
 export async function worktree(id: number): Promise<string | null> {
   try { const r = await call("GET", `/threads/${id}/worktree`); return r.status === 200 ? r.json.path : null } catch { return null }
 }
+export type Archive = { tickets: { id: number; title: string; closed_at: string | null }[]; threads: { id: number; title: string; stage: string | null; at: string }[] }
+/** a workspace's finished work: done tickets and closed threads, newest first */
+export async function archive(ws: number): Promise<Archive | null> {
+  try { const r = await call("GET", `/office/archive/${ws}`); return r.status === 200 ? r.json : null } catch { return null }
+}
 export async function thread(id: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }
 }
