@@ -115,9 +115,14 @@ defmodule Server.Tmux do
       "\nexport TERM=xterm-256color\n" <> exports <> "\n" <> cd_worktree() <> "\nexec " <> command
   end
 
-  @doc "The boot script's first line: close every fd above stderr."
+  @doc """
+  The boot script's first line: close every fd above stderr — but not one on the pane's terminal,
+  which is the shell's own: dash keeps its tty on fd 10, and a failed `exec 10>&-` on a special
+  builtin exits a POSIX shell — the window would close before its harness starts.
+  """
   def close_inherited_fds,
-    do: ~s|for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && eval "exec $fd>&-"; done 2>/dev/null|
+    do:
+      ~s|tty=$(readlink /proc/$$/fd/0); for fd in $(ls /proc/$$/fd); do [ "$fd" -gt 2 ] && [ "$(readlink /proc/$$/fd/$fd)" != "$tty" ] && eval "exec $fd>&-"; done 2>/dev/null|
 
   @doc "The line every harness boot takes after sourcing the exports: into the thread's worktree, guarded."
   def cd_worktree, do: ~s([ -n "$TLON_CWD" ] && cd "$TLON_CWD")
