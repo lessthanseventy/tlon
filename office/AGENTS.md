@@ -9,7 +9,8 @@ board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no r
   whiteboard's columns), sprites and looks (`sprites.ts`), the colour roles (`palette.ts`), the
   1x canvas and the **frame** a room hands a surface (`canvas.ts`), tlon's own bitmap font in two cuts (`font.ts`), the
   office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`),
-  drawing people and Nina into a `Scene` (`draw.ts`), the furniture every room has (`furniture.ts`).
+  drawing people and Nina into a `Scene` (`draw.ts`), the furniture every room has (`furniture.ts`),
+  the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen).
 - `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
   terminal); `wide.ts`, the TUI's full-width room (office, floor, meeting room, lounge, a long back
   wall with the whiteboard, notes, calendar, windows, clock, TV).

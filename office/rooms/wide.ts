@@ -10,6 +10,7 @@ import { drawActors, drawCat, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
+import { hueRole, Tv } from "../kit/tv"
 import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
 import type { Agents, Seat } from "../kit/types"
 
@@ -146,10 +147,29 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
 
 export class WideRoom extends Sim<Layout> {
   private readonly z: Zones
+  private readonly tvSet = new Tv(48, 28)
   constructor(readonly width: number) {
     super(widePlan(width))
     this.z = zones(width)
   }
+
+  /**
+   * The room's tick, and the TV's show at half its rate. Whoever's settled on the couch picks up the
+   * remote now and then (about once a minute and a quarter each) and flips the channel.
+   */
+  override step(a: Agents): boolean {
+    const moved = super.step(a)
+    if (this.tick % 2) return moved
+    for (const x of this.actors.values()) {
+      if (x.spot.kind !== "couch" || x.moving || Math.random() >= 1 / 375) continue
+      this.tvSet.next(); x.emote = "*"; x.emoteUntil = this.tick + 20
+      break
+    }
+    this.tvSet.step()
+    return true
+  }
+  /** the remote: the next channel */
+  channel() { this.tvSet.next() }
 
   render(a: Agents, focus: Focus, measure: Measure, now = new Date()): Frame {
     const W = this.width, H = WIDE_H
@@ -180,7 +200,7 @@ export class WideRoom extends Sim<Layout> {
     this.whiteboard(sc, a, measure, 62, F1 - 64)
     this.corkboard(sc, a, F1 - 58)
     this.windows(sc, M0 + 4, L0 + 30, now)
-    this.tv(sc, L0 + 36, using("couch"))
+    this.tv(sc, L0 + 36)
     this.clock(sc, W - 24, now)
 
     // ── your office: glass on the floor's side, a door at the bottom; your desk; Nina's corner ──
@@ -320,13 +340,12 @@ export class WideRoom extends Sim<Layout> {
     }
   }
 
-  /** the TV on the lounge's wall: a show while someone's on the couch, dark otherwise */
-  private tv(sc: Scene, x0: number, on: boolean) {
-    sc.px(x0, 6, 52, 32, ROLE.inactive)
-    if (on) {
-      sc.px(x0 + 2, 8, 48, 14, ROLE.key); sc.px(x0 + 2, 22, 48, 14, ROLE.live)
-      sc.px(x0 + 2 + ((sc.f * 3) % 44), 16 - (sc.f % 2), 4, 4, ROLE.body)
-    } else { sc.px(x0 + 2, 8, 48, 28, ROLE.ground); sc.px(x0 + 40, 10, 6, 2, ROLE.edge) }
+  /** the TV on the lounge's wall, showing the desktop's ambient shows in turn; a click changes the channel */
+  private tv(sc: Scene, x0: number) {
+    sc.px(x0, 6, 52, 32, ROLE.inactive); sc.px(x0 + 2, 8, 48, 28, ROLE.ground)
+    const { dots, w } = this.tvSet.screen
+    for (let i = 0; i < dots.length; i++) if (dots[i]) sc.px(x0 + 2 + (i % w), 8 + ((i / w) | 0), 1, 1, hueRole(dots[i]! - 1))
+    sc.hits.push({ x: x0, y: 6, w: 52, h: 32, tip: `the TV: ${this.tvSet.channel} — click for the next channel`, act: { kind: "tv" } })
   }
 
   /** the clock on the wall, telling the real time */
