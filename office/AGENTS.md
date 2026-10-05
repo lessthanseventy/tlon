@@ -32,7 +32,10 @@ board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no r
 - **No walk crosses furniture**: a room lists its footprints (`widePlan(w).blocks`) and
   `test/wide.test.ts` walks every route between every spot through them.
 - **Every colour is a `ROLE`, read at draw time.** A themed surface hands its roles in with
-  `useRoles`; shades between roles come from `tint`, never a literal.
+  `useRoles`; shades between roles come from `tint`, never a literal. The TUI's roles are the
+  machine's when it hands them in: `~/.config/tlon/palette.json` (`TLON_PALETTE` to point elsewhere;
+  `{ "role": {…} }` or the bare map), re-read within a second of the file — or the link to it — changing,
+  so a theme switch follows live. tlon never goes looking for a desktop's theme; the machine links it here.
 - **The TUI talks to the server only over the operator API** (`/api/*` on the service's loopback
   port, `TLON_URL` to point elsewhere; `tui/data.ts`). Its read models are `Server.Office`, the same
   function `tlon-cli.sh shell-status` serves the desktop — a new read is a context function and a

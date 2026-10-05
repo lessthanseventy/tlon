@@ -66,7 +66,7 @@ README (install, quickstart, `tlon` vs the console, macOS quarantine note), a re
 - The Bash tool runs **zsh**: `$var` doesn't word-split (`${=var}`); see the memory note.
 - Postgres, the service on :4040, ghostty/hyprctl/grim need the sandbox off.
 - Live-checking the TUI: a wrapper script run by `setsid -f ghostty --title=X --gtk-single-instance=false -e script`
-  (ghostty re-joins `-e` args), `hyprctl dispatch focuswindow pid:…`, `grim -g`. `wlrctl` can click.
+  (ghostty re-joins `-e` args), `hyprctl dispatch "hl.dsp.window.close({ window = 'address:…' })"` (the config is Lua: old-style `dispatch` lines fail, quietly when piped away), `grim -g`. `wlrctl` can click.
 - Burrito reuses its unpack by version; the `tlon` release version carries the commit.
 - `imv` is broken here (EGL assertion); open images in Floorp.
 - Parked: ghostty `o=z` crash report (memory note; payload in `~/.local/state/tlon/`).
