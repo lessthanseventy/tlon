@@ -12,6 +12,7 @@ import { ROLE } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
+import { WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
@@ -19,7 +20,7 @@ import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } f
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
-  | { kind: "column"; col: number } | { kind: "ticket"; id: number }
+  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void }
 
@@ -28,7 +29,9 @@ const STATE = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state")
 
 let all: Agents = { ...EMPTY, note: "…" }
 let ws: number | null = (() => { try { const n = Number(readFileSync(STATE, "utf8").trim()); return n > 0 ? n : null } catch { return null } })()
-const rooms = new Map<number, RailRoom>()
+// the wide room when the terminal is wide enough for it (`wide` is its width), else the rail room
+let wide: number | null = null
+const rooms = new Map<number, RailRoom | WideRoom>()
 const threads = new Map<number, ThreadView>()
 let mode: Mode = { kind: "home" }, picked: number | null = null, sel = 0
 let tip = "", status = ""
@@ -40,7 +43,7 @@ let g: Geometry, frame: Frame | null = null, sentImage = false, rows: Row[] = []
 let roomChanged = true, imageDirty = true
 
 const view = () => viewOf(all, ws)
-const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) rooms.set(k, (r = new RailRoom())); return r }
+const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); return r }
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
 const wsName = () => all.workspaces.find((w) => w.id === ws)?.name ?? "—"
 
@@ -106,6 +109,7 @@ function act(x: Act) {
     case "boss": case "hire": return open({ kind: "boss" })
     case "pen": return newTicket()
     case "cat": room().pet(); return draw()
+    case "calendar": return open({ kind: "calendar" })
   }
 }
 function newTicket() {
@@ -142,7 +146,7 @@ function detail(): { title: string; rows: Row[]; keys: string } {
   switch (mode.kind) {
     case "home": {
       const waiting = a.threads.filter(needsYou)
-      if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone, a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], keys: "tab crew · [ ] workspace · c crew · t tickets · n new ticket · o notes · q quit" }
+      if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone, a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], keys: "tab crew · [ ] workspace · c crew · t tickets · n new ticket · o notes · a calendar · q quit" }
       return {
         title: `WAITING ON YOU · ${waiting.length}`,
         rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => open({ kind: "thread", tid: t.id }) })),
@@ -201,6 +205,18 @@ function detail(): { title: string; rows: Row[]; keys: string } {
         keys: "s send to manager · enter start with lead · esc back",
       }
     }
+    case "calendar": {
+      const now = new Date(), first = new Date(now.getFullYear(), now.getMonth(), 1).getDay(), days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      const rows: Row[] = [{ segs: [dim("  Su  Mo  Tu  We  Th  Fr  Sa")] }]
+      let week: Seg[] = [plain("    ".repeat(first))]
+      for (let d = 1; d <= days; d++) {
+        const cell = String(d).padStart(4)
+        week.push(d === now.getDate() ? { s: cell, fg: ROLE.attention, bold: true } : d < now.getDate() ? dim(cell) : plain(cell))
+        if ((first + d) % 7 === 0 || d === days) { rows.push({ segs: week }); week = [] }
+      }
+      rows.push({ segs: [dim("nothing scheduled yet")] })
+      return { title: now.toLocaleString("en", { month: "long", year: "numeric" }).toUpperCase(), rows, keys: "esc back" }
+    }
     case "notes":
       return { title: `NOTES · ${a.notes.length}`, rows: a.notes.map((n) => ({ segs: [{ s: `${n.author}: `, fg: shirtOf(a.bench.find((b) => b.name === n.author)?.archetype) }, plain(n.body.replace(/\s+/g, " "))] })), keys: "j/k move · esc back" }
     case "boss": {
@@ -218,7 +234,17 @@ function detail(): { title: string; rows: Row[]; keys: string } {
 // ── drawing ────────────────────────────────────────────────────────────────────────────────────
 function layoutScreen() {
   const cols = process.stdout.columns ?? 80, rowsN = process.stdout.rows ?? 40
-  g = { ...geometry(W, H, cols, rowsN, DETAIL + 3, cell, kitty), row: 1 }
+  // as wide as the terminal, at the biggest whole scale (2 at least) that both fits its height and
+  // leaves the room wide enough for its zones
+  let next: number | null = null
+  if (kitty && cell) {
+    for (let k = Math.min(5, Math.floor(((rowsN - DETAIL - 3) * cell.h) / WIDE_H)); k >= 2 && next === null; k--) {
+      const w = Math.floor((cols * cell.w) / k)
+      if (w >= WIDE_MIN_W) next = w
+    }
+  }
+  if (next !== wide) { wide = next; rooms.clear() }
+  g = { ...(wide ? geometry(wide, WIDE_H, cols, rowsN, DETAIL + 3, cell, kitty) : geometry(W, H, cols, rowsN, DETAIL + 3, cell, kitty)), row: 1 }
   frame = null; sentImage = false
   out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
 }
@@ -289,6 +315,7 @@ function onKey(k: string) {
     case "c": return open({ kind: "crew" })
     case "t": return open({ kind: "column", col: 0 })
     case "o": return open({ kind: "notes" })
+    case "a": return open({ kind: "calendar" })
     case "n": return newTicket()
     case "p": room().pet(); return
     case "s": if (mode.kind === "ticket") rows[2]?.open?.(); return

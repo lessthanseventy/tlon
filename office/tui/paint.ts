@@ -3,8 +3,8 @@
 // desktop's sizes. Without, it is half blocks — two art pixels per cell — with the text as terminal
 // text on the cells. Either way clicks map back to the room's logical pixels.
 import type { Frame, Hit, Ink, Measure } from "../kit/canvas"
-import { FONT_H, FONT_W, glyph } from "../kit/font"
-import { rgb, ROLE } from "../kit/palette"
+import { FONT_ASCENT, FONT_H, FONT_W, glyph } from "../kit/font"
+import { contrast, rgb, ROLE } from "../kit/palette"
 import { png } from "./png"
 import { ESC, line, type Seg } from "./term"
 
@@ -26,13 +26,31 @@ export function geometry(W: number, H: number, termCols: number, termRows: numbe
   return { k, cw: 1, ch: 2, col: Math.max(0, Math.floor((termCols - cols) / 2)), row: 0, cols, rows, kitty: false }
 }
 
-/** the bitmap font's scale for a desktop text size at k×: the desktop draws `size` px at 3× */
-const fontScale = (size: number, k: number) => Math.max(1, Math.floor((size * k) / 3 / FONT_H + 0.25))
-/** text width in the room's logical px: the bitmap font's in kitty mode, a cell a glyph in blocks */
-export const measureFor = (g: Geometry): Measure => (s, size) => (g.kitty ? s.length * FONT_W * fontScale(size, g.k) : s.length * g.cw) / g.k
+/**
+ * The room's text follows the terminal's: the bitmap font scaled to about 70% of the cell's height,
+ * a step under the panes' text so it sits with the art, and growing when the terminal zooms (WCAG
+ * 1.4.4). The desktop's size hints don't shrink it.
+ */
+export const textScale = (g: Geometry) => Math.max(1, Math.round((g.ch * 0.7) / FONT_H))
+/** text width (and line height) in the room's logical px: the bitmap font's in kitty mode, a cell a glyph in blocks */
+export function measureFor(g: Geometry): Measure {
+  const sc = textScale(g)
+  const m: Measure = (s) => (g.kitty ? s.length * FONT_W * sc : s.length * g.cw) / g.k
+  m.lineHeight = () => (g.kitty ? FONT_H * sc + 2 : g.ch) / g.k
+  return m
+}
 
-/** the frame's ink, drawn into its k× art: bitmap text, corner brackets, balloons */
-function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number) {
+/** WCAG AA for text */
+export const MIN_CONTRAST = 4.5
+/** a solid backing for text that would not read against its art: the dark or the light role, whichever contrasts more */
+export function backingFor(text: string) { return contrast(text, ROLE.ground) >= contrast(text, ROLE.prose) ? ROLE.ground : ROLE.prose }
+
+/**
+ * The frame's ink, drawn into its k× art: bitmap text at the terminal's size, corner brackets,
+ * balloons. Text whose colour falls under 4.5:1 against the art behind it gets a solid backing
+ * (WCAG 1.4.3); `backed` collects each label's colour and the colour actually behind it.
+ */
+export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number, scale: number, backed?: { text: string; behind: string }[]) {
   const fill = (x: number, y: number, fw: number, fh: number, c: string) => {
     const [r, g, b] = rgb(c)
     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + fh)); j++)
@@ -40,13 +58,24 @@ function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number) {
   }
   const write = (s: string, x: number, baseline: number, c: string, sc: number) => {
     ;[...s].forEach((ch, n) => glyph(ch).forEach((bits, row) => {
-      for (let col = 0; col < FONT_W; col++) if ((bits >> (FONT_W - 1 - col)) & 1) fill(x + (n * FONT_W + col) * sc, baseline - (7 - row) * sc, sc, sc, c)
+      for (let col = 0; col < FONT_W; col++) if ((bits >> (FONT_W - 1 - col)) & 1) fill(x + (n * FONT_W + col) * sc, baseline - (FONT_ASCENT - row) * sc, sc, sc, c)
     }))
+  }
+  // the art's average colour under a box, as #rrggbb
+  const behind = (x: number, y: number, bw: number, bh: number) => {
+    let r = 0, g = 0, b = 0, n = 0
+    for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + bh)); j++)
+      for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + bw)); i++) { const o = (j * w + i) * 4; r += big[o]!; g += big[o + 1]!; b += big[o + 2]!; n++ }
+    return n ? "#" + [r, g, b].map((v) => Math.round(v / n).toString(16).padStart(2, "0")).join("") : ROLE.ground
   }
   for (const i of ink) {
     if (i.t === "text") {
-      const sc = fontScale(i.size, k), tw = i.s.length * FONT_W * sc
-      write(i.s, i.align === "center" ? i.x * k - tw / 2 : i.x * k, i.y * k - sc, i.color, sc)
+      const sc = scale, tw = i.s.length * FONT_W * sc, th = FONT_H * sc
+      const x = i.align === "center" ? i.x * k - tw / 2 : i.x * k, base = i.y * k - sc
+      let bg = behind(x, base - FONT_ASCENT * sc, tw, th)
+      if (contrast(i.color, bg) < MIN_CONTRAST) { bg = backingFor(i.color); fill(x - sc, base - FONT_ASCENT * sc - sc, tw + 2 * sc, th + 2 * sc, bg) }
+      backed?.push({ text: i.color, behind: bg })
+      write(i.s, x, base, i.color, sc)
     } else if (i.t === "brackets") {
       const t = Math.max(1, Math.round(k / 2)), arm = 3 * k, x0 = i.x * k, y0 = i.y * k, x1 = (i.x + i.w) * k, y1 = (i.y + i.h) * k
       for (const [x, y, dx, dy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]] as const) {
@@ -54,7 +83,7 @@ function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number) {
         fill(dx > 0 ? x : x - t, dy > 0 ? y : y - arm, t, arm, i.color)
       }
     } else {
-      const sc = fontScale(11, k), lh = (FONT_H + 2) * sc, pad = 3 * sc
+      const sc = scale, lh = (FONT_H + 2) * sc, pad = 3 * sc
       const bw = Math.max(...i.lines.map((l) => l.length)) * FONT_W * sc + pad * 2, bh = i.lines.length * lh + pad * 2
       const bx = Math.min(Math.max(i.cx * k - bw / 2, 2), w - bw - 2), by = Math.max(2, i.top * k - bh - 3 * k)
       fill(bx, by, bw, bh, ROLE.prose); fill(i.cx * k - k, by + bh, 2 * k, 2 * k, ROLE.prose)
@@ -72,7 +101,7 @@ export function kittyImage(fr: Frame, g: Geometry): string {
     const sy = Math.floor(y / g.k) * fr.width, row = y * w
     for (let x = 0; x < w; x++) dst[row + x] = src[sy + Math.floor(x / g.k)]!
   }
-  inkInto(big, w, h, fr.ink, g.k)
+  inkInto(big, w, h, fr.ink, g.k, textScale(g))
   const data = png(w, h, big).toString("base64")
   let o = `${ESC}[${g.row + 1};${g.col + 1}H`
   for (let i = 0; i < data.length; i += 4096) {

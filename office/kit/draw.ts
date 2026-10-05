@@ -1,0 +1,118 @@
+// Drawing the office's life, room-agnostic: the people (seated, walking, typing, asking, talking)
+// and Nina, into a Scene — a room's canvas, its ink and its click targets, with everything that has
+// a footprint drawn back to front. A room draws its own furniture into the same Scene.
+import { Canvas, balloonLines, type Frame, type Hit, type Ink } from "./canvas"
+import { tipOf } from "./crew"
+import { ROLE, tint } from "./palette"
+import type { Actor, Cat } from "./sim"
+import { ARROW, BUBBLE, CAT, CAT_NAME, figure, GLYPH, paints, shirtOf, type Dir } from "./sprites"
+import type { Agents } from "./types"
+
+/** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
+export type Focus = { picked: number | null; armed: number | null; person: string | null }
+/** something with a footprint: drawn in order of `base`, its feet's row, so nearer covers farther */
+export type Item = { base: number; draw: () => void }
+
+export class Scene {
+  readonly cv: Canvas
+  readonly ink: Ink[] = []
+  readonly balloons: Ink[] = []
+  readonly hits: Hit[] = []
+  /** people's click targets — they take a click before the furniture behind them */
+  readonly people: Hit[] = []
+  readonly items: Item[] = []
+  /** drawn after every item: bubbles over heads, the focus arrow */
+  readonly overhead: (() => void)[] = []
+  /** the 400 ms animation frame */
+  readonly f: number
+
+  constructor(readonly width: number, readonly height: number, readonly tick: number) {
+    this.cv = new Canvas(width, height)
+    this.f = Math.floor(tick / 4)
+  }
+  px(x: number, y: number, w: number, h: number, c: string) { this.cv.px(x, y, w, h, c) }
+  blit(rows: string[], x: number, y: number, map: Record<string, string>) { this.cv.blit(rows, x, y, map) }
+  text(s: string, x: number, y: number, color: string, size = 12, align: "center" | "left" = "center") { this.ink.push({ t: "text", s, x, y, color, size, align }) }
+  item(base: number, draw: () => void) { this.items.push({ base, draw }) }
+
+  /** everything drawn back to front, then overhead; the frame, people's targets first */
+  finish(): Frame {
+    this.items.sort((p, q) => p.base - q.base).forEach((x) => x.draw())
+    this.overhead.forEach((d) => d())
+    return { rgba: this.cv.rgba, width: this.width, height: this.height, ink: [...this.ink, ...this.balloons], hits: [...this.people.reverse(), ...this.hits] }
+  }
+}
+
+/**
+ * The people. Seated at a desk or on the couch they face away from you — toward the screen, toward
+ * the TV — and turn round only to talk with you; at work their hands move. Over their heads: a
+ * "…" while they think about what you asked, a "!" in your queue, an emote, the focus arrow.
+ */
+export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string, { text: string | null }>, a: Agents, focus: Focus) {
+  const f = sc.f
+  const threadOf = (id: number) => a.threads.find((x) => x.id === id)
+  for (const actor of actors) {
+    const seat = actor.seat
+    const sitting = actor.pose === "sit" && !actor.moving
+    const couch = actor.pose === "couch" && !actor.moving
+    const step = actor.moving ? 1 + (Math.floor(sc.tick / 2) % 2) : 0
+    const shut = (f + actor.look.blink) % 13 === 0
+    const talking = talk.has(seat.agent)
+    const working = sitting && seat.warm && !talking && actor.spot.face !== "down"
+    const seatedFace: Dir = talking || actor.spot.face === "down" ? "down" : actor.spot.face
+    const rows = figure(actor.look, seat.archetype, !!seat.lead, false, sitting ? seatedFace : couch ? "up" : actor.face, sitting || couch ? "sit" : "stand", step, shut)
+    const top = sitting || couch ? actor.y - 14 : actor.y - 20 + (actor.moving && step === 2 ? -1 : 0)
+    const left = actor.x - 6
+    sc.item(sitting ? actor.y : actor.y + 0.5, () => {
+      sc.blit(rows, left, top, paints(shirtOf(seat.archetype), actor.look))
+      if (working && actor.spot.face === "left") {
+        // side-on at a table: a hand reaching for the keys, tapping
+        sc.px(left + 1, top + 12 - ((f + actor.y) % 2), 2, 1, ROLE.prose)
+      } else if (working) {
+        // typing: their elbows, out past their shoulders, take turns
+        const up = (f + actor.x) % 2 === 0
+        sc.px(left, top + 11 - (up ? 1 : 0), 1, 1, ROLE.prose)
+        sc.px(left + 11, top + 11 - (up ? 0 : 1), 1, 1, ROLE.prose)
+      }
+    })
+    const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null
+    sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : 20, tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
+    const said = talk.get(seat.agent)
+    if (said?.text) sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: actor.x, top })
+    sc.overhead.push(() => {
+      let above = top - 9
+      const bob = f % 2
+      if (said && said.text === null) {
+        sc.blit(BUBBLE, left + 3, above + bob, { a: ROLE.prose })
+        sc.blit(GLYPH["…"]!, left + 4, above + 1 + bob, { k: ROLE.fieldInk })
+      } else if (actor.spot.kind === "queue" && !actor.moving) {
+        sc.blit(BUBBLE, left + 3, above + bob, { a: ROLE.attention })
+        sc.blit(GLYPH["!"]!, left + 4, above + 1 + bob, { k: ROLE.fieldInk })
+      } else if (actor.emote) {
+        sc.blit(BUBBLE, left + 3, above, { a: ROLE.prose })
+        sc.blit(GLYPH[actor.emote] ?? GLYPH["…"]!, left + 4, above + 1, { k: ROLE.fieldInk })
+      } else above = top - 1
+      if (focus.person ? seat.agent === focus.person : seat.thread_id === focus.picked) sc.blit(ARROW, left + 4, above - 4 - bob, { v: ROLE.body })
+    })
+  }
+}
+
+/** Nina, with a light rim so a black cat reads on any floor; `over` is the depth to draw her at when she is up on furniture */
+export function drawCat(sc: Scene, c: Cat, over: number | null) {
+  const f = sc.f
+  const frames = CAT[c.mode], rows0 = frames[c.mode === "walk" ? (c.x + c.y) % 2 : c.mode === "play" ? c.yarn % 2 : c.mode === "sit" && f % 5 === 0 ? 1 : 0]!
+  const rows = c.face < 0 ? rows0.map((r) => [...r].reverse().join("")) : rows0
+  const w = rows[0]!.length, h = rows.length, x = c.x - Math.floor(w / 2), y = c.y - h
+  sc.item(over ?? c.y, () => {
+    const r = tint(ROLE.prose, ROLE.ground, 0.55), rim = { k: r, e: r, t: r, c: r, w: r }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, rim)
+    sc.blit(rows, x, y, { k: ROLE.fieldInk, t: ROLE.fieldInk, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge })
+    if (c.mode === "sleep" && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
+    if (sc.tick < c.purr) {
+      sc.text(`${CAT_NAME}: prr`, c.x, y - 2, ROLE.attention, 11)
+      // your hand, stroking her back
+      if (c.byYou) sc.px(x + 3 + (f % 2) * 2, y + 2, 3, 1, ROLE.prose)
+    }
+    sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${CAT_NAME} - click to pet her`, act: { kind: "cat" } })
+  })
+}
