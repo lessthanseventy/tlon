@@ -49,6 +49,8 @@ board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no r
 - **Terminal text snaps to cells**, too coarse for the room's labels (rows 4.5 logical px apart
   collide). In kitty mode the ink is drawn into the image with `kit/font.ts`; half-block mode keeps
   cell text and lets the first label on a cell keep it.
+- **The TUI titles its window `tlon office`** (the old title pushed and popped on the terminal's
+  stack) so a window manager can match it — glass compositing shows a desktop through the art otherwise.
 - **tmux swallows kitty graphics**; under `$TMUX` the TUI uses half blocks unless
   `OFFICE_GRAPHICS=kitty`.
 
