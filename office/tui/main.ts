@@ -144,6 +144,7 @@ function act(x: Act) {
     case "calendar": return open({ kind: "calendar" })
     case "terminal": return void zoomInto(x.tid)
     case "archive": return open({ kind: "archive" })
+    case "dog": { const r = room(); if (r instanceof WideRoom) { r.patDog(); roomChanged = true; imageDirty = true; draw() } return }
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); roomChanged = true; imageDirty = true; draw() } return }
   }
 }

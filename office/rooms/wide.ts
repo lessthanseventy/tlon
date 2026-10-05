@@ -11,8 +11,8 @@ import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
 import { hueRole, Tv } from "../kit/tv"
-import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
-import type { Agents, Seat } from "../kit/types"
+import { BIG_PLANT, COFFEE, COOLER, DOG, DOG_NAME, SCRIBBLES, shirtOf } from "../kit/sprites"
+import { EMPTY, type Agents, type Seat } from "../kit/types"
 
 export const WIDE_H = 200
 /** below this the zones don't fit; a surface narrower than this draws the rail room */
@@ -146,12 +146,68 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
   }
 }
 
+/** Argos: where he is, the waypoints he is walking, what he is doing, the row he walks along */
+type Dog = { x: number; y: number; aisle: number; path: Pt[]; mode: "walk" | "sit" | "sleep"; until: number; face: number; woof: number; host: string | null; creep: boolean }
+/** Nina and Argos, up to something together */
+type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle"; until: number; trail: Pt[]; lap: Pt[] }
+
 export class WideRoom extends Sim<Layout> {
   private readonly z: Zones
   private readonly tvSet = new Tv(48, 28)
+  private readonly dog: Dog
+  private antic: Antic | null = null
+  /** what a pet just said, over its head for a moment */
+  private shouts: { who: "cat" | "dog"; text: string; until: number }[] = []
   constructor(readonly width: number) {
     super(widePlan(width))
     this.z = zones(width)
+    const bed = this.dogBed()
+    this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false }
+  }
+
+  /** his bed by the lounge's couch, his water bowl by the kitchen */
+  private dogBed(): Spot { return { x: this.z.L0 + 108, y: 112, aisle: 112, pose: "stand", face: "left", kind: "roam" } }
+  private dogBowl(): Spot { return { x: this.width - 26, y: 162, aisle: 162, pose: "stand", face: "right", kind: "roam" } }
+
+  /** a click on Argos: a woof and a wag, and he's up if he was asleep */
+  patDog() { const d = this.dog; d.woof = this.tick + 25; if (d.mode === "sleep") { d.mode = "sit"; d.until = this.tick + 120 } }
+
+  /**
+   * Argos' day: naps in his bed, drinks, trots the floor, sits by someone at their desk (they get a
+   * ♥), drops in on your office, lies in the meeting room. He walks the people's routes, so he keeps off the furniture too.
+   */
+  private stepDog(): boolean {
+    const d = this.dog
+    if (d.path.length) {
+      if (d.creep && this.tick % 3) return false
+      const to = d.path[0]!
+      d.x += Math.sign(to.x - d.x); d.y += Math.sign(to.y - d.y)
+      if (to.x !== d.x) d.face = Math.sign(to.x - d.x)
+      if (d.x === to.x && d.y === to.y) d.path.shift()
+      if (!d.path.length) {
+        const bed = this.dogBed(), asleep = d.x === bed.x && d.y === bed.y
+        d.mode = asleep ? "sleep" : "sit"
+        d.until = this.tick + (asleep ? 900 : 200) + Math.floor(Math.random() * 400)
+        const host = d.host ? this.actors.get(d.host) : undefined
+        if (host) { host.emote = "♥"; host.emoteUntil = this.tick + 40 }
+      }
+      return true
+    }
+    if (this.antic) return false
+    if (this.tick < d.until) return d.mode === "sit" && this.tick % 3 === 0
+    const r = Math.random(), working = [...this.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && !a.path.length)
+    const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]!
+    const host = working.length && r < 0.35 ? pick(working) : null
+    const spot = (x: number, y: number, aisle = y): Spot => ({ x, y, aisle, pose: "stand", face: "left", kind: "roam" })
+    const goal: Spot = host ? this.plan.visit(host)
+      : r < 0.5 ? this.dogBed() : r < 0.6 ? this.dogBowl()
+        : r < 0.72 ? spot(40 + Math.floor(Math.random() * 40), 140) // your office, where Nina is
+          : r < 0.82 ? spot(this.z.Mc - 4, 110, 116)
+            : this.plan.roam(this.plan.layout(EMPTY))
+    d.host = host ? keyOf(host.seat) : null
+    d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, goal)]
+    d.aisle = goal.aisle; d.mode = "walk"
+    return true
   }
 
   /**
@@ -159,7 +215,7 @@ export class WideRoom extends Sim<Layout> {
    * remote now and then (about once a minute and a quarter each) and flips the channel.
    */
   override step(a: Agents): boolean {
-    const moved = super.step(a)
+    const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
     if (this.tick % 2) return moved
     for (const x of this.actors.values()) {
       if (x.spot.kind !== "couch" || x.moving || Math.random() >= 1 / 375) continue
@@ -266,9 +322,123 @@ export class WideRoom extends Sim<Layout> {
     if (queued.length > this.plan.queue.length) sc.overhead.push(() => text(`+${queued.length - this.plan.queue.length + 1}`, 94, 176, ROLE.attention))
     const c = this.cat
     drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : null)
+    this.drawDog(sc)
+    this.drawAntics(sc)
 
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
     return sc.finish()
+  }
+
+  /**
+   * Nina and Argos, when both are on the floor of the same room (your office, or the lounge) and
+   * neither is on the way somewhere: now and then he sneaks up on her, she bats him awake, they
+   * chase round the room, or it all ends in a scuffle. The cat keeps to straight runs inside the
+   * room's open floor; the dog walks the people's routes or follows her trail.
+   */
+  private stepAntics(): boolean {
+    const c = this.cat, d = this.dog, now = this.tick
+    this.shouts = this.shouts.filter((s) => s.until > now)
+    const shout = (who: "cat" | "dog", text: string) => this.shouts.push({ who, text, until: now + 25 })
+    const a = this.antic
+    if (a) {
+      if (a.kind === "sneak" && !d.path.length) {
+        d.creep = false; d.mode = "sit"; d.until = now + 150
+        shout("dog", "BOO!"); shout("cat", "hss!")
+        c.path = [this.catFlee(c)]; c.mode = "walk"; c.until = now + 250
+        this.antic = null
+      } else if (a.kind === "bap" && !c.path.length) {
+        shout("cat", "*bap*"); shout("dog", "!?")
+        d.mode = "sit"; d.until = now + 120; c.mode = "sit"; c.until = now + 200
+        this.antic = null
+      } else if (a.kind === "chase") {
+        if (!c.path.length) { c.path = [a.lap[0]!]; a.lap.push(a.lap.shift()!) ; c.mode = "walk" }
+        a.trail.push({ x: c.x, y: c.y })
+        if (a.trail.length > 10) { const p = a.trail.shift()!; d.path = [p]; d.mode = "walk" }
+        if (now >= a.until) {
+          shout("dog", "woof!")
+          c.path = []; c.mode = "sit"; c.until = now + 200
+          d.path = []; d.mode = "sit"; d.until = now + 150; d.aisle = d.y
+          this.antic = null
+        }
+      } else if (a.kind === "scuffle" && now >= a.until) {
+        c.path = [this.catFlee(c)]; c.mode = "walk"; c.until = now + 250
+        d.until = now; d.mode = "sit"; d.aisle = d.y
+        shout("cat", "hmph")
+        this.antic = null
+      }
+      return true
+    }
+    if (now % 20 || Math.random() > 0.08) return false
+    const room = this.petRoom(c), alsoHere = this.petRoom(d)
+    if (!room || room !== alsoHere || c.path.length || d.path.length || this.plan.cat.via(c)) return false
+    const near = Math.abs(c.x - d.x) + Math.abs(c.y - d.y) < 60, r = Math.random()
+    const lap = this.lapOf(room)
+    if (d.mode === "sleep" && c.mode !== "sleep") {
+      c.path = [{ x: d.x - 8, y: c.y }, { x: d.x - 8, y: d.y }]; c.mode = "walk"; c.until = now + 400
+      this.antic = { kind: "bap", until: now + 400, trail: [], lap }
+    } else if (c.mode !== "walk" && d.mode !== "sleep" && (!near || r < 0.4)) {
+      const side = d.x < c.x ? -8 : 8
+      d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: c.x + side, y: c.y, aisle: c.y, pose: "stand", face: "left", kind: "roam" })]
+      d.aisle = c.y; d.mode = "walk"; d.creep = true; c.until = now + 1000
+      this.antic = { kind: "sneak", until: now + 1000, trail: [], lap }
+    } else if (near && d.mode !== "sleep" && r < 0.8) {
+      c.until = now + 1000; this.antic = { kind: "chase", until: now + 80, trail: [], lap }
+    } else if (near && d.mode !== "sleep") {
+      c.mode = "sit"; c.until = now + 1000; d.mode = "sit"
+      this.antic = { kind: "scuffle", until: now + 30, trail: [], lap }
+    }
+    return !!this.antic
+  }
+  /** which room's open floor a pet is on: your office, the lounge, or neither */
+  private petRoom(p: Pt): "office" | "lounge" | null {
+    if (p.x > 8 && p.x < OFF_W - 12 && p.y > 100 && p.y < 152) return "office"
+    if (p.x > this.z.L0 + 12 && p.x < this.width - 24 && p.y > 92 && p.y < 156) return "lounge"
+    return null
+  }
+  /** a lap of a room's open floor, for a chase */
+  private lapOf(room: "office" | "lounge"): Pt[] {
+    if (room === "office") return [{ x: 18, y: 104 }, { x: 80, y: 104 }, { x: 80, y: 148 }, { x: 18, y: 148 }]
+    const x0 = this.z.L0 + 18, x1 = Math.min(this.z.L0 + 100, this.width - 26)
+    return [{ x: x0, y: 96 }, { x: x1, y: 96 }, { x: x1, y: 152 }, { x: x0, y: 152 }]
+  }
+  /** away across the same room from wherever she is */
+  private catFlee(c: Pt): Pt {
+    const lap = this.lapOf(this.petRoom(c) ?? "office")
+    return lap.reduce((far, p) => (Math.abs(p.x - c.x) + Math.abs(p.y - c.y) > Math.abs(far.x - c.x) + Math.abs(far.y - c.y) ? p : far))
+  }
+
+  /** Argos, his bed and his bowl */
+  private drawDog(sc: Scene) {
+    const d = this.dog, bed = this.dogBed(), bowl = this.dogBowl(), f = sc.f
+    sc.item(bed.y - 3, () => { sc.px(bed.x - 9, bed.y - 4, 18, 5, tint(ROLE.alarm, ROLE.ground, 0.55)); sc.px(bed.x - 8, bed.y - 3, 16, 3, tint(ROLE.alarm, ROLE.prose, 0.35)) })
+    sc.item(bowl.y - 2, () => { sc.px(bowl.x - 3, bowl.y - 2, 6, 2, ROLE.inactive); sc.px(bowl.x - 2, bowl.y - 3, 4, 1, ROLE.key) })
+    const frames = DOG[d.mode], rows0 = frames[d.mode === "walk" ? (d.x + d.y) % 2 : d.mode === "sit" ? Math.floor(f / 2) % 2 : 0]!
+    const rows = d.face < 0 ? rows0.map((r) => [...r].reverse().join("")) : rows0
+    const w = rows[0]!.length, h = rows.length, x = d.x - Math.floor(w / 2), y = d.y - h
+    sc.item(d.y, () => {
+      const rim = tint(ROLE.prose, ROLE.ground, 0.55), r = { k: rim, e: rim, t: rim, n: rim }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, r)
+      sc.blit(rows, x, y, { k: ROLE.body, t: ROLE.body, e: tint(ROLE.body, ROLE.structure, 0.4), n: ROLE.fieldInk })
+      if (d.mode === "sleep" && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
+      if (sc.tick < d.woof) sc.text(`${DOG_NAME}: woof`, d.x, y - 2, ROLE.attention, 11)
+      if (d.creep && f % 4 < 2) sc.text("...", d.x, y - 2, ROLE.inactive, 9)
+      sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${DOG_NAME} - click to pat him`, act: { kind: "dog" } })
+    })
+  }
+
+  /** what the pets say, and the dust cloud of a scuffle */
+  private drawAntics(sc: Scene) {
+    const c = this.cat, d = this.dog, f = sc.f
+    sc.overhead.push(() => {
+      for (const s of this.shouts) { const p = s.who === "cat" ? c : d; sc.text(s.text, p.x, p.y - 11, ROLE.attention, 11) }
+    })
+    if (this.antic?.kind !== "scuffle") return
+    const mx = Math.round((c.x + d.x) / 2), my = Math.round((c.y + d.y) / 2) - 4
+    sc.item(Math.max(c.y, d.y) + 1, () => {
+      for (let i = 0; i < 9; i++) { const a = i * 0.7 + f * 0.9, r = 4 + ((i + f) % 3); sc.px(mx + Math.round(Math.cos(a) * r * 1.6) - 2, my + Math.round(Math.sin(a) * r) - 2, 4, 4, tint(ROLE.prose, ROLE.ground, 0.6)) }
+      sc.px(mx - 6, my - 3, 12, 6, tint(ROLE.prose, ROLE.ground, 0.75))
+    })
+    sc.overhead.push(() => sc.text(["!#@%", "%@!#", "#!%@"][f % 3]!, mx, my - 9, ROLE.alarm, 11))
   }
 
   /** the wall calendar: this month, today ringed */

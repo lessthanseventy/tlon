@@ -95,6 +95,18 @@ export const CAT = {
 }
 export const CAT_NAME = "Nina"
 
+// Argos, the office dog (Borges' "The Immortal"), facing right: body (k), ears (e), nose (n), tail (t)
+export const DOG = {
+  walk: [[".......ee..", "t.....kkkkn", ".tkkkkkkk..", "..kkkkkkk..", "..k.k..k.k."],
+         [".......ee..", ".t....kkkkn", "t.kkkkkkk..", "..kkkkkkk..", "...kk...kk."]],
+  // sitting up, tail going
+  sit: [[".....ee.", "....kkkn", "....kkk.", "t..kkkk.", ".tkkkkk.", "..kkkkk.", "..k.kk.."],
+        [".....ee.", "....kkkn", "....kkk.", "...kkkk.", "ttkkkkk.", "..kkkkk.", "..k.kk.."]],
+  // flat out asleep
+  sleep: [["....ee....", "..kkkkkkk.", ".kkkkkkkkt", "kkkkkkkk.."]],
+}
+export const DOG_NAME = "Argos"
+
 function overlay(rows: string[], over: Record<number, string> | undefined) {
   if (!over) return
   for (const [k, o] of Object.entries(over)) {

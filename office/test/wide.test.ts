@@ -40,6 +40,34 @@ describe("the wide room", () => {
     expect(new Set(seated.map((h) => `${h.x},${h.y}`)).size).toBe(10)
   })
 
+  test("Argos keeps off the furniture, and gets around", () => {
+    for (const w of [540, 696, 900]) {
+      const room = new WideRoom(w), a = viewOf(office(6), 1), plan = widePlan(w), blocks = plan.blocks(plan.layout(a))
+      const seen = new Set<string>()
+      for (let i = 0; i < 3000; i++) {
+        room.step(a)
+        const d = (room as unknown as { dog: { x: number; y: number } }).dog
+        const hit = blocks.find((b) => d.x > b.x && d.x < b.x + b.w - 1 && d.y > b.y && d.y < b.y + b.h - 1)
+        if (hit) throw new Error(`Argos at ${d.x},${d.y} (w ${w}, tick ${i}) is inside ${JSON.stringify(hit)}`)
+        seen.add(`${Math.round(d.x / 40)},${Math.round(d.y / 40)}`)
+      }
+      expect(seen.size).toBeGreaterThan(3)
+    }
+  })
+
+  test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => {
+    const room = new WideRoom(696), a = viewOf(office(6), 1), plan = widePlan(696), blocks = plan.blocks(plan.layout(a))
+    const kinds = new Set<string>()
+    for (let i = 0; i < 60_000 && kinds.size < 2; i++) {
+      room.step(a)
+      const r = room as unknown as { dog: { x: number; y: number }; antic: { kind: string } | null }
+      if (r.antic) kinds.add(r.antic.kind)
+      const hit = blocks.find((b) => r.dog.x > b.x && r.dog.x < b.x + b.w - 1 && r.dog.y > b.y && r.dog.y < b.y + b.h - 1)
+      if (hit) throw new Error(`Argos at ${r.dog.x},${r.dog.y} (tick ${i}, ${r.antic?.kind ?? "no antic"}) is inside ${JSON.stringify(hit)}`)
+    }
+    expect(kinds.size).toBeGreaterThanOrEqual(2)
+  })
+
   test("no walk crosses the furniture", () => {
     for (const w of [540, 560, 700]) {
       const plan = widePlan(w), l = plan.layout(viewOf(office(8), 1))
