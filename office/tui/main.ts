@@ -126,6 +126,7 @@ function act(x: Act) {
     case "pen": return newTicket()
     case "cat": room().pet(); return draw()
     case "calendar": return open({ kind: "calendar" })
+    case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); roomChanged = true; imageDirty = true; draw() } return }
   }
 }
 function newTicket() {
