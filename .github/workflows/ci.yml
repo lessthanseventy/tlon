@@ -1,0 +1,87 @@
+# CI runs the same mise tasks as the dev loop (`mise run check` is these four jobs) — one control
+# loop, never a second way to run anything. The job names are the required status checks on main.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # the checkout's mise.toml is ours: trust it without a prompt
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+  MISE_YES: "1"
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # The runner's own Postgres, over the socket at /run/postgresql with peer auth — the setup
+      # config.exs assumes — and tmux, which the office read model asks what windows exist.
+      - name: postgres and tmux
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres createuser --superuser "$USER"
+          sudo apt-get install -y --no-install-recommends tmux
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+          install_args: erlang elixir
+      - uses: actions/cache@v4
+        with:
+          path: |
+            server/deps
+            server/_build
+          key: server-${{ runner.os }}-${{ hashFiles('mise.toml', 'server/mix.lock') }}
+      - run: mise run server:check
+
+  console:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+          install_args: erlang elixir
+      - uses: actions/cache@v4
+        with:
+          path: |
+            console/deps
+            console/_build
+            server/deps
+          key: console-${{ runner.os }}-${{ hashFiles('mise.toml', 'console/mix.lock', 'server/mix.lock') }}
+      - run: mise run console:check
+
+  typescript:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+          install_args: bun
+      - run: mise run office:check
+      - run: mise run adapters:pi:check
+      - run: mise run adapters:consult:check
+      - run: mise run adapters:lsp:check
+      - run: mise run adapters:lspd:check
+      - run: mise run adapters:reload:check
+      - run: mise run adapters:footer:check
+
+  names:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+      - run: mise run check:names
+      - run: mise run manual:check
