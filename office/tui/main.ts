@@ -3,12 +3,12 @@
 // a ticket, the notes. Talk to a thread (reply, answer its prompt, close it) and hand out tickets;
 // hiring and configuring stay on the desktop for now. Runs on Linux and macOS: kitty graphics where
 // the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, COLS, crewOf, needsYou, viewOf, type Act } from "../kit/crew"
-import { ROLE } from "../kit/palette"
+import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
@@ -26,6 +26,9 @@ type Row = { segs: Seg[]; open?: () => void }
 
 const DETAIL = 14 // the detail pane's rows, title included: fixed, so nothing below the room moves
 const STATE = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"), "tlon/office-workspace")
+// the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
+// map). A link here that the machine repoints on a theme switch is followed within a second.
+const PALETTE = process.env.TLON_PALETTE ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/palette.json")
 
 let all: Agents = { ...EMPTY, note: "…" }
 let ws: number | null = (() => { try { const n = Number(readFileSync(STATE, "utf8").trim()); return n > 0 ? n : null } catch { return null } })()
@@ -46,6 +49,19 @@ const view = () => viewOf(all, ws)
 const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); return r }
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
 const wsName = () => all.workspaces.find((w) => w.id === ws)?.name ?? "—"
+
+let paletteSeen = ""
+/** take the machine's palette if it changed since last look; true when it did */
+function followPalette(): boolean {
+  try {
+    const real = realpathSync(PALETTE), seen = `${real}@${statSync(real).mtimeMs}`
+    if (seen === paletteSeen) return false
+    paletteSeen = seen
+    const j = JSON.parse(readFileSync(real, "utf8")), roles = j.role ?? j
+    useRoles(Object.fromEntries(Object.entries(roles).filter(([k, v]) => k in ROLE && typeof v === "string")) as Partial<Record<Role, string>>)
+    return true
+  } catch { return false }
+}
 
 function choose(id: number | null) {
   ws = id
@@ -349,6 +365,7 @@ function quit() { leave(); process.exit(0) }
 // ── startup ────────────────────────────────────────────────────────────────────────────────────
 async function main() {
   if (!process.stdin.isTTY) { console.error("office: needs a terminal"); process.exit(1) }
+  followPalette()
   enter()
   process.on("uncaughtException", (e) => { leave(); console.error(e); process.exit(1) })
   let pending = "", detected = false
@@ -375,6 +392,7 @@ async function main() {
   process.stdout.on("resize", () => { query(); setTimeout(() => { layoutScreen(); draw() }, 150) })
   await refresh()
   setInterval(refresh, 10_000)
+  setInterval(() => { if (followPalette()) { frame = null; draw() } }, 1000)
   // the room's clock: 10 Hz, drawn only when it changed
   setInterval(() => { if (room().step(view())) { roomChanged = true; imageDirty = true; draw() } }, 100)
 }
