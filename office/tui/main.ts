@@ -16,6 +16,7 @@ import { WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
+import { rows as vtRows, TerminalView } from "./terminal"
 
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" }
@@ -126,6 +127,7 @@ function act(x: Act) {
     case "pen": return newTicket()
     case "cat": room().pet(); return draw()
     case "calendar": return open({ kind: "calendar" })
+    case "terminal": return void zoomInto(x.tid)
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); roomChanged = true; imageDirty = true; draw() } return }
   }
 }
@@ -267,7 +269,7 @@ function layoutScreen() {
 }
 
 function draw() {
-  if (!g) return
+  if (!g || zoom) return
   const cols = process.stdout.columns ?? 80, termRows = process.stdout.rows ?? 40
   const a = view()
   let o = `${ESC}[?2026h`
@@ -328,7 +330,9 @@ function onKey(k: string) {
     case "left": case "right":
       if (mode.kind === "column") return open({ kind: "column", col: (mode.col + (k === "right" ? 1 : COLS.length - 1)) % COLS.length })
       return
-    case "enter": return mode.kind === "ticket" ? rows[3]?.open?.() : rows[sel]?.open?.()
+    case "enter":
+      if ((mode.kind === "thread" || mode.kind === "person") && tid !== null) return void zoomInto(tid)
+      return mode.kind === "ticket" ? rows[3]?.open?.() : rows[sel]?.open?.()
     case "c": return open({ kind: "crew" })
     case "t": return open({ kind: "column", col: 0 })
     case "o": return open({ kind: "notes" })
@@ -361,7 +365,48 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
   if (i >= 0 && r?.open) { sel = first + i; r.open() }
 }
 
-function quit() { leave(); process.exit(0) }
+// ── zoomed into a terminal ─────────────────────────────────────────────────────────────────────
+// The whole screen is one coworker's terminal: a bar on top, every key to the pane but Ctrl-],
+// which brings the room back.
+let zoom: { view: TerminalView; label: string } | null = null
+const ROOM_KEY = 0x1d // Ctrl-]
+
+async function zoomInto(tid: number) {
+  const target = await data.terminal(tid)
+  if (!target) { status = `#${tid} has no live terminal`; return draw() }
+  const cols = process.stdout.columns ?? 80, rowsN = Math.max(2, (process.stdout.rows ?? 24) - 1)
+  const who = threadOf(tid)?.lead ?? target.window
+  out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[?1003l${ESC}[?1006l${ESC}[2J`)
+  zoom = { label: `#${tid} ${who} · terminal`, view: new TerminalView(target, cols, rowsN, () => drawZoom(), () => leaveZoom()) }
+  drawZoom()
+}
+function drawZoom() {
+  if (!zoom) return
+  const cols = process.stdout.columns ?? 80, vt = zoom.view.vt
+  // no autowrap while drawing: a row the VT and this terminal measure differently can't wrap and scroll the bar away
+  let o = `${ESC}[?2026h${ESC}[?7l${ESC}[?25l${ESC}[1;1H` + line([{ s: " ROOM ", fg: ROLE.ground, bg: ROLE.attention }, key(" ctrl-] "), { s: zoom.label, fg: ROLE.body, bold: true }], cols)
+  vtRows(vt).forEach((r, i) => { o += `${ESC}[${i + 2};1H${r}` })
+  const b = vt.buffer.active
+  o += `${ESC}[?7h${ESC}[${b.cursorY + 2};${b.cursorX + 1}H${ESC}[?25h${ESC}[?2026l`
+  out(o)
+}
+function leaveZoom() {
+  if (!zoom) return
+  const z = zoom
+  zoom = null
+  z.view.close()
+  out(`${ESC}[0m${ESC}[?25l${ESC}[?1003h${ESC}[?1006h`)
+  layoutScreen(); draw()
+}
+/** raw keys while zoomed: Ctrl-] leaves, the rest goes to the pane as it came */
+function zoomInput(b: Uint8Array) {
+  const at = b.indexOf(ROOM_KEY)
+  if (at < 0) return zoom?.view.send(b)
+  zoom?.view.send(b.subarray(0, at))
+  leaveZoom()
+}
+
+function quit() { zoom?.view.close(); leave(); process.exit(0) }
 
 // ── startup ────────────────────────────────────────────────────────────────────────────────────
 async function main() {
@@ -372,6 +417,7 @@ async function main() {
   let pending = "", detected = false
   const ready = new Promise<void>((res) => {
     process.stdin.on("data", (b: Buffer) => {
+      if (zoom) return zoomInput(b)
       const { inputs, rest } = tokenize(pending + b.toString("utf8"))
       pending = rest
       for (const i of inputs) {
@@ -390,7 +436,10 @@ async function main() {
   // tmux eats the graphics protocol unless told to pass it through; blocks there by default
   if (process.env.TMUX && process.env.OFFICE_GRAPHICS !== "kitty") kitty = false
   layoutScreen()
-  process.stdout.on("resize", () => { query(); setTimeout(() => { layoutScreen(); draw() }, 150) })
+  process.stdout.on("resize", () => {
+    if (zoom) { zoom.view.resize(process.stdout.columns ?? 80, Math.max(2, (process.stdout.rows ?? 24) - 1)); return drawZoom() }
+    query(); setTimeout(() => { layoutScreen(); draw() }, 150)
+  })
   await refresh()
   setInterval(refresh, 10_000)
   setInterval(() => { if (followPalette()) { frame = null; draw() } }, 1000)

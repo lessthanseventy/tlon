@@ -17,6 +17,7 @@ export type Act =
   | { kind: "cat" }
   | { kind: "calendar" }
   | { kind: "tv" }
+  | { kind: "terminal"; tid: number }
 
 export const needsYou = (t?: Thread) => !!t && (!!t.awaiting || !!t.prompt)
 /** a meta coworker — the one who routes the work and never works a thread */
