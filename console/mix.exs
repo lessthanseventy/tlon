@@ -57,6 +57,14 @@ defmodule Console.MixProject do
     ]
   end
 
+  # A patched raxol_terminal that is already built is rebuilt from its patched source. One not
+  # built yet is left to the `compile` that follows, which builds raxol_core before it — forcing
+  # it here, alone, would compile it ahead of the raxol_core it depends on.
+  defp recompile_raxol_terminal do
+    if File.dir?(Path.join([Mix.Project.build_path(), "lib", "raxol_terminal"])),
+      do: Mix.Task.rerun("deps.compile", ["raxol_terminal", "--force"])
+  end
+
   # raxol_terminal 2.6.1 ships a termbox2 NIF with three defects this alias repairs after every
   # compile (all idempotent, pinned by test/aleph/termbox_nif_test.exs). deps/ is gitignored,
   # so the fix can't live in the dep's Makefile — it must re-apply on each build.
@@ -290,8 +298,8 @@ defmodule Console.MixProject do
 
           # `mix compile` won't recompile an already-built hex dep, so without this the parser
           # would keep the stale beam (the legacy single-:paste handler) while the source carries
-          # the new clauses. Force recompile now; runs once (idempotent), not every build.
-          Mix.Task.rerun("deps.compile", ["raxol_terminal", "--force"])
+          # the new clauses. Runs once (idempotent), not every build.
+          recompile_raxol_terminal()
         end
 
       _ ->
@@ -424,8 +432,8 @@ defmodule Console.MixProject do
 
           # `mix compile` won't recompile an already-built hex dep, so without this the module
           # would lack the stub while the rebuilt .so declares the NIF — load_nif then bad_libs
-          # the WHOLE NIF. Force recompile now; runs once (idempotent), not every build.
-          Mix.Task.rerun("deps.compile", ["raxol_terminal", "--force"])
+          # the WHOLE NIF. Runs once (idempotent), not every build.
+          recompile_raxol_terminal()
         end
 
       _ ->
