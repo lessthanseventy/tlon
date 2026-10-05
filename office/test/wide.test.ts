@@ -58,7 +58,7 @@ describe("the wide room", () => {
   test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1), plan = widePlan(696), blocks = plan.blocks(plan.layout(a))
     const kinds = new Set<string>()
-    for (let i = 0; i < 60_000 && kinds.size < 2; i++) {
+    for (let i = 0; i < 400_000 && kinds.size < 2; i++) {
       room.step(a)
       const r = room as unknown as { dog: { x: number; y: number }; antic: { kind: string } | null }
       if (r.antic) kinds.add(r.antic.kind)
@@ -66,6 +66,24 @@ describe("the wide room", () => {
       if (hit) throw new Error(`Argos at ${r.dog.x},${r.dog.y} (tick ${i}, ${r.antic?.kind ?? "no antic"}) is inside ${JSON.stringify(hit)}`)
     }
     expect(kinds.size).toBeGreaterThanOrEqual(2)
+  })
+
+  test("Nina gets the zoomies: tears between the room's leaps, then lands on its floor and sits", () => {
+    const room = new WideRoom(696), a = viewOf(office(6), 1)
+    const c = (room as unknown as { cat: { x: number; y: number; mode: string; leaps: { x: number; y: number }[] } }).cat
+    const visited = new Set<string>()
+    let runs = 0, was = c.mode
+    for (let i = 0; i < 400_000 && runs < 3; i++) {
+      room.step(a)
+      if (c.mode === "zoom" && c.leaps.some((q) => q.x === c.x && q.y === c.y)) visited.add(`${c.x},${c.y}`)
+      if (was === "zoom" && c.mode !== "zoom") {
+        runs++
+        expect({ mode: c.mode, at: [c.x, c.y] }).toEqual({ mode: "sit", at: [c.leaps[0]!.x, c.leaps[0]!.y] })
+      }
+      was = c.mode
+    }
+    expect(runs).toBe(3)
+    expect(visited.size).toBeGreaterThanOrEqual(3)
   })
 
   test("no walk crosses the furniture", () => {

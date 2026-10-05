@@ -100,14 +100,21 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
 /** Nina, with a light rim so a black cat reads on any floor; `over` is the depth to draw her at when she is up on furniture */
 export function drawCat(sc: Scene, c: Cat, over: number | null) {
   const f = sc.f
-  const frames = CAT[c.mode], rows0 = frames[c.mode === "walk" ? (c.x + c.y) % 2 : c.mode === "play" ? c.yarn % 2 : c.mode === "sit" && f % 5 === 0 ? 1 : 0]!
+  const frames = CAT[c.mode === "zoom" ? "walk" : c.mode], rows0 = frames[c.mode === "walk" || c.mode === "zoom" ? (c.x + c.y) % 2 : c.mode === "play" ? c.yarn % 2 : c.mode === "sit" && f % 5 === 0 ? 1 : 0]!
   const rows = c.face < 0 ? rows0.map((r) => [...r].reverse().join("")) : rows0
   const w = rows[0]!.length, h = rows.length, x = c.x - Math.floor(w / 2), y = c.y - h
-  sc.item(over ?? c.y, () => {
+  // the zoomies go over everything: she is on the couch, the TV, your desk
+  sc.item(c.mode === "zoom" ? 999 : over ?? c.y, () => {
     const r = tint(ROLE.prose, ROLE.ground, 0.55), rim = { k: r, e: r, t: r, c: r, w: r }
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, rim)
     sc.blit(rows, x, y, { k: ROLE.fieldInk, t: ROLE.fieldInk, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge })
     if (c.mode === "sleep" && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
+    if (c.mode === "zoom") {
+      // speed lines behind her, and now and then a "!"
+      const back = c.face < 0 ? x + w + 1 : x - 5
+      for (const dy of [1, 3]) sc.px(back + ((f + dy) % 2), y + dy, 4, 1, ROLE.inactive)
+      if (f % 7 < 2) sc.text("!", c.x, y - 2, ROLE.attention, 11)
+    }
     if (sc.tick < c.purr) {
       sc.text(`${CAT_NAME}: prr`, c.x, y - 2, ROLE.attention, 11)
       // your hand, stroking her back
