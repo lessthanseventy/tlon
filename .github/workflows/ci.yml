@@ -35,6 +35,8 @@ jobs:
         with:
           cache: true
           install_args: erlang elixir
+      # a fresh runner has no hex or rebar, and mix won't fetch a dep without them
+      - run: mix local.hex --force && mix local.rebar --force
       - uses: actions/cache@v4
         with:
           path: |
@@ -51,6 +53,8 @@ jobs:
         with:
           cache: true
           install_args: erlang elixir
+      # a fresh runner has no hex or rebar, and mix won't fetch a dep without them
+      - run: mix local.hex --force && mix local.rebar --force
       - uses: actions/cache@v4
         with:
           path: |
