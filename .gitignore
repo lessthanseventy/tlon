@@ -65,3 +65,5 @@ console/.reload
 office/dist/
 # the standalone server executables (mise run server:package)
 server/burrito_out/
+# the office TUI staged per target into the tlon launcher (Server.Package.Office)
+server/rel/burrito/office.xz

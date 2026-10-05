@@ -44,6 +44,9 @@ defmodule Server.MixProject do
         applications: [server: :permanent],
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
+          # `tlon office`: the launcher execs the office TUI it carries before the VM starts
+          plugin: "rel/burrito/plugin.zig",
+          extra_steps: [build: [pre: [Server.Package.Office]]],
           targets: [
             linux_x64: [os: :linux, cpu: :x86_64],
             linux_arm64: [os: :linux, cpu: :aarch64],
@@ -121,7 +124,7 @@ defmodule Server.MixProject do
       # design — the channel's contract is MCP, whatever serves it.
       {:bandit, "~> 1.0"},
       # Wraps the `tlon` release into one executable per platform (Server.Standalone reads its argv).
-      {:burrito, "~> 1.6"},
+      {:burrito, "~> 1.6", runtime: false},
       # The plug we author the /mint gateway on (Bandit serves plugs; we route one path).
       {:plug, "~> 1.0"},
       # Static analysis, part of the precommit gate.

@@ -116,8 +116,11 @@ The **standalone binary** is the same release for a box with no unit file (a Mac
 `mise run server:package` wraps the `tlon` release with Burrito into `burrito_out/tlon_<target>`
 (Linux and macOS, x64 and arm64; ERTS inside, exqlite rebuilt per target). Run with no arguments
 it migrates and serves until signalled (`Server.Standalone`), every `TLON_START_*` defaulting on as
-the service sets them; it still needs Postgres (`PGHOST`, else `/tmp` on macOS) and tmux. Each
-build's version carries its commit, because Burrito reuses an unpack named by version.
+the service sets them; it still needs Postgres (`PGHOST`, else `/tmp` on macOS) and tmux.
+`tlon office` is the office TUI from the same file: the launcher's plugin (`rel/burrito/plugin.zig`)
+carries that target's TUI (staged by `Server.Package.Office`) and execs it before the VM starts,
+so it has the real terminal. Each build's version carries its commit, because Burrito reuses an
+unpack named by version. `burrito` is build tooling (`runtime: false`): nothing ships it.
 
 The **shell parity pack** — operate the live channel from the shell, our peer to the agents' MCP tools
 (all via `scripts/tlon-cli.sh` → `bin/server rpc` into the running node, so the service must be up):
