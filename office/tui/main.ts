@@ -16,7 +16,7 @@ import { WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
-import { rows as vtRows, TerminalView } from "./terminal"
+import { rows as vtRows, TerminalView, type Target } from "./terminal"
 
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" }
@@ -195,11 +195,11 @@ function detail(): { title: string; rows: Row[]; keys: string } {
       if (!c) return { title: name.toUpperCase(), rows: [{ segs: [dim("not in this office any more")] }], keys: "esc back" }
       const head: Row = { segs: [{ s: c.name, fg: shirtOf(c.archetype), bold: true }, dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${c.status}`)] }
       if (c.thread === null) return { title: name.toUpperCase(), rows: [head, { segs: [dim("on the bench")] }], keys: "tab next · esc back" }
-      return { title: name.toUpperCase(), rows: [head, ...threadRows(threadOf(c.thread), c.thread)], keys: "r reply · 1-9 answer · x close thread · tab next · esc back" }
+      return { title: name.toUpperCase(), rows: [head, ...threadRows(threadOf(c.thread), c.thread)], keys: "enter terminal · g git · r reply · 1-9 answer · x close · tab next · esc back" }
     }
     case "thread": {
       const tid = mode.tid
-      return { title: `THREAD #${tid}`, rows: threadRows(threadOf(tid), tid), keys: "r reply · 1-9 answer · x close thread · esc back" }
+      return { title: `THREAD #${tid}`, rows: threadRows(threadOf(tid), tid), keys: "enter terminal · g git · r reply · 1-9 answer · x close · esc back" }
     }
     case "column": {
       const col = boardColumns(a)[mode.col]!
@@ -341,6 +341,7 @@ function onKey(k: string) {
     case "p": room().pet(); return
     case "s": if (mode.kind === "ticket") rows[2]?.open?.(); return
     case "r": if (tid !== null) reply(tid); return
+    case "g": if (tid !== null) void zoomGit(tid); return
     case "x": if (tid !== null) { confirm = { label: `close #${tid} as done`, run: () => did(data.closeThread(tid)) }; draw() } return
   }
   if (/^[1-9]$/.test(k) && tid !== null) {
@@ -374,10 +375,25 @@ const ROOM_KEY = 0x1d // Ctrl-]
 async function zoomInto(tid: number) {
   const target = await data.terminal(tid)
   if (!target) { status = `#${tid} has no live terminal`; return draw() }
+  zoomOn(target, `#${tid} ${threadOf(tid)?.lead ?? target.window} · terminal`)
+}
+/**
+ * lazygit in the thread's worktree, in a tmux session the office keeps (`-L tlon-office`, one per
+ * thread), so it is where you left it next time; quitting lazygit closes the window and the zoom.
+ */
+const OWN_TMUX = "tlon-office"
+async function zoomGit(tid: number) {
+  if (!Bun.which("lazygit")) { status = "lazygit is not installed"; return draw() }
+  const path = await data.worktree(tid)
+  if (!path) { status = `#${tid} has no repo to show`; return draw() }
+  const session = `git-${tid}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
+  if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) tmux("new-session", "-d", "-s", session, "-n", "lazygit", "-c", path, "lazygit")
+  zoomOn({ socket: OWN_TMUX, session, window: "lazygit" }, `#${tid} ${threadOf(tid)?.lead ?? ""} · git`)
+}
+function zoomOn(target: Target, label: string) {
   const cols = process.stdout.columns ?? 80, rowsN = Math.max(2, (process.stdout.rows ?? 24) - 1)
-  const who = threadOf(tid)?.lead ?? target.window
   out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[?1003l${ESC}[?1006l${ESC}[2J`)
-  zoom = { label: `#${tid} ${who} · terminal`, view: new TerminalView(target, cols, rowsN, () => drawZoom(), () => leaveZoom()) }
+  zoom = { label, view: new TerminalView(target, cols, rowsN, () => drawZoom(), () => leaveZoom()) }
   drawZoom()
 }
 function drawZoom() {

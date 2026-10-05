@@ -32,6 +32,10 @@ export async function status(): Promise<Agents> {
 export async function terminal(id: number): Promise<Target | null> {
   try { const r = await call("GET", `/threads/${id}/terminal`); return r.status === 200 ? r.json : null } catch { return null }
 }
+/** where a thread's coworker works (its git worktree, created on first ask), or null with no repo */
+export async function worktree(id: number): Promise<string | null> {
+  try { const r = await call("GET", `/threads/${id}/worktree`); return r.status === 200 ? r.json.path : null } catch { return null }
+}
 export async function thread(id: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }
 }
