@@ -6,6 +6,10 @@ defmodule Server.Application do
 
   @impl true
   def start(_type, _args) do
+    # the standalone binary's command line, first: it migrates before anything starts (no-op
+    # outside that binary)
+    Server.Standalone.boot()
+
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
     # test harness needs it so Channel.post can broadcast. The Repo is started
     # except under :test (the harness owns its lifecycle). The switchboard runner is

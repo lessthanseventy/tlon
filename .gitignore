@@ -63,3 +63,5 @@ console/.reload
 
 # the office TUI's compiled executables (mise run office:build)
 office/dist/
+# the standalone server executables (mise run server:package)
+server/burrito_out/

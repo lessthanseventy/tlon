@@ -1,5 +1,20 @@
 import Config
 
+# The standalone binary (`mise run server:package`, Burrito) is the service on a box with no unit
+# file: its launcher sets __BURRITO=1, and there every TLON_START_* defaults on, as the service
+# sets them. An explicit value still wins.
+standalone? = System.get_env("__BURRITO") == "1"
+
+on? = fn name ->
+  case System.get_env(name) do
+    nil -> standalone?
+    v -> v in ~w(1 true yes)
+  end
+end
+
+# Postgres' socket directory: PGHOST, else where this OS's packages put it (Homebrew's is /tmp)
+pg_socket = System.get_env("PGHOST") || if(match?({:unix, :darwin}, :os.type()), do: "/tmp", else: "/run/postgresql")
+
 # The store: Postgres on the local socket. TLON_DATABASE_URL names another (a remote, a
 # password); otherwise TLON_DATABASE (default `tlon`) over peer auth at /run/postgresql. Test
 # manages its own database (config/test.exs), so skip it here.
@@ -9,8 +24,8 @@ import Config
 if config_env() != :test do
   case {System.get_env("TLON_DATABASE_URL"), System.get_env("TLON_DATABASE"), config_env()} do
     {url, _, _} when is_binary(url) -> config :server, Server.Repo, url: url
-    {nil, db, _} when is_binary(db) -> config :server, Server.Repo, database: db, socket_dir: "/run/postgresql"
-    {nil, nil, :prod} -> config :server, Server.Repo, database: "tlon", socket_dir: "/run/postgresql"
+    {nil, db, _} when is_binary(db) -> config :server, Server.Repo, database: db, socket_dir: pg_socket
+    {nil, nil, :prod} -> config :server, Server.Repo, database: "tlon", socket_dir: pg_socket
     _ -> :ok
   end
 end
@@ -40,7 +55,7 @@ config :server, operator: System.get_env("TLON_OPERATOR") || "andrew"
 # second node avoid a clash.
 if config_env() != :test do
   config :server,
-    start_mcp: System.get_env("TLON_START_MCP") in ~w(1 true yes),
+    start_mcp: on?.("TLON_START_MCP"),
     mcp_port: String.to_integer(System.get_env("TLON_MCP_PORT") || "4040")
 end
 
@@ -48,13 +63,13 @@ end
 # TLON_START_SWITCHBOARD=1 for the durable bookkeeping even with no arbiter to poke. Guarded
 # out of :test: the suite starts the runner itself where a test needs it.
 if config_env() != :test do
-  config :server, start_switchboard: System.get_env("TLON_START_SWITCHBOARD") in ~w(1 true yes)
+  config :server, start_switchboard: on?.("TLON_START_SWITCHBOARD")
 end
 
 # The attention poller (master plan piece A): reads every coworker pane every few seconds and
 # turns a permission dialog into a `prompt` message on the thread. Service-only, like the rest.
 if config_env() != :test do
-  config :server, start_attention: System.get_env("TLON_START_ATTENTION") in ~w(1 true yes)
+  config :server, start_attention: on?.("TLON_START_ATTENTION")
 end
 
 # The terminal backends: the server's own tmux ones (one-brain piece B, slices 1–2). A wake is
@@ -75,9 +90,9 @@ if config_env() != :test do
       Base.encode64(
         :crypto.hash(:sha512, "tlon-web:" <> (System.get_env("TLON_WEB_SECRET") || Server.MCP.Secret.get()))
       ),
-    server: System.get_env("TLON_START_WEB") in ~w(1 true yes)
+    server: on?.("TLON_START_WEB")
 
   # Oban runs where the switchboard runs (the service); a scratch node without it stays quiet.
-  config :server, start_oban: System.get_env("TLON_START_OBAN") in ~w(1 true yes)
-  config :server, start_web: System.get_env("TLON_START_WEB") in ~w(1 true yes)
+  config :server, start_oban: on?.("TLON_START_OBAN")
+  config :server, start_web: on?.("TLON_START_WEB")
 end
