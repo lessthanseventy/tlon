@@ -29,7 +29,7 @@ board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no r
 - **WCAG 2.2 AA holds for what the TUI shows**, and `test/wcag.test.ts` measures it: every label
   4.5:1 against what is behind it (the painter backs one that would not), text on a type scale
   (`typeFor` in `tui/paint.ts`: small asides, body names and headers, doubled call-outs) that grows
-  with the terminal's zoom, no two labels overprinting, no state by colour alone, everything reachable by key.
+  with the terminal's zoom as far as the room's own scale lets it, no two labels overprinting, no state by colour alone, everything reachable by key.
 - **No walk crosses furniture**: a room lists its footprints (`widePlan(w).blocks`) and
   `test/wide.test.ts` walks every route between every spot through them.
 - **Every colour is a `ROLE`, read at draw time.** A themed surface hands its roles in with

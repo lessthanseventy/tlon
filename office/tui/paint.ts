@@ -28,9 +28,10 @@ export function geometry(W: number, H: number, termCols: number, termRows: numbe
 
 /**
  * The room's text grows with the terminal's: 1× in an 18 px cell, 2× at double the zoom (WCAG
- * 1.4.4), every step together.
+ * 1.4.4), every step together — but never past half the room's own scale, the ratio its labels are
+ * laid out for: a zoomed terminal too narrow to scale the room up keeps the text where it fits.
  */
-export const textScale = (g: Geometry) => Math.max(1, Math.round(g.ch / 18))
+export const textScale = (g: Geometry) => Math.max(1, Math.min(Math.round(g.ch / 18), Math.floor(g.k / 2)))
 /**
  * The type scale, from a text's size hint: under 10 the small cut (asides: whiteboard items, the
  * clock), 10..12 the body cut (names, headers, balloons), 13 and up the small cut doubled (call-outs).

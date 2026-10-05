@@ -54,15 +54,16 @@ describe("WCAG 1.4.3: text contrast", () => {
 
 describe("WCAG 1.4.8-ish: labels don't overprint each other", () => {
   test("no two labels in the wide room overlap, at the TUI's own type sizes", () => {
-    for (const w of [540, 696, 900]) {
-      const g = geometry(w, WIDE_H, Math.ceil((w * 2) / 8), 51, 17, { w: 8, h: 18 }, true), a = viewOf(office(), 1), room = new WideRoom(w)
+    // the room's width as the TUI picks it, at the terminal's zoom: 18 px cells, then zoomed in on narrow terminals
+    for (const [w, ch, cols] of [[540, 18, 135], [696, 18, 174], [900, 18, 225], [720, 27, 120], [696, 27, 174], [640, 36, 120], [600, 45, 120]] as const) {
+      const g = geometry(w, WIDE_H, cols, 51, 17, { w: Math.round((ch * 8) / 18), h: ch }, true), a = viewOf(office(), 1), room = new WideRoom(w)
       for (let i = 0; i < 300; i++) room.step(a)
       const zoom = textScale(g), boxes = room.render(a, { picked: 101, armed: null, person: null }, measureFor(g)).ink.flatMap((i) => {
         if (i.t !== "text") return []
         const { font, sc } = typeFor(i.size, zoom), tw = i.s.length * font.w * sc, x = i.align === "center" ? i.x * g.k - tw / 2 : i.x * g.k, base = i.y * g.k - sc
         return [{ s: i.s, x0: x, x1: x + tw - sc, y0: base - font.ascent * sc, y1: base + (font.h - font.ascent) * sc }]
       })
-      const clashes = boxes.flatMap((p, n) => boxes.slice(n + 1).filter((q) => p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1).map((q) => `${w}: "${p.s}" × "${q.s}"`))
+      const clashes = boxes.flatMap((p, n) => boxes.slice(n + 1).filter((q) => p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1).map((q) => `${w} @${ch}px: "${p.s}" × "${q.s}"`))
       expect(clashes).toEqual([])
     }
   })

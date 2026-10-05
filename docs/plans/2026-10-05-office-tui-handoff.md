@@ -19,9 +19,13 @@ the minimum, width goes mostly to the floor (and the whiteboard over it); wider 
 desks and seats; **`WIDE_MIN_W` is 540** (narrower terminals get the rail). `wcag.test.ts` now also
 fails when two labels overprint.
 
-**Next:** iterate on specific letters with Andrew (renders: `~/.local/state/tlon/tlon-font-*.png`),
-then a settings screen in the TUI (`,` and from the "you" card): the type scale's zoom step,
-persisted in `~/.local/state/tlon/office.json` like `office-workspace` is.
+Text zoom is `min(round(cell.h/18), floor(k/2))`: it follows the terminal's zoom only as far as
+the room's scale does, so a zoomed terminal too narrow to scale the room keeps labels apart
+(`wcag.test.ts` checks zoomed cells too).
+
+**Parked:** a settings screen for the zoom step (`,` and the "you" card) — not until the room can
+hold bigger text than its scale gives it. Letters get iterated with Andrew as they bother him
+(renders: `~/.local/state/tlon/tlon-font-*.png`).
 
 ## What exists now
 
