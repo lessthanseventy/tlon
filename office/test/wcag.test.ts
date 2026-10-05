@@ -6,7 +6,7 @@ import { contrast, ROLE } from "../kit/palette"
 import { EMPTY, type Agents } from "../kit/types"
 import { RailRoom, W, H } from "../rooms/rail"
 import { WideRoom, WIDE_H } from "../rooms/wide"
-import { geometry, inkInto, measureFor, MIN_CONTRAST, textScale } from "../tui/paint"
+import { geometry, inkInto, measureFor, MIN_CONTRAST, textScale, typeFor } from "../tui/paint"
 
 function office(): Agents {
   const names = ["tertius", "hronir", "lonnrot", "yu", "ashe", "daneri"]
@@ -49,5 +49,21 @@ describe("WCAG 1.4.3: text contrast", () => {
     const pane = [ROLE.prose, ROLE.inactive, ROLE.key, ROLE.attention, ROLE.body, ROLE.live, ROLE.alarm, ROLE.meta, ROLE.assistant, ROLE.builder, ROLE.reviewer, ROLE.planner, ROLE.surveyor]
     for (const c of pane) expect({ c, ratio: contrast(c, ROLE.ground) >= MIN_CONTRAST }).toMatchObject({ ratio: true })
     for (const fill of [ROLE.attention, ROLE.key]) expect({ fill, ratio: contrast(ROLE.ground, fill) >= MIN_CONTRAST }).toMatchObject({ ratio: true })
+  })
+})
+
+describe("WCAG 1.4.8-ish: labels don't overprint each other", () => {
+  test("no two labels in the wide room overlap, at the TUI's own type sizes", () => {
+    for (const w of [540, 696, 900]) {
+      const g = geometry(w, WIDE_H, Math.ceil((w * 2) / 8), 51, 17, { w: 8, h: 18 }, true), a = viewOf(office(), 1), room = new WideRoom(w)
+      for (let i = 0; i < 300; i++) room.step(a)
+      const zoom = textScale(g), boxes = room.render(a, { picked: 101, armed: null, person: null }, measureFor(g)).ink.flatMap((i) => {
+        if (i.t !== "text") return []
+        const { font, sc } = typeFor(i.size, zoom), tw = i.s.length * font.w * sc, x = i.align === "center" ? i.x * g.k - tw / 2 : i.x * g.k, base = i.y * g.k - sc
+        return [{ s: i.s, x0: x, x1: x + tw - sc, y0: base - font.ascent * sc, y1: base + (font.h - font.ascent) * sc }]
+      })
+      const clashes = boxes.flatMap((p, n) => boxes.slice(n + 1).filter((q) => p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1).map((q) => `${w}: "${p.s}" × "${q.s}"`))
+      expect(clashes).toEqual([])
+    }
   })
 })

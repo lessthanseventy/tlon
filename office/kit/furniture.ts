@@ -1,7 +1,7 @@
 // The office's furniture that every room has, drawn wherever a room puts it: your desk, the
 // manager's and the lead's desks, the crew board, the trinkets on a desk. A room places them; their
 // look is the same everywhere.
-import { fit, plate, type Measure } from "./canvas"
+import { fit, type Measure } from "./canvas"
 import { crewOf, needsYou, STAGES, tipOf, type CrewStatus } from "./crew"
 import type { Scene } from "./draw"
 import { ROLE } from "./palette"
@@ -20,17 +20,17 @@ export function decor(sc: Scene, look: Look, x: number, top: number) {
 }
 
 /** the crew board: who is on, at a glance — a light each (working, waiting on you, idle) */
-export function crewBoard(sc: Scene, a: Agents, measure: Measure, bx: number, by: number, bw: number, bh: number) {
+export function crewBoard(sc: Scene, a: Agents, measure: Measure, bx: number, by: number, bw: number, bh: number, nameSize = 11) {
   sc.px(bx, by, bw, bh, ROLE.structure); sc.px(bx + 1, by + 1, bw - 2, bh - 2, ROLE.ground)
   sc.text("CREW", bx + bw / 2, by + 6, ROLE.key, 11)
   const light: Record<CrewStatus, string> = { working: ROLE.live, waiting: ROLE.attention, idle: ROLE.inactive }
   // a surface that knows its text's height gets as many rows as fit at it, and a "+n" for the rest;
   // otherwise one column of names while they fit (six), a full office of ten in two, smaller
-  const lh = measure.lineHeight?.(11)
+  const lh = measure.lineHeight?.(nameSize)
   const all = crewOf(a).slice(0, 10)
   const fits = lh ? Math.max(1, Math.floor((bh - 10) / lh)) : 10
   const crew = all.length > fits ? all.slice(0, fits - 1) : all
-  const cols = lh ? 1 : crew.length > 6 ? 2 : 1, per = lh ? fits : cols === 1 ? 6 : 5, size = cols === 1 ? 11 : 9
+  const cols = lh ? 1 : crew.length > 6 ? 2 : 1, per = lh ? fits : cols === 1 ? 6 : 5, size = cols === 1 ? nameSize : 9
   crew.forEach((c, i) => {
     const cx = bx + 3 + Math.floor(i / per) * Math.floor(bw / 2), cy = by + 10 + (i % per) * (lh ?? (cols === 1 ? 4.5 : 5))
     sc.px(cx, Math.round(cy), 2, 2, c.status === "waiting" && sc.f % 2 ? ROLE.raised : light[c.status])
@@ -63,7 +63,7 @@ export function bossDesk(sc: Scene, a: Agents, d: DeskAt) {
     sc.px(d.x + 8, d.y + 24, d.w - 16, 5, ROLE.structure); sc.px(d.x + 9, d.y + 25, d.w - 18, 3, ROLE.body)
     sc.blit([".yyy.", "yyyyy", ".yyy.", "..y..", ".yyy."], d.x + d.w - 8, d.y + 14, { y: ROLE.body })
     decor(sc, BOSS_LOOK, d.x + d.w - 1, d.y + 19)
-    sc.text(a.awaiting ? `you - ${a.awaiting} waiting` : "you", d.x + d.w / 2, d.y + 38 - 2 / 3, ROLE.attention)
+    sc.text(a.awaiting ? `you - ${a.awaiting} waiting` : "you", d.x + d.w / 2, d.y + 38 - 2 / 3, ROLE.attention, a.awaiting ? 14 : 12)
     sc.hits.push({ x: d.x, y: d.y + 4, w: d.w, h: 30, tip: "you: hire, file, workspaces, what waits on you", act: { kind: "boss" } })
   })
 }
@@ -98,12 +98,16 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
       const at = th?.stage ? (th.stage === "merged" ? STAGES.length : STAGES.indexOf(th.stage)) : -1
       STAGES.forEach((_, i) => sc.px(d.x + 5 + i * 5, d.y + 25, 4, 3,
         i < at ? ROLE.live : i === at ? (needsYou(th) ? (f % 2 ? ROLE.attention : ROLE.raised) : f % 2 ? ROLE.live : ROLE.edge) : ROLE.edge))
-      sc.text(th ? `#${th.id}${th.stage ? ` ${th.stage}` : ""}` : "bench", d.x + d.w - 8, d.y + 28, needsYou(th) ? ROLE.attention : ROLE.body, 10)
+      // the stage in words beside the track, so it isn't said by colour alone
+      sc.text(th ? th.stage ?? `#${th.id}` : "bench", d.x + 6 + STAGES.length * 5, d.y + 28, needsYou(th) ? ROLE.attention : ROLE.body, 9, "left")
     }
   })
   sc.item(d.y + 32, () => {
     const p = d.seat
-    sc.text(plate(measure, p.agent, d.kind === "manager" ? "(manager)" : "(lead)", d.w - 2), d.x + d.w / 2, d.y + 38 - 2 / 3, there ? shirtOf(p.archetype) : ROLE.inactive)
+    // the name at body size, the role a step smaller beside it
+    const tail = d.kind === "manager" ? "(manager)" : "(lead)", tw = measure(tail, 9), colour = there ? shirtOf(p.archetype) : ROLE.inactive
+    const name = fit(measure, p.agent, d.w - 4 - tw, 12), nw = measure(name, 12), x = d.x + d.w / 2 - (nw + 2 + tw) / 2
+    sc.text(name, x, d.y + 38 - 2 / 3, colour, 12, "left"); sc.text(tail, x + nw + 2, d.y + 38 - 2 / 3, colour, 9, "left")
     const agentId = a.bench.find((b) => b.name === p.agent)?.agent_id ?? null
     sc.hits.push({ x: d.x, y: d.y, w: d.w, h: hitH, tip: tipOf(p, threadOf(p.thread_id), there ? `at the ${d.kind}'s desk` : "about the office"), act: { kind: "person", agentId, name: p.agent, tid: p.thread_id > 0 ? p.thread_id : null } })
   })

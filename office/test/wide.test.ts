@@ -21,7 +21,7 @@ function office(grunts: number): Agents {
 }
 
 describe("the wide room", () => {
-  for (const w of [470, 485, 640]) {
+  for (const w of [540, 560, 640]) {
     test(`renders a full frame ${w} wide`, () => {
       const room = new WideRoom(w), a = viewOf(office(3), 1)
       for (let i = 0; i < 300; i++) room.step(a)
@@ -33,7 +33,7 @@ describe("the wide room", () => {
   }
 
   test("a full office of ten seats everyone, each at their own place", () => {
-    const room = new WideRoom(485), a = viewOf(office(8), 1)
+    const room = new WideRoom(560), a = viewOf(office(8), 1)
     for (let i = 0; i < 400; i++) room.step(a)
     const seated = room.render(a, focus, measure).hits.filter((h) => h.act.kind === "person" && h.tip.includes("at the desk"))
     expect(seated.length).toBe(10)
@@ -41,7 +41,7 @@ describe("the wide room", () => {
   })
 
   test("no walk crosses the furniture", () => {
-    for (const w of [470, 560, 700]) {
+    for (const w of [540, 560, 700]) {
       const plan = widePlan(w), l = plan.layout(viewOf(office(8), 1))
       const homes = l.people.map((p) => plan.home(l, p.agent)).filter((s): s is Spot => !!s)
       const spots = [...homes, ...plan.queue, ...plan.lounge, plan.exit, plan.pen, plan.roam(l)]

@@ -3,46 +3,32 @@
 Where the office work stands after a long session, and what's next. Branch `office-next` in both
 tlon and ficciones; nothing pushed (see "Shipping" below).
 
-## Next: tlon's own pixel font
+## Done: tlon's own pixel font
 
-**The ask (Andrew):** a custom bitmap font for the office's text — "Nina + Comic Sans + personality +
-Atkinson Hyperlegible". Pixel-perfect *and* readable.
+The ask: "Nina + Comic Sans + personality + Atkinson Hyperlegible", pixel-perfect and readable.
+`office/kit/font.ts` holds it, hand-drawn as string rows, ASCII 32..126, in two cuts of one design:
+`SMALL` 6×9 (capitals 5×7) and `BODY` 7×13 (capitals 5×9, ascenders a row taller). Clipped round
+corners, chunky 2×2 punctuation; `I l 1 |`, `0 O o`, `5 S`, `8 B`, `rn m` told apart by shape.
 
-**The shape we settled on:**
-- A **6×9 cell** — 5×7 capitals, 2 rows of descender, 1 column of spacing — drawn at exactly **2×**,
-  so 12×18 screen px: the terminal's own cell height here (ghostty cell 8×18), capitals 14 px. A
-  bitmap is only perfect at native × integer; this one is designed for ×2 (×3 on a big zoom).
-- **Comic warmth**: rounded corners (one pixel clipped), friendly bouncy shapes.
-- **Hyperlegible**: `I l 1 |` and `0 O o` and `5 S`, `8 B`, `rn m` all distinct; open apertures
-  (c e a), generous spacing.
-- ASCII 32..126 (95 glyphs). Tlon's own — no licence questions (the candidates were MIT/BSD/OFL;
-  OFL reserves names on modified versions).
+The first try (6×9 at 2×, a terminal-sized 12×18) doubled every label's width and the room could
+not hold it; the room now speaks a **type scale** (`typeFor` in `tui/paint.ts`, from each text's size
+hint): under 10 → `SMALL` (whiteboard items, crew names, the role on a plate), 10..12 → `BODY` (names,
+headers, MEETING, balloons), 13+ → `SMALL` doubled (call-outs: "you - N waiting", the wall clock).
+All of it ×`round(cell.h/18)` with the terminal's zoom. The wide room was reshuffled to fit: past
+the minimum, width goes mostly to the floor (and the whiteboard over it); wider crew board, exec
+desks and seats; **`WIDE_MIN_W` is 540** (narrower terminals get the rail). `wcag.test.ts` now also
+fails when two labels overprint.
 
-**Where it plugs in:** `office/kit/font.ts` exports `FONT_W`, `FONT_H`, `FONT_ASCENT`, `glyph(ch)`
-(rows as bit-numbers, bit `FONT_W-1` the leftmost column). It is currently misc-fixed 6×12 generated
-from `/usr/share/fonts/misc/6x12-ISO8859-1.pcf.gz`. Replace it with hand-drawn glyphs — write them as
-string rows like the sprites (`"..##.."`), easier to review than hex. `office/tui/paint.ts`:
-`textScale(g)` picks the integer scale (now `round(cell.h*0.7/FONT_H)`; for a 9-row font aim at
-`round(cell.h/FONT_H)` → 2 here), `inkInto` draws glyphs at `baseline - (FONT_ASCENT - row) * scale`.
-`measureFor(g)` gives the room width and `lineHeight`.
-
-**How to judge it:** render the real room — `office/test/wcag.test.ts` shows how to paint a frame
-through `inkInto` offline; write a PNG with `office/tui/png.ts` — beside the current 6×12 and
-Departure Mono, and iterate on specific letters with Andrew. Keep `wcag.test.ts` green (it measures
-every label). Departure Mono, Cozette, Comic Mono, Atkinson Hyperlegible Mono, Spleen and Terminus
-are installed (ficciones `825bdb0`) for reference; a comparison of them is at
-`~/.local/state/tlon/office-fonts.png`.
-
-**Then:** a settings screen in the TUI (`,` and from the "you" card): the font size step, persisted
-in `~/.local/state/tlon/office.json` like `office-workspace` is. (A font *choice* was asked for too —
-moot if tlon's font is the one; keep the hook if more fonts come.)
+**Next:** iterate on specific letters with Andrew (renders: `~/.local/state/tlon/tlon-font-*.png`),
+then a settings screen in the TUI (`,` and from the "you" card): the type scale's zoom step,
+persisted in `~/.local/state/tlon/office.json` like `office-workspace` is.
 
 ## What exists now
 
 - **office/** (tlon) — `kit/` shared by every surface: types, data views (`crew.ts`), sprites,
   palette (+ WCAG `contrast`), canvas/Frame, `sim.ts` (a room's geometry as a `Plan`), `draw.ts`
   (people, Nina, `Scene`), `furniture.ts` (your desk, exec desks, crew board). `rooms/rail.ts` (the
-  desktop rail, 144 wide) and `rooms/wide.ts` (the TUI's full-width room; ≥470 logical px; zones
+  desktop rail, 144 wide) and `rooms/wide.ts` (the TUI's full-width room; ≥540 logical px; zones
   grow with width; calendar, windows on the real sky, clock, TV, meeting room, kitchen).
   `tui/` — the TUI: picks the wide room at the biggest whole scale ≥2 that fits, else the rail; kitty
   graphics as PNG (ghostty segfaults on `o=z`), half blocks otherwise; talks only to `/api`.

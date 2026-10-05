@@ -15,17 +15,18 @@ import type { Agents, Seat } from "../kit/types"
 
 export const WIDE_H = 200
 /** below this the zones don't fit; a surface narrower than this draws the rail room */
-export const WIDE_MIN_W = 470
+export const WIDE_MIN_W = 540
 const BAND = 44 // the back wall ends here
 const HALL = 191 // the hallway's walking row
 const OFF_W = 100, OFF_LANE = 94, OFF_DOOR = 150 // your office; its glass wall stops at the door
 const MEET_MIN = 86, MEET_BOTTOM = 124, LOUNGE_MIN = 124
-const EXEC_Y = 54, TABLE_YS = [102, 142], SEATS = 4, SEAT_GAP = 22
+const EXEC_Y = 54, TABLE_YS = [102, 142], SEATS = 4, SEAT_GAP = 28
+const CREW_W = 44, EXEC_W = 56
 
-/** the zones' edges for a room `w` wide: width past the minimum goes to the lounge and the meeting room as much as the floor */
+/** the zones' edges for a room `w` wide: width past the minimum goes mostly to the floor, and the whiteboard above it */
 function zones(w: number) {
   const extra = Math.max(0, w - WIDE_MIN_W)
-  const MW = MEET_MIN + 2 * Math.floor(extra * 0.15), LW = LOUNGE_MIN + Math.floor(extra * 0.35)
+  const MW = MEET_MIN + 2 * Math.floor(extra * 0.1), LW = LOUNGE_MIN + Math.floor(extra * 0.25)
   const L0 = w - LW, M0 = L0 - 6 - MW, F0 = OFF_W + 6, F1 = M0 - 6
   return { L0, M0, MW, Mc: M0 + MW / 2, F0, F1 }
 }
@@ -44,9 +45,9 @@ function layoutFor(z: Zones) {
     const desks: Desk[] = [{ x: 24, y: 56, w: 52, kind: "boss" }]
     const people = peopleOf(a)
     const managers = people.filter((p) => isManager(a, p)), workers = people.filter((p) => !isManager(a, p))
-    if (managers[0]) desks.push({ x: z.F0 + 42, y: EXEC_Y, w: 44, kind: "manager", seat: managers[0] })
+    if (managers[0]) desks.push({ x: z.F0 + CREW_W + 12, y: EXEC_Y, w: EXEC_W, kind: "manager", seat: managers[0] })
     const lead = workers.find((p) => p.lead), grunts = workers.filter((p) => p !== lead)
-    if (lead) desks.push({ x: z.F0 + 90, y: EXEC_Y, w: 44, kind: "lead", seat: lead })
+    if (lead) desks.push({ x: z.F0 + CREW_W + EXEC_W + 16, y: EXEC_Y, w: EXEC_W, kind: "lead", seat: lead })
     const chairs: Chair[] = []
     TABLE_YS.forEach((ty, t) => {
       for (let i = 0; i < SEATS; i++) chairs.push({ x: z.F0 + 24 + i * SEAT_GAP, table: ty, agent: grunts[t * SEATS + i]?.agent ?? null })
@@ -133,7 +134,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         { x: Mc - 14, y: 76, w: 28, h: 20 }, // its table
         { x: L0 + 34, y: 68, w: 54, h: 10 }, // the couch's back
         { x: w - 14, y: 100, w: 14, h: 56 }, // the kitchen counter
-        { x: F0 + 8, y: EXEC_Y, w: 30, h: 32 }, // the crew board
+        { x: F0 + 8, y: EXEC_Y, w: CREW_W, h: 32 }, // the crew board
         { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
       ]
       for (const d of l.desks) out.push({ x: d.x, y: d.y + 2, w: d.w, h: 29 })
@@ -171,7 +172,7 @@ export class WideRoom extends Sim<Layout> {
     for (let y = BAND + 3; y < H; y += 4) { px(L0, y, W - L0, 1, seam); px(L0 + 6 + ((y >> 2) % 3) * 19, y - 3, 1, 3, seam) }
     // the hallway's runner along the bottom, under every zone
     px(0, HALL - 6, W, 9, tint(ROLE.structure, ROLE.ground, 0.3)); px(0, HALL - 6, W, 1, tint(ROLE.body, ROLE.ground, 0.4))
-    text("EXIT", W - 12, HALL - 8, ROLE.live, 9)
+    text("EXIT", W - 14, HALL - 8, ROLE.live, 11)
 
     // ── the back wall ──
     px(0, 0, W, BAND - 1, ROLE.edge); px(0, BAND - 1, W, 1, ROLE.structure)
@@ -191,7 +192,7 @@ export class WideRoom extends Sim<Layout> {
     sc.item(170, () => blit(BIG_PLANT, 2, 159, { l: ROLE.live, o: ROLE.structure }))
 
     // ── the floor: the crew board, the manager's and the lead's desks, two tables of four ──
-    crewBoard(sc, a, measure, F0 + 8, EXEC_Y, 30, 32)
+    crewBoard(sc, a, measure, F0 + 8, EXEC_Y, CREW_W, 32, 9)
     for (const d of desks) {
       if (d.kind === "boss" || !d.seat) continue
       const owner = this.actors.get(keyOf(d.seat))
@@ -211,7 +212,7 @@ export class WideRoom extends Sim<Layout> {
       for (let dy = -10; dy <= 10; dy++) { const half = Math.round(Math.sqrt(100 - dy * dy) * 1.4); px(Mc - half, 86 + dy, half * 2, 1, dy < -8 ? ROLE.body : ROLE.borderInactive) }
       px(Mc - 3, 82, 6, 3, ROLE.prose); px(Mc + 6, 88, 3, 2, ROLE.attention) // papers, a mug
     })
-    text("MEETING", Mc, BAND + 8, ROLE.key, 9)
+    text("MEETING", Mc, BAND + 9, ROLE.key, 11)
 
     // ── the lounge: rug, couch (its back toward you), lamp, beanbag; the kitchen along the wall ──
     px(L0 + 34, 48, 54, 14, ROLE.structure); px(L0 + 35, 49, 52, 12, ROLE.borderInactive)
@@ -265,7 +266,8 @@ export class WideRoom extends Sim<Layout> {
       const cx = x0 + c * colW
       if (c) px(Math.round(cx), 4, 1, 34, ROLE.edge)
       const lh = measure.lineHeight?.(9) ?? 6
-      sc.text(`${COLS[c]} ${col.items.length}`, cx + 3, 3 + lh, ROLE.key, 10, "left")
+      const head = `${COLS[c]} ${col.items.length}`
+      sc.text(head, cx + 3, 3 + lh - 0.5, ROLE.key, measure(head, 10) <= colW - 4 ? 10 : 9, "left")
       sc.hits.push({ x: cx, y: 3, w: colW, h: lh + 1, tip: `${COLS[c]!.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
       // as many lines as fit at the surface's text size; the rest are a "+n more" (and the column's list)
       const room = Math.max(1, Math.floor((38 - 3 - lh) / lh)), shown = col.items.slice(0, col.items.length > room ? room - 1 : room)
@@ -334,7 +336,7 @@ export class WideRoom extends Sim<Layout> {
     const hand = (turns: number, len: number, c: string) => { for (let i = 1; i <= len; i++) sc.px(Math.round(cx + Math.sin(turns * 2 * Math.PI) * i), Math.round(cy - Math.cos(turns * 2 * Math.PI) * i), 1, 1, c) }
     hand((now.getHours() % 12 + now.getMinutes() / 60) / 12, 4, ROLE.fieldInk)
     hand(now.getMinutes() / 60, 6, ROLE.structure)
-    sc.text(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, cx, 34, ROLE.inactive, 9)
+    sc.text(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, cx, 36, ROLE.prose, 14)
   }
 
   /** Nina's corner: the tower by the glass, the litter box, the yarn (rolling while she bats it), a mouse */
