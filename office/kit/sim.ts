@@ -15,8 +15,9 @@ export type Actor = {
   spot: Spot; spotKey: string; pose: Pose; face: Dir; moving: boolean
   until: number; emote: string | null; emoteUntil: number; leaving: boolean
 }
-export type CatMode = "walk" | "sit" | "sleep" | "play"
-export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number }
+export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
+/** `zoom`: the tick her zoomies end; `leaps`: the room's leaps she is tearing between */
+export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[] }
 
 /** Nina's places in a room: her nap, your desk, her yarn, her litter, her tower's two perches, the lounge */
 export type CatPlan = {
@@ -25,6 +26,11 @@ export type CatPlan = {
   via(p: Pt): Pt | null
   /** the waypoints between two of her places — a door when they are in different rooms */
   door(from: Pt, to: Pt): Pt[]
+  /**
+   * The zoomies: per room, the places she tears between — the first a floor spot she lands on when
+   * it's over, the rest anything she can leap onto. Straight runs; a room with none has no zoomies.
+   */
+  leaps: Pt[][]
 }
 /** a room's geometry, as the sim needs it */
 export type Plan<L extends { people: Seat[] }> = {
@@ -60,7 +66,7 @@ export class Sim<L extends { people: Seat[] }> {
   private changed = true
 
   constructor(protected plan: Plan<L>) {
-    this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0 }
+    this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [] }
   }
 
   /** a click on Nina: she purrs for a few seconds, and wakes if she was asleep */
@@ -74,6 +80,7 @@ export class Sim<L extends { people: Seat[] }> {
   private stepCat(): boolean {
     const c = this.cat, p = this.plan.cat
     const at = (q: Pt) => c.x === q.x && c.y === q.y
+    if (c.mode === "zoom") return this.stepZoomies()
     if (c.path.length) {
       if (this.tick % 2) return false
       const to = c.path[0]!
@@ -102,12 +109,42 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.tick < c.until || this.tick < c.purr) return false
     const company = [...this.actors.values()].some((a) => !a.moving && LOUNGING.has(a.spot.kind))
     const r = Math.random()
+    const leaps = r < 0.05 && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
+    if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(Math.random() * 60); return true }
     const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]!
     const to = company && r < 0.3 ? pick(p.lounge)
       : r < 0.45 ? p.nap : r < 0.55 ? p.desk : r < 0.7 ? pick(p.perches)
         : r < 0.8 ? p.play : r < 0.85 ? p.litter : pick(p.spots)
     const down = p.via(c), up = p.via(to)
     c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]; c.mode = "walk"
+    return true
+  }
+
+  /** the leaps of the room she is in (the group with a spot nearest her), if it has any near */
+  private leapsHere(): Pt[] | null {
+    const c = this.cat, d = (q: Pt) => Math.abs(q.x - c.x) + Math.abs(q.y - c.y)
+    let best: Pt[] | null = null, bestD = 90
+    for (const g of this.plan.cat.leaps) for (const q of g) if (d(q) < bestD) { best = g; bestD = d(q) }
+    return best
+  }
+  /** the zoomies: two pixels a tick, from leap to leap, until it's over and she lands and sits like nothing happened */
+  private stepZoomies(): boolean {
+    const c = this.cat, g = c.leaps
+    if (!c.path.length) {
+      if (this.tick >= c.zoom) {
+        if (c.x === g[0]!.x && c.y === g[0]!.y) { c.mode = "sit"; c.until = this.tick + 200; c.purr = this.tick + 30; c.byYou = false; return true }
+        c.path = [{ ...g[0]! }]
+      } else {
+        const next = g.filter((q) => q.x !== c.x || q.y !== c.y)
+        c.path = [{ ...next[Math.floor(Math.random() * next.length)]! }]
+      }
+    }
+    for (let i = 0; i < 2 && c.path.length; i++) {
+      const to = c.path[0]!
+      c.x += Math.sign(to.x - c.x); c.y += Math.sign(to.y - c.y)
+      if (to.x !== c.x) c.face = Math.sign(to.x - c.x)
+      if (c.x === to.x && c.y === to.y) c.path.shift()
+    }
     return true
   }
 

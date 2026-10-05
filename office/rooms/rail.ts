@@ -109,6 +109,7 @@ const RAIL: Plan<Layout> = {
   cat: {
     nap: CAT_NAP, desk: CAT_DESK, play: PLAY, litter: LITTER, perches: [PERCH_TOP, PERCH_MID], lounge: CAT_LOUNGE,
     spots: [CAT_NAP, { x: 22, y: 98 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, ...CAT_LOUNGE],
+    leaps: [[CAT_NAP, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY]],
     // a spot up off the floor is got to from the floor below it: a hop, a climb, a step in
     via: (p: Pt) =>
       p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 76 }

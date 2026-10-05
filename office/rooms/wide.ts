@@ -113,6 +113,12 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
     },
     cat: {
       nap: CAT_NAP, desk: CAT_DESK, play: PLAY, litter: LITTER, perches: [PERCH_TOP, PERCH_MID],
+      // the zoomies: your office (your desk, her tower) and the lounge (the couch back, the top of
+      // the TV, the kitchen counter), each first the floor spot she lands on after
+      leaps: [
+        [CAT_NAP, CAT_DESK, PERCH_TOP, PERCH_MID, { x: 18, y: 112 }, { x: 72, y: 142 }],
+        [{ x: L0 + 52, y: 104 }, { x: L0 + 46, y: 69 }, { x: L0 + 80, y: 69 }, { x: L0 + 58, y: 7 }, { x: w - 7, y: 99 }, { x: L0 + 100, y: 140 }],
+      ],
       lounge: [{ x: L0 + 52, y: 104 }, { x: w - 40, y: 126 }],
       spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }],
       via: (p: Pt) =>
