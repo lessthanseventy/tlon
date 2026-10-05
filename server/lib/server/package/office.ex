@@ -14,6 +14,9 @@ defmodule Server.Package.Office do
     tui = Path.join(System.tmp_dir!(), "tlon-office-#{bun_target}")
     staged = Path.expand("rel/burrito/office.xz")
 
+    # its one runtime dep (@xterm/headless) compiles into the binary, so a fresh checkout installs it first
+    run!("bun", ["install", "--frozen-lockfile"], cd: Path.expand("../office"))
+
     run!("bun", ["build", "--compile", "--minify", "--target=#{bun_target}", "tui/main.ts", "--outfile", tui],
       cd: Path.expand("../office")
     )
