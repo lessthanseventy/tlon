@@ -15,6 +15,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
       GET    /api/threads/:id/messages    Channel.recent_messages (?limit=, default 50)
       GET    /api/threads/:id/terminal    where its coworker runs: {socket, session, window}, 404 if none
+      GET    /api/threads/:id/worktree    its coworker's working dir: {path} (the per-thread git worktree, ensured), 404 if no repo
       POST   /api/threads/:id/messages    {"body"} → Attention.respond as the operator: answers an open
                                           prompt, reopens a closed thread, else posts; 201 + the message
       POST   /api/threads/:id/close       Channel.close_thread: its sessions end, its ticket is done
@@ -82,6 +83,7 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "GET", [], t), do: json(conn, 200, t |> Board.brief() |> Brief.scope())
   defp on_thread(conn, "GET", ["messages"], t), do: messages(conn, t)
   defp on_thread(conn, "GET", ["terminal"], t), do: terminal(conn, t)
+  defp on_thread(conn, "GET", ["worktree"], t), do: worktree(conn, t)
   defp on_thread(conn, "POST", ["messages"], t), do: post(conn, t)
   defp on_thread(conn, "POST", ["close"], t), do: reply(conn, Channel.close_thread(t), &thread_row/1)
   defp on_thread(conn, "POST", ["hand-off"], t), do: hand_off(conn, t)
@@ -135,6 +137,15 @@ defmodule Server.MCP.OperatorAPI do
     case Tmux.terminal_target(thread) do
       nil -> json(conn, 404, %{error: "thread #{thread.id} has no live terminal"})
       target -> json(conn, 200, target)
+    end
+  end
+
+  # The thread's coworker's working dir (its per-thread worktree, created on first ask), for a client
+  # that runs something there (the office's lazygit). 404 = the thread has no repo.
+  defp worktree(conn, thread) do
+    case Server.worktree_for_thread(thread) do
+      {:ok, path} -> json(conn, 200, %{path: path})
+      {:error, reason} -> json(conn, 404, %{error: "thread #{thread.id} has no worktree: #{inspect(reason)}"})
     end
   end
 

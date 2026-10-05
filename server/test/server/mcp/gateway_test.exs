@@ -185,6 +185,23 @@ defmodule Server.MCP.GatewayTest do
     assert socket == "console-workspace-#{ws.id}" and session == "w#{ws.id}" and window == "t#{t.id}"
   end
 
+  test "GET /api/threads/:id/worktree is the coworker's working dir, ensured; 404 with no repo" do
+    {:ok, bare} = Channel.open_thread(%{title: "nowhere"})
+    assert {404, _} = get_json("/api/threads/#{bare.id}/worktree")
+
+    repo = Path.join(System.tmp_dir!(), "tlon-worktree-api-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(repo)
+    on_exit(fn -> File.rm_rf!(repo) end)
+    git = fn args -> {_, 0} = System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
+    git.(["init", "-q"])
+    git.(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "seed"])
+    {:ok, t} = Channel.open_thread(%{title: "somewhere", repo: repo})
+
+    assert {200, %{"path" => path}} = get_json("/api/threads/#{t.id}/worktree")
+    assert path == Server.Worktree.path(repo, Server.Worktree.name_for(t))
+    assert File.exists?(Path.join(path, ".git"))
+  end
+
   test "a workline's brief carries the gate" do
     # the artifact check runs git under the workline root: a throwaway repo, never this checkout
     tmp = Path.join(System.tmp_dir!(), "tlon-gateway-#{System.unique_integer([:positive])}")
