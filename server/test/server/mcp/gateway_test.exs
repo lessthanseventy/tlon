@@ -192,6 +192,30 @@ defmodule Server.MCP.GatewayTest do
     assert why =~ "intent.md"
   end
 
+  describe "/api/office and the office's writes — the TUI's door (Server.MCP.OperatorAPI)" do
+    test "GET /api/office is Office.status; GET /api/office/threads/:id a close look at one", %{thread: t} do
+      {200, body} = get_json("/api/office")
+      assert Enum.any?(body["threads"], &(&1["id"] == t.id))
+      assert Map.has_key?(body, "workspaces") and Map.has_key?(body, "bench")
+      {200, view} = get_json("/api/office/threads/#{t.id}")
+      assert is_list(view["messages"])
+      assert {404, _} = get_json("/api/office/threads/999999")
+    end
+
+    test "POST /api/tickets files one; /route and /start hand it on; /api/threads/:id/close closes" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {201, tk} = post_json("/api/tickets", %{workspace_id: ws.id, title: "from the TUI"})
+      assert tk["title"] == "from the TUI"
+      assert {400, _} = post_json("/api/tickets", %{workspace_id: ws.id})
+      {:ok, th} = Channel.open_thread(%{title: "done soon", workspace_id: ws.id})
+      {200, closed} = post_json("/api/threads/#{th.id}/close", %{})
+      assert closed["id"] == th.id
+      assert Server.Repo.get(Server.Thread, th.id).state == "closed"
+      assert {404, _} = post_json("/api/tickets/999999/route", %{})
+      assert {404, _} = post_json("/api/tickets/999999/start", %{})
+    end
+  end
+
   describe "/api — the operator's door (Server.MCP.OperatorAPI)" do
     test "GET /api/sidebar is Board.sidebar as JSON, and carries the open thread", %{thread: t} do
       # the sidebar groups by workspace, so the row needs one to be grouped under
