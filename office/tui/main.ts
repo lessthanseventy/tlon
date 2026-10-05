@@ -89,7 +89,20 @@ async function refresh() {
   if (all.ok && all.awaiting > before) out("\x07") // something new waits on you: the terminal's bell
   const tid = openThread()
   if (tid !== null) await loadThread(tid)
+  await chatter()
   draw()
+}
+// the office's small talk: each line the server's banter wrote, once, as a balloon over its speaker
+const heard = new Set<string>()
+async function chatter() {
+  if (ws === null) return
+  for (const b of await data.banter(ws)) {
+    const k = `${b.at} ${b.agent}`
+    if (heard.has(k)) continue
+    heard.add(k)
+    room().say(b.agent, b.line)
+    roomChanged = true; imageDirty = true
+  }
 }
 async function loadThread(tid: number) { const v = await data.thread(tid); if (v) threads.set(tid, v) }
 /** after a write: say what happened, then look again */

@@ -40,7 +40,11 @@ end
 # The post-response memory pass is opt-in: presence_idle → a queued pass → cheap extractor →
 # banked facts. Off by default so a dev shell never shells a model unasked. (The Maintain
 # sweeps need no flag: they run on Oban's cron wherever Oban runs, E/2.)
-config :server, memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes)
+# The office's small talk (Server.Office.Banter) shells the same cheap tier while an office polls,
+# opt-in the same way, so a dev shell never spends a model call on jokes.
+config :server,
+  memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes),
+  start_banter: System.get_env("TLON_BANTER") in ~w(1 true yes)
 
 # The operator's handle — who the human IS on this machine's channel. Local
 # configuration, never identity in the design (§8); the same default the console uses.

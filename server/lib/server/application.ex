@@ -43,6 +43,7 @@ defmodule Server.Application do
         maybe(:start_consult_mirror, true, Server.Consult.Mirror) ++
         maybe(:start_switchboard, false, Server.Switchboard.Runner) ++
         maybe(:start_attention, false, Server.Attention.Poller) ++
+        maybe(:start_banter, false, Server.Office.Banter) ++
         maybe(:start_mcp, false, mcp_children()) ++
         maybe(:start_oban, false, {Oban, Application.get_env(:server, Oban, [])}) ++
         maybe(:start_web, false, Server.Web.Endpoint)

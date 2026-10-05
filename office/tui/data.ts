@@ -41,6 +41,10 @@ export type Archive = { tickets: { id: number; title: string; closed_at: string 
 export async function archive(ws: number): Promise<Archive | null> {
   try { const r = await call("GET", `/office/archive/${ws}`); return r.status === 200 ? r.json : null } catch { return null }
 }
+/** the workspace's recent small talk (empty where the server's banter is off) */
+export async function banter(ws: number): Promise<{ agent: string; line: string; at: number }[]> {
+  try { const r = await call("GET", `/office/banter/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
+}
 export async function thread(id: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }
 }
