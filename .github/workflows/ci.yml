@@ -43,6 +43,8 @@ jobs:
             server/deps
             server/_build
           key: server-${{ runner.os }}-${{ hashFiles('mise.toml', 'server/mix.lock') }}
+      - run: mix deps.get
+        working-directory: server
       - run: mise run server:check
 
   console:
@@ -62,6 +64,8 @@ jobs:
             console/_build
             server/deps
           key: console-${{ runner.os }}-${{ hashFiles('mise.toml', 'console/mix.lock', 'server/mix.lock') }}
+      - run: mix deps.get
+        working-directory: console
       - run: mise run console:check
 
   typescript:
