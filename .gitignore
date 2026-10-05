@@ -60,3 +60,6 @@ console/.reload
 
 # .omc/ — local tool runtime state (sessions, last-tool-error.json); never repo content
 .omc/
+
+# the office TUI's compiled executables (mise run office:build)
+office/dist/

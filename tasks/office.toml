@@ -20,3 +20,8 @@ run = "bun test"
 description = "office: the precommit gate — install (frozen), typecheck, tests"
 dir = "office"
 run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+
+["office:build"]
+description = "office: the TUI as standalone executables, one per platform (macOS + Linux, arm64 + x64), in office/dist — no bun or checkout needed to run one"
+dir = "office"
+run = "for t in linux-x64 linux-arm64 darwin-arm64 darwin-x64; do bun build --compile --minify --target=bun-$t tui/main.ts --outfile dist/tlon-office-$t || exit 1; done"
