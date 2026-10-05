@@ -2,6 +2,7 @@
 // always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
 // beside it: a compiled TUI runs anywhere the server answers.
 import { EMPTY, type Agents, type ThreadView } from "../kit/types"
+import type { Target } from "./terminal"
 
 const BASE = (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/$/, "")
 
@@ -26,6 +27,10 @@ export async function status(): Promise<Agents> {
   } catch {
     return { ...EMPTY, note: `channel down (${BASE})` }
   }
+}
+/** where a thread's coworker runs (its tmux socket, session, window), or null when it has no window */
+export async function terminal(id: number): Promise<Target | null> {
+  try { const r = await call("GET", `/threads/${id}/terminal`); return r.status === 200 ? r.json : null } catch { return null }
 }
 export async function thread(id: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }

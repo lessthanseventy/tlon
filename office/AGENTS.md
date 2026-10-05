@@ -2,7 +2,9 @@
 
 The office is the server's state as a room: coworkers at desks when they work, in the lounge when
 idle, queued at your door when a thread waits on you; the whiteboard holds the worklines, the crew
-board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no runtime deps.
+board who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
+terminals the TUI zooms into (`tui/terminal.ts`: tmux control mode on the workspace's tmux, one
+linked window at a time, Ctrl-] back to the room).
 
 - `kit/` — what every office surface shares: the snapshot's types (`types.ts`, the shape of
   `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
@@ -51,6 +53,8 @@ board who is on what; Nina, your cat, keeps you company. TypeScript on bun, no r
   cell text and lets the first label on a cell keep it.
 - **The TUI titles its window `tlon office`** (the old title pushed and popped on the terminal's
   stack) so a window manager can match it — glass compositing shows a desktop through the art otherwise.
+- **A zoomed terminal resizes only the window it shows** (a throwaway session links just that one
+  window); attaching a grouped session would resize every coworker's window to ours.
 - **tmux swallows kitty graphics**; under `$TMUX` the TUI uses half blocks unless
   `OFFICE_GRAPHICS=kitty`.
 

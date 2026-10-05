@@ -72,6 +72,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # tmux: the office's terminal test drives a private tmux server
+      - run: sudo apt-get install -y --no-install-recommends tmux
       - uses: jdx/mise-action@v2
         with:
           cache: true

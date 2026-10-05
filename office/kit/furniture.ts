@@ -109,6 +109,8 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
     const name = fit(measure, p.agent, d.w - 4 - tw, 12), nw = measure(name, 12), x = d.x + d.w / 2 - (nw + 2 + tw) / 2
     sc.text(name, x, d.y + 38 - 2 / 3, colour, 12, "left"); sc.text(tail, x + nw + 2, d.y + 38 - 2 / 3, colour, 9, "left")
     const agentId = a.bench.find((b) => b.name === p.agent)?.agent_id ?? null
+    // their screens: a door into their terminal
+    if (p.thread_id > 0) sc.hits.push({ x: sx - 14, y: d.y + 11, w: 28, h: 8, tip: `${p.agent}'s terminal — click to look over their shoulder`, act: { kind: "terminal", tid: p.thread_id } })
     sc.hits.push({ x: d.x, y: d.y, w: d.w, h: hitH, tip: tipOf(p, threadOf(p.thread_id), there ? `at the ${d.kind}'s desk` : "about the office"), act: { kind: "person", agentId, name: p.agent, tid: p.thread_id > 0 ? p.thread_id : null } })
   })
 }

@@ -409,6 +409,8 @@ export class WideRoom extends Sim<Layout> {
         const { owner, p, seated, asks } = stateOf(c)
         // a nameplate where three letters fit at the surface's text size; the crew card and the tip have every name
         if (measure(c.agent.slice(0, 3), 11) <= SEAT_GAP) sc.text(fit(measure, c.agent, SEAT_GAP - 1, 11), c.x, ty + 37, asks ? ROLE.attention : seated ? shirtOf(p?.archetype) : ROLE.inactive, 11)
+        // their monitor: a door into their terminal
+        if (p && p.thread_id > 0) sc.hits.push({ x: c.x - 5, y: ty + 3, w: 10, h: 9, tip: `${c.agent}'s terminal — click to look over their shoulder`, act: { kind: "terminal", tid: p.thread_id } })
         const hx = c.x - 10, hy = ty, hw = SEAT_GAP, hh = 39
         const where = !owner ? "" : seated ? "working" : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : `idle, at the ${owner.spot.kind}`
         const agentId = a.bench.find((b) => b.name === c.agent)?.agent_id ?? null
