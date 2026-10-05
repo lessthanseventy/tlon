@@ -4,6 +4,8 @@ defmodule Server.BoardSidebarTest do
   # working flags. The contract the Slack-shaped UI sits on.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.Board
   alias Server.Bootstrap
   alias Server.Channel
@@ -79,6 +81,10 @@ defmodule Server.BoardSidebarTest do
     root = Channel.machine_thread(workspace.id)
     {:ok, older} = Channel.open_thread(%{title: "older but recently active"})
     {:ok, newer} = Channel.open_thread(%{title: "newer but quiet"})
+    # timestamps are whole seconds: put the births an hour back, so the post is clearly the latest
+    ago = fn s -> DateTime.utc_now() |> DateTime.add(-s) |> DateTime.truncate(:second) end
+    Server.Repo.update_all(from(t in Server.Thread, where: t.id == ^older.id), set: [created_at: ago.(7200)])
+    Server.Repo.update_all(from(t in Server.Thread, where: t.id == ^newer.id), set: [created_at: ago.(3600)])
     {:ok, _} = Channel.post(%{thread_id: older.id, author: "andrew", body: "still on this one"})
 
     [%{threads: threads}] = Board.sidebar()

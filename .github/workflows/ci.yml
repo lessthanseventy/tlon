@@ -54,6 +54,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # the console's suite reads the server's store: the runner's Postgres, as in the server job
+      - name: postgres and tmux
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres createuser --superuser "$USER"
+          sudo apt-get install -y --no-install-recommends tmux
       - uses: jdx/mise-action@v2
         with:
           cache: true
