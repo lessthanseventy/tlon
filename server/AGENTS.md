@@ -112,6 +112,13 @@ the live node:
 - `mise run server:console` — remote iex INTO the running service node.
 - `mise run server:logs` — follow the service's journal.
 
+The **standalone binary** is the same release for a box with no unit file (a Mac, say):
+`mise run server:package` wraps the `tlon` release with Burrito into `burrito_out/tlon_<target>`
+(Linux and macOS, x64 and arm64; ERTS inside, exqlite rebuilt per target). Run with no arguments
+it migrates and serves until signalled (`Server.Standalone`), every `TLON_START_*` defaulting on as
+the service sets them; it still needs Postgres (`PGHOST`, else `/tmp` on macOS) and tmux. Each
+build's version carries its commit, because Burrito reuses an unpack named by version.
+
 The **shell parity pack** — operate the live channel from the shell, our peer to the agents' MCP tools
 (all via `scripts/tlon-cli.sh` → `bin/server rpc` into the running node, so the service must be up):
 

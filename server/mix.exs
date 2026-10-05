@@ -16,7 +16,9 @@ defmodule Server.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       aliases: aliases(),
-      releases: releases()
+      releases: releases(),
+      # `mix release` alone is the service's release; the standalone binary is `mix release tlon`
+      default_release: :server
     ]
   end
 
@@ -31,6 +33,24 @@ defmodule Server.MixProject do
       server: [
         include_executables_for: [:unix],
         applications: [server: :permanent]
+      ],
+      # The same release as one self-contained executable per platform (Burrito: ERTS inside,
+      # NIFs rebuilt per target with zig) — `mise run server:package`, into burrito_out/.
+      # Server.Standalone is what it does with its command line.
+      tlon: [
+        # it unpacks into a directory named by its version and reuses it, so each build carries
+        # its commit: a new binary never runs an old unpack
+        version: "0.1.0+#{commit()}",
+        applications: [server: :permanent],
+        steps: [:assemble, &Burrito.wrap/1],
+        burrito: [
+          targets: [
+            linux_x64: [os: :linux, cpu: :x86_64],
+            linux_arm64: [os: :linux, cpu: :aarch64],
+            macos_arm64: [os: :darwin, cpu: :aarch64],
+            macos_x64: [os: :darwin, cpu: :x86_64]
+          ]
+        ]
       ]
     ]
   end
@@ -100,6 +120,8 @@ defmodule Server.MixProject do
       # Serves the StreamableHTTP plug + the /mint gateway, loopback-only. Plumbing, not
       # design — the channel's contract is MCP, whatever serves it.
       {:bandit, "~> 1.0"},
+      # Wraps the `tlon` release into one executable per platform (Server.Standalone reads its argv).
+      {:burrito, "~> 1.6"},
       # The plug we author the /mint gateway on (Bandit serves plugs; we route one path).
       {:plug, "~> 1.0"},
       # Static analysis, part of the precommit gate.
@@ -110,5 +132,14 @@ defmodule Server.MixProject do
       # iex> examples in @doc are formatted like the code around them
       {:doctest_formatter, "~> 0.4", only: [:dev, :test], runtime: false}
     ]
+  end
+
+  defp commit do
+    case System.cmd("git", ["describe", "--always", "--dirty", "--exclude=*"], stderr_to_stdout: true) do
+      {sha, 0} -> String.trim(sha)
+      _ -> "nogit"
+    end
+  rescue
+    _ -> "nogit"
   end
 end

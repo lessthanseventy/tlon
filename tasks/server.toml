@@ -169,6 +169,15 @@ TLON_START_MCP=1 TLON_MCP_PORT=4041 TLON_START_SWITCHBOARD=1 TLON_WORKLINE_ROOT=
   iex --name funes-dev@127.0.0.1 --cookie "$(tr -d '[:space:]' < "${TLON_COOKIE_FILE:-$HOME/.local/share/tlon/cookie}")" -S mix
 """
 
+# The server as one self-contained executable per platform (Burrito wraps the `tlon` release:
+# ERTS inside, exqlite rebuilt per target with zig). Burrito pins its zig; mise fetches that one
+# for this task alone. Run one with `burrito_out/tlon_<target>` — it migrates, then serves.
+["server:package"]
+description = "server: the standalone executables (Linux + macOS, x64 + arm64) into server/burrito_out — `tlon [serve]` migrates and serves, configured by the service's TLON_* env"
+dir = "server"
+env = { MIX_ENV = "prod" }
+run = "mise exec zig@0.16.0 -- mix release tlon --overwrite"
+
 # The seams no compiler covers: a script calling a module that no longer exists, a mise task a
 # guide names but mise.toml lost, a pi config file the adapter reads but the flake stopped writing.
 ["check:names"]
