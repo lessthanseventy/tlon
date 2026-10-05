@@ -5,6 +5,14 @@ import { EMPTY, type Agents } from "../kit/types"
 import { WIDE_H, WideRoom, widePlan } from "../rooms/wide"
 
 const measure = (s: string) => s.length * 2
+
+/** run `f` with Math.random seeded (mulberry32), so a test of the room's chance is the same every run */
+function seeded<T>(seed: number, f: () => T): T {
+  const real = Math.random
+  let a = seed >>> 0
+  Math.random = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+  try { return f() } finally { Math.random = real }
+}
 const focus = { picked: null, armed: null, person: null }
 
 function office(grunts: number): Agents {
@@ -55,7 +63,7 @@ describe("the wide room", () => {
     }
   })
 
-  test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => {
+  test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => seeded(7, () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1), plan = widePlan(696), blocks = plan.blocks(plan.layout(a))
     const kinds = new Set<string>()
     for (let i = 0; i < 400_000 && kinds.size < 2; i++) {
@@ -66,9 +74,9 @@ describe("the wide room", () => {
       if (hit) throw new Error(`Argos at ${r.dog.x},${r.dog.y} (tick ${i}, ${r.antic?.kind ?? "no antic"}) is inside ${JSON.stringify(hit)}`)
     }
     expect(kinds.size).toBeGreaterThanOrEqual(2)
-  })
+  }))
 
-  test("Nina gets the zoomies: tears between the room's leaps, then lands on its floor and sits", () => {
+  test("Nina gets the zoomies: tears between the room's leaps, then lands on its floor and sits", () => seeded(11, () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1)
     const c = (room as unknown as { cat: { x: number; y: number; mode: string; leaps: { x: number; y: number }[] } }).cat
     const visited = new Set<string>()
@@ -84,7 +92,7 @@ describe("the wide room", () => {
     }
     expect(runs).toBe(3)
     expect(visited.size).toBeGreaterThanOrEqual(3)
-  })
+  }))
 
   test("no walk crosses the furniture", () => {
     for (const w of [540, 560, 700]) {
