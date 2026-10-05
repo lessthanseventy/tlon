@@ -136,6 +136,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         { x: L0 + 34, y: 68, w: 54, h: 10 }, // the couch's back
         { x: w - 14, y: 100, w: 14, h: 56 }, // the kitchen counter
         { x: F0 + 8, y: EXEC_Y, w: CREW_W, h: 32 }, // the crew board
+        { x: F1 - 40, y: 150, w: 14, h: 24 }, // the filing cabinet
         { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
       ]
       for (const d of l.desks) out.push({ x: d.x, y: d.y + 2, w: d.w, h: 29 })
@@ -219,9 +220,16 @@ export class WideRoom extends Sim<Layout> {
       execDesk(sc, a, measure, { ...d, kind: d.kind, seat: d.seat }, !!owner && owner.spot.kind === "desk" && !owner.path.length, 38)
     }
     for (const ty of TABLE_YS) this.table(sc, a, measure, ty, chairs.filter((c) => c.table === ty), focus)
-    // what's left of the floor: plants along it, a printer
+    // what's left of the floor: plants along it, a printer, the filing cabinet (the finished work)
     if (F1 - F0 > 150) sc.item(TABLE_YS[0]! + 20, () => blit(BIG_PLANT, F1 - 14, TABLE_YS[0]! + 9, { l: ROLE.live, o: ROLE.structure }))
     if (F1 - F0 > 150) sc.item(176, () => { px(F1 - 20, 160, 16, 10, ROLE.inactive); px(F1 - 18, 158, 12, 2, ROLE.prose); px(F1 - 16, 170, 2, 4, ROLE.structure); px(F1 - 8, 170, 2, 4, ROLE.structure) })
+    sc.item(174, () => {
+      const cx = F1 - 40
+      px(cx, 150, 14, 24, ROLE.inactive); px(cx, 150, 14, 1, ROLE.prose)
+      for (const dy of [152, 160, 168]) { px(cx + 1, dy, 12, 6, tint(ROLE.inactive, ROLE.ground, 0.75)); px(cx + 5, dy + 2, 4, 1, ROLE.structure) }
+      px(cx + 2, 167, 9, 1, ROLE.prose) // a folder left sticking out of the bottom drawer
+    })
+    sc.hits.push({ x: F1 - 40, y: 150, w: 14, h: 24, tip: "the filing cabinet: finished tickets and closed threads", act: { kind: "archive" } })
 
     // ── the meeting room: glass, a round table, its chairs ──
     sc.item(BAND, () => {
