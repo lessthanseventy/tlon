@@ -73,7 +73,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 |---|---|
 | `office:build` | office: the TUI as standalone executables, one per platform (macOS + Linux, arm64 + x64), in office/dist — no bun or checkout needed to run one |
 | `office:check` | office: the precommit gate — install (frozen), typecheck, tests |
-| `office:run` | office: the TUI — the rail room in a terminal over the live server (kitty graphics in ghostty/kitty/WezTerm, half blocks elsewhere; OFFICE_GRAPHICS=blocks\|kitty to force) |
+| `office:run` | office: the TUI — the room in a terminal over the live server (kitty graphics in ghostty/kitty/WezTerm, half blocks elsewhere; OFFICE_GRAPHICS=blocks\|kitty to force) |
 | `office:test` | office: the kit, room and TUI unit suite (bun test) |
 | `office:watch` | office: re-run the suite on every change (cap signal) |
 

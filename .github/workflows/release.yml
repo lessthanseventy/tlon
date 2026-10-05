@@ -1,0 +1,38 @@
+# A `v*` tag builds the four standalone executables with the same task the dev loop uses
+# (`mise run server:package`) and publishes them as that tag's GitHub release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+  MISE_YES: "1"
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+          install_args: erlang elixir bun
+      # a fresh runner has no hex, rebar or deps; the task assumes a set-up checkout
+      - name: deps
+        working-directory: server
+        env:
+          MIX_ENV: prod
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get --only prod
+      - run: mise run server:package
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" server/burrito_out/tlon_* --title "$GITHUB_REF_NAME" --generate-notes
