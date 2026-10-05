@@ -1,5 +1,7 @@
 # Office TUI — handoff (2026-10-05)
 
+> Done and released as `v0.1.0`; the next round is `2026-10-05-console-retire-and-calendar-handoff.md`.
+
 Where the office work stands after a long session, and what's next. Branch `office-next` in both
 tlon and ficciones; nothing pushed (see "Shipping" below).
 
