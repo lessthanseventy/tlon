@@ -263,7 +263,7 @@ defmodule Server.ProfilesTest do
       File.write!(Path.join(base, "settings.json"), Jason.encode!(@base_settings))
       File.write!(Path.join(base, "mcp.json"), Jason.encode!(@base_mcp))
 
-      for f <- ~w(auth.json models.json models-store.json provider-failover.json),
+      for f <- ~w(auth.json models.json models-store.json),
           do: File.write!(Path.join(base, f), "{}")
 
       on_exit(fn -> File.rm_rf!(tmp) end)
@@ -286,12 +286,17 @@ defmodule Server.ProfilesTest do
       perms = Jason.decode!(File.read!(Path.join(dir, "extensions/pi-permission-system/config.json")))
       assert perms["yoloMode"] == true
       assert perms["permission"]["bash"]["sudo *"] == "deny"
-      # the shared files are symlinks back to the base — one credential store, one model catalog,
-      # one failover policy (so pi-multi-account fails this coworker's Claude over to ollama.com glm)
+      # the shared files are symlinks back to the base — one credential store, one model catalog
       assert File.read_link!(Path.join(dir, "auth.json")) == Path.join(base, "auth.json")
+      refute File.exists?(Path.join(dir, "provider-failover.json"))
+    end
 
-      assert File.read_link!(Path.join(dir, "provider-failover.json")) ==
-               Path.join(base, "provider-failover.json")
+    test "a profile left with the retired failover link loses it", %{base: base, root: root} do
+      dir = Path.join(root, "tertius")
+      File.mkdir_p!(dir)
+      File.ln_s!(Path.join(base, "provider-failover.json"), Path.join(dir, "provider-failover.json"))
+      Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
+      assert {:error, :enoent} = File.read_link(Path.join(dir, "provider-failover.json"))
     end
 
     test "a profile with a persona writes system_prompt.md (the tertius meta agent)", %{base: base, root: root} do

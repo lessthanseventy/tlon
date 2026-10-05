@@ -73,7 +73,7 @@ defmodule Server.Profiles do
         auth.json      ↳ symlink to ~/.pi/agent/auth.json       (shared credentials)
         models.json    ↳ symlink to ~/.pi/agent/models.json     (shared model catalog)
         models-store.json ↳ symlink                             (shared)
-        provider-failover.json ↳ symlink                        (shared failover policy — Claude→glm)
+
         keybindings.json ↳ symlink                              (shared keymap — Ctrl+P/N nav)
         sessions/         its own — each coworker resumes its own thread (reload --continue)
 
@@ -894,14 +894,15 @@ defmodule Server.Profiles do
     if r.system_prompt, do: File.write!(Path.join(dir, "system_prompt.md"), r.system_prompt)
     File.write!(Path.join(dir, "tmux.conf"), @coworker_tmux_conf)
 
-    # Shared, from the base: one credential store, one model catalog, one failover policy, one
-    # keymap. The provider-failover.json symlink is what lets pi-multi-account fail this coworker's
-    # Claude over to ollama.com glm — without it multi-account would write a fresh default here and
-    # miss preferredModels. keybindings.json shares the base map (Ctrl+P/N → history/selector nav);
+    # Shared, from the base: one credential store, one model catalog, one keymap. keybindings.json
+    # shares the base map (Ctrl+P/N → history/selector nav);
     # pi reads it from PI_CODING_AGENT_DIR, so a coworker without the symlink keeps pi's default
     # ctrl+p=model-cycle. Relink each time (idempotent). A missing base file just leaves a dangling
     # link pi ignores.
-    for f <- ~w(auth.json models.json models-store.json provider-failover.json keybindings.json) do
+    # a shared file no longer shared: its link goes, rather than dangle
+    _ = File.rm(Path.join(dir, "provider-failover.json"))
+
+    for f <- ~w(auth.json models.json models-store.json keybindings.json) do
       link = Path.join(dir, f)
       _ = File.rm(link)
       _ = File.ln_s(Path.join(base, f), link)
