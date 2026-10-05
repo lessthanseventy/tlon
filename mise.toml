@@ -8,7 +8,9 @@
 # Combined build (precompiled for this OTP) — pairing a bare "1.19" with a separate
 # erlang picks an incompatible OTP and fails to boot. OTP 29 (2026-09-07; was 28): console needs it
 # (ghostty_ex/libghostty-vt) and boots server, so the whole repo runs on one OTP.
-erlang = "29"
+# an exact OTP: the release wraps a prebuilt ERTS of this version (Burrito), and the newest 29.x
+# has none yet — a bare "29" resolves to it on a fresh runner and the package step 404s
+erlang = "29.0.6"
 elixir = "1.20.4-otp-29"
 # adapters' pi adapter is TypeScript; bun runs it natively (no build step) and is the test
 # runner. mise owns the dev runtime, so the JS toolchain is pinned here too, not assumed.
