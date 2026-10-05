@@ -45,6 +45,9 @@ jobs:
           key: server-${{ runner.os }}-${{ hashFiles('mise.toml', 'server/mix.lock') }}
       - run: mix deps.get
         working-directory: server
+      # the source tools run `mix format` in a scratch repo outside this checkout: the runner's
+      # global mise needs the same toolchain, or the shim there knows no elixir
+      - run: mise use -g "erlang@$(mise current erlang)" "elixir@$(mise current elixir)"
       - run: mise run server:check
 
   console:
@@ -66,6 +69,12 @@ jobs:
           key: console-${{ runner.os }}-${{ hashFiles('mise.toml', 'console/mix.lock', 'server/mix.lock') }}
       - run: mix deps.get
         working-directory: console
+      # build the patched raxol dep once without the gate's --warnings-as-errors (its own warnings
+      # are not ours); the gate then compiles only the console
+      - run: mix compile
+        working-directory: console
+        env:
+          MIX_ENV: test
       - run: mise run console:check
 
   typescript:
