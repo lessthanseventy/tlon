@@ -7,8 +7,10 @@ defmodule Server.Office.Corkboard do
   and the kind (`pick/4`), the model only writes it.
 
   Office chatter, not working memory: kept in memory here, the newest `@keep` per workspace, and
-  never written to `Server.Notes`, which the coworkers read as they work. A suggestion becomes a
-  ticket only when the operator files it. Lazy like banter — a note is only written while an office
+  never written to `Server.Notes`, which the coworkers read as they work. A suggestion goes in the
+  suggestion box instead (`suggestions/1`, the newest `@keep_ideas`), apart from the chatter so it
+  is never crowded out by it; it leaves the box when the operator files it as a ticket or throws
+  it out (`drop/2`). Lazy like banter — a note is only written while an office
   asks (`notes/1`), at most one per workspace every `@every_s` — and on and off with it.
   """
   use GenServer
@@ -17,6 +19,7 @@ defmodule Server.Office.Corkboard do
 
   @every_s 480
   @keep 12
+  @keep_ideas 20
   @voice """
   You write ONE sticky note a coworker pins on the corkboard of a pixel-art office of AI coworkers,
   for the others to read. Under 120 characters; in character for their role; dry, warm, a little
@@ -36,6 +39,18 @@ defmodule Server.Office.Corkboard do
     if GenServer.whereis(__MODULE__) && Server.OperatorConfig.banter?(),
       do: GenServer.call(__MODULE__, {:notes, workspace_id}),
       else: []
+  end
+
+  @doc "The suggestion box, newest first: the suggestions not yet filed or thrown out, shaped as `notes/1`'s."
+  @spec suggestions(integer()) :: [map()]
+  def suggestions(workspace_id) do
+    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:suggestions, workspace_id}), else: []
+  end
+
+  @doc "Take suggestion `id` out of the box — filed as a ticket, or thrown out. `:ok` either way."
+  @spec drop(integer(), integer()) :: :ok
+  def drop(workspace_id, id) do
+    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:drop, workspace_id, id}), else: :ok
   end
 
   @doc """
@@ -103,7 +118,7 @@ defmodule Server.Office.Corkboard do
   @impl true
   def handle_call({:notes, ws}, _from, state) do
     now = System.system_time(:second)
-    entry = Map.get(state, ws, %{notes: [], at: 0, next: 1})
+    entry = entry(state, ws)
 
     if now - entry.at >= @every_s do
       me = self()
@@ -114,14 +129,29 @@ defmodule Server.Office.Corkboard do
     {:reply, entry.notes, Map.put(state, ws, %{entry | at: if(now - entry.at >= @every_s, do: now, else: entry.at)})}
   end
 
+  def handle_call({:suggestions, ws}, _from, state), do: {:reply, entry(state, ws).ideas, state}
+
+  def handle_call({:drop, ws, id}, _from, state) do
+    entry = entry(state, ws)
+    {:reply, :ok, Map.put(state, ws, %{entry | ideas: Enum.reject(entry.ideas, &(&1.id == id))})}
+  end
+
   @impl true
   def handle_cast({:pinned, _ws, nil}, state), do: {:noreply, state}
 
   def handle_cast({:pinned, ws, note}, state) do
-    entry = Map.get(state, ws, %{notes: [], at: 0, next: 1})
+    entry = entry(state, ws)
     note = Map.merge(note, %{id: entry.next, at: System.system_time(:second)})
-    {:noreply, Map.put(state, ws, %{entry | notes: Enum.take([note | entry.notes], @keep), next: entry.next + 1})}
+
+    entry =
+      if note.kind == "suggestion",
+        do: %{entry | ideas: Enum.take([note | entry.ideas], @keep_ideas)},
+        else: %{entry | notes: Enum.take([note | entry.notes], @keep)}
+
+    {:noreply, Map.put(state, ws, %{entry | next: entry.next + 1})}
   end
+
+  defp entry(state, ws), do: Map.get(state, ws, %{notes: [], ideas: [], at: 0, next: 1})
 
   defp write(ws, board) do
     ctx = Banter.context(ws)

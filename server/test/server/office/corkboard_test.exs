@@ -83,4 +83,20 @@ defmodule Server.Office.CorkboardTest do
       assert kind in ~w(encourage joke comment suggestion) and is_integer(at)
     end
   end
+
+  test "a suggestion goes in the box, apart from the chatter, and leaves it when dropped" do
+    start_supervised!(Corkboard)
+
+    GenServer.cast(
+      Corkboard,
+      {:pinned, 9, %{author: "ashe", kind: "suggestion", body: "log first-failure times", re: nil}}
+    )
+
+    GenServer.cast(Corkboard, {:pinned, 9, %{author: "yu", kind: "joke", body: "a joke", re: nil}})
+
+    assert [%{id: id, author: "ashe", body: "log first-failure times"}] = Corkboard.suggestions(9)
+    refute Enum.any?(:sys.get_state(Corkboard)[9].notes, &(&1.kind == "suggestion"))
+    assert :ok = Corkboard.drop(9, id)
+    assert Corkboard.suggestions(9) == []
+  end
 end
