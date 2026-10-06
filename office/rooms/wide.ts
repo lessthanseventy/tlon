@@ -38,6 +38,19 @@ function laneOf(z: Zones, x: number) {
   return x <= OFF_W ? OFF_LANE : x < z.M0 ? z.F0 + 3 : x < z.L0 ? z.Mc : z.L0 + 6
 }
 
+/**
+ * Where the pastimes are, for a room's zones: the games corner under the meeting room (a ping-pong
+ * table left of its lane, two arcade cabinets right of it) and the aquarium on the open floor past
+ * the second table — what the plan routes to and the render draws, from one place.
+ */
+function corner(z: Zones) {
+  return {
+    table: { x: z.M0 + 8, y: 146, w: 26, h: 12 },
+    cabinets: [z.Mc + 8, z.Mc + 24].map((x) => ({ x, y: 128, w: 12, h: 20 })),
+    tank: { x: z.F0 + 136, y: 100, w: 30, h: 24 },
+  }
+}
+
 type Desk = { x: number; y: number; w: number; kind: "boss" | "manager" | "lead"; seat?: Seat }
 type Chair = { x: number; table: number; agent: string | null }
 const seatX = (d: Desk) => d.x + Math.round(d.w / 2)
@@ -72,6 +85,9 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
   const z = zones(w)
   const { L0, M0, MW, Mc, F0, F1 } = z
   const inOffice = (x: number) => x <= OFF_W
+  const { table, cabinets, tank } = corner(z)
+  const at = (x: number, y: number, aisle: number, face: Spot["face"], kind: Spot["kind"], partner?: Pt): Spot => ({ x, y, aisle, pose: "stand", face, kind, ...(partner ? { with: partner } : {}) })
+  const ends = [{ x: table.x - 4, y: table.y + 6 }, { x: table.x + table.w + 4, y: table.y + 6 }]
   return {
     layout: layoutFor(z),
     home(l, agent) {
@@ -93,6 +109,17 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       { x: L0 + 30, y: 150, aisle: 150, pose: "couch", face: "up", kind: "couch" },
       { x: w - 26, y: 116, aisle: 116, pose: "stand", face: "right", kind: "cooler" },
       { x: w - 26, y: 136, aisle: 136, pose: "stand", face: "right", kind: "coffee" },
+      // the pastimes: a game at a cabinet, a rally across the table, the fish, the sky through the
+      // meeting room's windows, the plants, a chat, a pet
+      ...cabinets.map((c) => at(c.x + 6, c.y + c.h + 10, c.y + c.h + 10, "up", "arcade")),
+      at(ends[0]!.x, ends[0]!.y, table.y + table.h + 12, "right", "pingpong", ends[1]),
+      at(ends[1]!.x, ends[1]!.y, table.y + table.h + 12, "left", "pingpong", ends[0]),
+      at(tank.x + 8, tank.y + tank.h + 10, tank.y + tank.h + 10, "up", "aquarium"),
+      at(tank.x + 22, tank.y + tank.h + 10, tank.y + tank.h + 10, "up", "aquarium"),
+      at(Mc - 32, 54, 116, "up", "window"), at(Mc + 32, 54, 116, "up", "window"),
+      at(L0 + 22, 184, 184, "left", "plant"), at(18, 168, 168, "left", "plant"),
+      at(L0 + 52, 124, 124, "right", "chat", { x: L0 + 66, y: 124 }), at(L0 + 66, 124, 124, "left", "chat", { x: L0 + 52, y: 124 }),
+      at(L0 + 90, 118, 118, "right", "pet"), at(L0 + 40, 106, 106, "right", "pet"),
     ],
     // the meeting room's table, two laptops a side: where the warm but unbusy sit, on call
     oncall: [Mc - 22, Mc + 22].flatMap((x) => [81, 95].map((y): Spot => ({ x, y, aisle: 116, pose: "sit", face: x < Mc ? "right" : "left", kind: "laptop" }))),
@@ -147,6 +174,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         { x: F1 - 40, y: 150, w: 14, h: 24 }, // the filing cabinet
         { x: F1 - 60, y: 146, w: 12, h: 28 }, // the server rack
         { x: TRAY.x, y: TRAY.y, w: 16, h: 14 }, // the in-tray's table
+        table, ...cabinets, tank, // the games corner, the aquarium
         { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
       ]
       for (const d of l.desks) out.push({ x: d.x, y: d.y + 2, w: d.w, h: 29 })
@@ -275,7 +303,7 @@ export class WideRoom extends Sim<Layout> {
     }
     if (this.antic) return false
     // anyone idling in the lounge reaches down to him when he wanders close
-    if (d.mode !== "sleep" && !d.fuss && Math.random() < 0.004) {
+    if (d.mode !== "sleep" && !d.fuss && this.quiet(d.saidUntil) && Math.random() < 0.0015) {
       const near = [...this.actors.values()].find((a) => !a.moving && !a.path.length && (a.spot.kind === "couch" || a.spot.kind === "cooler" || a.spot.kind === "coffee" || a.spot.kind === "roam") && Math.abs(a.x - d.x) < 22 && Math.abs(a.y - d.y) < 16)
       if (near) { this.fussDog(near); return true }
     }
@@ -403,6 +431,7 @@ export class WideRoom extends Sim<Layout> {
       px(W - 13, 140, 12, 15, ROLE.prose); px(W - 3, 145, 1, 4, ROLE.inactive) // the fridge
     })
     sc.item(186, () => blit(BIG_PLANT, L0 + 4, 175, { l: ROLE.live, o: ROLE.structure }))
+    this.pastimes(sc)
 
     // ── people, Nina ──
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")
@@ -516,6 +545,59 @@ export class WideRoom extends Sim<Layout> {
       sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${DOG_NAME} - click to pat him`, act: { kind: "dog" } })
     })
     if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
+  }
+
+  /** who is settled at a pastime of `kind`, and where */
+  private at(kind: string) { return [...this.actors.values()].filter((x) => x.spot.kind === kind && !x.moving && !x.path.length) }
+
+  /**
+   * The games corner and the aquarium. The ping-pong ball flies only when both ends are taken; a
+   * cabinet runs its attract screen until someone plays, then a game; the fish come up for flakes
+   * when someone at the tank feeds them.
+   */
+  private pastimes(sc: Scene) {
+    const { table: t, cabinets, tank } = corner(this.z), f = sc.f, tick = sc.tick, px = sc.px.bind(sc)
+    sc.item(t.y + t.h, () => {
+      px(t.x + 2, t.y + 8, 2, 4, ROLE.inactive); px(t.x + t.w - 4, t.y + 8, 2, 4, ROLE.inactive)
+      px(t.x, t.y, t.w, 8, tint(ROLE.live, ROLE.ground, 0.4)); px(t.x, t.y, t.w, 1, ROLE.prose); px(t.x, t.y + 7, t.w, 1, ROLE.prose)
+      px(t.x + t.w / 2 - 1, t.y - 2, 2, 9, tint(ROLE.prose, ROLE.ground, 0.7))
+    })
+    const players = this.at("pingpong")
+    if (players.length === 2) {
+      // a rally: across and back, an arc over the net, a bounce each side
+      const p = (tick % 16) / 8, k = p < 1 ? p : 2 - p, x = Math.round(t.x + 2 + k * (t.w - 4)), y = Math.round(t.y + 3 - Math.sin(k * Math.PI) * 7)
+      sc.overhead.push(() => px(x, y, 2, 2, ROLE.body))
+    }
+    cabinets.forEach((c, i) => sc.item(c.y + c.h, () => {
+      const body = i ? ROLE.assistant : ROLE.planner, playing = this.at("arcade").some((a) => Math.abs(a.x - (c.x + 6)) < 3)
+      px(c.x, c.y, c.w, c.h, tint(body, ROLE.ground, 0.55)); px(c.x, c.y, c.w, 3, f % 4 ? body : ROLE.body) // the marquee, flickering
+      px(c.x + 2, c.y + 4, 8, 7, ROLE.ground)
+      if (playing) {
+        // a wave of invaders marching, the ship under them firing
+        const dx = Math.floor(f / 2) % 3
+        for (let k = 0; k < 3; k++) px(c.x + 2 + dx + k * 2, c.y + 5, 1, 1, ROLE.live)
+        px(c.x + 3 + ((f * 3) % 6), c.y + 9, 2, 1, ROLE.key)
+        if (f % 2) px(c.x + 4 + ((f * 3) % 6), c.y + 6 + (tick % 3), 1, 1, ROLE.body)
+      } else if (f % 6 < 3) px(c.x + 3, c.y + 7, 6, 1, ROLE.body) // insert coin
+      px(c.x + 1, c.y + 12, 10, 3, ROLE.edge); px(c.x + 3, c.y + 11, 1, 2, ROLE.prose); px(c.x + 6, c.y + 13, 1, 1, ROLE.alarm); px(c.x + 8, c.y + 13, 1, 1, ROLE.key)
+      sc.hits.push({ x: c.x, y: c.y, w: c.w, h: c.h, tip: "the arcade - click to play", act: { kind: "arcade" } })
+    }))
+    sc.item(tank.y + tank.h, () => {
+      const water = tint(ROLE.key, ROLE.ground, 0.35), glass = tint(ROLE.prose, ROLE.ground, 0.6)
+      px(tank.x, tank.y + 18, tank.w, 6, ROLE.structure); px(tank.x + 2, tank.y + 23, 2, 1, ROLE.borderInactive)
+      px(tank.x, tank.y, tank.w, 18, glass); px(tank.x + 1, tank.y + 2, tank.w - 2, 15, water); px(tank.x, tank.y, tank.w, 1, ROLE.inactive)
+      px(tank.x + 1, tank.y + 15, tank.w - 2, 2, tint(ROLE.body, ROLE.ground, 0.5))
+      for (const [wx, h] of [[4, 7], [9, 5], [23, 8]] as const) for (let j = 0; j < h; j++) px(tank.x + wx + ((j + f) % 4 === 0 ? 1 : 0), tank.y + 14 - j, 1, 1, ROLE.live)
+      const feeding = this.at("aquarium").length > 0 && tick % 300 < 50
+      if (feeding) for (let k = 0; k < 4; k++) px(tank.x + 10 + k * 3, tank.y + 3 + ((tick + k * 5) % 10), 1, 1, ROLE.body)
+      ;[ROLE.alarm, ROLE.body, ROLE.attention].forEach((col, i) => {
+        // each fish swims its own lap; at feeding time they all come up for the flakes
+        const lap = 22, s = Math.floor(tick / (2 + i)) + i * 7, p = s % (2 * lap), x = p < lap ? p : 2 * lap - p
+        const fx = tank.x + 2 + x, fy = feeding ? tank.y + 4 + i : tank.y + 5 + i * 3, right = p < lap
+        px(fx, fy, 3, 2, col); px(right ? fx - 1 : fx + 3, fy + (f % 2), 1, 1, col)
+      })
+      for (let k = 0; k < 2; k++) px(tank.x + 6 + k * 14, tank.y + 14 - ((tick + k * 9) % 12), 1, 1, ROLE.prose)
+    })
   }
 
   /** the dust cloud of a scuffle */

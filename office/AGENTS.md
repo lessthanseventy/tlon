@@ -14,15 +14,20 @@ linked window at a time, Ctrl-] back to the room).
   what Nina says (`voices.ts`; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
   drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
   making a fuss of a pet), the furniture every room has (`furniture.ts`),
-  the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen).
+  the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen, and
+  an aquarium).
 - `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
   terminal); `wide.ts`, the TUI's full-width room (office, floor, meeting room, lounge, a long back
-  wall with the whiteboard, notes, calendar, windows, clock, TV).
+  wall with the whiteboard, notes, calendar, windows, clock, TV), and the pastimes idle coworkers
+  move between (`Pastime` in `sim.ts`): a games corner (arcade cabinets, ping-pong), an aquarium,
+  the windows, the plants, a chat, the pets.
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
   `main.ts` is the room, its detail pane's cards and the finder (`/`); `reader.ts` a thread
   full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
-  finder's matcher; `when.ts` reads a schedule's "when" (a cron, or a local time). It is the
+  finder's matcher; `when.ts` reads a schedule's "when" (a cron, or a local time). The arcade's
+  cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
+  zoomed like a coworker's terminal. It is the
   operator's surface. Under the room the pane splits: what you clicked on the left, what you can
   do to it on the right — each card's actions (`detail()`) are its keys, its clickable list and
   its docs at once, so they cannot drift apart. Popups only where a choice needs a list (the finder).

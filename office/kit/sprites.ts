@@ -75,6 +75,7 @@ export const GLYPH: Record<string, string[]> = {
   "~": [".....", ".k...", "k.k.k", "...k.", "....."],
   "*": ["k.k.k", ".kkk.", "kkkkk", ".kkk.", "k.k.k"],
   "♥": [".k.k.", "kkkkk", "kkkkk", ".kkk.", "..k.."],
+  "z": ["kkkkk", "...k.", "..k..", ".k...", "kkkkk"],
 }
 const SIGNATURES = ["♪", "♥", "*", "…"]
 // a thought, not a word: the bubble trails off in a dot instead of pointing at the speaker
