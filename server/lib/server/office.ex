@@ -8,16 +8,19 @@ defmodule Server.Office do
 
   import Ecto.Query
 
+  alias Server.Office.Room
   alias Server.Repo
 
   @consult_window_s 180
+  @page 60
 
   @doc """
   Every workspace at once: the roster (each row with its thread's workspace and bench seat), the
   benches with their policies, the open threads (lead, whether a window runs it, whether it is the
   workspace's standing thread, any open prompt), projects, unstarted tickets, notes, the consults
-  and hand-offs of the last three minutes, the archetypes and model choices, counts, and how many
-  threads await the operator. A surface shows one workspace and filters by `workspace_id`.
+  and hand-offs of the last three minutes, the archetypes and model choices, counts, how many
+  threads await the operator, each workspace's triage count (the beacon) and the service's health
+  (the rack). A surface shows one workspace and filters by `workspace_id`.
   """
   @spec status() :: map()
   def status do
@@ -39,7 +42,9 @@ defmodule Server.Office do
       archetypes: archetypes(),
       models: models(),
       counts: Map.new(Repo.all(from(t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}))),
-      awaiting: awaiting(prompts)
+      awaiting: awaiting(prompts),
+      triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
+      health: Map.take(Room.health(), [:state, :problems])
     }
   end
 
@@ -77,20 +82,32 @@ defmodule Server.Office do
   end
 
   @doc """
-  One thread up close: its last 60 messages, oldest first, and what its worker's pane shows now —
-  the thread's own window, or the lead's window for a standing thread; `peek`/`window` nil when
-  nothing runs it.
+  One thread up close: a page of its messages, oldest first — the newest #{@page}, or with `before`
+  the #{@page} before that message id; `more` says older ones remain — and what its worker's pane
+  shows now: the thread's own window, or the lead's window for a standing thread; `peek`/`window`
+  nil when nothing runs it.
   """
-  @spec thread_view(Server.Thread.t()) :: map()
-  def thread_view(%Server.Thread{} = t) do
+  @spec thread_view(Server.Thread.t(), integer() | nil) :: map()
+  def thread_view(%Server.Thread{} = t, before \\ nil) do
+    page =
+      from(m in Server.Message, where: m.thread_id == ^t.id, order_by: [desc: m.id], limit: @page + 1)
+      |> then(&if(before, do: where(&1, [m], m.id < ^before), else: &1))
+      |> Repo.all()
+
     messages =
-      t
-      |> Server.Channel.thread_messages()
-      |> Enum.take(-60)
+      page
+      |> Enum.take(@page)
+      |> Enum.reverse()
       |> Enum.map(&%{id: &1.id, author: &1.author, body: &1.body, at: &1.created_at, kind: &1.kind})
 
     tab = window_of(t)
-    %{messages: messages, peek: tab && peek(t.workspace_id, tab), window: tab && tab.name}
+
+    %{
+      messages: messages,
+      more: length(page) > @page,
+      peek: tab && peek(t.workspace_id, tab),
+      window: tab && tab.name
+    }
   end
 
   @doc """
