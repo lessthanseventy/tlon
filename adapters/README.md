@@ -18,7 +18,8 @@ adapters/
   AGENTS.md            the module's law — read it first
   pi/                  the pi adapter (TypeScript, bun)
     src/extension.ts   pi's lifecycle hooks: register, brief, widget, cadence capture,
-                       thinking presence
+                       thinking presence (and which tool is running)
+    src/doing.ts       a tool call → the office's kind of work (read/edit/bash/…), both adapters
     src/brief.ts       the honest brief renderer (pure, unit-tested)
     src/mcp.ts         a minimal MCP client — the extension's own door to server — and
                        identityFromEnv(), the one parse of the TLON_* identity
@@ -29,7 +30,7 @@ adapters/
     src/pi.ts          the slice of pi's ExtensionAPI adapters depends on
     launch.sh          the `pi:*` model launcher — spawns/joins a thread, exports TLON_*
   claude-code/         the Claude Code adapter: launch.sh (`server:claude`) + the
-                       SessionStart / UserPromptSubmit / Stop hook shells
+                       SessionStart / UserPromptSubmit / PreToolUse / Stop hook shells
   footer/              a dense 2-line pi statusline — generic, NOT a server adapter
   consult/             /consult and /fresh — delegate a prompt to a different model
   menard/             (in ~/projects/menard) the guard + format-on-save for Elixir —

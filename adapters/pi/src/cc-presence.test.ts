@@ -15,3 +15,7 @@ test("verbOf: bare invocation declares thinking; explicit idle clears", () => {
 test("verbOf: start registers", () => {
   expect(verbOf(["bun", "cc-presence.ts", "start"])).toBe("start");
 });
+
+test("verbOf: doing reports the PreToolUse hook's tool", () => {
+  expect(verbOf(["bun", "cc-presence.ts", "doing"])).toBe("doing");
+});

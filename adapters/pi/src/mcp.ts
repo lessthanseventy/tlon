@@ -18,6 +18,7 @@
 // format-agnostic (TLON_THREAD, TLON_AUTHOR, TLON_MCP_URL); the token is derived.
 
 import { env } from "node:process";
+import type { Doing } from "./doing.ts";
 
 const PROTOCOL_VERSION = "2025-03-26"; // the version the server's server_test handshakes with
 
@@ -139,6 +140,11 @@ export class TlonClient {
   // from the token, so both declares take no args.
   async presenceThinking(): Promise<void> {
     await this.#callTool("presence_thinking", {});
+  }
+
+  // What the declared turn is doing now; no `what` = back to plain thinking.
+  async presenceDoing(what?: Doing): Promise<void> {
+    await this.#callTool("presence_doing", what ? { what } : {});
   }
 
   async presenceIdle(): Promise<void> {

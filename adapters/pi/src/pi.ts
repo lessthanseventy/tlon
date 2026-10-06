@@ -62,6 +62,8 @@ export interface ExtensionAPI {
   ): void;
   on(event: "turn_start", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
   on(event: "turn_end", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
+  on(event: "tool_execution_start", handler: (event: { toolName: string; args: unknown }, ctx: ExtensionContext) => void | Promise<void>): void;
+  on(event: "tool_execution_end", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
   // Boundary hooks for total-recall capture: before the context is compacted (the key moment to
   // flush the delta) and at session end (best-effort final flush).
   on(event: "session_before_compact", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;

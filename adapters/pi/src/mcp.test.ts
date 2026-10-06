@@ -95,9 +95,10 @@ test("presenceThinking / presenceIdle call their argless self-thread tools", asy
   const c = new TlonClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
   await c.connect();
   await c.presenceThinking();
+  await c.presenceDoing("edit");
   await c.presenceIdle();
 
-  expect(called).toEqual(["presence_thinking", "presence_idle"]);
+  expect(called).toEqual(["presence_thinking", "presence_doing", "presence_idle"]);
 });
 
 // postMessage: pin the tool name + body arg go
