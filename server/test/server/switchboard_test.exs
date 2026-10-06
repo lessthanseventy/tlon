@@ -177,8 +177,10 @@ defmodule Server.SwitchboardTest do
       Switchboard.deliver(m)
 
       refute_received {:woke, "wSandra", _}
-      # Nothing was woken, so it is not a delivery — it stays pending.
-      assert Repo.get!(Message, m.id).delivered_at == nil
+      # Nothing warm to wake: the cold lead is rotated onto a fresh pane, and the message becomes
+      # its opening turn (claimed there, off this call's path — so its delivery isn't asserted here).
+      assert_receive {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Sandra")
     end
 
     test "a still-warm session is woken and its warmth is bumped forward" do
