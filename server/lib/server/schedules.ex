@@ -1,0 +1,280 @@
+defmodule Server.Schedules do
+  @moduledoc """
+  The operator's calendar: things to run on a cron or once at a time (`Server.Schedule`), and each
+  firing (`Server.ScheduleRun`, the automation board). OSS Oban has no dynamic cron, so a
+  per-minute job (`Server.Jobs.Dispatch`) asks `dispatch/1` what is due; each due schedule is
+  claimed — its `last_run_at` moved, guarded so two dispatchers can't both fire it — a run row
+  written, and `Server.Jobs.RunSchedule` does the work (`perform/1`): an agent run is a prompt
+  posted to a thread (fresh, or the schedule's standing one) staffed with the named coworker; a
+  workline opens; a script runs in a shell and its exit and output land on the run (and in the
+  standing thread, when it has one). A firing missed while the service was down fires once on
+  its return, not once per missed slot.
+
+  A cron reads the server's local wall clock (there is no tz database here): an expression is
+  matched against local time and the answer turned back to UTC with the offset in force now, so
+  the first firing after a DST change can land an hour off.
+  """
+
+  import Ecto.Query
+
+  alias Oban.Cron.Expression
+  alias Server.Channel
+  alias Server.Message
+  alias Server.Repo
+  alias Server.Schedule
+  alias Server.ScheduleRun
+
+  @script_timeout_ms 30 * 60 * 1000
+  @output_cap 4000
+
+  @doc "A new schedule. `{:ok, schedule}` or `{:error, changeset}`."
+  def create(attrs), do: attrs |> Schedule.create_changeset() |> Repo.insert()
+
+  @doc "Change one. `{:ok, schedule}` or `{:error, changeset}`."
+  def update(%Schedule{} = s, attrs), do: s |> Schedule.update_changeset(attrs) |> Repo.update()
+
+  @doc "Remove one, and its runs."
+  def remove(%Schedule{} = s), do: Repo.delete(s)
+
+  @doc "A schedule by id, or nil."
+  def get(id), do: Repo.get(Schedule, id)
+
+  @doc "A workspace's schedules, oldest first."
+  def in_workspace(workspace_id),
+    do: Repo.all(from s in Schedule, where: s.workspace_id == ^workspace_id, order_by: [asc: s.id])
+
+  @doc "A schedule's last `limit` runs, newest first."
+  def runs(schedule_id, limit \\ 20),
+    do: Repo.all(from r in ScheduleRun, where: r.schedule_id == ^schedule_id, order_by: [desc: r.id], limit: ^limit)
+
+  @doc """
+  When it next fires, from `now`: a one-off's time until it has run (then nil); a cron's next slot
+  after its last firing — `now` when that slot has already passed and is waiting on the dispatcher.
+  nil while disabled.
+  """
+  @spec next_at(Schedule.t(), DateTime.t()) :: DateTime.t() | nil
+  def next_at(s, now \\ DateTime.utc_now())
+  def next_at(%Schedule{enabled: false}, _now), do: nil
+
+  def next_at(%Schedule{} = s, now) do
+    case slot(s) do
+      nil -> nil
+      t -> if DateTime.compare(t, now) == :lt, do: DateTime.truncate(now, :second), else: t
+    end
+  end
+
+  # the slot it is owed: a one-off's time (until it ran), or the cron's next after its last firing
+  defp slot(%Schedule{cron: nil, at: at, last_run_at: nil}), do: at
+  defp slot(%Schedule{cron: nil}), do: nil
+  defp slot(%Schedule{cron: cron} = s), do: after_local(Expression.parse!(cron), s.last_run_at || s.created_at)
+
+  @doc "Whether it is owed a firing at `now`."
+  def due?(%Schedule{enabled: true} = s, now) do
+    case slot(s) do
+      nil -> false
+      t -> DateTime.compare(t, now) != :gt
+    end
+  end
+
+  def due?(_s, _now), do: false
+
+  @doc "The days of `month` (1..12) of `year`, in local time, on which it fires."
+  @spec days(Schedule.t(), integer(), integer()) :: [integer()]
+  def days(%Schedule{cron: nil, at: at}, year, month) do
+    local = to_local(at)
+    if {local.year, local.month} == {year, month}, do: [local.day], else: []
+  end
+
+  def days(%Schedule{cron: cron}, year, month) do
+    expr = Expression.parse!(cron)
+    start = year |> Date.new!(month, 1) |> DateTime.new!(~T[00:00:00]) |> DateTime.add(-60)
+    start |> Stream.unfold(&day_after(expr, &1, month)) |> Enum.to_list()
+  end
+
+  # the next day it fires after `cursor` (local, as a UTC-labelled datetime), and the end of that day
+  defp day_after(expr, cursor, month) do
+    case Expression.next_at(expr, cursor) do
+      %DateTime{month: ^month} = t -> {t.day, DateTime.new!(DateTime.to_date(t), ~T[23:59:00])}
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Fire everything due at `now`: claim it (its `last_run_at` moves to `now`, only if no one else
+  moved it first), write its run, and queue the work where Oban runs. The runs it started.
+  """
+  @spec dispatch(DateTime.t()) :: [ScheduleRun.t()]
+  def dispatch(now \\ DateTime.utc_now()) do
+    now = DateTime.truncate(now, :second)
+
+    for s <- Repo.all(from s in Schedule, where: s.enabled), due?(s, now), {:ok, run} <- [claim(s, now)] do
+      _ = Server.Jobs.enqueue(Server.Jobs.RunSchedule.new(%{run_id: run.id}))
+      run
+    end
+  end
+
+  defp claim(s, now) do
+    Repo.transaction(fn ->
+      {n, _} =
+        Repo.update_all(
+          from(x in Schedule,
+            where: x.id == ^s.id and fragment("? IS NOT DISTINCT FROM ?", x.last_run_at, ^s.last_run_at)
+          ),
+          set: [last_run_at: now]
+        )
+
+      if n == 1, do: start_run(s, now), else: Repo.rollback(:taken)
+    end)
+  end
+
+  @doc """
+  Fire it now, whatever its calendar says; its calendar is left as it was. Queued where Oban
+  runs; on a node without it, done in a task of its own, so the run never sits at `running`.
+  `{:ok, run}`.
+  """
+  def run_now(%Schedule{} = s) do
+    run = start_run(s, DateTime.truncate(DateTime.utc_now(), :second))
+
+    with {:error, :no_oban} <- Server.Jobs.enqueue(Server.Jobs.RunSchedule.new(%{run_id: run.id})),
+         do: Task.start(fn -> perform(run.id) end)
+
+    {:ok, run}
+  end
+
+  defp start_run(s, now), do: Repo.insert!(%ScheduleRun{schedule_id: s.id, status: "running", started_at: now})
+
+  @doc """
+  Do a run's work and close it: `ok` or `failed`, the thread it landed in, a script's exit and
+  output. A schedule removed since it fired fails its run, saying so.
+  """
+  @spec perform(integer()) :: ScheduleRun.t()
+  def perform(run_id) do
+    run = Repo.get!(ScheduleRun, run_id)
+
+    result =
+      case get(run.schedule_id) do
+        nil -> %{status: "failed", output: "the schedule is gone"}
+        s -> work(s)
+      end
+
+    run
+    |> Ecto.Changeset.change(Map.put(result, :finished_at, DateTime.truncate(DateTime.utc_now(), :second)))
+    |> Repo.update!()
+  end
+
+  defp work(%Schedule{kind: "agent"} = s) do
+    with {:ok, t} <- thread_for(s),
+         :ok <- staff(t, s.agent),
+         {:ok, _} <- Channel.post(%{thread_id: t.id, author: operator(), body: s.body}) do
+      %{status: "ok", thread_id: t.id}
+    else
+      {:error, why} -> %{status: "failed", output: inspect(why)}
+    end
+  end
+
+  defp work(%Schedule{kind: "workline"} = s) do
+    attrs = %{title: dated(s), stage: "intent", workspace_id: s.workspace_id}
+
+    with {:ok, t} <- Server.open_workline(attrs),
+         {:ok, _} <- Channel.post(%{thread_id: t.id, author: operator(), body: s.body}) do
+      %{status: "ok", thread_id: t.id}
+    else
+      {:error, why} -> %{status: "failed", output: inspect(why)}
+    end
+  end
+
+  defp work(%Schedule{kind: "script"} = s) do
+    {code, out} = shell(s.body, dir_for(s))
+    tail = String.slice(out, -@output_cap, @output_cap)
+    result = %{status: if(code == 0, do: "ok", else: "failed"), exit: code, output: tail}
+
+    if s.standing do
+      {:ok, t} = thread_for(s)
+      note(t.id, "⏰ #{s.title} — exit #{code}\n```\n#{String.slice(tail, -1500, 1500)}\n```")
+      Map.put(result, :thread_id, t.id)
+    else
+      result
+    end
+  end
+
+  # a standing schedule's one thread (opened by its first firing, reopened if since closed), else
+  # a fresh thread for this firing
+  defp thread_for(%Schedule{standing: true, thread_id: tid} = s) when is_integer(tid) do
+    case Channel.reopen_if_closed(tid) do
+      :no_thread -> open_thread(s)
+      _ -> {:ok, Channel.thread(tid)}
+    end
+  end
+
+  defp thread_for(s), do: open_thread(s)
+
+  defp open_thread(s) do
+    title = if s.standing, do: s.title, else: dated(s)
+
+    with {:ok, t} <- Channel.open_thread(%{title: title, workspace_id: s.workspace_id, scope: "machine"}) do
+      if s.standing, do: {:ok, _} = update_thread(s, t.id)
+      {:ok, t}
+    end
+  end
+
+  defp update_thread(s, tid), do: s |> Ecto.Changeset.change(thread_id: tid) |> Repo.update()
+
+  defp staff(_t, nil), do: :ok
+
+  # the lead it runs with: the staffing pass spawns them onto it, and the prompt is their wake
+  defp staff(t, agent) do
+    case Channel.assign_lead(t.id, agent) do
+      {:ok, _} -> :ok
+      {:error, why} -> {:error, {:assign_lead, agent, why}}
+    end
+  end
+
+  # a script's output for the record: on the thread, but delivered at birth — it is for the
+  # operator to read, not a wake for the thread's lead
+  defp note(tid, body) do
+    %{thread_id: tid, author: "tlon", body: body}
+    |> Message.post_changeset()
+    |> Ecto.Changeset.put_change(:delivered_at, DateTime.truncate(DateTime.utc_now(), :second))
+    |> Repo.insert!()
+    |> tap(&Server.Bus.broadcast({:message_posted, &1}))
+  end
+
+  defp dir_for(%Schedule{dir: dir}) when is_binary(dir) and dir != "", do: Path.expand(dir)
+
+  defp dir_for(s) do
+    case Server.Workspaces.repos(s.workspace_id) do
+      [r | _] -> Path.expand(r.path)
+      [] -> System.user_home!()
+    end
+  end
+
+  # the command in `sh -c`, output merged, nothing on its stdin (a command that reads it ends
+  # rather than waits); one that outlives the timeout is reported as exit 124
+  defp shell(cmd, dir) do
+    task = Task.async(fn -> System.cmd("sh", ["-c", "exec </dev/null\n" <> cmd], cd: dir, stderr_to_stdout: true) end)
+
+    case Task.yield(task, @script_timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {out, code}} -> {code, out}
+      _ -> {124, "timed out after #{div(@script_timeout_ms, 60_000)} minutes"}
+    end
+  rescue
+    e -> {127, Exception.message(e)}
+  end
+
+  defp dated(s), do: "#{s.title} · #{Calendar.strftime(to_local(DateTime.utc_now()), "%b %-d %H:%M")}"
+
+  @doc "The server's local wall-clock time now, as a UTC-labelled datetime — whose year and month a calendar shows."
+  def local_now, do: to_local(DateTime.utc_now())
+
+  # local wall-clock time, carried as a UTC-labelled datetime (what Expression matches against)
+  defp to_local(%DateTime{} = utc), do: DateTime.add(utc, offset_s())
+  defp after_local(expr, utc), do: expr |> Expression.next_at(to_local(utc)) |> DateTime.add(-offset_s())
+
+  defp offset_s do
+    local = NaiveDateTime.from_erl!(:calendar.local_time())
+    utc = NaiveDateTime.from_erl!(:calendar.universal_time())
+    round(NaiveDateTime.diff(local, utc) / 60) * 60
+  end
+
+  defp operator, do: Application.get_env(:server, :operator, "andrew")
+end

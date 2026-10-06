@@ -20,17 +20,19 @@ import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } fro
 import { Reader } from "./reader"
 import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
+import { parseWhen, showWhen } from "./when"
 
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
-type Row = { segs: Seg[]; open?: () => void }
+type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
 type Cycle = { name: string; values: { label: string; value: unknown }[]; i: number }
-type Prompt = { label: string; ed: Editor; submit: (s: string, picks: unknown[]) => void; cycles?: Cycle[] }
+type Prompt = { label: string; ed: Editor; submit: (s: string, picks: unknown[]) => void; cycles?: Cycle[]; focus: number }
 /** one row of the finder: what it shows, what it is matched on, what picking it does */
 type Pick = { segs: Seg[]; text: string; run: () => void }
 
@@ -55,6 +57,8 @@ const threads = new Map<number, ThreadView>()
 let mode: Mode = { kind: "home" }, picked: number | null = null, sel = 0
 let tip = "", status = ""
 let input: Prompt | null = null
+// a card just opened: its cursor goes to the first row you can act on, once there is one
+let snapSel = false
 let confirm: { label: string; run: () => void } | null = null
 let picker: { title: string; q: Editor; items: Pick[]; sel: number } | null = null
 let reader: Reader | null = null
@@ -66,6 +70,7 @@ let roomChanged = true, imageDirty = true
 // what the open card reads, fetched when it opens and on every refresh while it stays open
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null
+let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 
 const view = () => viewOf(all, ws)
@@ -163,6 +168,8 @@ async function loadCard() {
     case "memory": shelf = await data.memory(w); break
     case "ticket": case "column": tickets = (await data.board(w)) ?? tickets; break
     case "card": card = await data.workspaceCard(w); break
+    case "calendar": cal = await data.schedules(w); break
+    case "runs": case "run": board = (await data.runs(mode.id)) ?? board; cal ??= await data.schedules(w); break
     case "tray": trayRead = feed[0]?.at ?? trayRead; writeState(TRAY, trayRead); changed(); break
   }
 }
@@ -177,7 +184,7 @@ function openThread(): number | null {
   return null
 }
 function open(m: Mode) {
-  mode = m; sel = 0; confirm = null; picker = null
+  mode = m; sel = 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") picked = m.tid
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   const tid = openThread()
@@ -215,7 +222,7 @@ function act(x: Act) {
 
 // ── writing: the inputs ─────────────────────────────────────────────────────────────────────────
 function ask(label: string, submit: Prompt["submit"], opts: { multiline?: boolean; text?: string; cycles?: Cycle[] } = {}) {
-  input = { label, ed: new Editor(opts.text ?? "", !!opts.multiline), submit, cycles: opts.cycles }
+  input = { label, ed: new Editor(opts.text ?? "", !!opts.multiline), submit, cycles: opts.cycles, focus: 0 }
   draw()
 }
 function newThread() {
@@ -288,7 +295,7 @@ const VERBS: [string, () => void][] = [
   ["health: the service and its box", () => open({ kind: "health" })], ["memory: pinned facts and habits", () => open({ kind: "memory" })],
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
   ["crew", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
-  ["inbox: everything waiting on you", () => inbox()],
+  ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
@@ -367,6 +374,43 @@ const ago = (at: string) => {
   const s = Math.max(0, (Date.now() - new Date(at).getTime()) / 1000)
   return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`
 }
+const stamp = (at: string) => {
+  const d = new Date(at), p = (n: number) => String(n).padStart(2, "0")
+  return `${d.toDateString().slice(4, 10)} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+const runGlyph = (r: { status: string }): Seg => (r.status === "ok" ? { s: "✓", fg: ROLE.live } : r.status === "failed" ? { s: "✗", fg: ROLE.alarm } : { s: "…", fg: ROLE.key })
+const KIND_OF: Record<data.ScheduleKind, string> = { agent: "agent", workline: "workline", script: "script" }
+/** a schedule as one row: on or paused, what, when, next, how the last run went */
+function scheduleSegs(s: data.Schedule): Seg[] {
+  const next = s.next_at ? (new Date(s.next_at).getTime() - Date.now() < 60_000 ? "now" : stamp(s.next_at)) : s.enabled ? "done" : "paused"
+  return [
+    { s: s.enabled ? "● " : "○ ", fg: s.enabled ? ROLE.live : ROLE.inactive }, dim(KIND_OF[s.kind].padEnd(9)), plain(s.title), dim(`  ${showWhen(s)}${s.agent ? ` · ${s.agent}` : ""}${s.standing ? " · standing" : ""}`),
+    key(`  next ${next}`), ...(s.last ? [dim("  last "), runGlyph(s.last), dim(` ${ago(s.last.at)}`)] : []),
+  ]
+}
+/** schedule something new, or change `edit`: what it does (with how), then when */
+function newSchedule(edit?: data.Schedule) {
+  if (ws === null) return
+  const w = ws, bench = view().bench
+  const kinds = [{ label: "an agent run", value: "agent" }, { label: "a workline", value: "workline" }, { label: "a script", value: "script" }]
+  const threads = [{ label: "a fresh thread each time", value: false }, { label: "one standing thread", value: true }]
+  const who = [{ label: "the workspace's lead", value: null }, ...bench.map((b) => ({ label: b.name, value: b.name }))]
+  const cycles: Cycle[] = [
+    ...(edit ? [] : [{ name: "run", values: kinds, i: 0 }]),
+    { name: "in", values: threads, i: edit?.standing ? 1 : 0 },
+    { name: "with (agent runs)", values: who, i: Math.max(0, who.findIndex((x) => x.value === (edit?.agent ?? null))) },
+  ]
+  ask(edit ? `${edit.title} — what it does` : "schedule — the prompt, the workline's first words, or the shell command", (body, picks) => {
+    if (!body.trim()) return
+    const [kind, standing, agent] = edit ? [edit.kind, ...picks] : picks
+    ask("when — a cron (0 9 * * 1-5, @daily) or a time (14:30, 2026-10-06 14:30, in 2h)", (text) => {
+      const when = parseWhen(text)
+      if (!when) { status = "a schedule needs a when"; return draw() }
+      const attrs = { body: body.trim(), standing: standing as boolean, agent: kind === "agent" ? (agent as string | null) : null, ...when }
+      void did(edit ? data.schedulePatch(edit.id, attrs) : data.scheduleNew(w, { kind: kind as data.ScheduleKind, ...attrs })).then(loadCard).then(draw)
+    }, { text: edit ? showWhen(edit) : "" })
+  }, { multiline: true, text: edit?.body, cycles })
+}
 const KIND: Record<string, string> = { message: "said", fact: "learned", issue: "raised", question: "asked", check_failed: "check failed", check_passed: "check passed", work_landed: "landed", stage_advanced: "advanced", handoff_opened: "handed off" }
 
 function detail(): { title: string; rows: Row[]; keys: string } {
@@ -439,15 +483,37 @@ function detail(): { title: string; rows: Row[]; keys: string } {
     }
     case "calendar": {
       const now = new Date(), first = new Date(now.getFullYear(), now.getMonth(), 1).getDay(), days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      const booked = new Set((cal ?? []).filter((s) => s.enabled).flatMap((s) => s.days))
       const rows: Row[] = [{ segs: [dim("  Su  Mo  Tu  We  Th  Fr  Sa")] }]
       let week: Seg[] = [plain("    ".repeat(first))]
       for (let d = 1; d <= days; d++) {
-        const cell = String(d).padStart(4)
-        week.push(d === now.getDate() ? { s: cell, fg: ROLE.attention, bold: true } : d < now.getDate() ? dim(cell) : plain(cell))
+        const cell = String(d).padStart(3) + (booked.has(d) ? "•" : " ")
+        week.push(d === now.getDate() ? { s: cell, fg: ROLE.attention, bold: true } : booked.has(d) ? key(cell) : d < now.getDate() ? dim(cell) : plain(cell))
         if ((first + d) % 7 === 0 || d === days) { rows.push({ segs: week }); week = [] }
       }
-      rows.push({ segs: [dim("nothing scheduled yet")] })
-      return { title: now.toLocaleString("en", { month: "long", year: "numeric" }).toUpperCase(), rows, keys: "esc back" }
+      if (!cal) rows.push({ segs: [dim("reading the schedule…")] })
+      else if (!cal.length) rows.push({ segs: [dim("nothing scheduled yet — n schedules an agent run, a workline or a script")] })
+      else {
+        rows.push({ segs: [key(`SCHEDULED · ${cal.length}`)] })
+        for (const s of cal) rows.push({ segs: scheduleSegs(s), open: () => open({ kind: "runs", id: s.id }), ref: s })
+      }
+      return { title: now.toLocaleString("en", { month: "long", year: "numeric" }).toUpperCase(), rows, keys: "j/k move · enter its runs · n new · e edit · space pause/resume · r run now · d delete · esc back" }
+    }
+    case "runs": {
+      const s = cal?.find((x) => x.id === (mode as { id: number }).id)
+      const rows: Row[] = board.map((r) => ({
+        segs: [runGlyph(r), dim(` ${stamp(r.started_at)} `), plain(r.status.padEnd(8)), dim(r.exit === null ? "" : `exit ${r.exit}  `), r.thread_id ? key(`→ #${r.thread_id}  `) : dim(""), dim((r.output ?? "").replace(/\s+/g, " ").slice(0, 80))],
+        open: () => (r.thread_id && !r.output ? openReader(r.thread_id, false) : open({ kind: "run", id: (mode as { id: number }).id, run: r.id })),
+        ref: r,
+      }))
+      return { title: `RUNS · ${s?.title ?? ""}`, rows: rows.length ? rows : [{ segs: [dim("it hasn't run yet — r runs it now")] }], keys: "j/k move · enter open (its thread, or its output) · r run now · esc the calendar" }
+    }
+    case "run": {
+      const r = board.find((x) => x.id === (mode as { run: number }).run)
+      if (!r) return { title: "RUN", rows: [{ segs: [dim("gone")] }], keys: "esc back" }
+      const rows: Row[] = [{ segs: [runGlyph(r), dim(` started ${stamp(r.started_at)}${r.finished_at ? `, finished ${stamp(r.finished_at)}` : ", still running"}`), ...(r.thread_id ? [key(`  → #${r.thread_id} (t reads it)`)] : [])] }]
+      for (const l of wrap(r.output ?? "(no output)", cols() - 4)) rows.push({ segs: [plain(l)] })
+      return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, keys: `j/k scroll${r.thread_id ? " · t read its thread" : ""} · esc the runs` }
     }
     case "archive": {
       if (!archived) return { title: "FILING CABINET", rows: [{ segs: [dim("opening the drawers…")] }], keys: "esc back" }
@@ -582,7 +648,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     const v = input.ed.view(colsN - 6, body - 2)
     title = input.label
     segRows = [{ segs: cyclesSegs(input) }, ...v.rows.map((r) => ({ segs: [pink(" ▌ "), plain(r)] }))]
-    keys = `enter done · alt-enter newline${input.cycles?.length ? " · tab/shift-tab choose" : ""} · esc cancel`
+    keys = `enter done · alt-enter newline${input.cycles?.length ? ` · tab change the lit choice${input.cycles.length > 1 ? " · shift-tab the next choice" : ""}` : ""} · esc cancel`
     cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
   } else {
     const d = detail()
@@ -591,6 +657,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   rows = segRows
   o += `${ESC}[${top};1H` + line([{ s: ` ${title} `, fg: ROLE.ground, bg: picker || input ? ROLE.attention : ROLE.key }, dim(" " + "─".repeat(Math.max(0, colsN - title.length - 3)))], colsN)
   const selectable = rows.some((r) => r.open) && !input
+  if (snapSel && selectable && !picker) { snapSel = false; if (!rows[sel]?.open) sel = rows.findIndex((r) => r.open) }
   if (sel >= rows.length) sel = Math.max(0, rows.length - 1)
   const first = cursor && input ? 0 : Math.max(0, Math.min(sel - Math.floor((body - 1) / 2), rows.length - (body - 1)))
   for (let i = 0; i < body - 1; i++) {
@@ -608,7 +675,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   else if (cursor) o += `${ESC}[${top};${cursor.c + 1}H${ESC}[?25h`
   return o
 }
-const cyclesSegs = (i: Prompt): Seg[] => (i.cycles ?? []).flatMap((c) => [dim(`${c.name} `), key(`‹${c.values[c.i]!.label}› `)])
+const cyclesSegs = (i: Prompt): Seg[] => (i.cycles ?? []).flatMap((c, n) => [dim(`${c.name} `), n === i.focus && (i.cycles?.length ?? 0) > 1 ? { s: `‹${c.values[c.i]!.label}› `, fg: ROLE.ground, bg: ROLE.key } : key(`‹${c.values[c.i]!.label}› `)])
 
 /** the finder or a confirm over the reader: drawn in the bottom rows, the conversation above */
 function drawOverlay(colsN: number, termRows: number): string {
@@ -624,8 +691,8 @@ function inputKey(k: string) {
   if (k === "esc") { input = null; return draw() }
   if (k === "enter") { input = null; i.submit(i.ed.text, (i.cycles ?? []).map((c) => c.values[c.i]!.value)); return draw() }
   if ((k === "tab" || k === "backtab") && i.cycles?.length) {
-    const c = i.cycles[k === "tab" ? 0 : i.cycles.length - 1]!
-    c.i = (c.i + 1) % c.values.length
+    if (k === "backtab") i.focus = (i.focus + 1) % i.cycles.length
+    else { const c = i.cycles[i.focus]!; c.i = (c.i + 1) % c.values.length }
     return draw()
   }
   i.ed.key(k)
@@ -683,6 +750,27 @@ function cardKey(k: string): boolean {
       return false
     }
     case "notes": if (k === "n") { newNote(); return true } return false
+    case "calendar": {
+      const s = rows[sel]?.ref as data.Schedule | undefined
+      if (k === "n") { newSchedule(); return true }
+      if (!s) return false
+      if (k === "e") { newSchedule(s); return true }
+      if (k === " ") { void did(data.schedulePatch(s.id, { enabled: !s.enabled })).then(loadCard).then(draw); return true }
+      if (k === "r") { void did(data.scheduleRun(s.id)).then(loadCard).then(draw); return true }
+      if (k === "d") { confirm = { label: `remove "${s.title}" and its runs`, run: () => void did(data.scheduleDelete(s.id)).then(loadCard).then(draw) }; draw(); return true }
+      return false
+    }
+    case "runs": {
+      if (k === "esc") { open({ kind: "calendar" }); return true }
+      if (k === "r") { const id = mode.id; void did(data.scheduleRun(id)).then(loadCard).then(draw); return true }
+      return false
+    }
+    case "run": {
+      const r = board.find((x) => x.id === (mode as { run: number }).run)
+      if (k === "esc") { open({ kind: "runs", id: mode.id }); return true }
+      if (k === "t" && r?.thread_id) { openReader(r.thread_id, false); return true }
+      return false
+    }
     case "memory": {
       if (!shelf) return false
       const h = shelf.habits[sel - 2], f = shelf.pinned[sel - 3 - shelf.habits.length]
@@ -741,8 +829,8 @@ function onKey(k: string) {
       const i = mode.kind === "person" ? crew.findIndex((c) => c.name === (mode as { name: string }).name) : -1
       return open({ kind: "person", name: crew[(i + (k === "tab" ? 1 : -1) + crew.length) % crew.length]!.name })
     }
-    case "j": case "down": sel = Math.min(sel + 1, rows.length - 1); return draw()
-    case "k": case "up": sel = Math.max(sel - 1, 0); return draw()
+    case "j": case "down": snapSel = false; sel = Math.min(sel + 1, rows.length - 1); return draw()
+    case "k": case "up": snapSel = false; sel = Math.max(sel - 1, 0); return draw()
     case "left": case "right":
       if (mode.kind === "column") return open({ kind: "column", col: (mode.col + (k === "right" ? 1 : COLS.length - 1)) % COLS.length })
       return

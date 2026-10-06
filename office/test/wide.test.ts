@@ -51,6 +51,12 @@ describe("the wide room", () => {
     expect(busy.get("rack")).toContain("disk 95% full")
   })
 
+  test("the wall calendar counts the days still to come with something scheduled", () => {
+    const tip = (calendar: Record<string, number[]>) => new WideRoom(560).render(viewOf({ ...office(1), calendar }, 1), focus, measure, new Date(2026, 9, 10, 12, 0)).hits.find((h) => h.act.kind === "calendar")!.tip
+    expect(tip({ "1": [2, 9, 16, 23, 30], "2": [11, 12] })).toContain("something scheduled on 3 day(s) still to come")
+    expect(tip({})).not.toContain("scheduled")
+  })
+
   test("a full office of ten seats everyone, each at their own place", () => {
     const room = new WideRoom(560), a = viewOf(office(8), 1)
     for (let i = 0; i < 400; i++) room.step(a)

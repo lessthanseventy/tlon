@@ -263,7 +263,7 @@ export class WideRoom extends Sim<Layout> {
 
     // ── the back wall ──
     px(0, 0, W, BAND - 1, ROLE.edge); px(0, BAND - 1, W, 1, ROLE.structure)
-    this.calendar(sc, 4, now)
+    this.calendar(sc, 4, now, Object.values(a.calendar).flat())
     this.whiteboard(sc, a, measure, 62, F1 - 64)
     this.corkboard(sc, a, F1 - 58)
     this.windows(sc, M0 + 4, L0 + 30, now)
@@ -454,8 +454,8 @@ export class WideRoom extends Sim<Layout> {
     sc.overhead.push(() => sc.text(["!#@%", "%@!#", "#!%@"][f % 3]!, mx, my - 9, ROLE.alarm, 11))
   }
 
-  /** the wall calendar: this month, today ringed */
-  private calendar(sc: Scene, x0: number, now: Date) {
+  /** the wall calendar: this month, today ringed, a day with something scheduled lit (a dot under it) */
+  private calendar(sc: Scene, x0: number, now: Date, booked: number[]) {
     const px = sc.px.bind(sc)
     px(x0, 3, 52, 38, ROLE.structure); px(x0 + 1, 4, 50, 36, ROLE.prose); px(x0 + 1, 4, 50, 7, ROLE.alarm)
     px(x0 + 12, 2, 2, 3, ROLE.inactive); px(x0 + 38, 2, 2, 3, ROLE.inactive)
@@ -463,9 +463,12 @@ export class WideRoom extends Sim<Layout> {
     const first = new Date(now.getFullYear(), now.getMonth(), 1).getDay(), days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
     for (let d = 1; d <= days; d++) {
       const i = first + d - 1, x = x0 + 3 + (i % 7) * 7, y = 13 + Math.floor(i / 7) * 5
-      px(x, y, 6, 4, d === now.getDate() ? ROLE.attention : d < now.getDate() ? tint(ROLE.prose, ROLE.ground, 0.75) : ROLE.raised)
+      const on = booked.includes(d)
+      px(x, y, 6, 4, d === now.getDate() ? ROLE.attention : on ? ROLE.key : d < now.getDate() ? tint(ROLE.prose, ROLE.ground, 0.75) : ROLE.raised)
+      if (on) px(x + 2, y + 3, 2, 1, ROLE.edge)
     }
-    sc.hits.push({ x: x0, y: 3, w: 52, h: 38, tip: `${now.toDateString()} — the calendar`, act: { kind: "calendar" } })
+    const ahead = booked.filter((d) => d >= now.getDate()).length
+    sc.hits.push({ x: x0, y: 3, w: 52, h: 38, tip: `${now.toDateString()} — the calendar${ahead ? `: something scheduled on ${ahead} day(s) still to come` : ""}`, act: { kind: "calendar" } })
   }
 
   /** the whiteboard: the worklines by stage, each one a readable line in its coworker's colour */

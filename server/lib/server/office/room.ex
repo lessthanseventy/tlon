@@ -1,9 +1,10 @@
 defmodule Server.Office.Room do
   @moduledoc """
-  The reads behind the office's things you open: the in-tray on your desk (`activity/1`, what just
-  happened in a workspace), the beacon (`triage/1`, what is stuck), the server rack (`health/0`), the
-  bookshelf (`memory/1`, pinned facts and habits to review), the ticket board (`tickets/1`, every
-  column), and the history the finder searches (`history/0`). Plain maps, JSON-ready, served under
+  The reads behind the office's things you open: the in-tray (`activity/1`, what just happened in
+  a workspace), the beacon (`triage/1`, what is stuck), the server rack (`health/0`), memory
+  (`memory/1`, pinned facts and habits to review), the ticket board (`tickets/1`, every column), a
+  workspace's settings (`workspace/1`), the wall calendar (`schedules/2`, `calendar/1`, `runs/1`),
+  and the history the finder searches (`history/0`). Plain maps, JSON-ready, served under
   `GET /api/office/*` (`Server.MCP.OperatorAPI`).
   """
 
@@ -17,6 +18,7 @@ defmodule Server.Office.Room do
   alias Server.Message
   alias Server.Question
   alias Server.Repo
+  alias Server.Schedules
   alias Server.Thread
   alias Server.Tickets
 
@@ -254,6 +256,59 @@ defmodule Server.Office.Room do
         repos: for(r <- Server.Workspaces.repos(w.id), do: %{id: r.id, path: r.path, remote: r.remote})
       }
     end
+  end
+
+  @doc """
+  A workspace's schedules for the wall calendar's card: what each runs and when — `next_at`, the
+  days of `{year, month}` (default: this local month) it fires on — and how its last run went.
+  """
+  @spec schedules(integer(), {integer(), integer()} | nil) :: [map()]
+  def schedules(workspace_id, month \\ nil) do
+    {y, m} = month || this_month()
+    list = Schedules.in_workspace(workspace_id)
+    last = last_runs(Enum.map(list, & &1.id))
+
+    for s <- list do
+      s
+      |> Map.take([:id, :kind, :title, :body, :cron, :at, :agent, :standing, :thread_id, :dir, :enabled])
+      |> Map.merge(%{next_at: Schedules.next_at(s), days: Schedules.days(s, y, m), last: last[s.id]})
+    end
+  end
+
+  @doc "The days of this local month on which each workspace has something scheduled, by workspace id."
+  @spec calendar([integer()]) :: %{integer() => [integer()]}
+  def calendar(ws_ids) do
+    {y, m} = this_month()
+    on = Repo.all(from s in Server.Schedule, where: s.workspace_id in ^ws_ids and s.enabled)
+    by_ws = Enum.group_by(on, & &1.workspace_id)
+
+    Map.new(ws_ids, fn ws ->
+      {ws, by_ws |> Map.get(ws, []) |> Enum.flat_map(&Schedules.days(&1, y, m)) |> Enum.uniq() |> Enum.sort()}
+    end)
+  end
+
+  @doc "A schedule's recent runs, newest first: the automation board."
+  @spec runs(integer()) :: [map()]
+  def runs(schedule_id),
+    do:
+      for(
+        r <- Schedules.runs(schedule_id),
+        do: Map.take(r, [:id, :status, :exit, :output, :thread_id, :started_at, :finished_at])
+      )
+
+  defp this_month do
+    t = Schedules.local_now()
+    {t.year, t.month}
+  end
+
+  defp last_runs(ids) do
+    from(r in Server.ScheduleRun,
+      where: r.schedule_id in ^ids,
+      distinct: r.schedule_id,
+      order_by: [asc: r.schedule_id, desc: r.id]
+    )
+    |> Repo.all()
+    |> Map.new(&{&1.schedule_id, %{status: &1.status, exit: &1.exit, at: &1.started_at, thread_id: &1.thread_id}})
   end
 
   @doc "Every closed thread, any workspace, newest first — what the finder searches beside the open ones."

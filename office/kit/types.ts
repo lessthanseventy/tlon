@@ -39,9 +39,11 @@ export type Agents = {
   triage: Record<string, number>
   /** the service's health: `warn` with the problems named */
   health: { state: "ok" | "warn"; problems: string[] } | null
+  /** the days this month each workspace has something scheduled, by id (the wall calendar) */
+  calendar: Record<string, number[]>
   note?: string
 }
 /** a thread for a close look: a page of its messages (`more`: older ones remain), and what its worker's pane shows now */
 export type ThreadView = { messages: { id: number; author: string; body: string; at: string; kind: string }[]; more?: boolean; peek: string | null; window: string | null }
 
-export const EMPTY: Agents = { ok: false, roster: [], threads: [], counts: {}, awaiting: 0, bench: [], projects: [], tickets: [], workspaces: [], archetypes: [], models: [], notes: [], visits: [], triage: {}, health: null }
+export const EMPTY: Agents = { ok: false, roster: [], threads: [], counts: {}, awaiting: 0, bench: [], projects: [], tickets: [], workspaces: [], archetypes: [], models: [], notes: [], visits: [], triage: {}, health: null, calendar: {} }

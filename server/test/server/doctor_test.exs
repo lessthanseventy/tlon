@@ -23,6 +23,8 @@ defmodule Server.DoctorTest do
                "playbook",
                "project",
                "question",
+               "schedule",
+               "schedule_run",
                "session",
                "thread",
                "ticket",
