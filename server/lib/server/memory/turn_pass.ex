@@ -85,13 +85,11 @@ defmodule Server.Memory.TurnPass do
     end
   end
 
-  # Machine-authored process text (stage briefs, gate notices, nags) is NOT conversation:
-  # extracting it would bank the server's own playbook back into the dossier as fake decisions.
-  @machine_authors ~w(tlon console)
-
+  # `tlon` writes process text (stage briefs, gate notices, nags), not conversation: extracting it
+  # would bank the server's own playbook back into the dossier as fake decisions.
   defp new_messages(tid, last_id) do
     from(m in Message,
-      where: m.thread_id == ^tid and m.id > ^last_id and m.author not in ^@machine_authors,
+      where: m.thread_id == ^tid and m.id > ^last_id and m.author != "tlon",
       order_by: [desc: m.id],
       limit: @window
     )

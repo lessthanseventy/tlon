@@ -675,8 +675,8 @@ defmodule Server.Profiles do
 
   defp policy_for(workspace_id, name) do
     with %Server.Coworker{agent_id: agent_id} <-
-           workspace_id |> workspaces().bench() |> Enum.find(&(&1.name == name)),
-         %Server.Policy{} = p <- workspaces().policy(workspace_id, agent_id) do
+           workspace_id |> Server.Workspaces.bench() |> Enum.find(&(&1.name == name)),
+         %Server.Policy{} = p <- Server.Workspaces.policy(workspace_id, agent_id) do
       %{model: p.model && atomize_model(p.model), yolo: yolo_of(p.ask_default)}
     else
       _ -> %{}
@@ -684,9 +684,6 @@ defmodule Server.Profiles do
   rescue
     _ -> %{}
   end
-
-  # The workspaces context to read policy through (`:profiles_workspaces` swaps it).
-  defp workspaces, do: Application.get_env(:server, :profiles_workspaces, Server.Workspaces)
 
   defp yolo_of("allow"), do: true
   defp yolo_of("ask"), do: false
