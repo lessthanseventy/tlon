@@ -10,7 +10,7 @@ import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, COLS, crewOf, needsYou, viewOf, type Act } from "../kit/crew"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
-import { EMPTY, type Agents, type Coworker, type Thread, type ThreadView } from "../kit/types"
+import { EMPTY, type Agents, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
@@ -69,6 +69,8 @@ let roomChanged = true, imageDirty = true
 
 // what the open card reads, fetched when it opens and on every refresh while it stays open
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
+/** the office corkboard: the crew's chatter to each other, newest first */
+let cork: CorkNote[] = []
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
 let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
@@ -149,6 +151,8 @@ const heard = new Set<string>()
 async function chatter() {
   if (ws === null) return
   room().hear(await data.pets(ws))
+  cork = await data.corkboard(ws)
+  room().pinboard(cork)
   for (const b of await data.banter(ws)) {
     const k = `${b.at} ${b.agent}`
     if (heard.has(k)) continue
@@ -596,8 +600,17 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
       for (const t of archived.threads) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${t.stage ?? ""} ${day(t.at)}`)], open: () => openReader(t.id, false) })
       return { title: "FILING CABINET", rows, actions: [back1] }
     }
-    case "notes":
-      return { title: `NOTES · ${a.notes.length}`, rows: a.notes.map((n) => ({ segs: [{ s: `${n.author}: `, fg: shirtOf(a.bench.find((b) => b.name === n.author)?.archetype) }, plain(n.body.replace(/\s+/g, " "))] })), actions: [{ key: "n", label: "pin a note", run: newNote }, back1] }
+    case "notes": {
+      const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
+      const rows: Row[] = a.notes.map((n) => ({ segs: [who(n.author), plain(n.body.replace(/\s+/g, " "))] }))
+      // the crew's chatter, apart from the notes they work from; a suggestion can be filed as a ticket
+      if (cork.length) rows.push({ segs: [key(`CORKBOARD · ${cork.length} — the crew's notes to each other`)] }, ...cork.map((n): Row => ({ segs: [dim(`${n.kind.padEnd(10)} `), who(n.author), plain(n.body), dim(n.re ? `  (re #${n.re})` : "")], ref: n })))
+      const picked = rows[sel]?.ref as CorkNote | undefined
+      return {
+        title: `NOTES · ${a.notes.length}`, rows,
+        actions: [{ key: "n", label: "pin a note", run: newNote }, ...(picked?.kind === "suggestion" && ws !== null ? [{ key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(ws!, picked.body)) }] : []), back1],
+      }
+    }
     case "tray": {
       const rows = feed.map((x): Row => ({
         segs: [dim(ago(x.at).padStart(4) + " "), x.thread_id ? key(`#${x.thread_id} `) : dim(""), { s: `${x.who ?? ""} ${KIND[x.kind] ?? x.kind.replace(/_/g, " ")} `, fg: x.kind === "issue" || x.kind === "check_failed" ? ROLE.alarm : x.kind === "question" ? ROLE.attention : ROLE.inactive }, plain(x.text.replace(/\s+/g, " "))],

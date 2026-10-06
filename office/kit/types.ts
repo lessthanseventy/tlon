@@ -18,6 +18,8 @@ export type ModelChoice = ModelSpec & { key: string; harness: string }
 export type Note = { id: number; author: string; body: string; workspace_id: number | null; at: string }
 /** a consult in the last few minutes: `from` asked `to` something */
 export type Visit = { from: string; to: string; workspace_id: number; at: string }
+/** a note on the office corkboard (`Server.Office.Corkboard`): chatter, not working notes; `re` the note it answers */
+export type CorkNote = { id: number; author: string; kind: "encourage" | "tease" | "joke" | "comment" | "suggestion" | "reply"; body: string; re: number | null; at: number }
 /** a filed ticket nobody has started yet */
 export type Ticket = { id: number; workspace_id: number; project_id: number | null; title: string; priority: string; routed?: boolean }
 export type Agents = {

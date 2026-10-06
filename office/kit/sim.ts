@@ -5,7 +5,7 @@
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { needsYou } from "./crew"
 import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
-import type { Agents, Seat } from "./types"
+import type { Agents, CorkNote, Seat } from "./types"
 import { NINA, pick, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
@@ -42,6 +42,8 @@ export const FUSS = 36
 /** Nina's places in a room: her nap, your desk, her yarn, her litter, her tower's two perches, the lounge */
 export type CatPlan = {
   nap: Pt; desk: Pt; play: Pt; litter: Pt; perches: [Pt, Pt]; lounge: Pt[]; spots: Pt[]
+  /** somewhere warm she makes for when it's cold out (a radiator), if the room has one */
+  warm?: Pt
   /** the floor below a spot up off it (a desk, a perch, the litter box), or null */
   via(p: Pt): Pt | null
   /** the waypoints between two of her places — a door when they are in different rooms */
@@ -82,7 +84,10 @@ const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade",
 /** what someone at a pastime says now and then (over their head): a nap on the couch is a "z" */
 const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], darts: ["!", "?"], read: ["…", "?", "♥"] }
 /** how the hour pulls at a pastime: coffee in the morning, the machine at lunch, the windows and the couch at night */
-function moment(kind: string, hour: number) {
+function moment(kind: string, hour: number, weather?: string) {
+  // the weather out the window pulls first: in for the couch and a book when it pours, out to the glass when it snows
+  if (weather === "rain" || weather === "storm") return kind === "couch" || kind === "read" ? 3 : kind === "window" || kind === "arcade" ? 2 : 1
+  if (weather === "snow") return kind === "window" ? 4 : kind === "coffee" ? 2 : 1
   if (hour >= 20 || hour < 6) return kind === "window" ? 4 : kind === "couch" || kind === "read" ? 2 : 1
   if (hour >= 7 && hour < 10) return kind === "coffee" ? 4 : 1
   if (hour >= 12 && hour < 14) return kind === "vending" ? 4 : kind === "chat" ? 2 : 1
@@ -103,6 +108,12 @@ export class Sim<L extends { people: Seat[] }> {
   private leads = new Map<number, string>()
   private fived = new Set<string>()
   protected party: Party | null = null
+  /** the weather outside, from the snapshot: it pulls at what people do, and Nina wants warm when it's cold */
+  protected weather: Agents["weather"] = null
+  /** the office corkboard's notes (`pinboard`), and notes on their way up: an author walks to the board and reads theirs out */
+  protected cork: CorkNote[] = []
+  private pins = new Map<string, { text: string; until: number }>()
+  private corkSeen = false
   /** what the server's model wrote for each pet, by occasion (`hear`), and the lines already said */
   private voices: Record<string, Record<string, string[]>> = {}
   private spoken = new Set<string>()
@@ -117,6 +128,17 @@ export class Sim<L extends { people: Seat[] }> {
     c.purr = this.tick + 30; c.byYou = false
     if (c.mode === "sleep") { c.mode = "sit"; c.until = this.tick + 150; c.stretch = this.tick + 12 }
     this.catSay(this.line("Nina", "pet", NINA.pet))
+  }
+  /**
+   * The corkboard as the server has it (`GET /api/office/corkboard/:ws`): a note not seen before
+   * sends its author up to the board to pin it, reading it out when they get there. The first
+   * look is the board as it stands, not a rush of everyone pinning at once.
+   */
+  pinboard(notes: CorkNote[]) {
+    const seen = new Set(this.cork.map((n) => n.id))
+    if (this.corkSeen) for (const n of notes) if (!seen.has(n.id)) this.pins.set(n.author, { text: n.body, until: this.tick + 600 })
+    this.cork = notes
+    this.corkSeen = true
   }
   /** the pets' lines, fresh from the server (`GET /api/office/pets/:ws`) */
   hear(voices: Record<string, Record<string, string[]>>) { this.voices = voices }
@@ -192,7 +214,9 @@ export class Sim<L extends { people: Seat[] }> {
     const r = Math.random()
     const leaps = r < 0.05 && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
     if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(Math.random() * 60); return true }
-    const to = company && r < 0.3 ? pick(p.lounge)
+    const cold = (this.weather?.temp_c ?? 20) < 10
+    const to = cold && p.warm && r < 0.35 ? p.warm
+      : company && r < 0.3 ? pick(p.lounge)
       : r < 0.45 ? p.nap : r < 0.55 ? p.desk : r < 0.7 ? pick(p.perches)
         : r < 0.8 ? p.play : r < 0.85 ? p.litter : pick(p.spots)
     const down = p.via(c), up = p.via(to)
@@ -255,6 +279,7 @@ export class Sim<L extends { people: Seat[] }> {
    */
   step(a: Agents): boolean {
     this.tick++
+    this.weather = a.weather ?? this.weather
     let changed = this.changed || this.tick % 4 === 0
     this.changed = false
     for (const [k, v] of this.talk) if (this.tick > v.until) { this.talk.delete(k); changed = true }
@@ -274,6 +299,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (a.ok && gone.length && gone.length <= 2) for (const [, who] of gone) { const x = this.find(who); if (x) this.ship(x) }
     if (a.ok) this.leads = leads
     if (this.party && this.tick > this.party.until) this.party = null
+    for (const [who, pin] of this.pins) if (this.tick > pin.until) this.pins.delete(who)
     const live = new Set(l.people.map(keyOf))
     for (const r of l.people) {
       const k = keyOf(r)
@@ -307,7 +333,7 @@ export class Sim<L extends { people: Seat[] }> {
       if (actor.leaving) goal = plan.exit
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
       else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
-      else if (writing.has(actor.seat.agent)) goal = plan.pen
+      else if (writing.has(actor.seat.agent) || this.pins.has(actor.seat.agent)) goal = plan.pen
       else if ((actor.seat.thinking || this.tick < actor.stretch) && home) goal = home
       else if (actor.seat.warm && this.plan.oncall?.length) goal = this.oncallGoal(actor, held, l)
       else goal = this.idleGoal(actor, held, l)
@@ -329,6 +355,9 @@ export class Sim<L extends { people: Seat[] }> {
       else if (goal.kind === "visit" || goal.kind === "note") {
         // arrived: the two of them talk, or the pen moves
         const e = goal.kind === "note" ? "✎" : "~"
+        // a corkboard note: pinned, and read out
+        const pin = goal.kind === "note" ? this.pins.get(actor.seat.agent) : undefined
+        if (pin) { this.pins.delete(actor.seat.agent); this.say(actor.seat.agent, pin.text) }
         if (actor.emote !== e) { actor.emote = e; changed = true }
         actor.emoteUntil = this.tick + 5
         const h = goal.kind === "visit" ? this.find(visiting.get(actor.seat.agent)!) : undefined
@@ -401,7 +430,7 @@ export class Sim<L extends { people: Seat[] }> {
     const waiting = free.filter((s) => s.with && held.has(spotKey({ ...s, ...s.with })))
     if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
     // their favourite pulls three times as hard, and the hour has its say
-    const hour = new Date().getHours(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour)
+    const hour = new Date().getHours(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind)
     let roll = Math.random() * free.reduce((n, s) => n + weight(s), 0)
     return free.find((s) => (roll -= weight(s)) < 0) ?? this.plan.roam(l)
   }
