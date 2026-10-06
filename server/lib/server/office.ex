@@ -48,6 +48,7 @@ defmodule Server.Office do
       awaiting: awaiting(prompts),
       triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
       health: Map.take(Room.health(), [:state, :problems]),
+      weather: Server.Office.Weather.now(),
       calendar: Room.calendar(ws_ids)
     }
   end
