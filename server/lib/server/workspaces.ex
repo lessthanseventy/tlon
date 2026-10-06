@@ -81,7 +81,8 @@ defmodule Server.Workspaces do
   end
 
   @doc """
-  Remove a workspace. Its threads are rehoused in the oldest remaining workspace first —
+  Remove a workspace. Its threads, tickets and projects are rehoused in the oldest remaining
+  workspace first (a project the heir already has by name merges into it) —
   a remove must never orphan a thread's `workspace_id` (the pre-integrity version did,
   and the dangling refs surfaced as phantom workspaces). The last workspace is refused
   (`{:error, :last_workspace}`): threads always have a home.
@@ -108,12 +109,31 @@ defmodule Server.Workspaces do
     )
 
     Repo.delete_all(from(c in Server.ChannelRow, where: c.workspace_id == ^workspace.id))
+    Repo.update_all(from(t in Server.Ticket, where: t.workspace_id == ^workspace.id), set: [workspace_id: heir.id])
+    rehouse_projects(workspace, heir)
 
     # A delete refusal must roll the rehousing back with it — without this, a future
     # table gaining a workspace FK would silently move threads while the workspace survives.
     case Repo.delete(workspace) do
       {:ok, removed} -> removed
       {:error, changeset} -> Repo.rollback(changeset)
+    end
+  end
+
+  # a project name is unique within a workspace: one the heir already has merges into the heir's
+  # (its threads and tickets repointed, the row gone); any other moves across as it is
+  defp rehouse_projects(workspace, heir) do
+    for p <- Repo.all(from(p in Server.Project, where: p.workspace_id == ^workspace.id)) do
+      case Repo.get_by(Server.Project, workspace_id: heir.id, name: p.name) do
+        nil ->
+          Repo.update_all(from(x in Server.Project, where: x.id == ^p.id), set: [workspace_id: heir.id])
+
+        same ->
+          Repo.update_all(from(t in Server.Thread, where: t.project_id == ^p.id), set: [project_id: same.id])
+          Repo.update_all(from(t in Server.Ticket, where: t.project_id == ^p.id), set: [project_id: same.id])
+          Repo.update_all(from(w in Workspace, where: w.default_project_id == ^p.id), set: [default_project_id: nil])
+          Repo.delete_all(from(x in Server.Project, where: x.id == ^p.id))
+      end
     end
   end
 

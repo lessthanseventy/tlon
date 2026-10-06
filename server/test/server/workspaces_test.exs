@@ -80,6 +80,25 @@ defmodule Server.WorkspacesTest do
       assert_receive {:workspace_removed, %Workspace{}}
     end
 
+    test "its tickets move to the heir, and its projects too — one the heir has by name merges into the heir's" do
+      {:ok, keep} = Workspaces.register(%{name: "keep"})
+      {:ok, doomed} = Workspaces.register(%{name: "doomed"})
+      {:ok, kept} = Server.Projects.register(%{workspace_id: keep.id, name: "general"})
+      {:ok, twin} = Server.Projects.register(%{workspace_id: doomed.id, name: "general"})
+      {:ok, own} = Server.Projects.register(%{workspace_id: doomed.id, name: "smoke"})
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: doomed.id, title: "t", project_id: twin.id})
+      {:ok, thread} = Server.Channel.open_thread(%{title: "tenant", workspace_id: doomed.id})
+      thread |> Ecto.Changeset.change(project_id: twin.id) |> Server.Repo.update!()
+
+      assert {:ok, _} = Workspaces.remove(doomed)
+
+      assert %{workspace_id: ws, project_id: pid} = Server.Repo.get(Server.Ticket, ticket.id)
+      assert {ws, pid} == {keep.id, kept.id}
+      assert Server.Repo.get(Server.Thread, thread.id).project_id == kept.id
+      assert Server.Projects.get(twin.id) == nil
+      assert Server.Projects.get(own.id).workspace_id == keep.id
+    end
+
     test "the last workspace is refused — threads must always have a home" do
       {:ok, only} = Workspaces.register(%{name: "only"})
 
