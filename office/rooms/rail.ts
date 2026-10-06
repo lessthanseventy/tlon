@@ -4,7 +4,7 @@
 // right edge, so nobody needs a path finder. Its life is the kit's Sim; this file is its plan and
 // its drawing.
 import type { Frame, Measure } from "../kit/canvas"
-import { drawActors, drawCat, Scene, type Focus } from "../kit/draw"
+import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
 import { boardColumns, COLS, isManager, needsYou, peopleOf, tipOf, type Act } from "../kit/crew"
 import { ROLE, tint } from "../kit/palette"
@@ -295,6 +295,8 @@ export class RailRoom extends Sim<Layout> {
 
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")
     drawActors(sc, this.actors.values(), this.talk, a, focus)
+    const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
+    if (shipper) drawParty(sc, shipper.x, shipper.y, this.party!.until - this.tick)
     if (queued.length > this.plan.queue.length) sc.overhead.push(() => text(`+${queued.length - this.plan.queue.length + 1}`, 104, 82, ROLE.attention))
 
     {

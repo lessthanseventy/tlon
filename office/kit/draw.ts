@@ -99,6 +99,10 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
         if (kind === "arcade") { sc.px(left + 2 + (sc.tick % 2), top + 11, 2, 1, ROLE.prose); sc.px(left + 8, top + 11 - (f % 2), 2, 1, ROLE.prose) }
         else if (kind === "pingpong") { const r = actor.face === "right", sw = (sc.tick % 8) < 4 ? 0 : 2; sc.px(r ? left + 12 : left - 2, top + 8 + sw, 2, 3, ROLE.alarm) }
         else if (kind === "plant") { sc.px(left - 4, top + 10, 4, 3, ROLE.key); sc.px(left - 6, top + 10, 2, 1, ROLE.key); sc.px(left - 7, top + 12 + (f % 3) * 2, 1, 1, ROLE.key) }
+      } else if (sitting && actor.spot.kind === "read") {
+        // a book open in their lap, a page turning over now and then
+        sc.px(left + 2, top + 10, 8, 3, ROLE.prose); sc.px(left + 6, top + 10, 1, 3, ROLE.structure)
+        if (f % 6 === 0) sc.px(left + 6, top + 8, 3, 2, ROLE.prose)
       } else if (stretching) {
         // arms up over their head, and down again
         const lift = f % 2
@@ -108,6 +112,8 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
         sc.px(left + 9, top + lift, 2, 1, ROLE.prose)
       }
     })
+    if (actor.snack > sc.tick && !sitting) sc.item(actor.y + 0.6, () => sc.px(left + 10, top + 12 - ((sc.tick >> 3) % 4 === 0 ? 2 : 0), 2, 2, ROLE.alarm)) // a snack, a bite now and then
+    if (sc.tick < actor.five) sc.item(actor.y + 0.6, () => { sc.px(left + 11, top + 1, 1, 10, ROLE.prose); sc.px(left + 10, top, 3, 2, ROLE.prose) }) // a hand up for the high-five
     const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null
     sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : 20, tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : actor.spot.kind === "laptop" ? "on call, at a laptop in the meeting room" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
     const said = talk.get(seat.agent)
@@ -200,4 +206,16 @@ export function drawFuss(sc: Scene, fuss: Fussing, box: { x: number; y: number; 
     sc.px(tx, ty, 2, 2, ROLE.structure)
   } else if (f % 2) sc.px(head.x + 4, head.y + 5, 1, 1, ROLE.structure) // crumbs
   if (t > 4 && f % 3 !== 2) sc.blit(GLYPH["♥"]!, box.x + (t % 2 ? 1 : box.w - 5), box.y - 6 - (t % 8), { k: ROLE.attention })
+}
+
+/** a thread shipped: confetti bursting over whoever led it and drifting down, `left` ticks of it to go */
+export function drawParty(sc: Scene, x: number, y: number, left: number) {
+  const t = 60 - left, colours = [ROLE.attention, ROLE.body, ROLE.key, ROLE.live, ROLE.assistant]
+  sc.overhead.push(() => {
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2 + i, burst = Math.min(t, 10) * (1 + (i % 3)) * 0.6
+      const px = x + Math.round(Math.cos(a) * burst + Math.sin((t + i) / 3) * 2), py = y - 24 + Math.round(Math.sin(a) * burst * 0.5 + Math.max(0, t - 10) * 0.6)
+      sc.px(px, py, i % 2 ? 1 : 2, 1, colours[i % colours.length]!)
+    }
+  })
 }
