@@ -105,7 +105,8 @@ defmodule Server.Office.Pets do
 
     For EACH occasion below write 3 different lines, each under 60 characters, in character and
     funny; vary them. Where a line is about a coworker, write {name} for them, or use the names
-    above. No emoji, never cruel. Respond with ONLY a JSON object:
+    above; a coworker is "they", never "he" or "she". No emoji, never cruel. Respond with ONLY a
+    JSON object:
     {"lines": {"<occasion>": ["...", "...", "..."], ...}}
     OCCASIONS:
     #{asks}
