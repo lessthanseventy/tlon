@@ -196,3 +196,7 @@ run = "scripts/manual-gen.sh"
 ["manual:check"]
 description = "manual: fail if the generated task manual drifts from its source (run manual:gen)"
 run = "scripts/manual-gen.sh --check"
+
+["check:main"]
+description = "the whole gate on origin/main in a throwaway worktree (own test db) — main's health, whatever this checkout has out; the nightly schedule runs it"
+run = "scripts/check-main.sh"
