@@ -41,7 +41,7 @@ defmodule Server.OfficeTest do
       assert %{thinking: []} = Enum.find(Office.status().threads, &(&1.id == t.id))
     end
 
-    test "a seat mid-turn carries what it is doing and since when", %{ws: ws} do
+    test "a seat mid-turn carries what it is doing", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "busy", workspace_id: ws.id})
       {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "m", engine: "pi"})
       {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
@@ -49,11 +49,10 @@ defmodule Server.OfficeTest do
       :ok = Server.Presence.Thinking.doing(t.id, "hronir", "search")
       on_exit(fn -> Server.Presence.Thinking.idle(t.id, "hronir") end)
 
-      assert %{thinking: true, doing: "search", since: %DateTime{}} =
-               Enum.find(Office.status().roster, &(&1.agent == "hronir"))
+      assert %{thinking: true, doing: "search"} = Enum.find(Office.status().roster, &(&1.agent == "hronir"))
 
       :ok = Server.Presence.Thinking.idle(t.id, "hronir")
-      assert %{thinking: false, doing: nil, since: nil} = Enum.find(Office.status().roster, &(&1.agent == "hronir"))
+      assert %{thinking: false, doing: nil} = Enum.find(Office.status().roster, &(&1.agent == "hronir"))
     end
 
     test "carries each workspace's triage count and the service's health", %{ws: ws} do

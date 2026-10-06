@@ -182,8 +182,7 @@ defmodule Server.Office do
         archetype: seat && seat.archetype,
         lead: !!(seat && seat.lead?),
         thinking: turn != nil,
-        doing: turn && turn.doing,
-        since: turn && turn.started_at
+        doing: turn && turn.doing
       }
     end)
   end
