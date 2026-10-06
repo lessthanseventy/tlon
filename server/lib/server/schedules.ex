@@ -254,9 +254,8 @@ defmodule Server.Schedules do
   defp shell(cmd, dir) do
     args = ["-c", "exec </dev/null\n" <> cmd]
     port = Port.open({:spawn_executable, "/bin/sh"}, [:binary, :exit_status, :stderr_to_stdout, args: args, cd: dir])
-    {:os_pid, pid} = Port.info(port, :os_pid)
     timeout = Application.get_env(:server, :schedule_script_timeout_ms, @script_timeout_ms)
-    collect(port, "", System.monotonic_time(:millisecond) + timeout, fn -> kill_tree(pid) end, timeout)
+    collect(port, "", System.monotonic_time(:millisecond) + timeout, fn -> kill(port) end, timeout)
   rescue
     e -> {127, Exception.message(e)}
   end
@@ -275,6 +274,14 @@ defmodule Server.Schedules do
         kill.()
         close(port)
         {124, out <> "\n… timed out after #{div(timeout, 1000)} s"}
+    end
+  end
+
+  # the script's pid, asked only now: a fast one may be long gone, and its port with it
+  defp kill(port) do
+    case Port.info(port, :os_pid) do
+      {:os_pid, pid} -> kill_tree(pid)
+      nil -> :ok
     end
   end
 
