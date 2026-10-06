@@ -11,6 +11,12 @@ defmodule Server.ModelCli do
   """
 
   @keys %{"OLLAMA_API_KEY" => "ollama-api-key"}
+  # a one-off call is headless: nothing saved, nothing discovered, nothing to trust or approve —
+  # a CLI that stopped to ask would only sit there until the timeout
+  @headless %{
+    "pi" => ~w(--no-session --no-extensions --no-approve),
+    "claude" => ~w(--no-session-persistence --permission-mode dontAsk)
+  }
 
   @doc """
   Run `prompt` through the configured CLI with stdin closed, cut off after `:model_cli_timeout_s`
@@ -24,7 +30,9 @@ defmodule Server.ModelCli do
 
     # System.cmd leaves stdin an open pipe, and `pi -p` reads it as the rest of the prompt — it
     # waits forever. The CLI gets /dev/null, and `timeout` bounds a call that hangs regardless.
-    args = ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout), cmd, "-p", prompt, "--model", model]
+    args =
+      ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout), cmd, "-p", prompt, "--model", model] ++
+        Map.get(@headless, Path.basename(cmd), [])
 
     case System.cmd("sh", args, stderr_to_stdout: true, env: keys()) do
       {out, 0} -> {:ok, out}

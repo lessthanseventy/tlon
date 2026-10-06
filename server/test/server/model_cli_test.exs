@@ -40,6 +40,22 @@ defmodule Server.ModelCliTest do
              ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s(echo "$OLLAMA_API_KEY")), "m"})
   end
 
+  test "pi and claude run headless: no session saved, no extensions or trust to settle, nothing to ask",
+       %{dir: dir} do
+    for name <- ["pi", "claude"] do
+      File.mkdir_p!(Path.join(dir, name))
+      path = Path.join([dir, name, name])
+      File.write!(path, ~s(#!/bin/sh\necho "$@"\n))
+      File.chmod!(path, 0o755)
+    end
+
+    assert {:ok, "-p hi --model m --no-session --no-extensions --no-approve\n"} =
+             ModelCli.prompt("hi", :test_cmd, :test_model, {Path.join([dir, "pi", "pi"]), "m"})
+
+    assert {:ok, "-p hi --model m --no-session-persistence --permission-mode dontAsk\n"} =
+             ModelCli.prompt("hi", :test_cmd, :test_model, {Path.join([dir, "claude", "claude"]), "m"})
+  end
+
   test "a CLI that reads stdin still answers — stdin is closed, not a pipe left open", %{dir: dir} do
     cmd = cli(dir, "cat >/dev/null; echo answered")
     assert {:ok, "answered\n"} = ModelCli.prompt("hi", :test_cmd, :test_model, {cmd, "m"})
