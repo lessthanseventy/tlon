@@ -329,6 +329,79 @@ defmodule Server.MCP.GatewayTest do
     end
   end
 
+  describe "/api — what the office TUI needs to stand in for the console" do
+    test "a new thread: titled by its first line, the words its opening message; a spike is a workline at build" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {201, t} = post_json("/api/threads", %{workspace_id: ws.id, body: "fix the clock\nit runs fast"})
+      assert t["title"] == "fix the clock"
+      {200, view} = get_json("/api/office/threads/#{t["id"]}")
+      assert [%{"body" => "fix the clock\nit runs fast"}] = view["messages"]
+      assert view["more"] == false
+      {201, s} = post_json("/api/threads", %{workspace_id: ws.id, body: "try a thing", kind: "spike"})
+      assert s["stage"] == "build"
+      assert {422, _} = post_json("/api/threads", %{workspace_id: ws.id, body: "  "})
+    end
+
+    test "a thread's messages page back with ?before=", %{thread: t} do
+      for i <- 1..65, do: {:ok, _} = Channel.post(%{thread_id: t.id, author: "andrew", body: "m#{i}"})
+      {200, page} = get_json("/api/office/threads/#{t.id}")
+      assert length(page["messages"]) == 60 and page["more"]
+      assert List.last(page["messages"])["body"] == "m65"
+      {200, older} = get_json("/api/office/threads/#{t.id}?before=#{hd(page["messages"])["id"]}")
+      assert Enum.map(older["messages"], & &1["body"]) == ~w(m1 m2 m3 m4 m5)
+      refute older["more"]
+    end
+
+    test "the room's reads answer for a workspace, 404 for none" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+
+      for read <- ~w(activity triage memory tickets) do
+        assert {200, _} = get_json("/api/office/#{read}/#{ws.id}")
+        assert {404, _} = get_json("/api/office/#{read}/999999")
+      end
+
+      assert {200, %{"state" => _}} = get_json("/api/office/health")
+      assert {200, list} = get_json("/api/office/history")
+      assert is_list(list)
+    end
+
+    test "notes, ticket order and blockers, workspace from a template, its repos and fields" do
+      {201, ws} = post_json("/api/workspaces", %{name: "Life", template: "life"})
+      assert [%{name: "assistant"}] = Server.Workspaces.bench(ws["id"])
+      assert {409, _} = post_json("/api/workspaces", %{name: "Nope", template: "nope"})
+
+      {201, n} = post_json("/api/notes", %{workspace_id: ws["id"], body: "buy milk"})
+      assert n["body"] == "buy milk"
+
+      {:ok, a} = Server.Tickets.file(%{workspace_id: ws["id"], title: "a"})
+      {:ok, b} = Server.Tickets.file(%{workspace_id: ws["id"], title: "b"})
+      {200, _} = post_json("/api/tickets/#{b.id}/reorder", %{direction: "down"})
+      {200, blk} = post_json("/api/tickets/#{b.id}/blockers", %{by: a.id})
+      assert blk["blocked_by"] == [a.id]
+      {200, unblk} = request_json(:delete, "/api/tickets/#{b.id}/blockers/#{a.id}", %{})
+      assert unblk["blocked_by"] == []
+
+      {200, e} = request_json(:patch, "/api/workspaces/#{ws["id"]}", %{scope: "project", icon: "🏠"})
+      assert e["scope"] == "project"
+      assert Server.Workspaces.get(ws["id"]).knobs["icon"] == "🏠"
+      {201, r} = post_json("/api/workspaces/#{ws["id"]}/repos", %{path: "/tmp/life-repo"})
+      {200, _} = request_json(:delete, "/api/repos/#{r["id"]}", %{})
+      assert Server.Workspaces.repos(ws["id"]) == []
+    end
+
+    test "habits are approved or rejected; a thread moves between its workspace's projects" do
+      {:ok, h} = Server.Dossier.propose_habit(%{text: "gate first", proposed_by: "hronir"})
+      {200, %{"state" => "approved"}} = post_json("/api/habits/#{h.id}/approve", %{})
+      assert {404, _} = post_json("/api/habits/999999/reject", %{})
+
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "clock"})
+      {:ok, th} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
+      {200, _} = post_json("/api/threads/#{th.id}/move", %{project_id: p.id})
+      assert Server.Repo.get(Server.Thread, th.id).project_id == p.id
+    end
+  end
+
   describe "/api — the operator's door (Server.MCP.OperatorAPI)" do
     test "GET /api/sidebar is Board.sidebar as JSON, and carries the open thread", %{thread: t} do
       # the sidebar groups by workspace, so the row needs one to be grouped under

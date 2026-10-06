@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The deterministic verifier (worklines slice 4): run the module gates AND the machine gate
 # for a workline, record each result as CHECKS evidence (correlation workline:<slug>:verify),
-# and advance the stage when everything is green. Driven by the COCKPIT on verify entry —
+# and advance the stage when everything is green. Run by the service on verify entry (Server.Jobs.Verify) —
 # independent of the builder by construction (the builder never runs or reports this).
 # A model only enters when a failure needs interpreting; the gates themselves are script.
 #

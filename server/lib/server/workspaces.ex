@@ -31,6 +31,37 @@ defmodule Server.Workspaces do
     end
   end
 
+  # a template is a new workspace's starting shape: its type and the bench it is born with
+  @templates %{
+    "code" => %{type: "code", roster: ~w(surveyor builder reviewer planner)},
+    "life" => %{type: "life", roster: ~w(assistant)},
+    "blank" => %{type: "blank", roster: []}
+  }
+
+  @doc "The templates a new workspace starts from, by name: `code` (a full crew), `life` (an assistant), `blank`."
+  def templates, do: @templates
+
+  @doc """
+  Register a workspace named `name` from a template: its type, and a bench of one coworker per
+  archetype the template names (each named for its archetype, renamed later). `{:error,
+  :unknown_template}` for a name not in `templates/0`.
+  """
+  def register_from(template, name, repos \\ []) do
+    case @templates[template] do
+      nil ->
+        {:error, :unknown_template}
+
+      t ->
+        register(%{
+          name: name,
+          type: t.type,
+          scope: "machine",
+          repos: repos,
+          roster: Enum.map(t.roster, &%{name: &1, archetype: &1})
+        })
+    end
+  end
+
   @doc """
   Every workspace, oldest first (by id) — the machine seed's order, so its first workspace is where the
   cockpit opens and where the workspace ring starts, as it is in `Server.Board.sidebar/0`.

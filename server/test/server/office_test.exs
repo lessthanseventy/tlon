@@ -32,6 +32,14 @@ defmodule Server.OfficeTest do
       assert Enum.any?(s.archetypes, &(&1.name == "builder" and &1.meta == false))
     end
 
+    test "carries each workspace's triage count and the service's health", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "stuck", workspace_id: ws.id})
+      {:ok, _} = Server.Dossier.raise_issue(%{thread_id: t.id, summary: "blocked"})
+      s = Office.status()
+      assert s.triage[ws.id] >= 1
+      assert s.health.state in ["ok", "warn"]
+    end
+
     test "is plain data: it encodes as JSON", %{ws: ws} do
       {:ok, _} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
       assert is_binary(JSON.encode!(Office.status()))

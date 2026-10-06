@@ -368,6 +368,10 @@ defmodule Server.Workline do
     flipped = restaff(flipped)
     Server.Bus.broadcast({:workline_advanced, flipped})
     post_brief(flipped, Brief.stage_message(flipped))
+
+    if flipped.stage == "verify",
+      do: Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: flipped.id, slug: flipped.slug}))
+
     {:ok, flipped}
   end
 

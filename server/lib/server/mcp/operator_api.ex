@@ -10,9 +10,15 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/sidebar                 Board.sidebar
       GET    /api/roster                  Staff.roster
       GET    /api/office                  Office.status (every workspace: roster, benches, threads, …)
-      GET    /api/office/threads/:id      Office.thread_view (last messages + what its pane shows)
+      GET    /api/office/threads/:id      Office.thread_view (a page of messages, ?before=<id> for older, + what its pane shows)
       GET    /api/office/archive/:ws      Office.archive (a workspace's done tickets + closed threads)
       GET    /api/office/banter/:ws       Office.Banter.lines (recent small talk; asking may write the next line)
+      GET    /api/office/activity/:ws     Office.Room.activity (what just happened: the in-tray)
+      GET    /api/office/triage/:ws       Office.Room.triage (blockers, failed checks, unled threads: the beacon)
+      GET    /api/office/memory/:ws       Office.Room.memory (pinned facts, habits to review: the bookshelf)
+      GET    /api/office/tickets/:ws      Office.Room.tickets (the whole board, every status, with blockers)
+      GET    /api/office/health           Office.Room.health (the service and its box: the rack)
+      GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
       GET    /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
       GET    /api/threads/:id/messages    Channel.recent_messages (?limit=, default 50)
@@ -26,16 +32,29 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/approve     Workline.approve: complete its parked gate
       POST   /api/threads/:id/track       Workline.promote: make a plain thread a workline
       POST   /api/threads/:id/checks      {"slug", "exit", "cmd", "tail"?} → Dossier.record_check (the verify stage's evidence)
-      DELETE /api/threads/:id             Channel.delete_thread (the root machine thread is refused)
+      POST   /api/threads/:id/move        {"project_id"} → Projects.move_thread (within its workspace)
+      DELETE /api/threads/:id             Server.delete_thread (its worktree too, when that loses nothing;
+                                          the root machine thread is refused)
+      POST   /api/threads                 {"workspace_id", "body", "project_id"?, "kind"?} → a thread titled
+                                          by the body's first line, the body its opening message; kind
+                                          "workline" opens at intent, "spike" at build; 201
       POST   /api/worklines               {"title", "slug"} → Workline.open at intent; 201
+      POST   /api/notes                   {"workspace_id", "body"} → Notes.write as the operator; 201
 
       POST   /api/tickets                 {"workspace_id", "title", "project_id"?, "body"?} → Tickets.file; 201
       PATCH  /api/tickets/:id             {"status"?, "title"?, "body"?} → Tickets.update
       DELETE /api/tickets/:id             Tickets.remove
       POST   /api/tickets/:id/route       Tickets.route: to the workspace's manager (no manager: its lead starts it)
       POST   /api/tickets/:id/start       {"agent_id"?} → Tickets.start_thread (default: the lead); 201 + the thread
+      POST   /api/tickets/:id/reorder     {"direction": "up"|"down"} → Tickets.reorder within its column
+      POST   /api/tickets/:id/blockers    {"by"} → Tickets.link(by, id, "blocks")
+      DELETE /api/tickets/:id/blockers/:by  Tickets.unlink
 
-      POST   /api/workspaces              {"name", "repo"?} → Workspaces.register; 201
+      POST   /api/workspaces              {"name", "template"?, "repo"?} → Workspaces.register_from (a
+                                          template's type and bench) or Workspaces.register; 201
+      PATCH  /api/workspaces/:id          {"type"?, "scope"?, "icon"?} → Workspaces.edit
+      POST   /api/workspaces/:id/repos    {"path", "remote"?, "branch"?} → Workspaces.add_repo; 201
+      DELETE /api/repos/:id               Workspaces.remove_repo
       DELETE /api/workspaces/:id          Workspaces.remove (its threads move on; the last is refused)
       POST   /api/workspaces/:id/coworkers  {"name", "archetype", "model"?, "effort"?, "ask"?} → seat + retarget; 201
       PATCH  /api/workspaces/:id/coworkers/:agent_id  {"model"?, "effort"?, "ask"?} → Workspaces.retarget
@@ -45,6 +64,7 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/seats/:id               Workspaces.unseat (the agent itself survives)
       DELETE /api/facts/:id               Dossier.forget_fact (a tombstone: out of recall, row kept)
       POST   /api/issues/:id/resolve      {"resolution"?} → Dossier.resolve_issue
+      POST   /api/habits/:id/approve      Server.approve_habit (…/reject: Server.reject_habit)
   """
 
   import Plug.Conn
@@ -55,6 +75,7 @@ defmodule Server.MCP.OperatorAPI do
   alias Server.Dossier
   alias Server.MCP.Brief
   alias Server.Office
+  alias Server.Office.Room
   alias Server.Repo
   alias Server.Staff
   alias Server.Thread
@@ -85,9 +106,22 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp route(conn, "GET", "office", ["threads", id]),
-    do: with_thread(conn, id, &json(conn, 200, Office.thread_view(&1)))
+    do: with_thread(conn, id, &json(conn, 200, Office.thread_view(&1, int_param(conn, "before"))))
 
+  defp route(conn, "GET", "office", ["health"]), do: json(conn, 200, Room.health())
+  defp route(conn, "GET", "office", ["history"]), do: json(conn, 200, Room.history())
+
+  defp route(conn, "GET", "office", [read, ws]) when read in ~w(activity triage memory tickets),
+    do: with_workspace(conn, ws, &json(conn, 200, apply(Room, String.to_existing_atom(read), [&1.id])))
+
+  defp route(conn, "POST", "threads", []), do: new_thread(conn)
   defp route(conn, method, "threads", [id | rest]), do: with_thread(conn, id, &on_thread(conn, method, rest, &1))
+  defp route(conn, "POST", "notes", []), do: write_note(conn)
+  defp route(conn, "DELETE", "repos", [id]), do: with_row(conn, Server.WorkspaceRepo, id, &remove_repo(conn, &1))
+
+  defp route(conn, "POST", "habits", [id, verdict]) when verdict in ~w(approve reject),
+    do: with_int(conn, id, &reply(conn, review_habit(verdict, &1), fn h -> %{id: h.id, state: h.state} end))
+
   defp route(conn, "POST", "worklines", []), do: open_workline(conn)
   defp route(conn, method, "tickets", rest), do: on_tickets(conn, method, rest)
   defp route(conn, method, "workspaces", rest), do: on_workspaces(conn, method, rest)
@@ -107,7 +141,8 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["approve"], t), do: reply(conn, Workline.approve(t), &thread_row/1)
   defp on_thread(conn, "POST", ["track"], t), do: reply(conn, Workline.promote(t), &thread_row/1)
   defp on_thread(conn, "POST", ["checks"], t), do: record_check(conn, t)
-  defp on_thread(conn, "DELETE", [], t), do: reply(conn, Channel.delete_thread(t), fn _ -> %{deleted: t.id} end)
+  defp on_thread(conn, "POST", ["move"], t), do: move(conn, t)
+  defp on_thread(conn, "DELETE", [], t), do: delete_thread(conn, t)
   defp on_thread(conn, _, _, _), do: no_route(conn)
 
   defp on_tickets(conn, "POST", []), do: file_ticket(conn)
@@ -118,9 +153,17 @@ defmodule Server.MCP.OperatorAPI do
 
   defp on_tickets(conn, "POST", [id, "route"]), do: with_ticket(conn, id, &route_ticket(conn, &1))
   defp on_tickets(conn, "POST", [id, "start"]), do: with_ticket(conn, id, &start(conn, &1))
+  defp on_tickets(conn, "POST", [id, "reorder"]), do: with_ticket(conn, id, &reorder(conn, &1))
+  defp on_tickets(conn, "POST", [id, "blockers"]), do: with_ticket(conn, id, &block(conn, &1))
+
+  defp on_tickets(conn, "DELETE", [id, "blockers", by]),
+    do: with_ticket(conn, id, &with_int(conn, by, fn b -> unblock(conn, &1, b) end))
+
   defp on_tickets(conn, _, _), do: no_route(conn)
 
   defp on_workspaces(conn, "POST", []), do: new_workspace(conn)
+  defp on_workspaces(conn, "PATCH", [id]), do: with_workspace(conn, id, &edit_workspace(conn, &1))
+  defp on_workspaces(conn, "POST", [id, "repos"]), do: with_workspace(conn, id, &add_repo(conn, &1))
 
   defp on_workspaces(conn, "DELETE", [id]),
     do: with_workspace(conn, id, &reply(conn, Workspaces.remove(&1), fn w -> %{deleted: w.id} end))
@@ -266,16 +309,138 @@ defmodule Server.MCP.OperatorAPI do
     reply(conn, Tickets.start_thread(t, agent), &%{ticket: t.id, thread: &1.id}, 201)
   end
 
+  defp reorder(conn, t) do
+    case body(conn) do
+      {%{"direction" => d}, conn} when d in ~w(up down) ->
+        :ok = Tickets.reorder(t, String.to_existing_atom(d))
+        json(conn, 200, %{ticket: t.id})
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"direction": "up" | "down"})})
+    end
+  end
+
+  # "blocked by": a `blocks` link from the blocker to this ticket — the one direction it is stored in
+  defp block(conn, t) do
+    case body(conn) do
+      {%{"by" => by}, conn} when is_integer(by) and by != t.id ->
+        reply(conn, Tickets.link(by, t.id, "blocks"), fn _ -> %{ticket: t.id, blocked_by: Tickets.blockers(t.id)} end)
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"by": another ticket's id})})
+    end
+  end
+
+  defp unblock(conn, t, by) do
+    :ok = Tickets.unlink(by, t.id, "blocks")
+    json(conn, 200, %{ticket: t.id, blocked_by: Tickets.blockers(t.id)})
+  end
+
+  # A new thread from the operator's first words: titled by their first line, the words posted as
+  # its opening message (the lead wakes to them), in the workspace's chosen project. `kind` makes it
+  # a workline instead: "workline" starts at intent, "spike" straight at build.
+  defp new_thread(conn) do
+    case body(conn) do
+      {%{"workspace_id" => ws, "body" => text} = b, conn} when is_integer(ws) and is_binary(text) ->
+        title = text |> String.split("\n", parts: 2) |> hd() |> String.trim() |> String.slice(0, 60)
+        attrs = %{title: title, workspace_id: ws, project_id: b["project_id"]}
+
+        opened =
+          case b["kind"] do
+            "workline" -> Server.open_workline(Map.put(attrs, :stage, "intent"))
+            "spike" -> Server.open_workline(Map.put(attrs, :stage, "build"))
+            _ -> Channel.open_thread(Map.put(attrs, :scope, "machine"))
+          end
+
+        case opened do
+          {:ok, t} ->
+            {:ok, _} = Channel.post(%{thread_id: t.id, author: operator(), body: text})
+            staff_now(ws)
+            json(conn, 201, thread_row(t))
+
+          {:error, why} ->
+            refused(conn, why)
+        end
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"workspace_id": n, "body": "…", "project_id"?, "kind"?})})
+    end
+  end
+
+  defp move(conn, thread) do
+    case body(conn) do
+      {%{"project_id" => p}, conn} when is_integer(p) ->
+        reply(conn, Server.Projects.move_thread(thread, p), &thread_row/1)
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"project_id": n})})
+    end
+  end
+
+  # the thread goes, and its worktree with it when that loses nothing (else it is kept, and named)
+  defp delete_thread(conn, thread) do
+    case Server.delete_thread(thread.id) do
+      {:ok, _, {:kept, why}} -> json(conn, 200, %{deleted: thread.id, worktree: "kept: #{inspect(why)}"})
+      {:ok, _, {:removed, path}} -> json(conn, 200, %{deleted: thread.id, worktree: "removed #{path}"})
+      {:ok, _, :none} -> json(conn, 200, %{deleted: thread.id})
+      {:error, why} -> refused(conn, why)
+    end
+  end
+
+  defp write_note(conn) do
+    case body(conn) do
+      {%{"workspace_id" => ws, "body" => text}, conn} when is_integer(ws) and is_binary(text) ->
+        note = %{scope: "workspace", scope_id: ws, author: operator(), body: text}
+        reply(conn, Server.Notes.write(note), &%{id: &1.id, body: &1.body}, 201)
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"workspace_id": n, "body": "…"})})
+    end
+  end
+
+  defp review_habit("approve", id), do: Server.approve_habit(id)
+  defp review_habit("reject", id), do: Server.reject_habit(id)
+
+  defp edit_workspace(conn, ws) do
+    {b, conn} = body(conn)
+    attrs = for {k, v} <- b, k in ~w(type scope), is_binary(v), into: %{}, do: {String.to_existing_atom(k), v}
+
+    attrs =
+      if is_binary(b["icon"]), do: Map.put(attrs, :knobs, Map.put(ws.knobs || %{}, "icon", b["icon"])), else: attrs
+
+    if attrs == %{},
+      do: json(conn, 400, %{error: ~s(expected some of {"type", "scope", "icon"})}),
+      else: reply(conn, Workspaces.edit(ws, attrs), &%{id: &1.id, name: &1.name, type: &1.type, scope: &1.scope})
+  end
+
+  defp add_repo(conn, ws) do
+    case body(conn) do
+      {%{"path" => path} = b, conn} when is_binary(path) and path != "" ->
+        attrs = %{path: path, remote: b["remote"], default_branch: b["branch"]}
+        reply(conn, Workspaces.add_repo(ws.id, attrs), &%{id: &1.id, path: &1.path}, 201)
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"path", "remote"?, "branch"?})})
+    end
+  end
+
+  defp remove_repo(conn, repo), do: reply(conn, Workspaces.remove_repo(repo), &%{deleted: &1.id})
+
   defp new_workspace(conn) do
     case body(conn) do
+      {%{"name" => name, "template" => tpl} = b, conn} when is_binary(name) and name != "" and is_binary(tpl) ->
+        reply(conn, Workspaces.register_from(tpl, name, repos_of(b)), &%{id: &1.id, name: &1.name}, 201)
+
       {%{"name" => name} = b, conn} when is_binary(name) and name != "" ->
-        repos = if is_binary(b["repo"]) and b["repo"] != "", do: [b["repo"]], else: []
-        reply(conn, Workspaces.register(%{name: name, repos: repos}), &%{id: &1.id, name: &1.name}, 201)
+        reply(conn, Workspaces.register(%{name: name, repos: repos_of(b)}), &%{id: &1.id, name: &1.name}, 201)
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"name", "repo"?})})
     end
   end
+
+  defp repos_of(%{"repo" => r}) when is_binary(r) and r != "", do: [r]
+  defp repos_of(_), do: []
 
   # seat a new coworker, then its knobs if any were given — one request, as the CLI's `hire`
   defp hire(conn, ws) do
@@ -364,6 +529,13 @@ defmodule Server.MCP.OperatorAPI do
         row -> fun.(row)
       end
     end)
+  end
+
+  defp int_param(conn, name) do
+    case Integer.parse(fetch_query_params(conn).query_params[name] || "") do
+      {n, ""} -> n
+      _ -> nil
+    end
   end
 
   defp with_int(conn, id, fun) do
