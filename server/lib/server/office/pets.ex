@@ -63,6 +63,7 @@ defmodule Server.Office.Pets do
         {"done", "{name} finishes a turn of work"},
         {"queue", "{name} is now waiting on the boss"},
         {"shipped", "{name}'s work just shipped — confetti over them, the office cheering"},
+        {"fish", "she sits at the aquarium, pawing at the glass, the fish gathered just out of reach"},
         {"nap", "the boss tells her to go and nap"},
         {"play", "the boss tells her to play with her yarn"},
         {"come", "the boss calls her over to their desk"},
