@@ -65,3 +65,14 @@ describe("snacks", () => {
     expect(p.snack).toBe(0)
   })
 })
+
+describe("the date", () => {
+  test("October brings its decorations, and the dark its bats and lamplight", () => chance(0.999, () => {
+    const room = new WideRoom(560), a = viewOf(office(["hronir"]), 1)
+    for (let i = 0; i < 20; i++) room.step(a)
+    const at = (month: number, hour: number) => room.render(a, { picked: null, armed: null, person: null }, (s) => s.length * 2, new Date(2026, month, 6, hour, 30)).rgba.join()
+    // the windows' sky changes with the hour anyway, so compare like with like
+    expect(at(9, 21)).not.toBe(at(2, 21))
+    expect(at(9, 14)).not.toBe(at(2, 14))
+  }))
+})
