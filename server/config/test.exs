@@ -5,7 +5,13 @@ config :server, Oban, testing: :manual
 
 # The suite's own database on the local Postgres, created fresh per run by test_helper.
 # TLON_TEST_DATABASE names another when two suites run at once (a second session, a worktree).
-config :server, Server.Repo, database: System.get_env("TLON_TEST_DATABASE") || "tlon_test", pool_size: 5, log: false
+# No commit waits for the disk (synchronous_commit off): a test db needs none to outlive a crash,
+# and the wait was most of the suite's time — every test commits dozens of rows.
+config :server, Server.Repo,
+  database: System.get_env("TLON_TEST_DATABASE") || "tlon_test",
+  pool_size: 5,
+  log: false,
+  parameters: [synchronous_commit: "off"]
 
 # The web endpoint is started by the suite that tests it (no listener); fixed secrets.
 config :server, Server.Web.Endpoint,
