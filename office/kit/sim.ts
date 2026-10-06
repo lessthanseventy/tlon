@@ -123,6 +123,26 @@ export class Sim<L extends { people: Seat[] }> {
     return true
   }
 
+  /**
+   * You tell Nina what to do (she is a cat: she does it, then her own day carries on): nap on her
+   * rug, play with the yarn, come to your desk, or the zoomies where she is (or, with no leaps
+   * near, round your office). False when there is nothing to do it with.
+   */
+  catDo(what: "nap" | "play" | "come" | "zoomies"): boolean {
+    const c = this.cat, p = this.plan.cat
+    if (what === "zoomies") {
+      const leaps = this.leapsHere() ?? p.leaps[0]
+      if (!leaps?.length) return false
+      c.path = []; c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 90
+    } else {
+      const to = what === "nap" ? p.nap : what === "play" ? p.play : p.desk
+      const down = c.mode === "zoom" ? null : p.via(c), up = p.via(to)
+      c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]; c.mode = "walk"
+    }
+    c.until = this.tick + 150; this.changed = true
+    return true
+  }
+
   /** the leaps of the room she is in (the group with a spot nearest her), if it has any near */
   private leapsHere(): Pt[] | null {
     const c = this.cat, d = (q: Pt) => Math.abs(q.x - c.x) + Math.abs(q.y - c.y)

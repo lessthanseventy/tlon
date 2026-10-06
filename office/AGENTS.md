@@ -21,7 +21,9 @@ linked window at a time, Ctrl-] back to the room).
   `main.ts` is the room, its detail pane's cards and the finder (`/`); `reader.ts` a thread
   full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
   finder's matcher; `when.ts` reads a schedule's "when" (a cron, or a local time). It is the
-  operator's surface: every verb is a key, and the footer of each card lists its own.
+  operator's surface. Under the room the pane splits: what you clicked on the left, what you can
+  do to it on the right — each card's actions (`detail()`) are its keys, its clickable list and
+  its docs at once, so they cannot drift apart. Popups only where a choice needs a list (the finder).
 
 ## Law
 

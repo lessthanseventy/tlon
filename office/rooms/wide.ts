@@ -178,6 +178,17 @@ export class WideRoom extends Sim<Layout> {
   private dogBed(): Spot { return { x: this.z.L0 + 108, y: 112, aisle: 112, pose: "stand", face: "left", kind: "roam" } }
   private dogBowl(): Spot { return { x: this.width - 26, y: 162, aisle: 162, pose: "stand", face: "right", kind: "roam" } }
 
+  /** you tell Argos where to go — his bed, a turn round the floor, your office — or to sit where he is */
+  dogDo(what: "bed" | "walk" | "office" | "sit") {
+    const d = this.dog
+    if (what === "sit") { d.path = []; d.mode = "sit"; d.until = this.tick + 300; d.aisle = d.y; return }
+    const spot = (x: number, y: number): Spot => ({ x, y, aisle: y, pose: "stand", face: "left", kind: "roam" })
+    const goal = what === "bed" ? this.dogBed() : what === "office" ? spot(60, 140) : this.plan.roam(this.plan.layout(EMPTY))
+    d.host = null; d.creep = false
+    d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, goal)]
+    d.aisle = goal.aisle; d.mode = "walk"
+  }
+
   /** a click on Argos: a woof and a wag, and he's up if he was asleep */
   patDog() { const d = this.dog; d.woof = this.tick + 25; if (d.mode === "sleep") { d.mode = "sit"; d.until = this.tick + 120 } }
 
