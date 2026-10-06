@@ -148,7 +148,7 @@ describe("the wide room", () => {
       const blocks = plan.blocks(l)
       const inside = (x: number, y: number) => blocks.find((b) => x > b.x && x < b.x + b.w - 1 && y > b.y && y < b.y + b.h - 1)
       for (const from of spots) for (const to of spots) {
-        const start = from.kind === "desk" || from.kind === "laptop" || from.kind === "queue" ? from.aisle : from.y
+        const start = from.aisle
         const path = plan.route(from.x, start, to)
         // the first and last legs sit down and stand up; everything between is walking
         let x = path[0]!.x, y = path[0]!.y

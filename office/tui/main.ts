@@ -27,7 +27,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -218,6 +218,7 @@ function act(x: Act) {
     case "rack": return open({ kind: "health" })
     case "dog": { const r = room(); if (r instanceof WideRoom) r.patDog(); changed(); return open({ kind: "pet", who: "dog" }) }
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); changed(); draw() } return }
+    case "arcade": return open({ kind: "arcade" })
   }
 }
 
@@ -298,6 +299,7 @@ const VERBS: [string, () => void][] = [
   ["crew", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
+  ["the arcade", () => open({ kind: "arcade" })],
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
@@ -690,6 +692,13 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
         ],
       }
     }
+    case "arcade": {
+      const rows: Row[] = GAMES.map((g): Row => (Bun.which(g.cmd) ? { segs: [plain(g.name.padEnd(16)), dim(g.what)], open: () => play(g) } : { segs: [dim(g.name.padEnd(16)), dim("not installed")] }))
+      return {
+        title: "ARCADE", rows: [{ segs: [plain("the office's cabinets. a game you leave with ctrl-] waits for you; quitting it brings the room back.")] }, ...rows],
+        actions: [back1],
+      }
+    }
     case "pet": {
       const r = room(), wideRoom = r instanceof WideRoom ? r : null
       const doIt = (f: () => unknown) => () => { f(); changed(); draw() }
@@ -976,6 +985,24 @@ async function zoomGit(tid: number) {
   const session = `git-${tid}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
   if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) tmux("new-session", "-d", "-s", session, "-n", "lazygit", "-c", path, "lazygit")
   zoomOn({ socket: OWN_TMUX, session, window: "lazygit" }, `#${tid} ${threadOf(tid)?.lead ?? ""} · git`)
+}
+/** the arcade's games: terminal games, played wherever the machine has installed them */
+const GAMES = [
+  { name: "Space Invaders", cmd: "ninvaders", what: "ninvaders" },
+  { name: "Pac-Man", cmd: "myman", what: "myman" },
+  { name: "Moon Buggy", cmd: "moon-buggy", what: "jump the craters" },
+  { name: "Snake", cmd: "nsnake", what: "nsnake" },
+  { name: "Tetris", cmd: "bastet", what: "bastet, which picks the worst block on purpose" },
+  { name: "2048", cmd: "2048-in-terminal", what: "slide and merge" },
+  { name: "Minesweeper", cmd: "freesweep", what: "freesweep" },
+  { name: "Sudoku", cmd: "nudoku", what: "nudoku" },
+  { name: "Solitaire", cmd: "ttysolitaire", what: "klondike" },
+]
+/** a game in the office's own tmux, one session each, so a game you leave is where you left it */
+function play(g: (typeof GAMES)[number]) {
+  const session = `arcade-${g.cmd}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
+  if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) tmux("new-session", "-d", "-s", session, "-n", "game", g.cmd)
+  zoomOn({ socket: OWN_TMUX, session, window: "game" }, `arcade · ${g.name}`)
 }
 function zoomOn(target: Target, label: string) {
   const colsN = cols(), rowsN = Math.max(2, (process.stdout.rows ?? 24) - 1)

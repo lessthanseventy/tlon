@@ -93,6 +93,12 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
           const s = sc.tick + k * 3 + actor.x, rise = s % 4
           sc.px(left + 2 + ((s * 5) % 8), top + 10 - rise * 2, 1, 1, k ? ROLE.key : ROLE.body)
         }
+      } else if (!actor.moving && !actor.path.length && actor.pose === "stand") {
+        // at a pastime: hands on the joystick, a paddle swinging, a watering can tipped
+        const kind = actor.spot.kind
+        if (kind === "arcade") { sc.px(left + 2 + (sc.tick % 2), top + 11, 2, 1, ROLE.prose); sc.px(left + 8, top + 11 - (f % 2), 2, 1, ROLE.prose) }
+        else if (kind === "pingpong") { const r = actor.face === "right", sw = (sc.tick % 8) < 4 ? 0 : 2; sc.px(r ? left + 12 : left - 2, top + 8 + sw, 2, 3, ROLE.alarm) }
+        else if (kind === "plant") { sc.px(left - 4, top + 10, 4, 3, ROLE.key); sc.px(left - 6, top + 10, 2, 1, ROLE.key); sc.px(left - 7, top + 12 + (f % 3) * 2, 1, 1, ROLE.key) }
       } else if (stretching) {
         // arms up over their head, and down again
         const lift = f % 2

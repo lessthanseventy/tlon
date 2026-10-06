@@ -8,9 +8,15 @@ import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, Seat } from "./types"
 import { NINA, pick, type Fuss } from "./voices"
 
-export type Kind = Fav | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "laptop"
-/** a place to be: where to stand, the row you walk along to get there, how you stand once there */
-export type Spot = { x: number; y: number; aisle: number; pose: Pose; face: Dir; kind: Kind }
+/** something to do with your idle time, where a room has the thing to do it with */
+export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet"
+export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "laptop"
+/**
+ * A place to be: where to stand, the row you walk along to get there, how you stand once there;
+ * `with`, where a partner stands (the far end of the ping-pong table, the other half of a chat) —
+ * a spot whose partner is there already draws the next idle person over.
+ */
+export type Spot = { x: number; y: number; aisle: number; pose: Pose; face: Dir; kind: Kind; with?: Pt }
 export type Pt = { x: number; y: number }
 export type Actor = {
   seat: Seat; look: Look; x: number; y: number; path: Pt[]
@@ -70,7 +76,9 @@ export const spotKey = (s: Spot) => `${s.kind}:${s.x}:${s.y}`
 const VISIT_MS = 60_000, NOTE_MS = 45_000
 /** ticks a finished worker stretches at the desk before leaving it */
 export const STRETCH = 20
-const LOUNGING = new Set(["couch", "cooler", "coffee", "roam"])
+const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet"])
+/** what someone at a pastime says now and then (over their head): a nap on the couch is a "z" */
+const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"] }
 
 export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
@@ -152,8 +160,9 @@ export class Sim<L extends { people: Seat[] }> {
     // lounge reaches down to her when she is close
     if (this.tick >= c.purr) {
       if (at(p.desk) && Math.random() < 0.02) { c.purr = this.tick + 30; c.byYou = true; return true }
-      if (c.mode !== "sleep" && !c.path.length) for (const a of this.actors.values()) {
-        if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || Math.random() > 0.004) continue
+      // a fuss is an occasion, not a fixture: one at a time, and not while she still has the last to say
+      if (c.mode !== "sleep" && !c.path.length && this.quiet(c.saidUntil)) for (const a of this.actors.values()) {
+        if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || Math.random() > 0.0015) continue
         const kind = pick<Fuss>(["pat", "pat", "scratch", "treat"])
         c.fuss = { kind, from: { x: a.x, y: a.y }, until: this.tick + FUSS }; c.mode = "sit"; c.until = this.tick + FUSS + 60
         c.purr = this.tick + FUSS; c.byYou = false; a.emote = "♥"; a.emoteUntil = this.tick + FUSS
@@ -278,11 +287,13 @@ export class Sim<L extends { people: Seat[] }> {
       const gk = spotKey(goal)
       if (gk !== actor.spotKey) {
         held.delete(actor.spotKey); held.add(gk)
-        const from = actor.path.length === 0 && (actor.spot.kind === "desk" || actor.spot.kind === "laptop") ? actor.spot.aisle : actor.y
+        // settled somewhere, they leave the way they came: back to its aisle first, never through what is in front of them
+        const from = actor.path.length === 0 ? actor.spot.aisle : actor.y
         actor.path = plan.route(actor.x, from, goal)
         actor.spot = goal; actor.spotKey = gk; actor.pose = "stand"
         if (goal.kind === "queue") this.noticed(actor, "queue")
-        actor.until = this.tick + 80 + Math.floor(Math.random() * 120)
+        // a pastime holds them a minute or two before the next
+        actor.until = this.tick + 400 + Math.floor(Math.random() * 800)
       }
       // someone you are talking to stops where they are and faces you until they have answered
       if (this.talk.get(actor.seat.agent)?.text === null) { actor.moving = false; if (actor.pose === "stand") actor.face = "down" }
@@ -299,8 +310,8 @@ export class Sim<L extends { people: Seat[] }> {
       if (actor.leaving && !actor.moving && actor.path.length === 0) { this.actors.delete(k); changed = true; continue }
       if (actor.emote && this.tick > actor.emoteUntil) { actor.emote = null; changed = true }
       if (!actor.emote && !actor.moving && Math.random() < 0.006) {
-        const e: Record<string, string> = { board: "?", cooler: "~", coffee: "♥" }
-        actor.emote = e[actor.spot.kind] ?? actor.look.emote
+        const moods = MOODS[actor.spot.kind]
+        actor.emote = moods ? moods[Math.floor(Math.random() * moods.length)]! : actor.look.emote
         actor.emoteUntil = this.tick + 25
         changed = true
       }
@@ -322,9 +333,12 @@ export class Sim<L extends { people: Seat[] }> {
 
   private idleGoal(actor: Actor, held: Set<string>, l: L): Spot {
     const cur = actor.spot
-    const idle = cur.kind === "board" || cur.kind === "couch" || cur.kind === "cooler" || cur.kind === "coffee" || cur.kind === "roam"
+    const idle = cur.kind === "board" || LOUNGING.has(cur.kind)
     if (idle && this.tick < actor.until) return cur
     const free = this.plan.lounge.filter((s) => !held.has(spotKey(s)) && spotKey(s) !== actor.spotKey)
+    // someone waiting at the far end of the table, or half a chat: go and make it a pair
+    const waiting = free.filter((s) => s.with && held.has(spotKey({ ...s, ...s.with })))
+    if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
     const fav = free.filter((s) => s.kind === actor.look.fav)
     const pool = fav.length && Math.random() < 0.6 ? fav : free
     return pool[Math.floor(Math.random() * pool.length)] ?? this.plan.roam(l)
