@@ -9,7 +9,7 @@ import type { Agents, CorkNote, Seat } from "./types"
 import { NINA, pick, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
-export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "darts" | "read"
+export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read"
 export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "laptop"
 /**
  * A place to be: where to stand, the row you walk along to get there, how you stand once there;
@@ -80,9 +80,9 @@ export const spotKey = (s: Spot) => `${s.kind}:${s.x}:${s.y}`
 const VISIT_MS = 60_000, NOTE_MS = 45_000
 /** ticks a finished worker stretches at the desk before leaving it */
 export const STRETCH = 20
-const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "darts", "read"])
+const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read"])
 /** what someone at a pastime says now and then (over their head): a nap on the couch is a "z" */
-const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], darts: ["!", "?"], read: ["…", "?", "♥"] }
+const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], pool: ["!", "?"], read: ["…", "?", "♥"] }
 /** how the hour pulls at a pastime: coffee in the morning, the machine at lunch, the windows and the couch at night */
 function moment(kind: string, hour: number, weather?: string) {
   // the weather out the window pulls first: in for the couch and a book when it pours, out to the glass when it snows

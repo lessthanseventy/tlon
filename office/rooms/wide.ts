@@ -49,12 +49,12 @@ function corner(z: Zones) {
     cabinets: [z.Mc + 8, z.Mc + 24].map((x) => ({ x, y: 128, w: 12, h: 20 })),
     tank: { x: z.F0 + 136, y: 100, w: 30, h: 24 },
     // the lounge: the snack machine and a bookshelf against its back wall, an armchair by the shelf;
-    // a foosball table and a dartboard down by the hallway
+    // a foosball table and a pool table down by the hallway
     vending: { x: z.L0 + 18, y: 46, w: 12, h: 24 },
     shelf: { x: z.L0 + 96, y: 46, w: 22, h: 20 },
     foos: { x: z.L0 + 30, y: 166, w: 26, h: 12 },
-    // left of the EXIT sign, whose label sits over the room's last 26 px
-    darts: { x: z.W - 40, y: 164, w: 8, h: 18 },
+    // clear of the foosball's right-hand player, and of the EXIT sign's label over the room's last 26 px
+    pool: { x: z.L0 + 68, y: 166, w: 26, h: 12 },
   }
 }
 
@@ -97,7 +97,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
   const z = zones(w)
   const { L0, M0, MW, Mc, F0, F1 } = z
   const inOffice = (x: number) => x <= OFF_W
-  const { table, cabinets, tank, vending, shelf, foos, darts } = corner(z)
+  const { table, cabinets, tank, vending, shelf, foos, pool } = corner(z)
   const at = (x: number, y: number, aisle: number, face: Spot["face"], kind: Spot["kind"], partner?: Pt): Spot => ({ x, y, aisle, pose: "stand", face, kind, ...(partner ? { with: partner } : {}) })
   const ends = [{ x: table.x - 4, y: table.y + 6 }, { x: table.x + table.w + 4, y: table.y + 6 }]
   return {
@@ -135,7 +135,9 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       at(vending.x + 6, 80, 94, "up", "vending"),
       at(foos.x - 4, foos.y + 6, 184, "right", "foosball", { x: foos.x + foos.w + 4, y: foos.y + 6 }),
       at(foos.x + foos.w + 4, foos.y + 6, 184, "left", "foosball", { x: foos.x - 4, y: foos.y + 6 }),
-      at(darts.x - 16, darts.y + 12, 184, "right", "darts"),
+      // pool: a player at each end of the table's far side, so the table, drawn after, never hides the game
+      at(pool.x + 3, pool.y - 4, pool.y - 4, "down", "pool", { x: pool.x + 23, y: pool.y - 4 }),
+      at(pool.x + 23, pool.y - 4, pool.y - 4, "down", "pool", { x: pool.x + 3, y: pool.y - 4 }),
       { x: shelf.x + 8, y: 84, aisle: 94, pose: "sit", face: "down", kind: "read" },
     ],
     // the meeting room's table, two laptops a side: where the warm but unbusy sit, on call
@@ -199,7 +201,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         { x: F1 - 60, y: 146, w: 12, h: 28 }, // the server rack
         { x: TRAY.x, y: TRAY.y, w: 16, h: 14 }, // the in-tray's table
         RADIATOR,
-        table, ...cabinets, tank, vending, shelf, foos, darts, // the pastimes' furniture
+        table, ...cabinets, tank, vending, shelf, foos, pool, // the pastimes' furniture
         { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
       ]
       for (const d of l.desks) out.push({ x: d.x, y: d.y + 2, w: d.w, h: 29 })
@@ -688,7 +690,7 @@ export class WideRoom extends Sim<Layout> {
       })
       for (let k = 0; k < 2; k++) px(tank.x + 6 + k * 14, tank.y + 14 - ((tick + k * 9) % 12), 1, 1, ROLE.prose)
     })
-    const { vending: v, shelf, foos, darts } = corner(this.z)
+    const { vending: v, shelf, foos, pool } = corner(this.z)
     sc.item(v.y + v.h, () => {
       // the snack machine: rows of snacks behind the glass, a can thunking down when someone buys
       px(v.x, v.y, v.w, v.h, ROLE.alarm); px(v.x + 1, v.y + 2, 7, 16, tint(ROLE.prose, ROLE.ground, 0.3))
@@ -716,15 +718,27 @@ export class WideRoom extends Sim<Layout> {
       }
       if (on) px(foos.x + 3 + ((tick * 3) % (foos.w - 6)), foos.y + 3 + (tick % 2), 1, 1, ROLE.prose)
     })
-    sc.item(darts.y + darts.h, () => {
-      // the dartboard on its stand, its rings, the darts that have landed; a thrower's dart in the air
-      const bx = darts.x + 4, by = darts.y + 4
-      px(darts.x + 3, darts.y + 8, 2, darts.h - 8, ROLE.structure)
-      px(bx - 4, by - 4, 8, 8, ROLE.fieldInk); px(bx - 3, by - 3, 6, 6, ROLE.alarm); px(bx - 2, by - 2, 4, 4, ROLE.prose); px(bx - 1, by - 1, 2, 2, ROLE.alarm)
-      const thrower = this.at("darts")[0], round = tick % 90
-      if (thrower) {
-        for (let k = 0; k < Math.min(3, Math.floor(round / 25)); k++) px(bx - 2 + ((k * 5 + (tick >> 7)) % 4), by - 2 + ((k * 3) % 4), 1, 1, ROLE.body)
-        if (round % 25 < 6) px(thrower.x + 6 + Math.round(((round % 25) / 6) * (bx - thrower.x - 6)), by - 1, 2, 1, ROLE.body)
+    sc.item(pool.y + pool.h, () => {
+      // the pool table: wood rails, green felt, six pockets; racked and waiting, or a game on —
+      // a cue at the cue ball, the balls rolling, now and then one dropping into a pocket
+      px(pool.x, pool.y, pool.w, pool.h, ROLE.structure); px(pool.x + 2, pool.y + 2, pool.w - 4, pool.h - 4, tint(ROLE.live, ROLE.ground, 0.4))
+      for (const [dx, dy] of [[1, 1], [pool.w / 2 - 1, 1], [pool.w - 3, 1], [1, pool.h - 3], [pool.w / 2 - 1, pool.h - 3], [pool.w - 3, pool.h - 3]] as const) px(pool.x + dx, pool.y + dy, 2, 2, ROLE.fieldInk)
+      px(pool.x + 3, pool.y + pool.h, 2, 3, ROLE.structure); px(pool.x + pool.w - 5, pool.y + pool.h, 2, 3, ROLE.structure)
+      const colours = [ROLE.body, ROLE.alarm, ROLE.key, ROLE.assistant, ROLE.attention, ROLE.edge]
+      if (this.at("pool").length === 2) {
+        const shot = tick % 60, t = Math.min(1, shot / 20)
+        const cue = { x: pool.x + 6 + Math.round(t * 10), y: pool.y + 6 - Math.round(t * 2) }
+        if (shot < 4) px(cue.x - 7 + shot, cue.y, 6, 1, ROLE.borderInactive) // the cue drawing back and striking
+        px(cue.x, cue.y, 1, 1, ROLE.prose)
+        colours.forEach((c, k) => {
+          if ((tick >> 6) % 7 === k && shot > 40) return // this one's down
+          const bx = pool.x + 14 + ((k * 5 + (shot > 20 ? Math.round((shot - 20) / 8) * (k % 2 ? 1 : -1) : 0) + 20) % 8), by = pool.y + 3 + ((k * 3) % 6)
+          px(bx, by, 1, 1, c)
+        })
+      } else {
+        // racked: a triangle at the far end, the cue ball at the near one
+        colours.forEach((c, k) => { const row = k < 1 ? 0 : k < 3 ? 1 : 2, col = k < 1 ? 0 : k < 3 ? k - 1 : k - 3; px(pool.x + 16 + row * 2, pool.y + 5 - row + col * 2, 1, 1, c) })
+        px(pool.x + 6, pool.y + 6, 1, 1, ROLE.prose)
       }
     })
     // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's (at 18)

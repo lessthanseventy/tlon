@@ -21,7 +21,7 @@ linked window at a time, Ctrl-] back to the room).
   wall with the whiteboard, notes, calendar, windows on the real weather (`weather` on the
   snapshot), clock, TV), and the pastimes idle coworkers
   move between (`Pastime` in `sim.ts`): a games corner (arcade cabinets, ping-pong), an aquarium,
-  the windows, the plants, a chat, the pets, a snack machine, foosball, darts, a reading nook. A
+  the windows, the plants, a chat, the pets, a snack machine, foosball, pool, a reading nook. A
   thread that ships throws its lead a party; a finished turn high-fives whoever it passes. The
   notes board also carries the crew's chatter (`CorkNote`, from `Server.Office.Corkboard`), kept
   apart from the notes they work from; a suggestion there is filed as a ticket only by you.
