@@ -156,7 +156,10 @@ defmodule Server.Harness.Pi do
         _ -> ""
       end
 
-    "env PI_CODING_AGENT_DIR=#{dir} #{base}#{prompt}#{model}"
+    pi = "env PI_CODING_AGENT_DIR=#{dir} #{base}#{prompt}#{model}"
+    # adapters/reload respawns the pane with this, resuming the session; it carries the variable
+    # into the respawned pane itself (`respawn-pane -e`)
+    "env ADAPTERS_RELOAD_CMD=#{Server.Tmux.sh_single_quote(pi <> " --continue")} " <> String.trim_leading(pi, "env ")
   end
 
   @impl true

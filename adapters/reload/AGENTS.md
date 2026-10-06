@@ -15,11 +15,12 @@ code → call `reload` → wake up in the same thread running the new code.
 
 - It needs two things in the session's env: `TMUX_PANE` (pi's own pane, tmux-provided) and
   **`ADAPTERS_RELOAD_CMD`** — the command that re-launches pi with `--continue` (resume the
-  most-recent session = this one). Nothing in the repo exports `ADAPTERS_RELOAD_CMD` today (the
-  server's harness boot script, `Server.Tmux.boot_script/2`, does not), so set it by hand.
-- `reload` fires a **detached** helper that, after ~0.4s, runs `tmux respawn-pane -k` on pi's pane.
-  The delay lets this turn's result flush to the session `.jsonl`; `-k` kills the old pi; the
-  launcher's `--continue` brings the thread back. The helper is detached (its own process group)
+  most-recent session = this one). The server sets it on every pi window it spawns
+  (`Server.Harness.Pi.launch_command/1`); a pane started by hand needs it set by hand.
+- `reload` fires a **detached** helper that, after ~0.4s, runs `tmux respawn-pane -k` on pi's
+  pane, carrying `ADAPTERS_RELOAD_CMD` into the new one (`-e`) so it can reload again. The delay lets
+  this turn's result flush to the session `.jsonl`; `-k` kills the old pi; the launcher's
+  `--continue` brings the thread back. The helper is detached (its own process group)
   so it survives the very process — pi — that spawned it being killed.
 - **Gate:** unless `force: true`, it first runs `mise run adapters:typecheck` — every adapters extension
   must typecheck, or a fresh pi could fail to load one and lock you out. On failure it refuses and

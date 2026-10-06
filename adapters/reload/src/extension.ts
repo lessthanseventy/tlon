@@ -46,12 +46,13 @@ export function planReload(env: ReloadEnv, delaySeconds = 0.4): ReloadPlan {
     return {
       ok: false,
       error:
-        "reload has no respawn command — $ADAPTERS_RELOAD_CMD is unset. The coworker launcher (console Cockpit.profile_launcher/3) exports it; reboot the cockpit after updating console so the session carries it.",
+        "reload has no respawn command — $ADAPTERS_RELOAD_CMD is unset. The server sets it on every pi window it spawns (Server.Harness.Pi.launch_command); a pane started by hand has none.",
     };
   }
-  // Positional args ($0=pane, $1=cmd) dodge all quoting. `exec` so no bash lingers. The whole
-  // thing runs detached (see execute) so the pane-kill can't take it down mid-respawn.
-  const script = `sleep ${delaySeconds}; exec tmux respawn-pane -k -t "$0" "$1"`;
+  // Positional args ($0=pane, $1=cmd) dodge all quoting. `exec` so no bash lingers. `-e` carries the
+  // respawn command into the new pane, so it can reload again. The whole thing runs detached (see
+  // execute) so the pane-kill can't take it down mid-respawn.
+  const script = `sleep ${delaySeconds}; exec tmux respawn-pane -k -e "ADAPTERS_RELOAD_CMD=$1" -t "$0" "$1"`;
   return {
     ok: true,
     bashArgv: ["-c", script, env.pane, env.cmd],
