@@ -60,6 +60,7 @@ defmodule Server.Office.PetsTest do
     ctx = %{crew: [%{name: "hronir", archetype: "builder", lead: true, thread: nil}], tickets: []}
     nina = Pets.prompt("Nina", ctx)
     assert nina =~ "princess" and nina =~ "hronir" and nina =~ ~s("fuss_treat")
+    assert nina =~ ~s(a coworker is "they")
     refute nina =~ ~s("belly":)
     assert Pets.prompt("Argos", ctx) =~ "Homer"
   end
