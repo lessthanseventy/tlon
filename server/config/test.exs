@@ -47,6 +47,9 @@ config :server, start_consult_mirror: false
 # never the real one.
 config :server, start_repo: false
 
+# a wake's look-again for a swallowed Enter (Server.Arbiter.Tmux): off, but where a test turns it on
+config :server, tmux_confirm_ms: []
+
 # tmux runs as is in the suite; the systemd scope (Server.Tmux.run) is tested by switching it on
 # A fixed signing key for the stateless MCP tokens, so tests mint/resolve deterministically with
 # Where workline artifacts are written and COMMITTED. Unset it falls back to the cwd — which is

@@ -29,8 +29,12 @@ defmodule Server.Arbiter.Tmux do
       Process.sleep(Application.get_env(:server, :tmux_submit_delay_ms, 300))
 
       case Tmux.submit(ws, index) do
-        {_, 0} -> :ok
-        {out, _} -> {:error, {:tmux, out}}
+        {_, 0} ->
+          confirm(ws, index, sanitize(prompt))
+          :ok
+
+        {out, _} ->
+          {:error, {:tmux, out}}
       end
     else
       {:error, _} = e -> e
@@ -202,6 +206,26 @@ defmodule Server.Arbiter.Tmux do
   end
 
   @doc """
+  Whether `text` we typed is still waiting in the harness's input line — the last `❯` line on the
+  `pane` — rather than taken (an empty input) or someone else's draft (text that isn't ours). A boot
+  that ate the start of it leaves the rest, which is still ours.
+  """
+  def pending?(pane, text) do
+    pane
+    |> String.split("\n")
+    |> Enum.filter(&String.starts_with?(String.trim_leading(&1), "❯"))
+    |> List.last()
+    |> case do
+      nil ->
+        false
+
+      line ->
+        typed = line |> String.trim_leading() |> String.trim_leading("❯") |> String.trim()
+        typed != "" and String.contains?(text, String.slice(typed, 0, 24))
+    end
+  end
+
+  @doc """
   The pane shows an input line — pi's `tlon: registered` footer or a harness prompt `❯` — so the first
   prompt typed into it lands in an input, not in a booting TUI that swallows it.
   """
@@ -216,4 +240,28 @@ defmodule Server.Arbiter.Tmux do
   end
 
   def ready?(_handle), do: true
+
+  # A harness still booting (its SessionStart hooks, its MCP servers) draws its input line before it
+  # takes an Enter: the text lands, the Enter is swallowed, and the coworker never starts. So after
+  # the Enter, look again a few times; while our text still sits in the input, press Enter again.
+  defp confirm(ws, index, text) do
+    delays = Application.get_env(:server, :tmux_confirm_ms, [2_000, 4_000, 8_000, 15_000])
+
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+      Enum.reduce_while(delays, nil, fn ms, _ ->
+        Process.sleep(ms)
+        look_again(ws, index, text)
+      end)
+    end)
+  end
+
+  # one look at the pane: our text still waiting is another Enter and another look; anything else, done
+  defp look_again(ws, index, text) do
+    with {pane, 0} when is_binary(pane) <- Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, index)]),
+         true <- pending?(pane, text) do
+      {:cont, Tmux.submit(ws, index)}
+    else
+      _ -> {:halt, nil}
+    end
+  end
 end

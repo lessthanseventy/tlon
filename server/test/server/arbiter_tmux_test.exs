@@ -192,6 +192,41 @@ defmodule Server.Arbiter.TmuxTest do
     assert_received {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]}
   end
 
+  test "pending?: our text still in the harness's input line — not its echo in the history, not someone else's draft" do
+    sent = "New message on thread 1 from andrew: @tertius intake — ticket #13: add first-failure times"
+
+    stuck =
+      "● hooks ran\n──────\n❯ New message on thread 1 from andrew: @tertius intake —\n  ticket #13: add first-failure times\n──────\n"
+
+    # a boot that ate the start: what's left is still ours
+    eaten = "──────\n❯ ticket #13: add first-failure times\n──────\n"
+    taken = "❯ New message on thread 1 from andrew: @tertius intake\n● on it\n──────\n❯ \n──────\n"
+    draft = "──────\n❯ andrew typing something else\n──────\n"
+    assert Arbiter.Tmux.pending?(stuck, sent) and Arbiter.Tmux.pending?(eaten, sent)
+    refute Arbiter.Tmux.pending?(taken, sent)
+    refute Arbiter.Tmux.pending?(draft, sent)
+  end
+
+  test "wake: when the Enter was swallowed — the text still in the input — it presses Enter again", %{thread: t} do
+    Application.put_env(:server, :tmux_submit_delay_ms, 0)
+    Application.put_env(:server, :tmux_confirm_ms, [10])
+    on_exit(fn -> Application.delete_env(:server, :tmux_confirm_ms) end)
+
+    Application.put_env(
+      :server,
+      :tmux_cmd,
+      record(%{
+        "list-windows" => {"2\tbuilder-spawn-me\t#{t.id}\t9\n", 0},
+        "capture-pane" => {"──\n❯ ping from the server\n──\n", 0}
+      })
+    )
+
+    assert :ok = Arbiter.Tmux.wake(%{thread_id: t.id, agent: "claude-code", pane_ref: nil}, "ping from the server")
+    assert_received {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]}
+    assert_receive {:tmux, ["-L", _, "capture-pane" | _]}, 500
+    assert_receive {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]}, 500
+  end
+
   test "wake: with no leaf, the lead's own (centre) window by name; none at all is :no_window", %{thread: t} do
     Application.put_env(:server, :tmux_submit_delay_ms, 0)
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"0\tclaude-code\t\t9\n", 0}}))
