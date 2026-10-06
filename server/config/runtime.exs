@@ -33,8 +33,10 @@ end
 # Where workline artifact checks run git (`Server.Workline.Artifacts.Git`) — the workspace's
 # checkout. Unset → cwd, right for dev shells, WRONG for a release whose cwd is elsewhere
 # (the checker then reports the environment fault, not a fake "not committed").
-if root = System.get_env("TLON_WORKLINE_ROOT") do
-  config :server, workline_root: root
+# Not in test, like the start flags below: a suite run from inside the service (the nightly gate)
+# inherits its environment, and must not pick these up.
+if config_env() != :test do
+  if root = System.get_env("TLON_WORKLINE_ROOT"), do: config(:server, workline_root: root)
 end
 
 # The post-response memory pass is opt-in: presence_idle → a queued pass → cheap extractor →
@@ -42,9 +44,11 @@ end
 # sweeps need no flag: they run on Oban's cron wherever Oban runs, E/2.)
 # The office's small talk (Server.Office.Banter) shells the same cheap tier while an office polls,
 # opt-in the same way, so a dev shell never spends a model call on jokes.
-config :server,
-  memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes),
-  start_banter: System.get_env("TLON_BANTER") in ~w(1 true yes)
+if config_env() != :test do
+  config :server,
+    memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes),
+    start_banter: System.get_env("TLON_BANTER") in ~w(1 true yes)
+end
 
 # The operator's handle — who the human IS on this machine's channel. Local
 # configuration, never identity in the design (§8); the office TUI reads the same variable.
