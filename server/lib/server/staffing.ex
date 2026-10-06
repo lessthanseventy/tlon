@@ -89,7 +89,7 @@ defmodule Server.Staffing do
       Enum.split_with(tabs, fn tab ->
         with {thread, agent} when is_integer(thread) and is_binary(agent) <- owner(tab, standing, seats),
              true <- now - (tab.born || 0) > @boot_grace_s do
-          not on_the_clock?(thread, agent)
+          not on_the_clock?(thread, agent, workspace_id)
         else
           _ -> false
         end
@@ -111,17 +111,19 @@ defmodule Server.Staffing do
     end
   end
 
-  defp on_the_clock?(thread_id, agent) do
-    cutoff = Presence.warmth_cutoff()
+  defp on_the_clock?(thread_id, agent, workspace_id) do
+    cutoff = Presence.loosest_cutoff()
 
-    Repo.exists?(
-      from s in Session,
-        join: a in Agent,
-        on: a.id == s.agent_id,
-        where:
-          s.thread_id == ^thread_id and a.name == ^agent and is_nil(s.ended_at) and
-            (s.last_active_at > ^cutoff or not is_nil(s.thinking_since))
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      where:
+        s.thread_id == ^thread_id and a.name == ^agent and is_nil(s.ended_at) and
+          (s.last_active_at > ^cutoff or not is_nil(s.thinking_since)),
+      select: {s.last_active_at, s.thinking_since}
     )
+    |> Repo.all()
+    |> Enum.any?(fn {at, thinking} -> thinking != nil or Presence.warm_for?(at, agent, workspace_id) end)
   end
 
   # A session still mid-turn with no window to run it: the machine went down under it. End it (so

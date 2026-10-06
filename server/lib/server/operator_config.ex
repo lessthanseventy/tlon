@@ -11,7 +11,8 @@ defmodule Server.OperatorConfig do
       {
         "coworkers": {"tlon": {"provider": "anthropic", "model": "claude-opus-4-8", "thinking": "medium", "yolo": true}},
         "environment": "home",
-        "max_leaves": 6
+        "max_leaves": 6,
+        "warmth_seconds": {"ollama-cloud": 600}
       }
 
   Best-effort on read: a missing or corrupt file is just "no overrides".
@@ -86,6 +87,18 @@ defmodule Server.OperatorConfig do
     case read(path) do
       %{"max_leaves" => n} when is_integer(n) and n > 0 -> n
       _ -> 6
+    end
+  end
+
+  @doc """
+  Per-provider warmth windows in seconds (`"warmth_seconds": {"ollama-cloud": 600}`), for a provider
+  whose prompt cache does not last the default hour; `%{}` when none are set.
+  """
+  @spec warmth_seconds(String.t()) :: %{String.t() => pos_integer()}
+  def warmth_seconds(path \\ path()) do
+    case read(path) do
+      %{"warmth_seconds" => %{} = m} -> for {k, v} <- m, is_integer(v) and v > 0, into: %{}, do: {k, v}
+      _ -> %{}
     end
   end
 
