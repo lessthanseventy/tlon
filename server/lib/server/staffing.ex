@@ -1,53 +1,40 @@
 defmodule Server.Staffing do
   @moduledoc """
-  Who runs where — the staffing pass, on the server. A workspace's cast is its bench
-  (`Server.Workspaces.bench/1`), not constants: the lead is the CENTRE (window 0 of the workspace's
-  private tmux session, running pi from its profile), every other seat a tail window launched by
-  its archetype's harness driver, and every staffed machine thread a leaf window (tagged
-  `@funes_thread <id>`) that gets the thread's latest operator message as its opening turn — under
-  the leaf cap (`Server.OperatorConfig.max_leaves/1`), a thread past it parks with a note.
-  Orphan leaves (thread closed while nobody looked) are swept. Stale coworkers (a live process
-  minting under a handle the bench no longer has) are torn down so they respawn.
+  Keeping the workspace's tmux in step with who is actually working. Nobody is spawned ahead of
+  need: a coworker's window is opened when a message is addressed to them (`Server.Switchboard`
+  through `Server.Arbiter.Tmux`), and this pass takes away what is no longer needed —
 
-  Runs on Oban's cron every minute (`Server.Jobs.Staff`) and on demand (`pass/0`); a client
-  (asterion) attaches to what this made. Stateless: the tmux session IS the state (window tags
-  carry the opening phase).
+    * a window whose coworker has gone COLD (no live session warm within the cache window, none
+      mid-turn) and is past its boot grace is closed: the lounge is no window at all, and the next
+      message spawns a fresh, brief-seeded session;
+    * an orphan leaf (its thread closed or unstaffed while nobody looked) is swept;
+    * a stale coworker (a live process minting under a handle the bench no longer has) is torn down.
 
-  Seams: tmux rides `Server.Tmux.run/3` (`:server, :tmux_cmd`); identity minting is
-  `:server, :staff_join` (default `Server.MCP.Spawn.join/3`); the opening inject's poll/settle
-  budgets are app env so tests pay no wait.
+  And it picks up a turn a machine restart cut off: a session still marked mid-turn
+  (`Server.Presence.Thinking`'s durable mark) with no window left is ended, and its coworker is
+  told on the thread to carry on — that message spawns them as any other would.
+
+  Runs on Oban's cron every minute (`Server.Jobs.Staff`) and on demand (`pass/0`). Stateless:
+  the tmux session and the session rows are the state; a spawned window carries its thread,
+  coworker and birth time as window options (`Server.Tmux.parse_windows/1`).
   """
 
   import Ecto.Query
 
+  alias Server.Agent
   alias Server.Channel
-  alias Server.Coworker
-  alias Server.Harness
-  alias Server.LeafWindow
-  alias Server.MCP.Spawn
   alias Server.Message
   alias Server.OperatorConfig
-  alias Server.Profile
-  alias Server.Profiles
+  alias Server.Presence
   alias Server.Repo
+  alias Server.Session
+  alias Server.Staff
   alias Server.Thread
   alias Server.Tmux
   alias Server.Workspaces
 
-  require Logger
-
-  # The opening inject waits for the harness to be input-ready (the registered footer), then types
-  # the text, settles, and sends Enter as its own burst — a just-booted TUI takes the text but
-  # swallows an Enter in the same write. A poll timeout still injects.
-  @ready_marker "registered"
-  @ready_poll_ms 500
-  @ready_timeout_ms 20_000
-  @opening_settle_ms 1_200
-
-  defp joiner, do: Application.get_env(:server, :staff_join, &Spawn.join/3)
-  defp ready_poll_ms, do: Application.get_env(:server, :staff_poll_ms, @ready_poll_ms)
-  defp ready_timeout_ms, do: Application.get_env(:server, :staff_ready_timeout_ms, @ready_timeout_ms)
-  defp opening_settle_ms, do: Application.get_env(:server, :staff_settle_ms, @opening_settle_ms)
+  # a window this young is still booting — its coworker may not have registered a session yet
+  @boot_grace_s 600
 
   @doc "The pass over every workspace."
   def pass do
@@ -55,162 +42,158 @@ defmodule Server.Staffing do
     :ok
   end
 
-  @doc "The pass over one workspace: reap stale, centre, tail, leaves (spawn under the cap, sweep orphans)."
+  @doc "The pass over one workspace: reap stale, sweep orphans and the cold, pick up cut-off turns."
   def pass(workspace_id) do
     case Workspaces.bench(workspace_id) do
       [] ->
         :ok
 
-      # The CENTRE is the bench's HEAD — the seat the operator put first (tertius, the surveyor);
-      # the workspace's LEAD (`Coworker.lead/1`, the builder) is who leads threads, a different job.
-      [centre | _] = bench ->
-        tabs = reap_stale(workspace_id, bench, Tmux.list_windows(workspace_id))
-        tabs = ensure_centre(workspace_id, centre, tabs)
-        ensure_tail(workspace_id, centre, bench, tabs)
-        ensure_leaves(workspace_id, bench, tabs)
+      bench ->
+        standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
+
+        tabs =
+          workspace_id
+          |> reap_stale(bench, Tmux.list_windows(workspace_id))
+          |> sweep_orphans(workspace_id, standing)
+          |> sweep_cold(workspace_id, standing, bench)
+
+        resume_interrupted(workspace_id, tabs, standing)
         :ok
     end
   end
 
-  # Tear down a coworker whose identity no longer matches the bench, so the passes below rebuild
-  # it. A stale CENTRE drops the whole workspace server (the session's window 0 cannot be replaced
-  # in place); a stale tail window is just killed.
+  # Tear down a coworker whose identity no longer matches the bench; the next message to whoever
+  # holds that seat now spawns them.
   defp reap_stale(workspace_id, bench, tabs) do
-    handles = Enum.map(bench, & &1.name)
-    centre = hd(bench).name
-    stale = stale_coworkers(tabs, handles)
-
-    cond do
-      stale == [] ->
-        tabs
-
-      Enum.any?(stale, &(&1.name == centre)) ->
-        _ = Tmux.run(workspace_id, ["kill-server"])
-        []
-
-      true ->
-        for tab <- stale, do: Tmux.kill_window(workspace_id, tab.index)
-        tabs -- stale
-    end
+    stale = stale_coworkers(tabs, Enum.map(bench, & &1.name))
+    for tab <- stale, do: Tmux.kill_window(workspace_id, tab.index)
+    tabs -- stale
   end
 
-  # The CENTRE: the lead's pi on the workspace's standing machine thread (window 0, named after
-  # the lead) — the session a client attaches to with `new-session -A`. Pi by design,
-  # whatever the lead's archetype binds elsewhere: the centre is the workspace's conversational
-  # seat, and claude stays the deliberate escalation.
-  defp ensure_centre(workspace_id, %Coworker{name: name} = lead, tabs) do
-    if Tmux.named(tabs, name) do
-      tabs
-    else
-      with %Profile{} = profile <- instantiate(lead, workspace_id),
-           {:ok, exports} <- machine_exports(workspace_id, name),
-           script = Tmux.boot_script(exports, Harness.Pi.launch_command(profile)),
-           {_out, 0} <- open(workspace_id, name, script, profile, exports) do
-        # Harnesses in the centre can emit kitty graphics themselves — tmux must pass the APC through.
-        _ = Tmux.run(workspace_id, ["set-option", "-g", "allow-passthrough", "on"])
-        Tmux.list_windows(workspace_id)
-      else
-        other ->
-          Logger.warning("staffing: centre #{name} on workspace #{workspace_id} did not start: #{inspect(other)}")
-          tabs
-      end
-    end
+  defp sweep_orphans(tabs, workspace_id, standing) do
+    live = workspace_id |> Channel.staffed_machine_threads() |> MapSet.new(& &1.id)
+    live = if standing, do: MapSet.put(live, standing), else: live
+    {orphans, kept} = Enum.split_with(tabs, &orphan_leaf?(&1, live))
+    for tab <- orphans, do: Tmux.kill_window(workspace_id, tab.index)
+    kept
   end
 
-  # The centre's window opens the session when there is none — with the profile's persistence-free
-  # tmux.conf and the identity in the session env — else it is a window in the running session.
-  defp open(workspace_id, name, script, profile, exports) do
-    cmd = "/bin/sh -c " <> Tmux.sh_single_quote(script)
-    env = Tmux.identity_flags(exports)
+  # A coworker's window past its boot grace whose coworker has no warm or mid-turn session on its
+  # thread: closed. Only windows this server can attribute to a coworker are touched (a spawn's
+  # tags, else the identity its process holds) — a crew role's or a hand-made window never is.
+  defp sweep_cold(tabs, workspace_id, standing, bench) do
+    seats = MapSet.new(bench, & &1.name)
+    now = System.os_time(:second)
 
-    if Tmux.session_up?(workspace_id) do
-      Tmux.run(workspace_id, ["new-window", "-d", "-t", Tmux.session(workspace_id), "-n", name] ++ env ++ [cmd])
-    else
-      conf = Path.join(Profiles.config_dir(profile), "tmux.conf")
-
-      Tmux.run(
-        workspace_id,
-        ["-f", conf, "new-session", "-d", "-s", Tmux.session(workspace_id), "-n", name] ++ env ++ [cmd]
-      )
-    end
-  end
-
-  # The TAIL: one window per remaining seat, each joined to the workspace's standing machine
-  # thread so the cast coordinates over server messages. Gated on the centre being up (its spawn
-  # opens the thread these join) and on the window not already being there.
-  defp ensure_tail(workspace_id, %Coworker{name: centre}, bench, tabs) do
-    if Tmux.named(tabs, centre) do
-      thread_id = machine_thread_id(workspace_id)
-
-      for %Coworker{name: name} = seat <- bench,
-          name != centre,
-          is_nil(Tmux.named(tabs, name)),
-          %Profile{} = profile <- [instantiate(seat, workspace_id)] do
-        command = Harness.driver(profile.harness).launch_command(profile)
-        spawn_window(workspace_id, name, name, thread_id, command)
-      end
-    end
-
-    :ok
-  end
-
-  # The LEAVES: every staffed, open machine thread in this workspace (the standing one excepted —
-  # the centre already runs it) gets its own window, up to the cap; orphans are swept first off the
-  # same snapshot, so a leaf spawned this pass can't be swept.
-  defp ensure_leaves(workspace_id, bench, tabs) do
-    standing = machine_thread_id(workspace_id)
-    threads = workspace_id |> Channel.staffed_machine_threads() |> Enum.reject(&(&1.id == standing))
-    live_ids = MapSet.new(threads, & &1.id)
-
-    for tab <- tabs, orphan_leaf?(tab, live_ids), do: Tmux.kill_window(workspace_id, tab.index)
-
-    budget = OperatorConfig.max_leaves() - Enum.count(tabs, &Tmux.leaf_window?/1)
-    taken = MapSet.new(tabs, & &1.name)
-
-    _ =
-      Enum.reduce(threads, {budget, taken}, fn thread, {budget, taken} ->
-        case Tmux.leaf_tab(tabs, thread.id) do
-          # a leaf typed into before a restart: the text settled long ago, submit now
-          %{opening: "typed", index: index} ->
-            _ = Tmux.submit(workspace_id, index)
-            _ = Tmux.set_window_option(workspace_id, index, "@funes_opening", "done")
-            {budget, taken}
-
-          %{} ->
-            {budget, taken}
-
-          nil when budget <= 0 ->
-            note_parked(thread.id)
-            {budget, taken}
-
-          nil ->
-            spawn_leaf(workspace_id, bench, thread, taken, budget)
+    {cold, kept} =
+      Enum.split_with(tabs, fn tab ->
+        with {thread, agent} when is_integer(thread) and is_binary(agent) <- owner(tab, standing, seats),
+             true <- now - (tab.born || 0) > @boot_grace_s do
+          not on_the_clock?(thread, agent)
+        else
+          _ -> false
         end
       end)
 
+    for tab <- cold, do: Tmux.kill_window(workspace_id, tab.index)
+    kept
+  end
+
+  # whose window a tab is: the spawn's tags; else (a window from before the tags) the identity its
+  # process holds, on its tagged thread or the standing one
+  defp owner(%{agent: agent, thread_id: thread}, standing, _seats) when is_binary(agent),
+    do: {thread || standing, agent}
+
+  defp owner(tab, standing, seats) do
+    case pane_author(tab) do
+      nil -> nil
+      author -> if MapSet.member?(seats, author), do: {tab.thread_id || standing, author}
+    end
+  end
+
+  defp on_the_clock?(thread_id, agent) do
+    cutoff = Presence.warmth_cutoff()
+
+    Repo.exists?(
+      from s in Session,
+        join: a in Agent,
+        on: a.id == s.agent_id,
+        where:
+          s.thread_id == ^thread_id and a.name == ^agent and is_nil(s.ended_at) and
+            (s.last_active_at > ^cutoff or not is_nil(s.thinking_since))
+    )
+  end
+
+  # A session still mid-turn with no window to run it: the machine went down under it. End it (so
+  # the switchboard does not try to wake a pane that is gone) and tell its coworker on the thread
+  # to carry on — the message spawns them fresh, brief-seeded, like any other.
+  defp resume_interrupted(workspace_id, tabs, standing) do
+    for %{session_id: sid, thread_id: tid, agent: agent} <- Staff.interrupted(workspace_id),
+        not has_window?(tabs, tid, agent, standing) do
+      {:ok, _} = Staff.end_session(Repo.get!(Session, sid))
+
+      {:ok, _} =
+        Channel.post(%{
+          thread_id: tid,
+          author: "tlon",
+          body: "@#{agent} the machine restarted while you were mid-turn here — pick it up from the brief."
+        })
+    end
+
     :ok
   end
 
+  defp has_window?(tabs, thread_id, agent, standing) do
+    Enum.any?(tabs, fn tab ->
+      (tab.agent == agent and (tab.thread_id || standing) == thread_id) or
+        (is_nil(tab.agent) and thread_id == standing and tab.name == agent) or
+        (is_nil(tab.agent) and thread_id != standing and Tmux.leaf_tab([tab], thread_id) != nil)
+    end)
+  end
+
   @doc """
-  Hand a running thread to another coworker (the shell's office): restaff it, post the handoff as
-  the operator — which the new worker's leaf takes as its opening turn — and end the old worker's
-  leaf, which staffing would otherwise keep, so the next pass spawns the new one. `{:ok, thread}`, or
-  `Channel.assign_lead/2`'s error with nothing changed.
+  Hand a running thread to another coworker (the office): restaff it, post the handoff as the
+  operator — which wakes the new lead, spawning them — and close the old worker's leaf. `{:ok,
+  thread}`, or `Channel.assign_lead/2`'s error with nothing changed.
   """
   def hand_off(thread_id, handle) do
     with {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
-      operator = Application.get_env(:server, :operator, "andrew")
-      body = "Handing this to @#{handle}: pick it up from the brief."
-      {:ok, _} = Channel.post(%{thread_id: thread.id, author: operator, body: body})
-
       with %{index: index} <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id),
            do: Tmux.kill_window(thread.workspace_id, index)
 
+      operator = Application.get_env(:server, :operator, "andrew")
+      body = "Handing this to @#{handle}: pick it up from the brief."
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: operator, body: body})
       {:ok, thread}
     end
   end
 
-  @doc "Is this tab a leaf whose thread is no longer open+staffed? The centre/tail/crew windows never are."
+  @doc """
+  Clear a coworker's context: end their live sessions in `workspace_id` and close their windows.
+  The next message addressed to them spawns a fresh, brief-seeded session. `:ok`.
+  """
+  def clear_context(workspace_id, agent) do
+    ids = from(t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
+
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      where: a.name == ^agent and is_nil(s.ended_at) and s.thread_id in subquery(ids)
+    )
+    |> Repo.all()
+    |> Enum.each(&Staff.end_session/1)
+
+    seats = MapSet.new([agent])
+    standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
+
+    for tab <- Tmux.list_windows(workspace_id),
+        match?({_, ^agent}, owner(tab, standing, seats)),
+        do: Tmux.kill_window(workspace_id, tab.index)
+
+    :ok
+  end
+
+  @doc "Is this tab a leaf whose thread is no longer open+staffed? Untagged coworker and crew windows never are."
   def orphan_leaf?(%{thread_id: tid}, live_ids) when is_integer(tid), do: not MapSet.member?(live_ids, tid)
 
   def orphan_leaf?(%{name: name}, live_ids) do
@@ -220,77 +203,11 @@ defmodule Server.Staffing do
     end
   end
 
-  # A leaf via the lead's bench profile: the harness DRIVER supplies the exec, the window gets a
-  # HUMAN name (`<archetype>-<title-slug>`), the routing key is the `@funes_thread` tag stamped right
-  # after the spawn, and the opening turn follows once the harness is ready. A meta or
-  # bench-unknown lead spawns nothing.
-  defp spawn_leaf(workspace_id, bench, %{id: id, lead: lead, title: title}, taken, budget) do
-    case Profiles.leaf_profile(lead, bench) do
-      nil ->
-        {budget, taken}
-
-      %Profile{} = profile ->
-        with :ok <- materialise(profile),
-             window = LeafWindow.name(profile.archetype, title, taken),
-             command = Harness.driver(profile.harness).launch_command(profile),
-             {_out, 0} <- spawn_window(workspace_id, lead, window, id, command) do
-          _ = Tmux.set_window_option(workspace_id, "=" <> window, "@funes_thread", Integer.to_string(id))
-          inject_opening(workspace_id, window, id)
-          {budget - 1, MapSet.put(taken, window)}
-        else
-          other ->
-            Logger.warning("staffing: leaf for thread #{id} did not start: #{inspect(other)}")
-            {budget, taken}
-        end
-    end
-  end
-
-  # The opening turn: the thread's latest operator message, typed once the pane is ready, then
-  # Enter as its own burst; the window is tagged done either way, so nothing ever re-types it.
-  defp inject_opening(workspace_id, window, thread_id) do
-    if message = Channel.latest_operator_message(thread_id) do
-      operator = Application.get_env(:server, :operator, "andrew")
-      _ = await_ready(workspace_id, window)
-
-      _ =
-        Tmux.send_text(
-          workspace_id,
-          "=" <> window,
-          "[server thread ##{thread_id}] #{operator}: #{one_line(message.body)}"
-        )
-
-      Process.sleep(opening_settle_ms())
-      _ = Tmux.submit(workspace_id, "=" <> window)
-    end
-
-    _ = Tmux.set_window_option(workspace_id, "=" <> window, "@funes_opening", "done")
-    :ok
-  end
-
-  defp one_line(body), do: String.replace(body || "", "\n", " ")
-
-  defp await_ready(ws, window), do: poll_ready(ws, window, div(ready_timeout_ms(), max(ready_poll_ms(), 1)))
-
-  defp poll_ready(_ws, _window, remaining) when remaining <= 0, do: false
-
-  defp poll_ready(ws, window, remaining) do
-    case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, "=" <> window)]) do
-      {out, 0} when is_binary(out) ->
-        if String.contains?(out, @ready_marker) do
-          true
-        else
-          Process.sleep(ready_poll_ms())
-          poll_ready(ws, window, remaining - 1)
-        end
-
-      _ ->
-        false
-    end
-  end
-
-  # Tell the thread ONCE why nobody is working it yet — durable: the note is skipped while it is
-  # the thread's latest message, so a minute's cadence never nags.
-  defp note_parked(thread_id) do
+  @doc """
+  Tell a thread ONCE why nobody is working it yet (the leaf cap, `Server.OperatorConfig.max_leaves/1`)
+  — durable: the note is skipped while it is the thread's latest message, so a minute's cadence never nags.
+  """
+  def note_parked(thread_id) do
     last = Repo.one(from m in Message, where: m.thread_id == ^thread_id, order_by: [desc: m.id], limit: 1)
 
     if !(last && last.author == "tlon" && String.starts_with?(last.body, "⏸ parked")) do
@@ -300,67 +217,11 @@ defmodule Server.Staffing do
           author: "tlon",
           body:
             "⏸ parked — the leaf cap (#{OperatorConfig.max_leaves()}) is reached. This thread keeps its lead " <>
-              "and starts automatically when a seat frees (close an idle leaf, or raise \"max_leaves\")."
+              "and starts automatically when a seat frees (an idle leaf goes cold, or raise \"max_leaves\")."
         })
     end
 
     :ok
-  end
-
-  # Open a harness window named `window` on `thread_id` as server handle `handle`, running
-  # `command` in workspace `workspace_id` — the tail and the leaves ride this ONE spawn: identity
-  # join + tmux plumbing are harness-agnostic, only the exec differs. `-d`: a coworker starting
-  # must NOT yank the operator off whatever window they're on.
-  defp spawn_window(workspace_id, handle, window, thread_id, command) do
-    with id when is_integer(id) <- thread_id,
-         {:ok, %{exports: exports}} <- joiner().(id, handle, mandate: "machine") do
-      script = Tmux.boot_script(exports, command)
-
-      Tmux.run(workspace_id, [
-        "new-window",
-        "-d",
-        "-t",
-        Tmux.session(workspace_id),
-        "-n",
-        window,
-        "/bin/sh -c " <> Tmux.sh_single_quote(script)
-      ])
-    end
-  end
-
-  defp instantiate(%Coworker{} = seat, workspace_id) do
-    profile = Profiles.instantiate(Profiles.roster_entry(seat), workspace_id)
-    with :ok <- materialise(profile), do: profile
-  end
-
-  # A filesystem hiccup degrades to "no coworker", never a crashed pass.
-  defp materialise(profile) do
-    _ = Profiles.materialise!(profile)
-    :ok
-  rescue
-    e -> {:error, {:materialise, Exception.message(e)}}
-  end
-
-  # The workspace's standing machine thread — the centre's and the tail's root — find-or-created:
-  # the oldest open machine thread in the workspace, else a fresh lobby (Bootstrap mints the same).
-  defp standing_thread(workspace_id) do
-    case Channel.machine_thread(workspace_id) do
-      %Thread{} = t -> {:ok, t}
-      nil -> Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: workspace_id})
-    end
-  end
-
-  defp machine_thread_id(workspace_id) do
-    case standing_thread(workspace_id) do
-      {:ok, %Thread{id: id}} -> id
-      _ -> nil
-    end
-  end
-
-  defp machine_exports(workspace_id, agent) do
-    with {:ok, %Thread{id: id}} <- standing_thread(workspace_id),
-         {:ok, %{exports: e}} <- joiner().(id, agent, mandate: "machine"),
-         do: {:ok, e}
   end
 
   @doc """

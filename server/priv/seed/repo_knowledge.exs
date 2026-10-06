@@ -47,7 +47,7 @@
         "Container hierarchy is Workspace ▸ Project ▸ Thread. A Workspace is a context with its own bench of " <>
           "coworkers and its own tmux server; a Project is a named effort over one or more repos; a Thread is a " <>
           "unit of work with a lead, in a project. Each workspace has one standing thread, its lobby, where the " <>
-          "centre coworker sits. A Ticket is a lightweight workspace tracker that promotes into a thread; a Note " <>
+          "operator talks to the whole bench. A Ticket is a lightweight workspace tracker that promotes into a thread; a Note " <>
           "is freeform scratch."
     },
     %{
@@ -109,10 +109,11 @@
       kind: "decision",
       provenance: "stated",
       text:
-        "Coworker lifecycle: the service's staffing pass (each minute) keeps every benched workspace's centre " <>
-          "and tail seats running; a thread's lead comes online when the operator posts to it. A WARM lead (a live " <>
-          "session inside the ~1h warmth window) is woken; a COLD one gets a FRESH session seeded from the " <>
-          "thread's brief, never a /resume of a huge transcript."
+        "Coworker lifecycle: nobody runs ahead of need. A coworker comes online when a message is addressed " <>
+          "to them (a thread's lead anywhere, anyone @mentioned in the lobby). A WARM one (a live session inside " <>
+          "the ~1h warmth window) is woken; a COLD one's window is closed by the staffing pass and the next " <>
+          "message gets a FRESH session seeded from the thread's brief, never a /resume of a huge transcript. A " <>
+          "turn a machine restart cut off is picked up with a message telling its coworker to carry on."
     },
     %{
       intent: "seed:bootstrap-knowledge-loop",

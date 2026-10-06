@@ -20,7 +20,7 @@ defmodule Server.Bootstrap do
 
   require Logger
 
-  # Each workspace's standing machine thread — where the operator talks to the centre.
+  # Each workspace's standing machine thread — where the operator talks to the bench.
   @standing_title "lobby"
 
   @default %{

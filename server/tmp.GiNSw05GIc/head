@@ -1,0 +1,74 @@
+defmodule Server.StaffingTest do
+  # The staffing pass on the server: the centre, the tail, the leaves under the cap, the orphan
+  # sweep and the stale reap — driven through the `:tmux_cmd`/`:staff_join` seams, so no live tmux
+  # or harness is ever forked.
+  use ExUnit.Case, async: false
+
+  alias Server.Channel
+  alias Server.Staffing
+  alias Server.Workspaces
+
+  @bench [
+    %{archetype: "surveyor", name: "rufus"},
+    %{archetype: "builder", name: "hronir"},
+    %{archetype: "planner", name: "borges"}
+  ]
+
+  setup do
+    Server.TestDB.clean!()
+    {:ok, ws} = Workspaces.register(%{name: "Freedonia", type: "code", scope: "project", repos: [], roster: @bench})
+    # the workspace's standing machine thread — the oldest open one, so it is opened FIRST here
+    {:ok, standing} = Channel.open_thread(%{title: "general", scope: "machine", workspace_id: ws.id})
+
+    pi_root = Path.join(System.tmp_dir!(), "tlon_staffing_pi_#{System.unique_integer([:positive])}")
+    prior = System.get_env("PI_CODING_AGENT_DIR")
+    System.put_env("PI_CODING_AGENT_DIR", Path.join(pi_root, "agent"))
+    prior_env = System.get_env("TLON_ENV")
+    System.delete_env("TLON_ENV")
+
+    test_pid = self()
+
+    Application.put_env(:server, :staff_join, fn thread_id, agent, opts ->
+      send(test_pid, {:join, thread_id, agent, opts})
+      {:ok, %{exports: ~s(export TLON_THREAD="#{thread_id}"\nexport TLON_AUTHOR="#{agent}")}}
+    end)
+
+    Application.put_env(:server, :staff_poll_ms, 0)
+    Application.put_env(:server, :staff_settle_ms, 0)
+
+    on_exit(fn ->
+      for k <- [:tmux_cmd, :staff_join, :staff_poll_ms, :staff_settle_ms], do: Application.delete_env(:server, k)
+      if prior, do: System.put_env("PI_CODING_AGENT_DIR", prior), else: System.delete_env("PI_CODING_AGENT_DIR")
+      if prior_env, do: System.put_env("TLON_ENV", prior_env), else: System.delete_env("TLON_ENV")
+      File.rm_rf!(pi_root)
+    end)
+
+    %{ws: ws, standing: standing, sock: "tlon-workspace-#{ws.id}", session: "w#{ws.id}"}
+  end
+
+  # A fake tmux: `windows` is what list-windows prints (the centre `rufus` on 0 in most fixtures);
+  # everything else succeeds; a capture-pane reports the registered footer (harness ready).
+  defp tmux(windows) do
+    test_pid = self()
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      send(test_pid, {:tmux, args})
+      answer(windows, args)
+    end)
+  end
+
+  defp answer(windows, args) do
+    cond do
+      "list-windows" in args -> {windows, 0}
+      "has-session" in args -> if windows == "", do: {"no", 1}, else: {"", 0}
+      "capture-pane" in args -> {"tlon: registered", 0}
+      true -> {"", 0}
+    end
+  end
+
+  defp staffed_thread(ws, handle, title \\ nil) do
+    {:ok, thread} = Channel.open_thread(%{title: title || "task for #{handle}", scope: "machine", workspace_id: ws.id})
+    {:ok, _} = Channel.assign_lead(thread.id, handle)
+    thread
+  end
+

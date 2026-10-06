@@ -113,6 +113,40 @@ defmodule Server.Arbiter.TmuxTest do
     assert {:error, :already_running} = Arbiter.Tmux.spawn(exports)
   end
 
+  test "spawn: on the standing thread a window per coworker, named for them, tagged with them and its birth — no thread tag",
+       %{ws: ws} do
+    {:ok, _} = Staff.register_agent(%{name: "hronir", mandate: "m", engine: "pi"})
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+    assert Channel.machine_thread(ws.id).id == lobby.id
+    lobby_exports = ~s(export TLON_THREAD="#{lobby.id}"\nexport TLON_AUTHOR="hronir")
+
+    Application.put_env(
+      :server,
+      :tmux_cmd,
+      record(%{"has-session" => {"", 0}, "list-windows" => {"0\ttertius\t\t\t1\ttertius\t1\n", 0}})
+    )
+
+    assert {:ok, %{window: "hronir"}} = Arbiter.Tmux.spawn(lobby_exports)
+    assert_received {:tmux, ["-L", _, "set-option", "-w", "-t", _, "@funes_agent", "hronir"]}
+    assert_received {:tmux, ["-L", _, "set-option", "-w", "-t", _, "@funes_born", born]}
+    assert String.to_integer(born) > 0
+    refute_received {:tmux, ["-L", _, "set-option", "-w", "-t", _, "@funes_thread", _]}
+
+    # hronir is already up on the lobby: no second window
+    Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"0\thronir\t\t\t1\thronir\t1\n", 0}}))
+    assert {:error, :already_running} = Arbiter.Tmux.spawn(lobby_exports)
+  end
+
+  test "spawn: a leaf past the cap is refused, and the thread is told once", %{thread: t, exports: exports} do
+    leaves = Enum.map_join(1..6, fn i -> "#{i}\tleaf#{i}\t#{900_000 + i}\tdone\t#{i}\tx\t1\n" end)
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {leaves, 0}}))
+
+    assert {:error, :at_cap} = Arbiter.Tmux.spawn(exports)
+    assert {:error, :at_cap} = Arbiter.Tmux.spawn(exports)
+    refute_received {:tmux, ["-L", _, "new-window" | _]}
+    assert [%{author: "tlon", body: "⏸ parked" <> _}] = Channel.thread_messages(t)
+  end
+
   test "spawn: a bad exports block or unknown thread is a typed error", %{} do
     Application.put_env(:server, :tmux_cmd, record(%{}))
     assert {:error, :no_identity_in_exports} = Arbiter.Tmux.spawn("nothing here")

@@ -64,6 +64,8 @@ defmodule Server.MCP.OperatorAPI do
                                           ("inherit" puts a knob back to the archetype's; absent leaves it)
       POST   /api/workspaces/:id/coworkers/:agent_id/aside  {"question"} → Office.aside_spec: the
                                           command to run and where — the CALLER runs it
+      POST   /api/workspaces/:id/coworkers/:agent_id/clear  Staffing.clear_context: its sessions end and
+                                          its windows close; the next message spawns it fresh
       DELETE /api/seats/:id               Workspaces.unseat (the agent itself survives)
       DELETE /api/facts/:id               Dossier.forget_fact (a tombstone: out of recall, row kept)
       POST   /api/issues/:id/resolve      {"resolution"?} → Dossier.resolve_issue
@@ -197,6 +199,9 @@ defmodule Server.MCP.OperatorAPI do
 
   defp on_workspaces(conn, "POST", [id, "coworkers", a, "aside"]),
     do: with_workspace(conn, id, &with_int(conn, a, fn agent -> aside(conn, &1, agent) end))
+
+  defp on_workspaces(conn, "POST", [id, "coworkers", a, "clear"]),
+    do: with_workspace(conn, id, &with_int(conn, a, fn agent -> clear(conn, &1, agent) end))
 
   defp on_workspaces(conn, _, _), do: no_route(conn)
 
@@ -511,6 +516,14 @@ defmodule Server.MCP.OperatorAPI do
   defp retarget(conn, ws, agent) do
     {b, conn} = body(conn)
     reply(conn, Workspaces.retarget(ws.id, agent, knobs(b)), &policy_row/1)
+  end
+
+  # a seated coworker's context cleared: its sessions end, its windows close; the next message spawns it fresh
+  defp clear(conn, ws, agent_id) do
+    case Enum.find(Workspaces.bench(ws.id), &(&1.agent_id == agent_id)) do
+      nil -> json(conn, 404, %{error: "no coworker #{agent_id} on #{ws.name}"})
+      c -> reply(conn, {:ok, Server.Staffing.clear_context(ws.id, c.name)}, fn _ -> %{cleared: c.name} end)
+    end
   end
 
   defp aside(conn, ws, agent) do

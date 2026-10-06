@@ -76,9 +76,8 @@ defmodule Server.Switchboard do
   defp deliver_now(%Message{} = message) do
     case recipients(message) do
       [] ->
-        # Nobody warm+available is addressed — but if the thread's LEAD simply isn't running,
-        # open a pane for it (§4c.3) rather than wait for the human. Delivery still happens
-        # when that session registers and drains, so this stays :pending.
+        # Nobody warm+available is addressed — open panes for whoever it addresses (§4c.3) rather
+        # than wait for the human. Delivery happens when they come up, so this stays :pending.
         maybe_spawn_absent(message)
         {:pending, message}
 
@@ -129,8 +128,13 @@ defmodule Server.Switchboard do
     touch_author(message)
 
     case recipients(message) do
-      [] -> []
-      sessions -> if claim([message.id]) > 0, do: sessions, else: []
+      [] ->
+        # nobody warm is addressed: open their panes (a no-op while one is still booting)
+        maybe_spawn_absent(message)
+        []
+
+      sessions ->
+        if claim([message.id]) > 0, do: sessions, else: []
     end
   end
 
@@ -191,45 +195,56 @@ defmodule Server.Switchboard do
     end
   end
 
-  # The autonomous cold-thread spawn (§4c.3): a message addressed to a thread whose LEAD has no
-  # live session opens a fresh pane for it — the SAME arbiter seam the `s` verb uses (`Spawn`
-  # mints identity, `Arbiter` actuates) — so an unattended thread wakes someone instead of
-  # waiting for the human. Gated three ways: the lead must be ADDRESSED by this message (an
-  # @mention of a coworker does not spawn the lead), have NO live session (never a zombie
-  # double-spawn over a cold-but-live one), and its engine must NOT be clocked out (starting a
-  # fresh session it cannot run is worse than waiting). An inert arbiter's spawn is a no-op, so
-  # this is safe until a real backend is wired. Only the LEAD auto-spawns; an absent coworker
-  # stays pending for the human (or the `s` verb).
+  # Staffing on demand (§4c.3): nobody runs ahead of need, so a message addressed to coworkers with
+  # no warm session on its thread opens a pane for each it may — the thread's LEAD anywhere, any
+  # addressed coworker on the workspace's standing thread (one window each there; elsewhere a
+  # thread has one leaf, its lead's). The SAME arbiter seam the `s` verb uses (`Spawn` mints
+  # identity, `Arbiter` actuates). Gated: no warm session (a cold one is rotated onto a fresh,
+  # brief-seeded pane, never resumed), an open thread (a closed one's backlog wakes nobody), and an
+  # engine not clocked out (a fresh session it cannot run is worse than waiting). A pane already
+  # running (its coworker still booting) is left alone, which makes the drain's retry each minute safe.
   defp maybe_spawn_absent(%Message{thread_id: thread_id} = message) do
-    with %Thread{agent_id: agent_id} when not is_nil(agent_id) <- Repo.get(Thread, thread_id),
-         %Agent{} = lead <- Repo.get(Agent, agent_id),
-         true <- lead_addressed?(message, lead),
-         false <- has_warm_session?(thread_id, agent_id),
-         false <- Presence.clocked_out?(lead),
-         {:ok, %{exports: exports}} <- Spawn.join(thread_id, lead.name),
-         {:ok, handle} <- Arbiter.spawn(exports) do
-      opening_turn(message, lead, handle)
-    else
-      _ -> :ok
+    with %Thread{state: "open"} = thread <- Repo.get(Thread, thread_id) do
+      author = String.downcase(message.author)
+      standing? = match?(%Thread{id: ^thread_id}, Server.Channel.machine_thread(thread.workspace_id))
+
+      spawned =
+        for name <- target_names(message),
+            String.downcase(name) != author,
+            %Agent{} = agent <- [Staff.agent_by_name(name)],
+            standing? or agent.id == thread.agent_id,
+            not has_warm_session?(thread_id, agent.id),
+            not Presence.clocked_out?(agent),
+            {:ok, %{exports: exports}} <- [Spawn.join(thread_id, agent.name)],
+            {:ok, handle} <- [Arbiter.spawn(exports)],
+            do: {agent.name, handle}
+
+      if spawned != [], do: opening_turn(message, spawned)
     end
+
+    :ok
   end
 
-  # The spawned pane's OPENING TURN. A harness that registers only on its first prompt (Claude Code)
+  # The spawned panes' OPENING TURN. A harness that registers only on its first prompt (Claude Code)
   # would otherwise wait forever for a wake that waits for it to register. Off the caller's path:
-  # once the pane is ready (or the wait runs out), CLAIM the message — the claim is what keeps a
-  # concurrent drain from typing it a second time once the session does register — and wake the new
+  # once every pane is ready (or the wait runs out), CLAIM the message — the claim is what keeps a
+  # concurrent drain from typing it a second time once a session does register — and wake each new
   # window with it, exactly the poke a warm session would have got.
-  defp opening_turn(%Message{} = message, %Agent{name: agent}, handle) do
+  defp opening_turn(%Message{} = message, spawned) do
     {:ok, _pid} =
       Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-        await_ready(handle, Application.get_env(:server, :spawn_ready_timeout_ms, 20_000))
+        budget = Application.get_env(:server, :spawn_ready_timeout_ms, 20_000)
+        Enum.each(spawned, fn {_agent, handle} -> await_ready(handle, budget) end)
 
-        if claim([message.id]) > 0 do
-          poke(%{thread_id: message.thread_id, agent: agent, pane_ref: nil}, prompt(message))
-        end
+        if claim([message.id]) > 0, do: poke_spawned(message, spawned)
       end)
 
     :ok
+  end
+
+  defp poke_spawned(message, spawned) do
+    for {agent, _handle} <- spawned,
+        do: poke(%{thread_id: message.thread_id, agent: agent, pane_ref: nil}, prompt(message))
   end
 
   defp await_ready(handle, budget_ms) do
@@ -246,11 +261,6 @@ defmodule Server.Switchboard do
         Process.sleep(poll)
         await_ready(handle, budget_ms - max(poll, 1))
     end
-  end
-
-  defp lead_addressed?(%Message{} = message, %Agent{name: name}) do
-    down = String.downcase(name)
-    message |> target_names() |> Enum.any?(&(String.downcase(&1) == down))
   end
 
   # A WARM session is one worth waking (a cheap resume): live AND active within the warmth window.

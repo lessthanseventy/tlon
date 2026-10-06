@@ -1,13 +1,10 @@
 defmodule Server.Arbiter.Tmux do
   @moduledoc """
-  The server's terminal backend, and the ONE arbiter: spawn a coworker and wake it with no UI
-  open. The coworker is a window in the workspace's private tmux session (`Server.Tmux` naming),
-  tagged `@funes_thread <id>`, so the staffing pass adopts it as the thread's leaf instead of
-  spawning a second one, and asterion attaches to it.
-
-  What it does NOT do: the roster centre, the per-archetype profile drivers, the
-  leaf-cap budget and the opening-turn inject — those are the staffing pass (B/3). This spawns
-  the thread's LEAD with the harness its agent engine names and wakes by tag.
+  The server's terminal backend, and the ONE arbiter: spawn a coworker when a message needs them
+  and wake it, with no UI open. The coworker is a window in the workspace's private tmux session
+  (`Server.Tmux` naming) — one per coworker on the standing thread, one leaf per other thread under
+  the leaf cap — tagged with whose it is and when it was born, which the staffing pass reads to
+  close it once it goes cold. The harness is the coworker's profile's (`Server.Harness`).
   """
   @behaviour Server.Arbiter
 
@@ -41,13 +38,21 @@ defmodule Server.Arbiter.Tmux do
     end
   end
 
+  # A coworker's window: on the workspace's standing thread one per coworker, named after them;
+  # on any other thread the thread's one leaf, `t<id>`, under the leaf cap (a thread past it is
+  # told so once, and its message waits for the drain). Tagged with its coworker and its birth (a
+  # leaf with its thread too), which is how the staffing pass knows whose it is and when it goes cold.
   @impl true
   def spawn(exports) do
     with {:ok, thread_id, author} <- identity(exports),
          %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
          ws when not is_nil(ws) <- workspace_id(thread),
-         :absent <- leaf_state(ws, thread_id) do
-      window = "t#{thread_id}"
+         standing? = standing?(ws, thread),
+         tabs = Tmux.list_windows(ws),
+         :absent <- running(tabs, thread, author, standing?),
+         :ok <- under_cap(tabs, thread, standing?) do
+      leaf_thread = if(!standing?, do: thread_id)
+      window = if standing?, do: author, else: "t#{thread_id}"
       script = Tmux.boot_script(exports, launcher(ws, author))
       cmd = "/bin/sh -c " <> Tmux.sh_single_quote(script)
 
@@ -58,7 +63,7 @@ defmodule Server.Arbiter.Tmux do
 
       case Tmux.run(ws, args) do
         {_out, 0} ->
-          Tmux.set_window_option(ws, "=" <> window, "@funes_thread", Integer.to_string(thread_id))
+          tag(ws, window, leaf_thread, author)
           {:ok, target(ws, window)}
 
         {out, _} ->
@@ -70,15 +75,40 @@ defmodule Server.Arbiter.Tmux do
     end
   end
 
-  # `nil || {:error, _}` would read as the error — so an explicit atom for "no leaf yet"
-  defp leaf_state(ws, thread_id) do
-    if Tmux.leaf_tab(Tmux.list_windows(ws), thread_id), do: {:error, :already_running}, else: :absent
+  defp tag(ws, window, leaf_thread, author) do
+    set = &Tmux.set_window_option(ws, "=" <> window, &1, &2)
+    if leaf_thread, do: set.("@funes_thread", Integer.to_string(leaf_thread))
+    set.("@funes_agent", author)
+    set.("@funes_born", Integer.to_string(System.os_time(:second)))
+  end
+
+  defp standing?(ws, %Thread{id: id}), do: match?(%Thread{id: ^id}, Server.Channel.machine_thread(ws))
+
+  # `nil || {:error, _}` would read as the error — so an explicit atom for "not running yet"
+  defp running(tabs, %Thread{id: id}, author, standing?) do
+    mine =
+      if standing?,
+        do: Enum.find(tabs, &(&1.agent == author or (is_nil(&1.agent) and &1.name == author))),
+        else: Tmux.leaf_tab(tabs, id)
+
+    if mine, do: {:error, :already_running}, else: :absent
+  end
+
+  defp under_cap(_tabs, _thread, true), do: :ok
+
+  defp under_cap(tabs, %Thread{id: id}, false) do
+    if Enum.count(tabs, &Tmux.leaf_window?/1) < Server.OperatorConfig.max_leaves() do
+      :ok
+    else
+      Server.Staffing.note_parked(id)
+      {:error, :at_cap}
+    end
   end
 
   @doc """
   Where a thread's coworker runs, for any client that wants to attach — `%{socket, session,
   window}` or nil. The leaf window by tag or `t<id>` name, else the lead's own window (a
-  standing thread's coworker runs in the centre, named after the lead).
+  standing thread's coworker runs in a window named after them).
   """
   def terminal_target(%Thread{} = thread) do
     with ws when not is_nil(ws) <- workspace_id(thread),

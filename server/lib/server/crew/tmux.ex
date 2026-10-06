@@ -91,8 +91,8 @@ defmodule Server.Crew.Tmux do
     e -> {:error, {:materialise, Exception.message(e)}}
   end
 
-  # The window rides the workspace session the lead runs in; with no session yet (no centre
-  # spawned), the role opens it — the same rule as Arbiter.Tmux.spawn.
+  # The window rides the workspace's tmux session; with no session yet (nobody spawned), the role
+  # opens it — the same rule as Arbiter.Tmux.spawn.
   defp open_window(ws, window, script) do
     cmd = "/bin/sh -c " <> Tmux.sh_single_quote(script)
 
