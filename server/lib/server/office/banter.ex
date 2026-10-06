@@ -142,8 +142,9 @@ defmodule Server.Office.Banter do
     end)
   end
 
-  # Who is here and what everyone is on, gathered once per line.
-  defp context(ws) do
+  @doc false
+  # Who is here and what everyone is on, gathered once per line (and per pet batch, `Server.Office.Pets`).
+  def context(ws) do
     status = Server.Office.status()
     threads = for t <- status.threads, t.workspace_id == ws, into: %{}, do: {t.lead, t}
 
@@ -169,7 +170,8 @@ defmodule Server.Office.Banter do
     }
   end
 
-  defp scene(ctx) do
+  @doc false
+  def scene(ctx) do
     people =
       Enum.map_join(ctx.crew, "\n", fn c ->
         "- #{c.name}, #{c.archetype}#{if c.lead, do: " (lead)"}: #{if c.thread, do: thread_line(c.thread), else: "on the bench, idle"}"
