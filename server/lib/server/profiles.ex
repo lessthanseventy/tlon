@@ -751,6 +751,21 @@ defmodule Server.Profiles do
     end
   end
 
+  @doc """
+  The instantiated `%Profile{}` behind any seat on `roster`, meta included — what a window opened
+  for that coworker is launched with. nil for a handle with no registry-known seat.
+  """
+  @spec seat_profile(String.t(), [map()]) :: Profile.t() | nil
+  def seat_profile(handle, roster) do
+    roster
+    |> Enum.map(&roster_entry/1)
+    |> Enum.find(fn %{archetype: a, name: n} -> a != nil and n == handle end)
+    |> case do
+      nil -> nil
+      entry -> instantiate(entry)
+    end
+  end
+
   defp normalize_archetype(a) when is_atom(a), do: a
 
   # NOT `String.to_existing_atom/1`: that only succeeds once something has already loaded this
