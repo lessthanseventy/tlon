@@ -33,6 +33,7 @@ describe("planReload — respawn argv", () => {
   test("script kills the pane and respawns via the positional args (no interpolation)", () => {
     const script = plan.bashArgv?.[1] ?? "";
     expect(script).toContain("respawn-pane -k");
+    expect(script).toContain('-e "ADAPTERS_RELOAD_CMD=$1"'); // the new pane can reload again
     expect(script).toContain('"$0"'); // pane
     expect(script).toContain('"$1"'); // cmd
     expect(script).toContain("sleep 0.4");

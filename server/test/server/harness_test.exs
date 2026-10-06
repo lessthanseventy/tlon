@@ -159,6 +159,19 @@ defmodule Server.HarnessTest do
       assert cmd =~ "--model ollama-cloud/glm-5.2 --thinking medium"
     end
 
+    test "pi: the window carries its own resume — ADAPTERS_RELOAD_CMD is the same launch, --continue" do
+      p = %Profile{name: "borges", model: @glm, system_prompt: "You plan."}
+      cmd = Harness.driver(:pi).launch_command(p)
+
+      {out, 0} =
+        System.cmd("sh", [
+          "-c",
+          String.replace(cmd, ~r/(' PI_CODING_AGENT_DIR=\S+) pi .*$/, "\\1 printenv ADAPTERS_RELOAD_CMD")
+        ])
+
+      assert String.trim(out) =~ ~r/^env PI_CODING_AGENT_DIR=\S+ pi --append-system-prompt .* --continue$/
+    end
+
     test "claude_code: the profile's MCP excludeTools become deny rules — the same surface as under pi" do
       deny = fn name, archetype ->
         cmd = Harness.driver(:claude_code).launch_command(Profiles.instantiate(%{archetype: archetype, name: name}))
