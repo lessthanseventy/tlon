@@ -3,8 +3,9 @@ defmodule Server.OperatorConfig do
   The operator's **runtime settings file**, read side — knobs that change without editing Elixir
   source or re-running `home:switch`. A plain JSON map at `~/.config/tlon/config.json`
   (override with `config :server, :operator_config_path`, which the test envs point away from the
-  real home). Nothing in this repo writes it; the operator edits it by hand. The profile registry
-  and the staffing pass read it here, so every coworker the service spawns wears its overrides.
+  real home). The operator edits it by hand; the one key written back is a switch the office TUI
+  flips (`put/3`, the rest of the file kept). The profile registry and the staffing pass read it
+  here, so every coworker the service spawns wears its overrides.
 
   Shape (all keys optional — absent means "the compiled default wins"):
 
@@ -12,6 +13,7 @@ defmodule Server.OperatorConfig do
         "coworkers": {"tlon": {"provider": "anthropic", "model": "claude-opus-4-8", "thinking": "medium", "yolo": true}},
         "environment": "home",
         "max_leaves": 6,
+        "banter": true,
         "warmth_seconds": {"ollama-cloud": 600}
       }
 
@@ -99,6 +101,22 @@ defmodule Server.OperatorConfig do
     case read(path) do
       %{"warmth_seconds" => %{} = m} -> for {k, v} <- m, is_integer(v) and v > 0, into: %{}, do: {k, v}
       _ -> %{}
+    end
+  end
+
+  @doc """
+  Whether the office talks: its small talk (`Server.Office.Banter`) and its pets' lines
+  (`Server.Office.Pets`) on the cheap model tier. On unless `"banter": false`; read on every poll,
+  so a flip takes at once.
+  """
+  @spec banter?(String.t()) :: boolean()
+  def banter?(path \\ path()), do: read(path)["banter"] != false
+
+  @doc "Set one key in the settings file, keeping every other (the file and its directory made if absent)."
+  @spec put(String.t(), term(), String.t()) :: :ok | {:error, term()}
+  def put(key, value, path \\ path()) do
+    with :ok <- File.mkdir_p(Path.dirname(path)) do
+      File.write(path, Jason.encode_to_iodata!(Map.put(read(path), key, value), pretty: true))
     end
   end
 

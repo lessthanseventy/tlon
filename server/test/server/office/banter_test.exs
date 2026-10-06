@@ -80,6 +80,22 @@ defmodule Server.Office.BanterTest do
       assert File.read!(calls) == "x\n"
     end
 
+    test "turned off in the settings file, there is nothing, and nothing is asked", %{ws: ws, calls: calls} do
+      path = Path.join(System.tmp_dir!(), "tlon-config-#{System.unique_integer([:positive])}.json")
+      File.write!(path, ~s({"banter": false}))
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        Application.put_env(:server, :operator_config_path, "/nonexistent/tlon-test-config.json")
+        File.rm(path)
+      end)
+
+      assert Banter.lines(ws.id) == []
+      assert Server.Office.Pets.voices(ws.id) == %{}
+      Process.sleep(100)
+      refute File.exists?(calls)
+    end
+
     test "with banter off there is nothing, and nothing is asked", %{ws: ws} do
       stop_supervised!(Banter)
       assert Banter.lines(ws.id) == []

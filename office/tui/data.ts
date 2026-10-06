@@ -103,6 +103,9 @@ export const memory = (ws: number) => read<Memory>(`/office/memory/${ws}`)
 export const board = (ws: number) => read<BoardTicket[]>(`/office/tickets/${ws}`)
 /** a workspace's settings and repos */
 export const workspaceCard = (ws: number) => read<WorkspaceCard>(`/office/workspace/${ws}`)
+/** the office's switches, machine-wide, from the server's settings file */
+export type Settings = { banter: boolean }
+export const settings = () => read<Settings>("/settings")
 /** every closed thread, for the finder */
 export const history = () => read<Closed[]>("/office/history")
 
@@ -130,6 +133,7 @@ export const unseat = (seat: number, name: string) => send("DELETE", `letting ${
 
 export const workspaceNew = (name: string, template: string) => write(`opening ${name}`, "/workspaces", { name, template }, (j) => `opened ${j.name}`)
 export const workspaceEdit = (ws: number, patch: { type?: string; scope?: string; icon?: string }) => send("PATCH", "changing the workspace", `/workspaces/${ws}`, () => "workspace changed", patch)
+export const settingsEdit = (patch: Partial<Settings>) => send("PATCH", "changing the settings", "/settings", (j) => `banter ${j.banter ? "on" : "off"}`, patch)
 export const workspaceDelete = (ws: number) => send("DELETE", "closing the workspace", `/workspaces/${ws}`, () => "workspace closed")
 export const repoAdd = (ws: number, path: string) => write(`adding ${path}`, `/workspaces/${ws}/repos`, { path }, () => `added ${path}`)
 export const repoRemove = (id: number) => send("DELETE", "removing the repo", `/repos/${id}`, () => "repo removed")

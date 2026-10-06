@@ -131,6 +131,21 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  test "GET/PATCH /api/settings read and flip the office's banter switch in the settings file" do
+    path = Path.join(System.tmp_dir!(), "tlon-config-#{System.unique_integer([:positive])}.json")
+    Application.put_env(:server, :operator_config_path, path)
+
+    on_exit(fn ->
+      Application.put_env(:server, :operator_config_path, "/nonexistent/tlon-test-config.json")
+      File.rm(path)
+    end)
+
+    assert {200, %{"banter" => true}} = get_json("/api/settings")
+    assert {200, %{"banter" => false}} = request_json(:patch, "/api/settings", %{"banter" => false})
+    assert Server.OperatorConfig.read(path) == %{"banter" => false}
+    assert {422, _} = request_json(:patch, "/api/settings", %{"banter" => "loud"})
+  end
+
   test "POST /api/threads/:id/messages is the operator's one door: `y` answers an open prompt, a closed thread reopens",
        %{thread: t} do
     # the prompt row as Server.Attention opens it; the pane is a recording fake

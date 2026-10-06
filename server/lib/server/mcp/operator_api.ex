@@ -22,6 +22,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/schedules/:ws    Office.Room.schedules (the wall calendar: each schedule, its next
                                           firing, its days this month, its last run)
       GET    /api/office/health           Office.Room.health (the service and its box: the rack)
+      GET    /api/settings                the office's switches from the settings file: {"banter"}
+      PATCH  /api/settings                {"banter"} → OperatorConfig.put (the rest of the file kept)
       GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
       GET    /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
@@ -128,6 +130,19 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "GET", "office", ["threads", id]),
     do: with_thread(conn, id, &json(conn, 200, Office.thread_view(&1, int_param(conn, "before"))))
+
+  defp route(conn, "GET", "settings", []), do: json(conn, 200, settings())
+
+  defp route(conn, "PATCH", "settings", []) do
+    case body(conn) do
+      {%{"banter" => on}, conn} when is_boolean(on) ->
+        :ok = Server.OperatorConfig.put("banter", on)
+        json(conn, 200, settings())
+
+      {_, conn} ->
+        json(conn, 422, %{error: ~s(expected {"banter": true|false})})
+    end
+  end
 
   defp route(conn, "GET", "office", ["health"]), do: json(conn, 200, Room.health())
   defp route(conn, "GET", "office", ["history"]), do: json(conn, 200, Room.history())
@@ -570,6 +585,8 @@ defmodule Server.MCP.OperatorAPI do
   defp refused(conn, :unknown_model), do: json(conn, 422, %{error: "no such model"})
   defp refused(conn, :not_found), do: json(conn, 404, %{error: "not found"})
   defp refused(conn, why), do: json(conn, 409, %{error: inspect(why)})
+
+  defp settings, do: %{banter: Server.OperatorConfig.banter?()}
 
   # the request body as a map (empty when there is none or it isn't a JSON object)
   defp body(conn) do

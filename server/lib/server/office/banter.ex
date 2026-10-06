@@ -10,8 +10,10 @@ defmodule Server.Office.Banter do
   finished) is never drawn. The server picks the speaker and the kind; the model only writes it.
 
   Lazy on purpose: a line is only written while an office asks (`lines/1` from its poll), at most
-  one per workspace every `@every_s`, so a room nobody watches costs nothing. Opt-in per node
-  (`TLON_BANTER=1`, `:start_banter`) like the memory pass. A reply that does not parse is dropped.
+  one per workspace every `@every_s`, so a room nobody watches costs nothing. On by default: a node
+  runs it unless `TLON_BANTER=0` (`:start_banter`), and the operator's settings file switches it off
+  live (`"banter": false`, `Server.OperatorConfig.banter?/0`, flipped from the office's settings).
+  A reply that does not parse is dropped.
   """
   use GenServer
 
@@ -32,7 +34,9 @@ defmodule Server.Office.Banter do
   """
   @spec lines(integer()) :: [map()]
   def lines(workspace_id) do
-    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:lines, workspace_id}), else: []
+    if GenServer.whereis(__MODULE__) && Server.OperatorConfig.banter?(),
+      do: GenServer.call(__MODULE__, {:lines, workspace_id}),
+      else: []
   end
 
   @doc """

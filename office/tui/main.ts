@@ -69,7 +69,7 @@ let roomChanged = true, imageDirty = true
 
 // what the open card reads, fetched when it opens and on every refresh while it stays open
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
-let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null
+let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
 let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 
@@ -168,7 +168,7 @@ async function loadCard() {
     case "health": rack = await data.health(); break
     case "memory": shelf = await data.memory(w); break
     case "ticket": case "column": tickets = (await data.board(w)) ?? tickets; break
-    case "card": card = await data.workspaceCard(w); break
+    case "card": [card, settings] = await Promise.all([data.workspaceCard(w), data.settings()]); break
     case "calendar": cal = await data.schedules(w); break
     case "runs": case "run": board = (await data.runs(mode.id)) ?? board; cal ??= await data.schedules(w); break
     case "tray": trayRead = feed[0]?.at ?? trayRead; writeState(TRAY, trayRead); changed(); break
@@ -672,6 +672,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
       const reload = () => void loadCard().then(draw)
       const rows: Row[] = [
         { segs: [dim("type  "), plain(c.type), dim("   scope  "), plain(c.scope), dim("   icon  "), plain(c.icon ?? "—")] },
+        ...(settings ? [{ segs: [dim("banter  "), plain(settings.banter ? "on" : "off"), dim("   the model writing coworkers' small talk and the pets' lines, every workspace")] }] : []),
         { segs: [key(`REPOS · ${c.repos.length}`)] },
         ...c.repos.map((r): Row => ({ segs: [plain(`  ${r.path}`), dim(r.remote ? `  ${r.remote}` : "")], open: () => void 0, ref: r })),
       ]
@@ -682,6 +683,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
           { key: "T", label: `type: ${c.type} → next`, run: () => void did(data.workspaceEdit(w, { type: ring(["code", "life", "blank"], c.type) })).then(reload) },
           { key: "s", label: `scope: ${c.scope} → next`, run: () => void did(data.workspaceEdit(w, { scope: ring(["project", "machine"], c.scope) })).then(reload) },
           { key: "I", label: "icon", run: () => ask("icon", (s) => void did(data.workspaceEdit(w, { icon: s.trim() })).then(reload), { text: c.icon ?? "" }) },
+          ...(settings ? [{ key: "b", label: `banter: ${settings.banter ? "on → off" : "off → on"}`, run: () => void did(data.settingsEdit({ banter: !settings!.banter })).then(reload) }] : []),
           { key: "+", label: "add a repo", run: () => ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(reload) }) },
           ...(repo ? [{ key: "-", label: `remove ${repo.path.split("/").pop()}`, run: () => ask2(`remove ${repo.path} from ${c.name}`, () => void did(data.repoRemove(repo.id)).then(reload)) }] : []),
           back1,
