@@ -1,7 +1,7 @@
 // adapters — the pi adapter (pi doc §2b). Three lifecycle hooks make a pi session a citizen
 // of its server thread: session_start registers (claims the pane, supersedes any zombie
 // predecessor); before_agent_start injects the rendered dossier as the honest brief
-// (console §3b: briefed from the server state, never a raw replay); turn_end refreshes the footer.
+// (briefed from the server state, never a raw replay); turn_end refreshes the footer.
 //
 // Holds no state, touches no SQLite — calls the server through its own MCP client (mcp.ts).
 // When the server is unreachable it surfaces the failure and does nothing else: no retry queue,
@@ -202,7 +202,7 @@ export default function adapters(pi: ExtensionAPI): void {
     }
   });
 
-  // Thinking presence (the cockpit's typing indicator): declare at turn start, clear at turn
+  // Thinking presence (the office's typing indicator): declare at turn start, clear at turn
   // end. Best-effort both ways — presence is a nicety and must never disturb the session; a
   // crash that skips the idle is cleared by the server's own max-age sweep.
   pi.on("turn_start", async () => {
@@ -248,7 +248,7 @@ export default function adapters(pi: ExtensionAPI): void {
 }
 
 // The widget: the live at-a-glance the human driving pi directly sees — the same dossier
-// the cockpit shows (pi doc §2b): the goal, the open todos (and which is next), the blockers.
+// the office shows (pi doc §2b): the goal, the open todos (and which is next), the blockers.
 function updateWidget(ctx: ExtensionContext, d: Dossier): void {
   const lines = [`tlon · ${d.goal ?? "(untitled)"} — ${d.lead ?? "unstaffed"}`];
   const todos = d.todos.shown.length + d.todos.more;

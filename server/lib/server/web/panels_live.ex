@@ -1,10 +1,10 @@
 defmodule Server.Web.PanelsLive do
   @moduledoc """
-  The console's other panels, on the web (one-brain piece D, slice 2): TRIAGE (what awaits the
-  operator, with the approve verb, and the machine's recent activity), ROSTER (each workspace's
-  bench, its live sessions and its tmux windows — and the staffing pass on a button, which the
-  service runs with no cockpit open since B/3), TICKETS (the board per workspace) and HEALTH (the
-  doctor's report, the queue, who is thinking). Same reads as the TUI; live on the Bus.
+  The operator's panels, on the web: TRIAGE (what awaits the operator, with the approve verb, and
+  the machine's recent activity), ROSTER (each workspace's bench, its live sessions and its tmux
+  windows — and the staffing pass on a button; the service also runs it on its own), TICKETS (the
+  board per workspace) and HEALTH (the doctor's report, the queue, who is thinking). Live on the
+  Bus.
   """
   use Phoenix.LiveView
 

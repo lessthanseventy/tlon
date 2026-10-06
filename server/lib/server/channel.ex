@@ -1,6 +1,6 @@
 defmodule Server.Channel do
   @moduledoc """
-  The coordination spine (spec §5b, console §2/§9.2): threads and the messages on
+  The coordination spine (spec §5b): threads and the messages on
   them. The channel is also §4's capture path — a message a participant posts is
   already a durable row, so intent becomes permanent as a side effect of talking.
 
@@ -53,9 +53,8 @@ defmodule Server.Channel do
   @doc """
   The agent_id of a workspace's designated lead. nil when there is no workspace or its bench is
   empty (the thread then opens leaderless, healed when a coworker is first staffed). The lead
-  invariant's resolver — and now ONE query, not a JSON scan plus a lazy `"<name>-machine"`
-  registration: `Server.Coworker.lead/1` owns the rule, so this and the cockpit cannot disagree
-  about who leads (they did: this preferred a builder, the cockpit took the first seat).
+  invariant's resolver: `Server.Coworker.lead/1` owns the rule, so every caller agrees about who
+  leads.
   """
   def designated_lead(nil), do: nil
 
@@ -83,7 +82,7 @@ defmodule Server.Channel do
 
   @doc ~s{Close a thread. Its messages are untouched — history outlives the close. A CHILD thread
   (one with a `parent_thread_id`, Slice 4D) reports up on close: funes posts a system summary into
-  the parent thread, `@mentioning` its lead so the console's mention router wakes them.}
+  the parent thread, `@mentioning` its lead so the switchboard wakes them.}
   def close_thread(%Thread{} = thread) do
     result =
       thread
@@ -168,7 +167,7 @@ defmodule Server.Channel do
   The ROOT machine thread — the OLDEST open machine-scope thread, or nil. The founding machine
   thread: the standing coworkers' permanent home and the Orbis Tertius meta thread (design:
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`). Also the find-or-create lookup for
-  the Tlön machine coworker, so it reuses a persistent thread across console restarts.
+  the Tlön machine coworker, so it reuses a persistent thread across restarts.
 
   Oldest, NOT newest: every staffed child thread is machine-scope too, so a `[desc: t.id]`
   "latest machine thread" would return a child, not the root. Child threads are always newer
@@ -207,12 +206,11 @@ defmodule Server.Channel do
   end
 
   @doc """
-  STAFFED, OPEN machine-scope threads — the `ensure_thread_sessions` candidate list (console
-  cockpit.ex): every open machine-scope thread with a lead, `%{id, lead, title}` per thread
-  (`lead` is the staffed agent's name; the join makes it never nil). Open-only (Slice F): the
-  cockpit tears a child's window down when its thread closes, so a closed thread in this list
-  would be killed and respawned every render. No ordering guarantee — the cockpit does its own
-  dedup against live tmux windows and its own retry backoff.
+  STAFFED, OPEN machine-scope threads — the staffing pass's candidate list (`Server.Staffing`):
+  every open machine-scope thread with a lead, `%{id, lead, title}` per thread (`lead` is the
+  staffed agent's name; the join makes it never nil). Open-only: a child's window is torn down
+  when its thread closes, so a closed thread in this list would be killed and respawned every
+  pass. No ordering guarantee — the caller dedups against live tmux windows.
   """
   def staffed_machine_threads(workspace_id \\ nil) do
     from(t in Thread,
@@ -226,7 +224,7 @@ defmodule Server.Channel do
   end
 
   @doc """
-  ALL machine-scope threads as THREAD BLOCKS — console's Tlön machine-chat surface.
+  ALL machine-scope threads as THREAD BLOCKS.
   Like `chorus/1` but scoped to `machine` and WITHOUT the open-only filter: a rotated (closed)
   machine thread must still surface as history, so the chat can fold it below the current one.
   Each block carries the thread's recent messages (chat order within), most-recent-activity FIRST.
@@ -242,9 +240,8 @@ defmodule Server.Channel do
   end
 
   @doc """
-  Every OPEN thread in a workspace as THREAD BLOCKS, any scope — the cockpit's centre stack, the
-  same set the rail lists (2026-09-08: the stack read machine-scope only, so a project-scope
-  thread opened from the rail had no card). Most-recent-activity first, like `machine_threads/2`.
+  Every OPEN thread in a workspace as THREAD BLOCKS, any scope. Most-recent-activity first, like
+  `machine_threads/2`.
   """
   def workspace_threads(workspace_id, per_thread \\ 20) do
     thread_blocks(from(t in Thread, where: t.workspace_id == ^workspace_id and t.state == "open"), per_thread)
@@ -252,7 +249,7 @@ defmodule Server.Channel do
 
   @doc """
   Every CLOSED thread, any workspace, newest activity first (its last message, else its birth) —
-  the history the cockpit browses (the imported Claude Code conversations among them).
+  the operator's history (the imported Claude Code conversations among them).
   `%{id, title, workspace_id, project, at}` per row; `project` is the project name or nil. Capped.
   """
   def closed_threads(limit \\ 200) do
@@ -279,7 +276,7 @@ defmodule Server.Channel do
 
   @doc """
   One thread as a THREAD BLOCK (`%{thread, messages}`, its latest `per_thread` messages), whatever
-  its state — how the cockpit shows a closed thread it opened from history. nil when no such thread.
+  its state — a closed thread opened from history included. nil when no such thread.
   """
   def thread_block(thread_id, per_thread \\ 20) do
     with %Thread{} = thread <- thread(thread_id) do
@@ -320,7 +317,7 @@ defmodule Server.Channel do
   @doc "A thread by id, or nil — the load path for the cross-thread `close_thread` verb."
   def thread(id), do: Repo.get(Thread, id)
 
-  @doc "Every thread id in a workspace — the cockpit filters its global activity feed to these."
+  @doc "Every thread id in a workspace."
   def workspace_thread_ids(workspace_id) do
     Repo.all(from t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
   end
@@ -438,8 +435,7 @@ defmodule Server.Channel do
   defp sort_key(%{messages: messages}), do: {1, List.last(messages).id}
 
   @doc """
-  Staff `thread_id` with the agent named `handle` — the console machine-chat staffing call, a single
-  clean boundary crossing over a resolve-then-assign. `{:ok, thread}` on success; `{:error,
+  Staff `thread_id` with the agent named `handle` — a resolve-then-assign in one call. `{:ok, thread}` on success; `{:error,
   :no_agent}` when the handle has never registered (a coworker not yet staffed — a no-op, not a
   crash); `{:error, :no_thread}` when the thread id doesn't resolve.
   """

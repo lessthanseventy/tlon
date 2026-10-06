@@ -55,9 +55,6 @@ HANDOFF.md
 /cfg.json
 /cfg-*.json
 
-# console hot-reload trigger (console:reload)
-console/.reload
-
 # .omc/ — local tool runtime state (sessions, last-tool-error.json); never repo content
 .omc/
 

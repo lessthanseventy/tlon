@@ -25,7 +25,7 @@ run = "adapters/pi/launch.sh --provider ollama --model qwen3-coder"
 # install (~/.pi/agent/npm) and its VERSIONS — that dir is not nix-managed. So `home:switch` never
 # bumps an extension; this task is the update path, keeping it in the one control loop instead of an
 # ad-hoc `pi update` off the startup nag. Also updates the Tlön coworker profile (its own npm/ under
-# ~/.pi/profiles/tlon) when the console has materialised it.
+# ~/.pi/profiles/tlon) when the service has materialised it.
 ["pi:update"]
 description = "pi agent: update installed npm EXTENSIONS to the latest the flake's package list allows (pi owns the mutable npm/ install, not nix). Does NOT move pi itself — that is pi:upgrade."
 run = """

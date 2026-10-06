@@ -4,9 +4,9 @@
 # leaves a script calling a module that no longer exists fails silently at 2am — this catches it at
 # commit time.
 #
-#   (a) Server.X.Y / Console.X.Y referenced in scripts/*.sh, mise.toml,
-#       adapters/**/*.{ts,sh}  →  a `defmodule` in server/lib or console/lib
-#   (b) `mix server.<task>` / `mix console.<task>` in mise.toml, scripts
+#   (a) Server.X.Y referenced in scripts/*.sh, mise.toml, adapters/**/*.{ts,sh}
+#       →  a `defmodule` in server/lib
+#   (b) `mix server.<task>` in mise.toml, scripts
 #       →  <app>/lib/mix/tasks/<app>.<task>.ex
 #   (c) `mise run <task>` in any AGENTS.md / README.md, mise.toml, scripts
 #       →  a task `mise tasks ls` knows (`<prefix>:*` is a glob: some task must match)
@@ -32,14 +32,14 @@ adapter_sources() { find adapters -path '*/node_modules' -prune -o -type f \( -n
 guides() { find . -path '*/node_modules' -prune -o -path '*/deps' -prune -o -path '*/_build' -prune -o -path ./.worktrees -prune -o -path ./.git -prune -o -path ./docs -prune -o \( -name AGENTS.md -o -name README.md \) -print; }
 
 # ---- (a) Elixir modules -----------------------------------------------------------------------
-defined="$(grep -rhoE 'defmodule +[A-Z][A-Za-z0-9_.]*' server/lib console/lib | awk '{print $2}' | sort -u)"
+defined="$(grep -rhoE 'defmodule +[A-Z][A-Za-z0-9_.]*' server/lib | awk '{print $2}' | sort -u)"
 n_mod=0
 while IFS=: read -r file line name; do
   [ -n "$name" ] || continue
   n_mod=$((n_mod + 1))
   grep -qxF "$name" <<<"$defined" ||
-    miss "(a) $file:$line references $name — no defmodule in server/lib or console/lib"
-done < <(grep -noE '\b(Server|Console)(\.[A-Z][A-Za-z0-9_]*)+' $scripts mise.toml $(adapter_sources) 2>/dev/null | sort -u)
+    miss "(a) $file:$line references $name — no defmodule in server/lib"
+done < <(grep -noE '\bServer(\.[A-Z][A-Za-z0-9_]*)+' $scripts mise.toml $(adapter_sources) 2>/dev/null | sort -u)
 
 # ---- (b) mix tasks ----------------------------------------------------------------------------
 n_mix=0
@@ -50,7 +50,7 @@ while IFS=: read -r file line ref; do
   app="${task%%.*}"           # server
   [ -f "$app/lib/mix/tasks/$task.ex" ] ||
     miss "(b) $file:$line runs \`$ref\` — no $app/lib/mix/tasks/$task.ex"
-done < <(grep -noE '\bmix (server|console)\.[a-z_]+' mise.toml $scripts 2>/dev/null | sort -u)
+done < <(grep -noE '\bmix server\.[a-z_]+' mise.toml $scripts 2>/dev/null | sort -u)
 
 # ---- (c) mise tasks ---------------------------------------------------------------------------
 # Only tasks THIS repo defines: mise merges every mise.toml up the directory tree, so inside a

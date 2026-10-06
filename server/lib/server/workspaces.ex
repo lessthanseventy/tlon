@@ -1,9 +1,8 @@
 defmodule Server.Workspaces do
   @moduledoc """
   The workspaces context (workspaces/orbis Slice 1): the write pipe and reads over the
-  `workspace` table. Compositions are DATA here; console reads `all/0` to drive its
-  picker/survey/spawn, and every write announces on `Server.Bus`'s workspaces topic so
-  those live surfaces refresh. A workspace is machine-global — no thread scope.
+  `workspace` table. Compositions are DATA here; every write announces on
+  `Server.Bus`'s workspaces topic so live surfaces refresh. A workspace is machine-global — no thread scope.
   """
   import Ecto.Query
 
@@ -63,8 +62,8 @@ defmodule Server.Workspaces do
   end
 
   @doc """
-  Every workspace, oldest first (by id) — the machine seed's order, so its first workspace is where the
-  cockpit opens and where the workspace ring starts, as it is in `Server.Board.sidebar/0`.
+  Every workspace, oldest first (by id) — the machine seed's order, so its first workspace comes first
+  everywhere, as it does in `Server.Board.sidebar/0`.
   """
   def all do
     Repo.all(from w in Workspace, order_by: [asc: w.id])
@@ -128,8 +127,7 @@ defmodule Server.Workspaces do
 
   @doc """
   The repos of many workspaces at once, as `%{workspace_id => [repo]}` — the whole picker in ONE
-  query. A query per workspace is how a survey over a dozen workspaces gets slow, and the console
-  cache rebuilds this on every workspaces announcement.
+  query. A query per workspace is how a survey over a dozen workspaces gets slow.
   """
   @spec repos_by_workspace([integer()]) :: %{integer() => [WorkspaceRepo.t()]}
   def repos_by_workspace(workspace_ids) do

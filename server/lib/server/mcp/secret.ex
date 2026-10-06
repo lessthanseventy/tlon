@@ -4,7 +4,7 @@ defmodule Server.MCP.Secret do
   its claims, so it must verify across a node restart — which means the key cannot live only in
   memory. It is generated ONCE and persisted in a file beside the world's SQLite db
   (`<database>.token_secret`), so each db is its own trust domain: a token minted for the
-  console's `.dev` world never validates against the always-up service's XDG world, even on one
+  `server:dev` scratch world never validates against the always-up service's XDG world, even on one
   machine.
 
   Read from `config :server, :token_secret` when set (tests pin a fixed key, no file IO); otherwise

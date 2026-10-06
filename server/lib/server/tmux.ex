@@ -6,9 +6,8 @@ defmodule Server.Tmux do
   session; the roster lead is the CENTRE window (named after the lead), tail coworkers are named
   windows, a staffed thread's leaf window carries the `@funes_thread <id>` option (the routing
   key — its name is cosmetic; a legacy `t<id>` name still resolves) and its opening-turn phase as
-  `@funes_opening`, crew roles are `r<id>`. `Console.Tmux` is the same contract on the console
-  side; the names are defined here so a client (the console, asterion) and the server can never
-  disagree about where a coworker runs.
+  `@funes_opening`, crew roles are `r<id>`. The names are defined here so a client (asterion) and
+  the server can never disagree about where a coworker runs.
 
   Every call routes through `run/3`: `System.cmd/3` by default, `config :server, :tmux_cmd` is
   the test seam. Like `Server.Workline.Artifacts.Git`, a tmux fault is a value, never a raise.
@@ -103,8 +102,7 @@ defmodule Server.Tmux do
   def kill_window(id, window, opts \\ []), do: run(id, ["kill-window", "-t", target(id, window)], opts)
 
   @doc """
-  A harness window's boot script (lifted verbatim from the console's staffing, the one builder
-  every harness window rides): close every inherited fd above stderr (a beam socket rode into a
+  A harness window's boot script (the one builder every harness window rides): close every inherited fd above stderr (a beam socket rode into a
   coworker's tmux on 2026-09-08 and hung every later `mix`), set TERM so the harness produces
   colour, source the server `exports`, cd into the thread's worktree when it has one, `exec` the
   bare launcher. POSIX sh — callers run it with `/bin/sh -c`, never tmux's default-shell (zsh

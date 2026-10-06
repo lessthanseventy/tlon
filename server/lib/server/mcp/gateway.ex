@@ -8,10 +8,10 @@ defmodule Server.MCP.Gateway do
 
   A pane's `TLON_TOKEN` is never frozen into its env at spawn time — a frozen token
   would strand the pane the moment the token model changes or the world secret
-  regenerates, since a long-lived pane can outlive either even across a console
+  regenerates, since a long-lived pane can outlive either, even across a server
   restart. Instead, an adapter mints a fresh token on every connect against the SAME
-  origin as its `TLON_MCP_URL` (so it always hits the right world — the console's `.dev`
-  world on 4041, or the always-up service's XDG world on 4040), and identity travels
+  origin as its `TLON_MCP_URL` (so it always hits the right world — the `server:dev`
+  scratch node on 4041, or the always-up service's XDG world on 4040), and identity travels
   as the stable, format-agnostic `(TLON_THREAD, TLON_AUTHOR, TLON_MCP_URL)`.
 
   `/mint` is the endpoint that makes that possible. It takes `{"thread_id", "agent"}`

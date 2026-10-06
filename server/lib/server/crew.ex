@@ -6,8 +6,7 @@ defmodule Server.Crew do
   decides a role belongs on a thread; the backend *actuates*.
 
   The backend is chosen by config — `config :server, :crew, SomeModule` (a `Server.Crew` behaviour).
-  Since one-brain B/2 that is `Server.Crew.Tmux` everywhere: a window beside the lead on the
-  workspace's tmux server, spawned by the service or by an embedded console alike.
+  That is `Server.Crew.Tmux`: a window beside the lead on the workspace's tmux server.
 
   **No backend configured is a valid state**: `spawn_role`/`kill_role` return `{:error, :no_crew}` —
   degrade honestly, no crash. `spawn_crew`/`kill_crew` (the MCP tools) surface that as an

@@ -1,9 +1,9 @@
 # tlon — boundaries for a session at the repo root
 
 Tlön, the dev product: `server/` (the always-up brain — threads, facts, worklines, staffing; its node
-is `funes@`), `console/` (the TTY cockpit over it), `adapters/` (what makes pi and Claude Code
-citizens of the server) and `office/` (the pixel-art room over it: a shared kit, its rooms, and a
-standalone TUI). It runs on any box with Postgres and mise; the home machine wires it in from
+is `funes@`), `adapters/` (what makes pi and Claude Code citizens of the server) and `office/`
+(the pixel-art room over it: a shared kit, its rooms, and the standalone TUI that is the operator's
+surface). It runs on any box with Postgres and mise; the home machine wires it in from
 ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the secrets live. The
 design that split it out: ficciones' `docs/plans/2026-09-25-sovereign-repos-and-aleph-design.md`.
 
@@ -12,7 +12,7 @@ design that split it out: ficciones' `docs/plans/2026-09-25-sovereign-repos-and-
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — names gate + server, console, adapters and office gates + the task manual; the green-before-commit gate.
+- `mise run check` — names gate + server, adapters and office gates + the task manual; the green-before-commit gate.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
 - `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against
@@ -75,8 +75,7 @@ signal to read the log, not repeat the call — the same escape hatch any SWE re
 loop starts repeating itself.
 
 **Elixir tests and the gate go through Menard, not `cap`:** `~/projects/menard/bin/menard run test --in
-server [FILE[:LINE]]` and `~/projects/menard/bin/menard run check --in server` (`--in console` for the
-console). One run answers with one JSON line: `ok` and the counts when green; when red, every
+server [FILE[:LINE]]` and `~/projects/menard/bin/menard run check --in server`. One run answers with one JSON line: `ok` and the counts when green; when red, every
 failure with its kind, `file:line` and message, a failing test's name, source and the assertion's
 left and right. It is this section's rule with the failures already parsed out, so there is nothing
 to grep for. `cap` stays the door for everything else: builds, scripts, `mise run server:check`'s
@@ -125,7 +124,7 @@ editing Menard WITH Menard, where a half-applied edit otherwise locks the tool o
 
 The `Edit` tool is for the languages Menard does not cover — TypeScript, Lua, Nix. The plugin no
 longer blocks it on a module: `menard` is hook-only in Claude Code now, a `PostToolUse` formatter
-that runs the file's own project formatter on every write (`console`'s Styler included) and says
+that runs the file's own project formatter on every write and says
 what it changed. Its AST tools are the separate `manos` plugin. Neither is in
 `.claude/settings.json`; the rule holds regardless.
 
@@ -155,7 +154,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   structure that does not exist yet. The tree should not lie about what is built.
 - **An `AGENTS.md` is born the same way a comment is — when a scope needs context its parent doesn't
   give.** Root holds repo-wide invariants; a module or subapp gets its own when it has distinct law, a
-  distinct dev loop, or gotchas that bite (`server`, `adapters` + its adapters, `console`). Don't add one per
+  distinct dev loop, or gotchas that bite (`server`, `adapters` + its adapters, `office`). Don't add one per
   folder by reflex — `lib/schemas/`, `test/`, etc. earn a file only once they accumulate a rule a
   weaker model keeps getting wrong; until then that guidance lives in the module's file. Keep every one
   terse and actionable to the same standard as comments: orientation, the exact commands, the law, the
@@ -214,7 +213,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 ## Verify
 
 `mise run check` is the gate. `mise run check:names` (first in it) is the names-exist gate: every
-`Server.*`/`Console.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
+`Server.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
 guide name must actually exist — a rename that strands a reference fails here instead of at 2am. A
 claim that something works is backed by the command that proved it — and the agent and human run the
 *same* `mise` tasks, so "it works" means the shared task passed, not two private ones.

@@ -227,7 +227,7 @@ defmodule Server.MCP.Brief do
     do: %{"id" => n.id, "scope" => n.scope, "scope_id" => n.scope_id, "body" => n.body, "author" => n.author}
 
   @doc """
-  A WORKSPACE — a composition console reads to drive its picker/survey/spawn. Machine-global
+  A WORKSPACE — a composition of roster, repos and knobs. Machine-global
   (no thread scope). `repos` is the git-tracked scope as ROWS (UX slice 5: a `path` plus the
   `remote` and `default_branch` a bare glob had nowhere to record); `roster`/`knobs` still
   round-trip as the JSON their columns hold.

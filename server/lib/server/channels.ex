@@ -83,7 +83,6 @@ defmodule Server.Channels do
 
   @doc "Delete a topic channel (a row, or its id); its threads go home to #general. #general is refused."
   @spec delete(ChannelRow.t() | integer()) :: {:ok, ChannelRow.t()} | {:error, :general | :no_channel}
-  # by id — the console holds sidebar maps, not rows
   def delete(id) when is_integer(id) do
     case get(id) do
       %ChannelRow{} = channel -> delete(channel)

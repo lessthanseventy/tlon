@@ -1,11 +1,10 @@
 defmodule Server.Crew.Tmux do
   @moduledoc """
-  The crew backend on the workspace's tmux server (one-brain piece B, slice 2; lifted from the
-  console's `Console.Crew`, which this replaces). `spawn_role/3` mints the role's identity on the
+  The crew backend on the workspace's tmux server. `spawn_role/3` mints the role's identity on the
   thread, materialises its profile (`Server.Profiles`), opens the `r<tid>` window in the thread's
   workspace session running the profile's harness driver, and — once the pane shows the
   registered footer — types the leader's opening turn and submits it as a second burst.
-  `kill_role/2` drops the window. Runs the same in the service and in an embedded console.
+  `kill_role/2` drops the window.
 
   Seams: tmux rides `Server.Tmux.run/3` (`:server, :tmux_cmd`); identity minting is
   `:server, :crew_join` (default `Server.MCP.Spawn.join/3`); the settle/poll budgets are app env

@@ -1,6 +1,6 @@
 # adapters
 
-The hands of the stack. `server` remembers, `console` sees, **`adapters` acts** — it is how a
+The hands of the stack. `server` remembers, `office` sees, **`adapters` acts** — it is how a
 working agent reaches server, wakes up already knowing its thread, and banks what it learns.
 
 adapters is **vendor-agnostic**: the server's channel is MCP, so any harness can be a citizen of a

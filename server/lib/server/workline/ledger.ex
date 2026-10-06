@@ -67,7 +67,7 @@ defmodule Server.Workline.Ledger do
   defp date(_at), do: "?"
 
   @doc """
-  Every open workline's live status (console panel read-model), in id order — see `status_for/1`.
+  Every open workline's live status, in id order — see `status_for/1`.
   `workspace_id` scopes to one workspace's worklines; `nil` is every workspace.
   """
   def statuses(workspace_id \\ nil) do
@@ -83,7 +83,7 @@ defmodule Server.Workline.Ledger do
   defp scope_workspace(query, workspace_id), do: where(query, [t], t.workspace_id == ^workspace_id)
 
   @doc """
-  One workline's live status (console panel read-model): stage, gate, and `blocking` — the
+  One workline's live status: stage, gate, and `blocking` — the
   cmd/tail of the LATEST verify-stage check when it's a `check_failed`, `nil` when the
   latest is a pass or no verify check has run yet. Read fresh, not cached — the check state
   can flip between panel renders.

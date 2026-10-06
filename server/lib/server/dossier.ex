@@ -1,6 +1,6 @@
 defmodule Server.Dossier do
   @moduledoc """
-  The dossier (console §9.4, spec §4/§5): `fact`, `event`, `issue`, `todo`, `question` and
+  The dossier (spec §4/§5): `fact`, `event`, `issue`, `todo`, `question` and
   `habit` scoped to a thread — the thread's accumulated state, and the source of the brief's
   LEARNINGS, DONE, BLOCKERS, TODOS/NEXT, UNKNOWNS and CHECKS (`Server.Board.brief/1`). These
   are the judgement and the record a system cannot re-derive from a transcript; the channel
@@ -293,7 +293,7 @@ defmodule Server.Dossier do
   Approve a pending habit — state approved, `approved_at` stamped, and it joins the always-
   loaded set (`approved_habits/0`). This is the OPERATOR's act: it is deliberately NOT an
   agent-facing MCP tool (only `propose_habit` is), so an agent cannot approve its own
-  proposal — the gate is architectural, not a runtime author check. Called from console /
+  proposal — the gate is architectural, not a runtime author check. Called from the office /
   iex. `{:ok, habit}` or `{:error, changeset}`.
   """
   def approve_habit(%Habit{} = habit) do
@@ -314,7 +314,7 @@ defmodule Server.Dossier do
     Repo.all(from h in Habit, where: h.state == "approved", order_by: [desc: h.id])
   end
 
-  @doc "Habits awaiting review — the operator's queue, newest first (the console/iex review read)."
+  @doc "Habits awaiting review — the operator's queue, newest first (the office/iex review read)."
   def pending_habits(workspace_id \\ nil) do
     from(h in Habit, where: h.state == "pending", order_by: [desc: h.id])
     |> scope_habits_by_workspace(workspace_id)

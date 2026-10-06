@@ -1,7 +1,7 @@
 defmodule Server.StaffingTest do
-  # The staffing pass on the server (one-brain B/3, lifted from the console's render preamble):
-  # the centre, the tail, the leaves under the cap, the orphan sweep and the stale reap — driven
-  # through the `:tmux_cmd`/`:staff_join` seams, so no live tmux or harness is ever forked.
+  # The staffing pass on the server: the centre, the tail, the leaves under the cap, the orphan
+  # sweep and the stale reap — driven through the `:tmux_cmd`/`:staff_join` seams, so no live tmux
+  # or harness is ever forked.
   use ExUnit.Case, async: false
 
   alias Server.Channel
@@ -154,7 +154,7 @@ defmodule Server.StaffingTest do
     refute_receive {:tmux, ["-L", _, "new-window" | _]}, 50
   end
 
-  test "a console-era TYPED leaf is submitted and tagged done; a DONE one is left alone", %{
+  test "a TYPED leaf is submitted and tagged done; a DONE one is left alone", %{
     ws: ws,
     sock: sock,
     session: session

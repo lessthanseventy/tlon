@@ -1,12 +1,10 @@
 defmodule Server.OperatorConfig do
   @moduledoc """
-  The operator's **runtime settings file**, read side — the knobs the cockpit exposes in-app
-  (the SETTINGS panel + verbs) so changing them never means editing Elixir source or re-running
-  `home:switch`. A plain JSON map at `~/.config/console/config.json` (override with
-  `config :server, :operator_config_path`, which the test envs point away from the real home).
-  The console writes it (`Console.Config`); the server reads it here, because the profile
-  registry and the staffing pass moved to the server (one-brain piece B, slice 2) and a
-  coworker the SERVICE spawns must wear the same overrides one the cockpit spawns does.
+  The operator's **runtime settings file**, read side — knobs that change without editing Elixir
+  source or re-running `home:switch`. A plain JSON map at `~/.config/console/config.json`
+  (override with `config :server, :operator_config_path`, which the test envs point away from the
+  real home). Nothing in this repo writes it; the operator edits it by hand. The profile registry
+  and the staffing pass read it here, so every coworker the service spawns wears its overrides.
 
   Shape (all keys optional — absent means "the compiled default wins"):
 

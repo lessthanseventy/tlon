@@ -10,9 +10,8 @@ defmodule Server.Coworker do
   `-machine` and any one of them could drift. One name, one author.
 
   `archetype` lives on the seat rather than on the agent because the same coworker can be a
-  `builder` here and a `reviewer` in the next workspace. `lead?` is derived once, by `lead/1` —
-  it used to be derived twice, by `Server.Channel` (first builder, else first) and
-  `Console.Space` (just the first), which are not the same rule and did not always agree.
+  `builder` here and a `reviewer` in the next workspace. `lead?` is derived once, by `lead/1`, so
+  every caller agrees on who leads.
 
   Not to be confused with `Server.Staff.roster/0`, the IN FLIGHT list of live sessions. A bench is
   who a workspace employs; that roster is who is on the clock.

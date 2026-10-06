@@ -37,7 +37,7 @@ judgment you keep in your own context dies with you.
   mirror keys on to carry your answer back to the caller. A consult is a conversation, not a
   one-shot: keep replying with `reply_to` until it's done.
 - **Never route yourself through operator-only UI to reach a coworker.** You cannot press
-  the cockpit's keybindings; reaching claude by typing into another window's terminal is a
+  the office's keys; reaching claude by typing into another window's terminal is a
   raw hack, not a capability. Delegate through `/consult`, post on your thread, or ask the
   human — not `tmux send-keys`.
 

@@ -50,39 +50,6 @@ jobs:
       - run: mise use -g "erlang@$(mise current erlang)" "elixir@$(mise current elixir)"
       - run: mise run server:check
 
-  console:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      # the console's suite reads the server's store: the runner's Postgres, as in the server job
-      - name: postgres and tmux
-        run: |
-          sudo systemctl start postgresql.service
-          sudo -u postgres createuser --superuser "$USER"
-          sudo apt-get install -y --no-install-recommends tmux
-      - uses: jdx/mise-action@v2
-        with:
-          cache: true
-          install_args: erlang elixir
-      # a fresh runner has no hex or rebar, and mix won't fetch a dep without them
-      - run: mix local.hex --force && mix local.rebar --force
-      - uses: actions/cache@v4
-        with:
-          path: |
-            console/deps
-            console/_build
-            server/deps
-          key: console-${{ runner.os }}-${{ hashFiles('mise.toml', 'console/mix.lock', 'server/mix.lock') }}
-      - run: mix deps.get
-        working-directory: console
-      # build the patched raxol dep once without the gate's --warnings-as-errors (its own warnings
-      # are not ours); the gate then compiles only the console
-      - run: mix compile
-        working-directory: console
-        env:
-          MIX_ENV: test
-      - run: mise run console:check
-
   typescript:
     runs-on: ubuntu-24.04
     steps:

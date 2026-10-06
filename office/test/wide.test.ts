@@ -87,6 +87,7 @@ describe("the wide room", () => {
     expect(kinds.size).toBeGreaterThanOrEqual(2)
   }))
 
+  // up to 400k ticks of the room: seconds of CPU, more when the gate runs every suite at once
   test("Nina gets the zoomies: tears between the room's leaps, then lands on its floor and sits", () => seeded(11, () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1)
     const c = (room as unknown as { cat: { x: number; y: number; mode: string; leaps: { x: number; y: number }[] } }).cat
@@ -103,7 +104,7 @@ describe("the wide room", () => {
     }
     expect(runs).toBe(3)
     expect(visited.size).toBeGreaterThanOrEqual(3)
-  }))
+  }), 30_000)
 
   test("no walk crosses the furniture", () => {
     for (const w of [540, 560, 700]) {

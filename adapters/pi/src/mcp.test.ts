@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 // A mock fetch that scripts the MCP handshake and then 404s the first tool call — exactly what
-// anubis does when console restarts and loses the session the token was minted into.
+// anubis does when the server restarts and loses the session the token was minted into.
 function scriptedFetch() {
   let mints = 0;
   const fn = mock(async (input: string | URL | Request, init?: RequestInit) => {

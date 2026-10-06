@@ -2,8 +2,7 @@ defmodule Server.Bootstrap do
   @moduledoc """
   Boot-time integrity (reshape slice A). Two invariants, restored on every start:
   a default workspace exists, and every thread points at a workspace that is real.
-  Replaces the flake's ExecStartPre seed AND console's hardcoded fallback workspace —
-  any node that boots the server app self-heals, including the dev scratch db.
+  Any node that boots the server app self-heals, including the dev scratch db.
 
   Repair targets drift the FK pragma can't catch after the fact: table-rebuild
   migrations and pre-integrity `remove_workspace` both left threads pointing at dead
@@ -142,8 +141,8 @@ defmodule Server.Bootstrap do
     end
   end
 
-  # Every workspace gets exactly one open, stage-less machine root — the standing thread the cockpit's
-  # centre scopes to. Runs AFTER repair_projects so the root can carry the default project. Idempotent:
+  # Every workspace gets exactly one open, stage-less machine root — the standing thread a workspace's
+  # view scopes to. Runs AFTER repair_projects so the root can carry the default project. Idempotent:
   # a workspace that already has a machine root is left untouched.
   defp repair_machine_roots do
     for ws <- Repo.all(Workspace), is_nil(Channel.machine_thread(ws.id)) do

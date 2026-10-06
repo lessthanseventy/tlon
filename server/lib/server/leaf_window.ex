@@ -2,8 +2,8 @@ defmodule Server.LeafWindow do
   @moduledoc """
   Human window names for leaf sessions (per-thread-agents Slice C). A leaf's tmux window is named
   `<archetype>-<title-slug>` — readable in the window bar and `tmux list-windows` — instead of the
-  routing id `t<id>`. The name is COSMETIC: routing rides the `@funes_thread` window option the
-  cockpit stamps at spawn (`thread_id → window`, never name parsing), so collisions only cost a
+  routing id `t<id>`. The name is COSMETIC: routing rides the `@funes_thread` window option
+  stamped at spawn (`thread_id → window`, never name parsing), so collisions only cost a
   `-2` disambiguator, not a misdelivery.
   """
 

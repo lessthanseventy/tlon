@@ -1,6 +1,6 @@
 defmodule Server.Arbiter.TmuxTest do
   # The server's own terminal backend: spawn a coworker into the workspace's tmux session and
-  # wake it by tag, with no cockpit connected. Two layers — argv assertions through the runner
+  # wake it by tag, with no UI connected. Two layers — argv assertions through the runner
   # seam, and one REAL tmux run on a throwaway socket (tmux is on every box this runs on).
   use ExUnit.Case, async: false
 

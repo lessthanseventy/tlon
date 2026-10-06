@@ -2,7 +2,7 @@ defmodule Server.Presence.Thinking do
   @moduledoc """
   The explicit half of "who is working": a harness DECLARES thinking at turn start
   and idle at turn end (via the `presence_thinking`/`presence_idle` MCP tools), so
-  a cockpit can show "thinking" the moment a turn begins — no tmux-activity
+  a surface can show "thinking" the moment a turn begins — no tmux-activity
   inference lag. In-memory only: presence is liveness, not history, so a restart
   losing it is correct (the harnesses re-declare on their next turn).
 
@@ -35,7 +35,7 @@ defmodule Server.Presence.Thinking do
   @doc "Who is thinking on `thread_id`: `[%{agent, started_at}]`, empty when nobody."
   def thinking_for(store \\ __MODULE__, thread_id), do: GenServer.call(store, {:thinking_for, thread_id})
 
-  @doc "Everyone thinking, keyed by thread id — the cockpit's reconcile-on-connect read."
+  @doc "Everyone thinking, keyed by thread id — a surface's reconcile-on-connect read."
   def thinking_all(store \\ __MODULE__), do: GenServer.call(store, :thinking_all)
 
   @doc "Run the stuck-harness sweep now (the timer calls this on its own interval)."

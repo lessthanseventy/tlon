@@ -11,7 +11,7 @@ his life in perfect detail; each reconstruction took a full day. He found it har
 could not stop perceiving. He was not, in any useful sense, able to think.
 
 This module is named after him as a warning to itself. It is Tlön's spine — the memory and coordination
-layer between the cockpit (`../console`), the agents that reach it over MCP (`../adapters`: Claude Code,
+layer between the office (`../office`), the agents that reach it over MCP (`../adapters`: Claude Code,
 [pi](https://github.com/earendil-works/pi-coding-agent)), and the work — and its entire specification is
 an argument against being Funes. It remembers
 carefully rather than completely: the always-loaded set is 32 rows, not 297; a surface that is *complete*
@@ -49,7 +49,8 @@ the spec records why.
 Three owners, no overlap:
 
 - **SQLite** holds the machine's truth — facts, events, issues, the channel, the containers.
-- **The cockpit, over tmux** holds the terminal's truth — windows, panes, focus, which agent is live.
+- **tmux** (a private server per workspace) holds the terminal's truth — windows, panes, which agent
+  is live.
 - **Agents** hold nothing durable: they reach the spine only through the MCP channel, and what they
   learn is banked here or lost.
 

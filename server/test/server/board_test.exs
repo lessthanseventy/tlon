@@ -25,7 +25,7 @@ defmodule Server.BoardTest do
     s
   end
 
-  describe "recent_activity/1 — the cockpit NOW backfill" do
+  describe "recent_activity/1 — the activity feed backfill" do
     test "merges recent messages, facts, and events as {tag, row}, each carrying a thread_id" do
       {:ok, thread} = Channel.open_thread(%{title: "seed"})
       {:ok, _msg} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "shipping it"})
@@ -42,7 +42,7 @@ defmodule Server.BoardTest do
       assert :message_posted in tags
       assert :fact_banked in tags
       assert :event_recorded in tags
-      # every seeded row carries thread_id so the cockpit's scope_activity/2 can filter by workspace
+      # every seeded row carries thread_id so a surface can filter by workspace
       assert Enum.all?(feed, fn {_tag, row} -> row.thread_id == thread.id end)
     end
 

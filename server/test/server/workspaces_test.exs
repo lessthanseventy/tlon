@@ -33,7 +33,7 @@ defmodule Server.WorkspacesTest do
   end
 
   describe "all/0" do
-    test "lists workspaces oldest first — the order they were declared in, so the first is where the cockpit opens" do
+    test "lists workspaces oldest first — the order they were declared in, so the first comes first" do
       {:ok, _a} = Workspaces.register(%{name: "First"})
       {:ok, _b} = Workspaces.register(%{name: "Second"})
 

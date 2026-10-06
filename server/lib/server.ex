@@ -4,8 +4,7 @@ defmodule Server do
   compile warning, and the gate runs `--warnings-as-errors`, so reaching into a non-exported
   module fails `mise run check`).
 
-  The exports below ARE the server's public surface — what a consumer (console, an MCP adapter) may
-  call. Everything else (`Repo`, the schemas' changesets, `Switchboard`, `Agent`, `Session`,
+  The exports below ARE the server's public surface — what a consumer may call. Everything else (`Repo`, the schemas' changesets, `Switchboard`, `Agent`, `Session`,
   the event/fact/issue internals) is this module's own business: reach for it from outside and
   the build says no. Widening the surface is a one-line diff HERE, which is the point — the
   surface creeps only on purpose, reviewed in this file's history.
@@ -16,34 +15,34 @@ defmodule Server do
     exports: [
       # The channel: threads, messages, the chorus — the one conversational API.
       Channel,
-      # Pub/sub topics for live surfaces (console subscribes; announce stays internal callers').
+      # Pub/sub topics for live surfaces (announce stays internal callers').
       Bus,
-      # Read models a cockpit renders: who's working, what's known, what's in scope.
+      # Read models a surface renders: who's working, what's known, what's in scope.
       Staff,
       Board,
       Dossier,
-      # Compositions: the workspaces context console reads to drive its picker/survey/spawn.
+      # Compositions: the workspaces context (rosters, repos, knobs).
       Workspaces,
       # Channels (UX slice 1b): workspace → channels → threads; create/move/delete + the row struct.
       Channels,
       ChannelRow,
-      # The container tier (2026-08-30): projects, the lightweight ticket tracker, notes —
-      # peer contexts to Workspaces the console reads/writes for the god line + CRUD screens.
+      # The container tier: projects, the lightweight ticket tracker, notes — peer contexts to
+      # Workspaces.
       Projects,
       Tickets,
       Notes,
       Presence,
-      # Explicit thinking/idle presence (console renders it; harnesses declare via MCP).
+      # Explicit thinking/idle presence (the office renders it; harnesses declare via MCP).
       Presence.Thinking,
       # The agent-to-agent consult (ask a peer; the answer is mirrored back).
       Consult,
-      # Migration pre-flight (console.run refuses to boot a behind db).
+      # Migration pre-flight and integrity checks.
       Doctor,
       # Identity minting for spawned harnesses (the server-citizen handshake).
       MCP.Spawn,
-      # The arbiter behaviour a host implements (console's terminal-writing arbiter).
+      # The arbiter behaviour (`Server.Arbiter.Tmux` implements it).
       Arbiter,
-      # The crew behaviour a host implements (console spawns a role's window in-node).
+      # The crew behaviour (`Server.Crew.Tmux` implements it).
       Crew,
       # Structs read by consumers (pattern-matched, never changeset-built from outside).
       Thread,
@@ -53,9 +52,8 @@ defmodule Server do
       Coworker,
       # What a coworker may do in a workspace — read by the profile materialiser.
       Policy,
-      # One-brain piece B, slice 2: the coworker-profile registry + materialiser, the harness
-      # drivers, leaf window names, the tmux naming contract and the operator's settings file
-      # moved here from the console, so the SERVICE spawns the same coworker the cockpit would.
+      # The coworker-profile registry + materialiser, the harness drivers, leaf window names, the
+      # tmux naming contract and the operator's settings file — what a coworker is spawned from.
       Profile,
       Profiles,
       Harness,
@@ -89,7 +87,7 @@ defmodule Server do
   """
   def repo_for_thread(%Server.Thread{} = thread), do: Server.Projects.repo_for_thread(thread)
 
-  @doc "A workspace's primary repo dir — the cockpit STACK panel's per-workspace git root. See `Projects.repo_for_workspace/1`."
+  @doc "A workspace's primary repo dir. See `Projects.repo_for_workspace/1`."
   defdelegate repo_for_workspace(workspace_id), to: Server.Projects
 
   def repo_for_thread(thread_id) when is_integer(thread_id) do
@@ -123,7 +121,7 @@ defmodule Server do
 
   @doc """
   Where a thread's coworker works, as a PATH ONLY — no git, nothing ensured — for a display that
-  runs every frame (the cockpit's top bar). `{:ok, path}` or `{:error, :no_repo | :no_thread}`.
+  runs every frame. `{:ok, path}` or `{:error, :no_repo | :no_thread}`.
   """
   def cwd_for_thread(%Server.Thread{} = thread) do
     with {:ok, repo, name} <- repo_and_name(thread), do: {:ok, Server.Worktree.path(repo, name)}
@@ -156,29 +154,29 @@ defmodule Server do
     end
   end
 
-  @doc "Recall corpus at a glance (facts/embedded/pinned vs budget) — console's Memory pane read."
+  @doc "Recall corpus at a glance (facts/embedded/pinned vs budget)."
   defdelegate recall_coverage(), to: Server.Recall, as: :coverage
   defdelegate recall_coverage(workspace_id), to: Server.Recall, as: :coverage
 
-  @doc "The always-loaded constraint facts (the pinned set) — console's Memory pane shows these."
+  @doc "The always-loaded constraint facts (the pinned set)."
   defdelegate pinned(), to: Server.Dossier, as: :always_loaded_constraints
   defdelegate pinned(workspace_id), to: Server.Dossier, as: :always_loaded_constraints
 
-  @doc "Habits awaiting the operator's review — the Memory pane's approval queue, newest first."
+  @doc "Habits awaiting the operator's review, newest first."
   defdelegate pending_habits(), to: Server.Dossier
   defdelegate pending_habits(workspace_id), to: Server.Dossier
 
-  @doc "Every open workline's live status (stage, gate, blocking check) — the WORKLINES pane read."
+  @doc "Every open workline's live status (stage, gate, blocking check)."
   defdelegate workline_statuses(), to: Ledger, as: :statuses
   defdelegate workline_statuses(workspace_id), to: Ledger, as: :statuses
 
   @doc """
-  Approve a pending habit by id (the Memory pane's `a`) — loads fresh, so a stale row the pane
-  rendered can't be acted on. `{:ok, habit}` · `{:error, :not_found}` · `{:error, changeset}`.
+  Approve a pending habit by id — loads fresh, so a stale row a surface rendered can't be
+  acted on. `{:ok, habit}` · `{:error, :not_found}` · `{:error, changeset}`.
   """
   def approve_habit(id), do: with_habit(id, &Server.Dossier.approve_habit/1)
 
-  @doc "Reject a pending habit by id (the Memory pane's `r`) — same load-fresh contract as approve."
+  @doc "Reject a pending habit by id — same load-fresh contract as approve."
   def reject_habit(id), do: with_habit(id, &Server.Dossier.reject_habit/1)
 
   defp with_habit(id, act) do
@@ -189,7 +187,7 @@ defmodule Server do
   end
 
   @doc """
-  Hard-delete a thread by id (the cockpit's `d` on a thread row) — loads fresh, so a stale row
+  Hard-delete a thread by id — loads fresh, so a stale row
   can't be acted on — and clean its worktree up when that is safe (`Server.Worktree.remove/2`:
   a clean checkout with nothing unmerged goes; anything else is kept and named). `{:ok, thread,
   :none | {:removed, path} | {:kept, reason}}` · `{:error, :not_found | :root_machine_thread}`.

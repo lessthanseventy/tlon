@@ -20,8 +20,8 @@ The launcher `eval`s the export block from `server:spawn` and `exec`s `claude`.
 ## The two doors
 
 Both doors follow `TLON_MCP_URL` — whichever node spawned the session (the always-up service on
-:4040, or a console-launched cockpit brain on :4041) — so a console-launched claude is briefed
-from, and posts to, the same `.dev` world.
+:4040, or the `server:dev` scratch node on :4041) — so a claude spawned by either node is briefed
+from, and posts to, that node's world.
 
 - **Door 1 — the MCP tools.** Claude Code's `mcpServers.tlon` entry is `type: http`
   pointing at the channel, with a **`headersHelper`** (`scripts/tlon-cli.sh token`) instead

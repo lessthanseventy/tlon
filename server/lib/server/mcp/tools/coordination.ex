@@ -25,7 +25,7 @@ defmodule Server.MCP.Tool.StaffChild do
   Slice 4D). Composes the cross-thread primitives: open a thread titled `title` parented at the
   CALLER's thread (so its close reports up) and inheriting the caller's project, assign the registered
   agent `lead`, and post `brief` (authored by the caller's bound identity) as its opening message.
-  Staffing, not spawning: no terminal starts here — the cockpit's convergent sweep sees a worker-led
+  Staffing, not spawning: no terminal starts here — the staffing pass (`Server.Staffing`) sees a worker-led
   thread without a window and stands one up (human-named, `@funes_thread`-tagged, cap-accounted, its
   harness server-bound). An agent never launches a harness by hand — a bare spawn is not a server
   citizen and is invisible to the board; it staffs the thread and lets the board actuate.
@@ -221,9 +221,8 @@ defmodule Server.MCP.Tool.SpawnCrew do
   assignment. MVP role is `reviewer`. Like every self-thread tool it takes no thread parameter: the
   role joins the connection's own thread, so a lead spawns a reviewer onto the work it is leading.
 
-  Actuated by the configured crew backend (`Server.Crew`) — on the console hub that spawns the window
-  in the live node. With no backend (the standalone service) it reports unavailable rather than
-  faking a spawn.
+  Actuated by the configured crew backend (`Server.Crew`), which opens the window on the workspace's
+  tmux server. With no backend configured it reports unavailable rather than faking a spawn.
   """
   use Server.MCP.Tool
 
