@@ -7,7 +7,7 @@ defmodule Server.MixProject do
   def project do
     [
       app: :server,
-      version: "0.1.0",
+      version: "0.2.0",
       elixir: "~> 1.18",
       # Boundary enforcement (lib/funes.ex declares the surface) — violations are compile
       # warnings, which the gate's --warnings-as-errors turns into failures.
@@ -40,7 +40,7 @@ defmodule Server.MixProject do
       tlon: [
         # it unpacks into a directory named by its version and reuses it, so each build carries
         # its commit: a new binary never runs an old unpack
-        version: "0.1.0+#{commit()}",
+        version: "0.2.0+#{commit()}",
         applications: [server: :permanent],
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
