@@ -127,3 +127,27 @@ describe("the arcade's best scores", () => {
     expect(room.highScores()[0]!.score).toBeGreaterThan(0)
   }))
 })
+
+describe("the corkboard", () => {
+  const note = (id: number, author: string, body: string) => ({ id, author, kind: "joke" as const, body, re: null, at: 0 })
+  test("a new note walks its author to the board, and they read it out there; the board as first seen does not", () => chance(0.999, () => {
+    const room = new WideRoom(560), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room) as Room & { talk: Map<string, { text: string | null }> }
+    for (let i = 0; i < 100; i++) room.step(a)
+    room.pinboard([note(1, "yu", "old news")])
+    room.pinboard([note(2, "hronir", "Whoever keeps renaming things: I see you."), note(1, "yu", "old news")])
+    let said: string | null | undefined
+    for (let i = 0; i < 1500 && !said; i++) { room.step(a); said = r.talk.get("hronir")?.text }
+    expect(said).toBe("Whoever keeps renaming things: I see you.")
+    expect(r.talk.get("yu")?.text).toBeUndefined()
+  }))
+})
+
+describe("the cold", () => {
+  test("on a cold day Nina makes for the radiator", () => {
+    const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), weather: { kind: "snow", temp_c: -2, desc: "snow" } }, 1), r = inside(room)
+    chance(0.999, () => room.step(a))
+    Object.assign(r.cat, { mode: "sit", path: [], until: 0, purr: 0, stretch: 0, saidUntil: r.tick + 1000 })
+    chance(0.1, () => room.step(a))
+    expect((r.cat.path as { x: number; y: number }[]).at(-1)).toEqual({ x: 7, y: 115 })
+  })
+})

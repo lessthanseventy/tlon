@@ -1,7 +1,7 @@
 // The TUI's line to the server: the operator API over loopback HTTP (Server.MCP.OperatorAPI) — the
 // always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
 // beside it: a compiled TUI runs anywhere the server answers.
-import { EMPTY, type Agents, type ThreadView } from "../kit/types"
+import { EMPTY, type Agents, type CorkNote, type ThreadView } from "../kit/types"
 import type { Target } from "./terminal"
 
 const BASE = (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/$/, "")
@@ -44,6 +44,10 @@ export async function archive(ws: number): Promise<Archive | null> {
 /** the workspace's recent small talk (empty where the server's banter is off) */
 export async function banter(ws: number): Promise<{ agent: string; line: string; at: number }[]> {
   try { const r = await call("GET", `/office/banter/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
+}
+/** the office corkboard: the coworkers' notes to each other, newest first (empty where banter is off) */
+export async function corkboard(ws: number): Promise<CorkNote[]> {
+  try { const r = await call("GET", `/office/corkboard/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
 }
 /** each pet's lines by occasion, written by the server's model (empty where it is off) */
 export async function pets(ws: number): Promise<Record<string, Record<string, string[]>>> {

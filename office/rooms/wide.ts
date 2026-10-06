@@ -87,6 +87,8 @@ type Layout = ReturnType<ReturnType<typeof layoutFor>>
 const TOWER_X = 78, PERCH_TOP = { x: 83, y: 52 }, PERCH_MID = { x: 83, y: 69 }
 const CAT_NAP = { x: 50, y: 128 }, CAT_DESK = { x: 37, y: 75 }, LITTER = { x: 7, y: 98 }, PLAY = { x: 70, y: 132 }
 const YARN = { x: 76, y: 130 }, MOUSE = { x: 24, y: 134 }
+// a radiator on your office's left wall; on a cold day Nina sits on top of it
+const RADIATOR = { x: 2, y: 116, w: 10, h: 12 }, CAT_WARM = { x: 7, y: 115 }
 // your in-tray, on a side table left of your desk
 const TRAY = { x: 4, y: 62 }
 
@@ -156,7 +158,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       return [{ x, y: from }, { x: la, y: from }, { x: la, y: HALL }, { x: lb, y: HALL }, ...there]
     },
     cat: {
-      nap: CAT_NAP, desk: CAT_DESK, play: PLAY, litter: LITTER, perches: [PERCH_TOP, PERCH_MID],
+      nap: CAT_NAP, desk: CAT_DESK, play: PLAY, litter: LITTER, perches: [PERCH_TOP, PERCH_MID], warm: CAT_WARM,
       // the zoomies: your office (your desk, her tower) and the lounge (the couch back, the top of
       // the TV, the kitchen counter), each first the floor spot she lands on after
       leaps: [
@@ -169,7 +171,8 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       via: (p: Pt) =>
         p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 100 }
           : p.x === PERCH_TOP.x && p.y <= PERCH_MID.y ? { x: PERCH_TOP.x, y: 94 }
-            : p.x === LITTER.x && p.y === LITTER.y ? { x: LITTER.x, y: 106 } : null,
+            : p.x === LITTER.x && p.y === LITTER.y ? { x: LITTER.x, y: 106 }
+              : p.x === CAT_WARM.x && p.y === CAT_WARM.y ? { x: CAT_WARM.x, y: 136 } : null,
       // out through your office's door and along the hallway, when she changes rooms
       // out of one room and into another along the hallway: your office by its door, the lounge by
       // its lane, the open floor by the column she watches the fish from
@@ -195,6 +198,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         { x: F1 - 40, y: 150, w: 14, h: 24 }, // the filing cabinet
         { x: F1 - 60, y: 146, w: 12, h: 28 }, // the server rack
         { x: TRAY.x, y: TRAY.y, w: 16, h: 14 }, // the in-tray's table
+        RADIATOR,
         table, ...cabinets, tank, vending, shelf, foos, darts, // the pastimes' furniture
         { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
       ]
@@ -486,7 +490,13 @@ export class WideRoom extends Sim<Layout> {
     if (queued.length > this.plan.queue.length) sc.overhead.push(() => text(`+${queued.length - this.plan.queue.length + 1}`, 94, 176, ROLE.attention))
     const c = this.cat
     const chair = corner(this.z).shelf.x + 8
-    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : null)
+    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null)
+    // the radiator, and on a cold day the heat shimmering off it
+    sc.item(RADIATOR.y + RADIATOR.h, () => {
+      px(RADIATOR.x, RADIATOR.y, RADIATOR.w, RADIATOR.h, ROLE.prose)
+      for (let k = 1; k < RADIATOR.w; k += 2) px(RADIATOR.x + k, RADIATOR.y + 1, 1, RADIATOR.h - 2, tint(ROLE.prose, ROLE.ground, 0.6))
+      if ((a.weather?.temp_c ?? 20) < 10) for (let k = 0; k < 3; k++) px(RADIATOR.x + 2 + k * 3 + ((f + k) % 2), RADIATOR.y - 3 - ((f + k) % 3), 1, 2, tint(ROLE.alarm, ROLE.ground, 0.5))
+    })
     this.drawDog(sc)
     this.drawAntics(sc)
     const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
@@ -793,7 +803,14 @@ export class WideRoom extends Sim<Layout> {
       sc.blit(SCRIBBLES[n.id % SCRIBBLES.length]!, x + 1, y + 3, { k: who ? shirtOf(who.archetype) : ROLE.inactive })
       sc.hits.push({ x, y, w: 11, h: 8, tip: `${n.author}: ${n.body}`, act: { kind: "notes" } })
     })
-    sc.hits.push({ x: x0, y: 5, w: 52, h: 34, tip: `${a.notes.length} note(s): open as a list`, act: { kind: "notes" } })
+    // the crew's chatter in the slots left: a sticky of its kind's colour, pinned, and its words in the tip
+    const tones: Record<string, string> = { encourage: ROLE.live, tease: ROLE.alarm, joke: ROLE.body, comment: ROLE.key, suggestion: ROLE.assistant, reply: ROLE.attention }
+    this.cork.slice(0, Math.max(0, 8 - Math.min(8, a.notes.length))).forEach((n, k) => {
+      const i = Math.min(8, a.notes.length) + k, x = x0 + 4 + (i % 4) * 12, y = 17 + Math.floor(i / 4) * 10
+      sc.px(x, y, 9, 7, tones[n.kind] ?? ROLE.prose); sc.px(x + 1, y + 2, 7, 1, ROLE.fieldInk); sc.px(x + 1, y + 4, 5, 1, ROLE.fieldInk); sc.px(x + 4, y - 1, 1, 2, ROLE.alarm)
+      sc.hits.push({ x, y, w: 9, h: 7, tip: `${n.author} (${n.kind}): ${n.body}`, act: { kind: "notes" } })
+    })
+    sc.hits.push({ x: x0, y: 5, w: 52, h: 34, tip: `${a.notes.length} note(s), ${this.cork.length} on the corkboard: open as a list`, act: { kind: "notes" } })
   }
 
   /** windows on the sky as it is outside: night with its stars, dawn and dusk, day */
