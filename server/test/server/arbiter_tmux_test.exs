@@ -50,7 +50,7 @@ defmodule Server.Arbiter.TmuxTest do
     assert Arbiter.Tmux.ready?(handle)
   end
 
-  test "spawn: a seat on the bench spawns with its PROFILE's harness — a builder at home is Claude Code, whatever the agent row says" do
+  test "spawn: a seat on the bench spawns with its PROFILE's harness — a builder at home is Claude Code, whatever the agent row says; a meta seat too" do
     # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides
     # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides
     pi_root = Path.join(System.tmp_dir!(), "tlon_arbiter_pi_#{System.unique_integer([:positive])}")
@@ -69,7 +69,7 @@ defmodule Server.Arbiter.TmuxTest do
         type: "code",
         scope: "project",
         repos: [],
-        roster: [%{archetype: "builder", name: "hronir"}]
+        roster: [%{archetype: "builder", name: "hronir"}, %{archetype: "surveyor", name: "tertius"}]
       })
 
     agent = Staff.agent_by_name("hronir")
@@ -85,6 +85,17 @@ defmodule Server.Arbiter.TmuxTest do
     assert_received {:tmux, ["-L", _, "new-session", "-d", "-s", _, "-n", _, cmd]}
     assert cmd =~ "claude-code/launch.sh"
     refute cmd =~ "exec pi"
+
+    # tertius is never a leaf lead, but a window opened for it still wears its profile, not bare pi
+    {:ok, meta} = Channel.open_thread(%{title: "summary", workspace_id: ws.id})
+    {:ok, meta} = Staff.assign(meta, Staff.agent_by_name("tertius"))
+
+    meta_exports =
+      ~s(export TLON_MCP_URL="http://127.0.0.1:4040/mcp"\nexport TLON_THREAD="#{meta.id}"\nexport TLON_AUTHOR="tertius")
+
+    assert {:ok, _} = Arbiter.Tmux.spawn(meta_exports)
+    assert_received {:tmux, ["-L", _, "new-session", "-d", "-s", _, "-n", _, cmd]}
+    assert cmd =~ "claude-code/launch.sh"
   end
 
   test "spawn: no session yet → new-session -d with the leaf as window 0, tagged; the claude engine gets the claude launcher",
