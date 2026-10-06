@@ -41,7 +41,7 @@ defmodule Server.Arbiter.TmuxTest do
   end
 
   test "ready?: an input line on the pane — pi's registered footer or a harness prompt — else not yet" do
-    handle = %{socket: "console-workspace-1", session: "w1", window: "t7"}
+    handle = %{socket: "tlon-workspace-1", session: "w1", window: "t7"}
     Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"booting…", 0} end)
     refute Arbiter.Tmux.ready?(handle)
     Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"❯ \n⏵⏵ auto mode on", 0} end)

@@ -43,7 +43,7 @@ defmodule Server.StaffingTest do
       File.rm_rf!(pi_root)
     end)
 
-    %{ws: ws, standing: standing, sock: "console-workspace-#{ws.id}", session: "w#{ws.id}"}
+    %{ws: ws, standing: standing, sock: "tlon-workspace-#{ws.id}", session: "w#{ws.id}"}
   end
 
   # A fake tmux: `windows` is what list-windows prints (the centre `rufus` on 0 in most fixtures);
@@ -217,7 +217,7 @@ defmodule Server.StaffingTest do
     assert :ok = Staffing.pass(empty.id)
     refute_received {:tmux, _}
     assert :ok = Staffing.pass()
-    assert_receive {:tmux, ["-L", "console-workspace-" <> _ | _]}
+    assert_receive {:tmux, ["-L", "tlon-workspace-" <> _ | _]}
   end
 
   describe "hand_off/2 — a running thread goes to another coworker" do

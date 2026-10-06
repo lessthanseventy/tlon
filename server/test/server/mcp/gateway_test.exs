@@ -182,7 +182,7 @@ defmodule Server.MCP.GatewayTest do
     assert {200, %{"socket" => socket, "session" => session, "window" => window}} =
              get_json("/api/threads/#{t.id}/terminal")
 
-    assert socket == "console-workspace-#{ws.id}" and session == "w#{ws.id}" and window == "t#{t.id}"
+    assert socket == "tlon-workspace-#{ws.id}" and session == "w#{ws.id}" and window == "t#{t.id}"
   end
 
   test "GET /api/threads/:id/worktree is the coworker's working dir, ensured; 404 with no repo" do

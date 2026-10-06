@@ -56,7 +56,7 @@
       provenance: "stated",
       text:
         "Substrate: tmux is the runtime (where live terminals run), the server is the knowledge — orthogonal. " <>
-          "Coworkers run on their workspace's tmux server (socket console-workspace-<id>, session w<id>), so they " <>
+          "Coworkers run on their workspace's tmux server (socket tlon-workspace-<id>, session w<id>), so they " <>
           "survive any UI restarting. God-view is a server query across all workspaces, never a tmux attach."
     },
     %{

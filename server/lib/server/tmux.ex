@@ -2,7 +2,7 @@ defmodule Server.Tmux do
   @moduledoc """
   The tmux naming contract the whole machine shares, and the server's command seam behind it
   (one-brain piece B). Every workspace runs its coworkers on a PRIVATE tmux server — socket
-  `console-workspace-<id>`, session `w<id>`, both id-derived so a rename never orphans a running
+  `tlon-workspace-<id>`, session `w<id>`, both id-derived so a rename never orphans a running
   session; the roster lead is the CENTRE window (named after the lead), tail coworkers are named
   windows, a staffed thread's leaf window carries the `@funes_thread <id>` option (the routing
   key — its name is cosmetic; a legacy `t<id>` name still resolves) and its opening-turn phase as
@@ -22,7 +22,7 @@ defmodule Server.Tmux do
         }
 
   def session(id), do: "w#{id}"
-  def socket(id), do: "console-workspace-#{id}"
+  def socket(id), do: "tlon-workspace-#{id}"
   def target(id, window), do: "#{session(id)}:#{window}"
   def argv(id, args), do: ["-L", socket(id)] ++ args
 

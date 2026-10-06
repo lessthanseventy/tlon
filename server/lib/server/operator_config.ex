@@ -1,7 +1,7 @@
 defmodule Server.OperatorConfig do
   @moduledoc """
   The operator's **runtime settings file**, read side — knobs that change without editing Elixir
-  source or re-running `home:switch`. A plain JSON map at `~/.config/console/config.json`
+  source or re-running `home:switch`. A plain JSON map at `~/.config/tlon/config.json`
   (override with `config :server, :operator_config_path`, which the test envs point away from the
   real home). Nothing in this repo writes it; the operator edits it by hand. The profile registry
   and the staffing pass read it here, so every coworker the service spawns wears its overrides.
@@ -17,11 +17,11 @@ defmodule Server.OperatorConfig do
   Best-effort on read: a missing or corrupt file is just "no overrides".
   """
 
-  @doc "The settings file path (`config :server, :operator_config_path` override, else ~/.config/console/config.json)."
+  @doc "The settings file path (`config :server, :operator_config_path` override, else ~/.config/tlon/config.json)."
   @spec path() :: String.t()
   def path do
     Application.get_env(:server, :operator_config_path) ||
-      Path.join([xdg_config_home(), "console", "config.json"])
+      Path.join([xdg_config_home(), "tlon", "config.json"])
   end
 
   @doc "The whole settings map — `%{}` when the file is absent or unreadable (defaults win)."
