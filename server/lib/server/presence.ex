@@ -19,6 +19,45 @@ defmodule Server.Presence do
   @doc "The instant before which a `last_active_at` is cold. Pass `now` for testable time."
   def warmth_cutoff(now \\ now()), do: DateTime.shift(now, second: -warmth_window())
 
+  @doc """
+  The warmth window for a model provider: the operator's `"warmth_seconds"` for it in the settings
+  file (`Server.OperatorConfig.warmth_seconds/0` — a provider whose prompt cache lasts five minutes,
+  or that caches nothing, gets a shorter one), else the default.
+  """
+  def warmth_window(provider), do: Map.get(Server.OperatorConfig.warmth_seconds(), provider, warmth_window())
+
+  @doc "The loosest cutoff any provider has — a query's prefilter, before `warm_for?/4` decides each row."
+  def loosest_cutoff(now \\ now()) do
+    longest = Enum.max([warmth_window() | Map.values(Server.OperatorConfig.warmth_seconds())])
+    DateTime.shift(now, second: -longest)
+  end
+
+  @doc """
+  Is `agent`'s session warm as of `now`, by the window of the provider its seat in `workspace_id`
+  runs on? With no per-provider windows configured it is `warm?/2`, and nothing is looked up.
+  """
+  def warm_for?(at, agent, workspace_id, now \\ now())
+  def warm_for?(nil, _agent, _ws, _now), do: false
+
+  def warm_for?(%DateTime{} = at, agent, workspace_id, now) do
+    window =
+      if Server.OperatorConfig.warmth_seconds() == %{},
+        do: warmth_window(),
+        else: warmth_window(provider_of(agent, workspace_id))
+
+    DateTime.after?(at, DateTime.shift(now, second: -window))
+  end
+
+  # the provider the coworker's seat runs on in that workspace (its policy, else its archetype's)
+  defp provider_of(agent, workspace_id) do
+    with %{} = seat <- Enum.find(Server.Workspaces.bench(workspace_id), &(&1.name == agent)),
+         %{model: %{provider: p}} <- Server.Profiles.instantiate(Server.Profiles.roster_entry(seat), workspace_id) do
+      p
+    else
+      _ -> nil
+    end
+  end
+
   @doc "Is a session (or a bare `last_active_at`) warm as of `now`?"
   def warm?(session_or_time, now \\ now())
   def warm?(%{last_active_at: at}, now), do: warm?(at, now)

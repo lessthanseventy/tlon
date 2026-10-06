@@ -176,7 +176,7 @@ defmodule Server.Office do
         agent: r.agent,
         thread_id: r.thread_id,
         title: r.thread_title,
-        warm: r.warm?,
+        warm: Server.Presence.warm_for?(r.last_active_at, r.agent, ws),
         workspace_id: ws,
         archetype: seat && seat.archetype,
         lead: !!(seat && seat.lead?),

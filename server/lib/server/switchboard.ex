@@ -191,7 +191,8 @@ defmodule Server.Switchboard do
         # Only WARM sessions: live, addressed, and active within the cache window.
         # A cold session is treated like an ended one — never poked (§3b).
         wanted = Enum.map(names, &String.downcase/1)
-        cutoff = Presence.warmth_cutoff()
+        cutoff = Presence.loosest_cutoff()
+        ws = with %Thread{workspace_id: w} <- Repo.get(Thread, message.thread_id), do: w
 
         from(s in Session,
           join: a in Agent,
@@ -202,6 +203,8 @@ defmodule Server.Switchboard do
           select: {s, a}
         )
         |> Repo.all()
+        # each by its own provider's window (`Presence.warm_for?/4`; one window unless configured)
+        |> Enum.filter(fn {session, agent} -> Presence.warm_for?(session.last_active_at, agent.name, ws) end)
         # Then the ENGINE-CREDIT half of clocked-out: drop a session whose model is
         # out of credits / past its rate-limit window (§3b). A pluggable backend
         # (§8) — the SQL can't ask a vendor, so it is a post-filter on small N.
@@ -228,7 +231,7 @@ defmodule Server.Switchboard do
             String.downcase(name) != author,
             %Agent{} = agent <- [Staff.agent_by_name(name)],
             standing? or agent.id == thread.agent_id,
-            not has_warm_session?(thread_id, agent.id),
+            not has_warm_session?(thread, agent),
             not Presence.clocked_out?(agent),
             {:ok, %{exports: exports}} <- [Spawn.join(thread_id, agent.name)],
             {:ok, handle} <- [Arbiter.spawn(exports)],
@@ -284,15 +287,17 @@ defmodule Server.Switchboard do
   # `has_live_session?` (ended_at-only) stranded a cold lead: recipients wouldn't wake it (too cold)
   # and this wouldn't replace it (a session existed). The fresh spawn's Staff.start_session
   # supersedes the cold session on connect (the zombie guard), so the rotation leaves no double.
-  defp has_warm_session?(thread_id, agent_id) do
-    cutoff = Presence.warmth_cutoff()
+  defp has_warm_session?(%Thread{} = thread, %Agent{} = agent) do
+    cutoff = Presence.loosest_cutoff()
 
-    Repo.exists?(
-      from s in Session,
-        where:
-          s.thread_id == ^thread_id and s.agent_id == ^agent_id and is_nil(s.ended_at) and
-            s.last_active_at > ^cutoff
+    from(s in Session,
+      where:
+        s.thread_id == ^thread.id and s.agent_id == ^agent.id and is_nil(s.ended_at) and
+          s.last_active_at > ^cutoff,
+      select: s.last_active_at
     )
+    |> Repo.all()
+    |> Enum.any?(&Presence.warm_for?(&1, agent.name, thread.workspace_id))
   end
 
   defp target_names(%Message{} = message) do
