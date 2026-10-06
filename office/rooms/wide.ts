@@ -144,6 +144,8 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
     oncall: [Mc - 22, Mc + 22].flatMap((x) => [81, 95].map((y): Spot => ({ x, y, aisle: 116, pose: "sit", face: x < Mc ? "right" : "left", kind: "laptop" }))),
     exit: { x: w - 3, y: HALL, aisle: HALL, pose: "stand", face: "right", kind: "exit" },
     pen: { x: F1 - 30, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
+    // under the suggestion box on the wall between the notes board and the windows
+    box: { x: F1 + 1, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
     /** beside whoever is visited: in front of a desk that faces the room, beside a seat at a table, else where they stand */
     visit(h: Actor): Spot {
       const at = h.spot.kind === "desk" && !h.path.length
@@ -421,6 +423,7 @@ export class WideRoom extends Sim<Layout> {
     this.calendar(sc, 4, now, Object.values(a.calendar).flat())
     this.whiteboard(sc, a, measure, 62, F1 - 64)
     this.corkboard(sc, a, F1 - 58)
+    this.drawBox(sc, F1 - 4)
     this.windows(sc, M0 + 4, L0 + 30, now, a.weather ?? null)
     this.season(sc, now)
     this.tv(sc, L0 + 36)
@@ -825,6 +828,15 @@ export class WideRoom extends Sim<Layout> {
       sc.hits.push({ x, y, w: 9, h: 7, tip: `${n.author} (${n.kind}): ${n.body}`, act: { kind: "notes" } })
     })
     sc.hits.push({ x: x0, y: 5, w: 52, h: 34, tip: `${a.notes.length} note(s), ${this.cork.length} on the corkboard: open as a list`, act: { kind: "notes" } })
+  }
+
+  /** the suggestion box on the wall: a wooden box with a slot, the slips waiting in it showing over its lid */
+  private drawBox(sc: Scene, x0: number) {
+    const px = sc.px.bind(sc), n = Math.min(5, this.ideas.length)
+    for (let k = 0; k < n; k++) px(x0 + 1 + k * 2, 13 - (k % 2), 2, 4, ROLE.prose)
+    px(x0, 16, 10, 12, ROLE.structure); px(x0 + 1, 17, 8, 1, ROLE.borderInactive); px(x0 + 2, 19, 6, 1, ROLE.fieldInk)
+    px(x0 + 3, 22, 4, 3, ROLE.body) // its label plate
+    sc.hits.push({ x: x0 - 1, y: 10, w: 12, h: 19, tip: `the suggestion box: ${this.ideas.length ? `${this.ideas.length} suggestion(s)` : "empty"} - click to read`, act: { kind: "ideas" } })
   }
 
   /** windows on the sky as it is outside: night with its stars, dawn and dusk, day */

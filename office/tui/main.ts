@@ -27,7 +27,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -71,6 +71,8 @@ let roomChanged = true, imageDirty = true
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
 /** the office corkboard: the crew's chatter to each other, newest first */
 let cork: CorkNote[] = []
+/** the suggestion box: the crew's suggestions, waiting on you to file one or throw it out */
+let ideas: CorkNote[] = []
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
 let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
@@ -153,6 +155,8 @@ async function chatter() {
   room().hear(await data.pets(ws))
   cork = await data.corkboard(ws)
   room().pinboard(cork)
+  ideas = await data.suggestions(ws)
+  room().suggestionBox(ideas)
   for (const b of await data.banter(ws)) {
     const k = `${b.at} ${b.agent}`
     if (heard.has(k)) continue
@@ -223,6 +227,7 @@ function act(x: Act) {
     case "dog": { const r = room(); if (r instanceof WideRoom) r.patDog(); changed(); return open({ kind: "pet", who: "dog" }) }
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); changed(); draw() } return }
     case "arcade": return open({ kind: "arcade" })
+    case "ideas": return open({ kind: "ideas" })
     case "weather": status = all.weather ? `outside: ${all.weather.desc.toLowerCase()}${all.weather.temp_c === null ? "" : `, ${all.weather.temp_c}°C`}` : "no word on the weather"; return draw()
   }
 }
@@ -304,7 +309,7 @@ const VERBS: [string, () => void][] = [
   ["crew", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
-  ["the arcade", () => open({ kind: "arcade" })],
+  ["the arcade", () => open({ kind: "arcade" })], ["the suggestion box", () => open({ kind: "ideas" })],
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
@@ -603,13 +608,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
     case "notes": {
       const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
       const rows: Row[] = a.notes.map((n) => ({ segs: [who(n.author), plain(n.body.replace(/\s+/g, " "))] }))
-      // the crew's chatter, apart from the notes they work from; a suggestion can be filed as a ticket
+      // the crew's chatter, apart from the notes they work from (their suggestions go in the box)
       if (cork.length) rows.push({ segs: [key(`CORKBOARD · ${cork.length} — the crew's notes to each other`)] }, ...cork.map((n): Row => ({ segs: [dim(`${n.kind.padEnd(10)} `), who(n.author), plain(n.body), dim(n.re ? `  (re #${n.re})` : "")], ref: n })))
-      const picked = rows[sel]?.ref as CorkNote | undefined
-      return {
-        title: `NOTES · ${a.notes.length}`, rows,
-        actions: [{ key: "n", label: "pin a note", run: newNote }, ...(picked?.kind === "suggestion" && ws !== null ? [{ key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(ws!, picked.body)) }] : []), back1],
-      }
+      return { title: `NOTES · ${a.notes.length}`, rows, actions: [{ key: "n", label: "pin a note", run: newNote }, back1] }
     }
     case "tray": {
       const rows = feed.map((x): Row => ({
@@ -702,6 +703,22 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
           ...(settings ? [{ key: "b", label: `banter: ${settings.banter ? "on → off" : "off → on"}`, run: () => void did(data.settingsEdit({ banter: !settings!.banter })).then(reload) }] : []),
           { key: "+", label: "add a repo", run: () => ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(reload) }) },
           ...(repo ? [{ key: "-", label: `remove ${repo.path.split("/").pop()}`, run: () => ask2(`remove ${repo.path} from ${c.name}`, () => void did(data.repoRemove(repo.id)).then(reload)) }] : []),
+          back1,
+        ],
+      }
+    }
+    case "ideas": {
+      const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
+      const rows: Row[] = ideas.map((n) => ({ segs: [who(n.author), plain(n.body)], ref: n }))
+      const picked = rows[sel]?.ref as CorkNote | undefined, w = ws
+      const gone = (id: number) => { ideas = ideas.filter((x) => x.id !== id); room().suggestionBox(ideas) }
+      return {
+        title: `SUGGESTIONS · ${ideas.length}`, rows: rows.length ? rows : [{ segs: [dim("the box is empty. the crew drops ideas in it as they work.")] }],
+        actions: [
+          ...(picked && w !== null ? [
+            { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, picked.body)).then(() => data.dropSuggestion(w, picked.id)).then(() => { gone(picked.id); draw() }) },
+            { key: "d", label: "throw it out", run: () => void data.dropSuggestion(w, picked.id).then(() => { gone(picked.id); draw() }) },
+          ] : []),
           back1,
         ],
       }

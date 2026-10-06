@@ -140,6 +140,15 @@ describe("the corkboard", () => {
     expect(said).toBe("Whoever keeps renaming things: I see you.")
     expect(r.talk.get("yu")?.text).toBeUndefined()
   }))
+
+  test("a suggestion goes in the box, not on the board: its author walks to the box", () => chance(0.999, () => {
+    const room = new WideRoom(560), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room), box = widePlan(560).box!
+    for (let i = 0; i < 100; i++) room.step(a)
+    room.suggestionBox([])
+    room.suggestionBox([{ ...note(3, "yu", "diff the summary against yesterday's"), kind: "suggestion" }])
+    room.step(a)
+    expect(r.actors.get("yu")!.spot).toMatchObject({ x: box.x, y: box.y })
+  }))
 })
 
 describe("the cold", () => {

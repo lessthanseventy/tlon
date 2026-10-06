@@ -67,6 +67,8 @@ export type Plan<L extends { people: Seat[] }> = {
   visit(host: Actor): Spot
   /** where someone whose session is up but who is not mid-turn waits, on call, at a laptop (a room without: the lounge) */
   oncall?: Spot[]
+  /** where to stand to drop a suggestion in the box, for a room with one (else they pin it on the board) */
+  box?: Spot
   /** somewhere to stroll when the lounge is full */
   roam(l: L): Spot
   /** the waypoints from (x, row `from`) to a goal, kept off the furniture */
@@ -112,7 +114,10 @@ export class Sim<L extends { people: Seat[] }> {
   protected weather: Agents["weather"] = null
   /** the office corkboard's notes (`pinboard`), and notes on their way up: an author walks to the board and reads theirs out */
   protected cork: CorkNote[] = []
-  private pins = new Map<string, { text: string; until: number }>()
+  private pins = new Map<string, { text: string; until: number; box: boolean }>()
+  /** the suggestion box (`suggestionBox`) */
+  protected ideas: CorkNote[] = []
+  private ideasSeen = false
   private corkSeen = false
   /** what the server's model wrote for each pet, by occasion (`hear`), and the lines already said */
   private voices: Record<string, Record<string, string[]>> = {}
@@ -136,9 +141,16 @@ export class Sim<L extends { people: Seat[] }> {
    */
   pinboard(notes: CorkNote[]) {
     const seen = new Set(this.cork.map((n) => n.id))
-    if (this.corkSeen) for (const n of notes) if (!seen.has(n.id)) this.pins.set(n.author, { text: n.body, until: this.tick + 600 })
+    if (this.corkSeen) for (const n of notes) if (!seen.has(n.id)) this.pins.set(n.author, { text: n.body, until: this.tick + 600, box: false })
     this.cork = notes
     this.corkSeen = true
+  }
+  /** the suggestion box as the server has it: a new one walks its author over to drop it in, reading it out */
+  suggestionBox(ideas: CorkNote[]) {
+    const seen = new Set(this.ideas.map((n) => n.id))
+    if (this.ideasSeen) for (const n of ideas) if (!seen.has(n.id)) this.pins.set(n.author, { text: n.body, until: this.tick + 600, box: true })
+    this.ideas = ideas
+    this.ideasSeen = true
   }
   /** the pets' lines, fresh from the server (`GET /api/office/pets/:ws`) */
   hear(voices: Record<string, Record<string, string[]>>) { this.voices = voices }
@@ -333,7 +345,7 @@ export class Sim<L extends { people: Seat[] }> {
       if (actor.leaving) goal = plan.exit
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
       else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
-      else if (writing.has(actor.seat.agent) || this.pins.has(actor.seat.agent)) goal = plan.pen
+      else if (writing.has(actor.seat.agent) || this.pins.has(actor.seat.agent)) goal = this.pins.get(actor.seat.agent)?.box && plan.box ? plan.box : plan.pen
       else if ((actor.seat.thinking || this.tick < actor.stretch) && home) goal = home
       else if (actor.seat.warm && this.plan.oncall?.length) goal = this.oncallGoal(actor, held, l)
       else goal = this.idleGoal(actor, held, l)
