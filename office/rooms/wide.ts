@@ -10,7 +10,7 @@ import { drawActors, drawCat, drawFuss, drawParty, Scene, type Focus } from "../
 import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
 import { FUSS, Sim, keyOf, type Actor, type Fussing, type Plan, type Pt, type Spot } from "../kit/sim"
-import { pick, type Fuss } from "../kit/voices"
+import { NINA, pick, type Fuss } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { BIG_PLANT, COFFEE, COOLER, DOG, DOG_NAME, SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
@@ -57,6 +57,9 @@ function corner(z: Zones) {
     darts: { x: z.W - 40, y: 164, w: 8, h: 18 },
   }
 }
+
+/** where Nina sits to watch the fish: on the floor in front of the aquarium */
+function fishWatch(z: Zones): Pt { const t = corner(z).tank; return { x: t.x + 15, y: t.y + t.h + 8 } }
 
 type Desk = { x: number; y: number; w: number; kind: "boss" | "manager" | "lead"; seat?: Seat }
 type Chair = { x: number; table: number; agent: string | null }
@@ -162,16 +165,21 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       ],
       // the armchair too, when it's empty: a princess takes the good seat
       lounge: [{ x: L0 + 52, y: 104 }, { x: w - 40, y: 126 }, { x: shelf.x + 8, y: 82 }],
-      spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }],
+      spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }, fishWatch(z)],
       via: (p: Pt) =>
         p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 100 }
           : p.x === PERCH_TOP.x && p.y <= PERCH_MID.y ? { x: PERCH_TOP.x, y: 94 }
             : p.x === LITTER.x && p.y === LITTER.y ? { x: LITTER.x, y: 106 } : null,
       // out through your office's door and along the hallway, when she changes rooms
+      // out of one room and into another along the hallway: your office by its door, the lounge by
+      // its lane, the open floor by the column she watches the fish from
       door: (from, to) => {
-        if (inOffice(from.x) === inOffice(to.x)) return []
-        const office = [{ x: OFF_LANE, y: 160 }, { x: OFF_LANE, y: HALL - 3 }], lounge = [{ x: L0 + 6, y: HALL - 3 }, { x: L0 + 6, y: to.y }]
-        return inOffice(from.x) ? [...office, ...lounge] : [{ x: L0 + 6, y: HALL - 3 }, { x: OFF_LANE, y: HALL - 3 }, { x: OFF_LANE, y: 160 }]
+        const roomOf = (p: Pt) => (inOffice(p.x) ? "office" : p.x >= L0 ? "lounge" : "floor")
+        const a = roomOf(from), b = roomOf(to), fx = fishWatch(z).x
+        if (a === b) return []
+        const out = { office: [{ x: OFF_LANE, y: 160 }, { x: OFF_LANE, y: HALL - 3 }], lounge: [{ x: L0 + 6, y: HALL - 3 }], floor: [{ x: fx, y: HALL - 3 }] }
+        const into = { office: [{ x: OFF_LANE, y: HALL - 3 }, { x: OFF_LANE, y: 160 }], lounge: [{ x: L0 + 6, y: HALL - 3 }, { x: L0 + 6, y: to.y }], floor: [{ x: fx, y: HALL - 3 }] }
+        return [...out[a], ...into[b]]
       },
     },
     blocks(l) {
@@ -237,6 +245,10 @@ export class WideRoom extends Sim<Layout> {
   private readonly tvSet = new Tv(48, 28)
   private readonly dog: Dog
   private antic: Antic | null = null
+  /** each cabinet's best score and who set it; the game each player is on; a new best's fanfare until `fanfare` */
+  private highs: ({ name: string; score: number } | null)[] = [null, null]
+  private runs = new Map<string, { cab: number; score: number }>()
+  private fanfare = 0
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
   constructor(readonly width: number) {
@@ -350,6 +362,13 @@ export class WideRoom extends Sim<Layout> {
     const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
     if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
     for (const x of this.at("plant")) this.watered.set(x.spot.x, (this.watered.get(x.spot.x) ?? 0) + 1)
+    this.arcadeScores()
+    // Nina at the aquarium paws at the glass, and has thoughts about the fish
+    const c = this.cat, fw = fishWatch(this.z)
+    if (c.x === fw.x && c.y === fw.y && !c.path.length) {
+      if (c.mode === "sit") c.mode = "play"
+      if (this.quiet(c.saidUntil) && Math.random() < 0.006) this.catSay(this.line("Nina", "fish", NINA.fish))
+    }
     // at the ping-pong table for a rally, his head goes with the ball, and now and then he has to say so
     const { table: t } = corner(this.z), d = this.dog, rally = this.at("pingpong").length === 2
     if (rally && !d.path.length && Math.abs(d.x - (t.x + t.w / 2)) < 3 && Math.abs(d.y - (t.y + t.h + 6)) < 3) {
@@ -578,6 +597,31 @@ export class WideRoom extends Sim<Layout> {
     if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
   }
 
+  /** the cabinets' best scores, and who holds them */
+  highScores() { return this.highs }
+
+  /** whoever plays racks up points; walking away, a best beaten is theirs, with a fanfare */
+  private arcadeScores() {
+    const { cabinets } = corner(this.z), playing = new Set<string>()
+    for (const x of this.at("arcade")) {
+      const cab = cabinets.findIndex((c) => Math.abs(c.x + 6 - x.x) < 3)
+      if (cab < 0) continue
+      playing.add(x.seat.agent)
+      const run = this.runs.get(x.seat.agent) ?? { cab, score: 0 }
+      if (this.tick % 4 === 0) run.score += 10 * Math.floor(Math.random() * 6)
+      this.runs.set(x.seat.agent, run)
+    }
+    for (const [who, run] of this.runs) {
+      if (playing.has(who)) continue
+      this.runs.delete(who)
+      if (run.score <= (this.highs[run.cab]?.score ?? 0)) continue
+      this.highs[run.cab] = { name: who, score: run.score }
+      this.fanfare = this.tick + 40
+      const x = [...this.actors.values()].find((a) => a.seat.agent === who)
+      if (x) { x.emote = "!"; x.emoteUntil = this.tick + 30 }
+    }
+  }
+
   /** who is settled at a pastime of `kind`, and where */
   private at(kind: string) { return [...this.actors.values()].filter((x) => x.spot.kind === kind && !x.moving && !x.path.length) }
 
@@ -601,7 +645,8 @@ export class WideRoom extends Sim<Layout> {
     }
     cabinets.forEach((c, i) => sc.item(c.y + c.h, () => {
       const body = i ? ROLE.assistant : ROLE.planner, playing = this.at("arcade").some((a) => Math.abs(a.x - (c.x + 6)) < 3)
-      px(c.x, c.y, c.w, c.h, tint(body, ROLE.ground, 0.55)); px(c.x, c.y, c.w, 3, f % 4 ? body : ROLE.body) // the marquee, flickering
+      // the marquee flickers; a new best sets it flashing
+      px(c.x, c.y, c.w, c.h, tint(body, ROLE.ground, 0.55)); px(c.x, c.y, c.w, 3, tick < this.fanfare ? (tick % 2 ? ROLE.attention : ROLE.body) : f % 4 ? body : ROLE.body)
       px(c.x + 2, c.y + 4, 8, 7, ROLE.ground)
       if (playing) {
         // a wave of invaders marching, the ship under them firing
@@ -611,7 +656,8 @@ export class WideRoom extends Sim<Layout> {
         if (f % 2) px(c.x + 4 + ((f * 3) % 6), c.y + 6 + (tick % 3), 1, 1, ROLE.body)
       } else if (f % 6 < 3) px(c.x + 3, c.y + 7, 6, 1, ROLE.body) // insert coin
       px(c.x + 1, c.y + 12, 10, 3, ROLE.edge); px(c.x + 3, c.y + 11, 1, 2, ROLE.prose); px(c.x + 6, c.y + 13, 1, 1, ROLE.alarm); px(c.x + 8, c.y + 13, 1, 1, ROLE.key)
-      sc.hits.push({ x: c.x, y: c.y, w: c.w, h: c.h, tip: "the arcade - click to play", act: { kind: "arcade" } })
+      const best = this.highs[i]
+      sc.hits.push({ x: c.x, y: c.y, w: c.w, h: c.h, tip: `the arcade${best ? ` - best ${best.score} by ${best.name}` : ""} - click to play`, act: { kind: "arcade" } })
     }))
     sc.item(tank.y + tank.h, () => {
       const water = tint(ROLE.key, ROLE.ground, 0.35), glass = tint(ROLE.prose, ROLE.ground, 0.6)
@@ -624,7 +670,10 @@ export class WideRoom extends Sim<Layout> {
       ;[ROLE.alarm, ROLE.body, ROLE.attention].forEach((col, i) => {
         // each fish swims its own lap; at feeding time they all come up for the flakes
         const lap = 22, s = Math.floor(tick / (2 + i)) + i * 7, p = s % (2 * lap), x = p < lap ? p : 2 * lap - p
-        const fx = tank.x + 2 + x, fy = feeding ? tank.y + 4 + i : tank.y + 5 + i * 3, right = p < lap
+        // when Nina is at the glass they gather at her side of it, just out of reach
+        const nina = this.cat.x === tank.x + 15 && this.cat.y === tank.y + tank.h + 8 && !this.cat.path.length
+        const fx = nina ? tank.x + 10 + i * 3 + Math.round(Math.sin((tick + i * 15) / 7) * 2) : tank.x + 2 + x
+        const fy = feeding ? tank.y + 4 + i : nina ? tank.y + 9 + i * 2 : tank.y + 5 + i * 3, right = nina ? i % 2 === 0 : p < lap
         px(fx, fy, 3, 2, col); px(right ? fx - 1 : fx + 3, fy + (f % 2), 1, 1, col)
       })
       for (let k = 0; k < 2; k++) px(tank.x + 6 + k * 14, tank.y + 14 - ((tick + k * 9) % 12), 1, 1, ROLE.prose)

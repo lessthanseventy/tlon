@@ -112,6 +112,12 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
         sc.px(left + 9, top + lift, 2, 1, ROLE.prose)
       }
     })
+    if (actor.mug > sc.tick) sc.item(actor.y + 0.6, () => {
+      // a mug, in hand or on the desk beside them, steaming
+      const mx = sitting ? left + 12 : left - 1, my = sitting ? top + 4 : top + 12
+      sc.px(mx, my, 2, 2, ROLE.prose); sc.px(mx + 2, my, 1, 1, ROLE.prose)
+      if ((sc.tick >> 2) % 3) sc.px(mx + ((sc.tick >> 3) % 2), my - 2, 1, 1, tint(ROLE.prose, ROLE.ground, 0.6))
+    })
     if (actor.snack > sc.tick && !sitting) sc.item(actor.y + 0.6, () => sc.px(left + 10, top + 12 - ((sc.tick >> 3) % 4 === 0 ? 2 : 0), 2, 2, ROLE.alarm)) // a snack, a bite now and then
     if (sc.tick < actor.five) sc.item(actor.y + 0.6, () => { sc.px(left + 11, top + 1, 1, 10, ROLE.prose); sc.px(left + 10, top, 3, 2, ROLE.prose) }) // a hand up for the high-five
     const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null

@@ -24,6 +24,7 @@ export const NINA = {
   done: ["Done? Good. Now attend to me.", "Wonderful. Now the important work: me."],
   queue: ["Someone's waiting on you. So am I, but prettier."],
   shipped: ["{name} shipped. I inspired it, obviously.", "Confetti? For ME? Oh. For {name}. Fine."],
+  fish: ["The orange one mocks me. I have noted it.", "Glass. Always glass. Why is there always glass."],
   // what you tell her to do
   nap: ["Napping was MY idea, for the record."],
   play: ["The yarn has disrespected me for the LAST time."],

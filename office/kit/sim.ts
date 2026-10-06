@@ -24,8 +24,8 @@ export type Actor = {
   until: number; emote: string | null; emoteUntil: number; leaving: boolean
   /** the tick their `doing` last changed (a long one makes them sweat); the tick a just-finished turn's stretch ends */
   doingSince: number; stretch: number
-  /** a snack from the machine in hand until `snack`; the tick they last finished a turn; a high-five's hand up until `five` */
-  snack: number; finished: number; five: number
+  /** a snack from the machine in hand until `snack`; the tick they last finished a turn; a high-five's hand up until `five`; a coffee with them until `mug` */
+  snack: number; finished: number; five: number; mug: number
 }
 export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
 /**
@@ -285,7 +285,7 @@ export class Sim<L extends { people: Seat[] }> {
         actor.seat = r; actor.leaving = false; continue
       }
       const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
-      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0 })
+      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0 })
     }
     if (a.ok) this.seeded = true
     // a wave on the way in (whoever walks in from the exit) and on the way out
@@ -337,6 +337,8 @@ export class Sim<L extends { people: Seat[] }> {
       if (actor.leaving && !actor.moving && actor.path.length === 0) { this.actors.delete(k); changed = true; continue }
       // at the machine: a snack drops, and it goes where they go next
       if (!actor.moving && !actor.path.length && actor.spot.kind === "vending" && actor.snack < this.tick && Math.random() < 0.03) { actor.snack = this.tick + 900; changed = true }
+      // a coffee poured goes back to the desk with them, and steams there a while
+      if (!actor.moving && !actor.path.length && actor.spot.kind === "coffee" && actor.mug < this.tick && Math.random() < 0.03) { actor.mug = this.tick + 3000; changed = true }
       if (actor.emote && this.tick > actor.emoteUntil) { actor.emote = null; changed = true }
       if (!actor.emote && !actor.moving && Math.random() < 0.006) {
         const moods = MOODS[actor.spot.kind]
