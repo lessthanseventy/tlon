@@ -43,12 +43,12 @@ end
 # banked facts. Off by default so a dev shell never shells a model unasked. (The Maintain
 # sweeps need no flag: they run on Oban's cron wherever Oban runs, E/2.)
 # The office's small talk (Server.Office.Banter) and its pets' lines (Server.Office.Pets) shell the
-# same cheap tier while an office polls, opt-in the same way, so a dev shell never spends a model
-# call on jokes.
+# same cheap tier while an office polls — on unless TLON_BANTER=0, and switched off live by the
+# settings file's "banter": false (Server.OperatorConfig.banter?/0, the office's settings card).
 if config_env() != :test do
   config :server,
     memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes),
-    start_banter: System.get_env("TLON_BANTER") in ~w(1 true yes)
+    start_banter: System.get_env("TLON_BANTER") not in ~w(0 false no)
 end
 
 # The operator's handle — who the human IS on this machine's channel. Local

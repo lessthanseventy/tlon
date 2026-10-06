@@ -8,8 +8,8 @@ defmodule Server.Office.Pets do
   woken, a coworker starting a test, a treat…), about this office as it is now (`Banter.scene/1`), and
   the office picks from the batch as things happen; a line about a coworker carries `{name}` for the
   office to fill in. Lazy like banter: a batch is only written while an office asks (`voices/1`), at
-  most one per pet per workspace every `@every_s`. On with banter (`TLON_BANTER=1`). A reply that does
-  not parse is dropped, and the last good batch stands.
+  most one per pet per workspace every `@every_s`. On and off with banter (`Server.Office.Banter`). A
+  reply that does not parse is dropped, and the last good batch stands.
   """
   use GenServer
 
@@ -46,7 +46,9 @@ defmodule Server.Office.Pets do
   """
   @spec voices(integer()) :: %{String.t() => %{String.t() => [String.t()]}}
   def voices(workspace_id) do
-    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:voices, workspace_id}), else: %{}
+    if GenServer.whereis(__MODULE__) && Server.OperatorConfig.banter?(),
+      do: GenServer.call(__MODULE__, {:voices, workspace_id}),
+      else: %{}
   end
 
   @doc "A pet's occasions, `{name, what happened}`: what it may be asked to say something about."
