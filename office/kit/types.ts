@@ -4,8 +4,8 @@
 /** `prompt`: its coworker is sitting on a dialog (Server.Attention) — the ask, answered from the thread */
 /** `lead`: who it is staffed with; `live`: a tmux window is running it; `standing`: its workspace's lobby; `thinking`: who is mid-turn on it */
 export type Thread = { id: number; title: string; stage: string | null; awaiting: string | null; workspace_id?: number | null; lead?: string | null; live?: boolean; standing?: boolean; thinking?: string[]; prompt?: { summary: string; options?: { key: string; label: string }[] | null } | null }
-/** `archetype`/`lead`: the agent's seat on its workspace bench (null/false off every bench); `warm`: its session is recent; `thinking`: it is mid-turn (its harness said so) */
-export type Seat = { agent: string; thread_id: number; title: string; warm: boolean; thinking?: boolean; archetype?: string | null; lead?: boolean; workspace_id?: number | null }
+/** `archetype`/`lead`: the agent's seat on its workspace bench (null/false off every bench); `warm`: its session is recent; `thinking`: it is mid-turn (its harness said so); `doing`: the kind of tool running in that turn (read, edit, bash, search, web, test, delegate), null between tools */
+export type Seat = { agent: string; thread_id: number; title: string; warm: boolean; thinking?: boolean; doing?: string | null; archetype?: string | null; lead?: boolean; workspace_id?: number | null }
 /** a model as the server names it; `thinking` is the effort level */
 export type ModelSpec = { provider: string; model: string; thinking: string }
 /** a coworker a workspace employs, on a thread or not; `model`/`ask` are its policy, null = the archetype's */
