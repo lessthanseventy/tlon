@@ -200,13 +200,17 @@ export class WideRoom extends Sim<Layout> {
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
-  /** Argos says something (after `delay`, when he is answering); `{name}` in a line is whoever it is about */
-  private dogSay(text: string, name = "", delay = 0) { const d = this.dog; d.said = text.replaceAll("{name}", name || "friend"); d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
+  /** Argos says something (after `delay`, when he is answering) */
+  private dogSay(text: string, delay = 0) { const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
+  /** Argos' line for an occasion: the model's, else his own (`ARGOS`) */
+  private argos(occasion: keyof typeof ARGOS | `fuss_${Fuss}`, name = "") {
+    const canned = occasion.startsWith("fuss_") ? ARGOS.fuss[occasion.slice(5) as Fuss] : ARGOS[occasion as Exclude<keyof typeof ARGOS, "fuss">]
+    return this.line("Argos", occasion, canned, name)
+  }
   /** someone starts a tool, finishes a turn, or joins your queue: Nina's opinion, then Argos' */
   protected override noticed(actor: Actor, what: string) {
     super.noticed(actor, what)
-    const lines = what === "test" || what === "done" || what === "queue" ? ARGOS[what] : null
-    if (lines && this.quiet(this.dog.saidUntil) && Math.random() < 0.3) this.dogSay(pick(lines), actor.seat.agent)
+    if ((what === "test" || what === "done" || what === "queue") && this.quiet(this.dog.saidUntil) && Math.random() < 0.3) this.dogSay(this.argos(what, actor.seat.agent))
   }
 
   /** his bed by the lounge's couch, his water bowl by the kitchen */
@@ -222,7 +226,7 @@ export class WideRoom extends Sim<Layout> {
     d.host = null; d.creep = false
     d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, goal)]
     d.aisle = goal.aisle; d.mode = "walk"
-    this.dogSay(pick(ARGOS[what]))
+    this.dogSay(this.argos(what))
   }
 
   /** a click on Argos: a woof and a wag — and if he's not off somewhere, over he rolls for a belly rub */
@@ -230,7 +234,7 @@ export class WideRoom extends Sim<Layout> {
     const d = this.dog
     d.woof = this.tick + 25
     if (d.mode === "sleep") { d.mode = "sit"; d.until = this.tick + 120 }
-    if (!d.path.length) { d.belly = this.tick + 30; this.dogSay(pick(ARGOS.belly)) } else this.dogSay(pick(ARGOS.pat))
+    if (!d.path.length) { d.belly = this.tick + 30; this.dogSay(this.argos("belly")) } else this.dogSay(this.argos("pat"))
   }
   /** someone at `from` makes a fuss of Argos */
   private fussDog(by: Actor) {
@@ -239,7 +243,7 @@ export class WideRoom extends Sim<Layout> {
     if (kind === "belly") d.belly = this.tick + FUSS
     d.mode = "sit"; d.until = Math.max(d.until, this.tick + FUSS + 40)
     by.emote = "♥"; by.emoteUntil = this.tick + FUSS
-    this.dogSay(pick(ARGOS.fuss[kind]), by.seat.agent)
+    this.dogSay(this.argos(`fuss_${kind}`, by.seat.agent))
   }
 
   /**
@@ -264,7 +268,7 @@ export class WideRoom extends Sim<Layout> {
         if (host) {
           // at their desk they reach down to him; or he just says hello
           if (Math.random() < 0.6) this.fussDog(host)
-          else { host.emote = "♥"; host.emoteUntil = this.tick + 40; this.dogSay(pick(ARGOS.visit), host.seat.agent) }
+          else { host.emote = "♥"; host.emoteUntil = this.tick + 40; this.dogSay(this.argos("visit", host.seat.agent)) }
         }
       }
       return true
@@ -296,7 +300,7 @@ export class WideRoom extends Sim<Layout> {
    */
   override step(a: Agents): boolean {
     const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
-    if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(pick(ARGOS.muse))
+    if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
     if (this.tick % 2) return moved
     for (const x of this.actors.values()) {
       if (x.spot.kind !== "couch" || x.moving || Math.random() >= 1 / 375) continue
@@ -422,7 +426,7 @@ export class WideRoom extends Sim<Layout> {
   private stepAntics(): boolean {
     const c = this.cat, d = this.dog, now = this.tick
     // a pair of lines is an exchange: the second waits for the first, or their balloons collide
-    const shout = (who: "cat" | "dog", text: string, reply = false) => (who === "cat" ? this.catSay(text, 25, reply ? 25 : 0) : this.dogSay(text, "", reply ? 25 : 0))
+    const shout = (who: "cat" | "dog", text: string, reply = false) => (who === "cat" ? this.catSay(text, 25, reply ? 25 : 0) : this.dogSay(text, reply ? 25 : 0))
     const a = this.antic
     if (a) {
       if (a.kind === "sneak" && !d.path.length) {

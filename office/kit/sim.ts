@@ -80,6 +80,9 @@ export class Sim<L extends { people: Seat[] }> {
   /** who you are talking to, by agent name: `text` null while they think, then what they said */
   protected talk = new Map<string, { text: string | null; until: number }>()
   private changed = true
+  /** what the server's model wrote for each pet, by occasion (`hear`), and the lines already said */
+  private voices: Record<string, Record<string, string[]>> = {}
+  private spoken = new Set<string>()
 
   constructor(protected plan: Plan<L>) {
     this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null }
@@ -90,7 +93,20 @@ export class Sim<L extends { people: Seat[] }> {
     const c = this.cat
     c.purr = this.tick + 30; c.byYou = false
     if (c.mode === "sleep") { c.mode = "sit"; c.until = this.tick + 150; c.stretch = this.tick + 12 }
-    this.catSay(pick(NINA.pet))
+    this.catSay(this.line("Nina", "pet", NINA.pet))
+  }
+  /** the pets' lines, fresh from the server (`GET /api/office/pets/:ws`) */
+  hear(voices: Record<string, Record<string, string[]>>) { this.voices = voices }
+  /**
+   * What `pet` says on `occasion`: a line the model wrote that has not been said yet, else (when
+   * it wrote none, or every one has been said) one of the `canned` ones half the time; `{name}` is
+   * whoever it is about.
+   */
+  protected line(pet: string, occasion: string, canned: readonly string[], name = "") {
+    const fresh = this.voices[pet]?.[occasion] ?? [], unsaid = fresh.filter((l) => !this.spoken.has(l))
+    const l = unsaid.length ? pick(unsaid) : fresh.length && Math.random() < 0.5 ? pick(fresh) : pick(canned)
+    this.spoken.add(l)
+    return l.replaceAll("{name}", name || "you")
   }
   /** Nina says something, over her head for a few seconds — after `delay`, when she is answering someone */
   protected catSay(text: string, ticks = 45, delay = 0) { const c = this.cat; c.said = text; c.saidFrom = this.tick + delay; c.saidUntil = c.saidFrom + ticks; this.changed = true }
@@ -100,10 +116,10 @@ export class Sim<L extends { people: Seat[] }> {
    * Something happened to someone: they started a kind of tool (`what` its kind), finished a turn
    * (`done`), or joined your queue (`queue`). Nina may have an opinion; a room with more pets adds theirs.
    */
-  protected noticed(_actor: Actor, what: string) {
+  protected noticed(actor: Actor, what: string) {
     const lines = (NINA as Record<string, unknown>)[what]
     const odds = what === "queue" ? 0.4 : what === "done" ? 0.2 : 0.1
-    if (Array.isArray(lines) && this.quiet(this.cat.saidUntil) && Math.random() < odds) this.catSay(pick(lines as string[]))
+    if (Array.isArray(lines) && this.quiet(this.cat.saidUntil) && Math.random() < odds) this.catSay(this.line("Nina", what, lines as string[], actor.seat.agent))
   }
   /** someone was asked something (`text` null) or has answered; an answer shows for ~12 s */
   say(agent: string, text: string | null) { this.talk.set(agent, { text, until: text === null ? Infinity : this.tick + 120 }); this.changed = true }
@@ -141,7 +157,7 @@ export class Sim<L extends { people: Seat[] }> {
         const kind = pick<Fuss>(["pat", "pat", "scratch", "treat"])
         c.fuss = { kind, from: { x: a.x, y: a.y }, until: this.tick + FUSS }; c.mode = "sit"; c.until = this.tick + FUSS + 60
         c.purr = this.tick + FUSS; c.byYou = false; a.emote = "♥"; a.emoteUntil = this.tick + FUSS
-        this.catSay(pick(NINA.fuss[kind]))
+        this.catSay(this.line("Nina", `fuss_${kind}`, NINA.fuss[kind], a.seat.agent))
         return true
       }
     }
@@ -174,7 +190,7 @@ export class Sim<L extends { people: Seat[] }> {
       const down = c.mode === "zoom" ? null : p.via(c), up = p.via(to)
       c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]; c.mode = "walk"
     }
-    c.until = this.tick + 150; this.catSay(pick(NINA[what]))
+    c.until = this.tick + 150; this.catSay(this.line("Nina", what, NINA[what]))
     return true
   }
 
@@ -220,9 +236,9 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.stepCat()) changed = true
     if (asleep && this.cat.mode !== "sleep" && this.cat.mode !== "zoom") {
       this.cat.stretch = this.tick + 12
-      if (Math.random() < 0.5) this.catSay(pick(NINA.wake))
+      if (Math.random() < 0.5) this.catSay(this.line("Nina", "wake", NINA.wake))
     }
-    if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && Math.random() < 1 / 1500) this.catSay(pick(NINA.muse))
+    if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && Math.random() < 1 / 1500) this.catSay(this.line("Nina", "muse", NINA.muse))
     const plan = this.plan, l = plan.layout(a)
     const threadOf = (id: number) => a.threads.find((t) => t.id === id)
     const asks = l.people.filter((p) => needsYou(threadOf(p.thread_id))).sort((p, q) => p.thread_id - q.thread_id)

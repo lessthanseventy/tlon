@@ -45,6 +45,10 @@ export async function archive(ws: number): Promise<Archive | null> {
 export async function banter(ws: number): Promise<{ agent: string; line: string; at: number }[]> {
   try { const r = await call("GET", `/office/banter/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
 }
+/** each pet's lines by occasion, written by the server's model (empty where it is off) */
+export async function pets(ws: number): Promise<Record<string, Record<string, string[]>>> {
+  try { const r = await call("GET", `/office/pets/${ws}`); return r.status === 200 ? r.json : {} } catch { return {} }
+}
 export async function thread(id: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }
 }
