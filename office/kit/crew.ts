@@ -47,7 +47,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
     .filter((t) => t.lead && !sessions.some((r) => r.thread_id === t.id))
     .map((t) => {
       const c = bench.find((b) => b.name === t.lead)
-      return { agent: t.lead!, thread_id: t.id, title: t.title, warm: !!t.live && !t.standing, archetype: c?.archetype ?? null, lead: c?.lead ?? false, workspace_id: ws }
+      return { agent: t.lead!, thread_id: t.id, title: t.title, warm: !!t.live && !t.standing, thinking: !!t.thinking?.includes(t.lead!), archetype: c?.archetype ?? null, lead: c?.lead ?? false, workspace_id: ws }
     })
   return {
     ...a, threads, roster: [...sessions, ...unregistered], bench,
@@ -61,7 +61,8 @@ export function viewOf(a: Agents, ws: number | null): Agents {
 
 /**
  * The office's people, once each: the bench, then anyone on a thread who is not on it. Each is
- * shown on the thread that needs you if one does, else their first — and is warm if any is.
+ * shown on the thread that needs you if one does, else their first — and is warm, or mid-turn, if
+ * any of theirs is.
  */
 export function peopleOf(a: Agents): Seat[] {
   const byName = new Map<string, Seat>()
@@ -70,6 +71,7 @@ export function peopleOf(a: Agents): Seat[] {
     const p = byName.get(r.agent) ?? { ...r, warm: false, thread_id: 0 }
     if (p.thread_id <= 0 || needsYou(a.threads.find((t) => t.id === r.thread_id))) { p.thread_id = r.thread_id; p.title = r.title }
     p.warm = p.warm || r.warm
+    p.thinking = !!(p.thinking || r.thinking)
     byName.set(r.agent, p)
   }
   return [...byName.values()]
@@ -82,7 +84,7 @@ export type Crew = { name: string; archetype: string | null; manager: boolean; l
 export function crewOf(a: Agents): Crew[] {
   return peopleOf(a).map((p) => {
     const t = p.thread_id > 0 ? a.threads.find((x) => x.id === p.thread_id) : undefined
-    const status: CrewStatus = needsYou(t) ? "waiting" : p.warm ? "working" : "idle"
+    const status: CrewStatus = needsYou(t) ? "waiting" : p.thinking ? "working" : "idle"
     return { name: p.agent, archetype: p.archetype ?? null, manager: isManager(a, p), lead: !!p.lead, status, thread: p.thread_id > 0 ? p.thread_id : null, title: p.title }
   })
 }

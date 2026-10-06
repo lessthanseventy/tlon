@@ -15,7 +15,7 @@ function office(grunts: number): Agents {
     archetypes: [{ name: "surveyor", meta: true, read_only: true, model: "" }, { name: "builder", meta: false, read_only: false, model: "" }],
     bench: names.map((name, i) => ({ workspace_id: 1, seat_id: i, agent_id: i + 1, name, archetype: i === 0 ? "surveyor" : "builder", lead: i === 1, model: null, ask: null })),
     threads: names.map((name, i) => ({ id: 100 + i, title: `t${i}`, stage: i === 1 ? "build" : null, awaiting: null, workspace_id: 1, lead: name })),
-    roster: names.map((name, i) => ({ agent: name, thread_id: 100 + i, title: `t${i}`, warm: true, workspace_id: 1 })),
+    roster: names.map((name, i) => ({ agent: name, thread_id: 100 + i, title: `t${i}`, warm: true, thinking: true, workspace_id: 1 })),
     tickets: [{ id: 7, workspace_id: 1, project_id: null, title: "a ticket", priority: "high" }, { id: 8, workspace_id: 2, project_id: null, title: "elsewhere", priority: "normal" }],
   }
 }

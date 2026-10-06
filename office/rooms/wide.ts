@@ -84,8 +84,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       ...[48, 60, 72, 84].map((x, i): Spot => ({ x, y: 148, aisle: 148, pose: "stand", face: i === 0 ? "up" : "left", kind: "queue" })),
       { x: 88, y: 164, aisle: 164, pose: "stand", face: "up", kind: "queue" },
     ],
-    // the lounge's couch (facing the TV up on the wall), its beanbag, the kitchen counter; the
-    // meeting room's chairs round its table, where the idle go to think
+    // the lounge's couch (facing the TV up on the wall), its beanbag, the kitchen counter
     lounge: [
       { x: L0 + 44, y: 82, aisle: 94, pose: "couch", face: "up", kind: "couch" },
       { x: L0 + 60, y: 82, aisle: 94, pose: "couch", face: "up", kind: "couch" },
@@ -93,9 +92,9 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       { x: L0 + 30, y: 150, aisle: 150, pose: "couch", face: "up", kind: "couch" },
       { x: w - 26, y: 116, aisle: 116, pose: "stand", face: "right", kind: "cooler" },
       { x: w - 26, y: 136, aisle: 136, pose: "stand", face: "right", kind: "coffee" },
-      { x: Mc - 22, y: 98, aisle: 116, pose: "stand", face: "right", kind: "board" },
-      { x: Mc + 22, y: 98, aisle: 116, pose: "stand", face: "left", kind: "board" },
     ],
+    // the meeting room's table, two laptops a side: where the warm but unbusy sit, on call
+    oncall: [Mc - 22, Mc + 22].flatMap((x) => [81, 95].map((y): Spot => ({ x, y, aisle: 116, pose: "sit", face: x < Mc ? "right" : "left", kind: "laptop" }))),
     exit: { x: w - 3, y: HALL, aisle: HALL, pose: "stand", face: "right", kind: "exit" },
     pen: { x: F1 - 30, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
     /** beside whoever is visited: in front of a desk that faces the room, beside a seat at a table, else where they stand */
@@ -650,7 +649,7 @@ export class WideRoom extends Sim<Layout> {
         // their monitor: a door into their terminal
         if (p && p.thread_id > 0) sc.hits.push({ x: c.x - 5, y: ty + 3, w: 10, h: 9, tip: `${c.agent}'s terminal — click to look over their shoulder`, act: { kind: "terminal", tid: p.thread_id } })
         const hx = c.x - 10, hy = ty, hw = SEAT_GAP, hh = 39
-        const where = !owner ? "" : seated ? "working" : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : `idle, at the ${owner.spot.kind}`
+        const where = !owner ? "" : seated ? "working" : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : owner.spot.kind === "laptop" ? "on call, at a laptop in the meeting room" : `idle, at the ${owner.spot.kind}`
         const agentId = a.bench.find((b) => b.name === c.agent)?.agent_id ?? null
         sc.hits.push({ x: hx, y: hy, w: hw, h: hh, tip: p ? tipOf(p, a.threads.find((t) => t.id === p.thread_id), where) : c.agent, act: { kind: "person", agentId, name: c.agent, tid: p && p.thread_id > 0 ? p.thread_id : null } })
         if (p && p.thread_id > 0 && p.thread_id === focus.picked) sc.ink.push({ t: "brackets", x: hx, y: hy, w: hw, h: hh, color: ROLE.body })

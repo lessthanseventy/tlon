@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { viewOf } from "../kit/crew"
+import { crewOf, viewOf } from "../kit/crew"
 import type { Spot } from "../kit/sim"
 import { EMPTY, type Agents } from "../kit/types"
 import { WIDE_H, WideRoom, widePlan } from "../rooms/wide"
@@ -23,7 +23,7 @@ function office(grunts: number): Agents {
     archetypes: [{ name: "surveyor", meta: true, read_only: true, model: "" }, { name: "builder", meta: false, read_only: false, model: "" }],
     bench: names.map((name, i) => ({ workspace_id: 1, seat_id: i, agent_id: i + 1, name, archetype: i === 0 ? "surveyor" : "builder", lead: i === 1, model: null, ask: null })),
     threads: names.map((name, i) => ({ id: 100 + i, title: `thread ${i}`, stage: i === 1 ? "build" : null, awaiting: null, workspace_id: 1, lead: name })),
-    roster: names.map((name, i) => ({ agent: name, thread_id: 100 + i, title: `t${i}`, warm: true, workspace_id: 1 })),
+    roster: names.map((name, i) => ({ agent: name, thread_id: 100 + i, title: `t${i}`, warm: true, thinking: true, workspace_id: 1 })),
     notes: [{ id: 1, author: "hronir", body: "a note", workspace_id: 1, at: new Date(0).toISOString() }],
   }
 }
@@ -50,6 +50,18 @@ describe("the wide room", () => {
     expect(busy.get("beacon")).toContain("3 stuck")
     expect(busy.get("rack")).toContain("disk 95% full")
   })
+
+  test("mid-turn works at a desk; warm but unbusy waits on call at a laptop; cold goes to the lounge", () => seeded(3, () => {
+    const a0 = office(2)
+    const state = (i: number) => (i === 1 ? { warm: true, thinking: true } : i === 2 ? { warm: true, thinking: false } : { warm: false, thinking: false })
+    const a = viewOf({ ...a0, roster: a0.roster.map((r, i) => ({ ...r, ...state(i) })) }, 1)
+    const room = new WideRoom(560)
+    for (let i = 0; i < 600; i++) room.step(a)
+    const at = (name: string) => (room as unknown as { actors: Map<string, { spot: { kind: string } }> }).actors.get(name)!.spot.kind
+    expect([at("hronir"), at("w0")]).toEqual(["desk", "laptop"])
+    expect(["couch", "cooler", "coffee", "roam"]).toContain(at("w1"))
+    expect(crewOf(a).map((c) => [c.name, c.status])).toEqual([["tertius", "idle"], ["hronir", "working"], ["w0", "idle"], ["w1", "idle"]])
+  }))
 
   test("the wall calendar counts the days still to come with something scheduled", () => {
     const tip = (calendar: Record<string, number[]>) => new WideRoom(560).render(viewOf({ ...office(1), calendar }, 1), focus, measure, new Date(2026, 9, 10, 12, 0)).hits.find((h) => h.act.kind === "calendar")!.tip
@@ -116,11 +128,11 @@ describe("the wide room", () => {
     for (const w of [540, 560, 700]) {
       const plan = widePlan(w), l = plan.layout(viewOf(office(8), 1))
       const homes = l.people.map((p) => plan.home(l, p.agent)).filter((s): s is Spot => !!s)
-      const spots = [...homes, ...plan.queue, ...plan.lounge, plan.exit, plan.pen, plan.roam(l)]
+      const spots = [...homes, ...plan.queue, ...plan.lounge, ...(plan.oncall ?? []), plan.exit, plan.pen, plan.roam(l)]
       const blocks = plan.blocks(l)
       const inside = (x: number, y: number) => blocks.find((b) => x > b.x && x < b.x + b.w - 1 && y > b.y && y < b.y + b.h - 1)
       for (const from of spots) for (const to of spots) {
-        const start = from.kind === "desk" || from.kind === "queue" ? from.aisle : from.y
+        const start = from.kind === "desk" || from.kind === "laptop" || from.kind === "queue" ? from.aisle : from.y
         const path = plan.route(from.x, start, to)
         // the first and last legs sit down and stand up; everything between is walking
         let x = path[0]!.x, y = path[0]!.y

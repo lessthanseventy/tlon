@@ -15,10 +15,11 @@ defmodule Server.Office do
   @page 60
 
   @doc """
-  Every workspace at once: the roster (each row with its thread's workspace and bench seat), the
-  benches with their policies, the open threads (lead, whether a window runs it, whether it is the
-  workspace's standing thread, any open prompt), projects, unstarted tickets, notes, the consults
-  and hand-offs of the last three minutes, the archetypes and model choices, counts, how many
+  Every workspace at once: the roster (each row with its thread's workspace, bench seat, and
+  whether that agent is mid-turn), the benches with their policies, the open threads (lead,
+  whether a window runs it, whether it is the workspace's standing thread, any open prompt, who is
+  mid-turn on it), projects, unstarted tickets, notes, the consults and hand-offs of the last
+  three minutes, the archetypes and model choices, counts, how many
   threads await the operator, each workspace's triage count (the beacon), the service's health
   (the rack) and the days this month each workspace has something scheduled (the wall calendar).
   A surface shows one workspace and filters by `workspace_id`.
@@ -30,11 +31,12 @@ defmodule Server.Office do
     benches = Server.Workspaces.bench_by_workspace(ws_ids)
     projects = for ws <- ws_ids, p <- Server.Projects.in_workspace(ws), do: %{id: p.id, workspace_id: ws, name: p.name}
     prompts = Server.Attention.open_prompts_by_thread()
+    thinking = thinking()
 
     %{
-      roster: roster(benches),
+      roster: roster(benches, thinking),
       bench: bench(benches),
-      threads: threads(ws_ids, prompts),
+      threads: threads(ws_ids, prompts, thinking),
       projects: projects,
       tickets: tickets(ws_ids),
       notes: notes(projects),
@@ -153,7 +155,15 @@ defmodule Server.Office do
     end
   end
 
-  defp roster(benches) do
+  # who is mid-turn, by thread: the harnesses' own thinking/idle declarations (Presence.Thinking),
+  # so a surface can tell working from a session that is merely warm
+  defp thinking do
+    Map.new(Server.Presence.Thinking.thinking_all(), fn {tid, entries} -> {tid, Enum.map(entries, & &1.agent)} end)
+  catch
+    :exit, _ -> %{}
+  end
+
+  defp roster(benches, thinking) do
     rows = Server.Staff.roster()
     thread_ws = rows |> Enum.map(& &1.thread_id) |> workspaces_of()
     everyone = List.flatten(Map.values(benches))
@@ -169,7 +179,8 @@ defmodule Server.Office do
         warm: r.warm?,
         workspace_id: ws,
         archetype: seat && seat.archetype,
-        lead: !!(seat && seat.lead?)
+        lead: !!(seat && seat.lead?),
+        thinking: r.agent in Map.get(thinking, r.thread_id, [])
       }
     end)
   end
@@ -194,7 +205,7 @@ defmodule Server.Office do
   # each open thread with its lead, whether a tmux window is running it (asked of tmux: a Claude
   # Code worker registers no session until it calls register, so the roster alone misses it), and
   # whether it is the standing thread of its workspace
-  defp threads(ws_ids, prompts) do
+  defp threads(ws_ids, prompts, thinking) do
     tabs = Map.new(ws_ids, &{&1, Server.Tmux.list_windows(&1)})
 
     standing =
@@ -227,7 +238,13 @@ defmodule Server.Office do
       live =
         Server.Tmux.leaf_tab(ws_tabs, t.id) != nil or (std and Server.Tmux.named(ws_tabs, leads[t.id] || "") != nil)
 
-      Map.merge(t, %{prompt: prompts[t.id], lead: leads[t.id], live: live, standing: std})
+      Map.merge(t, %{
+        prompt: prompts[t.id],
+        lead: leads[t.id],
+        live: live,
+        standing: std,
+        thinking: Map.get(thinking, t.id, [])
+      })
     end)
   end
 
