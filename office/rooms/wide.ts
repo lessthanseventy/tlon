@@ -4,12 +4,13 @@
 // the lead's desks, the crew board, two tables of four), a glass meeting room, the lounge with its
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
-import { fit, type Frame, type Measure } from "../kit/canvas"
+import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, needsYou, peopleOf, tipOf } from "../kit/crew"
-import { drawActors, drawCat, Scene, type Focus } from "../kit/draw"
+import { drawActors, drawCat, drawFuss, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
-import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
+import { FUSS, Sim, keyOf, type Actor, type Fussing, type Plan, type Pt, type Spot } from "../kit/sim"
+import { pick, type Fuss } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { BIG_PLANT, COFFEE, COOLER, DOG, DOG_NAME, SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
@@ -155,8 +156,36 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
   }
 }
 
-/** Argos: where he is, the waypoints he is walking, what he is doing, the row he walks along */
-type Dog = { x: number; y: number; aisle: number; path: Pt[]; mode: "walk" | "sit" | "sleep"; until: number; face: number; woof: number; host: string | null; creep: boolean }
+/**
+ * What Argos says, by occasion. He is the troglodyte of Borges' "The Immortal" who turned out to be
+ * Homer: an epic poet, mostly forgotten, now overwhelmingly a good boy.
+ */
+const ARGOS = {
+  pat: ["Good boy? Me? Yes. ME!", "Sing, O Muse, of this scratch behind the ears.", "I have known gods. None pat like you."],
+  belly: ["Belly! The WHOLE belly! In twenty-four books!", "Rub the belly and I shall sing of it forever."],
+  muse: ["I once sang of Troy. Now I sing of squirrels.", "Rosy-fingered dawn means breakfast, right?", "Wine-dark sea. Water-dark bowl. Same thing.", "Every dog is all dogs. I still want the ball.", "Nine years at Troy. Nine minutes for a walk?", "The Immortal fears nothing. Except the vacuum."],
+  test: ["Fetch the tests! FETCH!", "Tests! Can I chase them? Can I?"],
+  done: ["Turn's done? WALK? Is it walk time?", "{name} finished! I'm so proud I could howl."],
+  queue: ["Someone's waiting! I will guard them.", "{name} needs the boss! I'll fetch!"],
+  visit: ["You look like you need a dog, {name}.", "Hello {name}! I brought my whole self."],
+  walk: ["WALK!! The best word in any language!"],
+  office: ["Coming! Coming coming coming."],
+  sit: ["Sitting. Very good sitting. Epic, even."],
+  bed: ["An epic nap, in twenty-four books."],
+  fuss: {
+    pat: ["Yes! The head! The good head!", "Thank you, {name}! Thank you thank you!"],
+    scratch: ["Ohh, the ear. The leg's going. Can't stop it.", "There! THERE! O, {name}, there!"],
+    belly: ["The belly! Achilles never got this!"],
+    treat: ["A TREAT! I'd sail to Ithaca for this!", "Nom! {name} is my favourite! Everyone is!"],
+  } satisfies Record<Fuss, string[]>,
+}
+
+/**
+ * Argos: where he is, the waypoints he is walking, what he is doing, the row he walks along; what
+ * he is saying until `saidUntil`; `belly` the tick his roll-over for a rub ends; `fuss` someone
+ * making a fuss of him
+ */
+type Dog = { x: number; y: number; aisle: number; path: Pt[]; mode: "walk" | "sit" | "sleep"; until: number; face: number; woof: number; host: string | null; creep: boolean; said: string | null; saidFrom: number; saidUntil: number; belly: number; fuss: Fussing | null }
 /** Nina and Argos, up to something together */
 type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle"; until: number; trail: Pt[]; lap: Pt[] }
 
@@ -165,13 +194,19 @@ export class WideRoom extends Sim<Layout> {
   private readonly tvSet = new Tv(48, 28)
   private readonly dog: Dog
   private antic: Antic | null = null
-  /** what a pet just said, over its head for a moment */
-  private shouts: { who: "cat" | "dog"; text: string; until: number }[] = []
   constructor(readonly width: number) {
     super(widePlan(width))
     this.z = zones(width)
     const bed = this.dogBed()
-    this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false }
+    this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
+  }
+  /** Argos says something (after `delay`, when he is answering); `{name}` in a line is whoever it is about */
+  private dogSay(text: string, name = "", delay = 0) { const d = this.dog; d.said = text.replaceAll("{name}", name || "friend"); d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
+  /** someone starts a tool, finishes a turn, or joins your queue: Nina's opinion, then Argos' */
+  protected override noticed(actor: Actor, what: string) {
+    super.noticed(actor, what)
+    const lines = what === "test" || what === "done" || what === "queue" ? ARGOS[what] : null
+    if (lines && this.quiet(this.dog.saidUntil) && Math.random() < 0.3) this.dogSay(pick(lines), actor.seat.agent)
   }
 
   /** his bed by the lounge's couch, his water bowl by the kitchen */
@@ -187,10 +222,25 @@ export class WideRoom extends Sim<Layout> {
     d.host = null; d.creep = false
     d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, goal)]
     d.aisle = goal.aisle; d.mode = "walk"
+    this.dogSay(pick(ARGOS[what]))
   }
 
-  /** a click on Argos: a woof and a wag, and he's up if he was asleep */
-  patDog() { const d = this.dog; d.woof = this.tick + 25; if (d.mode === "sleep") { d.mode = "sit"; d.until = this.tick + 120 } }
+  /** a click on Argos: a woof and a wag — and if he's not off somewhere, over he rolls for a belly rub */
+  patDog() {
+    const d = this.dog
+    d.woof = this.tick + 25
+    if (d.mode === "sleep") { d.mode = "sit"; d.until = this.tick + 120 }
+    if (!d.path.length) { d.belly = this.tick + 30; this.dogSay(pick(ARGOS.belly)) } else this.dogSay(pick(ARGOS.pat))
+  }
+  /** someone at `from` makes a fuss of Argos */
+  private fussDog(by: Actor) {
+    const d = this.dog, kind = pick<Fuss>(["pat", "scratch", "belly", "treat"])
+    d.fuss = { kind, from: { x: by.x, y: by.y }, until: this.tick + FUSS }
+    if (kind === "belly") d.belly = this.tick + FUSS
+    d.mode = "sit"; d.until = Math.max(d.until, this.tick + FUSS + 40)
+    by.emote = "♥"; by.emoteUntil = this.tick + FUSS
+    this.dogSay(pick(ARGOS.fuss[kind]), by.seat.agent)
+  }
 
   /**
    * Argos' day: naps in his bed, drinks, trots the floor, sits by someone at their desk (they get a
@@ -198,6 +248,8 @@ export class WideRoom extends Sim<Layout> {
    */
   private stepDog(): boolean {
     const d = this.dog
+    if (d.fuss && this.tick >= d.fuss.until) d.fuss = null
+    if (this.tick < d.belly) return false
     if (d.path.length) {
       if (d.creep && this.tick % 3) return false
       const to = d.path[0]!
@@ -209,14 +261,22 @@ export class WideRoom extends Sim<Layout> {
         d.mode = asleep ? "sleep" : "sit"
         d.until = this.tick + (asleep ? 900 : 200) + Math.floor(Math.random() * 400)
         const host = d.host ? this.actors.get(d.host) : undefined
-        if (host) { host.emote = "♥"; host.emoteUntil = this.tick + 40 }
+        if (host) {
+          // at their desk they reach down to him; or he just says hello
+          if (Math.random() < 0.6) this.fussDog(host)
+          else { host.emote = "♥"; host.emoteUntil = this.tick + 40; this.dogSay(pick(ARGOS.visit), host.seat.agent) }
+        }
       }
       return true
     }
     if (this.antic) return false
+    // anyone idling in the lounge reaches down to him when he wanders close
+    if (d.mode !== "sleep" && !d.fuss && Math.random() < 0.004) {
+      const near = [...this.actors.values()].find((a) => !a.moving && !a.path.length && (a.spot.kind === "couch" || a.spot.kind === "cooler" || a.spot.kind === "coffee" || a.spot.kind === "roam") && Math.abs(a.x - d.x) < 22 && Math.abs(a.y - d.y) < 16)
+      if (near) { this.fussDog(near); return true }
+    }
     if (this.tick < d.until) return d.mode === "sit" && this.tick % 3 === 0
     const r = Math.random(), working = [...this.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && !a.path.length)
-    const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]!
     const host = working.length && r < 0.35 ? pick(working) : null
     const spot = (x: number, y: number, aisle = y): Spot => ({ x, y, aisle, pose: "stand", face: "left", kind: "roam" })
     const goal: Spot = host ? this.plan.visit(host)
@@ -236,6 +296,7 @@ export class WideRoom extends Sim<Layout> {
    */
   override step(a: Agents): boolean {
     const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
+    if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(pick(ARGOS.muse))
     if (this.tick % 2) return moved
     for (const x of this.actors.values()) {
       if (x.spot.kind !== "couch" || x.moving || Math.random() >= 1 / 375) continue
@@ -360,17 +421,17 @@ export class WideRoom extends Sim<Layout> {
    */
   private stepAntics(): boolean {
     const c = this.cat, d = this.dog, now = this.tick
-    this.shouts = this.shouts.filter((s) => s.until > now)
-    const shout = (who: "cat" | "dog", text: string) => this.shouts.push({ who, text, until: now + 25 })
+    // a pair of lines is an exchange: the second waits for the first, or their balloons collide
+    const shout = (who: "cat" | "dog", text: string, reply = false) => (who === "cat" ? this.catSay(text, 25, reply ? 25 : 0) : this.dogSay(text, "", reply ? 25 : 0))
     const a = this.antic
     if (a) {
       if (a.kind === "sneak" && !d.path.length) {
         d.creep = false; d.mode = "sit"; d.until = now + 150
-        shout("dog", "BOO!"); shout("cat", "hss!")
+        shout("dog", "BOO!"); shout("cat", "How DARE you.", true)
         c.path = [this.catFlee(c)]; c.mode = "walk"; c.until = now + 250
         this.antic = null
       } else if (a.kind === "bap" && !c.path.length) {
-        shout("cat", "*bap*"); shout("dog", "!?")
+        shout("cat", "*bap* Up, peasant."); shout("dog", "!?", true)
         d.mode = "sit"; d.until = now + 120; c.mode = "sit"; c.until = now + 200
         this.antic = null
       } else if (a.kind === "chase") {
@@ -386,7 +447,7 @@ export class WideRoom extends Sim<Layout> {
       } else if (a.kind === "scuffle" && now >= a.until) {
         c.path = [this.catFlee(c)]; c.mode = "walk"; c.until = now + 250
         d.until = now; d.mode = "sit"; d.aisle = d.y
-        shout("cat", "hmph")
+        shout("cat", "My COLLAR! Do you know what this cost?")
         this.antic = null
       }
       return true
@@ -435,26 +496,27 @@ export class WideRoom extends Sim<Layout> {
     const d = this.dog, bed = this.dogBed(), bowl = this.dogBowl(), f = sc.f
     sc.item(bed.y - 3, () => { sc.px(bed.x - 9, bed.y - 4, 18, 5, tint(ROLE.alarm, ROLE.ground, 0.55)); sc.px(bed.x - 8, bed.y - 3, 16, 3, tint(ROLE.alarm, ROLE.prose, 0.35)) })
     sc.item(bowl.y - 2, () => { sc.px(bowl.x - 3, bowl.y - 2, 6, 2, ROLE.inactive); sc.px(bowl.x - 2, bowl.y - 3, 4, 1, ROLE.key) })
-    const frames = DOG[d.mode], rows0 = frames[d.mode === "walk" ? (d.x + d.y) % 2 : d.mode === "sit" ? Math.floor(f / 2) % 2 : 0]!
+    const belly = sc.tick < d.belly
+    const frames = belly ? DOG.belly : DOG[d.mode]
+    // walking, his legs; sitting, his tail — wagging double time when he's pleased; asleep, breathing
+    const rows0 = frames[belly ? f % 2 : d.mode === "walk" ? Math.floor(sc.tick / 2) % 2 : d.mode === "sit" ? (sc.tick < d.woof ? sc.tick % 2 : Math.floor(f / 2) % 2) : f % 4 < 2 ? 0 : 1]!
     const rows = d.face < 0 ? rows0.map((r) => [...r].reverse().join("")) : rows0
     const w = rows[0]!.length, h = rows.length, x = d.x - Math.floor(w / 2), y = d.y - h
     sc.item(d.y, () => {
-      const rim = tint(ROLE.prose, ROLE.ground, 0.55), r = { k: rim, e: rim, t: rim, n: rim }
+      const rim = tint(ROLE.prose, ROLE.ground, 0.55), r = { k: rim, e: rim, t: rim, n: rim, i: rim, p: rim, c: rim }
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, r)
-      sc.blit(rows, x, y, { k: ROLE.body, t: ROLE.body, e: tint(ROLE.body, ROLE.structure, 0.4), n: ROLE.fieldInk })
-      if (d.mode === "sleep" && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
-      if (sc.tick < d.woof) sc.text(`${DOG_NAME}: woof`, d.x, y - 2, ROLE.attention, 11)
+      sc.blit(rows, x, y, { k: ROLE.body, t: ROLE.body, e: tint(ROLE.body, ROLE.structure, 0.4), n: ROLE.fieldInk, i: ROLE.fieldInk, c: ROLE.fieldInk, p: ROLE.attention })
+      if (d.mode === "sleep" && !belly && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
       if (d.creep && f % 4 < 2) sc.text("...", d.x, y - 2, ROLE.inactive, 9)
+      if (d.fuss) drawFuss(sc, d.fuss, { x, y, w, h })
       sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${DOG_NAME} - click to pat him`, act: { kind: "dog" } })
     })
+    if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
   }
 
-  /** what the pets say, and the dust cloud of a scuffle */
+  /** the dust cloud of a scuffle */
   private drawAntics(sc: Scene) {
     const c = this.cat, d = this.dog, f = sc.f
-    sc.overhead.push(() => {
-      for (const s of this.shouts) { const p = s.who === "cat" ? c : d; sc.text(s.text, p.x, p.y - 11, ROLE.attention, 11) }
-    })
     if (this.antic?.kind !== "scuffle") return
     const mx = Math.round((c.x + d.x) / 2), my = Math.round((c.y + d.y) / 2) - 4
     sc.item(Math.max(c.y, d.y) + 1, () => {

@@ -692,7 +692,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
       const doIt = (f: () => unknown) => () => { f(); changed(); draw() }
       if (mode.who === "cat") {
         return {
-          title: "NINA", rows: [{ segs: [plain("your cat. she does what you ask — then her own day carries on.")] }],
+          title: "NINA", rows: [{ segs: [plain("your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.")] }],
           actions: [
             { key: "p", label: "pat her", run: doIt(() => r.pet()) },
             { key: "z", label: "the zoomies", run: doIt(() => r.catDo("zoomies")) },
