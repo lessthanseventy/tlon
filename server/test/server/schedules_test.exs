@@ -63,6 +63,21 @@ defmodule Server.SchedulesTest do
     assert Schedules.next_at(%{s | enabled: false}, now) == nil
   end
 
+  # The clocks go back in US Mountain time on 2026-11-01: 09:00 is 15:00Z the day before and 16:00Z
+  # that day. The BEAM reads its zone once, at start (CI runs the suite with TZ=America/Denver).
+  @mountain :calendar.universal_time_to_local_time({{2026, 10, 31}, {15, 0, 0}}) == {{2026, 10, 31}, {9, 0, 0}} and
+              :calendar.universal_time_to_local_time({{2026, 11, 1}, {16, 0, 0}}) == {{2026, 11, 1}, {9, 0, 0}}
+  @tag skip: if(@mountain, do: false, else: "needs TZ=America/Denver")
+  test "a 9:00 cron fires at 9:00 local on both sides of a DST change; a slot that never happens is skipped", %{ws: ws} do
+    nine = schedule!(ws, %{cron: "0 9 * * *"})
+    before = %{nine | last_run_at: ~U[2026-10-31 15:00:00Z]}
+    assert Schedules.next_at(before, ~U[2026-10-31 16:00:00Z]) == ~U[2026-11-01 16:00:00Z]
+
+    # 2:30 on 2026-03-08 does not exist (clocks jump 2:00 → 3:00): the next real 2:30 is the 9th's
+    half_two = %{schedule!(ws, %{cron: "30 2 * * *"}) | last_run_at: ~U[2026-03-07 09:30:00Z]}
+    assert Schedules.next_at(half_two, ~U[2026-03-07 10:00:00Z]) == ~U[2026-03-09 08:30:00Z]
+  end
+
   test "the days of a month it fires on", %{ws: ws} do
     mondays = schedule!(ws, %{cron: "0 9 * * 1"})
     assert Schedules.days(mondays, 2026, 10) == [5, 12, 19, 26]
@@ -83,6 +98,25 @@ defmodule Server.SchedulesTest do
     bad = schedule!(ws, %{cron: "@daily", body: "echo nope >&2; exit 3"})
     {:ok, run} = Schedules.run_now(bad)
     assert %{status: "failed", exit: 3, output: "nope\n"} = Schedules.perform(run.id)
+  end
+
+  test "a script that reads its stdin ends instead of waiting on it", %{ws: ws} do
+    s = schedule!(ws, %{cron: "@daily", body: "cat; echo done"})
+    {:ok, run} = Schedules.run_now(s)
+    assert %{status: "ok", output: "done\n"} = Schedules.perform(run.id)
+  end
+
+  test "a script past its timeout is killed with everything it started, and reported as exit 124", %{ws: ws} do
+    Application.put_env(:server, :schedule_script_timeout_ms, 300)
+    on_exit(fn -> Application.delete_env(:server, :schedule_script_timeout_ms) end)
+    marker = "#{System.unique_integer([:positive])}.5"
+    s = schedule!(ws, %{cron: "@daily", body: "echo started; sleep #{marker} & sleep #{marker}"})
+    {:ok, run} = Schedules.run_now(s)
+
+    assert %{status: "failed", exit: 124, output: out} = Schedules.perform(run.id)
+    assert out =~ "started"
+    Process.sleep(100)
+    assert {_, 1} = System.cmd("pgrep", ["-f", "sleep #{marker}"])
   end
 
   test "a standing script posts each run's output to its one thread, without waking a lead", %{ws: ws} do
