@@ -42,7 +42,7 @@ end
 # The post-response memory pass is opt-in: presence_idle → a queued pass → cheap extractor →
 # banked facts. Off by default so a dev shell never shells a model unasked. (The Maintain
 # sweeps need no flag: they run on Oban's cron wherever Oban runs, E/2.)
-# The office's small talk (Server.Office.Banter) and its pets' lines (Server.Office.Pets) shell the
+# The office's small talk (Server.Office.Banter), its corkboard (Server.Office.Corkboard) and its pets' lines (Server.Office.Pets) shell the
 # same cheap tier while an office polls — on unless TLON_BANTER=0, and switched off live by the
 # settings file's "banter": false (Server.OperatorConfig.banter?/0, the office's settings card).
 if config_env() != :test do
