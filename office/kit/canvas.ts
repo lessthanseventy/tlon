@@ -30,6 +30,14 @@ export class Canvas {
     const x0 = Math.max(0, Math.floor(x)), x1 = Math.min(W, Math.floor(x + pw)), y1 = Math.min(this.height, Math.floor(y + ph))
     for (let j = Math.max(0, Math.floor(y)); j < y1; j++) for (let i = x0, o = (j * W + x0) * 4; i < x1; i++, o += 4) { buf[o] = r!; buf[o + 1] = g!; buf[o + 2] = b!; buf[o + 3] = 255 }
   }
+  /** light falling on what is already drawn: each pixel `t` of the way toward `c` (a sunbeam, lamplight) */
+  glow(x: number, y: number, pw: number, ph: number, c: string, t: number) {
+    const [r, g, b] = rgb(c), W = this.width, buf = this.rgba
+    const x0 = Math.max(0, Math.floor(x)), x1 = Math.min(W, Math.floor(x + pw)), y1 = Math.min(this.height, Math.floor(y + ph))
+    for (let j = Math.max(0, Math.floor(y)); j < y1; j++) for (let i = x0, o = (j * W + x0) * 4; i < x1; i++, o += 4) {
+      buf[o] = Math.round(buf[o]! + (r! - buf[o]!) * t); buf[o + 1] = Math.round(buf[o + 1]! + (g! - buf[o + 1]!) * t); buf[o + 2] = Math.round(buf[o + 2]! + (b! - buf[o + 2]!) * t)
+    }
+  }
   /** a sprite: one char per pixel, "." (or any char `map` lacks) clear */
   blit(rows: string[], x: number, y: number, map: Record<string, string>) {
     rows.forEach((row, j) => { for (let i = 0; i < row.length; i++) { const c = map[row[i]!]; if (c) this.px(x + i, y + j, 1, 1, c) } })

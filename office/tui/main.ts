@@ -219,6 +219,7 @@ function act(x: Act) {
     case "dog": { const r = room(); if (r instanceof WideRoom) r.patDog(); changed(); return open({ kind: "pet", who: "dog" }) }
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); changed(); draw() } return }
     case "arcade": return open({ kind: "arcade" })
+    case "weather": status = all.weather ? `outside: ${all.weather.desc.toLowerCase()}${all.weather.temp_c === null ? "" : `, ${all.weather.temp_c}°C`}` : "no word on the weather"; return draw()
   }
 }
 
