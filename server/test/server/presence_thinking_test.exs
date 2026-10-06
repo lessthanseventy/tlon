@@ -83,6 +83,33 @@ defmodule Server.Presence.ThinkingTest do
     assert_received {:presence_idle, %{thread_id: 7, agent: "hronir"}}
   end
 
+  test "doing tags a declared turn with what it is doing now, without restarting it" do
+    store = start_store([])
+
+    Thinking.thinking(store, 7, "hronir")
+    [%{started_at: started}] = Thinking.thinking_for(store, 7)
+    Thinking.doing(store, 7, "hronir", "edit")
+
+    assert [%{agent: "hronir", doing: "edit", started_at: ^started}] = Thinking.thinking_for(store, 7)
+    Thinking.doing(store, 7, "hronir", nil)
+    assert [%{doing: nil}] = Thinking.thinking_for(store, 7)
+  end
+
+  test "doing with no turn declared is a no-op; idle forgets what it was doing" do
+    store = start_store([])
+
+    Thinking.doing(store, 7, "hronir", "bash")
+    assert Thinking.thinking_all(store) == %{}
+
+    Thinking.thinking(store, 7, "hronir")
+    Thinking.doing(store, 7, "hronir", "bash")
+    assert %{7 => [%{agent: "hronir", doing: "bash", started_at: %DateTime{}}]} = Thinking.thinking_all(store)
+
+    Thinking.idle(store, 7, "hronir")
+    Thinking.thinking(store, 7, "hronir")
+    assert [%{doing: nil}] = Thinking.thinking_for(store, 7)
+  end
+
   test "the sweep clears entries older than the max and announces them idle" do
     store = start_store(max_seconds: 0)
     Bus.subscribe_presence()

@@ -485,6 +485,30 @@ defmodule Server.MCP.Tool.PresenceThinking do
   end
 end
 
+defmodule Server.MCP.Tool.PresenceDoing do
+  @moduledoc """
+  Say what THIS connection's agent is doing inside its declared turn — call as a tool
+  starts (and with no `what` as it ends), so the office can show it. A no-op outside a
+  declared turn, so a hook can fire it without waiting on the answer.
+  """
+  use Server.MCP.Tool
+
+  alias Server.Presence.Thinking
+
+  schema do
+    field :what, :enum,
+      values: ["read", "edit", "bash", "search", "web", "test", "delegate"],
+      description: "The kind of tool running now; omit when it finished and you are thinking again"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+    :ok = Thinking.doing(identity.thread_id, identity.agent, params[:what])
+    ok(frame, %{"doing" => params[:what], "thread_id" => identity.thread_id})
+  end
+end
+
 defmodule Server.MCP.Tool.PresenceIdle do
   @moduledoc """
   Declare THIS connection's agent done thinking — call at turn end (and on session
