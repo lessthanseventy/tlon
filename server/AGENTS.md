@@ -39,7 +39,11 @@ and every layer the spine design's re-laid §9 asked for
   `Server.MCP.Brief` (certainty stated > checked > opinion, caps with counts); the dossier is also a
   resource. `record_check` lands a measured exit code, never a self-report.
 - **worklines** (`Server.Workline`) — a thread as a stage machine with git as the artifact chain
-  (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s.
+  (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
+  entering verify queues the verifier on the service (`Server.Jobs.Verify`).
+- **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
+  a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
+  `schedule_run` row (the automation board). Crons read the server's local clock.
 - **recall + forgetting** (`Server.Recall`, `Server.Search`) — the budgeted always-loaded set.
 - **seed + bootstrap** (`Server.Seed`, `Server.Bootstrap`) — the wipe-proof base knowledge
   (`priv/seed/repo_knowledge.exs` + the machine-appended `promoted_facts.exs`) and the default

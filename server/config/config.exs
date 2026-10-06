@@ -8,7 +8,7 @@ config :phoenix, :json_library, JSON
 config :server, Oban,
   engine: Oban.Engines.Basic,
   repo: Server.Repo,
-  queues: [default: 5, maintain: 1, staff: 1, verify: 1],
+  queues: [default: 5, maintain: 1, staff: 1, verify: 1, schedules: 2],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
     {Oban.Plugins.Cron,
@@ -19,7 +19,9 @@ config :server, Oban,
        # the control-band sweeps (stale gates nagged, stalled worklines flagged), every half hour
        {"*/30 * * * *", Server.Jobs.Maintain},
        # the staffing pass (one-brain B/3): centre, tail and leaves of every workspace, each minute
-       {"* * * * *", Server.Jobs.Staff}
+       {"* * * * *", Server.Jobs.Staff},
+       # the calendar: fire what the operator scheduled that is due (Server.Schedules)
+       {"* * * * *", Server.Jobs.Dispatch}
      ]}
   ]
 
@@ -28,7 +30,7 @@ config :server, Oban,
 # Connection details are per-env (dev/test below, runtime.exs for the release). The pool covers
 # Oban's queue concurrency plus the always-on callers (switchboard, attention, web, MCP) —
 # test/server/repo_pool_test.exs holds that line.
-config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 13
+config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 15
 
 config :server, Server.Web.Endpoint,
   adapter: Bandit.PhoenixAdapter,

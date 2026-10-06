@@ -329,7 +329,7 @@ defmodule Server.MCP.GatewayTest do
     end
   end
 
-  describe "/api — what the office TUI needs to stand in for the console" do
+  describe "/api — the office TUI's threads, room reads, settings and schedules" do
     test "a new thread: titled by its first line, the words its opening message; a spike is a workline at build" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
       {201, t} = post_json("/api/threads", %{workspace_id: ws.id, body: "fix the clock\nit runs fast"})
@@ -387,6 +387,36 @@ defmodule Server.MCP.GatewayTest do
       {201, r} = post_json("/api/workspaces/#{ws["id"]}/repos", %{path: "/tmp/life-repo"})
       {200, _} = request_json(:delete, "/api/repos/#{r["id"]}", %{})
       assert Server.Workspaces.repos(ws["id"]) == []
+    end
+
+    test "schedules: made, read on the calendar, run now, edited, removed" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+
+      {201, s} =
+        post_json("/api/schedules", %{workspace_id: ws.id, kind: "script", body: "echo hi\nmore", cron: "0 9 * * *"})
+
+      assert s["title"] == "echo hi"
+      assert {422, _} = post_json("/api/schedules", %{workspace_id: ws.id, kind: "script", body: "x", cron: "nope"})
+      at = DateTime.utc_now() |> DateTime.add(3600) |> DateTime.to_iso8601()
+
+      {201, once} =
+        post_json("/api/schedules", %{workspace_id: ws.id, kind: "agent", body: "look", at: at, standing: true})
+
+      {200, cal} = get_json("/api/office/schedules/#{ws.id}")
+      assert [%{"days" => days, "next_at" => _, "last" => nil}, %{"id" => once_id}] = cal
+      assert once_id == once["id"] and length(days) >= 28
+
+      {201, %{"run" => run}} = post_json("/api/schedules/#{s["id"]}/run", %{})
+      Server.Schedules.perform(run)
+      {200, [%{"status" => "ok", "output" => "hi\n"}]} = get_json("/api/schedules/#{s["id"]}/runs")
+
+      {200, off} = request_json(:patch, "/api/schedules/#{s["id"]}", %{enabled: false})
+      refute off["enabled"]
+      {200, _} = request_json(:delete, "/api/schedules/#{s["id"]}", %{})
+      assert {404, _} = get_json("/api/schedules/#{s["id"]}/runs")
+      {200, office} = get_json("/api/office")
+      assert is_list(office["calendar"]["#{ws.id}"])
     end
 
     test "habits are approved or rejected; a thread moves between its workspace's projects" do

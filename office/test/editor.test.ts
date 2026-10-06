@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Editor, wrap } from "../tui/editor"
 import { rank, score } from "../tui/fuzzy"
 import { tokenize } from "../tui/term"
+import { parseWhen, showWhen } from "../tui/when"
 
 describe("wrap", () => {
   test("breaks at words, keeps explicit newlines, splits a word too long for a row", () => {
@@ -59,5 +60,20 @@ describe("tokenize: what the composer needs", () => {
     const a = tokenize("\x1b[200~half")
     expect(a.inputs).toEqual([])
     expect(tokenize(a.rest + " more\x1b[201~").inputs).toEqual([{ t: "paste", text: "half more" }])
+  })
+})
+
+describe("when", () => {
+  const now = new Date(2026, 9, 5, 18, 0)
+  test("a cron passes through; a time is a one-off in local time", () => {
+    expect(parseWhen("0 9 * * 1-5", now)).toEqual({ cron: "0 9 * * 1-5", at: null })
+    expect(parseWhen("@daily", now)).toEqual({ cron: "@daily", at: null })
+    expect(parseWhen("in 2h", now)).toEqual({ cron: null, at: new Date(2026, 9, 5, 20, 0).toISOString() })
+    expect(parseWhen("2026-10-06 14:30", now)).toEqual({ cron: null, at: new Date(2026, 9, 6, 14, 30).toISOString() })
+    expect(parseWhen("", now)).toBeNull()
+  })
+  test("a bare time already past today is tomorrow's; a one-off shows back as typed", () => {
+    expect(parseWhen("09:00", now)!.at).toBe(new Date(2026, 9, 6, 9, 0).toISOString())
+    expect(showWhen(parseWhen("2026-10-06 14:30", now)!)).toBe("2026-10-06 14:30")
   })
 })

@@ -18,6 +18,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/memory/:ws       Office.Room.memory (pinned facts, habits to review: the bookshelf)
       GET    /api/office/tickets/:ws      Office.Room.tickets (the whole board, every status, with blockers)
       GET    /api/office/workspace/:ws    Office.Room.workspace (type, scope, icon, repos: its config card)
+      GET    /api/office/schedules/:ws    Office.Room.schedules (the wall calendar: each schedule, its next
+                                          firing, its days this month, its last run)
       GET    /api/office/health           Office.Room.health (the service and its box: the rack)
       GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
@@ -66,6 +68,14 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/facts/:id               Dossier.forget_fact (a tombstone: out of recall, row kept)
       POST   /api/issues/:id/resolve      {"resolution"?} → Dossier.resolve_issue
       POST   /api/habits/:id/approve      Server.approve_habit (…/reject: Server.reject_habit)
+
+      POST   /api/schedules               {"workspace_id", "kind": "agent"|"workline"|"script", "body",
+                                          "cron" | "at", "title"?, "agent"?, "standing"?, "dir"?}
+                                          → Schedules.create; 201
+      PATCH  /api/schedules/:id           any of those but kind, and "enabled" → Schedules.update
+      DELETE /api/schedules/:id           Schedules.remove (its runs go with it)
+      POST   /api/schedules/:id/run       Schedules.run_now (its calendar untouched); 201 + the run
+      GET    /api/schedules/:id/runs      Office.Room.runs (the automation board, newest first)
   """
 
   import Plug.Conn
@@ -112,7 +122,7 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "office", ["health"]), do: json(conn, 200, Room.health())
   defp route(conn, "GET", "office", ["history"]), do: json(conn, 200, Room.history())
 
-  defp route(conn, "GET", "office", [read, ws]) when read in ~w(activity triage memory tickets workspace),
+  defp route(conn, "GET", "office", [read, ws]) when read in ~w(activity triage memory tickets workspace schedules),
     do: with_workspace(conn, ws, &json(conn, 200, apply(Room, String.to_existing_atom(read), [&1.id])))
 
   defp route(conn, "POST", "threads", []), do: new_thread(conn)
@@ -125,6 +135,11 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "POST", "worklines", []), do: open_workline(conn)
   defp route(conn, method, "tickets", rest), do: on_tickets(conn, method, rest)
+  defp route(conn, "POST", "schedules", []), do: new_schedule(conn)
+
+  defp route(conn, method, "schedules", [id | rest]),
+    do: with_row(conn, Server.Schedule, id, &on_schedule(conn, method, rest, &1))
+
   defp route(conn, method, "workspaces", rest), do: on_workspaces(conn, method, rest)
   defp route(conn, "DELETE", "seats", [id]), do: with_int(conn, id, &fire(conn, &1))
   defp route(conn, "DELETE", "facts", [id]), do: with_row(conn, Server.Fact, id, &forget(conn, &1))
@@ -161,6 +176,12 @@ defmodule Server.MCP.OperatorAPI do
     do: with_ticket(conn, id, &with_int(conn, by, fn b -> unblock(conn, &1, b) end))
 
   defp on_tickets(conn, _, _), do: no_route(conn)
+
+  defp on_schedule(conn, "GET", ["runs"], s), do: json(conn, 200, Room.runs(s.id))
+  defp on_schedule(conn, "POST", ["run"], s), do: reply(conn, Server.Schedules.run_now(s), &%{run: &1.id}, 201)
+  defp on_schedule(conn, "PATCH", [], s), do: edit_schedule(conn, s)
+  defp on_schedule(conn, "DELETE", [], s), do: reply(conn, Server.Schedules.remove(s), &%{deleted: &1.id})
+  defp on_schedule(conn, _, _, _), do: no_route(conn)
 
   defp on_workspaces(conn, "POST", []), do: new_workspace(conn)
   defp on_workspaces(conn, "PATCH", [id]), do: with_workspace(conn, id, &edit_workspace(conn, &1))
@@ -209,8 +230,8 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  # Post as the operator through the one door (`Server.Attention.respond/3`, the same call the
-  # console reply box and `server:post` make): a body naming an option of an open prompt answers
+  # Post as the operator through the one door (`Server.Attention.respond/3`, the same call
+  # `server:post` makes): a body naming an option of an open prompt answers
   # the coworker's dialog in its pane (the 201 carries `reply_to` = the prompt), a closed thread
   # reopens, anything else posts and the Bus wakes the thread's lead. `author` is not a
   # parameter: this door IS the operator.
@@ -398,6 +419,34 @@ defmodule Server.MCP.OperatorAPI do
         json(conn, 400, %{error: ~s(expected {"workspace_id": n, "body": "…"})})
     end
   end
+
+  # A schedule from the operator: what (`kind`, `body`; `title` defaults to the body's first line),
+  # when (`cron`, or `at` as an ISO-8601 time), and how (`agent`, `standing`, `dir`).
+  defp new_schedule(conn) do
+    case body(conn) do
+      {%{"workspace_id" => ws, "kind" => kind, "body" => text} = b, conn} when is_integer(ws) and is_binary(text) ->
+        title = b["title"] || text |> String.split("\n", parts: 2) |> hd() |> String.trim() |> String.slice(0, 60)
+        attrs = Map.merge(schedule_attrs(b), %{workspace_id: ws, kind: kind, title: title})
+        reply(conn, Server.Schedules.create(attrs), &schedule_row/1, 201)
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"workspace_id", "kind", "body", "cron" | "at", …})})
+    end
+  end
+
+  defp edit_schedule(conn, s) do
+    {b, conn} = body(conn)
+    reply(conn, Server.Schedules.update(s, schedule_attrs(b)), &schedule_row/1)
+  end
+
+  defp schedule_attrs(b) do
+    for {k, v} <- b,
+        k in ~w(title body cron at agent standing dir enabled),
+        into: %{},
+        do: {String.to_existing_atom(k), v}
+  end
+
+  defp schedule_row(s), do: Map.take(s, [:id, :kind, :title, :cron, :at, :enabled, :standing, :agent])
 
   defp review_habit("approve", id), do: Server.approve_habit(id)
   defp review_habit("reject", id), do: Server.reject_habit(id)

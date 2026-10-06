@@ -19,8 +19,9 @@ defmodule Server.Office do
   benches with their policies, the open threads (lead, whether a window runs it, whether it is the
   workspace's standing thread, any open prompt), projects, unstarted tickets, notes, the consults
   and hand-offs of the last three minutes, the archetypes and model choices, counts, how many
-  threads await the operator, each workspace's triage count (the beacon) and the service's health
-  (the rack). A surface shows one workspace and filters by `workspace_id`.
+  threads await the operator, each workspace's triage count (the beacon), the service's health
+  (the rack) and the days this month each workspace has something scheduled (the wall calendar).
+  A surface shows one workspace and filters by `workspace_id`.
   """
   @spec status() :: map()
   def status do
@@ -44,7 +45,8 @@ defmodule Server.Office do
       counts: Map.new(Repo.all(from(t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}))),
       awaiting: awaiting(prompts),
       triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
-      health: Map.take(Room.health(), [:state, :problems])
+      health: Map.take(Room.health(), [:state, :problems]),
+      calendar: Room.calendar(ws_ids)
     }
   end
 

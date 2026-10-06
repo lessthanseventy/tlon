@@ -22,7 +22,7 @@ export async function status(): Promise<Agents> {
     if (status !== 200 || !j) throw new Error(`office ${status}`)
     return {
       ok: true, roster: j.roster ?? [], threads: j.threads ?? [], counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
-      bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null,
+      bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {},
     }
   } catch {
     return { ...EMPTY, note: `channel down (${BASE})` }
@@ -132,3 +132,21 @@ export const repoRemove = (id: number) => send("DELETE", "removing the repo", `/
 
 export const habit = (id: number, verdict: "approve" | "reject") => write(`reviewing habit ${id}`, `/habits/${id}/${verdict}`, {}, () => `habit ${verdict === "approve" ? "approved" : "rejected"}`)
 export const forget = (id: number) => send("DELETE", `forgetting fact ${id}`, `/facts/${id}`, () => `fact ${id} forgotten`)
+
+export type ScheduleKind = "agent" | "workline" | "script"
+export type Schedule = {
+  id: number; kind: ScheduleKind; title: string; body: string; cron: string | null; at: string | null; agent: string | null
+  standing: boolean; thread_id: number | null; dir: string | null; enabled: boolean; next_at: string | null; days: number[]
+  last: { status: "running" | "ok" | "failed"; exit: number | null; at: string; thread_id: number | null } | null
+}
+export type Run = { id: number; status: "running" | "ok" | "failed"; exit: number | null; output: string | null; thread_id: number | null; started_at: string; finished_at: string | null }
+export type ScheduleAttrs = { kind?: ScheduleKind; body?: string; title?: string; cron?: string | null; at?: string | null; agent?: string | null; standing?: boolean; dir?: string | null; enabled?: boolean }
+
+/** a workspace's schedules, with when each next fires and the days this month it does */
+export const schedules = (ws: number) => read<Schedule[]>(`/office/schedules/${ws}`)
+/** a schedule's recent runs, newest first (the automation board) */
+export const runs = (id: number) => read<Run[]>(`/schedules/${id}/runs`)
+export const scheduleNew = (ws: number, attrs: ScheduleAttrs) => write("scheduling", "/schedules", { workspace_id: ws, ...attrs }, (j) => `scheduled ${j.title}`)
+export const schedulePatch = (id: number, attrs: ScheduleAttrs) => send("PATCH", "changing the schedule", `/schedules/${id}`, (j) => `${j.title}${j.enabled ? "" : " (paused)"}`, attrs)
+export const scheduleDelete = (id: number) => send("DELETE", "removing the schedule", `/schedules/${id}`, () => "schedule removed")
+export const scheduleRun = (id: number) => write("running it now", `/schedules/${id}/run`, {}, () => "running it now — its run shows on the board")

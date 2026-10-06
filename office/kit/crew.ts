@@ -55,6 +55,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
     notes: a.notes.filter((n) => n.workspace_id === ws || n.workspace_id === null), visits: a.visits.filter((v) => v.workspace_id === ws),
     awaiting: threads.filter(needsYou).length,
     triage: ws === null ? {} : { [ws]: a.triage[String(ws)] ?? 0 },
+    calendar: ws === null ? {} : { [ws]: a.calendar[String(ws)] ?? [] },
   }
 }
 

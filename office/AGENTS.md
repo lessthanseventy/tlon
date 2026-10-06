@@ -20,8 +20,8 @@ linked window at a time, Ctrl-] back to the room).
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
   `main.ts` is the room, its detail pane's cards and the finder (`/`); `reader.ts` a thread
   full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
-  finder's matcher. It is where the operator works now that the console is gone: every verb the
-  console had is a key here (the footer of each card lists its own).
+  finder's matcher; `when.ts` reads a schedule's "when" (a cron, or a local time). It is the
+  operator's surface: every verb is a key, and the footer of each card lists its own.
 
 ## Law
 
