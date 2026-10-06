@@ -42,8 +42,9 @@ end
 # The post-response memory pass is opt-in: presence_idle → a queued pass → cheap extractor →
 # banked facts. Off by default so a dev shell never shells a model unasked. (The Maintain
 # sweeps need no flag: they run on Oban's cron wherever Oban runs, E/2.)
-# The office's small talk (Server.Office.Banter) shells the same cheap tier while an office polls,
-# opt-in the same way, so a dev shell never spends a model call on jokes.
+# The office's small talk (Server.Office.Banter) and its pets' lines (Server.Office.Pets) shell the
+# same cheap tier while an office polls, opt-in the same way, so a dev shell never spends a model
+# call on jokes.
 if config_env() != :test do
   config :server,
     memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes),
