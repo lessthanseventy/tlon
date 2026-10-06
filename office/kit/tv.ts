@@ -1,5 +1,5 @@
 // The TV's channels: the desktop backdrop's ambient shows (ficciones' shell/lib/ambient.ts), retuned
-// for a screen a few dozen pixels wide. Each is a pure `step` over a dot screen, one art pixel a
+// for a screen a few dozen pixels wide, and an aquarium of the office's own. Each is a pure `step` over a dot screen, one art pixel a
 // dot, in five hues that are roles, so a theme switch recolours them.
 import { ROLE, type Role } from "./palette"
 
@@ -288,10 +288,44 @@ const rain = (): Show => {
   }
 }
 
+// fish facing right (mirrored to swim left): "x" the body in its hue, "e" its eye
+const FISH = [["xx.", "xxe", "xx."], [".xxx.", "xxxxe", ".xxx."], ["x..xxx..", "xxxxxxxe", "x..xxx.."]]
+const WHALE = ["....xxxxxx....", "x.xxxxxxxxxx..", "xxxxxxxxxxxexx", "x.xxxxxxxxxxxx", "....xxxxxxxx.."]
+
+const aquarium = (): Show => {
+  type Fish = { x: number; y: number; v: number; hue: number; rows: string[] }
+  let fish: Fish[] = [], bubbles: { x: number; y: number }[] = [], t = 0
+  const spawn = (s: Screen, anywhere: boolean): Fish => {
+    const rows = FISH[Math.floor(Math.random() * FISH.length)]!, v = (0.15 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1), w = rows[0]!.length
+    return { x: anywhere ? Math.random() * s.w : v > 0 ? -w : s.w, y: 1 + Math.floor(Math.random() * (s.h - 7)), v, hue: [0, 2, 3, 4][Math.floor(Math.random() * 4)]!, rows }
+  }
+  const draw = (s: Screen, f: Fish) => f.rows.forEach((r, j) => [...r].forEach((ch, i) => {
+    if (ch === ".") return
+    s.plot(f.v > 0 ? f.x + i : f.x + r.length - 1 - i, f.y + j, ch === "e" ? 1 : f.hue)
+  }))
+  return {
+    name: "aquarium",
+    init(s) { s.clear(); t = 0; bubbles = []; fish = Array.from({ length: Math.max(3, Math.floor((s.w * s.h) / 200)) }, () => spawn(s, true)) },
+    step(s) {
+      s.clear(); t++
+      // the sand, the weed swaying in it, the bubbles going up
+      for (let x = 0; x < s.w; x++) if ((x * 7 + 3) % 5) s.plot(x, s.h - 1, 0)
+      for (const wx of [3, Math.floor(s.w / 3), Math.floor((s.w * 2) / 3) + 2, s.w - 4]) for (let j = 1; j < 6 + (wx % 4); j++) s.plot(wx + Math.round(Math.sin(t / 8 + j / 2) * (j / 4)), s.h - 1 - j, 1)
+      if (Math.random() < 0.15) bubbles.push({ x: 2 + Math.random() * (s.w - 4), y: s.h - 2 })
+      bubbles = bubbles.filter((b) => (b.y -= 0.4) > 0)
+      for (const b of bubbles) s.plot(b.x + Math.sin(b.y), b.y, 3)
+      for (const f of fish) { f.x += f.v; draw(s, f) }
+      fish = fish.map((f) => (f.x < -f.rows[0]!.length - 1 || f.x > s.w + 1 ? spawn(s, false) : f))
+      // now and then something big goes by, slowly
+      if (!fish.some((f) => f.rows === WHALE) && Math.random() < 0.004) fish.push({ x: -WHALE[0]!.length, y: 4, v: 0.12, hue: 4, rows: WHALE })
+    },
+  }
+}
+
 /** the TV: a screen, its channels in turn (a minute each), and the remote */
 export class Tv {
   readonly screen: Screen
-  private readonly shows = [lorenz(), life(), boids(), rule30(), pipes(), bonsai(), maze(), stars(), flow(), ant(), rain()]
+  private readonly shows = [lorenz(), life(), boids(), rule30(), pipes(), bonsai(), maze(), stars(), flow(), ant(), rain(), aquarium()]
   private idx = Math.floor(Math.random() * this.shows.length)
   private ticks = 0
   constructor(w: number, h: number) { this.screen = new Screen(w, h); this.shows[this.idx]!.init(this.screen) }
