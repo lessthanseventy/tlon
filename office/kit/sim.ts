@@ -288,7 +288,11 @@ export class Sim<L extends { people: Seat[] }> {
       this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0 })
     }
     if (a.ok) this.seeded = true
-    for (const [k, actor] of this.actors) if (!live.has(k)) actor.leaving = true
+    // a wave on the way in (whoever walks in from the exit) and on the way out
+    for (const [k, actor] of this.actors) {
+      if (!live.has(k) && !actor.leaving) { actor.leaving = true; actor.emote = "~"; actor.emoteUntil = this.tick + 30 }
+      else if (this.seeded && actor.spotKey === "" && !actor.emote) { actor.emote = "~"; actor.emoteUntil = this.tick + 30 }
+    }
 
     // a consult walks the asker over to whoever they asked; a note walks its author to the board
     const now = Date.now()

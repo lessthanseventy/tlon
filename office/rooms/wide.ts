@@ -160,7 +160,8 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         [CAT_NAP, CAT_DESK, PERCH_TOP, PERCH_MID, { x: 18, y: 112 }, { x: 72, y: 142 }],
         [{ x: L0 + 52, y: 104 }, { x: L0 + 46, y: 69 }, { x: L0 + 80, y: 69 }, { x: L0 + 58, y: 7 }, { x: w - 7, y: 99 }, { x: L0 + 100, y: 140 }],
       ],
-      lounge: [{ x: L0 + 52, y: 104 }, { x: w - 40, y: 126 }],
+      // the armchair too, when it's empty: a princess takes the good seat
+      lounge: [{ x: L0 + 52, y: 104 }, { x: w - 40, y: 126 }, { x: shelf.x + 8, y: 82 }],
       spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }],
       via: (p: Pt) =>
         p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 100 }
@@ -396,6 +397,7 @@ export class WideRoom extends Sim<Layout> {
     this.whiteboard(sc, a, measure, 62, F1 - 64)
     this.corkboard(sc, a, F1 - 58)
     this.windows(sc, M0 + 4, L0 + 30, now)
+    this.season(sc, now)
     this.tv(sc, L0 + 36)
     this.clock(sc, W - 24, now)
 
@@ -464,7 +466,8 @@ export class WideRoom extends Sim<Layout> {
     drawActors(sc, this.actors.values(), this.talk, a, focus)
     if (queued.length > this.plan.queue.length) sc.overhead.push(() => text(`+${queued.length - this.plan.queue.length + 1}`, 94, 176, ROLE.attention))
     const c = this.cat
-    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : null)
+    const chair = corner(this.z).shelf.x + 8
+    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : null)
     this.drawDog(sc)
     this.drawAntics(sc)
     const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
@@ -745,6 +748,33 @@ export class WideRoom extends Sim<Layout> {
   }
 
   /** windows on the sky as it is outside: night with its stars, dawn and dusk, day */
+  /**
+   * What the date brings: in October jack-o'-lanterns flickering in the lounge, a cobweb in its
+   * corner and, after dark, bats past the windows; in December a little tree with blinking lights.
+   * After dark at any time of year the lounge's lamp glows.
+   */
+  private season(sc: Scene, now: Date) {
+    const { L0, M0 } = this.z, f = sc.f, px = sc.px.bind(sc), h = now.getHours(), night = h >= 19 || h < 6
+    // a pool of lamplight on the boards under it, brighter at its heart
+    if (night) sc.item(83.5, () => { px(L0 + 5, 84, 19, 3, tint(ROLE.body, ROLE.structure, 0.35)); px(L0 + 9, 83, 11, 5, tint(ROLE.body, ROLE.structure, 0.55)) })
+    if (now.getMonth() === 9) {
+      for (const [x, y] of [[L0 + 42, 146], [OFF_LANE - 10, 182]] as const) sc.item(y, () => sc.blit(["..g..", ".ooo.", "oyoyo", "ooyoo", ".ooo."], x, y - 5, { g: ROLE.live, o: ROLE.structure, y: f % 3 ? ROLE.body : tint(ROLE.body, ROLE.structure, 0.5) }))
+      sc.item(BAND, () => { for (let k = 0; k < 6; k++) { px(this.width - 1 - k, BAND + k, 1, 1, tint(ROLE.prose, ROLE.ground, 0.5)); px(this.width - 1 - k * 2, BAND, 1, 1, tint(ROLE.prose, ROLE.ground, 0.4)); px(this.width - 1, BAND + k * 2, 1, 1, tint(ROLE.prose, ROLE.ground, 0.4)) } })
+      if (night) sc.overhead.push(() => {
+        for (let k = 0; k < 3; k++) {
+          const t = sc.tick / 3 + k * 40, x = M0 + 6 + ((t * 1.5) % (L0 + 20 - M0)), y = 12 + k * 7 + Math.round(Math.sin(t / 5) * 4)
+          sc.blit((f + k) % 2 ? ["k...k", ".kkk.", "..k.."] : ["kk.kk", "..k.."], Math.round(x), y, { k: tint(ROLE.prose, ROLE.ground, 0.55) })
+        }
+      })
+    } else if (now.getMonth() === 11) {
+      sc.item(150, () => {
+        sc.blit(["....g....", "...ggg...", "..ggggg..", "...ggg...", "..ggggg..", ".ggggggg.", "ggggggggg", "....o...."], L0 + 42, 140, { g: ROLE.live, o: ROLE.structure })
+        for (let k = 0; k < 6; k++) px(L0 + 43 + ((k * 3) % 7), 142 + k, 1, 1, [ROLE.alarm, ROLE.body, ROLE.key][(k + f) % 3]!)
+        px(L0 + 46, 139, 1, 1, ROLE.body)
+      })
+    }
+  }
+
   private windows(sc: Scene, x0: number, x1: number, now: Date) {
     const h = now.getHours() + now.getMinutes() / 60
     const sky = h < 6 || h >= 20.5 ? "night" : h < 7.5 || h >= 18.5 ? "dusk" : "day"
