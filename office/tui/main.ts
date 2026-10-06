@@ -694,9 +694,11 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
       }
     }
     case "arcade": {
+      // the coworkers' best scores on the cabinets, where the room keeps them
+      const r = room(), highs: Row[] = r instanceof WideRoom ? r.highScores().flatMap((h, i): Row[] => (h ? [{ segs: [key(`cabinet ${i + 1}  `), plain(`best ${h.score}`), dim(`  by ${h.name}`)] }] : [])) : []
       const rows: Row[] = GAMES.map((g): Row => (Bun.which(g.cmd) ? { segs: [plain(g.name.padEnd(16)), dim(g.what)], open: () => play(g) } : { segs: [dim(g.name.padEnd(16)), dim("not installed")] }))
       return {
-        title: "ARCADE", rows: [{ segs: [plain("the office's cabinets. a game you leave with ctrl-] waits for you; quitting it brings the room back.")] }, ...rows],
+        title: "ARCADE", rows: [{ segs: [plain("the office's cabinets. a game you leave with ctrl-] waits for you; quitting it brings the room back.")] }, ...highs, ...rows],
         actions: [back1],
       }
     }

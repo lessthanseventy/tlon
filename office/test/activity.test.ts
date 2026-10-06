@@ -14,7 +14,7 @@ function frame(doing: string | null, tick = 0, extra: Partial<Actor> = {}) {
   const sc = new Scene(48, 48, tick)
   const seat = { agent: "hronir", thread_id: 1, title: "", warm: true, thinking: true, doing, archetype: "builder" }
   const spot = { x: 14, y: 40, aisle: 44, pose: "sit" as const, face: "up" as const, kind: "desk" as const }
-  drawActors(sc, [{ seat, look: lookOf("hronir"), x: 14, y: 40, path: [], spot, spotKey: "", pose: "sit", face: "up", moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: tick, stretch: 0, snack: 0, finished: -1000, five: 0, ...extra }], new Map(), EMPTY, focus)
+  drawActors(sc, [{ seat, look: lookOf("hronir"), x: 14, y: 40, path: [], spot, spotKey: "", pose: "sit", face: "up", moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, ...extra }], new Map(), EMPTY, focus)
   return sc.finish().rgba.join(",")
 }
 

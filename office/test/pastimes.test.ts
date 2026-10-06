@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import type { Actor } from "../kit/sim"
 import { EMPTY, type Agents } from "../kit/types"
-import { WideRoom } from "../rooms/wide"
+import { WideRoom, widePlan } from "../rooms/wide"
 
 /** run `f` with Math.random fixed at `r`: every chance taken (0), or none (0.999) */
 function chance<T>(r: number, f: () => T): T {
@@ -91,5 +91,39 @@ describe("the weather", () => {
   }))
   test("no word on the weather draws a fair sky, and no forecast to click", () => chance(0.999, () => {
     expect(draw(null, 11).hits.some((h) => h.act.kind === "weather")).toBe(false)
+  }))
+})
+
+describe("Nina and the fish", () => {
+  test("she walks to the aquarium by the hallway, never through the furniture", () => {
+    for (const w of [540, 696]) {
+      const plan = widePlan(w), l = plan.layout(viewOf(office(["hronir"]), 1)), blocks = plan.blocks(l), fish = plan.cat.spots.at(-1)!
+      for (const from of [{ x: 50, y: 128 }, ...plan.cat.lounge.slice(0, 2)]) {
+        const path = [...plan.cat.door(from, fish), fish]
+        for (let i = 1; i < path.length; i++) {
+          const [p, q] = [path[i - 1]!, path[i]!]
+          expect({ leg: [p, q], straight: p.x === q.x || p.y === q.y }).toEqual({ leg: [p, q], straight: true })
+          for (let x = p.x, y = p.y; x !== q.x || y !== q.y; x += Math.sign(q.x - x), y += Math.sign(q.y - y)) {
+            const hit = blocks.find((b) => x > b.x && x < b.x + b.w - 1 && y > b.y && y < b.y + b.h - 1)
+            expect({ at: [x, y], hit }).toEqual({ at: [x, y], hit: undefined })
+          }
+        }
+      }
+    }
+  })
+})
+
+describe("the arcade's best scores", () => {
+  test("a game played and walked away from sets the cabinet's best, in that player's name", () => chance(0.999, () => {
+    const room = new WideRoom(560), a = viewOf(office(["hronir"]), 1), r = inside(room)
+    room.step(a)
+    const p = [...r.actors.values()][0]!, spot = widePlan(560).lounge.find((s) => s.kind === "arcade")!
+    Object.assign(p, { x: spot.x, y: spot.y, spot, spotKey: `arcade:${spot.x}:${spot.y}`, path: [], moving: false, until: r.tick + 1e6 })
+    chance(0.5, () => { for (let i = 0; i < 40; i++) room.step(a) })
+    expect(room.highScores()[0]).toBeNull()
+    Object.assign(p, { x: 10, y: 176, spot: { ...spot, kind: "roam" }, spotKey: "roam" })
+    room.step(a)
+    expect(room.highScores()[0]).toMatchObject({ name: "hronir" })
+    expect(room.highScores()[0]!.score).toBeGreaterThan(0)
   }))
 })
