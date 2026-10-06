@@ -77,10 +77,11 @@ perms=""
 perms_json=""
 [ -n "$perms" ] && perms_json=",\"permissions\":{$perms}"
 
-# Presence (thinking counts as working): UserPromptSubmit declares thinking, Stop clears it
+# Presence (thinking counts as working): UserPromptSubmit declares thinking, PreToolUse says
+# which tool is running (detached, never slowing it), Stop clears it
 # (parallel to the capture reflex, so a slow extraction never delays the idle), SessionEnd is
 # the exit/crash safety net.
-settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh start\"},{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}],\"SessionEnd\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}]}$perms_json}"
+settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh start\"},{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh doing\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}],\"SessionEnd\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}]}$perms_json}"
 
 # The citizen protocol, as a system prompt. Without it Claude Code treats a teammate's message
 # (typed into its input by the server's switchboard) like the
