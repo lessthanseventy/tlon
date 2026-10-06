@@ -63,6 +63,22 @@ describe("the wide room", () => {
     expect(crewOf(a).map((c) => [c.name, c.status])).toEqual([["tertius", "idle"], ["hronir", "working"], ["w0", "idle"], ["w1", "idle"]])
   }))
 
+  test("the pets do what you tell them: Nina naps, zooms, comes to your desk; Argos goes to bed", () => seeded(5, () => {
+    const room = new WideRoom(560), a = viewOf(office(1), 1)
+    const pets = room as unknown as { cat: { x: number; y: number; mode: string; path: unknown[] }; dog: { x: number; y: number; mode: string; path: unknown[] } }
+    const settle = (done: () => boolean) => { for (let i = 0; i < 3_000 && !done(); i++) room.step(a) }
+
+    room.catDo("come")
+    settle(() => !pets.cat.path.length)
+    expect([pets.cat.x, pets.cat.y]).toEqual([37, 75])
+    expect(room.catDo("zoomies")).toBe(true)
+    expect(pets.cat.mode).toBe("zoom")
+
+    room.dogDo("bed")
+    settle(() => !pets.dog.path.length)
+    expect(pets.dog.mode).toBe("sleep")
+  }))
+
   test("the wall calendar counts the days still to come with something scheduled", () => {
     const tip = (calendar: Record<string, number[]>) => new WideRoom(560).render(viewOf({ ...office(1), calendar }, 1), focus, measure, new Date(2026, 9, 10, 12, 0)).hits.find((h) => h.act.kind === "calendar")!.tip
     expect(tip({ "1": [2, 9, 16, 23, 30], "2": [11, 12] })).toContain("something scheduled on 3 day(s) still to come")
@@ -77,7 +93,7 @@ describe("the wide room", () => {
     expect(new Set(seated.map((h) => `${h.x},${h.y}`)).size).toBe(10)
   })
 
-  test("Argos keeps off the furniture, and gets around", () => {
+  test("Argos keeps off the furniture, and gets around", () => seeded(13, () => {
     for (const w of [540, 696, 900]) {
       const room = new WideRoom(w), a = viewOf(office(6), 1), plan = widePlan(w), blocks = plan.blocks(plan.layout(a))
       const seen = new Set<string>()
@@ -90,7 +106,7 @@ describe("the wide room", () => {
       }
       expect(seen.size).toBeGreaterThan(3)
     }
-  })
+  }))
 
   test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => seeded(7, () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1), plan = widePlan(696), blocks = plan.blocks(plan.layout(a))

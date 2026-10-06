@@ -10,7 +10,7 @@ import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, COLS, crewOf, needsYou, viewOf, type Act } from "../kit/crew"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
-import { EMPTY, type Agents, type Thread, type ThreadView } from "../kit/types"
+import { EMPTY, type Agents, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
@@ -27,7 +27,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -208,14 +208,14 @@ function act(x: Act) {
     case "boss": return open({ kind: "boss" })
     case "hire": return hire()
     case "pen": return newTicket()
-    case "cat": room().pet(); return draw()
+    case "cat": room().pet(); changed(); return open({ kind: "pet", who: "cat" })
     case "calendar": return open({ kind: "calendar" })
     case "terminal": return void zoomInto(x.tid)
     case "archive": return open({ kind: "archive" })
     case "tray": return open({ kind: "tray" })
     case "beacon": return open({ kind: "triage" })
     case "rack": return open({ kind: "health" })
-    case "dog": { const r = room(); if (r instanceof WideRoom) { r.patDog(); changed(); draw() } return }
+    case "dog": { const r = room(); if (r instanceof WideRoom) r.patDog(); changed(); return open({ kind: "pet", who: "dog" }) }
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); changed(); draw() } return }
   }
 }
@@ -296,6 +296,7 @@ const VERBS: [string, () => void][] = [
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
   ["crew", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
+  ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
@@ -313,36 +314,53 @@ function closeReader() {
   out(`${ESC}[?25l`)
   layoutScreen(); draw()
 }
-const THREAD_KEYS = "r reply · enter terminal · g git · 1-9 answer · A approve · > advance · h hand off · M move · x close · D delete"
+/** something you can do from a card: its key, what it says in the actions pane, what it does */
+type Action = { key: string; label: string; run: () => void }
+const ask2 = (label: string, run: () => void) => { confirm = { label, run }; draw() }
 
-/** the verbs on a thread, wherever it is open (its card, a person's, the reader); true when one ran */
-function threadKey(k: string, tid: number): boolean {
+/** the verbs on a thread, wherever it is open (its card, a person's, the reader) */
+function threadActions(tid: number, inReader = false): Action[] {
   const th = threadOf(tid)
-  switch (k) {
-    case "r": reply(tid); return true
-    case "v": openReader(tid, false); return true
-    case "t": case "enter": void zoomInto(tid); return true
-    case "g": void zoomGit(tid); return true
-    case "x": confirm = { label: `close #${tid} as done`, run: () => did(data.closeThread(tid)) }; draw(); return true
-    case "D": confirm = { label: `delete #${tid} for good (its worktree goes too, if it loses nothing)`, run: () => { if (reader) closeReader(); back(); void did(data.deleteThread(tid)) } }; draw(); return true
-    case "A": void did(data.approve(tid)); return true
-    case ">": void did(data.advance(tid)); return true
-    case "h": {
-      const bench = view().bench
-      find(`HAND #${tid} OFF TO`, bench.map((c) => ({ segs: [{ s: c.name, fg: shirtOf(c.archetype) }, { s: `  ${c.archetype ?? ""}${c.name === th?.lead ? " · leads it now" : ""}`, fg: ROLE.inactive }], text: c.name, run: () => { picker = null; void did(data.handOff(tid, c.name)) } })))
-      return true
-    }
-    case "M": {
-      const projects = view().projects
-      find(`MOVE #${tid} TO PROJECT`, projects.map((p) => ({ segs: [{ s: p.name, fg: ROLE.prose }], text: p.name, run: () => { picker = null; void did(data.move(tid, p.id)) } })))
-      return true
-    }
-  }
-  if (/^[1-9]$/.test(k)) {
-    const opt = th?.prompt?.options?.[Number(k) - 1]
-    if (opt) { void did(data.post(tid, opt.key)); return true }
-  }
-  return false
+  const answers = (th?.prompt?.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.post(tid, o.key)) }))
+  return [
+    ...answers,
+    ...(inReader ? [] : [{ key: "v", label: "read it all", run: () => openReader(tid, false) }]),
+    { key: "r", label: "reply", run: () => reply(tid) },
+    ...(th?.awaiting && th.stage ? [{ key: "A", label: `approve: ${th.awaiting}`, run: () => void did(data.approve(tid)) }] : []),
+    ...(th?.stage ? [{ key: ">", label: "advance the workline", run: () => void did(data.advance(tid)) }] : []),
+    { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) },
+    { key: "g", label: "git (lazygit)", run: () => void zoomGit(tid) },
+    {
+      key: "h", label: "hand off to…", run: () => {
+        const bench = view().bench
+        find(`HAND #${tid} OFF TO`, bench.map((c) => ({ segs: [{ s: c.name, fg: shirtOf(c.archetype) }, { s: `  ${c.archetype ?? ""}${c.name === th?.lead ? " · leads it now" : ""}`, fg: ROLE.inactive }], text: c.name, run: () => { picker = null; void did(data.handOff(tid, c.name)) } })))
+      },
+    },
+    {
+      key: "M", label: "move to project…", run: () => {
+        find(`MOVE #${tid} TO PROJECT`, view().projects.map((p) => ({ segs: [{ s: p.name, fg: ROLE.prose }], text: p.name, run: () => { picker = null; void did(data.move(tid, p.id)) } })))
+      },
+    },
+    { key: "x", label: "close as done", run: () => ask2(`close #${tid} as done`, () => did(data.closeThread(tid))) },
+    { key: "D", label: "delete for good", run: () => ask2(`delete #${tid} for good (its worktree goes too, if it loses nothing)`, () => { if (reader) closeReader(); back(); void did(data.deleteThread(tid)) }) },
+  ]
+}
+
+/** the verbs on a seated coworker: their model, ask/allow, a clean slate, letting them go */
+function seatActions(b: Coworker | undefined): Action[] {
+  const w = ws, a = view()
+  if (!b || w === null) return []
+  return [
+    {
+      key: "m", label: "model…", run: () => {
+        const models = [{ label: `the archetype's (${a.archetypes.find((x) => x.name === b.archetype)?.model ?? "?"})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
+        find(`${b.name.toUpperCase()}'S MODEL`, models.map((m) => ({ segs: [plain(m.label)], text: m.label, run: () => { picker = null; void did(data.retarget(w, b.agent_id, { model: m.value })) } })))
+      },
+    },
+    { key: "y", label: b.ask === "allow" ? "ask before acting" : "allow without asking", run: () => void did(data.retarget(w, b.agent_id, { ask: b.ask === "allow" ? "ask" : "allow" })) },
+    { key: "C", label: "clear context (fresh next time)", run: () => ask2(`clear ${b.name}'s context — their session ends, they start fresh when next needed`, () => did(data.clearContext(w, b.agent_id, b.name))) },
+    { key: "-", label: "let go", run: () => ask2(`let ${b.name} go from ${wsName()} (the agent itself stays)`, () => did(data.unseat(b.seat_id, b.name))) },
+  ]
 }
 
 // ── the detail pane ────────────────────────────────────────────────────────────────────────────
@@ -413,20 +431,31 @@ function newSchedule(edit?: data.Schedule) {
 }
 const KIND: Record<string, string> = { message: "said", fact: "learned", issue: "raised", question: "asked", check_failed: "check failed", check_passed: "check passed", work_landed: "landed", stage_advanced: "advanced", handoff_opened: "handed off" }
 
-function detail(): { title: string; rows: Row[]; keys: string } {
-  const a = view()
+const back1: Action = { key: "esc", label: "back", run: () => { back(); roomChanged = true; draw() } }
+const pick = <T,>(xs: T[], i: number) => (i >= 0 ? xs[i] : undefined)
+
+/** the card the pane shows: its title, its rows (the left, j/k + enter when any open), its actions (the right, by key) */
+function detail(): { title: string; rows: Row[]; actions: Action[] } {
+  const a = view(), w = ws
   switch (mode.kind) {
     case "home": {
       const waiting = a.threads.filter(needsYou)
-      if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone, a sticky or the crew board; / finds anything,")] }, { segs: [dim("n starts a thread, tab walks the crew, [ ] the workspaces.")] }], keys: "/ find · i inbox · n new thread · tab crew · [ ] workspace · c crew · t tickets · w in-tray · ! triage · H health · b memory · W workspaces · q quit" }
-      return {
-        title: `WAITING ON YOU · ${waiting.length}`,
-        rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => openReader(t.id, false) })),
-        keys: "j/k move · enter read · / find · i inbox · n new thread · tab crew · [ ] workspace · q quit",
-      }
+      const actions: Action[] = [
+        { key: "/", label: "find anything", run: () => void finder() }, { key: "i", label: "inbox — everywhere", run: inbox },
+        { key: "n", label: "new thread", run: newThread }, { key: "N", label: "new ticket", run: newTicket },
+        { key: "c", label: "crew", run: () => open({ kind: "crew" }) }, { key: "t", label: "tickets & worklines", run: () => open({ kind: "column", col: 0 }) },
+        { key: "w", label: "in-tray", run: () => open({ kind: "tray" }) }, { key: "!", label: "triage", run: () => open({ kind: "triage" }) },
+        { key: "a", label: "calendar", run: () => open({ kind: "calendar" }) }, { key: "o", label: "notes", run: () => open({ kind: "notes" }) },
+        { key: "b", label: "memory", run: () => open({ kind: "memory" }) }, { key: "H", label: "the rack (health)", run: () => open({ kind: "health" }) },
+        { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
+        { key: "q", label: "quit", run: quit },
+      ]
+      if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone — or Nina, or Argos — a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], actions }
+      return { title: `WAITING ON YOU · ${waiting.length}`, rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => openReader(t.id, false) })), actions }
     }
     case "crew": {
       const crew = crewOf(a)
+      const chosen = a.bench.find((x) => x.name === pick(crew, sel)?.name)
       return {
         title: `CREW · ${crew.length}`,
         rows: crew.map((c) => {
@@ -439,47 +468,68 @@ function detail(): { title: string; rows: Row[]; keys: string } {
             open: () => open({ kind: "person", name: c.name }),
           }
         }),
-        keys: "j/k move · enter open · + hire · m model · y ask/allow · - let go · esc back",
+        actions: [{ key: "+", label: "hire", run: hire }, ...seatActions(chosen), back1],
       }
     }
     case "person": {
       const name = mode.name
       const c = crewOf(a).find((x) => x.name === name), b = a.bench.find((x) => x.name === name)
-      if (!c) return { title: name.toUpperCase(), rows: [{ segs: [dim("not in this office any more")] }], keys: "esc back" }
+      if (!c) return { title: name.toUpperCase(), rows: [{ segs: [dim("not in this office any more")] }], actions: [back1] }
       const model = b?.model ? `${b.model.provider}/${b.model.model}` : `${a.archetypes.find((x) => x.name === c.archetype)?.model ?? "?"} (archetype's)`
-      const head: Row = { segs: [{ s: c.name, fg: shirtOf(c.archetype), bold: true }, dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${c.status} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)] }
-      const seatKeys = b ? " · m model · y ask/allow · - let go" : ""
-      if (c.thread === null) return { title: name.toUpperCase(), rows: [head, { segs: [dim("on the bench")] }], keys: `tab next${seatKeys} · esc back` }
-      return { title: name.toUpperCase(), rows: [head, ...threadRows(threadOf(c.thread), c.thread)], keys: `${THREAD_KEYS}${seatKeys} · tab next · esc back` }
+      const where = c.status === "working" ? "mid-turn" : a.roster.some((r) => r.agent === name && r.warm) ? "on call" : c.status === "waiting" ? "waiting on you" : "in the lounge"
+      const head: Row = { segs: [{ s: c.name, fg: shirtOf(c.archetype), bold: true }, dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${where} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)] }
+      const rows = c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread)]
+      return { title: name.toUpperCase(), rows, actions: [...(c.thread === null ? [] : threadActions(c.thread)), ...seatActions(b), back1] }
     }
     case "thread": {
       const tid = mode.tid
-      return { title: `THREAD #${tid}`, rows: threadRows(threadOf(tid), tid), keys: `v read all · ${THREAD_KEYS} · esc back` }
+      return { title: `THREAD #${tid}`, rows: threadRows(threadOf(tid), tid), actions: [...threadActions(tid), back1] }
     }
     case "column": {
-      const col = boardColumns(a)[mode.col]!
+      const col = boardColumns(a)[mode.col]!, items = col.items
+      const it = pick(items, sel)
+      const reorder = (dir: "up" | "down"): Action => ({ key: dir === "up" ? "K" : "J", label: `move ${dir}`, run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), items.length - 1)); draw() }) } })
       return {
-        title: `${col.name} · ${col.items.length}`,
-        rows: col.items.map((it) => {
-          const blocked = it.act.kind === "ticket" && (tickets.find((t) => t.id === (it.act as { id: number }).id)?.blocked_by.length ?? 0) > 0
+        title: `${col.name} · ${items.length}`,
+        rows: items.map((x) => {
+          const blocked = x.act.kind === "ticket" && (tickets.find((t) => t.id === (x.act as { id: number }).id)?.blocked_by.length ?? 0) > 0
           return {
-            segs: [key(it.act.kind === "ticket" ? `#${it.act.id} ` : it.act.kind === "thread" ? `#${it.act.tid} ` : ""), plain(it.title), dim(`  ${it.stage}${it.who ? ` · ${it.who}` : ""}`), ...(it.asks ? [pink("  waiting on you")] : []), ...(blocked ? [pink("  ⊘ blocked")] : [])],
-            open: () => act(it.act),
+            segs: [key(x.act.kind === "ticket" ? `#${x.act.id} ` : x.act.kind === "thread" ? `#${x.act.tid} ` : ""), plain(x.title), dim(`  ${x.stage}${x.who ? ` · ${x.who}` : ""}`), ...(x.asks ? [pink("  waiting on you")] : []), ...(blocked ? [pink("  ⊘ blocked")] : [])],
+            open: () => act(x.act),
           }
         }),
-        keys: `j/k move · enter open · ← → columns${mode.col === 0 ? " · n new ticket · J/K reorder" : ""} · esc back`,
+        actions: [
+          ...(mode.col === 0 ? [{ key: "n", label: "new ticket", run: newTicket }, reorder("up"), reorder("down")] : []),
+          { key: "right", label: "next column (← →)", run: () => open({ kind: "column", col: ((mode as { col: number }).col + 1) % COLS.length }) },
+          back1,
+        ],
       }
     }
     case "ticket": {
       const id = mode.id
       const tk = a.tickets.find((t) => t.id === id), full = tickets.find((t) => t.id === id)
-      if (!tk) return { title: `TICKET #${id}`, rows: [{ segs: [dim("started or gone")] }], keys: "esc back" }
-      const rows: Row[] = [{ segs: [plain(tk.title)] }, { segs: [dim(`${tk.priority} priority${tk.routed ? " · with the manager to staff" : ""}`)] },
-        { segs: [key("s "), plain("send to the manager to staff")], open: () => did(data.ticketRoute(id)) },
-        { segs: [key("enter "), plain("start it with the lead")], open: () => did(data.ticketStart(id)) }]
-      for (const by of full?.blocked_by ?? []) rows.push({ segs: [pink("⊘ blocked by "), key(`#${by} `), plain(tickets.find((t) => t.id === by)?.title ?? "")], open: () => did(data.ticketUnblock(id, by)) })
-      if (full?.body) for (const l of wrap(full.body, cols() - 4).slice(0, 6)) rows.push({ segs: [dim(l)] })
-      return { title: `TICKET #${id}`, rows, keys: "s send to manager · enter start with lead · e edit title · b blocked by… · J/K reorder · d delete · esc back" }
+      if (!tk) return { title: `TICKET #${id}`, rows: [{ segs: [dim("started or gone")] }], actions: [back1] }
+      const rows: Row[] = [{ segs: [plain(tk.title)] }, { segs: [dim(`${tk.priority} priority${tk.routed ? " · with the manager to staff" : ""}`)] }]
+      for (const by of full?.blocked_by ?? []) rows.push({ segs: [pink("⊘ blocked by "), key(`#${by} `), plain(tickets.find((t) => t.id === by)?.title ?? "")] })
+      if (full?.body) for (const l of wrap(full.body, cols() - 40).slice(0, 6)) rows.push({ segs: [dim(l)] })
+      return {
+        title: `TICKET #${id}`, rows,
+        actions: [
+          { key: "S", label: "start it with the lead", run: () => void did(data.ticketStart(id)) },
+          { key: "s", label: "send to the manager to staff", run: () => void did(data.ticketRoute(id)) },
+          { key: "e", label: "edit the title", run: () => ask(`ticket #${id} title`, (s) => { if (s.trim()) did(data.ticketPatch(id, { title: s.trim() })) }, { text: tk.title }) },
+          {
+            key: "b", label: "blocked by…", run: () => {
+              const others = tickets.filter((t) => t.id !== id && t.status !== "done")
+              find(`#${id} IS BLOCKED BY`, others.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), dim(`  ${t.status}`)], text: `#${t.id} ${t.title}`, run: () => { picker = null; void did(data.ticketBlock(id, t.id)) } })))
+            },
+          },
+          ...(full?.blocked_by.length ? [{ key: "u", label: "unblock", run: () => { for (const by of full.blocked_by) void did(data.ticketUnblock(id, by)) } }] : []),
+          { key: "K", label: "move up", run: () => void did(data.ticketReorder(id, "up")) }, { key: "J", label: "move down", run: () => void did(data.ticketReorder(id, "down")) },
+          { key: "d", label: "delete", run: () => ask2(`delete ticket #${id}`, () => { back(); void did(data.ticketDelete(id)) }) },
+          back1,
+        ],
+      }
     }
     case "calendar": {
       const now = new Date(), first = new Date(now.getFullYear(), now.getMonth(), 1).getDay(), days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
@@ -492,49 +542,67 @@ function detail(): { title: string; rows: Row[]; keys: string } {
         if ((first + d) % 7 === 0 || d === days) { rows.push({ segs: week }); week = [] }
       }
       if (!cal) rows.push({ segs: [dim("reading the schedule…")] })
-      else if (!cal.length) rows.push({ segs: [dim("nothing scheduled yet — n schedules an agent run, a workline or a script")] })
+      else if (!cal.length) rows.push({ segs: [dim("nothing scheduled yet")] })
       else {
         rows.push({ segs: [key(`SCHEDULED · ${cal.length}`)] })
         for (const s of cal) rows.push({ segs: scheduleSegs(s), open: () => open({ kind: "runs", id: s.id }), ref: s })
       }
-      return { title: now.toLocaleString("en", { month: "long", year: "numeric" }).toUpperCase(), rows, keys: "j/k move · enter its runs · n new · e edit · space pause/resume · r run now · d delete · esc back" }
+      const s = rows[sel]?.ref as data.Schedule | undefined
+      return {
+        title: now.toLocaleString("en", { month: "long", year: "numeric" }).toUpperCase(), rows,
+        actions: [
+          { key: "n", label: "schedule something", run: () => newSchedule() },
+          ...(s ? [
+            { key: "e", label: "edit it", run: () => newSchedule(s) },
+            { key: "space", label: s.enabled ? "pause it" : "resume it", run: () => void did(data.schedulePatch(s.id, { enabled: !s.enabled })).then(loadCard).then(draw) },
+            { key: "r", label: "run it now", run: () => void did(data.scheduleRun(s.id)).then(loadCard).then(draw) },
+            { key: "d", label: "delete it", run: () => ask2(`remove "${s.title}" and its runs`, () => void did(data.scheduleDelete(s.id)).then(loadCard).then(draw)) },
+          ] : []),
+          back1,
+        ],
+      }
     }
     case "runs": {
-      const s = cal?.find((x) => x.id === (mode as { id: number }).id)
+      const id = mode.id, s = cal?.find((x) => x.id === id)
       const rows: Row[] = board.map((r) => ({
         segs: [runGlyph(r), dim(` ${stamp(r.started_at)} `), plain(r.status.padEnd(8)), dim(r.exit === null ? "" : `exit ${r.exit}  `), r.thread_id ? key(`→ #${r.thread_id}  `) : dim(""), dim((r.output ?? "").replace(/\s+/g, " ").slice(0, 80))],
-        open: () => (r.thread_id && !r.output ? openReader(r.thread_id, false) : open({ kind: "run", id: (mode as { id: number }).id, run: r.id })),
+        open: () => (r.thread_id && !r.output ? openReader(r.thread_id, false) : open({ kind: "run", id, run: r.id })),
         ref: r,
       }))
-      return { title: `RUNS · ${s?.title ?? ""}`, rows: rows.length ? rows : [{ segs: [dim("it hasn't run yet — r runs it now")] }], keys: "j/k move · enter open (its thread, or its output) · r run now · esc the calendar" }
+      return {
+        title: `RUNS · ${s?.title ?? ""}`, rows: rows.length ? rows : [{ segs: [dim("it hasn't run yet")] }],
+        actions: [{ key: "r", label: "run it now", run: () => void did(data.scheduleRun(id)).then(loadCard).then(draw) }, { key: "esc", label: "the calendar", run: () => open({ kind: "calendar" }) }],
+      }
     }
     case "run": {
-      const r = board.find((x) => x.id === (mode as { run: number }).run)
-      if (!r) return { title: "RUN", rows: [{ segs: [dim("gone")] }], keys: "esc back" }
-      const rows: Row[] = [{ segs: [runGlyph(r), dim(` started ${stamp(r.started_at)}${r.finished_at ? `, finished ${stamp(r.finished_at)}` : ", still running"}`), ...(r.thread_id ? [key(`  → #${r.thread_id} (t reads it)`)] : [])] }]
-      for (const l of wrap(r.output ?? "(no output)", cols() - 4)) rows.push({ segs: [plain(l)] })
-      return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, keys: `j/k scroll${r.thread_id ? " · t read its thread" : ""} · esc the runs` }
+      const { id, run } = mode
+      const r = board.find((x) => x.id === run)
+      const up: Action = { key: "esc", label: "the runs", run: () => open({ kind: "runs", id }) }
+      if (!r) return { title: "RUN", rows: [{ segs: [dim("gone")] }], actions: [up] }
+      const rows: Row[] = [{ segs: [runGlyph(r), dim(` started ${stamp(r.started_at)}${r.finished_at ? `, finished ${stamp(r.finished_at)}` : ", still running"}`), ...(r.thread_id ? [key(`  → #${r.thread_id}`)] : [])] }]
+      for (const l of wrap(r.output ?? "(no output)", cols() - 40)) rows.push({ segs: [plain(l)] })
+      return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, actions: [...(r.thread_id ? [{ key: "t", label: "read its thread", run: () => openReader(r.thread_id!, false) }] : []), up] }
     }
     case "archive": {
-      if (!archived) return { title: "FILING CABINET", rows: [{ segs: [dim("opening the drawers…")] }], keys: "esc back" }
+      if (!archived) return { title: "FILING CABINET", rows: [{ segs: [dim("opening the drawers…")] }], actions: [back1] }
       const day = (s: string | null) => (s ? s.slice(0, 10) : "")
       const rows: Row[] = [{ segs: [key(`TICKETS DONE · ${archived.tickets.length}`)] }]
       for (const t of archived.tickets) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${day(t.closed_at)}`)] })
       rows.push({ segs: [key(`THREADS CLOSED · ${archived.threads.length}`)] })
       for (const t of archived.threads) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${t.stage ?? ""} ${day(t.at)}`)], open: () => openReader(t.id, false) })
-      return { title: "FILING CABINET", rows, keys: "j/k move · enter read a thread (replying reopens it) · esc back" }
+      return { title: "FILING CABINET", rows, actions: [back1] }
     }
     case "notes":
-      return { title: `NOTES · ${a.notes.length}`, rows: a.notes.map((n) => ({ segs: [{ s: `${n.author}: `, fg: shirtOf(a.bench.find((b) => b.name === n.author)?.archetype) }, plain(n.body.replace(/\s+/g, " "))] })), keys: "j/k move · n new note · esc back" }
+      return { title: `NOTES · ${a.notes.length}`, rows: a.notes.map((n) => ({ segs: [{ s: `${n.author}: `, fg: shirtOf(a.bench.find((b) => b.name === n.author)?.archetype) }, plain(n.body.replace(/\s+/g, " "))] })), actions: [{ key: "n", label: "pin a note", run: newNote }, back1] }
     case "tray": {
       const rows = feed.map((x): Row => ({
         segs: [dim(ago(x.at).padStart(4) + " "), x.thread_id ? key(`#${x.thread_id} `) : dim(""), { s: `${x.who ?? ""} ${KIND[x.kind] ?? x.kind.replace(/_/g, " ")} `, fg: x.kind === "issue" || x.kind === "check_failed" ? ROLE.alarm : x.kind === "question" ? ROLE.attention : ROLE.inactive }, plain(x.text.replace(/\s+/g, " "))],
         open: x.thread_id ? () => openReader(x.thread_id!, false) : undefined,
       }))
-      return { title: `IN-TRAY · what just happened in ${wsName()}`, rows: rows.length ? rows : [{ segs: [dim("nothing yet")] }], keys: "j/k move · enter read the thread · esc back" }
+      return { title: `IN-TRAY · ${wsName()}`, rows: rows.length ? rows : [{ segs: [dim("nothing yet")] }], actions: [back1] }
     }
     case "triage": {
-      if (!stuck) return { title: "TRIAGE", rows: [{ segs: [dim("looking…")] }], keys: "esc back" }
+      if (!stuck) return { title: "TRIAGE", rows: [{ segs: [dim("looking…")] }], actions: [back1] }
       const rows: Row[] = []
       const section = (name: string, c: data.Capped<data.Stuck>) => {
         if (!c.shown.length) return
@@ -543,10 +611,10 @@ function detail(): { title: string; rows: Row[]; keys: string } {
         if (c.more) rows.push({ segs: [dim(`  +${c.more} more`)] })
       }
       section("BLOCKERS — open issues", stuck.blockers); section("FAILED CHECKS", stuck.failed_checks); section("NOBODY LEADS", stuck.unled)
-      return { title: `TRIAGE · ${stuck.count} stuck in ${wsName()}`, rows: rows.length ? rows : [{ segs: [dim("nothing is stuck. the beacon is dark.")] }], keys: "j/k move · enter read the thread · esc back" }
+      return { title: `TRIAGE · ${stuck.count} stuck`, rows: rows.length ? rows : [{ segs: [dim("nothing is stuck. the beacon is dark.")] }], actions: [back1] }
     }
     case "health": {
-      if (!rack) return { title: "THE RACK", rows: [{ segs: [dim("probing…")] }], keys: "esc back" }
+      if (!rack) return { title: "THE RACK", rows: [{ segs: [dim("probing…")] }], actions: [back1] }
       const ok = (b: boolean, s: string): Row => ({ segs: [{ s: b ? "● " : "✕ ", fg: b ? ROLE.live : ROLE.alarm }, plain(s)] })
       const up = rack.up_s < 3600 ? `${Math.floor(rack.up_s / 60)}m` : rack.up_s < 86400 ? `${Math.floor(rack.up_s / 3600)}h` : `${Math.floor(rack.up_s / 86400)}d`
       const rows: Row[] = [
@@ -555,36 +623,101 @@ function detail(): { title: string; rows: Row[]; keys: string } {
         ok(rack.failed_jobs === 0, `${rack.failed_jobs} failed job(s) today`), ok(rack.tmux, "tmux is there for the coworkers"),
         { segs: [dim(`disk ${rack.disk_pct ?? "?"}% · memory ${rack.mem_pct ?? "?"}% · load ${rack.load ?? "?"}`)] },
       ]
-      return { title: `THE RACK · ${rack.state === "ok" ? "all green" : "needs a look"}`, rows, keys: "esc back" }
+      return { title: `THE RACK · ${rack.state === "ok" ? "all green" : "needs a look"}`, rows, actions: [back1] }
     }
     case "memory": {
-      if (!shelf) return { title: "MEMORY", rows: [{ segs: [dim("taking the books down…")] }], keys: "esc back" }
+      if (!shelf) return { title: "MEMORY", rows: [{ segs: [dim("taking the books down…")] }], actions: [back1] }
       const rows: Row[] = [{ segs: [dim(`${shelf.coverage.facts} facts, ${shelf.coverage.embedded} embedded · pinned ${shelf.coverage.pinned_count} (~${shelf.coverage.pinned_tokens} of ${shelf.coverage.budget} tokens)`)] }]
       rows.push({ segs: [key(`HABITS TO REVIEW · ${shelf.habits.length}`)] })
-      for (const h of shelf.habits) rows.push({ segs: [dim(`  ${h.by ?? "?"}: `), plain(h.text)], open: () => void 0 })
+      for (const h of shelf.habits) rows.push({ segs: [dim(`  ${h.by ?? "?"}: `), plain(h.text)], open: () => void 0, ref: { habit: h } })
       rows.push({ segs: [key(`PINNED — every session loads these · ${shelf.pinned.length}`)] })
-      for (const f of shelf.pinned) rows.push({ segs: [dim(`  ${f.id} `), plain(f.text.replace(/\s+/g, " "))], open: () => void 0 })
-      return { title: "MEMORY", rows, keys: "j/k move · on a habit: a approve, r reject · on a pinned fact: d forget · esc back" }
+      for (const f of shelf.pinned) rows.push({ segs: [dim(`  ${f.id} `), plain(f.text.replace(/\s+/g, " "))], open: () => void 0, ref: { fact: f } })
+      const at = rows[sel]?.ref as { habit?: data.Memory["habits"][number]; fact?: data.Memory["pinned"][number] } | undefined
+      const reload = () => void loadCard().then(draw)
+      return {
+        title: "MEMORY", rows,
+        actions: [
+          ...(at?.habit ? [{ key: "a", label: "approve the habit", run: () => void did(data.habit(at.habit!.id, "approve")).then(reload) }, { key: "r", label: "reject the habit", run: () => void did(data.habit(at.habit!.id, "reject")).then(reload) }] : []),
+          ...(at?.fact ? [{ key: "d", label: "forget the fact", run: () => ask2(`forget "${at.fact!.text.slice(0, 50)}"`, () => void did(data.forget(at.fact!.id)).then(reload)) }] : []),
+          back1,
+        ],
+      }
     }
     case "boss": {
       const rows: Row[] = [{ segs: [plain(all.awaiting ? `${all.awaiting} thread(s) wait on you across the office` : "nothing waits on you")] }]
-      for (const w of all.workspaces) {
-        const n = all.threads.filter((t) => t.workspace_id === w.id && needsYou(t)).length, s = all.triage[String(w.id)] ?? 0
-        rows.push({ segs: [key(w.id === ws ? "▸ " : "  "), plain(w.name.padEnd(16)), n ? pink(`${n} waiting  `) : dim(""), s ? pink(`${s} stuck`) : dim("")], open: () => goWs(w.id) })
+      for (const x of all.workspaces) {
+        const n = all.threads.filter((t) => t.workspace_id === x.id && needsYou(t)).length, s = all.triage[String(x.id)] ?? 0
+        rows.push({ segs: [key(x.id === ws ? "▸ " : "  "), plain(x.name.padEnd(16)), n ? pink(`${n} waiting  `) : dim(""), s ? pink(`${s} stuck`) : dim("")], open: () => goWs(x.id) })
       }
-      return { title: "WORKSPACES", rows, keys: "j/k move · enter switch · n new workspace · e this one's settings · d close it · + hire · esc back" }
+      return {
+        title: "WORKSPACES", rows,
+        actions: [
+          {
+            key: "n", label: "new workspace", run: () => {
+              const tpl = ["code", "life", "blank"].map((t) => ({ label: t, value: t }))
+              ask("new workspace — its name", (s, [t]) => { if (s.trim()) did(data.workspaceNew(s.trim(), t as string)) }, { cycles: [{ name: "from", values: tpl, i: 0 }] })
+            },
+          },
+          { key: "e", label: "this one's settings", run: () => open({ kind: "card" }) },
+          ...(w === null ? [] : [{ key: "d", label: "close this one", run: () => ask2(`close ${wsName()} (its threads move to another workspace)`, () => void did(data.workspaceDelete(w))) }]),
+          { key: "+", label: "hire", run: hire },
+          back1,
+        ],
+      }
     }
     case "card": {
-      if (!card) return { title: "SETTINGS", rows: [{ segs: [dim("reading…")] }], keys: "esc back" }
+      if (!card || w === null) return { title: "SETTINGS", rows: [{ segs: [dim("reading…")] }], actions: [back1] }
+      const c = card, ring = (xs: string[], x: string) => xs[(xs.indexOf(x) + 1) % xs.length]!
+      const reload = () => void loadCard().then(draw)
       const rows: Row[] = [
-        { segs: [dim("type  "), plain(card.type), dim("   scope  "), plain(card.scope), dim("   icon  "), plain(card.icon ?? "—")] },
-        { segs: [key(`REPOS · ${card.repos.length}`)] },
-        ...card.repos.map((r): Row => ({ segs: [plain(`  ${r.path}`), dim(r.remote ? `  ${r.remote}` : "")], open: () => void 0 })),
+        { segs: [dim("type  "), plain(c.type), dim("   scope  "), plain(c.scope), dim("   icon  "), plain(c.icon ?? "—")] },
+        { segs: [key(`REPOS · ${c.repos.length}`)] },
+        ...c.repos.map((r): Row => ({ segs: [plain(`  ${r.path}`), dim(r.remote ? `  ${r.remote}` : "")], open: () => void 0, ref: r })),
       ]
-      return { title: `${card.name.toUpperCase()} · SETTINGS`, rows, keys: "t type · s scope · i icon · + add a repo · - remove the selected repo · esc back" }
+      const repo = rows[sel]?.ref as data.WorkspaceCard["repos"][number] | undefined
+      return {
+        title: `${c.name.toUpperCase()} · SETTINGS`, rows,
+        actions: [
+          { key: "T", label: `type: ${c.type} → next`, run: () => void did(data.workspaceEdit(w, { type: ring(["code", "life", "blank"], c.type) })).then(reload) },
+          { key: "s", label: `scope: ${c.scope} → next`, run: () => void did(data.workspaceEdit(w, { scope: ring(["project", "machine"], c.scope) })).then(reload) },
+          { key: "I", label: "icon", run: () => ask("icon", (s) => void did(data.workspaceEdit(w, { icon: s.trim() })).then(reload), { text: c.icon ?? "" }) },
+          { key: "+", label: "add a repo", run: () => ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(reload) }) },
+          ...(repo ? [{ key: "-", label: `remove ${repo.path.split("/").pop()}`, run: () => ask2(`remove ${repo.path} from ${c.name}`, () => void did(data.repoRemove(repo.id)).then(reload)) }] : []),
+          back1,
+        ],
+      }
+    }
+    case "pet": {
+      const r = room(), wideRoom = r instanceof WideRoom ? r : null
+      const doIt = (f: () => unknown) => () => { f(); changed(); draw() }
+      if (mode.who === "cat") {
+        return {
+          title: "NINA", rows: [{ segs: [plain("your cat. she does what you ask — then her own day carries on.")] }],
+          actions: [
+            { key: "p", label: "pat her", run: doIt(() => r.pet()) },
+            { key: "z", label: "the zoomies", run: doIt(() => r.catDo("zoomies")) },
+            { key: "y", label: "play with the yarn", run: doIt(() => r.catDo("play")) },
+            { key: "c", label: "come to my desk", run: doIt(() => r.catDo("come")) },
+            { key: "s", label: "go have a nap", run: doIt(() => r.catDo("nap")) },
+            back1,
+          ],
+        }
+      }
+      return {
+        title: "ARGOS", rows: [{ segs: [plain(wideRoom ? "the office dog. good boy." : "Argos lives in the wide room — make the terminal wider to see him.")] }],
+        actions: wideRoom ? [
+          { key: "p", label: "pat him", run: doIt(() => wideRoom.patDog()) },
+          { key: "w", label: "go for a walk", run: doIt(() => wideRoom.dogDo("walk")) },
+          { key: "o", label: "come to my office", run: doIt(() => wideRoom.dogDo("office")) },
+          { key: "s", label: "sit", run: doIt(() => wideRoom.dogDo("sit")) },
+          { key: "b", label: "bed", run: doIt(() => wideRoom.dogDo("bed")) },
+          back1,
+        ] : [back1],
+      }
     }
   }
 }
+
 
 // ── drawing ────────────────────────────────────────────────────────────────────────────────────
 function layoutScreen() {
@@ -609,7 +742,7 @@ function draw() {
   const colsN = cols(), termRows = process.stdout.rows ?? 40
   if (reader) {
     if (picker || confirm) { out(`${ESC}[?25l` + drawOverlay(colsN, termRows)); return }
-    out(reader.draw(colsN, termRows, threadOf(reader.tid), `${THREAD_KEYS.replace("enter terminal", "t terminal")} · pgup/pgdn scroll · esc back`))
+    out(reader.draw(colsN, termRows, threadOf(reader.tid), [...threadActions(reader.tid, true).map((x) => `${x.key} ${x.label}`), "pgup/pgdn scroll", "esc back"].join(" · ")))
     return
   }
   const a = view()
@@ -631,11 +764,19 @@ function draw() {
   out(o + drawPane(tipRow + 1, colsN, termRows) + `${ESC}[?2026l`)
 }
 
-/** the detail pane from row `top` to the foot: the finder, a multi-line input, or the mode's card */
+// what the pane last drew, for a click on it: where it starts, how wide its left side is, the first row shown
+let acts: Action[] = [], asel = 0, pane = { top: 0, leftW: 0, first: 0, afirst: 0 }
+const ACTIONS_W = 34
+const keyName = (k: string) => ({ space: "␣", enter: "⏎", right: "→", left: "←" })[k] ?? k
+/** the actions take j/k and enter when the card's rows have nothing to open */
+const actionsFocused = () => !rows.some((r) => r.open)
+
+/** the pane from row `top` to the foot: the finder, a multi-line input, or the card — its rows on the left, its actions on the right */
 function drawPane(top: number, colsN: number, termRows: number): string {
   let o = ""
   const body = Math.max(1, termRows - top - 1)
-  let title: string, keys: string, segRows: Row[], cursor: { r: number; c: number } | null = null
+  let title: string, keys = "", segRows: Row[], cursor: { r: number; c: number } | null = null
+  acts = []
   if (picker) {
     const shown = rank(picker.q.text, picker.items, (p) => p.text)
     picker.sel = Math.min(picker.sel, Math.max(0, shown.length - 1))
@@ -652,20 +793,37 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
   } else {
     const d = detail()
-    title = d.title; keys = d.keys; segRows = d.rows
+    title = d.title; segRows = d.rows; acts = d.actions
   }
   rows = segRows
-  o += `${ESC}[${top};1H` + line([{ s: ` ${title} `, fg: ROLE.ground, bg: picker || input ? ROLE.attention : ROLE.key }, dim(" " + "─".repeat(Math.max(0, colsN - title.length - 3)))], colsN)
+  const split = acts.length > 0 && colsN >= 80
+  const leftW = split ? colsN - ACTIONS_W - 1 : colsN
+  if (!split && acts.length) keys = acts.map((x) => `${keyName(x.key)} ${x.label}`).join(" · ")
+  else if (!keys) keys = "/ find · i inbox · tab crew · [ ] workspace · esc back · q quit"
+  const bar = (t: string, w: number, bg: string) => line([{ s: ` ${t} `, fg: ROLE.ground, bg }, dim(" " + "─".repeat(Math.max(0, w - t.length - 3)))], w)
+  o += `${ESC}[${top};1H` + bar(title, leftW, picker || input ? ROLE.attention : ROLE.key) + (split ? line([dim("┬")], 1) + bar("ACTIONS", ACTIONS_W, ROLE.key) : "")
   const selectable = rows.some((r) => r.open) && !input
   if (snapSel && selectable && !picker) { snapSel = false; if (!rows[sel]?.open) sel = rows.findIndex((r) => r.open) }
   if (sel >= rows.length) sel = Math.max(0, rows.length - 1)
+  if (asel >= acts.length) asel = Math.max(0, acts.length - 1)
   const first = cursor && input ? 0 : Math.max(0, Math.min(sel - Math.floor((body - 1) / 2), rows.length - (body - 1)))
-  for (let i = 0; i < body - 1; i++) {
+  // more actions than rows: scroll them while they have the keys, else the last line names the rest
+  const room = body - 1, over = acts.length > room
+  const afirst = over && !selectable ? Math.max(0, Math.min(asel - room + 1, acts.length - room)) : 0
+  const shown = over && selectable ? room - 1 : room
+  pane = { top, leftW, first, afirst }
+  for (let i = 0; i < room; i++) {
     const r = rows[first + i]
     const mark = r && selectable && first + i === sel && mode.kind !== "thread" && mode.kind !== "person" ? key("▸ ") : plain("  ")
-    o += `${ESC}[${top + 1 + i};1H` + line(r ? [mark, ...r.segs] : [], colsN)
+    o += `${ESC}[${top + 1 + i};1H` + line(r ? [mark, ...r.segs] : [], leftW)
+    if (split) {
+      const x = i < shown ? acts[afirst + i] : undefined
+      const lit = x && !selectable && afirst + i === asel
+      const rest = i === shown && over ? acts.slice(shown).map((y) => keyName(y.key)).join(" ") : ""
+      o += line([dim("│")], 1) + line(x ? [lit ? key("▸") : plain(" "), { s: ` ${keyName(x.key).padStart(5)} `, fg: ROLE.key, bold: true }, { s: x.label, fg: x.key === "esc" ? ROLE.inactive : ROLE.prose }] : rest ? [dim(`  also: ${rest}`)] : [], ACTIONS_W)
+    }
   }
-  // the foot: the keys that work here, the line you are typing, or a confirm
+  // the foot: what you are typing, a confirm, or the keys (when there is no actions pane to show them)
   const one = input && !input.ed.multiline ? input : null
   o += `${ESC}[${termRows};1H` + line(one ? [pink(` ${one.label}: `), plain(one.ed.text), ...(one.cycles?.length ? [dim("   tab: "), ...cyclesSegs(one)] : [])] : confirm ? [pink(` ${confirm.label} (y/n)`)] : [dim(` ${keys}`)], colsN)
   if (one) {
@@ -675,6 +833,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   else if (cursor) o += `${ESC}[${top};${cursor.c + 1}H${ESC}[?25h`
   return o
 }
+
 const cyclesSegs = (i: Prompt): Seg[] => (i.cycles ?? []).flatMap((c, n) => [dim(`${c.name} `), n === i.focus && (i.cycles?.length ?? 0) > 1 ? { s: `‹${c.values[c.i]!.label}› `, fg: ROLE.ground, bg: ROLE.key } : key(`‹${c.values[c.i]!.label}› `)])
 
 /** the finder or a confirm over the reader: drawn in the bottom rows, the conversation above */
@@ -709,101 +868,6 @@ function pickerKey(k: string) {
   draw()
 }
 
-/** a key on the open card that only means something there; true when it did */
-function cardKey(k: string): boolean {
-  const a = view(), w = ws
-  switch (mode.kind) {
-    case "crew": case "person": {
-      const name = mode.kind === "person" ? mode.name : crewOf(a)[sel]?.name
-      const b = a.bench.find((x) => x.name === name)
-      if (k === "+") { hire(); return true }
-      if (!b || w === null) return false
-      if (k === "m") {
-        const models = [{ label: `the archetype's (${a.archetypes.find((x) => x.name === b.archetype)?.model ?? "?"})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
-        find(`${b.name.toUpperCase()}'S MODEL`, models.map((m) => ({ segs: [plain(m.label)], text: m.label, run: () => { picker = null; void did(data.retarget(w, b.agent_id, { model: m.value })) } })))
-        return true
-      }
-      if (k === "y") { void did(data.retarget(w, b.agent_id, { ask: b.ask === "allow" ? "ask" : "allow" })); return true }
-      if (k === "-") { confirm = { label: `let ${b.name} go from ${wsName()} (the agent itself stays)`, run: () => did(data.unseat(b.seat_id, b.name)) }; draw(); return true }
-      return false
-    }
-    case "column":
-      if (mode.col === 0 && k === "n") { newTicket(); return true }
-      if (mode.col === 0 && (k === "J" || k === "K")) {
-        const it = boardColumns(a)[0]!.items[sel]
-        if (it?.act.kind === "ticket") { void did(data.ticketReorder(it.act.id, k === "K" ? "up" : "down")).then(() => { sel = Math.max(0, Math.min(sel + (k === "K" ? -1 : 1), rows.length - 1)); draw() }); return true }
-      }
-      return false
-    case "ticket": {
-      const id = mode.id, tk = a.tickets.find((t) => t.id === id)
-      if (!tk) return false
-      if (k === "s") { void did(data.ticketRoute(id)); return true }
-      if (k === "enter" && sel < 4) { void did(data.ticketStart(id)); return true }
-      if (k === "e") { ask(`ticket #${id} title`, (s) => { if (s.trim()) did(data.ticketPatch(id, { title: s.trim() })) }, { text: tk.title }); return true }
-      if (k === "d") { confirm = { label: `delete ticket #${id}`, run: () => { back(); void did(data.ticketDelete(id)) } }; draw(); return true }
-      if (k === "J" || k === "K") { void did(data.ticketReorder(id, k === "K" ? "up" : "down")); return true }
-      if (k === "b") {
-        const others = tickets.filter((t) => t.id !== id && t.status !== "done")
-        find(`#${id} IS BLOCKED BY`, others.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), dim(`  ${t.status}`)], text: `#${t.id} ${t.title}`, run: () => { picker = null; void did(data.ticketBlock(id, t.id)) } })))
-        return true
-      }
-      return false
-    }
-    case "notes": if (k === "n") { newNote(); return true } return false
-    case "calendar": {
-      const s = rows[sel]?.ref as data.Schedule | undefined
-      if (k === "n") { newSchedule(); return true }
-      if (!s) return false
-      if (k === "e") { newSchedule(s); return true }
-      if (k === " ") { void did(data.schedulePatch(s.id, { enabled: !s.enabled })).then(loadCard).then(draw); return true }
-      if (k === "r") { void did(data.scheduleRun(s.id)).then(loadCard).then(draw); return true }
-      if (k === "d") { confirm = { label: `remove "${s.title}" and its runs`, run: () => void did(data.scheduleDelete(s.id)).then(loadCard).then(draw) }; draw(); return true }
-      return false
-    }
-    case "runs": {
-      if (k === "esc") { open({ kind: "calendar" }); return true }
-      if (k === "r") { const id = mode.id; void did(data.scheduleRun(id)).then(loadCard).then(draw); return true }
-      return false
-    }
-    case "run": {
-      const r = board.find((x) => x.id === (mode as { run: number }).run)
-      if (k === "esc") { open({ kind: "runs", id: mode.id }); return true }
-      if (k === "t" && r?.thread_id) { openReader(r.thread_id, false); return true }
-      return false
-    }
-    case "memory": {
-      if (!shelf) return false
-      const h = shelf.habits[sel - 2], f = shelf.pinned[sel - 3 - shelf.habits.length]
-      if (h && (k === "a" || k === "r")) { void did(data.habit(h.id, k === "a" ? "approve" : "reject")).then(loadCard).then(draw); return true }
-      if (f && k === "d") { confirm = { label: `forget "${f.text.slice(0, 50)}"`, run: () => void did(data.forget(f.id)).then(loadCard).then(draw) }; draw(); return true }
-      return false
-    }
-    case "boss": {
-      if (k === "n") {
-        const tpl = ["code", "life", "blank"].map((t) => ({ label: t, value: t }))
-        ask("new workspace — its name", (s, [t]) => { if (s.trim()) did(data.workspaceNew(s.trim(), t as string)) }, { cycles: [{ name: "from", values: tpl, i: 0 }] })
-        return true
-      }
-      if (k === "e") { open({ kind: "card" }); return true }
-      if (k === "d" && w !== null) { confirm = { label: `close ${wsName()} (its threads move to another workspace)`, run: () => void did(data.workspaceDelete(w)) }; draw(); return true }
-      if (k === "+") { hire(); return true }
-      return false
-    }
-    case "card": {
-      if (!card || w === null) return false
-      const ring = (xs: string[], x: string) => xs[(xs.indexOf(x) + 1) % xs.length]!
-      if (k === "t") { void did(data.workspaceEdit(w, { type: ring(["code", "life", "blank"], card.type) })).then(loadCard).then(draw); return true }
-      if (k === "s") { void did(data.workspaceEdit(w, { scope: ring(["project", "machine"], card.scope) })).then(loadCard).then(draw); return true }
-      if (k === "i") { ask("icon", (s) => void did(data.workspaceEdit(w, { icon: s.trim() })).then(loadCard).then(draw), { text: card.icon ?? "" }); return true }
-      if (k === "+") { ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(loadCard).then(draw) }); return true }
-      const repo = card.repos[sel - 2]
-      if (k === "-" && repo) { confirm = { label: `remove ${repo.path} from ${card.name}`, run: () => void did(data.repoRemove(repo.id)).then(loadCard).then(draw) }; draw(); return true }
-      return false
-    }
-  }
-  return false
-}
-
 function onKey(k: string) {
   if (picker) return pickerKey(k)
   if (input) return inputKey(k)
@@ -811,13 +875,15 @@ function onKey(k: string) {
   if (reader) {
     const r = reader.key(k, Math.max(1, (process.stdout.rows ?? 24) - 6))
     if (r === "leave") return closeReader()
-    if (r === "pass") { if (k !== "r" && threadKey(k === "enter" ? "" : k, reader.tid)) return; return }
+    if (r === "pass") return threadActions(reader.tid, true).find((x) => x.key === k)?.run()
     if (r !== "done") void r.then(draw)
     return draw()
   }
-  if (cardKey(k)) return
-  const tid = openThread()
-  if (tid !== null && k !== "enter" && threadKey(k, tid)) return
+  // the card's own actions first: a key there means what its actions pane says
+  const name = k === " " ? "space" : k
+  const own = detail().actions.find((x) => x.key === name)
+  if (own) return own.run()
+  const onActions = actionsFocused()
   switch (k) {
     case "q": case "ctrl-c": return quit()
     case "esc": back(); roomChanged = true; return draw()
@@ -829,14 +895,16 @@ function onKey(k: string) {
       const i = mode.kind === "person" ? crew.findIndex((c) => c.name === (mode as { name: string }).name) : -1
       return open({ kind: "person", name: crew[(i + (k === "tab" ? 1 : -1) + crew.length) % crew.length]!.name })
     }
-    case "j": case "down": snapSel = false; sel = Math.min(sel + 1, rows.length - 1); return draw()
-    case "k": case "up": snapSel = false; sel = Math.max(sel - 1, 0); return draw()
-    case "left": case "right":
-      if (mode.kind === "column") return open({ kind: "column", col: (mode.col + (k === "right" ? 1 : COLS.length - 1)) % COLS.length })
-      return
-    case "enter":
-      if ((mode.kind === "thread" || mode.kind === "person") && tid !== null) return void zoomInto(tid)
-      return rows[sel]?.open?.()
+    case "j": case "down":
+      snapSel = false
+      if (onActions) asel = Math.min(asel + 1, acts.length - 1); else sel = Math.min(sel + 1, rows.length - 1)
+      return draw()
+    case "k": case "up":
+      snapSel = false
+      if (onActions) asel = Math.max(asel - 1, 0); else sel = Math.max(sel - 1, 0)
+      return draw()
+    case "left": if (mode.kind === "column") return open({ kind: "column", col: (mode.col + COLS.length - 1) % COLS.length }); return
+    case "enter": return onActions ? acts[asel]?.run() : rows[sel]?.open?.()
     case "/": case "ctrl-k": return void finder()
     case "i": return inbox()
     case "n": return newThread()
@@ -851,9 +919,10 @@ function onKey(k: string) {
     case "H": return open({ kind: "health" })
     case "b": return open({ kind: "memory" })
     case "W": return open({ kind: "boss" })
-    case "p": room().pet(); return
+    case "p": room().pet(); changed(); return draw()
   }
 }
+
 function onPaste(text: string) {
   if (picker) { picker.q.insert(text); return draw() }
   if (input) { input.ed.insert(text); return draw() }
@@ -869,11 +938,16 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
   if (h) return act(h.act)
   // a click on bare floor clears the slate, as on the desktop
   if (inRoom) { back(true); roomChanged = true; return draw() }
-  const top = g.row + g.rows + 3, i = m.row - top
-  const body = (process.stdout.rows ?? 40) - top
-  const first = Math.max(0, Math.min(sel - Math.floor((body - 1) / 2), rows.length - (body - 1)))
-  const r = rows[first + i]
-  if (i >= 0 && r?.open) { sel = first + i; r.open() }
+  // the pane: a click on an action runs it, on a row opens it
+  const i = m.row - pane.top - 1
+  if (i < 0) return
+  if (m.col > pane.leftW + 1) {
+    const x = acts[pane.afirst + i]
+    if (x) { asel = pane.afirst + i; x.run() }
+    return
+  }
+  const r = rows[pane.first + i]
+  if (r?.open) { sel = pane.first + i; r.open() }
 }
 
 // ── zoomed into a terminal ─────────────────────────────────────────────────────────────────────

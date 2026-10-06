@@ -150,3 +150,5 @@ export const scheduleNew = (ws: number, attrs: ScheduleAttrs) => write("scheduli
 export const schedulePatch = (id: number, attrs: ScheduleAttrs) => send("PATCH", "changing the schedule", `/schedules/${id}`, (j) => `${j.title}${j.enabled ? "" : " (paused)"}`, attrs)
 export const scheduleDelete = (id: number) => send("DELETE", "removing the schedule", `/schedules/${id}`, () => "schedule removed")
 export const scheduleRun = (id: number) => write("running it now", `/schedules/${id}/run`, {}, () => "running it now — its run shows on the board")
+/** clear a coworker's context: its sessions end and its windows close; the next message spawns it fresh */
+export const clearContext = (ws: number, agent: number, name: string) => write(`clearing ${name}`, `/workspaces/${ws}/coworkers/${agent}/clear`, {}, () => `${name} starts fresh next time they're needed`)

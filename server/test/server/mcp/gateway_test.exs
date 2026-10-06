@@ -419,6 +419,19 @@ defmodule Server.MCP.GatewayTest do
       assert is_list(office["calendar"]["#{ws.id}"])
     end
 
+    test "a seated coworker's context is cleared: their live sessions end; a stranger is a 404" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder"})
+      {:ok, th} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
+      {:ok, s} = Server.Staff.start_session(%{agent_id: seat.agent_id, thread_id: th.id})
+
+      assert {200, %{"cleared" => "daneri"}} =
+               post_json("/api/workspaces/#{ws.id}/coworkers/#{seat.agent_id}/clear", %{})
+
+      assert Server.Repo.get!(Server.Session, s.id).ended_at
+      assert {404, _} = post_json("/api/workspaces/#{ws.id}/coworkers/999999/clear", %{})
+    end
+
     test "habits are approved or rejected; a thread moves between its workspace's projects" do
       {:ok, h} = Server.Dossier.propose_habit(%{text: "gate first", proposed_by: "hronir"})
       {200, %{"state" => "approved"}} = post_json("/api/habits/#{h.id}/approve", %{})
