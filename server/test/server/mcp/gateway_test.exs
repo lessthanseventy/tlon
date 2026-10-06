@@ -355,7 +355,7 @@ defmodule Server.MCP.GatewayTest do
     test "the room's reads answer for a workspace, 404 for none" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
 
-      for read <- ~w(activity triage memory tickets) do
+      for read <- ~w(activity triage memory tickets workspace) do
         assert {200, _} = get_json("/api/office/#{read}/#{ws.id}")
         assert {404, _} = get_json("/api/office/#{read}/999999")
       end

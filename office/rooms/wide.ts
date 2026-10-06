@@ -63,6 +63,8 @@ type Layout = ReturnType<ReturnType<typeof layoutFor>>
 const TOWER_X = 78, PERCH_TOP = { x: 83, y: 52 }, PERCH_MID = { x: 83, y: 69 }
 const CAT_NAP = { x: 50, y: 128 }, CAT_DESK = { x: 37, y: 75 }, LITTER = { x: 7, y: 98 }, PLAY = { x: 70, y: 132 }
 const YARN = { x: 76, y: 130 }, MOUSE = { x: 24, y: 134 }
+// your in-tray, on a side table left of your desk
+const TRAY = { x: 4, y: 62 }
 
 /** the plan, and the furniture's footprints (for the route test): every rectangle no feet may enter */
 export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x: number; y: number; w: number; h: number }[] } {
@@ -143,6 +145,8 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         { x: w - 14, y: 100, w: 14, h: 56 }, // the kitchen counter
         { x: F0 + 8, y: EXEC_Y, w: CREW_W, h: 32 }, // the crew board
         { x: F1 - 40, y: 150, w: 14, h: 24 }, // the filing cabinet
+        { x: F1 - 60, y: 146, w: 12, h: 28 }, // the server rack
+        { x: TRAY.x, y: TRAY.y, w: 16, h: 14 }, // the in-tray's table
         { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
       ]
       for (const d of l.desks) out.push({ x: d.x, y: d.y + 2, w: d.w, h: 29 })
@@ -272,6 +276,8 @@ export class WideRoom extends Sim<Layout> {
     for (let i = 0; i < 7; i++) for (const [dx, dy, w] of [[1, 0, 1], [0, 1, 3], [1, 2, 1]] as const) px(20 + i * 9 + dx, 124 + dy, w, 1, ROLE.assistant)
     for (const d of desks) if (d.kind === "boss") bossDesk(sc, a, d)
     this.ninasCorner(sc)
+    this.inTray(sc, focus.tray ?? 0)
+    this.beacon(sc, Object.values(a.triage).reduce((n, x) => n + x, 0))
     sc.item(170, () => blit(BIG_PLANT, 2, 159, { l: ROLE.live, o: ROLE.structure }))
 
     // ── the floor: the crew board, the manager's and the lead's desks, two tables of four ──
@@ -292,6 +298,7 @@ export class WideRoom extends Sim<Layout> {
       px(cx + 2, 167, 9, 1, ROLE.prose) // a folder left sticking out of the bottom drawer
     })
     sc.hits.push({ x: F1 - 40, y: 150, w: 14, h: 24, tip: "the filing cabinet: finished tickets and closed threads", act: { kind: "archive" } })
+    this.rack(sc, a, F1 - 60)
 
     // ── the meeting room: glass, a round table, its chairs ──
     sc.item(BAND, () => {
@@ -540,6 +547,50 @@ export class WideRoom extends Sim<Layout> {
     hand((now.getHours() % 12 + now.getMinutes() / 60) / 12, 4, ROLE.fieldInk)
     hand(now.getMinutes() / 60, 6, ROLE.structure)
     sc.text(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, cx, 36, ROLE.prose, 14)
+  }
+
+  /** the in-tray on its side table: a sheet for each thing you haven't read (six at most), the top one lit */
+  private inTray(sc: Scene, unread: number) {
+    const { x, y } = TRAY, px = sc.px.bind(sc)
+    sc.item(y + 14, () => {
+      px(x, y + 6, 16, 2, ROLE.structure); px(x + 1, y + 8, 2, 6, ROLE.structure); px(x + 13, y + 8, 2, 6, ROLE.structure)
+      px(x + 2, y + 2, 12, 4, ROLE.inactive); px(x + 3, y + 3, 10, 3, ROLE.edge)
+      const sheets = Math.min(6, unread)
+      for (let i = 0; i < sheets; i++) px(x + 3 + (i % 2), y + 4 - i, 10, 1, i === sheets - 1 ? ROLE.attention : ROLE.prose)
+      if (unread) sc.text(`${unread} new`, x + 8, y - 4, ROLE.attention, 9)
+    })
+    sc.hits.push({ x, y: y - 6, w: 16, h: 20, tip: `the in-tray: what just happened${unread ? ` — ${unread} new` : ""}`, act: { kind: "tray" } })
+  }
+
+  /** the beacon over your door: dark while nothing is stuck, turning red while something is */
+  private beacon(sc: Scene, stuck: number) {
+    const x = OFF_W - 4, y = OFF_DOOR - 16, f = sc.f, px = sc.px.bind(sc)
+    sc.item(BAND + 1, () => {
+      px(x, y + 5, 9, 2, ROLE.inactive)
+      const on = stuck > 0 && f % 4 < 2
+      px(x + 1, y, 7, 5, stuck ? (on ? ROLE.alarm : tint(ROLE.alarm, ROLE.ground, 0.5)) : ROLE.raised)
+      px(x + 3, y + 1, 3, 1, stuck ? ROLE.prose : ROLE.inactive)
+      if (on) for (const [dx, dy] of [[-3, 1], [10, 1], [-2, -2], [9, -2]] as const) px(x + dx, y + dy, 2, 1, ROLE.alarm)
+    })
+    if (stuck) sc.overhead.push(() => sc.text(`${stuck} stuck`, x + 4, y - 4, ROLE.alarm, 9))
+    sc.hits.push({ x: x - 3, y: y - 8, w: 15, h: 15, tip: stuck ? `the beacon: ${stuck} stuck — blockers, failed checks, threads nobody leads` : "the beacon: nothing is stuck", act: { kind: "beacon" } })
+  }
+
+  /** the server rack: its lights blink green while the service is well, red while it needs a look */
+  private rack(sc: Scene, a: Agents, x: number) {
+    const f = sc.f, px = sc.px.bind(sc), warn = a.health?.state === "warn"
+    sc.item(174, () => {
+      px(x, 146, 12, 28, ROLE.structure); px(x + 1, 147, 10, 26, ROLE.edge)
+      for (let u = 0; u < 6; u++) {
+        const y = 149 + u * 4
+        px(x + 2, y, 8, 3, ROLE.inactive)
+        const lit = (u * 7 + f) % 5 !== 0
+        px(x + 3, y + 1, 1, 1, warn && u < 2 ? (f % 2 ? ROLE.alarm : ROLE.raised) : lit ? ROLE.live : ROLE.raised)
+        px(x + 5, y + 1, 1, 1, (u + f) % 3 ? ROLE.key : ROLE.raised)
+      }
+    })
+    const tip = !a.health ? "the server rack" : warn ? `the server rack: needs a look — ${a.health.problems.join("; ")}` : "the server rack: all green"
+    sc.hits.push({ x, y: 146, w: 12, h: 28, tip, act: { kind: "rack" } })
   }
 
   /** Nina's corner: the tower by the glass, the litter box, the yarn (rolling while she bats it), a mouse */

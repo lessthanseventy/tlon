@@ -9,7 +9,8 @@ import { ARROW, BUBBLE, CAT, CAT_NAME, figure, GLYPH, paints, shirtOf, type Dir 
 import type { Agents } from "./types"
 
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
-export type Focus = { picked: number | null; armed: number | null; person: string | null }
+/** what the surface has open, and `tray`: how much of the in-tray you have not read */
+export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number }
 /** something with a footprint: drawn in order of `base`, its feet's row, so nearer covers farther */
 export type Item = { base: number; draw: () => void }
 

@@ -35,9 +35,13 @@ export type Agents = {
   models: ModelChoice[]
   notes: Note[]
   visits: Visit[]
+  /** each workspace's count of stuck things (blockers, failed checks, unled threads), by id */
+  triage: Record<string, number>
+  /** the service's health: `warn` with the problems named */
+  health: { state: "ok" | "warn"; problems: string[] } | null
   note?: string
 }
-/** a thread for a close look: its last messages, and what its worker's pane shows now */
-export type ThreadView = { messages: { id: number; author: string; body: string; at: string; kind: string }[]; peek: string | null; window: string | null }
+/** a thread for a close look: a page of its messages (`more`: older ones remain), and what its worker's pane shows now */
+export type ThreadView = { messages: { id: number; author: string; body: string; at: string; kind: string }[]; more?: boolean; peek: string | null; window: string | null }
 
-export const EMPTY: Agents = { ok: false, roster: [], threads: [], counts: {}, awaiting: 0, bench: [], projects: [], tickets: [], workspaces: [], archetypes: [], models: [], notes: [], visits: [] }
+export const EMPTY: Agents = { ok: false, roster: [], threads: [], counts: {}, awaiting: 0, bench: [], projects: [], tickets: [], workspaces: [], archetypes: [], models: [], notes: [], visits: [], triage: {}, health: null }

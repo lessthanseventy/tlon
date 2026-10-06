@@ -18,6 +18,10 @@ linked window at a time, Ctrl-] back to the room).
   wall with the whiteboard, notes, calendar, windows, clock, TV).
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
+  `main.ts` is the room, its detail pane's cards and the finder (`/`); `reader.ts` a thread
+  full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
+  finder's matcher. It is where the operator works now that the console is gone: every verb the
+  console had is a key here (the footer of each card lists its own).
 
 ## Law
 

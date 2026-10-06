@@ -40,6 +40,17 @@ describe("the wide room", () => {
     })
   }
 
+  test("the in-tray, the beacon and the rack say what they hold, and open their cards", () => {
+    const tips = (a: Agents, tray: number) => new Map(new WideRoom(560).render(a, { ...focus, tray }, measure).hits.map((h) => [h.act.kind, h.tip]))
+    const quiet = tips(viewOf({ ...office(1), triage: { "1": 0 }, health: { state: "ok", problems: [] } }, 1), 0)
+    expect([quiet.get("tray"), quiet.get("beacon"), quiet.get("rack")]).toEqual(["the in-tray: what just happened", "the beacon: nothing is stuck", "the server rack: all green"])
+    const busy = tips(viewOf({ ...office(1), triage: { "1": 3, "2": 9 }, health: { state: "warn", problems: ["disk 95% full"] } }, 1), 4)
+    expect(busy.get("tray")).toContain("4 new")
+    // the beacon counts this workspace's stuck things, never another's
+    expect(busy.get("beacon")).toContain("3 stuck")
+    expect(busy.get("rack")).toContain("disk 95% full")
+  })
+
   test("a full office of ten seats everyone, each at their own place", () => {
     const room = new WideRoom(560), a = viewOf(office(8), 1)
     for (let i = 0; i < 400; i++) room.step(a)
