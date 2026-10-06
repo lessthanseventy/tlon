@@ -107,29 +107,47 @@ export const ARROW = ["vvvvv", ".vvv.", "..v.."]
 // a note on the board: a squiggle in its author's colour, one of these by its id
 export const SCRIBBLES = [["k.kk.k.kk", ".k..k.k..", "kk.k.kk.k"], ["kk.k.kk.k", "k.k..k.k.", ".kk.kk.kk"], [".k.kk.k.k", "kk.k..kk.", "k..kk.k.k"]]
 
-// your cat, drawn facing right (mirrored for left): k fur, e its yellow eyes, t the tail
+// your cat, drawn facing right (mirrored for left): k fur, e her yellow eyes, c an eye shut, t the
+// tail, w the tail wrapped round her, p pink (nose, tongue), g and j the gems of her collar (she is a
+// princess; they sparkle)
+const CAT_SIT = ["........k...k", "........kk.kk", "........kkkkk", "........kekek", "........kkpkk", "......kkgjgk.", ".....kkkkkkk.", "....kkkkkkkk.", "....kkkkkkkk.", "...kkkkk.k.k."]
+const tail = (rows: string[], t: Record<number, string>) => rows.map((r, i) => (t[i] ? [...r].map((ch, j) => ((t[i]![j] ?? ".") !== "." ? t[i]![j]! : ch)).join("") : r))
 export const CAT = {
-  sit: [["......k.k", "......kkk", "......kek", ".....kkk.", "....kkkk.", "t..kkkkk.", "tkkkkkkk."],
-        ["......k.k", "......kkk", "......kek", "t....kkk.", ".t..kkkk.", "...kkkkk.", "..kkkkkk."]],
-  walk: [["t......k.k", ".t.....kkk", "..kkkkkkek", "..kkkkkkk.", "..k.k..k.k"],
-         ["t......k.k", ".t.....kkk", "..kkkkkkek", "..kkkkkkk.", "...k.k.k.."]],
-  // curled up: ears, the closed eye (c), the tail wrapped round its front (w)
-  sleep: [["..k.k....", "..kkk.kk.", ".kckkkkkk", "kkkkkkkkk", ".kwwwwwk."]],
+  // the tail flicks; a frame with her eyes shut is the blink
+  sit: [{ 6: "t....", 7: ".t...", 8: "..t..", 9: "..tt." }, { 6: "..t..", 7: "..t..", 8: "..t..", 9: "..tt." }, { 6: "....t", 7: "...t.", 8: "..t..", 9: "..tt." }].map((t) => tail(CAT_SIT, t)),
+  blink: [tail(CAT_SIT, { 6: "t....", 7: ".t...", 8: "..t..", 9: "..tt." }).map((r) => r.replaceAll("e", "c"))],
+  // a paw up at her mouth, then the tongue
+  groom: [["........k...k", "........kk.kk", "........kkkkk", "........kckck", "........kkpkk", "......kkgjgkk", ".....kkkkkk.k", "....kkkkkk...", "....kkkkkkkk.", "...kkkkk...k."],
+          ["........k...k", "........kk.kk", "........kkkkk", "........kckck", "........kkkpk", "......kkgjgpk", ".....kkkkkk.k", "....kkkkkk...", "....kkkkkkkk.", "...kkkkk...k."]],
+  walk: [["..........k.k", "t.........kkk", ".t........kek", "..kkkkkkkgkkp", "..kkkkkkkjkk.", "..kkkkkkkkk..", "..k.k....k.k.", ".k...k..k...k"],
+         ["..........k.k", ".t........kkk", "t.........kek", "..kkkkkkkgkkp", "..kkkkkkkjkk.", "..kkkkkkkkk..", "...kk....kk..", "...k.k...k.k."],
+         ["..........k.k", "t.........kkk", ".t........kek", "..kkkkkkkgkkp", "..kkkkkkkjkk.", "..kkkkkkkkk..", "..k.k....k.k.", "..k..k....k.k"],
+         ["..........k.k", ".t........kkk", "t.........kek", "..kkkkkkkgkkp", "..kkkkkkkjkk.", "..kkkkkkkkk..", "...kk....kk..", "..k..k...kk.."]],
+  // curled up, breathing
+  sleep: [[".............", "..k.k........", ".kkkk..kkkk..", "kckkkkkkkkkk.", "kkkkkkkkkkkkk", ".kwwwwwwwwwk."],
+          ["..k.k........", ".kkkk.kkkkk..", "kkkkkkkkkkkk.", "kckkkkkkkkkkk", "kkkkkkkkkkkkk", ".kwwwwwwwwwk."]],
+  // up from a nap: tail high, front paws out long, a yawn
+  stretch: [["t............", ".t...........", "..kkkk...k.k.", "..kkkkkk.kkk.", "..k..kkkgkck.", "..k...kkjkpk.", "..k....kkkk..", "..k..kkkkkkkk"]],
   // batting the yarn: a paw out, then back
-  play: [["......k.k.", "......kkk.", "......kek.", ".....kkkkk", "....kkkk..", "t..kkkkk..", "tkkkkkkk.."],
-         ["......k.k.", "......kkk.", "......kek.", ".....kkk..", "....kkkk..", "t..kkkkk..", "tkkkkkkk.."]],
+  play: [["........k...k", "........kk.kk", "........kkkkk", "........kekek", "........kkpkk", "......kkgjgkk", ".....kkkkkk.k", "....kkkkkkk..", "t...kkkkkkkk.", ".ttkkkkk.k.k."],
+         ["........k...k", "........kk.kk", "........kkkkk", "........kekek", "........kkpkk", "......kkgjgk.", ".....kkkkkkkk", "....kkkkkkk.k", "t...kkkkkkkk.", ".ttkkkkk.k.k."]],
 }
 export const CAT_NAME = "Nina"
 
-// Argos, the office dog (Borges' "The Immortal"), facing right: body (k), ears (e), nose (n), tail (t)
+// Argos, the office dog (Borges' "The Immortal"), facing right: coat (k), ears (e), eye (i), nose
+// (n), tongue (p), tail (t), an eye shut (c)
 export const DOG = {
-  walk: [[".......ee..", "t.....kkkkn", ".tkkkkkkk..", "..kkkkkkk..", "..k.k..k.k."],
-         [".......ee..", ".t....kkkkn", "t.kkkkkkk..", "..kkkkkkk..", "...kk...kk."]],
-  // sitting up, tail going
-  sit: [[".....ee.", "....kkkn", "....kkk.", "t..kkkk.", ".tkkkkk.", "..kkkkk.", "..k.kk.."],
-        [".....ee.", "....kkkn", "....kkk.", "...kkkk.", "ttkkkkk.", "..kkkkk.", "..k.kk.."]],
-  // flat out asleep
-  sleep: [["....ee....", "..kkkkkkk.", ".kkkkkkkkt", "kkkkkkkk.."]],
+  // sitting up, tongue out, tail going
+  sit: [[".........ee.....", "........eekkk...", "........ekkikk..", "........kkkkkkkn", "........kkkkkpp.", ".......kkkkk..p.", "......kkkkkk....", "t....kkkkkkk....", ".t..kkkkkkkk....", "..tkkkkk.k.k...."],
+        [".........ee.....", "........eekkk...", "........ekkikk..", "........kkkkkkkn", "........kkkkkpp.", "t......kkkkk..p.", ".t....kkkkkk....", "..t..kkkkkkk....", "....kkkkkkkk....", "...kkkkk.k.k...."]],
+  walk: [["...........ee...", "t.........eekkk.", ".t........ekkikk", "..kkkkkkkkkkkkkn", "..kkkkkkkkkkkpp.", "..kkkkkkkkkk....", "..kk.......kk...", ".k..k.....k..k..", "k....k...k....k."],
+         ["...........ee...", ".tt.......eekkk.", "...t......ekkikk", "..kkkkkkkkkkkkkn", "..kkkkkkkkkkkpp.", "..kkkkkkkkkk....", "...kk.....kk....", "...k.k....k.k...", "...k..k...k..k.."]],
+  // flat out asleep, breathing, an ear twitching
+  sleep: [["................", "...........ee...", "..........ekkkk.", "t.kkkkkkkkkckkkn", ".tkkkkkkkkkkkkk.", "kkkkkkkkkkkkkk.."],
+          ["................", "............e...", "..kkkkkkk.eekkk.", "t.kkkkkkkkkckkkn", ".tkkkkkkkkkkkkk.", "kkkkkkkkkkkkkk.."]],
+  // rolled over for a belly rub, paws going
+  belly: [["..k...k...k..k..", "..k..k.....kk...", ".kkkkkkkkkkkkke.", "tkkkkkkkkkkkkcke", ".kkkkkkkkkkkkkkn", "..kkkkkkkkkkkpp."],
+          ["...k.k....kk....", "..k...k...k..k..", ".kkkkkkkkkkkkke.", "tkkkkkkkkkkkkcke", ".kkkkkkkkkkkkkkn", "..kkkkkkkkkkkpp."]],
 }
 export const DOG_NAME = "Argos"
 

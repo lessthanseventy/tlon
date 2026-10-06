@@ -11,7 +11,9 @@ linked window at a time, Ctrl-] back to the room).
   whiteboard's columns), sprites and looks (`sprites.ts`), the colour roles (`palette.ts`), the
   1x canvas and the **frame** a room hands a surface (`canvas.ts`), tlon's own bitmap font in two cuts (`font.ts`), the
   office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`),
-  drawing people and Nina into a `Scene` (`draw.ts`), the furniture every room has (`furniture.ts`),
+  what Nina says (`voices.ts`; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
+  drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
+  making a fuss of a pet), the furniture every room has (`furniture.ts`),
   the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen).
 - `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
   terminal); `wide.ts`, the TUI's full-width room (office, floor, meeting room, lounge, a long back

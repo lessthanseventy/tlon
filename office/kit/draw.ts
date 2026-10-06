@@ -4,7 +4,7 @@
 import { Canvas, balloonLines, type Frame, type Hit, type Ink } from "./canvas"
 import { tipOf } from "./crew"
 import { ROLE, tint } from "./palette"
-import type { Actor, Cat } from "./sim"
+import { FUSS, type Actor, type Cat, type Fussing } from "./sim"
 import { ACTIVITY, ARROW, BUBBLE, CAT, CAT_NAME, figure, GLYPH, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
 import type { Agents } from "./types"
 
@@ -137,14 +137,30 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
 /** Nina, with a light rim so a black cat reads on any floor; `over` is the depth to draw her at when she is up on furniture */
 export function drawCat(sc: Scene, c: Cat, over: number | null) {
   const f = sc.f
-  const frames = CAT[c.mode === "zoom" ? "walk" : c.mode], rows0 = frames[c.mode === "walk" || c.mode === "zoom" ? (c.x + c.y) % 2 : c.mode === "play" ? c.yarn % 2 : c.mode === "sit" && f % 5 === 0 ? 1 : 0]!
+  const grooming = c.mode === "sit" && (f + c.until) % 30 < 6
+  const [frames, i] = sc.tick < c.stretch ? [CAT.stretch, 0]
+    : c.mode === "zoom" ? [CAT.walk, sc.tick % 4]
+      : c.mode === "walk" ? [CAT.walk, Math.floor(sc.tick / 2) % 4]
+        : c.mode === "sleep" ? [CAT.sleep, f % 4 < 2 ? 0 : 1]
+          : c.mode === "play" ? [CAT.play, c.yarn % 2]
+            : grooming ? [CAT.groom, f % 2]
+              : f % 13 === 0 ? [CAT.blink, 0] : [CAT.sit, [0, 1, 2, 1][Math.floor(f / 2) % 4]!]
+  const rows0 = frames[i]!
   const rows = c.face < 0 ? rows0.map((r) => [...r].reverse().join("")) : rows0
   const w = rows[0]!.length, h = rows.length, x = c.x - Math.floor(w / 2), y = c.y - h
   // the zoomies go over everything: she is on the couch, the TV, your desk
   sc.item(c.mode === "zoom" ? 999 : over ?? c.y, () => {
-    const r = tint(ROLE.prose, ROLE.ground, 0.55), rim = { k: r, e: r, t: r, c: r, w: r }
+    const r = tint(ROLE.prose, ROLE.ground, 0.55), rim = { k: r, e: r, t: r, c: r, w: r, p: r, g: r, j: r }
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, rim)
-    sc.blit(rows, x, y, { k: ROLE.fieldInk, t: ROLE.fieldInk, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge })
+    // the collar's gems trade colours as they catch the light
+    const [g, j] = f % 2 ? [ROLE.key, ROLE.body] : [ROLE.body, ROLE.key]
+    sc.blit(rows, x, y, { k: ROLE.fieldInk, t: ROLE.fieldInk, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge, p: ROLE.attention, g, j })
+    const gem = rows.findIndex((row) => row.includes("g"))
+    if (gem >= 0 && f % 9 === 0) {
+      // a twinkle off the collar
+      const gx = x + rows[gem]!.indexOf("g"), gy = y + gem - 3
+      sc.px(gx, gy - 1, 1, 3, ROLE.prose); sc.px(gx - 1, gy, 3, 1, ROLE.prose)
+    }
     if (c.mode === "sleep" && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
     if (c.mode === "zoom") {
       // speed lines behind her, and now and then a "!"
@@ -152,11 +168,30 @@ export function drawCat(sc: Scene, c: Cat, over: number | null) {
       for (const dy of [1, 3]) sc.px(back + ((f + dy) % 2), y + dy, 4, 1, ROLE.inactive)
       if (f % 7 < 2) sc.text("!", c.x, y - 2, ROLE.attention, 11)
     }
-    if (sc.tick < c.purr) {
-      sc.text(`${CAT_NAME}: prr`, c.x, y - 2, ROLE.attention, 11)
-      // your hand, stroking her back
-      if (c.byYou) sc.px(x + 3 + (f % 2) * 2, y + 2, 3, 1, ROLE.prose)
-    }
+    // your hand, stroking her back
+    if (sc.tick < c.purr && c.byYou) sc.px(x + 3 + (f % 2) * 2, y + 3, 3, 1, ROLE.prose)
+    if (c.fuss) drawFuss(sc, c.fuss, { x, y, w, h })
     sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${CAT_NAME} - click to pet her`, act: { kind: "cat" } })
   })
+  if (c.said && sc.tick >= c.saidFrom && sc.tick < c.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(c.said), cx: c.x, top: y })
+}
+
+/**
+ * A worker making a fuss of a pet (`box`, its sprite): a hand on its head (a pat), a hand going at
+ * its ear (a scratch), a hand circling its belly, or a treat tossed in an arc from where they are —
+ * and hearts rising off it.
+ */
+export function drawFuss(sc: Scene, fuss: Fussing, box: { x: number; y: number; w: number; h: number }) {
+  const left = sc.tick < fuss.until ? fuss.until - sc.tick : 0, t = FUSS - left, f = sc.f
+  const head = { x: box.x + box.w - 5, y: box.y }
+  if (fuss.kind === "pat") sc.px(head.x - 1, head.y - 2 + (f % 2), 4, 2, ROLE.prose)
+  else if (fuss.kind === "scratch") sc.px(head.x + 2 + (sc.tick % 2), head.y + 2, 2, 2, ROLE.prose)
+  else if (fuss.kind === "belly") sc.px(box.x + 4 + (f % 3) * 2, box.y + 1, 3, 2, ROLE.prose)
+  else if (t < FUSS / 3) {
+    // the treat, in flight: from their hand up and over to its mouth
+    const k = t / (FUSS / 3), fx = fuss.from.x, fy = fuss.from.y - 12
+    const tx = Math.round(fx + (head.x - fx) * k), ty = Math.round(fy + (head.y + 3 - fy) * k - Math.sin(k * Math.PI) * 10)
+    sc.px(tx, ty, 2, 2, ROLE.structure)
+  } else if (f % 2) sc.px(head.x + 4, head.y + 5, 1, 1, ROLE.structure) // crumbs
+  if (t > 4 && f % 3 !== 2) sc.blit(GLYPH["♥"]!, box.x + (t % 2 ? 1 : box.w - 5), box.y - 6 - (t % 8), { k: ROLE.attention })
 }
