@@ -48,7 +48,9 @@ end
 if config_env() != :test do
   config :server,
     memory_pass: System.get_env("TLON_MEMORY_PASS") in ~w(1 true yes),
-    start_banter: System.get_env("TLON_BANTER") not in ~w(0 false no)
+    start_banter: System.get_env("TLON_BANTER") not in ~w(0 false no),
+    # the weather outside the office's windows (Server.Office.Weather, wttr.in): on unless TLON_WEATHER=0
+    start_weather: System.get_env("TLON_WEATHER") not in ~w(0 false no)
 end
 
 # The operator's handle — who the human IS on this machine's channel. Local
