@@ -76,3 +76,20 @@ describe("the date", () => {
     expect(at(9, 14)).not.toBe(at(2, 14))
   }))
 })
+
+describe("the weather", () => {
+  const draw = (weather: Agents["weather"], hour: number) => {
+    const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), weather }, 1)
+    room.step(a)
+    return room.render(a, { picked: null, armed: null, person: null }, (s) => s.length * 2, new Date(2026, 2, 6, hour, 0))
+  }
+  test("the windows show the weather outside, and say it when clicked", () => chance(0.999, () => {
+    const kinds = ["clear", "partly", "cloudy", "fog", "rain", "snow", "storm"] as const
+    const frames = kinds.map((kind) => draw({ kind, temp_c: 9, desc: "Light rain " }, 11).rgba.join())
+    expect(new Set(frames).size).toBe(kinds.length)
+    expect(draw({ kind: "rain", temp_c: 9, desc: "Light rain" }, 11).hits.find((h) => h.act.kind === "weather")?.tip).toBe("outside: light rain, 9°C")
+  }))
+  test("no word on the weather draws a fair sky, and no forecast to click", () => chance(0.999, () => {
+    expect(draw(null, 11).hits.some((h) => h.act.kind === "weather")).toBe(false)
+  }))
+})

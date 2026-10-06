@@ -18,6 +18,7 @@ export type Act =
   | { kind: "calendar" }
   | { kind: "tv" }
   | { kind: "arcade" }
+  | { kind: "weather" }
   | { kind: "terminal"; tid: number }
   | { kind: "archive" }
   | { kind: "dog" }

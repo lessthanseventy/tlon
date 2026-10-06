@@ -396,7 +396,7 @@ export class WideRoom extends Sim<Layout> {
     this.calendar(sc, 4, now, Object.values(a.calendar).flat())
     this.whiteboard(sc, a, measure, 62, F1 - 64)
     this.corkboard(sc, a, F1 - 58)
-    this.windows(sc, M0 + 4, L0 + 30, now)
+    this.windows(sc, M0 + 4, L0 + 30, now, a.weather ?? null)
     this.season(sc, now)
     this.tv(sc, L0 + 36)
     this.clock(sc, W - 24, now)
@@ -775,22 +775,47 @@ export class WideRoom extends Sim<Layout> {
     }
   }
 
-  private windows(sc: Scene, x0: number, x1: number, now: Date) {
-    const h = now.getHours() + now.getMinutes() / 60
+  /**
+   * Windows on the sky as it is outside: night with its stars, dawn and dusk, day — and the weather
+   * over it (`Server.Office.Weather`): clouds, fog, rain, snow, a storm's lightning. On a clear day
+   * the sun comes in, slanting with the hour. A click says what it's like out there.
+   */
+  private windows(sc: Scene, x0: number, x1: number, now: Date, weather: Agents["weather"]) {
+    const h = now.getHours() + now.getMinutes() / 60, tick = sc.tick
     const sky = h < 6 || h >= 20.5 ? "night" : h < 7.5 || h >= 18.5 ? "dusk" : "day"
+    const kind = weather?.kind ?? "partly", grey = kind === "cloudy" || kind === "rain" || kind === "snow" || kind === "storm"
+    const flash = kind === "storm" && tick % 97 < 2
     for (let x = x0; x + 30 <= x1; x += 36) {
       sc.px(x, 6, 30, 30, ROLE.inactive)
-      if (sky === "night") {
+      if (flash) sc.px(x + 1, 7, 28, 28, ROLE.prose)
+      else if (sky === "night") {
         sc.px(x + 1, 7, 28, 28, ROLE.ground)
-        for (let i = 0; i < 5; i++) sc.px(x + 3 + ((i * 11 + x) % 24), 9 + ((i * 7) % 20), 1, 1, ROLE.prose)
+        if (!grey && kind !== "fog") for (let i = 0; i < 5; i++) sc.px(x + 3 + ((i * 11 + x) % 24), 9 + ((i * 7) % 20), 1, 1, ROLE.prose)
       } else if (sky === "dusk") {
         sc.px(x + 1, 7, 28, 10, tint(ROLE.assistant, ROLE.ground, 0.6)); sc.px(x + 1, 17, 28, 10, ROLE.attention); sc.px(x + 1, 27, 28, 8, ROLE.body)
-      } else {
-        sc.px(x + 1, 7, 28, 28, tint(ROLE.key, ROLE.prose, 0.3))
-        sc.px(x + 5 + ((x >> 3) % 12), 12, 8, 2, ROLE.prose); sc.px(x + 7 + ((x >> 3) % 12), 11, 4, 1, ROLE.prose)
+      } else sc.px(x + 1, 7, 28, 28, grey ? tint(ROLE.prose, ROLE.ground, kind === "storm" ? 0.38 : 0.62) : tint(ROLE.key, ROLE.prose, 0.3))
+      const cloud = grey ? tint(ROLE.prose, ROLE.ground, sky === "day" ? (kind === "storm" ? 0.55 : 0.85) : 0.35) : ROLE.prose
+      if (kind === "partly" || grey) for (let k = 0; k < (grey ? 3 : 1); k++) {
+        const cx = x + 1 + ((x >> 3) * 5 + k * 9 + (tick >> 5)) % 22
+        sc.px(cx, 10 + k * 5, 8, 2, cloud); sc.px(cx + 2, 9 + k * 5, 4, 1, cloud)
+      }
+      if (kind === "fog") sc.cv.glow(x + 1, 7, 28, 28, ROLE.prose, sky === "day" ? 0.5 : 0.25)
+      if (kind === "rain" || kind === "storm") for (let i = 0; i < 9; i++) {
+        const ry = 7 + ((tick * 2 + i * 17 + ((i * i * 5 + x) % 11)) % 26), rx = x + 2 + ((i * 7 + x) % 25) + (ry >> 4)
+        sc.px(rx, ry, 1, 2, tint(ROLE.key, ROLE.prose, 0.4))
+      }
+      if (kind === "snow") for (let i = 0; i < 8; i++) {
+        const fy = 7 + ((tick / 2 + i * 11) % 27), fx = x + 2 + ((i * 9 + x) % 25) + Math.round(Math.sin((tick + i * 20) / 12) * 1.5)
+        sc.px(fx, Math.floor(fy), 1, 1, ROLE.prose)
       }
       sc.px(x + 14, 6, 2, 30, ROLE.inactive); sc.px(x, 20, 30, 1, ROLE.inactive)
       sc.px(x - 1, 36, 32, 2, ROLE.structure)
+      // sun through the glass on a fair day, falling across the floor: east in the morning, west after noon
+      if (sky === "day" && (kind === "clear" || kind === "partly")) {
+        const slant = Math.max(-1, Math.min(1, (13 - h) / 5)), x2 = x
+        sc.item(BAND + 1, () => { for (let j = 0; j < 40; j++) sc.cv.glow(x2 + 3 + Math.round(j * slant * 0.7), BAND + 2 + j, 24, 1, ROLE.body, kind === "clear" ? 0.13 : 0.08) })
+      }
+      if (weather) sc.hits.push({ x, y: 6, w: 30, h: 30, tip: `outside: ${weather.desc.toLowerCase()}${weather.temp_c === null ? "" : `, ${weather.temp_c}°C`}`, act: { kind: "weather" } })
     }
   }
 

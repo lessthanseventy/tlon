@@ -41,6 +41,8 @@ export type Agents = {
   health: { state: "ok" | "warn"; problems: string[] } | null
   /** the days this month each workspace has something scheduled, by id (the wall calendar) */
   calendar: Record<string, number[]>
+  /** the weather outside, as the room draws it (`Server.Office.Weather`); null when unknown */
+  weather?: { kind: "clear" | "partly" | "cloudy" | "fog" | "rain" | "snow" | "storm"; temp_c: number | null; desc: string } | null
   note?: string
 }
 /** a thread for a close look: a page of its messages (`more`: older ones remain), and what its worker's pane shows now */
