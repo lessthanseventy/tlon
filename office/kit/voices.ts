@@ -1,6 +1,7 @@
-// What Nina says, by occasion. She is a princess and a diva — a cat of some renown, in her own
-// opinion, in a jewelled collar — and the office exists to admire her. Argos' lines are his room's
-// (rooms/wide.ts): he lives only there.
+// What Nina says, by occasion, when the server's model has written her nothing fresh
+// (`Server.Office.Pets`, through `Sim.hear`). She is a princess and a diva — a cat of some renown, in
+// her own opinion, in a jewelled collar — and the office exists to admire her. Argos' lines are his
+// room's (rooms/wide.ts): he lives only there.
 
 export const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)]!
 

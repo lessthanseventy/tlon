@@ -148,6 +148,7 @@ async function loadFeed() {
 const heard = new Set<string>()
 async function chatter() {
   if (ws === null) return
+  room().hear(await data.pets(ws))
   for (const b of await data.banter(ws)) {
     const k = `${b.at} ${b.agent}`
     if (heard.has(k)) continue

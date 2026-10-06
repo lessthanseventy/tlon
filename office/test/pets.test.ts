@@ -73,4 +73,14 @@ describe("the pets talk", () => {
     expect(pets.cat.fuss).toMatchObject({ kind: "pat" })
     expect(pets.cat.said).toBeTruthy()
   })
+
+  test("the server's lines come first, none said twice while another is unsaid, the coworker named", () => chance(0.999, () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), pets = room as unknown as Pets
+    room.hear({ Nina: { pet: ["Adore me, {name}.", "Kneel."] } })
+    room.step(a)
+    room.pet()
+    const first = pets.cat.said
+    room.pet()
+    expect(new Set([first, pets.cat.said])).toEqual(new Set(["Adore me, you.", "Kneel."]))
+  }))
 })
