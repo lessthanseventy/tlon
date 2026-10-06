@@ -147,6 +147,25 @@ defmodule Server.Arbiter.TmuxTest do
     assert [%{author: "tlon", body: "⏸ parked" <> _}] = Channel.thread_messages(t)
   end
 
+  test "under systemd, starting a workspace's tmux runs it in a scope of its own — so a restart can't take it; other commands don't",
+       %{ws: ws} do
+    pid = self()
+    Application.put_env(:server, :tmux_scope, true)
+    on_exit(fn -> Application.put_env(:server, :tmux_scope, false) end)
+
+    runner = fn cmd, args, _opts ->
+      send(pid, {:ran, cmd, args})
+      {"", 0}
+    end
+
+    Tmux.run(ws.id, ["new-session", "-d", "-s", "w#{ws.id}"], runner: runner)
+    assert_received {:ran, "systemd-run", ["--user", "--scope", "--quiet", "--collect", _ | rest]}
+    assert ["tmux", "-L", _, "new-session" | _] = rest
+
+    Tmux.run(ws.id, ["list-windows"], runner: runner)
+    assert_received {:ran, "tmux", ["-L", _, "list-windows"]}
+  end
+
   test "spawn: a bad exports block or unknown thread is a typed error", %{} do
     Application.put_env(:server, :tmux_cmd, record(%{}))
     assert {:error, :no_identity_in_exports} = Arbiter.Tmux.spawn("nothing here")

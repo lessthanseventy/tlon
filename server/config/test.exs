@@ -1,12 +1,13 @@
 import Config
 
-# Oban never runs jobs on its own in test — a test performs them.
-config :server, Oban, testing: :manual
-
 # The suite's own database on the local Postgres, created fresh per run by test_helper.
 # TLON_TEST_DATABASE names another when two suites run at once (a second session, a worktree).
+
+# Oban never runs jobs on its own in test — a test performs them.
 # No commit waits for the disk (synchronous_commit off): a test db needs none to outlive a crash,
 # and the wait was most of the suite's time — every test commits dozens of rows.
+config :server, Oban, testing: :manual
+
 config :server, Server.Repo,
   database: System.get_env("TLON_TEST_DATABASE") || "tlon_test",
   pool_size: 5,
@@ -16,28 +17,25 @@ config :server, Server.Repo,
 # The web endpoint is started by the suite that tests it (no listener); fixed secrets.
 config :server, Server.Web.Endpoint,
   secret_key_base: String.duplicate("t", 64),
+  # Bootstrap (seed + repair) is driven explicitly by its own suite; an app-boot
+  # run against the harness-owned repo would race the per-test TestDB.clean!.
+  # The suite is headless: recall's query embedding points at a port nothing listens on, so it
+  # degrades to keyword relevance instantly instead of reaching a real ollama.
   server: false
 
-# Bootstrap (seed + repair) is driven explicitly by its own suite; an app-boot
-# run against the harness-owned repo would race the per-test TestDB.clean!.
 config :server, bootstrap: false
-
-# The suite is headless: recall's query embedding points at a port nothing listens on, so it
-# degrades to keyword relevance instantly instead of reaching a real ollama.
 config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
 
 # Test transcripts are written moments before they are imported; nothing here is a live session.
-config :server, import_live_window_s: 0
-
 # Imported sessions are titled by a model CLI in prod; here there is none, so the first-line fallback
 # answers unless a test points this at a stub.
+config :server, import_live_window_s: 0
 config :server, import_title_cmd: "/nonexistent/tlon-test-title-cli"
 
 # The machine seed (Server.Seed.machine/0) is the box's own file; tests that want one pass a path.
-config :server, machine_seed_path: "/nonexistent/tlon-test-seed.exs"
-
 # Point the operator settings file away from the real ~/.config so the box's own overrides can
 # never leak into test assertions; tests that want one pass an explicit path.
+config :server, machine_seed_path: "/nonexistent/tlon-test-seed.exs"
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
 
 # The consult mirror is off in tests: the pure maybe_mirror tests call it directly, and the
@@ -49,11 +47,12 @@ config :server, start_consult_mirror: false
 # never the real one.
 config :server, start_repo: false
 
+# tmux runs as is in the suite; the systemd scope (Server.Tmux.run) is tested by switching it on
 # A fixed signing key for the stateless MCP tokens, so tests mint/resolve deterministically with
-# no secret-file IO (Server.MCP.Secret reads this before touching disk).
-config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b"
-
 # Where workline artifacts are written and COMMITTED. Unset it falls back to the cwd — which is
+config :server, tmux_scope: false
+# no secret-file IO (Server.MCP.Secret reads this before touching disk).
 # inside the ficciones checkout, so a test that approves a gate committed intent.md into the real
 # repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
+config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b"
 config :server, workline_root: "/nonexistent/tlon-test-workline"

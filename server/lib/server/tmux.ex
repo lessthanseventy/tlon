@@ -34,8 +34,24 @@ defmodule Server.Tmux do
 
   def run(id, args, opts) do
     runner = Keyword.get_lazy(opts, :runner, fn -> Application.get_env(:server, :tmux_cmd, &System.cmd/3) end)
-    runner.("tmux", argv(id, args), stderr_to_stdout: true)
+
+    if "new-session" in args and scoped?(),
+      do: runner.("systemd-run", scope_args(id) ++ ["tmux" | argv(id, args)], stderr_to_stdout: true),
+      else: runner.("tmux", argv(id, args), stderr_to_stdout: true)
   end
+
+  # A command that may start a workspace's tmux server runs it in a systemd scope of its own when
+  # the service runs under systemd: in the service's cgroup, every restart (a deploy) would take
+  # every coworker down with it, mid-turn. Off systemd (a Mac, a dev shell) tmux runs as is.
+  defp scoped? do
+    case Application.get_env(:server, :tmux_scope, :auto) do
+      :auto -> System.get_env("INVOCATION_ID") != nil and System.find_executable("systemd-run") != nil
+      on? -> on?
+    end
+  end
+
+  defp scope_args(id),
+    do: ["--user", "--scope", "--quiet", "--collect", "--description=tlon coworkers, workspace #{id}"]
 
   @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}"
 
