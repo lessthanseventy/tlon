@@ -6,7 +6,7 @@
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, needsYou, peopleOf, tipOf } from "../kit/crew"
-import { drawActors, drawCat, drawFuss, Scene, type Focus } from "../kit/draw"
+import { drawActors, drawCat, drawFuss, drawParty, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
 import { FUSS, Sim, keyOf, type Actor, type Fussing, type Plan, type Pt, type Spot } from "../kit/sim"
@@ -30,7 +30,7 @@ function zones(w: number) {
   const extra = Math.max(0, w - WIDE_MIN_W)
   const MW = MEET_MIN + 2 * Math.floor(extra * 0.1), LW = LOUNGE_MIN + Math.floor(extra * 0.25)
   const L0 = w - LW, M0 = L0 - 6 - MW, F0 = OFF_W + 6, F1 = M0 - 6
-  return { L0, M0, MW, Mc: M0 + MW / 2, F0, F1 }
+  return { L0, M0, MW, Mc: M0 + MW / 2, F0, F1, W: w }
 }
 type Zones = ReturnType<typeof zones>
 /** a zone's lane: the column it walks down to the hallway */
@@ -48,6 +48,13 @@ function corner(z: Zones) {
     table: { x: z.M0 + 8, y: 146, w: 26, h: 12 },
     cabinets: [z.Mc + 8, z.Mc + 24].map((x) => ({ x, y: 128, w: 12, h: 20 })),
     tank: { x: z.F0 + 136, y: 100, w: 30, h: 24 },
+    // the lounge: the snack machine and a bookshelf against its back wall, an armchair by the shelf;
+    // a foosball table and a dartboard down by the hallway
+    vending: { x: z.L0 + 18, y: 46, w: 12, h: 24 },
+    shelf: { x: z.L0 + 96, y: 46, w: 22, h: 20 },
+    foos: { x: z.L0 + 30, y: 166, w: 26, h: 12 },
+    // left of the EXIT sign, whose label sits over the room's last 26 px
+    darts: { x: z.W - 40, y: 164, w: 8, h: 18 },
   }
 }
 
@@ -85,7 +92,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
   const z = zones(w)
   const { L0, M0, MW, Mc, F0, F1 } = z
   const inOffice = (x: number) => x <= OFF_W
-  const { table, cabinets, tank } = corner(z)
+  const { table, cabinets, tank, vending, shelf, foos, darts } = corner(z)
   const at = (x: number, y: number, aisle: number, face: Spot["face"], kind: Spot["kind"], partner?: Pt): Spot => ({ x, y, aisle, pose: "stand", face, kind, ...(partner ? { with: partner } : {}) })
   const ends = [{ x: table.x - 4, y: table.y + 6 }, { x: table.x + table.w + 4, y: table.y + 6 }]
   return {
@@ -120,6 +127,11 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       at(L0 + 22, 184, 184, "left", "plant"), at(18, 168, 168, "left", "plant"),
       at(L0 + 52, 124, 124, "right", "chat", { x: L0 + 66, y: 124 }), at(L0 + 66, 124, 124, "left", "chat", { x: L0 + 52, y: 124 }),
       at(L0 + 90, 118, 118, "right", "pet"), at(L0 + 40, 106, 106, "right", "pet"),
+      at(vending.x + 6, 80, 94, "up", "vending"),
+      at(foos.x - 4, foos.y + 6, 184, "right", "foosball", { x: foos.x + foos.w + 4, y: foos.y + 6 }),
+      at(foos.x + foos.w + 4, foos.y + 6, 184, "left", "foosball", { x: foos.x - 4, y: foos.y + 6 }),
+      at(darts.x - 16, darts.y + 12, 184, "right", "darts"),
+      { x: shelf.x + 8, y: 84, aisle: 94, pose: "sit", face: "down", kind: "read" },
     ],
     // the meeting room's table, two laptops a side: where the warm but unbusy sit, on call
     oncall: [Mc - 22, Mc + 22].flatMap((x) => [81, 95].map((y): Spot => ({ x, y, aisle: 116, pose: "sit", face: x < Mc ? "right" : "left", kind: "laptop" }))),
@@ -174,7 +186,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
         { x: F1 - 40, y: 150, w: 14, h: 24 }, // the filing cabinet
         { x: F1 - 60, y: 146, w: 12, h: 28 }, // the server rack
         { x: TRAY.x, y: TRAY.y, w: 16, h: 14 }, // the in-tray's table
-        table, ...cabinets, tank, // the games corner, the aquarium
+        table, ...cabinets, tank, vending, shelf, foos, darts, // the pastimes' furniture
         { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
       ]
       for (const d of l.desks) out.push({ x: d.x, y: d.y + 2, w: d.w, h: 29 })
@@ -200,6 +212,8 @@ const ARGOS = {
   office: ["Coming! Coming coming coming."],
   sit: ["Sitting. Very good sitting. Epic, even."],
   bed: ["An epic nap, in twenty-four books."],
+  shipped: ["{name} SHIPPED IT! Sing, O Muse!", "A homecoming worthy of Odysseus, {name}!"],
+  rally: ["BALL. Ball ball ball. BALL.", "Left! Right! Left! I can't take it!"],
   fuss: {
     pat: ["Yes! The head! The good head!", "Thank you, {name}! Thank you thank you!"],
     scratch: ["Ohh, the ear. The leg's going. Can't stop it.", "There! THERE! O, {name}, there!"],
@@ -222,6 +236,8 @@ export class WideRoom extends Sim<Layout> {
   private readonly tvSet = new Tv(48, 28)
   private readonly dog: Dog
   private antic: Antic | null = null
+  /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
+  private watered = new Map<number, number>()
   constructor(readonly width: number) {
     super(widePlan(width))
     this.z = zones(width)
@@ -238,7 +254,7 @@ export class WideRoom extends Sim<Layout> {
   /** someone starts a tool, finishes a turn, or joins your queue: Nina's opinion, then Argos' */
   protected override noticed(actor: Actor, what: string) {
     super.noticed(actor, what)
-    if ((what === "test" || what === "done" || what === "queue") && this.quiet(this.dog.saidUntil) && Math.random() < 0.3) this.dogSay(this.argos(what, actor.seat.agent))
+    if ((what === "test" || what === "done" || what === "queue" || what === "shipped") && this.quiet(this.dog.saidUntil) && Math.random() < (what === "shipped" ? 0.7 : 0.3)) this.dogSay(this.argos(what, actor.seat.agent), what === "shipped" ? 20 : 0)
   }
 
   /** his bed by the lounge's couch, his water bowl by the kitchen */
@@ -311,7 +327,10 @@ export class WideRoom extends Sim<Layout> {
     const r = Math.random(), working = [...this.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && !a.path.length)
     const host = working.length && r < 0.35 ? pick(working) : null
     const spot = (x: number, y: number, aisle = y): Spot => ({ x, y, aisle, pose: "stand", face: "left", kind: "roam" })
+    const { table: t } = corner(this.z)
+    const watch = !host && this.at("pingpong").length === 2 && r > 0.85
     const goal: Spot = host ? this.plan.visit(host)
+      : watch ? { x: t.x + t.w / 2, y: t.y + t.h + 6, aisle: t.y + t.h + 12, pose: "stand", face: "left", kind: "roam" }
       : r < 0.5 ? this.dogBed() : r < 0.6 ? this.dogBowl()
         : r < 0.72 ? spot(40 + Math.floor(Math.random() * 40), 140) // your office, where Nina is
           : r < 0.82 ? spot(this.z.Mc - 4, 110, 116)
@@ -329,6 +348,13 @@ export class WideRoom extends Sim<Layout> {
   override step(a: Agents): boolean {
     const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
     if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
+    for (const x of this.at("plant")) this.watered.set(x.spot.x, (this.watered.get(x.spot.x) ?? 0) + 1)
+    // at the ping-pong table for a rally, his head goes with the ball, and now and then he has to say so
+    const { table: t } = corner(this.z), d = this.dog, rally = this.at("pingpong").length === 2
+    if (rally && !d.path.length && Math.abs(d.x - (t.x + t.w / 2)) < 3 && Math.abs(d.y - (t.y + t.h + 6)) < 3) {
+      d.face = this.tick % 16 < 8 ? 1 : -1
+      if (this.quiet(d.saidUntil) && Math.random() < 0.01) this.dogSay(this.argos("rally"))
+    }
     if (this.tick % 2) return moved
     for (const x of this.actors.values()) {
       if (x.spot.kind !== "couch" || x.moving || Math.random() >= 1 / 375) continue
@@ -441,6 +467,8 @@ export class WideRoom extends Sim<Layout> {
     drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : null)
     this.drawDog(sc)
     this.drawAntics(sc)
+    const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
+    if (shipper) drawParty(sc, shipper.x, shipper.y, this.party!.until - this.tick)
 
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
     return sc.finish()
@@ -598,6 +626,50 @@ export class WideRoom extends Sim<Layout> {
       })
       for (let k = 0; k < 2; k++) px(tank.x + 6 + k * 14, tank.y + 14 - ((tick + k * 9) % 12), 1, 1, ROLE.prose)
     })
+    const { vending: v, shelf, foos, darts } = corner(this.z)
+    sc.item(v.y + v.h, () => {
+      // the snack machine: rows of snacks behind the glass, a can thunking down when someone buys
+      px(v.x, v.y, v.w, v.h, ROLE.alarm); px(v.x + 1, v.y + 2, 7, 16, tint(ROLE.prose, ROLE.ground, 0.3))
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) px(v.x + 2 + k * 2, v.y + 3 + r * 4, 1, 2, [ROLE.body, ROLE.key, ROLE.live, ROLE.attention][(r + k) % 4]!)
+      px(v.x + 9, v.y + 4, 2, 6, ROLE.edge); px(v.x + 9, v.y + 12, 2, 2, f % 2 ? ROLE.live : ROLE.edge)
+      px(v.x + 1, v.y + 20, 10, 3, ROLE.edge)
+      if (this.at("vending").length && tick % 40 < 8) px(v.x + 4, v.y + 18 + Math.min(3, (tick % 40) >> 1), 2, 2, ROLE.key)
+    })
+    sc.item(shelf.y + shelf.h, () => {
+      // the bookshelf: three shelves of spines
+      px(shelf.x, shelf.y, shelf.w, shelf.h, ROLE.structure)
+      for (let r = 0; r < 3; r++) for (let k = 0; k < 9; k++) if ((k * 7 + r * 3) % 10 !== 0) px(shelf.x + 2 + k * 2, shelf.y + 2 + r * 6, 1, 5 - ((k + r) % 2), [ROLE.alarm, ROLE.key, ROLE.body, ROLE.live, ROLE.assistant][(k + r * 2) % 5]!)
+    })
+    // the armchair in front of it, drawn just behind whoever sits in it
+    sc.item(83, () => { px(shelf.x + 1, 72, 14, 12, ROLE.planner); px(shelf.x + 3, 74, 10, 8, tint(ROLE.planner, ROLE.ground, 0.6)); px(shelf.x + 1, 84, 2, 2, ROLE.structure); px(shelf.x + 13, 84, 2, 2, ROLE.structure) })
+    sc.item(foos.y + foos.h, () => {
+      // foosball: the rods slide while a pair plays, the ball rattling between them
+      px(foos.x, foos.y, foos.w, foos.h - 4, ROLE.structure); px(foos.x + 2, foos.y + 1, foos.w - 4, 6, tint(ROLE.live, ROLE.ground, 0.45))
+      px(foos.x + 3, foos.y + 8, 2, 4, ROLE.structure); px(foos.x + foos.w - 5, foos.y + 8, 2, 4, ROLE.structure)
+      const on = this.at("foosball").length === 2
+      for (let r = 0; r < 4; r++) {
+        const rx = foos.x + 5 + r * 5, dy = on ? ((tick + r * 3) % 4) - 2 : 0
+        px(rx, foos.y - 1, 1, 9, ROLE.inactive)
+        for (const my of [2, 5]) px(rx, foos.y + my + dy, 1, 1, r % 2 ? ROLE.alarm : ROLE.key)
+      }
+      if (on) px(foos.x + 3 + ((tick * 3) % (foos.w - 6)), foos.y + 3 + (tick % 2), 1, 1, ROLE.prose)
+    })
+    sc.item(darts.y + darts.h, () => {
+      // the dartboard on its stand, its rings, the darts that have landed; a thrower's dart in the air
+      const bx = darts.x + 4, by = darts.y + 4
+      px(darts.x + 3, darts.y + 8, 2, darts.h - 8, ROLE.structure)
+      px(bx - 4, by - 4, 8, 8, ROLE.fieldInk); px(bx - 3, by - 3, 6, 6, ROLE.alarm); px(bx - 2, by - 2, 4, 4, ROLE.prose); px(bx - 1, by - 1, 2, 2, ROLE.alarm)
+      const thrower = this.at("darts")[0], round = tick % 90
+      if (thrower) {
+        for (let k = 0; k < Math.min(3, Math.floor(round / 25)); k++) px(bx - 2 + ((k * 5 + (tick >> 7)) % 4), by - 2 + ((k * 3) % 4), 1, 1, ROLE.body)
+        if (round % 25 < 6) px(thrower.x + 6 + Math.round(((round % 25) / 6) * (bx - thrower.x - 6)), by - 1, 2, 1, ROLE.body)
+      }
+    })
+    // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's (at 18)
+    for (const [wx, plant] of [[this.z.L0 + 22, { x: this.z.L0 + 4, y: 175 }], [18, { x: 2, y: 159 }]] as const) {
+      const n = Math.min(3, Math.floor((this.watered.get(wx) ?? 0) / 300))
+      if (n) sc.item(plant.y + 12, () => { for (let k = 0; k < n; k++) sc.blit([".p.", "pyp", ".p."], plant.x + [1, 6, 3][k]!, plant.y - 1 + [0, 1, 3][k]!, { p: ROLE.attention, y: ROLE.body }) })
+    }
   }
 
   /** the dust cloud of a scuffle */
