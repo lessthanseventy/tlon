@@ -85,12 +85,21 @@ defmodule Server.Switchboard do
         # Claim delivery ATOMICALLY, then wake — so the drain and the live handler
         # racing over the same message at startup can never both poke a paid pane.
         # Whoever flips delivered_at from NULL is the only one who wakes.
-        if claim([message.id]) > 0 do
-          waken(sessions, prompt(message))
-          {:delivered, message}
-        else
-          {:already_delivered, message}
-        end
+        if claim([message.id]) > 0, do: wake_claimed(message, sessions), else: {:already_delivered, message}
+    end
+  end
+
+  defp wake_claimed(message, sessions) do
+    case waken(sessions, prompt(message)) do
+      # every pane it was for has closed (a restart took the windows): not a delivery — those
+      # sessions ended, it is pending again, and whoever it addresses is spawned fresh
+      [] ->
+        unclaim([message.id])
+        maybe_spawn_absent(message)
+        {:pending, message}
+
+      _reached ->
+        {:delivered, message}
     end
   end
 
@@ -111,14 +120,20 @@ defmodule Server.Switchboard do
     reached = Enum.flat_map(undelivered, &claim_reached/1)
 
     # Coalesce per recipient thread, keeping the COUNT §3b wants ("you have 50 unread") — one
-    # nudge per recipient, never one per message.
+    # nudge per recipient, never one per message. A thread whose pane has closed gets its
+    # messages back as undelivered (its sessions ended), for the next drain to spawn someone.
     reached
-    |> Enum.group_by(& &1.thread_id)
-    |> Enum.each(fn {_thread_id, [session | _] = sessions} ->
-      poke(session, "you have #{length(sessions)} unread message(s) on your threads")
-    end)
+    |> Enum.group_by(fn {session, _id} -> session.thread_id end)
+    |> Enum.each(fn {_thread_id, [{session, _} | _] = pairs} ->
+      case poke(session, "you have #{length(pairs)} unread message(s) on your threads") do
+        :gone ->
+          pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq_by(& &1.id) |> Enum.each(&end_gone/1)
+          pairs |> Enum.map(&elem(&1, 1)) |> unclaim()
 
-    reached |> Enum.map(& &1.id) |> Enum.uniq() |> Staff.touch_sessions(now())
+        _ ->
+          pairs |> Enum.map(&elem(&1, 0).id) |> Enum.uniq() |> Staff.touch_sessions(now())
+      end
+    end)
   end
 
   # For drain: bump the author's warmth, then return the recipient sessions this call
@@ -134,7 +149,7 @@ defmodule Server.Switchboard do
         []
 
       sessions ->
-        if claim([message.id]) > 0, do: sessions, else: []
+        if claim([message.id]) > 0, do: Enum.map(sessions, &{&1, message.id}), else: []
     end
   end
 
@@ -321,14 +336,24 @@ defmodule Server.Switchboard do
   end
 
   # Poke each distinct recipient thread once, and bump the woken sessions warm — being woken is
-  # a turn, so it refreshes their warmth.
+  # a turn, so it refreshes their warmth. A session whose pane has closed is ended instead. The
+  # sessions it reached.
   defp waken(sessions, prompt) do
-    sessions
-    |> Enum.uniq_by(& &1.thread_id)
-    |> Enum.each(&poke(&1, prompt))
+    {gone, reached} =
+      sessions
+      |> Enum.uniq_by(& &1.thread_id)
+      |> Enum.split_with(&(poke(&1, prompt) == :gone))
 
-    Staff.touch_sessions(Enum.map(sessions, & &1.id), now())
+    Enum.each(gone, &end_gone/1)
+    Staff.touch_sessions(Enum.map(reached, & &1.id), now())
+    reached
   end
+
+  # a live session whose pane has closed is over: ended, so the next message spawns its coworker
+  defp end_gone(%Session{} = session), do: Staff.end_session(session)
+  defp end_gone(_session), do: :ok
+
+  defp unclaim(ids), do: Repo.update_all(from(m in Message, where: m.id in ^ids), set: [delivered_at: nil])
 
   # Actuate one wake through the configured arbiter. No backend wired (`:no_arbiter`) is the
   # always-up service's normal state — the row is claimed and the display-owning node's arbiter
@@ -341,6 +366,9 @@ defmodule Server.Switchboard do
 
       {:error, :no_arbiter} ->
         Logger.debug("switchboard: no arbiter on this node — #{inspect(session.pane_ref)} not poked")
+
+      {:error, :no_window} ->
+        :gone
 
       {:error, reason} ->
         Logger.warning("arbiter failed to wake #{inspect(session.pane_ref)}: #{inspect(reason)}")

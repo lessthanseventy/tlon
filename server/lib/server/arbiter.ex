@@ -59,14 +59,19 @@ defmodule Server.Arbiter.Test do
   @moduledoc """
   A capturing arbiter for tests: sends `{:woke, pane_ref, prompt}` / `{:spawned, exports}` to the
   pid in `config :server, :test_pid`, so a test asserts exactly what the switchboard decided —
-  without a real terminal.
+  without a real terminal. A pane listed in `config :server, :test_gone_panes` is gone: its wake
+  answers `{:error, :no_window}`, as a real terminal's does once its window has closed.
   """
   @behaviour Server.Arbiter
 
   @impl true
   def wake(session, prompt) do
-    if pid = Application.get_env(:server, :test_pid), do: send(pid, {:woke, session.pane_ref, prompt})
-    :ok
+    if session.pane_ref in Application.get_env(:server, :test_gone_panes, []) do
+      {:error, :no_window}
+    else
+      if pid = Application.get_env(:server, :test_pid), do: send(pid, {:woke, session.pane_ref, prompt})
+      :ok
+    end
   end
 
   @impl true

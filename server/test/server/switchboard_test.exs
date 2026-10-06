@@ -394,6 +394,35 @@ defmodule Server.SwitchboardTest do
       assert exports =~ ~s(TLON_AUTHOR="Dana")
     end
 
+    test "a warm session whose pane has closed is ended; the message stays pending and its lead is spawned fresh" do
+      %{thread: thread, sandra_session: ss} = staffed_thread()
+      set_last_active(ss, 60)
+      Application.put_env(:server, :test_gone_panes, ["wSandra"])
+      on_exit(fn -> Application.delete_env(:server, :test_gone_panes) end)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "still with me?"})
+      assert {:pending, _} = Switchboard.deliver(m)
+
+      assert Repo.get!(Server.Session, ss.id).ended_at
+      assert_receive {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Sandra")
+    end
+
+    test "the drain gives a closed pane's messages back, so the next drain spawns someone" do
+      %{thread: thread, sandra_session: ss} = staffed_thread()
+      set_last_active(ss, 60)
+      Application.put_env(:server, :test_gone_panes, ["wSandra"])
+      on_exit(fn -> Application.delete_env(:server, :test_gone_panes) end)
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "anyone?"})
+
+      Switchboard.drain()
+      assert Repo.get!(Message, m.id).delivered_at == nil
+      assert Repo.get!(Server.Session, ss.id).ended_at
+
+      Switchboard.drain()
+      assert_receive {:spawned, _}
+    end
+
     test "a closed thread's backlog spawns nobody" do
       {:ok, thread} = Channel.open_thread(%{title: "done with"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
