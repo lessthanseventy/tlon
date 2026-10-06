@@ -62,6 +62,7 @@ defmodule Server.Office.Pets do
       [
         {"done", "{name} finishes a turn of work"},
         {"queue", "{name} is now waiting on the boss"},
+        {"shipped", "{name}'s work just shipped — confetti over them, the office cheering"},
         {"nap", "the boss tells her to go and nap"},
         {"play", "the boss tells her to play with her yarn"},
         {"come", "the boss calls her over to their desk"},
@@ -77,6 +78,8 @@ defmodule Server.Office.Pets do
       {"test", "{name} starts running the tests"},
       {"done", "{name} finishes a turn of work"},
       {"queue", "{name} is now waiting on the boss"},
+      {"shipped", "{name}'s work just shipped — confetti over them, the office cheering"},
+      {"rally", "he watches two coworkers play ping-pong, his head going with the ball"},
       {"visit", "he trots over to sit by {name} at their desk"},
       {"walk", "the boss tells him to go for a walk"},
       {"office", "the boss calls him into their office"},

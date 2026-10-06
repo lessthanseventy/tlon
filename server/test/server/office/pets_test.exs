@@ -63,6 +63,7 @@ defmodule Server.Office.PetsTest do
     assert nina =~ ~s(a coworker is "they")
     refute nina =~ ~s("belly":)
     assert Pets.prompt("Argos", ctx) =~ "Homer"
+    assert Pets.prompt("Argos", ctx) =~ ~s("rally") and nina =~ ~s("shipped")
   end
 
   test "a reply keeps only the pet's occasions, as trimmed, short, non-empty lines" do
