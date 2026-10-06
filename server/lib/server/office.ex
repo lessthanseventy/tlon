@@ -158,7 +158,7 @@ defmodule Server.Office do
   # who is mid-turn, by thread: the harnesses' own thinking/idle declarations (Presence.Thinking),
   # so a surface can tell working from a session that is merely warm
   defp thinking do
-    Map.new(Server.Presence.Thinking.thinking_all(), fn {tid, entries} -> {tid, Enum.map(entries, & &1.agent)} end)
+    Server.Presence.Thinking.thinking_all()
   catch
     :exit, _ -> %{}
   end
@@ -171,6 +171,7 @@ defmodule Server.Office do
     Enum.map(rows, fn r ->
       ws = thread_ws[r.thread_id]
       seat = Enum.find(Map.get(benches, ws, []), &(&1.name == r.agent)) || Enum.find(everyone, &(&1.name == r.agent))
+      turn = Enum.find(Map.get(thinking, r.thread_id, []), &(&1.agent == r.agent))
 
       %{
         agent: r.agent,
@@ -180,7 +181,9 @@ defmodule Server.Office do
         workspace_id: ws,
         archetype: seat && seat.archetype,
         lead: !!(seat && seat.lead?),
-        thinking: r.agent in Map.get(thinking, r.thread_id, [])
+        thinking: turn != nil,
+        doing: turn && turn.doing,
+        since: turn && turn.started_at
       }
     end)
   end
@@ -243,7 +246,7 @@ defmodule Server.Office do
         lead: leads[t.id],
         live: live,
         standing: std,
-        thinking: Map.get(thinking, t.id, [])
+        thinking: thinking |> Map.get(t.id, []) |> Enum.map(& &1.agent)
       })
     end)
   end

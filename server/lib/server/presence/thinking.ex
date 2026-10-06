@@ -33,7 +33,14 @@ defmodule Server.Presence.Thinking do
   @doc "Declare `agent` done thinking on `thread_id`. A no-op for an agent that never declared."
   def idle(store \\ __MODULE__, thread_id, agent), do: GenServer.call(store, {:idle, thread_id, agent})
 
-  @doc "Who is thinking on `thread_id`: `[%{agent, started_at}]`, empty when nobody."
+  @doc """
+  Tag `agent`'s declared turn on `thread_id` with what it is doing now (`"edit"`, `"bash"`, …;
+  `nil` = back to plain thinking). Leaves `started_at` alone. A no-op with no turn declared: a
+  harness's fire-and-forget tool hook can land after the turn's idle, and must not reopen it.
+  """
+  def doing(store \\ __MODULE__, thread_id, agent, what), do: GenServer.call(store, {:doing, thread_id, agent, what})
+
+  @doc "Who is thinking on `thread_id`: `[%{agent, started_at, doing}]`, empty when nobody."
   def thinking_for(store \\ __MODULE__, thread_id), do: GenServer.call(store, {:thinking_for, thread_id})
 
   @doc "Everyone thinking, keyed by thread id — a surface's reconcile-on-connect read."
@@ -47,7 +54,7 @@ defmodule Server.Presence.Thinking do
     max = Keyword.get(opts, :max_seconds, Application.get_env(:server, :thinking_max_seconds, @default_max_seconds))
     interval = Keyword.get(opts, :sweep_interval_ms, @sweep_interval_ms)
     Process.send_after(self(), :sweep, interval)
-    {:ok, %{entries: %{}, max_seconds: max, interval: interval}}
+    {:ok, %{entries: %{}, doing: %{}, max_seconds: max, interval: interval}}
   end
 
   @impl true
@@ -65,10 +72,16 @@ defmodule Server.Presence.Thinking do
     {:reply, :ok, next}
   end
 
+  def handle_call({:doing, thread_id, agent, what}, _from, state) do
+    key = {thread_id, agent}
+    next = if Map.has_key?(state.entries, key), do: put_in(state.doing[key], what), else: state
+    {:reply, :ok, next}
+  end
+
   def handle_call({:thinking_for, thread_id}, _from, state) do
     entries =
-      for {{^thread_id, agent}, started_at} <- state.entries do
-        %{agent: agent, started_at: started_at}
+      for {{^thread_id, agent} = key, started_at} <- state.entries do
+        %{agent: agent, started_at: started_at, doing: state.doing[key]}
       end
 
     {:reply, entries, state}
@@ -79,7 +92,10 @@ defmodule Server.Presence.Thinking do
       state.entries
       |> Enum.group_by(fn {{thread_id, _agent}, _at} -> thread_id end)
       |> Map.new(fn {thread_id, entries} ->
-        {thread_id, Enum.map(entries, fn {{_tid, agent}, started_at} -> %{agent: agent, started_at: started_at} end)}
+        {thread_id,
+         Enum.map(entries, fn {{_tid, agent} = key, started_at} ->
+           %{agent: agent, started_at: started_at, doing: state.doing[key]}
+         end)}
       end)
 
     {:reply, all, state}
@@ -113,7 +129,7 @@ defmodule Server.Presence.Thinking do
 
         # the turn ended: queue its memory pass (a no-op unless the pass is on and Oban runs here)
         _ = TurnPass.schedule(thread_id)
-        %{state | entries: entries}
+        %{state | entries: entries, doing: Map.delete(state.doing, {thread_id, agent})}
     end
   end
 

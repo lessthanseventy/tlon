@@ -92,6 +92,7 @@ defmodule Server.MCP.ServerTest do
                "spawn_crew",
                "kill_crew",
                "presence_thinking",
+               "presence_doing",
                "presence_idle",
                "propose_habit",
                "get_brief",
@@ -707,6 +708,20 @@ defmodule Server.MCP.ServerTest do
     assert note["body"] == "leads are managers"
     assert note["scope"] == "thread"
     assert note["scope_id"] == thread.id
+  end
+
+  test "presence_doing tags the declared turn with the tool running, and clears with no what" do
+    {:ok, thread} = Channel.open_thread(%{title: "busy thread"})
+    {:ok, agent} = Staff.register_agent(%{name: "Doer", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    on_exit(fn -> Server.Presence.Thinking.idle(thread.id, "Doer") end)
+
+    call(token, session, 2, "presence_thinking", %{})
+    refute call(token, session, 3, "presence_doing", %{"what" => "edit"})["isError"]
+    assert [%{doing: "edit"}] = Server.Presence.Thinking.thinking_for(thread.id)
+    call(token, session, 4, "presence_doing", %{})
+    assert [%{doing: nil}] = Server.Presence.Thinking.thinking_for(thread.id)
   end
 
   defp handshake(token) do
