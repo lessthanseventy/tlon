@@ -77,7 +77,8 @@ defmodule Server.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      # :inets (httpc) and :ssl ride in the release: the embedder and the weather call out with them
+      extra_applications: [:logger, :inets, :ssl],
       mod: {Server.Application, []}
     ]
   end
