@@ -24,7 +24,8 @@ linked window at a time, Ctrl-] back to the room).
   the windows, the plants, a chat, the pets, a snack machine, foosball, pool, a reading nook. A
   thread that ships throws its lead a party; a finished turn high-fives whoever it passes. The
   notes board also carries the crew's chatter (`CorkNote`, from `Server.Office.Corkboard`), kept
-  apart from the notes they work from; a suggestion there is filed as a ticket only by you.
+  apart from the notes they work from; their suggestions go in the suggestion box beside it, and
+  become tickets only when you file them.
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
   `main.ts` is the room, its detail pane's cards and the finder (`/`); `reader.ts` a thread

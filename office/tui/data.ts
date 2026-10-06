@@ -49,6 +49,12 @@ export async function banter(ws: number): Promise<{ agent: string; line: string;
 export async function corkboard(ws: number): Promise<CorkNote[]> {
   try { const r = await call("GET", `/office/corkboard/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
 }
+/** the suggestion box: the crew's suggestions not yet filed or thrown out */
+export async function suggestions(ws: number): Promise<CorkNote[]> {
+  try { const r = await call("GET", `/office/suggestions/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
+}
+/** take a suggestion out of the box (it was filed, or thrown out) */
+export const dropSuggestion = (ws: number, id: number) => send("DELETE", "clearing the suggestion", `/office/suggestions/${ws}/${id}`, () => "out of the box")
 /** each pet's lines by occasion, written by the server's model (empty where it is off) */
 export async function pets(ws: number): Promise<Record<string, Record<string, string[]>>> {
   try { const r = await call("GET", `/office/pets/${ws}`); return r.status === 200 ? r.json : {} } catch { return {} }
