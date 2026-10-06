@@ -240,14 +240,6 @@ defmodule Server.Channel do
   end
 
   @doc """
-  Every OPEN thread in a workspace as THREAD BLOCKS, any scope. Most-recent-activity first, like
-  `machine_threads/2`.
-  """
-  def workspace_threads(workspace_id, per_thread \\ 20) do
-    thread_blocks(from(t in Thread, where: t.workspace_id == ^workspace_id and t.state == "open"), per_thread)
-  end
-
-  @doc """
   Every CLOSED thread, any workspace, newest activity first (its last message, else its birth) —
   the operator's history (the imported Claude Code conversations among them).
   `%{id, title, workspace_id, project, at}` per row; `project` is the project name or nil. Capped.
@@ -272,16 +264,6 @@ defmodule Server.Channel do
           at: coalesce(l.at, t.created_at)
         }
     )
-  end
-
-  @doc """
-  One thread as a THREAD BLOCK (`%{thread, messages}`, its latest `per_thread` messages), whatever
-  its state — a closed thread opened from history included. nil when no such thread.
-  """
-  def thread_block(thread_id, per_thread \\ 20) do
-    with %Thread{} = thread <- thread(thread_id) do
-      %{thread: thread, messages: recent_messages(thread, per_thread)}
-    end
   end
 
   @doc """
@@ -316,11 +298,6 @@ defmodule Server.Channel do
 
   @doc "A thread by id, or nil — the load path for the cross-thread `close_thread` verb."
   def thread(id), do: Repo.get(Thread, id)
-
-  @doc "Every thread id in a workspace."
-  def workspace_thread_ids(workspace_id) do
-    Repo.all(from t in Thread, where: t.workspace_id == ^workspace_id, select: t.id)
-  end
 
   @doc """
   The message with this id, or nil. The `from_message` hook for stated facts

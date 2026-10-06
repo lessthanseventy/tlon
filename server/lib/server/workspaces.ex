@@ -126,17 +126,6 @@ defmodule Server.Workspaces do
     do: Repo.all(from r in WorkspaceRepo, where: r.workspace_id == ^workspace_id, order_by: [asc: r.sort, asc: r.id])
 
   @doc """
-  The repos of many workspaces at once, as `%{workspace_id => [repo]}` — the whole picker in ONE
-  query. A query per workspace is how a survey over a dozen workspaces gets slow.
-  """
-  @spec repos_by_workspace([integer()]) :: %{integer() => [WorkspaceRepo.t()]}
-  def repos_by_workspace(workspace_ids) do
-    from(r in WorkspaceRepo, where: r.workspace_id in ^workspace_ids, order_by: [asc: r.sort, asc: r.id])
-    |> Repo.all()
-    |> Enum.group_by(& &1.workspace_id)
-  end
-
-  @doc """
   Add a repo to a workspace; it lands at the BOTTOM of the list. `{:ok, repo}` or
   `{:error, changeset}` (a duplicate path in the same workspace).
   """
@@ -225,8 +214,8 @@ defmodule Server.Workspaces do
   def bench(workspace_id), do: workspace_id |> bench_query() |> Repo.all() |> to_bench()
 
   @doc """
-  The benches of many workspaces at once, as `%{workspace_id => [coworker]}` — the whole picker in
-  ONE query, for the same reason `repos_by_workspace/1` exists.
+  The benches of many workspaces at once, as `%{workspace_id => [coworker]}`, in ONE query — the
+  office snapshot reads every workspace each refresh.
   """
   @spec bench_by_workspace([integer()]) :: %{integer() => [Coworker.t()]}
   def bench_by_workspace(workspace_ids) do

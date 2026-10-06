@@ -136,24 +136,6 @@ defmodule Server.Projects do
 
   def read_dirs(_thread), do: []
 
-  @doc """
-  The `~`-expanded path of a workspace's first repo-bearing project (its primary repo).
-  `{:ok, path}` or
-  `{:error, :no_repo}`. Not existence-checked (the caller decides how to degrade).
-  """
-  def repo_for_workspace(workspace_id) when is_integer(workspace_id) do
-    workspace_id
-    |> in_workspace()
-    |> Enum.find_value({:error, :no_repo}, fn project ->
-      case primary_repo_path(project) do
-        {:ok, _} = ok -> ok
-        {:error, _} -> false
-      end
-    end)
-  end
-
-  def repo_for_workspace(_), do: {:error, :no_repo}
-
   # The first repo's `~`-expanded path, or `:no_repo`. Repos are a JSON list of `%{"path" => …}`.
   defp primary_repo_path(%Project{repos: [%{"path" => path} | _]}) when is_binary(path) do
     # a workspace scope glob ("modules/*") is not a checkout; expanded, it rooted worktrees in $HOME
