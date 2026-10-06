@@ -1,12 +1,13 @@
 // The office's life, room-agnostic: who walks where and when — people to their desks when they
-// work, to the lounge when idle, into your queue when a thread waits on you, over to whoever they
+// work (mid-turn), on call at a laptop when their session is up but they are not, to the lounge
+// when idle, into your queue when a thread waits on you, over to whoever they
 // consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { needsYou } from "./crew"
 import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, Seat } from "./types"
 
-export type Kind = Fav | "desk" | "queue" | "roam" | "exit" | "visit" | "note"
+export type Kind = Fav | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "laptop"
 /** a place to be: where to stand, the row you walk along to get there, how you stand once there */
 export type Spot = { x: number; y: number; aisle: number; pose: Pose; face: Dir; kind: Kind }
 export type Pt = { x: number; y: number }
@@ -43,6 +44,8 @@ export type Plan<L extends { people: Seat[] }> = {
   pen: Spot
   /** beside whoever is visited */
   visit(host: Actor): Spot
+  /** where someone whose session is up but who is not mid-turn waits, on call, at a laptop (a room without: the lounge) */
+  oncall?: Spot[]
   /** somewhere to stroll when the lounge is full */
   roam(l: L): Spot
   /** the waypoints from (x, row `from`) to a goal, kept off the furniture */
@@ -187,12 +190,13 @@ export class Sim<L extends { people: Seat[] }> {
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
       else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
       else if (writing.has(actor.seat.agent)) goal = plan.pen
-      else if (actor.seat.warm && home) goal = home
+      else if (actor.seat.thinking && home) goal = home
+      else if (actor.seat.warm && this.plan.oncall?.length) goal = this.oncallGoal(actor, held, l)
       else goal = this.idleGoal(actor, held, l)
       const gk = spotKey(goal)
       if (gk !== actor.spotKey) {
         held.delete(actor.spotKey); held.add(gk)
-        const from = actor.path.length === 0 && actor.spot.kind === "desk" ? actor.spot.aisle : actor.y
+        const from = actor.path.length === 0 && (actor.spot.kind === "desk" || actor.spot.kind === "laptop") ? actor.spot.aisle : actor.y
         actor.path = plan.route(actor.x, from, goal)
         actor.spot = goal; actor.spotKey = gk; actor.pose = "stand"
         actor.until = this.tick + 80 + Math.floor(Math.random() * 120)
@@ -225,6 +229,12 @@ export class Sim<L extends { people: Seat[] }> {
   private find(agent: string): Actor | undefined {
     const all = [...this.actors.values()].filter((x) => x.seat.agent === agent && !x.leaving)
     return all.find((x) => x.spot.kind === "desk") ?? all[0]
+  }
+
+  /** a free laptop seat, kept once taken; every seat taken, the lounge */
+  private oncallGoal(actor: Actor, held: Set<string>, l: L): Spot {
+    if (actor.spot.kind === "laptop") return actor.spot
+    return this.plan.oncall!.find((s) => !held.has(spotKey(s))) ?? this.idleGoal(actor, held, l)
   }
 
   private idleGoal(actor: Actor, held: Set<string>, l: L): Spot {

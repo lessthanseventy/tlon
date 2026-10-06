@@ -32,6 +32,15 @@ defmodule Server.OfficeTest do
       assert Enum.any?(s.archetypes, &(&1.name == "builder" and &1.meta == false))
     end
 
+    test "a thread carries who is mid-turn on it — a declared thinking, not a warm session", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "busy", workspace_id: ws.id})
+      :ok = Server.Presence.Thinking.thinking(t.id, "hronir")
+      on_exit(fn -> Server.Presence.Thinking.idle(t.id, "hronir") end)
+      assert %{thinking: ["hronir"]} = Enum.find(Office.status().threads, &(&1.id == t.id))
+      :ok = Server.Presence.Thinking.idle(t.id, "hronir")
+      assert %{thinking: []} = Enum.find(Office.status().threads, &(&1.id == t.id))
+    end
+
     test "carries each workspace's triage count and the service's health", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "stuck", workspace_id: ws.id})
       {:ok, _} = Server.Dossier.raise_issue(%{thread_id: t.id, summary: "blocked"})

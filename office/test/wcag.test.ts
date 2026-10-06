@@ -15,7 +15,7 @@ function office(): Agents {
     archetypes: [{ name: "surveyor", meta: true, read_only: true, model: "" }, { name: "builder", meta: false, read_only: false, model: "" }, { name: "reviewer", meta: false, read_only: true, model: "" }],
     bench: names.map((name, i) => ({ workspace_id: 1, seat_id: i, agent_id: i + 1, name, archetype: i === 0 ? "surveyor" : i === 2 ? "reviewer" : "builder", lead: i === 1, model: null, ask: null })),
     threads: names.map((name, i) => ({ id: 100 + i, title: `a thread about ${name}`, stage: ["build", "spec", null][i % 3] ?? null, awaiting: i === 3 ? "andrew" : null, workspace_id: 1, lead: name })),
-    roster: names.map((name, i) => ({ agent: name, thread_id: 100 + i, title: `t${i}`, warm: i % 2 === 0, workspace_id: 1 })),
+    roster: names.map((name, i) => ({ agent: name, thread_id: 100 + i, title: `t${i}`, warm: i % 2 === 0, thinking: i % 2 === 0, workspace_id: 1 })),
     tickets: [{ id: 7, workspace_id: 1, project_id: null, title: "a ticket with a long title", priority: "high", routed: true }],
     notes: [{ id: 1, author: "hronir", body: "a note", workspace_id: 1, at: new Date().toISOString() }],
   }

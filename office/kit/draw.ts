@@ -59,13 +59,20 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
     const step = actor.moving ? 1 + (Math.floor(sc.tick / 2) % 2) : 0
     const shut = (f + actor.look.blink) % 13 === 0
     const talking = talk.has(seat.agent)
-    const working = sitting && seat.warm && !talking && actor.spot.face !== "down"
+    const working = sitting && seat.thinking && !talking && actor.spot.face !== "down"
     const seatedFace: Dir = talking || actor.spot.face === "down" ? "down" : actor.spot.face
     const rows = figure(actor.look, seat.archetype, !!seat.lead, false, sitting ? seatedFace : couch ? "up" : actor.face, sitting || couch ? "sit" : "stand", step, shut)
     const top = sitting || couch ? actor.y - 14 : actor.y - 20 + (actor.moving && step === 2 ? -1 : 0)
     const left = actor.x - 6
     sc.item(sitting ? actor.y : actor.y + 0.5, () => {
       sc.blit(rows, left, top, paints(shirtOf(seat.archetype), actor.look))
+      if (sitting && actor.spot.kind === "laptop") {
+        // side-on, on their lap: the base toward them, its lid up on the far side, lit
+        const right = actor.spot.face === "right", lx = right ? actor.x + 2 : actor.x - 7
+        sc.px(lx, actor.y - 4, 6, 1, ROLE.inactive)
+        sc.px(right ? lx + 5 : lx, actor.y - 8, 1, 4, ROLE.inactive)
+        sc.px(right ? lx + 4 : lx + 1, actor.y - 7, 1, 2, ROLE.key)
+      }
       if (working && actor.spot.face === "left") {
         // side-on at a table: a hand reaching for the keys, tapping
         sc.px(left + 1, top + 12 - ((f + actor.y) % 2), 2, 1, ROLE.prose)
@@ -77,7 +84,7 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
       }
     })
     const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null
-    sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : 20, tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
+    sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : 20, tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : actor.spot.kind === "laptop" ? "on call, at a laptop in the meeting room" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
     const said = talk.get(seat.agent)
     if (said?.text) sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: actor.x, top })
     sc.overhead.push(() => {
