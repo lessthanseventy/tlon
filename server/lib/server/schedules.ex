@@ -10,9 +10,9 @@ defmodule Server.Schedules do
   standing thread, when it has one). A firing missed while the service was down fires once on
   its return, not once per missed slot.
 
-  A cron reads the server's local wall clock (there is no tz database here): an expression is
-  matched against local time and the answer turned back to UTC with the offset in force now, so
-  the first firing after a DST change can land an hour off.
+  A cron reads the server's local wall clock: an expression is matched against local time and
+  turned back to UTC through the OS's timezone rules for that very instant (no tz database here),
+  so a 9:00 cron fires at 9:00 on either side of a DST change.
   """
 
   import Ecto.Query
@@ -249,16 +249,52 @@ defmodule Server.Schedules do
   end
 
   # the command in `sh -c`, output merged, nothing on its stdin (a command that reads it ends
-  # rather than waits); one that outlives the timeout is reported as exit 124
+  # rather than waits); one that outlives the timeout is killed with every process it started
+  # (its tree, read off `pgrep -P`) and reported as exit 124
   defp shell(cmd, dir) do
-    task = Task.async(fn -> System.cmd("sh", ["-c", "exec </dev/null\n" <> cmd], cd: dir, stderr_to_stdout: true) end)
-
-    case Task.yield(task, @script_timeout_ms) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {out, code}} -> {code, out}
-      _ -> {124, "timed out after #{div(@script_timeout_ms, 60_000)} minutes"}
-    end
+    args = ["-c", "exec </dev/null\n" <> cmd]
+    port = Port.open({:spawn_executable, "/bin/sh"}, [:binary, :exit_status, :stderr_to_stdout, args: args, cd: dir])
+    {:os_pid, pid} = Port.info(port, :os_pid)
+    timeout = Application.get_env(:server, :schedule_script_timeout_ms, @script_timeout_ms)
+    collect(port, "", System.monotonic_time(:millisecond) + timeout, fn -> kill_tree(pid) end, timeout)
   rescue
     e -> {127, Exception.message(e)}
+  end
+
+  defp collect(port, out, deadline, kill, timeout) do
+    wait = max(0, deadline - System.monotonic_time(:millisecond))
+
+    receive do
+      {^port, {:data, d}} ->
+        collect(port, String.slice(out <> d, -(4 * @output_cap), 4 * @output_cap), deadline, kill, timeout)
+
+      {^port, {:exit_status, code}} ->
+        {code, out}
+    after
+      wait ->
+        kill.()
+        close(port)
+        {124, out <> "\n… timed out after #{div(timeout, 1000)} s"}
+    end
+  end
+
+  # the kill may have closed the port already, and closing a closed port raises
+  defp close(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
+  end
+
+  # every descendant is found before any is killed — a killed parent's children are re-parented away
+  defp kill_tree(pid) do
+    pids = Enum.map([pid | descendants(pid)], &Integer.to_string/1)
+    System.cmd("kill", ["-KILL" | pids], stderr_to_stdout: true)
+  end
+
+  defp descendants(pid) do
+    {out, _} = System.cmd("pgrep", ["-P", Integer.to_string(pid)], stderr_to_stdout: true)
+    kids = for l <- String.split(out, "\n", trim: true), {n, ""} <- [Integer.parse(l)], do: n
+    kids ++ Enum.flat_map(kids, &descendants/1)
   end
 
   defp dated(s), do: "#{s.title} · #{Calendar.strftime(to_local(DateTime.utc_now()), "%b %-d %H:%M")}"
@@ -266,15 +302,29 @@ defmodule Server.Schedules do
   @doc "The server's local wall-clock time now, as a UTC-labelled datetime — whose year and month a calendar shows."
   def local_now, do: to_local(DateTime.utc_now())
 
-  # local wall-clock time, carried as a UTC-labelled datetime (what Expression matches against)
-  defp to_local(%DateTime{} = utc), do: DateTime.add(utc, offset_s())
-  defp after_local(expr, utc), do: expr |> Expression.next_at(to_local(utc)) |> DateTime.add(-offset_s())
-
-  defp offset_s do
-    local = NaiveDateTime.from_erl!(:calendar.local_time())
-    utc = NaiveDateTime.from_erl!(:calendar.universal_time())
-    round(NaiveDateTime.diff(local, utc) / 60) * 60
+  # local wall-clock time, carried as a UTC-labelled datetime (what Expression matches against),
+  # through the OS's own timezone rules for that instant — so a date across a DST change converts
+  # with the offset in force then, not now
+  defp to_local(%DateTime{} = utc) do
+    utc |> DateTime.to_naive() |> NaiveDateTime.to_erl() |> :calendar.universal_time_to_local_time() |> naive_utc()
   end
+
+  defp after_local(expr, utc), do: expr |> Expression.next_at(to_local(utc)) |> from_local(expr)
+
+  # a local slot back to UTC: an hour that happens twice (clocks back) is its first; one that never
+  # happens (clocks forward) is the next slot after it
+  defp from_local(local, expr) do
+    local
+    |> DateTime.to_naive()
+    |> NaiveDateTime.to_erl()
+    |> :calendar.local_time_to_universal_time_dst()
+    |> case do
+      [utc | _] -> naive_utc(utc)
+      [] -> from_local(Expression.next_at(expr, local), expr)
+    end
+  end
+
+  defp naive_utc(erl), do: erl |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
 
   defp operator, do: Application.get_env(:server, :operator, "andrew")
 end

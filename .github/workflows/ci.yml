@@ -22,6 +22,9 @@ env:
 jobs:
   server:
     runs-on: ubuntu-24.04
+    # a zone with DST, so the schedules' clock-change test runs here rather than skips
+    env:
+      TZ: America/Denver
     steps:
       - uses: actions/checkout@v4
       # The runner's own Postgres, over the socket at /run/postgresql with peer auth — the setup
