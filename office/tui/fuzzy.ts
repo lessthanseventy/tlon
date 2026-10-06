@@ -10,10 +10,10 @@ export function score(query: string, text: string): number | null {
     const at = t.indexOf(c, ti)
     if (at < 0) return null
     const start = at === 0 || /[\s/#·:_\-.]/.test(t[at - 1]!)
-    s += 1 + (start ? 8 : 0) + (at === last + 1 ? 5 : 0) - Math.min(3, (at - ti) * 0.1)
+    s += 1 + (start ? 8 : 0) + (at === last + 1 ? 5 : 0) - (last < 0 ? 0 : Math.min(3, (at - ti) * 0.1))
     last = at; ti = at + 1
   }
-  return s - t.length * 0.01
+  return s
 }
 
 /** `items` that match, best first; `textOf` is what each is matched on */

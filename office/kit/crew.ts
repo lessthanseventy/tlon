@@ -20,6 +20,9 @@ export type Act =
   | { kind: "terminal"; tid: number }
   | { kind: "archive" }
   | { kind: "dog" }
+  | { kind: "tray" }
+  | { kind: "beacon" }
+  | { kind: "rack" }
 
 export const needsYou = (t?: Thread) => !!t && (!!t.awaiting || !!t.prompt)
 /** a meta coworker — the one who routes the work and never works a thread */
@@ -51,6 +54,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
     tickets: a.tickets.filter((t) => t.workspace_id === ws), projects: a.projects.filter((p) => p.workspace_id === ws),
     notes: a.notes.filter((n) => n.workspace_id === ws || n.workspace_id === null), visits: a.visits.filter((v) => v.workspace_id === ws),
     awaiting: threads.filter(needsYou).length,
+    triage: ws === null ? {} : { [ws]: a.triage[String(ws)] ?? 0 },
   }
 }
 

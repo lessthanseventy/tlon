@@ -241,6 +241,21 @@ defmodule Server.Office.Room do
     end
   end
 
+  @doc "A workspace's settings, for its config card: type, scope, icon, and its repos in order. nil for none."
+  @spec workspace(integer()) :: map() | nil
+  def workspace(workspace_id) do
+    with %{} = w <- Server.Workspaces.get(workspace_id) do
+      %{
+        id: w.id,
+        name: w.name,
+        type: w.type,
+        scope: w.scope,
+        icon: (w.knobs || %{})["icon"],
+        repos: for(r <- Server.Workspaces.repos(w.id), do: %{id: r.id, path: r.path, remote: r.remote})
+      }
+    end
+  end
+
   @doc "Every closed thread, any workspace, newest first — what the finder searches beside the open ones."
   @spec history() :: [map()]
   def history, do: Enum.map(Channel.closed_threads(), &Map.take(&1, [:id, :title, :workspace_id, :at]))
