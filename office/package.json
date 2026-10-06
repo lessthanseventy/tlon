@@ -1,6 +1,6 @@
 {
   "name": "@tlon/office",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "the office: the pixel-art room over the server — a shared kit (sprites, looks, palette, frame protocol, data views), rooms built from it, and the standalone TUI",
