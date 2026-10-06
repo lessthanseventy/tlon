@@ -15,6 +15,8 @@ export type Actor = {
   seat: Seat; look: Look; x: number; y: number; path: Pt[]
   spot: Spot; spotKey: string; pose: Pose; face: Dir; moving: boolean
   until: number; emote: string | null; emoteUntil: number; leaving: boolean
+  /** the tick their `doing` last changed (a long one makes them sweat); the tick a just-finished turn's stretch ends */
+  doingSince: number; stretch: number
 }
 export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
 /** `zoom`: the tick her zoomies end; `leaps`: the room's leaps she is tearing between */
@@ -57,6 +59,8 @@ export type Plan<L extends { people: Seat[] }> = {
 export const keyOf = (r: Seat) => r.agent
 export const spotKey = (s: Spot) => `${s.kind}:${s.x}:${s.y}`
 const VISIT_MS = 60_000, NOTE_MS = 45_000
+/** ticks a finished worker stretches at the desk before leaving it */
+export const STRETCH = 20
 const LOUNGING = new Set(["couch", "cooler", "coffee", "roam"])
 
 export class Sim<L extends { people: Seat[] }> {
@@ -189,9 +193,14 @@ export class Sim<L extends { people: Seat[] }> {
     for (const r of l.people) {
       const k = keyOf(r)
       const actor = this.actors.get(k)
-      if (actor) { actor.seat = r; actor.leaving = false; continue }
+      if (actor) {
+        if ((r.doing ?? null) !== (actor.seat.doing ?? null)) actor.doingSince = this.tick
+        // a turn just ended at the desk: a good stretch before getting up
+        if (actor.seat.thinking && !r.thinking && actor.spot.kind === "desk" && !actor.moving) actor.stretch = this.tick + STRETCH
+        actor.seat = r; actor.leaving = false; continue
+      }
       const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
-      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false })
+      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0 })
     }
     if (a.ok) this.seeded = true
     for (const [k, actor] of this.actors) if (!live.has(k)) actor.leaving = true
@@ -210,7 +219,7 @@ export class Sim<L extends { people: Seat[] }> {
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
       else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
       else if (writing.has(actor.seat.agent)) goal = plan.pen
-      else if (actor.seat.thinking && home) goal = home
+      else if ((actor.seat.thinking || this.tick < actor.stretch) && home) goal = home
       else if (actor.seat.warm && this.plan.oncall?.length) goal = this.oncallGoal(actor, held, l)
       else goal = this.idleGoal(actor, held, l)
       const gk = spotKey(goal)

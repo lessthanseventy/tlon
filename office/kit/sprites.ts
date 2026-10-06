@@ -77,6 +77,32 @@ export const GLYPH: Record<string, string[]> = {
   "♥": [".k.k.", "kkkkk", "kkkkk", ".kkk.", "..k.."],
 }
 const SIGNATURES = ["♪", "♥", "*", "…"]
+// a thought, not a word: the bubble trails off in a dot instead of pointing at the speaker
+export const THOUGHT = [".aaaaa.", "aaaaaaa", "aaaaaaa", "aaaaaaa", "aaaaaaa", "aaaaaaa", ".aaaaa.", ".......", "..a...."]
+/**
+ * What someone mid-turn is doing (their seat's `doing`; `think` between tools), as a 5x5 glyph's
+ * frames in their thought bubble, one per 400 ms frame — the shape says it, never the colour alone.
+ */
+export const ACTIVITY: Record<string, string[][]> = {
+  // the dots fill in; now and then the bulb
+  think: [[".....", ".....", ".....", ".....", "k...."], [".....", ".....", ".....", ".....", "k.k.."], [".....", ".....", ".....", ".....", "k.k.k"], [".....", ".....", ".....", ".....", "k.k.k"],
+    [".....", ".....", ".....", ".....", "....."], [".kkk.", "k...k", ".k.k.", ".kkk.", ".kkk."]],
+  // an open book, a page turning over
+  read: [["kk.kk", "k.k.k", "k.k.k", "kkkkk", "....."], ["kk.kk", "k.k.k", "k.k.k", "kkkkk", "....."], ["..k..", "kkk.k", "k.k.k", "kkkkk", "....."], ["kk...", "k.kkk", "k.k.k", "kkkkk", "....."]],
+  // a pencil, its line growing
+  edit: [["....k", "...k.", "..k..", ".....", "k...."], [".....", "....k", "...k.", "..k..", "kk..."], [".....", ".....", "....k", "...k.", "kkk.."], [".....", ".....", ".....", "....k", "kkkk."]],
+  // a prompt, its cursor blinking
+  bash: [[".....", "k....", ".k...", "k.kkk", "....."], [".....", "k....", ".k...", "k....", "....."]],
+  // a magnifier, sweeping
+  search: [["kkk..", "k.k..", "kkk..", "...k.", "....k"], [".kkk.", ".k.k.", ".kkk.", "....k", "....."], ["..kkk", "..k.k", "..kkk", ".k...", "k...."], [".kkk.", ".k.k.", ".kkk.", "....k", "....."]],
+  // a globe, turning
+  web: [[".kkk.", "kk..k", "kkkkk", "kk..k", ".kkk."], [".kkk.", "k.k.k", "kkkkk", "k.k.k", ".kkk."], [".kkk.", "k..kk", "kkkkk", "k..kk", ".kkk."]],
+  // a flask, bubbling
+  test: [["..k..", ".k.k.", "k...k", "k.k.k", "kkkkk"], [".....", ".k.k.", "k.k.k", "k...k", "kkkkk"], ["...k.", ".k.k.", "k...k", "k...k", "kkkkk"]],
+  // a letter, sealed and sent (a paper plane carries it off)
+  delegate: [["kkkkk", "kk.kk", "k.k.k", "k...k", "kkkkk"]],
+}
+export const PLANE = ["kk..", ".kkk", "kk.."]
 export const ARROW = ["vvvvv", ".vvv.", "..v.."]
 // a note on the board: a squiggle in its author's colour, one of these by its id
 export const SCRIBBLES = [["k.kk.k.kk", ".k..k.k..", "kk.k.kk.k"], ["kk.k.kk.k", "k.k..k.k.", ".kk.kk.kk"], [".k.kk.k.k", "kk.k..kk.", "k..kk.k.k"]]

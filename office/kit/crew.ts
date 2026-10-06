@@ -62,7 +62,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
 /**
  * The office's people, once each: the bench, then anyone on a thread who is not on it. Each is
  * shown on the thread that needs you if one does, else their first — and is warm, or mid-turn, if
- * any of theirs is.
+ * any of theirs is (doing what one of those turns is doing).
  */
 export function peopleOf(a: Agents): Seat[] {
   const byName = new Map<string, Seat>()
@@ -72,6 +72,7 @@ export function peopleOf(a: Agents): Seat[] {
     if (p.thread_id <= 0 || needsYou(a.threads.find((t) => t.id === r.thread_id))) { p.thread_id = r.thread_id; p.title = r.title }
     p.warm = p.warm || r.warm
     p.thinking = !!(p.thinking || r.thinking)
+    if (r.thinking && r.doing) p.doing = r.doing
     byName.set(r.agent, p)
   }
   return [...byName.values()]

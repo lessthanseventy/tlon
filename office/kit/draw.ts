@@ -5,12 +5,14 @@ import { Canvas, balloonLines, type Frame, type Hit, type Ink } from "./canvas"
 import { tipOf } from "./crew"
 import { ROLE, tint } from "./palette"
 import type { Actor, Cat } from "./sim"
-import { ARROW, BUBBLE, CAT, CAT_NAME, figure, GLYPH, paints, shirtOf, type Dir } from "./sprites"
+import { ACTIVITY, ARROW, BUBBLE, CAT, CAT_NAME, figure, GLYPH, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
 import type { Agents } from "./types"
 
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
 /** what the surface has open, and `tray`: how much of the in-tray you have not read */
 export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number }
+/** a tool running this long (ticks) has its worker sweating */
+const SWEAT = 600
 /** something with a footprint: drawn in order of `base`, its feet's row, so nearer covers farther */
 export type Item = { base: number; draw: () => void }
 
@@ -46,8 +48,11 @@ export class Scene {
 
 /**
  * The people. Seated at a desk or on the couch they face away from you — toward the screen, toward
- * the TV — and turn round only to talk with you; at work their hands move. Over their heads: a
- * "…" while they think about what you asked, a "!" in your queue, an emote, the focus arrow.
+ * the TV — and turn round only to talk with you; at work their hands move — still while they read
+ * or think, flying while they edit, sparks off the keys. Over their heads: a "…" while they think
+ * about what you asked, a "!" in your queue, a thought bubble with what they are doing mid-turn
+ * (a paper plane off to whoever they delegated to; a tool that runs on, a bead of sweat), an
+ * emote, the focus arrow. A turn done, they stretch.
  */
 export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string, { text: string | null }>, a: Agents, focus: Focus) {
   const f = sc.f
@@ -59,7 +64,10 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
     const step = actor.moving ? 1 + (Math.floor(sc.tick / 2) % 2) : 0
     const shut = (f + actor.look.blink) % 13 === 0
     const talking = talk.has(seat.agent)
-    const working = sitting && seat.thinking && !talking && actor.spot.face !== "down"
+    const busy = sitting && seat.thinking && !talking
+    const doing = busy ? (seat.doing && ACTIVITY[seat.doing] ? seat.doing : "think") : null
+    const working = busy && actor.spot.face !== "down" && doing !== "read" && doing !== "think"
+    const stretching = sitting && !seat.thinking && sc.tick < actor.stretch
     const seatedFace: Dir = talking || actor.spot.face === "down" ? "down" : actor.spot.face
     const rows = figure(actor.look, seat.archetype, !!seat.lead, false, sitting ? seatedFace : couch ? "up" : actor.face, sitting || couch ? "sit" : "stand", step, shut)
     const top = sitting || couch ? actor.y - 14 : actor.y - 20 + (actor.moving && step === 2 ? -1 : 0)
@@ -77,10 +85,21 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
         // side-on at a table: a hand reaching for the keys, tapping
         sc.px(left + 1, top + 12 - ((f + actor.y) % 2), 2, 1, ROLE.prose)
       } else if (working) {
-        // typing: their elbows, out past their shoulders, take turns
-        const up = (f + actor.x) % 2 === 0
+        // typing: their elbows, out past their shoulders, take turns — every tick when they edit
+        const up = ((doing === "edit" ? sc.tick : f) + actor.x) % 2 === 0
         sc.px(left, top + 11 - (up ? 1 : 0), 1, 1, ROLE.prose)
         sc.px(left + 11, top + 11 - (up ? 0 : 1), 1, 1, ROLE.prose)
+        if (doing === "edit") for (const k of [0, 1]) {
+          const s = sc.tick + k * 3 + actor.x, rise = s % 4
+          sc.px(left + 2 + ((s * 5) % 8), top + 10 - rise * 2, 1, 1, k ? ROLE.key : ROLE.body)
+        }
+      } else if (stretching) {
+        // arms up over their head, and down again
+        const lift = f % 2
+        sc.px(left, top + 1 + lift, 1, 10 - lift, ROLE.prose)
+        sc.px(left + 11, top + 1 + lift, 1, 10 - lift, ROLE.prose)
+        sc.px(left + 1, top + lift, 2, 1, ROLE.prose)
+        sc.px(left + 9, top + lift, 2, 1, ROLE.prose)
       }
     })
     const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null
@@ -96,6 +115,16 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
       } else if (actor.spot.kind === "queue" && !actor.moving) {
         sc.blit(BUBBLE, left + 3, above + bob, { a: ROLE.attention })
         sc.blit(GLYPH["!"]!, left + 4, above + 1 + bob, { k: ROLE.fieldInk })
+      } else if (doing) {
+        const frames = ACTIVITY[doing]!
+        sc.blit(THOUGHT, left + 3, above + bob, { a: ROLE.prose })
+        sc.blit(frames[f % frames.length]!, left + 4, above + 1 + bob, { k: ROLE.fieldInk })
+        if (doing === "delegate") {
+          // off it goes, up and away, again and again
+          const t = f % 6
+          sc.blit(PLANE, left + 11 + t * 3, above - t * 2, { k: ROLE.prose })
+        }
+        if (sc.tick - actor.doingSince > SWEAT && doing !== "think") sc.px(left + 1, top + 3 + (f % 3), 1, 2, ROLE.key)
       } else if (actor.emote) {
         sc.blit(BUBBLE, left + 3, above, { a: ROLE.prose })
         sc.blit(GLYPH[actor.emote] ?? GLYPH["…"]!, left + 4, above + 1, { k: ROLE.fieldInk })
