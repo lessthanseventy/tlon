@@ -17,6 +17,10 @@ mise run check >"$log" 2>&1
 code=$?
 # the verdict: every suite's counts, and on a red gate where it broke
 grep -E "(pass|fail)$|Result:|ERROR|check-names:|passed ·" "$log"
-[ "$code" -ne 0 ] && { echo "--- the end of the log:"; tail -n 30 "$log"; }
+if [ "$code" -ne 0 ]; then
+  # each failing test's block (name, file:line, assertion); the log's end when there is none
+  fails="$(grep -E -A14 "^\[[a-z:]+\] +[0-9]+\) test" "$log" | grep -vE "\] *$|\[debug\]")"
+  if [ -n "$fails" ]; then echo "--- failures:"; echo "$fails"; else echo "--- the end of the log:"; tail -n 30 "$log"; fi
+fi
 rm -f "$log"
 exit "$code"
