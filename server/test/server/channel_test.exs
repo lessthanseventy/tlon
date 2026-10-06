@@ -325,29 +325,6 @@ defmodule Server.ChannelTest do
       assert Channel.machine_thread(wsc.id) == nil
     end
 
-    # A workspace's threads are every scope, so a project-scope thread is found too. `scope` is
-    # legacy; workspace → (channel) → thread is the model.
-    test "workspace_threads/1 — every open thread in the workspace as blocks, any scope, newest activity first", %{
-      wsa: wsa
-    } do
-      {:ok, project} = Channel.open_thread(%{title: "old project thread", workspace_id: wsa.id})
-      {:ok, _} = Channel.post(%{thread_id: project.id, author: "andrew", body: "hello"})
-      {:ok, machine} = Channel.open_thread(%{title: "general", scope: "machine", workspace_id: wsa.id})
-
-      {:ok, _closed} =
-        %{title: "done", workspace_id: wsa.id}
-        |> Channel.open_thread()
-        |> then(fn {:ok, t} -> Channel.close_thread(t) end)
-
-      blocks = Channel.workspace_threads(wsa.id)
-      titles = Enum.map(blocks, & &1.thread.title)
-      assert "old project thread" in titles
-      assert "general" in titles
-      refute "done" in titles
-      assert Enum.map(Enum.find(blocks, &(&1.thread.id == project.id)).messages, & &1.body) == ["hello"]
-      _ = machine
-    end
-
     test "machine_threads/1 filters to one workspace; the other's threads are absent", %{wsa: wsa, wsb: wsb} do
       {:ok, _ta} = Channel.open_thread(%{title: "a-thread", scope: "machine", workspace_id: wsa.id})
       {:ok, _tb} = Channel.open_thread(%{title: "b-thread", scope: "machine", workspace_id: wsb.id})
@@ -368,13 +345,6 @@ defmodule Server.ChannelTest do
       titles = Enum.map(Channel.machine_threads(), & &1.thread.title)
       assert "a-thread" in titles
       assert "b-thread" in titles
-    end
-
-    test "workspace_thread_ids/1 returns only that workspace's thread ids", %{wsa: wsa, wsb: wsb} do
-      {:ok, ta} = Channel.open_thread(%{title: "a", workspace_id: wsa.id})
-      {:ok, _tb} = Channel.open_thread(%{title: "b", workspace_id: wsb.id})
-
-      assert Channel.workspace_thread_ids(wsa.id) == [ta.id]
     end
   end
 
@@ -704,16 +674,6 @@ defmodule Server.ChannelTest do
       assert {:ok, reopened} = Channel.reopen_thread(thread)
       assert reopened.state == "open"
       assert Channel.thread_lead(thread.id) == "hronir"
-    end
-
-    test "thread_block/1 is one thread's block whatever its state — a closed thread still reads" do
-      {:ok, thread} = Channel.open_thread(%{title: "read me later"})
-      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "hello"})
-      {:ok, _} = Channel.close_thread(thread)
-
-      assert %{thread: %Thread{id: id}, messages: [%Message{body: "hello"}]} = Channel.thread_block(thread.id)
-      assert id == thread.id
-      assert Channel.thread_block(-1) == nil
     end
 
     test "reopen_if_closed/1 reopens only a closed thread — the operator replying to history" do

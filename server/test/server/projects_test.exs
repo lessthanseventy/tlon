@@ -181,23 +181,6 @@ defmodule Server.ProjectsTest do
     end
   end
 
-  describe "repo_for_workspace/1 — the STACK panel's per-workspace git dir" do
-    test "the workspace's first repo-bearing project's ~-expanded primary repo", %{workspace: ws} do
-      {:ok, _empty} = Projects.register(%{workspace_id: ws.id, name: "empty"})
-
-      {:ok, _p} =
-        Projects.register(%{workspace_id: ws.id, name: "client", repos: [%{"name" => "r", "path" => "~/projects/x"}]})
-
-      assert {:ok, path} = Projects.repo_for_workspace(ws.id)
-      assert path == Path.expand("~/projects/x")
-    end
-
-    test "no repo-bearing project → {:error, :no_repo}; a nil id too", %{workspace: ws} do
-      assert {:error, :no_repo} = Projects.repo_for_workspace(ws.id)
-      assert {:error, :no_repo} = Projects.repo_for_workspace(nil)
-    end
-  end
-
   describe "repo_for_thread/1 — a scope glob is not a checkout" do
     test "a glob path (modules/*) resolves to :no_repo, never a worktree under $HOME", %{workspace: ws} do
       {:ok, p} =

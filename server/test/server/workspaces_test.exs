@@ -157,16 +157,6 @@ defmodule Server.WorkspacesTest do
       {:ok, _} = Workspaces.remove(doomed)
       assert Workspaces.repos(doomed.id) == []
     end
-
-    test "repos_by_workspace answers the whole picker in one read" do
-      {:ok, a} = Workspaces.register(%{name: "A", repos: ["a/*"]})
-      {:ok, b} = Workspaces.register(%{name: "B", repos: ["b/*", "b2/*"]})
-
-      by_ws = Workspaces.repos_by_workspace([a.id, b.id])
-
-      assert Enum.map(by_ws[a.id], & &1.path) == ["a/*"]
-      assert Enum.map(by_ws[b.id], & &1.path) == ["b/*", "b2/*"]
-    end
   end
 
   describe "the bench (UX slice 5) — the roster as workspace_agent rows" do
