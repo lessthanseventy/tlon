@@ -107,8 +107,7 @@ defmodule Server.Tickets do
 
   @doc """
   Start work on a ticket: a thread on the ticket's project whose opening post is the ticket (the
-  operator's post, so its lead is staffed like any ask), and the ticket promoted into it. The
-  cockpit's Enter on a ticket calls it. `agent_id` hands the thread to that coworker instead of the
+  operator's post, so its lead is staffed like any ask), and the ticket promoted into it. `agent_id` hands the thread to that coworker instead of the
   workspace's lead. `{:ok, thread}` or `{:error, reason}`.
   """
   def start_thread(%Ticket{} = ticket, agent_id \\ nil) do

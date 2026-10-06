@@ -6,8 +6,8 @@
 // it respawns pi in place and RESUMES the current session, so the agent edits code, calls
 // `reload`, and wakes up in the same thread running the new code.
 //
-// Mechanism: the coworker launcher (console Cockpit.profile_launcher/3) exports ADAPTERS_RELOAD_CMD — the
-// command that re-launches pi with `--continue` (resume the most-recent session = this one).
+// Mechanism: ADAPTERS_RELOAD_CMD in the session's env is the command that re-launches pi with
+// `--continue` (resume the most-recent session = this one); nothing in the repo exports it today.
 // reload fires a DETACHED helper (own session via setsid-equivalent) that, after a short delay,
 // runs `tmux respawn-pane -k` on pi's own pane: the delay lets this turn's result flush to the
 // session file, `-k` kills the old pi, and the launcher's `--continue` brings the thread back.

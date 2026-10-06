@@ -250,7 +250,7 @@ defmodule Server.Recall do
   defp embedding_model, do: get_in(Application.get_env(:server, :embedding, []), [:model]) || "nomic-embed-text"
 
   @doc """
-  The recall corpus at a glance — the observability read behind console's Memory pane: total facts,
+  The recall corpus at a glance — the observability read behind the office's memory view: total facts,
   how many carry an embedding (semantic-recall coverage), and the always-loaded floor's size in
   facts and estimated tokens against the working-set budget. Cheap: two counts + the floor query.
   """

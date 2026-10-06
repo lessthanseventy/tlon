@@ -16,8 +16,8 @@
       provenance: "stated",
       text:
         "Tlön (the name is from Borges) is an agent-orchestration product: an always-up server (threads, " <>
-          "facts, worklines, staffing), a terminal cockpit over it, and adapters that make pi and Claude Code " <>
-          "citizens of it. Its repo is tlon; the machine that runs it wires it in from outside."
+          "facts, worklines, staffing), the office (a terminal UI over it), and adapters that make pi and " <>
+          "Claude Code citizens of it. Its repo is tlon; the machine that runs it wires it in from outside."
     },
     %{
       intent: "seed:module-layout",
@@ -25,9 +25,9 @@
       provenance: "stated",
       text:
         "The tlon repo: server/ (OTP app :server, Server.* — the store, MCP, switchboard, staffing, web UI), " <>
-          "console/ (Console.* — the TTY cockpit; it calls only what Server exports, enforced by :boundary) and " <>
-          "adapters/ (TypeScript: the pi extension, the Claude Code adapter, lsp, consult). funes and aleph are " <>
-          "legacy names that survive only in prose and in the node name funes@."
+          "office/ (TypeScript: the pixel-art room and its TUI, the operator's surface, over the server's HTTP " <>
+          "API) and adapters/ (TypeScript: the pi extension, the Claude Code adapter, lsp, consult). funes and " <>
+          "aleph are legacy names that survive only in prose and in the node name funes@."
     },
     %{
       intent: "seed:coordination-model",
@@ -57,7 +57,7 @@
       text:
         "Substrate: tmux is the runtime (where live terminals run), the server is the knowledge — orthogonal. " <>
           "Coworkers run on their workspace's tmux server (socket console-workspace-<id>, session w<id>), so they " <>
-          "survive the cockpit restarting. God-view is a server query across all workspaces, never a tmux attach."
+          "survive any UI restarting. God-view is a server query across all workspaces, never a tmux attach."
     },
     %{
       intent: "seed:runtime-services",
@@ -65,8 +65,8 @@
       provenance: "stated",
       text:
         "Runtime: the server runs as a systemd --user service (tlon.service, node funes@127.0.0.1) — MCP on " <>
-          "127.0.0.1:4040, the web UI on :4042, Oban for scheduled work. The cockpit (`mise run console:run`) is " <>
-          "an :erpc client of that node, one brain; `console:run:local` embeds a server on the dev db instead. " <>
+          "127.0.0.1:4040, the web UI on :4042, Oban for scheduled work. The office (`mise run office:run`) talks " <>
+          "to it over HTTP on :4040; `mise run server:dev` runs a scratch node on the dev db (MCP :4041). " <>
           "`mise run server:restart` rebuilds the release and restarts the service."
     },
     %{
@@ -75,7 +75,7 @@
       provenance: "stated",
       text:
         "The store is Postgres over the local socket: `tlon` (the service), `tlon_dev` (dev shells and " <>
-          "console:run:local), `tlon_test` (the suite). TLON_DATABASE or TLON_DATABASE_URL override."
+          "server:dev), `tlon_test` (the suite). TLON_DATABASE or TLON_DATABASE_URL override."
     },
     %{
       intent: "seed:knowledge-model",
@@ -100,9 +100,9 @@
       kind: "constraint",
       provenance: "stated",
       text:
-        "Verification: `mise run check` is the gate — the names check, the server, console and adapter checks, " <>
-          "and the task manual. Precommit compiles with --warnings-as-errors, and the console may call only " <>
-          "exported Server modules (the :boundary compiler enforces it)."
+        "Verification: `mise run check` is the gate — the names check, the server, adapter and office checks, " <>
+          "and the task manual. Precommit compiles with --warnings-as-errors, and the :boundary compiler " <>
+          "keeps callers to the modules Server exports."
     },
     %{
       intent: "seed:coworker-lifecycle",

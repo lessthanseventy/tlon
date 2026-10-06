@@ -47,7 +47,7 @@ config :server,
   start_banter: System.get_env("TLON_BANTER") in ~w(1 true yes)
 
 # The operator's handle — who the human IS on this machine's channel. Local
-# configuration, never identity in the design (§8); the same default the console uses.
+# configuration, never identity in the design (§8); the office TUI reads the same variable.
 # `Dossier.bank_stated_fact` trusts only this author for `stated` provenance.
 config :server, operator: System.get_env("TLON_OPERATOR") || "andrew"
 
@@ -78,7 +78,7 @@ end
 
 # The terminal backends: the server's own tmux ones (one-brain piece B, slices 1–2). A wake is
 # send-keys into the thread's window on the workspace's tmux server, a spawn a new window there,
-# a crew role a window beside the lead — with or without a cockpit connected. Guarded out of
+# a crew role a window beside the lead. Guarded out of
 # :test (the suite uses Server.Arbiter.Test / Server.Crew.Test).
 if config_env() != :test do
   config :server, arbiter: Server.Arbiter.Tmux, crew: Server.Crew.Tmux

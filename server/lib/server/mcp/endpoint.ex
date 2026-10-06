@@ -50,7 +50,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.PresenceIdle, name: "presence_idle")
   component(Server.MCP.Tool.ProposeHabit, name: "propose_habit")
   # `get_dossier` is the canonical name (the pi adapter, the flake's directTools and the CLI call
-  # it); `get_brief` is the name the console's harness catch-up prompt and profile allowlists use.
+  # it); `get_brief` is the name the profile allowlists and workline briefs use.
   component(GetBrief, name: "get_dossier")
   component(GetBrief, name: "get_brief")
   component(Server.MCP.Tool.GetFacts, name: "get_facts")

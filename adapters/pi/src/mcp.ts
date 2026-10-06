@@ -12,8 +12,8 @@
 // PER-CONNECT MINT (the fix for the literal-tmux stale-401 of 2026-08-16): the token is
 // NOT read from a frozen TLON_TOKEN env. On every connect (and reconnect), the client
 // mints a fresh token against the SAME origin as TLON_MCP_URL (POST /mint — see
-// Server.MCP.Gateway), so it always hits the right world (the console's .dev world on 4041, or
-// the always-up service's XDG world on 4040) and a pane is never stranded by a token-
+// Server.MCP.Gateway), so it always hits the right world (the `server:dev` scratch node on 4041,
+// or the always-up service's XDG world on 4040) and a pane is never stranded by a token-
 // model change or a world-secret regeneration. Identity travels as the stable,
 // format-agnostic (TLON_THREAD, TLON_AUTHOR, TLON_MCP_URL); the token is derived.
 
@@ -135,7 +135,7 @@ export class TlonClient {
     await this.#callTool("raise_question", { text });
   }
 
-  // Thinking presence (the cockpit's typing indicator). Self-thread: agent + thread resolve
+  // Thinking presence (the office's typing indicator). Self-thread: agent + thread resolve
   // from the token, so both declares take no args.
   async presenceThinking(): Promise<void> {
     await this.#callTool("presence_thinking", {});

@@ -7,8 +7,8 @@
 # minted anywhere else dies with its node and 401s, and roster/presence is in-memory
 # there, so a fresh `eval` node would see neither. The service must be up. EXCEPTIONS:
 # `token`/`bearer` POST to the /mint HTTP endpoint at TLON_MCP_URL's origin, so they mint
-# in the RIGHT world for any node (console's 4041 or the service's 4040) — bin/server rpc
-# would only reach the service node and split a console-handed pane into the wrong world.
+# in the RIGHT world for any node (server:dev's 4041 or the service's 4040) — bin/server rpc
+# would only reach the service node and split a server:dev-handed pane into the wrong world.
 # `dossier` follows the same rule: with TLON_MCP_URL set it calls the `get_dossier` MCP
 # tool over HTTP at that URL (the brief hook's world), rpc only when unset.
 #
@@ -87,9 +87,9 @@ int() { case "$1" in ('' | *[!0-9]*) return 1 ;; (*) return 0 ;; esac; }
 
 # Mint a fresh token against TLON_MCP_URL's origin /mint (Server.MCP.Gateway) — the same
 # per-connect mint adapters/pi's mcp.ts does: POST {"thread_id", "agent"} → {"token"}. The token
-# is signed with THAT node's world secret, so it verifies at /mcp on the same node (console's
+# is signed with THAT node's world secret, so it verifies at /mcp on the same node (server:dev's
 # 4041 or the service's 4040); minting via `bin/server rpc` instead would only reach the service
-# node and strand an console-handed pane in the wrong world. No token is frozen — a fresh one per
+# node and strand a server:dev-handed pane in the wrong world. No token is frozen — a fresh one per
 # connect survives restart/model/secret changes. Any failure returns non-zero so the caller
 # (CC's `token` headersHelper / pi's `bearer` !command) marks the server bad rather than 401ing.
 mint_token() {
@@ -342,8 +342,8 @@ case "$cmd" in
   dossier)
     tid="${1:-${TLON_THREAD:-}}"
     int "$tid" || { echo 'usage: mise run server:dossier -- <thread-id> (or set TLON_THREAD)' >&2; exit 2; }
-    # With TLON_MCP_URL the brief comes from the node that spawned this pane (console's :4041
-    # .dev world or the service's :4040) — the get_dossier tool itself, over HTTP. Without it,
+    # With TLON_MCP_URL the brief comes from the node that spawned this pane (server:dev's :4041
+    # or the service's :4040) — the get_dossier tool itself, over HTTP. Without it,
     # the same Board.brief |> Brief.scope via rpc into the service node, pretty-printed.
     if [ -n "${TLON_MCP_URL:-}" ]; then dossier_http "$tid"; exit $?; fi
     exec "$SERVER" rpc "%Server.Thread{id: $tid} |> Server.Board.brief() |> Server.MCP.Brief.scope() |> inspect(pretty: true, limit: :infinity) |> IO.puts()"

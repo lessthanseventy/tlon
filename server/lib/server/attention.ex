@@ -232,7 +232,7 @@ defmodule Server.Attention do
   @doc """
   A worker's question for the operator — the `ask_operator` tool's door. The question is posted as
   the worker and the thread parks on the operator (`awaiting`), the field every waiting-on-you
-  surface already reads (the cockpit's `!`, the shell's inbox, its toasts); the operator's reply
+  surface already reads (the office's inbox, the shell's inbox, its toasts); the operator's reply
   clears it (`respond/3`). `{:ok, message}`.
   """
   def ask(thread_id, author, text) do

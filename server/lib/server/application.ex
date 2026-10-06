@@ -13,9 +13,9 @@ defmodule Server.Application do
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
     # test harness needs it so Channel.post can broadcast. The Repo is started
     # except under :test (the harness owns its lifecycle). The switchboard runner is
-    # opt-in per node (:start_switchboard — the console's config, the service's
-    # TLON_START_SWITCHBOARD): with an arbiter it pokes panes, without one it is
-    # bookkeeping only (drain on boot, claim, coalesce). The MCP channel is opt-in the
+    # opt-in per node (:start_switchboard — the service's TLON_START_SWITCHBOARD): with
+    # an arbiter it pokes panes, without one it is bookkeeping only (drain on boot, claim,
+    # coalesce). The MCP channel is opt-in the
     # same way: a node that serves agents flips :start_mcp on. The consult mirror is on
     # by default (it only writes DB rows) — the test harness turns it off so the pure
     # maybe_mirror tests don't double-fire.
@@ -27,7 +27,7 @@ defmodule Server.Application do
     # pass — the two GenServer loops those were are gone, E/2); D: the web UI's
     # own Bandit listener. Both opt-in per node like MCP — the service flips them on.
     # The attention poller (piece A) reads coworker panes for a waiting dialog — service-only too.
-    # get_env, not fetch_env!: a root app that embeds :server (the console) never evaluates this
+    # get_env, not fetch_env!: a root app that embeds :server never evaluates this
     # app's config.exs, and the child list is built before the flag is consulted
     children =
       [

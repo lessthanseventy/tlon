@@ -1,7 +1,6 @@
 defmodule Server.Staffing do
   @moduledoc """
-  Who runs where — the staffing pass, on the server (one-brain piece B, slice 3; lifted from the
-  console's render preamble, which ran it per frame). A workspace's cast is its bench
+  Who runs where — the staffing pass, on the server. A workspace's cast is its bench
   (`Server.Workspaces.bench/1`), not constants: the lead is the CENTRE (window 0 of the workspace's
   private tmux session, running pi from its profile), every other seat a tail window launched by
   its archetype's harness driver, and every staffed machine thread a leaf window (tagged
@@ -10,9 +9,9 @@ defmodule Server.Staffing do
   Orphan leaves (thread closed while nobody looked) are swept. Stale coworkers (a live process
   minting under a handle the bench no longer has) are torn down so they respawn.
 
-  Runs on Oban's cron every minute (`Server.Jobs.Staff`) and on demand (`pass/0`); the console
-  attaches to what this made. Stateless: the tmux session IS the state (window tags carry the
-  opening phase), and a minute's cadence replaces the per-frame backoffs.
+  Runs on Oban's cron every minute (`Server.Jobs.Staff`) and on demand (`pass/0`); a client
+  (asterion) attaches to what this made. Stateless: the tmux session IS the state (window tags
+  carry the opening phase).
 
   Seams: tmux rides `Server.Tmux.run/3` (`:server, :tmux_cmd`); identity minting is
   `:server, :staff_join` (default `Server.MCP.Spawn.join/3`); the opening inject's poll/settle
@@ -96,7 +95,7 @@ defmodule Server.Staffing do
   end
 
   # The CENTRE: the lead's pi on the workspace's standing machine thread (window 0, named after
-  # the lead) — the session the console's embed attaches to with `new-session -A`. Pi by design,
+  # the lead) — the session a client attaches to with `new-session -A`. Pi by design,
   # whatever the lead's archetype binds elsewhere: the centre is the workspace's conversational
   # seat, and claude stays the deliberate escalation.
   defp ensure_centre(workspace_id, %Coworker{name: name} = lead, tabs) do
@@ -171,7 +170,7 @@ defmodule Server.Staffing do
     _ =
       Enum.reduce(threads, {budget, taken}, fn thread, {budget, taken} ->
         case Tmux.leaf_tab(tabs, thread.id) do
-          # a leaf the console typed into before a restart: the text settled long ago, submit now
+          # a leaf typed into before a restart: the text settled long ago, submit now
           %{opening: "typed", index: index} ->
             _ = Tmux.submit(workspace_id, index)
             _ = Tmux.set_window_option(workspace_id, index, "@funes_opening", "done")

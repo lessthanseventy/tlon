@@ -1,5 +1,5 @@
 defmodule Server.Crew.TmuxTest do
-  # The crew backend on the workspace's tmux server (one-brain B/2, lifted from the console): the
+  # The crew backend on the workspace's tmux server: the
   # role's identity is minted on the thread, its profile materialised, its window opened beside the
   # lead, and the opening turn typed only once the pane shows the registered footer.
   use ExUnit.Case, async: false

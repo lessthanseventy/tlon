@@ -3,7 +3,7 @@ defmodule Server.Projects do
   The projects context (Workspace ▸ Project ▸ Thread): the write pipe
   (changeset |> insert |> Bus.announce) and reads over the `project` table. A project is
   the middle tier — it belongs to a workspace and owns threads. Every write announces on
-  `Server.Bus`'s projects topic so the console's switcher/rail refresh. The DB is the bus
+  `Server.Bus`'s projects topic so live surfaces refresh. The DB is the bus
   (§10): assertions read back through it.
   """
   import Ecto.Query
@@ -137,8 +137,8 @@ defmodule Server.Projects do
   def read_dirs(_thread), do: []
 
   @doc """
-  The `~`-expanded path of a workspace's first repo-bearing project (its primary repo) — what the
-  cockpit's STACK panel reads git from, so each workspace shows ITS repo. `{:ok, path}` or
+  The `~`-expanded path of a workspace's first repo-bearing project (its primary repo).
+  `{:ok, path}` or
   `{:error, :no_repo}`. Not existence-checked (the caller decides how to degrade).
   """
   def repo_for_workspace(workspace_id) when is_integer(workspace_id) do

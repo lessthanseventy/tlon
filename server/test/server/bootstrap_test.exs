@@ -163,7 +163,7 @@ defmodule Server.BootstrapTest do
     end
   end
 
-  describe "machine root per workspace (the cockpit re-scope invariant)" do
+  describe "machine root per workspace (the re-scope invariant)" do
     test "every workspace gets exactly one open, stage-less machine root" do
       {:ok, default} = Bootstrap.ensure()
       {:ok, other} = Workspaces.register(%{name: "other", type: "code", scope: "machine", repos: [], roster: []})

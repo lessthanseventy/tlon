@@ -17,8 +17,8 @@ adapter="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$adapter/../.." && pwd)"
 cli="$repo/scripts/tlon-cli.sh"
 
-# If the environment already carries a server identity (e.g. the console's Tlön pane exported it
-# before exec'ing this launcher), keep it as-is — per-connect minting targets TLON_MCP_URL's
+# If the environment already carries a server identity (e.g. `Server.Tmux`'s window
+# boot script exported it before exec'ing this launcher), keep it as-is — per-connect minting targets TLON_MCP_URL's
 # origin, so the token is always minted in the same world that serves /mcp.
 if [ -z "${TLON_MCP_URL:-}" ] || [ -z "${TLON_THREAD:-}" ] || [ -z "${TLON_AUTHOR:-}" ]; then
   # Optional leading numeric thread-id → join; otherwise open a fresh thread.
@@ -51,7 +51,7 @@ fi
 # tools read as mcp__tlon__post_message etc. Nothing reads the key back; it is a label.
 mcp_json="{\"mcpServers\":{\"tlon\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\",\"headersHelper\":\"$cli token\"}}}"
 
-# A write-fenced role (the console's claude_code driver sets TLON_PERMISSIONS_DENY, e.g.
+# A write-fenced role (`Server.Harness` sets TLON_PERMISSIONS_DENY, e.g.
 # "Write,Edit,NotebookEdit" for the reviewer) lands as a real permissions.deny in --settings —
 # a structural fence, not a persona request.
 deny_list=""
@@ -83,13 +83,13 @@ perms_json=""
 settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh start\"},{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}],\"SessionEnd\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}]}$perms_json}"
 
 # The citizen protocol, as a system prompt. Without it Claude Code treats a teammate's message
-# (injected into its input as "[tlon thread #N] <author>: ..." — Console.Mention's prefix) like the
+# (typed into its input by the server's switchboard) like the
 # human talking and answers in its own window — which no one else can see, so the reply is lost and
 # the peer is never woken. Spell out that a reply is a post_message tool call that @-mentions the sender.
 sys_prompt="You are a citizen of tlon thread #$TLON_THREAD posting as \"$TLON_AUTHOR\", working alongside other agents. Messages from teammates arrive in your input prefixed \"[tlon thread #N] <author>:\" — these are from other agents, NOT the human operator, and your terminal output is invisible to them. To reply so the sender actually receives it and takes their turn, call the tlon post_message tool and @-mention the sender by handle (for example @pi-machine); answering only in your own window reaches no one."
 
-# A coworker ROLE (archetype persona) rides in as a file via TLON_ROLE_PROMPT_FILE (console's
-# claude_code harness driver sets it) and is APPENDED to the citizen protocol — a second
+# A coworker ROLE (archetype persona) rides in as a file via TLON_ROLE_PROMPT_FILE (`Server.Harness`
+# sets it) and is APPENDED to the citizen protocol — a second
 # --append-system-prompt flag would replace it, not add to it.
 if [ -n "${TLON_ROLE_PROMPT_FILE:-}" ] && [ -f "$TLON_ROLE_PROMPT_FILE" ]; then
   sys_prompt="$sys_prompt

@@ -1,6 +1,6 @@
 defmodule Server.Board do
   @moduledoc """
-  The board's read models (console §4): pure aggregates a TUI (later a LiveView)
+  The board's read models: pure aggregates a TUI or a LiveView
   renders, composed from the contexts. §7 — the board holds no truth of its own, it
   reads the public context functions. `brief/1` is the focused thread's brief,
   and is deliberately the SAME one-call read that catches a re-entering session up
@@ -32,7 +32,7 @@ defmodule Server.Board do
 
   @doc """
   The machine-wide activity feed as `{tag, row}` entries, newest-first — the durable backfill for
-  the cockpit's in-memory activity ring (a fresh cockpit starts blank; this seeds it so NOW isn't
+  a surface's live activity stream (a fresh subscriber starts blank; this seeds it so the feed isn't
   empty after a restart). Merges the append-only logs the live feed is dominated by — posted
   messages, banked facts, recorded events — sorted by `created_at`. Transition-only tags
   (issue/question/todo resolved) aren't reconstructable from current state, so they're left to the

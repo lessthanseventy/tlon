@@ -11,7 +11,7 @@ defmodule Server.Worktree do
   tool-managed, not project state.
 
   Best-effort + honest, like `Server.Workline.Artifacts.Git`: a git fault is `{:error, reason}`,
-  never a raise, so a broken repo degrades gracefully instead of wedging the cockpit.
+  never a raise, so a broken repo degrades gracefully instead of wedging its caller.
   """
 
   # The slug names filesystem paths — same closed charset the workline enforces (Server.Thread),
@@ -163,7 +163,7 @@ defmodule Server.Worktree do
   # Share them by SYMLINK from the main tree — `deps` and `node_modules` are content-addressed by
   # their lockfiles and safe to share; `_build` is NOT (compiled artifacts of a different branch),
   # so each worktree builds its own. Best-effort: a missing dir in the main tree is skipped.
-  @shared_deps ["deps", "node_modules", "server/deps", "console/deps", "modules/desktop/shell/node_modules"]
+  @shared_deps ["deps", "node_modules", "server/deps", "modules/desktop/shell/node_modules"]
 
   defp link_deps(repo_path, wt) do
     for rel <- @shared_deps,

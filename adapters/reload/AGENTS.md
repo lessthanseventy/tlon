@@ -9,14 +9,14 @@ code → call `reload` → wake up in the same thread running the new code.
 ## When to use it
 
 - After you change a adapters extension's source and want it live **now**.
-- NOT for config that pi reads per-run, and NOT a substitute for `console:reset` — this restarts
-  *pi*, not the cockpit BEAM or the tmux session.
+- NOT for config that pi reads per-run — this restarts *pi*, not the server or the tmux session.
 
 ## How it works
 
-- The coworker launcher (`console` `Cockpit.profile_launcher/3`) exports two things into the session:
-  `TMUX_PANE` (pi's own pane, tmux-provided) and **`ADAPTERS_RELOAD_CMD`** — the command that
-  re-launches pi with `--continue` (resume the most-recent session = this one).
+- It needs two things in the session's env: `TMUX_PANE` (pi's own pane, tmux-provided) and
+  **`ADAPTERS_RELOAD_CMD`** — the command that re-launches pi with `--continue` (resume the
+  most-recent session = this one). Nothing in the repo exports `ADAPTERS_RELOAD_CMD` today (the
+  server's harness boot script, `Server.Tmux.boot_script/2`, does not), so set it by hand.
 - `reload` fires a **detached** helper that, after ~0.4s, runs `tmux respawn-pane -k` on pi's pane.
   The delay lets this turn's result flush to the session `.jsonl`; `-k` kills the old pi; the
   launcher's `--continue` brings the thread back. The helper is detached (its own process group)
@@ -25,8 +25,7 @@ code → call `reload` → wake up in the same thread running the new code.
   must typecheck, or a fresh pi could fail to load one and lock you out. On failure it refuses and
   returns the errors.
 
-If `ADAPTERS_RELOAD_CMD` or `TMUX_PANE` is unset, `reload` refuses with a message pointing at the
-launcher — reboot the cockpit after updating console so the session carries the export.
+If `ADAPTERS_RELOAD_CMD` or `TMUX_PANE` is unset, `reload` refuses with a message saying which.
 
 ## The seam
 

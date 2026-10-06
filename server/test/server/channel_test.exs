@@ -305,7 +305,7 @@ defmodule Server.ChannelTest do
     end
   end
 
-  describe "workspace-scoped machine threads (the cockpit re-scope)" do
+  describe "workspace-scoped machine threads (the re-scope)" do
     setup do
       {:ok, wsa} = Workspaces.register(%{name: "wsa", type: "code", scope: "machine", repos: [], roster: []})
       {:ok, wsb} = Workspaces.register(%{name: "wsb", type: "code", scope: "machine", repos: [], roster: []})
@@ -325,9 +325,8 @@ defmodule Server.ChannelTest do
       assert Channel.machine_thread(wsc.id) == nil
     end
 
-    # The cockpit's centre reads the WORKSPACE's threads, every scope — the rail lists them all,
-    # and opening a project-scope thread from it must find a card (2026-09-08: it fell to an empty
-    # list). `scope` is legacy; workspace → (channel) → thread is the model.
+    # A workspace's threads are every scope, so a project-scope thread is found too. `scope` is
+    # legacy; workspace → (channel) → thread is the model.
     test "workspace_threads/1 — every open thread in the workspace as blocks, any scope, newest activity first", %{
       wsa: wsa
     } do
@@ -547,7 +546,7 @@ defmodule Server.ChannelTest do
       assert Channel.staffed_machine_threads() == []
     end
 
-    test "omits a CLOSED machine thread — the cockpit tears its leaf down on close (Slice F)" do
+    test "omits a CLOSED machine thread — its leaf is torn down on close" do
       {:ok, thread} = Channel.open_thread(%{title: "Tlön · rotated", scope: "machine"})
       {:ok, agent} = Staff.register_agent(%{name: "pi-machine", mandate: "m", engine: "e"})
       {:ok, _} = Staff.assign(thread, agent)

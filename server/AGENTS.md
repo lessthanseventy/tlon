@@ -8,7 +8,7 @@ the spec is wrong, say so and change it in the same commit as the code that prov
 ## What is here
 
 The spine of Tlön: SQLite is the truth (a real db reads back under `sqlite3`), Ecto over `ecto_sqlite3`,
-and every layer the console doc's re-laid §9 asked for
+and every layer the spine design's re-laid §9 asked for
 (`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`) is built and gated:
 
 - **db + doctor** — the schema (`priv/repo/migrations/`), `Server.Doctor` (integrity_check, tables,
@@ -29,7 +29,7 @@ and every layer the console doc's re-laid §9 asked for
 - **the switchboard** (`Server.Switchboard` + `Server.Bus` + `Server.Arbiter`) — delivery WAKES the
   addressee (§5b.2): a posted message is a durable row first, then broadcast over `Phoenix.PubSub`, and
   the switchboard pokes the thread's lead / the @mentioned coworker / a reply's author through the
-  arbiter behaviour the host implements (the console's tmux arbiter). Coalesced (a backlog is one
+  arbiter behaviour (`Server.Arbiter.Tmux`). Coalesced (a backlog is one
   nudge), warmth-gated (a cold session is rotated onto a fresh, brief-seeded one, never poked), and
   `drain/0` re-delivers on restart, so killing the BEAM loses nothing.
 - **the MCP channel** (`Server.MCP.*`) — the sovereign door for any agent, `anubis_mcp` over Bandit,
@@ -57,7 +57,7 @@ backwards compatible with it.
 ## Public surface
 
 The module's public API *is* its boundary: the `exports:` list in `lib/server.ex` (`use Boundary`).
-That annotated list is the whole surface a consumer (the console, an MCP adapter) may call,
+That annotated list is the whole surface a consumer may call,
 machine-enforced: reach a non-exported module and the `:boundary` compiler fails the build. Each
 export is a context whose functions carry `@doc`s — call `Server.<Context>.<fun>` (e.g.
 `Server.Dossier.raise_issue/1`, `Server.Channel.machine_thread/0`). To find one, read the context

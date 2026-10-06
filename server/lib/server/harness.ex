@@ -1,11 +1,11 @@
 defmodule Server.Harness.Driver do
   @moduledoc """
   The uniform per-harness contract (per-thread-agents Slice D). The lifecycle's tmux transport
-  (spawn a window, inject a turn via send-keys, kill a window) is harness-AGNOSTIC and lives with
-  the cockpit; what differs per harness is captured here:
+  (spawn a window, inject a turn via send-keys, kill a window) is harness-AGNOSTIC and lives in
+  `Server.Tmux` and its callers; what differs per harness is captured here:
 
     * `launch_command/1` — the exec string a spawned window runs for a profile (the `spawn` half
-      of the design contract; the cockpit wraps it in identity exports + `tmux new-window`).
+      of the design contract; `Server.Tmux.boot_script/2` wraps it in identity exports).
   """
   @callback launch_command(Server.Profile.t()) :: String.t()
   @doc "The argv of a one-shot, read-only aside: print mode on `question`, `system` appended."
@@ -16,7 +16,7 @@ defmodule Server.Harness do
   @moduledoc """
   Environment-resolved harness binding (per-thread-agents Slice D). A coworker is
   archetype × harness-binding × model; the archetype no longer hardcodes *how* it runs — the
-  binding is resolved from the model + where console is running (`Server.OperatorConfig.environment/0`):
+  binding is resolved from the model + where the server is running (`Server.OperatorConfig.environment/0`):
 
     * **home** (personal Anthropic subscription): an anthropic-provider model binds to
       `:claude_code` — the official harness. Driving a personal Claude subscription through a

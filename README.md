@@ -7,16 +7,15 @@ exactly what the product does — you author a fictional organization (a cast of
 knobs) and, through use, it becomes real work in your actual repo. The fiction overwrites reality.
 
 Tlön is **many UIs over one memory** — a communication, planning, and coordination surface for a crew
-of AI agents. Four internal apps make it up, named for what they do:
+of AI agents. Three internal apps make it up, named for what they do:
 
 - **`server`** — the shared spine: the data model, the communication bus, the single-writer discipline,
   the always-up MCP channel. (The memory concept is *Funes the Memorious* — the man who could not
   forget — living on in the recall engine.)
 - **`office`** — the pixel-art room over the spine, in your terminal: coworkers at their desks when
   they work, queued at your door when a thread waits on you, the worklines on the whiteboard, Nina the
-  cat. Click or key into anyone to read their thread and reply.
-- **`console`** — the TTY cockpit: workspaces, threads, the crew, embedded terminals. Being folded
-  into the office.
+  cat. Click or key into anyone to read their thread and reply; the finder, inbox, tickets, notes,
+  memory and the crew's hiring and settings are all in the room.
 - **`adapters`** — the hands: how a working agent (Claude Code, pi) reaches the spine, wakes up already
   knowing its thread, and banks what it learns.
 
@@ -80,7 +79,6 @@ All environment, read at start:
 tlon/
   server/     # the spine — its own spec (server/docs/spec.md), its own boundary
   office/     # the pixel-art room: a shared kit, its rooms, the TUI
-  console/    # the TTY cockpit
   adapters/   # the hands: pi extensions, the Claude Code launcher + hooks, skills
   tasks/      # the mise tasks (mise.toml includes them) — `mise tasks` lists every verb
   scripts/    # the shell side of the loop (cap, watch, the reaper, the tlon CLI)

@@ -1,6 +1,6 @@
 # adapters — the hands
 
-The third story in the stack. `server` is the memory, `console` is the sight, `adapters` is the
+The third story in the stack. `server` is the memory, `office` is the sight, `adapters` is the
 **hands**: how a working agent reaches server, comes up already knowing its thread, and banks what it
 learns as it works. Read `../server/docs/spec.md` and
 `../../docs/plans/2026-08-15-pi-integration-and-server-mcp-design.md` before reshaping anything here —
@@ -97,7 +97,7 @@ Driven through the shared mise tasks (`mise tasks`), same as the rest of the rep
 - `mise run adapters:pi:check` — typecheck + tests, the precommit gate for this module.
 - `mise run server:serve` — boot server with its sovereign channel on, against the scratch db, so a
   hand-spawned pi pane has something to register with.
-- `mise run check` — the whole-repo gate: `server:check`, `console:check`, and the six
+- `mise run check` — the whole-repo gate: `server:check`, `office:check`, and the six
   adapters packages (`adapters:{pi,consult,lsp,lspd,reload,footer}:check`). menard's pi adapter
   is checked in its own repo (its `test` task, in ~/projects/menard).
 

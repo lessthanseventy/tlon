@@ -1,10 +1,9 @@
 defmodule Server.MCP.Tool.RegisterWorkspace do
   @moduledoc """
   Register a WORKSPACE — a first-class composition (workspaces/orbis Slice 1): a git-tracked
-  scope (`repos`), a `roster` of archetype instances, and free-form `knobs` that console
-  reads to drive its picker/survey/spawn. Unlike the thread-scoped tools this is
-  machine-GLOBAL — it takes no identity, it writes the shared `workspace` table via
-  `Server.Workspaces`. `name` is unique; a duplicate is a graceful error, not a crash.
+  scope (`repos`), a `roster` of archetype instances, and free-form `knobs`. Unlike the
+  thread-scoped tools this is machine-GLOBAL — it takes no identity, it writes the shared
+  `workspace` table via `Server.Workspaces`. `name` is unique; a duplicate is a graceful error, not a crash.
   """
   use Server.MCP.Tool
 
@@ -27,7 +26,7 @@ end
 
 defmodule Server.MCP.Tool.ListWorkspaces do
   @moduledoc """
-  Every WORKSPACE, oldest first — the machine-global read the cockpit's workspace ring walks.
+  Every WORKSPACE, oldest first — the machine-global read.
   Takes no identity: workspaces are not thread-scoped.
   """
   use Server.MCP.Tool

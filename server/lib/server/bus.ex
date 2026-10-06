@@ -1,6 +1,6 @@
 defmodule Server.Bus do
   @moduledoc """
-  The reactive substrate over the durable bus (console §5). `Phoenix.PubSub` fans
+  The reactive substrate over the durable bus. `Phoenix.PubSub` fans
   **typed events** out to **focused topics**, so a consumer subscribes to exactly
   what it needs — the switchboard to the message firehose, the board to one thread
   (IN SCOPE) or the roster (IN FLIGHT) — instead of filtering everything.
@@ -18,7 +18,7 @@ defmodule Server.Bus do
     * `tlon:sessions`     — session start/end (feeds the IN FLIGHT roster)
     * `tlon:presence`     — explicit thinking/idle declarations (`Server.Presence.Thinking`)
     * `tlon:habits`       — habit proposed/approved/rejected (the operator's review queue)
-    * `tlon:workspaces`   — workspace registered/edited/removed (the console's picker/survey)
+    * `tlon:workspaces`   — workspace registered/edited/removed
     * `tlon:projects`     — project registered/edited/removed
     * `tlon:notes`        — note written/edited/removed
     * `tlon:tickets`      — ticket filed/updated/removed
@@ -97,7 +97,7 @@ defmodule Server.Bus do
 
   # Habits are machine-wide (no thread_id key of their own), so they ride their own topic
   # plus the topic of the thread that PROPOSED them (source_thread_id, for provenance) when
-  # there was one — letting the cockpit's review surface and that thread both hear it.
+  # there was one — letting the operator's review surface and that thread both hear it.
   def broadcast({tag, %Server.Habit{} = habit} = event)
       when tag in [:habit_proposed, :habit_approved, :habit_rejected] do
     publish([habits_topic() | thread_topics(habit.source_thread_id)], event)

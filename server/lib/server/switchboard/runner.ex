@@ -1,12 +1,12 @@
 defmodule Server.Switchboard.Runner do
   @moduledoc """
-  The switchboard as a supervised process (console §6): subscribes to the bus and
+  The switchboard as a supervised process: subscribes to the bus and
   wakes recipients as messages are posted. Its liveness never makes a message
   *exist* (§10) — on start it `drain/0`s the DB, so anything posted while it was
   down is still delivered; while up, it reacts to PubSub for low latency.
 
-  Opt-in per node (`config :server, :start_switchboard, true` — the console sets it, the
-  service via `TLON_START_SWITCHBOARD=1`). A node with no arbiter configured still runs it
+  Opt-in per node (`config :server, :start_switchboard, true` — the service via
+  `TLON_START_SWITCHBOARD=1`). A node with no arbiter configured still runs it
   for the durable bookkeeping (drain on boot, claim + coalesce); only a node with an
   arbiter pokes a pane (see `Server.Switchboard`).
 

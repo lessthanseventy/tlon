@@ -431,7 +431,7 @@ defmodule Server.MCP.Tool.ProposeHabit do
   @moduledoc """
   Propose a HABIT — how you should WORK with the operator (a durable working preference,
   not a fact about the world and not a task step). It lands PENDING: the operator approves
-  it in console before it joins the always-loaded set every session reads. Distinct from a
+  it in the office before it joins the always-loaded set every session reads. Distinct from a
   `stated` constraint (his verbatim words, which you cannot author) — a habit is YOUR
   proposal, promoted only by his approval. There is deliberately no `approve_habit` tool:
   an agent cannot approve its own suggestion.
@@ -466,7 +466,7 @@ end
 defmodule Server.MCP.Tool.PresenceThinking do
   @moduledoc """
   Declare THIS connection's agent thinking on its thread — call at turn start, so
-  the cockpit shows "thinking" the moment work begins (thinking counts as working).
+  the office shows "thinking" the moment work begins (thinking counts as working).
   Self-thread like every write: agent + thread resolve from the token, no args.
   Idempotent; a stuck declare is swept by `Server.Presence.Thinking`'s max-age guard.
   """

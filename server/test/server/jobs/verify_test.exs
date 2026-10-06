@@ -1,6 +1,6 @@
 defmodule Server.Jobs.VerifyTest do
   # A workline entering `verify` queues the deterministic verifier on the service — nothing else
-  # (no cockpit open) has to be watching for the flip.
+  # has to be watching for the flip.
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 

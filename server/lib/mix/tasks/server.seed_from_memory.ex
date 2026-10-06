@@ -34,8 +34,8 @@ defmodule Mix.Tasks.Server.SeedFromMemory do
   come from `$TLON_SEED_MEMORY_DIR`. Idempotent per run only in that it always REPLACES the target
   thread's imported facts first, so a re-run reflects the current files rather than duplicating.
 
-  Dev-only: hits the live DB and live ollama, writes raw `created_at` (why it lives in server, not
-  console — console's boundary allows only the public API). A fact the embedder can't reach is left
+  Dev-only: hits the live DB and live ollama, writes raw `created_at` (why it lives in server:
+  only the server writes past the public API). A fact the embedder can't reach is left
   NULL (recall falls back to keyword), counted, never fatal.
   """
   use Mix.Task
