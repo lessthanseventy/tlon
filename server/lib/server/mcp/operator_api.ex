@@ -14,6 +14,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/archive/:ws      Office.archive (a workspace's done tickets + closed threads)
       GET    /api/office/banter/:ws       Office.Banter.lines (recent small talk; asking may write the next line)
       GET    /api/office/pets/:ws         Office.Pets.voices (the pets' lines by occasion; asking may write a batch)
+      GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next)
       GET    /api/office/activity/:ws     Office.Room.activity (what just happened: the in-tray)
       GET    /api/office/triage/:ws       Office.Room.triage (blockers, failed checks, unled threads: the beacon)
       GET    /api/office/memory/:ws       Office.Room.memory (pinned facts, habits to review: the bookshelf)
@@ -110,6 +111,13 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "office", ["banter", ws]) do
     case Integer.parse(ws) do
       {id, ""} -> json(conn, 200, Server.Office.Banter.lines(id))
+      _ -> json(conn, 404, %{error: "no workspace #{ws}"})
+    end
+  end
+
+  defp route(conn, "GET", "office", ["corkboard", ws]) do
+    case Integer.parse(ws) do
+      {id, ""} -> json(conn, 200, Server.Office.Corkboard.notes(id))
       _ -> json(conn, 404, %{error: "no workspace #{ws}"})
     end
   end
