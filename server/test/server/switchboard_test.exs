@@ -289,12 +289,6 @@ defmodule Server.SwitchboardTest do
     end
 
     test "a message no live addressee can receive spawns a pane and becomes its opening turn, claimed" do
-      # A thread with a lead assigned but whose session hasn't started: nobody live to
-      # WAKE, so the post is pending — but the autonomous spawn (§4c.3) opens a pane, and
-      # the message is delivered once that session registers and drains, not by this call.
-      # A thread with a lead assigned but whose session hasn't started: nobody live to WAKE — so the
-      # autonomous spawn (§4c.3) opens a pane and hands it THIS message as its opening turn, claimed so
-      # the drain never types it a second time once the session registers.
       # A thread with a lead assigned but whose session hasn't started: nobody live to WAKE — so the
       # autonomous spawn (§4c.3) opens a pane and hands it THIS message as its opening turn, claimed so
       # the drain never types it a second time once the session registers.
@@ -384,6 +378,40 @@ defmodule Server.SwitchboardTest do
 
       assert_received {:woke, "wCarl", _}
       refute_received {:spawned, _}
+    end
+
+    test "on the workspace's standing thread an @mentioned absent coworker IS spawned — one pane each there" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, _dana} = Staff.register_agent(%{name: "Dana", mandate: "review", engine: "fresh"})
+
+      {:ok, m} = Channel.post(%{thread_id: lobby.id, author: "stakeholder", body: "@Dana are you around?"})
+      assert {:pending, _} = Switchboard.deliver(m)
+
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Dana")
+    end
+
+    test "a closed thread's backlog spawns nobody" do
+      {:ok, thread} = Channel.open_thread(%{title: "done with"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+      {:ok, _m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "one more thing"})
+      {:ok, _} = Channel.close_thread(Channel.thread(thread.id))
+
+      Switchboard.drain()
+      refute_received {:spawned, _}
+    end
+
+    test "the drain retries the spawn for a pending message nobody warm is addressed by" do
+      {:ok, thread} = Channel.open_thread(%{title: "left waiting"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+      {:ok, _m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "still there?"})
+
+      Switchboard.drain()
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Carl")
     end
 
     test "an @mention of an absent coworker does not spawn the LEAD (only the addressed lead spawns)" do

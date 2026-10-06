@@ -1,0 +1,86 @@
+  test "orphan leaves (thread closed while nobody looked) are swept; centre, tail and live leaves are not",
+       %{ws: ws, sock: sock, session: session} do
+    thread = staffed_thread(ws, "borges")
+
+    tmux(
+      "0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-live\t#{thread.id}\tdone\t4\n4\treviewer-stale\t999888\tdone\t5\n5\tt777666\t\t\t6\n"
+    )
+
+    assert :ok = Staffing.pass(ws.id)
+
+    [t0, t3, t4, t5] = Enum.map([0, 3, 4, 5], &"#{session}:#{&1}")
+    assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^t4]}
+    assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^t5]}
+    refute_receive {:tmux, ["-L", _, "kill-window", "-t", ^t0]}, 20
+    refute_receive {:tmux, ["-L", _, "kill-window", "-t", ^t3]}, 20
+  end
+
+  test "a workspace with no bench is a no-op; pass/0 walks every workspace", %{ws: _ws} do
+    {:ok, empty} = Workspaces.register(%{name: "Sylvania", type: "code", scope: "project", repos: [], roster: []})
+    tmux("")
+    assert :ok = Staffing.pass(empty.id)
+    refute_received {:tmux, _}
+    assert :ok = Staffing.pass()
+    assert_receive {:tmux, ["-L", "tlon-workspace-" <> _ | _]}
+  end
+
+  describe "hand_off/2 — a running thread goes to another coworker" do
+    test "restaffs it, posts the handoff as the operator, and ends the old worker's leaf so the next pass spawns the new one",
+         %{ws: ws, sock: sock} do
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-task\t#{thread.id}\tdone\t4\n")
+
+      assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
+
+      assert Channel.thread_lead(thread.id) == "hronir"
+      assert %{author: "andrew", body: body} = List.last(Channel.thread_messages(thread))
+      assert body =~ "@hronir"
+      assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", target]}
+      assert target =~ ":3"
+    end
+
+    test "an unknown coworker is refused and changes nothing", %{ws: ws} do
+      thread = staffed_thread(ws, "borges")
+      tmux("0\trufus\t\t\t1\n")
+
+      assert {:error, :no_agent} = Staffing.hand_off(thread.id, "nobody")
+      assert Channel.thread_lead(thread.id) == "borges"
+      refute_received {:tmux, [_, _, "kill-window" | _]}
+    end
+  end
+
+  describe "stale_coworkers/3 — a rename left a process minting under a handle the bench lost" do
+    defp tab(name, author), do: {%{name: name, index: name, thread_id: nil, opening: nil, pane_pid: 1}, author}
+
+    defp check(pairs, bench) do
+      tabs = Enum.map(pairs, &elem(&1, 0))
+      authors = Map.new(pairs, fn {t, a} -> {t.name, a} end)
+      Staffing.stale_coworkers(tabs, bench, fn t -> authors[t.name] end)
+    end
+
+    test "a process holding a handle the bench no longer has is stale; one on the bench is not" do
+      assert [%{name: "tertius"}] = check([tab("tertius", "tertius-machine")], ["tertius", "hronir"])
+      assert check([tab("hronir", "hronir")], ["tertius", "hronir"]) == []
+    end
+
+    test "an unreadable process is never stale — we do not kill what we could not identify" do
+      assert check([tab("hronir", nil)], ["someone-else"]) == []
+    end
+
+    test "the window NAME is not the test — only the identity the process actually holds" do
+      assert [%{name: "hronir"}] = check([tab("hronir", "hronir-machine")], ["hronir"])
+    end
+
+    test "pane_author is nil for a pid that cannot be read, never a crash" do
+      assert Staffing.pane_author(%{pane_pid: 999_999_999}) == nil
+      assert Staffing.pane_author(%{pane_pid: nil}) == nil
+      assert Staffing.pane_author(%{}) == nil
+    end
+  end
+
+  test "the pass is on the minute cron" do
+    plugins = Application.fetch_env!(:server, Oban)[:plugins]
+    {_, cron} = Enum.find(plugins, &match?({Oban.Plugins.Cron, _}, &1))
+    assert {"* * * * *", Server.Jobs.Staff} in cron[:crontab]
+  end
+end

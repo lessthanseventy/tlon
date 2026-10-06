@@ -3,14 +3,15 @@ defmodule Server.Presence.Thinking do
   The explicit half of "who is working": a harness DECLARES thinking at turn start
   and idle at turn end (via the `presence_thinking`/`presence_idle` MCP tools), so
   a surface can show "thinking" the moment a turn begins — no tmux-activity
-  inference lag. In-memory only: presence is liveness, not history, so a restart
-  losing it is correct (the harnesses re-declare on their next turn).
+  inference lag. The store is in memory — presence is liveness, not history; the
+  harnesses re-declare on their next turn.
 
   Entries are `{thread_id, agent} => started_at`. A periodic sweep clears entries
   older than `:thinking_max_seconds` (default 600s) and announces them idle —
   the stuck-harness guard: a crashed harness that never sent `idle` must not read
   as thinking forever. Every transition broadcasts on `server:presence` and the
-  thread topic (`Server.Bus`).
+  thread topic (`Server.Bus`), and marks the agent's session (`Staff.mark_thinking/3`): the
+  durable half, so a turn a machine restart cut off can be picked up (`Server.Staffing`).
   """
   use GenServer
 
@@ -52,6 +53,7 @@ defmodule Server.Presence.Thinking do
   @impl true
   def handle_call({:thinking, thread_id, agent}, _from, state) do
     started_at = now()
+    durable(thread_id, agent, started_at)
     Bus.broadcast({:presence_thinking, %{thread_id: thread_id, agent: agent, started_at: started_at}})
     {:reply, :ok, put_in(state.entries[{thread_id, agent}], started_at)}
   end
@@ -107,11 +109,21 @@ defmodule Server.Presence.Thinking do
 
       {_started_at, entries} ->
         Bus.broadcast({:presence_idle, %{thread_id: thread_id, agent: agent}})
+        durable(thread_id, agent, nil)
 
         # the turn ended: queue its memory pass (a no-op unless the pass is on and Oban runs here)
         _ = TurnPass.schedule(thread_id)
         %{state | entries: entries}
     end
+  end
+
+  # the session row's mark (Staff.mark_thinking): best-effort, presence never fails on the db
+  defp durable(thread_id, agent, at) do
+    Server.Staff.mark_thinking(thread_id, agent, at)
+  rescue
+    _ -> :ok
+  catch
+    :exit, _ -> :ok
   end
 
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)

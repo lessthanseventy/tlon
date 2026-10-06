@@ -165,6 +165,37 @@ defmodule Server.Staff do
   end
 
   @doc """
+  Mark `agent`'s live sessions on `thread_id` mid-turn since `at`, or (nil) not — the durable
+  half of `Server.Presence.Thinking`, which keeps the fast in-memory read.
+  """
+  def mark_thinking(thread_id, agent, at) do
+    ids = from(a in Agent, where: a.name == ^agent, select: a.id)
+
+    Repo.update_all(
+      from(s in Session, where: s.thread_id == ^thread_id and s.agent_id in subquery(ids) and is_nil(s.ended_at)),
+      set: [thinking_since: at]
+    )
+
+    :ok
+  end
+
+  @doc """
+  Sessions a turn was cut off in: mid-turn (`thinking_since` set), not ended, in `workspace_id`.
+  `[%{session_id, thread_id, agent}]` — the staffing pass asks tmux whether each still has a window.
+  """
+  def interrupted(workspace_id) do
+    Repo.all(
+      from s in Session,
+        join: t in Thread,
+        on: t.id == s.thread_id,
+        join: a in Agent,
+        on: a.id == s.agent_id,
+        where: t.workspace_id == ^workspace_id and is_nil(s.ended_at) and not is_nil(s.thinking_since),
+        select: %{session_id: s.id, thread_id: s.thread_id, agent: a.name}
+    )
+  end
+
+  @doc """
   The session to jump into for a thread (§9.3): the newest not-yet-ended session,
   or nil if every session has ended. This hands over which pane to poke — liveness
   itself is asked of the arbiter live (§2), never read from here.

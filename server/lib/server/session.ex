@@ -19,6 +19,9 @@ defmodule Server.Session do
     # cache window (~1h) is cold, and the switchboard must not wake a cold session.
     # The switchboard bumps this as the session acts; a fresh session starts warm.
     field :last_active_at, :utc_datetime
+    # When its harness declared a turn started and has not declared it over (Presence.Thinking):
+    # a turn a machine restart cut off is one with this set and no window left to run it.
+    field :thinking_since, :utc_datetime
     belongs_to :agent, Server.Agent
     belongs_to :thread, Server.Thread
   end

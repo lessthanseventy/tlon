@@ -1,7 +1,7 @@
 defmodule Server.StaffingTest do
-  # The staffing pass on the server: the centre, the tail, the leaves under the cap, the orphan
-  # sweep and the stale reap — driven through the `:tmux_cmd`/`:staff_join` seams, so no live tmux
-  # or harness is ever forked.
+  # The staffing pass on the server: nothing spawned ahead of need, the cold swept, the orphan
+  # sweep, the stale reap and a cut-off turn picked up — driven through the `:tmux_cmd` seam, so no
+  # live tmux or harness is ever forked.
   use ExUnit.Case, async: false
 
   alias Server.Channel
@@ -19,29 +19,7 @@ defmodule Server.StaffingTest do
     {:ok, ws} = Workspaces.register(%{name: "Freedonia", type: "code", scope: "project", repos: [], roster: @bench})
     # the workspace's standing machine thread — the oldest open one, so it is opened FIRST here
     {:ok, standing} = Channel.open_thread(%{title: "general", scope: "machine", workspace_id: ws.id})
-
-    pi_root = Path.join(System.tmp_dir!(), "tlon_staffing_pi_#{System.unique_integer([:positive])}")
-    prior = System.get_env("PI_CODING_AGENT_DIR")
-    System.put_env("PI_CODING_AGENT_DIR", Path.join(pi_root, "agent"))
-    prior_env = System.get_env("TLON_ENV")
-    System.delete_env("TLON_ENV")
-
-    test_pid = self()
-
-    Application.put_env(:server, :staff_join, fn thread_id, agent, opts ->
-      send(test_pid, {:join, thread_id, agent, opts})
-      {:ok, %{exports: ~s(export TLON_THREAD="#{thread_id}"\nexport TLON_AUTHOR="#{agent}")}}
-    end)
-
-    Application.put_env(:server, :staff_poll_ms, 0)
-    Application.put_env(:server, :staff_settle_ms, 0)
-
-    on_exit(fn ->
-      for k <- [:tmux_cmd, :staff_join, :staff_poll_ms, :staff_settle_ms], do: Application.delete_env(:server, k)
-      if prior, do: System.put_env("PI_CODING_AGENT_DIR", prior), else: System.delete_env("PI_CODING_AGENT_DIR")
-      if prior_env, do: System.put_env("TLON_ENV", prior_env), else: System.delete_env("TLON_ENV")
-      File.rm_rf!(pi_root)
-    end)
+    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
 
     %{ws: ws, standing: standing, sock: "tlon-workspace-#{ws.id}", session: "w#{ws.id}"}
   end
@@ -72,126 +50,82 @@ defmodule Server.StaffingTest do
     thread
   end
 
-  test "the centre absent: the bench head's pi opens the session (new-session, the profile's tmux.conf, identity in the env)",
+  # a live session for `agent` on `thread_id`, last active `ago_s` seconds back, mid-turn or not
+  defp session!(agent, thread_id, ago_s, thinking? \\ false) do
+    a = Server.Staff.agent_by_name(agent)
+    {:ok, s} = Server.Staff.start_session(%{agent_id: a.id, thread_id: thread_id})
+    at = DateTime.add(DateTime.truncate(DateTime.utc_now(), :second), -ago_s)
+    s |> Ecto.Changeset.change(last_active_at: at, thinking_since: if(thinking?, do: at)) |> Server.Repo.update!()
+  end
+
+  defp old, do: System.os_time(:second) - 3_600
+  defp fresh, do: System.os_time(:second) - 60
+
+  test "nobody is spawned ahead of need: a pass over an empty workspace opens nothing", %{ws: ws} do
+    tmux("")
+    assert :ok = Staffing.pass(ws.id)
+    refute_received {:tmux, [_, _, "new-session" | _]}
+    refute_received {:tmux, [_, _, "new-window" | _]}
+  end
+
+  test "a cold coworker's window closes; a warm one, a mid-turn one and one still booting stay",
        %{ws: ws, standing: standing, sock: sock, session: session} do
-    tmux("")
-    assert :ok = Staffing.pass(ws.id)
-
-    assert_receive {:join, tid, "rufus", opts}
-    assert tid == standing.id
-    assert opts[:mandate] == "machine"
-    assert_receive {:tmux, ["-L", ^sock, "-f", conf, "new-session", "-d", "-s", ^session, "-n", "rufus" | rest]}
-    assert conf =~ "tmux.conf"
-    assert "-e" in rest
-    assert Enum.any?(rest, &String.starts_with?(&1, "TLON_AUTHOR=rufus"))
-    assert List.last(rest) =~ "PI_CODING_AGENT_DIR"
-    assert_receive {:tmux, ["-L", ^sock, "set-option", "-g", "allow-passthrough", "on"]}
-  end
-
-  test "a workspace with no machine thread yet: the centre opens one", %{ws: ws} do
-    Server.Repo.delete_all(Server.Thread)
-    tmux("")
-    assert :ok = Staffing.pass(ws.id)
-    assert %{scope: "machine", title: "lobby"} = Channel.machine_thread(ws.id)
-  end
-
-  test "the centre up: no new-session; the tail seats get their windows, each by its harness", %{
-    ws: ws,
-    sock: sock,
-    session: session
-  } do
-    tmux("0\trufus\t\t\t1\n")
-    assert :ok = Staffing.pass(ws.id)
-
-    refute_received {:tmux, ["-L", _, "new-session" | _]}
-    assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", "hronir", hronir]}
-    assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", "borges", borges]}
-    # at home the anthropic-model builder and planner ride the official claude launcher
-    assert hronir =~ "adapters/claude-code/launch.sh"
-    assert borges =~ "adapters/claude-code/launch.sh"
-    assert_receive {:join, _tid, "hronir", _}
-    assert_receive {:join, _tid, "borges", _}
-  end
-
-  test "a staffed worker thread gets a leaf: human name, @funes_thread tag, the operator's message as the opening turn, tagged done",
-       %{ws: ws, sock: sock, session: session} do
     thread = staffed_thread(ws, "borges")
-    {:ok, _} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "plan the\nrelease"})
-    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n")
+    session!("hronir", standing.id, 60)
+    session!("borges", thread.id, 7_200, true)
+
+    tmux(
+      "0\trufus\t\t\t1\trufus\t#{old()}\n1\thronir\t\t\t2\thronir\t#{old()}\n" <>
+        "2\tt#{thread.id}\t#{thread.id}\tdone\t3\tborges\t#{old()}\n3\tborges\t\t\t4\tborges\t#{fresh()}\n"
+    )
 
     assert :ok = Staffing.pass(ws.id)
 
-    window = "planner-task-for-borges"
-    assert_receive {:join, tid, "borges", opts}
-    assert tid == thread.id
-    assert opts[:mandate] == "machine"
-    assert_receive {:tmux, ["-L", ^sock, "new-window", "-d", "-t", ^session, "-n", ^window, script]}
-    assert script =~ "adapters/claude-code/launch.sh"
-    tag = "#{thread.id}"
-    target = "#{session}:=#{window}"
-    assert_receive {:tmux, ["-L", ^sock, "set-option", "-w", "-t", ^target, "@funes_thread", ^tag]}
-    assert_receive {:tmux, ["-L", ^sock, "capture-pane", "-p", "-t", ^target]}
-    assert_receive {:tmux, ["-L", ^sock, "send-keys", "-l", "-t", ^target, text]}
-    assert text == "[server thread ##{thread.id}] andrew: plan the release"
-    assert_receive {:tmux, ["-L", ^sock, "send-keys", "-t", ^target, "Enter"]}
-    assert_receive {:tmux, ["-L", ^sock, "set-option", "-w", "-t", ^target, "@funes_opening", "done"]}
+    # rufus: no session at all, long past booting — cold
+    cold = "#{session}:0"
+    assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^cold]}
+    # hronir warm, borges mid-turn on his leaf, borges just booting on the standing thread
+    for i <- 1..3, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
   end
 
-  test "a live tagged leaf suppresses a respawn; a meta (surveyor) lead never gets one; the standing thread neither",
-       %{ws: ws} do
-    borges = staffed_thread(ws, "borges")
-    _rufus = staffed_thread(ws, "rufus")
-
-    standing =
-      Channel.machine_thread(ws.id) ||
-        elem(Channel.open_thread(%{title: "general", scope: "machine", workspace_id: ws.id}), 1)
-
-    {:ok, _} = Channel.assign_lead(standing.id, "hronir")
-    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-x\t#{borges.id}\tdone\t4\n")
-
+  test "a window nobody can be attributed to (a crew role, a hand-made one) is never swept as cold",
+       %{ws: ws, session: session} do
+    tmux("0\tr12\t\t\t1\t\t\n1\tscratch\t\t\t2\t\t\n")
     assert :ok = Staffing.pass(ws.id)
-
-    refute_receive {:tmux, ["-L", _, "new-window" | _]}, 50
+    for i <- 0..1, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
   end
 
-  test "a TYPED leaf is submitted and tagged done; a DONE one is left alone", %{
-    ws: ws,
-    sock: sock,
-    session: session
-  } do
+  test "a turn the machine cut off: its session ends and its coworker is told on the thread to carry on",
+       %{ws: ws, standing: standing} do
     thread = staffed_thread(ws, "borges")
-    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-x\t#{thread.id}\ttyped\t4\n")
+    cut = session!("borges", thread.id, 30, true)
+    alive = session!("hronir", standing.id, 30, true)
+    tmux("0\thronir\t\t\t1\thronir\t#{fresh()}\n")
 
     assert :ok = Staffing.pass(ws.id)
 
-    t3 = "#{session}:3"
-    assert_receive {:tmux, ["-L", ^sock, "send-keys", "-t", ^t3, "Enter"]}
-    assert_receive {:tmux, ["-L", ^sock, "set-option", "-w", "-t", ^t3, "@funes_opening", "done"]}
-    refute_receive {:tmux, ["-L", _, "send-keys", "-l" | _]}, 20
+    assert Server.Repo.get!(Server.Session, cut.id).ended_at
+    assert %{author: "tlon", body: "@borges the machine restarted" <> _} = List.last(Channel.thread_messages(thread))
+    # hronir's window is still there: nothing to pick up
+    refute Server.Repo.get!(Server.Session, alive.id).ended_at
+    refute Enum.any?(Channel.thread_messages(standing), &(&1.author == "tlon"))
   end
 
-  test "the leaf cap parks a spawn past the budget — no new-window, one durable note", %{ws: ws} do
-    cfg = Path.join(System.tmp_dir!(), "tlon_cap_#{System.unique_integer([:positive])}.json")
-    File.write!(cfg, ~s({"max_leaves": 1}))
-    prior = Application.get_env(:server, :operator_config_path)
-    Application.put_env(:server, :operator_config_path, cfg)
-
-    on_exit(fn ->
-      Application.put_env(:server, :operator_config_path, prior)
-      File.rm(cfg)
-    end)
-
+  test "clearing a coworker's context ends their sessions and closes their windows, nobody else's",
+       %{ws: ws, standing: standing, sock: sock, session: session} do
     thread = staffed_thread(ws, "borges")
-    # one live leaf (of a thread that is still open+staffed) already holds the only seat
-    other = staffed_thread(ws, "hronir", "busy")
-    tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tbuilder-busy\t#{other.id}\tdone\t4\n")
+    s1 = session!("borges", thread.id, 30)
+    s2 = session!("hronir", standing.id, 30)
+    tmux("0\thronir\t\t\t1\thronir\t#{old()}\n1\tt#{thread.id}\t#{thread.id}\tdone\t2\tborges\t#{old()}\n")
 
-    assert :ok = Staffing.pass(ws.id)
-    assert :ok = Staffing.pass(ws.id)
+    assert :ok = Staffing.clear_context(ws.id, "borges")
 
-    refute_receive {:tmux, ["-L", _, "new-window" | _]}, 50
-    assert [%{body: body}] = Channel.thread_messages(Channel.thread(thread.id))
-    assert body =~ "parked"
+    assert Server.Repo.get!(Server.Session, s1.id).ended_at
+    refute Server.Repo.get!(Server.Session, s2.id).ended_at
+    leaf = "#{session}:1"
+    assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^leaf]}
+    centre = "#{session}:0"
+    refute_received {:tmux, ["-L", _, "kill-window", "-t", ^centre]}
   end
 
   test "orphan leaves (thread closed while nobody looked) are swept; centre, tail and live leaves are not",

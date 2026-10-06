@@ -3,10 +3,10 @@ defmodule Server.Tmux do
   The tmux naming contract the whole machine shares, and the server's command seam behind it
   (one-brain piece B). Every workspace runs its coworkers on a PRIVATE tmux server — socket
   `tlon-workspace-<id>`, session `w<id>`, both id-derived so a rename never orphans a running
-  session; the roster lead is the CENTRE window (named after the lead), tail coworkers are named
-  windows, a staffed thread's leaf window carries the `@funes_thread <id>` option (the routing
-  key — its name is cosmetic; a legacy `t<id>` name still resolves) and its opening-turn phase as
-  `@funes_opening`, crew roles are `r<id>`. The names are defined here so a client (asterion) and
+  session; on the standing thread each coworker's window is named after them, a staffed thread's
+  leaf window carries the `@funes_thread <id>` option (the routing key — its name is cosmetic; a
+  legacy `t<id>` name still resolves), every spawned window its coworker (`@funes_agent`) and birth
+  (`@funes_born`), and crew roles are `r<id>`. The names are defined here so a client (asterion) and
   the server can never disagree about where a coworker runs.
 
   Every call routes through `run/3`: `System.cmd/3` by default, `config :server, :tmux_cmd` is
@@ -18,7 +18,9 @@ defmodule Server.Tmux do
           index: String.t(),
           thread_id: integer() | nil,
           opening: String.t() | nil,
-          pane_pid: integer() | nil
+          pane_pid: integer() | nil,
+          agent: String.t() | nil,
+          born: integer() | nil
         }
 
   def session(id), do: "w#{id}"
@@ -35,7 +37,7 @@ defmodule Server.Tmux do
     runner.("tmux", argv(id, args), stderr_to_stdout: true)
   end
 
-  @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}"
+  @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}"
 
   @doc "The session's windows (a session not up is `[]`)."
   def list_windows(id, opts \\ []) do
@@ -46,16 +48,18 @@ defmodule Server.Tmux do
   end
 
   @doc """
-  Parse `list-windows` output: `<index>\\t<name>\\t<@funes_thread>\\t<@funes_opening>\\t<pane_pid>` per
-  window. Shorter lines still parse, missing fields nil; a malformed line is dropped.
+  Parse `list-windows` output, one window per line, tab-separated: index, name, `@funes_thread`,
+  `@funes_opening`, pane_pid, `@funes_agent`, `@funes_born` — the last two the coworker a window
+  runs and when it was spawned (unix seconds), as the spawn tagged it. Shorter lines still parse,
+  missing fields nil; a malformed line is dropped.
   """
   def parse_windows(out) do
     out
     |> String.split("\n", trim: true)
     |> Enum.flat_map(fn line ->
-      case String.split(line, "\t", parts: 5) do
+      case String.split(line, "\t", parts: 7) do
         [index, name | rest] when name != "" ->
-          [thread, opening, pid] = Enum.map(0..2, &Enum.at(rest, &1, ""))
+          [thread, opening, pid, agent, born] = Enum.map(0..4, &Enum.at(rest, &1, ""))
 
           [
             %{
@@ -63,7 +67,9 @@ defmodule Server.Tmux do
               name: name,
               thread_id: int_or_nil(thread),
               opening: if(opening in ["typed", "done"], do: opening),
-              pane_pid: int_or_nil(pid)
+              pane_pid: int_or_nil(pid),
+              agent: if(agent != "", do: agent),
+              born: int_or_nil(born)
             }
           ]
 
@@ -86,7 +92,7 @@ defmodule Server.Tmux do
   @doc "The tab named `name`, or nil."
   def named(tabs, name), do: Enum.find(tabs, &(&1.name == name))
 
-  @doc "Is this tab a LEAF session (a `@funes_thread` tag or a legacy `t<id>` name), vs the centre/tail/crew windows?"
+  @doc "Is this tab a LEAF session (a `@funes_thread` tag or a legacy `t<id>` name), vs a standing-thread coworker's or a crew window?"
   def leaf_window?(%{thread_id: tid}) when is_integer(tid), do: true
   def leaf_window?(%{name: name}), do: Regex.match?(~r/\At\d+\z/, name)
 

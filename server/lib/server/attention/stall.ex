@@ -8,9 +8,9 @@ defmodule Server.Attention.Stall do
   killed: deciding whether to nudge, restart or wait is the operator's.
 
   A pane waiting on a dialog is `Server.Attention`'s prompt, not a stall. A frozen pane nobody is
-  thinking in is idle. A standing-thread window (centre/tail, no `@funes_thread` tag) counts only
-  its OWN agent's thinking — the window name is the coworker's handle — so an idle tail never
-  inherits the lead's turn.
+  thinking in is idle. A standing-thread window (no `@funes_thread` tag) counts only its OWN
+  agent's thinking — the window name is the coworker's handle — so an idle coworker never
+  inherits another's turn.
 
   `tick/2` takes and returns the pane memory `%{{workspace_id, window} => {hash, since}}`; the
   poller carries it. In-memory on purpose: a restart forgets when a pane last moved, which only

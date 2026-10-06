@@ -98,8 +98,8 @@ defmodule Server.Attention do
   @doc """
   One workspace: every window's pane is read; a waiting pane with no open prompt opens one, a
   pane that moved on resolves its prompt (`answered in the terminal`), a new dialog on the same
-  window supersedes the old row, a window that is gone closes what it left open. Centre and tail
-  windows (no `@funes_thread` tag) belong to the workspace's standing machine thread.
+  window supersedes the old row, a window that is gone closes what it left open. A window with no
+  `@funes_thread` tag belongs to the workspace's standing machine thread.
   """
   def tick(workspace_id) do
     tabs = Tmux.list_windows(workspace_id)

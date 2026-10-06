@@ -1,6 +1,6 @@
 defmodule Server.Presence.ThinkingTest do
   # The explicit half of presence: a harness declares thinking at turn start and idle at
-  # turn end. In-memory store + sweep + Bus liveness — no DB.
+  # turn end. In-memory store + sweep + Bus liveness, and the session row's durable mark.
   use ExUnit.Case, async: false
 
   alias Server.Bus
@@ -10,6 +10,24 @@ defmodule Server.Presence.ThinkingTest do
     name = :"thinking_#{System.unique_integer([:positive])}"
     start_supervised!({Thinking, Keyword.put(opts, :name, name)})
     name
+  end
+
+  test "thinking marks the agent's live session mid-turn; idle (or the sweep) clears it" do
+    Server.TestDB.clean!()
+    store = start_store(max_seconds: 0)
+    {:ok, t} = Server.Channel.open_thread(%{title: "marked"})
+    {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "m", engine: "pi"})
+    {:ok, s} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
+    mark = fn -> Server.Repo.get!(Server.Session, s.id).thinking_since end
+
+    Thinking.thinking(store, t.id, "hronir")
+    assert %DateTime{} = mark.()
+    Thinking.idle(store, t.id, "hronir")
+    assert mark.() == nil
+
+    Thinking.thinking(store, t.id, "hronir")
+    Thinking.sweep(store)
+    assert mark.() == nil
   end
 
   test "thinking registers an entry readable per-thread and across all threads" do

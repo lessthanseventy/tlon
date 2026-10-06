@@ -203,7 +203,8 @@ defmodule Server.StaffTest do
       # denylist of guessed names — the rule is positive ("only the opaque ref"), so
       # ANY new column trips this, including one no one thought to forbid. Note:
       # last_active_at is OUR OWN presence bookkeeping (§3b), not a cached pane
-      # property, so it belongs here.
+      # property, so it belongs here; so is thinking_since — what the harness DECLARED
+      # over the channel (presence_thinking), never read off the pane.
       assert Session.__schema__(:fields) ==
                [
                  :id,
@@ -211,6 +212,7 @@ defmodule Server.StaffTest do
                  :started_at,
                  :ended_at,
                  :last_active_at,
+                 :thinking_since,
                  :agent_id,
                  :thread_id
                ]
