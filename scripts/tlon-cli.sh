@@ -349,6 +349,14 @@ case "$cmd" in
     exec "$SERVER" rpc "%Server.Thread{id: $tid} |> Server.Board.brief() |> Server.MCP.Brief.scope() |> inspect(pretty: true, limit: :infinity) |> IO.puts()"
     ;;
 
+  note)
+    # Post as tlon — the server's own voice, as its stage briefs are — not as the operator: what a
+    # script reports (a verify result) must not read as something the human said.
+    tid="${1:-}"; shift || true
+    body="$*"
+    { int "$tid" && [ -n "$body" ]; } || { echo 'usage: tlon-cli note <thread-id> <message text…>' >&2; exit 2; }
+    exec "$SERVER" rpc "{:ok, m} = Server.Channel.post(%{thread_id: $tid, author: \"tlon\", body: \"$(esc "$body")\"}); IO.puts(\"posted ##{m.id} to thread #$tid as tlon\")"
+    ;;
   post)
     tid="${1:-}"; shift || true
     body="$*"
