@@ -165,6 +165,7 @@ describe("the wide room", () => {
     expect(visited.size).toBeGreaterThanOrEqual(3)
   }), 30_000)
 
+  // every route between every fixed spot, at three widths: seconds of CPU, more under a full gate
   test("no walk crosses the furniture", () => {
     for (const w of [540, 560, 700]) {
       const plan = widePlan(w), l = plan.layout(viewOf(office(8), 1))
@@ -186,7 +187,7 @@ describe("the wide room", () => {
         }
       }
     }
-  })
+  }, 30_000)
 
   test("no walk crosses the furniture, tile by tile", () => {
     for (const w of [540, 560, 700]) {
