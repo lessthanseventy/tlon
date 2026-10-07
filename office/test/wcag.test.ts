@@ -7,6 +7,7 @@ import { EMPTY, type Agents } from "../kit/types"
 import { RailRoom, W, H } from "../rooms/rail"
 import { WideRoom, WIDE_H } from "../rooms/wide"
 import { geometry, inkInto, measureFor, MIN_CONTRAST, textScale, typeFor } from "../tui/paint"
+import { clampViewport, clipFrame } from "../tui/viewport"
 
 export function office(): Agents {
   const names = ["tertius", "hronir", "lonnrot", "yu", "ashe", "daneri"]
@@ -21,7 +22,8 @@ export function office(): Agents {
   }
 }
 
-/** every label the room drew, with the colour actually behind it once the painter has backed it */
+/** every label the room drew, with the colour actually behind it once the painter has backed it —
+ * swept across every viewport position the floor can take, one cell at a time */
 function labels(room: RailRoom | WideRoom, w: number, h: number, cell: { w: number; h: number }, cols: number, rows: number) {
   const g = geometry(w, h, cols, rows, 17, cell, true), a = viewOf(office(), 1)
   for (let i = 0; i < 300; i++) room.step(a)
@@ -29,8 +31,13 @@ function labels(room: RailRoom | WideRoom, w: number, h: number, cell: { w: numb
   const fr = room.render(a, { picked: 101, armed: null, person: null }, measureFor(g))
   const bw = fr.width * g.k, bh = fr.height * g.k, big = new Uint8Array(bw * bh * 4)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) big.set(fr.rgba.subarray(((Math.floor(y / g.k) * fr.width) + Math.floor(x / g.k)) * 4, ((Math.floor(y / g.k) * fr.width) + Math.floor(x / g.k)) * 4 + 4), (y * bw + x) * 4)
+  const vw = Math.min(g.floorW, (g.cols * g.cw) / g.k), vh = Math.min(g.floorH, (g.rows * g.ch) / g.k)
+  const step = Math.max(1, g.cw / g.k), maxX = Math.max(0, g.floorW - vw), maxY = Math.max(0, g.floorH - vh)
   const backed: { text: string; behind: string }[] = []
-  inkInto(big, bw, bh, fr.ink, g.k, textScale(g), backed)
+  for (let vy = 0; vy <= maxY; vy += step) for (let vx = 0; vx <= maxX; vx += step) {
+    const viewport = clampViewport({ x: vx, y: vy, w: vw, h: vh }, g.floorW, g.floorH)
+    inkInto(big, bw, bh, clipFrame(fr, viewport).ink, g.k, textScale(g), backed)
+  }
   return backed
 }
 
