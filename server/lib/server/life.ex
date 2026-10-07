@@ -70,4 +70,40 @@ defmodule Server.Life do
 
     (routine_xp || 0) + (quest_xp || 0)
   end
+
+  @doc "Every enabled routine whose current due has no run yet, with how long is left in its window."
+  @spec due(integer, DateTime.t()) :: [map()]
+  def due(workspace_id, now \\ DateTime.utc_now()) do
+    for routine <- Repo.all(from r in Routine, where: r.workspace_id == ^workspace_id and r.enabled),
+        due_at = current_due_at(routine, now),
+        due_at != nil,
+        not has_run?(routine.id, due_at) do
+      %{
+        routine_id: routine.id,
+        title: routine.title,
+        due_at: due_at,
+        window_remaining: DateTime.diff(DateTime.add(due_at, routine.window_minutes * 60), now)
+      }
+    end
+  end
+
+  @doc "Consecutive met dues counted back from now; 0 if the current due is unmet. Late still counts."
+  @spec streak(Routine.t(), DateTime.t()) :: integer
+  def streak(%Routine{} = routine, now \\ DateTime.utc_now()) do
+    case current_due_at(routine, now) do
+      nil -> 0
+      due_at -> if has_run?(routine.id, due_at), do: 1 + streak_before(routine, due_at), else: 0
+    end
+  end
+
+  defp streak_before(routine, due_at) do
+    case previous_due_at(routine, due_at) do
+      nil -> 0
+      prev -> if has_run?(routine.id, prev), do: 1 + streak_before(routine, prev), else: 0
+    end
+  end
+
+  defp has_run?(routine_id, due_at) do
+    Repo.exists?(from rr in RoutineRun, where: rr.routine_id == ^routine_id and rr.due_at == ^due_at)
+  end
 end

@@ -85,4 +85,31 @@ defmodule Server.LifeTest do
       assert Server.Life.late?(due, DateTime.add(due, 60 * 60 + 1), 60)
     end
   end
+
+  describe "streak/2" do
+    setup do
+      Server.TestDB.clean!()
+      created = ~U[2026-01-01 00:00:00Z]
+
+      {:ok, routine} =
+        Server.Routine.create_changeset(%{workspace_id: register_ws!().id, title: "stretch", every: "0 9 * * *"})
+        |> Ecto.Changeset.force_change(:created_at, created)
+        |> Server.Repo.insert()
+
+      %{routine: routine}
+    end
+
+    test "counts back from now, stopping at the first totally-missed due", %{routine: routine} do
+      created = ~U[2026-01-01 00:00:00Z]
+      dues = Enum.scan(1..7, created, fn _, cursor -> Server.Schedules.next_occurrence(routine.every, cursor) end)
+      # 7 daily occurrences after created. Run all but the 4th (the gap).
+      for due <- List.delete_at(dues, 3), do: insert_run!(routine, due, done_at: due, late: false)
+
+      now = DateTime.add(List.last(dues), 3600)
+
+      assert Server.Life.streak(routine, now) == 3
+    end
+
+    defp register_ws!, do: Server.Workspaces.register(%{name: "life-streak-#{System.unique_integer()}", type: "home"}) |> elem(1)
+  end
 end
