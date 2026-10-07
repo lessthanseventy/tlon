@@ -48,7 +48,7 @@ defmodule Server.Office do
       counts: Map.new(Repo.all(from(t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}))),
       awaiting: awaiting(prompts),
       triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
-      life: Map.new(home_ws_ids(wss), &{&1, Server.Life.status(&1) |> Map.take([:level, :xp, :due])}),
+      life: Map.new(home_ws_ids(wss), &{&1, &1 |> Server.Life.status() |> Map.take([:level, :xp, :due])}),
       health: Map.take(Room.health(), [:state, :problems]),
       weather: Server.Office.Weather.now(),
       # a TUI started on an older office revision offers a reload (Server.Rollout)
