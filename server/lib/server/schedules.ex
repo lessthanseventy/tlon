@@ -63,6 +63,10 @@ defmodule Server.Schedules do
     end
   end
 
+  @doc "The next local occurrence of `cron` (or `@daily`/`@weekly`/…) strictly after `after_at`."
+  @spec next_occurrence(String.t(), DateTime.t()) :: DateTime.t()
+  def next_occurrence(cron, after_at), do: cron |> Expression.parse!() |> after_local(after_at)
+
   # the slot it is owed: a one-off's time (until it ran), or the cron's next after its last firing
   defp slot(%Schedule{cron: nil, at: at, last_run_at: nil}), do: at
   defp slot(%Schedule{cron: nil}), do: nil
