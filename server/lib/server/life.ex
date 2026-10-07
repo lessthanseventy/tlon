@@ -5,7 +5,12 @@ defmodule Server.Life do
   integer math (`level/1`, `next_level_at/1`).
   """
 
+  import Ecto.Query
+
+  alias Server.Quest
+  alias Server.Repo
   alias Server.Routine
+  alias Server.RoutineRun
   alias Server.Schedules
 
   @doc "floor(sqrt(xp / 100)) — quick at first, slows down. A placeholder curve (spec §10)."
@@ -39,5 +44,30 @@ defmodule Server.Life do
   @spec previous_due_at(Routine.t(), DateTime.t()) :: DateTime.t() | nil
   def previous_due_at(%Routine{} = routine, before_due_at) do
     current_due_at(routine, DateTime.add(before_due_at, -1, :second))
+  end
+
+  @doc "done_at strictly after due_at + window_minutes is late; at the boundary or before is on time."
+  @spec late?(DateTime.t(), DateTime.t(), integer) :: boolean
+  def late?(due_at, done_at, window_minutes) do
+    DateTime.compare(done_at, DateTime.add(due_at, window_minutes * 60)) == :gt
+  end
+
+  @doc "Σ routine.xp over on-time runs + half (integer div) over late runs + Σ quest.xp over done quests."
+  @spec xp(integer) :: integer
+  def xp(workspace_id) do
+    routine_xp =
+      from(rr in RoutineRun,
+        join: r in Routine,
+        on: r.id == rr.routine_id,
+        where: r.workspace_id == ^workspace_id,
+        select: sum(fragment("CASE WHEN ? THEN ? / 2 ELSE ? END", rr.late, r.xp, r.xp))
+      )
+      |> Repo.one()
+
+    quest_xp =
+      from(q in Quest, where: q.workspace_id == ^workspace_id and not is_nil(q.done_at), select: sum(q.xp))
+      |> Repo.one()
+
+    (routine_xp || 0) + (quest_xp || 0)
   end
 end
