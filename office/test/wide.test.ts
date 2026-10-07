@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { describe, expect, test } from "bun:test"
 import { crewOf, viewOf } from "../kit/crew"
 import type { Spot } from "../kit/sim"
@@ -39,6 +40,23 @@ describe("the wide room", () => {
       for (const h of fr.hits) { expect(h.x).toBeGreaterThanOrEqual(-1); expect(h.x + h.w).toBeLessThanOrEqual(w + 1) }
     })
   }
+
+  test("the room's pixels don't move: a golden hash per width", () => seeded(1, () => {
+    const golden: Record<number, string> = {
+      540: "dff34a7f04724442e63370065d63434678222ff549b7cf905c393744fd0b5edf",
+      560: "76a2959cad01e5468ebea19edab7aaa67a0b2215954bc4243a86fb9f4a2d7118",
+      640: "12f0e1c6ab821d353a4fb95fe936f384ebc60640e626e9b74043a3329808b084",
+      696: "ca67aae931e05d64fe4e69c4571d89a6d8ca0b447282969e1c6496066b073b4d",
+      900: "1ca12cf8fccab5b07613f903a4a50211bda8d9bc1e7bebf1edfbbdd1cc024251",
+    }
+    for (const [w, hash] of Object.entries(golden)) {
+      const room = new WideRoom(Number(w)), a = viewOf(office(6), 1)
+      for (let i = 0; i < 300; i++) room.step(a)
+      const fr = room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0))
+      const got = createHash("sha256").update(Buffer.from(fr.rgba)).digest("hex")
+      expect(got).toBe(hash)
+    }
+  }))
 
   test("the in-tray, the beacon and the rack say what they hold, and open their cards", () => {
     const tips = (a: Agents, tray: number) => new Map(new WideRoom(560).render(a, { ...focus, tray }, measure).hits.map((h) => [h.act.kind, h.tip]))
