@@ -21,6 +21,7 @@ import { floorPlan } from "../kit/floor"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
+import { marqueeWindow, type NowPlaying } from "../kit/stereo"
 import { SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
 
@@ -103,6 +104,7 @@ type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle"; until: number; trail
 export class WideRoom extends Sim<Layout> {
   private readonly z: Zones
   private readonly tvSet = new Tv(48, 28)
+  private player: NowPlaying | null = null
   private readonly dog: Dog
   private readonly games: ReturnType<typeof gamesTile>
   private readonly kitchen: ReturnType<typeof kitchenTile>
@@ -217,6 +219,8 @@ export class WideRoom extends Sim<Layout> {
   }
   /** the remote: the next channel */
   channel() { this.tvSet.next() }
+  /** the TUI calls this every ~2s with whatever playerctl reports (or null — no player running) */
+  setPlayer(p: NowPlaying | null) { this.player = p }
 
   render(a: Agents, focus: Focus, measure: Measure, now = new Date()): Frame {
     const W = this.width, H = WIDE_H
@@ -249,6 +253,7 @@ export class WideRoom extends Sim<Layout> {
     this.windows(sc, M0 + 4, L0 + 30, now, a.weather ?? null)
     this.season(sc, now)
     this.tv(sc, L0 + 36)
+    this.stereo(sc, Math.min(L0 + 96, W - 46))
     this.clock(sc, W - 24, now)
 
     // ── your office: glass on the floor's side, a door at the bottom; your desk; Nina's corner ──
@@ -553,6 +558,21 @@ export class WideRoom extends Sim<Layout> {
     const { dots, w } = this.tvSet.screen
     for (let i = 0; i < dots.length; i++) if (dots[i]) sc.px(x0 + 2 + (i % w), 8 + ((i / w) | 0), 1, 1, hueRole(dots[i]! - 1))
     sc.hits.push({ x: x0, y: 6, w: 52, h: 32, tip: `the TV: ${this.tvSet.channel} — click for the next channel`, act: { kind: "tv" } })
+  }
+
+  /** the stereo: whatever's playing scrolls across its label; idle and silent with no player */
+  private stereo(sc: Scene, x0: number) {
+    const w = 44, labelW = 20
+    sc.px(x0, 6, w, 20, ROLE.inactive); sc.px(x0 + 2, 8, w - 4, 6, ROLE.ground)
+    const label = this.player ? marqueeWindow(this.player.text, labelW, sc.tick) : "no signal".padEnd(labelW)
+    sc.text(label, x0 + 3, 12, this.player ? ROLE.fieldInk : ROLE.inactive, 7)
+    sc.px(x0 + 2, 16, w - 4, 8, ROLE.edge)
+    for (let i = 0; i < 3; i++) sc.px(x0 + 6 + i * 12, 18, 6, 4, ROLE.structure)
+    sc.hits.push({
+      x: x0, y: 6, w, h: 20,
+      tip: this.player ? `the stereo: ${this.player.text}` : "the stereo: idle — no signal",
+      act: { kind: "stereo" },
+    })
   }
 
   /** the clock on the wall, telling the real time */
