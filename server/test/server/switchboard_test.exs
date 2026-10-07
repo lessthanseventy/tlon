@@ -373,10 +373,13 @@ defmodule Server.SwitchboardTest do
       {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "hi"})
       Switchboard.deliver(m)
 
-      # cold → never a cheap wake, but rotated: a fresh pane carrying Carl's identity on this thread.
-      refute_received {:woke, _, _}
+      # cold → never a cheap wake of the old pane, but rotated: a fresh pane carrying Carl's identity
+      # on this thread, which then gets its opening turn — from an async task, so it is awaited here
+      # (a straggler would otherwise land in the next test's mailbox)
       assert_received {:spawned, exports}
       assert exports =~ ~s(TLON_AUTHOR="Carl")
+      assert_receive {:woke, nil, _}, 2_000
+      refute_received {:woke, "wCarl", _}
     end
 
     test "a WARM session is woken, never spawned — no rotation over a still-cheap resume" do
@@ -397,12 +400,15 @@ defmodule Server.SwitchboardTest do
       {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
       {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, _dana} = Staff.register_agent(%{name: "Dana", mandate: "review", engine: "fresh"})
+      lead = Channel.thread_lead(lobby.id)
 
       {:ok, m} = Channel.post(%{thread_id: lobby.id, author: "stakeholder", body: "@Dana are you around?"})
       assert {:pending, _} = Switchboard.deliver(m)
 
       assert_received {:spawned, exports}
       assert exports =~ ~s(TLON_AUTHOR="Dana")
+      # a window of her own there — the lobby keeps its lead
+      assert Channel.thread_lead(lobby.id) == lead
     end
 
     test "a warm session whose pane has closed is ended; the message stays pending and its lead is spawned fresh" do
