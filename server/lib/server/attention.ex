@@ -245,8 +245,8 @@ defmodule Server.Attention do
     end
   end
 
-  # A reply settles a worker's question. A workline parked at a gate is waiting on an approval, which
-  # only `approve` gives — a reply there is just a reply; on any other stage the wait was a question.
+  # A reply settles a worker's question. A workline standing at its gate (`Workline.at_gate?/2`) is
+  # waiting on an approval, which only `approve` gives — a reply there is just a reply.
   defp answered(thread_id) do
     case Repo.get(Thread, thread_id) do
       %Thread{awaiting: awaiting} = thread when not is_nil(awaiting) ->

@@ -72,13 +72,22 @@ defmodule Server.AttentionTest do
     {:ok, _} = Attention.respond(verifying.id, "andrew", "verify is the server's job; it passed")
     assert %{awaiting: nil} = Repo.get(Server.Thread, verifying.id)
 
-    # at a gate the awaiting is the gate's: only an approval clears it
-    {:ok, gated} =
-      Server.Workline.open(%{title: "spec it", slug: "gated-#{System.unique_integer([:positive])}", stage: "review"})
+    # at review with no review.md yet, the reviewer's question is a question: a reply clears it
+    {:ok, reviewing} =
+      Server.Workline.open(%{title: "review it", slug: "asking-#{System.unique_integer([:positive])}", stage: "review"})
 
-    {:ok, _} = gated |> Ecto.Changeset.change(awaiting: "andrew") |> Repo.update()
-    {:ok, _} = Attention.respond(gated.id, "andrew", "looks good")
-    assert %{awaiting: "andrew"} = Repo.get(Server.Thread, gated.id)
+    {:ok, _} = Attention.ask(reviewing.id, "lonnrot", "who commits review.md?")
+    {:ok, _} = Attention.respond(reviewing.id, "andrew", "submit_review does")
+    assert %{awaiting: nil} = Repo.get(Server.Thread, reviewing.id)
+  end
+
+  test "a workline stands at its gate only on a gated stage whose artifact is there" do
+    {:ok, gated} =
+      Server.Workline.open(%{title: "review it", slug: "gated-#{System.unique_integer([:positive])}", stage: "review"})
+
+    assert Server.Workline.at_gate?(gated, artifacts: Server.Workline.ContinuationTest.Present)
+    refute Server.Workline.at_gate?(gated, artifacts: Server.Workline.ContinuationTest.Missing)
+    refute Server.Workline.at_gate?(%{gated | stage: "verify"}, artifacts: Server.Workline.ContinuationTest.Present)
   end
 
   test "respond/3 reopens a closed thread before posting — the one door reopens too", %{thread: t} do
