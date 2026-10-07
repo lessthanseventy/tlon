@@ -103,6 +103,8 @@ export class Sim<L extends { people: Seat[] }> {
   protected actors = new Map<string, Actor>()
   protected tick = 0
   private seeded = false
+  /** an actor's current spot on the floor, by agent name — null if they aren't seated here */
+  at(agent: string): Spot | null { return this.actors.get(agent)?.spot ?? null }
   /** who you are talking to, by agent name: `text` null while they think, then what they said */
   protected talk = new Map<string, { text: string | null; until: number }>()
   private changed = true

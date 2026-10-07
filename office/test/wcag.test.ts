@@ -8,7 +8,7 @@ import { RailRoom, W, H } from "../rooms/rail"
 import { WideRoom, WIDE_H } from "../rooms/wide"
 import { geometry, inkInto, measureFor, MIN_CONTRAST, textScale, typeFor } from "../tui/paint"
 
-function office(): Agents {
+export function office(): Agents {
   const names = ["tertius", "hronir", "lonnrot", "yu", "ashe", "daneri"]
   return {
     ...EMPTY, ok: true, workspaces: [{ id: 1, name: "Machine" }],
