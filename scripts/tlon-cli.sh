@@ -317,7 +317,7 @@ case "$cmd" in
     name="${1:-}"; repo="${2:-}"
     [ -n "$name" ] || { echo 'usage: tlon-cli.sh workspace-new <name> [repo-path]' >&2; exit 2; }
     if [ -n "$repo" ]; then repos="[\"$(esc "$repo")\"]"; else repos="[]"; fi
-    exec "$SERVER" rpc "case Server.Workspaces.register(%{name: \"$(esc "$name")\", repos: $repos}) do {:ok, w} -> IO.puts(\"workspace ##{w.id} #{w.name}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Workspaces.create(%{name: \"$(esc "$name")\", repos: $repos}) do {:ok, w} -> IO.puts(\"workspace ##{w.id} #{w.name}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
     ;;
 
   shell-dossier)

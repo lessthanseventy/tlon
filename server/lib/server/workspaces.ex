@@ -30,6 +30,24 @@ defmodule Server.Workspaces do
     end
   end
 
+  @doc """
+  Create a workspace ready to work in: `register/1`, then its lobby on its default project
+  (`Server.Bootstrap.ensure_standing/1`), so a ticket started or routed there has a standing
+  thread to go through now, not after the next boot. The door the operator and the agents use;
+  `register/1` alone is the bare row.
+  """
+  def create(attrs), do: attrs |> register() |> with_lobby()
+
+  @doc "`create/1` from a template — `register_from/3`, then its lobby."
+  def create_from(template, name, repos \\ []), do: template |> register_from(name, repos) |> with_lobby()
+
+  defp with_lobby({:ok, workspace}) do
+    :ok = Server.Bootstrap.ensure_standing(workspace)
+    {:ok, Repo.get!(Workspace, workspace.id)}
+  end
+
+  defp with_lobby(other), do: other
+
   # a template is a new workspace's starting shape: its type and the bench it is born with
   @templates %{
     "code" => %{type: "code", roster: ~w(surveyor builder reviewer planner)},

@@ -10,8 +10,7 @@ defmodule Server.IntakeTest do
 
   setup do
     Server.TestDB.clean!()
-    {:ok, ws} = Server.Workspaces.register(%{name: "Intake"})
-    {:ok, _} = Server.Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+    {:ok, ws} = Server.Workspaces.create(%{name: "Intake"})
     test = self()
 
     %{

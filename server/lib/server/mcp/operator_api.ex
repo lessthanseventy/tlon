@@ -579,10 +579,10 @@ defmodule Server.MCP.OperatorAPI do
   defp new_workspace(conn) do
     case body(conn) do
       {%{"name" => name, "template" => tpl} = b, conn} when is_binary(name) and name != "" and is_binary(tpl) ->
-        reply(conn, Workspaces.register_from(tpl, name, repos_of(b)), &%{id: &1.id, name: &1.name}, 201)
+        reply(conn, Workspaces.create_from(tpl, name, repos_of(b)), &%{id: &1.id, name: &1.name}, 201)
 
       {%{"name" => name} = b, conn} when is_binary(name) and name != "" ->
-        reply(conn, Workspaces.register(%{name: name, repos: repos_of(b)}), &%{id: &1.id, name: &1.name}, 201)
+        reply(conn, Workspaces.create(%{name: name, repos: repos_of(b)}), &%{id: &1.id, name: &1.name}, 201)
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"name", "repo"?})})

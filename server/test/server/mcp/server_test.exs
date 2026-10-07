@@ -746,7 +746,7 @@ defmodule Server.MCP.ServerTest do
   end
 
   test "start_ticket opens a thread on the ticket and promotes it, moving the ticket to doing" do
-    {:ok, ws} = Server.Workspaces.register(%{name: "StartWS"})
+    {:ok, ws} = Server.Workspaces.create(%{name: "StartWS"})
     {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "tlon", repos: []})
     {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id, project_id: p.id})
     {:ok, agent} = Staff.register_agent(%{name: "Starter", mandate: "build", engine: "fresh"})
@@ -765,9 +765,10 @@ defmodule Server.MCP.ServerTest do
     started_thread = Repo.get!(Server.Thread, thread_id)
     assert started_thread.title == "unbind ctrl+enter"
 
-    assert [%{author: "andrew", body: body}] = Channel.thread_messages(started_thread)
+    assert [%{body: body}] = for(m <- Channel.thread_messages(started_thread), m.author == "andrew", do: m)
     assert body =~ "unbind ctrl+enter"
     assert body =~ "ghostty eats it"
+    assert started_thread.stage == "build"
 
     assert %{"status" => "doing"} = filed["id"] |> Server.Tickets.get() |> Server.MCP.Brief.ticket()
   end
