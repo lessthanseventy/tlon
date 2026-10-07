@@ -35,6 +35,16 @@ export type Tile<L> = {
 
 export type Home = { tiles: { kind: TileKind; at: [number, number] }[] }
 
+/** today's office, tile for tile — the compiled-in default until a real `home.json` is read */
+export const DEFAULT_OFFICE: Home = {
+  // lounge before office: both have a "plant" spot, and the lounge's comes first in the original
+  // array this replaces — tile order breaks that tie for any kind more than one tile contributes.
+  tiles: [
+    { kind: "lounge", at: [0, 0] }, { kind: "office", at: [0, 0] }, { kind: "cat-corner", at: [0, 0] },
+    { kind: "meeting", at: [0, 0] }, { kind: "kitchen", at: [0, 0] }, { kind: "games", at: [0, 0] },
+  ],
+}
+
 /** a place to be, at absolute room coordinates: the one spot-builder every tile's `spots()` uses */
 export function at(x: number, y: number, aisle: number, face: Spot["face"], kind: Spot["kind"], partner?: Pt): Spot {
   return { x, y, aisle, pose: "stand", face, kind, ...(partner ? { with: partner } : {}) }

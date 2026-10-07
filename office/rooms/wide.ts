@@ -9,14 +9,16 @@ import { boardColumns, COLS, isManager, peopleOf } from "../kit/crew"
 import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
 import { argos, dogBed, dogBowl, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
-import { Sim, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
+import { Sim, type Actor, type Pt, type Spot } from "../kit/sim"
 import type { Live } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { meetingTile } from "../kit/tiles/meeting"
 import { loungeTile } from "../kit/tiles/lounge"
-import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR, TOWER_X } from "../kit/tiles/cat-corner"
+import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR } from "../kit/tiles/cat-corner"
 import { officeTile } from "../kit/tiles/office"
+import { floorPlan } from "../kit/floor"
+import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -42,7 +44,7 @@ export function zones(w: number) {
 }
 export type Zones = ReturnType<typeof zones>
 /** a zone's lane: the column it walks down to the hallway */
-function laneOf(z: Zones, x: number) {
+export function laneOf(z: Zones, x: number) {
   return x <= OFF_W ? OFF_LANE : x < z.M0 ? z.F0 + 3 : x < z.L0 ? z.Mc : z.L0 + 6
 }
 
@@ -73,7 +75,7 @@ export type Desk = { x: number; y: number; w: number; kind: "boss" | "manager" |
 export type Chair = { x: number; table: number; agent: string | null }
 export const seatX = (d: Desk) => d.x + Math.round(d.w / 2)
 
-function layoutFor(z: Zones) {
+export function layoutFor(z: Zones) {
   return (a: Agents) => {
     const desks: Desk[] = [{ x: 24, y: 56, w: 52, kind: "boss" }]
     const people = peopleOf(a)
@@ -93,90 +95,7 @@ export type Layout = ReturnType<ReturnType<typeof layoutFor>>
 // your in-tray, on a side table left of your desk
 export const TRAY = { x: 4, y: 62 }
 
-/** the plan, and the furniture's footprints (for the route test): every rectangle no feet may enter */
-export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x: number; y: number; w: number; h: number }[] } {
-  const z = zones(w)
-  const { L0, M0, MW, Mc, F0, F1 } = z
-  const { table, cabinets, tank, vending, shelf, foos, pool } = corner(z)
-  const at = (x: number, y: number, aisle: number, face: Spot["face"], kind: Spot["kind"], partner?: Pt): Spot => ({ x, y, aisle, pose: "stand", face, kind, ...(partner ? { with: partner } : {}) })
-  const ends = [{ x: table.x - 4, y: table.y + 6 }, { x: table.x + table.w + 4, y: table.y + 6 }]
-  return {
-    layout: layoutFor(z),
-    home: officeTile(z).home,
-    // whoever has a question for you stands in front of your desk; the rest wait behind them
-    queue: officeTile(z).spots(layoutFor(z)(EMPTY)).queue!,
-    // the lounge's couch (facing the TV up on the wall), its beanbag, the kitchen counter
-    lounge: [
-      { x: L0 + 44, y: 82, aisle: 94, pose: "couch", face: "up", kind: "couch" },
-      { x: L0 + 60, y: 82, aisle: 94, pose: "couch", face: "up", kind: "couch" },
-      { x: L0 + 76, y: 82, aisle: 94, pose: "couch", face: "up", kind: "couch" },
-      { x: L0 + 30, y: 150, aisle: 150, pose: "couch", face: "up", kind: "couch" },
-      { x: w - 26, y: 116, aisle: 116, pose: "stand", face: "right", kind: "cooler" },
-      { x: w - 26, y: 136, aisle: 136, pose: "stand", face: "right", kind: "coffee" },
-      // the pastimes: a game at a cabinet, a rally across the table, the fish, the sky through the
-      // meeting room's windows, the plants, a chat, a pet
-      ...cabinets.map((c) => at(c.x + 6, c.y + c.h + 10, c.y + c.h + 10, "up", "arcade")),
-      at(ends[0]!.x, ends[0]!.y, table.y + table.h + 12, "right", "pingpong", ends[1]),
-      at(ends[1]!.x, ends[1]!.y, table.y + table.h + 12, "left", "pingpong", ends[0]),
-      at(tank.x + 8, tank.y + tank.h + 10, tank.y + tank.h + 10, "up", "aquarium"),
-      at(tank.x + 22, tank.y + tank.h + 10, tank.y + tank.h + 10, "up", "aquarium"),
-      at(Mc - 32, 54, 116, "up", "window"), at(Mc + 32, 54, 116, "up", "window"),
-      at(L0 + 22, 184, 184, "left", "plant"), at(18, 168, 168, "left", "plant"),
-      at(L0 + 52, 124, 124, "right", "chat", { x: L0 + 66, y: 124 }), at(L0 + 66, 124, 124, "left", "chat", { x: L0 + 52, y: 124 }),
-      at(L0 + 90, 118, 118, "right", "pet"), at(L0 + 40, 106, 106, "right", "pet"),
-      at(vending.x + 6, 80, 94, "up", "vending"),
-      at(foos.x - 4, foos.y + 6, 184, "right", "foosball", { x: foos.x + foos.w + 4, y: foos.y + 6 }),
-      at(foos.x + foos.w + 4, foos.y + 6, 184, "left", "foosball", { x: foos.x - 4, y: foos.y + 6 }),
-      // pool: a player at each end of the table's far side, so the table, drawn after, never hides the game
-      at(pool.x + 3, pool.y - 4, pool.y - 4, "down", "pool", { x: pool.x + 23, y: pool.y - 4 }),
-      at(pool.x + 23, pool.y - 4, pool.y - 4, "down", "pool", { x: pool.x + 3, y: pool.y - 4 }),
-      { x: shelf.x + 8, y: 84, aisle: 94, pose: "sit", face: "down", kind: "read" },
-    ],
-    // the meeting room's table, two laptops a side: where the warm but unbusy sit, on call
-    oncall: [Mc - 22, Mc + 22].flatMap((x) => [81, 95].map((y): Spot => ({ x, y, aisle: 116, pose: "sit", face: x < Mc ? "right" : "left", kind: "laptop" }))),
-    exit: { x: w - 3, y: HALL, aisle: HALL, pose: "stand", face: "right", kind: "exit" },
-    pen: { x: F1 - 30, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
-    // under the suggestion box on the wall between the notes board and the windows
-    box: { x: F1 + 1, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
-    /** beside whoever is visited: in front of a desk that faces the room, beside a seat at a table, else where they stand */
-    visit(h: Actor): Spot {
-      const at = h.spot.kind === "desk" && !h.path.length
-      if (at && h.spot.face === "down") return { x: h.x, y: h.spot.y + 16, aisle: h.spot.y + 16, pose: "stand", face: "up", kind: "visit" }
-      if (at) return { x: h.x + SEAT_GAP / 2, y: h.spot.y, aisle: h.spot.aisle, pose: "stand", face: "left", kind: "visit" }
-      return { x: Math.min(w - 10, h.x + 12), y: h.y, aisle: h.y, pose: "stand", face: "left", kind: "visit" }
-    },
-    // the lounge is full: a stroll along the floor's back aisle
-    roam: () => ({ x: F0 + 10 + Math.floor(Math.random() * Math.max(1, F1 - F0 - 20)), y: 176, aisle: 176, pose: "stand", face: "down", kind: "roam" }),
-    route(x, from, goal) {
-      const la = laneOf(z, x), lb = laneOf(z, goal.x)
-      const there = [{ x: lb, y: goal.aisle }, { x: goal.x, y: goal.aisle }, { x: goal.x, y: goal.y }]
-      if (la === lb) return [{ x, y: from }, { x: la, y: from }, ...there]
-      return [{ x, y: from }, { x: la, y: from }, { x: la, y: HALL }, { x: lb, y: HALL }, ...there]
-    },
-    cat: catCornerTile(z).cat(),
-    blocks(l) {
-      const out = [
-        { x: 0, y: 0, w, h: BAND }, // the back wall
-        { x: TOWER_X, y: 40, w: 12, h: 48 }, // the cat tower
-        { x: M0 - 1, y: BAND, w: 2, h: MEET_BOTTOM - BAND }, { x: M0 + MW - 1, y: BAND, w: 2, h: MEET_BOTTOM - BAND }, // the meeting room's glass
-        { x: M0, y: MEET_BOTTOM - 1, w: MW / 2 - 9, h: 2 }, { x: Mc + 9, y: MEET_BOTTOM - 1, w: MW / 2 - 9, h: 2 },
-        { x: Mc - 14, y: 76, w: 28, h: 20 }, // its table
-        { x: L0 + 34, y: 68, w: 54, h: 10 }, // the couch's back
-        { x: w - 14, y: 100, w: 14, h: 56 }, // the kitchen counter
-        { x: F0 + 8, y: EXEC_Y, w: CREW_W, h: 32 }, // the crew board
-        { x: F1 - 40, y: 150, w: 14, h: 24 }, // the filing cabinet
-        { x: F1 - 60, y: 146, w: 12, h: 28 }, // the server rack
-        { x: TRAY.x, y: TRAY.y, w: 16, h: 14 }, // the in-tray's table
-        RADIATOR,
-        table, ...cabinets, tank, vending, shelf, foos, pool, // the pastimes' furniture
-        { x: OFF_W - 1, y: BAND, w: 2, h: OFF_DOOR - BAND }, // your office's glass
-      ]
-      for (const d of l.desks) out.push({ x: d.x, y: d.y + 2, w: d.w, h: 29 })
-      for (const ty of TABLE_YS) out.push({ x: F0 + 14, y: ty + 3, w: SEATS * SEAT_GAP + 4, h: 20 })
-      return out
-    },
-  }
-}
+export const widePlan = (w: number) => floorPlan(DEFAULT_OFFICE, w)
 
 /** Nina and Argos, up to something together */
 type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle"; until: number; trail: Pt[]; lap: Pt[] }

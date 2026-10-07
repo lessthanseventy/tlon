@@ -73,6 +73,8 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
         ...[48, 60, 72, 84].map((x, i) => at(x, 148, 148, i === 0 ? "up" : "left", "queue")),
         at(88, 164, 164, "up", "queue"),
       ],
+      // the office-side plant by your desk (the lounge's own plant is lounge's, at L0 + 22)
+      plant: [at(18, 168, 168, "left", "plant")],
     }),
     home(l: Layout, agent: string): Spot | null {
       const m = l.desks.find((d) => (d.kind === "manager" || d.kind === "lead") && d.seat?.agent === agent)
