@@ -11,10 +11,12 @@ import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
 import { argos, dogBed, dogBowl, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
+import type { Live } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
+import { kitchenTile } from "../kit/tiles/kitchen"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
-import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
+import { BIG_PLANT, SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
 
 export const WIDE_H = 200
@@ -223,6 +225,7 @@ export class WideRoom extends Sim<Layout> {
   private readonly tvSet = new Tv(48, 28)
   private readonly dog: Dog
   private readonly games: ReturnType<typeof gamesTile>
+  private readonly kitchen: ReturnType<typeof kitchenTile>
   private antic: Antic | null = null
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -230,6 +233,7 @@ export class WideRoom extends Sim<Layout> {
     super(widePlan(width))
     this.z = zones(width)
     this.games = gamesTile(this.z)
+    this.kitchen = kitchenTile(this.z, width)
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
@@ -332,7 +336,6 @@ export class WideRoom extends Sim<Layout> {
     const { L0, M0, MW, Mc, F0, F1 } = this.z
     const { desks, chairs } = this.plan.layout(a)
     const px = sc.px.bind(sc), blit = sc.blit.bind(sc), text = sc.text.bind(sc)
-    const using = this.using.bind(this)
 
     // ── floors ──
     const tileA = tint(ROLE.prose, ROLE.ground, 0.27), tileB = tint(ROLE.prose, ROLE.ground, 0.21)
@@ -410,13 +413,6 @@ export class WideRoom extends Sim<Layout> {
     })
     sc.item(84, () => { px(L0 + 14, 60, 1, 24, ROLE.inactive); px(L0 + 12, 84, 5, 1, ROLE.inactive); blit(["sssss", ".sss."], L0 + 12, 57, { s: ROLE.body }) })
     sc.item(150, () => { px(L0 + 22, 140, 18, 10, ROLE.attention); px(L0 + 24, 138, 14, 3, tint(ROLE.attention, ROLE.ground, 0.7)) })
-    sc.item(156, () => {
-      px(W - 14, 100, 14, 56, ROLE.structure); px(W - 14, 100, 14, 2, ROLE.borderInactive)
-      blit(COOLER, W - 12, 98, { k: ROLE.key, m: ROLE.prose, a: ROLE.alarm, o: ROLE.inactive })
-      blit(COFFEE, W - 11, 128, { m: ROLE.inactive, l: ROLE.live, c: ROLE.prose })
-      if (using("coffee")) blit(f % 2 ? ["v.v", ".v."] : [".v.", "v.v"], W - 9, 125, { v: ROLE.prose })
-      px(W - 13, 140, 12, 15, ROLE.prose); px(W - 3, 145, 1, 4, ROLE.inactive) // the fridge
-    })
     sc.item(186, () => blit(BIG_PLANT, L0 + 4, 175, { l: ROLE.live, o: ROLE.structure }))
     this.pastimes(sc)
 
@@ -536,17 +532,12 @@ export class WideRoom extends Sim<Layout> {
    * cabinet runs its attract screen until someone plays, then a game; the fish come up for flakes
    * when someone at the tank feeds them.
    */
+  private live(): Live { return { at: (kind) => this.at(kind), using: (kind) => this.using(kind), cat: this.cat } }
+
   private pastimes(sc: Scene) {
-    this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, { at: (kind) => this.at(kind), cat: this.cat })
-    const { vending: v, shelf } = corner(this.z), f = sc.f, tick = sc.tick, px = sc.px.bind(sc)
-    sc.item(v.y + v.h, () => {
-      // the snack machine: rows of snacks behind the glass, a can thunking down when someone buys
-      px(v.x, v.y, v.w, v.h, ROLE.alarm); px(v.x + 1, v.y + 2, 7, 16, tint(ROLE.prose, ROLE.ground, 0.3))
-      for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++) px(v.x + 2 + k * 2, v.y + 3 + r * 4, 1, 2, [ROLE.body, ROLE.key, ROLE.live, ROLE.attention][(r + k) % 4]!)
-      px(v.x + 9, v.y + 4, 2, 6, ROLE.edge); px(v.x + 9, v.y + 12, 2, 2, f % 2 ? ROLE.live : ROLE.edge)
-      px(v.x + 1, v.y + 20, 10, 3, ROLE.edge)
-      if (this.at("vending").length && tick % 40 < 8) px(v.x + 4, v.y + 18 + Math.min(3, (tick % 40) >> 1), 2, 2, ROLE.key)
-    })
+    this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live())
+    this.kitchen.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live())
+    const { shelf } = corner(this.z), px = sc.px.bind(sc)
     sc.item(shelf.y + shelf.h, () => {
       // the bookshelf: three shelves of spines
       px(shelf.x, shelf.y, shelf.w, shelf.h, ROLE.structure)
