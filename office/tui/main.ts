@@ -916,7 +916,7 @@ function draw() {
   const room0 = room()
   const fresh = !frame
   if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread() }, measureFor(g)); roomChanged = false }
-  if (g.kitty && (!sentImage || fresh || imageDirty)) { o += kittyImage(frame!, g); sentImage = true; imageDirty = false }
+  if (g.kitty && (!sentImage || fresh || imageDirty)) { o += kittyImage(frame!, g, { x: 0, y: 0, w: g.floorW, h: g.floorH }); sentImage = true; imageDirty = false }
   if (!g.kitty) textLayer(frame!, g).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
   // the tip line: what the pointer is over, or what just happened
   const tipRow = g.row + g.rows + 1

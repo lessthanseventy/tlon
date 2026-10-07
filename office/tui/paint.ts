@@ -7,6 +7,7 @@ import { BODY, SMALL, type Cut } from "../kit/font"
 import { contrast, rgb, ROLE } from "../kit/palette"
 import { png } from "./png"
 import { ESC, line, type Seg } from "./term"
+import type { Viewport } from "./viewport"
 
 /** where the room sits: `k` screen px per art px; cells of `cw`×`ch` px; the image's cell box; the floor's own size */
 export type Geometry = { k: number; cw: number; ch: number; col: number; row: number; cols: number; rows: number; kitty: boolean; floorW: number; floorH: number }
@@ -100,8 +101,14 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
   }
 }
 
-/** the room, k× by nearest neighbour with its ink drawn in, as a kitty PNG image (id 1) at the cursor */
-export function kittyImage(fr: Frame, g: Geometry): string {
+let lastImageData: string | null = null
+
+/**
+ * The floor, k× by nearest neighbour with its ink drawn in, transmitted once per frame change
+ * (`a=t`, image id 1) — then placed (`a=p`) cropped to the viewport on every call, so panning
+ * repositions the crop without ever re-encoding or re-sending the bitmap.
+ */
+export function kittyImage(fr: Frame, g: Geometry, viewport: Viewport): string {
   const w = fr.width * g.k, h = fr.height * g.k
   const big = new Uint8Array(w * h * 4)
   const src = new Uint32Array(fr.rgba.buffer, fr.rgba.byteOffset, fr.width * fr.height), dst = new Uint32Array(big.buffer)
@@ -111,13 +118,18 @@ export function kittyImage(fr: Frame, g: Geometry): string {
   }
   inkInto(big, w, h, fr.ink, g.k, textScale(g))
   const data = png(w, h, big).toString("base64")
-  let o = `${ESC}[${g.row + 1};${g.col + 1}H`
-  for (let i = 0; i < data.length; i += 4096) {
-    const more = i + 4096 < data.length ? 1 : 0
-    o += i === 0
-      ? `${ESC}_Ga=T,f=100,i=1,p=1,q=2,C=1,z=-1,m=${more};${data.slice(i, i + 4096)}${ESC}\\`
-      : `${ESC}_Gm=${more};${data.slice(i, i + 4096)}${ESC}\\`
+  let o = ""
+  if (data !== lastImageData) {
+    lastImageData = data
+    for (let i = 0; i < data.length; i += 4096) {
+      const more = i + 4096 < data.length ? 1 : 0
+      o += i === 0
+        ? `${ESC}_Ga=t,f=100,i=1,q=2,m=${more};${data.slice(i, i + 4096)}${ESC}\\`
+        : `${ESC}_Gm=${more};${data.slice(i, i + 4096)}${ESC}\\`
+    }
   }
+  const x = Math.round(viewport.x * g.k), y = Math.round(viewport.y * g.k), vw = Math.round(viewport.w * g.k), vh = Math.round(viewport.h * g.k)
+  o += `${ESC}[${g.row + 1};${g.col + 1}H${ESC}_Ga=d,d=i,i=1,p=1,q=2${ESC}\\${ESC}_Ga=p,i=1,p=1,q=2,C=1,z=-1,x=${x},y=${y},w=${vw},h=${vh}${ESC}\\`
   return o
 }
 
