@@ -13,7 +13,7 @@ import { pick, type Fuss } from "./voices"
  * he is saying until `saidUntil`; `belly` the tick his roll-over for a rub ends; `fuss` someone
  * making a fuss of him
  */
-export type Dog = { x: number; y: number; aisle: number; path: Pt[]; mode: "walk" | "sit" | "sleep"; until: number; face: number; woof: number; host: string | null; creep: boolean; said: string | null; saidFrom: number; saidUntil: number; belly: number; fuss: Fussing | null }
+export type Dog = { x: number; y: number; aisle: number; path: Pt[]; mode: "walk" | "sit" | "sleep"; until: number; face: number; woof: number; host: string | null; creep: boolean; said: string | null; saidFrom: number; saidUntil: number; belly: number; fuss: Fussing | null; cheer?: boolean }
 
 /**
  * What Argos says, by occasion. He is the troglodyte of Borges' "The Immortal" who turned out to be
@@ -27,10 +27,12 @@ export const ARGOS = {
   done: ["Turn's done? WALK? Is it walk time?", "{name} finished! I'm so proud I could howl."],
   queue: ["Someone's waiting! I will guard them.", "{name} needs the boss! I'll fetch!"],
   visit: ["You look like you need a dog, {name}.", "Hello {name}! I brought my whole self."],
-  walk: ["WALK!! The best word in any language!"],
-  office: ["Coming! Coming coming coming."],
-  sit: ["Sitting. Very good sitting. Epic, even."],
-  bed: ["An epic nap, in twenty-four books."],
+  walk: ["WALK!! The best word in any language!", "Every road leads somewhere smelly. I love roads.", "A journey! Like Odysseus, but shorter. Please."],
+  office: ["Coming! Coming coming coming.", "Your office! The best office! I'm in it!", "On my way, captain of the crew!"],
+  sit: ["Sitting. Very good sitting. Epic, even.", "Look at this sit. Achilles never sat like this.", "Sat. Now treat? Treat now?"],
+  bed: ["An epic nap, in twenty-four books.", "Bed. The wine-dark blanket calls.", "I will dream of a thousand squirrels."],
+  // you send him over to someone: he tells them so, with his whole body
+  cheer: ["{name}! You're doing GREAT! I think! I can't read!", "{name}, I brought you my whole self. And a sock.", "Sing, O Muse, of {name}, who writes the good code!", "{name}! You! Are! The best! At the typing!", "Heroes ship, {name}. You're a hero. Probably.", "{name}, I'll guard your desk. From everything."],
   shipped: ["{name} SHIPPED IT! Sing, O Muse!", "A homecoming worthy of Odysseus, {name}!"],
   rally: ["BALL. Ball ball ball. BALL.", "Left! Right! Left! I can't take it!"],
   fuss: {
@@ -39,6 +41,12 @@ export const ARGOS = {
     belly: ["The belly! Achilles never got this!"],
     treat: ["A TREAT! I'd sail to Ithaca for this!", "Nom! {name} is my favourite! Everyone is!"],
   } satisfies Record<Fuss, string[]>,
+}
+
+/** the parts of his musings: a bard's frame and a dog's concerns — a fresh epic every time */
+export const ARGOS_RIFF = {
+  open: ["Sing, O Muse, of", "I have known", "Twenty-four books could not hold", "The gods themselves envy", "Ten years at sea, and still I think of", "Rosy-fingered dawn brings"],
+  matter: ["the ball that rolled under the couch.", "the squirrel that got away.", "a sandwich left unguarded.", "the mailman, my nemesis.", "the smell of a new keyboard.", "the great belly rub of yesterday.", "my own tail, which eludes me.", "the sock nobody misses."],
 }
 
 /** his bed and his bowl are wherever the room's geometry puts them — these just name the idea */
@@ -66,6 +74,13 @@ export function dogDo(d: Dog, what: "bed" | "walk" | "office" | "sit", tick: num
   d.path = [{ x: d.x, y: d.aisle }, ...ctx.route(d.x, d.aisle, goal)]
   d.aisle = goal.aisle; d.mode = "walk"
   ctx.say(ctx.argos(what))
+}
+
+/** you send Argos over to someone (`host`, at `goal` beside them): he trots there and cheers them on */
+export function dogCheer(d: Dog, host: Actor, goal: Spot, route: (x: number, from: number, goal: Spot) => Pt[]) {
+  d.host = keyOf(host.seat); d.cheer = true; d.creep = false
+  d.path = [{ x: d.x, y: d.aisle }, ...route(d.x, d.aisle, goal)]
+  d.aisle = goal.aisle; d.mode = "walk"
 }
 
 /** a click on Argos: a woof and a wag — and if he's not off somewhere, over he rolls for a belly rub */
@@ -104,7 +119,7 @@ export function stepDog(d: Dog, ctx: {
   table(): { x: number; y: number; w: number; h: number }
   mc: number
   say(text: string): void
-  argos(occasion: "visit", name: string): string
+  argos(occasion: "visit" | "cheer", name: string): string
   fussDog(by: Actor): void
 }): boolean {
   if (d.fuss && ctx.tick >= d.fuss.until) d.fuss = null
@@ -120,7 +135,9 @@ export function stepDog(d: Dog, ctx: {
       d.mode = asleep ? "sleep" : "sit"
       d.until = ctx.tick + (asleep ? 900 : 200) + Math.floor(Math.random() * 400)
       const host = d.host ? ctx.actors.get(d.host) : undefined
-      if (host) {
+      if (host && d.cheer) {
+        d.cheer = false; host.emote = "♥"; host.emoteUntil = ctx.tick + 60; ctx.say(ctx.argos("cheer", host.seat.agent))
+      } else if (host) {
         if (Math.random() < 0.6) ctx.fussDog(host)
         else { host.emote = "♥"; host.emoteUntil = ctx.tick + 40; ctx.say(ctx.argos("visit", host.seat.agent)) }
       }

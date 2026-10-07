@@ -8,7 +8,7 @@ import { fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, peopleOf } from "../kit/crew"
 import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
-import { argos, dogBed, dogBowl, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
+import { ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
 import { Sim, type Actor, type Pt, type Spot } from "../kit/sim"
 import type { Live } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
@@ -131,7 +131,7 @@ export class WideRoom extends Sim<Layout> {
   private dogSay(text: string, delay = 0) { const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
   /** Argos' line for an occasion: the model's, else his own */
   private argos(occasion: Parameters<typeof argos>[0], name = "") {
-    return argos(occasion, (o, c, n) => this.line("Argos", o, c, n), name)
+    return argos(occasion, (o, c, n) => this.line("Argos", o, c, n, o === "muse" ? ARGOS_RIFF : undefined), name)
   }
   /** someone starts a tool, finishes a turn, or joins your queue: Nina's opinion, then Argos' */
   protected override noticed(actor: Actor, what: string) {
@@ -152,6 +152,14 @@ export class WideRoom extends Sim<Layout> {
       say: (text) => this.dogSay(text),
       argos: (occasion) => this.argos(occasion),
     })
+  }
+
+  /** you send Argos over to someone (their name) to cheer them on; false when they aren't in the room */
+  dogCheer(name: string): boolean {
+    const host = this.actors.get(name)
+    if (!host) return false
+    dogCheer(this.dog, host, this.plan.visit(host), (x, from, goal) => this.plan.route(x, from, goal))
+    return true
   }
 
   /** a click on Argos: a woof and a wag — and if he's not off somewhere, over he rolls for a belly rub */

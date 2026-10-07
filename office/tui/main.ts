@@ -890,6 +890,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     case "pet": {
       const r = room(), wideRoom = r instanceof WideRoom ? r : null
       const doIt = (f: () => unknown) => () => { f(); changed(); draw() }
+      // someone mid-turn in this workspace, for a pet to go and cheer on
+      const busy = () => all.roster.filter((x) => x.workspace_id === ws && x.thinking).map((x) => x.agent)
+      const cheer = (send: (name: string) => boolean) => doIt(() => { const who = busy(); if (who.length) send(who[Math.floor(Math.random() * who.length)]!) })
       if (mode.who === "cat") {
         return {
           title: "NINA", rows: [{ segs: [plain("your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.")] }],
@@ -899,6 +902,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
             { key: "y", label: "play with the yarn", run: doIt(() => r.catDo("play")) },
             { key: "c", label: "come to my desk", run: doIt(() => r.catDo("come")) },
             { key: "s", label: "go have a nap", run: doIt(() => r.catDo("nap")) },
+            ...(busy().length ? [{ key: "g", label: "go cheer someone on", run: cheer((name) => r.catCheer(name)) }] : []),
             back1,
           ],
         }
@@ -911,6 +915,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           { key: "o", label: "come to my office", run: doIt(() => wideRoom.dogDo("office")) },
           { key: "s", label: "sit", run: doIt(() => wideRoom.dogDo("sit")) },
           { key: "b", label: "bed", run: doIt(() => wideRoom.dogDo("bed")) },
+          ...(busy().length ? [{ key: "g", label: "go cheer someone on", run: cheer((name) => wideRoom.dogCheer(name)) }] : []),
           back1,
         ] : [back1],
       }
