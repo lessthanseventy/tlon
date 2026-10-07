@@ -6,6 +6,11 @@ description = "office: the TUI — the room in a terminal over the live server (
 dir = "office"
 run = "bun tui/main.ts"
 
+["office:import-sprite"]
+description = "office: import a 12x22 (or 48x22, four views) PNG into looks.json as that agent's custom sprite — every pixel snapped to the nearest palette role"
+dir = "office"
+run = "bun cli.ts import-sprite \"$@\""
+
 ["office:watch"]
 description = "office: re-run the suite on every change (cap signal)"
 dir = "office"
