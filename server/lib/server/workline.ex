@@ -301,8 +301,14 @@ defmodule Server.Workline do
   defp describe({:file, name}), do: name
   defp describe(other), do: to_string(other)
 
-  defp gated?(%Thread{stage: "intent", born: "machine"}), do: true
-  defp gated?(%Thread{stage: stage}), do: stage in @gated
+  @doc """
+  Whether a workline's stage is one whose exit is a gate — so an `awaiting` on it is that gate,
+  which only an approval clears (on any other stage it is a worker's question, which a reply clears).
+  """
+  def at_gate?(%Thread{stage: "intent", born: "machine"}), do: true
+  def at_gate?(%Thread{stage: stage}), do: stage in @gated
+
+  defp gated?(thread), do: at_gate?(thread)
 
   defp park(thread, checker) do
     {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()

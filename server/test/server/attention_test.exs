@@ -63,6 +63,24 @@ defmodule Server.AttentionTest do
     assert %{key: "1", label: "Yes"} in options
   end
 
+  test "a worker's question on a workline at an ungated stage is cleared by the reply; a gate is not" do
+    {:ok, verifying} =
+      Server.Workline.open(%{title: "finder", slug: "finder-#{System.unique_integer([:positive])}", stage: "verify"})
+
+    {:ok, _} = Attention.ask(verifying.id, "daneri", "how do I attach my check to verify?")
+    assert %{awaiting: "andrew"} = Repo.get(Server.Thread, verifying.id)
+    {:ok, _} = Attention.respond(verifying.id, "andrew", "verify is the server's job; it passed")
+    assert %{awaiting: nil} = Repo.get(Server.Thread, verifying.id)
+
+    # at a gate the awaiting is the gate's: only an approval clears it
+    {:ok, gated} =
+      Server.Workline.open(%{title: "spec it", slug: "gated-#{System.unique_integer([:positive])}", stage: "review"})
+
+    {:ok, _} = gated |> Ecto.Changeset.change(awaiting: "andrew") |> Repo.update()
+    {:ok, _} = Attention.respond(gated.id, "andrew", "looks good")
+    assert %{awaiting: "andrew"} = Repo.get(Server.Thread, gated.id)
+  end
+
   test "respond/3 reopens a closed thread before posting — the one door reopens too", %{thread: t} do
     {:ok, closed} = Channel.close_thread(t)
     assert closed.state == "closed"

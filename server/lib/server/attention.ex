@@ -245,12 +245,14 @@ defmodule Server.Attention do
     end
   end
 
-  # A reply settles a plain thread's question. A workline's `awaiting` is its gate, which only an
-  # approval clears — a reply there is just a reply.
+  # A reply settles a worker's question. A workline parked at a gate is waiting on an approval, which
+  # only `approve` gives — a reply there is just a reply; on any other stage the wait was a question.
   defp answered(thread_id) do
     case Repo.get(Thread, thread_id) do
-      %Thread{stage: nil, awaiting: awaiting} = thread when not is_nil(awaiting) ->
-        thread |> Ecto.Changeset.change(awaiting: nil) |> Repo.update()
+      %Thread{awaiting: awaiting} = thread when not is_nil(awaiting) ->
+        if thread.stage && Server.Workline.at_gate?(thread),
+          do: :ok,
+          else: thread |> Ecto.Changeset.change(awaiting: nil) |> Repo.update()
 
       _ ->
         :ok
