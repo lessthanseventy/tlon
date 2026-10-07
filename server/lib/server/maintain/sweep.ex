@@ -120,8 +120,9 @@ defmodule Server.Maintain.Sweep do
     :ok
   end
 
+  # worklines only: a plain thread waiting on a reply is not a parked gate
   defp parked_gates do
-    Repo.all(from t in Thread, where: t.state == "open" and not is_nil(t.awaiting))
+    Repo.all(from t in Thread, where: t.state == "open" and not is_nil(t.awaiting) and not is_nil(t.stage))
   end
 
   defp stalled_candidates do

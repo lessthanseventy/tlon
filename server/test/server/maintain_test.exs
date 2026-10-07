@@ -91,6 +91,14 @@ defmodule Server.MaintainTest do
     assert length(reminders) == 1
   end
 
+  test "only a workline at its gate is nagged — not a plain thread waiting on a reply" do
+    {:ok, plain} = Server.Channel.open_thread(%{title: "a question"})
+    {:ok, _} = plain |> Ecto.Changeset.change(awaiting: "andrew") |> Repo.update()
+
+    assert :ok = sweep()
+    refute Enum.any?(Repo.all(Message), &(&1.thread_id == plain.id and &1.body =~ "still parked"))
+  end
+
   test "a stalled workline is flagged as a machine-born intent, once per slug" do
     {:ok, stalled} = Workline.open(%{title: "going nowhere", slug: "stuck"})
 
