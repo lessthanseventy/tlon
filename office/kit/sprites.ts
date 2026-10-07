@@ -13,6 +13,7 @@ export type Accessory = "glasses" | "headphones"
 export type Look = {
   hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number
   skinRole?: Role; outfit?: Outfit; accessory?: Accessory
+  custom?: Partial<Record<"front" | "side" | "back", string[]>>
 }
 export const SKIN_ROLES: Role[] = ["builder", "surveyor", "reviewer", "assistant", "planner", "body"]
 
@@ -180,7 +181,9 @@ export function figure(look: Look, archetype: string | null | undefined, lead: b
   const view = face === "up" ? "back" : face === "left" || face === "right" ? "side" : "front"
   const bald = look.hair === "bald"
   let rows: string[]
-  if (view === "side") {
+  if (look.custom?.[view]) {
+    rows = [...look.custom[view]!]
+  } else if (view === "side") {
     rows = SIDE_HEAD.map((r, i) => (bald && i >= 2 && i <= 7 ? r.replaceAll("h", "f") : r))
     if (look.hair === "bun") overlay(rows, { 0: ".......hh...", 1: "......hhhh.." })
     if (look.hair === "spiky") overlay(rows, { 1: "....h.h.h..." })
