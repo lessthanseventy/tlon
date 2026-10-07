@@ -71,25 +71,42 @@ defmodule Server.Worktree do
   """
   def remove(repo_path, slug) do
     wt = path(repo_path, slug)
-    branch = branch(slug)
 
     cond do
       not File.exists?(Path.join(wt, ".git")) ->
         :none
 
-      dirty?(wt) ->
-        {:kept, "#{branch} has uncommitted changes at #{wt}"}
-
-      unmerged?(repo_path, branch) ->
-        {:kept, "#{branch} has unmerged commits — merge or delete it yourself"}
+      reason = holds(repo_path, slug) ->
+        {:kept, reason}
 
       true ->
         with {_out, 0} <- git(repo_path, ["worktree", "remove", wt]),
-             {_out, 0} <- git(repo_path, ["branch", "-D", branch]) do
+             {_out, 0} <- git(repo_path, ["branch", "-D", branch(slug)]) do
           {:removed, wt}
         else
           {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
         end
+    end
+  end
+
+  @doc "Why a checkout must stay — uncommitted changes, or commits no other branch has — or nil."
+  @spec holds(String.t(), String.t()) :: String.t() | nil
+  def holds(repo_path, slug) do
+    branch = branch(slug)
+
+    cond do
+      dirty?(path(repo_path, slug)) -> "#{branch} has uncommitted changes at #{path(repo_path, slug)}"
+      unmerged?(repo_path, branch) -> "#{branch} has unmerged commits — merge or delete it yourself"
+      true -> nil
+    end
+  end
+
+  @doc "The checkouts under `repo_path`'s `.worktrees/`, by name."
+  @spec names(String.t()) :: [String.t()]
+  def names(repo_path) do
+    case File.ls(Path.join(repo_path, ".worktrees")) do
+      {:ok, names} -> Enum.filter(names, &File.exists?(Path.join(path(repo_path, &1), ".git")))
+      _ -> []
     end
   end
 

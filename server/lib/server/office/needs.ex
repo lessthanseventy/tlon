@@ -9,7 +9,8 @@ defmodule Server.Office.Needs do
       sits on a prompt: pick an option), `verify_failed` (a workline whose last gate run was red);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since), `suggestion` (the corkboard's suggestion box), `rollout` (what a
-      merge could not roll out itself).
+      merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
+      work: merge it or delete it — `Server.Maintain.Strays`).
 
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
   behind it is resolved — approved, answered, filed — not when it is looked at.
@@ -29,7 +30,7 @@ defmodule Server.Office.Needs do
     prompts = Server.Attention.open_prompts_by_thread()
 
     blocking = waits(open, prompts) ++ red_verifies(open)
-    decide = mentions(open, operator) ++ suggestions(open) ++ rollout()
+    decide = mentions(open, operator) ++ suggestions(open) ++ rollout() ++ stranded()
 
     Enum.sort_by(blocking, & &1.at) ++ Enum.sort_by(decide, & &1.at)
   end
@@ -146,6 +147,24 @@ defmodule Server.Office.Needs do
         at: DateTime.from_unix!(n.at),
         options: nil,
         ref: n.id
+      }
+    end
+  end
+
+  defp stranded do
+    for %{repo: repo, name: name, thread: t} <- Server.Maintain.Strays.worktrees(),
+        why = Server.Worktree.holds(repo, name) do
+      %{
+        key: "stranded:#{repo}:#{name}",
+        kind: "stranded",
+        level: "decide",
+        thread_id: t && t.id,
+        workspace_id: t && t.workspace_id,
+        title: "stranded work in #{name}",
+        text: "#{Path.join([repo, ".worktrees", name])}: #{why}",
+        at: (t && t.created_at) || DateTime.utc_now(),
+        options: nil,
+        ref: nil
       }
     end
   end

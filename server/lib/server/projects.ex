@@ -137,10 +137,11 @@ defmodule Server.Projects do
   def read_dirs(_thread), do: []
 
   # The first repo's `~`-expanded path, or `:no_repo`. Repos are a JSON list of `%{"path" => …}`.
-  defp primary_repo_path(%Project{repos: [%{"path" => path} | _]}) when is_binary(path) do
+  @doc "A project's primary checkout (its first repo), `~`-expanded."
+  def primary_repo_path(%Project{repos: [%{"path" => path} | _]}) when is_binary(path) do
     # a workspace scope glob ("modules/*") is not a checkout; expanded, it rooted worktrees in $HOME
     if String.contains?(path, "*"), do: {:error, :no_repo}, else: {:ok, Path.expand(path)}
   end
 
-  defp primary_repo_path(_project), do: {:error, :no_repo}
+  def primary_repo_path(_project), do: {:error, :no_repo}
 end
