@@ -16,9 +16,13 @@ cli="$root/scripts/tlon-cli.sh"
 # The gates run on the work itself — the workline's checkout of work/<slug> (the verify job passes
 # it), never tlon's main checkout, whose green says nothing about the branch under review.
 tree="${3:-$root/.worktrees/$slug}"
-# its own test database: a coworker running the suite in the same checkout at the same time shares
-# tlon_test, and one run's setup wipes the other's tables mid-test (verify runs one at a time)
-export TLON_TEST_DATABASE=tlon_verify
+# The gate runs as a clean checkout would: none of the service's TLON_* variables (it inherits them
+# here — its ports, its real database — and a gate that boots the app would bind 4040 or touch the
+# live store), and its own test database, since a coworker running the suite in the same checkout
+# shares tlon_test and one run's setup wipes the other's tables (verify runs one at a time).
+clean=(env)
+for v in $(compgen -e | grep '^TLON_'); do clean+=(-u "$v"); done
+clean+=(TLON_TEST_DATABASE=tlon_verify)
 if [ ! -d "$tree" ]; then
   "$cli" post "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
   echo "workline-verify: no checkout of work/$slug at $tree" >&2
@@ -37,7 +41,7 @@ unrecorded=0
 run_gate() {
   local name="$1"; shift
   local out code
-  out=$(cd "$tree" && "$@" 2>&1); code=$?
+  out=$(cd "$tree" && "${clean[@]}" "$@" 2>&1); code=$?
   if ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$(printf '%s' "$out" | tail -c 400)"; then
     echo "workline-verify: could not record evidence for '$name' (exit $code) — is the service up?" >&2
     unrecorded=1
