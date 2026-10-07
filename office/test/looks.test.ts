@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { overrideFor, useLookOverrides } from "../kit/looks"
+import { looksGen, overrideFor, useLookOverrides } from "../kit/looks"
 
 describe("look overrides", () => {
   test("nobody is overridden until useLookOverrides is called", () => {
@@ -11,5 +11,10 @@ describe("look overrides", () => {
     expect(overrideFor("hronir")).toBeUndefined()
     useLookOverrides({})
     expect(overrideFor("yu")).toBeUndefined()
+  })
+  test("looksGen advances on every call, so a reader can skip recomputing when it hasn't", () => {
+    const g = looksGen()
+    useLookOverrides({})
+    expect(looksGen()).toBe(g + 1)
   })
 })
