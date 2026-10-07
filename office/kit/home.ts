@@ -1,10 +1,8 @@
-// Build mode's engine: a home is tiles on a cell grid (`home.json`), and build mode places,
-// picks up, carries, rotates, removes and undoes them. Every tile this step is one cell with doors
-// open on all four sides, so the floor's connectivity is just grid adjacency — the rule a drop must
-// keep: the floor stays one piece, or the drop is refused.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
-import { dirname, join } from "node:path"
+// Build mode's engine: a home is tiles on a cell grid (`home.json`, read and written by the
+// surface — see tui/home.ts), and build mode places, picks up, carries, rotates, removes and
+// undoes them. Every tile this step is one cell with doors open on all four sides, so the floor's
+// connectivity is just grid adjacency — the rule a drop must keep: the floor stays one piece, or
+// the drop is refused.
 
 export type HomeTileKind = "living" | "kitchen" | "bathroom" | "bedroom" | "street"
 export const CATALOGUE: HomeTileKind[] = ["living", "kitchen", "bathroom", "bedroom", "street"]
@@ -95,20 +93,4 @@ export function rotate(b: Build): Build {
 export function undo(b: Build): Build {
   if (!b.history.length) return b
   return { ...b, home: b.history[b.history.length - 1]!, history: b.history.slice(0, -1) }
-}
-
-export const HOME_PATH = process.env.TLON_HOME
-  ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/home.json")
-
-export function loadHome(path: string = HOME_PATH): Home {
-  try {
-    const j = JSON.parse(readFileSync(path, "utf8"))
-    if (Array.isArray(j?.tiles)) return { tiles: j.tiles }
-  } catch { /* no file, or not JSON: an empty home */ }
-  return { tiles: [] }
-}
-
-export function saveHome(home: Home, path: string = HOME_PATH): void {
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(home, null, 2)}\n`)
 }
