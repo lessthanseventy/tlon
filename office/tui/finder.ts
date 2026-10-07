@@ -10,6 +10,7 @@ export type Pick = { segs: Seg[]; text: string; run: () => void }
 export function ticketPicks(tickets: Ticket[], wsName: (id: number) => string, open: (id: number) => void): Pick[] {
   return tickets.map((t) => {
     const where = wsName(t.workspace_id)
-    return { segs: [{ s: `#${t.id} `, fg: ROLE.key }, { s: t.title, fg: ROLE.prose }, { s: `  ${where}`, fg: ROLE.inactive }], text: `#${t.id} ${t.title} ${where}`, run: () => open(t.id) }
+    // labelled, as the finder's workspace and coworker rows are: ticket #15 is not thread #15
+    return { segs: [{ s: "ticket ", fg: ROLE.inactive }, { s: `#${t.id} `, fg: ROLE.key }, { s: t.title, fg: ROLE.prose }, { s: `  ${where}`, fg: ROLE.inactive }], text: `ticket #${t.id} ${t.title} ${where}`, run: () => open(t.id) }
   })
 }

@@ -11,12 +11,12 @@ describe("finder: tickets", () => {
   test("a title query lists the ticket", () => {
     const picks = ticketPicks(tickets, wsName, () => {})
     const hit = rank("finder tickets", picks, (p) => p.text)
-    expect(hit.map((p) => p.text)).toEqual(["#15 Finder can't find tickets tlon"])
+    expect(hit.map((p) => p.text)).toEqual(["ticket #15 Finder can't find tickets tlon"])
   })
   test("Enter runs the pick, which opens the ticket's card", () => {
     const opened: number[] = []
     const picks = ticketPicks(tickets, wsName, (id) => opened.push(id))
-    picks.find((p) => p.text.startsWith("#15"))!.run()
+    picks.find((p) => p.text.startsWith("ticket #15"))!.run()
     expect(opened).toEqual([15])
   })
 })
