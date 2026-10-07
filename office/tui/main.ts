@@ -411,8 +411,12 @@ const screens = new Map<number, string[]>(), targets = new Map<number, Target | 
 function pollPlayer() {
   const rm = room()
   if (!(rm instanceof WideRoom)) return
-  const r = Bun.spawnSync(["playerctl", "metadata", "--format", "{{ title }}|{{ artist }}|{{ bpm }}"])
-  rm.setPlayer(r.exitCode === 0 ? parseNowPlaying(r.stdout.toString()) : null)
+  try {
+    const r = Bun.spawnSync(["playerctl", "metadata", "--format", "{{ title }}|{{ artist }}|{{ bpm }}"])
+    rm.setPlayer(r.exitCode === 0 ? parseNowPlaying(r.stdout.toString()) : null)
+  } catch {
+    rm.setPlayer(null)
+  }
 }
 async function peekScreen(tid: number) {
   if (!targets.has(tid)) targets.set(tid, await data.terminal(tid))
