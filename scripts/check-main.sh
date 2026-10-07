@@ -9,6 +9,9 @@ trap 'git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$di
 git -C "$root" worktree add -q --detach "$dir" origin/main || exit 1
 cd "$dir" || exit 1
 echo "check-main: origin/main @ $(git log -1 --format='%h %s')"
+# The nightly schedule runs this from the service, whose TLON_* (its ports, its real database) a gate
+# that boots the app would inherit — and bind 4040 under the live service (:eaddrinuse).
+for v in $(compgen -e | grep '^TLON_'); do unset "$v"; done
 export MISE_YES=1 TLON_TEST_DATABASE=tlon_test_main
 mise trust -q "$dir" >/dev/null 2>&1
 (cd server && mix deps.get >/dev/null) || { echo "check-main: mix deps.get failed"; exit 1; }
