@@ -49,6 +49,18 @@ export async function banter(ws: number): Promise<{ agent: string; line: string;
 export async function corkboard(ws: number): Promise<CorkNote[]> {
   try { const r = await call("GET", `/office/corkboard/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
 }
+/** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
+export type Need = {
+  key: string; kind: "gate" | "question" | "dialog" | "verify_failed" | "mention" | "suggestion" | "rollout"
+  level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
+  options: { key: string; label: string }[] | null; ref: number | null
+}
+/** everything waiting on the operator, blocking first */
+export async function needs(): Promise<Need[]> {
+  try { const r = await call("GET", "/office/needs"); return r.status === 200 ? r.json : [] } catch { return [] }
+}
+export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `/threads/${tid}/verify`, {}, () => `verify on #${tid} queued`)
+export const dismissRollout = (id: number) => send("DELETE", "clearing the note", `/office/rollout/${id}`, () => "done")
 /** the suggestion box: the crew's suggestions not yet filed or thrown out */
 export async function suggestions(ws: number): Promise<CorkNote[]> {
   try { const r = await call("GET", `/office/suggestions/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }

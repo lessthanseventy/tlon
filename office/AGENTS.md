@@ -33,7 +33,10 @@ linked window at a time, Ctrl-] back to the room).
   finder's matcher; `when.ts` reads a schedule's "when" (a cron, or a local time). The arcade's
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
   zoomed like a coworker's terminal. It is the
-  operator's surface. Under the room the pane splits: what you clicked on the left, what you can
+  operator's surface. Its header carries what waits on you (`⚑ N blocking · M to decide`, from
+  `GET /api/office/needs`), `i` opens that queue with each item's own actions, and a TUI on an older
+  office than main offers `R` to reload itself. A running coworker's card shows their live screen
+  (captured, never resized; `c` the conversation, ⏎ step in). Under the room the pane splits: what you clicked on the left, what you can
   do to it on the right — each card's actions (`detail()`) are its keys, its clickable list and
   its docs at once, so they cannot drift apart. Popups only where a choice needs a list (the finder).
 

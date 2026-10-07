@@ -28,7 +28,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -72,6 +72,10 @@ let roomChanged = true, imageDirty = true
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
 /** the office corkboard: the crew's chatter to each other, newest first */
 let cork: CorkNote[] = []
+/** everything waiting on you (`Server.Office.Needs`), blocking first */
+let needs: data.Need[] = []
+/** the office revision this TUI started on: when main's moves past it, R reloads */
+let officeRev: string | null | undefined
 /** the suggestion box: the crew's suggestions, waiting on you to file one or throw it out */
 let ideas: CorkNote[] = []
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
@@ -119,21 +123,24 @@ function goWs(id: number) { choose(id); back(true); frame = null; void refresh()
 
 // ── staying current ───────────────────────────────────────────────────────────────────────────
 async function refresh() {
-  const before = all
-  all = await data.status()
+  const before = all, beforeNeeds = needs
+  ;[all, needs] = await Promise.all([data.status(), data.needs()])
+  if (officeRev === undefined && all.ok) officeRev = all.revs?.office ?? null
   settleWorkspace()
-  if (all.ok && before.ok) tellNews(before)
+  if (all.ok && before.ok) tellNews(before, beforeNeeds)
   const tid = openThread()
   await Promise.all([tid !== null ? loadThread(tid) : null, reader ? reader.reload() : null, loadCard(), loadFeed()])
   await chatter()
   draw()
 }
 /** what changed since the last look that you'd want to hear about even with the office in the back */
-function tellNews(before: Agents) {
-  const was = new Set(before.threads.filter(needsYou).map((t) => t.id))
-  const fresh = all.threads.filter((t) => needsYou(t) && !was.has(t.id))
+function tellNews(before: Agents, beforeNeeds: data.Need[]) {
+  // only what stops work rings: a new blocking item; several at once are one notification
+  const was = new Set(beforeNeeds.map((n) => n.key))
+  const fresh = needs.filter((n) => n.level === "blocking" && !was.has(n.key))
   if (fresh.length) out("\x07") // something new waits on you: the terminal's bell
-  for (const t of fresh) notify(`#${t.id} ${t.title}`, t.prompt?.summary ?? `awaits ${t.awaiting}`)
+  if (fresh.length === 1) notify(needTitle(fresh[0]!), fresh[0]!.text)
+  else if (fresh.length > 1) notify(`${fresh.length} things wait on you`, fresh.map(needTitle).join(" · "))
   if (before.health?.state === "ok" && all.health?.state === "warn") notify("tlon needs a look", all.health.problems.join("; "))
 }
 /** a desktop notification (OSC 777, as ghostty, kitty, WezTerm and foot take it) */
@@ -294,14 +301,19 @@ async function finder() {
   }
 }
 /** everything across the workspaces that waits on you, then what's being worked on */
-function inbox() {
-  const waiting = all.threads.filter(needsYou), live = all.threads.filter((t) => !needsYou(t) && t.live && !t.standing)
-  const pick = (t: Thread, why: Seg): Pick => ({ segs: [tidSeg(t.id), { s: t.title, fg: ROLE.prose }, { s: `  ${wsName(t.workspace_id ?? null)} · `, fg: ROLE.inactive }, why], text: `#${t.id} ${t.title}`, run: () => goThread(t.id, t.workspace_id) })
-  find(`INBOX — ${waiting.length} waiting on you, ${live.length} being worked`, [
-    ...waiting.map((t) => pick(t, { s: t.prompt?.summary ?? `awaits ${t.awaiting}`, fg: ROLE.attention })),
-    ...live.map((t) => pick(t, { s: t.lead ? `${t.lead} on it` : "running", fg: ROLE.live })),
-  ])
+function inbox() { open({ kind: "needs" }) }
+/** a need's one-line name: what kind, and where */
+const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", verify_failed: "verify red", mention: "mentioned you", suggestion: "suggestion", rollout: "rollout" }
+const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
+/** main's office has moved past the revision this TUI started on */
+const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev
+/** start this TUI over on the new code: hand the terminal back, run the same command, leave with its code */
+async function relaunch() {
+  leave()
+  const child = Bun.spawn([process.execPath, ...process.argv.slice(1)], { stdio: ["inherit", "inherit", "inherit"], env: process.env })
+  process.exit(await child.exited)
 }
+
 /** the verbs the finder offers by name — the same ones the keys reach */
 const VERBS: [string, () => void][] = [
   ["new thread", () => newThread()], ["new ticket", () => newTicket()], ["new note", () => newNote()], ["hire a coworker", () => hire()],
@@ -383,22 +395,71 @@ const dim = (s: string): Seg => ({ s, fg: ROLE.inactive }), plain = (s: string):
 const key = (s: string): Seg => ({ s, fg: ROLE.key }), pink = (s: string): Seg => ({ s, fg: ROLE.attention })
 const cols = () => process.stdout.columns ?? 80
 
+/**
+ * Coworkers' screens, by thread: their window as it is now, captured from the workspace's tmux
+ * (read-only, so it never resizes their window), shown in a card in place of the conversation —
+ * `c` flips to the conversation, ⏎ steps into the session itself.
+ */
+const screens = new Map<number, string[]>(), targets = new Map<number, Target | null>(), talkView = new Set<number>()
+async function peekScreen(tid: number) {
+  if (!targets.has(tid)) targets.set(tid, await data.terminal(tid))
+  const t = targets.get(tid)
+  if (!t) return false
+  const r = Bun.spawnSync(["tmux", "-L", t.socket, "capture-pane", "-p", "-t", `${t.session}:${t.window}`])
+  if (r.exitCode !== 0) { targets.delete(tid); screens.delete(tid); return false }
+  const lines = r.stdout.toString().replace(/\s+$/, "").split("\n")
+  const was = screens.get(tid)
+  screens.set(tid, lines)
+  return !was || was.join("\n") !== lines.join("\n")
+}
+/** the actions a running thread's card adds: step into the session, flip screen and conversation */
+function liveActions(tid: number): Action[] {
+  if (!threadOf(tid)?.live) return []
+  return [
+    { key: "enter", label: "step into their session", run: () => void zoomInto(tid) },
+    { key: "c", label: talkView.has(tid) ? "their screen" : "the conversation", run: () => { if (!talkView.delete(tid)) talkView.add(tid); draw() } },
+  ]
+}
+/** an author's colour: you in pink, the server dim, a coworker in their archetype's */
+const authorColor = (author: string) =>
+  author === OPERATOR ? ROLE.attention : author === "tlon" ? ROLE.inactive : shirtOf(all.bench.find((b) => b.name === author)?.archetype)
+const STAGE_RING = ["intent", "spec", "plan", "build", "verify", "review", "merged"]
+
 /** the detail pane's text width: the terminal's, less the actions column when there is room for it */
 const paneW = () => (cols() >= 80 ? cols() - ACTIONS_W - 1 : cols())
 /** a thread's rows for a card; `above`: the card's own rows over them, so the tail still ends in view */
 function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   const v = threads.get(tid), out: Row[] = []
   out.push({ segs: [key(`#${tid} `), plain(th?.title ?? "")] })
-  out.push({ segs: [dim(`${th?.stage ?? "thread"}${th?.awaiting && th.stage ? ` · gated: ${th.awaiting}` : ""}${th?.lead ? ` · ${th.lead}` : ""}${th?.live ? " · running" : ""}`)] })
+  // a workline's stages as a track (done ones lit, the current one a chip); a plain thread's lead and state
+  const cur = th?.stage ? STAGE_RING.indexOf(th.stage) : -1
+  out.push({
+    segs: [
+      ...(th?.stage
+        ? STAGE_RING.flatMap((st, i): Seg[] => [...(i ? [dim(" ▸ ")] : []), i === cur ? { s: ` ${st} `, fg: ROLE.ground, bg: th.awaiting ? ROLE.attention : ROLE.key, bold: true } : { s: st, fg: i < cur ? ROLE.live : ROLE.inactive }])
+        : [dim("thread")]),
+      ...(th?.lead ? [dim("  · "), { s: th.lead, fg: authorColor(th.lead), bold: true }] : []),
+      ...(th?.live ? [{ s: "  ● running", fg: ROLE.live }] : []),
+    ],
+  })
   if (th?.prompt) {
     out.push({ segs: [pink("asks: "), plain(th.prompt.summary)] })
     th.prompt.options?.forEach((o, i) => out.push({ segs: [key(` ${i + 1} `), plain(o.label)], open: () => did(data.post(tid, o.key)) }))
   } else if (th?.awaiting) out.push({ segs: [pink(`awaits ${th.awaiting}${th.stage ? " — A approves" : ""}`)] })
+  // a running coworker's screen, as it is now — unless you flipped to the conversation
+  const screen = th?.live && !talkView.has(tid) ? screens.get(tid) : undefined
+  if (screen) {
+    const room = DETAIL - 1 - above - out.length - 1, w = paneW() - 4
+    out.push({ segs: [{ s: " LIVE ", fg: ROLE.ground, bg: ROLE.live, bold: true }, dim("  their screen now · ⏎ step in · c the conversation")] })
+    for (const l of screen.slice(-room)) out.push({ segs: [{ s: "│ ", fg: ROLE.live }, { s: l.slice(0, w), fg: ROLE.prose }] })
+    return out
+  }
   // the conversation's tail, wrapped, as much as fits; `v` reads the whole of it
   const room = DETAIL - 1 - above - out.length, tail: Row[] = []
   for (const m of [...(v?.messages ?? [])].reverse()) {
     const lines = wrap(`${m.author}: ${m.body}`, paneW() - 4)
-    const rowsOf = lines.map((l, i): Row => ({ segs: i ? [plain(`  ${l}`)] : [{ s: `${m.author}: `, fg: m.author === OPERATOR ? ROLE.attention : ROLE.key }, plain(l.slice(m.author.length + 2))] }))
+    const tone = m.author === "tlon" ? ROLE.inactive : ROLE.prose
+    const rowsOf = lines.map((l, i): Row => ({ segs: i ? [{ s: `  ${l}`, fg: tone }] : [{ s: `${m.author}: `, fg: authorColor(m.author), bold: true }, { s: l.slice(m.author.length + 2), fg: tone }] }))
     tail.unshift(...rowsOf)
     if (tail.length >= room) break
   }
@@ -453,7 +514,7 @@ const back1: Action = { key: "esc", label: "back", run: () => { back(); roomChan
 const pick = <T,>(xs: T[], i: number) => (i >= 0 ? xs[i] : undefined)
 
 /** the card the pane shows: its title, its rows (the left, j/k + enter when any open), its actions (the right, by key) */
-function detail(): { title: string; rows: Row[]; actions: Action[] } {
+function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: string } {
   const a = view(), w = ws
   switch (mode.kind) {
     case "home": {
@@ -495,13 +556,20 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
       if (!c) return { title: name.toUpperCase(), rows: [{ segs: [dim("not in this office any more")] }], actions: [back1] }
       const model = b?.model ? `${b.model.provider}/${b.model.model}` : `${a.archetypes.find((x) => x.name === c.archetype)?.model ?? "?"} (archetype's)`
       const where = c.status === "working" ? "mid-turn" : a.roster.some((r) => r.agent === name && r.warm) ? "on call" : c.status === "waiting" ? "waiting on you" : "in the lounge"
-      const head: Row = { segs: [{ s: c.name, fg: shirtOf(c.archetype), bold: true }, dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${where} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)] }
+      // a pill for where they are, and what they're at mid-turn (the thought bubble's kind)
+      const doing = a.roster.find((r) => r.agent === name && r.thinking)?.doing
+      const pill = c.status === "working" ? ROLE.live : c.status === "waiting" ? ROLE.attention : where === "on call" ? ROLE.key : ROLE.inactive
+      const head: Row = {
+        segs: [{ s: ` ${c.name} `, fg: ROLE.ground, bg: shirtOf(c.archetype), bold: true }, plain(" "), { s: ` ${where}${doing ? ` · ${doing}` : ""} `, fg: ROLE.ground, bg: pill },
+          dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
+      }
       const rows = c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]
-      return { title: name.toUpperCase(), rows, actions: [...(c.thread === null ? [] : threadActions(c.thread)), ...seatActions(b), back1] }
+      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), back1] }
     }
     case "thread": {
       const tid = mode.tid
-      return { title: `THREAD #${tid}`, rows: threadRows(threadOf(tid), tid), actions: [...threadActions(tid), back1] }
+      const th = threadOf(tid)
+      return { title: `THREAD #${tid}${th?.stage ? ` · workline ${th.stage}` : ""}`, rows: threadRows(th, tid), tint: th?.awaiting || th?.prompt ? ROLE.attention : th?.lead ? authorColor(th.lead) : ROLE.key, actions: [...liveActions(tid), ...threadActions(tid), back1] }
     }
     case "column": {
       const col = boardColumns(a)[mode.col]!, items = col.items
@@ -712,6 +780,43 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
         ],
       }
     }
+    case "needs": {
+      // what waits on you: blocking first (work has stopped), then what to decide; then what's under way
+      const tone: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, verify_failed: ROLE.alarm, mention: ROLE.body, suggestion: ROLE.assistant, rollout: ROLE.live }
+      const row = (n: data.Need): Row => ({
+        segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: tone[n.kind] }, plain(" "), ...(n.thread_id ? [tidSeg(n.thread_id)] : []),
+          { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), { s: n.text.replace(/\s+/g, " "), fg: n.level === "blocking" ? ROLE.prose : ROLE.inactive }],
+        open: n.thread_id ? () => openReader(n.thread_id!, false) : n.kind === "suggestion" ? () => open({ kind: "ideas" }) : undefined, ref: n,
+      })
+      const blocking = needs.filter((n) => n.level === "blocking"), deciding = needs.filter((n) => n.level === "decide")
+      const live = all.threads.filter((t) => t.live && !t.standing && !needs.some((n) => n.thread_id === t.id))
+      const section = (label: string, bg: string, note: string): Row => ({ segs: [{ s: ` ${label} `, fg: ROLE.ground, bg, bold: true }, dim(`  ${note}`)] })
+      const rows: Row[] = [
+        ...(blocking.length ? [section(`BLOCKING · ${blocking.length}`, ROLE.attention, "work has stopped until you act"), ...blocking.map(row)] : []),
+        ...(deciding.length ? [section(`TO DECIDE · ${deciding.length}`, ROLE.body, "nothing waits on these"), ...deciding.map(row)] : []),
+        ...(live.length ? [section(`UNDER WAY · ${live.length}`, ROLE.live, "being worked on"), ...live.map((t): Row => ({ segs: [tidSeg(t.id), { s: t.title, fg: ROLE.prose }, dim(`  ${t.lead ?? ""}${t.stage ? ` · ${t.stage}` : ""}`)], open: () => goThread(t.id, t.workspace_id) }))] : []),
+      ]
+      const n = rows[sel]?.ref as data.Need | undefined, tid = n?.thread_id ?? null, w = n?.workspace_id ?? ws
+      const after = () => void refresh()
+      const acts: Action[] = !n ? [] : [
+        ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
+        ...(n.kind === "dialog" && tid ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.post(tid, o.key)).then(after) })) : []),
+        ...((n.kind === "question" || n.kind === "mention") && tid ? [{ key: "r", label: "reply", run: () => reply(tid) }] : []),
+        ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
+        ...(n.kind === "suggestion" && w !== null && n.ref ? [
+          { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, n.text)).then(() => data.dropSuggestion(w, n.ref!)).then(after) },
+          { key: "d", label: "throw it out", run: () => void data.dropSuggestion(w, n.ref!).then(after) },
+        ] : []),
+        ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
+        ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
+      ]
+      return {
+        title: needs.length ? `WAITING ON YOU · ${blocking.length} blocking · ${deciding.length} to decide` : "WAITING ON YOU",
+        tint: blocking.length ? ROLE.attention : deciding.length ? ROLE.body : ROLE.live,
+        rows: rows.length ? rows : [{ segs: [{ s: "nothing waits on you. ", fg: ROLE.live }, dim("the crew is getting on with it.")] }],
+        actions: [...acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i), back1],
+      }
+    }
     case "ideas": {
       const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
       const rows: Row[] = ideas.map((n) => ({ segs: [who(n.author), plain(n.body)], ref: n }))
@@ -798,9 +903,13 @@ function draw() {
   const a = view()
   let o = `${ESC}[?2026h${ESC}[?25l`
   // header: the workspace, and what waits elsewhere
-  const elsewhere = all.threads.filter((t) => t.workspace_id !== ws && needsYou(t)).length
+  const blocking = needs.filter((n) => n.level === "blocking").length, deciding = needs.length - blocking
   o += `${ESC}[1;1H` + line([{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
-    ...(all.ok ? [] : [{ s: `  ${all.note ?? "channel down"}`, fg: ROLE.alarm }]), ...(elsewhere ? [pink(`  ! ${elsewhere} elsewhere`)] : []),
+    ...(all.ok ? [] : [{ s: `  ${all.note ?? "channel down"}`, fg: ROLE.alarm }]),
+    ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true }] : []),
+    ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body }] : []),
+    ...(needs.length ? [dim("  (i)")] : []),
+    ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
     ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm }] : [])], colsN)
   // the room
   const room0 = room()
@@ -826,6 +935,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   let o = ""
   const body = Math.max(1, termRows - top - 1)
   let title: string, keys = "", segRows: Row[], cursor: { r: number; c: number } | null = null
+  let tint = ROLE.key
   acts = []
   if (picker) {
     const shown = rank(picker.q.text, picker.items, (p) => p.text)
@@ -843,7 +953,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
   } else {
     const d = detail()
-    title = d.title; segRows = d.rows; acts = d.actions
+    title = d.title; segRows = d.rows; acts = d.actions; tint = d.tint ?? ROLE.key
   }
   rows = segRows
   const split = acts.length > 0 && colsN >= 80
@@ -851,7 +961,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   if (!split && acts.length) keys = acts.map((x) => `${keyName(x.key)} ${x.label}`).join(" · ")
   else if (!keys) keys = "/ find · i inbox · tab crew · [ ] workspace · esc back · q quit"
   const bar = (t: string, w: number, bg: string) => line([{ s: ` ${t} `, fg: ROLE.ground, bg }, dim(" " + "─".repeat(Math.max(0, w - t.length - 3)))], w)
-  o += `${ESC}[${top};1H` + bar(title, leftW, picker || input ? ROLE.attention : ROLE.key) + (split ? line([dim("┬")], 1) + bar("ACTIONS", ACTIONS_W, ROLE.key) : "")
+  o += `${ESC}[${top};1H` + bar(title, leftW, picker || input ? ROLE.attention : tint) + (split ? line([dim("┬")], 1) + bar("ACTIONS", ACTIONS_W, ROLE.key) : "")
   const selectable = rows.some((r) => r.open) && !input
   if (snapSel && selectable && !picker) { snapSel = false; if (!rows[sel]?.open) sel = rows.findIndex((r) => r.open) }
   if (sel >= rows.length) sel = Math.max(0, rows.length - 1)
@@ -957,6 +1067,7 @@ function onKey(k: string) {
     case "enter": return onActions ? acts[asel]?.run() : rows[sel]?.open?.()
     case "/": case "ctrl-k": return void finder()
     case "i": return inbox()
+    case "R": if (updated()) void relaunch(); return
     case "n": return newThread()
     case "N": return newTicket()
     case "c": return open({ kind: "crew" })
@@ -1113,6 +1224,11 @@ async function main() {
   await refresh()
   setInterval(refresh, 10_000)
   setInterval(() => { if (followPalette()) { frame = null; draw() } }, 1000)
+  // a card showing a running coworker keeps their screen current
+  setInterval(() => {
+    const tid = openThread()
+    if (tid !== null && !zoom && !reader && threadOf(tid)?.live && !talkView.has(tid)) void peekScreen(tid).then((moved) => { if (moved) draw() })
+  }, 1000)
   // the room's clock: 10 Hz, drawn only when it changed
   setInterval(() => { if (!reader && room().step(view())) { changed(); draw() } }, 100)
 }

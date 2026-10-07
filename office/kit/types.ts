@@ -45,6 +45,8 @@ export type Agents = {
   calendar: Record<string, number[]>
   /** the weather outside, as the room draws it (`Server.Office.Weather`); null when unknown */
   weather?: { kind: "clear" | "partly" | "cloudy" | "fog" | "rain" | "snow" | "storm"; temp_c: number | null; desc: string } | null
+  /** the office code's revision on main: a TUI started on another offers a reload (`Server.Rollout`) */
+  revs?: { office: string | null }
   note?: string
 }
 /** a thread for a close look: a page of its messages (`more`: older ones remain), and what its worker's pane shows now */
