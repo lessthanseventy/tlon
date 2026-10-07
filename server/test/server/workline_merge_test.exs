@@ -36,6 +36,28 @@ defmodule Server.Workline.MergeTest do
     assert linear?(git)
   end
 
+  test "a gate runs on the rebased branch before main moves; red, main stays where it was", %{repo: repo, git: git} do
+    File.write!(Path.join(repo, "c.txt"), "meanwhile\n")
+    {_, 0} = git.(["add", "c.txt"])
+    {_, 0} = git.(["commit", "-qm", "meanwhile on main"])
+    {main_before, 0} = git.(["rev-parse", "main"])
+    me = self()
+
+    red = fn r, branch ->
+      {log, 0} = System.cmd("git", ["-C", r, "log", "--format=%s", branch])
+      send(me, {:gated, log})
+      {:error, "the gate is red"}
+    end
+
+    assert {:error, "the gate is red"} = Merge.merge(repo, "finder", gate: red)
+    assert_received {:gated, log}
+    assert log =~ "build" and log =~ "meanwhile on main"
+    assert {^main_before, 0} = git.(["rev-parse", "main"])
+
+    assert {:ok, _} = Merge.merge(repo, "finder", gate: fn _, _ -> {:ok, :green} end)
+    assert File.read!(Path.join(repo, "b.txt")) == "built\n"
+  end
+
   test "main having moved on, the branch is rebased onto it first — still no merge commit", %{repo: repo, git: git} do
     File.write!(Path.join(repo, "c.txt"), "meanwhile\n")
     {_, 0} = git.(["add", "c.txt"])

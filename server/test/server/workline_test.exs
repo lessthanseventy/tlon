@@ -213,8 +213,15 @@ defmodule Server.WorklineTest do
 
   defmodule Merges do
     @moduledoc false
-    def merge(_repo, slug),
-      do: if(slug == "conflicted", do: {:error, "merging hit a conflict"}, else: {:ok, %{from: "a", to: "b"}})
+    def merge(repo, slug, opts \\ []) do
+      gate = Keyword.get(opts, :gate, fn _, _ -> {:ok, :no_gate} end)
+
+      cond do
+        slug == "conflicted" -> {:error, "merging hit a conflict"}
+        match?({:error, _}, gate.(repo, "work/#{slug}")) -> gate.(repo, "work/#{slug}")
+        true -> {:ok, %{from: "a", to: "b"}}
+      end
+    end
   end
 
   test "approving the review gate merges the branch, then the workline is merged and its thread closed" do
@@ -223,6 +230,53 @@ defmodule Server.WorklineTest do
     assert {:ok, merged} = Workline.approve(parked, artifacts: AllPresent, merge: Merges)
     assert merged.stage == "merged"
     assert %Server.Thread{state: "closed"} = Server.Repo.get(Server.Thread, thread.id)
+  end
+
+  describe "the merge queue" do
+    use Oban.Testing, repo: Server.Repo
+
+    test "approving the review gate queues the landing: no longer waiting on the operator, not yet merged" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "queued", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+
+      assert {:ok, queued} = Workline.approve(parked, artifacts: AllPresent, land: :queue)
+      assert %Server.Thread{stage: "review", awaiting: nil, state: "open"} = queued
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+      assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "merge queue"))
+    end
+
+    test "its turn, green on main: merged, closed" do
+      thread = open!(%{slug: "lands", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+      {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+      assert {:ok, %{stage: "merged"}} =
+               Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end)
+
+      assert %Server.Thread{state: "closed"} = Repo.get(Server.Thread, thread.id)
+    end
+
+    test "its turn, red on main or a conflict: back to build, the builder told why — never parked on the operator" do
+      for {slug, gate, why} <- [
+            {"conflicted", fn _, _ -> {:ok, :green} end, "merging hit a conflict"},
+            {"red-on-main", fn _, _ -> {:error, "the gate on main is red"} end, "the gate on main is red"}
+          ] do
+        thread = open!(%{slug: slug, stage: "review"})
+        {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+        {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+        assert {:error, {:bounced, ^why}} = Workline.land_queued(queued, merge: Merges, gate: gate)
+        assert %Server.Thread{stage: "build", awaiting: nil, state: "open"} = Repo.get(Server.Thread, thread.id)
+        assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "back to build" and &1.body =~ why))
+      end
+    end
+
+    test "a thread no longer queued (re-parked, closed, moved on) is left alone" do
+      thread = open!(%{slug: "not-queued", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+      assert {:ok, %{stage: "review", awaiting: "andrew"}} = Workline.land_queued(parked, merge: Merges)
+    end
   end
 
   test "a merge that can't land keeps the gate parked, and says why on the thread" do

@@ -9,10 +9,15 @@ defmodule Server.Workline.Merge do
   words the operator can act on.
   """
 
-  @doc "Land `work/<slug>` on `main` in `repo`: rebase it onto main, fast-forward main."
-  @spec merge(String.t(), String.t()) :: {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t()}
-  def merge(repo, slug) do
+  @doc """
+  Land `work/<slug>` on `main` in `repo`: rebase it onto main, fast-forward main. `opts[:gate]`, a
+  `fn repo, branch -> {:ok, _} | {:error, why} end`, runs on the rebased branch before main moves —
+  red, main stays where it was (the branch keeps its rebase).
+  """
+  @spec merge(String.t(), String.t(), keyword()) :: {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t()}
+  def merge(repo, slug, opts \\ []) do
     branch = "work/#{slug}"
+    gate = Keyword.get(opts, :gate, fn _repo, _branch -> {:ok, :no_gate} end)
 
     with {:ok, _} <- run(repo, ["rev-parse", "--verify", "--quiet", branch], "there is no branch #{branch}"),
          {:ok, "main"} <- current(repo),
@@ -31,6 +36,7 @@ defmodule Server.Workline.Merge do
          {:ok, _} <- sync(repo),
          {:ok, from} <- run(repo, ["rev-parse", "HEAD"], "no HEAD"),
          {:ok, _} <- rebase(repo, branch),
+         {:ok, _} <- gate.(repo, branch),
          {:ok, _} <- run(repo, ["merge", "--ff-only", "--quiet", branch], "main could not fast-forward to #{branch}"),
          {:ok, to} <- run(repo, ["rev-parse", "HEAD"], "no HEAD") do
       {:ok, %{from: from, to: to}}
