@@ -15,6 +15,7 @@ import type { Live } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { meetingTile } from "../kit/tiles/meeting"
+import { loungeTile } from "../kit/tiles/lounge"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { BIG_PLANT, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -229,6 +230,7 @@ export class WideRoom extends Sim<Layout> {
   private readonly games: ReturnType<typeof gamesTile>
   private readonly kitchen: ReturnType<typeof kitchenTile>
   private readonly meeting: ReturnType<typeof meetingTile>
+  private readonly lounge: ReturnType<typeof loungeTile>
   private antic: Antic | null = null
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -238,6 +240,7 @@ export class WideRoom extends Sim<Layout> {
     this.games = gamesTile(this.z)
     this.kitchen = kitchenTile(this.z, width)
     this.meeting = meetingTile(this.z)
+    this.lounge = loungeTile(this.z)
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
@@ -401,15 +404,7 @@ export class WideRoom extends Sim<Layout> {
     this.meeting.draw(sc, a, l, measure, this.live())
 
     // ── the lounge: rug, couch (its back toward you), lamp, beanbag; the kitchen along the wall ──
-    px(L0 + 34, 48, 54, 14, ROLE.structure); px(L0 + 35, 49, 52, 12, ROLE.borderInactive)
-    for (let i = 0; i < 8; i++) px(L0 + 38 + i * 6, 52 + (i % 2) * 4, 2, 2, ROLE.meta)
-    sc.item(82.5, () => {
-      px(L0 + 34, 76, 56, 8, ROLE.structure); px(L0 + 35, 77, 54, 1, ROLE.borderInactive)
-      px(L0 + 32, 70, 4, 14, ROLE.structure); px(L0 + 88, 70, 4, 14, ROLE.structure)
-    })
-    sc.item(84, () => { px(L0 + 14, 60, 1, 24, ROLE.inactive); px(L0 + 12, 84, 5, 1, ROLE.inactive); blit(["sssss", ".sss."], L0 + 12, 57, { s: ROLE.body }) })
-    sc.item(150, () => { px(L0 + 22, 140, 18, 10, ROLE.attention); px(L0 + 24, 138, 14, 3, tint(ROLE.attention, ROLE.ground, 0.7)) })
-    sc.item(186, () => blit(BIG_PLANT, L0 + 4, 175, { l: ROLE.live, o: ROLE.structure }))
+    this.lounge.draw(sc, a, l, measure, this.live())
     this.pastimes(sc)
 
     // ── people, Nina ──
@@ -533,14 +528,6 @@ export class WideRoom extends Sim<Layout> {
   private pastimes(sc: Scene) {
     this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live())
     this.kitchen.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live())
-    const { shelf } = corner(this.z), px = sc.px.bind(sc)
-    sc.item(shelf.y + shelf.h, () => {
-      // the bookshelf: three shelves of spines
-      px(shelf.x, shelf.y, shelf.w, shelf.h, ROLE.structure)
-      for (let r = 0; r < 3; r++) for (let k = 0; k < 9; k++) if ((k * 7 + r * 3) % 10 !== 0) px(shelf.x + 2 + k * 2, shelf.y + 2 + r * 6, 1, 5 - ((k + r) % 2), [ROLE.alarm, ROLE.key, ROLE.body, ROLE.live, ROLE.assistant][(k + r * 2) % 5]!)
-    })
-    // the armchair in front of it, drawn just behind whoever sits in it
-    sc.item(83, () => { px(shelf.x + 1, 72, 14, 12, ROLE.planner); px(shelf.x + 3, 74, 10, 8, tint(ROLE.planner, ROLE.ground, 0.6)); px(shelf.x + 1, 84, 2, 2, ROLE.structure); px(shelf.x + 13, 84, 2, 2, ROLE.structure) })
     // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's (at 18)
     for (const [wx, plant] of [[this.z.L0 + 22, { x: this.z.L0 + 4, y: 175 }], [18, { x: 2, y: 159 }]] as const) {
       const n = Math.min(3, Math.floor((this.watered.get(wx) ?? 0) / 300))
