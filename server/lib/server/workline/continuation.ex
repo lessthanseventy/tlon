@@ -39,7 +39,7 @@ defmodule Server.Workline.Continuation do
          false <- verifying?(thread),
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),
-         {:budget, true, _} <- {:budget, sent < max, {thread, why, sent}} do
+         {:budget, true, _} <- {:budget, sent < max, {thread, why, sent, after_id}} do
       Channel.post(%{
         thread_id: thread_id,
         author: "tlon",
@@ -52,27 +52,48 @@ defmodule Server.Workline.Continuation do
 
       :ok
     else
-      {:budget, false, {thread, why, sent}} -> stuck(thread, why, sent)
+      {:budget, false, {thread, why, sent, after_id}} -> stuck(thread, why, sent, after_id)
       _ -> :ok
     end
   end
 
-  # out of nudges: the operator decides — answer the lead, hand it to someone else, or close it
-  defp stuck(thread, why, sent) do
-    operator = Application.get_env(:server, :operator, "andrew")
-    {:ok, _} = thread |> Thread.workline_stage_changeset(%{awaiting: operator}) |> Repo.update()
+  # Out of nudges. Where a sheriff owns red it is the sheriff's, and the workline waits on no one
+  # it doesn't (the room shows who it truly waits on); else the operator decides — answer the lead,
+  # hand it to someone else, or close it. Said once per stage: the payload marks which.
+  defp stuck(thread, why, sent, after_id) do
+    if !stuck_said?(thread.id, after_id) do
+      sheriff = Server.Sheriff.of(thread.workspace_id)
 
-    Channel.post(%{
-      thread_id: thread.id,
-      author: "tlon",
-      body:
-        "⚠ stuck at #{thread.stage} after #{sent} nudges: #{why}. It needs you — answer the lead here, " <>
-          "hand it to someone else, or close it."
-    })
+      if !sheriff do
+        operator = Application.get_env(:server, :operator, "andrew")
+        {:ok, _} = thread |> Thread.workline_stage_changeset(%{awaiting: operator}) |> Repo.update()
+      end
 
-    Server.Sheriff.report(thread, "stuck at #{thread.stage} after #{sent} nudges: #{why}")
+      Channel.post(%{
+        thread_id: thread.id,
+        author: "tlon",
+        body:
+          "⚠ stuck at #{thread.stage} after #{sent} nudges: #{why}. " <>
+            if(sheriff,
+              do: "#{sheriff.name}, the sheriff, has it.",
+              else: "It needs you — answer the lead here, hand it to someone else, or close it."
+            ),
+        payload: %{"stuck_after" => after_id}
+      })
+
+      Server.Sheriff.report(thread, "stuck at #{thread.stage} after #{sent} nudges: #{why}")
+    end
 
     :ok
+  end
+
+  defp stuck_said?(thread_id, after_id) do
+    Repo.exists?(
+      from m in Message,
+        where:
+          m.thread_id == ^thread_id and m.author == "tlon" and
+            fragment("(? ->> 'stuck_after')::bigint", m.payload) == ^after_id
+    )
   end
 
   # verify's artifact is the server's own run (Jobs.Verify, ~a minute of gates): the lead can't
