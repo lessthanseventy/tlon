@@ -497,7 +497,7 @@ defmodule Server.Workline do
       merger ->
         repo = Git.root(thread)
 
-        case merger.merge(repo, thread.slug, thread.title) do
+        case merger.merge(repo, thread.slug) do
           {:ok, moved} ->
             {:ok, Map.put(moved, :repo, repo)}
 
