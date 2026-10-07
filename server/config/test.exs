@@ -1,7 +1,14 @@
 import Config
 
-# The suite's own database on the local Postgres, created fresh per run by test_helper.
-# TLON_TEST_DATABASE names another when two suites run at once (a second session, a worktree).
+# The suite's own database on the local Postgres, DROPPED and created fresh per run by test_helper —
+# so two checkouts sharing one would delete it under each other mid-run. Each checkout gets its own:
+# a worktree at .worktrees/<name> uses tlon_test_<name>, the main checkout tlon_test.
+# TLON_TEST_DATABASE names another (a second suite in the same checkout).
+test_database =
+  case Regex.run(~r{/\.worktrees/([^/]+)/}, __DIR__) do
+    [_, name] -> "tlon_test_" <> String.slice(String.replace(name, ~r/[^A-Za-z0-9_]/, "_"), 0, 50)
+    nil -> "tlon_test"
+  end
 
 # Oban never runs jobs on its own in test — a test performs them.
 # No commit waits for the disk (synchronous_commit off): a test db needs none to outlive a crash,
@@ -9,7 +16,7 @@ import Config
 config :server, Oban, testing: :manual
 
 config :server, Server.Repo,
-  database: System.get_env("TLON_TEST_DATABASE") || "tlon_test",
+  database: System.get_env("TLON_TEST_DATABASE") || test_database,
   pool_size: 5,
   log: false,
   parameters: [synchronous_commit: "off"]
