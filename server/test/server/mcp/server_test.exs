@@ -114,6 +114,7 @@ defmodule Server.MCP.ServerTest do
                "file_ticket",
                "list_tickets",
                "update_ticket",
+               "start_ticket",
                "write_note",
                "get_notes",
                # the source verbs (repo tools design, 2026-09-08)
@@ -741,6 +742,45 @@ defmodule Server.MCP.ServerTest do
 
     listed = token |> call(session, 3, "list_tickets", %{}) |> decode_tool_json()
     assert Enum.any?(listed, &(&1["id"] == id and &1["title"] == "auth is fucked"))
+  end
+
+  test "start_ticket opens a thread on the ticket and promotes it, moving the ticket to doing" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "StartWS"})
+    {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "tlon", repos: []})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id, project_id: p.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Starter", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    filed =
+      token
+      |> call(session, 2, "file_ticket", %{"title" => "unbind ctrl+enter", "body" => "ghostty eats it"})
+      |> decode_tool_json()
+
+    started = token |> call(session, 3, "start_ticket", %{"id" => filed["id"]}) |> decode_tool_json()
+    assert %{"thread_id" => thread_id} = started
+    assert is_integer(thread_id)
+
+    started_thread = Repo.get!(Server.Thread, thread_id)
+    assert started_thread.title == "unbind ctrl+enter"
+
+    assert [%{author: "andrew", body: body}] = Channel.thread_messages(started_thread)
+    assert body =~ "unbind ctrl+enter"
+    assert body =~ "ghostty eats it"
+
+    assert %{"status" => "doing"} = filed["id"] |> Server.Tickets.get() |> Server.MCP.Brief.ticket()
+  end
+
+  test "start_ticket refuses a missing ticket" do
+    {:ok, thread} = Channel.open_thread(%{title: "starter thread"})
+    {:ok, agent} = Staff.register_agent(%{name: "Starter2", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    r = call(token, session, 2, "start_ticket", %{"id" => 999_999})
+    assert r["isError"]
+    %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
+    assert text =~ "999999"
   end
 
   test "write_note defaults to the bound thread; get_notes reads it back" do
