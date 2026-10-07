@@ -29,6 +29,8 @@ export type Act =
   | { kind: "rack" }
 
 export const needsYou = (t?: Thread) => !!t && (!!t.awaiting || !!t.prompt)
+/** `who` brings `t` to you: it needs you, and they lead it — everyone else on it gets on */
+export const asksYou = (who: string, t?: Thread) => needsYou(t) && (!t!.lead || t!.lead === who)
 /** a meta coworker — the one who routes the work and never works a thread */
 export const isManager = (a: Agents, r: { archetype?: string | null }) => !!a.archetypes.find((x) => x.name === r.archetype)?.meta
 
@@ -65,7 +67,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
 
 /**
  * The office's people, once each: the bench, then anyone on a thread who is not on it. Each is
- * shown on the thread that needs you if one does, else their first — and is warm, or mid-turn, if
+ * shown on the thread they bring to you if one waits on you, else their first — and is warm, or mid-turn, if
  * any of theirs is (doing what one of those turns is doing).
  */
 export function peopleOf(a: Agents): Seat[] {
@@ -73,7 +75,7 @@ export function peopleOf(a: Agents): Seat[] {
   for (const c of a.bench) byName.set(c.name, { agent: c.name, thread_id: -c.agent_id, title: "", warm: false, archetype: c.archetype, lead: c.lead })
   for (const r of a.roster) {
     const p = byName.get(r.agent) ?? { ...r, warm: false, thread_id: 0 }
-    if (p.thread_id <= 0 || needsYou(a.threads.find((t) => t.id === r.thread_id))) { p.thread_id = r.thread_id; p.title = r.title }
+    if (p.thread_id <= 0 || asksYou(r.agent, a.threads.find((t) => t.id === r.thread_id))) { p.thread_id = r.thread_id; p.title = r.title }
     p.warm = p.warm || r.warm
     p.thinking = !!(p.thinking || r.thinking)
     if (r.thinking && r.doing) p.doing = r.doing
@@ -89,7 +91,7 @@ export type Crew = { name: string; archetype: string | null; manager: boolean; l
 export function crewOf(a: Agents): Crew[] {
   return peopleOf(a).map((p) => {
     const t = p.thread_id > 0 ? a.threads.find((x) => x.id === p.thread_id) : undefined
-    const status: CrewStatus = needsYou(t) ? "waiting" : p.thinking ? "working" : "idle"
+    const status: CrewStatus = asksYou(p.agent, t) ? "waiting" : p.thinking ? "working" : "idle"
     return { name: p.agent, archetype: p.archetype ?? null, manager: isManager(a, p), lead: !!p.lead, status, thread: p.thread_id > 0 ? p.thread_id : null, title: p.title }
   })
 }

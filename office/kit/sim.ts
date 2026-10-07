@@ -3,7 +3,7 @@
 // when idle, into your queue when a thread waits on you, over to whoever they
 // consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
-import { needsYou } from "./crew"
+import { asksYou } from "./crew"
 import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
@@ -361,7 +361,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && Math.random() < 1 / 1500) this.catSay(this.line("Nina", "muse", NINA.muse, "", NINA_RIFF))
     const plan = this.plan, l = plan.layout(a)
     const threadOf = (id: number) => a.threads.find((t) => t.id === id)
-    const asks = l.people.filter((p) => needsYou(threadOf(p.thread_id))).sort((p, q) => p.thread_id - q.thread_id)
+    const asks = l.people.filter((p) => asksYou(p.agent, threadOf(p.thread_id))).sort((p, q) => p.thread_id - q.thread_id)
     // a thread gone from the open ones has shipped — unless many went at once (a new view, the channel down)
     const leads = new Map(a.threads.filter((t) => t.lead).map((t) => [t.id, t.lead!]))
     const gone = [...this.leads].filter(([id]) => !leads.has(id))

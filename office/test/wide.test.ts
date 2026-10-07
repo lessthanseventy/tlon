@@ -161,6 +161,22 @@ describe("the wide room", () => {
     expect(yawned).toBe(true)
   }))
 
+  test("a thread waiting on you is brought to you by its lead alone — the rest of its people get on", () => seeded(13, () => {
+    const a0 = office(1)
+    // hronir leads #900, at its gate; w0 has a seat on it too
+    const a = viewOf({
+      ...a0,
+      threads: [...a0.threads, { id: 900, title: "at the gate", stage: "review", awaiting: "andrew", workspace_id: 1, lead: "hronir" }],
+      roster: [...a0.roster, { agent: "hronir", thread_id: 900, title: "at the gate", warm: true, thinking: false, workspace_id: 1 }, { agent: "w0", thread_id: 900, title: "at the gate", warm: true, thinking: false, workspace_id: 1 }],
+    }, 1)
+    expect(crewOf(a).filter((c) => c.status === "waiting").map((c) => c.name)).toEqual(["hronir"])
+
+    const room = new WideRoom(560)
+    for (let i = 0; i < 1_500; i++) room.step(a)
+    const queued = [...(room as unknown as { actors: Map<string, { spot: { kind: string } }> }).actors].filter(([, x]) => x.spot.kind === "queue").map(([k]) => k)
+    expect(queued).toEqual(["hronir"])
+  }))
+
   test("a pet never says the same thing twice in a row", () => seeded(9, () => {
     const room = new WideRoom(560)
     const said = (room as unknown as { cat: { said: string | null } }).cat
