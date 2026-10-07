@@ -112,8 +112,9 @@ defmodule Server.Workline.Artifacts.Git do
 
   @doc """
   What the workline branch changes, net, since it left the main checkout — its own `work/<slug>/`
-  docs left out: `%{paths, deleted, lines, diff}`, `lines` the added plus deleted (a binary file's
-  count as 0). No branch reads as no change.
+  docs left out: `%{paths, deleted, lines, diff, files}`, `lines` the added plus deleted (a binary
+  file's count as 0), `files` each surviving text file's `{path, text}` as the branch has it. No
+  branch reads as no change.
   """
   def change(thread) do
     range = "HEAD...work/#{thread.slug}"
@@ -137,12 +138,16 @@ defmodule Server.Workline.Artifacts.Git do
         _ -> ""
       end
 
-    %{
-      paths: changed_paths(thread),
-      deleted: names(git(thread, ["diff", "--name-only", "--diff-filter=D", range | only])),
-      lines: lines,
-      diff: diff
-    }
+    paths = changed_paths(thread)
+    deleted = names(git(thread, ["diff", "--name-only", "--diff-filter=D", range | only]))
+
+    files =
+      for path <- paths -- deleted,
+          {text, 0} = git(thread, ["show", "work/#{thread.slug}:#{path}"]),
+          not String.contains?(text, <<0>>),
+          do: {path, text}
+
+    %{paths: paths, deleted: deleted, lines: lines, diff: diff, files: files}
   end
 
   defp count("-"), do: 0
