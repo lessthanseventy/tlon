@@ -58,13 +58,26 @@ defmodule Server.Workline.Artifacts.Git do
     end
   end
 
+  # only evidence since the workline last entered verify: a green from before a bounce back to
+  # build is about code that has changed since
   def check(thread, :checks) do
     correlation = "workline:#{thread.slug}:verify"
+
+    entered =
+      Repo.one(
+        from e in Event,
+          where:
+            e.thread_id == ^thread.id and e.kind == "stage_advanced" and
+              fragment("(?::jsonb ->> 'to') = 'verify'", e.detail),
+          select: max(e.id)
+      ) || 0
 
     passed =
       Repo.exists?(
         from e in Event,
-          where: e.thread_id == ^thread.id and e.kind == "check_passed" and e.correlation == ^correlation
+          where:
+            e.thread_id == ^thread.id and e.kind == "check_passed" and e.correlation == ^correlation and
+              e.id > ^entered
       )
 
     if passed,
