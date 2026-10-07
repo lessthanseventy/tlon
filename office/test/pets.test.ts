@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
+import { dancing } from "../kit/draw"
 import { CAT, DOG } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom } from "../rooms/wide"
@@ -83,4 +84,28 @@ describe("the pets talk", () => {
     room.pet()
     expect(new Set([first, pets.cat.said])).toEqual(new Set(["Adore me, you.", "Kneel."]))
   }))
+})
+
+describe("tempo-synced dance", () => {
+  test("bpm > 120, cat awake and not fussed/zooming: dancing reads true", () => {
+    const room = new WideRoom(640) as unknown as Pets & { setPlayer(p: unknown): void }
+    room.setPlayer({ text: "x", bpm: 140 })
+    room.cat.mode = "sit"; room.cat.fuss = null
+    expect(dancing(room.cat.mode, room.cat.fuss as never, 140)).toBe(true)
+  })
+  test("bpm <= 120: never dances", () => {
+    expect(dancing("sit", null, 120)).toBe(false)
+  })
+  test("no bpm: never dances", () => {
+    expect(dancing("sit", null, null)).toBe(false)
+  })
+  test("asleep: never dances even with a fast bpm", () => {
+    expect(dancing("sleep", null, 140)).toBe(false)
+  })
+  test("mid-zoomies: never dances", () => {
+    expect(dancing("zoom", null, 140)).toBe(false)
+  })
+  test("fussed: never dances", () => {
+    expect(dancing("sit", { kind: "pat", from: { x: 0, y: 0 }, until: 999 } as never, 140)).toBe(false)
+  })
 })

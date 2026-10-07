@@ -2,7 +2,7 @@
 // own code shrinks to tile composition and chrome. A room still owns his geometry (his bed, his
 // bowl, the ping-pong table he watches) — these functions take it as plain data, never `Zones`.
 import { balloonLines } from "./canvas"
-import { drawFuss, type Scene } from "./draw"
+import { dancing, drawFuss, type Scene } from "./draw"
 import { ROLE, tint } from "./palette"
 import { FUSS, keyOf, type Actor, type Fussing, type Pt, type Spot } from "./sim"
 import { DOG, DOG_NAME } from "./sprites"
@@ -151,16 +151,19 @@ export function stepDog(d: Dog, ctx: {
 }
 
 /** Argos, his bed and his bowl */
-export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot) {
+export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | null = null) {
   const f = sc.f
   sc.item(bed.y - 3, () => { sc.px(bed.x - 9, bed.y - 4, 18, 5, tint(ROLE.alarm, ROLE.ground, 0.55)); sc.px(bed.x - 8, bed.y - 3, 16, 3, tint(ROLE.alarm, ROLE.prose, 0.35)) })
   sc.item(bowl.y - 2, () => { sc.px(bowl.x - 3, bowl.y - 2, 6, 2, ROLE.inactive); sc.px(bowl.x - 2, bowl.y - 3, 4, 1, ROLE.key) })
   const belly = sc.tick < d.belly
+  const dance = dancing(d.mode, d.fuss, bpm)
+  const phase = dance ? Math.floor((sc.tick * bpm!) / 300) % 2 : 0
   const frames = belly ? DOG.belly : DOG[d.mode]
   // walking, his legs; sitting, his tail — wagging double time when he's pleased; asleep, breathing
   const rows0 = frames[belly ? f % 2 : d.mode === "walk" ? Math.floor(sc.tick / 2) % 2 : d.mode === "sit" ? (sc.tick < d.woof ? sc.tick % 2 : Math.floor(f / 2) % 2) : f % 4 < 2 ? 0 : 1]!
-  const rows = d.face < 0 ? rows0.map((r) => [...r].reverse().join("")) : rows0
-  const w = rows[0]!.length, h = rows.length, x = d.x - Math.floor(w / 2), y = d.y - h
+  const flipped = dance ? phase === 1 : d.face < 0
+  const rows = flipped ? rows0.map((r) => [...r].reverse().join("")) : rows0
+  const w = rows[0]!.length, h = rows.length, x = d.x - Math.floor(w / 2), y = d.y - h - (dance ? phase : 0)
   sc.item(d.y, () => {
     const rim = tint(ROLE.prose, ROLE.ground, 0.55), r = { k: rim, e: rim, t: rim, n: rim, i: rim, p: rim, c: rim }
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, r)

@@ -320,7 +320,7 @@ export class RailRoom extends Sim<Layout> {
       } })
       items.push({ base: MOUSE.y, draw: () => { px(MOUSE.x, MOUSE.y - 2, 4, 2, ROLE.prose); px(MOUSE.x + 3, MOUSE.y - 3, 1, 1, ROLE.attention); px(MOUSE.x - 2, MOUSE.y - 1, 2, 1, ROLE.attention) } })
       // up on the desk or the tower she is drawn over it, as she is climbing up or down
-      drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 76 ? 80 : null)
+      drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 76 ? 80 : null, null)
     }
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), MANAGER_X + EXEC_W / 2, FLOOR + 20, a.ok ? ROLE.inactive : ROLE.alarm)
     return sc.finish()
