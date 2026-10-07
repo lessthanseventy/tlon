@@ -35,6 +35,19 @@ defmodule Server.WorklineTest do
     :ok
   end
 
+  @low_scores %{"scope" => 1, "reversibility" => 1, "blast" => 2, "detectability" => 1, "proof" => 1}
+  @low %{"limits" => [], "decisions" => [], "scores" => @low_scores}
+
+  defp graded!(thread, grade) do
+    {:ok, _} =
+      Server.Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: "check_passed",
+        correlation: "workline:#{thread.slug}:grade",
+        detail: grade
+      })
+  end
+
   defp open!(attrs \\ %{}) do
     {:ok, thread} = Workline.open(Map.merge(%{title: "fix the composer", slug: "composer-wrap"}, attrs))
     thread
@@ -288,38 +301,91 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "back to build" and &1.body =~ "review.md"))
     end
 
-    test "standing approval: an approved review whose every change is in an auto-land path joins the queue itself" do
+    test "an approving review asks for a risk grade" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
-      thread = open!(%{slug: "auto-office", stage: "review"})
+      thread = open!(%{slug: "asks-grade", stage: "review"})
       {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
-
-      policy = [
-        artifacts: AllPresent,
-        auto_land: ["office/**"],
-        changed: ["office/kit/pets.ts", "office/test/pets.test.ts"]
-      ]
-
-      assert {:ok, queued} = Workline.advance(Repo.get!(Server.Thread, thread.id), policy)
-      assert %Server.Thread{stage: "review", awaiting: nil} = queued
-      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
-      assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "standing approval"))
+      assert_enqueued(worker: Server.Jobs.Grade, args: %{thread_id: thread.id})
     end
 
-    test "standing approval holds back: a change outside its paths, or no approving review, waits for the operator" do
-      for {slug, verdict, changed} <- [
-            {"touches-server", "approve", ["office/a.ts", "server/lib/x.ex"]},
-            {"unreviewed", nil, ["office/a.ts"]}
+    test "standing approval: an approved review graded at or under the threshold joins the queue itself" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "auto-low", stage: "review"})
+      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      graded!(thread, @low)
+
+      assert {:ok, queued} =
+               Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
+
+      assert %Server.Thread{stage: "review", awaiting: nil} = queued
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "standing approval" and &1.body =~ "risk"))
+    end
+
+    test "standing approval holds back: a high axis, a decision left open, a limit, no grade, no approving review" do
+      for {slug, verdict, grade} <- [
+            {"high-blast", "approve", %{"limits" => [], "decisions" => [], "scores" => %{@low_scores | "blast" => 4}}},
+            {"decides", "approve", %{"limits" => [], "decisions" => ["the wording"], "scores" => @low_scores}},
+            {"migrates", "approve", %{"limits" => ["a database migration"]}},
+            {"ungraded", "approve", nil},
+            {"unreviewed", nil, @low}
           ] do
         thread = open!(%{slug: slug, stage: "review"})
         if verdict, do: {:ok, _} = Workline.review_verdict(thread, verdict, "lonnrot")
+        if grade, do: graded!(thread, grade)
 
         assert {:awaiting, %{awaiting: "andrew"}} =
-                 Workline.advance(Repo.get!(Server.Thread, thread.id),
-                   artifacts: AllPresent,
-                   auto_land: ["office/**"],
-                   changed: changed
-                 )
+                 Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2),
+               slug
       end
+    end
+
+    test "with no threshold set, every review waits for the operator, however low its grade" do
+      thread = open!(%{slug: "no-policy", stage: "review"})
+      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+      graded!(thread, @low)
+
+      assert {:awaiting, %{awaiting: "andrew"}} =
+               Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: nil)
+    end
+
+    test "a grade that arrives after the gate parked lands it then" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "graded-late", stage: "review"})
+      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+
+      {:awaiting, parked} =
+        Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
+
+      graded!(parked, @low)
+      assert {:ok, %{awaiting: nil}} = Workline.graded(parked, artifacts: AllPresent, auto_land_risk: 2)
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+    end
+
+    test "a grade over the threshold leaves the parked gate with the operator" do
+      thread = open!(%{slug: "graded-high", stage: "review"})
+      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+
+      {:awaiting, parked} =
+        Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
+
+      graded!(parked, %{"limits" => [], "decisions" => [], "scores" => %{@low_scores | "proof" => 5}})
+      assert {:ok, %{awaiting: "andrew"}} = Workline.graded(parked, artifacts: AllPresent, auto_land_risk: 2)
+    end
+
+    test "the approval card carries the grade" do
+      thread = open!(%{slug: "card-grade", stage: "review"})
+
+      graded!(thread, %{
+        "limits" => [],
+        "decisions" => [],
+        "scores" => %{@low_scores | "blast" => 3},
+        "reasons" => %{"blast" => "the merge queue"}
+      })
+
+      summary = Workline.gate_summary(thread)
+      assert summary =~ "risk scope 1 · reversibility 1 · blast 3"
+      assert summary =~ "(blast: the merge queue)"
     end
 
     test "a thread no longer queued (re-parked, closed, moved on) is left alone" do
