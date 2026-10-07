@@ -141,20 +141,24 @@ defmodule Server.Bootstrap do
     end
   end
 
-  # Every workspace gets exactly one open, stage-less machine root — the standing thread a workspace's
-  # view scopes to. Runs AFTER repair_projects so the root can carry the default project. Idempotent:
-  # a workspace that already has a machine root is left untouched.
+  # Runs AFTER repair_projects so the root can carry the default project.
   defp repair_machine_roots do
-    for ws <- Repo.all(Workspace), is_nil(Channel.machine_thread(ws.id)) do
-      project = ensure_default_project(ws)
+    for ws <- Repo.all(Workspace), do: ensure_standing(ws)
+  end
 
-      Channel.open_thread(%{
-        title: @standing_title,
-        scope: "machine",
-        workspace_id: ws.id,
-        project_id: project.id
-      })
+  @doc """
+  Give `ws` its standing thread (the lobby) if it has none: exactly one open, stage-less machine
+  root, the thread its view scopes to and its coworkers' home windows live on, carrying its default
+  project (adopted or made). Called at a workspace's birth (`Server.Workspaces.register/1`) and on
+  every boot. Idempotent: a workspace that already has one is left untouched.
+  """
+  def ensure_standing(%Workspace{} = ws) do
+    if is_nil(Channel.machine_thread(ws.id)) do
+      project = ensure_default_project(ws)
+      Channel.open_thread(%{title: @standing_title, scope: "machine", workspace_id: ws.id, project_id: project.id})
     end
+
+    :ok
   end
 
   # The workspace names its default (`default_project_id`). Unset — a fresh workspace, or its

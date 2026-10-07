@@ -20,7 +20,7 @@ defmodule Server.MCP.Tool.RegisterWorkspace do
 
   @impl true
   def execute(params, frame) do
-    reply(frame, Workspaces.register(params), fn w -> %{"workspace_id" => w.id, "name" => w.name} end)
+    reply(frame, Workspaces.create(params), fn w -> %{"workspace_id" => w.id, "name" => w.name} end)
   end
 end
 
@@ -254,9 +254,16 @@ defmodule Server.MCP.Tool.StartTicket do
         fail(frame, "no ticket ##{params[:id]}")
 
       ticket ->
-        reply(frame, Tickets.start_thread(ticket, params[:agent_id]), fn thread ->
-          %{"ticket_id" => ticket.id, "thread_id" => thread.id}
-        end)
+        result =
+          case Tickets.start_thread(ticket, params[:agent_id]) do
+            {:error, why} when is_atom(why) or is_tuple(why) ->
+              {:error, "couldn't start ticket ##{ticket.id}: #{inspect(why)}"}
+
+            other ->
+              other
+          end
+
+        reply(frame, result, fn thread -> %{"ticket_id" => ticket.id, "thread_id" => thread.id} end)
     end
   end
 end

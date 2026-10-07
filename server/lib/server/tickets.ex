@@ -120,19 +120,10 @@ defmodule Server.Tickets do
            %{title: ticket.title, workspace_id: ticket.workspace_id, project_id: ticket.project_id, scope: "machine"}
            |> then(&if(agent_id, do: Map.put(&1, :agent_id, agent_id), else: &1))
            |> Server.Channel.open_thread(),
-         {:ok, thread} <- as_workline(opened),
+         {:ok, thread} <- Server.Workline.promote(opened),
          {:ok, _} <- promote(ticket, thread.id),
          {:ok, _} <- Server.Attention.respond(thread.id, operator, ask) do
       {:ok, thread}
-    end
-  end
-
-  # A workspace made since the server booted has no lobby yet, so the ticket's own thread is its
-  # standing thread for now, which a workline may not be: it starts as a plain thread there.
-  defp as_workline(thread) do
-    case Server.Workline.promote(thread) do
-      {:error, :root_machine_thread} -> {:ok, thread}
-      other -> other
     end
   end
 

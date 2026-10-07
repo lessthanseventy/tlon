@@ -15,6 +15,17 @@ defmodule Server.WorkspacesTest do
   end
 
   describe "register/1" do
+    test "a created workspace has its lobby, on its default project — not only after the next boot" do
+      {:ok, ws} = Workspaces.create(%{name: "Fresh"})
+
+      assert %Server.Thread{title: "lobby", scope: "machine", stage: nil, project_id: pid} =
+               Server.Channel.machine_thread(ws.id)
+
+      assert %{default_project_id: ^pid} = ws
+      assert {:ok, tpl} = Workspaces.create_from("blank", "Fresh too")
+      assert %Server.Thread{title: "lobby"} = Server.Channel.machine_thread(tpl.id)
+    end
+
     test "inserts and announces on the workspaces topic" do
       Bus.subscribe_workspaces()
 
