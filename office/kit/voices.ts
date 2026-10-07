@@ -47,6 +47,8 @@ export const NINA = {
   play: ["The yarn has disrespected me for the LAST time.", "Fear me, string.", "I am a fearsome hunter. Of wool."],
   come: ["I'm coming because I WANT to. Not because you asked.", "Fine. Clear the desk. I'm lying on the important papers.", "I was going that way anyway."],
   zoomies: ["PRINCESS ZOOMIES! Clear the runway!"],
+  // she sits on someone's keyboard
+  keyboard: ["This is my desk now.", "I fixed your code, {name}. You're welcome.", "Warm. Mine. Go away.", "I'm helping.", "Your keyboard is my cushion now, {name}."],
   // you send her over to someone: she tells them so, in her way
   cheer: ["{name}. Your code is almost as elegant as me.", "{name}, I've decided you're doing well. You're welcome.", "Keep going, {name}. I'll supervise. From your keyboard.", "{name}, a princess believes in you. Briefly.", "{name}! That test will pass. I've commanded it.", "{name}, you may pet me when you've shipped. Not before."],
   // a worker fussing over her

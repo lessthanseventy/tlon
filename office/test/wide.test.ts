@@ -123,6 +123,44 @@ describe("the wide room", () => {
     expect(room.catCheer("nobody-here")).toBe(false)
   }))
 
+  test("easter eggs in the room: the cat on the keyboard, the howl, the disco, the night owls", () => seeded(11, () => {
+    const a0 = office(0)
+    const a = viewOf({ ...a0, roster: a0.roster.map((r) => (r.agent === "hronir" ? { ...r, warm: true, thinking: true } : r)) }, 1)
+    const room = new WideRoom(560)
+    for (let i = 0; i < 600; i++) room.step(a)
+    const r = room as unknown as {
+      cat: { path: unknown[]; said: string | null }
+      dog: { path: unknown[]; said: string | null }
+      talk: Map<string, { text: string | null }>
+      actors: Map<string, { emote: string | null }>
+      ship(actor: unknown): void
+      hour: () => number
+    }
+    const settle = (done: () => boolean) => { for (let i = 0; i < 3_000 && !done(); i++) room.step(a) }
+
+    // Nina takes the keyboard: hronir's next words are hers
+    expect(room.catKeyboard("hronir")).toBe(true)
+    settle(() => !r.cat.path.length)
+    expect(r.talk.get("hronir")?.text).toMatch(/^[a-z;',.\/\[\]]{8,}$/)
+
+    // someone ships: Argos howls, and is off on a lap of honour
+    r.ship(r.actors.get("hronir"))
+    expect(r.dog.said).toMatch(/AWO+/)
+    expect(r.dog.path.length).toBeGreaterThan(0)
+
+    // the Konami code: everyone gets a heart, and the room has a beat for the pets to dance to
+    room.disco()
+    expect([...r.actors.values()].every((x) => x.emote === "♥")).toBe(true)
+    expect(room.bpm()).toBeGreaterThan(120)
+
+    // the small hours: someone at their desk yawns
+    r.hour = () => 2
+    for (const x of r.actors.values()) x.emote = null
+    let yawned = false
+    for (let i = 0; i < 4_000 && !yawned; i++) { room.step(a); yawned = [...r.actors.values()].some((x) => x.emote === "z") }
+    expect(yawned).toBe(true)
+  }))
+
   test("a pet never says the same thing twice in a row", () => seeded(9, () => {
     const room = new WideRoom(560)
     const said = (room as unknown as { cat: { said: string | null } }).cat

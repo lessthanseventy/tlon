@@ -3,6 +3,7 @@
 // a ticket, the notes, the in-tray, the beacon, the rack, the bookshelf, the workspaces. A thread
 // opens full-screen to read and answer; `/` finds anything. Runs on Linux and macOS: kitty
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
+import { babelPage, isKonami, KONAMI } from "../kit/eggs"
 import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
@@ -30,7 +31,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -298,6 +299,7 @@ async function finder() {
   for (const w of all.workspaces) picks.push({ segs: [{ s: "workspace ", fg: ROLE.inactive }, { s: w.name, fg: ROLE.body }], text: `workspace ${w.name}`, run: () => goWs(w.id) })
   for (const c of all.bench.filter((b) => b.workspace_id === ws)) picks.push({ segs: [{ s: "coworker ", fg: ROLE.inactive }, { s: c.name, fg: shirtOf(c.archetype) }, { s: `  ${c.archetype ?? ""}`, fg: ROLE.inactive }], text: `${c.name} ${c.archetype}`, run: () => open({ kind: "person", name: c.name }) })
   for (const [label, run] of VERBS) picks.push({ segs: [{ s: "do ", fg: ROLE.inactive }, { s: label, fg: ROLE.prose }], text: label, run })
+  picks.push({ segs: [{ s: "the Library of Babel", fg: ROLE.inactive }], text: "babel library borges", run: () => openBabel() })
   find("FIND — a thread, a workspace, a coworker, a verb", picks)
   const closed = await data.history()
   if (picker?.title.startsWith("FIND") && closed) {
@@ -306,6 +308,9 @@ async function finder() {
   }
 }
 /** everything across the workspaces that waits on you, then what's being worked on */
+/** a page of the Library of Babel, the width of the card */
+function openBabel() { open({ kind: "babel", page: babelPage(DETAIL - 2, Math.max(20, paneW() - 4)) }) }
+
 /** what can be done about one waiting item — the inbox's list and its one-at-a-time card share these */
 function needActions(n: data.Need): Action[] {
   const tid = n.thread_id ?? null, w = n.workspace_id ?? ws
@@ -842,6 +847,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         actions: [...acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i), back1],
       }
     }
+    case "babel": return {
+      title: "THE LIBRARY OF BABEL · a page, at random",
+      tint: ROLE.inactive,
+      rows: mode.page.map((l): Row => ({ segs: [/[a-z]{4,} [a-z]{3,}/.test(l.trim()) && !l.includes(",") ? { s: l, fg: ROLE.attention } : dim(l)] })),
+      actions: [{ key: "n", label: "another page", run: openBabel }, back1],
+    }
     case "decide": {
       // one waiting item at a time, everything to decide it on the card; acting moves to the next
       const order = [...needs.filter((x) => x.level === "blocking"), ...needs.filter((x) => x.level === "decide")]
@@ -1085,7 +1096,12 @@ function pickerKey(k: string) {
   draw()
 }
 
+// the last keys pressed, for the Konami code
+let keyLog: string[] = []
+
 function onKey(k: string) {
+  keyLog = [...keyLog, k].slice(-KONAMI.length)
+  if (isKonami(keyLog)) { keyLog = []; room().disco(); status = "↑↑↓↓←→←→BA — everybody dance"; changed(); return draw() }
   if (picker) return pickerKey(k)
   if (input) return inputKey(k)
   if (confirm) { const c = confirm; confirm = null; if (k === "y") c.run(); return draw() }

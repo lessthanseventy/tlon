@@ -4,6 +4,7 @@
 // the lead's desks, the crew board, two tables of four), a glass meeting room, the lounge with its
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
+import { clockFace } from "../kit/eggs"
 import { fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, peopleOf } from "../kit/crew"
 import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
@@ -19,7 +20,7 @@ import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR } from "../kit/t
 import { officeTile } from "../kit/tiles/office"
 import { floorPlan } from "../kit/floor"
 import { DEFAULT_OFFICE } from "../kit/tiles"
-import { NINA } from "../kit/voices"
+import { NINA, pick } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { marqueeWindow, type NowPlaying } from "../kit/stereo"
 import { SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -101,6 +102,9 @@ export const widePlan = (w: number) => floorPlan(DEFAULT_OFFICE, w)
 /** Nina and Argos, up to something together */
 type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle"; until: number; trail: Pt[]; lap: Pt[] }
 
+// Argos' howl at a landing — the whole floor hears it
+const HOWLS = ["AWOOOOOOO! {name} SHIPPED!", "AWOOOO! Sing, O Muse, of {name}'s landing!", "AWOOOOOOOOO! A HOMECOMING!", "Awoo? AWOOOOOO! {name}!!"]
+
 export class WideRoom extends Sim<Layout> {
   private readonly z: Zones
   private readonly tvSet = new Tv(48, 28)
@@ -136,7 +140,9 @@ export class WideRoom extends Sim<Layout> {
   /** someone starts a tool, finishes a turn, or joins your queue: Nina's opinion, then Argos' */
   protected override noticed(actor: Actor, what: string) {
     super.noticed(actor, what)
-    if ((what === "test" || what === "done" || what === "queue" || what === "shipped") && this.quiet(this.dog.saidUntil) && Math.random() < (what === "shipped" ? 0.7 : 0.3)) this.dogSay(this.argos(what, actor.seat.agent), what === "shipped" ? 20 : 0)
+    // a landing: Argos howls it to the rafters, and runs a lap of honour
+    if (what === "shipped") { this.dogDo("walk"); this.dogSay(pick(HOWLS).replaceAll("{name}", actor.seat.agent), 20); return }
+    if ((what === "test" || what === "done" || what === "queue") && this.quiet(this.dog.saidUntil) && Math.random() < 0.3) this.dogSay(this.argos(what, actor.seat.agent))
   }
 
   /** his bed by the lounge's couch, his water bowl by the kitchen */
@@ -229,6 +235,8 @@ export class WideRoom extends Sim<Layout> {
   channel() { this.tvSet.next() }
   /** the TUI calls this every ~2s with whatever playerctl reports (or null — no player running) */
   setPlayer(p: NowPlaying | null) { this.player = p }
+  /** the music's beat when it has one, else the room's own (a disco's) */
+  override bpm(): number | null { return this.player?.bpm ?? super.bpm() }
 
   render(a: Agents, focus: Focus, measure: Measure, now = new Date()): Frame {
     const W = this.width, H = WIDE_H
@@ -284,11 +292,13 @@ export class WideRoom extends Sim<Layout> {
     if (queued.length > this.plan.queue.length) sc.overhead.push(() => text(`+${queued.length - this.plan.queue.length + 1}`, 94, 176, ROLE.attention))
     const c = this.cat
     const chair = corner(this.z).shelf.x + 8
-    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null, this.player?.bpm ?? null)
+    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null, this.bpm())
     this.drawDog(sc)
     this.drawAntics(sc)
     const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
     if (shipper) drawParty(sc, shipper.x, shipper.y, this.party!.until - this.tick)
+    // a disco: confetti over everyone
+    if (this.tick < this.discoUntil) for (const x of this.actors.values()) drawParty(sc, x.x, x.y, (this.discoUntil - this.tick) % 60)
 
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
     return sc.finish()
@@ -374,7 +384,7 @@ export class WideRoom extends Sim<Layout> {
 
   /** Argos, his bed and his bowl */
   private drawDog(sc: Scene) {
-    drawDog(sc, this.dog, this.dogBed(), this.dogBowl(), this.player?.bpm ?? null)
+    drawDog(sc, this.dog, this.dogBed(), this.dogBowl(), this.bpm())
   }
 
   /** the cabinets' best scores, and who holds them */
@@ -590,7 +600,7 @@ export class WideRoom extends Sim<Layout> {
     const hand = (turns: number, len: number, c: string) => { for (let i = 1; i <= len; i++) sc.px(Math.round(cx + Math.sin(turns * 2 * Math.PI) * i), Math.round(cy - Math.cos(turns * 2 * Math.PI) * i), 1, 1, c) }
     hand((now.getHours() % 12 + now.getMinutes() / 60) / 12, 4, ROLE.fieldInk)
     hand(now.getMinutes() / 60, 6, ROLE.structure)
-    sc.text(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, cx, 36, ROLE.prose, 14)
+    sc.text(clockFace(now), cx, 36, ROLE.prose, 14)
   }
 
 }
