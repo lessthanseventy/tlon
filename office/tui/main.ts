@@ -10,6 +10,7 @@ import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, COLS, crewOf, needsYou, viewOf, type Act } from "../kit/crew"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
+import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, type Agents, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
@@ -406,6 +407,13 @@ const cols = () => process.stdout.columns ?? 80
  * `c` flips to the conversation, ⏎ steps into the session itself.
  */
 const screens = new Map<number, string[]>(), targets = new Map<number, Target | null>(), talkView = new Set<number>()
+/** playerctl, polled every ~2s: feeds the wide room's stereo marquee + dance trigger */
+function pollPlayer() {
+  const rm = room()
+  if (!(rm instanceof WideRoom)) return
+  const r = Bun.spawnSync(["playerctl", "metadata", "--format", "{{ title }}|{{ artist }}|{{ bpm }}"])
+  rm.setPlayer(r.exitCode === 0 ? parseNowPlaying(r.stdout.toString()) : null)
+}
 async function peekScreen(tid: number) {
   if (!targets.has(tid)) targets.set(tid, await data.terminal(tid))
   const t = targets.get(tid)
@@ -1282,6 +1290,7 @@ async function main() {
   })
   await refresh()
   setInterval(refresh, 10_000)
+  setInterval(pollPlayer, 2000)
   setInterval(() => { if (followPalette()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
