@@ -40,7 +40,7 @@ defmodule Server.Jobs.Land do
 
       {out, code} ->
         {:error,
-         "the full check on main with this branch is red (exit #{code}): #{String.slice(String.trim(out), -300, 300)}"}
+         "the full check on main with this branch is red (exit #{code}): #{String.slice(String.trim(out), -2000, 2000)}"}
     end
   end
 end

@@ -72,12 +72,22 @@ tree="$fresh"
 # result could not be recorded is a gate that never ran as far as the stage machine can tell,
 # so the failure is surfaced (stderr + the unrecorded flag) instead of dropped on the floor.
 unrecorded=0
+# The failing tests by name (ExUnit's "N) test … (Mod)" + its file:line, bun's "(fail) …"): a long
+# suite's last 400 bytes hold only its summary, and the lead would re-run it to learn what broke.
+failures() {
+  awk '/^ +[0-9]+\) (test|doctest|property) / { sub(/^ +/, ""); h = $0; getline; sub(/^ +/, ""); print h " — " $0; next }
+       /^\(fail\) /' | cut -c1-160 | head -n 10
+}
 run_gate() {
   local name="$1"; shift
-  local out code
+  local out code fails
   out=$(cd "$tree" && "${clean[@]}" "$@" 2>&1); code=$?
-  gate_tail="$(printf '%s' "$out" | tail -c 400)"
-  if ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$(printf '%s' "$out" | tail -c 400)"; then
+  fails="$(printf '%s\n' "$out" | failures)"
+  gate_tail="${fails:+failing:
+$fails
+…
+}$(printf '%s' "$out" | tail -c 400)"
+  if ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$gate_tail"; then
     echo "workline-verify: could not record evidence for '$name' (exit $code) — is the service up?" >&2
     unrecorded=1
   fi
