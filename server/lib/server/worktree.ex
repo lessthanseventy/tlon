@@ -123,7 +123,7 @@ defmodule Server.Worktree do
   # Commits on the branch that no OTHER branch reaches — the "unmerged" that matters for a delete.
   # (`--not --branches` would include the branch itself; excluding it first makes the set honest.)
   defp unmerged?(repo_path, branch) do
-    case git(repo_path, ["log", "--oneline", branch, "--not", "--exclude=#{branch}", "--branches"]) do
+    case git(repo_path, ["log", "--oneline", branch, "--not", "--exclude=#{branch}", "--branches", "--"]) do
       {out, 0} -> String.trim(out) != ""
       _ -> true
     end
