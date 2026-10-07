@@ -343,8 +343,12 @@ defmodule Server.Switchboard do
     |> Enum.any?(&Presence.warm_for?(&1, agent.name, thread.workspace_id))
   end
 
+  # Who is addressed, the author never among them — so a post whose only mention is its own author
+  # ("report back to @me") is addressed to nobody else, and wakes the lead like any plain post.
   defp target_names(%Message{} = message) do
-    case reply_author(message) ++ mentioned_agents(message) do
+    author = String.downcase(message.author)
+
+    case Enum.reject(reply_author(message) ++ mentioned_agents(message), &(String.downcase(&1) == author)) do
       [] -> lead_name(message)
       addressed -> Enum.uniq(addressed)
     end
