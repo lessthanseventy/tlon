@@ -68,13 +68,14 @@ need adding to `Server.TestDB`'s `@ordered` truncation list (children before par
 `Server.Quests` if split out) need adding to `server/lib/server.ex`'s `exports:` list — the
 `:boundary`-enforced public surface — or nothing outside `Server` can call them.
 
-### 2.1 Open: `type` already has a value named `life`
+### 2.1 Decided: `home` is a fourth `type` value
 
 `workspace.type` is an existing closed set (`code | life | blank`, DB-CHECK'd,
 `server/lib/server/workspace.ex`) that picks the roster template at creation — `life` currently
-means "an assistant" (`workspaces.ex:36`), nothing to do with routines/quests. The design doc
-(§3.3) calls the new thing a workspace **kind** of `home`. Two ways to reconcile, and this is a
-real open question, not a stylistic one — see §8.5.
+means "an assistant" (`workspaces.ex:36`), nothing to do with routines/quests. **Decided
+(andrew, thread #133): `"home"` becomes a fourth `type` value** — extend the DB `CHECK` and
+`@templates` with `"home" => %{type: "home", roster: [...]}`; no second column. `Server.Life`'s
+routines/quests scope to any workspace of `type: "home"`.
 
 ## 3 · `Server.Life` — derived, nothing cached
 
@@ -118,10 +119,10 @@ where noted.
   due, quests, today}`.
   - `streaks` — `%{routine_id => streak}` for every enabled routine.
   - `quests` — open quests (`done_at` nil), soonest `due_at` first, then no-due last.
-  - `today` — routines whose `current_due` falls on today's calendar date (local to the server's
-    configured timezone — same source `Server.Calendar` already reads), each tagged `done: true/
-    false`; this is the step 5 room's "what's on today" list, built here so step 5 adds no new
-    query.
+  - `today` — routines whose `current_due` falls on today's calendar date, "today" resolved the
+    same way `Server.Schedules` resolves local "now" for a `when` (its existing local-time
+    source, not a naive UTC-day comparison — see §8.5), each tagged `done: true/false`; this is
+    the step 5 room's "what's on today" list, built here so step 5 adds no new query.
 
 ## 4 · Routes — `/api/life`, operator-API
 
@@ -146,12 +147,10 @@ truth); the six new routes get added there too.
 Correction to the check line: `check:names` (`scripts/check-names.sh`) is a glue-integrity grep —
 every `Server.X.Y` named in scripts/`mise.toml`/adapters/docs must have a matching `defmodule`,
 every named mix/mise task must exist. It does **not** enumerate operator-API routes or MCP tool
-names today. What actually gates the six routes: they resolve inside `mise run server:check`
-(the existing route-dispatch tests + the ExUnit suite this step adds), and `Server.Life`/
-`Server.Routines` land in `server/lib/server.ex`'s `exports:` list so `check:names`' module-exists
-check has something real to point at. If andrew wants a literal "every /api/life route resolves"
-gate, that's a small addition to `check-names.sh` or a dedicated route test — flagged as a
-question in §8.5, not assumed.
+names today, and (decided, §8.5) it stays that way. What gates the six routes: the route-dispatch
+ExUnit tests this step adds (one per route, through `OperatorAPI.call/2`), plus `Server.Life`/
+`Server.Routines` landing in `server/lib/server.ex`'s `exports:` list so `check:names`'
+module-exists check has something real to point at.
 
 ## 5 · MCP tools
 
@@ -180,9 +179,9 @@ with the matching routine's id — resolving *which* routine from free text is t
 `Server.Office.status/0` (`office.ex:17-56`) returns one map with per-workspace keys already
 built the same way — `triage: Map.new(ws_ids, &{&1, Room.triage(&1).count})` is the precedent. A
 new top-level `life` key follows it: `Map.new(home_ws_ids, &{&1, Server.Life.status(&1) |>
-Map.take([:level, :xp, :due])})` — one entry per `home`-kind workspace, the summary only (full
+Map.take([:level, :xp, :due])})` — one entry per `type: "home"` workspace, the summary only (full
 `streaks`/`quests`/`today` stay behind the `/api/life` fetch the step-5 card makes, so the
-snapshot never gets heavy). Absent for any workspace not of that kind, same as `triage` is keyed
+snapshot never gets heavy). Absent for any workspace not of that type, same as `triage` is keyed
 only by workspaces that have one.
 
 ## 7 · Test matrix (drives `menard run test --in server`)
@@ -199,8 +198,10 @@ only by workspaces that have one.
 - **level_up on the crossing stamp** — a workspace sitting one xp below a level boundary:
   `routine_done` for a routine whose xp crosses it returns `level_up: true`; the stamp before it
   (still under the boundary) and the one after (already past it) both return `level_up: false`.
-- **`check:names`** — the six `/api/life` routes resolve in whatever manifest `check:names`
-  walks, alongside the existing route set.
+- **route-dispatch tests** — one ExUnit test per `/api/life` route, through
+  `OperatorAPI.call/2`, the gate for the six routes (§8.5: no `check:names` change); plus
+  `check:names` itself passing once `Server.Life`/`Server.Routines` are in `server.ex`'s
+  `exports:` list.
 
 ## 8 · Assumptions made (flagging, not asking — nothing here needed andrew's call)
 
@@ -215,32 +216,27 @@ only by workspaces that have one.
 - `today` in the snapshot/status body is today's due occurrences tagged done/not — needed by
   step 5's header and not worth a second query there, so it's built now.
 
-### 8.5 · Real open question — not settled by the plan, needs andrew's call
+### 8.5 · Decided (andrew, thread #133, msg after 2427)
 
-`workspace.type` is an existing DB-CHECK'd closed set (`code | life | blank`) that already has a
-value spelled `life`, meaning "an assistant" roster template — unrelated to this track's `home`
-kind. Two ways to give a `home` workspace its kind, and the plan doc didn't know this collision
-existed:
-
-1. **Add `"home"` as a fourth `type` value.** Reuses the one field the DB already CHECKs and the
-   one `Workspaces.register_from/3` template lookup already does; `home` just needs its own
-   template entry (`roster: []` or similar). Keeps one closed-set column, not two overlapping
-   ones. Risk: `type` already carries roster-template meaning, not "what kind of life this is" —
-   semantically a slight stretch, but no worse than `code`/`blank` already being there.
-2. **A separate new column** (`kind`, as the design doc's prose literally says), independent of
-   `type`. Keeps `type`'s existing meaning untouched; costs a second closed-set column whose
-   relationship to `type` needs explaining (can a `code`-type workspace also be `home`-kind? The
-   plan's answer is implicitly no — home is its own thing).
-
-Recommendation: (1) — extend `type`'s CHECK and `@templates`, no new column, matches "the
-smallest change that gives the life side a scope" (§3.3's own framing). Needs andrew's sign-off
-before the plan stage locks the migration.
+- **`type` gains a fourth value, `"home"`** — no second column (§2.1). Settles the collision
+  with the existing `"life"` type value.
+- **No `check:names` addition.** The route-dispatch tests in the ExUnit suite this step adds are
+  the gate for the six `/api/life` routes; §4's "flagged as a question" is resolved — don't touch
+  `check-names.sh`.
+- **The README privacy note lands in this PR** (§9's deferred item is promoted: not deferred,
+  done here).
+- **`today` uses `Server.Schedules`' local-time source, not UTC.** Wherever `Server.Schedules`
+  resolves "now" for a cron/`@daily`/`@weekly` `when` (its own local-time boundary, not
+  `DateTime.utc_now()` naively compared), `Server.Life.status/1`'s `today` field uses the same
+  source for "what day is it" — so a routine due at 23:30 local doesn't fall on the wrong side of
+  midnight relative to when the nag would actually fire. §3's `today` bullet is corrected by this.
 
 ## 9 · Deferred, named so they aren't silently assumed later
 
 - Nag scheduling and `Server.Attention` wiring (step 5+).
 - Routine packs (§6, later step).
 - A real `(routine_id, due_at)` DB constraint, if the no-op guard above ever proves insufficient.
-- README note on life-side privacy (plain rows, readable by any coworker with `home` workspace
-  MCP tools) — §10 says this lands "before anyone else runs a `home` workspace," i.e. by this
-  step's PR; tracked here so it isn't dropped.
+
+**Not deferred — in this PR (§8.5):** a README note on life-side privacy (plain rows, readable
+by any coworker with `home`-type workspace MCP tools), per §10's "before anyone else runs a
+`home` workspace."
