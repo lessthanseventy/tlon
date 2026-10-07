@@ -223,6 +223,13 @@ defmodule Server.ProfilesTest do
       assert Profiles.render(Profiles.fetch("tertius"), @base_settings, @base_mcp).system_prompt =~ "tertius"
     end
 
+    test "the sheriff reaches across to route red — machine_overview and consult_peer — but never staffs" do
+      tlon = Profiles.archetype(:sheriff).mcp["tlon"]
+      assert "machine_overview" in tlon["directTools"] and "consult_peer" in tlon["directTools"]
+      refute "consult_peer" in tlon["excludeTools"]
+      for staffing <- ["staff_child", "assign_lead"], do: refute(staffing in tlon["directTools"])
+    end
+
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
       assert "machine_overview" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
     end
@@ -393,7 +400,7 @@ defmodule Server.ProfilesTest do
   describe "the archetype registry — role templates keyed by archetype atom" do
     test "the seed archetype set is present with sane defaults" do
       keys = Profiles.archetypes() |> Map.keys() |> Enum.sort()
-      assert keys == ~w(assistant builder planner researcher reviewer surveyor)a
+      assert keys == ~w(assistant builder planner researcher reviewer sheriff surveyor)a
     end
 
     test "reviewer archetype cannot write (deny floor), builder can" do

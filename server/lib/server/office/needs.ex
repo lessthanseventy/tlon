@@ -6,7 +6,8 @@ defmodule Server.Office.Needs do
 
     * **blocking** — work has stopped until the operator acts:
       `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
-      sits on a prompt: pick an option), `verify_failed` (a workline whose last gate run was red);
+      sits on a prompt: pick an option), `verify_failed` (a workline whose last gate run was red —
+      only where the workspace has no sheriff, who owns red there: `Server.Sheriff`);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since), `suggestion` (the corkboard's suggestion box), `rollout` (what a
       merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
@@ -71,9 +72,10 @@ defmodule Server.Office.Needs do
 
   defp prompt_at(id), do: Repo.one(from m in Message, where: m.id == ^id, select: m.created_at)
 
-  # a workline sitting at verify whose newest verify run was red
+  # a workline sitting at verify whose newest verify run was red — where no sheriff owns red
   defp red_verifies(open) do
     for %Thread{stage: "verify", slug: slug} = t <- open,
+        Server.Sheriff.of(t.workspace_id) == nil,
         %{kind: "check_failed"} = e <- [last_verify(slug)],
         do:
           item(

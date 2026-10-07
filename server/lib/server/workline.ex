@@ -361,6 +361,7 @@ defmodule Server.Workline do
         "fix it test-first, then advance_stage; it comes back through verify and review."
     )
 
+    Server.Sheriff.report(back, "the merge queue bounced it back to build: #{why}")
     {:error, {:bounced, why}}
   end
 
