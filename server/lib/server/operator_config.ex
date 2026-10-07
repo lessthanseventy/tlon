@@ -18,12 +18,16 @@ defmodule Server.OperatorConfig do
         "calendars": [{"name": "work", "ics_secret": "calendar-work"}],
         "alarm_minutes": 5,
         "max_worklines": 4,
-        "max_open_worklines": 10
+        "max_open_worklines": 10,
+        "auto_land": ["office/**"]
       }
 
   `calendars` and `alarm_minutes` are `Server.Calendar`'s and `Server.Alerts`' (a meeting's alarm);
   `max_worklines` and `max_open_worklines` are `Server.Intake`'s caps per workspace: worklines being
-  worked, and open in all (those waiting on the operator included).
+  worked, and open in all (those waiting on the operator included). `auto_land` is the operator's
+  standing approval (`Server.Workline`): path patterns (`**` any depth, `*` one segment) under which
+  a reviewed-and-approved workline joins the merge queue without waiting on them; absent, every
+  review waits for its approval.
 
   Best-effort on read: a missing or corrupt file is just "no overrides".
   """

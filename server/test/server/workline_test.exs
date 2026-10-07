@@ -281,6 +281,47 @@ defmodule Server.WorklineTest do
       assert_enqueued(worker: Server.Jobs.Verify, args: %{thread_id: t.id, slug: "asks-verify"})
     end
 
+    test "a review requesting changes sends it back to build at once — it never reaches the operator" do
+      thread = open!(%{slug: "changes-asked", stage: "review"})
+      assert {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot")
+      assert %Server.Thread{stage: "build", awaiting: nil} = Repo.get(Server.Thread, thread.id)
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "back to build" and &1.body =~ "review.md"))
+    end
+
+    test "standing approval: an approved review whose every change is in an auto-land path joins the queue itself" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "auto-office", stage: "review"})
+      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+
+      policy = [
+        artifacts: AllPresent,
+        auto_land: ["office/**"],
+        changed: ["office/kit/pets.ts", "office/test/pets.test.ts"]
+      ]
+
+      assert {:ok, queued} = Workline.advance(Repo.get!(Server.Thread, thread.id), policy)
+      assert %Server.Thread{stage: "review", awaiting: nil} = queued
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "standing approval"))
+    end
+
+    test "standing approval holds back: a change outside its paths, or no approving review, waits for the operator" do
+      for {slug, verdict, changed} <- [
+            {"touches-server", "approve", ["office/a.ts", "server/lib/x.ex"]},
+            {"unreviewed", nil, ["office/a.ts"]}
+          ] do
+        thread = open!(%{slug: slug, stage: "review"})
+        if verdict, do: {:ok, _} = Workline.review_verdict(thread, verdict, "lonnrot")
+
+        assert {:awaiting, %{awaiting: "andrew"}} =
+                 Workline.advance(Repo.get!(Server.Thread, thread.id),
+                   artifacts: AllPresent,
+                   auto_land: ["office/**"],
+                   changed: changed
+                 )
+      end
+    end
+
     test "a thread no longer queued (re-parked, closed, moved on) is left alone" do
       thread = open!(%{slug: "not-queued", stage: "review"})
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)

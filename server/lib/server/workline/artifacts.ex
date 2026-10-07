@@ -86,6 +86,17 @@ defmodule Server.Workline.Artifacts.Git do
   end
 
   @doc """
+  The paths the workline branch changes, net, since it left the main checkout — its own
+  `work/<slug>/` docs left out. `[]` when there is no branch to diff (so nothing can auto-land on it).
+  """
+  def changed_paths(thread) do
+    case git(thread, ["diff", "--name-only", "HEAD...work/#{thread.slug}", "--", ".", ":!work/#{thread.slug}"]) do
+      {out, 0} -> String.split(out, "\n", trim: true)
+      _ -> []
+    end
+  end
+
+  @doc """
   The workline branch's change against the main tree's HEAD (`git diff --shortstat HEAD...work/<slug>`):
   `{:ok, shortstat}`, or `{:error, why}` when there is no branch to diff.
   """

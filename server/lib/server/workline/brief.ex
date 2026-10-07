@@ -89,8 +89,9 @@ defmodule Server.Workline.Brief do
   defp playbook(%{stage: "review"}),
     do:
       "You are the reviewer, not the builder: findings against spec compliance, bugs, security — verdict at the top. " <>
-        "Land it with submit_review (the whole review.md, verdict first): the server commits it for you, since " <>
-        "you never write files; then call advance_stage to hand the merge gate to the operator."
+        "Land it with submit_review — verdict approve or request_changes, and the whole review.md, verdict " <>
+        "first: the server commits it for you, since you never write files. request_changes sends it back to " <>
+        "the builder; after approve, call advance_stage to hand it to the merge gate."
 
   defp playbook(%{stage: "intent"}), do: "Capture the originator's words near-verbatim plus a one-line restatement."
 
@@ -123,7 +124,7 @@ defmodule Server.Workline.Brief do
     do: "Exit: none of yours — the server advances it when its check passes on branch work/#{t.slug}."
 
   defp exit_line(%{stage: "review"} = t),
-    do: "Exit: submit_review (the server commits #{owed(t)}), then call advance_stage."
+    do: "Exit: submit_review with a verdict (the server commits #{owed(t)}); after approve, call advance_stage."
 
   defp exit_line(%{stage: "build"} = t), do: "Exit: commit #{owed(t)}, then call advance_stage."
 
