@@ -11,7 +11,7 @@ defmodule Server.WorklineReviewTest do
   setup do
     Server.TestDB.clean!()
 
-    tmp = Path.join(System.tmp_dir!(), "workline-review-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "workline-review-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     {_, 0} = System.cmd("git", ["-C", tmp, "init", "-q"], stderr_to_stdout: true)
     {_, 0} = System.cmd("git", ["-C", tmp, "config", "user.email", "test@test"], stderr_to_stdout: true)
@@ -41,6 +41,24 @@ defmodule Server.WorklineReviewTest do
     assert {:ok, _} = Artifacts.Git.check(thread(), {:file, "review.md"})
   end
 
+  test "a stage doc committed on the workline's branch counts — where its lead, in the worktree, commits it", %{
+    root: root
+  } do
+    git = fn args -> System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
+    File.write!(Path.join(root, "seed"), "s")
+    {_, 0} = git.(["add", "seed"])
+    {_, 0} = git.(["commit", "-qm", "seed"])
+    {_, 0} = git.(["checkout", "-qb", "work/fence-test"])
+    File.mkdir_p!(Path.join(root, "work/fence-test"))
+    File.write!(Path.join(root, "work/fence-test/intent.md"), "the ask")
+    {_, 0} = git.(["add", "work/fence-test/intent.md"])
+    {_, 0} = git.(["commit", "-qm", "intent"])
+    {_, 0} = git.(["checkout", "-q", "-"])
+
+    assert {:ok, _} = Artifacts.Git.check(thread("intent"), {:file, "intent.md"})
+    assert {:error, _} = Artifacts.Git.check(thread("spec"), {:file, "spec.md"})
+  end
+
   test "resubmitting identical content is fine — the artifact is already committed" do
     {:ok, _} = Review.submit(thread(), "same words", "menard-machine")
     assert {:ok, _} = Review.submit(thread(), "same words", "menard-machine")
@@ -51,7 +69,7 @@ defmodule Server.WorklineReviewTest do
   end
 
   test "a thread with a project checks and commits in THAT repo, not the workline root" do
-    other = Path.join(System.tmp_dir!(), "workline-other-#{System.unique_integer([:positive])}")
+    other = Path.join(System.tmp_dir!(), "workline-other-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(other)
     on_exit(fn -> File.rm_rf!(other) end)
 
