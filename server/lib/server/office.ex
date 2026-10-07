@@ -49,6 +49,8 @@ defmodule Server.Office do
       triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
       health: Map.take(Room.health(), [:state, :problems]),
       weather: Server.Office.Weather.now(),
+      # a TUI started on an older office revision offers a reload (Server.Rollout)
+      revs: Server.Rollout.revs(),
       calendar: Room.calendar(ws_ids)
     }
   end
