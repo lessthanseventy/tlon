@@ -1,5 +1,12 @@
 # Spec — workline dbconnection-client-exited (ticket #9)
 
+> **Superseded — see `plan.md`.** The "leading hypothesis" and "fix" sections below (the
+> `opening_turn`/`await_background` 5s-kill theory, and the `spawn_ready_timeout_ms` change) were
+> disproven: a diagnostic on the force-kill branch never fired across ~20 reproductions. The real
+> cause was the shared test database (`test_helper.exs` dropping/recreating `tlon_test` under a
+> concurrent run) — fixed on `main` at `03413a6`. Left in place below as the investigation record;
+> do not act on the "Fix" section.
+
 ## Problem
 
 `server:check` intermittently (0–2 lines per gate run, since 2026-09-25 09:13) logs:
