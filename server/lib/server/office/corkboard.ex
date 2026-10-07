@@ -56,12 +56,12 @@ defmodule Server.Office.Corkboard do
   @doc """
   Draw a kind of note for `author` by weight: `{kind, ask, re}` (`re` the note a reply answers),
   or nil when nothing fits. A reply needs someone else's note; a tease, someone to tease; a
-  suggestion, work in hand. `roll` in [0, 1) picks the point on the weighted line.
+  suggestion, someone else's work in hand. `roll` in [0, 1) picks the point on the weighted line.
   """
   def pick(ctx, board, author, roll \\ :rand.uniform()) do
     others = Enum.filter(ctx.crew, &(&1.name != author.name))
     theirs = Enum.filter(board, &(&1.author != author.name))
-    working = Enum.filter(ctx.crew, & &1.thread)
+    working = Enum.filter(others, & &1.thread)
 
     kinds =
       [
