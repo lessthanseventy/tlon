@@ -302,6 +302,48 @@ defmodule Server.WorklineTest do
     assert Channel.thread_lead(at_spec.id) == "yu"
   end
 
+  describe "one coworker, one workline" do
+    defp bench_ws(name, roster),
+      do: Server.Workspaces.register(%{name: name, type: "code", scope: "machine", repos: [], roster: roster})
+
+    test "a coworker leading one workline is not handed another: a free one of the kind is" do
+      {:ok, ws} =
+        bench_ws("TwoPlanners", [
+          %{"archetype" => "planner", "name" => "yu"},
+          %{"archetype" => "planner", "name" => "averroes"}
+        ])
+
+      a = open!(%{slug: "first", stage: "spec", workspace_id: ws.id})
+      b = open!(%{slug: "second", stage: "spec", workspace_id: ws.id})
+      assert Channel.thread_lead(a.id) == "yu"
+      assert Channel.thread_lead(b.id) == "averroes"
+    end
+
+    test "every one of the kind busy, another is hired onto the bench and leads it" do
+      {:ok, ws} = bench_ws("OnePlanner", [%{"archetype" => "planner", "name" => "yu"}])
+      yu = Enum.find(Server.Workspaces.bench(ws.id), &(&1.name == "yu"))
+      glm = %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}
+      {:ok, _} = Server.Workspaces.set_policy(ws.id, yu.agent_id, %{model: glm})
+      _a = open!(%{slug: "busy-one", stage: "spec", workspace_id: ws.id})
+      b = open!(%{slug: "busy-two", stage: "spec", workspace_id: ws.id})
+
+      hired = Channel.thread_lead(b.id)
+      refute hired in [nil, "yu"]
+      seat = Enum.find(Server.Workspaces.bench(ws.id), &(&1.name == hired and &1.archetype == "planner"))
+      assert seat
+      # the hire runs on its peers' model
+      assert Server.Workspaces.policy(ws.id, seat.agent_id).model == glm
+    end
+
+    test "a lead already of the stage's kind keeps the workline, busy elsewhere or not" do
+      {:ok, ws} = bench_ws("Continuity", [%{"archetype" => "planner", "name" => "yu"}])
+      a = open!(%{slug: "keeps", stage: "spec", workspace_id: ws.id})
+      {:awaiting, a} = Workline.advance(a, artifacts: AllPresent)
+      {:ok, at_plan} = Workline.approve(a, artifacts: AllPresent)
+      assert at_plan.stage == "plan" and Channel.thread_lead(a.id) == "yu"
+    end
+  end
+
   test "entering review with no reviewer in the roster leaves the lead alone" do
     thread = open!(%{slug: "no-reviewer"})
     {:ok, thread} = Workline.advance(thread, artifacts: AllPresent)
