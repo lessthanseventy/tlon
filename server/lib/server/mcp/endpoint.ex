@@ -80,6 +80,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.FileTicket, name: "file_ticket")
   component(Server.MCP.Tool.ListTickets, name: "list_tickets")
   component(Server.MCP.Tool.UpdateTicket, name: "update_ticket")
+  component(Server.MCP.Tool.StartTicket, name: "start_ticket")
   component(Server.MCP.Tool.WriteNote, name: "write_note")
   component(Server.MCP.Tool.GetNotes, name: "get_notes")
   component(Server.MCP.Resource.Brief, name: "brief")

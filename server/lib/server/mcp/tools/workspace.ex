@@ -230,6 +230,37 @@ defmodule Server.MCP.Tool.UpdateTicket do
   end
 end
 
+defmodule Server.MCP.Tool.StartTicket do
+  @moduledoc """
+  Start work on a filed ticket: opens a thread on it (its title/body as the opening ask) and
+  promotes the ticket into it, moving it to `doing`. Same door as `POST /api/tickets/:id/start`
+  and `tlon-cli ticket-start` — both call `Server.Tickets.start_thread/2`. `id` identifies the
+  ticket; a missing one is refused. `agent_id` hands the new thread to that coworker instead of
+  the workspace's lead.
+  """
+  use Server.MCP.Tool
+
+  alias Server.Tickets
+
+  schema do
+    field :id, :integer, required: true, description: "The ticket id"
+    field :agent_id, :integer, description: "Hand the thread to this coworker instead of the workspace's lead"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    case Tickets.get(params[:id]) do
+      nil ->
+        fail(frame, "no ticket ##{params[:id]}")
+
+      ticket ->
+        reply(frame, Tickets.start_thread(ticket, params[:agent_id]), fn thread ->
+          %{"ticket_id" => ticket.id, "thread_id" => thread.id}
+        end)
+    end
+  end
+end
+
 defmodule Server.MCP.Tool.WriteNote do
   @moduledoc """
   Write a NOTE — funes-native scratch, agent-readable/writable. Defaults to a note on THIS thread;
