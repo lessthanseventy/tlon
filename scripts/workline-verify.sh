@@ -18,7 +18,9 @@ cli="$root/scripts/tlon-cli.sh"
 note() { if [ -n "${WORKLINE_GATE:-}" ]; then echo "$2"; else "$cli" note "$@"; fi; }
 # The workline's checkout of work/<slug> (the verify job passes it): where the gate borrows its
 # installed deps from. The gates themselves run on a throwaway checkout, below.
-tree="${3:-$root/.worktrees/$slug}"
+# Never guessed from tlon's own .worktrees/: a thread in another project (menard) has its checkout
+# there, and a stale tlon worktree of the same name once got verified in its place, green.
+tree="${3:-$("$cli" worktree "$tid" 2>/dev/null)}"
 # The gate runs as a clean checkout would: none of the service's TLON_* variables (it inherits them
 # here — its ports, its real database — and a gate that boots the app would bind 4040 or touch the
 # live store), and its own test database, since a coworker running the suite in the same checkout
