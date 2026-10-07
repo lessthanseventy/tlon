@@ -140,16 +140,17 @@ const hex = (r: number, g: number, b: number) => "#" + [r, g, b].map((v) => v.to
  * The room as half blocks, with the frame's ink as terminal text on the cells — where labels land on
  * the same cells, the first keeps them. One string per row, ready to write at the box's left edge.
  */
-export function textLayer(fr: Frame, g: Geometry): string[] {
+export function textLayer(fr: Frame, g: Geometry, viewport: Viewport = { x: 0, y: 0, w: g.floorW, h: g.floorH }): string[] {
+  const rows0 = Math.min(g.rows, Math.ceil((viewport.h * g.k) / g.ch)), cols0 = Math.min(g.cols, Math.ceil((viewport.w * g.k) / g.cw))
   const cells: (Cell & { ink?: boolean })[][] = []
-  for (let r = 0; r < g.rows; r++) {
+  for (let r = 0; r < rows0; r++) {
     const row: (Cell & { ink?: boolean })[] = []
-    for (let c = 0; c < g.cols; c++) {
+    for (let c = 0; c < cols0; c++) {
       const at = (py: number) => {
-        const x = Math.min(fr.width - 1, Math.floor(c / g.k)), y = Math.min(fr.height - 1, Math.floor(py / g.k)), o = (y * fr.width + x) * 4
+        const x = Math.min(fr.width - 1, Math.floor(viewport.x + (c * g.cw) / g.k)), y = Math.min(fr.height - 1, Math.floor(viewport.y + py / g.k)), o = (y * fr.width + x) * 4
         return hex(fr.rgba[o]!, fr.rgba[o + 1]!, fr.rgba[o + 2]!)
       }
-      row.push({ ch: "▀", fg: at(r * 2), bg: at(r * 2 + 1) })
+      row.push({ ch: "▀", fg: at(r * g.ch), bg: at(r * g.ch + 1) })
     }
     cells.push(row)
   }
@@ -177,7 +178,7 @@ export function textLayer(fr: Frame, g: Geometry): string[] {
       if (last && last.fg === c.fg && last.bg === c.bg) last.s += c.ch
       else segs.push({ s: c.ch, fg: c.fg, bg: c.bg })
     }
-    return line(segs, g.cols)
+    return line(segs, cols0)
   })
 }
 
