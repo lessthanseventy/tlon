@@ -25,7 +25,7 @@ defmodule Server.WorktreeTest do
   end
 
   describe "ensure/2" do
-    test "creates an isolated checkout on branch work/<slug>, off HEAD", %{repo: repo, git: git} do
+    test "creates an isolated checkout on branch work/<slug>", %{repo: repo, git: git} do
       assert {:ok, wt} = Worktree.ensure(repo, "redis-cache")
       assert wt == Worktree.path(repo, "redis-cache")
       # A linked worktree carries a `.git` FILE pointing back at the shared gitdir.
@@ -63,6 +63,20 @@ defmodule Server.WorktreeTest do
       assert File.read!(Path.join(wt, "server/deps/jason/x")) == "built\n"
       assert File.read!(Path.join(wt, "server/_build/dev/x")) == "built\n"
       refute File.exists?(Path.join(wt, "office/node_modules"))
+    end
+
+    test "a new work/<slug> starts from main, whatever branch the checkout is on", %{repo: repo, git: git} do
+      {_, 0} = git.(["branch", "-M", "main"])
+      {_, 0} = git.(["checkout", "-qb", "side"])
+      File.write!(Path.join(repo, "side.txt"), "side work\n")
+      {_, 0} = git.(["add", "side.txt"])
+      {_, 0} = git.(["commit", "-qm", "side work"])
+
+      assert {:ok, wt} = Worktree.ensure(repo, "from-main")
+      refute File.exists?(Path.join(wt, "side.txt"))
+      {main, 0} = git.(["rev-parse", "main"])
+      {base, 0} = git.(["rev-parse", "work/from-main"])
+      assert base == main
     end
 
     test "is idempotent — a second call returns the same path, no error, no churn", %{repo: repo} do

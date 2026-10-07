@@ -53,8 +53,8 @@ defmodule Server.Worktree do
 
   @doc """
   Lazily ensure the worktree exists. Idempotent — an existing checkout returns its path untouched.
-  Creates branch `work/<slug>` off HEAD when absent, reuses it when present. `{:ok, abs_path}` or
-  `{:error, :bad_slug | :not_a_repo | reason}`.
+  Creates branch `work/<slug>` off `main` (HEAD where there is none) when absent, reuses it when
+  present. `{:ok, abs_path}` or `{:error, :bad_slug | :not_a_repo | reason}`.
   """
   def ensure(repo_path, slug) do
     cond do
@@ -198,10 +198,14 @@ defmodule Server.Worktree do
   defp add(repo_path, wt, slug) do
     branch = branch(slug)
 
+    # a new branch starts from main, not whatever the checkout happens to be on — a side branch's
+    # commits would ride along into the workline and land with it
+    base = if branch_exists?(repo_path, "main"), do: ["main"], else: []
+
     args =
       if branch_exists?(repo_path, branch),
         do: ["worktree", "add", wt, branch],
-        else: ["worktree", "add", "-b", branch, wt]
+        else: ["worktree", "add", "-b", branch, wt | base]
 
     case git(repo_path, args) do
       {_out, 0} ->
