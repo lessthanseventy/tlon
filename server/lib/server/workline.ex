@@ -454,8 +454,9 @@ defmodule Server.Workline do
   defp restaff(%Thread{workspace_id: nil} = thread, kind), do: restaff_miss(thread, kind, "no workspace bound")
 
   # One coworker, one workline: a lead already of this kind keeps it (spec→plan, build→verify);
-  # else the first of the kind not leading another live workline; else, the kind being on the bench
-  # but all busy, one more is hired. A kind the bench lacks is never invented.
+  # else the first of the kind not leading another live workline (one only waiting on the operator
+  # does not count — its session waits in its own window); else, the kind being on the bench but
+  # all busy, one more is hired. A kind the bench lacks is never invented.
   defp restaff(thread, kind) do
     of_kind = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == kind))
     current = Server.Channel.thread_lead(thread.id)
@@ -475,7 +476,7 @@ defmodule Server.Workline do
       from t in Thread,
         where:
           t.agent_id == ^agent_id and t.id != ^thread.id and t.state == "open" and not is_nil(t.stage) and
-            t.stage != "merged"
+            t.stage != "merged" and is_nil(t.awaiting)
     )
   end
 

@@ -335,6 +335,14 @@ defmodule Server.WorklineTest do
       assert Server.Workspaces.policy(ws.id, seat.agent_id).model == glm
     end
 
+    test "a coworker whose other workline only waits on the operator is free to lead this one" do
+      {:ok, ws} = bench_ws("WaitingPlanner", [%{"archetype" => "planner", "name" => "yu"}])
+      a = open!(%{slug: "waits", stage: "spec", workspace_id: ws.id})
+      {:ok, _} = a |> Ecto.Changeset.change(awaiting: "andrew") |> Server.Repo.update()
+      b = open!(%{slug: "meanwhile", stage: "spec", workspace_id: ws.id})
+      assert Channel.thread_lead(b.id) == "yu"
+    end
+
     test "a lead already of the stage's kind keeps the workline, busy elsewhere or not" do
       {:ok, ws} = bench_ws("Continuity", [%{"archetype" => "planner", "name" => "yu"}])
       a = open!(%{slug: "keeps", stage: "spec", workspace_id: ws.id})

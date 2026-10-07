@@ -53,6 +53,44 @@ defmodule Server.IntakeTest do
     refute_received {:routed, _}
   end
 
+  test "a workline waiting on the operator does not hold a slot — work goes on while gates queue", %{
+    ws: ws,
+    route: route
+  } do
+    t = file(ws, "next", "high")
+
+    {:ok, w} =
+      Server.Workline.open(%{
+        title: "parked",
+        slug: "parked-#{System.unique_integer([:positive])}",
+        workspace_id: ws.id
+      })
+
+    {:ok, _} = w |> Ecto.Changeset.change(awaiting: "andrew") |> Server.Repo.update()
+
+    Intake.run(cap: 1, route: route)
+    assert_received {:routed, id}
+    assert id == t.id
+  end
+
+  test "but how many may wait at once has a ceiling", %{ws: ws, route: route} do
+    _t = file(ws, "next", "high")
+
+    for i <- 1..2 do
+      {:ok, w} =
+        Server.Workline.open(%{
+          title: "parked #{i}",
+          slug: "parked-#{i}-#{System.unique_integer([:positive])}",
+          workspace_id: ws.id
+        })
+
+      {:ok, _} = w |> Ecto.Changeset.change(awaiting: "andrew") |> Server.Repo.update()
+    end
+
+    Intake.run(cap: 4, max_open: 2, route: route)
+    refute_received {:routed, _}
+  end
+
   test "the intake is on the cron" do
     crontab =
       Enum.find_value(Application.get_env(:server, Oban)[:plugins], fn

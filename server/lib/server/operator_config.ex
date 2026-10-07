@@ -17,11 +17,13 @@ defmodule Server.OperatorConfig do
         "warmth_seconds": {"ollama-cloud": 600},
         "calendars": [{"name": "work", "ics_secret": "calendar-work"}],
         "alarm_minutes": 5,
-        "max_worklines": 4
+        "max_worklines": 4,
+        "max_open_worklines": 10
       }
 
   `calendars` and `alarm_minutes` are `Server.Calendar`'s and `Server.Alerts`' (a meeting's alarm);
-  `max_worklines` is `Server.Intake`'s cap on worklines in flight per workspace.
+  `max_worklines` and `max_open_worklines` are `Server.Intake`'s caps per workspace: worklines being
+  worked, and open in all (those waiting on the operator included).
 
   Best-effort on read: a missing or corrupt file is just "no overrides".
   """
