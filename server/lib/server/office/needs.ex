@@ -17,6 +17,7 @@ defmodule Server.Office.Needs do
   """
   import Ecto.Query
 
+  alias Server.Event
   alias Server.Message
   alias Server.Repo
   alias Server.Thread
@@ -86,7 +87,7 @@ defmodule Server.Office.Needs do
 
   defp last_verify(slug) do
     Repo.one(
-      from e in Server.Event,
+      from e in Event,
         where: e.correlation == ^"workline:#{slug}:verify" and e.kind in ["check_passed", "check_failed"],
         order_by: [desc: e.id],
         limit: 1
@@ -108,12 +109,18 @@ defmodule Server.Office.Needs do
     |> Repo.all()
     |> Enum.uniq_by(& &1.thread_id)
     # a thread already waiting on the operator is on the list as its question, not twice
-    |> Enum.reject(&(by_id[&1.thread_id].awaiting != nil or answered?(&1, operator)))
+    |> Enum.reject(&(by_id[&1.thread_id].awaiting != nil or settled?(&1, operator)))
     |> Enum.map(&item("mention", "decide", by_id[&1.thread_id], "#{&1.author}: #{&1.body}", &1.created_at))
   end
 
-  defp answered?(m, operator),
-    do: Repo.exists?(from r in Message, where: r.thread_id == ^m.thread_id and r.author == ^operator and r.id > ^m.id)
+  # a reply settles a mention; so does the workline moving on — it asked about a stage now done
+  defp settled?(m, operator) do
+    Repo.exists?(from r in Message, where: r.thread_id == ^m.thread_id and r.author == ^operator and r.id > ^m.id) or
+      Repo.exists?(
+        from e in Event,
+          where: e.thread_id == ^m.thread_id and e.kind == "stage_advanced" and e.created_at >= ^m.created_at
+      )
+  end
 
   defp suggestions(open) do
     workspaces = open |> Enum.map(& &1.workspace_id) |> Enum.reject(&is_nil/1) |> Enum.uniq()

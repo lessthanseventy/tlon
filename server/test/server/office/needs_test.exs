@@ -62,6 +62,30 @@ defmodule Server.Office.NeedsTest do
     assert kinds(ws) == []
   end
 
+  test "a workline that advances past a mention settles it — the question was about a stage now done",
+       %{ws: ws} do
+    {:ok, t} =
+      Server.Workline.open(%{
+        title: "w",
+        slug: "mention-#{System.unique_integer([:positive])}",
+        stage: "spec",
+        workspace_id: ws.id
+      })
+
+    {:ok, _} = Channel.post(%{thread_id: t.id, author: "yu", body: "@andrew spec is in — good to advance?"})
+    assert {"mention", "decide"} in kinds(ws)
+
+    {:ok, _} =
+      Server.Dossier.record_event(%{
+        thread_id: t.id,
+        kind: "stage_advanced",
+        correlation: "workline:#{t.slug}",
+        detail: %{"from" => "spec", "to" => "plan"}
+      })
+
+    refute {"mention", "decide"} in kinds(ws)
+  end
+
   test "blocking comes before deciding, oldest first within each", %{ws: ws} do
     {:ok, a} = Channel.open_thread(%{title: "a", workspace_id: ws.id})
     {:ok, b} = Channel.open_thread(%{title: "b", workspace_id: ws.id})
