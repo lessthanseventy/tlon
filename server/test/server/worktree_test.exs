@@ -37,6 +37,34 @@ defmodule Server.WorktreeTest do
       assert String.trim(head) == "work/redis-cache"
     end
 
+    test "a new worktree is seeded with the main checkout's deps where its lockfile is the same; a changed one is left to install",
+         %{repo: repo, git: git} do
+      for {lock, body} <- [{"server/mix.lock", "%{a: 1}\n"}, {"office/bun.lock", "{\"a\": 1}\n"}] do
+        File.mkdir_p!(Path.dirname(Path.join(repo, lock)))
+        File.write!(Path.join(repo, lock), body)
+      end
+
+      {_, 0} = git.(["add", "server/mix.lock", "office/bun.lock"])
+      {_, 0} = git.(["commit", "-qm", "locks"])
+      # on the work branch, office's lockfile changes (a dep added); server's does not
+      {_, 0} = git.(["checkout", "-qb", "work/seeded"])
+      File.write!(Path.join(repo, "office/bun.lock"), "{\"a\": 2}\n")
+      {_, 0} = git.(["commit", "-qam", "bump"])
+      {_, 0} = git.(["checkout", "-q", "-"])
+      File.write!(Path.join(repo, "office/bun.lock"), "{\"a\": 1}\n")
+
+      # the main checkout's installed deps (untracked)
+      for dir <- ["server/deps/jason", "server/_build/dev", "office/node_modules/left-pad"] do
+        File.mkdir_p!(Path.join(repo, dir))
+        File.write!(Path.join([repo, dir, "x"]), "built\n")
+      end
+
+      assert {:ok, wt} = Worktree.ensure(repo, "seeded")
+      assert File.read!(Path.join(wt, "server/deps/jason/x")) == "built\n"
+      assert File.read!(Path.join(wt, "server/_build/dev/x")) == "built\n"
+      refute File.exists?(Path.join(wt, "office/node_modules"))
+    end
+
     test "is idempotent — a second call returns the same path, no error, no churn", %{repo: repo} do
       assert {:ok, wt} = Worktree.ensure(repo, "redis-cache")
       assert {:ok, ^wt} = Worktree.ensure(repo, "redis-cache")

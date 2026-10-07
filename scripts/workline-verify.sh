@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The deterministic verifier (worklines slice 4): run the module gates AND the machine gate
-# for a workline, record each result as CHECKS evidence (correlation workline:<slug>:verify),
+# for a workline, in its own checkout of work/<slug>, record each result as CHECKS evidence (correlation workline:<slug>:verify),
 # and advance the stage when everything is green. Run by the service on verify entry (Server.Jobs.Verify) —
 # independent of the builder by construction (the builder never runs or reports this).
 # A model only enters when a failure needs interpreting; the gates themselves are script.
@@ -8,11 +8,19 @@
 # usage: workline-verify.sh <thread-id> <slug>
 set -uo pipefail
 
-tid="${1:?usage: workline-verify.sh <thread-id> <slug>}"
-slug="${2:?usage: workline-verify.sh <thread-id> <slug>}"
+tid="${1:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
+slug="${2:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cli="$root/scripts/tlon-cli.sh"
+# The gates run on the work itself — the workline's checkout of work/<slug> (the verify job passes
+# it), never tlon's main checkout, whose green says nothing about the branch under review.
+tree="${3:-$root/.worktrees/$slug}"
+if [ ! -d "$tree" ]; then
+  "$cli" post "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
+  echo "workline-verify: no checkout of work/$slug at $tree" >&2
+  exit 1
+fi
 
 # One verifier per workline at a time: a duplicate dispatch (bus redelivery, a manual re-run
 # racing the auto one) exits quietly instead of double-running gates and double-advancing.
@@ -26,7 +34,7 @@ unrecorded=0
 run_gate() {
   local name="$1"; shift
   local out code
-  out=$(cd "$root" && "$@" 2>&1); code=$?
+  out=$(cd "$tree" && "$@" 2>&1); code=$?
   if ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$(printf '%s' "$out" | tail -c 400)"; then
     echo "workline-verify: could not record evidence for '$name' (exit $code) — is the service up?" >&2
     unrecorded=1
