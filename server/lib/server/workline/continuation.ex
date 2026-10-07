@@ -36,6 +36,7 @@ defmodule Server.Workline.Continuation do
     with %Thread{state: "open", awaiting: nil} = thread <- Repo.get(Thread, thread_id),
          {:error, why} <- Workline.owed_status(thread, opts),
          false <- Attention.waiting?(thread_id),
+         false <- verifying?(thread),
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),
          {:budget, true, _} <- {:budget, sent < max, {thread, why, sent}} do
@@ -71,6 +72,19 @@ defmodule Server.Workline.Continuation do
 
     :ok
   end
+
+  # verify's artifact is the server's own run (Jobs.Verify, ~a minute of gates): the lead can't
+  # produce it, so nudging while it runs only burns the budget and flags a healthy workline stuck
+  defp verifying?(%Thread{stage: "verify", id: id}) do
+    Repo.exists?(
+      from j in Oban.Job,
+        where:
+          j.worker == "Server.Jobs.Verify" and j.state in ["available", "scheduled", "executing", "retryable"] and
+            fragment("(? ->> 'thread_id')::bigint", j.args) == ^id
+    )
+  end
+
+  defp verifying?(_thread), do: false
 
   defp last_advance_id(thread_id) do
     Repo.one(

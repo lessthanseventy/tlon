@@ -80,6 +80,19 @@ defmodule Server.Workline.ContinuationTest do
     assert m.body =~ "plan" and m.body =~ "work/x/plan.md is not committed"
   end
 
+  test "at verify the server owes the artifact: no nudge while its verify job is in flight, then one" do
+    {:ok, v} = Workline.open(%{title: "verify it", slug: "verifying", stage: "verify"})
+    job = Repo.insert!(Server.Jobs.Verify.new(%{thread_id: v.id, slug: v.slug}))
+
+    for _ <- 1..5, do: :ok = Continuation.run(v.id, artifacts: Missing)
+    assert continuations(v.id) == []
+    assert Repo.get!(Server.Thread, v.id).awaiting == nil
+
+    job |> Ecto.Changeset.change(state: "completed") |> Repo.update!()
+    :ok = Continuation.run(v.id, artifacts: Missing)
+    assert [_] = continuations(v.id)
+  end
+
   test "nothing to say: the artifact is there, the gate is parked, the thread is plain, a prompt is open",
        %{thread: t} do
     :ok = Continuation.run(t.id, artifacts: Present)
