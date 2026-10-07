@@ -13,7 +13,8 @@ end
 defmodule Server.Workline.Artifacts.Git do
   @moduledoc """
   The real checker: files must be COMMITTED (git ls-files, not mere existence — an untracked
-  intent.md is not an artifact), the branch is `work/<slug>`, verify evidence is a
+  intent.md is not an artifact) — on the main checkout, or on the workline's branch, where its lead
+  in the worktree commits it — the branch is `work/<slug>`, verify evidence is a
   `check_passed` event correlated `workline:<slug>:verify`. Git runs in the thread's own repo
   (`root/1`), so a workline on another project is checked against that project.
   """
@@ -29,9 +30,15 @@ defmodule Server.Workline.Artifacts.Git do
   def check(thread, {:file, name}) do
     rel = Path.join(["work", thread.slug, name])
 
-    case git(thread, ["ls-files", "--error-unmatch", rel]) do
-      {_out, 0} -> {:ok, "committed #{rel}"}
-      {_out, _} -> sane_root_or(thread, fn -> {:error, "#{rel} is not committed"} end)
+    cond do
+      match?({_, 0}, git(thread, ["ls-files", "--error-unmatch", rel])) ->
+        {:ok, "committed #{rel}"}
+
+      match?({_, 0}, git(thread, ["cat-file", "-e", "refs/heads/work/#{thread.slug}:#{rel}"])) ->
+        {:ok, "committed #{rel} on work/#{thread.slug}"}
+
+      true ->
+        sane_root_or(thread, fn -> {:error, "#{rel} is not committed (on main or on work/#{thread.slug})"} end)
     end
   end
 

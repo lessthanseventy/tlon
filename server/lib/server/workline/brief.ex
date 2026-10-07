@@ -125,7 +125,9 @@ defmodule Server.Workline.Brief do
   defp exit_line(%{stage: "review"} = t),
     do: "Exit: submit_review (the server commits #{owed(t)}), then call advance_stage."
 
-  defp exit_line(t), do: "Exit: commit #{owed(t)}, then call advance_stage."
+  defp exit_line(%{stage: "build"} = t), do: "Exit: commit #{owed(t)}, then call advance_stage."
+
+  defp exit_line(t), do: "Exit: commit #{owed(t)} on your branch work/#{t.slug}, then call advance_stage."
 
   # a workline may open at any stage: the docs of the stages it skipped were never written
   defp skipped_note(%{stage: stage}) when stage in ["plan", "build", "verify", "review"],
