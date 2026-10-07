@@ -80,6 +80,21 @@ defmodule Server.AlertsTest do
     assert Enum.any?(List.last(alerts).actions, &(&1.path == "/api/threads/9/verify"))
   end
 
+  test "the corkboard's suggestions and rollout notes stay in the inbox — no card on the desktop" do
+    alerts =
+      Alerts.build(
+        [
+          need("suggestion", %{level: "decide"}),
+          need("rollout", %{level: "decide"}),
+          need("mention", %{level: "decide"})
+        ],
+        [],
+        @now
+      )
+
+    assert Enum.map(alerts, & &1.kind) == ["mention"]
+  end
+
   test "a meeting is an alarm from a few minutes before it starts until shortly after, with a way to join" do
     soon = meeting(~U[2026-10-08 16:00:00Z])
     later = meeting(~U[2026-10-08 17:00:00Z], %{uid: "later@x"})

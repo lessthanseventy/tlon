@@ -7,8 +7,9 @@ defmodule Server.Alerts do
       ten minutes in: full screen, with Join;
     * **decision** — work has stopped on a choice (a gate, a dialog, a question): a banner with
       its answers;
-    * **sticky** — wants the operator, nothing waits on it (a red verify, a mention, a
-      suggestion, a rollout note): stays until dismissed or resolved.
+    * **sticky** — wants the operator, nothing waits on it (a red verify, a mention): stays until
+      dismissed or resolved. A suggestion or a rollout note raises nothing here: the office's
+      inbox has it.
 
   Each alert is `%{key, level, kind, title, body, at, thread_id, link, actions}`; an action is a
   call on the operator API (`method`, `path`, `body`, and `input` naming the body field a typed
@@ -17,6 +18,8 @@ defmodule Server.Alerts do
   """
 
   @alarm_minutes 5
+  # the corkboard's chatter and a rollout's housekeeping: the inbox has them, the desktop doesn't
+  @inbox_only ~w(suggestion rollout)
   @alarm_after_s 600
 
   @doc "Every alert now."
@@ -37,7 +40,7 @@ defmodule Server.Alerts do
           DateTime.diff(now, m.start) <= @alarm_after_s,
           do: alarm(m)
 
-    from_needs = Enum.map(needs, &from_need/1)
+    from_needs = needs |> Enum.reject(&(&1.kind in @inbox_only)) |> Enum.map(&from_need/1)
 
     Enum.sort_by(alarms, & &1.at, DateTime) ++
       Enum.filter(from_needs, &(&1.level == "decision")) ++ Enum.filter(from_needs, &(&1.level == "sticky"))
