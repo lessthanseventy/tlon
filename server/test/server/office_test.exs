@@ -67,6 +67,17 @@ defmodule Server.OfficeTest do
       {:ok, _} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
       assert is_binary(JSON.encode!(Office.status()))
     end
+
+    test "status/0 carries a life summary only for type: home workspaces" do
+      {:ok, home} = Workspaces.register(%{name: "office-life-#{System.unique_integer()}", type: "home"})
+      {:ok, code} = Workspaces.register(%{name: "office-code-#{System.unique_integer()}", type: "code"})
+
+      status = Office.status()
+
+      assert Map.has_key?(status.life, home.id)
+      assert status.life[home.id] |> Map.keys() |> Enum.sort() == [:due, :level, :xp]
+      refute Map.has_key?(status.life, code.id)
+    end
   end
 
   describe "aside_spec/3" do

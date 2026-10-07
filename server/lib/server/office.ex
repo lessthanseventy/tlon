@@ -48,6 +48,7 @@ defmodule Server.Office do
       counts: Map.new(Repo.all(from(t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}))),
       awaiting: awaiting(prompts),
       triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
+      life: Map.new(home_ws_ids(wss), &{&1, Server.Life.status(&1) |> Map.take([:level, :xp, :due])}),
       health: Map.take(Room.health(), [:state, :problems]),
       weather: Server.Office.Weather.now(),
       # a TUI started on an older office revision offers a reload (Server.Rollout)
@@ -213,6 +214,8 @@ defmodule Server.Office do
   # each open thread with its lead, whether a tmux window is running it (asked of tmux: a Claude
   # Code worker registers no session until it calls register, so the roster alone misses it), and
   # whether it is the standing thread of its workspace
+  defp home_ws_ids(wss), do: wss |> Enum.filter(&(&1.type == "home")) |> Enum.map(& &1.id)
+
   defp threads(ws_ids, prompts, thinking) do
     tabs = Map.new(ws_ids, &{&1, Server.Tmux.list_windows(&1)})
 
