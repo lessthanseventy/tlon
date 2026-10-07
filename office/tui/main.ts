@@ -12,7 +12,7 @@ import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
-import { WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
+import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
@@ -21,6 +21,7 @@ import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } fro
 import { Reader } from "./reader"
 import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
+import { centerViewport, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
 
 type Mode =
@@ -65,6 +66,9 @@ let picker: { title: string; q: Editor; items: Pick[]; sel: number } | null = nu
 let reader: Reader | null = null
 let cell: { w: number; h: number } | null = null, kitty = process.env.OFFICE_GRAPHICS === "kitty"
 let g: Geometry, frame: Frame | null = null, sentImage = false, rows: Row[] = []
+/** the floor's visible window: centred on the office zone while `follow`, fixed where a manual pan left it otherwise */
+let viewport: Viewport = { x: 0, y: 0, w: 0, h: 0 }, follow = true, panned = false
+let drag: { col: number; row: number } | null = null
 // the room moved (re-render its frame); its art changed (resend the image)
 let roomChanged = true, imageDirty = true
 
@@ -889,6 +893,10 @@ function layoutScreen() {
   }
   if (next !== wide) { wide = next; rooms.clear() }
   g = { ...(wide ? geometry(wide, WIDE_H, colsN, rowsN, DETAIL + 3, cell, kitty) : geometry(W, H, colsN, rowsN, DETAIL + 3, cell, kitty)), row: 1 }
+  const vw = Math.min(g.floorW, (g.cols * g.cw) / g.k), vh = Math.min(g.floorH, (g.rows * g.ch) / g.k)
+  viewport = follow
+    ? centerViewport({ x: 0, y: 0, w: vw, h: vh }, OFF_W / 2, (BAND + OFF_DOOR) / 2, g.floorW, g.floorH)
+    : centerViewport({ ...viewport, w: vw, h: vh }, viewport.x + viewport.w / 2, viewport.y + viewport.h / 2, g.floorW, g.floorH)
   frame = null; sentImage = false
   out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
 }
@@ -911,13 +919,15 @@ function draw() {
     ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body }] : []),
     ...(needs.length ? [dim("  (i)")] : []),
     ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
-    ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm }] : [])], colsN)
+    ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm }] : []),
+    ...(process.env.OFFICE_DEBUG ? [dim(`  viewport ${Math.round(viewport.x)},${Math.round(viewport.y)}`)] : [])], colsN)
   // the room
   const room0 = room()
   const fresh = !frame
   if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread() }, measureFor(g)); roomChanged = false }
-  if (g.kitty && (!sentImage || fresh || imageDirty)) { o += kittyImage(frame!, g, { x: 0, y: 0, w: g.floorW, h: g.floorH }); sentImage = true; imageDirty = false }
-  if (!g.kitty) textLayer(frame!, g).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
+  if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(frame!, g, viewport); sentImage = true; imageDirty = false }
+  if (!g.kitty) textLayer(frame!, g, viewport).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
+  panned = false
   // the tip line: what the pointer is over, or what just happened
   const tipRow = g.row + g.rows + 1
   o += `${ESC}[${tipRow};1H` + line([tip ? dim(` ${tip.split("\n").join(" · ")}`) : status ? key(` ${status}`) : dim("")], colsN)
@@ -1065,6 +1075,23 @@ function onKey(k: string) {
       if (onActions) asel = Math.max(asel - 1, 0); else sel = Math.max(sel - 1, 0)
       return draw()
     case "left": if (mode.kind === "column") return open({ kind: "column", col: (mode.col + COLS.length - 1) % COLS.length }); return
+    case "shift-up": case "shift-down": case "shift-left": case "shift-right": {
+      const dx = g.cw / g.k, dy = g.ch / g.k
+      const [ddx, ddy] = k === "shift-left" ? [-dx, 0] : k === "shift-right" ? [dx, 0] : k === "shift-up" ? [0, -dy] : [0, dy]
+      viewport = panViewport(viewport, ddx, ddy, g.floorW, g.floorH); follow = false; panned = true
+      return draw()
+    }
+    case ".":
+      viewport = centerViewport(viewport, OFF_W / 2, (BAND + OFF_DOOR) / 2, g.floorW, g.floorH); follow = true; panned = true
+      return draw()
+    case ",": {
+      const need = needs[0]
+      const seat = need ? all.roster.find((r) => r.thread_id === need.thread_id) : null
+      const at = seat ? room().at(seat.agent) : null
+      if (!at) return
+      viewport = centerViewport(viewport, at.x, at.y, g.floorW, g.floorH); panned = true
+      return draw()
+    }
     case "enter": return onActions ? acts[asel]?.run() : rows[sel]?.open?.()
     case "/": case "ctrl-k": return void finder()
     case "i": return inbox()
@@ -1093,10 +1120,22 @@ function onPaste(text: string) {
 
 function onMouse(m: Extract<Input, { t: "mouse" }>) {
   if (!frame || !g || reader) return
+  const inRoom0 = m.row - 1 >= g.row && m.row - 1 < g.row + g.rows
+  if (m.motion && m.button === 0) {
+    if (inRoom0 && drag) {
+      const dx = (drag.col - m.col) * (g.cw / g.k), dy = (drag.row - m.row) * (g.ch / g.k)
+      viewport = panViewport(viewport, dx, dy, g.floorW, g.floorH); follow = false; panned = true
+      drag = { col: m.col, row: m.row }
+      return draw()
+    }
+    if (inRoom0) drag = { col: m.col, row: m.row }
+    return
+  }
+  drag = null
   const h = hitAt(frame, g, m.col, m.row)
   if (m.motion) { const t = h?.tip ?? ""; if (t !== tip) { tip = t; draw() } return }
   if (!m.press || m.button !== 0) return
-  const inRoom = m.row - 1 >= g.row && m.row - 1 < g.row + g.rows
+  const inRoom = inRoom0
   if (h) return act(h.act)
   // a click on bare floor clears the slate, as on the desktop
   if (inRoom) { back(true); roomChanged = true; return draw() }
