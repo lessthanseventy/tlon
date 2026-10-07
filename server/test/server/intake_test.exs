@@ -3,12 +3,15 @@ defmodule Server.IntakeTest do
   # than the cap, the most urgent ticket nothing blocks goes to the manager — one per pass.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.Intake
   alias Server.Tickets
 
   setup do
     Server.TestDB.clean!()
     {:ok, ws} = Server.Workspaces.register(%{name: "Intake"})
+    {:ok, _} = Server.Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
     test = self()
 
     %{
@@ -89,6 +92,39 @@ defmodule Server.IntakeTest do
 
     Intake.run(cap: 4, max_open: 2, route: route)
     refute_received {:routed, _}
+  end
+
+  describe "a routed ticket nobody starts" do
+    defp routed(ws, title, minutes_ago) do
+      t = file(ws, title)
+      {:ok, t} = Tickets.update(t, %{status: "todo"})
+      at = DateTime.utc_now() |> DateTime.add(-minutes_ago * 60, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(x in Server.Ticket, where: x.id == ^t.id), set: [updated_at: at])
+      t
+    end
+
+    test "is started by intake itself with the lead once 30 minutes pass — it never holds a slot in silence", %{
+      ws: ws,
+      route: route
+    } do
+      {:ok, lead} = Server.Workspaces.seat(ws.id, %{name: "hronir-i", archetype: "builder"})
+      stalled = routed(ws, "floor step 3", 31)
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(stalled.id)
+      assert [{"promoted", tid}] = Tickets.threads_of(stalled.id)
+      assert %{stage: "build", agent_id: agent} = thread = Server.Repo.get!(Server.Thread, tid)
+      assert agent == lead.agent_id
+      assert Enum.any?(Server.Channel.thread_messages(thread), &(&1.body =~ "not staffed in 30 minutes"))
+    end
+
+    test "is left with the manager inside the 30 minutes", %{ws: ws, route: route} do
+      fresh = routed(ws, "just routed", 5)
+      Intake.run(cap: 4, route: route)
+      assert %{status: "todo"} = Tickets.get(fresh.id)
+      assert Tickets.threads_of(fresh.id) == []
+    end
   end
 
   test "the intake is on the cron" do

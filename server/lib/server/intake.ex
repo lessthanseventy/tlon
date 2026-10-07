@@ -7,7 +7,10 @@ defmodule Server.Intake do
   per pass, so a full backlog arrives steadily, not in a flood; a routed ticket (`todo`) counts as
   in flight until its work starts. A workline waiting on the operator holds no slot — work goes on
   while gates queue for them — but open worklines in all stop at `"max_open_worklines"` (default 10),
-  so a long night leaves a reviewable pile, not an endless one. Run by `Server.Jobs.Intake` on the cron.
+  so a long night leaves a reviewable pile, not an endless one. A routed ticket the manager hasn't
+  started within `@stalled_after` is started by intake itself, with the workspace's lead
+  (`Server.Tickets.start_thread/1`), and the sheriff told: a handed-over ticket never holds a slot
+  in silence. Run by `Server.Jobs.Intake` on the cron.
   """
   import Ecto.Query
 
@@ -18,6 +21,7 @@ defmodule Server.Intake do
   @cap 4
   @max_open 10
   @urgency %{"high" => 0, "med" => 1, "low" => 2}
+  @stalled_after 30 * 60
 
   @doc "One pass over every workspace with a backlog. `cap` and `route` override for a test."
   def run(opts \\ []) do
@@ -25,6 +29,8 @@ defmodule Server.Intake do
     cap = opts[:cap] || settings["max_worklines"] || @cap
     max_open = opts[:max_open] || settings["max_open_worklines"] || @max_open
     route = opts[:route] || (&Server.Tickets.route/1)
+
+    start_stalled(opts)
 
     for ws <- Repo.all(from t in Ticket, where: t.status == "backlog", distinct: true, select: t.workspace_id),
         {working, open} = in_flight(ws),
@@ -46,6 +52,33 @@ defmodule Server.Intake do
     waiting = Repo.aggregate(from(t in open, where: not is_nil(t.awaiting)), :count)
     routed = Repo.aggregate(from(t in Ticket, where: t.workspace_id == ^ws and t.status == "todo"), :count)
     {all - waiting + routed, all + routed}
+  end
+
+  # routed (`todo`) longer than `after_s` ago, with no thread it was started in
+  defp stalled(after_s) do
+    cutoff = DateTime.add(DateTime.utc_now(), -after_s, :second)
+
+    from(t in Ticket,
+      where: t.status == "todo" and t.updated_at < ^cutoff,
+      where:
+        not exists(from tt in Server.TicketThread, where: tt.ticket_id == parent_as(:t).id and tt.kind == "promoted")
+    )
+    |> from(as: :t)
+    |> Repo.all()
+  end
+
+  defp start_stalled(opts) do
+    for ticket <- stalled(opts[:stalled_after] || @stalled_after), do: start_stalled_ticket(ticket)
+  end
+
+  defp start_stalled_ticket(ticket) do
+    with {:ok, thread} <- Server.Tickets.start_thread(ticket) do
+      why =
+        "ticket ##{ticket.id} was routed to the manager and not staffed in 30 minutes, so intake started it here with the lead"
+
+      Server.Channel.post(%{thread_id: thread.id, author: "tlon", body: "⏱ #{why}."})
+      Server.Sheriff.report(thread, why)
+    end
   end
 
   defp next(ws) do
