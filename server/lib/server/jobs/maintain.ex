@@ -9,7 +9,7 @@ defmodule Server.Jobs.Maintain do
 
   alias Server.Maintain.Sweep
 
-  @bands ~w(gate_stale_ms stalled_ms renag_ms)
+  @bands ~w(gate_stale_ms stalled_ms renag_ms quiet_ms)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do

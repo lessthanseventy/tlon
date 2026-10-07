@@ -8,6 +8,8 @@ defmodule Server.Maintain.Sweep do
     * a gate parked longer than `gate_stale_ms` → a reminder post (once per `renag_ms`)
     * a non-merged workline with no stage advance for `stalled_ms` → `Workline.flag/2`
       (once per slug; `maint-*` flags never flag themselves)
+    * a workline quiet for `quiet_ms` (a lead whose window died is never idle) → a continuation,
+      toward the budget that stops a stuck one on the operator
 
   And the board kept true, so its state can be trusted:
 
@@ -33,7 +35,8 @@ defmodule Server.Maintain.Sweep do
   @defaults [
     gate_stale_ms: to_timeout(day: 1),
     stalled_ms: to_timeout(day: 3),
-    renag_ms: to_timeout(day: 1)
+    renag_ms: to_timeout(day: 1),
+    quiet_ms: to_timeout(hour: 1)
   ]
 
   @doc "Both sweeps, with the default bands unless `opts` names one."
@@ -41,8 +44,26 @@ defmodule Server.Maintain.Sweep do
     opts = Keyword.merge(@defaults, opts)
     sweep_gates(opts)
     sweep_stalled(opts)
+    sweep_quiet(opts)
     sweep_tickets()
     sweep_worktrees()
+    :ok
+  end
+
+  # a lead whose window died never goes idle, so it never gets the continuation an idle schedules:
+  # a workline quiet for the band is nudged here, toward the same budget, and so stops on the
+  # operator if it is truly stuck
+  defp sweep_quiet(opts) do
+    since = DateTime.add(DateTime.utc_now(), -opts[:quiet_ms], :millisecond)
+
+    for t <-
+          Repo.all(
+            from t in Thread,
+              where: t.state == "open" and not is_nil(t.stage) and t.stage != "merged" and is_nil(t.awaiting)
+          ),
+        not Repo.exists?(from m in Server.Message, where: m.thread_id == ^t.id and m.created_at > ^since),
+        do: Server.Workline.Continuation.run(t.id)
+
     :ok
   end
 

@@ -155,6 +155,12 @@ defmodule Server.MaintainTest do
     t
   end
 
+  test "a workline gone quiet gets a nudge — a lead whose window died never goes idle to get one" do
+    {:ok, w} = Workline.open(%{title: "quiet", slug: "quiet-#{System.unique_integer([:positive])}", stage: "plan"})
+    sweep(%{quiet_ms: 0})
+    assert Enum.any?(Repo.all(Message), &(&1.thread_id == w.id and &1.body =~ "↻ continue"))
+  end
+
   describe "the board says what is true" do
     test "a ticket left doing with nothing open working on it goes back to the backlog, saying why" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Board"})
