@@ -285,6 +285,23 @@ defmodule Server.WorklineTest do
     assert at_review.stage == "review" and Channel.thread_lead(thread.id) == "lonnrot"
   end
 
+  test "opening a workline staffs its first stage: intent the bench's lead, spec the planner" do
+    {:ok, workspace} =
+      Server.Workspaces.register(%{
+        name: "OpenedWorkspace",
+        type: "code",
+        scope: "machine",
+        repos: [],
+        roster: [%{"archetype" => "planner", "name" => "yu"}, %{"archetype" => "builder", "name" => "tertius"}]
+      })
+
+    at_intent = open!(%{slug: "opened-intent", workspace_id: workspace.id})
+    assert Channel.thread_lead(at_intent.id) == "tertius"
+
+    at_spec = open!(%{slug: "opened-spec", stage: "spec", workspace_id: workspace.id})
+    assert Channel.thread_lead(at_spec.id) == "yu"
+  end
+
   test "entering review with no reviewer in the roster leaves the lead alone" do
     thread = open!(%{slug: "no-reviewer"})
     {:ok, thread} = Workline.advance(thread, artifacts: AllPresent)
