@@ -79,7 +79,14 @@ defmodule Server.Application do
       # The Gateway routes POST /mint (a fresh-token mint for an adapter's per-connect auth)
       # and forwards everything else to the anubis MCP transport. Loopback only — a personal
       # machine binds no further than 127.0.0.1. See Server.MCP.Gateway for why /mint exists.
-      {Bandit, plug: {Server.MCP.Gateway, []}, ip: {127, 0, 0, 1}, port: Application.get_env(:server, :mcp_port, 4040)}
+      # A coworker's MCP stream stays open for good, so a stop waits out the whole drain: 2 s, not
+      # ThousandIsland's 15 — past the service's 10 s stop timeout, every restart was a SIGKILL.
+      # Clients reconnect on their own.
+      {Bandit,
+       plug: {Server.MCP.Gateway, []},
+       ip: {127, 0, 0, 1},
+       port: Application.get_env(:server, :mcp_port, 4040),
+       thousand_island_options: [shutdown_timeout: 2_000]}
     ]
   end
 end
