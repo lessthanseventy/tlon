@@ -23,3 +23,15 @@ describe("outfit and accessory overlays", () => {
       .toEqual(figure(lookOf("yu"), "builder", true, false, "down", "stand", 0, false))
   })
 })
+
+describe("custom sprite override", () => {
+  test("a custom view replaces the generated base but keeps gear and the sit/mirror rules", () => {
+    const custom = { front: Array.from({ length: 20 }, (_, i) => (i === 0 ? "kkkkkkkkkkkk" : "............")) }
+    const rows = figure({ ...lookOf("hronir"), custom }, "builder", false, false, "down", "stand", 0, false)
+    expect(rows[0]).toBe("kkkkkkkkkkkk")
+    const sitting = figure({ ...lookOf("hronir"), custom }, null, false, false, "down", "sit", 0, false)
+    expect(sitting.length).toBe(14)
+    const right = figure({ ...lookOf("hronir"), custom: { side: custom.front } }, null, false, false, "right", "stand", 0, false)
+    expect(right[0]).toBe([...custom.front[0]!].reverse().join(""))
+  })
+})
