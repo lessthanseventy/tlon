@@ -586,6 +586,16 @@ defmodule Server.ChannelTest do
       assert Repo.get!(Server.Fact, fact.id).thread_id == nil
     end
 
+    test "leaves a durable thread_deleted event with who, when, and the title", %{thread: thread} do
+      {:ok, _} = Channel.delete_thread(thread)
+
+      event = Repo.get_by!(Server.Event, kind: "thread_deleted")
+      assert event.thread_id == nil
+      assert event.detail["title"] == "test clutter"
+      assert event.detail["deleted_by"] == Application.get_env(:server, :operator, "andrew")
+      assert DateTime.diff(DateTime.utc_now(), event.created_at) < 5
+    end
+
     test "the ROOT machine thread is refused — the standing coworkers' home" do
       {:ok, root} = Channel.open_thread(%{title: "Tlön", scope: "machine"})
       {:ok, leaf} = Channel.open_thread(%{title: "a leaf", scope: "machine"})

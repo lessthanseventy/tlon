@@ -4,7 +4,7 @@ defmodule Server.Event do
   The closed `kind` the DB CHECKs (`priv/repo/migrations/*_stage_event_kind.exs`
   holds the current set) is the outcomes and judgements no other table records:
   `work_landed`, `command_approved`, `check_passed`, `check_failed`, `handoff_opened`,
-  `cited`, `stage_advanced`. A message and a session are NOT events — they
+  `cited`, `stage_advanced`, `thread_deleted`. A message and a session are NOT events — they
   are their own rows with their own timestamps, and the timeline derives them; an
   event copying them would be a second source (§2) and a dual write (§10).
   `correlation` is the explicit id of the lifecycle a row belongs to; `detail` is

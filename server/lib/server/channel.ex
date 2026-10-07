@@ -129,7 +129,8 @@ defmodule Server.Channel do
     end
   end
 
-  # The transactional body: unlink the surviving rows, delete the thread-scoped ones, then the row.
+  # The transactional body: unlink the surviving rows, delete the thread-scoped ones, record the
+  # deletion itself (who/when/title — the only trace once the row below is gone), then the row.
   defp purge_thread(thread) do
     for schema <- [Fact, Issue, Event] do
       Repo.update_all(from(r in schema, where: r.thread_id == ^thread.id), set: [thread_id: nil])
@@ -138,6 +139,17 @@ defmodule Server.Channel do
     for schema <- [Message, Todo, Question, Session] do
       Repo.delete_all(from(r in schema, where: r.thread_id == ^thread.id))
     end
+
+    {:ok, _} =
+      Server.Dossier.record_event(%{
+        kind: "thread_deleted",
+        correlation: "thread:#{thread.id}",
+        detail: %{
+          "thread_id" => thread.id,
+          "title" => thread.title,
+          "deleted_by" => Application.get_env(:server, :operator, "andrew")
+        }
+      })
 
     Repo.delete!(thread)
   end
