@@ -98,6 +98,15 @@ defmodule Server.WorklineTest do
     assert approved.awaiting == nil
   end
 
+  test "a stuck hold off a gate yields once the artifact is there: advance flips and clears it" do
+    {:ok, stuck} =
+      %{stage: "verify"} |> open!() |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
+
+    assert {:ok, advanced} = Workline.advance(stuck, artifacts: AllPresent)
+    assert advanced.stage == "review"
+    assert advanced.awaiting == nil
+  end
+
   test "the full pipeline: gates at spec→plan and review→merged, terminal at merged" do
     thread = open!(%{slug: "full-run"})
 
