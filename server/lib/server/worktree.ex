@@ -18,6 +18,9 @@ defmodule Server.Worktree do
   # re-checked here so a bad slug can never traverse out of `.worktrees/`.
   @slug ~r/\A[a-z0-9][a-z0-9-]*\z/
 
+  # A module's installed deps, keyed by the lockfile that pins them.
+  @deps %{"mix.lock" => ["deps", "_build"], "bun.lock" => ["node_modules"]}
+
   @doc """
   The branch a thread's code lives on. Matches `Server.Workline.Artifacts.Git`.
 
@@ -136,7 +139,40 @@ defmodule Server.Worktree do
       {:ok, wt}
     else
       ignore_worktrees(repo_path)
-      add(repo_path, wt, slug)
+
+      with {:ok, wt} <- add(repo_path, wt, slug) do
+        seed_deps(repo_path, wt)
+        {:ok, wt}
+      end
+    end
+  end
+
+  # A fresh checkout starts with the main checkout's installed deps wherever its lockfile is the
+  # same — fetching and compiling them again would only reproduce them; a changed lockfile is left
+  # to install. Copy-on-write where the filesystem has it (btrfs, xfs), a plain copy otherwise, never
+  # hard links: a build in the worktree rewrites files in place and would corrupt the main's.
+  defp seed_deps(repo_path, wt) do
+    for {lock, dirs} <- @deps,
+        main_lock <-
+          Path.wildcard(Path.join([repo_path, "*", lock])) ++ Path.wildcard(Path.join([repo_path, "*/*", lock])),
+        rel = Path.relative_to(Path.dirname(main_lock), repo_path),
+        not String.starts_with?(rel, ".worktrees"),
+        File.read(Path.join([wt, rel, lock])) == File.read(main_lock),
+        dir <- dirs,
+        src = Path.join([repo_path, rel, dir]),
+        dst = Path.join([wt, rel, dir]),
+        File.dir?(src) and not File.exists?(dst) do
+      copy_tree(src, dst)
+    end
+
+    :ok
+  end
+
+  defp copy_tree(src, dst) do
+    case System.cmd("cp", ["-a", "--reflink=auto", src, dst], stderr_to_stdout: true) do
+      {_, 0} -> :ok
+      # BSD cp (macOS) has no --reflink
+      _ -> System.cmd("cp", ["-Rp", src, dst], stderr_to_stdout: true)
     end
   end
 

@@ -18,15 +18,19 @@ defmodule Server.Jobs.Verify do
   def perform(%Oban.Job{args: %{"thread_id" => tid, "slug" => slug}}) do
     script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
 
+    # the gates run on the work itself: the workline's own checkout of work/<slug>, never tlon's main
+    tree = with %Server.Thread{} = t <- Channel.thread(tid), {:ok, path} <- Server.worktree_for_thread(t), do: path
+
     cond do
       !File.exists?(script) -> by_hand(tid, slug, "no tlon checkout at #{Server.Profiles.tlon_root()}")
       !System.find_executable("mise") -> by_hand(tid, slug, "no mise on the service's PATH")
-      true -> run(script, tid, slug)
+      !is_binary(tree) -> by_hand(tid, slug, "no checkout of work/#{slug} (#{inspect(tree)})")
+      true -> run(script, tid, slug, tree)
     end
   end
 
-  defp run(script, tid, slug) do
-    case System.cmd("bash", [script, to_string(tid), slug], stderr_to_stdout: true) do
+  defp run(script, tid, slug, tree) do
+    case System.cmd("bash", [script, to_string(tid), slug, tree], stderr_to_stdout: true) do
       {_, 0} -> :ok
       {out, code} -> {:error, "workline-verify exited #{code}: #{String.slice(out, -400, 400)}"}
     end

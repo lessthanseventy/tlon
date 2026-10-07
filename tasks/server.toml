@@ -86,7 +86,7 @@ dir = "server"
 run = "mix server.ledger"
 
 ["workline:verify"]
-description = "workline: the deterministic verifier — run check + flake:check, record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
+description = "workline: the deterministic verifier — run check in the workline's checkout of work/<slug> (.worktrees/<slug>), record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug>"
 run = "scripts/workline-verify.sh"
 
 ["server:web"]
