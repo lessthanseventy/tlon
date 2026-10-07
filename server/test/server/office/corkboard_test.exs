@@ -53,7 +53,7 @@ defmodule Server.Office.CorkboardTest do
       Server.TestDB.clean!()
       {:ok, ws} = Server.Workspaces.register(%{name: "Machine"})
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
-      dir = Path.join(System.tmp_dir!(), "cork-#{System.unique_integer([:positive])}")
+      dir = Path.join(System.tmp_dir!(), "cork-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
       cli = Path.join(dir, "model")
       File.write!(cli, ~s(#!/bin/sh\necho '{"note": "Whoever keeps renaming things: I see you."}'\n))

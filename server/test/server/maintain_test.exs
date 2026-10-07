@@ -59,7 +59,7 @@ defmodule Server.MaintainTest do
   end
 
   test "approving a machine-born intent materializes intent.md from the evidence — one verb, chain intact" do
-    tmp = Path.join(System.tmp_dir!(), "workline-flag-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "workline-flag-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     {_, 0} = System.cmd("git", ["-C", tmp, "init", "-q"], stderr_to_stdout: true)
     {_, 0} = System.cmd("git", ["-C", tmp, "config", "user.email", "t@t"], stderr_to_stdout: true)
@@ -176,7 +176,7 @@ defmodule Server.MaintainTest do
 
   describe "worktrees no thread is working in" do
     setup do
-      repo = Path.join(System.tmp_dir!(), "stale-wt-#{System.unique_integer([:positive])}")
+      repo = Path.join(System.tmp_dir!(), "stale-wt-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(repo)
 
       git = fn args ->

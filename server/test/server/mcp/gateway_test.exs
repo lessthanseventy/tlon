@@ -132,7 +132,7 @@ defmodule Server.MCP.GatewayTest do
   end
 
   test "GET/PATCH /api/settings read and flip the office's banter switch in the settings file" do
-    path = Path.join(System.tmp_dir!(), "tlon-config-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "tlon-config-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     Application.put_env(:server, :operator_config_path, path)
 
     on_exit(fn ->
@@ -204,7 +204,7 @@ defmodule Server.MCP.GatewayTest do
     {:ok, bare} = Channel.open_thread(%{title: "nowhere"})
     assert {404, _} = get_json("/api/threads/#{bare.id}/worktree")
 
-    repo = Path.join(System.tmp_dir!(), "tlon-worktree-api-#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "tlon-worktree-api-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(repo)
     on_exit(fn -> File.rm_rf!(repo) end)
     git = fn args -> {_, 0} = System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
@@ -240,7 +240,7 @@ defmodule Server.MCP.GatewayTest do
 
   test "a workline's brief carries the gate" do
     # the artifact check runs git under the workline root: a throwaway repo, never this checkout
-    tmp = Path.join(System.tmp_dir!(), "tlon-gateway-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "tlon-gateway-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     {_, 0} = System.cmd("git", ["-C", tmp, "init", "-q"], stderr_to_stdout: true)
     previous = Application.get_env(:server, :workline_root)

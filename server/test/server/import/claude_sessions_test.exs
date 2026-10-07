@@ -13,7 +13,7 @@ defmodule Server.Import.ClaudeSessionsTest do
 
   setup do
     Server.TestDB.clean!()
-    dir = Path.join(System.tmp_dir!(), "claude-sessions-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "claude-sessions-#{System.pid()}-#{System.unique_integer([:positive])}")
     on_exit(fn -> File.rm_rf!(dir) end)
     {:ok, ws} = Workspaces.register(%{name: "Home"})
     {:ok, general} = Projects.register(%{workspace_id: ws.id, name: "general", repos: [%{"path" => "/nowhere"}]})

@@ -199,7 +199,7 @@ defmodule Server.BootstrapTest do
 
   describe "the machine seed" do
     setup do
-      path = Path.join(System.tmp_dir!(), "tlon-machine-seed-#{System.unique_integer([:positive])}.exs")
+      path = Path.join(System.tmp_dir!(), "tlon-machine-seed-#{System.pid()}-#{System.unique_integer([:positive])}.exs")
 
       write = fn projects ->
         File.write!(path, """

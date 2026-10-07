@@ -9,7 +9,7 @@ defmodule Server.WorktreeTest do
   doctest Server.Worktree
 
   setup do
-    tmp = Path.join(System.tmp_dir!(), "worktree-test-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "worktree-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     git = fn args -> System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true) end
     {_, 0} = git.(["init", "-q"])
@@ -93,7 +93,7 @@ defmodule Server.WorktreeTest do
     end
 
     test "a non-git directory is a clean error, not a raise", %{} do
-      bare = Path.join(System.tmp_dir!(), "not-a-repo-#{System.unique_integer([:positive])}")
+      bare = Path.join(System.tmp_dir!(), "not-a-repo-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(bare)
       on_exit(fn -> File.rm_rf!(bare) end)
       assert {:error, :not_a_repo} = Worktree.ensure(bare, "x")

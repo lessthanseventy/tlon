@@ -57,7 +57,7 @@ defmodule Server.DoctorTest do
   end
 
   test "export/1 writes one JSONL file per table — the escape hatch on disk" do
-    dir = Path.join(System.tmp_dir!(), "doctor-export-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "doctor-export-#{System.pid()}-#{System.unique_integer([:positive])}")
     Server.TestDB.clean!()
 
     on_exit(fn ->

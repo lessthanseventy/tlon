@@ -52,7 +52,7 @@ defmodule Server.HarnessTest do
     end
 
     test "the config file's environment key is read when no env var is set" do
-      path = Path.join(System.tmp_dir!(), "aleph_env_test_#{System.unique_integer([:positive])}.json")
+      path = Path.join(System.tmp_dir!(), "aleph_env_test_#{System.pid()}_#{System.unique_integer([:positive])}.json")
       File.write!(path, ~s({"environment": "work"}))
       on_exit(fn -> File.rm(path) end)
 

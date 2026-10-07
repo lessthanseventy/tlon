@@ -22,7 +22,7 @@ defmodule Server.Workline.ProofTest do
 
   setup do
     Server.TestDB.clean!()
-    tmp = Path.join(System.tmp_dir!(), "tlon-proof-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "tlon-proof-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     git = fn args -> {_, 0} = System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true) end
     git.(["init", "-q", "-b", "main"])

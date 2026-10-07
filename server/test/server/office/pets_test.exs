@@ -11,7 +11,7 @@ defmodule Server.Office.PetsTest do
       {:ok, ws} = Server.Workspaces.register(%{name: "Machine"})
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
 
-      dir = Path.join(System.tmp_dir!(), "pets-#{System.unique_integer([:positive])}")
+      dir = Path.join(System.tmp_dir!(), "pets-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
       cli = Path.join(dir, "model")
       calls = Path.join(dir, "calls")
