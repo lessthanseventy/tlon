@@ -630,6 +630,24 @@ defmodule Server.MCP.ServerTest do
     assert %{body: "inbox A shipped, tests green"} = List.last(Channel.thread_messages(thread))
   end
 
+  test "the workspace's standing thread is never closed by an agent: finish posts but leaves it open, close_thread refuses" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Standing"})
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Daneri", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(lobby, agent)
+    session = handshake(token)
+    call(token, session, 2, "register", %{})
+
+    r = call(token, session, 3, "finish", %{"summary" => "ticket #15 done"})
+    refute r["isError"]
+    assert decode_tool_json(r)["stays_open"] == true
+    assert %Thread{state: "open"} = Repo.get(Thread, lobby.id)
+    assert %{body: "ticket #15 done"} = List.last(Channel.thread_messages(lobby))
+
+    assert call(token, session, 4, "close_thread", %{"thread_id" => lobby.id})["isError"]
+    assert %Thread{state: "open"} = Repo.get(Thread, lobby.id)
+  end
+
   test "staff_child with a ticket_id moves that ticket into the thread it opens", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "yu-machine", mandate: "plan", engine: "fresh"})
     {:ok, ws} = Server.Workspaces.register(%{name: "Ticketed"})

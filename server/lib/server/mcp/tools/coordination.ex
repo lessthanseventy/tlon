@@ -131,8 +131,15 @@ defmodule Server.MCP.Tool.CloseThread do
         fail(frame, "no such thread: #{params[:thread_id]}")
 
       thread ->
-        {:ok, closed} = Channel.close_thread(thread)
-        ok(frame, %{"closed" => closed.id, "state" => closed.state})
+        if Channel.standing?(thread) do
+          fail(
+            frame,
+            "thread #{thread.id} is the workspace's standing thread — every coworker's window lives on it; it is never closed"
+          )
+        else
+          {:ok, closed} = Channel.close_thread(thread)
+          ok(frame, %{"closed" => closed.id, "state" => closed.state})
+        end
     end
   end
 end

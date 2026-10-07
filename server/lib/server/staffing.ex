@@ -70,8 +70,17 @@ defmodule Server.Staffing do
     tabs -- stale
   end
 
+  # A leaf is live while its thread is open and staffed, of any scope: a delegated child (staff_child)
+  # is a project-scope thread, and a machine-scope-only test reaped every one within the minute.
   defp sweep_orphans(tabs, workspace_id, standing) do
-    live = workspace_id |> Channel.staffed_machine_threads() |> MapSet.new(& &1.id)
+    live =
+      from(t in Thread,
+        where: t.workspace_id == ^workspace_id and t.state == "open" and not is_nil(t.agent_id),
+        select: t.id
+      )
+      |> Repo.all()
+      |> MapSet.new()
+
     live = if standing, do: MapSet.put(live, standing), else: live
     {orphans, kept} = Enum.split_with(tabs, &orphan_leaf?(&1, live))
     for tab <- orphans, do: Tmux.kill_window(workspace_id, tab.index)
