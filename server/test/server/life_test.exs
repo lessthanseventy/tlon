@@ -1,5 +1,5 @@
 defmodule Server.LifeTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   describe "level/1" do
     test "0 xp is level 0" do
@@ -44,6 +44,45 @@ defmodule Server.LifeTest do
       now = DateTime.new!(~D[2026-01-05], ~T[11:00:00], "Etc/UTC")
 
       assert Server.Life.current_due_at(routine, now) == nil
+    end
+  end
+
+  describe "xp/1" do
+    setup do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "life-xp-#{System.unique_integer()}", type: "home"})
+      {:ok, routine} = Server.Routine.create_changeset(%{workspace_id: ws.id, title: "stretch", every: "@daily"}) |> Server.Repo.insert()
+      %{ws: ws, routine: routine}
+    end
+
+    test "on-time runs count full xp, late runs count half, quests add their own", %{ws: ws, routine: routine} do
+      due = DateTime.utc_now() |> DateTime.truncate(:second)
+      insert_run!(routine, due, done_at: due, late: false)
+      insert_run!(routine, DateTime.add(due, -86400), done_at: DateTime.add(due, -86400), late: true)
+
+      {:ok, quest} = Server.Quest.create_changeset(%{workspace_id: ws.id, title: "dentist", xp: 20}) |> Server.Repo.insert()
+      quest |> Server.Quest.done_changeset(DateTime.utc_now()) |> Server.Repo.update!()
+
+      # routine.xp defaults to 10: 10 (on time) + 5 (late, integer div) + 20 (quest) = 35
+      assert Server.Life.xp(ws.id) == 35
+    end
+
+    defp insert_run!(routine, due_at, done_at: done_at, late: late) do
+      %{routine_id: routine.id, due_at: due_at, done_at: done_at, late: late}
+      |> Server.RoutineRun.create_changeset()
+      |> Server.Repo.insert!()
+    end
+  end
+
+  describe "late?/3" do
+    test "on time at the boundary" do
+      due = ~U[2026-01-01 09:00:00Z]
+      refute Server.Life.late?(due, DateTime.add(due, 60 * 60), 60)
+    end
+
+    test "late one second past the window" do
+      due = ~U[2026-01-01 09:00:00Z]
+      assert Server.Life.late?(due, DateTime.add(due, 60 * 60 + 1), 60)
     end
   end
 end
