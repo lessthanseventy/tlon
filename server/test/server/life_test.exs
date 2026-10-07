@@ -144,4 +144,27 @@ defmodule Server.LifeTest do
       assert Server.Life.routine_done(routine.id, now) == {:error, :already_done}
     end
   end
+
+  describe "status/1" do
+    setup do
+      Server.TestDB.clean!()
+      :ok
+    end
+
+    test "assembles xp, level, next_level_at, streaks, due, quests, today" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "life-status-#{System.unique_integer()}", type: "home"})
+      {:ok, routine} = Server.Life.create_routine(ws.id, %{title: "stretch", every: "@daily"})
+      {:ok, _quest} = Server.Life.create_quest(ws.id, %{title: "dentist"})
+
+      status = Server.Life.status(ws.id)
+
+      assert status.xp == 0
+      assert status.level == 0
+      assert status.next_level_at == 100
+      assert Map.has_key?(status.streaks, routine.id)
+      assert is_list(status.due)
+      assert is_list(status.quests)
+      assert is_list(status.today)
+    end
+  end
 end
