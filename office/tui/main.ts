@@ -10,6 +10,7 @@ import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
+import { useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
@@ -52,6 +53,8 @@ const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
 // map). A link here that the machine repoints on a theme switch is followed within a second.
 const PALETTE = process.env.TLON_PALETTE ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/palette.json")
+// per-agent look overrides, same poll shape as PALETTE above
+const LOOKS = process.env.TLON_LOOKS ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/looks.json")
 
 const readState = (p: string) => { try { return readFileSync(p, "utf8").trim() } catch { return "" } }
 const writeState = (p: string, s: string) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, s) } catch { /* a read-only home: it just won't remember */ } }
@@ -115,6 +118,18 @@ function followPalette(): boolean {
     paletteSeen = seen
     const j = JSON.parse(readFileSync(real, "utf8")), roles = j.role ?? j
     useRoles(Object.fromEntries(Object.entries(roles).filter(([k, v]) => k in ROLE && typeof v === "string")) as Partial<Record<Role, string>>)
+    return true
+  } catch { return false }
+}
+
+let looksSeen = ""
+/** take the machine's looks.json if it changed since last look; true when it did */
+function followLooks(): boolean {
+  try {
+    const real = realpathSync(LOOKS), seen = `${real}@${statSync(real).mtimeMs}`
+    if (seen === looksSeen) return false
+    looksSeen = seen
+    useLookOverrides(JSON.parse(readFileSync(real, "utf8")) as Record<string, LookOverride>)
     return true
   } catch { return false }
 }
@@ -1456,6 +1471,7 @@ function quit() { zoom?.view.close(); leave(); process.exit(0) }
 async function main() {
   if (!process.stdin.isTTY) { console.error("office: needs a terminal"); process.exit(1) }
   followPalette()
+  followLooks()
   enter()
   process.on("uncaughtException", (e) => { leave(); console.error(e); process.exit(1) })
   let pending = "", detected = false
@@ -1488,7 +1504,7 @@ async function main() {
   await refresh()
   setInterval(refresh, 10_000)
   setInterval(pollPlayer, 2000)
-  setInterval(() => { if (followPalette()) { frame = null; draw() } }, 1000)
+  setInterval(() => { if (followPalette() || followLooks()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0

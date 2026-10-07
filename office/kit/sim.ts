@@ -387,7 +387,7 @@ export class Sim<L extends { people: Seat[] }> {
         // a turn just ended at the desk: a good stretch before getting up
         if (actor.seat.thinking && !r.thinking && actor.spot.kind === "desk" && !actor.moving) { actor.stretch = this.tick + STRETCH; actor.finished = this.tick; this.noticed(actor, "done") }
         if (actor.seat.thinking && !r.thinking) actor.cooled = this.tick
-        actor.seat = r; actor.leaving = false; continue
+        actor.seat = r; actor.leaving = false; actor.look = { ...lookOf(r.agent), ...overrideFor(r.agent) }; continue
       }
       const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
       this.actors.set(k, { seat: r, look: { ...lookOf(r.agent), ...overrideFor(r.agent) }, x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.thinking ? 1 : r.warmth ?? (r.warm ? 1 : 0) })
