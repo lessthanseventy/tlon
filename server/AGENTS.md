@@ -52,7 +52,9 @@ and every layer the spine design's re-laid §9 asked for
   deterministic ones in the gate, judged ones in `mise run server:eval`.
 
 Still deferred: the engine-credit half of presence (clocked-out from spent credits/rate-limit), the
-human-notification path, cross-thread mentions, and the `Sense` collectors.
+human-notification path, and the `Sense` collectors. (A mention of a coworker who isn't on the
+thread reaches them in their window on the workspace's standing thread; they answer with
+`consult_peer`.)
 
 Version one ran on the *work* machine and is **not on this clean-room box** (§8c). It is **evidence, not
 a source**: it exists to show what a failure looked like, never to copy a shape. Nothing here needs to be
