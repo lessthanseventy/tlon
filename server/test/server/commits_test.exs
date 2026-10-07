@@ -13,7 +13,19 @@ defmodule Server.CommitsTest do
   setup do
     tmp = Path.join(System.tmp_dir!(), "commits-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
-    git = fn args, env -> System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true, env: env) end
+
+    # The outer session running this suite may itself be a staffed thread's pane (TLON_THREAD/
+    # TLON_AUTHOR set in the real process env) — unset both unless a test explicitly supplies
+    # them, so that identity can never leak into a commit the test didn't ask for.
+    isolate_env = fn env ->
+      given = Enum.into(env, %{})
+      %{"TLON_THREAD" => nil, "TLON_AUTHOR" => nil} |> Map.merge(given) |> Map.to_list()
+    end
+
+    git = fn args, env ->
+      System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true, env: isolate_env.(env))
+    end
+
     {_, 0} = git.(["init", "-q", "-b", "main"], [])
     {_, 0} = git.(["config", "user.email", "test@test"], [])
     {_, 0} = git.(["config", "user.name", "test"], [])
