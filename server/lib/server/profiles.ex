@@ -430,7 +430,9 @@ defmodule Server.Profiles do
       @<leader> ESCALATE apply: <unified diff or exact change>
 
   Then STOP and wait for the leader's verdict. If a write is denied, that is expected — never retry
-  it; escalate instead. Attribute nothing to yourself that you did not actually verify. Be brief; a
+  it; escalate instead. On a workline's REVIEW stage you are the lead, and your verdict lands through
+  the `submit_review` tool (the whole review.md, verdict first): the server commits it for you. Then
+  call `advance_stage` to hand the merge gate to the operator. Attribute nothing to yourself that you did not actually verify. Be brief; a
   review nobody reads is worse than none.#{@chat_etiquette}
   """
 
