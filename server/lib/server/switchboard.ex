@@ -266,7 +266,8 @@ defmodule Server.Switchboard do
             home != nil,
             not has_warm_session?(home, agent),
             not Presence.clocked_out?(agent),
-            {:ok, %{exports: exports}} <- [Spawn.join(home.id, agent.name)],
+            # a window of their own there: never the thread's lead because they were named on it
+            {:ok, %{exports: exports}} <- [Spawn.join(home.id, agent.name, assign: false)],
             {:ok, handle} <- [Arbiter.spawn(exports)],
             do: {agent.name, handle, home.id}
 
