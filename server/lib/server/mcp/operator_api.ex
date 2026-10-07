@@ -97,6 +97,13 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/schedules/:id           Schedules.remove (its runs go with it)
       POST   /api/schedules/:id/run       Schedules.run_now (its calendar untouched); 201 + the run
       GET    /api/schedules/:id/runs      Office.Room.runs (the automation board, newest first)
+
+      GET    /api/life/:ws               Server.Life.status; {xp, level, next_level_at, streaks, due, quests, today}
+      POST   /api/life/:ws/routines      {"title", "every", "window_minutes"?, "xp"?, "tile"?} → Life.create_routine; 201
+      PATCH  /api/life/routines/:id      any of those, + "enabled" → Life.update_routine
+      POST   /api/life/routines/:id/done Life.routine_done; {run, level_up}
+      POST   /api/life/:ws/quests        {"title", "due_at"?, "xp"?} → Life.create_quest; 201
+      POST   /api/life/quests/:id/done   Life.quest_done; {quest, level_up}
   """
 
   import Plug.Conn
@@ -254,6 +261,16 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "DELETE", "seats", [id]), do: with_int(conn, id, &fire(conn, &1))
   defp route(conn, "DELETE", "facts", [id]), do: with_row(conn, Server.Fact, id, &forget(conn, &1))
   defp route(conn, "POST", "issues", [id, "resolve"]), do: with_row(conn, Server.Issue, id, &resolve(conn, &1))
+
+  defp route(conn, "GET", "life", [ws]), do: with_workspace(conn, ws, &json(conn, 200, Server.Life.status(&1.id)))
+
+  defp route(conn, "POST", "life", [ws, "routines"]), do: with_workspace(conn, ws, &new_routine(conn, &1))
+  defp route(conn, "POST", "life", [ws, "quests"]), do: with_workspace(conn, ws, &new_quest(conn, &1))
+
+  defp route(conn, "PATCH", "life", ["routines", id]), do: with_row(conn, Server.Routine, id, &edit_routine(conn, &1))
+  defp route(conn, "POST", "life", ["routines", id, "done"]), do: with_row(conn, Server.Routine, id, &done_routine(conn, &1))
+  defp route(conn, "POST", "life", ["quests", id, "done"]), do: with_row(conn, Server.Quest, id, &done_quest(conn, &1))
+
   defp route(conn, _, _, _), do: no_route(conn)
 
   defp on_thread(conn, "GET", [], t), do: json(conn, 200, t |> Board.brief() |> Brief.scope())
@@ -584,6 +601,44 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp schedule_row(s), do: Map.take(s, [:id, :kind, :title, :cron, :at, :enabled, :standing, :agent])
+
+  defp new_routine(conn, ws) do
+    {b, conn} = body(conn)
+    reply(conn, Server.Life.create_routine(ws.id, routine_attrs(b)), &routine_row/1, 201)
+  end
+
+  defp edit_routine(conn, r) do
+    {b, conn} = body(conn)
+    reply(conn, Server.Life.update_routine(r, routine_attrs(b)), &routine_row/1)
+  end
+
+  defp done_routine(conn, r) do
+    case Server.Life.routine_done(r.id) do
+      {:ok, run, level_up} -> json(conn, 200, %{run: routine_run_row(run), level_up: level_up})
+      {:error, reason} -> refused(conn, reason)
+    end
+  end
+
+  defp new_quest(conn, ws) do
+    {b, conn} = body(conn)
+    reply(conn, Server.Life.create_quest(ws.id, quest_attrs(b)), &quest_row/1, 201)
+  end
+
+  defp done_quest(conn, q) do
+    case Server.Life.quest_done(q.id) do
+      {:ok, quest, level_up} -> json(conn, 200, %{quest: quest_row(quest), level_up: level_up})
+      {:error, reason} -> refused(conn, reason)
+    end
+  end
+
+  defp routine_attrs(b),
+    do: for({k, v} <- b, k in ~w(title every window_minutes xp tile enabled), into: %{}, do: {String.to_existing_atom(k), v})
+
+  defp quest_attrs(b), do: for({k, v} <- b, k in ~w(title due_at xp), into: %{}, do: {String.to_existing_atom(k), v})
+
+  defp routine_row(r), do: Map.take(r, [:id, :title, :every, :window_minutes, :xp, :tile, :enabled])
+  defp routine_run_row(rr), do: Map.take(rr, [:id, :routine_id, :due_at, :done_at, :late])
+  defp quest_row(q), do: Map.take(q, [:id, :title, :due_at, :xp, :done_at])
 
   defp review_habit("approve", id), do: Server.approve_habit(id)
   defp review_habit("reject", id), do: Server.reject_habit(id)
