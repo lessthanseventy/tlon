@@ -222,7 +222,7 @@ defmodule Server.Workline do
 
     with :ok <- advanceable(thread, checker),
          :ok <- verified_artifact(thread, checker) do
-      if gated?(thread), do: park(thread, checker), else: flip(thread)
+      if gated?(thread), do: park(thread, checker, opts), else: flip(thread)
     else
       {:error, {:artifact_missing, why}} when thread.stage == "verify" ->
         if Keyword.get(opts, :reverify, checker == Git),
@@ -309,12 +309,12 @@ defmodule Server.Workline do
 
   defp queue?(_thread, _checker, _opts), do: false
 
-  defp queue(thread) do
+  defp queue(thread, why \\ "approved") do
     with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
       post_brief(
         queued,
-        "⧗ approved — in the merge queue: it lands once rebased onto main and green there, one landing at a time"
+        "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, one landing at a time"
       )
 
       {:ok, queued}
@@ -346,14 +346,101 @@ defmodule Server.Workline do
         {:ok, flipped}
 
       {:error, why} ->
-        bounce(thread, why)
+        Server.Sheriff.report(thread, "the merge queue bounced it back to build: #{why}")
+
+        bounce(
+          thread,
+          why,
+          "the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto main, fix it test-first"
+        )
     end
   end
 
   def land_queued(thread, _opts), do: {:ok, thread}
 
+  @doc """
+  The reviewer's verdict on its submitted review — `"approve"` or `"request_changes"` — recorded as
+  evidence (`workline:<slug>:review`). Changes requested send it straight back to build, its builder
+  told to read review.md: a review asking for changes never reaches the operator's gate. An approval
+  is what a standing approval (`auto_land` in the settings file) needs to land without them.
+  """
+  def review_verdict(%Thread{stage: "review"} = thread, verdict, author) when verdict in ~w(approve request_changes) do
+    {:ok, _} =
+      Dossier.record_check(%{
+        thread_id: thread.id,
+        cmd: "review verdict by #{author}",
+        exit: if(verdict == "approve", do: 0, else: 1),
+        tail: verdict,
+        correlation: "workline:#{thread.slug}:review"
+      })
+
+    if verdict == "request_changes",
+      do:
+        bounce(
+          thread,
+          "the review requested changes",
+          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
+        ),
+      else: {:ok, thread}
+  end
+
+  def review_verdict(%Thread{stage: "review"}, verdict, _author), do: {:error, {:bad_verdict, verdict}}
+  def review_verdict(%Thread{stage: stage}, _verdict, _author), do: {:error, {:not_in_review, stage}}
+
+  # A standing approval: the operator's `auto_land` paths (settings file) — a reviewed-and-approved
+  # workline whose every change sits under one lands without them, through the same gated queue.
+  # Only against the real repo, unless a test hands the policy and the changed paths outright.
+  defp auto_land?(thread, checker, opts) do
+    patterns = Keyword.get_lazy(opts, :auto_land, fn -> if checker == Git, do: auto_land_paths(), else: [] end)
+
+    with [_ | _] <- patterns,
+         true <- review_approved?(thread),
+         [_ | _] = changed <- Keyword.get_lazy(opts, :changed, fn -> Git.changed_paths(thread) end) do
+      Enum.all?(changed, fn path -> Enum.any?(patterns, &glob?(&1, path)) end)
+    else
+      _ -> false
+    end
+  end
+
+  defp auto_land_note(opts),
+    do:
+      "auto-approved by your standing approval (reviewed, and every change is under #{Enum.join(Keyword.get_lazy(opts, :auto_land, &auto_land_paths/0), ", ")})"
+
+  defp auto_land_paths, do: Server.OperatorConfig.read()["auto_land"] || []
+
+  # the newest review verdict since the workline last entered review
+  defp review_approved?(thread) do
+    entered =
+      Repo.one(
+        from e in Server.Event,
+          where:
+            e.thread_id == ^thread.id and e.kind == "stage_advanced" and
+              fragment("(?::jsonb ->> 'to') = 'review'", e.detail),
+          select: max(e.id)
+      ) || 0
+
+    Repo.one(
+      from e in Server.Event,
+        where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review" and e.id > ^entered,
+        order_by: [desc: e.id],
+        limit: 1,
+        select: e.kind
+    ) == "check_passed"
+  end
+
+  # `**` any depth, `*` within one path segment
+  defp glob?(pattern, path) do
+    re =
+      pattern
+      |> Regex.escape()
+      |> String.replace("\\*\\*", ".*")
+      |> String.replace("\\*", "[^/]*")
+
+    Regex.match?(~r/^#{re}$/, path)
+  end
+
   # back to build: the stage and its ledger row in one write, the builder restaffed and told why
-  defp bounce(thread, why) do
+  defp bounce(thread, why, headline) do
     {:ok, back} =
       Repo.transaction(fn ->
         {:ok, back} = thread |> Thread.workline_stage_changeset(%{stage: "build", awaiting: nil}) |> Repo.update()
@@ -372,13 +459,7 @@ defmodule Server.Workline do
     back = restaff(back)
     Server.Bus.broadcast({:workline_advanced, back})
 
-    post_brief(
-      back,
-      "↩ back to build — the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto main, " <>
-        "fix it test-first, then advance_stage; it comes back through verify and review."
-    )
-
-    Server.Sheriff.report(back, "the merge queue bounced it back to build: #{why}")
+    post_brief(back, "↩ back to build — #{headline}, then advance_stage; it comes back through verify and review.")
     {:error, {:bounced, why}}
   end
 
@@ -461,7 +542,13 @@ defmodule Server.Workline do
   defp gated?(%Thread{stage: "intent", born: "machine"}), do: true
   defp gated?(%Thread{stage: stage}), do: stage in @gated
 
-  defp park(thread, checker) do
+  defp park(thread, checker, opts) do
+    if thread.stage == "review" and auto_land?(thread, checker, opts),
+      do: queue(thread, auto_land_note(opts)),
+      else: park_on_operator(thread, checker)
+  end
+
+  defp park_on_operator(thread, checker) do
     {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
     Server.Bus.broadcast({:workline_gated, parked})
     proof = if parked.stage == "review", do: proof(parked, artifacts: checker)
