@@ -12,26 +12,42 @@ assert = fn name, run, expect ->
 end
 
 [
-  assert.("every working stage's brief names its owed exit artifact and the advance verb", fn ->
-    for stage <- ~w(intent spec plan build verify review), do: Brief.stage_message(thread.(stage))
-  end, fn briefs ->
-    Enum.all?(briefs, &(&1 =~ "advance_stage")) and
-      Enum.zip(~w(intent spec plan build verify review), briefs)
+  assert.(
+    "every working stage's brief names its owed exit artifact and the advance verb",
+    fn ->
+      for stage <- ~w(intent spec plan build verify review), do: Brief.stage_message(thread.(stage))
+    end,
+    fn briefs ->
+      ~w(intent spec plan build verify review)
+      |> Enum.zip(briefs)
       |> Enum.all?(fn
-        {"build", b} -> b =~ "work/s"
-        {"verify", b} -> b =~ "workline:s:verify"
-        {stage, b} -> b =~ "#{stage}.md"
+        {"build", b} -> b =~ "work/s" and b =~ "advance_stage"
+        {"verify", b} -> b =~ "the server" and b =~ "work/s" and not (b =~ "advance_stage")
+        {stage, b} -> b =~ "#{stage}.md" and b =~ "advance_stage"
       end)
-  end),
-  assert.("gated stages tell the worker the exit is the operator's", fn ->
-    {Brief.stage_message(thread.("spec")), Brief.stage_message(thread.("plan"))}
-  end, fn {spec, plan} ->
-    spec =~ "gates on the operator" and not (plan =~ "gates on the operator")
-  end),
-  assert.("the build playbook carries the failing-test write-fence advisory", fn ->
-    Brief.stage_message(thread.("build"))
-  end, &(&1 =~ "read-only")),
-  assert.("the spec playbook keeps the interview IN the thread", fn ->
-    Brief.stage_message(thread.("spec"))
-  end, &(&1 =~ "IN THIS THREAD"))
+    end
+  ),
+  assert.(
+    "gated stages tell the worker the exit is the operator's",
+    fn ->
+      {Brief.stage_message(thread.("spec")), Brief.stage_message(thread.("plan"))}
+    end,
+    fn {spec, plan} ->
+      spec =~ "gates on the operator" and not (plan =~ "gates on the operator")
+    end
+  ),
+  assert.(
+    "the build playbook carries the failing-test write-fence advisory",
+    fn ->
+      Brief.stage_message(thread.("build"))
+    end,
+    &(&1 =~ "read-only")
+  ),
+  assert.(
+    "the spec playbook keeps the interview IN the thread",
+    fn ->
+      Brief.stage_message(thread.("spec"))
+    end,
+    &(&1 =~ "IN THIS THREAD")
+  )
 ]
