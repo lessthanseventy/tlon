@@ -453,16 +453,53 @@ defmodule Server.Workline do
 
   defp restaff(%Thread{workspace_id: nil} = thread, kind), do: restaff_miss(thread, kind, "no workspace bound")
 
+  # One coworker, one workline: a lead already of this kind keeps it (spec→plan, build→verify);
+  # else the first of the kind not leading another live workline; else, the kind being on the bench
+  # but all busy, one more is hired. A kind the bench lacks is never invented.
   defp restaff(thread, kind) do
-    thread.workspace_id
-    |> Server.Workspaces.bench()
-    |> Enum.find(&(&1.archetype == kind))
-    |> case do
-      %Server.Coworker{name: name} -> hand_to(thread, kind, name)
-      _ -> restaff_miss(thread, kind, "no #{kind} on the workspace's bench")
+    of_kind = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == kind))
+    current = Server.Channel.thread_lead(thread.id)
+
+    cond do
+      of_kind == [] -> restaff_miss(thread, kind, "no #{kind} on the workspace's bench")
+      Enum.any?(of_kind, &(&1.name == current)) -> thread
+      free = Enum.find(of_kind, &(not leading_another?(&1, thread))) -> hand_to(thread, kind, free.name)
+      true -> hire_for(thread, kind, of_kind)
     end
   rescue
     e -> restaff_miss(thread, kind, Exception.message(e))
+  end
+
+  defp leading_another?(%Server.Coworker{agent_id: agent_id}, thread) do
+    Repo.exists?(
+      from t in Thread,
+        where:
+          t.agent_id == ^agent_id and t.id != ^thread.id and t.state == "open" and not is_nil(t.stage) and
+            t.stage != "merged"
+    )
+  end
+
+  @hire_names ~w(averroes beatriz emma ireneo tzinacan ulrikke runeberg nolan pierre zunz)
+
+  # the hire runs on the model its peers of the kind were set to (their workspace policy), so a
+  # reviewer moved to another model family stays one when the bench grows
+  defp hire_for(thread, kind, peers) do
+    taken = MapSet.new(Repo.all(from a in Server.Agent, select: a.name))
+    name = Enum.find(@hire_names, &(not MapSet.member?(taken, &1))) || "#{kind}-#{System.unique_integer([:positive])}"
+    ws = thread.workspace_id
+
+    case Server.Workspaces.seat(ws, %{name: name, archetype: kind}) do
+      {:ok, hired} ->
+        with %{model: model} when not is_nil(model) <-
+               Enum.find_value(peers, &Server.Workspaces.policy(ws, &1.agent_id)) do
+          Server.Workspaces.set_policy(ws, hired.agent_id, %{model: model})
+        end
+
+        hand_to(thread, kind, name)
+
+      {:error, why} ->
+        restaff_miss(thread, kind, "could not hire a #{kind}: #{inspect(why)}")
+    end
   end
 
   # Already theirs: nothing to hand over, and nothing to announce.
