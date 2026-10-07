@@ -19,6 +19,16 @@ defmodule Mix.Tasks.Server.Eval do
   def run(argv) do
     mode = Server.Eval.mode(argv)
 
+    # This boots in :dev, where runtime.exs trusts the ambient TLON_START_* env — exactly what
+    # an agent session bound to the live service has set, for its OWN MCP connection. Without
+    # this, server:check's eval step inherits them and tries to rebind the live service's own
+    # ports (:eaddrinuse) — the same env this eval already isolates its db against. Before
+    # ecto.drop, not after: that's the first Mix.Task.run call, so it's the one that triggers
+    # "loadconfig" (runtime.exs) — on the ambient env if this ran any later, locking in
+    # :start_mcp etc. before Application.put_env could ever override it back.
+    for name <- ~w(TLON_START_MCP TLON_START_WEB TLON_START_OBAN TLON_START_SWITCHBOARD TLON_START_ATTENTION),
+        do: System.put_env(name, "0")
+
     # its own database, whatever this shell inherited: a coworker's session carries the service's
     # TLON_DATABASE, and the scenarios open threads
     System.delete_env("TLON_DATABASE_URL")
