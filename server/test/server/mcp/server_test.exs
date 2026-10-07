@@ -125,6 +125,12 @@ defmodule Server.MCP.ServerTest do
                "set_urgency",
                # QA's (roster design §5)
                "submit_qa",
+               "life_status",
+               "routine_create",
+               "routine_update",
+               "routine_done",
+               "quest_create",
+               "quest_done",
                # the source verbs (repo tools design, 2026-09-08)
                "rename_identifier",
                "outline_file",

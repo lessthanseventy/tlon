@@ -45,8 +45,13 @@ defmodule Server.Routine do
 
   defp validate_every(cs) do
     case get_field(cs, :every) do
-      nil -> cs
-      every -> if match?({:ok, _}, Oban.Cron.Expression.parse(every)), do: cs, else: add_error(cs, :every, "not a cron: #{every}")
+      nil ->
+        cs
+
+      every ->
+        if match?({:ok, _}, Oban.Cron.Expression.parse(every)),
+          do: cs,
+          else: add_error(cs, :every, "not a cron: #{every}")
     end
   end
 end

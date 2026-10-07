@@ -56,17 +56,17 @@ defmodule Server.Life do
   @spec xp(integer) :: integer
   def xp(workspace_id) do
     routine_xp =
-      from(rr in RoutineRun,
-        join: r in Routine,
-        on: r.id == rr.routine_id,
-        where: r.workspace_id == ^workspace_id,
-        select: sum(fragment("CASE WHEN ? THEN ? / 2 ELSE ? END", rr.late, r.xp, r.xp))
+      Repo.one(
+        from(rr in RoutineRun,
+          join: r in Routine,
+          on: r.id == rr.routine_id,
+          where: r.workspace_id == ^workspace_id,
+          select: sum(fragment("CASE WHEN ? THEN ? / 2 ELSE ? END", rr.late, r.xp, r.xp))
+        )
       )
-      |> Repo.one()
 
     quest_xp =
-      from(q in Quest, where: q.workspace_id == ^workspace_id and not is_nil(q.done_at), select: sum(q.xp))
-      |> Repo.one()
+      Repo.one(from(q in Quest, where: q.workspace_id == ^workspace_id and not is_nil(q.done_at), select: sum(q.xp)))
 
     (routine_xp || 0) + (quest_xp || 0)
   end
@@ -158,7 +158,8 @@ defmodule Server.Life do
 
   @doc "A new routine. `{:ok, routine}` or `{:error, changeset}`."
   @spec create_routine(integer, map) :: {:ok, Routine.t()} | {:error, Ecto.Changeset.t()}
-  def create_routine(workspace_id, attrs), do: Map.put(attrs, :workspace_id, workspace_id) |> Routine.create_changeset() |> Repo.insert()
+  def create_routine(workspace_id, attrs),
+    do: attrs |> Map.put(:workspace_id, workspace_id) |> Routine.create_changeset() |> Repo.insert()
 
   @doc "Edit a routine's mutable fields."
   @spec update_routine(Routine.t(), map) :: {:ok, Routine.t()} | {:error, Ecto.Changeset.t()}
@@ -166,7 +167,8 @@ defmodule Server.Life do
 
   @doc "A new quest. `{:ok, quest}` or `{:error, changeset}`."
   @spec create_quest(integer, map) :: {:ok, Quest.t()} | {:error, Ecto.Changeset.t()}
-  def create_quest(workspace_id, attrs), do: Map.put(attrs, :workspace_id, workspace_id) |> Quest.create_changeset() |> Repo.insert()
+  def create_quest(workspace_id, attrs),
+    do: attrs |> Map.put(:workspace_id, workspace_id) |> Quest.create_changeset() |> Repo.insert()
 
   @doc "The `GET /api/life` body for one workspace."
   @spec status(integer) :: map

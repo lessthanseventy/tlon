@@ -90,6 +90,12 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.SetUrgency, name: "set_urgency")
   # QA's (roster design §5): what it saw driving a reviewed user-visible change.
   component(Server.MCP.Tool.SubmitQA, name: "submit_qa")
+  component(Server.MCP.Tool.LifeStatus, name: "life_status")
+  component(Server.MCP.Tool.RoutineCreate, name: "routine_create")
+  component(Server.MCP.Tool.RoutineUpdate, name: "routine_update")
+  component(Server.MCP.Tool.RoutineDone, name: "routine_done")
+  component(Server.MCP.Tool.QuestCreate, name: "quest_create")
+  component(Server.MCP.Tool.QuestDone, name: "quest_done")
   component(Server.MCP.Resource.Brief, name: "brief")
   component(Server.MCP.Resource.Constraints, name: "constraints")
   component(Server.MCP.Resource.Habits, name: "habits")

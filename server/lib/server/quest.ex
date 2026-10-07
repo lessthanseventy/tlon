@@ -31,6 +31,6 @@ defmodule Server.Quest do
   end
 
   def done_changeset(%__MODULE__{} = q, at) do
-    q |> change(done_at: DateTime.truncate(at, :second), updated_at: DateTime.truncate(DateTime.utc_now(), :second))
+    change(q, done_at: DateTime.truncate(at, :second), updated_at: DateTime.truncate(DateTime.utc_now(), :second))
   end
 end

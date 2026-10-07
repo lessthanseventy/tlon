@@ -268,7 +268,10 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "POST", "life", [ws, "quests"]), do: with_workspace(conn, ws, &new_quest(conn, &1))
 
   defp route(conn, "PATCH", "life", ["routines", id]), do: with_row(conn, Server.Routine, id, &edit_routine(conn, &1))
-  defp route(conn, "POST", "life", ["routines", id, "done"]), do: with_row(conn, Server.Routine, id, &done_routine(conn, &1))
+
+  defp route(conn, "POST", "life", ["routines", id, "done"]),
+    do: with_row(conn, Server.Routine, id, &done_routine(conn, &1))
+
   defp route(conn, "POST", "life", ["quests", id, "done"]), do: with_row(conn, Server.Quest, id, &done_quest(conn, &1))
 
   defp route(conn, _, _, _), do: no_route(conn)
@@ -632,7 +635,13 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp routine_attrs(b),
-    do: for({k, v} <- b, k in ~w(title every window_minutes xp tile enabled), into: %{}, do: {String.to_existing_atom(k), v})
+    do:
+      for(
+        {k, v} <- b,
+        k in ~w(title every window_minutes xp tile enabled),
+        into: %{},
+        do: {String.to_existing_atom(k), v}
+      )
 
   defp quest_attrs(b), do: for({k, v} <- b, k in ~w(title due_at xp), into: %{}, do: {String.to_existing_atom(k), v})
 
