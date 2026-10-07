@@ -58,12 +58,26 @@ defmodule Server.Workline.ContinuationTest do
   end
 
   test "at most max_turns between stage advances; an advance starts the count again", %{thread: t} do
-    for _ <- 1..5, do: Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+    for _ <- 1..3, do: Continuation.run(t.id, artifacts: Missing, max_turns: 3)
     assert length(continuations(t.id)) == 3
 
     {:ok, _} = Workline.advance(Repo.get!(Server.Thread, t.id), artifacts: Present)
     :ok = Continuation.run(t.id, artifacts: Missing, max_turns: 3)
     assert length(continuations(t.id)) == 4
+  end
+
+  test "nudges run out: the workline stops on the operator, once, saying it is stuck and why", %{thread: t} do
+    for _ <- 1..5, do: Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+
+    stuck = Repo.get!(Server.Thread, t.id)
+    assert stuck.awaiting == "andrew"
+
+    assert [m] =
+             Repo.all(
+               from m in Message, where: m.thread_id == ^t.id and m.author == "tlon" and like(m.body, "⚠ stuck%")
+             )
+
+    assert m.body =~ "plan" and m.body =~ "work/x/plan.md is not committed"
   end
 
   test "nothing to say: the artifact is there, the gate is parked, the thread is plain, a prompt is open",

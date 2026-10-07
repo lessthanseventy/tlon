@@ -5,8 +5,9 @@ defmodule Server.Workline.Continuation do
   posts a `tlon` continuation on the thread — the stage, why its artifact is missing, what to do
   — and the switchboard wakes the lead with it, the same for every harness.
 
-  Bounded: at most `max_turns` (default 3) between stage advances, so a coworker that genuinely
-  cannot produce the artifact stops being pushed and `Server.Maintain.Sweep` takes it from there.
+  Bounded: at most `max_turns` (default 3) between stage advances. A coworker that genuinely cannot
+  produce the artifact is not pushed again: the workline stops on the operator, saying it is stuck
+  and why, so it reaches them as something to decide rather than sitting quiet.
   Each continuation names the `stage_advanced` event it follows in its payload, so the count is a
   query, never a column. Silent on a plain thread, a merged one, one parked at a gate, one whose
   artifact is there, and one with a prompt open on the operator.
@@ -36,7 +37,8 @@ defmodule Server.Workline.Continuation do
          {:error, why} <- Workline.owed_status(thread, opts),
          false <- Attention.waiting?(thread_id),
          after_id = last_advance_id(thread_id),
-         sent when sent < max <- sent_since(thread_id, after_id) do
+         sent = sent_since(thread_id, after_id),
+         {:budget, true, _} <- {:budget, sent < max, {thread, why, sent}} do
       Channel.post(%{
         thread_id: thread_id,
         author: "tlon",
@@ -49,8 +51,25 @@ defmodule Server.Workline.Continuation do
 
       :ok
     else
+      {:budget, false, {thread, why, sent}} -> stuck(thread, why, sent)
       _ -> :ok
     end
+  end
+
+  # out of nudges: the operator decides — answer the lead, hand it to someone else, or close it
+  defp stuck(thread, why, sent) do
+    operator = Application.get_env(:server, :operator, "andrew")
+    {:ok, _} = thread |> Thread.workline_stage_changeset(%{awaiting: operator}) |> Repo.update()
+
+    Channel.post(%{
+      thread_id: thread.id,
+      author: "tlon",
+      body:
+        "⚠ stuck at #{thread.stage} after #{sent} nudges: #{why}. It needs you — answer the lead here, " <>
+          "hand it to someone else, or close it."
+    })
+
+    :ok
   end
 
   defp last_advance_id(thread_id) do
