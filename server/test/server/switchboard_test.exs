@@ -74,6 +74,17 @@ defmodule Server.SwitchboardTest do
       refute_received {:woke, _, _}
     end
 
+    test "a post whose only @mention is its own author still wakes the lead — \"report back to @me\"" do
+      %{thread: thread} = staffed_thread()
+
+      {:ok, m} =
+        Channel.post(%{thread_id: thread.id, author: "Robert", body: "Sandra, when it's done tell @Robert in one line"})
+
+      assert {:delivered, _} = Switchboard.deliver(m)
+      assert_received {:woke, "wSandra", _}
+      refute_received {:woke, "wRobert", _}
+    end
+
     test "an @mention wakes that coworker, not the lead" do
       %{thread: thread} = staffed_thread()
 

@@ -10,6 +10,11 @@ defmodule Server.Application do
     # outside that binary)
     Server.Standalone.boot()
 
+    # Names resolve in the VM (hosts file, then DNS from resolv.conf), never through the native
+    # inet_gethost helper: that OS process outlives the VM at shutdown, and systemd SIGKILLs it after
+    # its stop timeout and marks every restart failed.
+    :ok = :inet_db.set_lookup([:file, :dns])
+
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
     # test harness needs it so Channel.post can broadcast. The Repo is started
     # except under :test (the harness owns its lifecycle). The switchboard runner is
