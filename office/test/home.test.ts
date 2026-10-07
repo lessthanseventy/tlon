@@ -3,8 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  canPlace, connected, drop, loadHome, move, pickUp, place, remove, rotate, saveHome, startBuild, undo, type Home, type HomeTile,
+  canPlace, connected, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
 } from "../kit/home"
+import { loadHome, saveHome } from "../tui/home"
 
 const byAt = (x: HomeTile, y: HomeTile) => x.at[0] - y.at[0] || x.at[1] - y.at[1]
 
