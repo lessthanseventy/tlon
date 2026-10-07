@@ -42,12 +42,18 @@ defmodule Server.Workline.Artifacts.Git do
     end
   end
 
+  # the branch carries the workline's docs from spec on, so build is owed more than the branch:
+  # a commit the main checkout lacks that touches something other than work/<slug>/
   def check(thread, :branch) do
     branch = "work/#{thread.slug}"
 
-    case git(thread, ["rev-parse", "--verify", "--quiet", branch]) do
-      {sha, 0} -> {:ok, "#{branch} @ #{String.slice(String.trim(sha), 0, 12)}"}
-      {_out, _} -> sane_root_or(thread, fn -> {:error, "branch #{branch} does not exist"} end)
+    with {sha, 0} <- git(thread, ["rev-parse", "--verify", "--quiet", branch]),
+         {code, 0} <- git(thread, ["log", "--oneline", "HEAD..#{branch}", "--", ".", ":!work/#{thread.slug}"]) do
+      if String.trim(code) == "",
+        do: {:error, "#{branch} has no code yet — only the workline's docs"},
+        else: {:ok, "#{branch} @ #{String.slice(String.trim(sha), 0, 12)}"}
+    else
+      _ -> sane_root_or(thread, fn -> {:error, "branch #{branch} does not exist"} end)
     end
   end
 
