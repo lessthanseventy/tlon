@@ -9,6 +9,9 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, COLS, crewOf, needsYou, viewOf, type Act } from "../kit/crew"
+import {
+  drop, loadHome, move, pickUp, place, remove, rotate, saveHome, startBuild, undo, type Build, type HomeTile,
+} from "../kit/home"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
@@ -32,6 +35,7 @@ type Mode =
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] }
+  | { kind: "build" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -71,6 +75,8 @@ let g: Geometry, frame: Frame | null = null, sentImage = false, rows: Row[] = []
 /** the floor's visible window: centred on the office zone while `follow`, fixed where a manual pan left it otherwise */
 let viewport: Viewport = { x: 0, y: 0, w: 0, h: 0 }, follow = true, panned = false
 let drag: { col: number; row: number } | null = null
+/** build mode's state, kept across a leave-and-reopen so you come back where you left it */
+let build: Build | null = null
 // the room moved (re-render its frame); its art changed (resend the image)
 let roomChanged = true, imageDirty = true
 
@@ -569,6 +575,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "w", label: "in-tray", run: () => open({ kind: "tray" }) }, { key: "!", label: "triage", run: () => open({ kind: "triage" }) },
         { key: "a", label: "calendar", run: () => open({ kind: "calendar" }) }, { key: "o", label: "notes", run: () => open({ kind: "notes" }) },
         { key: "b", label: "memory", run: () => open({ kind: "memory" }) }, { key: "H", label: "the rack (health)", run: () => open({ kind: "health" }) },
+        { key: "B", label: "build mode", run: () => open({ kind: "build" }) },
         { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
         { key: "q", label: "quit", run: quit },
       ]
@@ -774,6 +781,47 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           ...(at?.habit ? [{ key: "a", label: "approve the habit", run: () => void did(data.habit(at.habit!.id, "approve")).then(reload) }, { key: "r", label: "reject the habit", run: () => void did(data.habit(at.habit!.id, "reject")).then(reload) }] : []),
           ...(at?.fact ? [{ key: "d", label: "forget the fact", run: () => ask2(`forget "${at.fact!.text.slice(0, 50)}"`, () => void did(data.forget(at.fact!.id)).then(reload)) }] : []),
           back1,
+        ],
+      }
+    }
+    case "build": {
+      if (!build) build = startBuild(loadHome())
+      const b = build
+      const mutate = (f: (b: Build) => Build): (() => void) => () => {
+        const next = f(build!)
+        const wrote = next.home !== build!.home
+        build = next
+        if (wrote) saveHome(build.home)
+        draw()
+      }
+      const [cx, cy] = b.cursor
+      const xs = [...b.home.tiles.map((t) => t.at[0]), cx], ys = [...b.home.tiles.map((t) => t.at[1]), cy]
+      const x0 = Math.min(...xs) - 1, x1 = Math.max(...xs) + 1, y0 = Math.min(...ys) - 1, y1 = Math.max(...ys) + 1
+      const code = (t: HomeTile | undefined) => (t ? t.kind.slice(0, 2).toUpperCase() : "··")
+      const rows: Row[] = []
+      for (let y = y0; y <= y1; y++) {
+        const segs: Seg[] = []
+        for (let x = x0; x <= x1; x++) {
+          const t = b.home.tiles.find((h) => h.at[0] === x && h.at[1] === y)
+          const text = ` ${code(t)} `
+          segs.push(x === cx && y === cy ? { s: text, fg: b.refused ? ROLE.alarm : ROLE.attention, bold: true } : t ? key(text) : dim(text))
+        }
+        rows.push({ segs })
+      }
+      return {
+        title: `BUILD MODE${b.carrying ? ` · carrying ${b.carrying.kind}` : ""}${b.refused ? " · refused — overlap or it would split the floor" : ""}`,
+        rows,
+        actions: [
+          { key: "up", label: "move", run: mutate((x) => move(x, 0, -1)) },
+          { key: "down", label: "move", run: mutate((x) => move(x, 0, 1)) },
+          { key: "left", label: "move", run: mutate((x) => move(x, -1, 0)) },
+          { key: "right", label: "move", run: mutate((x) => move(x, 1, 0)) },
+          { key: "enter", label: b.carrying ? "drop" : "pick up", run: mutate((x) => (x.carrying ? drop(x) : pickUp(x))) },
+          { key: "n", label: "new tile (cycles the kind)", run: mutate((x) => place(x)) },
+          { key: "x", label: "remove", run: mutate((x) => remove(x)) },
+          { key: "r", label: "rotate", run: mutate((x) => rotate(x)) },
+          { key: "u", label: "undo", run: () => { build = undo(build!); saveHome(build.home); draw() } },
+          { key: "esc", label: "leave", run: () => { back(true); roomChanged = true; draw() } },
         ],
       }
     }
@@ -1169,6 +1217,7 @@ function onKey(k: string) {
     case "!": return open({ kind: "triage" })
     case "H": return open({ kind: "health" })
     case "b": return open({ kind: "memory" })
+    case "B": return open({ kind: "build" })
     case "W": return open({ kind: "boss" })
     case "p": room().pet(); changed(); return draw()
   }
