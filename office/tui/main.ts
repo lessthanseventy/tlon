@@ -381,7 +381,10 @@ const dim = (s: string): Seg => ({ s, fg: ROLE.inactive }), plain = (s: string):
 const key = (s: string): Seg => ({ s, fg: ROLE.key }), pink = (s: string): Seg => ({ s, fg: ROLE.attention })
 const cols = () => process.stdout.columns ?? 80
 
-function threadRows(th: Thread | undefined, tid: number): Row[] {
+/** the detail pane's text width: the terminal's, less the actions column when there is room for it */
+const paneW = () => (cols() >= 80 ? cols() - ACTIONS_W - 1 : cols())
+/** a thread's rows for a card; `above`: the card's own rows over them, so the tail still ends in view */
+function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   const v = threads.get(tid), out: Row[] = []
   out.push({ segs: [key(`#${tid} `), plain(th?.title ?? "")] })
   out.push({ segs: [dim(`${th?.stage ?? "thread"}${th?.awaiting && th.stage ? ` · gated: ${th.awaiting}` : ""}${th?.lead ? ` · ${th.lead}` : ""}${th?.live ? " · running" : ""}`)] })
@@ -390,9 +393,9 @@ function threadRows(th: Thread | undefined, tid: number): Row[] {
     th.prompt.options?.forEach((o, i) => out.push({ segs: [key(` ${i + 1} `), plain(o.label)], open: () => did(data.post(tid, o.key)) }))
   } else if (th?.awaiting) out.push({ segs: [pink(`awaits ${th.awaiting}${th.stage ? " — A approves" : ""}`)] })
   // the conversation's tail, wrapped, as much as fits; `v` reads the whole of it
-  const room = DETAIL - 1 - out.length, tail: Row[] = []
+  const room = DETAIL - 1 - above - out.length, tail: Row[] = []
   for (const m of [...(v?.messages ?? [])].reverse()) {
-    const lines = wrap(`${m.author}: ${m.body}`, cols() - 4)
+    const lines = wrap(`${m.author}: ${m.body}`, paneW() - 4)
     const rowsOf = lines.map((l, i): Row => ({ segs: i ? [plain(`  ${l}`)] : [{ s: `${m.author}: `, fg: m.author === OPERATOR ? ROLE.attention : ROLE.key }, plain(l.slice(m.author.length + 2))] }))
     tail.unshift(...rowsOf)
     if (tail.length >= room) break
@@ -491,7 +494,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[] } {
       const model = b?.model ? `${b.model.provider}/${b.model.model}` : `${a.archetypes.find((x) => x.name === c.archetype)?.model ?? "?"} (archetype's)`
       const where = c.status === "working" ? "mid-turn" : a.roster.some((r) => r.agent === name && r.warm) ? "on call" : c.status === "waiting" ? "waiting on you" : "in the lounge"
       const head: Row = { segs: [{ s: c.name, fg: shirtOf(c.archetype), bold: true }, dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${where} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)] }
-      const rows = c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread)]
+      const rows = c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]
       return { title: name.toUpperCase(), rows, actions: [...(c.thread === null ? [] : threadActions(c.thread)), ...seatActions(b), back1] }
     }
     case "thread": {
