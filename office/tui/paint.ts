@@ -183,9 +183,9 @@ export function textLayer(fr: Frame, g: Geometry, viewport: Viewport = { x: 0, y
 }
 
 /** the topmost hit under a cell (1-based terminal coordinates), in the room's logical px */
-export function hitAt(fr: Frame, g: Geometry, col: number, row: number): Hit | undefined {
+export function hitAt(fr: Frame, g: Geometry, col: number, row: number, viewport: Viewport = { x: 0, y: 0, w: g.floorW, h: g.floorH }): Hit | undefined {
   const c = col - 1 - g.col, r = row - 1 - g.row
   if (c < 0 || r < 0 || c >= g.cols || r >= g.rows) return undefined
-  const x = ((c + 0.5) * g.cw) / g.k, y = ((r + 0.5) * g.ch) / g.k
+  const x = viewport.x + ((c + 0.5) * g.cw) / g.k, y = viewport.y + ((r + 0.5) * g.ch) / g.k
   return fr.hits.find((h) => x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h)
 }

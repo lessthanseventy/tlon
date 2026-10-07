@@ -21,7 +21,7 @@ import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } fro
 import { Reader } from "./reader"
 import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
-import { centerViewport, panViewport, type Viewport } from "./viewport"
+import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
 
 type Mode =
@@ -925,8 +925,9 @@ function draw() {
   const room0 = room()
   const fresh = !frame
   if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread() }, measureFor(g)); roomChanged = false }
-  if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(frame!, g, viewport); sentImage = true; imageDirty = false }
-  if (!g.kitty) textLayer(frame!, g, viewport).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
+  const seen = clipFrame(frame!, viewport)
+  if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, viewport); sentImage = true; imageDirty = false }
+  if (!g.kitty) textLayer(seen, g, viewport).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
   panned = false
   // the tip line: what the pointer is over, or what just happened
   const tipRow = g.row + g.rows + 1
@@ -1132,7 +1133,7 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
     return
   }
   drag = null
-  const h = hitAt(frame, g, m.col, m.row)
+  const h = hitAt(clipFrame(frame, viewport), g, m.col, m.row, viewport)
   if (m.motion) { const t = h?.tip ?? ""; if (t !== tip) { tip = t; draw() } return }
   if (!m.press || m.button !== 0) return
   const inRoom = inRoom0
