@@ -4,11 +4,10 @@ import Config
 # so two checkouts sharing one would delete it under each other mid-run. Each checkout gets its own:
 # a worktree at .worktrees/<name> uses tlon_test_<name>, the main checkout tlon_test.
 # TLON_TEST_DATABASE names another (a second suite in the same checkout).
-test_database =
-  case Regex.run(~r{/\.worktrees/([^/]+)/}, __DIR__) do
-    [_, name] -> "tlon_test_" <> String.slice(String.replace(name, ~r/[^A-Za-z0-9_]/, "_"), 0, 50)
-    nil -> "tlon_test"
-  end
+# The naming rule lives in Server.TestDatabaseName (config/support/), tested directly by
+# test/server/test_database_name_test.exs — a config file itself can't be run by ExUnit.
+Code.eval_file(Path.join(__DIR__, "support/test_database_name.exs"))
+test_database = Server.TestDatabaseName.compute(__DIR__, System.get_env("TLON_TEST_DATABASE"))
 
 # Oban never runs jobs on its own in test — a test performs them.
 # No commit waits for the disk (synchronous_commit off): a test db needs none to outlive a crash,
