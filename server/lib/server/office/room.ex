@@ -96,7 +96,7 @@ defmodule Server.Office.Room do
       |> Enum.uniq_by(&{&1.thread_id, cmd(&1.detail)})
       |> Enum.filter(&(&1.kind == "check_failed"))
       # a stage's owed doc not there yet is work in progress, not something stuck
-      |> Enum.reject(&String.starts_with?(cmd(&1.detail) || "", "workline artifact"))
+      |> Enum.reject(&String.starts_with?(cmd(&1.detail), "workline artifact"))
       |> Enum.map(&%{thread_id: &1.thread_id, title: &1.title, text: cmd(&1.detail)})
 
     unled =

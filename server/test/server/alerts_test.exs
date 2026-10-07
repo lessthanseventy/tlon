@@ -45,6 +45,7 @@ defmodule Server.AlertsTest do
     assert a.level == "decision" and a.key == "gate:7"
 
     assert [
+             %{label: "Read it", read: "/api/threads/7/docs/current"},
              %{label: "Approve", method: "POST", path: "/api/threads/7/approve"},
              %{label: "Other…", path: "/api/threads/7/messages", input: "body"}
            ] = a.actions

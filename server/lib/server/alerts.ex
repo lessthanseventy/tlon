@@ -73,7 +73,7 @@ defmodule Server.Alerts do
     }
   end
 
-  defp actions(%{kind: "gate", thread_id: t}), do: [call("Approve", "/approve", t), other(t)]
+  defp actions(%{kind: "gate", thread_id: t}), do: [read_doc(t), call("Approve", "/approve", t), other(t)]
 
   defp actions(%{kind: "dialog", thread_id: t, options: options}),
     do: Enum.map(options || [], &call(&1["label"], "/messages", t, %{body: &1["key"]})) ++ [other(t)]
@@ -90,6 +90,9 @@ defmodule Server.Alerts do
 
   defp call(label, sub, t, body \\ nil),
     do: %{label: label, method: "POST", path: "/api/threads/#{t}#{sub}", body: body}
+
+  # the doc the gate is about, to read before approving it
+  defp read_doc(t), do: %{label: "Read it", read: "/api/threads/#{t}/docs/current"}
 
   defp other(t), do: "Other…" |> call("/messages", t) |> Map.put(:input, "body")
 end
