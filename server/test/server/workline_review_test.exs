@@ -91,6 +91,35 @@ defmodule Server.WorklineReviewTest do
     assert {:ok, _} = Artifacts.Git.check(thread("build"), :branch)
   end
 
+  test "verify's evidence counts only since the workline last entered verify — a bounce leaves none" do
+    {:ok, t} = Server.Workline.open(%{title: "v", slug: "fresh-evidence", stage: "verify"})
+    corr = "workline:#{t.slug}:verify"
+
+    entered = fn ->
+      Server.Dossier.record_event(%{
+        thread_id: t.id,
+        kind: "stage_advanced",
+        correlation: "workline:#{t.slug}",
+        detail: %{"from" => "build", "to" => "verify"}
+      })
+    end
+
+    passed = fn ->
+      Server.Dossier.record_check(%{thread_id: t.id, cmd: "mise run check", exit: 0, tail: "", correlation: corr})
+    end
+
+    {:ok, _} = entered.()
+    {:ok, _} = passed.()
+    assert {:ok, _} = Artifacts.Git.check(t, :checks)
+
+    # bounced to build and back: the old green is about code that has changed since
+    {:ok, _} = entered.()
+    assert {:error, _} = Artifacts.Git.check(t, :checks)
+
+    {:ok, _} = passed.()
+    assert {:ok, _} = Artifacts.Git.check(t, :checks)
+  end
+
   test "resubmitting identical content is fine — the artifact is already committed" do
     {:ok, _} = Review.submit(thread(), "same words", "menard-machine")
     assert {:ok, _} = Review.submit(thread(), "same words", "menard-machine")
