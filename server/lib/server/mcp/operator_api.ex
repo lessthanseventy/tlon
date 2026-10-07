@@ -15,6 +15,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/banter/:ws       Office.Banter.lines (recent small talk; asking may write the next line)
       GET    /api/office/pets/:ws         Office.Pets.voices (the pets' lines by occasion; asking may write a batch)
       GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next)
+      GET    /api/office/focus            Office.Focus.latest (the newest "show thread N" request)
+      POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks the office TUI to open a thread
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
       GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky — each with its actions)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
@@ -124,6 +126,18 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp route(conn, "GET", "office", ["needs"]), do: json(conn, 200, Server.Office.Needs.list())
+  defp route(conn, "GET", "office", ["focus"]), do: json(conn, 200, Server.Office.Focus.latest())
+
+  defp route(conn, "POST", "office", ["focus"]) do
+    case body(conn) do
+      {%{"thread_id" => id}, conn} when is_integer(id) ->
+        json(conn, 200, Server.Office.Focus.request(id) && Server.Office.Focus.latest())
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"thread_id": n})})
+    end
+  end
+
   defp route(conn, "GET", "alerts", []), do: json(conn, 200, Server.Alerts.list())
 
   defp route(conn, "DELETE", "office", ["rollout", id]) do

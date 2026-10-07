@@ -357,6 +357,7 @@ function threadActions(tid: number, inReader = false): Action[] {
     ...(th?.stage ? [{ key: ">", label: "advance the workline", run: () => void did(data.advance(tid)) }] : []),
     { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) },
     { key: "g", label: "git (lazygit)", run: () => void zoomGit(tid) },
+    ...(th?.stage ? [{ key: "d", label: "read its docs (spec, plan…)", run: () => void pickDoc(tid) }] : []),
     {
       key: "h", label: "hand off to…", run: () => {
         const bench = view().bench
@@ -1135,6 +1136,24 @@ async function zoomGit(tid: number) {
   if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) tmux("new-session", "-d", "-s", session, "-n", "lazygit", "-c", path, "lazygit")
   zoomOn({ socket: OWN_TMUX, session, window: "lazygit" }, `#${tid} ${threadOf(tid)?.lead ?? ""} · git`)
 }
+/** a workline's docs, picked from a list */
+async function pickDoc(tid: number) {
+  const names = await data.docs(tid)
+  if (!names.length) { status = `#${tid} has no docs yet`; return draw() }
+  find(`DOCS · #${tid}`, names.map((n) => ({ segs: [{ s: n, fg: ROLE.prose }], text: n, run: () => { picker = null; void readDoc(tid, n) } })))
+}
+/** a doc read in the office's own tmux: glow renders markdown, else bat, else less */
+async function readDoc(tid: number, name: string) {
+  const text = await data.doc(tid, name)
+  if (text === null) { status = `#${tid}: no ${name}`; return draw() }
+  const dir = `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/tlon-office`, file = `${dir}/doc-${tid}-${name}`
+  mkdirSync(dir, { recursive: true }); writeFileSync(file, text)
+  const session = `doc-${tid}-${name.replace(/\W/g, "_")}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
+  tmux("kill-session", "-t", `=${session}`)
+  const show = `if command -v glow >/dev/null; then glow -p "$0"; elif command -v bat >/dev/null; then bat --paging=always --style=plain -l md "$0"; else less "$0"; fi`
+  tmux("new-session", "-d", "-s", session, "-n", "doc", "sh", "-c", show, file)
+  zoomOn({ socket: OWN_TMUX, session, window: "doc" }, `#${tid} · ${name}`)
+}
 /** the arcade's games: terminal games, played wherever the machine has installed them */
 const GAMES = [
   { name: "Space Invaders", cmd: "ninvaders", what: "ninvaders" },
@@ -1224,6 +1243,17 @@ async function main() {
   await refresh()
   setInterval(refresh, 10_000)
   setInterval(() => { if (followPalette()) { frame = null; draw() } }, 1000)
+  // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
+  // what was asked before this TUI started
+  let seenFocus = (await data.focus())?.at ?? 0
+  setInterval(async () => {
+    const f = await data.focus()
+    if (!f || f.at <= seenFocus) return
+    seenFocus = f.at
+    if (zoom) leaveZoom()
+    goThread(f.thread_id, threadOf(f.thread_id)?.workspace_id)
+    openReader(f.thread_id, false)
+  }, 1000)
   // a card showing a running coworker keeps their screen current
   setInterval(() => {
     const tid = openThread()

@@ -36,6 +36,18 @@ export async function terminal(id: number): Promise<Target | null> {
 export async function worktree(id: number): Promise<string | null> {
   try { const r = await call("GET", `/threads/${id}/worktree`); return r.status === 200 ? r.json.path : null } catch { return null }
 }
+/** the newest "show thread N" request from another surface (the desktop's alerts), or null */
+export async function focus(): Promise<{ thread_id: number; at: number } | null> {
+  try { const r = await call("GET", "/office/focus"); return r.status === 200 ? r.json : null } catch { return null }
+}
+/** a workline's docs (work/<slug>/*.md), by name */
+export async function docs(id: number): Promise<string[]> {
+  try { const r = await call("GET", `/threads/${id}/docs`); return r.status === 200 ? r.json : [] } catch { return [] }
+}
+/** one doc's text ("current": the doc the stage is about), or null */
+export async function doc(id: number, name: string): Promise<string | null> {
+  try { const r = await call("GET", `/threads/${id}/docs/${encodeURIComponent(name)}`); return r.status === 200 ? r.json.text : null } catch { return null }
+}
 export type Archive = { tickets: { id: number; title: string; closed_at: string | null }[]; threads: { id: number; title: string; stage: string | null; at: string }[] }
 /** a workspace's finished work: done tickets and closed threads, newest first */
 export async function archive(ws: number): Promise<Archive | null> {
