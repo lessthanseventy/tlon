@@ -112,4 +112,36 @@ defmodule Server.LifeTest do
 
     defp register_ws!, do: Server.Workspaces.register(%{name: "life-streak-#{System.unique_integer()}", type: "home"}) |> elem(1)
   end
+
+  describe "routine_done/2" do
+    setup do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "life-done-#{System.unique_integer()}", type: "home"})
+
+      {:ok, routine} =
+        Server.Routine.create_changeset(%{workspace_id: ws.id, title: "stretch", every: "@daily", xp: 2})
+        |> Ecto.Changeset.force_change(:created_at, DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-90_000, :second))
+        |> Server.Repo.insert()
+
+      %{ws: ws, routine: routine}
+    end
+
+    test "stamps a run and reports level_up only on the crossing stamp", %{ws: ws, routine: routine} do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+      {:ok, pad} = Server.Quest.create_changeset(%{workspace_id: ws.id, title: "pad", xp: 99}) |> Server.Repo.insert()
+      pad |> Server.Quest.done_changeset(now) |> Server.Repo.update!()
+
+      {:ok, _run, level_up} = Server.Life.routine_done(routine.id, now)
+      assert level_up == true
+
+      assert Server.Life.routine_done(routine.id, now) == {:error, :already_done}
+    end
+
+    test "a second stamp of the same instance is refused, not a second run", %{routine: routine} do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      assert {:ok, _run, _} = Server.Life.routine_done(routine.id, now)
+      assert Server.Life.routine_done(routine.id, now) == {:error, :already_done}
+    end
+  end
 end

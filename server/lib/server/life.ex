@@ -106,4 +106,53 @@ defmodule Server.Life do
   defp has_run?(routine_id, due_at) do
     Repo.exists?(from rr in RoutineRun, where: rr.routine_id == ^routine_id and rr.due_at == ^due_at)
   end
+
+  @doc """
+  Stamps the routine's current due instance as done at `at` (default now). `{:ok, run, level_up}`,
+  or `{:error, :not_found | :not_due | :already_done}`. `level_up` compares the workspace's level
+  before and after this one write.
+  """
+  @spec routine_done(integer, DateTime.t()) :: {:ok, RoutineRun.t(), boolean} | {:error, atom}
+  def routine_done(routine_id, at \\ DateTime.utc_now()) do
+    at = DateTime.truncate(at, :second)
+
+    case Repo.get(Routine, routine_id) do
+      nil -> {:error, :not_found}
+      routine -> stamp_routine(routine, at)
+    end
+  end
+
+  defp stamp_routine(routine, at) do
+    case current_due_at(routine, at) do
+      nil -> {:error, :not_due}
+      due_at -> if has_run?(routine.id, due_at), do: {:error, :already_done}, else: insert_run(routine, due_at, at)
+    end
+  end
+
+  defp insert_run(routine, due_at, at) do
+    xp_before = xp(routine.workspace_id)
+
+    {:ok, run} =
+      %{routine_id: routine.id, due_at: due_at, done_at: at, late: late?(due_at, at, routine.window_minutes)}
+      |> RoutineRun.create_changeset()
+      |> Repo.insert()
+
+    {:ok, run, level(xp(routine.workspace_id)) > level(xp_before)}
+  end
+
+  @doc "Marks a quest done at `at` (default now). `{:ok, quest, level_up}` or `{:error, :not_found | :already_done}`."
+  @spec quest_done(integer, DateTime.t()) :: {:ok, Quest.t(), boolean} | {:error, atom}
+  def quest_done(quest_id, at \\ DateTime.utc_now()) do
+    case Repo.get(Quest, quest_id) do
+      nil -> {:error, :not_found}
+      %Quest{done_at: done_at} when not is_nil(done_at) -> {:error, :already_done}
+      quest -> do_quest_done(quest, at)
+    end
+  end
+
+  defp do_quest_done(quest, at) do
+    xp_before = xp(quest.workspace_id)
+    {:ok, quest} = quest |> Quest.done_changeset(at) |> Repo.update()
+    {:ok, quest, level(xp(quest.workspace_id)) > level(xp_before)}
+  end
 end
