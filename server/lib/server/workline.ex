@@ -230,11 +230,35 @@ defmodule Server.Workline do
   Complete a parked gate — the operator's verb (tlon-cli `approve`). RE-VERIFIES the owed
   artifact before flipping: a flag-parked intent (or an artifact that vanished since the
   park) cannot ride approval past the invariant. `{:ok, thread}`,
-  `{:error, {:artifact_missing, why}}` (still parked), or `{:error, :nothing_awaiting}`.
+  `{:error, {:artifact_missing, why}}` (still parked), `{:error, :nothing_awaiting}`, or
+  `{:error, :approving}` while another approval of it is landing.
   """
   def approve(thread, opts \\ [])
 
-  def approve(%Thread{awaiting: awaiting} = thread, opts) when not is_nil(awaiting) do
+  def approve(%Thread{awaiting: awaiting} = thread, opts) when not is_nil(awaiting),
+    do: landing(thread.id, fn -> do_approve(thread, opts) end)
+
+  def approve(%Thread{}, _opts), do: {:error, :nothing_awaiting}
+
+  @doc """
+  Run `fun` as `thread_id`'s one landing: a second caller while it runs gets `{:error, :approving}`
+  at once — a burst of approve clicks is one landing, not several racing over the same checkout.
+  """
+  def landing(thread_id, fun) do
+    lock = {{:workline_landing, thread_id}, self()}
+
+    if :global.set_lock(lock, [node()], 0) do
+      try do
+        fun.()
+      after
+        :global.del_lock(lock, [node()])
+      end
+    else
+      {:error, :approving}
+    end
+  end
+
+  defp do_approve(thread, opts) do
     checker = Keyword.get(opts, :artifacts, Git)
 
     # A machine-born intent's approval IS its acceptance: server materializes intent.md from
@@ -252,8 +276,6 @@ defmodule Server.Workline do
       {:ok, flipped}
     end
   end
-
-  def approve(%Thread{}, _opts), do: {:error, :nothing_awaiting}
 
   @doc """
   The Maintain back-edge's verb: open a MACHINE-BORN workline already parked at the intent

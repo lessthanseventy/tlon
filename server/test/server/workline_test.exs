@@ -402,6 +402,24 @@ defmodule Server.WorklineTest do
     assert Channel.thread_lead(thread.id) == nil
   end
 
+  test "an approval already landing is not run twice: a second one meanwhile is refused" do
+    thread = open!(%{born: "machine", slug: "approving-twice"})
+    {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+    me = self()
+
+    holder =
+      spawn(fn ->
+        Workline.landing(parked.id, fn ->
+          send(me, :holding)
+          receive do: (:release -> :ok)
+        end)
+      end)
+
+    assert_receive :holding
+    assert {:error, :approving} = Workline.approve(parked, artifacts: AllPresent)
+    send(holder, :release)
+  end
+
   test "approve with nothing parked is refused; a plain thread is not a workline" do
     assert {:error, :nothing_awaiting} = Workline.approve(open!())
 
