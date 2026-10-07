@@ -16,6 +16,7 @@ import { WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
+import { ticketPicks } from "./finder"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader } from "./reader"
 import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
@@ -281,6 +282,7 @@ async function finder() {
     const where = wsName(t.workspace_id ?? null)
     picks.push({ segs: [tidSeg(t.id), { s: t.title, fg: ROLE.prose }, { s: `  ${where}${t.lead ? ` · ${t.lead}` : ""}${needsYou(t) ? " · waiting on you" : ""}`, fg: needsYou(t) ? ROLE.attention : ROLE.inactive }], text: `#${t.id} ${t.title} ${where} ${t.lead ?? ""}`, run: () => goThread(t.id, t.workspace_id) })
   }
+  picks.push(...ticketPicks(all.tickets, wsName, (id) => open({ kind: "ticket", id })))
   for (const w of all.workspaces) picks.push({ segs: [{ s: "workspace ", fg: ROLE.inactive }, { s: w.name, fg: ROLE.body }], text: `workspace ${w.name}`, run: () => goWs(w.id) })
   for (const c of all.bench.filter((b) => b.workspace_id === ws)) picks.push({ segs: [{ s: "coworker ", fg: ROLE.inactive }, { s: c.name, fg: shirtOf(c.archetype) }, { s: `  ${c.archetype ?? ""}`, fg: ROLE.inactive }], text: `${c.name} ${c.archetype}`, run: () => open({ kind: "person", name: c.name }) })
   for (const [label, run] of VERBS) picks.push({ segs: [{ s: "do ", fg: ROLE.inactive }, { s: label, fg: ROLE.prose }], text: label, run })
