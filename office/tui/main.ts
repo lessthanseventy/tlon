@@ -789,7 +789,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const b = build
       const mutate = (f: (b: Build) => Build): (() => void) => () => {
         const next = f(build!)
-        const wrote = next.home !== build!.home
+        const wrote = next.writes !== build!.writes
         build = next
         if (wrote) saveHome(build.home)
         draw()

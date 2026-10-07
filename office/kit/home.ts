@@ -43,10 +43,10 @@ export function canPlace(home: Home, tile: HomeTile): boolean {
   return connected([...rest, tile])
 }
 
-export type Build = { home: Home; cursor: Pt; carrying: HomeTile | null; history: Home[]; refused: boolean }
+export type Build = { home: Home; cursor: Pt; carrying: HomeTile | null; history: Home[]; refused: boolean; writes: number }
 
 export function startBuild(home: Home): Build {
-  return { home, cursor: [0, 0], carrying: null, history: [], refused: false }
+  return { home, cursor: [0, 0], carrying: null, history: [], refused: false, writes: 0 }
 }
 
 const remember = (b: Build): Home[] => [...b.history, b.home].slice(-HISTORY_LIMIT)
@@ -66,7 +66,7 @@ export function drop(b: Build): Build {
   if (!b.carrying) return b
   const tile: HomeTile = { ...b.carrying, at: b.cursor }
   if (!canPlace(b.home, tile)) return { ...b, refused: true }
-  return { ...b, home: { tiles: [...b.home.tiles, tile] }, carrying: null, refused: false, history: remember(b) }
+  return { ...b, home: { tiles: [...b.home.tiles, tile] }, carrying: null, refused: false, history: remember(b), writes: b.writes + 1 }
 }
 
 /** cycles the catalogue onto the cursor's cell: empty → the first kind, a tile there → its successor */
@@ -76,20 +76,20 @@ export function place(b: Build): Build {
   const tile: HomeTile = { kind, at: b.cursor }
   const without = { tiles: b.home.tiles.filter((t) => t !== existing) }
   if (!canPlace(without, tile)) return { ...b, refused: true }
-  return { ...b, home: { tiles: [...without.tiles, tile] }, refused: false, history: remember(b) }
+  return { ...b, home: { tiles: [...without.tiles, tile] }, refused: false, history: remember(b), writes: b.writes + 1 }
 }
 
 export function remove(b: Build): Build {
   const tile = at(b.home, b.cursor)
   if (!tile) return b
-  return { ...b, home: { tiles: b.home.tiles.filter((t) => t !== tile) }, history: remember(b) }
+  return { ...b, home: { tiles: b.home.tiles.filter((t) => t !== tile) }, history: remember(b), writes: b.writes + 1 }
 }
 
 export function rotate(b: Build): Build {
   const tile = at(b.home, b.cursor)
   if (!tile) return b
   const rot = (((tile.rot ?? 0) + 90) % 360) as HomeTile["rot"]
-  return { ...b, home: { tiles: b.home.tiles.map((t) => (t === tile ? { ...t, rot } : t)) }, history: remember(b) }
+  return { ...b, home: { tiles: b.home.tiles.map((t) => (t === tile ? { ...t, rot } : t)) }, history: remember(b), writes: b.writes + 1 }
 }
 
 export function undo(b: Build): Build {

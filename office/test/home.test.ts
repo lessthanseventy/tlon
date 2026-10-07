@@ -64,12 +64,14 @@ describe("build mode: place, pick up, drop, rotate, remove, undo", () => {
     b = pickUp(b)
     expect(b.carrying?.kind).toBe("living")
     expect(b.home.tiles).toEqual([])
+    expect(b.writes).toBe(0) // carrying is in memory only — nothing to write yet
     b = move(b, 2, 0)
     b = drop(b)
     expect(b.carrying).toBeNull()
     expect(b.home.tiles).toEqual([{ kind: "living", at: [2, 0] }])
+    expect(b.writes).toBe(1)
   })
-  test("a drop that cuts the floor in two is refused", () => {
+  test("a drop that cuts the floor in two is refused, and never counts as a write", () => {
     let b = startBuild({ tiles: [
       { kind: "living", at: [0, 0] }, { kind: "kitchen", at: [1, 0] }, { kind: "bathroom", at: [2, 0] },
     ] })
@@ -81,6 +83,7 @@ describe("build mode: place, pick up, drop, rotate, remove, undo", () => {
     expect(b.refused).toBe(true)
     expect(b.carrying?.kind).toBe("kitchen") // still carried — the drop never happened
     expect(b.home).toBe(before)
+    expect(b.writes).toBe(0) // so there is nothing a caller should persist: the file stays as it was
   })
   test("remove takes a tile off the floor; rotate marks it; undo steps back", () => {
     let b = startBuild({ tiles: [{ kind: "living", at: [0, 0] }] })
