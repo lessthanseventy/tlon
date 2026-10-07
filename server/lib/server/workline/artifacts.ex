@@ -86,6 +86,27 @@ defmodule Server.Workline.Artifacts.Git do
   end
 
   @doc """
+  A workline doc's first line of text (its heading's marks dropped) — committed on main or on the
+  workline's branch — or nil when it isn't there.
+  """
+  def doc_line(thread, name) do
+    rel = Path.join(["work", thread.slug, name])
+
+    Enum.find_value(["HEAD:#{rel}", "work/#{thread.slug}:#{rel}"], fn ref ->
+      case git(thread, ["show", ref]) do
+        {out, 0} ->
+          out
+          |> String.split("\n")
+          |> Enum.map(&(&1 |> String.trim_leading("#") |> String.trim()))
+          |> Enum.find(&(&1 != ""))
+
+        _ ->
+          nil
+      end
+    end)
+  end
+
+  @doc """
   The paths the workline branch changes, net, since it left the main checkout — its own
   `work/<slug>/` docs left out. `[]` when there is no branch to diff (so nothing can auto-land on it).
   """

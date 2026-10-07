@@ -49,11 +49,18 @@ defmodule Server.Office.Needs do
 
   defp wait(%Thread{stage: stage} = t, nil) when not is_nil(stage) do
     if Server.Workline.at_gate?(t),
-      do: item("gate", "blocking", t, "#{t.slug} waits at #{stage} for your approval", t.created_at),
+      do: item("gate", "blocking", t, gate_text(t, stage), t.created_at),
       else: question(t)
   end
 
   defp wait(t, nil), do: question(t)
+
+  # what to decide the gate on; git trouble only costs the detail
+  defp gate_text(t, stage) do
+    Server.Workline.gate_summary(t)
+  rescue
+    _ -> "#{t.slug} waits at #{stage} for your approval"
+  end
 
   # the question is the newest message from someone other than the operator
   defp question(t) do
