@@ -62,10 +62,10 @@ defmodule Server.MCP.Tool.StaffChild do
 
     with {:agent, %Agent{}} <- {:agent, Staff.agent_by_name(params[:lead])},
          {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
-         {:ok, _} <- Channel.assign_lead(thread.id, params[:lead]),
+         {:ok, lead} <- staff(thread, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
          :ok <- promote_ticket(params[:ticket_id], thread.id) do
-      ok(frame, %{"thread_id" => thread.id, "lead" => params[:lead]})
+      ok(frame, %{"thread_id" => thread.id, "lead" => lead})
     else
       {:agent, nil} ->
         fail(frame, "no registered agent named #{inspect(params[:lead])} — staff a handle from the workspace roster")
@@ -75,6 +75,28 @@ defmodule Server.MCP.Tool.StaffChild do
 
       {:error, reason} ->
         fail(frame, "staff_child failed: #{inspect(reason)}")
+    end
+  end
+
+  # a plain thread takes the pick; a workline keeps one coworker to one workline (Workline.lead_for/2):
+  # a busy or wrong-kind pick gives way to the one staffing chose when it opened, and the thread says why
+  defp staff(%{stage: nil} = thread, wanted),
+    do: with({:ok, _} <- Channel.assign_lead(thread.id, wanted), do: {:ok, wanted})
+
+  defp staff(thread, wanted) do
+    case Server.Workline.lead_for(thread, wanted) do
+      {:ok, ^wanted, :as_asked} ->
+        with {:ok, _} <- Channel.assign_lead(thread.id, wanted), do: {:ok, wanted}
+
+      {:ok, lead, {:instead, why}} ->
+        {:ok, _} =
+          Channel.post(%{
+            thread_id: thread.id,
+            author: "tlon",
+            body: "→ #{lead} leads, not #{wanted}: #{why} (one coworker, one workline)"
+          })
+
+        {:ok, lead}
     end
   end
 

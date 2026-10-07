@@ -343,6 +343,34 @@ defmodule Server.WorklineTest do
       assert Channel.thread_lead(b.id) == "yu"
     end
 
+    test "a manager's pick stands when it fits: of the stage's kind and free" do
+      {:ok, ws} =
+        bench_ws("PickFits", [
+          %{"archetype" => "planner", "name" => "yu"},
+          %{"archetype" => "planner", "name" => "averroes"}
+        ])
+
+      w = open!(%{slug: "picked", stage: "spec", workspace_id: ws.id})
+      assert {:ok, "averroes", :as_asked} = Workline.lead_for(w, "averroes")
+    end
+
+    test "a manager's pick that is busy, or the wrong kind, gives way to the rule's — and says why" do
+      {:ok, ws} =
+        bench_ws("PickGivesWay", [
+          %{"archetype" => "planner", "name" => "yu"},
+          %{"archetype" => "builder", "name" => "hronir"}
+        ])
+
+      _busy = open!(%{slug: "yu-busy", stage: "spec", workspace_id: ws.id})
+      w = open!(%{slug: "second-spec", stage: "spec", workspace_id: ws.id})
+      staffed = Channel.thread_lead(w.id)
+
+      assert {:ok, ^staffed, {:instead, why}} = Workline.lead_for(w, "yu")
+      assert why =~ "yu" and why =~ "another workline"
+      assert {:ok, ^staffed, {:instead, why}} = Workline.lead_for(w, "hronir")
+      assert why =~ "planner"
+    end
+
     test "a lead already of the stage's kind keeps the workline, busy elsewhere or not" do
       {:ok, ws} = bench_ws("Continuity", [%{"archetype" => "planner", "name" => "yu"}])
       a = open!(%{slug: "keeps", stage: "spec", workspace_id: ws.id})

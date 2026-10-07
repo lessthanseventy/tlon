@@ -471,6 +471,33 @@ defmodule Server.Workline do
     e -> restaff_miss(thread, kind, Exception.message(e))
   end
 
+  @doc """
+  Who leads `thread` when a manager asks for `wanted` (`staff_child`): them, when they are of the
+  stage's kind (intent takes anyone on the bench) and lead no other live workline — else whoever
+  staffing put there when the workline opened, and why. A pick from off the bench (a registered
+  agent the bench does not seat), or a workline staffing left without a lead, takes the pick as
+  asked. `{:ok, name, :as_asked | {:instead, why}}`.
+  """
+  def lead_for(%Thread{} = thread, wanted) do
+    current = Server.Channel.thread_lead(thread.id)
+    kind = @staff_by_stage[thread.stage]
+    seat = thread.workspace_id && thread.workspace_id |> Server.Workspaces.bench() |> Enum.find(&(&1.name == wanted))
+
+    cond do
+      is_nil(current) or is_nil(seat) ->
+        {:ok, wanted, :as_asked}
+
+      kind && seat.archetype != kind ->
+        {:ok, current, {:instead, "#{wanted} is a #{seat.archetype}; the #{thread.stage} stage is a #{kind}'s"}}
+
+      leading_another?(seat, thread) ->
+        {:ok, current, {:instead, "#{wanted} is leading another workline"}}
+
+      true ->
+        {:ok, wanted, :as_asked}
+    end
+  end
+
   defp leading_another?(%Server.Coworker{agent_id: agent_id}, thread) do
     Repo.exists?(
       from t in Thread,
