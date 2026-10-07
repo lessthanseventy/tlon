@@ -10,9 +10,9 @@ import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
-import { useLookOverrides, type LookOverride } from "../kit/looks"
+import { overrideFor, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
-import { shirtOf } from "../kit/sprites"
+import { ACCESSORY, HAIRS, HAIR_ROLES, lookOf, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
@@ -37,6 +37,7 @@ type Mode =
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] }
   | { kind: "build" } | { kind: "settings" }
+  | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -59,6 +60,15 @@ const LOOKS = process.env.TLON_LOOKS ?? join(process.env.XDG_CONFIG_HOME ?? join
 const readState = (p: string) => { try { return readFileSync(p, "utf8").trim() } catch { return "" } }
 const writeState = (p: string, s: string) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, s) } catch { /* a read-only home: it just won't remember */ } }
 
+/** read-merge-write one agent's entry into looks.json, same shape as cli.ts's importer */
+function saveLook(name: string, draft: LookOverride) {
+  let all: Record<string, LookOverride> = {}
+  try { all = JSON.parse(readFileSync(LOOKS, "utf8")) } catch { /* no file yet */ }
+  all[name] = draft
+  writeState(LOOKS, JSON.stringify(all, null, 2))
+  looksSeen = "" // our own write: make the next poll re-read it instead of treating it as already seen
+}
+
 let all: Agents = { ...EMPTY, note: "…" }
 let ws: number | null = Number(readState(STATE)) || null
 // the wide room when the terminal is wide enough for it (`wide` is its width), else the rail room
@@ -71,6 +81,15 @@ let input: Prompt | null = null
 // a card just opened: its cursor goes to the first row you can act on, once there is one
 let snapSel = false
 let confirm: { label: string; run: () => void } | null = null
+// the look card/editor's draft, not yet saved to looks.json; set on open, cleared on close/save
+let lookDraft: LookOverride | null = null
+let editBuf: Record<"front" | "side" | "back", string[]> | null = null
+let editEntry: Record<"front" | "side" | "back", string[]> | null = null
+let editCursor = { x: 0, y: 0 }
+let editScroll = 0
+let editMirror = true
+const LEGEND_CHARS = ["h", "f", "k", "s", "p", "b", "y", "c", "g", "e", "w", "r", "o"]
+const blankBuf = () => Array.from({ length: 22 }, () => ".".repeat(12))
 let picker: { title: string; q: Editor; items: Pick[]; sel: number } | null = null
 let reader: Reader | null = null
 let cell: { w: number; h: number } | null = null, kitty = process.env.OFFICE_GRAPHICS === "kitty"
@@ -239,6 +258,7 @@ function open(m: Mode) {
   mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") picked = m.tid
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
+  if (m.kind === "look") lookDraft = { ...lookOf(m.name), ...overrideFor(m.name) }
   const tid = openThread()
   void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(draw)
   draw()
@@ -246,7 +266,7 @@ function open(m: Mode) {
 /** Esc: a card back to home, home to nothing picked; `all` drops both at once */
 function back(everything = false) {
   if (everything || mode.kind === "home") picked = null
-  mode = { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null
+  mode = { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null; lookDraft = null
 }
 
 function act(x: Act) {
@@ -454,6 +474,13 @@ function seatActions(b: Coworker | undefined): Action[] {
 }
 
 // ── the detail pane ────────────────────────────────────────────────────────────────────────────
+/** step a required field forward through its catalogue, wrapping */
+function cycleVal<T>(values: readonly T[], cur: T): T { const i = values.indexOf(cur); return values[(i + 1) % values.length]! }
+/** step an optional field forward through its catalogue, with undefined ("default"/"none") as one more stop */
+function cycleOpt<T>(values: readonly T[], cur: T | undefined): T | undefined {
+  const all: (T | undefined)[] = [undefined, ...values], i = all.indexOf(cur)
+  return all[(i + 1) % all.length]
+}
 const dim = (s: string): Seg => ({ s, fg: ROLE.inactive }), plain = (s: string): Seg => ({ s, fg: ROLE.prose })
 const key = (s: string): Seg => ({ s, fg: ROLE.key }), pink = (s: string): Seg => ({ s, fg: ROLE.attention })
 const cols = () => process.stdout.columns ?? 80
@@ -654,7 +681,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
       }
       const rows = c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]
-      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), back1] }
+      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {
       const tid = mode.tid
@@ -1047,6 +1074,55 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ] : [back1],
       }
     }
+    case "look": {
+      const name = mode.name
+      const draft = (lookDraft ??= { ...lookOf(name), ...overrideFor(name) })
+      const field = (label: string, value: string, cycle: () => void): Row => ({ segs: [dim(label.padEnd(12)), plain(value)], open: () => { cycle(); draw() } })
+      const rows: Row[] = [
+        { segs: [dim("look at the room — a saved change shows there live, with no restart")] },
+        field("hair", draft.hair ?? "", () => { draft.hair = cycleVal(HAIRS, draft.hair!) }),
+        field("hair colour", draft.hairRole ?? "", () => { draft.hairRole = cycleVal(HAIR_ROLES, draft.hairRole!) }),
+        field("skin", draft.skinRole ?? "default", () => { draft.skinRole = cycleOpt(SKIN_ROLES, draft.skinRole) }),
+        field("outfit", draft.outfit ?? "none", () => { draft.outfit = cycleOpt(Object.keys(OUTFIT) as Outfit[], draft.outfit) }),
+        field("accessory", draft.accessory ?? "none", () => { draft.accessory = cycleOpt(Object.keys(ACCESSORY) as Accessory[], draft.accessory) }),
+      ]
+      return {
+        title: `LOOK · ${name.toUpperCase()}`, rows,
+        actions: [
+          // not "enter": rows[sel].open() (field-cycling) owns Enter here, same as every other card with cycled rows
+          { key: "s", label: "save", run: () => { saveLook(name, draft); lookDraft = null; back(); roomChanged = true; draw() } },
+          { key: "e", label: "draw a custom look", run: () => {
+            editBuf = { front: draft.custom?.front ? [...draft.custom.front] : blankBuf(), side: draft.custom?.side ? [...draft.custom.side] : blankBuf(), back: draft.custom?.back ? [...draft.custom.back] : blankBuf() }
+            editEntry = { front: [...editBuf.front], side: [...editBuf.side], back: [...editBuf.back] }
+            editCursor = { x: 0, y: 0 }; editScroll = 0
+            mode = { kind: "look-editor", name, view: "front" }; sel = 0; snapSel = true; draw()
+          } },
+          back1,
+        ],
+      }
+    }
+    case "look-editor": {
+      const { name, view } = mode
+      if (!editBuf) { editBuf = { front: blankBuf(), side: blankBuf(), back: blankBuf() } }
+      const draft = (lookDraft ?? { ...lookOf(name), ...overrideFor(name) }) as Look
+      const paint = paints(shirtOf(null), draft)
+      const WIN = 11
+      if (editCursor.y < editScroll + 1) editScroll = Math.max(0, editCursor.y - 1)
+      else if (editCursor.y > editScroll + WIN - 2) editScroll = Math.min(22 - WIN, editCursor.y - (WIN - 2))
+      const legend: Seg[] = LEGEND_CHARS.flatMap((ch) => [{ s: ch, fg: paint[ch] ?? ROLE.inactive }, plain(" ")])
+      const rows: Row[] = [{ segs: legend }]
+      const buf = editBuf[view]!
+      for (let y = editScroll; y < Math.min(22, editScroll + WIN); y++) {
+        const r = buf[y]!, segs: Seg[] = []
+        for (let x = 0; x < 12; x++) {
+          const ch = r[x]!, color = ch === "." ? ROLE.inactive : (paint[ch] ?? ROLE.inactive), atCursor = y === editCursor.y && x === editCursor.x
+          segs.push(atCursor ? { s: "█", fg: ROLE.ground, bg: color } : { s: ch === "." ? "·" : "█", fg: color })
+        }
+        rows.push({ segs })
+      }
+      rows.push({ segs: [dim(`1/2/3 view (${view}) · m mirror (${editMirror ? "on" : "off"}) · letter paints · . clears · ⏎ save · esc discard`)] })
+      return { title: `DRAW · ${name.toUpperCase()}`, rows, actions: [] }
+    }
   }
 }
 
@@ -1243,6 +1319,39 @@ function pickerKey(k: string) {
   draw()
 }
 
+function paintAt(ch: string) {
+  if (mode.kind !== "look-editor" || !editBuf) return
+  const view = mode.view, row = editBuf[view]![editCursor.y]!.split("")
+  row[editCursor.x] = ch
+  if (editMirror) row[11 - editCursor.x] = ch
+  editBuf[view]![editCursor.y] = row.join("")
+  draw()
+}
+
+function editorKey(k: string) {
+  if (mode.kind !== "look-editor" || !editBuf) return
+  const { name, view } = mode
+  if (k === "up") { editCursor.y = Math.max(0, editCursor.y - 1); return draw() }
+  if (k === "down") { editCursor.y = Math.min(21, editCursor.y + 1); return draw() }
+  if (k === "left") { editCursor.x = Math.max(0, editCursor.x - 1); return draw() }
+  if (k === "right") { editCursor.x = Math.min(11, editCursor.x + 1); return draw() }
+  if (k === "m") { editMirror = !editMirror; return draw() }
+  if (k === "1" || k === "2" || k === "3") {
+    mode = { kind: "look-editor", name, view: k === "1" ? "front" : k === "2" ? "side" : "back" }
+    return draw()
+  }
+  if (k === "esc") {
+    if (editEntry) editBuf[view] = [...editEntry[view]]
+    mode = { kind: "look", name }; sel = 0; snapSel = true; return draw()
+  }
+  if (k === "enter") {
+    if (lookDraft) lookDraft.custom = { front: [...editBuf.front], side: [...editBuf.side], back: [...editBuf.back] }
+    mode = { kind: "look", name }; sel = 0; snapSel = true; return draw()
+  }
+  if (k === ".") return paintAt(".")
+  if (LEGEND_CHARS.includes(k)) return paintAt(k)
+}
+
 // the last keys pressed, for the Konami code
 let keyLog: string[] = []
 
@@ -1252,6 +1361,7 @@ function onKey(k: string) {
   if (picker) return pickerKey(k)
   if (input) return inputKey(k)
   if (confirm) { const c = confirm; confirm = null; if (k === "y") c.run(); return draw() }
+  if (mode.kind === "look-editor") return editorKey(k)
   if (reader) {
     const r = reader.key(k, Math.max(1, (process.stdout.rows ?? 24) - 6))
     if (r === "leave") return closeReader()
