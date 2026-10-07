@@ -570,6 +570,12 @@ defmodule Server.Workline do
     post_brief(thread, "⤵ merged into main as #{String.slice(to, 0, 7)}")
     {:ok, _} = Server.Channel.close_thread(thread)
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
+
+    case Server.Workline.Publish.publish(repo, thread.slug, thread.title) do
+      {:ok, url} -> post_brief(thread, "⇪ published as #{url} (GitHub merges it once its checks pass)")
+      :none -> :ok
+      {:error, why} -> post_brief(thread, "⚠ landed here but not on GitHub: #{why}")
+    end
   rescue
     e ->
       require(Logger) &&
