@@ -139,9 +139,11 @@ defmodule Server.Worktree do
 
   # Commits on the branch that no OTHER branch reaches — the "unmerged" that matters for a delete.
   # (`--not --branches` would include the branch itself; excluding it first makes the set honest.)
+  # by change, not by hash: a rebase merge lands the same change on main as a new commit, so a
+  # branch is unmerged only while it holds a change ("+" in git cherry) the main checkout lacks
   defp unmerged?(repo_path, branch) do
-    case git(repo_path, ["log", "--oneline", branch, "--not", "--exclude=#{branch}", "--branches", "--"]) do
-      {out, 0} -> String.trim(out) != ""
+    case git(repo_path, ["cherry", "HEAD", branch]) do
+      {out, 0} -> out |> String.split("\n", trim: true) |> Enum.any?(&String.starts_with?(&1, "+"))
       _ -> true
     end
   end

@@ -169,6 +169,22 @@ defmodule Server.WorktreeTest do
       assert {:removed, _} = Worktree.remove(repo, "docs")
     end
 
+    test "remove/2 drops a worktree whose commits reached main by rebase — same change, new hash", %{
+      repo: repo,
+      git: git
+    } do
+      {:ok, wt} = Worktree.ensure(repo, "rebased")
+      File.write!(Path.join(wt, "work.txt"), "landed\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "work.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"])
+      # main moves on, then the same change lands on it as a different commit (a rebase merge)
+      File.write!(Path.join(repo, "other.txt"), "meanwhile\n")
+      {_, 0} = git.(["add", "other.txt"])
+      {_, 0} = git.(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "meanwhile"])
+      {_, 0} = git.(["-c", "user.email=t@t", "-c", "user.name=t", "cherry-pick", "work/rebased"])
+      assert {:removed, _} = Worktree.remove(repo, "rebased")
+    end
+
     test "remove/2 on a worktree that never existed is :none", %{repo: repo} do
       assert :none = Worktree.remove(repo, "ghost")
     end
