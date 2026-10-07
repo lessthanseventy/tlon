@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing } from "../kit/draw"
+import { ARGOS } from "../kit/pets"
 import { CAT, DOG } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom } from "../rooms/wide"
@@ -73,6 +74,15 @@ describe("the pets talk", () => {
     chance(0, () => room.step(a))
     expect(pets.cat.fuss).toMatchObject({ kind: "pat" })
     expect(pets.cat.said).toBeTruthy()
+  })
+
+  test("Argos sometimes fetches the newspaper and brings it to your office", () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), pets = room as unknown as Pets
+    chance(0.999, () => { for (let i = 0; i < 3_000 && (i < 600 || pets.dog.mode === "sleep" || pets.dog.path.length); i++) room.step(a) })
+    chance(0, () => room.step(a))
+    expect(pets.dog.mode).toBe("walk")
+    expect(ARGOS.paper).toContain(pets.dog.said)
+    expect(balloons(room, a).some((b) => b.t === "balloon" && b.cx === pets.dog.x)).toBe(true)
   })
 
   test("the server's lines come first, none said twice while another is unsaid, the coworker named", () => chance(0.999, () => {
