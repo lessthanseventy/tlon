@@ -145,6 +145,17 @@ defmodule Server.StaffingTest do
     refute_receive {:tmux, ["-L", _, "kill-window", "-t", ^t3]}, 20
   end
 
+  test "a delegated child's leaf (a project-scope thread, as staff_child opens it) is live, not an orphan",
+       %{ws: ws, standing: standing, sock: sock, session: session} do
+    {:ok, child} = Channel.open_thread(%{title: "finder", workspace_id: ws.id, parent_thread_id: standing.id})
+    {:ok, _} = Channel.assign_lead(child.id, "borges")
+    tmux("0\tborges\t\t\t1\n1\tt#{child.id}\t#{child.id}\t\t2\n")
+
+    assert :ok = Staffing.pass(ws.id)
+    t1 = "#{session}:1"
+    refute_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^t1]}, 20
+  end
+
   test "a workspace with no bench is a no-op; pass/0 walks every workspace", %{ws: _ws} do
     {:ok, empty} = Workspaces.register(%{name: "Sylvania", type: "code", scope: "project", repos: [], roster: []})
     tmux("")

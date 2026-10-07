@@ -163,14 +163,22 @@ defmodule Server.Channel do
     Repo.all(from t in Thread, where: t.state == "open" and t.scope == ^@project_scope, order_by: [desc: t.id])
   end
 
+  @doc """
+  Whether `thread` is its workspace's standing thread (the lobby, `machine_thread/1`): every
+  coworker's home window lives on it, so it is never an agent's to close.
+  """
+  def standing?(%Thread{id: id, workspace_id: ws}) when not is_nil(ws), do: match?(%Thread{id: ^id}, machine_thread(ws))
+
+  def standing?(_thread), do: false
+
   @doc ~s"""
   The ROOT machine thread — the OLDEST open machine-scope thread, or nil. The founding machine
   thread: the standing coworkers' permanent home and the Orbis Tertius meta thread (design:
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`). Also the find-or-create lookup for
   the Tlön machine coworker, so it reuses a persistent thread across restarts.
 
-  Oldest, NOT newest: every staffed child thread is machine-scope too, so a `[desc: t.id]`
-  "latest machine thread" would return a child, not the root. Child threads are always newer
+  Oldest, NOT newest: a staffed child thread can be machine-scope too (a workline always is), so a
+  `[desc: t.id]` "latest machine thread" could return a child, not the root. Child threads are always newer
   than the root, so `[asc: t.id]` returns the root and only the root (until it is closed, which
   rotation/`clear-machine-threads` must not do).
   """

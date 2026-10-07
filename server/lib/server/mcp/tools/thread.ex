@@ -323,11 +323,19 @@ defmodule Server.MCP.Tool.Finish do
 
     with {:ok, _} <- Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params[:summary]}),
          %Server.Thread{} = thread <- Channel.thread(identity.thread_id),
+         false <- Channel.standing?(thread),
          {:ok, closed} <- Channel.close_thread(thread) do
       ok(frame, %{"closed" => closed.id})
     else
-      nil -> fail(frame, "this connection's thread is gone")
-      other -> reply(frame, other, & &1)
+      # the lobby holds every coworker's window: the summary is posted, the thread stays open
+      true ->
+        ok(frame, %{"stays_open" => true, "why" => "this is the workspace's standing thread — it is never closed"})
+
+      nil ->
+        fail(frame, "this connection's thread is gone")
+
+      other ->
+        reply(frame, other, & &1)
     end
   end
 end
