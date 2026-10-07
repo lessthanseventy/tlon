@@ -32,7 +32,9 @@ config :server, Oban,
        # test/server/repo_pool_test.exs holds that line.
        # the listener is loopback, so the origin check guards nothing — but a tab at localhost or the
        # box's tailscale name reconnecting every minute logged "Could not check origin" (2026-09-18)
-       {"* * * * *", Server.Jobs.Dispatch}
+       {"* * * * *", Server.Jobs.Dispatch},
+       # the backlog's intake: the next ready ticket to the manager while worklines are under the cap
+       {"*/15 * * * *", Server.Jobs.Intake}
      ]}
   ]
 
