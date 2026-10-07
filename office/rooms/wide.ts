@@ -171,7 +171,7 @@ export class WideRoom extends Sim<Layout> {
       antic: this.antic,
       quiet: (saidUntil) => this.quiet(saidUntil),
       actors: this.actors,
-      at: (kind) => this.at(kind),
+      at: (kind) => this.peopleAt(kind),
       bed: () => this.dogBed(),
       bowl: () => this.dogBowl(),
       visit: (host) => this.plan.visit(host),
@@ -192,8 +192,8 @@ export class WideRoom extends Sim<Layout> {
   override step(a: Agents): boolean {
     const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
     if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
-    for (const x of this.at("plant")) this.watered.set(x.spot.x, (this.watered.get(x.spot.x) ?? 0) + 1)
-    this.games.step(this.tick, (kind) => this.at(kind), this.actors)
+    for (const x of this.peopleAt("plant")) this.watered.set(x.spot.x, (this.watered.get(x.spot.x) ?? 0) + 1)
+    this.games.step(this.tick, (kind) => this.peopleAt(kind), this.actors)
     // Nina at the aquarium paws at the glass, and has thoughts about the fish
     const c = this.cat, fw = fishWatch(this.z)
     if (c.x === fw.x && c.y === fw.y && !c.path.length) {
@@ -201,7 +201,7 @@ export class WideRoom extends Sim<Layout> {
       if (this.quiet(c.saidUntil) && Math.random() < 0.006) this.catSay(this.line("Nina", "fish", NINA.fish))
     }
     // at the ping-pong table for a rally, his head goes with the ball, and now and then he has to say so
-    const { table: t } = corner(this.z), d = this.dog, rally = this.at("pingpong").length === 2
+    const { table: t } = corner(this.z), d = this.dog, rally = this.peopleAt("pingpong").length === 2
     if (rally && !d.path.length && Math.abs(d.x - (t.x + t.w / 2)) < 3 && Math.abs(d.y - (t.y + t.h + 6)) < 3) {
       d.face = this.tick % 16 < 8 ? 1 : -1
       if (this.quiet(d.saidUntil) && Math.random() < 0.01) this.dogSay(this.argos("rally"))
@@ -368,14 +368,14 @@ export class WideRoom extends Sim<Layout> {
   highScores() { return this.games.highScores() }
 
   /** who is settled at a pastime of `kind`, and where */
-  private at(kind: string) { return [...this.actors.values()].filter((x) => x.spot.kind === kind && !x.moving && !x.path.length) }
+  private peopleAt(kind: string) { return [...this.actors.values()].filter((x) => x.spot.kind === kind && !x.moving && !x.path.length) }
 
   /**
    * The games corner and the aquarium. The ping-pong ball flies only when both ends are taken; a
    * cabinet runs its attract screen until someone plays, then a game; the fish come up for flakes
    * when someone at the tank feeds them.
    */
-  private live(): Live { return { at: (kind) => this.at(kind), using: (kind) => this.using(kind), cat: this.cat, actor: (agent) => this.actors.get(agent) } }
+  private live(): Live { return { at: (kind) => this.peopleAt(kind), using: (kind) => this.using(kind), cat: this.cat, actor: (agent) => this.actors.get(agent) } }
 
   private pastimes(sc: Scene, focus: Focus) {
     this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live(), focus)
