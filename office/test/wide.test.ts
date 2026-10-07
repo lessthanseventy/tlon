@@ -132,6 +132,7 @@ describe("the wide room", () => {
     }
   }))
 
+  // up to 400k ticks of the room: seconds of CPU, more when the gate runs every suite at once
   test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => seeded(7, () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1), plan = widePlan(696), blocks = plan.blocks(plan.layout(a))
     const kinds = new Set<string>()
@@ -143,7 +144,7 @@ describe("the wide room", () => {
       if (hit) throw new Error(`Argos at ${r.dog.x},${r.dog.y} (tick ${i}, ${r.antic?.kind ?? "no antic"}) is inside ${JSON.stringify(hit)}`)
     }
     expect(kinds.size).toBeGreaterThanOrEqual(2)
-  }))
+  }), 30_000)
 
   // up to 400k ticks of the room: seconds of CPU, more when the gate runs every suite at once
   test("Nina gets the zoomies: tears between the room's leaps, then lands on its floor and sits", () => seeded(11, () => {
