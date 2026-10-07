@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { contrast, ROLE } from "../kit/palette"
+import { SKIN_ROLES } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { RailRoom, W, H } from "../rooms/rail"
 import { WideRoom, WIDE_H } from "../rooms/wide"
@@ -56,6 +57,17 @@ describe("WCAG 1.4.3: text contrast", () => {
     const pane = [ROLE.prose, ROLE.inactive, ROLE.key, ROLE.attention, ROLE.body, ROLE.live, ROLE.alarm, ROLE.meta, ROLE.assistant, ROLE.builder, ROLE.reviewer, ROLE.planner, ROLE.surveyor]
     for (const c of pane) expect({ c, ratio: contrast(c, ROLE.ground) >= MIN_CONTRAST }).toMatchObject({ ratio: true })
     for (const fill of [ROLE.attention, ROLE.key]) expect({ fill, ratio: contrast(ROLE.ground, fill) >= MIN_CONTRAST }).toMatchObject({ ratio: true })
+  })
+})
+
+describe("WCAG: skin tones against the rooms", () => {
+  test("every skin role reads at 3:1 (large-shape contrast) against every room background in use today", () => {
+    // the fills a figure can stand in front of: the ground plus the room's floor/panel tones —
+    // re-run against tiles.ts's floors once step 1 lands them (spec.md §6)
+    const backgrounds = [ROLE.ground, ROLE.panel, ROLE.raised, ROLE.edge]
+    for (const skin of SKIN_ROLES) for (const bg of backgrounds) {
+      expect({ skin, bg, ratio: contrast(ROLE[skin], bg) >= 3 }).toMatchObject({ ratio: true })
+    }
   })
 })
 
