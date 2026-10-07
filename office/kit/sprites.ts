@@ -8,7 +8,8 @@ export type Pose = "stand" | "sit" | "couch"
 /** where someone likes to idle */
 export type Fav = "board" | "couch" | "cooler" | "coffee"
 export type Hair = "mop" | "spiky" | "bun" | "long" | "bald"
-export type Look = { hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number }
+export type Look = { hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number; skinRole?: Role }
+export const SKIN_ROLES: Role[] = ["builder", "surveyor", "reviewer", "assistant", "planner", "body"]
 
 export function hash(s: string) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0 }
 
@@ -210,7 +211,7 @@ export const BOSS_LOOK: Look = { hair: "mop", hairRole: "structure", decor: 1, f
 
 /** a figure's paint map: hair, skin, ink, shirt (its archetype's colour), trousers, boots, gear */
 export function paints(shirt: string, look: Look): Record<string, string> {
-  return { h: ROLE[look.hairRole], f: ROLE.prose, k: ROLE.fieldInk, s: shirt, p: ROLE.meta, b: ROLE.structure, y: ROLE.body, c: ROLE.structure, g: ROLE.key, e: ROLE.key, w: ROLE.prose, r: ROLE.alarm }
+  return { h: ROLE[look.hairRole], f: look.skinRole ? ROLE[look.skinRole] : ROLE.prose, k: ROLE.fieldInk, s: shirt, p: ROLE.meta, b: ROLE.structure, y: ROLE.body, c: ROLE.structure, g: ROLE.key, e: ROLE.key, w: ROLE.prose, r: ROLE.alarm }
 }
 /** an archetype's colour (its shirt, its sticky): its role if it has one, else gold */
 export const shirtOf = (archetype?: string | null) => ROLE[(archetype ?? "") as Role] ?? ROLE.body
