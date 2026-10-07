@@ -104,7 +104,18 @@ defmodule Server.Workline.Merge do
   defp run(repo, args, why) do
     case git(repo, args) do
       {out, 0} -> {:ok, String.trim(out)}
-      _ -> {:error, why}
+      {out, _} -> {:error, said(why, out)}
+    end
+  end
+
+  # what git said, so the operator can act on the failure, not just learn which step it was
+  defp said(why, out) do
+    out
+    |> String.trim()
+    |> String.slice(-300, 300)
+    |> case do
+      "" -> why
+      git -> "#{why} (git: #{git})"
     end
   end
 

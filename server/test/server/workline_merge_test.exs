@@ -94,6 +94,13 @@ defmodule Server.Workline.MergeTest do
     assert why =~ "work/nope"
   end
 
+  test "a git step that fails says what git said, not only which step", %{repo: repo, git: git} do
+    {_, 0} = git.(["remote", "add", "origin", repo <> "-nowhere.git"])
+    assert {:error, why} = Merge.merge(repo, "finder")
+    assert why =~ "could not be brought up to date"
+    assert why =~ "nowhere.git"
+  end
+
   test "main is brought up to date with its remote first, so a landing builds on what GitHub has", %{
     repo: repo,
     git: git
