@@ -98,16 +98,18 @@ export function floorPlan<L extends { people: Seat[] }>(
   return {
     ...rest,
     queue: [], // office tile contributes queue via its own spots() entry — see below
-    lounge: tiles.flatMap((t) => t.spots as any), // placeholder — real shape built per task 3
+    lounge: tiles.flatMap((t) => t.spots as any), // placeholder — NOT real code, see below
     blocks: (l) => tiles.flatMap((t) => t.blocks(l)),
   }
 }
 ```
 
-This sketch is deliberately thin — task 3 below nails the exact union (which spot kinds come from
-which tile's `spots()`, and how `cat-corner`'s partial `CatPlan` merges with the rest) once the
-first two tiles exist to test it against. Don't take the snippet above as final; it's here to fix
-the shape, not the body.
+This sketch is deliberately thin and does not typecheck as written (the `as any` is marking where
+the real union goes, not code to ship) — task 10 below nails the exact union (which spot kinds come
+from which tile's `spots()`, keyed by `Kind | Pastime`, and how `cat-corner`'s partial `CatPlan`
+merges with the rest's) once all six tiles exist to compose. **The `as any` must not survive task
+10** — `floorPlan`'s final body is fully typed, built against the real `Tile<L>.spots()` return
+shape, with no escape hatch.
 
 ## `home.json`
 
@@ -136,9 +138,12 @@ Add to `test/wide.test.ts`, **before any extraction**, so it's red-then-green-at
 ```ts
 import { createHash } from "node:crypto"
 
-test("the room's pixels don't move: a golden hash per width", () => {
-  // generated once against main (pre-cut) with `bun test -t golden --update` (see below); this
-  // step's whole job is for every one of these to stay the same.
+test("the room's pixels don't move: a golden hash per width", () => seeded(1, () => {
+  // generated once against main (pre-cut) with the seed fixed at 1 (see below); this step's whole
+  // job is for every one of these to stay the same. People and pets choose randomly every tick
+  // (idle targets, Nina's zoomies, Argos' wandering), so the hash MUST be captured under the same
+  // seeded() Math.random this test runs under — unseeded, a 300-tick hash is a coin flip and the
+  // tripwire proves nothing.
   const golden: Record<number, string> = {
     540: "<fill in from the baseline run>",
     560: "<fill in from the baseline run>",
@@ -153,15 +158,13 @@ test("the room's pixels don't move: a golden hash per width", () => {
     const got = createHash("sha256").update(Buffer.from(fr.rgba)).digest("hex")
     expect(got).toBe(hash)
   }
-})
+}))
 ```
 
-**Task 0** fills in `golden` by running this against the *current* `wide.ts` (print the hash
-instead of asserting, commit the filled-in table), so the test is a real tripwire from the first
-extraction commit on. `Math.random` isn't seeded here on purpose — `office(6)`'s roster is enough
-seats that the frame after 300 ticks is dominated by deterministic layout/furniture, not pet idling;
-if a later task finds this flaky, seed it (`seeded(1, …)`) and re-capture the hashes once, not per
-task.
+**Task 0** fills in `golden` by running this against the *current* `wide.ts`, seed fixed at 1 from
+the start (print the hash instead of asserting, commit the filled-in table) — not seeded "later if
+it turns out flaky": unseeded, the hash is never reproducible, so an unseeded version of this test
+would never have been a tripwire at all, from the first extraction commit on.
 
 ## The route test, extended
 
@@ -187,6 +190,12 @@ test("no walk crosses the furniture, tile by tile", () => {
   }
 })
 ```
+
+This is weaker than the plan's per-tile routing (§2.2's eventual door-graph BFS, which needs real
+tile boundaries and doesn't exist yet) — accepted for this step, since every tile still shares the
+one `route()` on the composed floor and the full composed-floor walk test already proves every
+actual route taken is furniture-free. A tile whose spot sits inside its own block is still a bug
+worth catching now, just a narrower one than "every route through this tile alone" would be.
 
 ## Argos → `kit/pets.ts` (new)
 
