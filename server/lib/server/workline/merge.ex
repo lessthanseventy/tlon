@@ -1,6 +1,7 @@
 defmodule Server.Workline.Merge do
   @moduledoc """
-  The approved workline's last act: land its branch `work/<slug>` on `main`, linearly — the branch
+  The approved workline's last act: land its branch `work/<slug>` on `main` (first brought up to date
+  with its remote), linearly — the branch
   is rebased onto main (in its worktree, where it is checked out), then main fast-forwards to it, as
   the remote takes no merge commits. It runs in the checkout people work in, so it is careful: only
   onto `main`, only with nothing uncommitted, and a conflict is aborted — main and the branch left
@@ -27,6 +28,7 @@ defmodule Server.Workline.Merge do
              ["diff", "--cached", "--quiet"],
              "#{repo} has staged, uncommitted changes — commit them, then approve again"
            ),
+         {:ok, _} <- sync(repo),
          {:ok, from} <- run(repo, ["rev-parse", "HEAD"], "no HEAD"),
          {:ok, _} <- rebase(repo, branch),
          {:ok, _} <- run(repo, ["merge", "--ff-only", "--quiet", branch], "main could not fast-forward to #{branch}"),
@@ -35,6 +37,22 @@ defmodule Server.Workline.Merge do
     else
       {:ok, other} -> {:error, "#{repo} is on #{other}, not main — the merge goes onto main"}
       {:error, _} = e -> e
+    end
+  end
+
+  # main up to date with its remote first: what GitHub merged (as new commits, by rebase) is pulled
+  # in and this machine's copies of it drop out, so the landing builds on what GitHub has
+  defp sync(repo) do
+    case git(repo, ["remote", "get-url", "origin"]) do
+      {_, 0} ->
+        run(
+          repo,
+          ["pull", "--rebase", "--quiet", "origin", "main"],
+          "main could not be brought up to date with origin — sort it out, then approve again"
+        )
+
+      _ ->
+        {:ok, :no_remote}
     end
   end
 

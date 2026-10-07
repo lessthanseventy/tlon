@@ -93,4 +93,28 @@ defmodule Server.Workline.MergeTest do
     assert {:error, why} = Merge.merge(repo, "nope")
     assert why =~ "work/nope"
   end
+
+  test "main is brought up to date with its remote first, so a landing builds on what GitHub has", %{
+    repo: repo,
+    git: git
+  } do
+    remote = repo <> "-remote.git"
+    on_exit(fn -> File.rm_rf!(remote) end)
+    {_, 0} = System.cmd("git", ["init", "-q", "--bare", "-b", "main", remote])
+    {_, 0} = git.(["remote", "add", "origin", remote])
+    {_, 0} = git.(["push", "-q", "-u", "origin", "main"])
+
+    # something lands on GitHub's main that this machine has not pulled
+    other = repo <> "-other"
+    on_exit(fn -> File.rm_rf!(other) end)
+    {_, 0} = System.cmd("git", ["clone", "-q", remote, other])
+    File.write!(Path.join(other, "theirs.txt"), "from github\n")
+
+    for args <- [~w(add theirs.txt), ~w(-c user.email=t@t -c user.name=t commit -qm theirs), ~w(push -q origin main)],
+        do: {_, 0} = System.cmd("git", ["-C", other | args])
+
+    assert {:ok, _} = Merge.merge(repo, "finder")
+    assert File.read!(Path.join(repo, "theirs.txt")) == "from github\n"
+    assert File.read!(Path.join(repo, "b.txt")) == "built\n"
+  end
 end
