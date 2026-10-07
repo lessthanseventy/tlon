@@ -42,6 +42,7 @@
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
+#   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
 set -euo pipefail
@@ -375,6 +376,12 @@ case "$cmd" in
     # Open a workline at stage intent — the operator's kickoff. The stage machine takes it
     # from here (advance_stage / approve).
     exec "$SERVER" rpc "case Server.Workline.open(%{title: \"$(esc "$title")\", slug: \"$(esc "$slug")\"}) do {:ok, t} -> IO.puts(\"workline ##{t.id} #{t.slug} at #{t.stage} — folder work/#{t.slug}/\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\") end"
+    ;;
+
+  worktree)
+    tid="${1:-}"
+    int "$tid" || { echo 'usage: tlon-cli.sh worktree <thread-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.worktree_for_thread($tid) do {:ok, path} -> IO.puts(path); other -> IO.puts(:stderr, inspect(other)); System.halt(1) end"
     ;;
 
   advance)

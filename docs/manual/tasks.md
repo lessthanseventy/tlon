@@ -121,7 +121,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
-| `workline:verify` | workline: the deterministic verifier — run check in the workline's checkout of work/<slug> (.worktrees/<slug>), record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug> |
+| `workline:verify` | workline: the deterministic verifier — run check on work/<slug> rebased onto main, from the thread's own checkout (asked of the server), record CHECKS evidence (workline:<slug>:verify), advance on green. usage: mise run workline:verify -- <thread-id> <slug> |
 
 ## —
 
