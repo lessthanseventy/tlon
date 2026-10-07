@@ -42,6 +42,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/hand-off    {"agent"} → Staffing.hand_off (staffed now where Oban runs)
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
       POST   /api/threads/:id/approve     Workline.approve: complete its parked gate
+      GET    /api/threads/:id/docs        Workline.Docs.list (the workline's docs: work/<slug>/*.md)
+      GET    /api/threads/:id/docs/:name  Workline.Docs.read (one doc's text; "current" is the stage's)
       POST   /api/threads/:id/verify      run a workline's verify again (Jobs.Verify), as entering verify does; 409 off verify
       POST   /api/threads/:id/track       Workline.promote: make a plain thread a workline
       POST   /api/threads/:id/checks      {"slug", "exit", "cmd", "tail"?} → Dossier.record_check (the verify stage's evidence)
@@ -213,6 +215,15 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "GET", ["messages"], t), do: messages(conn, t)
   defp on_thread(conn, "GET", ["terminal"], t), do: terminal(conn, t)
   defp on_thread(conn, "GET", ["worktree"], t), do: worktree(conn, t)
+  defp on_thread(conn, "GET", ["docs"], t), do: json(conn, 200, Server.Workline.Docs.list(t))
+
+  defp on_thread(conn, "GET", ["docs", name], t) do
+    case Server.Workline.Docs.read(t, name) do
+      {:ok, text} -> json(conn, 200, %{name: name, text: text})
+      {:error, why} -> json(conn, 404, %{error: why})
+    end
+  end
+
   defp on_thread(conn, "POST", ["messages"], t), do: post(conn, t)
   defp on_thread(conn, "POST", ["close"], t), do: reply(conn, Channel.close_thread(t), &thread_row/1)
   defp on_thread(conn, "POST", ["hand-off"], t), do: hand_off(conn, t)
