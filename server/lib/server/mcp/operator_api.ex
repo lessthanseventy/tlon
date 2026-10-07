@@ -15,6 +15,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/banter/:ws       Office.Banter.lines (recent small talk; asking may write the next line)
       GET    /api/office/pets/:ws         Office.Pets.voices (the pets' lines by occasion; asking may write a batch)
       GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next)
+      GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
+      DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
       GET    /api/office/suggestions/:ws  Office.Corkboard.suggestions (the suggestion box)
       DELETE /api/office/suggestions/:ws/:id  Office.Corkboard.drop (filed as a ticket, or thrown out)
       GET    /api/office/activity/:ws     Office.Room.activity (what just happened: the in-tray)
@@ -114,6 +116,15 @@ defmodule Server.MCP.OperatorAPI do
     case Integer.parse(ws) do
       {id, ""} -> json(conn, 200, Server.Office.Banter.lines(id))
       _ -> json(conn, 404, %{error: "no workspace #{ws}"})
+    end
+  end
+
+  defp route(conn, "GET", "office", ["needs"]), do: json(conn, 200, Server.Office.Needs.list())
+
+  defp route(conn, "DELETE", "office", ["rollout", id]) do
+    case Integer.parse(id) do
+      {n, ""} -> json(conn, 200, %{ok: Server.Rollout.dismiss(n) == :ok})
+      _ -> json(conn, 404, %{error: "no rollout note #{id}"})
     end
   end
 
