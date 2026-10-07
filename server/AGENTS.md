@@ -78,6 +78,11 @@ human-notification path, and the `Sense` collectors. (A mention of a coworker wh
 thread reaches them in their window on the workspace's standing thread; they answer with
 `consult_peer`.)
 
+**The life side has no privacy boundary yet.** `routine`/`routine_run`/`quest` rows are plain
+Postgres, readable by any coworker holding a `home`-type workspace's MCP tools — same trust
+model as everything else on this box, named here before anyone runs a second `home` workspace
+that isn't andrew's own.
+
 Version one ran on the *work* machine and is **not on this clean-room box** (§8c). It is **evidence, not
 a source**: it exists to show what a failure looked like, never to copy a shape. Nothing here needs to be
 backwards compatible with it.
