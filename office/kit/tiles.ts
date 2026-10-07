@@ -13,6 +13,8 @@ export type Rect = { x: number; y: number; w: number; h: number }
 export type Live = {
   /** who is settled at a pastime of this kind, and where */
   at(kind: Kind | Pastime): Actor[]
+  /** someone there now, mid-walk-up included (coffee at the machine starts the moment they arrive) */
+  using(kind: Kind | Pastime): boolean
   /** Nina's position, for a tile whose art reacts to her (the aquarium's fish gathering at the glass) */
   cat: Pt
 }
