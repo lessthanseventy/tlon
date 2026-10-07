@@ -90,21 +90,66 @@ defmodule Server.Workline.Artifacts.Git do
   workline's branch — or nil when it isn't there.
   """
   def doc_line(thread, name) do
+    if text = doc(thread, name) do
+      text
+      |> String.split("\n")
+      |> Enum.map(&(&1 |> String.trim_leading("#") |> String.trim()))
+      |> Enum.find(&(&1 != ""))
+    end
+  end
+
+  @doc "A workline doc's text, committed on main or on the workline's branch, or nil."
+  def doc(thread, name) do
     rel = Path.join(["work", thread.slug, name])
 
     Enum.find_value(["HEAD:#{rel}", "work/#{thread.slug}:#{rel}"], fn ref ->
       case git(thread, ["show", ref]) do
-        {out, 0} ->
-          out
-          |> String.split("\n")
-          |> Enum.map(&(&1 |> String.trim_leading("#") |> String.trim()))
-          |> Enum.find(&(&1 != ""))
-
-        _ ->
-          nil
+        {out, 0} -> out
+        _ -> nil
       end
     end)
   end
+
+  @doc """
+  What the workline branch changes, net, since it left the main checkout — its own `work/<slug>/`
+  docs left out: `%{paths, deleted, lines, diff}`, `lines` the added plus deleted (a binary file's
+  count as 0). No branch reads as no change.
+  """
+  def change(thread) do
+    range = "HEAD...work/#{thread.slug}"
+    only = ["--", ".", ":!work/#{thread.slug}"]
+
+    lines =
+      case git(thread, ["diff", "--numstat", range | only]) do
+        {out, 0} ->
+          for line <- String.split(out, "\n", trim: true),
+              [a, d | _] = String.split(line, "\t"),
+              reduce: 0,
+              do: (acc -> acc + count(a) + count(d))
+
+        _ ->
+          0
+      end
+
+    diff =
+      case git(thread, ["diff", range | only]) do
+        {out, 0} -> out
+        _ -> ""
+      end
+
+    %{
+      paths: changed_paths(thread),
+      deleted: names(git(thread, ["diff", "--name-only", "--diff-filter=D", range | only])),
+      lines: lines,
+      diff: diff
+    }
+  end
+
+  defp count("-"), do: 0
+  defp count(n), do: String.to_integer(n)
+
+  defp names({out, 0}), do: String.split(out, "\n", trim: true)
+  defp names(_), do: []
 
   @doc """
   The paths the workline branch changes, net, since it left the main checkout — its own

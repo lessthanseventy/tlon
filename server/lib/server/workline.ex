@@ -22,6 +22,7 @@ defmodule Server.Workline do
   alias Server.Thread
   alias Server.Workline.Artifacts.Git
   alias Server.Workline.Brief
+  alias Server.Workline.Grade
   alias Server.Workline.Scribe
 
   @stages ~w(intent spec plan build verify review merged)
@@ -371,7 +372,8 @@ defmodule Server.Workline do
         {:error, why} -> why
       end
 
-    "#{verdict} · #{size} — approve to land it through the merge queue"
+    risk = if grade = grade(thread), do: " · #{Grade.line(grade)}", else: ""
+    "#{verdict} · #{size}#{risk} — approve to land it through the merge queue"
   end
 
   def gate_summary(%Thread{stage: stage, slug: slug}), do: "work/#{slug}/#{stage}.md is ready — approve to move on"
@@ -380,7 +382,8 @@ defmodule Server.Workline do
   The reviewer's verdict on its submitted review — `"approve"` or `"request_changes"` — recorded as
   evidence (`workline:<slug>:review`). Changes requested send it straight back to build, its builder
   told to read review.md: a review asking for changes never reaches the operator's gate. An approval
-  is what a standing approval (`auto_land` in the settings file) needs to land without them.
+  is what a standing approval (`auto_land_risk` in the settings file) needs to land without them,
+  and asks for the risk grade it is decided on (`Server.Jobs.Grade`).
   """
   def review_verdict(%Thread{stage: "review"} = thread, verdict, author) when verdict in ~w(approve request_changes) do
     {:ok, _} =
@@ -392,42 +395,62 @@ defmodule Server.Workline do
         correlation: "workline:#{thread.slug}:review"
       })
 
-    if verdict == "request_changes",
-      do:
-        bounce(
-          thread,
-          "the review requested changes",
-          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
-        ),
-      else: {:ok, thread}
+    if verdict == "request_changes" do
+      bounce(
+        thread,
+        "the review requested changes",
+        "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
+      )
+    else
+      Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
+      {:ok, thread}
+    end
   end
 
   def review_verdict(%Thread{stage: "review"}, verdict, _author), do: {:error, {:bad_verdict, verdict}}
   def review_verdict(%Thread{stage: stage}, _verdict, _author), do: {:error, {:not_in_review, stage}}
 
-  # A standing approval: the operator's `auto_land` paths (settings file) — a reviewed-and-approved
-  # workline whose every change sits under one lands without them, through the same gated queue.
-  # Only against the real repo, unless a test hands the policy and the changed paths outright.
-  defp auto_land?(thread, checker, opts) do
-    patterns = Keyword.get_lazy(opts, :auto_land, fn -> if checker == Git, do: auto_land_paths(), else: [] end)
+  @doc """
+  A risk grade just recorded for `thread` (`Server.Jobs.Grade`): a gate parked on the operator
+  that the grade now lets land under the standing approval joins the merge queue; anything else
+  is left as it is. `{:ok, thread}`. `opts` as `advance/2`'s.
+  """
+  def graded(%Thread{} = thread, opts \\ []) do
+    thread = Repo.get!(Thread, thread.id)
+    checker = Keyword.get(opts, :artifacts, Git)
 
-    with [_ | _] <- patterns,
-         true <- review_approved?(thread),
-         [_ | _] = changed <- Keyword.get_lazy(opts, :changed, fn -> Git.changed_paths(thread) end) do
-      Enum.all?(changed, fn path -> Enum.any?(patterns, &glob?(&1, path)) end)
-    else
-      _ -> false
+    if thread.stage == "review" and thread.awaiting == "andrew" and auto_land?(thread, checker, opts),
+      do: queue(thread, auto_land_note(thread, opts)),
+      else: {:ok, thread}
+  end
+
+  # A standing approval: the operator's `auto_land_risk` — a reviewed-and-approved workline whose
+  # risk grade has no axis over it (and no limit hit, no decision left open) lands without them,
+  # through the same gated queue. Off unless set; a test hands the threshold outright.
+  defp auto_land?(thread, checker, opts) do
+    max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
+    is_integer(max) and review_approved?(thread) and Grade.allows?(grade(thread), max)
+  end
+
+  defp auto_land_note(thread, opts),
+    do:
+      "auto-approved by your standing approval (reviewed; #{Grade.line(grade(thread))}, none over #{Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0)})"
+
+  defp auto_land_risk, do: Server.OperatorConfig.read()["auto_land_risk"]
+
+  # the newest grade since the workline last entered review: nil if none, or the grader failed
+  defp grade(thread) do
+    case since_review(thread, "workline:#{thread.slug}:grade") do
+      %{kind: "check_passed", detail: grade} -> grade
+      _ -> nil
     end
   end
 
-  defp auto_land_note(opts),
-    do:
-      "auto-approved by your standing approval (reviewed, and every change is under #{Enum.join(Keyword.get_lazy(opts, :auto_land, &auto_land_paths/0), ", ")})"
+  defp review_approved?(thread),
+    do: match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:review"))
 
-  defp auto_land_paths, do: Server.OperatorConfig.read()["auto_land"] || []
-
-  # the newest review verdict since the workline last entered review
-  defp review_approved?(thread) do
+  # the newest event of `correlation` since the workline last entered review
+  defp since_review(thread, correlation) do
     entered =
       Repo.one(
         from e in Server.Event,
@@ -439,22 +462,10 @@ defmodule Server.Workline do
 
     Repo.one(
       from e in Server.Event,
-        where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review" and e.id > ^entered,
+        where: e.thread_id == ^thread.id and e.correlation == ^correlation and e.id > ^entered,
         order_by: [desc: e.id],
-        limit: 1,
-        select: e.kind
-    ) == "check_passed"
-  end
-
-  # `**` any depth, `*` within one path segment
-  defp glob?(pattern, path) do
-    re =
-      pattern
-      |> Regex.escape()
-      |> String.replace("\\*\\*", ".*")
-      |> String.replace("\\*", "[^/]*")
-
-    Regex.match?(~r/^#{re}$/, path)
+        limit: 1
+    )
   end
 
   # back to build: the stage and its ledger row in one write, the builder restaffed and told why
@@ -562,7 +573,7 @@ defmodule Server.Workline do
 
   defp park(thread, checker, opts) do
     if thread.stage == "review" and auto_land?(thread, checker, opts),
-      do: queue(thread, auto_land_note(opts)),
+      do: queue(thread, auto_land_note(thread, opts)),
       else: park_on_operator(thread, checker)
   end
 
