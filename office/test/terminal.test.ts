@@ -15,10 +15,13 @@ afterAll(() => tmux("kill-server"))
 
 test("a window's screen arrives, keys typed into it come back", async () => {
   tmux("new-session", "-d", "-s", "w9", "-n", "lead", "-x", "60", "-y", "10", "sh -c 'printf \"hello from the pane\\n\"; exec cat'")
-  await Bun.sleep(300)
+  // conditions waited on, never fixed sleeps: under load (a gate beside coworkers' suites) the fixed
+  // waits outran bun's 5 s budget
+  const until = async (ok: () => boolean) => { for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50) }
+  const sessions = () => dec.decode(tmux("ls", "-F", "#{session_name}").stdout).trim()
+  await until(() => sessions() === "w9")
   let changes = 0
   const view = new TerminalView({ socket, session: "w9", window: "lead" }, 40, 8, () => changes++, () => {})
-  const until = async (ok: () => boolean) => { for (let i = 0; i < 50 && !ok(); i++) await Bun.sleep(50) }
   const text = () => rows(view.vt).map((r) => r.replace(/\x1b\[[0-9;]*m/g, "")).join("\n")
   await until(() => text().includes("hello from the pane"))
   expect(text()).toContain("hello from the pane")
@@ -28,6 +31,7 @@ test("a window's screen arrives, keys typed into it come back", async () => {
   expect(changes).toBeGreaterThan(0)
   expect(rows(view.vt).every((r) => r.replace(/\x1b\[[0-9;]*m/g, "").length === 40)).toBe(true)
   // only our throwaway session went away; the coworker's stays
-  view.close(); await Bun.sleep(700)
-  expect(dec.decode(tmux("ls", "-F", "#{session_name}").stdout).trim()).toBe("w9")
-})
+  view.close()
+  await until(() => sessions() === "w9")
+  expect(sessions()).toBe("w9")
+}, 30_000)
