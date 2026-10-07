@@ -159,6 +159,16 @@ defmodule Server.WorktreeTest do
       assert String.trim(out) != ""
     end
 
+    test "remove/2 drops a merged workline's worktree even with its docs folder on main", %{repo: repo, git: git} do
+      # a workline's docs live at work/<slug>/ on main — the same spelling as its branch
+      {:ok, _wt} = Worktree.ensure(repo, "docs")
+      File.mkdir_p!(Path.join(repo, "work/docs"))
+      File.write!(Path.join(repo, "work/docs/spec.md"), "spec\n")
+      {_, 0} = git.(["add", "work/docs/spec.md"])
+      {_, 0} = git.(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "spec"])
+      assert {:removed, _} = Worktree.remove(repo, "docs")
+    end
+
     test "remove/2 on a worktree that never existed is :none", %{repo: repo} do
       assert :none = Worktree.remove(repo, "ghost")
     end
