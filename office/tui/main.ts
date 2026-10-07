@@ -30,7 +30,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -306,9 +306,30 @@ async function finder() {
   }
 }
 /** everything across the workspaces that waits on you, then what's being worked on */
-function inbox() { open({ kind: "needs" }) }
+/** what can be done about one waiting item — the inbox's list and its one-at-a-time card share these */
+function needActions(n: data.Need): Action[] {
+  const tid = n.thread_id ?? null, w = n.workspace_id ?? ws
+  const after = () => void refresh()
+  const acts: Action[] = [
+    ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
+    ...(n.kind === "dialog" && tid ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.post(tid, o.key)).then(after) })) : []),
+    ...((n.kind === "question" || n.kind === "mention") && tid ? [{ key: "r", label: "reply", run: () => reply(tid) }] : []),
+    ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
+    ...(n.kind === "suggestion" && w !== null && n.ref ? [
+      { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, n.text)).then(() => data.dropSuggestion(w, n.ref!)).then(after) },
+      { key: "d", label: "throw it out", run: () => void data.dropSuggestion(w, n.ref!).then(after) },
+    ] : []),
+    ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
+    ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
+  ]
+  return acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i)
+}
+
+/** what waits on you: one at a time when anything does — the whole list is a key away */
+function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
 /** a need's one-line name: what kind, and where */
 const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", verify_failed: "verify red", mention: "mentioned you", suggestion: "suggestion", rollout: "rollout" }
+const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, verify_failed: ROLE.alarm, mention: ROLE.body, suggestion: ROLE.assistant, rollout: ROLE.live }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev
@@ -799,9 +820,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "needs": {
       // what waits on you: blocking first (work has stopped), then what to decide; then what's under way
-      const tone: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, verify_failed: ROLE.alarm, mention: ROLE.body, suggestion: ROLE.assistant, rollout: ROLE.live }
       const row = (n: data.Need): Row => ({
-        segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: tone[n.kind] }, plain(" "), ...(n.thread_id ? [tidSeg(n.thread_id)] : []),
+        segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(n.thread_id ? [tidSeg(n.thread_id)] : []),
           { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), { s: n.text.replace(/\s+/g, " "), fg: n.level === "blocking" ? ROLE.prose : ROLE.inactive }],
         open: n.thread_id ? () => openReader(n.thread_id!, false) : n.kind === "suggestion" ? () => open({ kind: "ideas" }) : undefined, ref: n,
       })
@@ -813,25 +833,33 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ...(deciding.length ? [section(`TO DECIDE · ${deciding.length}`, ROLE.body, "nothing waits on these"), ...deciding.map(row)] : []),
         ...(live.length ? [section(`UNDER WAY · ${live.length}`, ROLE.live, "being worked on"), ...live.map((t): Row => ({ segs: [tidSeg(t.id), { s: t.title, fg: ROLE.prose }, dim(`  ${t.lead ?? ""}${t.stage ? ` · ${t.stage}` : ""}`)], open: () => goThread(t.id, t.workspace_id) }))] : []),
       ]
-      const n = rows[sel]?.ref as data.Need | undefined, tid = n?.thread_id ?? null, w = n?.workspace_id ?? ws
-      const after = () => void refresh()
-      const acts: Action[] = !n ? [] : [
-        ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
-        ...(n.kind === "dialog" && tid ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.post(tid, o.key)).then(after) })) : []),
-        ...((n.kind === "question" || n.kind === "mention") && tid ? [{ key: "r", label: "reply", run: () => reply(tid) }] : []),
-        ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
-        ...(n.kind === "suggestion" && w !== null && n.ref ? [
-          { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, n.text)).then(() => data.dropSuggestion(w, n.ref!)).then(after) },
-          { key: "d", label: "throw it out", run: () => void data.dropSuggestion(w, n.ref!).then(after) },
-        ] : []),
-        ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
-        ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
-      ]
+      const n = rows[sel]?.ref as data.Need | undefined
+      const acts: Action[] = !n ? [] : [...needActions(n), { key: "f", label: "one at a time", run: () => open({ kind: "decide", i: Math.max(0, needs.indexOf(n)) }) }]
       return {
         title: needs.length ? `WAITING ON YOU · ${blocking.length} blocking · ${deciding.length} to decide` : "WAITING ON YOU",
         tint: blocking.length ? ROLE.attention : deciding.length ? ROLE.body : ROLE.live,
         rows: rows.length ? rows : [{ segs: [{ s: "nothing waits on you. ", fg: ROLE.live }, dim("the crew is getting on with it.")] }],
         actions: [...acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i), back1],
+      }
+    }
+    case "decide": {
+      // one waiting item at a time, everything to decide it on the card; acting moves to the next
+      const order = [...needs.filter((x) => x.level === "blocking"), ...needs.filter((x) => x.level === "decide")]
+      if (!order.length) return { title: "WAITING ON YOU", tint: ROLE.live, rows: [{ segs: [{ s: "nothing waits on you. ", fg: ROLE.live }, dim("the crew is getting on with it.")] }], actions: [back1] }
+      const i = Math.min(mode.i, order.length - 1), n = order[i]!, tid = n.thread_id ?? null
+      const t = tid ? all.threads.find((x) => x.id === tid) : undefined
+      const step = (d: number) => open({ kind: "decide", i: (i + d + order.length) % order.length })
+      const rows: Row[] = [
+        { segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(tid ? [tidSeg(tid)] : []), { s: n.title, fg: ROLE.prose, bold: true }], open: tid ? () => openReader(tid, false) : undefined },
+        { segs: [dim(`${n.level === "blocking" ? "work has stopped until you act" : "nothing waits on this"} · ${ago(n.at)}${t ? ` · ${t.lead ?? "no lead"}${t.stage ? ` at ${t.stage}` : ""}` : ""}`)] },
+        { segs: [plain("")] },
+        ...wrap(n.text, paneW() - 4).slice(0, DETAIL - 5).map((l): Row => ({ segs: [plain(l)] })),
+      ]
+      return {
+        title: `DECIDE · ${i + 1} of ${order.length}`,
+        tint: n.level === "blocking" ? ROLE.attention : ROLE.body,
+        rows,
+        actions: [...needActions(n), { key: "n", label: "next", run: () => step(1) }, { key: "p", label: "previous", run: () => step(-1) }, { key: "l", label: "the whole list", run: () => open({ kind: "needs" }) }, back1],
       }
     }
     case "ideas": {
