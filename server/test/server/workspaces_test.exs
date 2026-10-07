@@ -43,6 +43,13 @@ defmodule Server.WorkspacesTest do
     end
   end
 
+  describe "home type" do
+    test "home joins the type closed set" do
+      assert {:ok, ws} = Workspaces.register(%{name: "home-test-#{System.unique_integer()}", type: "home"})
+      assert ws.type == "home"
+    end
+  end
+
   describe "all/0" do
     test "lists workspaces oldest first — the order they were declared in, so the first comes first" do
       {:ok, _a} = Workspaces.register(%{name: "First"})
