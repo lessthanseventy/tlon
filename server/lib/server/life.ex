@@ -155,4 +155,53 @@ defmodule Server.Life do
     {:ok, quest} = quest |> Quest.done_changeset(at) |> Repo.update()
     {:ok, quest, level(xp(quest.workspace_id)) > level(xp_before)}
   end
+
+  @doc "A new routine. `{:ok, routine}` or `{:error, changeset}`."
+  @spec create_routine(integer, map) :: {:ok, Routine.t()} | {:error, Ecto.Changeset.t()}
+  def create_routine(workspace_id, attrs), do: Map.put(attrs, :workspace_id, workspace_id) |> Routine.create_changeset() |> Repo.insert()
+
+  @doc "Edit a routine's mutable fields."
+  @spec update_routine(Routine.t(), map) :: {:ok, Routine.t()} | {:error, Ecto.Changeset.t()}
+  def update_routine(%Routine{} = routine, attrs), do: routine |> Routine.update_changeset(attrs) |> Repo.update()
+
+  @doc "A new quest. `{:ok, quest}` or `{:error, changeset}`."
+  @spec create_quest(integer, map) :: {:ok, Quest.t()} | {:error, Ecto.Changeset.t()}
+  def create_quest(workspace_id, attrs), do: Map.put(attrs, :workspace_id, workspace_id) |> Quest.create_changeset() |> Repo.insert()
+
+  @doc "The `GET /api/life` body for one workspace."
+  @spec status(integer) :: map
+  def status(workspace_id) do
+    now = Schedules.local_now()
+    routines = Repo.all(from r in Routine, where: r.workspace_id == ^workspace_id and r.enabled)
+    xp = xp(workspace_id)
+
+    %{
+      xp: xp,
+      level: level(xp),
+      next_level_at: next_level_at(xp),
+      streaks: Map.new(routines, &{&1.id, streak(&1, now)}),
+      due: due(workspace_id, now),
+      quests: open_quests(workspace_id),
+      today: today(routines, now)
+    }
+  end
+
+  defp open_quests(workspace_id) do
+    Repo.all(
+      from q in Quest,
+        where: q.workspace_id == ^workspace_id and is_nil(q.done_at),
+        order_by: [asc_nulls_last: q.due_at]
+    )
+  end
+
+  defp today(routines, now) do
+    today_date = DateTime.to_date(now)
+
+    for routine <- routines,
+        due_at = current_due_at(routine, now),
+        due_at != nil,
+        Date.compare(DateTime.to_date(due_at), today_date) == :eq do
+      %{routine_id: routine.id, title: routine.title, due_at: due_at, done: has_run?(routine.id, due_at)}
+    end
+  end
 end
