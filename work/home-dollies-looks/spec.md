@@ -146,7 +146,10 @@ entrypoint; the mise task in `tasks/office.toml` just runs it with `bun office/c
 1. Decode the PNG to RGBA. **New dependency**: `pngjs` (pure JS, no native build, MIT) — this
    repo's encoder (`tui/png.ts`) is hand-rolled because it only ever writes one filter-free IDAT;
    decoding arbitrary PNGs (Aseprite's own filters, palettes, bit depths) is not a one-screen
-   function, so it is not hand-rolled here. Added to `office/package.json` `dependencies`.
+   function, so it is not hand-rolled here. Added to `office/package.json` `dependencies`, but
+   **imported only from `office/cli.ts`** — the compiled TUI ships one runtime dep (`office/AGENTS.md`),
+   so nothing under `tui/` or `kit/` may import `pngjs`. `kit/snap.ts` (below) takes plain RGBA,
+   never a PNG buffer, so it needs no PNG library and stays reachable from `tui/main.ts` clean.
 2. Refuse (print the actual size, exit 1) anything that isn't exactly 12×22 **or** a 48×22 sheet
    (4 views side by side, the plan's "whole-sheet" form) — no scaling, per §5.1.
 3. Snap every pixel to the nearest `ROLE` by Lab distance (convert each `ROLE` hex and each pixel
