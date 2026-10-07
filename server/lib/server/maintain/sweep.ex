@@ -16,7 +16,8 @@ defmodule Server.Maintain.Sweep do
     * a ticket `doing` with no open thread tied to it → back to `backlog`, the reason in its body;
       a ticket tied as `promoted` to an open thread but not `doing` → `doing`
     * a worktree no thread is working in (`Server.Maintain.Strays`) → removed when it holds
-      nothing; one holding work stays, for the operator (the needs list's stranded work)
+      nothing, unless it is the lobby's, which the coworkers' home windows run in; one holding
+      work stays, for the operator (the needs list's stranded work)
 
   Stateless: nag recency derives from the durable nag message, a flag from its slug row —
   so `Server.Jobs.Maintain` runs it on Oban's cron (one-brain piece E, slice 2) with nothing
@@ -95,8 +96,13 @@ defmodule Server.Maintain.Sweep do
     :ok
   end
 
+  # never the lobby's: every coworker's home window runs in it, and pulling it out from under a live
+  # session drops whatever that session was doing
   defp sweep_worktrees do
-    for %{repo: repo, name: name} <- Server.Maintain.Strays.worktrees(), do: Server.Worktree.remove(repo, name)
+    for %{repo: repo, name: name, thread: thread} <- Server.Maintain.Strays.worktrees(),
+        not (thread && Server.Channel.root_machine_thread?(thread)),
+        do: Server.Worktree.remove(repo, name)
+
     :ok
   end
 
