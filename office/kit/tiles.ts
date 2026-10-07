@@ -3,7 +3,7 @@
 // list of them into the Plan the sim needs.
 import type { Measure } from "./canvas"
 import type { Scene } from "./draw"
-import type { Actor, CatPlan, Kind, Pastime, Pt, Spot } from "./sim"
+import type { Actor, Cat, CatPlan, Kind, Pastime, Pt, Spot } from "./sim"
 import type { Agents } from "./types"
 
 export type TileKind = "office" | "cat-corner" | "meeting" | "lounge" | "kitchen" | "games"
@@ -15,8 +15,8 @@ export type Live = {
   at(kind: Kind | Pastime): Actor[]
   /** someone there now, mid-walk-up included (coffee at the machine starts the moment they arrive) */
   using(kind: Kind | Pastime): boolean
-  /** Nina's position, for a tile whose art reacts to her (the aquarium's fish gathering at the glass) */
-  cat: Pt
+  /** Nina, for a tile whose art reacts to her (the aquarium's fish gathering at the glass, her corner's yarn) */
+  cat: Cat
 }
 
 export type Tile<L> = {

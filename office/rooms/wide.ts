@@ -16,6 +16,7 @@ import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { meetingTile } from "../kit/tiles/meeting"
 import { loungeTile } from "../kit/tiles/lounge"
+import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR, TOWER_X } from "../kit/tiles/cat-corner"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { BIG_PLANT, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -25,8 +26,8 @@ export const WIDE_H = 200
 /** below this the zones don't fit; a surface narrower than this draws the rail room */
 export const WIDE_MIN_W = 540
 export const BAND = 44 // the back wall ends here
-const HALL = 191 // the hallway's walking row
-const OFF_W = 100, OFF_LANE = 94, OFF_DOOR = 150 // your office; its glass wall stops at the door
+export const HALL = 191 // the hallway's walking row
+export const OFF_W = 100, OFF_LANE = 94, OFF_DOOR = 150 // your office; its glass wall stops at the door
 const MEET_MIN = 86, LOUNGE_MIN = 124
 export const MEET_BOTTOM = 124
 const EXEC_Y = 54, TABLE_YS = [102, 142], SEATS = 4, SEAT_GAP = 28
@@ -89,13 +90,6 @@ function layoutFor(z: Zones) {
 }
 export type Layout = ReturnType<ReturnType<typeof layoutFor>>
 
-// Nina's corner of your office: the tower by the glass, the litter box by the left wall, the yarn
-// and a mouse on the rug
-const TOWER_X = 78, PERCH_TOP = { x: 83, y: 52 }, PERCH_MID = { x: 83, y: 69 }
-const CAT_NAP = { x: 50, y: 128 }, CAT_DESK = { x: 37, y: 75 }, LITTER = { x: 7, y: 98 }, PLAY = { x: 70, y: 132 }
-const YARN = { x: 76, y: 130 }, MOUSE = { x: 24, y: 134 }
-// a radiator on your office's left wall; on a cold day Nina sits on top of it
-const RADIATOR = { x: 2, y: 116, w: 10, h: 12 }, CAT_WARM = { x: 7, y: 115 }
 // your in-tray, on a side table left of your desk
 const TRAY = { x: 4, y: 62 }
 
@@ -103,7 +97,6 @@ const TRAY = { x: 4, y: 62 }
 export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x: number; y: number; w: number; h: number }[] } {
   const z = zones(w)
   const { L0, M0, MW, Mc, F0, F1 } = z
-  const inOffice = (x: number) => x <= OFF_W
   const { table, cabinets, tank, vending, shelf, foos, pool } = corner(z)
   const at = (x: number, y: number, aisle: number, face: Spot["face"], kind: Spot["kind"], partner?: Pt): Spot => ({ x, y, aisle, pose: "stand", face, kind, ...(partner ? { with: partner } : {}) })
   const ends = [{ x: table.x - 4, y: table.y + 6 }, { x: table.x + table.w + 4, y: table.y + 6 }]
@@ -168,34 +161,7 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
       if (la === lb) return [{ x, y: from }, { x: la, y: from }, ...there]
       return [{ x, y: from }, { x: la, y: from }, { x: la, y: HALL }, { x: lb, y: HALL }, ...there]
     },
-    cat: {
-      nap: CAT_NAP, desk: CAT_DESK, play: PLAY, litter: LITTER, perches: [PERCH_TOP, PERCH_MID], warm: CAT_WARM,
-      // the zoomies: your office (your desk, her tower) and the lounge (the couch back, the top of
-      // the TV, the kitchen counter), each first the floor spot she lands on after
-      leaps: [
-        [CAT_NAP, CAT_DESK, PERCH_TOP, PERCH_MID, { x: 18, y: 112 }, { x: 72, y: 142 }],
-        [{ x: L0 + 52, y: 104 }, { x: L0 + 46, y: 69 }, { x: L0 + 80, y: 69 }, { x: L0 + 58, y: 7 }, { x: w - 7, y: 99 }, { x: L0 + 100, y: 140 }],
-      ],
-      // the armchair too, when it's empty: a princess takes the good seat
-      lounge: [{ x: L0 + 52, y: 104 }, { x: w - 40, y: 126 }, { x: shelf.x + 8, y: 82 }],
-      spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }, fishWatch(z)],
-      via: (p: Pt) =>
-        p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 100 }
-          : p.x === PERCH_TOP.x && p.y <= PERCH_MID.y ? { x: PERCH_TOP.x, y: 94 }
-            : p.x === LITTER.x && p.y === LITTER.y ? { x: LITTER.x, y: 106 }
-              : p.x === CAT_WARM.x && p.y === CAT_WARM.y ? { x: CAT_WARM.x, y: 136 } : null,
-      // out through your office's door and along the hallway, when she changes rooms
-      // out of one room and into another along the hallway: your office by its door, the lounge by
-      // its lane, the open floor by the column she watches the fish from
-      door: (from, to) => {
-        const roomOf = (p: Pt) => (inOffice(p.x) ? "office" : p.x >= L0 ? "lounge" : "floor")
-        const a = roomOf(from), b = roomOf(to), fx = fishWatch(z).x
-        if (a === b) return []
-        const out = { office: [{ x: OFF_LANE, y: 160 }, { x: OFF_LANE, y: HALL - 3 }], lounge: [{ x: L0 + 6, y: HALL - 3 }], floor: [{ x: fx, y: HALL - 3 }] }
-        const into = { office: [{ x: OFF_LANE, y: HALL - 3 }, { x: OFF_LANE, y: 160 }], lounge: [{ x: L0 + 6, y: HALL - 3 }, { x: L0 + 6, y: to.y }], floor: [{ x: fx, y: HALL - 3 }] }
-        return [...out[a], ...into[b]]
-      },
-    },
+    cat: catCornerTile(z).cat(),
     blocks(l) {
       const out = [
         { x: 0, y: 0, w, h: BAND }, // the back wall
@@ -231,6 +197,7 @@ export class WideRoom extends Sim<Layout> {
   private readonly kitchen: ReturnType<typeof kitchenTile>
   private readonly meeting: ReturnType<typeof meetingTile>
   private readonly lounge: ReturnType<typeof loungeTile>
+  private readonly catCorner: ReturnType<typeof catCornerTile>
   private antic: Antic | null = null
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -241,6 +208,7 @@ export class WideRoom extends Sim<Layout> {
     this.kitchen = kitchenTile(this.z, width)
     this.meeting = meetingTile(this.z)
     this.lounge = loungeTile(this.z)
+    this.catCorner = catCornerTile(this.z)
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
@@ -339,7 +307,7 @@ export class WideRoom extends Sim<Layout> {
 
   render(a: Agents, focus: Focus, measure: Measure, now = new Date()): Frame {
     const W = this.width, H = WIDE_H
-    const sc = new Scene(W, H, this.tick), f = sc.f
+    const sc = new Scene(W, H, this.tick)
     const { L0, M0, MW, F0, F1 } = this.z
     const l = this.plan.layout(a), { desks, chairs } = l
     const px = sc.px.bind(sc), blit = sc.blit.bind(sc), text = sc.text.bind(sc)
@@ -375,7 +343,7 @@ export class WideRoom extends Sim<Layout> {
     px(14, 108, 72, 36, ROLE.body); px(15, 109, 70, 34, ROLE.meta)
     for (let i = 0; i < 7; i++) for (const [dx, dy, w] of [[1, 0, 1], [0, 1, 3], [1, 2, 1]] as const) px(20 + i * 9 + dx, 124 + dy, w, 1, ROLE.assistant)
     for (const d of desks) if (d.kind === "boss") bossDesk(sc, a, d)
-    this.ninasCorner(sc)
+    this.catCorner.draw(sc, a, l, measure, this.live())
     this.inTray(sc, focus.tray ?? 0)
     this.beacon(sc, Object.values(a.triage).reduce((n, x) => n + x, 0))
     sc.item(170, () => blit(BIG_PLANT, 2, 159, { l: ROLE.live, o: ROLE.structure }))
@@ -414,12 +382,6 @@ export class WideRoom extends Sim<Layout> {
     const c = this.cat
     const chair = corner(this.z).shelf.x + 8
     drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null)
-    // the radiator, and on a cold day the heat shimmering off it
-    sc.item(RADIATOR.y + RADIATOR.h, () => {
-      px(RADIATOR.x, RADIATOR.y, RADIATOR.w, RADIATOR.h, ROLE.prose)
-      for (let k = 1; k < RADIATOR.w; k += 2) px(RADIATOR.x + k, RADIATOR.y + 1, 1, RADIATOR.h - 2, tint(ROLE.prose, ROLE.ground, 0.6))
-      if ((a.weather?.temp_c ?? 20) < 10) for (let k = 0; k < 3; k++) px(RADIATOR.x + 2 + k * 3 + ((f + k) % 2), RADIATOR.y - 3 - ((f + k) % 3), 1, 2, tint(ROLE.alarm, ROLE.ground, 0.5))
-    })
     this.drawDog(sc)
     this.drawAntics(sc)
     const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
@@ -755,26 +717,6 @@ export class WideRoom extends Sim<Layout> {
     })
     const tip = !a.health ? "the server rack" : warn ? `the server rack: needs a look — ${a.health.problems.join("; ")}` : "the server rack: all green"
     sc.hits.push({ x, y: 146, w: 12, h: 28, tip, act: { kind: "rack" } })
-  }
-
-  /** Nina's corner: the tower by the glass, the litter box, the yarn (rolling while she bats it), a mouse */
-  private ninasCorner(sc: Scene) {
-    const c = this.cat, px = sc.px.bind(sc)
-    sc.item(88, () => {
-      const tx = TOWER_X, carpet = ROLE.meta, under = tint(ROLE.meta, ROLE.ground, 0.5)
-      px(tx + 4, 54, 3, 32, ROLE.inactive); for (let y = 56; y < 84; y += 3) px(tx + 4, y, 3, 1, ROLE.borderInactive)
-      px(tx, 84, 11, 3, carpet); px(tx, 87, 11, 1, under)
-      px(tx, 69, 11, 2, carpet); px(tx, 71, 11, 1, under)
-      px(tx - 1, 52, 12, 2, carpet); px(tx - 1, 54, 12, 1, under)
-      px(tx + 10, 71, 1, 5, ROLE.prose); px(tx + 9, 76, 3, 2, ROLE.attention)
-    })
-    sc.item(92, () => { px(1, 93, 10, 4, ROLE.key); px(2, 94, 8, 2, ROLE.inactive) })
-    sc.item(100, () => px(1, 97, 10, 2, ROLE.key))
-    sc.item(YARN.y, () => {
-      const yx = YARN.x + (c.mode === "play" ? [0, 1, 2, 1][c.yarn]! : 0)
-      px(yx, YARN.y - 3, 3, 3, ROLE.attention); px(yx + 1, YARN.y - 2, 1, 1, ROLE.assistant); px(yx - 2, YARN.y - 1, 2, 1, ROLE.attention)
-    })
-    sc.item(MOUSE.y, () => { px(MOUSE.x, MOUSE.y - 2, 4, 2, ROLE.prose); px(MOUSE.x + 3, MOUSE.y - 3, 1, 1, ROLE.attention); px(MOUSE.x - 2, MOUSE.y - 1, 2, 1, ROLE.attention) })
   }
 
   /**
