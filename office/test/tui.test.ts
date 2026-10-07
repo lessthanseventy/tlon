@@ -32,7 +32,7 @@ describe("paint", () => {
     expect(geometry(144, 190, 40, 80, 17, { w: 10, h: 20 }, true).k).toBe(2)
   })
   test("half blocks: text lands on the cell under its logical position; clicks map back", () => {
-    const g = { k: 2, cw: 4, ch: 8, col: 3, row: 1, cols: 10, rows: 5, kitty: false }
+    const g = { k: 2, cw: 4, ch: 8, col: 3, row: 1, cols: 10, rows: 5, kitty: false, floorW: 20, floorH: 20 }
     const fr = frame(20, 20, {
       ink: [{ t: "text", s: "hi", x: 10, y: 9, color: "#ffffff", size: 12, align: "center" }],
       hits: [{ x: 8, y: 8, w: 4, h: 4, tip: "spot", act: { kind: "crew" } }],
@@ -46,7 +46,7 @@ describe("paint", () => {
     expect(hitAt(fr, g, 4, 2)).toBeUndefined()
   })
   test("a label never overwrites one already on its cells", () => {
-    const g = { k: 2, cw: 4, ch: 8, col: 0, row: 0, cols: 10, rows: 2, kitty: false }
+    const g = { k: 2, cw: 4, ch: 8, col: 0, row: 0, cols: 10, rows: 2, kitty: false, floorW: 20, floorH: 8 }
     const fr = frame(20, 8, { ink: [
       { t: "text", s: "lonnrot", x: 0, y: 4, color: "#ffffff", size: 11, align: "left" },
       { t: "text", s: "yu", x: 0, y: 4.5, color: "#ffffff", size: 11, align: "left" },

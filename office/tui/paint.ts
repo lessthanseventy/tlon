@@ -8,22 +8,23 @@ import { contrast, rgb, ROLE } from "../kit/palette"
 import { png } from "./png"
 import { ESC, line, type Seg } from "./term"
 
-/** where the room sits: `k` screen px per art px; cells of `cw`×`ch` px; the image's cell box */
-export type Geometry = { k: number; cw: number; ch: number; col: number; row: number; cols: number; rows: number; kitty: boolean }
+/** where the room sits: `k` screen px per art px; cells of `cw`×`ch` px; the image's cell box; the floor's own size */
+export type Geometry = { k: number; cw: number; ch: number; col: number; row: number; cols: number; rows: number; kitty: boolean; floorW: number; floorH: number }
 
-/** the biggest whole-pixel scale (half blocks: any fit) that leaves `below` rows for the rest */
+/** the biggest whole-pixel scale that fits, or a flat legible 2× once the floor no longer fits at all (the viewport pans instead) */
 export function geometry(W: number, H: number, termCols: number, termRows: number, below: number, cell: { w: number; h: number } | null, kitty: boolean): Geometry {
   const room = Math.max(4, termRows - below)
   if (kitty && cell) {
     // past 5× the frames get heavy to encode for no gain a sidebar can see
-    const k = Math.max(1, Math.min(5, Math.floor((termCols * cell.w) / W), Math.floor((room * cell.h) / H)))
-    const cols = Math.ceil((W * k) / cell.w), rows = Math.ceil((H * k) / cell.h)
-    return { k, cw: cell.w, ch: cell.h, col: Math.max(0, Math.floor((termCols - cols) / 2)), row: 0, cols, rows, kitty: true }
+    const naturalK = Math.min(Math.floor((termCols * cell.w) / W), Math.floor((room * cell.h) / H))
+    const k = naturalK >= 1 ? Math.max(1, Math.min(5, naturalK)) : 2
+    const cols = Math.min(termCols, Math.ceil((W * k) / cell.w)), rows = Math.min(room, Math.ceil((H * k) / cell.h))
+    return { k, cw: cell.w, ch: cell.h, col: Math.max(0, Math.floor((termCols - cols) / 2)), row: 0, cols, rows, kitty: true, floorW: W, floorH: H }
   }
   // half blocks: a cell is one art px wide, two tall, at a scale that fits
   const k = Math.min(termCols / W, (room * 2) / H)
   const cols = Math.floor(W * k), rows = Math.floor((H * k) / 2)
-  return { k, cw: 1, ch: 2, col: Math.max(0, Math.floor((termCols - cols) / 2)), row: 0, cols, rows, kitty: false }
+  return { k, cw: 1, ch: 2, col: Math.max(0, Math.floor((termCols - cols) / 2)), row: 0, cols, rows, kitty: false, floorW: W, floorH: H }
 }
 
 /**
