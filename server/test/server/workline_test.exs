@@ -202,6 +202,32 @@ defmodule Server.WorklineTest do
     assert Channel.thread_lead(thread.id) == "menard"
   end
 
+  test "a stage that changes its lead closes the old lead's window, so the new lead can be spawned on it" do
+    {:ok, workspace} =
+      Server.Workspaces.register(%{
+        name: "HandedWorkspace",
+        type: "code",
+        scope: "machine",
+        repos: [],
+        roster: [%{"archetype" => "reviewer", "name" => "lonnrot"}]
+      })
+
+    thread = open!(%{slug: "handed", workspace_id: workspace.id, stage: "verify"})
+    pid = self()
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      send(pid, {:tmux, args})
+      if "list-windows" in args, do: {"3\tt#{thread.id}\t#{thread.id}\t\t42\tdaneri\t1\n", 0}, else: {"", 0}
+    end)
+
+    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+
+    {:ok, at_review} = Workline.advance(thread, artifacts: AllPresent)
+    assert Channel.thread_lead(at_review.id) == "lonnrot"
+    assert_received {:tmux, ["-L", _, "kill-window", "-t", target]}
+    assert target =~ ":3"
+  end
+
   test "each stage is staffed by its kind: spec and plan the planner, build and verify the builder, review the reviewer" do
     {:ok, workspace} =
       Server.Workspaces.register(%{
