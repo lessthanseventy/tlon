@@ -41,6 +41,24 @@ defmodule Server.WorklineReviewTest do
     assert {:ok, _} = Artifacts.Git.check(thread(), {:file, "review.md"})
   end
 
+  test "the review gate says what there is to decide on: the verdict line and the change's size", %{root: root} do
+    git = fn args -> System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
+    File.write!(Path.join(root, "seed"), "s")
+    {_, 0} = git.(["add", "seed"])
+    {_, 0} = git.(["commit", "-qm", "seed"])
+    {_, 0} = git.(["branch", "work/fence-test"])
+    {_, 0} = git.(["checkout", "-q", "work/fence-test"])
+    File.write!(Path.join(root, "lib.ex"), "code\n")
+    {_, 0} = git.(["add", "lib.ex"])
+    {_, 0} = git.(["commit", "-qm", "code"])
+    {_, 0} = git.(["checkout", "-q", "-"])
+    {:ok, _} = Review.submit(thread(), "## Verdict: APPROVE — clean, one nit\n\ndetails", "lonnrot")
+
+    summary = Server.Workline.gate_summary(thread())
+    assert summary =~ "Verdict: APPROVE — clean, one nit"
+    assert summary =~ "1 file changed"
+  end
+
   test "a stage doc committed on the workline's branch counts — where its lead, in the worktree, commits it", %{
     root: root
   } do

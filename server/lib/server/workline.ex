@@ -359,6 +359,24 @@ defmodule Server.Workline do
   def land_queued(thread, _opts), do: {:ok, thread}
 
   @doc """
+  What a workline's gate is decided on, in one line: at review, the reviewer's verdict line and the
+  change's size, and what approving does; at another gate, the stage's doc that is ready.
+  """
+  def gate_summary(%Thread{stage: "review"} = thread) do
+    verdict = Git.doc_line(thread, "review.md") || "no review.md yet"
+
+    size =
+      case Git.diffstat(thread) do
+        {:ok, stat} -> stat
+        {:error, why} -> why
+      end
+
+    "#{verdict} · #{size} — approve to land it through the merge queue"
+  end
+
+  def gate_summary(%Thread{stage: stage, slug: slug}), do: "work/#{slug}/#{stage}.md is ready — approve to move on"
+
+  @doc """
   The reviewer's verdict on its submitted review — `"approve"` or `"request_changes"` — recorded as
   evidence (`workline:<slug>:review`). Changes requested send it straight back to build, its builder
   told to read review.md: a review asking for changes never reaches the operator's gate. An approval
