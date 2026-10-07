@@ -42,7 +42,7 @@ defmodule Server.Workline.Continuation do
         author: "tlon",
         body:
           "↻ continue (#{sent + 1}/#{max}) — workline #{thread.slug} is at #{thread.stage} and its owed " <>
-            "artifact is not there: #{why}. Commit it (then call advance_stage), or post on the thread " <>
+            "artifact is not there: #{why}. #{land(thread.stage)}, or post on the thread " <>
             "why you cannot.",
         payload: %{"continue_after" => after_id}
       })
@@ -71,4 +71,8 @@ defmodule Server.Workline.Continuation do
       :count
     )
   end
+
+  # a reviewer cannot write files: its artifact lands through submit_review, which commits it
+  defp land("review"), do: "Land it with submit_review — the server commits review.md (then call advance_stage)"
+  defp land(_stage), do: "Commit it (then call advance_stage)"
 end

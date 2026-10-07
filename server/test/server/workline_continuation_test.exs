@@ -49,6 +49,14 @@ defmodule Server.Workline.ContinuationTest do
     assert m.body =~ "work/x/plan.md is not committed"
   end
 
+  test "at review the continuation says how a reviewer lands it — submit_review, not a commit it cannot make" do
+    {:ok, review} = Workline.open(%{title: "review it", slug: "reviewing", stage: "review"})
+    :ok = Continuation.run(review.id, artifacts: Missing)
+    assert [m] = continuations(review.id)
+    assert m.body =~ "submit_review"
+    refute m.body =~ "Commit it"
+  end
+
   test "at most max_turns between stage advances; an advance starts the count again", %{thread: t} do
     for _ <- 1..5, do: Continuation.run(t.id, artifacts: Missing, max_turns: 3)
     assert length(continuations(t.id)) == 3

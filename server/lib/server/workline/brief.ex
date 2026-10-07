@@ -86,7 +86,10 @@ defmodule Server.Workline.Brief do
       "Run the module gates AND the machine gate; record each result via record_check with correlation workline:#{t.slug}:verify — evidence, not self-report."
 
   defp playbook(%{stage: "review"}),
-    do: "You are the reviewer, not the builder: findings against spec compliance, bugs, security — verdict at the top."
+    do:
+      "You are the reviewer, not the builder: findings against spec compliance, bugs, security — verdict at the top. " <>
+        "Land it with submit_review (the whole review.md, verdict first): the server commits it for you, since " <>
+        "you never write files; then call advance_stage to hand the merge gate to the operator."
 
   defp playbook(%{stage: "intent"}), do: "Capture the originator's words near-verbatim plus a one-line restatement."
 
