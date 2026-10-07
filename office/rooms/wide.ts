@@ -14,6 +14,7 @@ import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/si
 import type { Live } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
+import { meetingTile } from "../kit/tiles/meeting"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { BIG_PLANT, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -22,10 +23,11 @@ import { EMPTY, type Agents, type Seat } from "../kit/types"
 export const WIDE_H = 200
 /** below this the zones don't fit; a surface narrower than this draws the rail room */
 export const WIDE_MIN_W = 540
-const BAND = 44 // the back wall ends here
+export const BAND = 44 // the back wall ends here
 const HALL = 191 // the hallway's walking row
 const OFF_W = 100, OFF_LANE = 94, OFF_DOOR = 150 // your office; its glass wall stops at the door
-const MEET_MIN = 86, MEET_BOTTOM = 124, LOUNGE_MIN = 124
+const MEET_MIN = 86, LOUNGE_MIN = 124
+export const MEET_BOTTOM = 124
 const EXEC_Y = 54, TABLE_YS = [102, 142], SEATS = 4, SEAT_GAP = 28
 const CREW_W = 44, EXEC_W = 56
 
@@ -226,6 +228,7 @@ export class WideRoom extends Sim<Layout> {
   private readonly dog: Dog
   private readonly games: ReturnType<typeof gamesTile>
   private readonly kitchen: ReturnType<typeof kitchenTile>
+  private readonly meeting: ReturnType<typeof meetingTile>
   private antic: Antic | null = null
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -234,6 +237,7 @@ export class WideRoom extends Sim<Layout> {
     this.z = zones(width)
     this.games = gamesTile(this.z)
     this.kitchen = kitchenTile(this.z, width)
+    this.meeting = meetingTile(this.z)
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
@@ -333,8 +337,8 @@ export class WideRoom extends Sim<Layout> {
   render(a: Agents, focus: Focus, measure: Measure, now = new Date()): Frame {
     const W = this.width, H = WIDE_H
     const sc = new Scene(W, H, this.tick), f = sc.f
-    const { L0, M0, MW, Mc, F0, F1 } = this.z
-    const { desks, chairs } = this.plan.layout(a)
+    const { L0, M0, MW, F0, F1 } = this.z
+    const l = this.plan.layout(a), { desks, chairs } = l
     const px = sc.px.bind(sc), blit = sc.blit.bind(sc), text = sc.text.bind(sc)
 
     // ── floors ──
@@ -394,15 +398,7 @@ export class WideRoom extends Sim<Layout> {
     this.rack(sc, a, F1 - 60)
 
     // ── the meeting room: glass, a round table, its chairs ──
-    sc.item(BAND, () => {
-      for (const x of [M0, M0 + MW - 1]) { px(x, BAND, 1, MEET_BOTTOM - BAND, ROLE.key) }
-      px(M0, MEET_BOTTOM - 1, MW / 2 - 9, 1, ROLE.key); px(Mc + 9, MEET_BOTTOM - 1, MW / 2 - 9, 1, ROLE.key)
-    })
-    sc.item(96, () => {
-      for (let dy = -10; dy <= 10; dy++) { const half = Math.round(Math.sqrt(100 - dy * dy) * 1.4); px(Mc - half, 86 + dy, half * 2, 1, dy < -8 ? ROLE.body : ROLE.borderInactive) }
-      px(Mc - 3, 82, 6, 3, ROLE.prose); px(Mc + 6, 88, 3, 2, ROLE.attention) // papers, a mug
-    })
-    text("MEETING", Mc, BAND + 9, ROLE.key, 11)
+    this.meeting.draw(sc, a, l, measure, this.live())
 
     // ── the lounge: rug, couch (its back toward you), lamp, beanbag; the kitchen along the wall ──
     px(L0 + 34, 48, 54, 14, ROLE.structure); px(L0 + 35, 49, 52, 12, ROLE.borderInactive)
