@@ -8,7 +8,12 @@ export type Pose = "stand" | "sit" | "couch"
 /** where someone likes to idle */
 export type Fav = "board" | "couch" | "cooler" | "coffee"
 export type Hair = "mop" | "spiky" | "bun" | "long" | "bald"
-export type Look = { hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number; skinRole?: Role }
+export type Outfit = "hoodie" | "labcoat"
+export type Accessory = "glasses" | "headphones"
+export type Look = {
+  hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number
+  skinRole?: Role; outfit?: Outfit; accessory?: Accessory
+}
 export const SKIN_ROLES: Role[] = ["builder", "surveyor", "reviewer", "assistant", "planner", "body"]
 
 export function hash(s: string) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0 }
@@ -51,6 +56,14 @@ const GEAR: Record<string, Gear> = {
   },
   researcher: { front: { 10: "........ggg.", 11: ".......g...g", 12: "........ggg.", 13: ".......c...." }, side: { 10: ".ggg........", 11: "g...g.......", 12: ".ggg........", 13: "....c......." } },
   planner: { front: { 11: ".......cc...", 12: "......wwww..", 13: "......wwww..", 14: "......wwww.." }, side: { 11: "..cc........", 12: ".wwww.......", 13: ".wwww......." } },
+}
+export const OUTFIT: Record<Outfit, Gear> = {
+  hoodie: { front: { 10: ".oooooooooo.", 11: ".oo........o" }, back: { 10: ".oooooooooo." }, side: { 10: "..oooooooo.." } },
+  labcoat: { front: { 9: ".wwwwwwwwww.", 10: "ww........ww", 11: "ww........ww" }, back: { 9: ".wwwwwwwwww." }, side: { 9: "wwwwwwwwwwww" } },
+}
+export const ACCESSORY: Record<Accessory, Gear> = {
+  glasses: { front: { 6: "..kk..kk...." }, side: { 6: ".kk........." } },
+  headphones: { front: { 5: ".k........k." }, back: { 5: ".k........k." }, side: { 5: "k..........." } },
 }
 const BADGE = { 11: "...y........", 12: "..yyy......." }
 const TIE = { 10: ".....rr.....", 11: ".....rr.....", 12: "....rrrr....", 13: ".....rr....." }
@@ -187,6 +200,8 @@ export function figure(look: Look, archetype: string | null | undefined, lead: b
     }
     rows = [...top, ...face4, ...TORSO, ...(pose === "couch" ? LEGS.couch! : step === 1 ? LEGS.a! : step === 2 ? LEGS.b! : LEGS.stand!)]
   }
+  if (look.outfit) overlay(rows, view === "front" ? OUTFIT[look.outfit].front : view === "back" ? OUTFIT[look.outfit].back : OUTFIT[look.outfit].side)
+  if (look.accessory) overlay(rows, view === "front" ? ACCESSORY[look.accessory].front : view === "back" ? ACCESSORY[look.accessory].back : ACCESSORY[look.accessory].side)
   const gear = GEAR[archetype ?? ""]
   overlay(rows, view === "front" ? gear?.front : view === "back" ? gear?.back : gear?.side)
   if (view === "front" && lead) overlay(rows, BADGE)
@@ -211,7 +226,7 @@ export const BOSS_LOOK: Look = { hair: "mop", hairRole: "structure", decor: 1, f
 
 /** a figure's paint map: hair, skin, ink, shirt (its archetype's colour), trousers, boots, gear */
 export function paints(shirt: string, look: Look): Record<string, string> {
-  return { h: ROLE[look.hairRole], f: look.skinRole ? ROLE[look.skinRole] : ROLE.prose, k: ROLE.fieldInk, s: shirt, p: ROLE.meta, b: ROLE.structure, y: ROLE.body, c: ROLE.structure, g: ROLE.key, e: ROLE.key, w: ROLE.prose, r: ROLE.alarm }
+  return { h: ROLE[look.hairRole], f: look.skinRole ? ROLE[look.skinRole] : ROLE.prose, k: ROLE.fieldInk, s: shirt, p: ROLE.meta, b: ROLE.structure, y: ROLE.body, c: ROLE.structure, g: ROLE.key, e: ROLE.key, w: ROLE.prose, r: ROLE.alarm, o: ROLE.body }
 }
 /** an archetype's colour (its shirt, its sticky): its role if it has one, else gold */
 export const shirtOf = (archetype?: string | null) => ROLE[(archetype ?? "") as Role] ?? ROLE.body
