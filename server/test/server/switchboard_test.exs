@@ -445,6 +445,55 @@ defmodule Server.SwitchboardTest do
       assert exports =~ ~s(TLON_AUTHOR="Carl")
     end
 
+    test "an @mention of a coworker who isn't on the thread reaches them in their lobby window, saying where from" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, task} = Channel.open_thread(%{title: "ticket 13", workspace_id: ws.id})
+      {:ok, daneri} = Staff.register_agent(%{name: "Daneri", mandate: "build", engine: "fresh"})
+      {:ok, tertius} = Staff.register_agent(%{name: "Tertius", mandate: "manage", engine: "fresh"})
+      {:ok, _} = Staff.assign(task, daneri)
+      {:ok, _} = Staff.start_session(%{agent_id: daneri.id, thread_id: task.id, pane_ref: "wDaneri"})
+      {:ok, _} = Staff.start_session(%{agent_id: tertius.id, thread_id: lobby.id, pane_ref: "wTertius"})
+
+      {:ok, m} =
+        Channel.post(%{thread_id: task.id, author: "Daneri", body: "@Tertius blocked: no code makes the summary"})
+
+      assert {:delivered, _} = Switchboard.deliver(m)
+
+      assert_received {:woke, "wTertius", prompt}
+      assert prompt =~ "thread #{task.id} from Daneri" and prompt =~ "consult_peer"
+      refute_received {:woke, "wDaneri", _}
+    end
+
+    test "two coworkers named on the standing thread are each woken in their own window" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, ana} = Staff.register_agent(%{name: "Ana", mandate: "build", engine: "fresh"})
+      {:ok, bo} = Staff.register_agent(%{name: "Bo", mandate: "build", engine: "fresh"})
+      {:ok, _} = Staff.start_session(%{agent_id: ana.id, thread_id: lobby.id, pane_ref: "wAna"})
+      {:ok, _} = Staff.start_session(%{agent_id: bo.id, thread_id: lobby.id, pane_ref: "wBo"})
+
+      {:ok, m} = Channel.post(%{thread_id: lobby.id, author: "stakeholder", body: "@Ana @Bo standup?"})
+      assert {:delivered, _} = Switchboard.deliver(m)
+      assert_received {:woke, "wAna", _}
+      assert_received {:woke, "wBo", _}
+    end
+
+    test "…and with no warm session in the lobby, they're spawned there to answer it" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, task} = Channel.open_thread(%{title: "ticket 13", workspace_id: ws.id})
+      {:ok, daneri} = Staff.register_agent(%{name: "Daneri", mandate: "build", engine: "fresh"})
+      {:ok, _tertius} = Staff.register_agent(%{name: "Tertius", mandate: "manage", engine: "fresh"})
+      {:ok, _} = Staff.assign(task, daneri)
+
+      {:ok, m} = Channel.post(%{thread_id: task.id, author: "Daneri", body: "@Tertius blocked"})
+      assert {:pending, _} = Switchboard.deliver(m)
+
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Tertius") and exports =~ ~s(TLON_THREAD="#{lobby.id}")
+    end
+
     test "an @mention of an absent coworker does not spawn the LEAD (only the addressed lead spawns)" do
       {:ok, thread} = Channel.open_thread(%{title: "t"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})

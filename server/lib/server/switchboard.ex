@@ -90,7 +90,7 @@ defmodule Server.Switchboard do
   end
 
   defp wake_claimed(message, sessions) do
-    case waken(sessions, prompt(message)) do
+    case waken(sessions, message) do
       # every pane it was for has closed (a restart took the windows): not a delivery — those
       # sessions ended, it is pending again, and whoever it addresses is spawned fresh
       [] ->
@@ -172,7 +172,8 @@ defmodule Server.Switchboard do
 
   # Who a message wakes (the addressed-delivery model):
   #   * a REPLY  -> the author of the message it replies to
-  #   * @mentions -> the named coworkers
+  #   * @mentions -> the named coworkers — one with no place on this thread (not on it, not its
+  #     lead) in their own window on the workspace's standing thread, told how to answer
   #   * neither (a plain top-level post) -> the thread's LEAD (its assigned agent)
   # minus the message's own author — you are never woken by your own words. The
   # lead stays informed without being cc'd because coworkers report back to the
@@ -188,30 +189,61 @@ defmodule Server.Switchboard do
         []
 
       names ->
-        # Only WARM sessions: live, addressed, and active within the cache window.
-        # A cold session is treated like an ended one — never poked (§3b).
-        wanted = Enum.map(names, &String.downcase/1)
-        cutoff = Presence.loosest_cutoff()
-        ws = with %Thread{workspace_id: w} <- Repo.get(Thread, message.thread_id), do: w
+        thread = Repo.get(Thread, message.thread_id)
+        ws = thread && thread.workspace_id
+        here = warm_sessions(message.thread_id, names, ws)
+        found = MapSet.new(here, fn {_session, agent} -> String.downcase(agent.name) end)
 
-        from(s in Session,
-          join: a in Agent,
-          on: a.id == s.agent_id,
-          where:
-            s.thread_id == ^message.thread_id and is_nil(s.ended_at) and
-              fragment("lower(?)", a.name) in ^wanted and s.last_active_at > ^cutoff,
-          select: {s, a}
-        )
-        |> Repo.all()
-        # each by its own provider's window (`Presence.warm_for?/4`; one window unless configured)
-        |> Enum.filter(fn {session, agent} -> Presence.warm_for?(session.last_active_at, agent.name, ws) end)
-        # Then the ENGINE-CREDIT half of clocked-out: drop a session whose model is
-        # out of credits / past its rate-limit window (§3b). A pluggable backend
-        # (§8) — the SQL can't ask a vendor, so it is a post-filter on small N.
-        |> Enum.reject(fn {_session, agent} -> Presence.clocked_out?(agent) end)
-        |> Enum.map(fn {session, _agent} -> session end)
+        # someone named here who has no place on this thread hears it where they live: their window
+        # on the workspace's standing thread
+        away =
+          for name <- names,
+              not MapSet.member?(found, String.downcase(name)),
+              lobby = elsewhere(thread, name),
+              lobby != nil,
+              pair <- warm_sessions(lobby, [name], ws),
+              do: pair
+
+        Enum.map(here ++ away, &elem(&1, 0))
     end
   end
+
+  # Only WARM sessions of `names` on `thread_id`: live, addressed, and active within the cache window.
+  # A cold session is treated like an ended one — never poked (§3b).
+  defp warm_sessions(thread_id, names, ws) do
+    wanted = Enum.map(names, &String.downcase/1)
+    cutoff = Presence.loosest_cutoff()
+
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      where:
+        s.thread_id == ^thread_id and is_nil(s.ended_at) and
+          fragment("lower(?)", a.name) in ^wanted and s.last_active_at > ^cutoff,
+      select: {s, a}
+    )
+    |> Repo.all()
+    # each by its own provider's window (`Presence.warm_for?/4`; one window unless configured)
+    |> Enum.filter(fn {session, agent} -> Presence.warm_for?(session.last_active_at, agent.name, ws) end)
+    # Then the ENGINE-CREDIT half of clocked-out: drop a session whose model is
+    # out of credits / past its rate-limit window (§3b). A pluggable backend
+    # (§8) — the SQL can't ask a vendor, so it is a post-filter on small N.
+    |> Enum.reject(fn {_session, agent} -> Presence.clocked_out?(agent) end)
+  end
+
+  # Where a coworker named on `thread` with no place on it is reached: the workspace's standing
+  # thread, where each coworker has a window of their own — unless this is that thread, or they
+  # lead this one (then it is here they are woken, or spawned). nil when there is nowhere else.
+  defp elsewhere(%Thread{workspace_id: ws} = thread, name) when not is_nil(ws) do
+    with %Thread{id: lobby, state: "open"} when lobby != thread.id <- Server.Channel.machine_thread(ws),
+         %Agent{id: id} when id != thread.agent_id <- Staff.agent_by_name(name) do
+      lobby
+    else
+      _ -> nil
+    end
+  end
+
+  defp elsewhere(_thread, _name), do: nil
 
   # Staffing on demand (§4c.3): nobody runs ahead of need, so a message addressed to coworkers with
   # no warm session on its thread opens a pane for each it may — the thread's LEAD anywhere, any
@@ -230,17 +262,28 @@ defmodule Server.Switchboard do
         for name <- target_names(message),
             String.downcase(name) != author,
             %Agent{} = agent <- [Staff.agent_by_name(name)],
-            standing? or agent.id == thread.agent_id,
-            not has_warm_session?(thread, agent),
+            home = spawn_home(thread, agent, standing?),
+            home != nil,
+            not has_warm_session?(home, agent),
             not Presence.clocked_out?(agent),
-            {:ok, %{exports: exports}} <- [Spawn.join(thread_id, agent.name)],
+            {:ok, %{exports: exports}} <- [Spawn.join(home.id, agent.name)],
             {:ok, handle} <- [Arbiter.spawn(exports)],
-            do: {agent.name, handle}
+            do: {agent.name, handle, home.id}
 
       if spawned != [], do: opening_turn(message, spawned)
     end
 
     :ok
+  end
+
+  # Where an absent coworker named on `thread` is spawned: here if this is the standing thread or they
+  # lead it; anyone else in their own window on the standing thread (`elsewhere/2`).
+  defp spawn_home(thread, agent, standing?) do
+    cond do
+      standing? or agent.id == thread.agent_id -> thread
+      lobby = elsewhere(thread, agent.name) -> Repo.get(Thread, lobby)
+      true -> nil
+    end
   end
 
   # The spawned panes' OPENING TURN. A harness that registers only on its first prompt (Claude Code)
@@ -252,7 +295,7 @@ defmodule Server.Switchboard do
     {:ok, _pid} =
       Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
         budget = Application.get_env(:server, :spawn_ready_timeout_ms, 20_000)
-        Enum.each(spawned, fn {_agent, handle} -> await_ready(handle, budget) end)
+        Enum.each(spawned, fn {_agent, handle, _home} -> await_ready(handle, budget) end)
 
         if claim([message.id]) > 0, do: poke_spawned(message, spawned)
       end)
@@ -261,8 +304,8 @@ defmodule Server.Switchboard do
   end
 
   defp poke_spawned(message, spawned) do
-    for {agent, _handle} <- spawned,
-        do: poke(%{thread_id: message.thread_id, agent: agent, pane_ref: nil}, prompt(message))
+    for {agent, _handle, home} <- spawned,
+        do: poke(%{thread_id: home, agent: agent, pane_ref: nil}, prompt_for(message, home))
   end
 
   defp await_ready(handle, budget_ms) do
@@ -343,15 +386,25 @@ defmodule Server.Switchboard do
   # Poke each distinct recipient thread once, and bump the woken sessions warm — being woken is
   # a turn, so it refreshes their warmth. A session whose pane has closed is ended instead. The
   # sessions it reached.
-  defp waken(sessions, prompt) do
+  defp waken(sessions, message) do
     {gone, reached} =
       sessions
-      |> Enum.uniq_by(& &1.thread_id)
-      |> Enum.split_with(&(poke(&1, prompt) == :gone))
+      |> Enum.uniq_by(&pane_of/1)
+      |> Enum.split_with(&(poke(&1, prompt_for(message, &1.thread_id)) == :gone))
 
     Enum.each(gone, &end_gone/1)
     Staff.touch_sessions(Enum.map(reached, & &1.id), now())
     reached
+  end
+
+  # A session's pane: its coworker's own window on a standing thread, else the thread's one leaf.
+  defp pane_of(%{thread_id: thread_id} = session) do
+    with %Thread{workspace_id: ws} when not is_nil(ws) <- Repo.get(Thread, thread_id),
+         %Thread{id: ^thread_id} <- Server.Channel.machine_thread(ws) do
+      {thread_id, session.agent_id}
+    else
+      _ -> thread_id
+    end
   end
 
   # a live session whose pane has closed is over: ended, so the next message spawns its coworker
@@ -405,4 +458,10 @@ defmodule Server.Switchboard do
   defp prompt(%Message{author: author, body: body, thread_id: thread_id}) do
     "New message on thread #{thread_id} from #{author}: #{body}"
   end
+
+  # The wake for a session on `thread_id`: a message from another thread says how to answer it there
+  defp prompt_for(%Message{thread_id: thread_id} = message, thread_id), do: prompt(message)
+
+  defp prompt_for(%Message{author: author} = message, _elsewhere),
+    do: prompt(message) <> " (It's from a thread you're not on: to answer #{author}, use consult_peer.)"
 end
