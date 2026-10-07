@@ -272,6 +272,15 @@ defmodule Server.WorklineTest do
       end
     end
 
+    test "advance_stage at verify with no fresh evidence asks the server to verify — the lead's only way to" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      {:ok, t} = Workline.open(%{title: "v", slug: "asks-verify", stage: "verify"})
+
+      assert {:error, {:artifact_missing, why}} = Workline.advance(t, artifacts: NonePresent, reverify: true)
+      assert why =~ "verify is queued"
+      assert_enqueued(worker: Server.Jobs.Verify, args: %{thread_id: t.id, slug: "asks-verify"})
+    end
+
     test "a thread no longer queued (re-parked, closed, moved on) is left alone" do
       thread = open!(%{slug: "not-queued", stage: "review"})
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)

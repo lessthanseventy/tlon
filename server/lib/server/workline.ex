@@ -223,6 +223,23 @@ defmodule Server.Workline do
     with :ok <- advanceable(thread, checker),
          :ok <- verified_artifact(thread, checker) do
       if gated?(thread), do: park(thread, checker), else: flip(thread)
+    else
+      {:error, {:artifact_missing, why}} when thread.stage == "verify" ->
+        if Keyword.get(opts, :reverify, checker == Git),
+          do: reverify(thread, why),
+          else: {:error, {:artifact_missing, why}}
+
+      other ->
+        other
+    end
+  end
+
+  # verify's evidence is the server's own run: a lead asking to advance past it (after fixing the
+  # branch) is asking for a verify, which only the server can start — so it does
+  defp reverify(thread, why) do
+    case Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: thread.id, slug: thread.slug})) do
+      {:ok, _} -> {:error, {:artifact_missing, "#{why} — verify is queued; the server posts its result here"}}
+      {:error, _} -> {:error, {:artifact_missing, why}}
     end
   end
 
