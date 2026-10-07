@@ -37,6 +37,8 @@ defmodule Server.Office.RoomTest do
     {:ok, _} = Dossier.record_check(%{thread_id: ctx.t.id, exit: 1, cmd: "mix test"})
     {:ok, _} = Dossier.record_check(%{thread_id: ctx.t.id, exit: 1, cmd: "mix credo"})
     {:ok, _} = Dossier.record_check(%{thread_id: ctx.t.id, exit: 0, cmd: "mix credo"})
+    # a stage's doc not written yet is work in progress, not a failure to triage
+    {:ok, _} = Dossier.record_check(%{thread_id: ctx.t.id, exit: 1, cmd: "workline artifact spec.md"})
 
     tr = Room.triage(ctx.ws.id)
 
