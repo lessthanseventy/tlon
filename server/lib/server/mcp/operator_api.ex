@@ -41,6 +41,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/hand-off    {"agent"} → Staffing.hand_off (staffed now where Oban runs)
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
       POST   /api/threads/:id/approve     Workline.approve: complete its parked gate
+      POST   /api/threads/:id/verify      run a workline's verify again (Jobs.Verify), as entering verify does; 409 off verify
       POST   /api/threads/:id/track       Workline.promote: make a plain thread a workline
       POST   /api/threads/:id/checks      {"slug", "exit", "cmd", "tail"?} → Dossier.record_check (the verify stage's evidence)
       POST   /api/threads/:id/move        {"project_id"} → Projects.move_thread (within its workspace)
@@ -216,6 +217,15 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["advance"], t), do: reply(conn, Workline.advance(t), &thread_row/1)
   defp on_thread(conn, "POST", ["approve"], t), do: reply(conn, Workline.approve(t), &thread_row/1)
   defp on_thread(conn, "POST", ["track"], t), do: reply(conn, Workline.promote(t), &thread_row/1)
+
+  defp on_thread(conn, "POST", ["verify"], %Thread{stage: "verify"} = t) do
+    case Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: t.id, slug: t.slug})) do
+      {:ok, _} -> json(conn, 202, %{verifying: t.id})
+      {:error, why} -> json(conn, 503, %{error: "verify can't be queued here: #{inspect(why)}"})
+    end
+  end
+
+  defp on_thread(conn, "POST", ["verify"], t), do: json(conn, 409, %{error: "thread #{t.id} is not at verify"})
   defp on_thread(conn, "POST", ["checks"], t), do: record_check(conn, t)
   defp on_thread(conn, "POST", ["move"], t), do: move(conn, t)
   defp on_thread(conn, "DELETE", [], t), do: delete_thread(conn, t)
