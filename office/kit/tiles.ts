@@ -2,7 +2,7 @@
 // coordinates for this step (no grid offset yet — see spec, "non-goals"). floorPlan composes a
 // list of them into the Plan the sim needs.
 import type { Measure } from "./canvas"
-import type { Scene } from "./draw"
+import type { Focus, Scene } from "./draw"
 import type { Actor, Cat, CatPlan, Kind, Pastime, Pt, Spot } from "./sim"
 import type { Agents } from "./types"
 
@@ -17,6 +17,8 @@ export type Live = {
   using(kind: Kind | Pastime): boolean
   /** Nina, for a tile whose art reacts to her (the aquarium's fish gathering at the glass, her corner's yarn) */
   cat: Cat
+  /** the actor seated at a desk/chair owned by this agent, if any is on the clock right now */
+  actor(agent: string): Actor | undefined
 }
 
 export type Tile<L> = {
@@ -28,7 +30,7 @@ export type Tile<L> = {
   /** this tile's slice of Nina's places, if it has one (only `cat-corner` does, this step) */
   cat?(l: L): Partial<CatPlan>
   /** art + furniture, at the scene's draw time */
-  draw(sc: Scene, a: Agents, l: L, m: Measure, sim: Live): void
+  draw(sc: Scene, a: Agents, l: L, m: Measure, sim: Live, focus: Focus): void
 }
 
 export type Home = { tiles: { kind: TileKind; at: [number, number] }[] }

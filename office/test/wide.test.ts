@@ -2,8 +2,14 @@ import { createHash } from "node:crypto"
 import { describe, expect, test } from "bun:test"
 import { crewOf, viewOf } from "../kit/crew"
 import type { Spot } from "../kit/sim"
+import { catCornerTile } from "../kit/tiles/cat-corner"
+import { gamesTile } from "../kit/tiles/games"
+import { kitchenTile } from "../kit/tiles/kitchen"
+import { loungeTile } from "../kit/tiles/lounge"
+import { meetingTile } from "../kit/tiles/meeting"
+import { officeTile } from "../kit/tiles/office"
 import { EMPTY, type Agents } from "../kit/types"
-import { WIDE_H, WideRoom, widePlan } from "../rooms/wide"
+import { WIDE_H, WideRoom, widePlan, zones } from "../rooms/wide"
 
 const measure = (s: string) => s.length * 2
 
@@ -177,6 +183,18 @@ describe("the wide room", () => {
             if (hit) throw new Error(`${from.kind}@${from.x},${from.y} → ${to.kind}@${to.x},${to.y} (w ${w}) walks through ${JSON.stringify(hit)} at ${x},${y}`)
           }
         }
+      }
+    }
+  })
+
+  test("no walk crosses the furniture, tile by tile", () => {
+    for (const w of [540, 560, 700]) {
+      const z = zones(w), plan = widePlan(w), l = plan.layout(viewOf(office(8), 1))
+      const tiles = [gamesTile(z), kitchenTile(z, w), meetingTile(z), loungeTile(z), catCornerTile(z), officeTile(z)]
+      for (const tile of tiles) {
+        const blocks = tile.blocks(l), spots = Object.values(tile.spots(l)).flat()
+        const inside = (x: number, y: number) => blocks.find((b) => x > b.x && x < b.x + b.w - 1 && y > b.y && y < b.y + b.h - 1)
+        for (const s of spots) if (inside(s.x, s.y)) throw new Error(`${tile.kind}@${w}: spot ${s.kind}@${s.x},${s.y} is inside its own block`)
       }
     }
   })

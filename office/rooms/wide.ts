@@ -5,21 +5,21 @@
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { fit, type Frame, type Measure } from "../kit/canvas"
-import { boardColumns, COLS, isManager, needsYou, peopleOf, tipOf } from "../kit/crew"
+import { boardColumns, COLS, isManager, peopleOf } from "../kit/crew"
 import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
-import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
 import { argos, dogBed, dogBowl, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
-import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
+import { Sim, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
 import type { Live } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { meetingTile } from "../kit/tiles/meeting"
 import { loungeTile } from "../kit/tiles/lounge"
 import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR, TOWER_X } from "../kit/tiles/cat-corner"
+import { officeTile } from "../kit/tiles/office"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
-import { BIG_PLANT, SCRIBBLES, shirtOf } from "../kit/sprites"
+import { SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
 
 export const WIDE_H = 200
@@ -30,8 +30,8 @@ export const HALL = 191 // the hallway's walking row
 export const OFF_W = 100, OFF_LANE = 94, OFF_DOOR = 150 // your office; its glass wall stops at the door
 const MEET_MIN = 86, LOUNGE_MIN = 124
 export const MEET_BOTTOM = 124
-const EXEC_Y = 54, TABLE_YS = [102, 142], SEATS = 4, SEAT_GAP = 28
-const CREW_W = 44, EXEC_W = 56
+export const EXEC_Y = 54, TABLE_YS = [102, 142], SEATS = 4, SEAT_GAP = 28
+export const CREW_W = 44, EXEC_W = 56
 
 /** the zones' edges for a room `w` wide: width past the minimum goes mostly to the floor, and the whiteboard above it */
 export function zones(w: number) {
@@ -69,9 +69,9 @@ export function corner(z: Zones) {
 /** where Nina sits to watch the fish: on the floor in front of the aquarium */
 export function fishWatch(z: Zones): Pt { const t = corner(z).tank; return { x: t.x + 15, y: t.y + t.h + 8 } }
 
-type Desk = { x: number; y: number; w: number; kind: "boss" | "manager" | "lead"; seat?: Seat }
-type Chair = { x: number; table: number; agent: string | null }
-const seatX = (d: Desk) => d.x + Math.round(d.w / 2)
+export type Desk = { x: number; y: number; w: number; kind: "boss" | "manager" | "lead"; seat?: Seat }
+export type Chair = { x: number; table: number; agent: string | null }
+export const seatX = (d: Desk) => d.x + Math.round(d.w / 2)
 
 function layoutFor(z: Zones) {
   return (a: Agents) => {
@@ -91,7 +91,7 @@ function layoutFor(z: Zones) {
 export type Layout = ReturnType<ReturnType<typeof layoutFor>>
 
 // your in-tray, on a side table left of your desk
-const TRAY = { x: 4, y: 62 }
+export const TRAY = { x: 4, y: 62 }
 
 /** the plan, and the furniture's footprints (for the route test): every rectangle no feet may enter */
 export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x: number; y: number; w: number; h: number }[] } {
@@ -102,17 +102,9 @@ export function widePlan(w: number): Plan<Layout> & { blocks: (l: Layout) => { x
   const ends = [{ x: table.x - 4, y: table.y + 6 }, { x: table.x + table.w + 4, y: table.y + 6 }]
   return {
     layout: layoutFor(z),
-    home(l, agent) {
-      const m = l.desks.find((d) => (d.kind === "manager" || d.kind === "lead") && d.seat?.agent === agent)
-      if (m) return { x: seatX(m), y: m.y + 19, aisle: m.y - 3, pose: "sit", face: "down", kind: "desk" }
-      const c = l.chairs.find((x) => x.agent === agent)
-      return c ? { x: c.x, y: c.table + 26, aisle: c.table + 34, pose: "sit", face: "up", kind: "desk" } : null
-    },
+    home: officeTile(z).home,
     // whoever has a question for you stands in front of your desk; the rest wait behind them
-    queue: [
-      ...[48, 60, 72, 84].map((x, i): Spot => ({ x, y: 148, aisle: 148, pose: "stand", face: i === 0 ? "up" : "left", kind: "queue" })),
-      { x: 88, y: 164, aisle: 164, pose: "stand", face: "up", kind: "queue" },
-    ],
+    queue: officeTile(z).spots(layoutFor(z)(EMPTY)).queue!,
     // the lounge's couch (facing the TV up on the wall), its beanbag, the kitchen counter
     lounge: [
       { x: L0 + 44, y: 82, aisle: 94, pose: "couch", face: "up", kind: "couch" },
@@ -198,6 +190,7 @@ export class WideRoom extends Sim<Layout> {
   private readonly meeting: ReturnType<typeof meetingTile>
   private readonly lounge: ReturnType<typeof loungeTile>
   private readonly catCorner: ReturnType<typeof catCornerTile>
+  private readonly office: ReturnType<typeof officeTile>
   private antic: Antic | null = null
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -209,6 +202,7 @@ export class WideRoom extends Sim<Layout> {
     this.meeting = meetingTile(this.z)
     this.lounge = loungeTile(this.z)
     this.catCorner = catCornerTile(this.z)
+    this.office = officeTile(this.z)
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
@@ -309,8 +303,8 @@ export class WideRoom extends Sim<Layout> {
     const W = this.width, H = WIDE_H
     const sc = new Scene(W, H, this.tick)
     const { L0, M0, MW, F0, F1 } = this.z
-    const l = this.plan.layout(a), { desks, chairs } = l
-    const px = sc.px.bind(sc), blit = sc.blit.bind(sc), text = sc.text.bind(sc)
+    const l = this.plan.layout(a)
+    const px = sc.px.bind(sc), text = sc.text.bind(sc)
 
     // ── floors ──
     const tileA = tint(ROLE.prose, ROLE.ground, 0.27), tileB = tint(ROLE.prose, ROLE.ground, 0.21)
@@ -342,38 +336,15 @@ export class WideRoom extends Sim<Layout> {
     for (const y0 of [BAND]) { px(OFF_W - 1, y0, 1, OFF_DOOR - y0, ROLE.edge); px(OFF_W, y0, 1, OFF_DOOR - y0, ROLE.key) }
     px(14, 108, 72, 36, ROLE.body); px(15, 109, 70, 34, ROLE.meta)
     for (let i = 0; i < 7; i++) for (const [dx, dy, w] of [[1, 0, 1], [0, 1, 3], [1, 2, 1]] as const) px(20 + i * 9 + dx, 124 + dy, w, 1, ROLE.assistant)
-    for (const d of desks) if (d.kind === "boss") bossDesk(sc, a, d)
-    this.catCorner.draw(sc, a, l, measure, this.live())
-    this.inTray(sc, focus.tray ?? 0)
-    this.beacon(sc, Object.values(a.triage).reduce((n, x) => n + x, 0))
-    sc.item(170, () => blit(BIG_PLANT, 2, 159, { l: ROLE.live, o: ROLE.structure }))
-
-    // ── the floor: the crew board, the manager's and the lead's desks, two tables of four ──
-    crewBoard(sc, a, measure, F0 + 8, EXEC_Y, CREW_W, 32, 9)
-    for (const d of desks) {
-      if (d.kind === "boss" || !d.seat) continue
-      const owner = this.actors.get(keyOf(d.seat))
-      execDesk(sc, a, measure, { ...d, kind: d.kind, seat: d.seat }, !!owner && owner.spot.kind === "desk" && !owner.path.length, 38)
-    }
-    for (const ty of TABLE_YS) this.table(sc, a, measure, ty, chairs.filter((c) => c.table === ty), focus)
-    // what's left of the floor: plants along it, a printer, the filing cabinet (the finished work)
-    if (F1 - F0 > 150) sc.item(TABLE_YS[0]! + 20, () => blit(BIG_PLANT, F1 - 14, TABLE_YS[0]! + 9, { l: ROLE.live, o: ROLE.structure }))
-    if (F1 - F0 > 150) sc.item(176, () => { px(F1 - 20, 160, 16, 10, ROLE.inactive); px(F1 - 18, 158, 12, 2, ROLE.prose); px(F1 - 16, 170, 2, 4, ROLE.structure); px(F1 - 8, 170, 2, 4, ROLE.structure) })
-    sc.item(174, () => {
-      const cx = F1 - 40
-      px(cx, 150, 14, 24, ROLE.inactive); px(cx, 150, 14, 1, ROLE.prose)
-      for (const dy of [152, 160, 168]) { px(cx + 1, dy, 12, 6, tint(ROLE.inactive, ROLE.ground, 0.75)); px(cx + 5, dy + 2, 4, 1, ROLE.structure) }
-      px(cx + 2, 167, 9, 1, ROLE.prose) // a folder left sticking out of the bottom drawer
-    })
-    sc.hits.push({ x: F1 - 40, y: 150, w: 14, h: 24, tip: "the filing cabinet: finished tickets and closed threads", act: { kind: "archive" } })
-    this.rack(sc, a, F1 - 60)
+    this.catCorner.draw(sc, a, l, measure, this.live(), focus)
+    this.office.draw(sc, a, l, measure, this.live(), focus)
 
     // ── the meeting room: glass, a round table, its chairs ──
-    this.meeting.draw(sc, a, l, measure, this.live())
+    this.meeting.draw(sc, a, l, measure, this.live(), focus)
 
     // ── the lounge: rug, couch (its back toward you), lamp, beanbag; the kitchen along the wall ──
-    this.lounge.draw(sc, a, l, measure, this.live())
-    this.pastimes(sc)
+    this.lounge.draw(sc, a, l, measure, this.live(), focus)
+    this.pastimes(sc, focus)
 
     // ── people, Nina ──
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")
@@ -485,11 +456,11 @@ export class WideRoom extends Sim<Layout> {
    * cabinet runs its attract screen until someone plays, then a game; the fish come up for flakes
    * when someone at the tank feeds them.
    */
-  private live(): Live { return { at: (kind) => this.at(kind), using: (kind) => this.using(kind), cat: this.cat } }
+  private live(): Live { return { at: (kind) => this.at(kind), using: (kind) => this.using(kind), cat: this.cat, actor: (agent) => this.actors.get(agent) } }
 
-  private pastimes(sc: Scene) {
-    this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live())
-    this.kitchen.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live())
+  private pastimes(sc: Scene, focus: Focus) {
+    this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live(), focus)
+    this.kitchen.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live(), focus)
     // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's (at 18)
     for (const [wx, plant] of [[this.z.L0 + 22, { x: this.z.L0 + 4, y: 175 }], [18, { x: 2, y: 159 }]] as const) {
       const n = Math.min(3, Math.floor((this.watered.get(wx) ?? 0) / 300))
@@ -675,89 +646,4 @@ export class WideRoom extends Sim<Layout> {
     sc.text(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`, cx, 36, ROLE.prose, 14)
   }
 
-  /** the in-tray on its side table: a sheet for each thing you haven't read (six at most), the top one lit */
-  private inTray(sc: Scene, unread: number) {
-    const { x, y } = TRAY, px = sc.px.bind(sc)
-    sc.item(y + 14, () => {
-      px(x, y + 6, 16, 2, ROLE.structure); px(x + 1, y + 8, 2, 6, ROLE.structure); px(x + 13, y + 8, 2, 6, ROLE.structure)
-      px(x + 2, y + 2, 12, 4, ROLE.inactive); px(x + 3, y + 3, 10, 3, ROLE.edge)
-      const sheets = Math.min(6, unread)
-      for (let i = 0; i < sheets; i++) px(x + 3 + (i % 2), y + 4 - i, 10, 1, i === sheets - 1 ? ROLE.attention : ROLE.prose)
-      if (unread) sc.text(`${unread} new`, x + 8, y - 4, ROLE.attention, 9)
-    })
-    sc.hits.push({ x, y: y - 6, w: 16, h: 20, tip: `the in-tray: what just happened${unread ? ` — ${unread} new` : ""}`, act: { kind: "tray" } })
-  }
-
-  /** the beacon over your door: dark while nothing is stuck, turning red while something is */
-  private beacon(sc: Scene, stuck: number) {
-    const x = OFF_W - 4, y = OFF_DOOR - 16, f = sc.f, px = sc.px.bind(sc)
-    sc.item(BAND + 1, () => {
-      px(x, y + 5, 9, 2, ROLE.inactive)
-      const on = stuck > 0 && f % 4 < 2
-      px(x + 1, y, 7, 5, stuck ? (on ? ROLE.alarm : tint(ROLE.alarm, ROLE.ground, 0.5)) : ROLE.raised)
-      px(x + 3, y + 1, 3, 1, stuck ? ROLE.prose : ROLE.inactive)
-      if (on) for (const [dx, dy] of [[-3, 1], [10, 1], [-2, -2], [9, -2]] as const) px(x + dx, y + dy, 2, 1, ROLE.alarm)
-    })
-    if (stuck) sc.overhead.push(() => sc.text(`${stuck} stuck`, x + 4, y - 4, ROLE.alarm, 9))
-    sc.hits.push({ x: x - 3, y: y - 8, w: 15, h: 15, tip: stuck ? `the beacon: ${stuck} stuck — blockers, failed checks, threads nobody leads` : "the beacon: nothing is stuck", act: { kind: "beacon" } })
-  }
-
-  /** the server rack: its lights blink green while the service is well, red while it needs a look */
-  private rack(sc: Scene, a: Agents, x: number) {
-    const f = sc.f, px = sc.px.bind(sc), warn = a.health?.state === "warn"
-    sc.item(174, () => {
-      px(x, 146, 12, 28, ROLE.structure); px(x + 1, 147, 10, 26, ROLE.edge)
-      for (let u = 0; u < 6; u++) {
-        const y = 149 + u * 4
-        px(x + 2, y, 8, 3, ROLE.inactive)
-        const lit = (u * 7 + f) % 5 !== 0
-        px(x + 3, y + 1, 1, 1, warn && u < 2 ? (f % 2 ? ROLE.alarm : ROLE.raised) : lit ? ROLE.live : ROLE.raised)
-        px(x + 5, y + 1, 1, 1, (u + f) % 3 ? ROLE.key : ROLE.raised)
-      }
-    })
-    const tip = !a.health ? "the server rack" : warn ? `the server rack: needs a look — ${a.health.problems.join("; ")}` : "the server rack: all green"
-    sc.hits.push({ x, y: 146, w: 12, h: 28, tip, act: { kind: "rack" } })
-  }
-
-  /**
-   * A table of four across the floor: a monitor at every seat facing its chair (lit while its owner
-   * works, pink while their thread waits on you), the owner's things beside it, their nameplate below.
-   */
-  private table(sc: Scene, a: Agents, measure: Measure, ty: number, mine: Chair[], focus: Focus) {
-    const { F0 } = this.z, x0 = F0 + 14, w = SEATS * SEAT_GAP + 4, f = sc.f
-    const stateOf = (c: Chair) => {
-      const owner = c.agent ? this.actors.get(c.agent) : undefined
-      return { owner, p: owner?.seat, seated: !!owner && owner.spot.kind === "desk" && !owner.path.length, asks: !!owner && needsYou(a.threads.find((t) => t.id === owner.seat.thread_id)) }
-    }
-    sc.item(ty + 22, () => {
-      sc.px(x0, ty + 12, w, 2, ROLE.structure)
-      sc.px(x0 + 1, ty + 14, w - 2, 8, ROLE.borderInactive)
-      for (const c of mine) {
-        const { owner, seated, asks } = stateOf(c)
-        const mx = c.x - 5, my = ty + 3
-        sc.px(mx, my, 10, 7, ROLE.inactive); sc.px(mx + 4, my + 7, 2, 2, ROLE.inactive)
-        if (asks) sc.px(mx + 1, my + 1, 8, 5, f % 2 ? ROLE.attention : ROLE.raised)
-        else {
-          sc.px(mx + 1, my + 1, 8, 5, ROLE.ground)
-          if (seated) for (let l = 0; l < 3; l++) sc.px(mx + 2, my + 1 + l * 2, 1 + ((f + l * 3 + c.x) % 6), 1, ROLE.live)
-        }
-        if (owner) decor(sc, owner.look, c.x + 11, ty + 12)
-      }
-    })
-    sc.item(ty + 30, () => {
-      for (const c of mine) {
-        if (!c.agent) continue
-        const { owner, p, seated, asks } = stateOf(c)
-        // a nameplate where three letters fit at the surface's text size; the crew card and the tip have every name
-        if (measure(c.agent.slice(0, 3), 11) <= SEAT_GAP) sc.text(fit(measure, c.agent, SEAT_GAP - 1, 11), c.x, ty + 37, asks ? ROLE.attention : seated ? shirtOf(p?.archetype) : ROLE.inactive, 11)
-        // their monitor: a door into their terminal
-        if (p && p.thread_id > 0) sc.hits.push({ x: c.x - 5, y: ty + 3, w: 10, h: 9, tip: `${c.agent}'s terminal — click to look over their shoulder`, act: { kind: "terminal", tid: p.thread_id } })
-        const hx = c.x - 10, hy = ty, hw = SEAT_GAP, hh = 39
-        const where = !owner ? "" : seated ? "working" : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : owner.spot.kind === "laptop" ? "on call, at a laptop in the meeting room" : `idle, at the ${owner.spot.kind}`
-        const agentId = a.bench.find((b) => b.name === c.agent)?.agent_id ?? null
-        sc.hits.push({ x: hx, y: hy, w: hw, h: hh, tip: p ? tipOf(p, a.threads.find((t) => t.id === p.thread_id), where) : c.agent, act: { kind: "person", agentId, name: c.agent, tid: p && p.thread_id > 0 ? p.thread_id : null } })
-        if (p && p.thread_id > 0 && p.thread_id === focus.picked) sc.ink.push({ t: "brackets", x: hx, y: hy, w: hw, h: hh, color: ROLE.body })
-      }
-    })
-  }
 }
