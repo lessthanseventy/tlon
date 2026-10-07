@@ -59,6 +59,28 @@ defmodule Server.WorklineReviewTest do
     assert {:error, _} = Artifacts.Git.check(thread("spec"), {:file, "spec.md"})
   end
 
+  test "build is owed code: a branch carrying only the workline's docs is not built", %{root: root} do
+    git = fn args -> System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
+    File.write!(Path.join(root, "seed"), "s")
+    {_, 0} = git.(["add", "seed"])
+    {_, 0} = git.(["commit", "-qm", "seed"])
+    {_, 0} = git.(["branch", "-M", "main"])
+    {_, 0} = git.(["checkout", "-qb", "work/fence-test"])
+    File.mkdir_p!(Path.join(root, "work/fence-test"))
+    File.write!(Path.join(root, "work/fence-test/spec.md"), "spec")
+    {_, 0} = git.(["add", "work"])
+    {_, 0} = git.(["commit", "-qm", "spec"])
+
+    assert {:error, why} = Artifacts.Git.check(thread("build"), :branch)
+    assert why =~ "no code"
+
+    File.write!(Path.join(root, "lib.ex"), "code")
+    {_, 0} = git.(["add", "lib.ex"])
+    {_, 0} = git.(["commit", "-qm", "code"])
+    {_, 0} = git.(["checkout", "-q", "main"])
+    assert {:ok, _} = Artifacts.Git.check(thread("build"), :branch)
+  end
+
   test "resubmitting identical content is fine — the artifact is already committed" do
     {:ok, _} = Review.submit(thread(), "same words", "menard-machine")
     assert {:ok, _} = Review.submit(thread(), "same words", "menard-machine")
@@ -78,10 +100,15 @@ defmodule Server.WorklineReviewTest do
           ~w(config user.email test@test),
           ~w(config user.name test),
           ~w(commit -q --allow-empty -m root),
-          ~w(branch work/fence-test)
+          ~w(checkout -qb work/fence-test)
         ] do
       {_, 0} = System.cmd("git", ["-C", other | args], stderr_to_stdout: true)
     end
+
+    File.write!(Path.join(other, "lib.ex"), "code")
+
+    for args <- [~w(add lib.ex), ~w(commit -qm code), ~w(checkout -q -)],
+        do: {_, 0} = System.cmd("git", ["-C", other | args], stderr_to_stdout: true)
 
     {:ok, ws} = Server.Workspaces.register(%{name: "Elsewhere"})
 
