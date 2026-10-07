@@ -36,7 +36,11 @@ defmodule Server.WorklineTest do
   end
 
   @low_scores %{"scope" => 1, "reversibility" => 1, "blast" => 2, "detectability" => 1, "proof" => 1}
-  @low %{"limits" => [], "decisions" => [], "scores" => @low_scores}
+  @checked Map.new(
+             ~w(scope reversibility blast detectability proof),
+             &{&1, %{"why" => "fine", "kind" => "fact", "quote" => "q", "grounded" => true}}
+           )
+  @low %{"limits" => [], "decisions" => [], "scores" => @low_scores, "reasons" => @checked}
 
   defp graded!(thread, grade) do
     {:ok, _} =
@@ -324,8 +328,8 @@ defmodule Server.WorklineTest do
 
     test "standing approval holds back: a high axis, a decision left open, a limit, no grade, no approving review" do
       for {slug, verdict, grade} <- [
-            {"high-blast", "approve", %{"limits" => [], "decisions" => [], "scores" => %{@low_scores | "blast" => 4}}},
-            {"decides", "approve", %{"limits" => [], "decisions" => ["the wording"], "scores" => @low_scores}},
+            {"high-blast", "approve", %{@low | "scores" => %{@low_scores | "blast" => 4}}},
+            {"decides", "approve", %{@low | "decisions" => ["the wording"]}},
             {"migrates", "approve", %{"limits" => ["a database migration"]}},
             {"ungraded", "approve", nil},
             {"unreviewed", nil, @low}
@@ -369,7 +373,7 @@ defmodule Server.WorklineTest do
       {:awaiting, parked} =
         Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
 
-      graded!(parked, %{"limits" => [], "decisions" => [], "scores" => %{@low_scores | "proof" => 5}})
+      graded!(parked, %{@low | "scores" => %{@low_scores | "proof" => 5}})
       assert {:ok, %{awaiting: "andrew"}} = Workline.graded(parked, artifacts: AllPresent, auto_land_risk: 2)
     end
 
@@ -380,7 +384,10 @@ defmodule Server.WorklineTest do
         "limits" => [],
         "decisions" => [],
         "scores" => %{@low_scores | "blast" => 3},
-        "reasons" => %{"blast" => "the merge queue"}
+        "reasons" => %{
+          @checked
+          | "blast" => %{"why" => "the merge queue", "kind" => "fact", "quote" => "q", "grounded" => true}
+        }
       })
 
       summary = Workline.gate_summary(thread)
