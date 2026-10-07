@@ -214,12 +214,13 @@ defmodule Server.Workline do
   Advance past the current stage. `{:ok, thread}` on a flip, `{:awaiting, thread}` when the
   transition gates on the operator, `{:error, {:artifact_missing, why}}` when the owed
   artifact isn't committed, `{:error, :awaiting_operator | :terminal | :not_a_workline}`
-  otherwise. `opts[:artifacts]` swaps the checker (tests stub it; default is git).
+  otherwise; a hold off a gate (a worker's question, a stuck flag) does not block it.
+  `opts[:artifacts]` swaps the checker (tests stub it; default is git).
   """
   def advance(%Thread{} = thread, opts \\ []) do
     checker = Keyword.get(opts, :artifacts, Git)
 
-    with :ok <- advanceable(thread),
+    with :ok <- advanceable(thread, checker),
          :ok <- verified_artifact(thread, checker) do
       if gated?(thread), do: park(thread, checker), else: flip(thread)
     end
@@ -269,12 +270,20 @@ defmodule Server.Workline do
     end
   end
 
-  defp advanceable(%Thread{stage: nil}), do: {:error, :not_a_workline}
-  defp advanceable(%Thread{stage: "merged"}), do: {:error, :terminal}
-  defp advanceable(%Thread{awaiting: awaiting}) when not is_nil(awaiting), do: {:error, :awaiting_operator}
-  defp advanceable(%Thread{stage: stage}) when stage in @stages, do: :ok
+  defp advanceable(%Thread{stage: nil}, _checker), do: {:error, :not_a_workline}
+  defp advanceable(%Thread{stage: "merged"}, _checker), do: {:error, :terminal}
+
+  # Only a gate's hold waits for approve. Off a gate the hold is a question or a stuck flag about the
+  # missing artifact, which the artifact answers — or a green verify would sit behind it.
+  defp advanceable(%Thread{awaiting: awaiting} = thread, checker) when not is_nil(awaiting) do
+    if at_gate?(thread, artifacts: checker),
+      do: {:error, :awaiting_operator},
+      else: advanceable(%{thread | awaiting: nil}, checker)
+  end
+
+  defp advanceable(%Thread{stage: stage}, _checker) when stage in @stages, do: :ok
   # A stage outside the ring (hand-edited row, drifted data) is a typed refusal, not a crash.
-  defp advanceable(%Thread{stage: stage}), do: {:error, {:invalid_stage, stage}}
+  defp advanceable(%Thread{stage: stage}, _checker), do: {:error, {:invalid_stage, stage}}
 
   # The owed-artifact check, recorded as a CHECK either way — the audit half of the invariant.
   defp verified_artifact(thread, checker) do
@@ -371,7 +380,7 @@ defmodule Server.Workline do
 
     {:ok, flipped} =
       Repo.transaction(fn ->
-        {:ok, flipped} = thread |> Thread.workline_stage_changeset(%{stage: to}) |> Repo.update()
+        {:ok, flipped} = thread |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
 
         {:ok, _event} =
           Dossier.record_event(%{
