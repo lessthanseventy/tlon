@@ -22,44 +22,59 @@ wall calendar, header XP bar, clock-in/out walk) is explicitly **not** this step
 
 ## 2 · Schema
 
-Three new tables, one new column, all owned by a workspace of kind `home`:
+Three new tables, all owned by a workspace; the workspace-kind question is open (§8.5 below).
+Migrations are raw SQL, Postgres, in the style of `20261005000000_schedule.exs` (`BIGSERIAL`
+PK, explicit `CHECK` constraints for closed-set columns, `TIMESTAMPTZ`, FK `ON DELETE CASCADE`,
+app-stamped `created_at TIMESTAMPTZ NOT NULL`, explicit `CREATE INDEX`, a `down/0` dropping in
+reverse order) — not the Ecto DSL, matching every recent migration in this tree:
 
 ```
-workspaces
-  + kind  :string, default "office", not null   -- "office" | "home"
-
 routines
-  id              :bigserial pk
-  workspace_id    references(:workspaces), not null
-  title           :string, not null
-  every           :string, not null       -- cron expression, or "@daily" / "@weekly"
-  window_minutes  :integer, not null, default 60
-  xp              :integer, not null, default 10
-  tile            :string                 -- nullable; a tile kind name, uninterpreted here
-  enabled         :boolean, not null, default true
-  timestamps()
+  id              bigserial primary key
+  workspace_id    bigint not null references workspaces(id) on delete cascade
+  title           text not null
+  every           text not null            -- cron expression, or "@daily" / "@weekly"
+  window_minutes  integer not null default 60
+  xp              integer not null default 10
+  tile            text                     -- nullable; a tile kind name, uninterpreted here
+  enabled         boolean not null default true
+  created_at      timestamptz not null
+  updated_at      timestamptz not null
 
 routine_runs
-  id              :bigserial pk
-  routine_id      references(:routines), not null
-  due_at          :utc_datetime, not null   -- the due instance this run satisfies
-  done_at         :utc_datetime, not null   -- set at insert; a run only exists once done
-  late            :boolean, not null        -- computed at insert, never recomputed
-  inserted_at     :utc_datetime, not null   -- no updated_at: a run is immutable
+  id              bigserial primary key
+  routine_id      bigint not null references routines(id) on delete cascade
+  due_at          timestamptz not null      -- the due instance this run satisfies
+  done_at         timestamptz not null      -- set at insert; a run only exists once done
+  late            boolean not null          -- computed at insert, never recomputed
+  created_at      timestamptz not null      -- no updated_at: a run is immutable
+  -- unique index on (routine_id, due_at): see §8.4, a one-line follow-up, not this step
 
 quests
-  id              :bigserial pk
-  workspace_id    references(:workspaces), not null
-  title           :string, not null
-  due_at          :utc_datetime             -- nullable: due is optional (§3.1)
-  xp              :integer, not null, default 10
-  done_at         :utc_datetime             -- nullable until done
-  timestamps()
+  id              bigserial primary key
+  workspace_id    bigint not null references workspaces(id) on delete cascade
+  title           text not null
+  due_at          timestamptz               -- nullable: due is optional (§3.1)
+  xp              integer not null default 10
+  done_at         timestamptz               -- nullable until done
+  created_at      timestamptz not null
+  updated_at      timestamptz not null
 ```
 
-`kind` on workspaces: existing `Server.Workspaces.create/1` grows the one field; default keeps
-every current workspace `"office"` with no migration of existing rows' data, only the column add
-with its default.
+Schema modules (`Server.Routine`, `Server.RoutineRun`, `Server.Quest`) follow `Server.Schedule`'s
+shape: a `create_changeset/1`, closed-set validation where relevant, `Repo.insert`. New tables
+need adding to `Server.TestDB`'s `@ordered` truncation list (children before parents:
+`routine_runs` before `routines`), and the new contexts (`Server.Life`, and `Server.Routines`/
+`Server.Quests` if split out) need adding to `server/lib/server.ex`'s `exports:` list — the
+`:boundary`-enforced public surface — or nothing outside `Server` can call them.
+
+### 2.1 Open: `type` already has a value named `life`
+
+`workspace.type` is an existing closed set (`code | life | blank`, DB-CHECK'd,
+`server/lib/server/workspace.ex`) that picks the roster template at creation — `life` currently
+means "an assistant" (`workspaces.ex:36`), nothing to do with routines/quests. The design doc
+(§3.3) calls the new thing a workspace **kind** of `home`. Two ways to reconcile, and this is a
+real open question, not a stylistic one — see §8.5.
 
 ## 3 · `Server.Life` — derived, nothing cached
 
@@ -122,15 +137,32 @@ POST   /api/life/quests               Server.Life.create_quest/2          -> {ti
 POST   /api/life/quests/:id/done      Server.Life.quest_done/1
 ```
 
-Every route resolves its workspace the same way the rest of the operator API already scopes a
-workspace (existing plug/param convention — not changed here). `check:names` must list all six
-so a later rename fails the gate instead of stranding a route silently.
+This repo's operator API is a hand-rolled dispatcher (`Server.MCP.OperatorAPI.call/2`,
+function-clauses on `[resource | rest]` + method), not Phoenix router macros — new clauses for
+`"life"` alongside the existing `on_thread/4`-style helpers, same `with_workspace`/`reply/4`
+helpers. The route table is a hand-kept comment block at the top of that module (its source of
+truth); the six new routes get added there too.
+
+Correction to the check line: `check:names` (`scripts/check-names.sh`) is a glue-integrity grep —
+every `Server.X.Y` named in scripts/`mise.toml`/adapters/docs must have a matching `defmodule`,
+every named mix/mise task must exist. It does **not** enumerate operator-API routes or MCP tool
+names today. What actually gates the six routes: they resolve inside `mise run server:check`
+(the existing route-dispatch tests + the ExUnit suite this step adds), and `Server.Life`/
+`Server.Routines` land in `server/lib/server.ex`'s `exports:` list so `check:names`' module-exists
+check has something real to point at. If andrew wants a literal "every /api/life route resolves"
+gate, that's a small addition to `check-names.sh` or a dedicated route test — flagged as a
+question in §8.5, not assumed.
 
 ## 5 · MCP tools
 
-The same six, one-to-one with the routes, for a coworker employed by (or consulted in) a `home`
-workspace — the adapter's existing route→tool mapping needs no change, only the six new routes
-registered:
+Six new tool modules under `server/lib/server/mcp/tools/`, each `use Server.MCP.Tool`, registered
+individually with `component(Server.MCP.Tool.X, name: "...")` in `endpoint.ex` — the same shape as
+every existing tool (e.g. `RegisterWorkspace`). **Correction to the plan's framing**: there is no
+adapter that derives MCP tools from operator-API routes — routes and tools are two independent,
+thin callers of the same `Server.Life`/`Server.Routines`/`Server.Quests` context functions (see
+`RegisterWorkspace` next to `POST /api/workspaces` for the existing precedent). "No adapter
+changes" is still true, but means the TS `adapters/` packages, not a route→tool generator — there
+isn't one to change.
 
 - `life_status`
 - `routine_create`
@@ -145,11 +177,13 @@ with the matching routine's id — resolving *which* routine from free text is t
 
 ## 6 · Office snapshot
 
-`Server.Office.status` grows a `life` summary block, computed by calling `Server.Life.status/1`
-and projecting down to `%{level, xp, due: [...]}` (the detail fields — `streaks`, full `quests`,
-`today` — stay behind the `/api/life` fetch the step-5 card makes; the snapshot only carries what
-the step-5 header needs so it never gets heavy). Only present when the viewer's current/linked
-workspace is `kind: "home"`; absent otherwise, same as any workspace-scoped block today.
+`Server.Office.status/0` (`office.ex:17-56`) returns one map with per-workspace keys already
+built the same way — `triage: Map.new(ws_ids, &{&1, Room.triage(&1).count})` is the precedent. A
+new top-level `life` key follows it: `Map.new(home_ws_ids, &{&1, Server.Life.status(&1) |>
+Map.take([:level, :xp, :due])})` — one entry per `home`-kind workspace, the summary only (full
+`streaks`/`quests`/`today` stay behind the `/api/life` fetch the step-5 card makes, so the
+snapshot never gets heavy). Absent for any workspace not of that kind, same as `triage` is keyed
+only by workspaces that have one.
 
 ## 7 · Test matrix (drives `menard run test --in server`)
 
@@ -180,6 +214,27 @@ workspace is `kind: "home"`; absent otherwise, same as any workspace-scoped bloc
   ever actually happens.
 - `today` in the snapshot/status body is today's due occurrences tagged done/not — needed by
   step 5's header and not worth a second query there, so it's built now.
+
+### 8.5 · Real open question — not settled by the plan, needs andrew's call
+
+`workspace.type` is an existing DB-CHECK'd closed set (`code | life | blank`) that already has a
+value spelled `life`, meaning "an assistant" roster template — unrelated to this track's `home`
+kind. Two ways to give a `home` workspace its kind, and the plan doc didn't know this collision
+existed:
+
+1. **Add `"home"` as a fourth `type` value.** Reuses the one field the DB already CHECKs and the
+   one `Workspaces.register_from/3` template lookup already does; `home` just needs its own
+   template entry (`roster: []` or similar). Keeps one closed-set column, not two overlapping
+   ones. Risk: `type` already carries roster-template meaning, not "what kind of life this is" —
+   semantically a slight stretch, but no worse than `code`/`blank` already being there.
+2. **A separate new column** (`kind`, as the design doc's prose literally says), independent of
+   `type`. Keeps `type`'s existing meaning untouched; costs a second closed-set column whose
+   relationship to `type` needs explaining (can a `code`-type workspace also be `home`-kind? The
+   plan's answer is implicitly no — home is its own thing).
+
+Recommendation: (1) — extend `type`'s CHECK and `@templates`, no new column, matches "the
+smallest change that gives the life side a scope" (§3.3's own framing). Needs andrew's sign-off
+before the plan stage locks the migration.
 
 ## 9 · Deferred, named so they aren't silently assumed later
 
