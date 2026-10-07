@@ -3,11 +3,19 @@
 // list of them into the Plan the sim needs.
 import type { Measure } from "./canvas"
 import type { Scene } from "./draw"
-import type { CatPlan, Kind, Pastime, Spot } from "./sim"
+import type { Actor, CatPlan, Kind, Pastime, Pt, Spot } from "./sim"
 import type { Agents } from "./types"
 
 export type TileKind = "office" | "cat-corner" | "meeting" | "lounge" | "kitchen" | "games"
 export type Rect = { x: number; y: number; w: number; h: number }
+
+/** the live sim state a tile's draw reads at paint time, beyond the snapshot and its own layout */
+export type Live = {
+  /** who is settled at a pastime of this kind, and where */
+  at(kind: Kind | Pastime): Actor[]
+  /** Nina's position, for a tile whose art reacts to her (the aquarium's fish gathering at the glass) */
+  cat: Pt
+}
 
 export type Tile<L> = {
   kind: TileKind
@@ -18,7 +26,12 @@ export type Tile<L> = {
   /** this tile's slice of Nina's places, if it has one (only `cat-corner` does, this step) */
   cat?(l: L): Partial<CatPlan>
   /** art + furniture, at the scene's draw time */
-  draw(sc: Scene, a: Agents, l: L, m: Measure): void
+  draw(sc: Scene, a: Agents, l: L, m: Measure, sim: Live): void
 }
 
 export type Home = { tiles: { kind: TileKind; at: [number, number] }[] }
+
+/** a place to be, at absolute room coordinates: the one spot-builder every tile's `spots()` uses */
+export function at(x: number, y: number, aisle: number, face: Spot["face"], kind: Spot["kind"], partner?: Pt): Spot {
+  return { x, y, aisle, pose: "stand", face, kind, ...(partner ? { with: partner } : {}) }
+}

@@ -11,6 +11,7 @@ import { bossDesk, crewBoard, decor, execDesk } from "../kit/furniture"
 import { ROLE, tint } from "../kit/palette"
 import { argos, dogBed, dogBowl, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
+import { gamesTile } from "../kit/tiles/games"
 import { NINA } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
 import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -27,13 +28,13 @@ const EXEC_Y = 54, TABLE_YS = [102, 142], SEATS = 4, SEAT_GAP = 28
 const CREW_W = 44, EXEC_W = 56
 
 /** the zones' edges for a room `w` wide: width past the minimum goes mostly to the floor, and the whiteboard above it */
-function zones(w: number) {
+export function zones(w: number) {
   const extra = Math.max(0, w - WIDE_MIN_W)
   const MW = MEET_MIN + 2 * Math.floor(extra * 0.1), LW = LOUNGE_MIN + Math.floor(extra * 0.25)
   const L0 = w - LW, M0 = L0 - 6 - MW, F0 = OFF_W + 6, F1 = M0 - 6
   return { L0, M0, MW, Mc: M0 + MW / 2, F0, F1, W: w }
 }
-type Zones = ReturnType<typeof zones>
+export type Zones = ReturnType<typeof zones>
 /** a zone's lane: the column it walks down to the hallway */
 function laneOf(z: Zones, x: number) {
   return x <= OFF_W ? OFF_LANE : x < z.M0 ? z.F0 + 3 : x < z.L0 ? z.Mc : z.L0 + 6
@@ -44,7 +45,7 @@ function laneOf(z: Zones, x: number) {
  * table left of its lane, two arcade cabinets right of it) and the aquarium on the open floor past
  * the second table — what the plan routes to and the render draws, from one place.
  */
-function corner(z: Zones) {
+export function corner(z: Zones) {
   return {
     table: { x: z.M0 + 8, y: 146, w: 26, h: 12 },
     cabinets: [z.Mc + 8, z.Mc + 24].map((x) => ({ x, y: 128, w: 12, h: 20 })),
@@ -60,7 +61,7 @@ function corner(z: Zones) {
 }
 
 /** where Nina sits to watch the fish: on the floor in front of the aquarium */
-function fishWatch(z: Zones): Pt { const t = corner(z).tank; return { x: t.x + 15, y: t.y + t.h + 8 } }
+export function fishWatch(z: Zones): Pt { const t = corner(z).tank; return { x: t.x + 15, y: t.y + t.h + 8 } }
 
 type Desk = { x: number; y: number; w: number; kind: "boss" | "manager" | "lead"; seat?: Seat }
 type Chair = { x: number; table: number; agent: string | null }
@@ -81,7 +82,7 @@ function layoutFor(z: Zones) {
     return { desks, chairs, people }
   }
 }
-type Layout = ReturnType<ReturnType<typeof layoutFor>>
+export type Layout = ReturnType<ReturnType<typeof layoutFor>>
 
 // Nina's corner of your office: the tower by the glass, the litter box by the left wall, the yarn
 // and a mouse on the rug
@@ -221,16 +222,14 @@ export class WideRoom extends Sim<Layout> {
   private readonly z: Zones
   private readonly tvSet = new Tv(48, 28)
   private readonly dog: Dog
+  private readonly games: ReturnType<typeof gamesTile>
   private antic: Antic | null = null
-  /** each cabinet's best score and who set it; the game each player is on; a new best's fanfare until `fanfare` */
-  private highs: ({ name: string; score: number } | null)[] = [null, null]
-  private runs = new Map<string, { cab: number; score: number }>()
-  private fanfare = 0
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
   constructor(readonly width: number) {
     super(widePlan(width))
     this.z = zones(width)
+    this.games = gamesTile(this.z)
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
@@ -302,7 +301,7 @@ export class WideRoom extends Sim<Layout> {
     const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
     if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
     for (const x of this.at("plant")) this.watered.set(x.spot.x, (this.watered.get(x.spot.x) ?? 0) + 1)
-    this.arcadeScores()
+    this.games.step(this.tick, (kind) => this.at(kind), this.actors)
     // Nina at the aquarium paws at the glass, and has thoughts about the fish
     const c = this.cat, fw = fishWatch(this.z)
     if (c.x === fw.x && c.y === fw.y && !c.path.length) {
@@ -527,29 +526,7 @@ export class WideRoom extends Sim<Layout> {
   }
 
   /** the cabinets' best scores, and who holds them */
-  highScores() { return this.highs }
-
-  /** whoever plays racks up points; walking away, a best beaten is theirs, with a fanfare */
-  private arcadeScores() {
-    const { cabinets } = corner(this.z), playing = new Set<string>()
-    for (const x of this.at("arcade")) {
-      const cab = cabinets.findIndex((c) => Math.abs(c.x + 6 - x.x) < 3)
-      if (cab < 0) continue
-      playing.add(x.seat.agent)
-      const run = this.runs.get(x.seat.agent) ?? { cab, score: 0 }
-      if (this.tick % 4 === 0) run.score += 10 * Math.floor(Math.random() * 6)
-      this.runs.set(x.seat.agent, run)
-    }
-    for (const [who, run] of this.runs) {
-      if (playing.has(who)) continue
-      this.runs.delete(who)
-      if (run.score <= (this.highs[run.cab]?.score ?? 0)) continue
-      this.highs[run.cab] = { name: who, score: run.score }
-      this.fanfare = this.tick + 40
-      const x = [...this.actors.values()].find((a) => a.seat.agent === who)
-      if (x) { x.emote = "!"; x.emoteUntil = this.tick + 30 }
-    }
-  }
+  highScores() { return this.games.highScores() }
 
   /** who is settled at a pastime of `kind`, and where */
   private at(kind: string) { return [...this.actors.values()].filter((x) => x.spot.kind === kind && !x.moving && !x.path.length) }
@@ -560,54 +537,8 @@ export class WideRoom extends Sim<Layout> {
    * when someone at the tank feeds them.
    */
   private pastimes(sc: Scene) {
-    const { table: t, cabinets, tank } = corner(this.z), f = sc.f, tick = sc.tick, px = sc.px.bind(sc)
-    sc.item(t.y + t.h, () => {
-      px(t.x + 2, t.y + 8, 2, 4, ROLE.inactive); px(t.x + t.w - 4, t.y + 8, 2, 4, ROLE.inactive)
-      px(t.x, t.y, t.w, 8, tint(ROLE.live, ROLE.ground, 0.4)); px(t.x, t.y, t.w, 1, ROLE.prose); px(t.x, t.y + 7, t.w, 1, ROLE.prose)
-      px(t.x + t.w / 2 - 1, t.y - 2, 2, 9, tint(ROLE.prose, ROLE.ground, 0.7))
-    })
-    const players = this.at("pingpong")
-    if (players.length === 2) {
-      // a rally: across and back, an arc over the net, a bounce each side
-      const p = (tick % 16) / 8, k = p < 1 ? p : 2 - p, x = Math.round(t.x + 2 + k * (t.w - 4)), y = Math.round(t.y + 3 - Math.sin(k * Math.PI) * 7)
-      sc.overhead.push(() => px(x, y, 2, 2, ROLE.body))
-    }
-    cabinets.forEach((c, i) => sc.item(c.y + c.h, () => {
-      const body = i ? ROLE.assistant : ROLE.planner, playing = this.at("arcade").some((a) => Math.abs(a.x - (c.x + 6)) < 3)
-      // the marquee flickers; a new best sets it flashing
-      px(c.x, c.y, c.w, c.h, tint(body, ROLE.ground, 0.55)); px(c.x, c.y, c.w, 3, tick < this.fanfare ? (tick % 2 ? ROLE.attention : ROLE.body) : f % 4 ? body : ROLE.body)
-      px(c.x + 2, c.y + 4, 8, 7, ROLE.ground)
-      if (playing) {
-        // a wave of invaders marching, the ship under them firing
-        const dx = Math.floor(f / 2) % 3
-        for (let k = 0; k < 3; k++) px(c.x + 2 + dx + k * 2, c.y + 5, 1, 1, ROLE.live)
-        px(c.x + 3 + ((f * 3) % 6), c.y + 9, 2, 1, ROLE.key)
-        if (f % 2) px(c.x + 4 + ((f * 3) % 6), c.y + 6 + (tick % 3), 1, 1, ROLE.body)
-      } else if (f % 6 < 3) px(c.x + 3, c.y + 7, 6, 1, ROLE.body) // insert coin
-      px(c.x + 1, c.y + 12, 10, 3, ROLE.edge); px(c.x + 3, c.y + 11, 1, 2, ROLE.prose); px(c.x + 6, c.y + 13, 1, 1, ROLE.alarm); px(c.x + 8, c.y + 13, 1, 1, ROLE.key)
-      const best = this.highs[i]
-      sc.hits.push({ x: c.x, y: c.y, w: c.w, h: c.h, tip: `the arcade${best ? ` - best ${best.score} by ${best.name}` : ""} - click to play`, act: { kind: "arcade" } })
-    }))
-    sc.item(tank.y + tank.h, () => {
-      const water = tint(ROLE.key, ROLE.ground, 0.35), glass = tint(ROLE.prose, ROLE.ground, 0.6)
-      px(tank.x, tank.y + 18, tank.w, 6, ROLE.structure); px(tank.x + 2, tank.y + 23, 2, 1, ROLE.borderInactive)
-      px(tank.x, tank.y, tank.w, 18, glass); px(tank.x + 1, tank.y + 2, tank.w - 2, 15, water); px(tank.x, tank.y, tank.w, 1, ROLE.inactive)
-      px(tank.x + 1, tank.y + 15, tank.w - 2, 2, tint(ROLE.body, ROLE.ground, 0.5))
-      for (const [wx, h] of [[4, 7], [9, 5], [23, 8]] as const) for (let j = 0; j < h; j++) px(tank.x + wx + ((j + f) % 4 === 0 ? 1 : 0), tank.y + 14 - j, 1, 1, ROLE.live)
-      const feeding = this.at("aquarium").length > 0 && tick % 300 < 50
-      if (feeding) for (let k = 0; k < 4; k++) px(tank.x + 10 + k * 3, tank.y + 3 + ((tick + k * 5) % 10), 1, 1, ROLE.body)
-      ;[ROLE.alarm, ROLE.body, ROLE.attention].forEach((col, i) => {
-        // each fish swims its own lap; at feeding time they all come up for the flakes
-        const lap = 22, s = Math.floor(tick / (2 + i)) + i * 7, p = s % (2 * lap), x = p < lap ? p : 2 * lap - p
-        // when Nina is at the glass they gather at her side of it, just out of reach
-        const nina = this.cat.x === tank.x + 15 && this.cat.y === tank.y + tank.h + 8 && !this.cat.path.length
-        const fx = nina ? tank.x + 10 + i * 3 + Math.round(Math.sin((tick + i * 15) / 7) * 2) : tank.x + 2 + x
-        const fy = feeding ? tank.y + 4 + i : nina ? tank.y + 9 + i * 2 : tank.y + 5 + i * 3, right = nina ? i % 2 === 0 : p < lap
-        px(fx, fy, 3, 2, col); px(right ? fx - 1 : fx + 3, fy + (f % 2), 1, 1, col)
-      })
-      for (let k = 0; k < 2; k++) px(tank.x + 6 + k * 14, tank.y + 14 - ((tick + k * 9) % 12), 1, 1, ROLE.prose)
-    })
-    const { vending: v, shelf, foos, pool } = corner(this.z)
+    this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, { at: (kind) => this.at(kind), cat: this.cat })
+    const { vending: v, shelf } = corner(this.z), f = sc.f, tick = sc.tick, px = sc.px.bind(sc)
     sc.item(v.y + v.h, () => {
       // the snack machine: rows of snacks behind the glass, a can thunking down when someone buys
       px(v.x, v.y, v.w, v.h, ROLE.alarm); px(v.x + 1, v.y + 2, 7, 16, tint(ROLE.prose, ROLE.ground, 0.3))
@@ -623,41 +554,6 @@ export class WideRoom extends Sim<Layout> {
     })
     // the armchair in front of it, drawn just behind whoever sits in it
     sc.item(83, () => { px(shelf.x + 1, 72, 14, 12, ROLE.planner); px(shelf.x + 3, 74, 10, 8, tint(ROLE.planner, ROLE.ground, 0.6)); px(shelf.x + 1, 84, 2, 2, ROLE.structure); px(shelf.x + 13, 84, 2, 2, ROLE.structure) })
-    sc.item(foos.y + foos.h, () => {
-      // foosball: the rods slide while a pair plays, the ball rattling between them
-      px(foos.x, foos.y, foos.w, foos.h - 4, ROLE.structure); px(foos.x + 2, foos.y + 1, foos.w - 4, 6, tint(ROLE.live, ROLE.ground, 0.45))
-      px(foos.x + 3, foos.y + 8, 2, 4, ROLE.structure); px(foos.x + foos.w - 5, foos.y + 8, 2, 4, ROLE.structure)
-      const on = this.at("foosball").length === 2
-      for (let r = 0; r < 4; r++) {
-        const rx = foos.x + 5 + r * 5, dy = on ? ((tick + r * 3) % 4) - 2 : 0
-        px(rx, foos.y - 1, 1, 9, ROLE.inactive)
-        for (const my of [2, 5]) px(rx, foos.y + my + dy, 1, 1, r % 2 ? ROLE.alarm : ROLE.key)
-      }
-      if (on) px(foos.x + 3 + ((tick * 3) % (foos.w - 6)), foos.y + 3 + (tick % 2), 1, 1, ROLE.prose)
-    })
-    sc.item(pool.y + pool.h, () => {
-      // the pool table: wood rails, green felt, six pockets; racked and waiting, or a game on —
-      // a cue at the cue ball, the balls rolling, now and then one dropping into a pocket
-      px(pool.x, pool.y, pool.w, pool.h, ROLE.structure); px(pool.x + 2, pool.y + 2, pool.w - 4, pool.h - 4, tint(ROLE.live, ROLE.ground, 0.4))
-      for (const [dx, dy] of [[1, 1], [pool.w / 2 - 1, 1], [pool.w - 3, 1], [1, pool.h - 3], [pool.w / 2 - 1, pool.h - 3], [pool.w - 3, pool.h - 3]] as const) px(pool.x + dx, pool.y + dy, 2, 2, ROLE.fieldInk)
-      px(pool.x + 3, pool.y + pool.h, 2, 3, ROLE.structure); px(pool.x + pool.w - 5, pool.y + pool.h, 2, 3, ROLE.structure)
-      const colours = [ROLE.body, ROLE.alarm, ROLE.key, ROLE.assistant, ROLE.attention, ROLE.edge]
-      if (this.at("pool").length === 2) {
-        const shot = tick % 60, t = Math.min(1, shot / 20)
-        const cue = { x: pool.x + 6 + Math.round(t * 10), y: pool.y + 6 - Math.round(t * 2) }
-        if (shot < 4) px(cue.x - 7 + shot, cue.y, 6, 1, ROLE.borderInactive) // the cue drawing back and striking
-        px(cue.x, cue.y, 1, 1, ROLE.prose)
-        colours.forEach((c, k) => {
-          if ((tick >> 6) % 7 === k && shot > 40) return // this one's down
-          const bx = pool.x + 14 + ((k * 5 + (shot > 20 ? Math.round((shot - 20) / 8) * (k % 2 ? 1 : -1) : 0) + 20) % 8), by = pool.y + 3 + ((k * 3) % 6)
-          px(bx, by, 1, 1, c)
-        })
-      } else {
-        // racked: a triangle at the far end, the cue ball at the near one
-        colours.forEach((c, k) => { const row = k < 1 ? 0 : k < 3 ? 1 : 2, col = k < 1 ? 0 : k < 3 ? k - 1 : k - 3; px(pool.x + 16 + row * 2, pool.y + 5 - row + col * 2, 1, 1, c) })
-        px(pool.x + 6, pool.y + 6, 1, 1, ROLE.prose)
-      }
-    })
     // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's (at 18)
     for (const [wx, plant] of [[this.z.L0 + 22, { x: this.z.L0 + 4, y: 175 }], [18, { x: 2, y: 159 }]] as const) {
       const n = Math.min(3, Math.floor((this.watered.get(wx) ?? 0) / 300))
