@@ -167,6 +167,10 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   still describing the old design is the incident this comes from.)
 - **Commit each piece of work when it is done**: one commit per bug, feature or ticket, before
   you start the next, so `git log` says what changed and why.
+- **History is linear.** GitHub's `main` is protected: rebase-merge only, every change through a PR.
+  Rebase onto main, never merge it in, never make a merge commit; ship work as a PR branch, or a
+  stack of small ones with `gh stack`. A workline's approval lands its branch the same way —
+  rebased, then fast-forwarded (`Server.Workline.Merge`). Rewriting pushed history is the human's call.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
   that wrote it — YOUR model, read from the brief's `You are … (pi)` line (or `$PI_MODEL`), never a
   name copied from an example or another model's commit. Format: `Co-Authored-By: <your model> (pi)
