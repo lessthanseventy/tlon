@@ -146,4 +146,91 @@ defmodule Server.MaintainTest do
     {:ok, t} = Workline.approve(t, artifacts: AllPresent)
     t
   end
+
+  describe "the board says what is true" do
+    test "a ticket left doing with nothing open working on it goes back to the backlog, saying why" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Board"})
+      {:ok, idle} = Server.Tickets.file(%{workspace_id: ws.id, title: "owned by nobody"})
+      {:ok, _} = Server.Tickets.update(idle, %{status: "doing"})
+      {:ok, busy} = Server.Tickets.file(%{workspace_id: ws.id, title: "being worked"})
+      {:ok, th} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id})
+      {:ok, _} = Server.Tickets.promote(busy, th.id)
+
+      sweep()
+
+      idle = Repo.get!(Server.Ticket, idle.id)
+      assert idle.status == "backlog" and idle.body =~ "no open thread"
+      assert Repo.get!(Server.Ticket, busy.id).status == "doing"
+    end
+
+    test "a ticket started on an open thread but still in the backlog is doing" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Board2"})
+      {:ok, tk} = Server.Tickets.file(%{workspace_id: ws.id, title: "started"})
+      {:ok, th} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id})
+      {:ok, _} = Server.Tickets.tie(tk, th.id, "promoted")
+
+      sweep()
+      assert Repo.get!(Server.Ticket, tk.id).status == "doing"
+    end
+  end
+
+  describe "worktrees no thread is working in" do
+    setup do
+      repo = Path.join(System.tmp_dir!(), "stale-wt-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+
+      git = fn args ->
+        System.cmd("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true)
+      end
+
+      {_, 0} = git.(["init", "-q", "-b", "main"])
+      File.write!(Path.join(repo, "a.txt"), "a\n")
+      {_, 0} = git.(["add", "a.txt"])
+      {_, 0} = git.(["commit", "-qm", "seed"])
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      {:ok, ws} = Server.Workspaces.register(%{name: "Trees"})
+
+      {:ok, project} =
+        Server.Projects.register(%{workspace_id: ws.id, name: "trees", repos: [%{"name" => "r", "path" => repo}]})
+
+      %{repo: repo, git: git, ws: ws, project: project}
+    end
+
+    defp thread_with_tree(ctx, title) do
+      {:ok, th} = Server.Channel.open_thread(%{title: title, workspace_id: ctx.ws.id, project_id: ctx.project.id})
+      {:ok, wt} = Server.worktree_for_thread(th)
+      {th, wt}
+    end
+
+    test "a closed thread's clean, merged worktree is removed; one holding work stays and is on the needs list", ctx do
+      {done, done_wt} = thread_with_tree(ctx, "finished")
+      {held, held_wt} = thread_with_tree(ctx, "abandoned")
+      File.write!(Path.join(held_wt, "b.txt"), "work\n")
+      {_, 0} = System.cmd("git", ["-C", held_wt, "add", "b.txt"])
+
+      {_, 0} =
+        System.cmd("git", ["-C", held_wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "unmerged work"])
+
+      {:ok, _} = Server.Channel.close_thread(done)
+      {:ok, _} = Server.Channel.close_thread(held)
+
+      sweep()
+
+      refute File.exists?(done_wt)
+      assert File.exists?(held_wt)
+
+      assert [%{kind: "stranded", level: "decide", text: text}] =
+               Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded"))
+
+      assert text =~ Path.basename(held_wt) and text =~ "unmerged"
+    end
+
+    test "an open thread's worktree is left alone", ctx do
+      {_th, wt} = thread_with_tree(ctx, "in progress")
+      sweep()
+      assert File.exists?(wt)
+      assert Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded")) == []
+    end
+  end
 end

@@ -1,7 +1,8 @@
 defmodule Server.Jobs.Maintain do
   @moduledoc """
   The Maintain sweeps on Oban's cron (one-brain piece E, slice 2): every half hour, stale
-  gates get their reminder and stalled worklines their machine-born flag. `args` may name a
+  gates get their reminder, stalled worklines their machine-born flag, and the board is kept true
+  (tickets' status against their threads, worktrees nothing is working in — `Server.Maintain.Sweep`). `args` may name a
   band in ms (`gate_stale_ms`, `stalled_ms`, `renag_ms`) — tests do; the cron entry passes none.
   """
   use Oban.Worker, queue: :maintain, max_attempts: 1, unique: [period: 60]
