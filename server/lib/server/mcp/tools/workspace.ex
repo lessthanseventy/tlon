@@ -11,7 +11,7 @@ defmodule Server.MCP.Tool.RegisterWorkspace do
 
   schema do
     field :name, :string, required: true, description: "The workspace's unique name"
-    field :type, :enum, values: ["code", "life", "blank"], default: "code"
+    field :type, :enum, values: ["code", "life", "blank", "home"], default: "code"
     field :scope, :enum, values: ["project", "machine"], default: "machine"
     field :repos, {:list, :string}, default: [], description: "Git-tracked scope: repo paths or globs"
     field :roster, {:list, :map}, default: [], description: "Archetype instances: {archetype,name,model?,knobs}"
@@ -55,7 +55,7 @@ defmodule Server.MCP.Tool.EditWorkspace do
 
   schema do
     field :name, :string, required: true, description: "The workspace to edit (its unique name)"
-    field :type, :enum, values: ["code", "life", "blank"]
+    field :type, :enum, values: ["code", "life", "blank", "home"]
     field :scope, :enum, values: ["project", "machine"]
     field :repos, {:list, :string}, description: "Git-tracked scope: REPLACES the repo list"
     field :roster, {:list, :map}, description: "Archetype instances: {archetype,name,model?,knobs}"

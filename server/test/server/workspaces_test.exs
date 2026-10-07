@@ -48,6 +48,11 @@ defmodule Server.WorkspacesTest do
       assert {:ok, ws} = Workspaces.register(%{name: "home-test-#{System.unique_integer()}", type: "home"})
       assert ws.type == "home"
     end
+
+    test "the home template registers a type: home workspace" do
+      assert {:ok, ws} = Workspaces.register_from("home", "home-template-#{System.unique_integer()}")
+      assert ws.type == "home"
+    end
   end
 
   describe "all/0" do

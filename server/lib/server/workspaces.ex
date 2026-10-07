@@ -52,10 +52,11 @@ defmodule Server.Workspaces do
   @templates %{
     "code" => %{type: "code", roster: ~w(surveyor builder reviewer planner)},
     "life" => %{type: "life", roster: ~w(assistant)},
+    "home" => %{type: "home", roster: []},
     "blank" => %{type: "blank", roster: []}
   }
 
-  @doc "The templates a new workspace starts from, by name: `code` (a full crew), `life` (an assistant), `blank`."
+  @doc "The templates a new workspace starts from, by name: `code` (a full crew), `life` (an assistant), `blank`, home (no bench yet)."
   def templates, do: @templates
 
   @doc """
