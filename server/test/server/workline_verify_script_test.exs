@@ -49,7 +49,8 @@ defmodule Server.WorklineVerifyScriptTest do
   """
 
   defp failures(output) do
-    {out, 0} = System.cmd("bash", ["-c", @run, @script, output])
+    # the service runs with no LANG: the C locale, where tools count bytes, not characters
+    {out, 0} = System.cmd("bash", ["-c", @run, @script, output], env: [{"LC_ALL", "C"}, {"LANG", nil}])
 
     String.split(out, "\n", trim: true)
   end
@@ -67,6 +68,11 @@ defmodule Server.WorklineVerifyScriptTest do
 
   test "a green run names nothing" do
     assert failures("Finished in 0.1 seconds\nResult: 3/3 passed\n") == []
+  end
+
+  test "a cut never splits a multibyte character: the names stay valid UTF-8" do
+    [name] = failures("(fail) " <> String.duplicate("é—", 120))
+    assert String.valid?(name)
   end
 
   test "bounded: at most 10 names, none over 160 characters" do

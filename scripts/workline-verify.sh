@@ -76,11 +76,11 @@ unrecorded=0
 # suite's last 400 bytes hold only its summary, and the lead would re-run it to learn what broke.
 failures() {
   awk '/^ +[0-9]+\) (test|doctest|property) / { sub(/^ +/, ""); h = $0; getline; sub(/^ +/, ""); print h " — " $0; next }
-       /^\(fail\) /' | cut -c1-160 | head -n 10
+       /^\(fail\) /' | cut -c1-160 | iconv -c -f utf-8 -t utf-8 | head -n 10
 }
 run_gate() {
   local name="$1"; shift
-  local out code fails
+  local out code
   out=$(cd "$tree" && "${clean[@]}" "$@" 2>&1); code=$?
   fails="$(printf '%s\n' "$out" | failures)"
   gate_tail="${fails:+failing:
@@ -111,5 +111,7 @@ elif [ "$fail" -eq 0 ]; then
   note "$tid" "$msg" || true
   exit 1
 else
-  note "$tid" "verify FAILED for workline $slug — see the check_failed evidence (workline:$slug:verify); fix on branch work/$slug, then re-run: mise run workline:verify -- $tid $slug"
+  note "$tid" "verify FAILED for workline $slug — ${fails:+failing:
+$fails
+}see the check_failed evidence (workline:$slug:verify); fix on branch work/$slug, then re-run: mise run workline:verify -- $tid $slug"
 fi
