@@ -34,27 +34,33 @@ fi
 exec 9>"$root/.git/workline-verify-$slug.lock"
 flock -n 9 || { echo "verify already running for $slug — skipping"; exit 0; }
 
+# The repo the workline lives in is its worktree's — not always tlon's: a menard thread's is menard.
+repo="$(cd "$(git -C "$tree" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
+
 # The gates run on the branch as it would land — rebased onto the current origin/main, in a throwaway
 # checkout: a fix that reached main after the branch was cut reaches its verify too, and the lead's
 # own worktree is never touched.
-git -C "$root" fetch -q origin main || { "$cli" note "$tid" "verify can't run: fetching origin/main failed" || true; exit 1; }
+git -C "$repo" fetch -q origin main || { "$cli" note "$tid" "verify can't run: fetching origin/main failed in $repo" || true; exit 1; }
 fresh="$(mktemp -d -t "tlon-verify-XXXXXX")"
-trap 'git -C "$root" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"' EXIT
-git -C "$root" worktree add -q --detach "$fresh" "work/$slug" || exit 1
+trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"' EXIT
+git -C "$repo" worktree add -q --detach "$fresh" "work/$slug" || exit 1
 if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
   git -C "$fresh" rebase --abort >/dev/null 2>&1
   "$cli" note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
   exit 1
 fi
-# the lead's fetched dep sources, copy-on-write, to save the download — never its _build: compiled
-# against the branch's old base, it fails the gate on lock mismatches main has moved past
-[ -d "$tree/server/deps" ] && cp -r --reflink=auto "$tree/server/deps" "$fresh/server/deps"
 mise trust -q "$fresh" >/dev/null 2>&1
-# main's lockfile may have moved past the branch's: fetch what it pins now
-(cd "$fresh/server" && "${clean[@]}" MISE_YES=1 mise exec -- mix deps.get >/dev/null 2>&1) || {
-  "$cli" note "$tid" "verify can't run: mix deps.get failed on work/$slug rebased onto origin/main" || true
-  exit 1
-}
+# each mix project in the tree (tlon's under server/, menard's at its root): the lead's fetched dep
+# sources, copy-on-write, to save the download — never its _build: compiled against the branch's
+# old base, it fails the gate on lock mismatches main has moved past — then what main's lock pins now
+for d in server .; do
+  [ -f "$fresh/$d/mix.exs" ] || continue
+  [ -d "$tree/$d/deps" ] && cp -r --reflink=auto "$tree/$d/deps" "$fresh/$d/deps"
+  (cd "$fresh/$d" && "${clean[@]}" MISE_YES=1 mise exec -- mix deps.get >/dev/null 2>&1) || {
+    "$cli" note "$tid" "verify can't run: mix deps.get failed in $d on work/$slug rebased onto origin/main" || true
+    exit 1
+  }
+done
 tree="$fresh"
 
 # Run one gate, record its REAL exit + tail — evidence, never a self-report. A gate whose
