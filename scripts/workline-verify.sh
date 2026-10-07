@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The deterministic verifier (worklines slice 4): run the module gates AND the machine gate
-# for a workline, in its own checkout of work/<slug>, record each result as CHECKS evidence (correlation workline:<slug>:verify),
+# for a workline, on work/<slug> rebased onto origin/main, record each result as CHECKS evidence (correlation workline:<slug>:verify),
 # and advance the stage when everything is green. Run by the service on verify entry (Server.Jobs.Verify) —
 # independent of the builder by construction (the builder never runs or reports this).
 # A model only enters when a failure needs interpreting; the gates themselves are script.
@@ -13,8 +13,8 @@ slug="${2:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cli="$root/scripts/tlon-cli.sh"
-# The gates run on the work itself — the workline's checkout of work/<slug> (the verify job passes
-# it), never tlon's main checkout, whose green says nothing about the branch under review.
+# The workline's checkout of work/<slug> (the verify job passes it): where the gate borrows its
+# installed deps from. The gates themselves run on a throwaway checkout, below.
 tree="${3:-$root/.worktrees/$slug}"
 # The gate runs as a clean checkout would: none of the service's TLON_* variables (it inherits them
 # here — its ports, its real database — and a gate that boots the app would bind 4040 or touch the
@@ -33,6 +33,29 @@ fi
 # racing the auto one) exits quietly instead of double-running gates and double-advancing.
 exec 9>"$root/.git/workline-verify-$slug.lock"
 flock -n 9 || { echo "verify already running for $slug — skipping"; exit 0; }
+
+# The gates run on the branch as it would land — rebased onto the current origin/main, in a throwaway
+# checkout: a fix that reached main after the branch was cut reaches its verify too, and the lead's
+# own worktree is never touched.
+git -C "$root" fetch -q origin main || { "$cli" note "$tid" "verify can't run: fetching origin/main failed" || true; exit 1; }
+fresh="$(mktemp -d -t "tlon-verify-XXXXXX")"
+trap 'git -C "$root" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"' EXIT
+git -C "$root" worktree add -q --detach "$fresh" "work/$slug" || exit 1
+if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
+  git -C "$fresh" rebase --abort >/dev/null 2>&1
+  "$cli" note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
+  exit 1
+fi
+# the lead's fetched dep sources, copy-on-write, to save the download — never its _build: compiled
+# against the branch's old base, it fails the gate on lock mismatches main has moved past
+[ -d "$tree/server/deps" ] && cp -r --reflink=auto "$tree/server/deps" "$fresh/server/deps"
+mise trust -q "$fresh" >/dev/null 2>&1
+# main's lockfile may have moved past the branch's: fetch what it pins now
+(cd "$fresh/server" && "${clean[@]}" MISE_YES=1 mise exec -- mix deps.get >/dev/null 2>&1) || {
+  "$cli" note "$tid" "verify can't run: mix deps.get failed on work/$slug rebased onto origin/main" || true
+  exit 1
+}
+tree="$fresh"
 
 # Run one gate, record its REAL exit + tail — evidence, never a self-report. A gate whose
 # result could not be recorded is a gate that never ran as far as the stage machine can tell,

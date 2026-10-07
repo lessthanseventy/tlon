@@ -2,7 +2,8 @@ defmodule Server.Jobs.Verify do
   @moduledoc """
   The deterministic verifier for a workline that has just entered `verify`: runs
   `scripts/workline-verify.sh` (the gates, each recorded as CHECKS evidence, advance on green) from
-  tlon's checkout, independent of the builder by construction. Enqueued by `Server.Workline` on the
+  tlon's checkout, independent of the builder by construction — on the branch rebased onto
+  origin/main in a throwaway checkout, so a fix that reached main after the branch was cut counts. Enqueued by `Server.Workline` on the
   flip. Where it cannot run — no checkout beside this release, no `mise` on the service's PATH — it
   says so on the thread, with the command to run by hand, rather than leaving the stage parked in
   silence.
@@ -18,7 +19,7 @@ defmodule Server.Jobs.Verify do
   def perform(%Oban.Job{args: %{"thread_id" => tid, "slug" => slug}}) do
     script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
 
-    # the gates run on the work itself: the workline's own checkout of work/<slug>, never tlon's main
+    # the workline's own checkout: the script borrows its installed deps for the throwaway one
     tree = with %Server.Thread{} = t <- Channel.thread(tid), {:ok, path} <- Server.worktree_for_thread(t), do: path
 
     cond do
