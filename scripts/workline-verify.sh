@@ -24,7 +24,7 @@ clean=(env)
 for v in $(compgen -e | grep '^TLON_'); do clean+=(-u "$v"); done
 clean+=(TLON_TEST_DATABASE=tlon_verify)
 if [ ! -d "$tree" ]; then
-  "$cli" post "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
+  "$cli" note "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
   echo "workline-verify: no checkout of work/$slug at $tree" >&2
   exit 1
 fi
@@ -59,8 +59,8 @@ elif [ "$fail" -eq 0 ]; then
   # artifact, and advancing here would be exactly the self-report this script exists to replace.
   msg="verify for workline $slug ran green but its evidence could NOT be recorded — not advancing; re-run once the service is up: mise run workline:verify -- $tid $slug"
   echo "workline-verify: $msg" >&2
-  "$cli" post "$tid" "$msg" || true
+  "$cli" note "$tid" "$msg" || true
   exit 1
 else
-  "$cli" post "$tid" "verify FAILED for workline $slug — see the check_failed evidence (workline:$slug:verify); fix on branch work/$slug, then re-run: mise run workline:verify -- $tid $slug"
+  "$cli" note "$tid" "verify FAILED for workline $slug — see the check_failed evidence (workline:$slug:verify); fix on branch work/$slug, then re-run: mise run workline:verify -- $tid $slug"
 fi
