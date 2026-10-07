@@ -268,13 +268,100 @@ defmodule Server.Workline do
       Scribe.materialize_intent(thread)
     end
 
-    with :ok <- verified_artifact(thread, checker),
-         {:ok, landed} <- land(thread, checker, opts),
+    with :ok <- verified_artifact(thread, checker) do
+      if queue?(thread, checker, opts), do: queue(thread), else: approve_now(thread, checker, opts)
+    end
+  end
+
+  defp approve_now(thread, checker, opts) do
+    with {:ok, landed} <- land(thread, checker, opts),
          {:ok, cleared} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
          {:ok, flipped} <- flip(cleared) do
       if landed, do: finish(flipped, landed)
       {:ok, flipped}
     end
+  end
+
+  # The review gate's approval joins the merge queue (`Server.Jobs.Land`, one landing at a time,
+  # each rebased onto main and gated there) — against the real repo; a test's stub merger lands
+  # inline, and `land: :queue | :now` says so outright.
+  defp queue?(%Thread{stage: "review"}, checker, opts) do
+    Keyword.get(opts, :land, if(checker == Git and not Keyword.has_key?(opts, :merge), do: :queue, else: :now)) ==
+      :queue
+  end
+
+  defp queue?(_thread, _checker, _opts), do: false
+
+  defp queue(thread) do
+    with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
+         {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
+      post_brief(
+        queued,
+        "⧗ approved — in the merge queue: it lands once rebased onto main and green there, one landing at a time"
+      )
+
+      {:ok, queued}
+    else
+      {:error, why} ->
+        {:ok, _} = thread |> Thread.workline_stage_changeset(%{awaiting: thread.awaiting}) |> Repo.update()
+        {:error, {:queue, why}}
+    end
+  end
+
+  @doc """
+  The merge queue's turn for `thread` (`Server.Jobs.Land`): land `work/<slug>` rebased onto main,
+  gated there before main moves. Green: merged, closed, published. A conflict or a red gate sends
+  it back to build, its builder told why — the operator approved; the fix is the builder's. A thread
+  no longer queued (re-parked, closed, moved on) is left alone. `opts[:merge]`/`opts[:gate]` swap the
+  merger and the gate (tests). `{:ok, thread}` | `{:error, {:bounced, why}}`.
+  """
+  def land_queued(thread, opts \\ [])
+
+  def land_queued(%Thread{stage: "review", awaiting: nil, state: "open"} = thread, opts) do
+    merger = Keyword.get(opts, :merge, Server.Workline.Merge)
+    gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(thread, &1, &2) end)
+    repo = Git.root(thread)
+
+    case merger.merge(repo, thread.slug, gate: gate) do
+      {:ok, moved} ->
+        {:ok, flipped} = flip(thread)
+        finish(flipped, Map.put(moved, :repo, repo))
+        {:ok, flipped}
+
+      {:error, why} ->
+        bounce(thread, why)
+    end
+  end
+
+  def land_queued(thread, _opts), do: {:ok, thread}
+
+  # back to build: the stage and its ledger row in one write, the builder restaffed and told why
+  defp bounce(thread, why) do
+    {:ok, back} =
+      Repo.transaction(fn ->
+        {:ok, back} = thread |> Thread.workline_stage_changeset(%{stage: "build", awaiting: nil}) |> Repo.update()
+
+        {:ok, _event} =
+          Dossier.record_event(%{
+            thread_id: thread.id,
+            kind: "stage_advanced",
+            correlation: "workline:#{thread.slug}",
+            detail: %{"from" => "review", "to" => "build", "bounced" => why}
+          })
+
+        back
+      end)
+
+    back = restaff(back)
+    Server.Bus.broadcast({:workline_advanced, back})
+
+    post_brief(
+      back,
+      "↩ back to build — the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto main, " <>
+        "fix it test-first, then advance_stage; it comes back through verify and review."
+    )
+
+    {:error, {:bounced, why}}
   end
 
   @doc """

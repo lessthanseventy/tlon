@@ -15,7 +15,7 @@ config :phoenix, :json_library, JSON
 config :server, Oban,
   engine: Oban.Engines.Basic,
   repo: Server.Repo,
-  queues: [default: 5, maintain: 1, staff: 1, verify: 1, schedules: 2],
+  queues: [default: 5, maintain: 1, staff: 1, verify: 1, landing: 1, schedules: 2],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
     {Oban.Plugins.Cron,
@@ -38,7 +38,7 @@ config :server, Oban,
      ]}
   ]
 
-config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 15
+config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 16
 
 config :server, Server.Web.Endpoint,
   adapter: Bandit.PhoenixAdapter,

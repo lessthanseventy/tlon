@@ -40,7 +40,8 @@ and every layer the spine design's re-laid §9 asked for
   resource. `record_check` lands a measured exit code, never a self-report.
 - **worklines** (`Server.Workline`) — a thread as a stage machine with git as the artifact chain
   (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
-  entering verify queues the verifier on the service (`Server.Jobs.Verify`).
+  entering verify queues the verifier on the service (`Server.Jobs.Verify`); approving review queues
+  the landing (`Server.Jobs.Land`, one at a time, gated on main before it moves — red bounces to build).
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board). Crons read the server's local clock.

@@ -13,6 +13,9 @@ slug="${2:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cli="$root/scripts/tlon-cli.sh"
+# WORKLINE_GATE=1: the merge queue's gate (Server.Jobs.Land) — the same check and evidence, but it
+# never advances and posts nothing; it says what broke on stdout and the landing tells the thread
+note() { if [ -n "${WORKLINE_GATE:-}" ]; then echo "$2"; else "$cli" note "$@"; fi; }
 # The workline's checkout of work/<slug> (the verify job passes it): where the gate borrows its
 # installed deps from. The gates themselves run on a throwaway checkout, below.
 tree="${3:-$root/.worktrees/$slug}"
@@ -24,7 +27,7 @@ clean=(env)
 for v in $(compgen -e | grep '^TLON_'); do clean+=(-u "$v"); done
 clean+=(TLON_TEST_DATABASE=tlon_verify)
 if [ ! -d "$tree" ]; then
-  "$cli" note "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
+  note "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
   echo "workline-verify: no checkout of work/$slug at $tree" >&2
   exit 1
 fi
@@ -40,13 +43,13 @@ repo="$(cd "$(git -C "$tree" rev-parse --path-format=absolute --git-common-dir)/
 # The gates run on the branch as it would land — rebased onto the current origin/main, in a throwaway
 # checkout: a fix that reached main after the branch was cut reaches its verify too, and the lead's
 # own worktree is never touched.
-git -C "$repo" fetch -q origin main || { "$cli" note "$tid" "verify can't run: fetching origin/main failed in $repo" || true; exit 1; }
+git -C "$repo" fetch -q origin main || { note "$tid" "verify can't run: fetching origin/main failed in $repo" || true; exit 1; }
 fresh="$(mktemp -d -t "tlon-verify-XXXXXX")"
 trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"' EXIT
 git -C "$repo" worktree add -q --detach "$fresh" "work/$slug" || exit 1
 if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
   git -C "$fresh" rebase --abort >/dev/null 2>&1
-  "$cli" note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
+  note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
   exit 1
 fi
 mise trust -q "$fresh" >/dev/null 2>&1
@@ -57,7 +60,7 @@ for d in server .; do
   [ -f "$fresh/$d/mix.exs" ] || continue
   [ -d "$tree/$d/deps" ] && cp -r --reflink=auto "$tree/$d/deps" "$fresh/$d/deps"
   (cd "$fresh/$d" && "${clean[@]}" MISE_YES=1 mise exec -- mix deps.get >/dev/null 2>&1) || {
-    "$cli" note "$tid" "verify can't run: mix deps.get failed in $d on work/$slug rebased onto origin/main" || true
+    note "$tid" "verify can't run: mix deps.get failed in $d on work/$slug rebased onto origin/main" || true
     exit 1
   }
 done
@@ -71,6 +74,7 @@ run_gate() {
   local name="$1"; shift
   local out code
   out=$(cd "$tree" && "${clean[@]}" "$@" 2>&1); code=$?
+  gate_tail="$(printf '%s' "$out" | tail -c 400)"
   if ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$(printf '%s' "$out" | tail -c 400)"; then
     echo "workline-verify: could not record evidence for '$name' (exit $code) — is the service up?" >&2
     unrecorded=1
@@ -81,15 +85,19 @@ run_gate() {
 fail=0
 run_gate "mise run check" mise run check || fail=1
 
-if [ "$fail" -eq 0 ] && [ "$unrecorded" -eq 0 ]; then
+if [ -n "${WORKLINE_GATE:-}" ]; then
+  [ "$fail" -eq 0 ] && exit 0
+  printf '%s\n' "$gate_tail"
+  exit 1
+elif [ "$fail" -eq 0 ] && [ "$unrecorded" -eq 0 ]; then
   "$cli" advance "$tid"
 elif [ "$fail" -eq 0 ]; then
   # Green gates with no evidence on record cannot advance: the verify stage owes a CHECKS
   # artifact, and advancing here would be exactly the self-report this script exists to replace.
   msg="verify for workline $slug ran green but its evidence could NOT be recorded — not advancing; re-run once the service is up: mise run workline:verify -- $tid $slug"
   echo "workline-verify: $msg" >&2
-  "$cli" note "$tid" "$msg" || true
+  note "$tid" "$msg" || true
   exit 1
 else
-  "$cli" note "$tid" "verify FAILED for workline $slug — see the check_failed evidence (workline:$slug:verify); fix on branch work/$slug, then re-run: mise run workline:verify -- $tid $slug"
+  note "$tid" "verify FAILED for workline $slug — see the check_failed evidence (workline:$slug:verify); fix on branch work/$slug, then re-run: mise run workline:verify -- $tid $slug"
 fi
