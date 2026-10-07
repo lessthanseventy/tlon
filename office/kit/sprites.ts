@@ -19,8 +19,8 @@ export const SKIN_ROLES: Role[] = ["builder", "surveyor", "reviewer", "assistant
 
 export function hash(s: string) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0 }
 
-const HAIRS: Hair[] = ["mop", "spiky", "bun", "long", "bald"]
-const HAIR_ROLES: Role[] = ["inactive", "structure", "meta", "borderInactive"]
+export const HAIRS: Hair[] = ["mop", "spiky", "bun", "long", "bald"]
+export const HAIR_ROLES: Role[] = ["inactive", "structure", "meta", "borderInactive"]
 const TOP: Record<Hair, string[]> = {
   mop: ["............", "............", "....hhhh....", "..hhhhhhhh..", "..hhhhhhhh..", "..hffffffh.."],
   spiky: ["............", "...h..h..h..", "..hhhhhhhh..", "..hhhhhhhh..", "..hhhhhhhh..", "..hffffffh.."],
