@@ -445,6 +445,7 @@ defmodule Server.Workline do
     else
       case Server.Channel.assign_lead(thread.id, name) do
         {:ok, restaffed} ->
+          close_leaf(restaffed)
           post_brief(restaffed, "→ #{name} leads (#{thread.stage} stage)")
           restaffed
 
@@ -453,6 +454,16 @@ defmodule Server.Workline do
       end
     end
   end
+
+  # A thread has one window, its lead's: the old lead's must close or the new lead can never be
+  # spawned (the builder kept the leaf and did verify's job; the reviewer's brief went nowhere).
+  # The brief that follows spawns the new lead, as `Server.Staffing.hand_off/2` does.
+  defp close_leaf(%Thread{workspace_id: ws} = thread) when not is_nil(ws) do
+    with %{index: index} <- ws |> Server.Tmux.list_windows() |> Server.Tmux.leaf_tab(thread.id),
+         do: Server.Tmux.kill_window(ws, index)
+  end
+
+  defp close_leaf(_thread), do: :ok
 
   defp restaff_miss(thread, "reviewer", why) do
     post_brief(thread, "⚠ review stage could not restaff a reviewer (#{why}) — the current lead still holds it")
