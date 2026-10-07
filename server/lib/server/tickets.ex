@@ -106,7 +106,8 @@ defmodule Server.Tickets do
   end
 
   @doc """
-  Start work on a ticket: a thread on the ticket's project whose opening post is the ticket (the
+  Start work on a ticket: a workline at build on the ticket's project (`Server.Workline.promote/1`,
+  so it is verified, reviewed and risk-graded like any other) whose opening post is the ticket (the
   operator's post, so its lead is staffed like any ask), and the ticket promoted into it. `agent_id` hands the thread to that coworker instead of the
   workspace's lead. `{:ok, thread}` or `{:error, reason}`.
   """
@@ -114,13 +115,24 @@ defmodule Server.Tickets do
     operator = Application.get_env(:server, :operator, "andrew")
     ask = Enum.join(Enum.reject([ticket.title, ticket.body, "(ticket ##{ticket.id})"], &(&1 in [nil, ""])), "\n\n")
 
-    with {:ok, thread} <-
+    # a workline before the ask is posted, so its lead is briefed for the stage it starts at
+    with {:ok, opened} <-
            %{title: ticket.title, workspace_id: ticket.workspace_id, project_id: ticket.project_id, scope: "machine"}
            |> then(&if(agent_id, do: Map.put(&1, :agent_id, agent_id), else: &1))
            |> Server.Channel.open_thread(),
+         {:ok, thread} <- as_workline(opened),
          {:ok, _} <- promote(ticket, thread.id),
          {:ok, _} <- Server.Attention.respond(thread.id, operator, ask) do
       {:ok, thread}
+    end
+  end
+
+  # A workspace made since the server booted has no lobby yet, so the ticket's own thread is its
+  # standing thread for now, which a workline may not be: it starts as a plain thread there.
+  defp as_workline(thread) do
+    case Server.Workline.promote(thread) do
+      {:error, :root_machine_thread} -> {:ok, thread}
+      other -> other
     end
   end
 

@@ -232,7 +232,7 @@ end
 
 defmodule Server.MCP.Tool.StartTicket do
   @moduledoc """
-  Start work on a filed ticket: opens a thread on it (its title/body as the opening ask) and
+  Start work on a filed ticket: opens a workline at build on it (its title/body as the opening ask) and
   promotes the ticket into it, moving it to `doing`. Same door as `POST /api/tickets/:id/start`
   and `tlon-cli ticket-start` — both call `Server.Tickets.start_thread/2`. `id` identifies the
   ticket; a missing one is refused. `agent_id` hands the new thread to that coworker instead of

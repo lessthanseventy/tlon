@@ -77,6 +77,7 @@ defmodule Server.TicketsTest do
 
     test "start_thread opens a thread on the ticket's project whose opening post is the ticket, and promotes it" do
       {:ok, ws} = Workspaces.register(%{name: "Start"})
+      {:ok, _} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "tlon", repos: []})
 
       {:ok, t} =
@@ -86,7 +87,7 @@ defmodule Server.TicketsTest do
       assert %{title: "unbind ctrl+enter", project_id: pid, workspace_id: wid, state: "open"} = thread
       assert {pid, wid} == {p.id, ws.id}
 
-      assert [%{author: "andrew", body: body}] = Channel.thread_messages(thread)
+      assert [%{body: body}] = for(m <- Channel.thread_messages(thread), m.author == "andrew", do: m)
       assert body =~ "unbind ctrl+enter"
       assert body =~ "ghostty eats it"
       assert body =~ "ticket ##{t.id}"
@@ -94,6 +95,16 @@ defmodule Server.TicketsTest do
       assert %{status: "doing"} = Tickets.get(t.id)
       assert [{"promoted", tid}] = Tickets.threads_of(t.id)
       assert tid == thread.id
+    end
+
+    test "a started ticket is a workline at build — verified, reviewed and graded like any other" do
+      {:ok, ws} = Workspaces.register(%{name: "Tracked"})
+      {:ok, _} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "Floor step 3: build mode"})
+
+      assert {:ok, %{stage: "build", slug: slug} = thread} = Tickets.start_thread(t)
+      assert slug =~ "floor-step-3"
+      assert %{stage: "build"} = Server.Repo.get!(Server.Thread, thread.id)
     end
 
     test "route sends a ticket to the workspace's manager as intake on its root thread" do
@@ -111,6 +122,7 @@ defmodule Server.TicketsTest do
 
     test "closing the thread a ticket was started into marks the ticket done" do
       {:ok, ws} = Workspaces.register(%{name: "Closing"})
+      {:ok, _} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "ship it"})
       {:ok, thread} = Tickets.start_thread(t)
 
@@ -120,6 +132,7 @@ defmodule Server.TicketsTest do
 
     test "route with no manager on the bench starts the ticket with the lead" do
       {:ok, ws} = Workspaces.register(%{name: "Unmanaged"})
+      {:ok, _} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, lead} = Workspaces.seat(ws.id, %{name: "hronir-u", archetype: "builder"})
       {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "build it"})
 
@@ -130,6 +143,7 @@ defmodule Server.TicketsTest do
 
     test "start_thread staffs the named agent instead of the lead; without one, the lead" do
       {:ok, ws} = Workspaces.register(%{name: "Hand"})
+      {:ok, _} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, lead} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
       {:ok, orbis} = Workspaces.seat(ws.id, %{name: "orbis", archetype: "reviewer"})
       {:ok, handed} = Tickets.file(%{workspace_id: ws.id, title: "review the rail"})
