@@ -5,12 +5,29 @@
 
 export const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)]!
 
+/** a pick that skips what was said lately, while anything else is left to say */
+export const pickFresh = (xs: readonly string[], recent: readonly string[]): string => {
+  const unsaid = xs.filter((x) => !recent.includes(x))
+  return pick(unsaid.length ? unsaid : xs)
+}
+
+/**
+ * A musing put together from parts, so the same few lines don't come round again: an opener and a
+ * matter, each a pet's own (`NINA_RIFF`, Argos' `ARGOS_RIFF`) — dozens of lines out of a handful.
+ */
+export const riff = (parts: { open: readonly string[]; matter: readonly string[] }) => `${pick(parts.open)} ${pick(parts.matter)}`
+
+export const NINA_RIFF = {
+  open: ["Note to self:", "Official statement:", "For the record,", "Royal decree:", "Breaking news:", "Unpopular opinion:", "Overheard in my head:", "Today's grievance:"],
+  matter: ["the sunbeam moved without my permission.", "that keyboard is warm and I am entitled to it.", "the red dot owes me an apology.", "my collar has never looked better.", "nobody has complimented my tail in an hour.", "the printer is plotting against me.", "I would make an excellent tech lead.", "the fish are getting ideas.", "this cushion is beneath my station.", "I have decided to like the dog. Today only."],
+}
+
 /** a worker fussing over a pet: a pat on the head, a scratch, a belly rub, a treat */
 export type Fuss = "pat" | "scratch" | "belly" | "treat"
 
 export const NINA = {
   // you, clicking on her
-  pet: ["Yes. Adore me. Continue.", "You may touch the royal fur. Briefly.", "Mind the collar. It's couture.", "prrr... this changes nothing.", "Finally, some respect in this office."],
+  pet: ["Yes. Adore me. Continue.", "You may touch the royal fur. Briefly.", "Mind the collar. It's couture.", "prrr... this changes nothing.", "Finally, some respect in this office.", "Again. But with more reverence.", "You missed a spot. Behind the ear. Obviously.", "I permit this.", "Your hands are cold. I'll allow it."],
   wake: ["I was NOT asleep. I was resting my eyes, regally.", "Who woke the princess? I want names.", "Ugh. Fine. I'm up. Worship accordingly."],
   muse: ["Has anyone noticed my collar today? Anyone??", "I am the main character of this office.", "I could lead this workspace. I'd be incredible.", "This floor is beneath me. Literally.", "I deserve a bigger tower. A castle, really.", "Sparkle check: still sparkling.", "My public needs me. Probably.", "Robbed of best nap. AGAIN."],
   // a worker starting a kind of tool
@@ -26,10 +43,12 @@ export const NINA = {
   shipped: ["{name} shipped. I inspired it, obviously.", "Confetti? For ME? Oh. For {name}. Fine."],
   fish: ["The orange one mocks me. I have noted it.", "Glass. Always glass. Why is there always glass."],
   // what you tell her to do
-  nap: ["Napping was MY idea, for the record."],
-  play: ["The yarn has disrespected me for the LAST time."],
-  come: ["I'm coming because I WANT to. Not because you asked."],
+  nap: ["Napping was MY idea, for the record.", "Wake me for treats. Only treats.", "Beauty sleep. You wouldn't understand."],
+  play: ["The yarn has disrespected me for the LAST time.", "Fear me, string.", "I am a fearsome hunter. Of wool."],
+  come: ["I'm coming because I WANT to. Not because you asked.", "Fine. Clear the desk. I'm lying on the important papers.", "I was going that way anyway."],
   zoomies: ["PRINCESS ZOOMIES! Clear the runway!"],
+  // you send her over to someone: she tells them so, in her way
+  cheer: ["{name}. Your code is almost as elegant as me.", "{name}, I've decided you're doing well. You're welcome.", "Keep going, {name}. I'll supervise. From your keyboard.", "{name}, a princess believes in you. Briefly.", "{name}! That test will pass. I've commanded it.", "{name}, you may pet me when you've shipped. Not before."],
   // a worker fussing over her
   fuss: {
     pat: ["Gentle. I'm priceless.", "Head pats are a privilege, peasant.", "prrr... you may continue."],

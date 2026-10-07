@@ -6,7 +6,7 @@
 import { needsYou } from "./crew"
 import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
-import { NINA, pick, type Fuss } from "./voices"
+import { NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
 export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read"
@@ -33,7 +33,7 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
  * is saying, from `saidFrom` until `saidUntil`; `stretch`: the tick her wake-up stretch ends; `fuss`: a worker making
  * a fuss of her, from where they are
  */
-export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null }
+export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; cheer?: string | null }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
@@ -124,6 +124,8 @@ export class Sim<L extends { people: Seat[] }> {
   /** what the server's model wrote for each pet, by occasion (`hear`), and the lines already said */
   private voices: Record<string, Record<string, string[]>> = {}
   private spoken = new Set<string>()
+  // the last lines said, so a pet doesn't say the same thing twice running
+  private recent: string[] = []
 
   constructor(protected plan: Plan<L>) {
     this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null }
@@ -158,13 +160,17 @@ export class Sim<L extends { people: Seat[] }> {
   hear(voices: Record<string, Record<string, string[]>>) { this.voices = voices }
   /**
    * What `pet` says on `occasion`: a line the model wrote that has not been said yet, else (when
-   * it wrote none, or every one has been said) one of the `canned` ones half the time; `{name}` is
-   * whoever it is about.
+   * it wrote none, or every one has been said) one of the `canned` ones — or, given `parts`, now and
+   * then one put together from them (`riff`) — never one of the last few said; `{name}` is whoever
+   * it is about.
    */
-  protected line(pet: string, occasion: string, canned: readonly string[], name = "") {
+  protected line(pet: string, occasion: string, canned: readonly string[], name = "", parts?: Parameters<typeof riff>[0]) {
     const fresh = this.voices[pet]?.[occasion] ?? [], unsaid = fresh.filter((l) => !this.spoken.has(l))
-    const l = unsaid.length ? pick(unsaid) : fresh.length && Math.random() < 0.5 ? pick(fresh) : pick(canned)
+    const l = unsaid.length ? pick(unsaid)
+      : parts && Math.random() < 0.5 ? riff(parts)
+        : pickFresh(fresh.length && Math.random() < 0.5 ? fresh : canned, this.recent)
     this.spoken.add(l)
+    this.recent = [l, ...this.recent].slice(0, 8)
     return l.replaceAll("{name}", name || "you")
   }
   /** Nina says something, over her head for a few seconds — after `delay`, when she is answering someone */
@@ -198,6 +204,12 @@ export class Sim<L extends { people: Seat[] }> {
       c.x += Math.sign(to.x - c.x); c.y += Math.sign(to.y - c.y)
       if (to.x !== c.x) c.face = Math.sign(to.x - c.x)
       if (c.x === to.x && c.y === to.y) c.path.shift()
+      if (!c.path.length && c.cheer) {
+        const host = this.actors.get(c.cheer)
+        c.cheer = null; c.mode = "sit"; c.until = this.tick + 200
+        if (host) { host.emote = "♥"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "cheer", NINA.cheer, host.seat.agent), 70) }
+        return true
+      }
       if (!c.path.length) {
         const nap = at(p.nap) || (at(p.perches[0]) && Math.random() < 0.7)
         c.mode = nap ? "sleep" : at(p.play) ? "play" : "sit"
@@ -258,6 +270,20 @@ export class Sim<L extends { people: Seat[] }> {
     return true
   }
 
+  /**
+   * You send Nina over to someone (their name): she walks to them and, when she gets there, tells
+   * them something encouraging, in her way — and they get a ♥. False when they aren't in the room.
+   */
+  catCheer(name: string): boolean {
+    const host = this.actors.get(name)
+    if (!host) return false
+    const c = this.cat, p = this.plan.cat, to = this.plan.visit(host)
+    const down = c.mode === "zoom" ? null : p.via(c)
+    c.path = [...(down ? [down] : []), ...p.door(down ?? c, to), { ...to }]
+    c.mode = "walk"; c.until = this.tick + 150; c.cheer = name
+    return true
+  }
+
   /** the leaps of the room she is in (the group with a spot nearest her), if it has any near */
   private leapsHere(): Pt[] | null {
     const c = this.cat, d = (q: Pt) => Math.abs(q.x - c.x) + Math.abs(q.y - c.y)
@@ -303,7 +329,7 @@ export class Sim<L extends { people: Seat[] }> {
       this.cat.stretch = this.tick + 12
       if (Math.random() < 0.5) this.catSay(this.line("Nina", "wake", NINA.wake))
     }
-    if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && Math.random() < 1 / 1500) this.catSay(this.line("Nina", "muse", NINA.muse))
+    if (this.cat.mode !== "sleep" && this.quiet(this.cat.saidUntil) && Math.random() < 1 / 1500) this.catSay(this.line("Nina", "muse", NINA.muse, "", NINA_RIFF))
     const plan = this.plan, l = plan.layout(a)
     const threadOf = (id: number) => a.threads.find((t) => t.id === id)
     const asks = l.people.filter((p) => needsYou(threadOf(p.thread_id))).sort((p, q) => p.thread_id - q.thread_id)

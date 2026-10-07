@@ -103,6 +103,35 @@ describe("the wide room", () => {
     expect(pets.dog.mode).toBe("sleep")
   }))
 
+  test("send a pet to cheer someone on: over they go, and say something to them by name", () => seeded(7, () => {
+    const a0 = office(0)
+    const a = viewOf({ ...a0, roster: a0.roster.map((r) => (r.agent === "hronir" ? { ...r, warm: true, thinking: true } : r)) }, 1)
+    const room = new WideRoom(560)
+    for (let i = 0; i < 600; i++) room.step(a)
+    const pets = room as unknown as { cat: { path: unknown[]; said: string | null }; dog: { path: unknown[]; said: string | null } }
+    const hronir = () => (room as unknown as { actors: Map<string, { emote: string | null }> }).actors.get("hronir")!
+    const settle = (done: () => boolean) => { for (let i = 0; i < 3_000 && !done(); i++) room.step(a) }
+
+    expect(room.catCheer("hronir")).toBe(true)
+    settle(() => !pets.cat.path.length)
+    expect(pets.cat.said).toContain("hronir")
+    expect(hronir().emote).toBe("♥")
+
+    expect(room.dogCheer("hronir")).toBe(true)
+    settle(() => !pets.dog.path.length)
+    expect(pets.dog.said).toContain("hronir")
+    expect(room.catCheer("nobody-here")).toBe(false)
+  }))
+
+  test("a pet never says the same thing twice in a row", () => seeded(9, () => {
+    const room = new WideRoom(560)
+    const said = (room as unknown as { cat: { said: string | null } }).cat
+    const lines: string[] = []
+    for (let i = 0; i < 40; i++) { room.pet(); lines.push(said.said!) }
+    for (let i = 1; i < lines.length; i++) expect(lines[i]).not.toBe(lines[i - 1])
+    expect(new Set(lines.slice(0, 4)).size).toBe(4)
+  }))
+
   test("the wall calendar counts the days still to come with something scheduled", () => {
     const tip = (calendar: Record<string, number[]>) => new WideRoom(560).render(viewOf({ ...office(1), calendar }, 1), focus, measure, new Date(2026, 9, 10, 12, 0)).hits.find((h) => h.act.kind === "calendar")!.tip
     expect(tip({ "1": [2, 9, 16, 23, 30], "2": [11, 12] })).toContain("something scheduled on 3 day(s) still to come")
