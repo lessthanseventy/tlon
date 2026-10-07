@@ -19,9 +19,9 @@ defmodule Server.Workline.Brief do
   def stage_message(%Thread{} = t) do
     String.trim("""
     ▶ #{String.upcase(t.stage)} — workline #{t.slug}
-    Read: #{read_list(t)}
+    Read: #{read_list(t)}#{skipped_note(t)}
     #{playbook(t)}#{routing_note(t)}
-    Exit: commit #{owed(t)}, then call advance_stage.#{gate_note(t.stage)}
+    #{exit_line(t)}#{gate_note(t.stage)}
     """)
   end
 
@@ -81,9 +81,10 @@ defmodule Server.Workline.Brief do
     do:
       "Implement on branch work/#{t.slug}, test-first; every commit stays green. The failing tests are read-only to you."
 
-  defp playbook(%{stage: "verify"} = t),
+  defp playbook(%{stage: "verify"}),
     do:
-      "Run the module gates AND the machine gate; record each result via record_check with correlation workline:#{t.slug}:verify — evidence, not self-report."
+      "The server verifies, not you: it runs the full check on the branch in its own checkout and records the evidence " <>
+        "itself. Nothing to run or record here — on a failure it posts what broke, and the fix goes on the branch."
 
   defp playbook(%{stage: "review"}),
     do:
@@ -116,4 +117,19 @@ defmodule Server.Workline.Brief do
   defp gate_note(_stage), do: ""
 
   defp dir(t), do: "work/#{t.slug}"
+
+  # how a stage is left: verify by the server alone; review through the reviewer's own door
+  defp exit_line(%{stage: "verify"} = t),
+    do: "Exit: none of yours — the server advances it when its check passes on branch work/#{t.slug}."
+
+  defp exit_line(%{stage: "review"} = t),
+    do: "Exit: submit_review (the server commits #{owed(t)}), then call advance_stage."
+
+  defp exit_line(t), do: "Exit: commit #{owed(t)}, then call advance_stage."
+
+  # a workline may open at any stage: the docs of the stages it skipped were never written
+  defp skipped_note(%{stage: stage}) when stage in ["plan", "build", "verify", "review"],
+    do: " (a doc from a stage this workline started after won't exist — that's expected, not owed)"
+
+  defp skipped_note(_t), do: ""
 end

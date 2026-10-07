@@ -67,8 +67,19 @@ defmodule Server.WorklineBriefTest do
     assert build =~ "spec.md" and build =~ "plan.md"
   end
 
-  test "the verify brief pins evidence to the workline's verify correlation" do
-    assert Brief.stage_message(thread("verify")) =~ "workline:composer-wrap:verify"
+  test "the verify brief says the server verifies the branch — nothing for a coworker to run or record" do
+    verify = Brief.stage_message(thread("verify"))
+    assert verify =~ "the server" and verify =~ "work/composer-wrap"
+    refute verify =~ "record_check"
+    refute verify =~ "Exit: commit"
+  end
+
+  test "the review brief lands the review through submit_review; a late-started stage says its missing docs are expected" do
+    review = Brief.stage_message(thread("review"))
+    assert review =~ "submit_review" and review =~ "advance_stage"
+    refute review =~ "Exit: commit"
+    assert Brief.stage_message(thread("build")) =~ "expected"
+    refute Brief.stage_message(thread("spec")) =~ "expected"
   end
 
   test "the gate notice names the parked transition and the operator's approve verb" do
