@@ -92,7 +92,7 @@ defmodule Server.Workline.Merge do
         _ = git(tree, ["rebase", "--abort"])
 
         {:error,
-         "rebasing #{branch} onto main hit a conflict, aborted — main and the branch are as they were: #{String.slice(out, 0, 300)}"}
+         "rebasing #{branch} onto main hit a conflict, aborted — main and the branch are as they were: #{out |> without_hints() |> String.slice(0, 300)}"}
     end
   end
 
@@ -117,13 +117,17 @@ defmodule Server.Workline.Merge do
   # what git said, so the operator can act on the failure, not just learn which step it was
   defp said(why, out) do
     out
-    |> String.trim()
+    |> without_hints()
     |> String.slice(-300, 300)
     |> case do
       "" -> why
       git -> "#{why} (git: #{git})"
     end
   end
+
+  # git's advice lines say how to drive git by hand, not what went wrong
+  defp without_hints(out),
+    do: out |> String.split("\n") |> Enum.reject(&String.starts_with?(&1, "hint:")) |> Enum.join("\n") |> String.trim()
 
   defp git(repo, args), do: System.cmd("git", ["-C", repo | args], stderr_to_stdout: true)
 end

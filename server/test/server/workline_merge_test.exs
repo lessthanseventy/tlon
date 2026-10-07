@@ -105,7 +105,8 @@ defmodule Server.Workline.MergeTest do
     {tip, 0} = git.(["rev-parse", "work/finder"])
 
     assert {:error, why} = Merge.merge(repo, "finder")
-    assert why =~ "conflict"
+    assert why =~ "conflict" and why =~ "a.txt"
+    refute why =~ "hint:"
     assert {^head, 0} = git.(["rev-parse", "HEAD"])
     assert {^tip, 0} = git.(["rev-parse", "work/finder"])
     assert {"", 0} = git.(["status", "--porcelain"])
