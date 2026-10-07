@@ -108,6 +108,9 @@ defmodule Server.MixProject do
       {:phoenix_html, "~> 4.3"},
       # Background work (one-brain piece E): Oban on the same Postgres.
       {:oban, "~> 2.23"},
+      # the calendar: .ics feeds parsed and their recurrences expanded (ical), in their time zones (tz)
+      {:ical, "~> 3.2"},
+      {:tz, "~> 0.28"},
       # Oban's notifier/peers encode with Jason (not the stdlib JSON) — the release must ship it
       # (2026-09-18: the service crash-looped on Oban.Sonar without it).
       {:jason, "~> 1.4"},

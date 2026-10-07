@@ -14,8 +14,12 @@ defmodule Server.OperatorConfig do
         "environment": "home",
         "max_leaves": 6,
         "banter": true,
-        "warmth_seconds": {"ollama-cloud": 600}
+        "warmth_seconds": {"ollama-cloud": 600},
+        "calendars": [{"name": "work", "ics_secret": "calendar-work"}],
+        "alarm_minutes": 5
       }
+
+  `calendars` and `alarm_minutes` are `Server.Calendar`'s and `Server.Alerts`' (a meeting's alarm).
 
   Best-effort on read: a missing or corrupt file is just "no overrides".
   """
