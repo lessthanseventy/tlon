@@ -7,7 +7,7 @@ defmodule Server.TestRepoDir do
   """
 
   def make!(context \\ %{}) do
-    tmp = Path.join(System.tmp_dir!(), "repo-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "repo-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     git = fn args -> System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true) end
     {_, 0} = git.(["init", "-q"])

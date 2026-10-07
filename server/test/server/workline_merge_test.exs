@@ -7,7 +7,7 @@ defmodule Server.Workline.MergeTest do
   alias Server.Workline.Merge
 
   setup do
-    repo = Path.join(System.tmp_dir!(), "merge-test-#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "merge-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(repo)
     git = fn args -> System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
     {_, 0} = git.(["init", "-q", "-b", "main"])

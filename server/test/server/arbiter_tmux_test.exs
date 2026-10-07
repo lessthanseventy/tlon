@@ -53,7 +53,7 @@ defmodule Server.Arbiter.TmuxTest do
   test "spawn: a seat on the bench spawns with its PROFILE's harness — a builder at home is Claude Code, whatever the agent row says; a meta seat too" do
     # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides
     # the same claude-first default the staffing pass uses; the agent row's `local` engine no longer decides
-    pi_root = Path.join(System.tmp_dir!(), "tlon_arbiter_pi_#{System.unique_integer([:positive])}")
+    pi_root = Path.join(System.tmp_dir!(), "tlon_arbiter_pi_#{System.pid()}_#{System.unique_integer([:positive])}")
     prior = System.get_env("PI_CODING_AGENT_DIR")
     System.put_env("PI_CODING_AGENT_DIR", Path.join(pi_root, "agent"))
 

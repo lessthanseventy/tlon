@@ -42,7 +42,7 @@ defmodule Server.CalendarTest do
   end
 
   test "a source's url comes from the machine's secret when it names one" do
-    dir = Path.join(System.tmp_dir!(), "cal-secret-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "cal-secret-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(dir, "agenix"))
     File.write!(Path.join([dir, "agenix", "calendar-work"]), "https://example.test/private.ics\n")
     on_exit(fn -> File.rm_rf!(dir) end)

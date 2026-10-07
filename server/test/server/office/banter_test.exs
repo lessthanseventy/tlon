@@ -45,7 +45,7 @@ defmodule Server.Office.BanterTest do
       {:ok, ws} = Server.Workspaces.register(%{name: "Machine"})
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
 
-      dir = Path.join(System.tmp_dir!(), "banter-#{System.unique_integer([:positive])}")
+      dir = Path.join(System.tmp_dir!(), "banter-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
       cli = Path.join(dir, "model")
       calls = Path.join(dir, "calls")
@@ -81,7 +81,7 @@ defmodule Server.Office.BanterTest do
     end
 
     test "turned off in the settings file, there is nothing, and nothing is asked", %{ws: ws, calls: calls} do
-      path = Path.join(System.tmp_dir!(), "tlon-config-#{System.unique_integer([:positive])}.json")
+      path = Path.join(System.tmp_dir!(), "tlon-config-#{System.pid()}-#{System.unique_integer([:positive])}.json")
       File.write!(path, ~s({"banter": false}))
       Application.put_env(:server, :operator_config_path, path)
 

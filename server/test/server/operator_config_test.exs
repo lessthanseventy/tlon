@@ -6,7 +6,7 @@ defmodule Server.OperatorConfigTest do
   alias Server.OperatorConfig
 
   setup do
-    path = Path.join(System.tmp_dir!(), "tlon-config-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "tlon-config-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     on_exit(fn -> File.rm(path) end)
     %{path: path}
   end

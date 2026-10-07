@@ -4,7 +4,7 @@ defmodule Server.ModelCliTest do
   alias Server.ModelCli
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "model-cli-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "model-cli-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     %{dir: dir}

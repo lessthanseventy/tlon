@@ -32,7 +32,7 @@ defmodule Server.Web.PanelsLiveTest do
 
     # approve materialises + commits intent.md under the workline root: a throwaway git repo, never
     # the checkout this suite runs in
-    tmp = Path.join(System.tmp_dir!(), "tlon-panels-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "tlon-panels-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     {_, 0} = System.cmd("git", ["-C", tmp, "init", "-q"], stderr_to_stdout: true)
     {_, 0} = System.cmd("git", ["-C", tmp, "config", "user.email", "t@t"], stderr_to_stdout: true)

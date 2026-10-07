@@ -11,7 +11,7 @@ defmodule Server.CommitsTest do
   @hooks Path.expand("../../../scripts/git-hooks", __DIR__)
 
   setup do
-    tmp = Path.join(System.tmp_dir!(), "commits-test-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "commits-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(tmp)
     git = fn args, env -> System.cmd("git", ["-C", tmp | args], stderr_to_stdout: true, env: env) end
     {_, 0} = git.(["init", "-q", "-b", "main"], [])

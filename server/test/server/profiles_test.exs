@@ -257,7 +257,7 @@ defmodule Server.ProfilesTest do
 
   describe "materialise!/2 — writes the config dir from a base" do
     setup do
-      tmp = Path.join(System.tmp_dir!(), "aleph-prof-#{System.unique_integer([:positive])}")
+      tmp = Path.join(System.tmp_dir!(), "aleph-prof-#{System.pid()}-#{System.unique_integer([:positive])}")
       base = Path.join(tmp, "agent")
       File.mkdir_p!(base)
       File.write!(Path.join(base, "settings.json"), Jason.encode!(@base_settings))
@@ -364,7 +364,7 @@ defmodule Server.ProfilesTest do
     end
 
     test "materialise! writes the write-deny into the pi-permission-system config" do
-      root = Path.join(System.tmp_dir!(), "crew-mat-#{System.unique_integer([:positive])}")
+      root = Path.join(System.tmp_dir!(), "crew-mat-#{System.pid()}-#{System.unique_integer([:positive])}")
       base = Path.join(root, "agent")
       File.mkdir_p!(base)
       File.write!(Path.join(base, "settings.json"), ~s({"extensions":[]}))
@@ -553,7 +553,7 @@ defmodule Server.ProfilesTest do
     end
 
     test "materialise! writes WHERE config_dir says — the two cannot disagree" do
-      root = Path.join(System.tmp_dir!(), "mat_#{System.unique_integer([:positive])}")
+      root = Path.join(System.tmp_dir!(), "mat_#{System.pid()}_#{System.unique_integer([:positive])}")
       base = Path.join(root, "agent")
       File.mkdir_p!(base)
       File.write!(Path.join(base, "settings.json"), "{}")

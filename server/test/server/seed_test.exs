@@ -27,7 +27,7 @@ defmodule Server.SeedTest do
 
   describe "fact promotion — learnings graduate into the wipe-proof seed" do
     setup do
-      path = Path.join(System.tmp_dir!(), "promoted-#{System.unique_integer([:positive])}.exs")
+      path = Path.join(System.tmp_dir!(), "promoted-#{System.pid()}-#{System.unique_integer([:positive])}.exs")
       Application.put_env(:server, :promoted_facts_path, path)
 
       on_exit(fn ->

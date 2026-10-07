@@ -14,7 +14,7 @@ defmodule Server.Crew.TmuxTest do
     {:ok, thread} = Channel.open_thread(%{title: "review me", workspace_id: ws.id})
 
     # the profile materialises a config dir — point the pi root at a tmp dir, never the real ~/.pi
-    pi_root = Path.join(System.tmp_dir!(), "tlon_crew_pi_#{System.unique_integer([:positive])}")
+    pi_root = Path.join(System.tmp_dir!(), "tlon_crew_pi_#{System.pid()}_#{System.unique_integer([:positive])}")
     prior = System.get_env("PI_CODING_AGENT_DIR")
     System.put_env("PI_CODING_AGENT_DIR", Path.join(pi_root, "agent"))
 

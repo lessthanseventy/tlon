@@ -13,7 +13,7 @@ defmodule Server.PresenceTest do
     {:ok, _} = Workspaces.retarget(ws.id, pip.agent_id, %{model: "ollama-cloud/glm-5.2"})
     {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
 
-    path = Path.join(System.tmp_dir!(), "tlon_presence_#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "tlon_presence_#{System.pid()}_#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
 
