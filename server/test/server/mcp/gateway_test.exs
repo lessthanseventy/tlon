@@ -9,10 +9,6 @@ defmodule Server.MCP.GatewayTest do
   alias Server.MCP
   alias Server.Staff
 
-  @port 48_641
-  @mint_url ~c"http://127.0.0.1:48641/mint"
-  @mcp_url ~c"http://127.0.0.1:48641/mcp"
-
   setup_all do
     {:ok, _} = Application.ensure_all_started(:inets)
     :ok
@@ -21,7 +17,9 @@ defmodule Server.MCP.GatewayTest do
   setup do
     Server.TestDB.clean!()
     start_supervised!({MCP.Endpoint, transport: {:streamable_http, start: true}})
-    start_supervised!({Bandit, plug: {Server.MCP.Gateway, []}, ip: {127, 0, 0, 1}, port: @port})
+    bandit = start_supervised!({Bandit, plug: {Server.MCP.Gateway, []}, ip: {127, 0, 0, 1}, port: 0})
+    {:ok, {_address, port}} = ThousandIsland.listener_info(bandit)
+    Process.put(:gateway_base, "http://127.0.0.1:#{port}")
 
     {:ok, thread} = Channel.open_thread(%{title: "vision consult"})
     {:ok, agent} = Staff.register_agent(%{name: "pi-machine", mandate: "m", engine: "e"})
@@ -52,13 +50,13 @@ defmodule Server.MCP.GatewayTest do
   end
 
   test "POST /mint with a malformed body is a 400" do
-    {status, _body} = post_raw(@mint_url, "not json")
+    {status, _body} = post_raw(mint_url(), "not json")
     assert status == 400
   end
 
   test "GET /mint is a 405 (POST only)" do
     {:ok, {{_http, status, _reason}, _headers, _body}} =
-      :httpc.request(:get, {@mint_url, []}, [], body_format: :binary)
+      :httpc.request(:get, {mint_url(), []}, [], body_format: :binary)
 
     assert status == 405
   end
@@ -67,7 +65,7 @@ defmodule Server.MCP.GatewayTest do
     # A bare POST to /mcp with no bearer is the MCP server's 401 — proving the request
     # reached anubis through the Gateway, not the mint handler.
     {:ok, {{_http, status, _reason}, _headers, _body}} =
-      :httpc.request(:post, {@mcp_url, [], ~c"application/json", ~s({"jsonrpc":"2.0","method":"initialize"})}, [],
+      :httpc.request(:post, {mcp_url(), [], ~c"application/json", ~s({"jsonrpc":"2.0","method":"initialize"})}, [],
         body_format: :binary
       )
 
@@ -83,8 +81,11 @@ defmodule Server.MCP.GatewayTest do
     assert t1 == t2
   end
 
+  defp mint_url, do: ~c"#{Process.get(:gateway_base)}/mint"
+  defp mcp_url, do: ~c"#{Process.get(:gateway_base)}/mcp"
+
   defp mint(body) do
-    {status, decoded} = post_raw(@mint_url, JSON.encode!(body))
+    {status, decoded} = post_raw(mint_url(), JSON.encode!(body))
     {status, decoded}
   end
 
@@ -102,7 +103,7 @@ defmodule Server.MCP.GatewayTest do
 
   defp get_json(path) do
     {:ok, {{_http, status, _reason}, _headers, body}} =
-      :httpc.request(:get, {~c"http://127.0.0.1:48641" ++ String.to_charlist(path), []}, [], body_format: :binary)
+      :httpc.request(:get, {String.to_charlist(Process.get(:gateway_base) <> path), []}, [], body_format: :binary)
 
     {status, JSON.decode!(body)}
   end
@@ -111,7 +112,7 @@ defmodule Server.MCP.GatewayTest do
     {:ok, {{_http, status, _reason}, _headers, body}} =
       :httpc.request(
         :post,
-        {~c"http://127.0.0.1:48641" ++ String.to_charlist(path), [], ~c"application/json", JSON.encode!(map)},
+        {String.to_charlist(Process.get(:gateway_base) <> path), [], ~c"application/json", JSON.encode!(map)},
         [],
         body_format: :binary
       )
@@ -123,7 +124,7 @@ defmodule Server.MCP.GatewayTest do
     {:ok, {{_http, status, _reason}, _headers, body}} =
       :httpc.request(
         method,
-        {~c"http://127.0.0.1:48641" ++ String.to_charlist(path), [], ~c"application/json", JSON.encode!(map)},
+        {String.to_charlist(Process.get(:gateway_base) <> path), [], ~c"application/json", JSON.encode!(map)},
         [],
         body_format: :binary
       )

@@ -20,9 +20,6 @@ defmodule Server.MCP.ServerTest do
   alias Server.Staff
   alias Server.Thread
 
-  @port 48_631
-  @url ~c"http://127.0.0.1:48631/mcp"
-
   setup_all do
     {:ok, _} = Application.ensure_all_started(:inets)
     :ok
@@ -32,7 +29,9 @@ defmodule Server.MCP.ServerTest do
     Server.TestDB.clean!()
     start_supervised!({MCP.Endpoint, transport: {:streamable_http, start: true}})
 
-    start_supervised!({Bandit, plug: {Server.MCP.Gateway, []}, ip: {127, 0, 0, 1}, port: @port})
+    bandit = start_supervised!({Bandit, plug: {Server.MCP.Gateway, []}, ip: {127, 0, 0, 1}, port: 0})
+    {:ok, {_address, port}} = ThousandIsland.listener_info(bandit)
+    Process.put(:mcp_url, ~c"http://127.0.0.1:#{port}/mcp")
 
     {:ok, thread} = Channel.open_thread(%{title: "review PR 329"})
     {:ok, agent} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
@@ -862,7 +861,7 @@ defmodule Server.MCP.ServerTest do
     {:ok, {{_http, status, _reason}, resp_headers, resp_body}} =
       :httpc.request(
         :post,
-        {@url, headers, ~c"application/json", JSON.encode!(body)},
+        {Process.get(:mcp_url), headers, ~c"application/json", JSON.encode!(body)},
         [],
         body_format: :binary
       )
