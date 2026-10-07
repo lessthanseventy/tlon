@@ -200,3 +200,32 @@ describe("the wide room", () => {
     }
   })
 })
+
+describe("the stereo", () => {
+  test("idle with no player: hit exists, tip says idle, no track text", () => {
+    const room = new WideRoom(640), a = viewOf(office(3), 1)
+    for (let i = 0; i < 10; i++) room.step(a)
+    const fr = room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0))
+    const hit = fr.hits.find((h) => h.tip.startsWith("the stereo"))
+    expect(hit).toBeTruthy()
+    expect(hit!.tip).toContain("idle")
+  })
+
+  test("a player set: the tip names the track", () => {
+    const room = new WideRoom(640), a = viewOf(office(3), 1)
+    room.setPlayer({ text: "Test Song - Test Artist", bpm: null })
+    for (let i = 0; i < 10; i++) room.step(a)
+    const fr = room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0))
+    const hit = fr.hits.find((h) => h.tip.startsWith("the stereo"))
+    expect(hit!.tip).toContain("Test Song - Test Artist")
+  })
+
+  test("clearing the player goes back to idle", () => {
+    const room = new WideRoom(640), a = viewOf(office(3), 1)
+    room.setPlayer({ text: "Test Song", bpm: null })
+    room.setPlayer(null)
+    for (let i = 0; i < 10; i++) room.step(a)
+    const fr = room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0))
+    expect(fr.hits.find((h) => h.tip.startsWith("the stereo"))!.tip).toContain("idle")
+  })
+})
