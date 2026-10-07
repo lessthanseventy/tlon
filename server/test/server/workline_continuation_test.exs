@@ -93,6 +93,18 @@ defmodule Server.Workline.ContinuationTest do
     assert [_] = continuations(v.id)
   end
 
+  test "where a sheriff owns red, running out of nudges goes to the sheriff — it does not wait on the operator" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Sheriffed"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+    {:ok, t} = Workline.open(%{title: "stalls", slug: "stalls", stage: "plan", workspace_id: ws.id})
+
+    for _ <- 1..5, do: Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+
+    assert Repo.get!(Server.Thread, t.id).awaiting == nil
+    beat = Repo.one!(from th in Server.Thread, where: th.workspace_id == ^ws.id and th.title == "sheriff's beat")
+    assert Repo.exists?(from m in Message, where: m.thread_id == ^beat.id and like(m.body, "%stuck at plan%"))
+  end
+
   test "nothing to say: the artifact is there, the gate is parked, the thread is plain, a prompt is open",
        %{thread: t} do
     :ok = Continuation.run(t.id, artifacts: Present)
