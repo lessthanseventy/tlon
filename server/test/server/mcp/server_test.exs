@@ -652,6 +652,34 @@ defmodule Server.MCP.ServerTest do
     assert [{"promoted", ^tid}] = Server.Tickets.threads_of(ticket.id)
   end
 
+  test "staff_child with workline opens the child as a workline at that stage — its lead, brief and ticket as before",
+       %{token: token, thread: thread} do
+    {:ok, _} = Staff.register_agent(%{name: "yu-machine", mandate: "plan", engine: "fresh"})
+    {:ok, ws} = Server.Workspaces.register(%{name: "Lined"})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "finder finds tickets"})
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r =
+      call(token, session, 4, "staff_child", %{
+        "title" => "Finder finds tickets",
+        "lead" => "yu-machine",
+        "brief" => "Spec it: the finder should match open tickets by title.",
+        "ticket_id" => ticket.id,
+        "workline" => "spec"
+      })
+
+    refute r["isError"]
+    tid = decode_tool_json(r)["thread_id"]
+    child = Repo.get!(Thread, tid)
+    assert {child.stage, child.parent_thread_id} == {"spec", thread.id}
+    assert child.slug =~ "finder-finds-tickets"
+    assert Channel.thread_lead(tid) == "yu-machine"
+    assert Enum.any?(Channel.thread_messages(child), &(&1.body =~ "match open tickets by title"))
+    assert [{"promoted", ^tid}] = Server.Tickets.threads_of(ticket.id)
+  end
+
   test "staff_child refuses an unregistered lead without opening a thread", %{token: token} do
     session = handshake(token)
     call(token, session, 3, "register", %{})

@@ -46,6 +46,11 @@ defmodule Server.MCP.Tool.StaffChild do
 
     field :ticket_id, :integer,
       description: "The ticket this work is for, when it came from one — it moves into the new thread"
+
+    field :workline, :enum,
+      values: ["intent", "spec", "plan", "build"],
+      description:
+        "Open the child as a WORKLINE at this stage (staged work: spec → plan → build → verify → review, each owing its artifact) instead of a plain thread"
   end
 
   @impl true
@@ -56,7 +61,7 @@ defmodule Server.MCP.Tool.StaffChild do
     parent = identity.thread_id && Channel.thread(identity.thread_id)
 
     with {:agent, %Agent{}} <- {:agent, Staff.agent_by_name(params[:lead])},
-         {:ok, thread} <- Channel.open_thread(child_attrs(params[:title], parent)),
+         {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
          {:ok, _} <- Channel.assign_lead(thread.id, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
          :ok <- promote_ticket(params[:ticket_id], thread.id) do
@@ -75,6 +80,18 @@ defmodule Server.MCP.Tool.StaffChild do
 
   defp child_attrs(title, nil), do: %{title: title}
   defp child_attrs(title, parent), do: %{title: title, parent_thread_id: parent.id, project_id: parent.project_id}
+
+  # a plain thread, or a workline at `stage` in the parent's workspace (its brief the stage's own)
+  defp open_child(title, parent, nil), do: Channel.open_thread(child_attrs(title, parent))
+
+  defp open_child(title, parent, stage) do
+    extra =
+      if parent,
+        do: %{parent_thread_id: parent.id, project_id: parent.project_id, workspace_id: parent.workspace_id},
+        else: %{}
+
+    Server.Workline.open_titled(title, stage, extra)
+  end
 
   # The ticket the work came from moves into the new thread (status doing, tied to it). An unknown
   # id is refused rather than ignored: the manager named a ticket that is not there.

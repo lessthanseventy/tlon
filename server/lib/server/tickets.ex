@@ -88,7 +88,7 @@ defmodule Server.Tickets do
               [
                 "@#{name} intake — ticket ##{ticket.id}: #{ticket.title}",
                 ticket.body,
-                "Triage it: decide plain thread or workline, then staff_child whoever fits (with ticket_id: #{ticket.id})."
+                "Triage it: decide plain thread or workline, then staff_child whoever fits (with ticket_id: #{ticket.id}; a workline also takes workline: the stage to start at)."
               ],
               &(&1 in [nil, ""])
             ),
