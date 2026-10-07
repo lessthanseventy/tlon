@@ -180,7 +180,12 @@ defmodule Server.SchedulesTest do
     after_at = DateTime.new!(~D[2026-01-01], ~T[00:00:00], "Etc/UTC")
     next = Schedules.next_occurrence("0 9 * * *", after_at)
 
-    local = next |> DateTime.to_naive() |> NaiveDateTime.to_erl() |> :calendar.universal_time_to_local_time() |> NaiveDateTime.from_erl!()
+    local =
+      next
+      |> DateTime.to_naive()
+      |> NaiveDateTime.to_erl()
+      |> :calendar.universal_time_to_local_time()
+      |> NaiveDateTime.from_erl!()
 
     assert local.hour == 9
     assert DateTime.compare(next, after_at) == :gt

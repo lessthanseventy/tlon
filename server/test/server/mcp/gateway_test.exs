@@ -544,7 +544,16 @@ defmodule Server.MCP.GatewayTest do
       {:ok, ws} = Server.Workspaces.register(%{name: "Home", type: "home"})
 
       {200, status} = get_json("/api/life/#{ws.id}")
-      assert status == %{"xp" => 0, "level" => 0, "next_level_at" => 100, "streaks" => %{}, "due" => [], "quests" => [], "today" => []}
+
+      assert status == %{
+               "xp" => 0,
+               "level" => 0,
+               "next_level_at" => 100,
+               "streaks" => %{},
+               "due" => [],
+               "quests" => [],
+               "today" => []
+             }
 
       {201, r} = post_json("/api/life/#{ws.id}/routines", %{title: "stretch", every: "@daily"})
       assert r["title"] == "stretch" and r["every"] == "@daily"
@@ -552,7 +561,7 @@ defmodule Server.MCP.GatewayTest do
       # "@daily"'s first occurrence is strictly after created_at — backdate it so there's
       # already a due instance to stamp (mirrors Server.LifeTest's routine_done/2 setup).
       past = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-90_000, :second)
-      Server.Repo.get!(Server.Routine, r["id"]) |> Ecto.Changeset.change(created_at: past) |> Server.Repo.update!()
+      Server.Routine |> Server.Repo.get!(r["id"]) |> Ecto.Changeset.change(created_at: past) |> Server.Repo.update!()
 
       {200, edited} = request_json(:patch, "/api/life/routines/#{r["id"]}", %{window_minutes: 30})
       assert edited["window_minutes"] == 30
