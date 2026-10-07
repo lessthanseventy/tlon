@@ -6,6 +6,7 @@
 import { needsYou } from "./crew"
 import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
+import { keyMash, nightOwl } from "./eggs"
 import { NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
@@ -33,7 +34,7 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
  * is saying, from `saidFrom` until `saidUntil`; `stretch`: the tick her wake-up stretch ends; `fuss`: a worker making
  * a fuss of her, from where they are
  */
-export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; cheer?: string | null }
+export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" } | null }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
@@ -126,6 +127,9 @@ export class Sim<L extends { people: Seat[] }> {
   private spoken = new Set<string>()
   // the last lines said, so a pet doesn't say the same thing twice running
   private recent: string[] = []
+  protected discoUntil = 0
+  /** the hour it is — a function, so a test can make it the small hours */
+  protected hour = () => new Date().getHours()
 
   constructor(protected plan: Plan<L>) {
     this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null }
@@ -204,10 +208,12 @@ export class Sim<L extends { people: Seat[] }> {
       c.x += Math.sign(to.x - c.x); c.y += Math.sign(to.y - c.y)
       if (to.x !== c.x) c.face = Math.sign(to.x - c.x)
       if (c.x === to.x && c.y === to.y) c.path.shift()
-      if (!c.path.length && c.cheer) {
-        const host = this.actors.get(c.cheer)
-        c.cheer = null; c.mode = "sit"; c.until = this.tick + 200
-        if (host) { host.emote = "♥"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "cheer", NINA.cheer, host.seat.agent), 70) }
+      if (!c.path.length && c.errand) {
+        const { name, kind } = c.errand, host = this.actors.get(name)
+        c.errand = null; c.mode = "sit"; c.until = this.tick + (kind === "keys" ? 400 : 200)
+        if (host && kind === "cheer") { host.emote = "♥"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "cheer", NINA.cheer, name), 70) }
+        // she sits on their keyboard: whatever they were typing, this is what they type now
+        if (host && kind === "keys") { this.say(name, keyMash()); this.catSay(this.line("Nina", "keyboard", NINA.keyboard, name), 70, 20) }
         return true
       }
       if (!c.path.length) {
@@ -238,7 +244,11 @@ export class Sim<L extends { people: Seat[] }> {
     if (this.tick < c.until || this.tick < c.purr) return false
     const company = [...this.actors.values()].some((a) => !a.moving && LOUNGING.has(a.spot.kind))
     const r = Math.random()
-    const leaps = r < 0.05 && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
+    // now and then she goes to sit on the keyboard of someone hard at work
+    const typing = [...this.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && a.seat.thinking)
+    if (typing.length && r > 0.97 && c.mode !== "sleep") return this.catKeyboard(pick(typing).seat.agent)
+    // the small hours give her ideas
+    const leaps = r < (nightOwl(this.hour()) ? 0.15 : 0.05) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
     if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(Math.random() * 60); return true }
     const cold = (this.weather?.temp_c ?? 20) < 10
     const to = cold && p.warm && r < 0.35 ? p.warm
@@ -274,15 +284,30 @@ export class Sim<L extends { people: Seat[] }> {
    * You send Nina over to someone (their name): she walks to them and, when she gets there, tells
    * them something encouraging, in her way — and they get a ♥. False when they aren't in the room.
    */
-  catCheer(name: string): boolean {
+  catCheer(name: string): boolean { return this.catErrand(name, "cheer") }
+
+  /** Nina goes and sits on someone's keyboard (their name); false when they aren't in the room */
+  catKeyboard(name: string): boolean { return this.catErrand(name, "keys") }
+
+  private catErrand(name: string, kind: "cheer" | "keys"): boolean {
     const host = this.actors.get(name)
     if (!host) return false
     const c = this.cat, p = this.plan.cat, to = this.plan.visit(host)
     const down = c.mode === "zoom" ? null : p.via(c)
     c.path = [...(down ? [down] : []), ...p.door(down ?? c, to), { ...to }]
-    c.mode = "walk"; c.until = this.tick + 150; c.cheer = name
+    c.mode = "walk"; c.until = this.tick + 150; c.errand = { name, kind }
     return true
   }
+
+  /** the Konami code: a heart for everyone, confetti over them all, and a beat for the pets to dance to */
+  disco() {
+    this.discoUntil = this.tick + 300
+    for (const x of this.actors.values()) { x.emote = "♥"; x.emoteUntil = this.tick + 120 }
+    this.changed = true
+  }
+
+  /** the beat the room dances to now: a disco's, else none (a room with music says otherwise) */
+  bpm(): number | null { return this.tick < this.discoUntil ? 140 : null }
 
   /** the leaps of the room she is in (the group with a spot nearest her), if it has any near */
   private leapsHere(): Pt[] | null {
@@ -325,6 +350,10 @@ export class Sim<L extends { people: Seat[] }> {
     for (const [k, v] of this.talk) if (this.tick > v.until) { this.talk.delete(k); changed = true }
     const asleep = this.cat.mode === "sleep"
     if (this.stepCat()) changed = true
+    // the night owls: in the small hours, someone at their desk yawns now and then
+    if (nightOwl(this.hour())) for (const x of this.actors.values()) {
+      if (x.spot.kind === "desk" && !x.moving && this.tick >= x.emoteUntil && Math.random() < 1 / 900) { x.emote = "z"; x.emoteUntil = this.tick + 45; changed = true }
+    }
     if (asleep && this.cat.mode !== "sleep" && this.cat.mode !== "zoom") {
       this.cat.stretch = this.tick + 12
       if (Math.random() < 0.5) this.catSay(this.line("Nina", "wake", NINA.wake))
