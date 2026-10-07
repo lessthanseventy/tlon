@@ -16,6 +16,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/pets/:ws         Office.Pets.voices (the pets' lines by occasion; asking may write a batch)
       GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next)
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
+      GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky — each with its actions)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
       GET    /api/office/suggestions/:ws  Office.Corkboard.suggestions (the suggestion box)
       DELETE /api/office/suggestions/:ws/:id  Office.Corkboard.drop (filed as a ticket, or thrown out)
@@ -121,6 +122,7 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp route(conn, "GET", "office", ["needs"]), do: json(conn, 200, Server.Office.Needs.list())
+  defp route(conn, "GET", "alerts", []), do: json(conn, 200, Server.Alerts.list())
 
   defp route(conn, "DELETE", "office", ["rollout", id]) do
     case Integer.parse(id) do

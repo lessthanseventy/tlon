@@ -1,0 +1,99 @@
+defmodule Server.AlertsTest do
+  # What the desktop raises, and how loudly: a choice blocking work is a decision, what should
+  # stay until seen is sticky, a meeting about to start is an alarm. Each carries its actions as
+  # calls on the operator API, so the surface needs no per-kind logic.
+  use ExUnit.Case, async: true
+
+  alias Server.Alerts
+
+  @now ~U[2026-10-08 15:57:00Z]
+
+  defp need(kind, extra \\ %{}) do
+    Map.merge(
+      %{
+        key: "#{kind}:7",
+        kind: kind,
+        level: "blocking",
+        thread_id: 7,
+        workspace_id: 1,
+        title: "the finder",
+        text: "waits",
+        at: @now,
+        options: nil,
+        ref: nil
+      },
+      extra
+    )
+  end
+
+  defp meeting(start, extra \\ %{}) do
+    Map.merge(
+      %{
+        uid: "m@x",
+        title: "Standup",
+        start: start,
+        stop: DateTime.add(start, 1800),
+        link: "https://meet.google.com/abc",
+        calendar: "work"
+      },
+      extra
+    )
+  end
+
+  test "a gate is a decision: approve, or say something else" do
+    [a] = Alerts.build([need("gate")], [], @now)
+    assert a.level == "decision" and a.key == "gate:7"
+
+    assert [
+             %{label: "Approve", method: "POST", path: "/api/threads/7/approve"},
+             %{label: "Other…", path: "/api/threads/7/messages", input: "body"}
+           ] = a.actions
+  end
+
+  test "a dialog is a decision with its own options; a question takes a reply" do
+    [d, q] =
+      Alerts.build(
+        [
+          need("dialog", %{options: [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]}),
+          need("question", %{key: "question:8", thread_id: 8})
+        ],
+        [],
+        @now
+      )
+
+    assert d.level == "decision"
+    assert [%{label: "Yes", body: %{body: "y"}}, %{label: "No", body: %{body: "n"}}, %{label: "Other…"}] = d.actions
+    assert q.level == "decision"
+    assert [%{label: "Reply…", input: "body", path: "/api/threads/8/messages"}] = q.actions
+  end
+
+  test "what to decide when convenient is sticky, never an interruption" do
+    alerts =
+      Alerts.build(
+        [need("mention", %{level: "decide"}), need("verify_failed", %{key: "verify_failed:9", thread_id: 9})],
+        [],
+        @now
+      )
+
+    assert Enum.map(alerts, & &1.level) == ["sticky", "sticky"]
+    assert Enum.any?(List.last(alerts).actions, &(&1.path == "/api/threads/9/verify"))
+  end
+
+  test "a meeting is an alarm from a few minutes before it starts until shortly after, with a way to join" do
+    soon = meeting(~U[2026-10-08 16:00:00Z])
+    later = meeting(~U[2026-10-08 17:00:00Z], %{uid: "later@x"})
+    gone = meeting(~U[2026-10-08 15:30:00Z], %{uid: "gone@x"})
+
+    assert [a] = Alerts.build([], [soon, later, gone], @now, alarm_minutes: 5)
+    assert a.level == "alarm" and a.key == "meeting:m@x:2026-10-08T16:00:00Z"
+    assert a.at == ~U[2026-10-08 16:00:00Z] and a.link == "https://meet.google.com/abc"
+    assert [%{label: "Join", open: "https://meet.google.com/abc"}] = a.actions
+  end
+
+  test "alarms first, then decisions, then sticky" do
+    alerts =
+      Alerts.build([need("mention", %{level: "decide"}), need("gate")], [meeting(~U[2026-10-08 16:00:00Z])], @now)
+
+    assert Enum.map(alerts, & &1.level) == ["alarm", "decision", "sticky"]
+  end
+end
