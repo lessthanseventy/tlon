@@ -1,15 +1,16 @@
 defmodule Server.Workline.Merge do
   @moduledoc """
-  The approved workline's last act: merge its branch `work/<slug>` into `main`. It runs in the
-  checkout people work in, so it is careful: only onto `main`, only with nothing uncommitted, always
-  a merge commit (`--no-ff`, so the work stays one reviewable unit), and a conflict is aborted —
-  never a half-merged tree. `{:ok, %{from, to}}` (the main commits before and after), or
-  `{:error, why}` in words the operator can act on.
+  The approved workline's last act: land its branch `work/<slug>` on `main`, linearly — the branch
+  is rebased onto main (in its worktree, where it is checked out), then main fast-forwards to it, as
+  the remote takes no merge commits. It runs in the checkout people work in, so it is careful: only
+  onto `main`, only with nothing uncommitted, and a conflict is aborted — main and the branch left
+  as they were. `{:ok, %{from, to}}` (the main commits before and after), or `{:error, why}` in
+  words the operator can act on.
   """
 
-  @doc "Merge `work/<slug>` into `main` in `repo`, titled `title`."
-  @spec merge(String.t(), String.t(), String.t()) :: {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t()}
-  def merge(repo, slug, title) do
+  @doc "Land `work/<slug>` on `main` in `repo`: rebase it onto main, fast-forward main."
+  @spec merge(String.t(), String.t()) :: {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t()}
+  def merge(repo, slug) do
     branch = "work/#{slug}"
 
     with {:ok, _} <- run(repo, ["rev-parse", "--verify", "--quiet", branch], "there is no branch #{branch}"),
@@ -27,7 +28,8 @@ defmodule Server.Workline.Merge do
              "#{repo} has staged, uncommitted changes — commit them, then approve again"
            ),
          {:ok, from} <- run(repo, ["rev-parse", "HEAD"], "no HEAD"),
-         {:ok, _} <- merge_commit(repo, branch, title),
+         {:ok, _} <- rebase(repo, branch),
+         {:ok, _} <- run(repo, ["merge", "--ff-only", "--quiet", branch], "main could not fast-forward to #{branch}"),
          {:ok, to} <- run(repo, ["rev-parse", "HEAD"], "no HEAD") do
       {:ok, %{from: from, to: to}}
     else
@@ -38,15 +40,47 @@ defmodule Server.Workline.Merge do
 
   defp current(repo), do: run(repo, ["symbolic-ref", "--short", "HEAD"], "#{repo} is not on a branch")
 
-  defp merge_commit(repo, branch, title) do
-    case git(repo, ["merge", "--no-ff", "--no-edit", "-m", "Merge #{branch}: #{title}", branch]) do
+  # where the branch is checked out it can only be rebased there; elsewhere, in a throwaway worktree
+  defp rebase(repo, branch) do
+    case checked_out(repo, branch) do
+      nil ->
+        tmp = Path.join(System.tmp_dir!(), "tlon-land-#{System.unique_integer([:positive])}")
+
+        with {:ok, _} <- run(repo, ["worktree", "add", "--quiet", tmp, branch], "could not check out #{branch}") do
+          try do
+            rebase_in(tmp, branch)
+          after
+            git(repo, ["worktree", "remove", "--force", tmp])
+          end
+        end
+
+      tree ->
+        rebase_in(tree, branch)
+    end
+  end
+
+  defp rebase_in(tree, branch) do
+    case git(tree, ["rebase", "--quiet", "main"]) do
       {_, 0} ->
-        {:ok, :merged}
+        {:ok, :rebased}
 
       {out, _} ->
-        _ = git(repo, ["merge", "--abort"])
-        {:error, "merging #{branch} hit a conflict, aborted — main is as it was: #{String.slice(out, 0, 300)}"}
+        _ = git(tree, ["rebase", "--abort"])
+
+        {:error,
+         "rebasing #{branch} onto main hit a conflict, aborted — main and the branch are as they were: #{String.slice(out, 0, 300)}"}
     end
+  end
+
+  defp checked_out(repo, branch) do
+    {out, 0} = git(repo, ["worktree", "list", "--porcelain"])
+
+    out
+    |> String.split("\n\n", trim: true)
+    |> Enum.find_value(fn entry ->
+      lines = String.split(entry, "\n")
+      if "branch refs/heads/#{branch}" in lines, do: lines |> hd() |> String.replace_prefix("worktree ", "")
+    end)
   end
 
   defp run(repo, args, why) do

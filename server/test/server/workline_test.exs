@@ -204,7 +204,7 @@ defmodule Server.WorklineTest do
 
   defmodule Merges do
     @moduledoc false
-    def merge(_repo, slug, _title),
+    def merge(_repo, slug),
       do: if(slug == "conflicted", do: {:error, "merging hit a conflict"}, else: {:ok, %{from: "a", to: "b"}})
   end
 
