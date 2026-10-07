@@ -79,7 +79,8 @@ defmodule Server.Workline do
 
       with {:ok, thread} <-
              attrs |> Thread.workline_changeset() |> Repo.insert() |> Server.Bus.announce(:thread_opened) do
-        # The brief IS the wake from the entry stage — the opening playbook must not wait for an advance.
+        # staffed first, so the brief — the wake from the entry stage — reaches its lead
+        thread = restaff(thread)
         post_brief(thread, Brief.stage_message(thread))
         {:ok, thread}
       end
@@ -428,9 +429,21 @@ defmodule Server.Workline do
   end
 
   # Each stage is led by its kind of worker from the workspace's bench, so a workline hands itself
-  # on as it moves. Best-effort (the stage already flipped; a restaff fault must not fail the
-  # advance). A workspace without that kind keeps the current lead — quietly, except at review:
-  # a builder holding its own review is posted, never silent.
+  # on as it moves; intent by the bench's lead (the manager), who takes the ask in. Best-effort (the
+  # stage already flipped; a restaff fault must not fail the advance). A workspace without that kind
+  # keeps the current lead — quietly, except at review: a builder holding its own review is posted.
+  defp restaff(%Thread{stage: "intent", workspace_id: ws} = thread) when not is_nil(ws) do
+    ws
+    |> Server.Workspaces.bench()
+    |> Server.Coworker.lead()
+    |> case do
+      %Server.Coworker{name: name} -> hand_to(thread, "lead", name)
+      nil -> thread
+    end
+  rescue
+    _ -> thread
+  end
+
   defp restaff(%Thread{stage: stage} = thread) do
     case @staff_by_stage[stage] do
       nil -> thread
