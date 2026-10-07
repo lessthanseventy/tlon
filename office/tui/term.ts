@@ -32,6 +32,7 @@ export function query() {
 const KEYS: Record<string, string> = {
   "[A": "up", "[B": "down", "[C": "right", "[D": "left", "[H": "home", "[F": "end", "[5~": "pgup", "[6~": "pgdn", "[Z": "backtab", "OA": "up", "OB": "down", "OC": "right", "OD": "left",
   "[1~": "home", "[4~": "end", "[3~": "delete", "[13;2u": "shift-enter", "[27;2;13~": "shift-enter",
+  "[1;2A": "shift-up", "[1;2B": "shift-down", "[1;2C": "shift-right", "[1;2D": "shift-left",
 }
 const PASTE_END = `${ESC}[201~`
 /** a control character as the key it is: \r enter, \t tab, ^H/DEL backspace, the rest ctrl-<letter> */
