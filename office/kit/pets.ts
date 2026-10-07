@@ -35,6 +35,7 @@ export const ARGOS = {
   cheer: ["{name}! You're doing GREAT! I think! I can't read!", "{name}, I brought you my whole self. And a sock.", "Sing, O Muse, of {name}, who writes the good code!", "{name}! You! Are! The best! At the typing!", "Heroes ship, {name}. You're a hero. Probably.", "{name}, I'll guard your desk. From everything."],
   shipped: ["{name} SHIPPED IT! Sing, O Muse!", "A homecoming worthy of Odysseus, {name}!"],
   rally: ["BALL. Ball ball ball. BALL.", "Left! Right! Left! I can't take it!"],
+  paper: ["The morning news! I fetch it like a trophy from Troy!", "Dispatches! Sing, O Muse, of the evening edition!", "I bring news. I do not read it. Reading is for the gods."],
   fuss: {
     pat: ["Yes! The head! The good head!", "Thank you, {name}! Thank you thank you!"],
     scratch: ["Ohh, the ear. The leg's going. Can't stop it.", "There! THERE! O, {name}, there!"],

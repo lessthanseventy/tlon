@@ -81,7 +81,7 @@ describe("the pets talk", () => {
     chance(0.999, () => { for (let i = 0; i < 3_000 && (i < 600 || pets.dog.mode === "sleep" || pets.dog.path.length); i++) room.step(a) })
     chance(0, () => room.step(a))
     expect(pets.dog.mode).toBe("walk")
-    expect(ARGOS.paper).toContain(pets.dog.said)
+    expect(ARGOS.paper).toContain(pets.dog.said!)
     expect(balloons(room, a).some((b) => b.t === "balloon" && b.cx === pets.dog.x)).toBe(true)
   })
 
