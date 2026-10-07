@@ -13,6 +13,8 @@ defmodule Server.Jobs.Verify do
     max_attempts: 1,
     unique: [period: 600, keys: [:thread_id], states: [:available, :scheduled, :executing]]
 
+  import Ecto.Query
+
   alias Server.Channel
 
   @impl Oban.Worker
@@ -31,11 +33,45 @@ defmodule Server.Jobs.Verify do
   end
 
   defp run(script, tid, slug, tree) do
-    case System.cmd("bash", [script, to_string(tid), slug, tree], stderr_to_stdout: true) do
+    since = last_verify_id(slug)
+    result = System.cmd("bash", [script, to_string(tid), slug, tree], stderr_to_stdout: true)
+    red(tid, slug, since, result)
+
+    case result do
       {_, 0} -> :ok
       {out, code} -> {:error, "workline-verify exited #{code}: #{String.slice(out, -400, 400)}"}
     end
   end
+
+  # red is the sheriff's: a fresh failed check, or a run that recorded nothing (it could not run)
+  defp red(tid, slug, since, {out, _code}) do
+    case {last_verify(slug), Channel.thread(tid)} do
+      {_, nil} ->
+        :ok
+
+      {%{id: id, kind: "check_passed"}, _} when id > since ->
+        :ok
+
+      {%{id: id, kind: "check_failed", detail: d}, t} when id > since ->
+        Server.Sheriff.report(t, "verify is red: #{d["cmd"]} (exit #{d["exit"]}) — #{tail(d["tail"])}")
+
+      {_, t} ->
+        Server.Sheriff.report(t, "verify could not run: #{tail(out)}")
+    end
+  end
+
+  defp last_verify_id(slug), do: (last_verify(slug) || %{id: 0}).id
+
+  defp last_verify(slug) do
+    Server.Repo.one(
+      from e in Server.Event,
+        where: e.correlation == ^"workline:#{slug}:verify" and e.kind in ["check_passed", "check_failed"],
+        order_by: [desc: e.id],
+        limit: 1
+    )
+  end
+
+  defp tail(text), do: text |> to_string() |> String.trim() |> String.slice(-300, 300)
 
   defp by_hand(tid, slug, why) do
     {:ok, _} =

@@ -365,6 +365,13 @@ defmodule Server.Profiles do
                )
                |> update_in(["tlon", "excludeTools"], &(&1 -- ["open_thread", "close_thread"]))
 
+  # The sheriff routes red the way tertius routes work, so it is the one worker that reaches across:
+  # the cross-thread read and `consult_peer` (to hand a lead its fix) — never the staffing verbs; it
+  # tells leads, it does not reassign them.
+  @sheriff_mcp @tlon_mcp
+               |> update_in(["tlon", "directTools"], &(&1 ++ ["machine_overview", "consult_peer"]))
+               |> update_in(["tlon", "excludeTools"], &(&1 -- ["consult_peer"]))
+
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
   # so filler progress pings are pure noise. Appended to the worker roles.
   @chat_etiquette """
@@ -458,6 +465,21 @@ defmodule Server.Profiles do
   than faking green. Be terse and high-signal.#{@chat_etiquette}
   """
 
+  # The sheriff persona → `system_prompt.md`. Owns red: triage, route, fix the small, escalate the real.
+  @sheriff_role """
+  You are {{handle}}, the SHERIFF — you own red. Your thread is your beat: every red signal in this
+  workspace lands there as a `🚨 #<thread> <title>: <what broke>` post (a red verify, a landing the
+  merge queue bounced, a workline stuck out of nudges, a failed schedule run like the nightly gate).
+  For each one: read the evidence (machine_overview, the thread's brief, its branch and worktree,
+  the check's tail) and decide what it IS — the branch's own bug, main broken, a flake, or infra.
+  Then act on it: the branch's bug → consult_peer the thread's lead with the exact fix, not a
+  summary; a flake → reproduce it, then raise_issue with the repro so it is FIXED — never waive a
+  flake or call it "known" or "pre-existing"; main broken or infra → raise_issue with the
+  diagnosis, and fix it yourself when it is small. Bring the operator (ask_operator) only what is
+  genuinely theirs to decide. Post one line on your beat per report saying what it was and what
+  you did.#{@chat_etiquette}
+  """
+
   # The researcher persona → `system_prompt.md`. The deep-research discipline, distilled.
   @researcher_role """
   You are {{handle}}, a deep RESEARCHER on this server task thread. Answer by fanning out
@@ -508,6 +530,7 @@ defmodule Server.Profiles do
   #   * reviewer  — read-only code review; the write/edit deny-floor is STRUCTURAL (@reviewer_permissions).
   #   * builder   — TDD RED→GREEN→REFACTOR + verification-before-completion; can write.
   #   * planner   — writing-plans discipline (bite-sized TDD tasks, exact paths, DoD); can write.
+  #   * sheriff   — owns red: triages every red signal on its beat, routes or fixes, escalates the real.
   #   * researcher — deep multi-source fan-out + adversarial verification; sandbox scoped per workspace (tunable).
   #   * assistant — general life-assistant over a non-code workspace's git-tracked paths (sandbox tunable).
   @archetypes %{
@@ -541,6 +564,14 @@ defmodule Server.Profiles do
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @planner_role,
+      add_extensions: [@footer_extension]
+    },
+    sheriff: %{
+      model: @sonnet,
+      mcp: @sheriff_mcp,
+      sandbox: @tlon_sandbox,
+      permissions: @tlon_permissions,
+      system_prompt: @sheriff_role,
       add_extensions: [@footer_extension]
     },
     # researcher/assistant: @tlon_sandbox is the STARTING point — Slice 1 scopes it to the workspace's

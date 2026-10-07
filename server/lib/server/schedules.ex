@@ -188,13 +188,26 @@ defmodule Server.Schedules do
     tail = String.slice(out, -@output_cap, @output_cap)
     result = %{status: if(code == 0, do: "ok", else: "failed"), exit: code, output: tail}
 
-    if s.standing do
-      {:ok, t} = thread_for(s)
-      note(t.id, "⏰ #{s.title} — exit #{code}\n```\n#{String.slice(tail, -1500, 1500)}\n```")
-      Map.put(result, :thread_id, t.id)
-    else
-      result
+    result =
+      if s.standing do
+        {:ok, t} = thread_for(s)
+        note(t.id, "⏰ #{s.title} — exit #{code}\n```\n#{String.slice(tail, -1500, 1500)}\n```")
+        Map.put(result, :thread_id, t.id)
+      else
+        result
+      end
+
+    # the note above wakes no one, by design; a red run is the sheriff's to triage
+    if code != 0 do
+      source = %{id: result[:thread_id], title: s.title, workspace_id: s.workspace_id}
+
+      Server.Sheriff.report(
+        source,
+        "the scheduled run failed (exit #{code}): #{String.slice(String.trim(tail), -300, 300)}"
+      )
     end
+
+    result
   end
 
   # a standing schedule's one thread (opened by its first firing, reopened if since closed), else

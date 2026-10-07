@@ -70,6 +70,8 @@ defmodule Server.Workline.Continuation do
           "hand it to someone else, or close it."
     })
 
+    Server.Sheriff.report(thread, "stuck at #{thread.stage} after #{sent} nudges: #{why}")
+
     :ok
   end
 

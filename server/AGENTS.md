@@ -42,6 +42,8 @@ and every layer the spine design's re-laid §9 asked for
   (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
   entering verify queues the verifier on the service (`Server.Jobs.Verify`); approving review queues
   the landing (`Server.Jobs.Land`, one at a time, gated on main before it moves — red bounces to build).
+  Red — a red verify, a bounce, a stuck workline, a failed schedule run — goes to the workspace's
+  sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board). Crons read the server's local clock.
