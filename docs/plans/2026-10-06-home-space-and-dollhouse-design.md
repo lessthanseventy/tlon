@@ -1,7 +1,7 @@
 # A home beside the office — the dollhouse, the life quests, and a room that scrolls — design
 
 **Date:** 2026-10-06
-**Status:** agreed with Andrew (the calls in §8), nothing built. Three tracks in §8, each step gated by a check.
+**Status:** agreed with Andrew (the calls in §9), nothing built. Three tracks in §8, each step gated by a check.
 **Asked:** Andrew: *"an alternative space … to manage more of my life and less of a dev shop. like
 where my sim clocks out … use the primitives we've managed to come up with to gamify my life. down
 to like leveling up when i brush my teeth … a scrollable office so it doesn't have to feel so
@@ -194,7 +194,7 @@ and **your figure walks from the one to the other**. Four things move you, and a
   stamping a routine or opening the life card walks you home. The room follows your attention, and
   the clock and keys only override it;
 - **coworkers cross too** — a consult (`Visit`) or a nag walks its coworker over the street to the
-  home door and rings (§6, the doorbell, §7); otherwise they stay on their side.
+  home door and rings (§7, the doorbell); otherwise they stay on their side.
 
 While you are home, the office still runs — coworkers at desks, the queue at your door — you just
 watch it from across the street, and the needs count in the header is the same count.
@@ -411,7 +411,7 @@ as three worklines; within a track the steps stack. The two joins are named.
 | 5 | **The life room** — routines in their tiles, pulse/stamp, fridge notes, calendar on the wall, XP in the header, clock-in/out walk | a driven session stamps a due routine from the room and `/api/life` shows it; the walk is seen, not assumed |
 | 6 | **Looks** — parts catalogue, the look card, the editor, `import-sprite`, `looks.json` | a round trip: import a PNG → `looks.json` → draw → the pixels match the PNG's role-snapped version; WCAG on every skin tone against every tile floor |
 | 7 | **Pets + temperament** — `kit/pets.ts`, two new species, `pets.json`, the pet card with live preview | per-axis: mode-table weights move the way the table says (a unit test over 10k ticks); the card's preview is driven and read back |
-| 8 | **Whimsy** — from §6, one each, as they appeal | each its own one-line check in its PR |
+| 8 | **Whimsy** — from §7, one each, as they appeal | each its own one-line check in its PR |
 
 Step 1 ships with `wide.ts` cut into tiles and Argos in `kit/pets.ts`; step 4 and step 6 can open
 the same day, on nothing.
