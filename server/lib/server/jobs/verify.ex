@@ -71,7 +71,7 @@ defmodule Server.Jobs.Verify do
     )
   end
 
-  defp tail(text), do: text |> to_string() |> String.trim() |> String.slice(-300, 300)
+  defp tail(text), do: text |> to_string() |> String.trim() |> String.slice(-2000, 2000)
 
   defp by_hand(tid, slug, why) do
     {:ok, _} =
