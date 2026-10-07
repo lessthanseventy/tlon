@@ -202,6 +202,31 @@ defmodule Server.WorklineTest do
     assert Channel.thread_lead(thread.id) == "menard"
   end
 
+  defmodule Merges do
+    @moduledoc false
+    def merge(_repo, slug, _title),
+      do: if(slug == "conflicted", do: {:error, "merging hit a conflict"}, else: {:ok, %{from: "a", to: "b"}})
+  end
+
+  test "approving the review gate merges the branch, then the workline is merged and its thread closed" do
+    thread = open!(%{slug: "landing", stage: "review"})
+    {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+    assert {:ok, merged} = Workline.approve(parked, artifacts: AllPresent, merge: Merges)
+    assert merged.stage == "merged"
+    assert %Server.Thread{state: "closed"} = Server.Repo.get(Server.Thread, thread.id)
+  end
+
+  test "a merge that can't land keeps the gate parked, and says why on the thread" do
+    thread = open!(%{slug: "conflicted", stage: "review"})
+    {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+    assert {:error, {:merge, "merging hit a conflict"}} = Workline.approve(parked, artifacts: AllPresent, merge: Merges)
+
+    assert %Server.Thread{stage: "review", awaiting: "andrew", state: "open"} =
+             Server.Repo.get(Server.Thread, thread.id)
+
+    assert Enum.any?(Channel.thread_messages(parked), &(&1.body =~ "couldn't merge"))
+  end
+
   test "a stage that changes its lead closes the old lead's window, so the new lead can be spawned on it" do
     {:ok, workspace} =
       Server.Workspaces.register(%{

@@ -41,7 +41,9 @@ defmodule Server.Application do
         # (Server.Recall.embed_on_write): a crash or a slow ollama stays here, off bank_fact.
         {Task.Supervisor, name: Server.TaskSupervisor},
         # Explicit thinking/idle declarations (in-memory liveness; harnesses re-declare after a restart).
-        Server.Presence.Thinking
+        Server.Presence.Thinking,
+        # What a merge into tlon rolls out, and the notes it leaves the operator.
+        Server.Rollout
       ] ++
         maybe(:start_repo, true, Server.Repo) ++
         maybe(:bootstrap, true, Server.Bootstrap) ++

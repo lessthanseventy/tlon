@@ -242,9 +242,12 @@ defmodule Server.Workline do
       Scribe.materialize_intent(thread)
     end
 
-    with :ok <- verified_artifact(thread, checker) do
-      {:ok, cleared} = thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
-      flip(cleared)
+    with :ok <- verified_artifact(thread, checker),
+         {:ok, landed} <- land(thread, checker, opts),
+         {:ok, cleared} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
+         {:ok, flipped} <- flip(cleared) do
+      if landed, do: finish(flipped, landed)
+      {:ok, flipped}
     end
   end
 
@@ -482,4 +485,43 @@ defmodule Server.Workline do
   end
 
   defp restaff_miss(thread, _kind, _why), do: thread
+
+  # The review gate's approval is the merge: work/<slug> onto main (`Merge`), or — when it can't —
+  # the gate stays parked and the thread says why. Only against the real checker unless a test
+  # hands its own merger: a stub must never merge in the live repo.
+  defp land(%Thread{stage: "review"} = thread, checker, opts) do
+    case Keyword.get(opts, :merge, if(checker == Git, do: Server.Workline.Merge)) do
+      nil ->
+        {:ok, nil}
+
+      merger ->
+        repo = Git.root(thread)
+
+        case merger.merge(repo, thread.slug, thread.title) do
+          {:ok, moved} ->
+            {:ok, Map.put(moved, :repo, repo)}
+
+          {:error, why} ->
+            post_brief(
+              thread,
+              "⚠ couldn't merge work/#{thread.slug}: #{why} The gate stays parked; approve again once it's fixed."
+            )
+
+            {:error, {:merge, why}}
+        end
+    end
+  end
+
+  defp land(_thread, _checker, _opts), do: {:ok, nil}
+
+  # merged: the thread's work is done (closing it marks its ticket done), and what changed rolls out
+  defp finish(thread, %{repo: repo, from: from, to: to}) do
+    post_brief(thread, "⤵ merged into main as #{String.slice(to, 0, 7)}")
+    {:ok, _} = Server.Channel.close_thread(thread)
+    Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
+  rescue
+    e ->
+      require(Logger) &&
+        Logger.warning("workline #{thread.slug}: merged, but its close-out failed: #{Exception.message(e)}")
+  end
 end
