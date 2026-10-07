@@ -276,7 +276,7 @@ export class WideRoom extends Sim<Layout> {
     if (queued.length > this.plan.queue.length) sc.overhead.push(() => text(`+${queued.length - this.plan.queue.length + 1}`, 94, 176, ROLE.attention))
     const c = this.cat
     const chair = corner(this.z).shelf.x + 8
-    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null)
+    drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 100 ? 104 : c.x === chair && c.y === 82 ? 84 : c.x === CAT_WARM.x && c.y === CAT_WARM.y ? RADIATOR.y + RADIATOR.h + 1 : null, this.player?.bpm ?? null)
     this.drawDog(sc)
     this.drawAntics(sc)
     const shipper = this.party && [...this.actors.values()].find((x) => x.seat.agent === this.party!.agent)
@@ -366,7 +366,7 @@ export class WideRoom extends Sim<Layout> {
 
   /** Argos, his bed and his bowl */
   private drawDog(sc: Scene) {
-    drawDog(sc, this.dog, this.dogBed(), this.dogBowl())
+    drawDog(sc, this.dog, this.dogBed(), this.dogBowl(), this.player?.bpm ?? null)
   }
 
   /** the cabinets' best scores, and who holds them */

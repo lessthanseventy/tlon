@@ -152,10 +152,17 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
   }
 }
 
+/** bpm present and fast, and the pet isn't asleep, fussed, or mid-zoomies */
+export function dancing(mode: string, fuss: Fussing | null, bpm: number | null): boolean {
+  return bpm !== null && bpm > 120 && mode !== "sleep" && mode !== "zoom" && !fuss
+}
+
 /** Nina, with a light rim so a black cat reads on any floor; `over` is the depth to draw her at when she is up on furniture */
-export function drawCat(sc: Scene, c: Cat, over: number | null) {
+export function drawCat(sc: Scene, c: Cat, over: number | null, bpm: number | null) {
   const f = sc.f
   const grooming = c.mode === "sit" && (f + c.until) % 30 < 6
+  const dance = dancing(c.mode, c.fuss, bpm)
+  const phase = dance ? Math.floor((sc.tick * bpm!) / 300) % 2 : 0
   const [frames, i] = sc.tick < c.stretch ? [CAT.stretch, 0]
     : c.mode === "zoom" ? [CAT.walk, sc.tick % 4]
       : c.mode === "walk" ? [CAT.walk, Math.floor(sc.tick / 2) % 4]
@@ -164,8 +171,9 @@ export function drawCat(sc: Scene, c: Cat, over: number | null) {
             : grooming ? [CAT.groom, f % 2]
               : f % 13 === 0 ? [CAT.blink, 0] : [CAT.sit, [0, 1, 2, 1][Math.floor(f / 2) % 4]!]
   const rows0 = frames[i]!
-  const rows = c.face < 0 ? rows0.map((r) => [...r].reverse().join("")) : rows0
-  const w = rows[0]!.length, h = rows.length, x = c.x - Math.floor(w / 2), y = c.y - h
+  const flipped = dance ? phase === 1 : c.face < 0
+  const rows = flipped ? rows0.map((r) => [...r].reverse().join("")) : rows0
+  const w = rows[0]!.length, h = rows.length, x = c.x - Math.floor(w / 2), y = c.y - h - (dance ? phase : 0)
   // the zoomies go over everything: she is on the couch, the TV, your desk
   sc.item(c.mode === "zoom" ? 999 : over ?? c.y, () => {
     const r = tint(ROLE.prose, ROLE.ground, 0.55), rim = { k: r, e: r, t: r, c: r, w: r, p: r, g: r, j: r }
