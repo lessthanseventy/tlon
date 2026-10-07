@@ -74,6 +74,16 @@ defmodule Server.WorklineReviewTest do
     assert {:error, why} = Artifacts.Git.check(thread("build"), :branch)
     assert why =~ "no code"
 
+    # a doc first committed at the root, then moved under work/<slug>/: on net, still only docs
+    File.write!(Path.join(root, "plan.md"), "plan")
+    {_, 0} = git.(["add", "plan.md"])
+    {_, 0} = git.(["commit", "-qm", "plan at the root"])
+    {_, 0} = git.(["mv", "plan.md", "work/fence-test/plan.md"])
+    {_, 0} = git.(["commit", "-qm", "plan moved"])
+    {_, 0} = git.(["checkout", "-q", "main"])
+    assert {:error, _} = Artifacts.Git.check(thread("build"), :branch)
+    {_, 0} = git.(["checkout", "-q", "work/fence-test"])
+
     File.write!(Path.join(root, "lib.ex"), "code")
     {_, 0} = git.(["add", "lib.ex"])
     {_, 0} = git.(["commit", "-qm", "code"])
