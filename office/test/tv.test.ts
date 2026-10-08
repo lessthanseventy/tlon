@@ -12,3 +12,13 @@ test("every channel runs, lights the screen, and stays on it", () => {
   }
   expect(seen.size).toBe(12)
 })
+
+test("showLevel paints the level on the screen, then hands back to the interrupted show", () => {
+  const tv = new Tv(48, 28), before = tv.channel
+  tv.showLevel(7, 10)
+  expect(tv.channel).toBe("level")
+  tv.step()
+  expect(tv.screen.dots.filter((d) => d > 0).length).toBeGreaterThan(20)
+  for (let i = 0; i < 10; i++) tv.step()
+  expect(tv.channel).toBe(before)
+})

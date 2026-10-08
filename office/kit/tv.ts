@@ -1,6 +1,7 @@
 // The TV's channels: the desktop backdrop's ambient shows (ficciones' shell/lib/ambient.ts), retuned
 // for a screen a few dozen pixels wide, and an aquarium of the office's own. Each is a pure `step` over a dot screen, one art pixel a
 // dot, in five hues that are roles, so a theme switch recolours them.
+import { SMALL } from "./font"
 import { ROLE, type Role } from "./palette"
 
 const HUES: Role[] = ["body", "live", "attention", "key", "meta"]
@@ -329,9 +330,26 @@ export class Tv {
   private idx = Math.floor(Math.random() * this.shows.length)
   private ticks = 0
   constructor(w: number, h: number) { this.screen = new Screen(w, h); this.shows[this.idx]!.init(this.screen) }
-  get channel() { return this.shows[this.idx]!.name }
+  get channel() { return this.levelLeft > 0 ? "level" : this.shows[this.idx]!.name }
+  /** the level channel: "LEVEL" and the number, for `frames`, then the interrupted show again */
+  showLevel(n: number, frames = 150) { this.level = n; this.levelLeft = frames }
+  private level = 0
+  private levelLeft = 0
+  private drawText(text: string, y: number, scale: number, hue: number) {
+    const s = this.screen, x0 = Math.floor((s.w - text.length * SMALL.w * scale) / 2)
+    ;[...text].forEach((ch, i) => SMALL.glyph(ch).forEach((bits, r) => {
+      for (let c = 0; c < SMALL.w; c++) if (bits & (1 << (SMALL.w - 1 - c))) for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) s.plot(x0 + (i * SMALL.w + c) * scale + dx, y + r * scale + dy, hue)
+    }))
+  }
   /** one frame of the show; changes channel every 300 frames */
   step() {
+    if (this.levelLeft > 0) {
+      this.screen.clear()
+      this.drawText("LEVEL", 2, 1, 3)
+      this.drawText(String(this.level), 13, 2, this.levelLeft % 8 < 4 ? 1 : 2)
+      if (--this.levelLeft === 0) { this.screen.clear(); this.shows[this.idx]!.init(this.screen) }
+      return
+    }
     if (++this.ticks % 300 === 0) return this.next()
     this.shows[this.idx]!.step(this.screen)
   }
