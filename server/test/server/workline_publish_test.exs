@@ -42,6 +42,30 @@ defmodule Server.WorklinePublishTest do
     assert why =~ "push"
   end
 
+  describe "follow_main/2 — the main checkout mirrors origin/main, fast-forward only" do
+    defp on(branch), do: {&match?(["git", "-C", _, "symbolic-ref", "--short", "HEAD"], &1), {branch <> "\n", 0}}
+    defp ancestor(code), do: {&match?(["git", "-C", _, "merge-base", "--is-ancestor" | _], &1), {"", code}}
+
+    test "behind origin/main: fetched and fast-forwarded" do
+      run = runner([on("main"), ancestor(0)])
+      assert :forwarded = Publish.follow_main("/repo", run)
+      assert_received {:ran, ["git", "-C", "/repo", "fetch", "-q", "origin", "main"]}
+      assert_received {:ran, ["git", "-C", "/repo", "merge", "--ff-only", "-q", "origin/main"]}
+    end
+
+    test "a checkout on another branch is left alone" do
+      run = runner([on("work/x")])
+      assert :skipped = Publish.follow_main("/repo", run)
+      refute_received {:ran, ["git", "-C", _, "fetch" | _]}
+    end
+
+    test "main with commits of its own is never merged or rewritten — it says how far it has drifted" do
+      run = runner([on("main"), ancestor(1), {&match?(["git", "-C", _, "rev-list", "--count" | _], &1), {"4\n", 0}}])
+      assert {:diverged, 4} = Publish.follow_main("/repo", run)
+      refute_received {:ran, ["git", "-C", _, "merge", "--ff-only" | _]}
+    end
+  end
+
   describe "refresh_behind/2 — a landing GitHub won't merge because main moved under it" do
     @prs Jason.encode!([
            %{"number" => 69, "headRefName" => "work/floor", "mergeStateStatus" => "BEHIND", "autoMergeRequest" => %{}},

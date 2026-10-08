@@ -53,5 +53,41 @@ defmodule Server.Workline.Publish do
     end
   end
 
+  @doc """
+  Keep `repo`'s main checkout a mirror of origin/main: on `main`, fetch and fast-forward to it.
+  Never a merge or a rewrite — local main with commits of its own is `{:diverged, ahead}` for the
+  operator to sort out; a checkout on another branch is `:skipped`. `:forwarded` (or already level),
+  or `{:error, why}` when git refuses.
+  """
+  def follow_main(repo, run \\ &System.cmd/3) do
+    git = fn args -> run.("git", ["-C", repo | args], stderr_to_stdout: true) end
+
+    with {"main\n", 0} <- git.(["symbolic-ref", "--short", "HEAD"]),
+         {_, 0} <- git.(["fetch", "-q", "origin", "main"]) do
+      case git.(["merge-base", "--is-ancestor", "HEAD", "origin/main"]) do
+        {_, 0} ->
+          case git.(["merge", "--ff-only", "-q", "origin/main"]) do
+            {_, 0} -> :forwarded
+            {out, _} -> {:error, String.slice(out, 0, 200)}
+          end
+
+        _ ->
+          {ahead, _} = git.(["rev-list", "--count", "origin/main..HEAD"])
+
+          {:diverged,
+           ahead
+           |> String.trim()
+           |> Integer.parse()
+           |> then(fn
+             {n, _} -> n
+             _ -> 0
+           end)}
+      end
+    else
+      {out, code} when is_binary(out) and code != 0 -> {:error, String.slice(out, 0, 200)}
+      _ -> :skipped
+    end
+  end
+
   defp body(slug), do: "Workline `#{slug}`, approved at its review gate. Spec, plan and review are in `work/#{slug}/`."
 end
