@@ -88,6 +88,18 @@ defmodule Server.StaffingTest do
     for i <- 1..3, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
   end
 
+  test "a mid-turn mark a day old is a turn a lost connection never ended: its window is swept",
+       %{ws: ws, session: session} do
+    thread = staffed_thread(ws, "borges")
+    session!("borges", thread.id, 86_400, true)
+
+    tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t1\tborges\t#{old()}\n")
+    assert :ok = Staffing.pass(ws.id)
+
+    stale = "#{session}:0"
+    assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^stale]}
+  end
+
   test "a window nobody can be attributed to (a crew role, a hand-made one) is never swept as cold",
        %{ws: ws, session: session} do
     tmux("0\tr12\t\t\t1\t\t\n1\tscratch\t\t\t2\t\t\n")
