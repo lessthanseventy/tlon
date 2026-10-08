@@ -7,6 +7,8 @@ import { kitchenTile } from "../kit/tiles/kitchen"
 import { loungeTile } from "../kit/tiles/lounge"
 import { meetingTile } from "../kit/tiles/meeting"
 import { officeTile } from "../kit/tiles/office"
+import type { Home } from "../kit/home"
+import { annexHeight } from "../kit/homeart"
 import { type Agents, EMPTY } from "../kit/types"
 import type { Tv } from "../kit/tv"
 import { WIDE_H, WideRoom, widePlan, zones } from "../rooms/wide"
@@ -23,6 +25,21 @@ describe("the wide room", () => {
       for (const h of fr.hits) { expect(h.x).toBeGreaterThanOrEqual(-1); expect(h.x + h.w).toBeLessThanOrEqual(w + 1) }
     })
   }
+
+  test("a home hangs below the office as an annex; the office rows stay put", () => {
+    const home: Home = { tiles: [{ kind: "garden", at: [0, 0] }] }
+    const a = viewOf(office(3), 1), now = new Date(2026, 9, 5, 21, 0)
+    const shot = (h?: Home) => seeded(7, () => {
+      const room = new WideRoom(696)
+      if (h) room.setHome(h)
+      for (let i = 0; i < 50; i++) room.step(a)
+      return room.render(a, focus, measure, now)
+    })
+    const bare = shot(), withHome = shot(home)
+    expect(bare.height).toBe(WIDE_H)
+    expect(withHome.height).toBe(WIDE_H + annexHeight(home))
+    expect(Buffer.from(withHome.rgba.slice(0, bare.rgba.length)).equals(Buffer.from(bare.rgba))).toBe(true)
+  })
 
   test("the room's pixels don't move: a golden hash per width", async () => {
     const golden: Record<string, string> = await Bun.file(GOLDEN).json()

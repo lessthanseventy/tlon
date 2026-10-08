@@ -20,6 +20,8 @@ import { loungeTile } from "../kit/tiles/lounge"
 import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR } from "../kit/tiles/cat-corner"
 import { officeTile } from "../kit/tiles/office"
 import { floorPlan } from "../kit/floor"
+import type { Home } from "../kit/home"
+import { annexHeight, paintAnnex } from "../kit/homeart"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA, pick } from "../kit/voices"
 import { hueRole, Tv } from "../kit/tv"
@@ -121,6 +123,7 @@ export class WideRoom extends Sim<Layout> {
   private readonly catCorner: ReturnType<typeof catCornerTile>
   private readonly office: ReturnType<typeof officeTile>
   private antic: Antic | null = null
+  private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
   constructor(readonly width: number) {
@@ -247,6 +250,9 @@ export class WideRoom extends Sim<Layout> {
   /** the lounge TV flashes the new level over whatever it was showing */
   protected override levelUp(level: number) { super.levelUp(level); this.tvSet.showLevel(level) }
   /** the remote: the next channel */
+  /** the placed home tiles; drawn as a strip below the office */
+  setHome(h: Home) { this.home = h }
+  get height() { return WIDE_H + annexHeight(this.home) }
   channel() { this.tvSet.next() }
   /** the TUI calls this every ~2s with whatever playerctl reports (or null — no player running) */
   setPlayer(p: NowPlaying | null) { this.player = p }
@@ -255,7 +261,7 @@ export class WideRoom extends Sim<Layout> {
 
   render(a: Agents, focus: Focus, measure: Measure, now = new Date()): Frame {
     const W = this.width, H = WIDE_H
-    const sc = new Scene(W, H, this.tick)
+    const sc = new Scene(W, this.height, this.tick)
     sc.dark = dark(now.getHours() + now.getMinutes() / 60)
     const { L0, M0, MW, F0, F1 } = this.z
     const l = this.plan.layout(a)
@@ -318,6 +324,7 @@ export class WideRoom extends Sim<Layout> {
 
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
     this.nightfall(sc, now)
+    paintAnnex(sc.cv, this.home, WIDE_H)
     return sc.finish()
   }
 
