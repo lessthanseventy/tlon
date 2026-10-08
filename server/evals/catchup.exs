@@ -1,8 +1,8 @@
 # Steering evals — CATCH-UP family (worklines slice 0). The dossier/brief is how a fresh or
 # rotated agent reconstructs a thread's state (never /resume), so its fidelity IS steering
-# config. Runs against the EPHEMERAL eval db `mix funes.eval` provisions — every scenario
+# config. Runs against the EPHEMERAL eval db `mix server.eval` provisions — every scenario
 # seeds its own thread. Deterministic set gates funes' precommit; the judged scenario needs
-# a live judge (`mise run funes:eval`).
+# a live judge (`mise run server:eval`).
 alias Server.Channel
 alias Server.Dossier
 alias Server.Eval.Scenario

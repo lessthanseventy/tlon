@@ -7,7 +7,7 @@ the spec is wrong, say so and change it in the same commit as the code that prov
 
 ## What is here
 
-The spine of Tlön: SQLite is the truth (a real db reads back under `sqlite3`), Ecto over `ecto_sqlite3`,
+The spine of Tlön: Postgres is the truth (a real db reads back under `psql`), Ecto over `postgrex`,
 and every layer the spine design's re-laid §9 asked for
 (`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`) is built and gated:
 
@@ -179,4 +179,4 @@ to run these.
 
 Built test-first (RED before GREEN), and a claim that something works is backed by having run it — the
 spec exists because "it works" without running it happened repeatedly in version one. `mise run
-server:check` is the gate; `server doctor` against a real db, read back with `sqlite3`, is the 2am proof.
+server:check` is the gate; `server doctor` against a real db, read back with `psql`, is the 2am proof.

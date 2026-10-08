@@ -60,7 +60,7 @@ export class LspdClient {
     return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        reject(new LspdTimeoutError(`${method} timed out after ${this.#timeoutMs}ms — the lspd daemon is not responding (mise run lspd:restart)`));
+        reject(new LspdTimeoutError(`${method} timed out after ${this.#timeoutMs}ms — the lspd daemon is not responding (restart the lspd daemon: kill it and the next call respawns it)`));
       }, this.#timeoutMs);
       this.#pending.set(id, { resolve, reject, timer });
       this.#sock!.write(encode({ id, method, params } as LspdRequest));
