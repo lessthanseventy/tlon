@@ -161,4 +161,94 @@ defmodule Server.Workline.MergeTest do
     assert {:error, why} = Merge.merge(repo, "finder")
     assert why =~ "no origin"
   end
+
+  describe "golden frames (office/test/golden.json)" do
+    # both sides re-hash the room's frames, so the file conflicts on every rebase; a landing takes
+    # origin's side and re-hashes afterwards instead of bouncing
+    setup %{repo: repo, git: git, other: other} do
+      golden = "office/test/golden.json"
+      File.mkdir_p!(Path.join(repo, "office/test"))
+      File.write!(Path.join(repo, golden), "base\n")
+      {_, 0} = git.(["add", golden])
+      {_, 0} = git.(["commit", "-qm", "golden"])
+      {_, 0} = git.(["push", "-q", "origin", "main"])
+      {_, 0} = System.cmd("git", ["-C", other, "pull", "-q"], stderr_to_stdout: true)
+      {_, 0} = git.(["checkout", "-q", "work/finder"])
+      {_, 0} = git.(["rebase", "-q", "main"])
+      File.write!(Path.join(repo, "office/room.ts"), "moved\n")
+      File.write!(Path.join(repo, golden), "ours\n")
+      {_, 0} = git.(["add", "office"])
+      {_, 0} = git.(["commit", "-qm", "office: move the room"])
+      File.write!(Path.join(repo, golden), "ours again\n")
+      {_, 0} = git.(["commit", "-qam", "office: re-hash"])
+      {_, 0} = git.(["checkout", "-q", "main"])
+      me = self()
+
+      rehash = fn tree ->
+        send(me, {:rehashed, tree})
+        File.write!(Path.join(tree, golden), "rehashed\n")
+        {:ok, :rehashed}
+      end
+
+      %{golden: golden, rehash: rehash}
+    end
+
+    test "a conflict only on golden.json takes origin's side, then the frames are re-hashed and committed", %{
+      repo: repo,
+      git: git,
+      other: other,
+      golden: golden,
+      rehash: rehash
+    } do
+      _ = land_upstream(other, golden, "theirs\n", "office: theirs")
+
+      assert {:ok, %{to: to}} = Merge.merge(repo, "finder", rehash: rehash)
+      assert_received {:rehashed, _}
+      assert {"rehashed\n", 0} = git.(["show", "work/finder:" <> golden])
+      assert to == sha(git, "work/finder")
+
+      # the branch's own re-hash commit is empty on origin's side, so it drops out
+      assert subjects(git, "work/finder") == [
+               "office: re-hash the golden frames on landing",
+               "office: move the room",
+               "build",
+               "office: theirs",
+               "golden",
+               "seed"
+             ]
+    end
+
+    test "any other conflict beside it still aborts", %{
+      repo: repo,
+      git: git,
+      other: other,
+      golden: golden,
+      rehash: rehash
+    } do
+      {_, 0} = git.(["checkout", "-q", "work/finder"])
+      File.write!(Path.join(repo, "a.txt"), "mine\n")
+      {_, 0} = git.(["commit", "-qam", "a mine"])
+      {_, 0} = git.(["checkout", "-q", "main"])
+      tip = sha(git, "work/finder")
+      _ = land_upstream(other, golden, "theirs\n", "office: theirs")
+      _ = land_upstream(other, "a.txt", "theirs\n", "a theirs")
+
+      assert {:error, why} = Merge.merge(repo, "finder", rehash: rehash)
+      assert why =~ "conflict" and why =~ "a.txt"
+      refute_received {:rehashed, _}
+      assert sha(git, "work/finder") == tip
+    end
+
+    test "a branch that never touched office/ isn't re-hashed", %{repo: repo, git: git, rehash: rehash} do
+      {_, 0} = git.(["branch", "-qf", "work/finder", "main"])
+      {_, 0} = git.(["checkout", "-q", "work/finder"])
+      File.write!(Path.join(repo, "c.txt"), "elsewhere\n")
+      {_, 0} = git.(["add", "c.txt"])
+      {_, 0} = git.(["commit", "-qm", "elsewhere"])
+      {_, 0} = git.(["checkout", "-q", "main"])
+
+      assert {:ok, _} = Merge.merge(repo, "finder", rehash: rehash)
+      refute_received {:rehashed, _}
+    end
+  end
 end

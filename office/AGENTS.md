@@ -89,6 +89,9 @@ linked window at a time, Ctrl-] back to the room).
 
 - `mise run office:run` — the TUI over the live server; `mise run office:build` — the executables.
 - `mise run office:watch` — the suite on every change; `mise run office:test` once.
+- `mise run office:golden` — re-hash the wide room's golden frames (`test/golden.json`) after a
+  change meant to move its pixels. A landing re-hashes them itself after its rebase, so two such
+  branches never conflict on the file.
 
 ## Verify
 

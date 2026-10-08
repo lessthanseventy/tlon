@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import { describe, expect, test } from "bun:test"
 import { crewOf, viewOf } from "../kit/crew"
 import type { Spot } from "../kit/sim"
@@ -8,32 +7,9 @@ import { kitchenTile } from "../kit/tiles/kitchen"
 import { loungeTile } from "../kit/tiles/lounge"
 import { meetingTile } from "../kit/tiles/meeting"
 import { officeTile } from "../kit/tiles/office"
-import { EMPTY, type Agents } from "../kit/types"
+import type { Agents } from "../kit/types"
 import { WIDE_H, WideRoom, widePlan, zones } from "../rooms/wide"
-
-const measure = (s: string) => s.length * 2
-
-/** run `f` with Math.random seeded (mulberry32), so a test of the room's chance is the same every run */
-function seeded<T>(seed: number, f: () => T): T {
-  const real = Math.random
-  let a = seed >>> 0
-  Math.random = () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
-  try { return f() } finally { Math.random = real }
-}
-const focus = { picked: null, armed: null, person: null }
-
-function office(grunts: number): Agents {
-  const names = ["tertius", "hronir", ...Array.from({ length: grunts }, (_, i) => `w${i}`)]
-  return {
-    ...EMPTY, ok: true,
-    workspaces: [{ id: 1, name: "Machine" }],
-    archetypes: [{ name: "surveyor", meta: true, read_only: true, model: "" }, { name: "builder", meta: false, read_only: false, model: "" }],
-    bench: names.map((name, i) => ({ workspace_id: 1, seat_id: i, agent_id: i + 1, name, archetype: i === 0 ? "surveyor" : "builder", lead: i === 1, model: null, ask: null })),
-    threads: names.map((name, i) => ({ id: 100 + i, title: `thread ${i}`, stage: i === 1 ? "build" : null, awaiting: null, workspace_id: 1, lead: name })),
-    roster: names.map((name, i) => ({ agent: name, thread_id: 100 + i, title: `t${i}`, warm: true, thinking: true, workspace_id: 1 })),
-    notes: [{ id: 1, author: "hronir", body: "a note", workspace_id: 1, at: new Date(0).toISOString() }],
-  }
-}
+import { focus, frameHashes, GOLDEN, measure, office, seeded } from "./golden"
 
 describe("the wide room", () => {
   for (const w of [540, 560, 640]) {
@@ -47,24 +23,13 @@ describe("the wide room", () => {
     })
   }
 
-  test("the room's pixels don't move: a golden hash per width", () => seeded(1, () => {
-    const golden: Record<number, string> = {
-      540: "3b4f86aedd4dfdd5cd96b5f57a1e2998d7c11e3fc52de9405a93c8344e28af2d",
-      560: "d3f274db0f2b111d95e44d35dd32d1efa519205834658e1762026d5ac9c35bc5",
-      640: "79dd81c1c358a629b5c517ef1373423df2bba6c6a70d2978cff7b3d17b9af6ea",
-      696: "02d0fb17e3487380a28bf3457b89e334d8341f4d1b5bff38d8478829e21b321b",
-      900: "d2d9564ab1fff2a8baebe8e9f3ab0a4d8aa3c5e59c8d57cb13604c0412a36c85",
-    }
-    for (const [w, hash] of Object.entries(golden)) {
-      const room = new WideRoom(Number(w)), a = viewOf(office(6), 1)
-      // a fixed hour for the steps, as for the render: who lounges where follows the clock
-      ;(room as unknown as { hour: () => number }).hour = () => 16
-      for (let i = 0; i < 300; i++) room.step(a)
-      const fr = room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0))
-      const got = createHash("sha256").update(Buffer.from(fr.rgba)).digest("hex")
-      expect(got).toBe(hash)
-    }
-  }))
+  test("the room's pixels don't move: a golden hash per width", async () => {
+    const golden: Record<string, string> = await Bun.file(GOLDEN).json()
+    const got = frameHashes()
+    const moved = Object.keys(golden).filter((w) => got[w] !== golden[w])
+    expect(moved.length ? `widths ${moved.join(", ")} moved; if that is meant, re-hash: mise run office:golden` : "").toBe("")
+    expect(Object.keys(got)).toEqual(Object.keys(golden))
+  })
 
   test("the in-tray, the beacon and the rack say what they hold, and open their cards", () => {
     const tips = (a: Agents, tray: number) => new Map(new WideRoom(560).render(a, { ...focus, tray }, measure).hits.map((h) => [h.act.kind, h.tip]))
