@@ -5,7 +5,8 @@ import { balloonLines } from "./canvas"
 import { dancing, drawFuss, type Scene } from "./draw"
 import { ROLE, tint } from "./palette"
 import { FUSS, keyOf, type Actor, type Fussing, type Pt, type Spot } from "./sim"
-import { DOG, DOG_NAME } from "./sprites"
+import { CAT_NAME, DOG, DOG_NAME } from "./sprites"
+import { clampAxis, type Temperament } from "./temperament"
 import { pick, type Fuss } from "./voices"
 
 /**
@@ -192,4 +193,46 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
     sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${DOG_NAME} - click to pat him`, act: { kind: "dog" } })
   })
   if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
+}
+
+export const SPECIES = ["cat", "dog"] as const
+/** grows with the roster, never ahead of it */
+export type Species = (typeof SPECIES)[number]
+export type PetSetting = { name: string; species: Species; temperament: Temperament }
+type SlotFile = Partial<Omit<PetSetting, "temperament">> & { temperament?: string | Partial<Temperament> }
+export type PetsFile = { preset?: string; cat?: SlotFile; dog?: SlotFile }
+export type Pets = { cat: PetSetting; dog: PetSetting }
+
+/** the named temperaments (§6); the card cycles them */
+export const TEMPERAMENTS: Record<string, Temperament> = {
+  classic: { warmth: -2, wits: 1, energy: 1 },
+  menace: { warmth: -2, wits: 2, energy: 2 },
+  "golden retriever": { warmth: 2, wits: -2, energy: 2 },
+  "old cat": { warmth: 2, wits: 2, energy: -2 },
+  gremlin: { warmth: -1, wits: -2, energy: 2 },
+  zen: { warmth: 1, wits: 1, energy: -1 },
+}
+export const DEFAULT_PETS: Pets = {
+  cat: { name: CAT_NAME, species: "cat", temperament: TEMPERAMENTS.classic! },
+  dog: { name: DOG_NAME, species: "dog", temperament: { warmth: 2, wits: -1, energy: 1 } },
+}
+export const PRESETS: Record<string, Pets> = { "nina-and-argos": DEFAULT_PETS }
+
+function resolveSlot(base: PetSetting, f: SlotFile | undefined): PetSetting {
+  if (!f || typeof f !== "object") return base
+  const t = f.temperament
+  const temperament = typeof t === "string" ? (TEMPERAMENTS[t] ?? base.temperament)
+    : t && typeof t === "object" ? Object.fromEntries((["warmth", "wits", "energy"] as const).map((k) => [k, clampAxis(Number(t[k] ?? base.temperament[k]) || 0)])) as Temperament
+    : base.temperament
+  return {
+    name: typeof f.name === "string" && f.name.trim() ? f.name.trim() : base.name,
+    species: SPECIES.includes(f.species as Species) ? f.species! : base.species,
+    temperament,
+  }
+}
+
+/** a preset plus the file's overrides: only what the file names changes */
+export function resolvePets(f: PetsFile | undefined): Pets {
+  const base = PRESETS[f?.preset ?? ""] ?? DEFAULT_PETS
+  return { cat: resolveSlot(base.cat, f?.cat), dog: resolveSlot(base.dog, f?.dog) }
 }
