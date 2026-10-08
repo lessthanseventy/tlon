@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing } from "../kit/draw"
-import { ARGOS } from "../kit/pets"
+import { ARGOS, DEFAULT_PETS, resolvePets, TEMPERAMENTS } from "../kit/pets"
 import { CAT, DOG } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom } from "../rooms/wide"
@@ -125,5 +125,23 @@ describe("tempo-synced dance", () => {
   })
   test("fussed: never dances", () => {
     expect(dancing("sit", { kind: "pat", from: { x: 0, y: 0 }, until: 999 } as never, 140)).toBe(false)
+  })
+})
+
+describe("pet presets", () => {
+  test("absent file is the default preset: Nina classic, Argos", () => {
+    expect(resolvePets(undefined)).toEqual(DEFAULT_PETS)
+    expect(DEFAULT_PETS.cat.temperament).toEqual(TEMPERAMENTS.classic)
+  })
+  test("a file is a preset plus overrides — only the change is read", () => {
+    const p = resolvePets({ preset: "nina-and-argos", cat: { temperament: "zen", name: "Mimi" } })
+    expect(p.cat.name).toBe("Mimi"); expect(p.cat.temperament).toEqual(TEMPERAMENTS.zen); expect(p.dog.name).toBe("Argos")
+  })
+  test("axes are clamped and junk is ignored", () => {
+    expect(resolvePets({ cat: { temperament: { warmth: 9, wits: "x", energy: -9 } } } as never).cat.temperament).toEqual({ warmth: 2, wits: 0, energy: -2 })
+  })
+  test("an unknown preset, species or temperament name falls back", () => {
+    const p = resolvePets({ preset: "nope", cat: { species: "dragon", temperament: "nope" } } as never)
+    expect(p).toEqual(DEFAULT_PETS)
   })
 })
