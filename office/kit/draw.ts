@@ -2,7 +2,7 @@
 // and Nina, into a Scene — a room's canvas, its ink and its click targets, with everything that has
 // a footprint drawn back to front. A room draws its own furniture into the same Scene.
 import { Canvas, balloonLines, type Frame, type Hit, type Ink } from "./canvas"
-import { tipOf } from "./crew"
+import { tipOf, type BoardCtx } from "./crew"
 import { ROLE, tint } from "./palette"
 import { FUSS, type Actor, type Cat, type Fussing } from "./sim"
 import { ACTIVITY, ARROW, BUBBLE, CAT, CAT_NAME, figure, GLYPH, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
@@ -10,7 +10,7 @@ import type { Agents } from "./types"
 
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
 /** what the surface has open, and `tray`: how much of the in-tray you have not read */
-export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number }
+export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number; board?: BoardCtx }
 /** a tool running this long (ticks) has its worker sweating */
 const SWEAT = 600
 /** something with a footprint: drawn in order of `base`, its feet's row, so nearer covers farther */

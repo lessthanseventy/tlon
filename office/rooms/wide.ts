@@ -6,7 +6,7 @@
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { clockFace } from "../kit/eggs"
 import { fit, type Frame, type Measure } from "../kit/canvas"
-import { boardColumns, COLS, isManager, peopleOf } from "../kit/crew"
+import { boardColumns, COLS, isManager, peopleOf, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
 import { ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
@@ -104,6 +104,9 @@ type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle"; until: number; trail
 
 // Argos' howl at a landing — the whole floor hears it
 const HOWLS = ["AWOOOOOOO! {name} SHIPPED!", "AWOOOO! Sing, O Muse, of {name}'s landing!", "AWOOOOOOOOO! A HOMECOMING!", "Awoo? AWOOOOOO! {name}!!"]
+
+/** a whiteboard line's mark, by where its workline stands: a play arrow, a pause, a flag */
+const STATE_ICON: Record<CardState["kind"], string[]> = { running: ["k..", "kk.", "k.."], parked: ["k.k", "k.k", "k.k"], needs: ["kkk", "kk.", "k.."] }
 
 export class WideRoom extends Sim<Layout> {
   private readonly z: Zones
@@ -263,7 +266,7 @@ export class WideRoom extends Sim<Layout> {
     // ── the back wall ──
     px(0, 0, W, BAND - 1, ROLE.edge); px(0, BAND - 1, W, 1, ROLE.structure)
     this.calendar(sc, 4, now, Object.values(a.calendar).flat())
-    this.whiteboard(sc, a, measure, 62, F1 - 64)
+    this.whiteboard(sc, a, measure, 62, F1 - 64, focus.board)
     this.corkboard(sc, a, F1 - 58)
     this.drawBox(sc, F1 - 4)
     this.windows(sc, M0 + 4, L0 + 30, now, a.weather ?? null)
@@ -439,11 +442,11 @@ export class WideRoom extends Sim<Layout> {
     sc.hits.push({ x: x0, y: 3, w: 52, h: 38, tip: `${now.toDateString()} — the calendar${ahead ? `: something scheduled on ${ahead} day(s) still to come` : ""}`, act: { kind: "calendar" } })
   }
 
-  /** the whiteboard: the worklines by stage, each one a readable line in its coworker's colour */
-  private whiteboard(sc: Scene, a: Agents, measure: Measure, x0: number, x1: number) {
+  /** the whiteboard: the worklines by stage, each one a readable line in its coworker's colour, marked with where it stands */
+  private whiteboard(sc: Scene, a: Agents, measure: Measure, x0: number, x1: number, ctx: BoardCtx = {}) {
     const { px } = { px: sc.px.bind(sc) }
     px(x0 - 1, 2, x1 - x0 + 2, 39, ROLE.structure); px(x0, 3, x1 - x0, 36, ROLE.ground); px(x0, 39, x1 - x0, 2, ROLE.borderInactive)
-    const cols = boardColumns(a), colW = (x1 - x0) / cols.length
+    const cols = boardColumns(a, ctx), colW = (x1 - x0) / cols.length
     cols.forEach((col, c) => {
       const cx = x0 + c * colW
       if (c) px(Math.round(cx), 4, 1, 34, ROLE.edge)
@@ -457,9 +460,11 @@ export class WideRoom extends Sim<Layout> {
         const y = 3 + lh * (i + 2)
         const id = it.act.kind === "ticket" ? it.act.id : it.act.kind === "thread" ? it.act.tid : 0
         const colour = it.asks ? (sc.f % 2 ? ROLE.attention : ROLE.prose) : it.act.kind === "ticket" ? (it.routed ? ROLE.meta : ROLE.prose) : it.who ? shirtOf(it.archetype) : ROLE.inactive
-        px(cx + 3, y - 3, 2, 2, colour)
+        if (it.state) sc.blit(STATE_ICON[it.state.kind], cx + 3, y - 4, { k: colour })
+        else px(cx + 3, y - 3, 2, 2, colour)
         sc.text(fit(measure, `#${id} ${it.title}`, colW - 9, 9), cx + 7, y, colour, 9, "left")
-        sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${it.asks ? "\nwaiting on you" : ""}`, act: it.act })
+        const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
+        sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act })
       })
       if (col.items.length > shown.length) sc.text(`+${col.items.length - shown.length} more`, cx + 7, 3 + lh * (shown.length + 2), ROLE.inactive, 9, "left")
     })

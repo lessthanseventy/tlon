@@ -6,7 +6,7 @@
 import type { Frame, Measure } from "../kit/canvas"
 import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
-import { boardColumns, COLS, isManager, needsYou, peopleOf, tipOf, type Act } from "../kit/crew"
+import { boardColumns, COLS, isManager, needsYou, peopleOf, STATE_GLYPH, tipOf, type Act } from "../kit/crew"
 import { ROLE, tint } from "../kit/palette"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
 import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -165,11 +165,12 @@ export class RailRoom extends Sim<Layout> {
     px(4, 30, 136, 2, ROLE.borderInactive)
     blit(["kk.aa.ll"], 100, 30, { k: ROLE.key, a: ROLE.alarm, l: ROLE.live })
     type Sticky = { tip: string; act: Act; colour: string; mark?: string; blink?: boolean }
-    const cols: Sticky[][] = boardColumns(a).map((col) => col.items.map((it): Sticky => {
+    const cols: Sticky[][] = boardColumns(a, focus.board).map((col) => col.items.map((it): Sticky => {
       if (it.act.kind === "ticket")
         return { tip: `ticket #${it.act.id} ${it.title}\n${it.routed ? "with the manager to staff" : "click: send to the manager, or click a coworker to hand it over"}`, act: it.act, colour: it.routed ? ROLE.meta : ROLE.prose, mark: it.high ? ROLE.alarm : undefined, blink: it.act.id === focus.armed }
       const id = it.act.kind === "thread" ? it.act.tid : 0
-      return { tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${it.asks ? "\nwaiting on you" : ""}`, act: it.act, colour: it.who ? shirtOf(it.archetype) : ROLE.inactive, blink: it.asks }
+      const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
+      return { tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act, colour: it.who ? shirtOf(it.archetype) : ROLE.inactive, blink: it.asks }
     }))
     cols.forEach((list, c) => {
       const x0 = 5 + c * COL_W
