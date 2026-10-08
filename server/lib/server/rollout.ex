@@ -236,11 +236,19 @@ defmodule Server.Rollout do
 
   defp schedule(run, busy, poll_ms) do
     if !restart_pending?() do
-      {:ok, _} =
+      # registered by the caller before it waits, so restart_pending?/0 is true once this returns;
+      # a schedule that lost the race to another drops its own waiter
+      {:ok, pid} =
         Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-          Process.register(self(), @waiter)
-          wait_then(run, busy, poll_ms)
+          receive do: (:go -> wait_then(run, busy, poll_ms))
         end)
+
+      try do
+        Process.register(pid, @waiter)
+        send(pid, :go)
+      rescue
+        ArgumentError -> Process.exit(pid, :kill)
+      end
     end
 
     {:scheduled, busy.()}
