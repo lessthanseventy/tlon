@@ -82,7 +82,9 @@ export function remove(b: Build): Build {
   if (b.carrying) return b
   const tile = at(b.home, b.cursor)
   if (!tile) return b
-  return { ...b, home: { tiles: b.home.tiles.filter((t) => t !== tile) }, history: remember(b), writes: b.writes + 1 }
+  const rest = b.home.tiles.filter((t) => t !== tile)
+  if (!connected(rest)) return { ...b, refused: true }
+  return { ...b, home: { tiles: rest }, refused: false, history: remember(b), writes: b.writes + 1 }
 }
 
 export function rotate(b: Build): Build {
