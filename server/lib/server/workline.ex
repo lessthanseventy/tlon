@@ -310,7 +310,9 @@ defmodule Server.Workline do
 
     with :ok <- verified_artifact(thread, checker),
          :ok <- qa_cleared(thread, opts) do
-      if queue?(thread, checker, opts), do: queue(thread, "approved", thread.awaiting || "andrew"), else: approve_now(thread, checker, opts)
+      if queue?(thread, checker, opts),
+        do: queue(thread, "approved", thread.awaiting || "andrew"),
+        else: approve_now(thread, checker, opts)
     end
   end
 
