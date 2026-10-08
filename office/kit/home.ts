@@ -100,3 +100,19 @@ export function undo(b: Build): Build {
   if (!b.history.length) return b
   return { ...b, home: b.history[b.history.length - 1]!, history: b.history.slice(0, -1), writes: b.writes + 1 }
 }
+
+/** most cells (wide, tall) the build grid draws: a cursor wandering off must not make the render unbounded */
+export const GRID_MAX: Pt = [15, 9]
+
+/** the cells build mode draws: every tile and the cursor with a cell of margin, or — past GRID_MAX — a window centred on the cursor */
+export function gridWindow(home: Home, cursor: Pt): { x0: number; x1: number; y0: number; y1: number } {
+  const axis = (i: 0 | 1) => {
+    const vs = [...home.tiles.map((t) => t.at[i]), cursor[i]]
+    const lo = Math.min(...vs) - 1, hi = Math.max(...vs) + 1
+    if (hi - lo + 1 <= GRID_MAX[i]) return [lo, hi] as const
+    const start = cursor[i] - Math.floor(GRID_MAX[i] / 2)
+    return [start, start + GRID_MAX[i] - 1] as const
+  }
+  const [x0, x1] = axis(0), [y0, y1] = axis(1)
+  return { x0, x1, y0, y1 }
+}
