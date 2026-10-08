@@ -243,6 +243,19 @@ defmodule Server.WorklineTest do
       at_review
     end
 
+    test "the grade the manager gave holds at every stage: a junior's workline is built by a junior" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Sticky #{System.unique_integer([:positive])}"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", grade: "senior"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "junior"})
+
+      thread = open!(%{slug: "sticky-#{System.unique_integer([:positive])}", stage: "plan", workspace_id: ws.id})
+      {:ok, thread} = thread |> Ecto.Changeset.change(grade: "junior") |> Server.Repo.update()
+      {:ok, at_build} = Workline.advance(thread, artifacts: AllPresent)
+
+      assert at_build.stage == "build"
+      assert Channel.thread_lead(thread.id) == "daneri"
+    end
+
     test "the reviewer is on another model than the builder, at no lower a grade" do
       at_review = to_review([{"tzinacan", "senior"}, {"ulrikke", "junior"}, {"lonnrot", "greybeard"}])
       assert at_review.stage == "review"

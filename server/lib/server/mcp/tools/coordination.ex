@@ -74,6 +74,7 @@ defmodule Server.MCP.Tool.StaffChild do
     with :ok <- briefed(params[:brief]),
          {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
          {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
+         {:ok, thread} <- graded(thread, params[:grade]),
          {:ok, lead} <- staff(thread, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
          :ok <- promote_ticket(params[:ticket_id], thread.id) do
@@ -102,6 +103,10 @@ defmodule Server.MCP.Tool.StaffChild do
     ws = (parent && parent.workspace_id) || Server.Bootstrap.default_workspace_id()
     Server.Workline.suggest_lead(ws, kind, "#{params[:title]}\n#{params[:brief]}", params[:grade])
   end
+
+  # the manager's grade stays on the thread, so each stage's lead is picked at it, not re-guessed
+  defp graded(thread, nil), do: {:ok, thread}
+  defp graded(thread, grade), do: thread |> Ecto.Changeset.change(grade: grade) |> Server.Repo.update()
 
   defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
   defp briefed(_), do: :blank

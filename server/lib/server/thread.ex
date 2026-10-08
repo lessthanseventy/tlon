@@ -22,6 +22,8 @@ defmodule Server.Thread do
     field :slug, :string
     field :born, :string
     field :awaiting, :string
+    # the grade the manager staffed it at (junior/senior/greybeard); every stage's lead is picked by it
+    field :grade, :string
     belongs_to :workspace, Server.Workspace
     belongs_to :project, Server.Project
     # which of the project's repos the thread works in, as the project spells its path; nil = its first

@@ -1152,7 +1152,7 @@ defmodule Server.Workline do
   defp wanted(thread, kind, builder) do
     opening = Server.Channel.opening_operator_message(thread.id)
     text = Enum.join([thread.title, opening && opening.body], "\n")
-    base = %{grade: Server.Roster.wanted_grade(text, nil), specialty: Server.Roster.specialty_of(text)}
+    base = %{grade: Server.Roster.wanted_grade(text, thread.grade), specialty: Server.Roster.specialty_of(text)}
 
     if kind == "reviewer" and builder,
       do: Map.merge(base, %{not_model: seat_model(thread.workspace_id, builder), min_grade: builder.grade || "senior"}),
