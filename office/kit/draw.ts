@@ -5,7 +5,7 @@ import { Canvas, balloonLines, type Frame, type Hit, type Ink } from "./canvas"
 import { tipOf, type BoardCtx } from "./crew"
 import { ROLE, tint } from "./palette"
 import { FUSS, type Actor, type Cat, type Fussing } from "./sim"
-import { ACTIVITY, ARROW, BUBBLE, CAT, CAT_NAME, figure, GLYPH, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
+import { ACTIVITY, ARROW, BUBBLE, CAT, figure, GLYPH, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
 import type { Agents } from "./types"
 
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
@@ -211,7 +211,7 @@ export function drawCat(sc: Scene, c: Cat, over: number | null, bpm: number | nu
     // your hand, stroking her back
     if (sc.tick < c.purr && c.byYou) sc.px(x + 3 + (f % 2) * 2, y + 3, 3, 1, ROLE.prose)
     if (c.fuss) drawFuss(sc, c.fuss, { x, y, w, h })
-    sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${CAT_NAME} - click to pet her`, act: { kind: "cat" } })
+    sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${c.name} - click to pet her`, act: { kind: "cat" } })
   })
   if (c.said && sc.tick >= c.saidFrom && sc.tick < c.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(c.said), cx: c.x, top: y })
 }

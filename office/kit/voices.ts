@@ -72,6 +72,6 @@ export const SWEET: Partial<Record<keyof typeof NINA, readonly string[]>> = {
 
 /** sweet with odds (no roll at all when not warm: a seeded sequence must not shift) that grow with warmth (0 at neutral or cold, 0.9 at +2), else the sassy bucket */
 export function bucketFor(occasion: string, t: Temperament, rand: () => number): readonly string[] {
-  const sassy = (NINA as Record<string, readonly string[]>)[occasion]!, sweet = (SWEET as Record<string, readonly string[]>)[occasion]
+  const sassy = (NINA as Record<string, unknown>)[occasion] as readonly string[], sweet = (SWEET as Record<string, readonly string[]>)[occasion]
   return sweet && t.warmth > 0 && rand() < (Math.max(0, t.warmth) / 2) * 0.9 ? sweet : sassy
 }
