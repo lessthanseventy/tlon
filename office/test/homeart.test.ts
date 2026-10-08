@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Canvas } from "../kit/canvas"
-import { CATALOGUE, type HomeTile } from "../kit/home"
-import { SPRITES, TILE, TILE_ART, paintTile, renderHome, rotated } from "../kit/homeart"
+import { CATALOGUE, type Home, type HomeTile } from "../kit/home"
+import { ANNEX_PAD, SPRITES, TILE, TILE_ART, annexHeight, paintAnnex, paintTile, renderHome, rotated } from "../kit/homeart"
 import { ROLE } from "../kit/palette"
 
 describe("rotated", () => {
@@ -59,5 +59,24 @@ describe("renderHome", () => {
     const placed = renderHome({ ...base, home: { tiles: [carrying, { kind: "street", at: [1, 0] }] } as never })
     expect(Buffer.from(hold.rgba).equals(Buffer.from(placed.rgba))).toBe(false)
     expect(hold.rgba.some((v, i) => v !== 0 && i % 4 === 3)).toBe(true)
+  })
+})
+
+describe("annex", () => {
+  const one = { tiles: [{ kind: "garden", at: [3, 5] }] } as Home
+  test("no tiles → no height, nothing painted", () => {
+    expect(annexHeight({ tiles: [] })).toBe(0)
+    const c = new Canvas(40, 40), before = Buffer.from(c.rgba).toString("hex")
+    paintAnnex(c, { tiles: [] }, 0)
+    expect(Buffer.from(c.rgba).toString("hex")).toBe(before)
+  })
+  test("height covers the tile rows; a tile paints where paintTile would", () => {
+    expect(annexHeight(one)).toBe(14 + 2 * ANNEX_PAD)
+    const c = new Canvas(60, annexHeight(one))
+    paintAnnex(c, one, 0)
+    const ref = new Canvas(TILE, TILE)
+    paintTile(ref, 0, 0, one.tiles[0]!)
+    const at = (cv: Canvas, x: number, y: number) => Buffer.from(cv.rgba).readUInt32LE((y * cv.width + x) * 4)
+    expect(at(c, ANNEX_PAD + 1 + 5, ANNEX_PAD + 1 + 5)).toBe(at(ref, 5, 5))
   })
 })

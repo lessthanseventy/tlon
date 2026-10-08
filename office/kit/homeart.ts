@@ -60,6 +60,20 @@ export function paintTile(c: Canvas, x: number, y: number, t: HomeTile) {
   (TILE_ART[t.kind] ?? plainTile)(c, x, y, t)
 }
 
+export const ANNEX_PAD = 8
+const bounds = (h: Home) => ({ x0: Math.min(...h.tiles.map((t) => t.at[0])), y0: Math.min(...h.tiles.map((t) => t.at[1])), y1: Math.max(...h.tiles.map((t) => t.at[1])) })
+
+/** px height of the strip that shows `h` under the office: 0 when it has no tiles */
+export const annexHeight = (h: Home) => h.tiles.length ? (bounds(h).y1 - bounds(h).y0 + 1) * CELL + 2 * ANNEX_PAD : 0
+
+/** paints the home on `c` from row `y`: ground, then every tile via `paintTile`. Canvas clips what overruns the width. */
+export function paintAnnex(c: Canvas, h: Home, y: number) {
+  if (!h.tiles.length) return
+  const { x0, y0 } = bounds(h)
+  c.px(0, y, c.width, annexHeight(h), ROLE.ground)
+  for (const t of h.tiles) paintTile(c, ANNEX_PAD + (t.at[0] - x0) * CELL + 1, y + ANNEX_PAD + (t.at[1] - y0) * CELL + 1, t)
+}
+
 export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number }
 
 /** the build grid as a Frame of w×h logical px: every cell of `gridWindow`, centred; no text, no hits */
