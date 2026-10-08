@@ -35,11 +35,14 @@ defmodule Server.Calendar do
     end
   end
 
-  @doc "The day's birthdays and anniversaries across the calendars (`Feed.celebrations/2`); [] when off."
+  @doc """
+  The day's birthdays and anniversaries across the calendars (`Feed.celebrations/2`); [] when off.
+  Computed once per day per fetch and kept, since `Server.Office.status/0` asks on every poll.
+  """
   @spec celebrations(GenServer.server(), Date.t()) :: [map()]
   def celebrations(server \\ __MODULE__, day) do
     if GenServer.whereis(server) do
-      for {_name, ics} <- GenServer.call(server, :feeds), c <- Feed.celebrations(ics, day), do: c
+      GenServer.call(server, {:celebrations, day})
     else
       []
     end
@@ -66,6 +69,8 @@ defmodule Server.Calendar do
   def init(opts) do
     state = %{
       feeds: %{},
+      cache: %{},
+      celebrate: Keyword.get(opts, :celebrations, &Feed.celebrations/2),
       fetch: Keyword.get(opts, :fetch, &fetch/1),
       sources: Keyword.get(opts, :sources, fn -> List.wrap(Server.OperatorConfig.read()["calendars"]) end),
       every: Keyword.get(opts, :every_ms, @every_ms)
@@ -77,7 +82,18 @@ defmodule Server.Calendar do
 
   @impl true
   def handle_call(:feeds, _from, state), do: {:reply, state.feeds, state}
-  def handle_call(:refresh, _from, state), do: {:reply, :ok, %{state | feeds: fetch_all(state)}}
+  def handle_call(:refresh, _from, state), do: {:reply, :ok, %{state | feeds: fetch_all(state), cache: %{}}}
+
+  def handle_call({:celebrations, day}, _from, state) do
+    case state.cache do
+      %{^day => found} ->
+        {:reply, found, state}
+
+      cache ->
+        found = for {_name, ics} <- state.feeds, c <- state.celebrate.(ics, day), do: c
+        {:reply, found, %{state | cache: Map.put(cache, day, found)}}
+    end
+  end
 
   @impl true
   def handle_info(:tick, state) do
@@ -88,7 +104,7 @@ defmodule Server.Calendar do
   end
 
   @impl true
-  def handle_cast({:fetched, feeds}, state), do: {:noreply, %{state | feeds: Map.merge(state.feeds, feeds)}}
+  def handle_cast({:fetched, feeds}, state), do: {:noreply, %{state | feeds: Map.merge(state.feeds, feeds), cache: %{}}}
 
   # the sources fetched this round, by name; a failed one is absent, so a merge keeps its last copy
   defp fetch_all(state) do

@@ -149,6 +149,22 @@ defmodule Server.Calendar.FeedTest do
       assert Feed.celebrations(feed, ~D[2026-10-09]) == []
     end
 
+    test "a yearly series doesn't fire before its own start year" do
+      feed =
+        ics(
+          vevent([
+            "UID:f@x",
+            "DTSTART;VALUE=DATE:20271008",
+            "DTEND;VALUE=DATE:20271009",
+            "RRULE:FREQ=YEARLY",
+            "SUMMARY:Di's birthday"
+          ])
+        )
+
+      assert Feed.celebrations(feed, ~D[2026-10-08]) == []
+      assert Feed.celebrations(feed, ~D[2027-10-08]) == [%{title: "Di's birthday", kind: "birthday"}]
+    end
+
     test "a feed that isn't one is no celebrations, not a crash" do
       assert Feed.celebrations("<html>nope</html>", ~D[2026-10-08]) == []
     end

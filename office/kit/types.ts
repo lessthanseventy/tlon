@@ -52,9 +52,9 @@ export type Agents = {
   /** the days this month each workspace has something scheduled, by id (the wall calendar) */
   calendar: Record<string, number[]>
   /** the weather outside, as the room draws it (`Server.Office.Weather`); null when unknown */
+  weather?: { kind: "clear" | "partly" | "cloudy" | "fog" | "rain" | "snow" | "storm"; temp_c: number | null; desc: string } | null
   /** today's birthdays and anniversaries from the calendar feeds (`Server.Calendar`): bunting, a cake, a crowd */
   celebrations?: { title: string; kind: "birthday" | "anniversary" }[]
-  weather?: { kind: "clear" | "partly" | "cloudy" | "fog" | "rain" | "snow" | "storm"; temp_c: number | null; desc: string } | null
   /** the office code's revision on main: a TUI started on another offers a reload (`Server.Rollout`) */
   revs?: { office: string | null }
   /** the server's feature flags by name (`Server.Flags`): what the office shows of work that lands dark */

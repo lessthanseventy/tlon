@@ -63,4 +63,31 @@ defmodule Server.CalendarTest do
     assert Calendar.celebrations(pid, ~D[2026-10-09]) == []
     assert Calendar.celebrations(:no_such_calendar, ~D[2026-10-08]) == []
   end
+
+  test "a day's celebrations are computed once per fetch, not per read" do
+    me = self()
+    source = [%{"name" => "family", "ics" => "https://example.test/b.ics"}]
+
+    {:ok, pid} =
+      Calendar.start_link(
+        name: :cal_cache_test,
+        every_ms: :manual,
+        fetch: fn _ -> {:ok, "ics"} end,
+        sources: fn -> source end,
+        celebrations: fn "ics", day ->
+          send(me, {:parsed, day})
+          []
+        end
+      )
+
+    :ok = Calendar.refresh(pid)
+    Calendar.celebrations(pid, ~D[2026-10-08])
+    Calendar.celebrations(pid, ~D[2026-10-08])
+    assert_received {:parsed, ~D[2026-10-08]}
+    refute_received {:parsed, _}
+
+    :ok = Calendar.refresh(pid)
+    Calendar.celebrations(pid, ~D[2026-10-08])
+    assert_received {:parsed, ~D[2026-10-08]}
+  end
 end
