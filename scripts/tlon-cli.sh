@@ -228,7 +228,7 @@ case "$cmd" in
     # The operator closes a thread: its sessions end, a child reports up, its ticket is done.
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh close-thread <thread-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); System.halt(1); t -> {:ok, _} = Server.Channel.close_thread(t); IO.puts(\"closed thread #$tid — #{t.title}\") end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> {:ok, _} = Server.Channel.close_thread(t); IO.puts(\"closed thread #$tid — #{t.title}\") end"
     ;;
 
   reopen)
@@ -236,7 +236,7 @@ case "$cmd" in
     # queue goes back into it while its approval stands for its branch as it is now.
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh reopen <thread-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); System.halt(1); t -> case Server.Workline.reopen(t) do {:ok, r} -> IO.puts(\"reopened thread #$tid — #{r.title}#{if r.stage, do: \" (#{r.stage})\"}\"); other -> IO.puts(\"reopened thread #$tid, but: #{inspect(other)}\"); System.halt(1) end end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> case Server.Workline.reopen(t) do {:ok, r} -> IO.puts(\"reopened thread #$tid — #{r.title}#{if r.stage, do: \" (#{r.stage})\"}\"); other -> IO.puts(\"reopened thread #$tid, but: #{inspect(other)}\"); raise(\"refused\") end end"
     ;;
 
   reap)
@@ -250,14 +250,14 @@ case "$cmd" in
     { int "$ws" && [ -n "$title" ] && { [ "$proj" = "-" ] || int "$proj"; }; } ||
       { echo 'usage: tlon-cli.sh ticket-file <workspace-id> <project-id|-> <title> [body…]' >&2; exit 2; }
     [ "$proj" = "-" ] && proj=nil
-    exec "$SERVER" rpc "case Server.Tickets.file(%{workspace_id: $ws, project_id: $proj, title: \"$(esc "$title")\", body: \"$(esc "$*")\"}) do {:ok, t} -> IO.puts(\"filed ticket ##{t.id} — #{t.title}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Tickets.file(%{workspace_id: $ws, project_id: $proj, title: \"$(esc "$title")\", body: \"$(esc "$*")\"}) do {:ok, t} -> IO.puts(\"filed ticket ##{t.id} — #{t.title}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
     ;;
 
   ticket-route)
     # Send a ticket to its workspace's manager to staff (Server.Tickets.route); no manager → the lead starts it.
     tk="${1:-}"
     int "$tk" || { echo 'usage: tlon-cli.sh ticket-route <ticket-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> case Server.Tickets.route(t) do {:ok, %{routed_to: m}} -> IO.puts(\"ticket #$tk sent to #{m}\"); {:ok, %{started: th}} -> IO.puts(\"no manager: ticket #$tk started as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end end"
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.route(t) do {:ok, %{routed_to: m}} -> IO.puts(\"ticket #$tk sent to #{m}\"); {:ok, %{started: th}} -> IO.puts(\"no manager: ticket #$tk started as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   ticket-start)
@@ -265,7 +265,7 @@ case "$cmd" in
     tk="${1:-}"; agent="${2:-nil}"
     { int "$tk" && { [ "$agent" = nil ] || int "$agent"; }; } ||
       { echo 'usage: tlon-cli.sh ticket-start <ticket-id> [agent-id]' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> case Server.Tickets.start_thread(t, $agent) do {:ok, th} -> IO.puts(\"started ticket #$tk as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end end"
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.start_thread(t, $agent) do {:ok, th} -> IO.puts(\"started ticket #$tk as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   hire)
@@ -274,7 +274,7 @@ case "$cmd" in
     ws="${1:-}"; name="${2:-}"; arch="${3:-}"; model="${4:--}"; effort="${5:--}"; ask="${6:--}"
     { int "$ws" && [ -n "$name" ] && [ -n "$arch" ] && knobs "$model" "$effort" "$ask"; } ||
       { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype> [<provider/model>|- [low|medium|high|xhigh|max|- [ask|allow|-]]]' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
     ;;
 
   coworker-set)
@@ -283,7 +283,7 @@ case "$cmd" in
     ws="${1:-}"; agent="${2:-}"; model="${3:--}"; effort="${4:--}"; ask="${5:--}"
     { int "$ws" && int "$agent" && knobs "$model" "$effort" "$ask"; } ||
       { echo 'usage: tlon-cli.sh coworker-set <workspace-id> <agent-id> <provider/model>|inherit|- <effort>|- ask|allow|inherit|-' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.retarget($ws, $agent, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}) do {:ok, _} -> IO.puts(\"set coworker #$agent on workspace #$ws\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Workspaces.retarget($ws, $agent, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}) do {:ok, _} -> IO.puts(\"set coworker #$agent on workspace #$ws\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end"
     ;;
 
   aside)
@@ -305,7 +305,7 @@ case "$cmd" in
     # Take a coworker off a workspace's bench by its seat (row) id; the agent itself survives.
     seat="${1:-}"
     int "$seat" || { echo 'usage: tlon-cli.sh fire <seat-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.unseat($seat) do {:ok, _} -> IO.puts(\"unseated seat #$seat\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Workspaces.unseat($seat) do {:ok, _} -> IO.puts(\"unseated seat #$seat\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end"
     ;;
 
   ticket-set)
@@ -313,20 +313,20 @@ case "$cmd" in
     tk="${1:-}"; field="${2:-}"; shift 2 2>/dev/null || true; value="$*"
     { int "$tk" && case "$field" in status|title|body) true ;; *) false ;; esac; } ||
       { echo 'usage: tlon-cli.sh ticket-set <ticket-id> status|title|body <value…>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> case Server.Tickets.update(t, %{$field: \"$(esc "$value")\"}) do {:ok, _} -> IO.puts(\"ticket #$tk $field set\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end end"
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.update(t, %{$field: \"$(esc "$value")\"}) do {:ok, _} -> IO.puts(\"ticket #$tk $field set\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end end"
     ;;
 
   ticket-delete)
     tk="${1:-}"
     int "$tk" || { echo 'usage: tlon-cli.sh ticket-delete <ticket-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); System.halt(1); t -> {:ok, _} = Server.Tickets.remove(t); IO.puts(\"deleted ticket #$tk\") end"
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> {:ok, _} = Server.Tickets.remove(t); IO.puts(\"deleted ticket #$tk\") end"
     ;;
 
   workspace-delete)
     # Its threads move to the oldest remaining workspace; the last workspace is refused.
     ws="${1:-}"
     int "$ws" || { echo 'usage: tlon-cli.sh workspace-delete <workspace-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.get($ws) do nil -> IO.puts(\"no workspace #$ws\"); System.halt(1); w -> case Server.Workspaces.remove(w) do {:ok, _} -> IO.puts(\"deleted workspace #{w.name}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end end"
+    exec "$SERVER" rpc "case Server.Workspaces.get($ws) do nil -> IO.puts(\"no workspace #$ws\"); raise(\"refused\"); w -> case Server.Workspaces.remove(w) do {:ok, _} -> IO.puts(\"deleted workspace #{w.name}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   hand-off)
@@ -334,7 +334,7 @@ case "$cmd" in
     # rather than at the next minute's pass.
     tid="${1:-}"; handle="${2:-}"
     { int "$tid" && [ -n "$handle" ]; } || { echo 'usage: tlon-cli.sh hand-off <thread-id> <agent-name>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Staffing.hand_off($tid, \"$(esc "$handle")\") do {:ok, t} -> Task.start(fn -> Server.Staffing.pass(t.workspace_id) end); IO.puts(\"handed thread #$tid to $(esc "$handle")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Staffing.hand_off($tid, \"$(esc "$handle")\") do {:ok, t} -> Task.start(fn -> Server.Staffing.pass(t.workspace_id) end); IO.puts(\"handed thread #$tid to $(esc "$handle")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end"
     ;;
 
   workspace-new)
@@ -342,7 +342,7 @@ case "$cmd" in
     name="${1:-}"; repo="${2:-}"
     [ -n "$name" ] || { echo 'usage: tlon-cli.sh workspace-new <name> [repo-path]' >&2; exit 2; }
     if [ -n "$repo" ]; then repos="[\"$(esc "$repo")\"]"; else repos="[]"; fi
-    exec "$SERVER" rpc "case Server.Workspaces.create(%{name: \"$(esc "$name")\", repos: $repos}) do {:ok, w} -> IO.puts(\"workspace ##{w.id} #{w.name}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.Workspaces.create(%{name: \"$(esc "$name")\", repos: $repos}) do {:ok, w} -> IO.puts(\"workspace ##{w.id} #{w.name}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
     ;;
 
   shell-dossier)
@@ -390,7 +390,7 @@ case "$cmd" in
       as="${2:-}"; shift 2 || true; tid="${1:-}"; shift || true; body="$*"
       { [ -n "$as" ] && int "$tid" && [ -n "$body" ]; } ||
         { echo 'usage: tlon-cli.sh post --as <citizen> <thread-id> <message text…>' >&2; exit 2; }
-      exec "$SERVER" rpc "case Server.Outside.post($tid, \"$(esc "$as")\", \"$(esc "$body")\") do {:ok, m} -> IO.puts(\"posted ##{m.id} to thread #$tid as $(esc "$as")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
+      exec "$SERVER" rpc "case Server.Outside.post($tid, \"$(esc "$as")\", \"$(esc "$body")\") do {:ok, m} -> IO.puts(\"posted ##{m.id} to thread #$tid as $(esc "$as")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end"
     fi
     tid="${1:-}"; shift || true
     body="$*"
@@ -438,7 +438,7 @@ case "$cmd" in
   worktree)
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh worktree <thread-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.worktree_for_thread($tid) do {:ok, path} -> IO.puts(path); other -> IO.puts(:stderr, inspect(other)); System.halt(1) end"
+    exec "$SERVER" rpc "case Server.worktree_for_thread($tid) do {:ok, path} -> IO.puts(path); other -> IO.puts(:stderr, inspect(other)); raise(\"refused\") end"
     ;;
 
   advance)
