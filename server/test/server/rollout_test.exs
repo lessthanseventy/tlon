@@ -42,22 +42,24 @@ defmodule Server.RolloutTest do
     end
 
     test "quiet when nobody is mid-turn and no verify or landing runs" do
-      assert Rollout.busy() == []
-      assert Rollout.quiet?()
+      assert Rollout.busy(%{}) == []
     end
 
     test "a running verify or landing is named, and the window is shut" do
       running!("Server.Jobs.Verify", :verify, %{thread_id: 140, slug: "lazy"})
       running!("Server.Jobs.Land", :landing, %{thread_id: 145})
-      busy = Rollout.busy()
+      busy = Rollout.busy(%{})
       assert Enum.any?(busy, &(&1 =~ "verify of #140"))
       assert Enum.any?(busy, &(&1 =~ "landing of #145"))
-      refute Rollout.quiet?()
     end
 
     test "other queues don't hold the window" do
       running!("Server.Jobs.Drain", :default, %{})
-      assert Rollout.quiet?()
+      assert Rollout.busy(%{}) == []
+    end
+
+    test "a coworker mid-turn holds it too" do
+      assert ["a coworker is mid-turn on #148"] = Rollout.busy(%{148 => ["hronir"]})
     end
   end
 end
