@@ -535,9 +535,9 @@ defmodule Server.Profiles do
   reads) comes to you once its review approves it; the brief names its branch.
 
   DRIVE IT. Build the branch as a scratch release and keep it up, in the background:
-  `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/<slug>` — port 4047 and db tlon_smoke, the fixed
+  `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/<slug>` — its own port and db tlon_smoke_<port> (the run prints the url), the fixed
   smoke first (open, a thread, a card, R). Then drive the changed path as he would:
-  `TLON_URL=http://127.0.0.1:4047 mise run office:drive -- <keys>` (the drive-office skill), the keys
+  `TLON_URL=<the url it printed> mise run office:drive -- <keys>` (the drive-office skill), the keys
   he'd press and the screen after each. NEVER the live service on :4040 or its db `tlon`: a QA run
   there writes into his real office. Stop the scratch release when you're done.
 

@@ -6,14 +6,16 @@
 #
 #   release-smoke.sh [<commit>]     default origin/main
 #
-# TLON_SMOKE_PORT (4047) and TLON_SMOKE_DATABASE (tlon_smoke) name the scratch ones; the service's
+# TLON_SMOKE_PORT and TLON_SMOKE_DATABASE name the scratch ones (default: a port picked from the pid,
+# and a database named after it, so concurrent smokes never share either); the service's
 # 4040 and `tlon` are refused. TLON_SMOKE_URL smokes a server already up there instead: nothing is
 # built, started or recorded. A run ends `ran-on: smoke <sha>`, which a scheduled run records.
 # TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped.
 set -uo pipefail
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
-port="${TLON_SMOKE_PORT:-4047}" db="${TLON_SMOKE_DATABASE:-tlon_smoke}" url="${TLON_SMOKE_URL:-}"
+port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
+db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
 hold="${TLON_SMOKE_HOLD:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
 fail() { echo "smoke FAILED: $* (the log: $log)"; exit 1; }
@@ -51,6 +53,8 @@ if [ -z "$url" ]; then
   git -C "$root" worktree add -q --detach "$dir" "$sha" || fail "can't check out ${sha:0:7}"
   office="$dir"
   mise trust -q "$dir" >/dev/null 2>&1
+  # the drive runs the candidate's own office-drive.sh under a throwaway XDG_STATE_HOME, which hides the trust above
+  export MISE_TRUSTED_CONFIG_PATHS="$dir"
   [ -d "$root/server/deps" ] && cp -a --reflink=auto "$root/server/deps" "$dir/server/"
   [ -d "$root/office/node_modules" ] && cp -a --reflink=auto "$root/office/node_modules" "$dir/office/"
   (cd "$dir/office" && bun install --frozen-lockfile >/dev/null 2>&1) || fail "bun install failed"

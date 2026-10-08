@@ -17,7 +17,7 @@ t() { tmux -L "$sock" "$@"; }
 trap 't kill-server 2>/dev/null; rm -rf "$state"' EXIT
 
 t new-session -d -x "${OFFICE_COLS:-150}" -y "${OFFICE_ROWS:-60}" \
-  "cd '$root/office' && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='$state' bun tui/main.ts 2>'$state/err'"
+  "cd '$root/office' && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' bun tui/main.ts 2>'$state/err'"
 sleep 3
 for step in "$@"; do
   eval "t send-keys -t 0 $step"
