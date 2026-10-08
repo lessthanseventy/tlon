@@ -34,6 +34,7 @@ import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input,
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
+import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
@@ -84,6 +85,22 @@ let mode: Mode = { kind: "home" }, picked: number | null = null, sel = 0
 let tip = "", status = ""
 /** the header's clickable spans, in 1-based columns, as last drawn */
 let headHits: { from: number; to: number; go: () => void }[] = []
+// how the list cards are ordered (`s` sort, `g` group): kept across visits
+const CREW_GROUP_MODES = [null, ...CREW_GROUPS]
+let crewSort = CREW_SORTS[0]!, crewGroup: (typeof CREW_GROUP_MODES)[number] = null
+type Item = ReturnType<typeof boardColumns>[number]["items"][number]
+const COL_SORTS: Sort<Item>[] = [{ name: "board", cmp: () => 0 }, { name: "title", cmp: (a, b) => a.title.localeCompare(b.title) }, { name: "who", cmp: (a, b) => (a.who ?? "~").localeCompare(b.who ?? "~") }]
+let colSort = COL_SORTS[0]!
+const TRAY_SORTS: Sort<data.Activity[number]>[] = [{ name: "newest", cmp: () => 0 }, { name: "thread", cmp: (a, b) => (a.thread_id ?? Infinity) - (b.thread_id ?? Infinity) }, { name: "who", cmp: (a, b) => (a.who ?? "~").localeCompare(b.who ?? "~") }]
+let traySort = TRAY_SORTS[0]!
+/** step an ordering, keeping the cursor on the row (by its `ref`) it was on */
+function resort(step: () => void) {
+  const was = rows[sel]?.ref
+  step()
+  const at = was === undefined ? -1 : detail().rows.findIndex((r) => r.ref === was)
+  if (at >= 0) sel = at
+  draw()
+}
 let input: Prompt | null = null
 // a card just opened: its cursor goes to the first row you can act on, once there is one
 let snapSel = false
@@ -714,20 +731,28 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "crew": {
       const crew = crewOf(a)
-      const chosen = a.bench.find((x) => x.name === pick(crew, sel)?.name)
-      return {
-        title: `CREW · ${crew.length}`,
-        rows: crew.map((c) => {
+      const rows: Row[] = []
+      for (const g of arrange(crew, crewSort.cmp, crewGroup)) {
+        if (g.label !== null) rows.push({ segs: [key(`${g.label} · ${g.items.length}`)] })
+        for (const c of g.items) {
           const b = a.bench.find((x) => x.name === c.name), arch = a.archetypes.find((x) => x.name === c.archetype)
           const model = b?.model ? b.model.model : arch?.model?.split("/").pop() ?? ""
-          return {
+          rows.push({
             segs: [{ s: c.status === "working" ? "● " : c.status === "waiting" ? "! " : "○ ", fg: c.status === "working" ? ROLE.live : c.status === "waiting" ? ROLE.attention : ROLE.inactive },
               { s: c.name.padEnd(10), fg: shirtOf(c.archetype) }, dim(`${c.manager ? "manager" : c.archetype ?? "?"}${c.lead ? " · lead" : ""}`.padEnd(18)), key(model.padEnd(16)), dim(`${b?.ask ?? ""}`.padEnd(6)),
               dim(c.thread !== null ? `#${c.thread} ${c.title}` : "on the bench")],
-            open: () => open({ kind: "person", name: c.name }),
-          }
-        }),
-        actions: [{ key: "+", label: "hire", run: hire }, ...seatActions(chosen), back1],
+            open: () => open({ kind: "person", name: c.name }), ref: c.name,
+          })
+        }
+      }
+      const chosen = a.bench.find((x) => x.name === rows[sel]?.ref)
+      return {
+        title: `CREW · ${crew.length} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
+        rows,
+        actions: [{ key: "+", label: "hire", run: hire },
+          { key: "s", label: `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`, run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
+          { key: "g", label: `group: ${crewGroup?.name ?? "none"} → ${next(CREW_GROUP_MODES, crewGroup)?.name ?? "none"}`, run: () => resort(() => { crewGroup = next(CREW_GROUP_MODES, crewGroup) }) },
+          ...seatActions(chosen), back1],
       }
     }
     case "person": {
@@ -752,21 +777,22 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `THREAD #${tid}${th?.stage ? ` · workline ${th.stage}` : ""}`, rows: threadRows(th, tid), tint: th?.awaiting || th?.prompt ? ROLE.attention : th?.lead ? authorColor(th.lead) : ROLE.key, actions: [...liveActions(tid), ...threadActions(tid), back1] }
     }
     case "column": {
-      const col = boardColumns(a, boardCtx())[mode.col]!, items = col.items
+      const col = boardColumns(a, boardCtx())[mode.col]!, items = arrange(col.items, colSort.cmp, null)[0]!.items
       const it = pick(items, sel)
       const reorder = (dir: "up" | "down"): Action => ({ key: dir === "up" ? "K" : "J", label: `move ${dir}`, run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), items.length - 1)); draw() }) } })
       return {
-        title: `${col.name} · ${items.length}`,
+        title: `${col.name} · ${items.length}${colSort.name === "board" ? "" : ` · by ${colSort.name}`}`,
         rows: items.map((x) => {
           const blocked = x.act.kind === "ticket" && (tickets.find((t) => t.id === (x.act as { id: number }).id)?.blocked_by.length ?? 0) > 0
           return {
             segs: [...(x.state ? [stateSeg(x.state)] : []), key(x.act.kind === "ticket" ? `#${x.act.id} ` : x.act.kind === "thread" ? `#${x.act.tid} ` : ""), plain(x.title), dim(`  ${x.stage}${x.who ? ` · ${x.who}` : ""}`),
               ...(x.state ? [{ s: `  ${x.state.why}`, fg: x.state.kind === "needs" ? ROLE.attention : ROLE.inactive }] : x.asks ? [pink("  waiting on you")] : []), ...(blocked ? [pink("  ⊘ blocked")] : [])],
-            open: () => act(x.act),
+            open: () => act(x.act), ref: JSON.stringify(x.act),
           }
         }),
         actions: [
-          ...(mode.col === 0 ? [{ key: "n", label: "new ticket", run: newTicket }, reorder("up"), reorder("down")] : []),
+          ...(mode.col === 0 ? [{ key: "n", label: "new ticket", run: newTicket }, ...(colSort.name === "board" ? [reorder("up"), reorder("down")] : [])] : []),
+          { key: "s", label: `sort: ${colSort.name} → ${next(COL_SORTS, colSort).name}`, run: () => resort(() => { colSort = next(COL_SORTS, colSort) }) },
           { key: "right", label: "next column (← →)", run: () => open({ kind: "column", col: ((mode as { col: number }).col + 1) % COLS.length }) },
           back1,
         ],
@@ -879,11 +905,14 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `NOTES · ${a.notes.length}`, rows, actions: [{ key: "n", label: "pin a note", run: newNote }, back1] }
     }
     case "tray": {
-      const rows = feed.map((x): Row => ({
+      const rows = arrange(feed, traySort.cmp, null)[0]!.items.map((x): Row => ({
         segs: [dim(ago(x.at).padStart(4) + " "), x.thread_id ? key(`#${x.thread_id} `) : dim(""), { s: `${x.who ?? ""} ${KIND[x.kind] ?? x.kind.replace(/_/g, " ")} `, fg: x.kind === "issue" || x.kind === "check_failed" ? ROLE.alarm : x.kind === "question" ? ROLE.attention : ROLE.inactive }, plain(x.text.replace(/\s+/g, " "))],
-        open: x.thread_id ? () => openReader(x.thread_id!, false) : undefined,
+        open: x.thread_id ? () => openReader(x.thread_id!, false) : undefined, ref: `${x.at}${x.kind}${x.text}`,
       }))
-      return { title: `IN-TRAY · ${wsName()}`, rows: rows.length ? rows : [{ segs: [dim("nothing yet")] }], actions: [back1] }
+      return {
+        title: `IN-TRAY · ${wsName()}${traySort.name === "newest" ? "" : ` · by ${traySort.name}`}`, rows: rows.length ? rows : [{ segs: [dim("nothing yet")] }],
+        actions: [{ key: "s", label: `sort: ${traySort.name} → ${next(TRAY_SORTS, traySort).name}`, run: () => resort(() => { traySort = next(TRAY_SORTS, traySort) }) }, back1],
+      }
     }
     case "triage": {
       if (!stuck) return { title: "TRIAGE", rows: [{ segs: [dim("looking…")] }], actions: [back1] }
