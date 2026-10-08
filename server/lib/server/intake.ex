@@ -78,13 +78,16 @@ defmodule Server.Intake do
     end
   end
 
-  @doc "The ticket intake starts next in workspace `ws`: the most urgent backlog ticket nothing blocks, or nil."
+  @doc """
+  The ticket intake starts next in workspace `ws`: the most urgent backlog ticket nothing blocks, or
+  nil. Equally urgent ones go in board order (`Server.Tickets.in_workspace/1`), the top first.
+  """
   def next(ws) do
     blocked = Server.Tickets.blocked_in_workspace(ws)
 
     from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog")
     |> Repo.all()
     |> Enum.reject(&MapSet.member?(blocked, &1.id))
-    |> Enum.min_by(&{Map.get(@urgency, &1.priority, 1), &1.sort || 0, &1.id}, fn -> nil end)
+    |> Enum.min_by(&{Map.get(@urgency, &1.priority, 1), -(&1.sort || 0), -&1.id}, fn -> nil end)
   end
 end
