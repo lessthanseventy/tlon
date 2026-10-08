@@ -28,8 +28,8 @@ export function kitchenTile(z: Zones, w: number): Tile<Layout> {
         if (sim.using("coffee")) blit(f % 2 ? ["v.v", ".v."] : [".v.", "v.v"], w - 9, 125, { v: ROLE.prose })
         px(w - 13, 140, 12, 15, ROLE.prose); px(w - 3, 145, 1, 4, ROLE.inactive) // the fridge
         if (a.celebrations?.length) {
-          // the cake on the counter, its candle flickering
-          px(w - 11, 104, 8, 4, ROLE.alarm); px(w - 11, 104, 8, 1, ROLE.prose); px(w - 8, 101, 1, 3, ROLE.key); px(w - 8, 100, 1, 1, f % 2 ? ROLE.attention : ROLE.alarm)
+          // the cake on the bare stretch between the cooler and the coffee machine, its candle flickering
+          px(w - 11, 121, 8, 4, ROLE.alarm); px(w - 11, 121, 8, 1, ROLE.prose); px(w - 8, 118, 1, 3, ROLE.key); px(w - 8, 117, 1, 1, f % 2 ? ROLE.attention : ROLE.alarm)
         }
       })
       sc.item(v.y + v.h, () => {
