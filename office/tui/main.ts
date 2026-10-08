@@ -23,7 +23,8 @@ import { ticketPicks } from "./finder"
 import { loadHome, saveHome } from "./home"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader } from "./reader"
-import { enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
+import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
+import { cells, enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
@@ -213,7 +214,7 @@ function openThread(): number | null {
   return null
 }
 function open(m: Mode) {
-  mode = m; sel = 0; confirm = null; picker = null; snapSel = true
+  mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") picked = m.tid
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   const tid = openThread()
@@ -223,7 +224,7 @@ function open(m: Mode) {
 /** Esc: a card back to home, home to nothing picked; `all` drops both at once */
 function back(everything = false) {
   if (everything || mode.kind === "home") picked = null
-  mode = { kind: "home" }; sel = 0; confirm = null; picker = null
+  mode = { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null
 }
 
 function act(x: Act) {
@@ -475,6 +476,8 @@ const authorColor = (author: string) =>
   author === OPERATOR ? ROLE.attention : author === "tlon" ? ROLE.inactive : shirtOf(all.bench.find((b) => b.name === author)?.archetype)
 const STAGE_RING = ["intent", "spec", "plan", "build", "verify", "review", "merged"]
 
+/** the detail pane's lines under its title, with a one-line foot */
+const paneRows = () => (g ? Math.max(1, (process.stdout.rows ?? 40) - (g.row + g.rows + 2) - 2) : DETAIL - 2)
 /** the detail pane's text width: the terminal's, less the actions column when there is room for it */
 const paneW = () => (cols() >= 80 ? cols() - ACTIONS_W - 1 : cols())
 /** a thread's rows for a card; `above`: the card's own rows over them, so the tail still ends in view */
@@ -499,13 +502,13 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   // a running coworker's screen, as it is now — unless you flipped to the conversation
   const screen = th?.live && !talkView.has(tid) ? screens.get(tid) : undefined
   if (screen) {
-    const room = DETAIL - 1 - above - out.length - 1, w = paneW() - 4
+    const room = paneRows() - above - out.length - 1, w = paneW() - 4
     out.push({ segs: [{ s: " LIVE ", fg: ROLE.ground, bg: ROLE.live, bold: true }, dim("  their screen now · ⏎ step in · c the conversation")] })
     for (const l of screen.slice(-room)) out.push({ segs: [{ s: "│ ", fg: ROLE.live }, { s: l.slice(0, w), fg: ROLE.prose }] })
     return out
   }
   // the conversation's tail, wrapped, as much as fits; `v` reads the whole of it
-  const room = DETAIL - 1 - above - out.length, tail: Row[] = []
+  const room = paneRows() - above - out.length, tail: Row[] = []
   for (const m of [...(v?.messages ?? [])].reverse()) {
     const lines = wrap(`${m.author}: ${m.body}`, paneW() - 4)
     const tone = m.author === "tlon" ? ROLE.inactive : ROLE.prose
@@ -648,7 +651,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (!tk) return { title: `TICKET #${id}`, rows: [{ segs: [dim("started or gone")] }], actions: [back1] }
       const rows: Row[] = [{ segs: [plain(tk.title)] }, { segs: [dim(`${tk.priority} priority${tk.routed ? " · with the manager to staff" : ""}`)] }]
       for (const by of full?.blocked_by ?? []) rows.push({ segs: [pink("⊘ blocked by "), key(`#${by} `), plain(tickets.find((t) => t.id === by)?.title ?? "")] })
-      if (full?.body) for (const l of wrap(full.body, cols() - 40).slice(0, 6)) rows.push({ segs: [dim(l)] })
+      if (full?.body) for (const l of wrap(full.body, cols() - 40)) rows.push({ segs: [dim(l)] })
       return {
         title: `TICKET #${id}`, rows,
         actions: [
@@ -940,7 +943,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(tid ? [tidSeg(tid)] : []), { s: n.title, fg: ROLE.prose, bold: true }], open: tid ? () => openReader(tid, false) : undefined },
         { segs: [dim(`${n.level === "blocking" ? "work has stopped until you act" : "nothing waits on this"} · ${ago(n.at)}${t ? ` · ${t.lead ?? "no lead"}${t.stage ? ` at ${t.stage}` : ""}` : ""}`)] },
         { segs: [plain("")] },
-        ...wrap(n.text, paneW() - 4).slice(0, DETAIL - 5).map((l): Row => ({ segs: [plain(l)] })),
+        ...wrap(n.text, paneW() - 4).map((l): Row => ({ segs: [plain(l)] })),
       ]
       return {
         title: `DECIDE · ${i + 1} of ${order.length}`,
@@ -1067,17 +1070,31 @@ function draw() {
   out(o + drawPane(tipRow + 1, colsN, termRows) + `${ESC}[?2026l`)
 }
 
-// what the pane last drew, for a click on it: where it starts, how wide its left side is, the first row shown
-let acts: Action[] = [], asel = 0, pane = { top: 0, leftW: 0, first: 0, afirst: 0 }
+// what the pane last drew, for a click on it: where it starts, how wide its left side is, which
+// row and which action each of its lines shows
+let acts: Action[] = [], asel = 0, pane = { top: 0, leftW: 0, room: 0, first: 0, rowAt: [] as (number | undefined)[], actAt: [] as (number | undefined)[] }
+/** how far a card whose rows have nothing to open is scrolled down; Infinity keeps a thread's tail in view */
+let scroll = 0
 const ACTIONS_W = 34
 const keyName = (k: string) => ({ space: "␣", enter: "⏎", right: "→", left: "←" })[k] ?? k
 /** the actions take j/k and enter when the card's rows have nothing to open */
 const actionsFocused = () => !rows.some((r) => r.open)
+/** the keys that work everywhere a card's own actions don't claim them */
+const GLOBALS: Hint[] = [{ key: "/", label: "find" }, { key: "i", label: "inbox" }, { key: "tab", label: "crew" }, { key: "[ ]", label: "workspace" }, { key: "esc", label: "back" }, { key: "q", label: "quit" }]
+/** a window's line `i`, as a row index, an "↑ N more" (-1) or "↓ N more" (-2), or nothing */
+function lineOf(w: Window, i: number): number | undefined {
+  if (w.above && i === 0) return -1
+  const j = i - (w.above ? 1 : 0)
+  if (j < w.count) return w.first + j
+  if (w.below && j === w.count) return -2
+  return undefined
+}
+const more = (w: Window, at: number, how: string): Seg[] => [dim(at === -1 ? `  ↑ ${w.above} more${how}` : `  ↓ ${w.below} more${how}`)]
+const fit = (s: string, w: number) => (cells(s) <= w ? s : `${[...s].slice(0, Math.max(0, w - 1)).join("")}…`)
 
 /** the pane from row `top` to the foot: the finder, a multi-line input, or the card — its rows on the left, its actions on the right */
 function drawPane(top: number, colsN: number, termRows: number): string {
-  let o = ""
-  const body = Math.max(1, termRows - top - 1)
+  let o = `${ESC}[?7l`
   let title: string, keys = "", segRows: Row[], cursor: { r: number; c: number } | null = null
   let tint = ROLE.key
   acts = []
@@ -1090,7 +1107,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     cursor = { r: -1, c: title.length + 1 }
     sel = picker.sel
   } else if (input?.ed.multiline) {
-    const v = input.ed.view(colsN - 6, body - 2)
+    const v = input.ed.view(colsN - 6, Math.max(1, termRows - top - 3))
     title = input.label
     segRows = [{ segs: cyclesSegs(input) }, ...v.rows.map((r) => ({ segs: [pink(" ▌ "), plain(r)] }))]
     keys = `enter done · alt-enter newline${input.cycles?.length ? ` · tab change the lit choice${input.cycles.length > 1 ? " · shift-tab the next choice" : ""}` : ""} · esc cancel`
@@ -1102,34 +1119,51 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   rows = segRows
   const split = acts.length > 0 && colsN >= 80
   const leftW = split ? colsN - ACTIONS_W - 1 : colsN
-  if (!split && acts.length) keys = acts.map((x) => `${keyName(x.key)} ${x.label}`).join(" · ")
-  else if (!keys) keys = "/ find · i inbox · tab crew · [ ] workspace · esc back · q quit"
-  const bar = (t: string, w: number, bg: string) => line([{ s: ` ${t} `, fg: ROLE.ground, bg }, dim(" " + "─".repeat(Math.max(0, w - t.length - 3)))], w)
-  o += `${ESC}[${top};1H` + bar(title, leftW, picker || input ? ROLE.attention : tint) + (split ? line([dim("┬")], 1) + bar("ACTIONS", ACTIONS_W, ROLE.key) : "")
   const selectable = rows.some((r) => r.open) && !input
   if (snapSel && selectable && !picker) { snapSel = false; if (!rows[sel]?.open) sel = rows.findIndex((r) => r.open) }
   if (sel >= rows.length) sel = Math.max(0, rows.length - 1)
   if (asel >= acts.length) asel = Math.max(0, acts.length - 1)
-  const first = cursor && input ? 0 : Math.max(0, Math.min(sel - Math.floor((body - 1) / 2), rows.length - (body - 1)))
-  // more actions than rows: scroll them while they have the keys, else the last line names the rest
-  const room = body - 1, over = acts.length > room
-  const afirst = over && !selectable ? Math.max(0, Math.min(asel - room + 1, acts.length - room)) : 0
-  const shown = over && selectable ? room - 1 : room
-  pane = { top, leftW, first, afirst }
+  // the foot lists what the actions column can't show (all of it, with no column), then the globals;
+  // its height and the column's room depend on each other, so settle them together
+  const claimed = new Set(acts.map((x) => x.key))
+  const globals = GLOBALS.filter((h) => !h.key.split(" ").some((k) => claimed.has(k)))
+  let footN = 1, room = 0, win: Window, awin: Window = { first: 0, count: 0, above: 0, below: 0 }, foot: Hint[][] = []
+  for (let pass = 0; pass < 3; pass++) {
+    room = Math.max(1, termRows - footN - 1 - top)
+    win = cursor && input ? offset(rows.length, room, 0) : selectable || picker ? followSel(rows.length, sel, room) : offset(rows.length, room, scroll)
+    if (split) awin = !selectable ? followSel(acts.length, asel, room) : offset(acts.length, room, 0)
+    const hidden = split ? acts.filter((_, i) => i < awin.first || i >= awin.first + awin.count) : acts
+    foot = keys ? [] : footLines([...hidden.map((x) => ({ key: keyName(x.key), label: x.label })), ...globals], colsN - 2, Math.max(1, Math.floor((termRows - top - 1) / 2)))
+    const n = Math.max(1, foot.length)
+    if (n === footN) break
+    footN = n
+  }
+  win = win!
+  if (!selectable && !picker && !input && Number.isFinite(scroll)) scroll = win.first
+  const bar = (t: string, w: number, bg: string) => line([{ s: ` ${t} `, fg: ROLE.ground, bg }, dim(" " + "─".repeat(Math.max(0, w - cells(t) - 3)))], w)
+  o += `${ESC}[${top};1H` + bar(title, leftW, picker || input ? ROLE.attention : tint) + (split ? line([dim("┬")], 1) + bar("ACTIONS", ACTIONS_W, ROLE.key) : "")
+  const how = selectable || picker ? "" : " · pgup/pgdn"
+  pane = { top, leftW, room, first: win.first, rowAt: [], actAt: [] }
   for (let i = 0; i < room; i++) {
-    const r = rows[first + i]
-    const mark = r && selectable && first + i === sel && mode.kind !== "thread" && mode.kind !== "person" ? key("▸ ") : plain("  ")
-    o += `${ESC}[${top + 1 + i};1H` + line(r ? [mark, ...r.segs] : [], leftW)
+    const at = lineOf(win, i), r = at !== undefined && at >= 0 ? rows[at] : undefined
+    pane.rowAt.push(r ? at : undefined)
+    const mark = r && selectable && at === sel && mode.kind !== "thread" && mode.kind !== "person" ? key("▸ ") : plain("  ")
+    o += `${ESC}[${top + 1 + i};1H` + line(r ? [mark, ...r.segs] : at !== undefined ? more(win, at, how) : [], leftW)
     if (split) {
-      const x = i < shown ? acts[afirst + i] : undefined
-      const lit = x && !selectable && afirst + i === asel
-      const rest = i === shown && over ? acts.slice(shown).map((y) => keyName(y.key)).join(" ") : ""
-      o += line([dim("│")], 1) + line(x ? [lit ? key("▸") : plain(" "), { s: ` ${keyName(x.key).padStart(5)} `, fg: ROLE.key, bold: true }, { s: x.label, fg: x.key === "esc" ? ROLE.inactive : ROLE.prose }] : rest ? [dim(`  also: ${rest}`)] : [], ACTIONS_W)
+      const ai = lineOf(awin, i), x = ai !== undefined && ai >= 0 ? acts[ai] : undefined
+      pane.actAt.push(x ? ai : undefined)
+      const lit = x && !selectable && ai === asel
+      o += `${ESC}[${top + 1 + i};${leftW + 1}H` + line([dim("│")], 1) + line(x ? [lit ? key("▸") : plain(" "), { s: ` ${keyName(x.key).padStart(5)} `, fg: ROLE.key, bold: true }, { s: fit(x.label, ACTIONS_W - 8), fg: x.key === "esc" ? ROLE.inactive : ROLE.prose }] : ai !== undefined ? more(awin, ai, selectable ? " · in the foot" : "") : [], ACTIONS_W)
     }
   }
-  // the foot: what you are typing, a confirm, or the keys (when there is no actions pane to show them)
+  // the foot: what you are typing, a confirm, or the keys — the lit one when the actions have them and no column shows it
+  o += `${ESC}[${termRows - footN};1H` + line([], colsN)
   const one = input && !input.ed.multiline ? input : null
-  o += `${ESC}[${termRows};1H` + line(one ? [pink(` ${one.label}: `), plain(one.ed.text), ...(one.cycles?.length ? [dim("   tab: "), ...cyclesSegs(one)] : [])] : confirm ? [pink(` ${confirm.label} (y/n)`)] : [dim(` ${keys}`)], colsN)
+  const litKey = !split && !selectable && acts[asel] ? keyName(acts[asel]!.key) : null
+  const hintSegs = (l: Hint[]): Seg[] => l.flatMap((h, j): Seg[] => [...(j ? [dim(" · ")] : []), h.key === litKey ? { s: `${h.key} ${h.label}`, fg: ROLE.ground, bg: ROLE.key } : { s: h.key, fg: ROLE.key, bold: true }, ...(h.key === litKey ? [] : [plain(` ${h.label}`)])])
+  const feet: Seg[][] = one ? [[pink(` ${one.label}: `), plain(one.ed.text), ...(one.cycles?.length ? [dim("   tab: "), ...cyclesSegs(one)] : [])]] : confirm ? [[pink(` ${confirm.label} (y/n)`)]] : keys ? [[dim(` ${keys}`)]] : foot.map((l) => [plain(" "), ...hintSegs(l)])
+  for (let i = 0; i < footN; i++) o += `${ESC}[${termRows - footN + 1 + i};1H` + line(feet[i] ?? [], colsN)
+  o += `${ESC}[?7h`
   if (one) {
     const pre = [...` ${one.label}: `].length
     o += `${ESC}[${termRows};${pre + one.ed.col + 1}H${ESC}[?25h`
@@ -1230,6 +1264,7 @@ function onKey(k: string) {
       viewport = centerViewport(viewport, at.x, at.y, g.floorW, g.floorH); panned = true
       return draw()
     }
+    case "pgdn": case "pgup": return page(k === "pgdn" ? 1 : -1)
     case "enter": return onActions ? acts[asel]?.run() : rows[sel]?.open?.()
     case "/": case "ctrl-k": return void finder()
     case "i": return inbox()
@@ -1249,6 +1284,14 @@ function onKey(k: string) {
     case "W": return open({ kind: "boss" })
     case "p": room().pet(); changed(); return draw()
   }
+}
+
+/** a page of the card's rows, by the selection when they open, else by the view */
+function page(dir: 1 | -1, by = Math.max(1, pane.room - 2)) {
+  snapSel = false
+  if (actionsFocused()) scroll = Math.max(0, (Number.isFinite(scroll) ? scroll : pane.first) + dir * by)
+  else sel = Math.max(0, Math.min(sel + dir * by, rows.length - 1))
+  draw()
 }
 
 function onPaste(text: string) {
@@ -1271,6 +1314,8 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
     return
   }
   drag = null
+  // the wheel over the pane scrolls it
+  if (m.press && (m.button === 64 || m.button === 65) && m.row > pane.top) return page(m.button === 65 ? 1 : -1, 3)
   const h = hitAt(clipFrame(frame, viewport), g, m.col, m.row, viewport)
   if (m.motion) { const t = h?.tip ?? ""; if (t !== tip) { tip = t; draw() } return }
   if (!m.press || m.button !== 0) return
@@ -1282,12 +1327,12 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
   const i = m.row - pane.top - 1
   if (i < 0) return
   if (m.col > pane.leftW + 1) {
-    const x = acts[pane.afirst + i]
-    if (x) { asel = pane.afirst + i; x.run() }
+    const ai = pane.actAt[i], x = ai === undefined ? undefined : acts[ai]
+    if (x) { asel = ai!; x.run() }
     return
   }
-  const r = rows[pane.first + i]
-  if (r?.open) { sel = pane.first + i; r.open() }
+  const ri = pane.rowAt[i], r = ri === undefined ? undefined : rows[ri]
+  if (r?.open) { sel = ri!; r.open() }
 }
 
 // ── zoomed into a terminal ─────────────────────────────────────────────────────────────────────
