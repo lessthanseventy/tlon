@@ -3,6 +3,8 @@ import { viewOf } from "../kit/crew"
 import type { Actor } from "../kit/sim"
 import { EMPTY, type Agents } from "../kit/types"
 import { moment } from "../kit/sim"
+import { kitchenTile } from "../kit/tiles/kitchen"
+import { zones } from "../rooms/wide"
 import { WideRoom, widePlan } from "../rooms/wide"
 
 /** run `f` with Math.random fixed at `r`: every chance taken (0), or none (0.999) */
@@ -199,6 +201,17 @@ describe("a birthday from the calendar", () => {
       expect(seen.length).toBeGreaterThan(0)
       expect(seen.every((c) => c?.length === 1)).toBe(true)
     })
+  })
+  test("the cake stands on a free stretch of the counter, clear of the cooler and the coffee machine", () => {
+    const w = 560, rects: { x: number; y: number; w: number; h: number; role: unknown }[] = [], blits: { x: number; y: number; h: number }[] = []
+    const sc = { f: 0, tick: 0, item: (_y: number, fn: () => void) => fn(), px: (x: number, y: number, w: number, h: number, role: unknown) => rects.push({ x, y, w, h, role }), blit: (rows: string[], x: number, y: number) => blits.push({ x, y, h: rows.length }) }
+    const live = { using: () => false, at: () => [] }
+    const draw = (celebrations: Agents["celebrations"]) => { rects.length = blits.length = 0; kitchenTile(zones(w), w).draw(sc as never, { ...EMPTY, celebrations }, {} as never, () => 0, live as never, null as never) }
+    draw([]); const plain = new Set(rects.map((r) => JSON.stringify(r)))
+    draw([{ title: "Ana", kind: "birthday" }])
+    const cake = rects.filter((r) => !plain.has(JSON.stringify(r))), top = Math.min(...cake.map((r) => r.y)), bottom = Math.max(...cake.map((r) => r.y + r.h))
+    expect(cake.length).toBeGreaterThan(0)
+    for (const b of blits) expect(bottom <= b.y || top >= b.y + b.h).toBe(true)
   })
   test("anniversaries get the same, but not the same frame as a birthday's cake alone", () => {
     expect(frame([{ title: "Bo", kind: "anniversary" }])).not.toBe(frame([]))
