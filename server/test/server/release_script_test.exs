@@ -84,6 +84,15 @@ defmodule Server.ReleaseScriptTest do
     assert rev(ctx.repo, "live") == rev(ctx.repo, "main~1")
   end
 
+  test "a build that fails leaves live where it was", ctx do
+    assert {_, 0} = release(ctx, ["cut", rev(ctx.repo, "main~1")])
+    File.write!(Path.join(ctx.bin, "mix"), "#!/bin/sh\n[ \"$1\" = release ] && exit 1\nexit 0\n")
+
+    assert {out, 1} = release(ctx, ["cut"])
+    assert out =~ "the build failed"
+    assert rev(ctx.repo, "live") == rev(ctx.repo, "main~1")
+  end
+
   test "status names what main has that the release doesn't", ctx do
     assert {_, 0} = release(ctx, ["cut", rev(ctx.repo, "main~1")])
     assert {out, 0} = release(ctx, ["status"])

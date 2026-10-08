@@ -33,7 +33,9 @@ build_at() {
   else git worktree add -q --detach "$rel" "$1" || return 1; fi
   # the main checkout's installed deps where there are none: a cut never refetches the world
   if [ ! -d "$rel/server/deps" ] && [ -d "$root/server/deps" ]; then cp -a --reflink=auto "$root/server/deps" "$rel/server/"; fi
-  (cd "$rel/server" && MIX_ENV=prod mix release --overwrite >/dev/null) || { echo "release: the build failed in $rel" >&2; return 1; }
+  # deps first: a commit that adds a dependency builds nowhere until it is fetched
+  (cd "$rel/server" && MIX_ENV=prod mix deps.get >/dev/null && MIX_ENV=prod mix release --overwrite >/dev/null) ||
+    { echo "release: the build failed in $rel" >&2; return 1; }
 }
 
 cmd="${1:-status}"; shift || true
@@ -66,10 +68,10 @@ case "$cmd" in
       exit 1
     fi
 
+    # built first, moved after: a build that fails leaves the pointer naming what still runs
+    build_at "$to" || { echo "release: live stays at ${from:0:7}" >&2; exit 1; }
     git branch -f live "$to" || exit 1
     git push -q ${rollback:+--force} origin live 2>/dev/null || echo "release: moved here; the push to origin failed (pushed next cut)" >&2
-
-    build_at "$to" || exit 1
 
     echo "release → ${to:0:7}${from:+ (from ${from:0:7})}"
     [ -n "$from" ] && git log --format='  %h %s' "$from..$to"
