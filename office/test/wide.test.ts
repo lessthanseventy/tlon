@@ -202,6 +202,8 @@ describe("the wide room", () => {
   // up to 400k ticks of the room: seconds of CPU, more when the gate runs every suite at once
   test("Nina gets the zoomies: tears between the room's leaps, then lands on its floor and sits", () => seeded(11, () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1)
+    // by day: after dark the pets are in bed
+    ;(room as unknown as { hour: () => number }).hour = () => 16
     const c = (room as unknown as { cat: { x: number; y: number; mode: string; leaps: { x: number; y: number }[] } }).cat
     const visited = new Set<string>()
     let runs = 0, was = c.mode

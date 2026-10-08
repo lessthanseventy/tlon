@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { bedtime, darkness, lampsLit } from "../kit/daylight"
+import { dark, darkness, lampsLit } from "../kit/daylight"
+import { Scene } from "../kit/draw"
+import { bossDesk } from "../kit/furniture"
 import { viewOf } from "../kit/crew"
 import { EMPTY } from "../kit/types"
 import { WideRoom } from "../rooms/wide"
@@ -24,10 +26,11 @@ describe("the light follows the clock", () => {
     expect(new Set(lit).size).toBeGreaterThan(2)
   })
 
-  test("the pets' bedtime is the dark hours", () => {
-    expect(bedtime(23)).toBe(true)
-    expect(bedtime(3)).toBe(true)
-    expect(bedtime(12)).toBe(false)
+  test("dark is the hours of full dark: bedtime for the pets, clock-out for you", () => {
+    expect(dark(23)).toBe(true)
+    expect(dark(3)).toBe(true)
+    expect(dark(12)).toBe(false)
+    expect(dark(19)).toBe(false)
   })
 })
 
@@ -41,6 +44,25 @@ describe("the floor at night", () => {
     const room = new WideRoom(560), a = viewOf({ ...EMPTY, ok: true }, 1)
     const day = lum(room.render(a, focus, measure, at(12)).rgba), night = lum(room.render(a, focus, measure, at(3)).rgba)
     expect(night).toBeLessThan(day * 0.85)
+    expect(night).toBeGreaterThan(day * 0.4)
+  })
+
+  test("a lit lamp pools light: its patch is brighter, relatively, than the floor away from it", () => {
+    const room = new WideRoom(560), a = viewOf({ ...EMPTY, ok: true }, 1), L0 = (room as unknown as { z: { L0: number } }).z.L0
+    const patch = (f: { rgba: Uint8Array; width: number }, x: number, y: number) => {
+      let s = 0
+      for (let j = y; j < y + 8; j++) for (let i = x; i < x + 8; i++) { const o = (j * f.width + i) * 4; s += f.rgba[o]! + f.rgba[o + 1]! + f.rgba[o + 2]! }
+      return s
+    }
+    const day = room.render(a, focus, measure, at(12)), night = room.render(a, focus, measure, at(3))
+    const lamp = patch(night, L0 + 10, 62) / patch(day, L0 + 10, 62), away = patch(night, L0 + 60, 170) / patch(day, L0 + 60, 170)
+    expect(lamp).toBeGreaterThan(away)
+  })
+
+  test("you wear pyjamas after dark: no tie, a different top", () => {
+    const a = viewOf({ ...EMPTY, ok: true }, 1)
+    const draw = (isDark: boolean) => { const sc = new Scene(100, 100, 0); sc.dark = isDark; bossDesk(sc, a, { x: 20, y: 20, w: 40 }); return Buffer.from(sc.finish().rgba).toString("hex") }
+    expect(draw(true)).not.toBe(draw(false))
   })
 
   test("the pets go to sleep at bedtime, and not at noon", () => {

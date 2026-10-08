@@ -4,7 +4,7 @@
 // the lead's desks, the crew board, two tables of four), a glass meeting room, the lounge with its
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
-import { bedtime, darkness, lampsLit } from "../kit/daylight"
+import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
 import { fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, peopleOf, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
@@ -212,7 +212,7 @@ export class WideRoom extends Sim<Layout> {
   override step(a: Agents): boolean {
     const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
     // after dark the pets turn in, once whatever they were up to is done
-    if (bedtime(this.hour()) && this.tick % 20 === 0 && Math.random() < 0.5) {
+    if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog
       if (c.mode === "sit" && !c.path.length && !c.errand && !c.fuss) this.catDo("nap")
       if (d.mode === "sit" && !d.path.length && !d.fuss) this.dogDo("bed")
@@ -254,6 +254,7 @@ export class WideRoom extends Sim<Layout> {
   render(a: Agents, focus: Focus, measure: Measure, now = new Date()): Frame {
     const W = this.width, H = WIDE_H
     const sc = new Scene(W, H, this.tick)
+    sc.dark = dark(now.getHours() + now.getMinutes() / 60)
     const { L0, M0, MW, F0, F1 } = this.z
     const l = this.plan.layout(a)
     const px = sc.px.bind(sc), text = sc.text.bind(sc)
@@ -327,8 +328,7 @@ export class WideRoom extends Sim<Layout> {
     const h = now.getHours() + now.getMinutes() / 60, d = darkness(h)
     if (d === 0) return
     sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.4 * d)
-    const { L0, M0, MW } = this.z, lamps: [number, number][] = [[L0 + 14, 85], [50, 126], [M0 + MW / 2, 90], [this.width - 30, 130], [L0 + 60, 160]]
-    lamps.slice(0, lampsLit(h, lamps.length)).forEach(([x, y]) => {
+    sc.lamps.slice(0, lampsLit(h, sc.lamps.length)).forEach(([x, y]) => {
       sc.cv.glow(x - 14, y - 4, 28, 9, ROLE.body, 0.3); sc.cv.glow(x - 8, y - 6, 16, 13, ROLE.body, 0.3)
     })
   }
@@ -536,7 +536,7 @@ export class WideRoom extends Sim<Layout> {
    * After dark at any time of year the lounge's lamp glows.
    */
   private season(sc: Scene, now: Date) {
-    const { L0, M0 } = this.z, f = sc.f, px = sc.px.bind(sc), h = now.getHours(), night = h >= 19 || h < 6
+    const { L0, M0 } = this.z, f = sc.f, px = sc.px.bind(sc), h = now.getHours(), night = darkness(h) > 0.5
     if (now.getMonth() === 9) {
       for (const [x, y] of [[L0 + 42, 146], [OFF_LANE - 10, 182]] as const) sc.item(y, () => sc.blit(["..g..", ".ooo.", "oyoyo", "ooyoo", ".ooo."], x, y - 5, { g: ROLE.live, o: ROLE.structure, y: f % 3 ? ROLE.body : tint(ROLE.body, ROLE.structure, 0.5) }))
       sc.item(BAND, () => { for (let k = 0; k < 6; k++) { px(this.width - 1 - k, BAND + k, 1, 1, tint(ROLE.prose, ROLE.ground, 0.5)); px(this.width - 1 - k * 2, BAND, 1, 1, tint(ROLE.prose, ROLE.ground, 0.4)); px(this.width - 1, BAND + k * 2, 1, 1, tint(ROLE.prose, ROLE.ground, 0.4)) } })

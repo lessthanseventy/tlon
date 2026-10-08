@@ -15,7 +15,7 @@ linked window at a time, Ctrl-] back to the room).
   whiteboard's columns), sprites and looks (`sprites.ts`), the colour roles (`palette.ts`), the
   1x canvas and the **frame** a room hands a surface (`canvas.ts`), tlon's own bitmap font in two cuts (`font.ts`), the
   office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`),
-  the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, the pets' bedtime),
+  the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
   what Nina says (`voices.ts`; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
   drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
   making a fuss of a pet), the furniture every room has (`furniture.ts`),

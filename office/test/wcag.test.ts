@@ -25,11 +25,11 @@ export function office(): Agents {
 
 /** every label the room drew, with the colour actually behind it once the painter has backed it —
  * swept across every viewport position the floor can take, one cell at a time */
-function labels(room: RailRoom | WideRoom, w: number, h: number, cell: { w: number; h: number }, cols: number, rows: number) {
+function labels(room: RailRoom | WideRoom, w: number, h: number, cell: { w: number; h: number }, cols: number, rows: number, now?: Date) {
   const g = geometry(w, h, cols, rows, 17, cell, true), a = viewOf(office(), 1)
   for (let i = 0; i < 300; i++) room.step(a)
   room.say("yu", "a reply to you")
-  const fr = room.render(a, { picked: 101, armed: null, person: null }, measureFor(g))
+  const fr = room.render(a, { picked: 101, armed: null, person: null }, measureFor(g), now)
   const bw = fr.width * g.k, bh = fr.height * g.k, big = new Uint8Array(bw * bh * 4)
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) big.set(fr.rgba.subarray(((Math.floor(y / g.k) * fr.width) + Math.floor(x / g.k)) * 4, ((Math.floor(y / g.k) * fr.width) + Math.floor(x / g.k)) * 4 + 4), (y * bw + x) * 4)
   const vw = Math.min(g.floorW, (g.cols * g.cw) / g.k), vh = Math.min(g.floorH, (g.rows * g.ch) / g.k)
@@ -45,6 +45,11 @@ function labels(room: RailRoom | WideRoom, w: number, h: number, cell: { w: numb
 describe("WCAG 1.4.3: text contrast", () => {
   test("every label in the wide room reads at 4.5:1 against what is behind it", () => {
     const got = labels(new WideRoom(696), 696, WIDE_H, { w: 8, h: 18 }, 174, 51)
+    expect(got.length).toBeGreaterThan(20)
+    for (const l of got) expect({ ...l, ratio: contrast(l.text, l.behind) >= MIN_CONTRAST }).toMatchObject({ ratio: true })
+  })
+  test("and in full dark, with the floor dimmed and the lamps lit", () => {
+    const got = labels(new WideRoom(696), 696, WIDE_H, { w: 8, h: 18 }, 174, 51, new Date(2026, 2, 6, 3, 0))
     expect(got.length).toBeGreaterThan(20)
     for (const l of got) expect({ ...l, ratio: contrast(l.text, l.behind) >= MIN_CONTRAST }).toMatchObject({ ratio: true })
   })

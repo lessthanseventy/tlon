@@ -53,7 +53,8 @@ export function bossDesk(sc: Scene, a: Agents, d: DeskAt) {
     for (let i = 0; i < 3; i++) sc.px(sx - 7 + i * 6, d.y + 1, 2, 2, ROLE.body)
   })
   sc.item(d.y + 25, () => {
-    sc.blit(figure(BOSS_LOOK, null, false, true, "down", "sit", 0, (f + BOSS_LOOK.blink) % 13 === 0), sx - 6, d.y + 5, paints(ROLE.attention, BOSS_LOOK))
+    const pj = sc.dark
+    sc.blit(figure(BOSS_LOOK, null, false, !pj, "down", "sit", 0, (f + BOSS_LOOK.blink) % 13 === 0), sx - 6, d.y + 5, pj ? { ...paints(ROLE.planner, BOSS_LOOK), p: ROLE.planner } : paints(ROLE.attention, BOSS_LOOK))
   })
   sc.item(d.y + 30, () => {
     for (const mx of [d.x + 1, sx + 6]) { sc.px(mx, d.y + 11, 10, 7, ROLE.inactive); sc.px(mx + 1, d.y + 12, 8, 5, ROLE.edge); sc.px(mx + 4, d.y + 18, 2, 1, ROLE.inactive) }
@@ -88,6 +89,7 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
     sc.px(d.x + 2, d.y + 22, d.w - 4, 9, ROLE.borderInactive)
     sc.px(d.x + 8, d.y + 25, 4, 1, ROLE.body); sc.px(d.x + d.w - 12, d.y + 25, 4, 1, ROLE.body)
     sc.blit(["sss.", ".s..", ".s..", "ooo."], d.x + d.w - 6, d.y + 15, { s: ROLE.body, o: ROLE.inactive })
+    sc.lamps.push([d.x + d.w - 5, d.y + 15])
     const th = threadOf(d.seat.thread_id)
     if (d.kind === "manager") {
       const routed = a.tickets.filter((x) => x.routed).length
