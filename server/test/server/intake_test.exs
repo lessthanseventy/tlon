@@ -49,6 +49,16 @@ defmodule Server.IntakeTest do
     assert id == older.id
   end
 
+  test "a held ticket is never routed — the next one goes instead", %{ws: ws, route: route} do
+    held = file(ws, "renderer first", "high")
+    {:ok, _} = Tickets.update(held, %{labels: ["held"]})
+    next = file(ws, "soon")
+
+    Intake.run(cap: 4, route: route)
+    assert_received {:routed, id}
+    assert id == next.id
+  end
+
   test "a blocked ticket waits for its blocker to be done", %{ws: ws, route: route} do
     blocker = file(ws, "first", "low")
     blocked = file(ws, "second", "high")
@@ -130,6 +140,16 @@ defmodule Server.IntakeTest do
       assert %{stage: "build", agent_id: agent} = thread = Server.Repo.get!(Server.Thread, tid)
       assert agent == lead.agent_id
       assert Enum.any?(Server.Channel.thread_messages(thread), &(&1.body =~ "not staffed in 30 minutes"))
+    end
+
+    test "is left alone when the manager held it — the label says it waits on something", %{ws: ws, route: route} do
+      held = routed(ws, "mailbox", 31)
+      {:ok, _} = Tickets.update(held, %{labels: ["whimsy", "held"]})
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "todo"} = Tickets.get(held.id)
+      assert Tickets.threads_of(held.id) == []
     end
 
     test "is left with the manager inside the 30 minutes", %{ws: ws, route: route} do

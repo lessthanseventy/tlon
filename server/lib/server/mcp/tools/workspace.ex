@@ -202,7 +202,7 @@ defmodule Server.MCP.Tool.ListTickets do
 end
 
 defmodule Server.MCP.Tool.UpdateTicket do
-  @moduledoc "Update a ticket's status/priority/title/body/assignee. `id` identifies it; a missing ticket is refused."
+  @moduledoc "Update a ticket's status/priority/title/body/assignee/labels. `id` identifies it; a missing ticket is refused."
   use Server.MCP.Tool
 
   alias Server.MCP
@@ -211,6 +211,7 @@ defmodule Server.MCP.Tool.UpdateTicket do
   schema do
     field :id, :integer, required: true, description: "The ticket id"
     field :status, :enum, values: ["backlog", "todo", "doing", "done"], description: "Move the ticket"
+    field :labels, {:list, :string}, description: "Replace its labels; `held` keeps intake from routing or starting it"
     field :priority, :enum, values: ["low", "med", "high"]
     field :title, :string
     field :body, :string

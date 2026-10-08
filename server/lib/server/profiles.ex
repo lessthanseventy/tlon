@@ -429,6 +429,9 @@ defmodule Server.Profiles do
       pass `ticket_id: N` to `staff_child` so the ticket moves into the thread you open. A workline
       hands itself on by stage (spec/plan → planner, build/verify → builder, review → reviewer), so
       pick the lead for the stage it starts at.
+    * A ticket you can't staff yet because it waits on something: `update_ticket` it to backlog
+      with the `held` label and the reason in its body. Intake leaves a held ticket alone (never
+      routes it, never auto-starts it) until you take the label off.
   NEVER launch a harness yourself (no `claude`/`pi` via shell): a bare spawn is invisible to the
   board, posts to no thread, and dies with your session.
 

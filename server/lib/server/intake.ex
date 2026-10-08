@@ -10,7 +10,8 @@ defmodule Server.Intake do
   so a long night leaves a reviewable pile, not an endless one. A routed ticket the manager hasn't
   started within `@stalled_after` is started by intake itself, with the workspace's lead
   (`Server.Tickets.start_thread/1`), and the sheriff told: a handed-over ticket never holds a slot
-  in silence. Run by `Server.Jobs.Intake` on the cron.
+  in silence. A ticket the manager labelled `held` (it waits on something; the why in its body) is
+  neither routed nor started until the label comes off. Run by `Server.Jobs.Intake` on the cron.
   """
   import Ecto.Query
 
@@ -65,7 +66,7 @@ defmodule Server.Intake do
 
   defp start_stalled(opts) do
     after_s = opts[:stalled_after] || Server.OperatorConfig.setting("stalled_ticket_minutes") * 60
-    for ticket <- stalled(after_s), do: start_stalled_ticket(ticket)
+    for ticket <- stalled(after_s), not held?(ticket), do: start_stalled_ticket(ticket)
   end
 
   defp start_stalled_ticket(ticket) do
@@ -87,7 +88,9 @@ defmodule Server.Intake do
 
     from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog")
     |> Repo.all()
-    |> Enum.reject(&MapSet.member?(blocked, &1.id))
+    |> Enum.reject(&(MapSet.member?(blocked, &1.id) or held?(&1)))
     |> Enum.min_by(&{Map.get(@urgency, &1.priority, 1), -(&1.sort || 0), -&1.id}, fn -> nil end)
   end
+
+  defp held?(%Ticket{labels: labels}), do: is_list(labels) and "held" in labels
 end
