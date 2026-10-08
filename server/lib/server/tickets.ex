@@ -58,15 +58,31 @@ defmodule Server.Tickets do
     end
   end
 
-  @doc "A thread closed: every ticket started into it (`promoted`) that is not done yet is done now."
+  @doc """
+  A thread closed: every ticket started into it (`promoted`) that is not done yet is done now —
+  unless the thread is a workline that never merged. Its work didn't land, so the ticket stays
+  `doing`, and the Maintain sweep returns a `doing` ticket with no open thread to the backlog.
+  """
   def done_for(thread_id) do
+    case Repo.get(Server.Thread, thread_id) do
+      %Server.Thread{stage: stage} when not is_nil(stage) and stage != "merged" -> :ok
+      _ -> thread_id |> promoted(&(&1 != "done")) |> Enum.each(&__MODULE__.update(&1, %{status: "done"}))
+    end
+  end
+
+  @doc "A merged workline came back (reopened, or its PR conflicted): its done tickets are `doing` again."
+  def undone_for(thread_id) do
+    thread_id |> promoted(&(&1 == "done")) |> Enum.each(&__MODULE__.update(&1, %{status: "doing"}))
+  end
+
+  defp promoted(thread_id, status?) do
     from(t in Ticket,
       join: tt in TicketThread,
       on: tt.ticket_id == t.id,
-      where: tt.thread_id == ^thread_id and tt.kind == "promoted" and t.status != "done"
+      where: tt.thread_id == ^thread_id and tt.kind == "promoted"
     )
     |> Repo.all()
-    |> Enum.each(&__MODULE__.update(&1, %{status: "done"}))
+    |> Enum.filter(&status?.(&1.status))
   end
 
   @doc """

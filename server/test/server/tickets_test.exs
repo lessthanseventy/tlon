@@ -118,13 +118,33 @@ defmodule Server.TicketsTest do
       assert %{status: "todo"} = Tickets.get(t.id)
     end
 
-    test "closing the thread a ticket was started into marks the ticket done" do
+    test "a ticket is done when its workline merges — not when its thread is closed mid-stage" do
       {:ok, ws} = Workspaces.create(%{name: "Closing"})
-      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "ship it"})
-      {:ok, thread} = Tickets.start_thread(t)
+      {:ok, dropped} = Tickets.file(%{workspace_id: ws.id, title: "abandoned at build"})
+      {:ok, shipped} = Tickets.file(%{workspace_id: ws.id, title: "ship it"})
+      {:ok, at_build} = Tickets.start_thread(dropped)
+      {:ok, landing} = Tickets.start_thread(shipped)
 
-      assert {:ok, _} = Channel.close_thread(thread)
+      assert {:ok, _} = Channel.close_thread(at_build)
+      assert %{status: "doing"} = Tickets.get(dropped.id)
+
+      {:ok, merged} = landing |> Server.Thread.workline_stage_changeset(%{stage: "merged"}) |> Server.Repo.update()
+      assert {:ok, _} = Channel.close_thread(merged)
+      assert %{status: "done"} = Tickets.get(shipped.id)
+    end
+
+    test "a merged workline sent back (its PR conflicted) takes its ticket back to doing" do
+      {:ok, ws} = Workspaces.create(%{name: "Reland"})
+      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "the garden tile"})
+      {:ok, thread} = Tickets.start_thread(t)
+      {:ok, merged} = thread |> Server.Thread.workline_stage_changeset(%{stage: "merged"}) |> Server.Repo.update()
+      {:ok, _} = Channel.close_thread(merged)
       assert %{status: "done"} = Tickets.get(t.id)
+
+      {:error, {:bounced, _}} =
+        Server.Workline.reland(Server.Repo.get!(Server.Thread, thread.id), "its PR #9 conflicts")
+
+      assert %{status: "doing"} = Tickets.get(t.id)
     end
 
     test "route with no manager on the bench starts the ticket with the lead" do

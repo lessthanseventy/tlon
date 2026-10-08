@@ -477,6 +477,7 @@ defmodule Server.Workline do
   """
   def reland(%Thread{stage: "merged"} = thread, why) do
     Server.Channel.reopen_if_closed(thread.id)
+    Server.Tickets.undone_for(thread.id)
 
     bounce(
       Repo.get!(Thread, thread.id),
