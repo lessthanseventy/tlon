@@ -605,6 +605,36 @@ defmodule Server.MCP.ServerTest do
     assert first.body =~ "slice by slice"
   end
 
+  test "staff_child with no lead takes the server's pick by grade: the greybeard for greybeard work" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Picking"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "junior"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", grade: "greybeard"})
+    {:ok, manager} = Staff.register_agent(%{name: "tertius", mandate: "route", engine: "fresh"})
+    {:ok, home} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, agent_id: manager.id})
+    token = MCP.Tokens.mint(home, manager)
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r =
+      call(token, session, 4, "staff_child", %{
+        "title" => "add a column",
+        "brief" => "Write the migration.",
+        "grade" => "greybeard"
+      })
+
+    refute r["isError"]
+    assert decode_tool_json(r)["lead"] == "hronir"
+
+    r =
+      call(token, session, 5, "staff_child", %{
+        "title" => "tweak a label",
+        "brief" => "Rename the lamp's tooltip.",
+        "grade" => "junior"
+      })
+
+    assert decode_tool_json(r)["lead"] == "daneri"
+  end
+
   test "staff_child and spawn_crew refuse a blank brief, opening nothing", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "hronir-machine", mandate: "build", engine: "fresh"})
     Application.put_env(:server, :crew, Server.Crew.Test)

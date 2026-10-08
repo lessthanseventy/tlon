@@ -714,21 +714,50 @@ defmodule Server.Workline do
   defp restaff(%Thread{workspace_id: nil} = thread, kind), do: restaff_miss(thread, kind, "no workspace bound")
 
   # One coworker, one workline: a lead already of this kind keeps it (spec→plan, build→verify);
-  # else the first of the kind not leading another live workline (one only waiting on the operator
-  # does not count — its session waits in its own window); else, the kind being on the bench but
-  # all busy, one more is hired. A kind the bench lacks is never invented.
+  # else the best of the kind not leading another live workline by grade × specialty (Roster.pick;
+  # one only waiting on the operator does not count — its session waits in its own window); else,
+  # the kind being on the bench but all busy, one more is hired. A kind the bench lacks is never invented.
   defp restaff(thread, kind) do
-    of_kind = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == kind))
+    bench = Server.Workspaces.bench(thread.workspace_id)
+    of_kind = Enum.filter(bench, &(&1.archetype == kind))
     current = Server.Channel.thread_lead(thread.id)
+    free = Enum.reject(of_kind, &leading_another?(&1, thread))
 
     cond do
-      of_kind == [] -> restaff_miss(thread, kind, "no #{kind} on the workspace's bench")
-      Enum.any?(of_kind, &(&1.name == current)) -> thread
-      free = Enum.find(of_kind, &(not leading_another?(&1, thread))) -> hand_to(thread, kind, free.name)
-      true -> hire_for(thread, kind, of_kind)
+      of_kind == [] ->
+        restaff_miss(thread, kind, "no #{kind} on the workspace's bench")
+
+      Enum.any?(of_kind, &(&1.name == current)) ->
+        thread
+
+      free != [] ->
+        builder = Enum.find(bench, &(&1.name == current))
+        candidates = Enum.map(free, &%{coworker: &1, model: seat_model(thread.workspace_id, &1)})
+        {pick, short} = Server.Roster.pick(candidates, wanted(thread, kind, builder))
+        hand_to(thread, kind, pick.name, shortfall(short, builder, thread.workspace_id))
+
+      true ->
+        hire_for(thread, kind, of_kind)
     end
   rescue
     e -> restaff_miss(thread, kind, Exception.message(e))
+  end
+
+  @doc """
+  The server's pick of a `kind` on `workspace_id`'s bench for an ask (`text`), when a manager
+  names no lead (`staff_child`): free seats first (leading no other live workline), by the grade
+  the manager gave (else `Server.Roster.wanted_grade/2`'s) and the area the ask names. nil for a
+  bench with none of the kind.
+  """
+  def suggest_lead(workspace_id, kind, text, grade \\ nil) do
+    of_kind = workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == kind))
+    free = Enum.reject(of_kind, &leading_another?(&1, %Thread{id: 0}))
+    want = %{grade: Server.Roster.wanted_grade(text, grade), specialty: Server.Roster.specialty_of(text)}
+
+    case Server.Roster.pick(Enum.map(if(free == [], do: of_kind, else: free), &%{coworker: &1, model: nil}), want) do
+      {%Server.Coworker{name: name}, _} -> name
+      nil -> nil
+    end
   end
 
   @doc """
@@ -791,14 +820,14 @@ defmodule Server.Workline do
   end
 
   # Already theirs: nothing to hand over, and nothing to announce.
-  defp hand_to(thread, kind, name) do
+  defp hand_to(thread, kind, name, note \\ nil) do
     if Server.Channel.thread_lead(thread.id) == name do
       thread
     else
       case Server.Channel.assign_lead(thread.id, name) do
         {:ok, restaffed} ->
           close_leaf(restaffed)
-          post_brief(restaffed, "→ #{name} leads (#{thread.stage} stage)")
+          post_brief(restaffed, "→ #{name} leads (#{thread.stage} stage)#{note}")
           restaffed
 
         {:error, reason} ->
@@ -867,5 +896,34 @@ defmodule Server.Workline do
     e ->
       require(Logger) &&
         Logger.warning("workline #{thread.slug}: merged, but its close-out failed: #{Exception.message(e)}")
+  end
+
+  # what the stage's lead should be: the grade and area the ask names; for a review, also not the
+  # builder's model and no lower than the builder's grade (roster design §3)
+  defp wanted(thread, kind, builder) do
+    opening = Server.Channel.opening_operator_message(thread.id)
+    text = Enum.join([thread.title, opening && opening.body], "\n")
+    base = %{grade: Server.Roster.wanted_grade(text, nil), specialty: Server.Roster.specialty_of(text)}
+
+    if kind == "reviewer" and builder,
+      do: Map.merge(base, %{not_model: seat_model(thread.workspace_id, builder), min_grade: builder.grade || "senior"}),
+      else: base
+  end
+
+  defp seat_model(ws, %Server.Coworker{name: name, archetype: archetype}) do
+    entry = Server.Profiles.roster_entry(%{"name" => name, "archetype" => archetype})
+    if entry.archetype, do: Server.Profiles.instantiate(entry, ws).model[:model]
+  end
+
+  defp shortfall([], _builder, _ws), do: nil
+
+  defp shortfall(short, builder, ws) do
+    why =
+      Enum.map(short, fn
+        :same_model -> "no free reviewer runs another model than the builder's (#{seat_model(ws, builder)})"
+        :below_grade -> "no free reviewer is at the builder's grade (#{builder.grade || "senior"})"
+      end)
+
+    " — " <> Enum.join(why, "; ") <> ". Say so in review.md's first line."
   end
 end

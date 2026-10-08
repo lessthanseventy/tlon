@@ -228,6 +228,35 @@ defmodule Server.WorklineTest do
     assert Channel.thread_lead(thread.id) == "menard"
   end
 
+  describe "review staffing by grade and model (roster design §3)" do
+    defp to_review(names_grades) do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Graded #{System.unique_integer([:positive])}"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", grade: "senior"})
+
+      for {name, grade} <- names_grades,
+          do: {:ok, _} = Server.Workspaces.seat(ws.id, %{name: name, archetype: "reviewer", grade: grade})
+
+      thread = open!(%{slug: "graded-#{System.unique_integer([:positive])}", stage: "build", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(thread.id, "emma")
+      {:ok, thread} = Workline.advance(Server.Repo.get!(Server.Thread, thread.id), artifacts: AllPresent)
+      {:ok, at_review} = Workline.advance(thread, artifacts: AllPresent)
+      at_review
+    end
+
+    test "the reviewer is on another model than the builder, at no lower a grade" do
+      at_review = to_review([{"tzinacan", "senior"}, {"ulrikke", "junior"}, {"lonnrot", "greybeard"}])
+      assert at_review.stage == "review"
+      assert Channel.thread_lead(at_review.id) == "lonnrot"
+    end
+
+    test "with only the builder's model free, the review still runs and is told to say so" do
+      at_review = to_review([{"tzinacan", "senior"}])
+      assert Channel.thread_lead(at_review.id) == "tzinacan"
+      brief = at_review |> Channel.thread_messages() |> Enum.map(& &1.body) |> Enum.find(&(&1 =~ "tzinacan leads"))
+      assert brief =~ "review.md's first line"
+    end
+  end
+
   defmodule Merges do
     @moduledoc false
     def merge(repo, slug, opts \\ []) do

@@ -403,7 +403,11 @@ defmodule Server.Profiles do
       (title, lead, brief) opens a CHILD thread parented at this one, staffed and stood up as a proper
       server citizen (its own window, board-visible). Re-point an existing thread's lead with
       `assign_lead` (thread_id, handle). Pick the lead from the workspace roster by fit — build → the
-      builder, review → the reviewer, plan → the planner. For a bounded in-thread task (review a diff,
+      builder, review → the reviewer, plan → the planner — or leave `lead` out and pass `grade`
+      (junior for small mechanical changes, greybeard for migrations, gates and the spec, else senior):
+      the server picks the free seat of that grade whose specialty matches the area the brief names.
+      The brief carries what is being checked or built (the text, file or diff); an empty one is
+      refused. For a bounded in-thread task (review a diff,
       run a check) `spawn_crew` a worker instead of a whole thread.
     * A TICKET arrives as `@you intake — ticket #N: …` from the operator. Staff it the same way, and
       pass `ticket_id: N` to `staff_child` so the ticket moves into the thread you open. A workline
