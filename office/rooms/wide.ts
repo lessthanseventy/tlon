@@ -244,6 +244,8 @@ export class WideRoom extends Sim<Layout> {
     this.tvSet.step()
     return true
   }
+  /** the lounge TV flashes the new level over whatever it was showing */
+  protected override levelUp(level: number) { super.levelUp(level); this.tvSet.showLevel(level) }
   /** the remote: the next channel */
   channel() { this.tvSet.next() }
   /** the TUI calls this every ~2s with whatever playerctl reports (or null — no player running) */
