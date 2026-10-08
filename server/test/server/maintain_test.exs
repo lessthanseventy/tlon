@@ -240,6 +240,28 @@ defmodule Server.MaintainTest do
       assert text =~ Path.basename(held_wt) and text =~ "unmerged"
     end
 
+    test "a workline that just landed is not stranded while GitHub merges it; an hour on, it is", ctx do
+      {th, wt} = thread_with_tree(ctx, "just landed")
+      File.write!(Path.join(wt, "b.txt"), "landing\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "b.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "landing"])
+      {:ok, th} = th |> Server.Thread.workline_stage_changeset(%{stage: "merged"}) |> Server.Repo.update()
+      {:ok, _} = Server.Channel.close_thread(th)
+
+      {:ok, landed} =
+        Server.Dossier.record_event(%{
+          thread_id: th.id,
+          kind: "stage_advanced",
+          correlation: "workline:t",
+          detail: %{"from" => "review", "to" => "merged"}
+        })
+
+      assert Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded")) == []
+
+      landed |> Ecto.Changeset.change(created_at: DateTime.add(landed.created_at, -2, :hour)) |> Server.Repo.update!()
+      assert [%{kind: "stranded"}] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded"))
+    end
+
     test "an open thread's worktree is left alone", ctx do
       {_th, wt} = thread_with_tree(ctx, "in progress")
       sweep()

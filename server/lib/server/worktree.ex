@@ -168,8 +168,12 @@ defmodule Server.Worktree do
   # (`--not --branches` would include the branch itself; excluding it first makes the set honest.)
   # by change, not by hash: a rebase merge lands the same change on main as a new commit, so a
   # branch is unmerged only while it holds a change ("+" in git cherry) the main checkout lacks
+  # against origin's main where there is one: what GitHub merged is merged, however far this checkout
+  # lags behind it
   defp unmerged?(repo_path, branch) do
-    case git(repo_path, ["cherry", "HEAD", branch]) do
+    base = if branch_exists?(repo_path, "refs/remotes/origin/main"), do: "origin/main", else: "HEAD"
+
+    case git(repo_path, ["cherry", base, branch]) do
       {out, 0} -> out |> String.split("\n", trim: true) |> Enum.any?(&String.starts_with?(&1, "+"))
       _ -> true
     end
