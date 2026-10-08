@@ -77,6 +77,22 @@ defmodule Server.SwitchboardTest do
       refute_received {:woke, _, _}
     end
 
+    test "while a restart waits for quiet, nobody new is woken; a cancelled restart lets the message through" do
+      %{thread: thread} = staffed_thread()
+      on_exit(fn -> Server.Rollout.cancel_restart() end)
+
+      {:scheduled, _} =
+        Server.Rollout.restart(run: fn _ -> :ok end, busy: fn -> ["a coworker is mid-turn on #1"] end, poll_ms: 60_000)
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "how's it going?"})
+      assert {:pending, _} = Switchboard.deliver(m)
+      refute_received {:woke, _, _}
+
+      :ok = Server.Rollout.cancel_restart()
+      Switchboard.drain()
+      assert_received {:woke, "wSandra", _}
+    end
+
     test "the lead's own top-level post wakes no agent — it is a report up to the human" do
       %{thread: thread} = staffed_thread()
       {:ok, m} = Channel.post(%{thread_id: thread.id, author: "Sandra", body: "shipped the fix"})

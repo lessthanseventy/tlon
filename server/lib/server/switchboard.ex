@@ -70,10 +70,13 @@ defmodule Server.Switchboard do
     touch_author(message)
 
     # The pane is sitting on a dialog (Server.Attention): typing a message into it would answer
-    # the dialog with garbage. Hold; the drain re-delivers once the prompt is resolved.
-    if is_nil(message.delivered_at) and Server.Attention.waiting?(message.thread_id),
-      do: {:pending, message},
-      else: deliver_now(message)
+    # the dialog with garbage. Hold; the drain re-delivers once the prompt is resolved. A restart
+    # waiting for quiet holds every new wake too, so the bench drains instead of starting turns
+    # the restart would cut; the drain after it delivers them.
+    if is_nil(message.delivered_at) and
+         (Server.Attention.waiting?(message.thread_id) or Server.Rollout.restart_pending?()),
+       do: {:pending, message},
+       else: deliver_now(message)
   end
 
   defp deliver_now(%Message{} = message) do
@@ -114,29 +117,7 @@ defmodule Server.Switchboard do
   delivered.
   """
   def drain do
-    undelivered =
-      Repo.all(from m in Message, where: is_nil(m.delivered_at), order_by: [asc: m.id])
-
-    # Claim each message before collecting its recipients, so a wake is scoped to
-    # what THIS drain actually claimed — a message a concurrent deliver already took
-    # contributes nothing here.
-    reached = Enum.flat_map(undelivered, &claim_reached/1)
-
-    # Coalesce per recipient thread, keeping the COUNT §3b wants ("you have 50 unread") — one
-    # nudge per recipient, never one per message. A thread whose pane has closed gets its
-    # messages back as undelivered (its sessions ended), for the next drain to spawn someone.
-    reached
-    |> Enum.group_by(fn {session, _id} -> session.thread_id end)
-    |> Enum.each(fn {_thread_id, [{session, _} | _] = pairs} ->
-      case poke(session, "you have #{length(pairs)} unread message(s) on your threads") do
-        :gone ->
-          pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq_by(& &1.id) |> Enum.each(&end_gone/1)
-          pairs |> Enum.map(&elem(&1, 1)) |> unclaim()
-
-        _ ->
-          pairs |> Enum.map(&elem(&1, 0).id) |> Enum.uniq() |> Staff.touch_sessions(now())
-      end
-    end)
+    if Server.Rollout.restart_pending?(), do: :ok, else: drain_now()
   end
 
   @doc """
@@ -511,4 +492,30 @@ defmodule Server.Switchboard do
 
   defp prompt_for(%Message{author: author} = message, _elsewhere),
     do: prompt(message) <> " (It's from a thread you're not on: to answer #{author}, use consult_peer.)"
+
+  defp drain_now do
+    undelivered =
+      Repo.all(from m in Message, where: is_nil(m.delivered_at), order_by: [asc: m.id])
+
+    # Claim each message before collecting its recipients, so a wake is scoped to
+    # what THIS drain actually claimed — a message a concurrent deliver already took
+    # contributes nothing here.
+    reached = Enum.flat_map(undelivered, &claim_reached/1)
+
+    # Coalesce per recipient thread, keeping the COUNT §3b wants ("you have 50 unread") — one
+    # nudge per recipient, never one per message. A thread whose pane has closed gets its
+    # messages back as undelivered (its sessions ended), for the next drain to spawn someone.
+    reached
+    |> Enum.group_by(fn {session, _id} -> session.thread_id end)
+    |> Enum.each(fn {_thread_id, [{session, _} | _] = pairs} ->
+      case poke(session, "you have #{length(pairs)} unread message(s) on your threads") do
+        :gone ->
+          pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq_by(& &1.id) |> Enum.each(&end_gone/1)
+          pairs |> Enum.map(&elem(&1, 1)) |> unclaim()
+
+        _ ->
+          pairs |> Enum.map(&elem(&1, 0).id) |> Enum.uniq() |> Staff.touch_sessions(now())
+      end
+    end)
+  end
 end
