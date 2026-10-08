@@ -318,6 +318,20 @@ defmodule Server.WorklineTest do
       end
     end
 
+    test "a landing whose PR then conflicts with main: reopened and back to build, the builder told why" do
+      thread = open!(%{slug: "stranded", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+      {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+      {:ok, merged} = Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end)
+      assert %Server.Thread{state: "closed"} = Repo.get(Server.Thread, merged.id)
+
+      why = "its PR #73 conflicts with main"
+      assert {:error, {:bounced, ^why}} = Workline.reland(merged, why)
+      assert %Server.Thread{stage: "build", awaiting: nil, state: "open"} = Repo.get(Server.Thread, thread.id)
+      assert Enum.any?(Channel.thread_messages(merged), &(&1.body =~ "back to build" and &1.body =~ why))
+      assert {:ok, %{stage: "build"}} = Workline.reland(Repo.get(Server.Thread, thread.id), why)
+    end
+
     test "advance_stage at verify with no fresh evidence asks the server to verify — the lead's only way to" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       {:ok, t} = Workline.open(%{title: "v", slug: "asks-verify", stage: "verify"})

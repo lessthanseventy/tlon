@@ -1,7 +1,9 @@
 defmodule Server.Jobs.KeepUp do
   @moduledoc """
   Every few minutes, each project repo's landings that GitHub left behind main are rebased so their
-  auto-merge can go (`Server.Workline.Publish.refresh_behind/2`), and its main checkout is brought
+  auto-merge can go (`Server.Workline.Publish.refresh_behind/2`), those that now conflict with main
+  are closed and their worklines sent back to build (`Server.Workline.reland/2`) rather than left
+  stranded with their threads closed, and its main checkout is brought
   level with origin/main, fast-forward only (`follow_main/2`); one that has drifted is a note for
   the operator, never a merge.
   """
@@ -11,10 +13,21 @@ defmodule Server.Jobs.KeepUp do
   def perform(%Oban.Job{}) do
     for repo <- repos() do
       Server.Workline.Publish.refresh_behind(repo)
+      reland(repo)
       drifted(repo, Server.Workline.Publish.follow_main(repo))
     end
 
     :ok
+  end
+
+  defp reland(repo) do
+    for %{number: n, slug: slug} <- Server.Workline.Publish.conflicting(repo),
+        %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
+      why = "its PR ##{n} conflicts with main"
+
+      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to rebase it"),
+           do: Server.Workline.reland(t, why)
+    end
   end
 
   defp drifted(repo, {:diverged, n}) do

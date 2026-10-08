@@ -54,6 +54,32 @@ defmodule Server.Workline.Publish do
   end
 
   @doc """
+  Its landings GitHub can never merge: main moved under one after it landed and they now conflict
+  (`DIRTY`), which no `update-branch` fixes. Each open PR on a `work/*` branch so marked, as
+  `%{number, slug}`; a repo `gh` can't read is `[]`.
+  """
+  def conflicting(repo, run \\ &System.cmd/3) do
+    opts = [cd: repo, stderr_to_stdout: true]
+
+    with {out, 0} <-
+           run.("gh", ["pr", "list", "--state", "open", "--json", "number,headRefName,mergeStateStatus"], opts),
+         {:ok, prs} when is_list(prs) <- Jason.decode(out) do
+      for %{"number" => n, "headRefName" => "work/" <> slug, "mergeStateStatus" => "DIRTY"} <- prs,
+          do: %{number: n, slug: slug}
+    else
+      _ -> []
+    end
+  end
+
+  @doc "Close PR `number`, saying why; its branch stays for the next landing to push and open anew."
+  def close(repo, number, why, run \\ &System.cmd/3) do
+    case run.("gh", ["pr", "close", to_string(number), "--comment", why], cd: repo, stderr_to_stdout: true) do
+      {_, 0} -> :ok
+      {out, _} -> {:error, String.slice(out, 0, 200)}
+    end
+  end
+
+  @doc """
   Keep `repo`'s main checkout a mirror of origin/main: on `main`, fetch and fast-forward to it.
   Never a merge or a rewrite — local main with commits of its own is `{:diverged, ahead}` for the
   operator to sort out; a checkout on another branch is `:skipped`. `:forwarded` (or already level),
