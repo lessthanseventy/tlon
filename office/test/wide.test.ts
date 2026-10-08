@@ -49,11 +49,11 @@ describe("the wide room", () => {
 
   test("the room's pixels don't move: a golden hash per width", () => seeded(1, () => {
     const golden: Record<number, string> = {
-      540: "a9a9d8dce689c99eac5436700d0df5b07f7ec6aa7bdd64ed398a657a863c91ef",
-      560: "e846d5869c487239225c195b42771838f695ffa100f9b333134c54a9cf650fcc",
-      640: "32999cf367fd0268b2d9ffde9c2a64a74e5c23fc6df2f34b69dba6f344ef2497",
-      696: "a5387283aa6886b1425df2d0b4ead0829e170548321c6d5fa481d83822b12ebc",
-      900: "7de32912edff5def1b63a987b8f9591d65b691ab1fb0b875bd88d9c47b6a902c",
+      540: "3b4f86aedd4dfdd5cd96b5f57a1e2998d7c11e3fc52de9405a93c8344e28af2d",
+      560: "d3f274db0f2b111d95e44d35dd32d1efa519205834658e1762026d5ac9c35bc5",
+      640: "79dd81c1c358a629b5c517ef1373423df2bba6c6a70d2978cff7b3d17b9af6ea",
+      696: "02d0fb17e3487380a28bf3457b89e334d8341f4d1b5bff38d8478829e21b321b",
+      900: "d2d9564ab1fff2a8baebe8e9f3ab0a4d8aa3c5e59c8d57cb13604c0412a36c85",
     }
     for (const [w, hash] of Object.entries(golden)) {
       const room = new WideRoom(Number(w)), a = viewOf(office(6), 1)

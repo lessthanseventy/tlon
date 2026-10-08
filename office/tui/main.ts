@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
-import { boardColumns, busiest, COLS, crewOf, needsYou, viewOf, type Act } from "../kit/crew"
+import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
@@ -95,6 +95,11 @@ let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 
 const view = () => viewOf(all, ws)
+/** what the board reads beyond the snapshot: the leaf cap, and which threads are on the needs list */
+const boardCtx = (): BoardCtx => {
+  const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
+  return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])) }
+}
 const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); return r }
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
 const wsName = (id = ws) => all.workspaces.find((w) => w.id === id)?.name ?? "—"
@@ -136,7 +141,9 @@ function goWs(id: number) { choose(id); back(true); frame = null; void refresh()
 // ── staying current ───────────────────────────────────────────────────────────────────────────
 async function refresh() {
   const before = all, beforeNeeds = needs
-  ;[all, needs] = await Promise.all([data.status(), data.needs()])
+  let knobs: data.Settings | null
+  ;[all, needs, knobs] = await Promise.all([data.status(), data.needs(), data.settings()])
+  settings = knobs ?? settings
   if (officeRev === undefined && all.ok) officeRev = all.revs?.office ?? null
   settleWorkspace()
   if (all.ok && before.ok) tellNews(before, beforeNeeds)
@@ -394,6 +401,7 @@ function threadActions(tid: number, inReader = false): Action[] {
     { key: "r", label: "reply", run: () => reply(tid) },
     ...(th?.awaiting && th.stage ? [{ key: "A", label: `approve: ${th.awaiting}`, run: () => void did(data.approve(tid)) }] : []),
     ...(th?.stage ? [{ key: ">", label: "advance the workline", run: () => void did(data.advance(tid)) }] : []),
+    ...(th && cardState(view(), th, boardCtx())?.atCap ? [{ key: "S", label: "raise the cap (settings)", run: () => { if (reader) closeReader(); open({ kind: "settings" }) } }] : []),
     { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) },
     { key: "g", label: "git (lazygit)", run: () => void zoomGit(tid) },
     ...(th?.stage ? [{ key: "d", label: "read its docs (spec, plan…)", run: () => void pickDoc(tid) }] : []),
@@ -495,10 +503,13 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
       ...(th?.live ? [{ s: "  ● running", fg: ROLE.live }] : []),
     ],
   })
+  // a board card's state, and the one thing that moves it
+  const st = th && (th.stage || (th.lead && !th.standing)) ? cardState(view(), th, boardCtx()) : null
+  if (th && st) { const n = nextStep(th, st); out.push({ segs: [stateSeg(st), { s: st.why, fg: st.kind === "needs" ? ROLE.attention : ROLE.prose }, dim("  → "), key(`${n.key} `), plain(n.label)] }) }
   if (th?.prompt) {
     out.push({ segs: [pink("asks: "), plain(th.prompt.summary)] })
     th.prompt.options?.forEach((o, i) => out.push({ segs: [key(` ${i + 1} `), plain(o.label)], open: () => did(data.post(tid, o.key)) }))
-  } else if (th?.awaiting) out.push({ segs: [pink(`awaits ${th.awaiting}${th.stage ? " — A approves" : ""}`)] })
+  } else if (th?.awaiting && !st) out.push({ segs: [pink(`awaits ${th.awaiting}${th.stage ? " — A approves" : ""}`)] })
   // a running coworker's screen, as it is now — unless you flipped to the conversation
   const screen = th?.live && !talkView.has(tid) ? screens.get(tid) : undefined
   if (screen) {
@@ -519,6 +530,16 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   out.push(...tail.slice(-room))
   if (!v?.messages.length && v?.peek) for (const l of v.peek.split("\n").filter((x) => x.trim()).slice(-4)) out.push({ segs: [dim(l)] })
   return out
+}
+/** a card state's glyph: ▶ running, ⏸ parked, ⚑ needs you */
+const stateSeg = (st: CardState): Seg => ({ s: `${STATE_GLYPH[st.kind]} `, fg: st.kind === "running" ? ROLE.live : st.kind === "needs" ? ROLE.attention : ROLE.inactive, bold: true })
+/** the one thing to do about a board card, by where it stands */
+function nextStep(th: Thread, st: CardState): { key: string; label: string } {
+  const options = th.prompt?.options?.length ?? 0
+  if (st.kind === "needs" && options) return { key: options > 1 ? `1–${Math.min(9, options)}` : "1", label: "answer it" }
+  if (st.kind === "needs" && th.awaiting && th.stage) return { key: "A", label: `approve: ${th.awaiting}` }
+  if (st.atCap) return { key: "S", label: "raise the cap in settings" }
+  return { key: "v", label: "open the reader" }
 }
 const ago = (at: string) => {
   const s = Math.max(0, (Date.now() - new Date(at).getTime()) / 1000)
@@ -626,7 +647,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `THREAD #${tid}${th?.stage ? ` · workline ${th.stage}` : ""}`, rows: threadRows(th, tid), tint: th?.awaiting || th?.prompt ? ROLE.attention : th?.lead ? authorColor(th.lead) : ROLE.key, actions: [...liveActions(tid), ...threadActions(tid), back1] }
     }
     case "column": {
-      const col = boardColumns(a)[mode.col]!, items = col.items
+      const col = boardColumns(a, boardCtx())[mode.col]!, items = col.items
       const it = pick(items, sel)
       const reorder = (dir: "up" | "down"): Action => ({ key: dir === "up" ? "K" : "J", label: `move ${dir}`, run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), items.length - 1)); draw() }) } })
       return {
@@ -634,7 +655,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         rows: items.map((x) => {
           const blocked = x.act.kind === "ticket" && (tickets.find((t) => t.id === (x.act as { id: number }).id)?.blocked_by.length ?? 0) > 0
           return {
-            segs: [key(x.act.kind === "ticket" ? `#${x.act.id} ` : x.act.kind === "thread" ? `#${x.act.tid} ` : ""), plain(x.title), dim(`  ${x.stage}${x.who ? ` · ${x.who}` : ""}`), ...(x.asks ? [pink("  waiting on you")] : []), ...(blocked ? [pink("  ⊘ blocked")] : [])],
+            segs: [...(x.state ? [stateSeg(x.state)] : []), key(x.act.kind === "ticket" ? `#${x.act.id} ` : x.act.kind === "thread" ? `#${x.act.tid} ` : ""), plain(x.title), dim(`  ${x.stage}${x.who ? ` · ${x.who}` : ""}`),
+              ...(x.state ? [{ s: `  ${x.state.why}`, fg: x.state.kind === "needs" ? ROLE.attention : ROLE.inactive }] : x.asks ? [pink("  waiting on you")] : []), ...(blocked ? [pink("  ⊘ blocked")] : [])],
             open: () => act(x.act),
           }
         }),
@@ -1059,7 +1081,7 @@ function draw() {
   // the room
   const room0 = room()
   const fresh = !frame
-  if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread() }, measureFor(g)); roomChanged = false }
+  if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g)); roomChanged = false }
   const seen = clipFrame(frame!, viewport)
   if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, viewport); sentImage = true; imageDirty = false }
   if (!g.kitty) textLayer(seen, g, viewport).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })

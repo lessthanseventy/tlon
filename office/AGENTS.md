@@ -1,7 +1,9 @@
 # office — the pixel-art room over the server
 
 The office is the server's state as a room: coworkers at desks when they work, in the lounge when
-idle, queued at your door when a thread waits on you; the whiteboard holds the worklines, the crew
+idle, queued at your door when a thread waits on you; the whiteboard holds the worklines, each
+marked where it stands (`cardState` in `kit/crew.ts`: ▶ its lead is on it, ⏸ parked and why — the
+leaf cap or its lead — ⚑ it needs you; a thread's card names the one key that moves it), the crew
 board who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
 terminals the TUI zooms into (`tui/terminal.ts`: tmux control mode on the workspace's tmux, one
 linked window at a time, Ctrl-] back to the room).
