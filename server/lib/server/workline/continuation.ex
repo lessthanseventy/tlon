@@ -29,12 +29,16 @@ defmodule Server.Workline.Continuation do
   @doc "Queue a continuation check for `thread_id`; never raises (an idle must not fail on it)."
   def schedule(thread_id) when is_integer(thread_id), do: Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id}))
 
-  @doc "Post a continuation when the thread's workline owes one. Opts: `artifacts:`, `max_turns:`."
+  @doc """
+  Post a continuation when the thread's workline owes one. Opts: `artifacts:`, `max_turns:`, and
+  `quiet: true` from the quiet-band sweep, where a workline whose artifact is there but that has
+  not moved is nudged to advance too — on an ordinary idle that is only a turn ending mid-stage.
+  """
   def run(thread_id, opts \\ []) do
     max = Keyword.get(opts, :max_turns, @default_max_turns)
 
     with %Thread{state: "open", awaiting: nil} = thread <- Repo.get(Thread, thread_id),
-         {:error, why} <- Workline.owed_status(thread, opts),
+         {:nudge, why, say} <- nudge(thread, opts),
          false <- Attention.waiting?(thread_id),
          false <- verifying?(thread),
          after_id = last_advance_id(thread_id),
@@ -43,10 +47,7 @@ defmodule Server.Workline.Continuation do
       Channel.post(%{
         thread_id: thread_id,
         author: "tlon",
-        body:
-          "↻ continue (#{sent + 1}/#{max}) — workline #{thread.slug} is at #{thread.stage} and its owed " <>
-            "artifact is not there: #{why}. #{land(thread.stage)}, or post on the thread " <>
-            "why you cannot.",
+        body: "↻ continue (#{sent + 1}/#{max}) — workline #{thread.slug} is at #{thread.stage} and #{say}",
         payload: %{"continue_after" => after_id}
       })
 
@@ -54,6 +55,25 @@ defmodule Server.Workline.Continuation do
     else
       {:budget, false, {thread, why, sent, after_id}} -> stuck(thread, why, sent, after_id)
       _ -> :ok
+    end
+  end
+
+  defp nudge(thread, opts) do
+    case Workline.owed_status(thread, opts) do
+      {:error, why} ->
+        {:nudge, why,
+         "its owed artifact is not there: #{why}. #{land(thread.stage)}, or post on the thread why you cannot."}
+
+      {:ok, have} ->
+        if opts[:quiet],
+          do:
+            {:nudge, "#{have}, but nobody advanced it",
+             "its artifact is there (#{have}) but it has not moved: if the stage's work is done, call " <>
+               "advance_stage; if not, carry on, or post on the thread what is left."},
+          else: :nothing
+
+      _ ->
+        :nothing
     end
   end
 

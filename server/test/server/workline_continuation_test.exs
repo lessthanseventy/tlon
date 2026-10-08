@@ -127,6 +127,20 @@ defmodule Server.Workline.ContinuationTest do
     assert continuations(plain.id) == []
   end
 
+  test "quiet for the band with its artifact there: a nudge to advance, or to say what is left", %{thread: t} do
+    :ok = Continuation.run(t.id, artifacts: Present, quiet: true)
+
+    assert [m] = continuations(t.id)
+    assert m.body =~ "↻ continue (1/3)"
+    assert m.body =~ "advance_stage"
+  end
+
+  test "quiet nudges spend the same budget: a lead that never advances is stuck, not sitting there", %{thread: t} do
+    for _ <- 1..4, do: :ok = Continuation.run(t.id, artifacts: Present, quiet: true)
+    assert length(continuations(t.id)) == 3
+    assert Enum.any?(Server.Channel.thread_messages(t), &(&1.body =~ "⚠ stuck at plan"))
+  end
+
   test "an explicit idle schedules the job; the stuck-harness sweep does not", %{thread: t} do
     start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
     {:ok, store} = Thinking.start_link(name: :continuation_thinking, max_seconds: 0, sweep_interval_ms: 60_000)
