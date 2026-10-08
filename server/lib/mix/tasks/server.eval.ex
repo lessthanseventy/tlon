@@ -3,8 +3,9 @@ defmodule Mix.Tasks.Server.Eval do
   @moduledoc """
   #{@shortdoc}.
 
-  Loads every scenario in `evals/` and runs it against an EPHEMERAL db (`.dev/funes_eval.db`,
-  recreated per run) — never the live or dev-scratch db. Deterministic scenarios are plain
+  Loads every scenario in `evals/` and runs it against its own Postgres database (`tlon_eval`,
+  dropped and recreated per run) — never the live or dev-scratch one, whatever `TLON_DATABASE`
+  the shell carries. Deterministic scenarios are plain
   asserts; judged scenarios go through the LLM judge (`Server.Eval.Judge.Claude`, cheap alias)
   and gate on a ≥3.5 average. `--deterministic` skips the judged set — the fast, offline mode
   `mix precommit` runs. Exits nonzero on any failure.
@@ -12,14 +13,17 @@ defmodule Mix.Tasks.Server.Eval do
   use Mix.Task
   use Boundary, classify_to: Server
 
-  @eval_db ".dev/funes_eval.db"
+  @eval_db "tlon_eval"
 
   @impl Mix.Task
   def run(argv) do
     mode = Server.Eval.mode(argv)
 
-    for suffix <- ["", "-wal", "-shm"], do: File.rm(@eval_db <> suffix)
-    System.put_env("TLON_DB", Path.expand(@eval_db))
+    # its own database, whatever this shell inherited: a coworker's session carries the service's
+    # TLON_DATABASE, and the scenarios open threads
+    System.delete_env("TLON_DATABASE_URL")
+    System.put_env("TLON_DATABASE", @eval_db)
+    Mix.Task.run("ecto.drop", ["--quiet", "--force-drop"])
     Mix.Task.run("ecto.create", ["--quiet"])
     Mix.Task.run("ecto.migrate", ["--quiet"])
     Mix.Task.run("app.start")
