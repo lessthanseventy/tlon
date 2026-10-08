@@ -77,6 +77,7 @@ export function peopleOf(a: Agents): Seat[] {
     const p = byName.get(r.agent) ?? { ...r, warm: false, thread_id: 0 }
     if (p.thread_id <= 0 || asksYou(r.agent, a.threads.find((t) => t.id === r.thread_id))) { p.thread_id = r.thread_id; p.title = r.title }
     p.warm = p.warm || r.warm
+    if (r.warmth !== undefined) p.warmth = Math.max(p.warmth ?? 0, r.warmth)
     p.thinking = !!(p.thinking || r.thinking)
     if (r.thinking && r.doing) p.doing = r.doing
     byName.set(r.agent, p)
