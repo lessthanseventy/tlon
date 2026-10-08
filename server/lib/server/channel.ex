@@ -136,6 +136,17 @@ defmodule Server.Channel do
       Repo.update_all(from(r in schema, where: r.thread_id == ^thread.id), set: [thread_id: nil])
     end
 
+    # what points INTO the rows about to go: unlinked, never deleted with them
+    sessions = from(r in Session, where: r.thread_id == ^thread.id, select: r.id)
+    messages = from(r in Message, where: r.thread_id == ^thread.id, select: r.id)
+    Repo.update_all(from(f in Fact, where: f.source_session_id in subquery(sessions)), set: [source_session_id: nil])
+    Repo.update_all(from(m in Message, where: m.reply_to in subquery(messages)), set: [reply_to: nil])
+    Repo.update_all(from(t in Thread, where: t.parent_thread_id == ^thread.id), set: [parent_thread_id: nil])
+
+    for schema <- [Server.Habit, Server.Playbook] do
+      Repo.update_all(from(r in schema, where: r.source_thread_id == ^thread.id), set: [source_thread_id: nil])
+    end
+
     for schema <- [Message, Todo, Question, Session] do
       Repo.delete_all(from(r in schema, where: r.thread_id == ^thread.id))
     end

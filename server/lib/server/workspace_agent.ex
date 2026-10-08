@@ -32,11 +32,20 @@ defmodule Server.WorkspaceAgent do
     |> cast(attrs, [:workspace_id, :agent_id | @mutable])
     |> validate_required([:workspace_id, :agent_id])
     |> validate_inclusion(:grade, @grades)
+    |> validate_archetype()
     |> unique_constraint([:workspace_id, :agent_id])
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
   end
 
   @doc "Edit a seat's archetype or order. Which workspace and which agent are its identity, not fields."
   def edit_changeset(%__MODULE__{} = seat, attrs),
-    do: seat |> cast(attrs, @mutable) |> validate_inclusion(:grade, @grades)
+    do: seat |> cast(attrs, @mutable) |> validate_inclusion(:grade, @grades) |> validate_archetype()
+
+  # one the role registry can't resolve would crash every read that instantiates the seat's profile
+  defp validate_archetype(cs) do
+    validate_change(cs, :archetype, fn :archetype, a ->
+      known = Enum.map(Map.keys(Server.Profiles.archetypes()), &Atom.to_string/1)
+      if a in known, do: [], else: [archetype: "unknown archetype #{inspect(a)} (one of: #{Enum.join(known, ", ")})"]
+    end)
+  end
 end

@@ -417,7 +417,7 @@ defmodule Server.Release.PM do
 
     files =
       for path <- paths -- deleted,
-          {text, 0} = git(root, ["show", "#{sha}:#{path}"]),
+          {text, 0} <- [git(root, ["show", "#{sha}:#{path}"])],
           not String.contains?(text, <<0>>),
           do: {path, text}
 

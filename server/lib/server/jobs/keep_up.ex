@@ -11,13 +11,18 @@ defmodule Server.Jobs.KeepUp do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    for repo <- repos() do
-      Server.Workline.Publish.refresh_behind(repo)
-      reland(repo)
-      drifted(repo, Server.Workline.Publish.follow_main(repo))
-    end
+    for repo <- repos(), do: keep_up(repo)
 
     :ok
+  end
+
+  # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others
+  defp keep_up(repo) do
+    Server.Workline.Publish.refresh_behind(repo)
+    reland(repo)
+    drifted(repo, Server.Workline.Publish.follow_main(repo))
+  rescue
+    e -> require(Logger) && Logger.error("keep_up #{repo}: #{Exception.message(e)}")
   end
 
   defp reland(repo) do
