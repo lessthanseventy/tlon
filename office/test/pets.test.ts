@@ -68,7 +68,7 @@ describe("the pets talk", () => {
     const idler = () => [...pets.actors.values()][0]!
     chance(0.999, () => { for (let i = 0; i < 3_000 && (i < 600 || idler().moving || idler().path.length); i++) room.step(a) })
     const settled = idler()
-    expect(["desk", "laptop", "queue"]).not.toContain(settled.spot.kind)
+    expect(["desk", "queue"]).not.toContain(settled.spot.kind)
     Object.assign(pets.cat, { x: settled.x + 10, y: settled.y, mode: "sit", path: [], purr: 0, stretch: 0 })
     chance(0, () => room.step(a))
     expect(pets.cat.fuss).toMatchObject({ kind: "pat" })

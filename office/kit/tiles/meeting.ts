@@ -1,8 +1,8 @@
-// The meeting room: a round table behind glass, two laptops a side for whoever's on call.
+// The meeting room: a round table behind glass.
 import type { Measure } from "../canvas"
 import type { Scene } from "../draw"
 import { ROLE } from "../palette"
-import { at, type Rect, type Tile } from "../tiles"
+import type { Rect, Tile } from "../tiles"
 import type { Agents } from "../types"
 import { BAND, MEET_BOTTOM, type Layout, type Zones } from "../../rooms/wide"
 
@@ -16,9 +16,7 @@ export function meetingTile(z: Zones): Tile<Layout> {
       { x: M0, y: MEET_BOTTOM - 1, w: MW / 2 - 9, h: 2 }, { x: Mc + 9, y: MEET_BOTTOM - 1, w: MW / 2 - 9, h: 2 },
       { x: Mc - 14, y: 76, w: 28, h: 20 },
     ],
-    spots: () => ({
-      laptop: [Mc - 22, Mc + 22].flatMap((x) => [81, 95].map((y) => at(x, y, 116, x < Mc ? "right" : "left", "laptop"))),
-    }),
+    spots: () => ({}),
     draw(sc: Scene, _a: Agents, _l: Layout, _m: Measure) {
       const px = sc.px.bind(sc), text = sc.text.bind(sc)
       sc.item(BAND, () => {
