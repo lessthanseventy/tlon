@@ -26,7 +26,7 @@ function office(state: { thinking: boolean; doing?: string | null }): Agents {
     roster: [{ agent: "hronir", thread_id: 100, title: "t", warm: false, workspace_id: 1, ...state }],
   }
 }
-type Pets = { cat: { x: number; y: number; mode: string; stretch: number; said: string | null; fuss: unknown; path: unknown[] }; dog: { x: number; mode: string; belly: number; said: string | null; path: unknown[] }; tick: number }
+type Pets = { cat: { x: number; y: number; mode: string; stretch: number; said: string | null; fuss: unknown; path: unknown[] }; dog: { x: number; y: number; fuss: unknown; mode: string; belly: number; said: string | null; path: unknown[] }; tick: number }
 const balloons = (room: WideRoom, a: Agents) => room.render(a, focus, measure).ink.filter((i) => i.t === "balloon")
 
 describe("the pets' sprites", () => {
@@ -88,7 +88,7 @@ describe("the pets talk", () => {
   test("Argos doesn't wander off for the paper mid-fuss", () => {
     const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), pets = room as unknown as Pets
     chance(0.999, () => { for (let i = 0; i < 3_000 && (i < 600 || pets.dog.mode === "sleep" || pets.dog.path.length); i++) room.step(a) })
-    pets.dog.fuss = { kind: "pat", from: { x: pets.dog.x, y: pets.dog.y }, until: 1e9 } as typeof pets.dog.fuss
+    pets.dog.fuss = { kind: "pat", from: { x: pets.dog.x, y: pets.dog.y }, until: 1e9 }
     chance(0, () => room.step(a))
     expect(ARGOS.paper).not.toContain(pets.dog.said!)
   })
