@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { lifeBar, lifeHeader } from "../kit/life"
+import { lifeBar, lifeHeader, lifeRows } from "../kit/life"
 import { EMPTY } from "../kit/types"
 
 describe("lifeBar", () => {
@@ -17,5 +17,19 @@ describe("lifeHeader", () => {
   test("a workspace with no life entry has no header", () => {
     expect(lifeHeader(a, 8)).toBeNull()
     expect(lifeHeader(a, null)).toBeNull()
+  })
+})
+
+describe("lifeRows", () => {
+  const s = { xp: 650, level: 2, next_level_at: 900, streaks: { "1": 3 },
+    due: [{ routine_id: 1, title: "teeth", due_at: "2026-10-08T07:00:00Z", window_remaining: 600 },
+          { routine_id: 2, title: "stretch", due_at: "2026-10-08T09:00:00Z", window_remaining: -60 }],
+    quests: [{ id: 5, title: "book dentist", due_at: null, xp: 20 }], today: [] }
+  test("due routines first (overdue flagged), then open quests", () => {
+    expect(lifeRows(s).map((r) => [r.kind, r.id, r.text])).toEqual([
+      ["routine", 2, "stretch · overdue"],
+      ["routine", 1, "teeth · 10m left · streak 3"],
+      ["quest", 5, "book dentist · +20 xp"],
+    ])
   })
 })
