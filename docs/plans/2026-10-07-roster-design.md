@@ -1,7 +1,8 @@
-# The roster — fifteen names, one coworker — design
+# The roster — sixteen names, one coworker — design
 
 **Date:** 2026-10-07
-**Status:** approved by Andrew (calls in §7); nothing built. Six steps in §8.
+**Status:** approved by Andrew (calls in §7); step 1 done. Seven steps in §8; Sonny (§5, step 7)
+was added after approval and its seat is a proposal.
 **Asked:** Andrew: *"make sure hronir is doing what he should, that everyone has a clearly defined
 role, and that we aren't missing any roles/SMEs/different personalities amongst the same role.
 juniors vs. greybeards for like haiku->fable? … let's just use what we have and like make it what
@@ -144,6 +145,7 @@ missing roles:
 | scharlach | sheriff | senior | general | knows where the bodies are |
 | **beatriz** | planner → **pm** | senior | general | owns the release (other doc) |
 | **nolan** | builder → **qa** | senior | office | stages the play and watches the audience |
+| **sonny** | builder (new) | junior | general | sunny; brings a flower to every handoff |
 
 **hronir becomes what it was supposed to be:** the one greybeard builder, kept for hard
 builds. It stops being the default for everything. That needs the routing fix in §6.
@@ -152,6 +154,14 @@ builds. It stops being the default for everything. That needs the routing fix in
 `drive-office` and the scratch-release smoke run (release doc §4). Its prompt: after a workline
 that touches a user-visible surface passes review, drive the changed path as Andrew would, and
 post what you saw, with screen text. A finding goes back to the builder like a request_changes.
+
+**sonny** is the one name that isn't Borges'. It's drawn after Andrew's Sonny Angel figure, and
+it fills a real gap: the bench has no junior general builder, so scratch checks and grade-1
+tickets outside `office/` have no junior to go to. Once §6 routes by grade, tertius staffs those
+to sonny. Its look is a `looks.json` custom sprite: a yellow lion suit, a pastel petal mane
+(pink, blue, lavender), a pink bow at the neck, and a pink daisy with a yellow centre in one hand.
+It's built with the Dollies importer or editor (home-space doc §5.1, step 6), not a new drawing
+path.
 
 ## 6 · Routing, so the fields matter
 
@@ -189,6 +199,7 @@ post what you saw, with screen text. A finding goes back to the builder like a r
 | 4 | **Routing by grade × specialty; reviewer ≠ builder model; escalate up a grade** | intake picks a junior for a grade-1 `office/` ticket, a greybeard for a migration; a review whose only reviewer shares the builder's model says so in review.md |
 | 5 | **The seat table**: seed/bootstrap and the live bench updated | `select … from workspace_agent` matches §5 |
 | 6 | **QA archetype**: prompt, tools, the post-review QA pass on user-visible worklines | a driven workline with a broken `R` gets a QA finding before it lands |
+| 7 | **Sonny**: hire the seat (junior, general, the §5 voice line); draw its look into `looks.json` | `select … from workspace_agent` has sonny; the office shows the lion suit and daisy |
 
 Step 1 is a fix and goes first. Steps 2→3→4 stack. 5 needs 3. 6 can open after the release doc's
-smoke step exists.
+smoke step exists. 7 needs 5 for the seat, and Dollies step 6 for the look.
