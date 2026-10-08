@@ -725,17 +725,18 @@ defmodule Server.Workline do
   defp describe(other), do: to_string(other)
 
   @doc """
-  Whether a workline stands at its gate — a gated stage whose owed artifact is there, which is when
-  `advance` parks it — so an `awaiting` on it is that gate, which only an approval clears. Anywhere
-  else (an ungated stage, or a gated one whose artifact isn't written yet) it is a worker's question,
-  which a reply clears. A machine-born intent parks before its artifact by design: always a gate.
+  Whether a workline stands at its gate — a gated stage whose owed artifact is there (and at review,
+  no QA owed), which is when `advance` parks it — so an `awaiting` on it is that gate, which only an
+  approval clears. Anywhere else (an ungated stage, a gated one whose artifact isn't written yet, or
+  a review still owing QA) it is a worker's question, which a reply clears. A machine-born intent parks before its artifact by design: always a gate.
   `opts[:artifacts]` swaps the checker (tests).
   """
   def at_gate?(thread, opts \\ [])
   def at_gate?(%Thread{stage: "intent", born: "machine"}, _opts), do: true
 
   def at_gate?(%Thread{stage: stage} = thread, opts) do
-    stage in @gated and match?({:ok, _}, Keyword.get(opts, :artifacts, Git).check(thread, Map.fetch!(@owed, stage)))
+    stage in @gated and match?({:ok, _}, Keyword.get(opts, :artifacts, Git).check(thread, Map.fetch!(@owed, stage))) and
+      qa_cleared(thread, opts) == :ok
   rescue
     # an artifact that can't even be checked (no slug, no repo): the cautious reading, a gate
     _ -> true

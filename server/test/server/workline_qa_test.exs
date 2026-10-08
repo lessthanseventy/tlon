@@ -107,6 +107,23 @@ defmodule Server.WorklineQATest do
     assert Enum.any?(bodies(thread), &(&1 =~ "QA passed" and &1 =~ "HOME"))
   end
 
+  test "while QA is owed it is not at its gate: QA's question to the operator is a question, which a reply clears" do
+    {thread, opts} = at_review("asks", ["office/kit/room.ts"])
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
+
+    {:ok, asked} =
+      Thread |> Repo.get!(thread.id) |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
+
+    refute Workline.at_gate?(asked, opts)
+    assert Enum.all?(Server.Office.Needs.list(), &(&1.kind != "gate" or &1.thread_id != asked.id))
+
+    {:ok, _} = Server.Attention.respond(asked.id, "andrew", "go ahead, the slot is free")
+    assert %Thread{awaiting: nil} = answered = Repo.get!(Thread, asked.id)
+
+    {:ok, _} = Workline.qa_verdict(answered, "pass", "nolan", "=== after: R\n HOME", opts)
+    assert Workline.at_gate?(Repo.get!(Thread, thread.id), opts)
+  end
+
   test "an operator's approve can't land it past an owed QA" do
     {thread, opts} = at_review("held", ["office/kit/room.ts"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
