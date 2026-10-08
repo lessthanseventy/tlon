@@ -38,7 +38,9 @@ linked window at a time, Ctrl-] back to the room).
   office than main offers `R` to reload itself. A running coworker's card shows their live screen
   (captured, never resized; `c` the conversation, ⏎ step in). Under the room the pane splits: what you clicked on the left, what you can
   do to it on the right — each card's actions (`detail()`) are its keys, its clickable list and
-  its docs at once, so they cannot drift apart. Popups only where a choice needs a list (the finder).
+  its docs at once, so they cannot drift apart. A card's rows scroll (`tui/pane.ts`: with the
+  selection, or pgup/pgdn and the wheel, `↑/↓ N more` where rows hide); the foot lists the actions
+  the column can't show — all of them on a terminal too narrow for it — then the global keys. Popups only where a choice needs a list (the finder).
 
 ## Law
 
