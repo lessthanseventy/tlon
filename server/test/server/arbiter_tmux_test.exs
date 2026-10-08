@@ -207,6 +207,20 @@ defmodule Server.Arbiter.TmuxTest do
     refute Arbiter.Tmux.pending?(draft, sent)
   end
 
+  test "pending?: our text on a later line of a draft — a poke typed under an earlier one that never went" do
+    first = "New message on thread 145 from tlon: ⧗ approved — in the merge queue: it lands once rebased onto main"
+    second = "you have 1 unread message(s) on your threads"
+
+    # hronir's pane: a fresh session's boot ate the first poke's Enters, and the drain's poke landed under it
+    both =
+      "● agents-md: AGENTS.md loaded\n──────\n❯ #{first}\n  #{second}\n──────\n  ╭─────╮\n  │ ctx 0 │\n  ╰─────╯\n"
+
+    assert Arbiter.Tmux.pending?(both, second)
+    assert Arbiter.Tmux.pending?(both, first)
+    # the box's border and status lines below the draft are never read as part of it
+    refute Arbiter.Tmux.pending?("──────\n❯ \n──────\n  │ #{second} │\n", second)
+  end
+
   test "wake: when the Enter was swallowed — the text still in the input — it presses Enter again", %{thread: t} do
     Application.put_env(:server, :tmux_submit_delay_ms, 0)
     Application.put_env(:server, :tmux_confirm_ms, [10])
