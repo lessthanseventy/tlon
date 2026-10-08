@@ -35,6 +35,7 @@
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   post <id> <text…>              post as the operator
+#   post --as <citizen> <id> <text…>  post as an outside citizen (uqbar), never as the operator
 #   close-thread <id>              close a thread (its ticket is done; a child reports up)
 #   reopen <id>                    reopen a closed thread; a queued workline re-joins the merge queue if its approval stands
 #   reap                           the worktree sweep now: strays removed, the ones holding work kept with why
@@ -383,6 +384,14 @@ case "$cmd" in
     exec "$SERVER" rpc "{:ok, m} = Server.Channel.post(%{thread_id: $tid, author: \"tlon\", body: \"$(esc "$body")\"}); IO.puts(\"posted ##{m.id} to thread #$tid as tlon\")"
     ;;
   post)
+    if [ "${1:-}" = "--as" ]; then
+      # an outside citizen (uqbar, the operator's Claude Code session) posts signed as itself, never as
+      # the operator; Server.Outside refuses a seated coworker's name
+      as="${2:-}"; shift 2 || true; tid="${1:-}"; shift || true; body="$*"
+      { [ -n "$as" ] && int "$tid" && [ -n "$body" ]; } ||
+        { echo 'usage: tlon-cli.sh post --as <citizen> <thread-id> <message text…>' >&2; exit 2; }
+      exec "$SERVER" rpc "case Server.Outside.post($tid, \"$(esc "$as")\", \"$(esc "$body")\") do {:ok, m} -> IO.puts(\"posted ##{m.id} to thread #$tid as $(esc "$as")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); System.halt(1) end"
+    fi
     tid="${1:-}"; shift || true
     body="$*"
     { int "$tid" && [ -n "$body" ]; } ||
