@@ -135,12 +135,19 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
-  test "POST /api/restart refuses while a restart would cut something off, and says what" do
+  test "POST /api/restart while busy schedules it, says what it waits on; DELETE drops it" do
     :ok = Server.Presence.Thinking.thinking(987_654, "hronir")
-    on_exit(fn -> Server.Presence.Thinking.idle(987_654, "hronir") end)
 
-    assert {409, %{"busy" => lines}} = request_json(:post, "/api/restart", %{})
+    on_exit(fn ->
+      Server.Rollout.cancel_restart()
+      Server.Presence.Thinking.idle(987_654, "hronir")
+    end)
+
+    assert {202, %{"scheduled" => true, "waiting_on" => lines}} = request_json(:post, "/api/restart", %{})
     assert Enum.any?(lines, &(&1 =~ "#987654"))
+    assert {200, %{"restart_pending" => true}} = get_json("/api/settings")
+
+    assert {200, %{"restart_pending" => false}} = request_json(:delete, "/api/restart", %{})
   end
 
   test "GET/PATCH /api/settings read and change every runtime knob in the settings file" do

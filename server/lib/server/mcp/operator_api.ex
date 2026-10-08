@@ -32,7 +32,9 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/health           Office.Room.health (the service and its box: the rack)
       GET    /api/settings                every runtime knob from the settings file: {"knobs": [...]}
       PATCH  /api/settings                {key: value, ...} → OperatorConfig.put_settings (all checked, then written)
-      POST   /api/restart                 restart the service once quiet ({"force": true} anyway); 409 + {"busy"} when not
+      POST   /api/restart                 restart the service now if quiet, else schedule it for the first quiet
+                                          moment: 202 + {"scheduled", "waiting_on"} ({"force": true}: now anyway)
+      DELETE /api/restart                 drop a scheduled restart
       GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
       GET    /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
@@ -193,9 +195,14 @@ defmodule Server.MCP.OperatorAPI do
 
     case Server.Rollout.restart(force: b["force"] == true) do
       :ok -> json(conn, 202, %{restarting: true})
-      {:busy, lines} -> json(conn, 409, %{error: "a restart now would cut something off", busy: lines})
+      {:scheduled, lines} -> json(conn, 202, %{scheduled: true, waiting_on: lines})
       {:error, why} -> json(conn, 409, %{error: why})
     end
+  end
+
+  defp route(conn, "DELETE", "restart", []) do
+    :ok = Server.Rollout.cancel_restart()
+    json(conn, 200, settings())
   end
 
   defp route(conn, "PATCH", "settings", []) do
@@ -667,7 +674,7 @@ defmodule Server.MCP.OperatorAPI do
   defp refused(conn, :not_found), do: json(conn, 404, %{error: "not found"})
   defp refused(conn, why), do: json(conn, 409, %{error: inspect(why)})
 
-  defp settings, do: %{knobs: Server.OperatorConfig.knobs()}
+  defp settings, do: %{knobs: Server.OperatorConfig.knobs(), restart_pending: Server.Rollout.restart_pending?()}
 
   # the request body as a map (empty when there is none or it isn't a JSON object)
   defp body(conn) do
