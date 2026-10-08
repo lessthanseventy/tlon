@@ -61,3 +61,32 @@ describe("renderHome", () => {
     expect(hold.rgba.some((v, i) => v !== 0 && i % 4 === 3)).toBe(true)
   })
 })
+
+describe("weather on the garden", () => {
+  const garden: HomeTile = { kind: "garden", at: [0, 0] }
+  const wet = (kind?: string | null) => { const c = new Canvas(TILE, TILE); paintTile(c, 0, 0, garden, kind); return Buffer.from(c.rgba).toString("hex") }
+  test("rain, storm and snow each change the garden; clear, cloudy and unknown leave it as drawn", () => {
+    const dry = wet()
+    for (const k of ["clear", "partly", "cloudy", "fog", null, undefined]) expect(wet(k)).toBe(dry)
+    expect(wet("rain")).not.toBe(dry)
+    expect(wet("snow")).not.toBe(dry)
+    expect(wet("rain")).not.toBe(wet("snow"))
+    expect(wet("storm")).toBe(wet("rain"))
+  })
+  test("only the garden is out in it", () => {
+    for (const kind of CATALOGUE.filter((k) => k !== "garden")) {
+      const c = new Canvas(TILE, TILE); paintTile(c, 0, 0, { kind, at: [0, 0] }, "snow")
+      expect(Buffer.from(c.rgba).toString("hex")).toBe(paint({ kind, at: [0, 0] }))
+    }
+  })
+  test("snow piles on the fence: the fence row ends up lighter than it was", () => {
+    const c = new Canvas(TILE, TILE); paintTile(c, 0, 0, garden, "snow")
+    const d = new Canvas(TILE, TILE); paintTile(d, 0, 0, garden)
+    const sum = (k: Canvas) => Array.from(k.rgba.slice(0, TILE * 4)).reduce((a, b) => a + b, 0)
+    expect(sum(c)).toBeGreaterThan(sum(d))
+  })
+  test("renderHome paints the weather it is given", () => {
+    const g = { home: { tiles: [garden] } as never, cursor: [0, 0] as [number, number], carrying: null, refused: false, w: 60, h: 40 }
+    expect(Buffer.from(renderHome({ ...g, weather: "rain" }).rgba).equals(Buffer.from(renderHome(g).rgba))).toBe(false)
+  })
+})

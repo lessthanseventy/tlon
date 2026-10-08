@@ -56,14 +56,25 @@ const plainTile: TileArt = (c, x, y) => {
   c.px(x + 1, y + 1, TILE - 2, TILE - 2, floor())
 }
 
-export function paintTile(c: Canvas, x: number, y: number, t: HomeTile) {
-  (TILE_ART[t.kind] ?? plainTile)(c, x, y, t)
+/** the weather outside reaches the garden only: rain streaks the beds, snow caps the fence and flecks the ground */
+function weatherOnGarden(c: Canvas, x: number, y: number, weather: string) {
+  if (weather === "rain" || weather === "storm") {
+    for (let j = 2; j < TILE; j += 3) for (let i = (j % 2) * 2; i < TILE; i += 4) c.px(x + i, y + j, 1, 2, ROLE.key)
+  } else if (weather === "snow") {
+    c.px(x, y, TILE, 1, ROLE.body)
+    for (let j = 2; j < TILE; j += 3) for (let i = (j % 2) * 3; i < TILE; i += 6) c.px(x + i, y + j, 1, 1, ROLE.body)
+  }
 }
 
-export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number }
+export function paintTile(c: Canvas, x: number, y: number, t: HomeTile, weather?: string | null) {
+  (TILE_ART[t.kind] ?? plainTile)(c, x, y, t)
+  if (t.kind === "garden" && weather) weatherOnGarden(c, x, y, weather)
+}
+
+export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null }
 
 /** the build grid as a Frame of w×h logical px: every cell of `gridWindow`, centred; no text, no hits */
-export function renderHome({ home, cursor, carrying, refused, w, h }: HomeView): Frame {
+export function renderHome({ home, cursor, carrying, refused, w, h, weather }: HomeView): Frame {
   const c = new Canvas(w, h)
   c.px(0, 0, w, h, ROLE.ground)
   const win = gridWindow(home, cursor)
@@ -72,7 +83,7 @@ export function renderHome({ home, cursor, carrying, refused, w, h }: HomeView):
   for (let y = win.y0; y <= win.y1; y++) for (let x = win.x0; x <= win.x1; x++) {
     const [px, py] = pos([x, y])
     const t = home.tiles.find((q) => q.at[0] === x && q.at[1] === y)
-    if (t) paintTile(c, px, py, t)
+    if (t) paintTile(c, px, py, t, weather)
     else c.px(px, py, TILE, TILE, ROLE.raised)
   }
   const [cx, cy] = pos(cursor)
