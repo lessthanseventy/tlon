@@ -125,6 +125,12 @@ defmodule Server.OperatorConfig do
     }
   ]
 
+  @grade_defaults %{
+    "junior" => %{provider: "anthropic", model: "claude-haiku-5-5", thinking: "low"},
+    "senior" => %{provider: "anthropic", model: "claude-sonnet-5-5", thinking: "medium"},
+    "greybeard" => %{provider: "anthropic", model: "claude-fable-5-1", thinking: "high"}
+  }
+
   @doc "The settings file path (`config :server, :operator_config_path` override, else ~/.config/tlon/config.json)."
   @spec path() :: String.t()
   def path do
@@ -154,6 +160,25 @@ defmodule Server.OperatorConfig do
 
       _ ->
         nil
+    end
+  end
+
+  @doc """
+  The model a grade maps to: the config's `grades.<grade>` (`{provider, model, thinking}`), else
+  the compiled default — Claude at every grade, so a fresh install needs one subscription. nil
+  for no grade. In the `Server.Profile.model` shape.
+  """
+  @spec grade_model(String.t() | nil, String.t()) :: map() | nil
+  def grade_model(grade, path \\ path())
+  def grade_model(nil, _path), do: nil
+
+  def grade_model(grade, path) do
+    case get_in(read(path), ["grades", grade]) do
+      %{"provider" => prov, "model" => model} = m ->
+        %{provider: prov, model: model, thinking: m["thinking"] || "medium"}
+
+      _ ->
+        @grade_defaults[grade]
     end
   end
 
