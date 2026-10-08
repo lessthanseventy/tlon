@@ -1,21 +1,21 @@
-# Review — home-dollies-looks (round 2)
+# Review — home-dollies-looks (round 3, after the rebase onto 46f92a3)
 
 **Verdict: approve.**
 
-Round 1's blocker is fixed. The editor now saves through `trimCustom` (kit/looks.ts), so an all-"." view is dropped instead of drawing an invisible figure. The two new tests in test/looks.test.ts cover a front-only draw and a blank draw. The most recent `mise run check` on the branch exited 0 (server:check 9 passed, 0 failed, 1 skipped).
+This round only re-checks the rebase. The earlier approve (round 2) still holds: the `trimCustom` fix, the pngjs boundary and the live looks.json re-read are unchanged.
 
-I read the diff (`git diff main...HEAD`). I did not run the suite or drive the TUI myself.
+I read `git diff main...HEAD -- office/kit/sim.ts`, the file that conflicted. The resolution keeps both sides:
+- main's `warmth` and `cooled` fields are intact.
+- The branch's `lookGen` and `overrideFor` are merged into the `Actor` type, the look refresh on an existing actor, and the new-actor construction.
+- The branch is based on current main (merge-base 46f92a3).
 
-## Spec compliance
-- **pngjs boundary holds:** only `office/cli.ts` imports it. `kit/snap.ts` is pure, and nothing under `kit/` or `tui/` pulls in pngjs. This is the operator's condition.
-- **Mise task and live re-read:** `office:import-sprite` exists in `tasks/office.toml`. looks.json is re-read live, using the same mtime poll as palette.json.
-- **No change for agents without an entry:** the `Look` additions are optional, and `skinRole` falls back to `ROLE.prose`.
+The latest `mise run check` on the branch exited 0 (server:check 9 passed, 0 failed, 1 skipped).
 
-## Open minors (non-blocking; the builder already names 2–5)
-1. **Malformed `custom` can crash the render.** looks.json rows are not validated, and `overlay` does `rows[i]!.split`. A hand-edited `custom` with fewer than 22 rows, or one that is not an array, throws in `figure`, and the TUI's `uncaughtException` handler exits. The importer always writes 22×12, so only hand edits hit this. Validate shape in `useLookOverrides`, or drop a bad `custom`, as a follow-up.
-2. **Importer paint map ignores saved overrides.** `paints(shirtOf(null), lookOf(name))` skips `overrideFor`, so a saved `skinRole` is not used when snapping. It also uses the gold shirt, so `s`, `y` and `o` tie on colour and `s` always wins. Likewise `b`/`c` and `g`/`e` resolve to the first char. This is lossy but deterministic.
-3. **`esc` in the editor restores only the current view.** All drafts are discarded when the card reopens, so the effect is cosmetic.
-4. **Mirror applies in the side view.** It should be off or ignored there.
-5. **`saveLook` freezes every derived field** (hair, decor, blink and so on) into looks.json. Later changes to the hash-derived defaults will not reach an agent that was saved once.
-6. **`followLooks` never clears overrides** if looks.json is deleted or becomes invalid JSON. It keeps the last good set until restart.
-7. **`import-sprite` decodes the PNG twice** and crashes on invalid existing looks.json JSON. Fine for a dev tool.
+I did not run the suite or drive the TUI myself.
+
+## Open minors (non-blocking, carried from round 2)
+1. A malformed `custom` in a hand-edited looks.json can crash the render. Validate its shape in `useLookOverrides`.
+2. The importer's paint map ignores saved `skinRole` overrides.
+3. `esc` in the editor restores only the current view.
+4. The mirror toggle also applies in the side view.
+5. `saveLook` freezes every derived field into looks.json.
