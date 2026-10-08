@@ -8,6 +8,7 @@ import { loungeTile } from "../kit/tiles/lounge"
 import { meetingTile } from "../kit/tiles/meeting"
 import { officeTile } from "../kit/tiles/office"
 import { type Agents, EMPTY } from "../kit/types"
+import type { Tv } from "../kit/tv"
 import { WIDE_H, WideRoom, widePlan, zones } from "../rooms/wide"
 import { focus, frameHashes, GOLDEN, measure, office, seeded } from "./golden"
 
@@ -127,6 +128,7 @@ describe("the wide room", () => {
     expect(lvRoom.bpm()).toBeNull()
     lvRoom.step(lv(4))
     expect(lvRoom.bpm()).toBeGreaterThan(120)
+    expect((lvRoom as unknown as { tvSet: Tv }).tvSet.channel).toBe("level")
 
     // the small hours: someone at their desk yawns
     r.hour = () => 2
