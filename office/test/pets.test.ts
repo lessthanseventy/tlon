@@ -85,6 +85,14 @@ describe("the pets talk", () => {
     expect(balloons(room, a).some((b) => b.t === "balloon" && b.cx === pets.dog.x)).toBe(true)
   })
 
+  test("Argos doesn't wander off for the paper mid-fuss", () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), pets = room as unknown as Pets
+    chance(0.999, () => { for (let i = 0; i < 3_000 && (i < 600 || pets.dog.mode === "sleep" || pets.dog.path.length); i++) room.step(a) })
+    pets.dog.fuss = { kind: "pat", from: { x: pets.dog.x, y: pets.dog.y }, until: 1e9 } as typeof pets.dog.fuss
+    chance(0, () => room.step(a))
+    expect(ARGOS.paper).not.toContain(pets.dog.said!)
+  })
+
   test("the server's lines come first, none said twice while another is unsaid, the coworker named", () => chance(0.999, () => {
     const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), pets = room as unknown as Pets
     room.hear({ Nina: { pet: ["Adore me, {name}.", "Kneel."] } })
