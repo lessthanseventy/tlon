@@ -170,8 +170,9 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 - **History is linear.** GitHub's `main` is protected: rebase-merge only, every change through a PR.
   Rebase onto main, never merge it in, never make a merge commit; ship work as a PR branch, or a
   stack of small ones with `gh stack`. A workline's approval lands its branch the same way —
-  rebased, then fast-forwarded (`Server.Workline.Merge`) — and publishes it: the branch pushed, a PR
-  opened, auto-merged by GitHub once green (`Server.Workline.Publish`). Rewriting pushed history is the human's call.
+  rebased onto origin's main and gated (`Server.Workline.Merge`), then published: the branch pushed,
+  a PR opened, auto-merged by GitHub once green (`Server.Workline.Publish`). The checkout's own main
+  is never moved by a landing; it only follows origin. Rewriting pushed history is the human's call.
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
   that wrote it — YOUR model, read from the brief's `You are … (pi)` line (or `$PI_MODEL`), never a
   name copied from an example or another model's commit. Format: `Co-Authored-By: <your model> (pi)

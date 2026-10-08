@@ -1,7 +1,8 @@
 defmodule Server.Workline.Publish do
   @moduledoc """
-  An approved workline lands on this machine's main first (`Server.Workline.Merge`); this carries it
-  to GitHub, whose main takes only PRs: push `work/<slug>`, open a PR, and ask GitHub to rebase-merge
+  An approved workline's branch is rebased onto origin's main and gated (`Server.Workline.Merge`);
+  this carries it to GitHub, whose main takes only PRs — the only way a landing reaches main, which
+  this machine's checkout then follows: push `work/<slug>`, open a PR, and ask GitHub to rebase-merge
   it once its checks pass (`gh pr merge --auto`; with auto-merge off on the repo the PR stays open,
   its link on the thread). A repo with no `origin` is `:none` — nothing to publish to.
   """

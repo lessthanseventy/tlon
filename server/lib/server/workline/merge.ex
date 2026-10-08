@@ -1,18 +1,18 @@
 defmodule Server.Workline.Merge do
   @moduledoc """
-  The approved workline's last act: land its branch `work/<slug>` on `main` (first brought up to date
-  with its remote), linearly — the branch
-  is rebased onto main (in its worktree, where it is checked out), then main fast-forwards to it, as
-  the remote takes no merge commits. It runs in the checkout people work in, so it is careful: only
-  onto `main`, only with nothing uncommitted, and a conflict is aborted — main and the branch left
-  as they were. `{:ok, %{from, to}}` (the main commits before and after), or `{:error, why}` in
-  words the operator can act on.
+  The approved workline's landing, readied for GitHub: `work/<slug>` is rebased onto origin's main
+  (freshly fetched; in its worktree where it is checked out, else a throwaway one) and gated there.
+  `Server.Workline.Publish` then pushes it and GitHub rebase-merges it. Local `main` is never
+  touched — GitHub's merge gives the commits new ids, so a local fast-forward would hold copies that
+  differ from origin's; the checkout's main only ever follows origin. A conflict is aborted, the
+  branch left as it was. `{:ok, %{from, to}}` (origin's main, and the rebased branch tip), or
+  `{:error, why}` in words the operator can act on.
   """
 
   @doc """
-  Land `work/<slug>` on `main` in `repo`: rebase it onto main, fast-forward main. `opts[:gate]`, a
-  `fn repo, branch -> {:ok, _} | {:error, why} end`, runs on the rebased branch before main moves —
-  red, main stays where it was (the branch keeps its rebase).
+  Ready `work/<slug>` in `repo` to land: fetch origin, rebase the branch onto `origin/main`, gate it.
+  `opts[:gate]`, a `fn repo, branch -> {:ok, _} | {:error, why} end`, runs on the rebased branch —
+  red, the branch keeps its rebase.
   """
   @spec merge(String.t(), String.t(), keyword()) :: {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t()}
   def merge(repo, slug, opts \\ []) do
@@ -20,49 +20,15 @@ defmodule Server.Workline.Merge do
     gate = Keyword.get(opts, :gate, fn _repo, _branch -> {:ok, :no_gate} end)
 
     with {:ok, _} <- run(repo, ["rev-parse", "--verify", "--quiet", branch], "there is no branch #{branch}"),
-         {:ok, "main"} <- current(repo),
-         {:ok, _} <-
-           run(
-             repo,
-             ["diff", "--quiet"],
-             "#{repo} has uncommitted changes — commit or set them aside, then approve again"
-           ),
-         {:ok, _} <-
-           run(
-             repo,
-             ["diff", "--cached", "--quiet"],
-             "#{repo} has staged, uncommitted changes — commit them, then approve again"
-           ),
-         {:ok, _} <- sync(repo),
-         {:ok, from} <- run(repo, ["rev-parse", "HEAD"], "no HEAD"),
+         {:ok, _} <- run(repo, ["remote", "get-url", "origin"], "#{repo} has no origin to land on"),
+         {:ok, _} <- run(repo, ["fetch", "--quiet", "origin", "main"], "could not fetch origin"),
+         {:ok, from} <- run(repo, ["rev-parse", "origin/main"], "origin has no main"),
          {:ok, _} <- rebase(repo, branch),
          {:ok, _} <- gate.(repo, branch),
-         {:ok, _} <- run(repo, ["merge", "--ff-only", "--quiet", branch], "main could not fast-forward to #{branch}"),
-         {:ok, to} <- run(repo, ["rev-parse", "HEAD"], "no HEAD") do
+         {:ok, to} <- run(repo, ["rev-parse", branch], "no #{branch}") do
       {:ok, %{from: from, to: to}}
-    else
-      {:ok, other} -> {:error, "#{repo} is on #{other}, not main — the merge goes onto main"}
-      {:error, _} = e -> e
     end
   end
-
-  # main up to date with its remote first: what GitHub merged (as new commits, by rebase) is pulled
-  # in and this machine's copies of it drop out, so the landing builds on what GitHub has
-  defp sync(repo) do
-    case git(repo, ["remote", "get-url", "origin"]) do
-      {_, 0} ->
-        run(
-          repo,
-          ["pull", "--rebase", "--quiet", "origin", "main"],
-          "main could not be brought up to date with origin — sort it out, then approve again"
-        )
-
-      _ ->
-        {:ok, :no_remote}
-    end
-  end
-
-  defp current(repo), do: run(repo, ["symbolic-ref", "--short", "HEAD"], "#{repo} is not on a branch")
 
   # where the branch is checked out it can only be rebased there; elsewhere, in a throwaway worktree
   defp rebase(repo, branch) do
@@ -83,8 +49,10 @@ defmodule Server.Workline.Merge do
     end
   end
 
+  # rebase drops the commits whose patch origin already has: this machine's copies of what GitHub
+  # merged under new ids
   defp rebase_in(tree, branch) do
-    case git(tree, ["rebase", "--quiet", "main"]) do
+    case git(tree, ["rebase", "--quiet", "origin/main"]) do
       {_, 0} ->
         {:ok, :rebased}
 
@@ -92,7 +60,7 @@ defmodule Server.Workline.Merge do
         _ = git(tree, ["rebase", "--abort"])
 
         {:error,
-         "rebasing #{branch} onto main hit a conflict, aborted — main and the branch are as they were: #{out |> without_hints() |> String.slice(0, 300)}"}
+         "rebasing #{branch} onto origin/main hit a conflict, aborted — the branch is as it was: #{out |> without_hints() |> String.slice(0, 300)}"}
     end
   end
 

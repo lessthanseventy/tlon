@@ -42,7 +42,7 @@ and every layer the spine design's re-laid §9 asked for
 - **worklines** (`Server.Workline`) — a thread as a stage machine with git as the artifact chain
   (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
   entering verify queues the verifier on the service (`Server.Jobs.Verify`); approving review queues
-  the landing (`Server.Jobs.Land`, one at a time, gated on main before it moves — red bounces to build).
+  the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; GitHub merges it).
   An approving review is risk-graded by a model that didn't write it (`Server.Workline.Grade`, run by
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.

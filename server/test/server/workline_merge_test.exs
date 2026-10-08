@@ -1,14 +1,17 @@
 defmodule Server.Workline.MergeTest do
-  # Approving a review lands the workline's branch on main — in the checkout people work in, so only
-  # onto main, only clean, never half-done, and history stays linear (the remote takes no merge
-  # commits). Real git, temp repos.
+  # Approving a review lands the workline's branch: rebased onto origin's main and gated there, for
+  # GitHub to merge. The checkout people work in is never moved — its main follows origin on its own.
+  # Real git, temp repos with a bare origin.
   use ExUnit.Case, async: true
 
   alias Server.Workline.Merge
 
   setup do
     repo = Path.join(System.tmp_dir!(), "merge-test-#{System.pid()}-#{System.unique_integer([:positive])}")
+    remote = repo <> "-remote.git"
+    other = repo <> "-other"
     File.mkdir_p!(repo)
+    on_exit(fn -> Enum.each([repo, remote, other, repo <> "-wt"], &File.rm_rf!/1) end)
     git = fn args -> System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
     {_, 0} = git.(["init", "-q", "-b", "main"])
     {_, 0} = git.(["config", "user.email", "t@t"])
@@ -16,31 +19,79 @@ defmodule Server.Workline.MergeTest do
     File.write!(Path.join(repo, "a.txt"), "one\n")
     {_, 0} = git.(["add", "a.txt"])
     {_, 0} = git.(["commit", "-qm", "seed"])
+    {_, 0} = System.cmd("git", ["init", "-q", "--bare", "-b", "main", remote])
+    {_, 0} = git.(["remote", "add", "origin", remote])
+    {_, 0} = git.(["push", "-q", "-u", "origin", "main"])
+    {_, 0} = System.cmd("git", ["clone", "-q", remote, other])
     {_, 0} = git.(["checkout", "-qb", "work/finder"])
     File.write!(Path.join(repo, "b.txt"), "built\n")
     {_, 0} = git.(["add", "b.txt"])
     {_, 0} = git.(["commit", "-qm", "build"])
     {_, 0} = git.(["checkout", "-q", "main"])
-    on_exit(fn -> File.rm_rf!(repo) end)
-    %{repo: repo, git: git}
+    %{repo: repo, git: git, other: other}
   end
 
-  defp linear?(git), do: match?({"", 0}, git.(["rev-list", "--merges", "HEAD"]))
+  # something lands on GitHub's main that this machine has not fetched
+  defp land_upstream(other, file, text, subject) do
+    File.write!(Path.join(other, file), text)
 
-  test "fast-forwards main to work/<slug>, and says what moved", %{repo: repo, git: git} do
-    {before, 0} = git.(["rev-parse", "HEAD"])
-    assert {:ok, %{from: from, to: to}} = Merge.merge(repo, "finder")
-    assert from == String.trim(before) and to != from
-    assert File.read!(Path.join(repo, "b.txt")) == "built\n"
-    assert {^to, 0} = then(git.(["rev-parse", "work/finder"]), fn {o, c} -> {String.trim(o), c} end)
-    assert linear?(git)
+    for args <- [["add", file], ~w(-c user.email=t@t -c user.name=t commit -qm) ++ [subject], ~w(push -q origin main)],
+        do: {_, 0} = System.cmd("git", ["-C", other | args], stderr_to_stdout: true)
+
+    {sha, 0} = System.cmd("git", ["-C", other, "rev-parse", "HEAD"])
+    String.trim(sha)
   end
 
-  test "a gate runs on the rebased branch before main moves; red, main stays where it was", %{repo: repo, git: git} do
+  defp sha(git, ref) do
+    {out, 0} = git.(["rev-parse", ref])
+    String.trim(out)
+  end
+
+  defp subjects(git, ref) do
+    {out, 0} = git.(["log", "--format=%s", ref])
+    String.split(out, "\n", trim: true)
+  end
+
+  test "rebases work/<slug> onto origin's main and says what moved; local main never moves", %{
+    repo: repo,
+    git: git,
+    other: other
+  } do
+    main_before = sha(git, "main")
+    upstream = land_upstream(other, "theirs.txt", "from github\n", "theirs")
+
+    assert {:ok, %{from: ^upstream, to: to}} = Merge.merge(repo, "finder")
+    assert to == sha(git, "work/finder")
+    assert subjects(git, "work/finder") == ["build", "theirs", "seed"]
+    assert {"", 0} = git.(["rev-list", "--merges", "work/finder"])
+    assert sha(git, "main") == main_before
+    refute File.exists?(Path.join(repo, "b.txt"))
+  end
+
+  test "this machine's copies of what GitHub merged drop out of the rebased branch", %{
+    git: git,
+    repo: repo,
+    other: other
+  } do
+    # GitHub rebase-merged a change, so origin has it under another id than local main does
+    _ = land_upstream(other, "c.txt", "meanwhile\n", "meanwhile")
     File.write!(Path.join(repo, "c.txt"), "meanwhile\n")
     {_, 0} = git.(["add", "c.txt"])
-    {_, 0} = git.(["commit", "-qm", "meanwhile on main"])
-    {main_before, 0} = git.(["rev-parse", "main"])
+    {_, 0} = git.(["commit", "-qm", "meanwhile (local copy)"])
+    {_, 0} = git.(["rebase", "-q", "main", "work/finder"])
+    {_, 0} = git.(["checkout", "-q", "main"])
+
+    assert {:ok, _} = Merge.merge(repo, "finder")
+    assert subjects(git, "work/finder") == ["build", "meanwhile", "seed"]
+  end
+
+  test "a gate runs on the rebased branch; red, the branch keeps its rebase and main stays", %{
+    repo: repo,
+    git: git,
+    other: other
+  } do
+    _ = land_upstream(other, "c.txt", "meanwhile\n", "meanwhile on main")
+    main_before = sha(git, "main")
     me = self()
 
     red = fn r, branch ->
@@ -52,63 +103,44 @@ defmodule Server.Workline.MergeTest do
     assert {:error, "the gate is red"} = Merge.merge(repo, "finder", gate: red)
     assert_received {:gated, log}
     assert log =~ "build" and log =~ "meanwhile on main"
-    assert {^main_before, 0} = git.(["rev-parse", "main"])
-
-    assert {:ok, _} = Merge.merge(repo, "finder", gate: fn _, _ -> {:ok, :green} end)
-    assert File.read!(Path.join(repo, "b.txt")) == "built\n"
+    assert sha(git, "main") == main_before
   end
 
-  test "main having moved on, the branch is rebased onto it first — still no merge commit", %{repo: repo, git: git} do
-    File.write!(Path.join(repo, "c.txt"), "meanwhile\n")
-    {_, 0} = git.(["add", "c.txt"])
-    {_, 0} = git.(["commit", "-qm", "meanwhile on main"])
-
-    assert {:ok, _} = Merge.merge(repo, "finder")
-    assert File.read!(Path.join(repo, "b.txt")) == "built\n" and File.read!(Path.join(repo, "c.txt")) == "meanwhile\n"
-    assert linear?(git)
-    {subjects, 0} = git.(["log", "--format=%s"])
-    assert String.split(subjects, "\n", trim: true) == ["build", "meanwhile on main", "seed"]
-  end
-
-  test "a branch checked out in its own worktree is rebased there", %{repo: repo, git: git} do
+  test "a branch checked out in its own worktree is rebased there", %{repo: repo, git: git, other: other} do
     wt = repo <> "-wt"
     {_, 0} = git.(["worktree", "add", "-q", wt, "work/finder"])
-    on_exit(fn -> File.rm_rf!(wt) end)
-    File.write!(Path.join(repo, "c.txt"), "meanwhile\n")
-    {_, 0} = git.(["add", "c.txt"])
-    {_, 0} = git.(["commit", "-qm", "meanwhile on main"])
+    _ = land_upstream(other, "c.txt", "meanwhile\n", "meanwhile on main")
 
     assert {:ok, _} = Merge.merge(repo, "finder")
-    assert linear?(git)
     assert File.read!(Path.join(wt, "c.txt")) == "meanwhile\n"
   end
 
-  test "refuses a checkout with uncommitted changes, or one not on main — nothing touched", %{repo: repo, git: git} do
-    File.write!(Path.join(repo, "a.txt"), "edited\n")
-    assert {:error, why} = Merge.merge(repo, "finder")
-    assert why =~ "uncommitted"
-    {_, 0} = git.(["checkout", "-q", "a.txt"])
-
+  test "the live checkout's own state is not its business: dirty, or on another branch, it lands and nothing there moves",
+       %{repo: repo, git: git} do
     {_, 0} = git.(["checkout", "-qb", "elsewhere"])
-    assert {:error, why} = Merge.merge(repo, "finder")
-    assert why =~ "elsewhere"
+    File.write!(Path.join(repo, "a.txt"), "edited\n")
+    head = sha(git, "HEAD")
+
+    assert {:ok, _} = Merge.merge(repo, "finder")
+    assert {"elsewhere\n", 0} = git.(["symbolic-ref", "--short", "HEAD"])
+    assert sha(git, "HEAD") == head
+    assert File.read!(Path.join(repo, "a.txt")) == "edited\n"
   end
 
-  test "a conflict is aborted, leaving main and the branch as they were", %{repo: repo, git: git} do
+  test "a conflict is aborted, leaving main and the branch as they were", %{repo: repo, git: git, other: other} do
     {_, 0} = git.(["checkout", "-q", "work/finder"])
     File.write!(Path.join(repo, "a.txt"), "theirs\n")
     {_, 0} = git.(["commit", "-qam", "theirs"])
     {_, 0} = git.(["checkout", "-q", "main"])
-    File.write!(Path.join(repo, "a.txt"), "ours\n")
-    {_, 0} = git.(["commit", "-qam", "ours"])
-    {head, 0} = git.(["rev-parse", "HEAD"])
-    {tip, 0} = git.(["rev-parse", "work/finder"])
+    _ = land_upstream(other, "a.txt", "ours\n", "ours")
+    head = sha(git, "HEAD")
+    tip = sha(git, "work/finder")
 
     assert {:error, why} = Merge.merge(repo, "finder")
     assert why =~ "conflict" and why =~ "a.txt"
     refute why =~ "hint:"
-    assert {^head, 0} = git.(["rev-parse", "HEAD"])
-    assert {^tip, 0} = git.(["rev-parse", "work/finder"])
+    assert sha(git, "HEAD") == head
+    assert sha(git, "work/finder") == tip
     assert {"", 0} = git.(["status", "--porcelain"])
   end
 
@@ -118,33 +150,15 @@ defmodule Server.Workline.MergeTest do
   end
 
   test "a git step that fails says what git said, not only which step", %{repo: repo, git: git} do
-    {_, 0} = git.(["remote", "add", "origin", repo <> "-nowhere.git"])
+    {_, 0} = git.(["remote", "set-url", "origin", repo <> "-nowhere.git"])
     assert {:error, why} = Merge.merge(repo, "finder")
-    assert why =~ "could not be brought up to date"
+    assert why =~ "could not fetch origin"
     assert why =~ "nowhere.git"
   end
 
-  test "main is brought up to date with its remote first, so a landing builds on what GitHub has", %{
-    repo: repo,
-    git: git
-  } do
-    remote = repo <> "-remote.git"
-    on_exit(fn -> File.rm_rf!(remote) end)
-    {_, 0} = System.cmd("git", ["init", "-q", "--bare", "-b", "main", remote])
-    {_, 0} = git.(["remote", "add", "origin", remote])
-    {_, 0} = git.(["push", "-q", "-u", "origin", "main"])
-
-    # something lands on GitHub's main that this machine has not pulled
-    other = repo <> "-other"
-    on_exit(fn -> File.rm_rf!(other) end)
-    {_, 0} = System.cmd("git", ["clone", "-q", remote, other])
-    File.write!(Path.join(other, "theirs.txt"), "from github\n")
-
-    for args <- [~w(add theirs.txt), ~w(-c user.email=t@t -c user.name=t commit -qm theirs), ~w(push -q origin main)],
-        do: {_, 0} = System.cmd("git", ["-C", other | args])
-
-    assert {:ok, _} = Merge.merge(repo, "finder")
-    assert File.read!(Path.join(repo, "theirs.txt")) == "from github\n"
-    assert File.read!(Path.join(repo, "b.txt")) == "built\n"
+  test "a repo with no origin has nowhere to land", %{repo: repo, git: git} do
+    {_, 0} = git.(["remote", "remove", "origin"])
+    assert {:error, why} = Merge.merge(repo, "finder")
+    assert why =~ "no origin"
   end
 end
