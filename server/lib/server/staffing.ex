@@ -35,6 +35,9 @@ defmodule Server.Staffing do
 
   # a window this young is still booting — its coworker may not have registered a session yet
   @boot_grace_s 600
+  # a mid-turn mark older than this is a turn nothing will end (a restart cut the connection
+  # before its idle reached the server); turns here run tens of minutes, never hours
+  @stale_turn_s 3 * 3600
 
   @doc "The pass over every workspace."
   def pass do
@@ -132,7 +135,7 @@ defmodule Server.Staffing do
       select: {s.last_active_at, s.thinking_since}
     )
     |> Repo.all()
-    |> Enum.any?(fn {at, thinking} -> thinking != nil or Presence.warm_for?(at, agent, workspace_id) end)
+    |> Enum.any?(fn {at, thinking} -> live_turn?(thinking) or Presence.warm_for?(at, agent, workspace_id) end)
   end
 
   # A session still mid-turn with no window to run it: the machine went down under it. End it (so
@@ -270,4 +273,7 @@ defmodule Server.Staffing do
   end
 
   def pane_author(_tab), do: nil
+
+  defp live_turn?(nil), do: false
+  defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < @stale_turn_s
 end
