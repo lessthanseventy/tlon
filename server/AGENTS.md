@@ -50,7 +50,8 @@ and every layer the spine design's re-laid §9 asked for
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.
   Red — a red verify, a bounce, a stuck workline, a failed schedule run — goes to the workspace's
-  sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list.
+  sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list;
+  a beat incident resolved naming its PR is banked as a `postmortem:` fact.
 - **the PM** (`Server.Release.PM`, bench archetype `pm`) — what ships: `release_status`,
   `propose_release` (graded commit by commit with `Grade.assess/2`, the max per axis; under
   `auto_land_risk` it cuts, else one gate on the root thread — a window-less `prompt` answered through

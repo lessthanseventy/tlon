@@ -1,7 +1,7 @@
 # A PM and a release pointer — what's on main is not what's shipped — design
 
 **Date:** 2026-10-07
-**Status:** approved by Andrew (calls in §9). Six steps in §8; 1–5 built (step 4: the `pm` archetype, `Server.Release.PM`; beatriz holds the seat).
+**Status:** approved by Andrew (calls in §9). Six steps in §8, all built (step 4: the `pm` archetype, `Server.Release.PM`; beatriz holds the seat).
 **Asked:** Andrew: *"not every PR at work is releasable. is there someone … watching over the
 process at large and saying like 'if we were to release today, it should be this commit on main'
 … this is quite literally a software factory version of a real office so what metaphors are we
@@ -161,6 +161,11 @@ everyone; per-workspace actor gates are not wired yet.
 When a `Sheriff.report` incident is resolved, the sheriff writes a short "what broke, why, what
 changed (PR)" note and banks it as a fact. That way repeats show up as a pattern rather than as
 lore. That is its whole addition here.
+
+Built (step 6): an incident is an issue raised on the sheriff's beat. Resolving it with a resolution
+that names a PR (`#123` or a `/pull/123` URL) banks one derived fact on the beat —
+`postmortem: <summary> — <resolution>` (`Server.Sheriff.postmortem/1`, from
+`Dossier.resolve_issue/2`). The sheriff's prompt has it write the summary as what broke and why.
 
 ## 8 · Steps, each gated
 

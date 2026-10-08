@@ -85,4 +85,49 @@ defmodule Server.SheriffTest do
     assert [r] = reports(beat)
     assert r.body =~ "##{t.id}" and r.body =~ "a conflict in wide.ts"
   end
+
+  describe "postmortems — a resolved incident is banked as a fact" do
+    setup %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      {:ok, red} = Channel.open_thread(%{title: "argos", workspace_id: ws.id})
+      :ok = Sheriff.report(red, "verify is red: mise run check (exit 1)")
+      [beat] = beats(ws)
+      %{beat: beat}
+    end
+
+    defp facts(thread_id), do: Repo.all(from f in Server.Fact, where: f.thread_id == ^thread_id)
+
+    defp incident(thread_id),
+      do: Server.Dossier.raise_issue(%{thread_id: thread_id, summary: "the clock test read the wall clock"})
+
+    test "an incident resolved with its PR yields one fact with the PR linked", %{beat: beat} do
+      {:ok, issue} = incident(beat.id)
+      {:ok, _} = Server.Dossier.resolve_issue(issue, "froze the clock in the test, #123")
+
+      assert [fact] = facts(beat.id)
+      assert fact.text == "postmortem: the clock test read the wall clock — froze the clock in the test, #123"
+      assert fact.kind == "learned" and fact.provenance == "derived"
+
+      {:ok, _} = Server.Dossier.resolve_issue(Repo.get!(Server.Issue, issue.id), "again, #123")
+      assert [_] = facts(beat.id)
+    end
+
+    test "a PR URL links it too", %{beat: beat} do
+      {:ok, issue} = incident(beat.id)
+      {:ok, _} = Server.Dossier.resolve_issue(issue, "https://github.com/o/r/pull/77")
+      assert [fact] = facts(beat.id)
+      assert fact.text =~ "/pull/77"
+    end
+
+    test "no PR named, or an issue off the beat: no postmortem", %{beat: beat, ws: ws} do
+      {:ok, issue} = incident(beat.id)
+      {:ok, _} = Server.Dossier.resolve_issue(issue, "went away on its own")
+      assert facts(beat.id) == []
+
+      {:ok, elsewhere} = Channel.open_thread(%{title: "elsewhere", workspace_id: ws.id})
+      {:ok, other} = incident(elsewhere.id)
+      {:ok, _} = Server.Dossier.resolve_issue(other, "fixed in #9")
+      assert facts(elsewhere.id) == []
+    end
+  end
 end

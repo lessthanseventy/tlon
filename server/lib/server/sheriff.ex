@@ -9,6 +9,9 @@ defmodule Server.Sheriff do
 
   A workspace with no sheriff on its bench gets nothing here; its red verifies stay on the
   operator's list (`Server.Office.Needs`) instead.
+
+  An incident raised on the beat and resolved naming the PR that fixed it is banked as a
+  `postmortem:` fact on the beat, so a repeat shows up in recall as a pattern.
   """
   import Ecto.Query
 
@@ -48,6 +51,25 @@ defmodule Server.Sheriff do
       Logger.warning("sheriff report for ##{inspect(Map.get(source, :id))} failed: #{Exception.message(e)}")
       :ok
   end
+
+  @doc """
+  Bank a closed beat incident's postmortem — "postmortem: <what broke, why> — <the resolution>" — when
+  its resolution names a PR (`#123` or a `/pull/123` URL). `{:ok, fact}`, or nil when it is not one.
+  """
+  def postmortem(%Server.Issue{thread_id: thread_id, resolution: resolution} = issue)
+      when is_integer(thread_id) and is_binary(resolution) do
+    if resolution =~ ~r{#\d+|/pull/\d+} and
+         Repo.exists?(from t in Thread, where: t.id == ^thread_id and t.title == @beat) do
+      Server.Dossier.bank_fact(%{
+        thread_id: thread_id,
+        kind: "learned",
+        provenance: "derived",
+        text: "postmortem: #{issue.summary} — #{resolution}"
+      })
+    end
+  end
+
+  def postmortem(_issue), do: nil
 
   defp beat(workspace_id, sheriff) do
     case Repo.one(
