@@ -202,6 +202,7 @@ describe("the wide room", () => {
     expect(new Set(seated.map((h) => `${h.x},${h.y}`)).size).toBe(10)
   })
 
+  // 9000 ticks of the room: ~1.5 s alone, ten times that under the whole gate's load
   test("Argos keeps off the furniture, and gets around", () => seeded(13, () => {
     for (const w of [540, 696, 900]) {
       const room = new WideRoom(w), a = viewOf(office(6), 1), plan = widePlan(w), blocks = plan.blocks(plan.layout(a))
@@ -215,7 +216,7 @@ describe("the wide room", () => {
       }
       expect(seen.size).toBeGreaterThan(3)
     }
-  }))
+  }), 30_000)
 
   // up to 400k ticks of the room: seconds of CPU, more when the gate runs every suite at once
   test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => seeded(7, () => {
