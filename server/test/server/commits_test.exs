@@ -102,4 +102,20 @@ defmodule Server.CommitsTest do
     assert {:error, _} = Commits.list(Path.join(repo, "nope"), 1)
     assert Commits.for_thread(%Server.Thread{id: 1}) == %{shown: [], more: 0}
   end
+
+  test "push fence: a coworker pane pushes nothing itself — not even its own work/* branch; a terminal pushes", %{
+    repo: repo,
+    git: git
+  } do
+    remote = repo <> "-remote.git"
+    {_, 0} = System.cmd("git", ["init", "-q", "--bare", remote])
+    on_exit(fn -> File.rm_rf!(remote) end)
+    {_, 0} = git.(["remote", "add", "origin", remote], [])
+
+    assert {out, code} = git.(["push", "-q", "origin", "work/fixture"], [{"TLON_THREAD", "9"}])
+    assert code != 0
+    assert out =~ "push_branch"
+
+    assert {_, 0} = git.(["push", "-q", "origin", "work/fixture"], [])
+  end
 end

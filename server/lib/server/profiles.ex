@@ -343,7 +343,8 @@ defmodule Server.Profiles do
         "record_done",
         "record_check",
         "get_brief",
-        "propose_habit"
+        "propose_habit",
+        "push_branch"
       ],
       "excludeTools" =>
         ["register", "consult_peer", "open_thread", "close_thread"] ++

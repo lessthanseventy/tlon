@@ -110,4 +110,24 @@ defmodule Server.WorklinePublishTest do
       assert_received {:ran, ["gh", "pr", "close", "73", "--comment", "main moved under it"]}
     end
   end
+
+  describe "push_branch/3 — the one way a coworker's branch reaches GitHub" do
+    test "force-pushes a work/* branch with a lease" do
+      run = runner([])
+      assert :ok = Publish.push_branch("/repo", "work/tiles", run)
+      assert_received {:ran, ["git", "-C", "/repo", "push", "--force-with-lease", "origin", "work/tiles"]}
+    end
+
+    test "never main, nor any branch that isn't a thread's" do
+      run = runner([])
+      for b <- ["main", "fix/mine", "work/../main"], do: assert({:error, _} = Publish.push_branch("/repo", b, run))
+      refute_received {:ran, _}
+    end
+
+    test "a refused push says why" do
+      run = runner([{&match?(["git", "-C", "/repo", "push" | _], &1), {"stale info", 1}}])
+      assert {:error, why} = Publish.push_branch("/repo", "work/tiles", run)
+      assert why =~ "stale info"
+    end
+  end
 end

@@ -173,7 +173,9 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   stack of small ones with `gh stack`. A workline's approval lands its branch the same way —
   rebased onto origin's main and gated (`Server.Workline.Merge`), then published: the branch pushed,
   a PR opened, auto-merged by GitHub once green (`Server.Workline.Publish`). The checkout's own main
-  is never moved by a landing; it only follows origin. Rewriting pushed history is the human's call.
+  is never moved by a landing; it only follows origin. Rewriting pushed history is the human's call —
+  except a coworker's own thread branch: the server pushes `work/<slug>` for it, force-with-lease
+  (the `push_branch` tool), and a coworker pane's own `git push` is refused (`scripts/git-hooks/pre-push`).
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
   that wrote it — YOUR model, read from the brief's `You are … (pi)` line (or `$PI_MODEL`), never a
   name copied from an example or another model's commit. Format: `Co-Authored-By: <your model> (pi)

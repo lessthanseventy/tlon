@@ -118,6 +118,7 @@ defmodule Server.MCP.ServerTest do
                "start_ticket",
                "write_note",
                "get_notes",
+               "push_branch",
                # the PM's (pm-and-release design §1)
                "release_status",
                "check_candidate",
