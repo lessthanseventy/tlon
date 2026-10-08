@@ -204,3 +204,11 @@ describe("applyBuild: the TUI's build glue saves only when a change was written"
     expect(b.home.tiles).toEqual([])
   })
 })
+
+describe("place keeps a tile's rotation when it cycles the kind", () => {
+  test("rot survives cycling at an occupied cell", () => {
+    let b = startBuild({ tiles: [{ kind: "living", at: [0, 0], rot: 90 }] })
+    b = place(b)
+    expect(b.home.tiles).toEqual([{ kind: "kitchen", at: [0, 0], rot: 90 }])
+  })
+})
