@@ -4,8 +4,8 @@
 // connectivity is just grid adjacency — the rule a drop must keep: the floor stays one piece, or
 // the drop is refused.
 
-export type HomeTileKind = "living" | "kitchen" | "bathroom" | "bedroom" | "street"
-export const CATALOGUE: HomeTileKind[] = ["living", "kitchen", "bathroom", "bedroom", "street"]
+export type HomeTileKind = "living" | "kitchen" | "bathroom" | "bedroom" | "street" | "garden"
+export const CATALOGUE: HomeTileKind[] = ["living", "kitchen", "bathroom", "bedroom", "street", "garden"]
 
 export type Pt = [number, number]
 export type HomeTile = { kind: HomeTileKind; at: Pt; rot?: 0 | 90 | 180 | 270 }
