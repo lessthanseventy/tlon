@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Canvas } from "../kit/canvas"
 import { CATALOGUE, type HomeTile } from "../kit/home"
-import { SPRITES, TILE, TILE_ART, paintTile, rotated } from "../kit/homeart"
+import { SPRITES, TILE, TILE_ART, paintTile, renderHome, rotated } from "../kit/homeart"
+import { ROLE } from "../kit/palette"
 
 describe("rotated", () => {
   const s = ["abc", "def", "ghi"]
@@ -34,5 +35,29 @@ describe("sprites", () => {
     let called = 0
     TILE_ART.garden = (c, x, y) => { called++; c.px(x, y, TILE, TILE, "#112233") }
     try { expect(paint(garden)).not.toBe(plain); expect(called).toBe(1) } finally { delete TILE_ART.garden }
+  })
+})
+
+const home = { tiles: [{ kind: "living", at: [0, 0] }, { kind: "street", at: [1, 0] }] } as const
+const base = { home: home as never, cursor: [0, 0] as [number, number], carrying: null, refused: false, w: 200, h: 100 }
+
+describe("renderHome", () => {
+  test("a frame of the size asked, one bracket on the cursor", () => {
+    const f = renderHome(base)
+    expect([f.width, f.height, f.rgba.length]).toEqual([200, 100, 200 * 100 * 4])
+    const b = f.ink.filter((i) => i.t === "brackets")
+    expect(b.length).toBe(1)
+    expect(b[0]).toMatchObject({ color: ROLE.attention })
+  })
+  test("a refused drop turns the cursor alarm-coloured", () => {
+    expect(renderHome({ ...base, refused: true }).ink.find((i) => i.t === "brackets")).toMatchObject({ color: ROLE.alarm })
+  })
+  test("a carried tile shows at the cursor, dimmed against the same tile placed", () => {
+    const empty = { tiles: [{ kind: "street", at: [1, 0] }] } as never
+    const carrying = { kind: "living", at: [0, 0] } as never
+    const hold = renderHome({ ...base, home: empty, carrying })
+    const placed = renderHome({ ...base, home: { tiles: [carrying, { kind: "street", at: [1, 0] }] } as never })
+    expect(Buffer.from(hold.rgba).equals(Buffer.from(placed.rgba))).toBe(false)
+    expect(hold.rgba.some((v, i) => v !== 0 && i % 4 === 3)).toBe(true)
   })
 })
