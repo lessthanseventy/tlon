@@ -53,6 +53,9 @@ defmodule Server.Switchboard do
 
   require Logger
 
+  # a session active more than this after its wake made a call of its own: it heard the message
+  @heard_after 5
+
   @doc """
   Deliver one message (the live path): wake its addressed recipients (`recipients/1`),
   then stamp it delivered. A message no one live is addressed to stays undelivered
@@ -134,6 +137,42 @@ defmodule Server.Switchboard do
           pairs |> Enum.map(&elem(&1, 0).id) |> Enum.uniq() |> Staff.touch_sessions(now())
       end
     end)
+  end
+
+  @doc """
+  Hand back for re-delivery a wake nobody heard: a message delivered 10–30 minutes ago whose every
+  addressed session has made no call to the server since the wake itself (`@heard_after` of slack
+  for the wake's own warmth bump). That is a turn whose calls all failed — the server unreachable,
+  its working directory gone — ending on a promise to retry that nothing would otherwise keep. The
+  next `drain/0` wakes them again; past 30 minutes from its posting a message is let go (a routed
+  ticket has the intake's own rescue). Returns how many were handed back.
+  """
+  def redeliver_unheard(now \\ DateTime.utc_now()) do
+    since = DateTime.add(now, -30 * 60)
+    settled = DateTime.add(now, -10 * 60)
+
+    ids =
+      from(m in Message,
+        where: not is_nil(m.delivered_at) and m.delivered_at <= ^settled and m.created_at >= ^since
+      )
+      |> Repo.all()
+      |> Enum.filter(&unheard?/1)
+      |> Enum.map(& &1.id)
+
+    if ids != [], do: unclaim(ids)
+    length(ids)
+  end
+
+  defp unheard?(message) do
+    heard_by = DateTime.add(message.delivered_at, @heard_after)
+
+    case recipients(message) do
+      [] ->
+        false
+
+      sessions ->
+        Enum.all?(sessions, &(is_nil(&1.last_active_at) or DateTime.compare(&1.last_active_at, heard_by) != :gt))
+    end
   end
 
   # For drain: bump the author's warmth, then return the recipient sessions this call

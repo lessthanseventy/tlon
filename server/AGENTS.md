@@ -31,7 +31,8 @@ and every layer the spine design's re-laid §9 asked for
   the switchboard pokes the thread's lead / the @mentioned coworker / a reply's author through the
   arbiter behaviour (`Server.Arbiter.Tmux`). Coalesced (a backlog is one
   nudge), warmth-gated (a cold session is rotated onto a fresh, brief-seeded one, never poked), and
-  `drain/0` re-delivers on restart, so killing the BEAM loses nothing.
+  `drain/0` re-delivers on restart, so killing the BEAM loses nothing. A wake its addressee never
+  acted on (no call to the server since) is offered again for 30 minutes (`redeliver_unheard/1`).
 - **the MCP channel** (`Server.MCP.*`) — the sovereign door for any agent, `anubis_mcp` over Bandit,
   loopback-only. Identity rides the CONNECTION: a signed token resolves to (thread, agent, session) on
   every request, so no tool takes a thread parameter and every authenticated call bumps warmth. Tools

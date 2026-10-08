@@ -3,13 +3,15 @@ defmodule Server.Jobs.Drain do
   The switchboard's durability path as a recurring job (one-brain piece E, slice 1): every
   undelivered message is offered to whoever is live now, oldest first, coalesced per pane. It ran
   only on boot before; on Oban's cron it runs every minute, so a message posted while its
-  recipient was cold is delivered the moment a session appears. Idempotent — `drain/0` claims
+  recipient was cold is delivered the moment a session appears — and a wake its addressee never
+  acted on (`Server.Switchboard.redeliver_unheard/1`) is offered again. Idempotent — `drain/0` claims
   atomically, so a concurrent live delivery can never double-poke.
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 30]
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
+    _ = Server.Switchboard.redeliver_unheard()
     _ = Server.Switchboard.drain()
     :ok
   end

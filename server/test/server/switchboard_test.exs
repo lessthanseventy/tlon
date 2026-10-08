@@ -571,6 +571,47 @@ defmodule Server.SwitchboardTest do
     end
   end
 
+  describe "a wake nobody heard — the addressee never reached the server after it" do
+    # a message delivered `minutes` ago to Sandra, whose session was last active `active_ago` seconds ago
+    defp woken(minutes, active_ago) do
+      %{thread: thread, sandra_session: ss} = staffed_thread()
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "staff ticket #21"})
+      at = DateTime.utc_now() |> DateTime.shift(minute: -minutes) |> DateTime.truncate(:second)
+      {:ok, m} = m |> Ecto.Changeset.change(created_at: at, delivered_at: at) |> Repo.update()
+      set_last_active(ss, active_ago)
+      flush()
+      m
+    end
+
+    test "is delivered again: a turn whose every call failed (server down, cwd gone) gets its retry" do
+      m = woken(12, 12 * 60)
+
+      Switchboard.redeliver_unheard()
+      Switchboard.drain()
+
+      assert_received {:woke, "wSandra", _}
+      assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
+    end
+
+    test "is left alone once the addressee has acted since — they heard it" do
+      m = woken(12, 5 * 60)
+      Switchboard.redeliver_unheard()
+      assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
+    end
+
+    test "is left alone before 10 minutes — they may still be at it" do
+      m = woken(3, 3 * 60)
+      Switchboard.redeliver_unheard()
+      assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
+    end
+
+    test "is let go after 30 minutes — it stops trying" do
+      m = woken(45, 45 * 60)
+      Switchboard.redeliver_unheard()
+      assert Repo.get!(Message, m.id).delivered_at == m.delivered_at
+    end
+  end
+
   describe "Runner — the reactive live path over PubSub" do
     test "a posted message wakes its addressee without anyone calling deliver" do
       %{thread: thread} = staffed_thread()
