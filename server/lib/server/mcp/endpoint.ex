@@ -59,6 +59,8 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.SearchHistory, name: "search_history")
   component(Server.MCP.Tool.SearchFacts, name: "search_facts")
   component(Server.MCP.Tool.MachineOverview, name: "machine_overview")
+  # the manager's scheduled inbox sweep reads what waits on the operator
+  component(Server.MCP.Tool.OperatorInbox, name: "operator_inbox")
   # The Oracle: a second read from the OTHER subscription bucket (field survey §4 adopt #6).
   component(Server.MCP.Tool.ConsultOracle, name: "consult_oracle")
   # Playbooks: named procedures with success criteria (field survey §4 adopt #4).

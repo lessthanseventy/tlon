@@ -257,6 +257,11 @@ defmodule Server.ProfilesTest do
 
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
       assert "machine_overview" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
+      assert "operator_inbox" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
+
+      for {k, t} <- Profiles.archetypes(),
+          k != :surveyor,
+          do: refute("operator_inbox" in (t.mcp["tlon"]["directTools"] -- t.mcp["tlon"]["excludeTools"]), "#{k}")
     end
   end
 

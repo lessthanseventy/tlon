@@ -347,7 +347,7 @@ defmodule Server.Profiles do
         "push_branch"
       ],
       "excludeTools" =>
-        ["register", "consult_peer", "open_thread", "close_thread"] ++
+        ["register", "consult_peer", "open_thread", "close_thread", "operator_inbox"] ++
           ~w(release_status check_candidate propose_release set_urgency submit_qa)
     }
   }
@@ -364,9 +364,10 @@ defmodule Server.Profiles do
   @tertius_mcp @tlon_mcp
                |> update_in(
                  ["tlon", "directTools"],
-                 &(&1 ++ ["machine_overview", "staff_child", "assign_lead", "open_thread", "close_thread"])
+                 &(&1 ++
+                     ["machine_overview", "staff_child", "assign_lead", "open_thread", "close_thread", "operator_inbox"])
                )
-               |> update_in(["tlon", "excludeTools"], &(&1 -- ["open_thread", "close_thread"]))
+               |> update_in(["tlon", "excludeTools"], &(&1 -- ["open_thread", "close_thread", "operator_inbox"]))
 
   # The sheriff routes red the way tertius routes work, so it is the one worker that reaches across:
   # the cross-thread read and `consult_peer` (to hand a lead its fix) — never the staffing verbs; it

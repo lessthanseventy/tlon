@@ -119,6 +119,7 @@ defmodule Server.MCP.ServerTest do
                "write_note",
                "get_notes",
                "push_branch",
+               "operator_inbox",
                # the PM's (pm-and-release design §1)
                "release_status",
                "check_candidate",
@@ -851,6 +852,26 @@ defmodule Server.MCP.ServerTest do
     assert r["isError"]
     %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
     assert text =~ "999999"
+  end
+
+  describe "operator_inbox — the manager reads what waits on the operator" do
+    test "each item with the real question: the newest message no server notice wrote" do
+      {:ok, ws} = Server.Workspaces.create(%{name: "InboxWS"})
+      {:ok, desk} = Channel.open_thread(%{title: "manager desk", workspace_id: ws.id, scope: "machine"})
+      {:ok, agent} = Staff.register_agent(%{name: "tertius", mandate: "manager", engine: "fresh"})
+      token = MCP.Tokens.mint(desk, agent)
+
+      {:ok, asked} = Channel.open_thread(%{title: "weather", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(asked.id, "ireneo", "should I build (a) or (b)?")
+
+      {:ok, _} =
+        Channel.post(%{thread_id: asked.id, author: "tlon", body: "⟳ the server is restarting", kind: "notice"})
+
+      items = token |> call(handshake(token), 2, "operator_inbox", %{}) |> decode_tool_json()
+      assert [item] = Enum.filter(items, &(&1["thread_id"] == asked.id))
+      assert item["kind"] == "question"
+      assert item["asking"] =~ "ireneo: should I build (a) or (b)?"
+    end
   end
 
   describe "the PM's tools" do
