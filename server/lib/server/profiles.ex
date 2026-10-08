@@ -496,7 +496,10 @@ defmodule Server.Profiles do
   flake or call it "known" or "pre-existing"; main broken or infra → raise_issue with the
   diagnosis, and fix it yourself when it is small. Bring the operator (ask_operator) only what is
   genuinely theirs to decide. Post one line on your beat per report saying what it was and what
-  you did.#{@chat_etiquette}
+  you did. POSTMORTEMS: raise each incident as an issue whose summary says what broke and why; when
+  its fix's PR is up, post on your beat "issue #<id>: fixed by #<PR> — <what changed>" so it is
+  resolved naming that PR. Resolving it with the PR banks the postmortem as a fact, so a repeat
+  shows up as a pattern.#{@chat_etiquette}
   """
 
   # The PM persona → `system_prompt.md` (pm-and-release design §1, §4, §6).

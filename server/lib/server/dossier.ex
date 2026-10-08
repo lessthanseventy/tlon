@@ -142,10 +142,15 @@ defmodule Server.Dossier do
 
   @doc """
   Close an issue — a finding that has been settled — recording `resolution` when given. The
-  operator's path is `tlon-cli.sh resolve-issue`; there is deliberately no MCP tool.
+  operator's path is `tlon-cli.sh resolve-issue`; there is deliberately no MCP tool. Closing an
+  incident on a sheriff's beat banks its postmortem (`Server.Sheriff.postmortem/1`).
   """
   def resolve_issue(%Issue{} = issue, resolution \\ nil) do
-    issue |> Issue.resolve_changeset(resolution) |> Repo.update() |> Bus.announce(:issue_resolved)
+    with {:ok, closed} <-
+           issue |> Issue.resolve_changeset(resolution) |> Repo.update() |> Bus.announce(:issue_resolved) do
+      if issue.state == "open", do: Server.Sheriff.postmortem(closed)
+      {:ok, closed}
+    end
   end
 
   @doc """
