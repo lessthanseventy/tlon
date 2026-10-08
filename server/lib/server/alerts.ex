@@ -25,7 +25,7 @@ defmodule Server.Alerts do
   @doc "Every alert now."
   def list do
     now = DateTime.utc_now()
-    minutes = Server.OperatorConfig.read()["alarm_minutes"] || @alarm_minutes
+    minutes = Server.OperatorConfig.setting("alarm_minutes")
     window = {DateTime.add(now, -@alarm_after_s), DateTime.add(now, minutes * 60)}
     build(Server.Office.Needs.list(), Server.Calendar.upcoming(window), now, alarm_minutes: minutes)
   end

@@ -30,8 +30,9 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/schedules/:ws    Office.Room.schedules (the wall calendar: each schedule, its next
                                           firing, its days this month, its last run)
       GET    /api/office/health           Office.Room.health (the service and its box: the rack)
-      GET    /api/settings                the office's switches from the settings file: {"banter"}
-      PATCH  /api/settings                {"banter"} → OperatorConfig.put (the rest of the file kept)
+      GET    /api/settings                every runtime knob from the settings file: {"knobs": [...]}
+      PATCH  /api/settings                {key: value, ...} → OperatorConfig.put_settings (all checked, then written)
+      POST   /api/restart                 restart the service once quiet ({"force": true} anyway); 409 + {"busy"} when not
       GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
       GET    /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
@@ -187,14 +188,22 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "GET", "settings", []), do: json(conn, 200, settings())
 
-  defp route(conn, "PATCH", "settings", []) do
-    case body(conn) do
-      {%{"banter" => on}, conn} when is_boolean(on) ->
-        :ok = Server.OperatorConfig.put("banter", on)
-        json(conn, 200, settings())
+  defp route(conn, "POST", "restart", []) do
+    {b, conn} = body(conn)
 
-      {_, conn} ->
-        json(conn, 422, %{error: ~s(expected {"banter": true|false})})
+    case Server.Rollout.restart(force: b["force"] == true) do
+      :ok -> json(conn, 202, %{restarting: true})
+      {:busy, lines} -> json(conn, 409, %{error: "a restart now would cut something off", busy: lines})
+      {:error, why} -> json(conn, 409, %{error: why})
+    end
+  end
+
+  defp route(conn, "PATCH", "settings", []) do
+    {changes, conn} = body(conn)
+
+    case Server.OperatorConfig.put_settings(changes) do
+      :ok -> json(conn, 200, settings())
+      {:error, why} -> json(conn, 422, %{error: why})
     end
   end
 
@@ -658,7 +667,7 @@ defmodule Server.MCP.OperatorAPI do
   defp refused(conn, :not_found), do: json(conn, 404, %{error: "not found"})
   defp refused(conn, why), do: json(conn, 409, %{error: inspect(why)})
 
-  defp settings, do: %{banter: Server.OperatorConfig.banter?()}
+  defp settings, do: %{knobs: Server.OperatorConfig.knobs()}
 
   # the request body as a map (empty when there is none or it isn't a JSON object)
   defp body(conn) do

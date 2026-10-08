@@ -32,6 +32,99 @@ defmodule Server.OperatorConfig do
   Best-effort on read: a missing or corrupt file is just "no overrides".
   """
 
+  # The runtime knobs the operator steers a running bench with — what /api/settings serves and the
+  # office's settings panel edits. Every one is read live where it is used, so a change takes at the
+  # next pass. A `nullable` knob's nil means "off" and removes the key.
+  @knobs [
+    %{key: "max_leaves", type: "int", min: 1, max: 12, default: 6, doc: "coworker windows open at once"},
+    %{
+      key: "max_worklines",
+      type: "int",
+      min: 0,
+      max: 12,
+      default: 4,
+      doc: "worklines intake keeps in work per workspace (0 pauses intake)"
+    },
+    %{
+      key: "max_open_worklines",
+      type: "int",
+      min: 1,
+      max: 50,
+      default: 10,
+      doc: "open worklines per workspace, waiting on you included"
+    },
+    %{
+      key: "auto_land_risk",
+      type: "int",
+      min: 1,
+      max: 5,
+      default: nil,
+      nullable: true,
+      doc: "an approved workline graded at most this lands without you (off: every review waits)"
+    },
+    %{
+      key: "continuation_turns",
+      type: "int",
+      min: 0,
+      max: 10,
+      default: 3,
+      doc: "nudges a stuck workline gets before it stops on you"
+    },
+    %{
+      key: "quiet_workline_minutes",
+      type: "int",
+      min: 10,
+      max: 1440,
+      default: 60,
+      doc: "a workline quiet this long gets a nudge"
+    },
+    %{
+      key: "stalled_ticket_minutes",
+      type: "int",
+      min: 5,
+      max: 1440,
+      default: 30,
+      doc: "a routed ticket nobody started is started by intake after this"
+    },
+    %{
+      key: "alarm_minutes",
+      type: "int",
+      min: 0,
+      max: 60,
+      default: 5,
+      doc: "a meeting's alarm goes up this long before it starts"
+    },
+    %{key: "banter", type: "bool", default: true, doc: "the model writing coworkers' small talk and the pets' lines"},
+    %{key: "weather_location", type: "string", default: "", doc: "where the office's weather comes from"},
+    %{
+      key: "intake_every_minutes",
+      type: "int",
+      min: 1,
+      max: 60,
+      default: 15,
+      boot: true,
+      doc: "how often intake hands the manager the next ticket"
+    },
+    %{
+      key: "maintain_every_minutes",
+      type: "int",
+      min: 5,
+      max: 60,
+      default: 30,
+      boot: true,
+      doc: "how often the sweeps nag stale gates and nudge quiet worklines"
+    },
+    %{
+      key: "lifeline_rescue_minutes",
+      type: "int",
+      min: 15,
+      max: 240,
+      default: 30,
+      boot: true,
+      doc: "a job left running by a stopped server is retried after this"
+    }
+  ]
+
   @doc "The settings file path (`config :server, :operator_config_path` override, else ~/.config/tlon/config.json)."
   @spec path() :: String.t()
   def path do
@@ -97,12 +190,7 @@ defmodule Server.OperatorConfig do
   keep their lead; they just wait ("parked") until a seat frees.
   """
   @spec max_leaves(String.t()) :: pos_integer()
-  def max_leaves(path \\ path()) do
-    case read(path) do
-      %{"max_leaves" => n} when is_integer(n) and n > 0 -> n
-      _ -> 6
-    end
-  end
+  def max_leaves(path \\ path()), do: setting("max_leaves", path)
 
   @doc """
   Per-provider warmth windows in seconds (`"warmth_seconds": {"ollama-cloud": 600}`), for a provider
@@ -122,7 +210,76 @@ defmodule Server.OperatorConfig do
   so a flip takes at once.
   """
   @spec banter?(String.t()) :: boolean()
-  def banter?(path \\ path()), do: read(path)["banter"] != false
+  def banter?(path \\ path()), do: setting("banter", path)
+
+  @doc "Every runtime knob with its current `value` (the default where the file is silent); `boot` ones take on a restart."
+  @spec knobs(String.t()) :: [map()]
+  def knobs(path \\ path()) do
+    map = read(path)
+    for k <- @knobs, do: k |> Map.put_new(:boot, false) |> Map.put(:value, value(k, map))
+  end
+
+  @doc """
+  Oban's compiled config with the boot knobs applied: the intake and maintain crons' intervals and
+  Lifeline's rescue window. A config without those plugins (the test env's) passes through as is.
+  """
+  @spec boot_oban(keyword(), String.t()) :: keyword()
+  def boot_oban(oban, path \\ path()) do
+    case oban[:plugins] do
+      nil ->
+        oban
+
+      plugins ->
+        every = fn key -> "*/#{setting(key, path)} * * * *" end
+
+        cron = %{
+          Server.Jobs.Intake => every.("intake_every_minutes"),
+          Server.Jobs.Maintain => every.("maintain_every_minutes")
+        }
+
+        plugins =
+          Enum.map(plugins, fn
+            {Oban.Plugins.Lifeline, o} ->
+              {Oban.Plugins.Lifeline,
+               Keyword.put(o, :rescue_after, to_timeout(minute: setting("lifeline_rescue_minutes", path)))}
+
+            {Oban.Plugins.Cron, o} ->
+              {Oban.Plugins.Cron,
+               Keyword.update(o, :crontab, [], fn tab -> for {expr, w} <- tab, do: {Map.get(cron, w, expr), w} end)}
+
+            other ->
+              other
+          end)
+
+        Keyword.put(oban, :plugins, plugins)
+    end
+  end
+
+  @doc "One knob's current value, the default where the file is silent or holds something invalid."
+  @spec setting(String.t(), String.t()) :: term()
+  def setting(key, path \\ path()), do: value(Enum.find(@knobs, &(&1.key == key)), read(path))
+
+  @doc """
+  Set several knobs at once: every key is checked against its knob first, and nothing is written
+  unless all of them pass. `:ok` or `{:error, why}`.
+  """
+  @spec put_settings(map(), String.t()) :: :ok | {:error, String.t()}
+  def put_settings(changes, path \\ path()) when is_map(changes) do
+    checked =
+      Enum.reduce_while(changes, {:ok, read(path)}, fn {key, v}, {:ok, acc} ->
+        with %{} = knob <- Enum.find(@knobs, &(&1.key == key)) || {:error, "no setting named #{inspect(key)}"},
+             {:ok, ok} <- valid(knob, v) do
+          {:cont, {:ok, if(is_nil(ok), do: Map.delete(acc, key), else: Map.put(acc, key, ok))}}
+        else
+          {:error, why} -> {:halt, {:error, why}}
+          :invalid -> {:halt, {:error, "#{key} must be #{expects(Enum.find(@knobs, &(&1.key == key)))}"}}
+        end
+      end)
+
+    with {:ok, map} <- checked, :ok <- File.mkdir_p(Path.dirname(path)) do
+      File.write(path, Jason.encode_to_iodata!(map, pretty: true))
+    end
+  end
 
   @doc "Set one key in the settings file, keeping every other (the file and its directory made if absent)."
   @spec put(String.t(), term(), String.t()) :: :ok | {:error, term()}
@@ -135,4 +292,24 @@ defmodule Server.OperatorConfig do
   defp xdg_config_home do
     System.get_env("XDG_CONFIG_HOME") || Path.join(System.user_home!(), ".config")
   end
+
+  defp value(knob, map) do
+    case valid(knob, Map.get(map, knob.key)) do
+      {:ok, v} when not is_nil(v) -> v
+      _ -> knob.default
+    end
+  end
+
+  defp valid(%{nullable: true}, nil), do: {:ok, nil}
+  defp valid(_knob, nil), do: {:ok, nil}
+  defp valid(%{type: "int", min: lo, max: hi}, v) when is_integer(v) and v >= lo and v <= hi, do: {:ok, v}
+  defp valid(%{type: "bool"}, v) when is_boolean(v), do: {:ok, v}
+  defp valid(%{type: "string"}, v) when is_binary(v), do: {:ok, String.trim(v)}
+  defp valid(_knob, _v), do: :invalid
+
+  defp expects(%{type: "int", min: lo, max: hi} = k),
+    do: "a whole number #{lo}–#{hi}#{if k[:nullable], do: " or null (off)"}"
+
+  defp expects(%{type: "bool"}), do: "true or false"
+  defp expects(%{type: "string"}), do: "text"
 end

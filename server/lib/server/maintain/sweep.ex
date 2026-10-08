@@ -42,7 +42,8 @@ defmodule Server.Maintain.Sweep do
 
   @doc "Both sweeps, with the default bands unless `opts` names one."
   def run(opts \\ []) do
-    opts = Keyword.merge(@defaults, opts)
+    quiet = to_timeout(minute: Server.OperatorConfig.setting("quiet_workline_minutes"))
+    opts = @defaults |> Keyword.put(:quiet_ms, quiet) |> Keyword.merge(opts)
     sweep_gates(opts)
     sweep_stalled(opts)
     sweep_quiet(opts)

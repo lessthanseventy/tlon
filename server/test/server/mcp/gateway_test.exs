@@ -135,7 +135,15 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
-  test "GET/PATCH /api/settings read and flip the office's banter switch in the settings file" do
+  test "POST /api/restart refuses while a restart would cut something off, and says what" do
+    :ok = Server.Presence.Thinking.thinking(987_654, "hronir")
+    on_exit(fn -> Server.Presence.Thinking.idle(987_654, "hronir") end)
+
+    assert {409, %{"busy" => lines}} = request_json(:post, "/api/restart", %{})
+    assert Enum.any?(lines, &(&1 =~ "#987654"))
+  end
+
+  test "GET/PATCH /api/settings read and change every runtime knob in the settings file" do
     path = Path.join(System.tmp_dir!(), "tlon-config-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     Application.put_env(:server, :operator_config_path, path)
 
@@ -144,10 +152,16 @@ defmodule Server.MCP.GatewayTest do
       File.rm(path)
     end)
 
-    assert {200, %{"banter" => true}} = get_json("/api/settings")
-    assert {200, %{"banter" => false}} = request_json(:patch, "/api/settings", %{"banter" => false})
-    assert Server.OperatorConfig.read(path) == %{"banter" => false}
-    assert {422, _} = request_json(:patch, "/api/settings", %{"banter" => "loud"})
+    value = fn {_, %{"knobs" => knobs}}, key -> Enum.find(knobs, &(&1["key"] == key))["value"] end
+
+    assert "/api/settings" |> get_json() |> value.("banter") == true
+
+    patched = request_json(:patch, "/api/settings", %{"banter" => false, "max_leaves" => 2})
+    assert {200, _} = patched
+    assert value.(patched, "max_leaves") == 2
+    assert Server.OperatorConfig.read(path) == %{"banter" => false, "max_leaves" => 2}
+    assert {422, %{"error" => _}} = request_json(:patch, "/api/settings", %{"banter" => "loud"})
+    assert {422, _} = request_json(:patch, "/api/settings", %{"max_leaves" => 999})
   end
 
   test "POST /api/threads/:id/messages is the operator's one door: `y` answers an open prompt, a closed thread reopens",

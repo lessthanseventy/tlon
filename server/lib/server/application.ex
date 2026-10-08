@@ -56,7 +56,7 @@ defmodule Server.Application do
         maybe(:start_weather, false, {Server.Office.Weather, []}) ++
         maybe(:start_calendar, false, {Server.Calendar, []}) ++
         maybe(:start_mcp, false, mcp_children()) ++
-        maybe(:start_oban, false, {Oban, Application.get_env(:server, Oban, [])}) ++
+        maybe(:start_oban, false, {Oban, Server.OperatorConfig.boot_oban(Application.get_env(:server, Oban, []))}) ++
         maybe(:start_web, false, Server.Web.Endpoint)
 
     # A discarded job reaches the operator (Server.Jobs.Alarm) wherever Oban runs.
