@@ -32,7 +32,7 @@ defmodule Server.Coworker do
         }
 
   @doc """
-  The bench's lead — its first `builder` (the manager archetype), else its first seat. Better a
+  The bench's lead — its first `builder`, the default worker, else its first seat. Better a
   lead than none: a workspace whose bench is staffed but whose archetypes are all unusual still
   has someone to address. `nil` for an empty bench.
   """

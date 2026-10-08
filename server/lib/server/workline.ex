@@ -689,7 +689,7 @@ defmodule Server.Workline do
   end
 
   # Each stage is led by its kind of worker from the workspace's bench, so a workline hands itself
-  # on as it moves; intent by the bench's lead (the manager), who takes the ask in. Best-effort (the
+  # on as it moves; intent by the bench's lead (its first builder), who takes the ask in. Best-effort (the
   # stage already flipped; a restaff fault must not fail the advance). A workspace without that kind
   # keeps the current lead — quietly, except at review: a builder holding its own review is posted.
   defp restaff(%Thread{stage: "intent", workspace_id: ws} = thread) when not is_nil(ws) do

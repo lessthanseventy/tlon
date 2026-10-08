@@ -36,9 +36,9 @@ defmodule Server.Channel do
     # a thread lives in a channel (UX slice 1b): the named one, else the workspace's #general
     attrs = Map.put_new_lazy(attrs, :channel_id, fn -> default_channel_id(attrs.workspace_id) end)
 
-    # The lead invariant: a thread is born with a lead (its workspace's designated manager) unless
-    # the caller names one. Enforced HERE, the one creation path, so it holds for operator, MCP, and
-    # orchestrator opens alike; tertius refines the choice afterward.
+    # The lead invariant: a thread is born with a lead (its workspace's manager) unless the caller
+    # names one. Enforced HERE, the one creation path, so it holds for operator, MCP, and
+    # orchestrator opens alike; the manager staffs it or answers it.
     attrs
     |> Map.put_new_lazy(:agent_id, fn -> designated_lead(attrs[:workspace_id]) end)
     |> Thread.open_changeset()
@@ -51,15 +51,15 @@ defmodule Server.Channel do
   defp default_channel_id(workspace_id), do: Server.Channels.general(workspace_id).id
 
   @doc """
-  The agent_id of a workspace's designated lead. nil when there is no workspace or its bench is
-  empty (the thread then opens leaderless, healed when a coworker is first staffed). The lead
-  invariant's resolver: `Server.Coworker.lead/1` owns the rule, so every caller agrees about who
-  leads.
+  The agent_id of a workspace's designated lead: its manager (`Server.Workspaces.manager/1`), so a
+  thread nobody staffed is the manager's to staff rather than the first builder's; a bench without
+  one falls back to `Server.Workspaces.lead/1`. nil when there is no workspace or its bench is
+  empty (the thread then opens leaderless, healed when a coworker is first staffed).
   """
   def designated_lead(nil), do: nil
 
   def designated_lead(workspace_id) do
-    case Server.Workspaces.lead(workspace_id) do
+    case Server.Workspaces.manager(workspace_id) || Server.Workspaces.lead(workspace_id) do
       %Server.Coworker{agent_id: agent_id} -> agent_id
       nil -> nil
     end
