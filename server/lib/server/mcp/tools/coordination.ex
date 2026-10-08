@@ -41,7 +41,16 @@ defmodule Server.MCP.Tool.StaffChild do
 
   schema do
     field :title, :string, required: true, description: "What the child thread is for (its NORTH STAR)"
-    field :lead, :string, required: true, description: "Registered worker handle to staff as lead (e.g. hronir-machine)"
+
+    field :lead, :string,
+      description:
+        "Registered worker handle to staff as lead (e.g. hronir). Omit it and the server picks from the bench by `grade` and the area the brief names"
+
+    field :grade, :enum,
+      values: ["junior", "senior", "greybeard"],
+      description:
+        "The grade the work wants when you leave the pick to the server: junior for small mechanical changes, greybeard for migrations, gates and the spec; default senior"
+
     field :brief, :string, required: true, description: "The opening assignment, posted as the thread's first message"
 
     field :ticket_id, :integer,
@@ -60,8 +69,10 @@ defmodule Server.MCP.Tool.StaffChild do
     # reports up, and inherits the caller's project. An unbound caller opens a top-level thread.
     parent = identity.thread_id && Channel.thread(identity.thread_id)
 
+    params = Map.put(params, :lead, params[:lead] || picked(params, parent))
+
     with :ok <- briefed(params[:brief]),
-         {:agent, %Agent{}} <- {:agent, Staff.agent_by_name(params[:lead])},
+         {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
          {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
          {:ok, lead} <- staff(thread, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
@@ -83,6 +94,13 @@ defmodule Server.MCP.Tool.StaffChild do
       {:error, reason} ->
         fail(frame, "staff_child failed: #{inspect(reason)}")
     end
+  end
+
+  # the server's pick when the manager named no lead: the stage's kind (a plain child is a builder's)
+  defp picked(params, parent) do
+    kind = %{"spec" => "planner", "plan" => "planner", "intent" => "builder"}[params[:workline]] || "builder"
+    ws = (parent && parent.workspace_id) || Server.Bootstrap.default_workspace_id()
+    Server.Workline.suggest_lead(ws, kind, "#{params[:title]}\n#{params[:brief]}", params[:grade])
   end
 
   defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
