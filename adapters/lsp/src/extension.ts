@@ -42,7 +42,7 @@ export default function lsp(pi: ExtensionAPI): void {
           return { content: [{ type: "text", text }] };
         } catch (err2) {
           const msg = err2 instanceof Error ? err2.message : String(err2);
-          return { content: [{ type: "text", text: `lspd unavailable — ${msg} (mise run lspd:restart)` }], isError: true };
+          return { content: [{ type: "text", text: `lspd unavailable — ${msg} (restart the lspd daemon: kill it and the next call respawns it)` }], isError: true };
         }
       }
       const msg = err instanceof Error ? err.message : String(err);

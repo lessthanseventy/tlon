@@ -2,14 +2,13 @@ defmodule Server.MixProject do
   use Mix.Project
 
   # funes — the machine-side memory and coordination layer, as an OTP application.
-  # SQLite is the truth (Ecto over ecto_sqlite3); the same single file the spec
-  # measured, still sqlite3-inspectable and 2am-repairable.
+  # Postgres is the truth (Ecto over postgrex); `psql` reads it back at 2am.
   def project do
     [
       app: :server,
       version: "0.2.0",
       elixir: "~> 1.18",
-      # Boundary enforcement (lib/funes.ex declares the surface) — violations are compile
+      # Boundary enforcement (lib/server.ex declares the surface) — violations are compile
       # warnings, which the gate's --warnings-as-errors turns into failures.
       compilers: [:boundary] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
@@ -93,7 +92,7 @@ defmodule Server.MixProject do
 
   defp deps do
     [
-      # Compile-time module-boundary checks (lib/funes.ex). runtime: false — pure tooling.
+      # Compile-time module-boundary checks (lib/server.ex). runtime: false — pure tooling.
       {:boundary, "~> 0.10", runtime: false},
       # Menard (hex.pm/packages/menard): AST-aware source edits + introspection on Sourceror; the
       # coworkers' source verbs (Server.Source.Tools) call it — a runtime dep. From hex, never a

@@ -101,7 +101,7 @@ description = "server: who's on the clock — every live session, warm/cold (Sta
 run = "scripts/tlon-cli.sh roster"
 
 ["server:dossier"]
-description = "server: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool"
+description = "server: render a thread's brief from the shell (Board.brief → Brief) — parity with the get_dossier MCP tool"
 run = "scripts/tlon-cli.sh dossier"
 
 ["server:post"]

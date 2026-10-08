@@ -48,7 +48,7 @@ the spec records why.
 
 Three owners, no overlap:
 
-- **SQLite** holds the machine's truth — facts, events, issues, the channel, the containers.
+- **Postgres** holds the machine's truth — facts, events, issues, the channel, the containers.
 - **tmux** (a private server per workspace) holds the terminal's truth — windows, panes, which agent
   is live.
 - **Agents** hold nothing durable: they reach the spine only through the MCP channel, and what they

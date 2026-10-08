@@ -101,7 +101,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `server:console` | server: remote iex INTO the running service node — inspect/mint against the live channel |
 | `server:dev` | server: a scratch server NODE (funes-dev@127.0.0.1, database tlon_dev, MCP :4041) in iex — hack on the server with the live service untouched; point the office at it with `TLON_URL=http://127.0.0.1:4041 mise run office:run` |
 | `server:doctor` | server: the 2am report against the scratch db |
-| `server:dossier` | server: render a thread's brief from the shell (Board.in_scope → Brief) — parity with the get_dossier MCP tool |
+| `server:dossier` | server: render a thread's brief from the shell (Board.brief → Brief) — parity with the get_dossier MCP tool |
 | `server:eval` | server: the FULL steering evals incl. LLM-judged scenarios (claude -p, cheap alias) — run when steering config changes |
 | `server:import-claude` | server: import Claude Code's transcripts (~/.claude/projects) as closed, searchable threads on the LIVE service — idempotent per session |
 | `server:import-pi` | server: import pi's transcripts (~/.pi/agent + coworker profiles) as closed, searchable threads on the LIVE service — idempotent per session |

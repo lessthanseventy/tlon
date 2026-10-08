@@ -2,6 +2,11 @@
 
 **Date:** 2026-10-07
 **Status:** approved by Andrew (calls in §9). Six steps in §8, all built (step 4: the `pm` archetype, `Server.Release.PM`; beatriz holds the seat).
+**As built (2026-10-08):** the pointer is `refs/heads/live`, not `release` (a `release/*` branch
+collides with it), and `scripts/release.sh` moves it; there is no `Release.Pointer` module.
+`check_candidate` (#122) lets the PM run the gate and the smoke on demand. **Not yet exercised:** no
+scheduled smoke run has been recorded, the PM has not proposed a cut (every cut so far was the
+operator's `release:cut`), and ficciones' tlon flake input still follows `main`, not `live`.
 **Asked:** Andrew: *"not every PR at work is releasable. is there someone … watching over the
 process at large and saying like 'if we were to release today, it should be this commit on main'
 … this is quite literally a software factory version of a real office so what metaphors are we

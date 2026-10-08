@@ -31,6 +31,12 @@ machine (§8c) and, on landing, three things changed and are recorded here rathe
 
 The reasoning is in `../../docs/plans/2026-08-14-machine-v2-and-funes-design.md`.
 
+**Amended 2026-09-18: the store is Postgres.** One-brain piece C (`f4c70bb`) moved the truth from the
+SQLite file to Postgres (`postgrex`; `ecto_sqlite3` stays only for the one-shot `mix
+server.import_sqlite`). Wherever this document says SQLite below, read *the store*: its role is
+unchanged, and the 2am tool is `psql`. The measurements in §4 are of the SQLite file and are kept as
+history.
+
 **Amended 2026-08-14 again, when the shape coalesced.** funes is not a set of CLIs — it is a TUI Slack for
 agents, the cockpit `aleph`, and the coalesced architecture supersedes two things this document implied:
 
