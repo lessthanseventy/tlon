@@ -59,10 +59,10 @@ const plainTile: TileArt = (c, x, y) => {
 /** the weather outside reaches the garden only: rain streaks the beds, snow caps the fence and flecks the ground */
 function weatherOnGarden(c: Canvas, x: number, y: number, weather: string) {
   if (weather === "rain" || weather === "storm") {
-    for (let j = 2; j < TILE; j += 3) for (let i = (j % 2) * 2; i < TILE; i += 4) c.px(x + i, y + j, 1, 2, ROLE.key)
+    for (let j = 2; j < TILE - 1; j += 3) for (let i = (j % 2) * 2; i < TILE; i += 4) c.px(x + i, y + j, 1, 2, ROLE.key)
   } else if (weather === "snow") {
-    c.px(x, y, TILE, 1, ROLE.body)
-    for (let j = 2; j < TILE; j += 3) for (let i = (j % 2) * 3; i < TILE; i += 6) c.px(x + i, y + j, 1, 1, ROLE.body)
+    c.px(x, y, TILE, 1, ROLE.prose)
+    for (let j = 2; j < TILE; j += 3) for (let i = (j % 2) * 3; i < TILE; i += 6) c.px(x + i, y + j, 1, 1, ROLE.prose)
   }
 }
 

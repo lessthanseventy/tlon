@@ -85,6 +85,24 @@ describe("weather on the garden", () => {
     const sum = (k: Canvas) => Array.from(k.rgba.slice(0, TILE * 4)).reduce((a, b) => a + b, 0)
     expect(sum(c)).toBeGreaterThan(sum(d))
   })
+  const onBig = (weather?: string) => { const c = new Canvas(TILE + 8, TILE + 8); paintTile(c, 4, 4, garden, weather); return c }
+  const inside = (i: number) => { const p = i >> 2, x = p % (TILE + 8), y = Math.floor(p / (TILE + 8)); return x >= 4 && x < 4 + TILE && y >= 4 && y < 4 + TILE }
+  test("rain and snow stay inside the tile", () => {
+    for (const k of ["rain", "snow"]) {
+      const c = onBig(k)
+      c.rgba.forEach((v, i) => { if (!inside(i)) expect(v).toBe(0) })
+    }
+  })
+  test("snow is pale, not the fence's amber", () => {
+    const dry = onBig(), c = onBig("snow")
+    let changed = 0
+    for (let i = 0; i < c.rgba.length; i += 4) {
+      if (c.rgba[i] === dry.rgba[i] && c.rgba[i + 1] === dry.rgba[i + 1] && c.rgba[i + 2] === dry.rgba[i + 2]) continue
+      changed++
+      expect(c.rgba[i + 2]).toBeGreaterThan(150)
+    }
+    expect(changed).toBeGreaterThan(0)
+  })
   test("renderHome paints the weather it is given", () => {
     const g = { home: { tiles: [garden] } as never, cursor: [0, 0] as [number, number], carrying: null, refused: false, w: 60, h: 40 }
     expect(Buffer.from(renderHome({ ...g, weather: "rain" }).rgba).equals(Buffer.from(renderHome(g).rgba))).toBe(false)
