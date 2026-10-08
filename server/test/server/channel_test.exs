@@ -587,6 +587,39 @@ defmodule Server.ChannelTest do
       assert Repo.get(Server.Todo, todo.id) == nil
     end
 
+    test "everything else that points at it survives, unlinked: a fact from one of its sessions, a reply to one of its messages, a child thread, a habit and a playbook it proposed",
+         %{thread: thread} do
+      {:ok, agent} = Server.Staff.register_agent(%{name: "purge-#{thread.id}", mandate: "build", engine: "fresh"})
+      session = Repo.insert!(Server.Session.start_changeset(%{agent_id: agent.id, thread_id: thread.id}))
+
+      {:ok, fact} =
+        Server.Dossier.bank_fact(%{
+          kind: "learned",
+          text: "from a session",
+          provenance: "derived",
+          source_session_id: session.id
+        })
+
+      [msg | _] = Channel.thread_messages(thread)
+      {:ok, other} = Channel.open_thread(%{title: "elsewhere"})
+      {:ok, reply} = Channel.post(%{thread_id: other.id, author: "andrew", body: "re", reply_to: msg.id})
+      {:ok, child} = Channel.open_thread(%{title: "child", parent_thread_id: thread.id})
+
+      habit =
+        Repo.insert!(%Server.Habit{
+          text: "h",
+          proposed_by: "x",
+          source_thread_id: thread.id,
+          created_at: DateTime.truncate(DateTime.utc_now(), :second)
+        })
+
+      assert {:ok, %Thread{}} = Channel.delete_thread(thread)
+      assert Repo.get!(Server.Fact, fact.id).source_session_id == nil
+      assert Repo.get!(Message, reply.id).reply_to == nil
+      assert Repo.get!(Thread, child.id).parent_thread_id == nil
+      assert Repo.get!(Server.Habit, habit.id).source_thread_id == nil
+    end
+
     test "facts born on the thread survive with the thread link cleared", %{thread: thread} do
       {:ok, fact} =
         Server.Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "kept", provenance: "derived"})

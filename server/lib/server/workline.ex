@@ -1142,8 +1142,9 @@ defmodule Server.Workline do
     end
   rescue
     e ->
-      require(Logger) &&
-        Logger.warning("workline #{thread.slug}: merged, but its close-out failed: #{Exception.message(e)}")
+      why = "merged, but its close-out failed (not published to GitHub): #{Exception.message(e)}"
+      require(Logger) && Logger.warning("workline #{thread.slug}: #{why}")
+      post_brief(thread, "⚠ #{why}")
   end
 
   # what the stage's lead should be: the grade and area the ask names; for a review, also not the

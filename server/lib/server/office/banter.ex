@@ -200,7 +200,17 @@ defmodule Server.Office.Banter do
 
   defp start_line(ws) do
     me = self()
-    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:said, ws, write_line(ws)}) end)
+    # the cast is what clears `busy`: a line that raises still sends it, or banter stops for good
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+      said =
+        try do
+          write_line(ws)
+        rescue
+          _ -> nil
+        end
+
+      GenServer.cast(me, {:said, ws, said})
+    end)
   end
 
   # the kind whose stretch of the weighted line holds `point`

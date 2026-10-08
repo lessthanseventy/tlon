@@ -143,7 +143,7 @@ defmodule Server.Workline.Artifacts.Git do
 
     files =
       for path <- paths -- deleted,
-          {text, 0} = git(thread, ["show", "work/#{thread.slug}:#{path}"]),
+          {text, 0} <- [git(thread, ["show", "work/#{thread.slug}:#{path}"])],
           not String.contains?(text, <<0>>),
           do: {path, text}
 

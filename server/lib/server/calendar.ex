@@ -28,7 +28,7 @@ defmodule Server.Calendar do
   def upcoming(server \\ __MODULE__, {from, to}) do
     if GenServer.whereis(server) do
       for {name, ics} <- GenServer.call(server, :feeds),
-          m <- Feed.occurrences(ics, from, to),
+          m <- occurrences(ics, from, to),
           do: Map.put(m, :calendar, name)
     else
       []
@@ -109,5 +109,12 @@ defmodule Server.Calendar do
     end
   rescue
     e -> {:error, e}
+  end
+
+  # one feed whose recurrences can't be expanded drops out, rather than failing every caller's read
+  defp occurrences(ics, from, to) do
+    Feed.occurrences(ics, from, to)
+  rescue
+    _ -> []
   end
 end
