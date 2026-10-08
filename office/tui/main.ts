@@ -11,7 +11,8 @@ import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
-import { drop, gridWindow, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
+import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
+import { renderHome } from "../kit/homeart"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
@@ -106,7 +107,7 @@ let drag: { col: number; row: number } | null = null
 /** build mode's state, kept across a leave-and-reopen so you come back where you left it */
 let build: Build | null = null
 // the room moved (re-render its frame); its art changed (resend the image)
-let roomChanged = true, imageDirty = true
+let roomChanged = true, imageDirty = true, homeShown = false
 
 // what the open card reads, fetched when it opens and on every refresh while it stays open
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
@@ -915,19 +916,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         build = applyBuild(build!, f)
         draw()
       }
-      const [cx, cy] = b.cursor
-      const { x0, x1, y0, y1 } = gridWindow(b.home, b.cursor)
-      const code = (t: HomeTile | undefined) => (t ? t.kind.slice(0, 2).toUpperCase() : "··")
-      const rows: Row[] = []
-      for (let y = y0; y <= y1; y++) {
-        const segs: Seg[] = []
-        for (let x = x0; x <= x1; x++) {
-          const t = b.home.tiles.find((h) => h.at[0] === x && h.at[1] === y)
-          const text = ` ${code(t)} `
-          segs.push(x === cx && y === cy ? { s: text, fg: b.refused ? ROLE.alarm : ROLE.attention, bold: true } : t ? key(text) : dim(text))
-        }
-        rows.push({ segs })
-      }
+      const rows: Row[] = [{ segs: [dim("the home is drawn above")] }]
       return {
         title: `BUILD MODE${b.carrying ? ` · carrying ${b.carrying.kind}` : ""}${b.refused ? " · refused — overlap or it would split the floor" : ""}`,
         rows,
@@ -1237,11 +1226,19 @@ function draw() {
     ...(process.env.OFFICE_DEBUG ? [dim(`  viewport ${Math.round(viewport.x)},${Math.round(viewport.y)}`)] : [])], colsN)
   // the room
   const room0 = room()
+  const building = mode.kind === "build" && build !== null
   const fresh = !frame
-  if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g)); roomChanged = false }
-  const seen = clipFrame(frame!, viewport)
-  if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, viewport); sentImage = true; imageDirty = false }
-  if (!g.kitty) textLayer(seen, g, viewport).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
+  // leaving build mode puts the room back, however the mode was left
+  if (!building && homeShown) { roomChanged = true; imageDirty = true }
+  homeShown = building
+  const vp = building ? { x: 0, y: 0, w: viewport.w, h: viewport.h } : viewport
+  if (building) {
+    frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h) })
+    imageDirty = true
+  } else if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g)); roomChanged = false }
+  const seen = clipFrame(frame!, vp)
+  if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, vp); sentImage = true; imageDirty = false }
+  if (!g.kitty) textLayer(seen, g, vp).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
   panned = false
   // the tip line: what the pointer is over, or what just happened
   const tipRow = g.row + g.rows + 1
