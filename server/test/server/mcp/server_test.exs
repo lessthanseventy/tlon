@@ -122,6 +122,8 @@ defmodule Server.MCP.ServerTest do
                "release_status",
                "propose_release",
                "set_urgency",
+               # QA's (roster design §5)
+               "submit_qa",
                # the source verbs (repo tools design, 2026-09-08)
                "rename_identifier",
                "outline_file",
@@ -907,6 +909,23 @@ defmodule Server.MCP.ServerTest do
       assert r["isError"]
       assert Server.Tickets.get(t.id).priority == "med"
     end
+  end
+
+  test "submit_qa: a fail sends the workline back to build with the finding; off review it is refused" do
+    {:ok, thread} = Server.Workline.open(%{title: "office: R", slug: "qa-tool", stage: "review"})
+    {:ok, agent} = Staff.register_agent(%{name: "nolan", mandate: "qa", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    r =
+      call(token, session, 2, "submit_qa", %{"verdict" => "fail", "report" => "after R: 'R reloads' on its own server"})
+
+    refute r["isError"]
+    assert %Thread{stage: "build"} = Repo.get!(Thread, thread.id)
+    assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "back to build" and &1.body =~ "R reloads"))
+
+    again = call(token, session, 3, "submit_qa", %{"verdict" => "pass", "report" => "fine"})
+    assert again["isError"]
   end
 
   test "write_note defaults to the bound thread; get_notes reads it back" do

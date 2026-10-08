@@ -2,7 +2,9 @@
 
 **Date:** 2026-10-07
 **Status:** approved by Andrew (calls in §7); step 1 done; of step 5, beatriz is the PM (a data
-migration, `…_beatriz_is_the_pm.exs`). Seven steps in §8; Sonny (§5, step 7)
+migration, `…_beatriz_is_the_pm.exs`); step 6 done: the `qa` archetype, the QA pass before a
+user-visible workline lands (`Server.Workline.qa_verdict/5`), nolan its seat (`…_nolan_is_qa.exs`).
+Seven steps in §8; Sonny (§5, step 7)
 was added after approval and its seat is a proposal.
 **Asked:** Andrew: *"make sure hronir is doing what he should, that everyone has a clearly defined
 role, and that we aren't missing any roles/SMEs/different personalities amongst the same role.

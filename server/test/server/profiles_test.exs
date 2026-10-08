@@ -243,6 +243,18 @@ defmodule Server.ProfilesTest do
           do: assert(tool in t.mcp["tlon"]["excludeTools"], "#{k} reaches #{tool}")
     end
 
+    test "QA files its verdict with submit_qa, writes no code, and no other archetype has it" do
+      qa = Profiles.archetype(:qa)
+      assert "submit_qa" in qa.mcp["tlon"]["directTools"]
+      for cut <- ~w(submit_qa), do: refute(cut in qa.mcp["tlon"]["excludeTools"])
+      for cut <- ~w(submit_review edit_clause rename_identifier), do: assert(cut in qa.mcp["tlon"]["excludeTools"])
+      assert get_in(qa.permissions, ["permission", "write"]) == "deny"
+      assert qa.system_prompt =~ "release:smoke"
+      assert qa.system_prompt =~ "4040"
+
+      for {k, t} <- Profiles.archetypes(), k != :qa, do: assert("submit_qa" in t.mcp["tlon"]["excludeTools"], "#{k}")
+    end
+
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
       assert "machine_overview" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
     end
@@ -413,7 +425,7 @@ defmodule Server.ProfilesTest do
   describe "the archetype registry — role templates keyed by archetype atom" do
     test "the seed archetype set is present with sane defaults" do
       keys = Profiles.archetypes() |> Map.keys() |> Enum.sort()
-      assert keys == ~w(assistant builder planner pm researcher reviewer sheriff surveyor)a
+      assert keys == ~w(assistant builder planner pm qa researcher reviewer sheriff surveyor)a
     end
 
     test "reviewer archetype cannot write (deny floor), builder can" do

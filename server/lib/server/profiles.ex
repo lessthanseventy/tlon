@@ -346,7 +346,8 @@ defmodule Server.Profiles do
         "propose_habit"
       ],
       "excludeTools" =>
-        ["register", "consult_peer", "open_thread", "close_thread"] ++ ~w(release_status propose_release set_urgency)
+        ["register", "consult_peer", "open_thread", "close_thread"] ++
+          ~w(release_status propose_release set_urgency submit_qa)
     }
   }
 
@@ -379,6 +380,11 @@ defmodule Server.Profiles do
   @pm_mcp @tlon_mcp
           |> update_in(["tlon", "directTools"], &(&1 ++ @pm_release_tools ++ ["machine_overview", "list_tickets"]))
           |> update_in(["tlon", "excludeTools"], &((&1 -- @pm_release_tools) ++ ["rename_identifier", "edit_clause"]))
+
+  # QA uses the product and files what it saw; it neither edits code nor reviews the diff.
+  @qa_mcp @reviewer_mcp
+          |> update_in(["tlon", "directTools"], &(&1 ++ ["submit_qa"]))
+          |> update_in(["tlon", "excludeTools"], &((&1 -- ["submit_qa"]) ++ ["submit_review"]))
 
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
   # so filler progress pings are pure noise. Appended to the worker roles.
@@ -517,6 +523,26 @@ defmodule Server.Profiles do
   Move urgency for a reason you can say in one line, and not to look busy.#{@chat_etiquette}
   """
 
+  # The QA persona → `system_prompt.md` (roster design §5).
+  @qa_role """
+  You are {{handle}}, QA — you use the product the way Andrew does, and you don't read the diff (the
+  reviewer did). A workline that changes something he sees (the office, or the operator API it
+  reads) comes to you once its review approves it; the brief names its branch.
+
+  DRIVE IT. Build the branch as a scratch release and keep it up, in the background:
+  `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/<slug>` — port 4047 and db tlon_smoke, the fixed
+  smoke first (open, a thread, a card, R). Then drive the changed path as he would:
+  `TLON_URL=http://127.0.0.1:4047 mise run office:drive -- <keys>` (the drive-office skill), the keys
+  he'd press and the screen after each. NEVER the live service on :4040 or its db `tlon`: a QA run
+  there writes into his real office. Stop the scratch release when you're done.
+
+  FILE WHAT YOU SAW. `submit_qa(verdict, report)`: pass, or fail with the finding. The report is what
+  you pressed, the screen text you saw (pasted), and what you expected; a fail names the one thing
+  that is wrong. A smoke that won't build or boot is a fail, with its last lines. Say what the
+  product did, not where you guess the code is wrong. A fail goes back to the builder the way a
+  review requesting changes does; a pass moves it to the merge gate.#{@chat_etiquette}
+  """
+
   # The researcher persona → `system_prompt.md`. The deep-research discipline, distilled.
   @researcher_role """
   You are {{handle}}, a deep RESEARCHER on this server task thread. Answer by fanning out
@@ -570,6 +596,7 @@ defmodule Server.Profiles do
   #   * planner   — writing-plans discipline (bite-sized TDD tasks, exact paths, DoD); can write.
   #   * sheriff   — owns red: triages every red signal on its beat, routes or fixes, escalates the real.
   #   * pm        — owns what ships: releasability, the release pointer, the changelog, backlog urgency; no writes.
+  #   * qa        — drives a reviewed user-visible change on a scratch release and files what it saw; no writes.
   #   * researcher — deep multi-source fan-out + adversarial verification; sandbox scoped per workspace (tunable).
   #   * assistant — general life-assistant over a non-code workspace's git-tracked paths (sandbox tunable).
   @archetypes %{
@@ -619,6 +646,14 @@ defmodule Server.Profiles do
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
       system_prompt: @pm_role,
+      add_extensions: [@footer_extension]
+    },
+    qa: %{
+      model: @sonnet,
+      mcp: @qa_mcp,
+      sandbox: @tlon_sandbox,
+      permissions: @reviewer_permissions,
+      system_prompt: @qa_role,
       add_extensions: [@footer_extension]
     },
     # researcher/assistant: @tlon_sandbox is the STARTING point — Slice 1 scopes it to the workspace's

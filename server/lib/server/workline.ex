@@ -10,7 +10,9 @@ defmodule Server.Workline do
   stage's owed artifact (checked through the `Server.Workline.Artifacts` behaviour, recorded
   as a CHECK either way, correlation `workline:<slug>:artifact`). Gated transitions —
   spec→plan, review→merged, and a machine-born intent→spec — park in `awaiting: "andrew"`
-  instead of flipping; `approve/1` is the operator's completion verb. Every completed flip
+  instead of flipping; `approve/1` is the operator's completion verb. A reviewed change Andrew
+  would see (`@user_visible` paths) also owes a QA pass before its gate (`qa_verdict/5`), when the
+  bench seats a qa. Every completed flip
   records a `stage_advanced` event: the slice-6 ledger reads metrics out of rows that
   already exist.
   """
@@ -45,6 +47,8 @@ defmodule Server.Workline do
   }
   # Stages whose EXIT waits on the operator; a machine-born intent gates its exit too.
   @gated ~w(spec review)
+  # What Andrew sees: the office, and the operator API it reads (the office snapshot rides on it).
+  @user_visible ~w(office/ server/lib/server/mcp/operator_api.ex server/lib/server/office)
 
   # The ring, the owed map, and the gate list drift independently unless something ties them:
   # every non-terminal stage MUST owe an artifact, every gated stage must be in the ring.
@@ -222,7 +226,8 @@ defmodule Server.Workline do
     checker = Keyword.get(opts, :artifacts, Git)
 
     with :ok <- advanceable(thread, checker),
-         :ok <- verified_artifact(thread, checker) do
+         :ok <- verified_artifact(thread, checker),
+         :ok <- qa_cleared(thread, opts) do
       if gated?(thread), do: park(thread, checker, opts), else: flip(thread)
     else
       {:error, {:artifact_missing, why}} when thread.stage == "verify" ->
@@ -286,7 +291,8 @@ defmodule Server.Workline do
       Scribe.materialize_intent(thread)
     end
 
-    with :ok <- verified_artifact(thread, checker) do
+    with :ok <- verified_artifact(thread, checker),
+         :ok <- qa_cleared(thread, opts) do
       if queue?(thread, checker, opts), do: queue(thread), else: approve_now(thread, checker, opts)
     end
   end
@@ -391,9 +397,13 @@ defmodule Server.Workline do
   evidence (`workline:<slug>:review`). Changes requested send it straight back to build, its builder
   told to read review.md: a review asking for changes never reaches the operator's gate. An approval
   is what a standing approval (`auto_land_risk` in the settings file) needs to land without them,
-  and asks for the risk grade it is decided on (`Server.Jobs.Grade`).
+  and asks for the risk grade it is decided on (`Server.Jobs.Grade`); a change that owes QA is
+  handed to the qa seat. `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
   """
-  def review_verdict(%Thread{stage: "review"} = thread, verdict, author) when verdict in ~w(approve request_changes) do
+  def review_verdict(thread, verdict, author, opts \\ [])
+
+  def review_verdict(%Thread{stage: "review"} = thread, verdict, author, opts)
+      when verdict in ~w(approve request_changes) do
     {:ok, _} =
       Dossier.record_check(%{
         thread_id: thread.id,
@@ -417,12 +427,45 @@ defmodule Server.Workline do
       bounced
     else
       Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
-      {:ok, thread}
+
+      case qa_owed(thread, opts) do
+        nil -> {:ok, thread}
+        {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
+      end
     end
   end
 
-  def review_verdict(%Thread{stage: "review"}, verdict, _author), do: {:error, {:bad_verdict, verdict}}
-  def review_verdict(%Thread{stage: stage}, _verdict, _author), do: {:error, {:not_in_review, stage}}
+  def review_verdict(%Thread{stage: "review"}, verdict, _author, _opts), do: {:error, {:bad_verdict, verdict}}
+  def review_verdict(%Thread{stage: stage}, _verdict, _author, _opts), do: {:error, {:not_in_review, stage}}
+
+  @doc """
+  The qa seat's verdict on a reviewed change it drove (`submit_qa`): `"pass"` or `"fail"`, its report
+  (what it pressed and the screen text it saw) recorded as evidence (`workline:<slug>:qa`). A fail
+  sends it back to build with the finding, as a review requesting changes does; a pass advances it
+  to the merge gate. `opts` as `advance/2`'s.
+  """
+  def qa_verdict(thread, verdict, author, report, opts \\ [])
+
+  def qa_verdict(%Thread{stage: "review"} = thread, verdict, author, report, opts) when verdict in ~w(pass fail) do
+    {:ok, _} =
+      Dossier.record_check(%{
+        thread_id: thread.id,
+        cmd: "qa by #{author}",
+        exit: if(verdict == "pass", do: 0, else: 1),
+        tail: report,
+        correlation: "workline:#{thread.slug}:qa"
+      })
+
+    if verdict == "fail" do
+      bounce(thread, "QA found a problem", "QA (#{author}) drove it and found:\n\n#{report}\n\nFix it test-first")
+    else
+      post_brief(thread, "✓ QA passed (#{author}):\n\n#{report}")
+      advance(Repo.get!(Thread, thread.id), opts)
+    end
+  end
+
+  def qa_verdict(%Thread{stage: "review"}, verdict, _author, _report, _opts), do: {:error, {:bad_verdict, verdict}}
+  def qa_verdict(%Thread{stage: stage}, _verdict, _author, _report, _opts), do: {:error, {:not_in_review, stage}}
 
   @doc """
   A risk grade just recorded for `thread` (`Server.Jobs.Grade`): a gate parked on the operator
@@ -443,7 +486,9 @@ defmodule Server.Workline do
   # through the same gated queue. Off unless set; a test hands the threshold outright.
   defp auto_land?(thread, checker, opts) do
     max = Keyword.get_lazy(opts, :auto_land_risk, fn -> if checker == Git, do: auto_land_risk() end)
-    is_integer(max) and review_approved?(thread) and Grade.allows?(grade(thread), max)
+
+    is_integer(max) and review_approved?(thread) and Grade.allows?(grade(thread), max) and
+      qa_cleared(thread, opts) == :ok
   end
 
   defp auto_land_note(thread, opts),
@@ -981,5 +1026,61 @@ defmodule Server.Workline do
       ),
       :count
     )
+  end
+
+  # at review, a change Andrew would see waits on a QA pass since it last entered review — where the
+  # bench seats a qa; a bench without one lands it as before
+  defp qa_cleared(thread, opts) do
+    case qa_owed(thread, opts) do
+      nil ->
+        :ok
+
+      {seat, _paths} ->
+        {:error,
+         {:artifact_missing,
+          "QA hasn't passed this user-visible change: #{seat.name} drives it against a scratch release and files what it saw with submit_qa"}}
+    end
+  end
+
+  defp qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
+    with %Server.Coworker{} = seat <- qa_seat(thread),
+         [_ | _] = paths <- Enum.filter(changed_paths(thread, opts), &String.starts_with?(&1, @user_visible)),
+         false <- match?(%{kind: "check_passed"}, since_review(thread, "workline:#{thread.slug}:qa")) do
+      {seat, paths}
+    else
+      _ -> nil
+    end
+  end
+
+  defp qa_owed(_thread, _opts), do: nil
+
+  defp changed_paths(thread, opts) do
+    Keyword.get_lazy(opts, :paths, fn ->
+      if Keyword.get(opts, :artifacts, Git) == Git, do: Git.changed_paths(thread), else: []
+    end)
+  end
+
+  # the thread's lead when it is the qa already, else a free one, else any
+  defp qa_seat(thread) do
+    seats = thread.workspace_id |> Server.Workspaces.bench() |> Enum.filter(&(&1.archetype == "qa"))
+    current = Server.Channel.thread_lead(thread.id)
+
+    Enum.find(seats, &(&1.name == current)) || Enum.find(seats, &(not leading_another?(&1, thread))) ||
+      List.first(seats)
+  end
+
+  defp to_qa(thread, seat, paths) do
+    handed = hand_to(thread, "qa", seat.name)
+
+    post_brief(handed, """
+    🎭 QA: the review approved a change Andrew will see (#{Enum.join(Enum.take(paths, 5), ", ")}). Drive \
+    the changed path as he would, against a scratch release of work/#{thread.slug}: \
+    `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/#{thread.slug}` builds it on :4047 (db tlon_smoke), \
+    smokes it and keeps it up; drive it with `TLON_URL=http://127.0.0.1:4047 mise run office:drive -- <keys>`. \
+    Never :4040, the live service. Then submit_qa: pass, or fail with the finding — what you pressed and \
+    the screen text you saw.\
+    """)
+
+    handed
   end
 end
