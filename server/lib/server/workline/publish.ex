@@ -64,28 +64,28 @@ defmodule Server.Workline.Publish do
 
     with {"main\n", 0} <- git.(["symbolic-ref", "--short", "HEAD"]),
          {_, 0} <- git.(["fetch", "-q", "origin", "main"]) do
-      case git.(["merge-base", "--is-ancestor", "HEAD", "origin/main"]) do
-        {_, 0} ->
-          case git.(["merge", "--ff-only", "-q", "origin/main"]) do
-            {_, 0} -> :forwarded
-            {out, _} -> {:error, String.slice(out, 0, 200)}
-          end
-
-        _ ->
-          {ahead, _} = git.(["rev-list", "--count", "origin/main..HEAD"])
-
-          {:diverged,
-           ahead
-           |> String.trim()
-           |> Integer.parse()
-           |> then(fn
-             {n, _} -> n
-             _ -> 0
-           end)}
-      end
+      if match?({_, 0}, git.(["merge-base", "--is-ancestor", "HEAD", "origin/main"])),
+        do: forward(git),
+        else: diverged(git)
     else
       {out, code} when is_binary(out) and code != 0 -> {:error, String.slice(out, 0, 200)}
       _ -> :skipped
+    end
+  end
+
+  defp forward(git) do
+    case git.(["merge", "--ff-only", "-q", "origin/main"]) do
+      {_, 0} -> :forwarded
+      {out, _} -> {:error, String.slice(out, 0, 200)}
+    end
+  end
+
+  defp diverged(git) do
+    {ahead, _} = git.(["rev-list", "--count", "origin/main..HEAD"])
+
+    case Integer.parse(String.trim(ahead)) do
+      {n, _} -> {:diverged, n}
+      :error -> {:diverged, 0}
     end
   end
 
