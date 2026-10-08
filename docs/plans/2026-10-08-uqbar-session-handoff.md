@@ -11,9 +11,12 @@ Read this, then `AGENTS.md`, then the memory index
   grade fix (#156), the birthdays. main is ahead only by docs. The office was restarted fresh on
   the fixed code; R is safe.
 - **Talking in the office:** design `2026-10-08-office-talk-design.md`; tickets #70 (balloons
-  bigger, never overflowing) → #71 → #72 → #73, each `held` on the one before.
+  bigger, never overflowing) → #71 → #72 → #73, each blocked by the one before.
 - **#74:** KeepUp's drifted-main note — one per repo (it duplicated per count), routed to the
   repo's workspace instead of the operator.
+- **Epics:** design `2026-10-08-epics-and-initiatives-design.md` (PR #163); tickets #77 (server,
+  high) → #78 → #79, and #80 (Uqbar backfills the six epics once #78 lands). Priorities set
+  2026-10-08: #75, #74, #70, #52, #47 high.
 - **Thread #1:** uqbar asked Andrew a Funes question (post #3886: what should tlon blur on
   purpose?). His reply is still to come; answer it as uqbar there.
 
@@ -33,8 +36,8 @@ The canvas is live: today's picture is Sonny's four jack-o'-lanterns, 1,632 back
 ## 3 · The delegate loop
 
 Andrew asked this session to be his eyes and his stand-in. It ran a self-paced `/loop` doing: the
-inbox (answer, approve gates **after reading the doc/diff**, hand off misroutes, take `held` off
-when a blocker lands), releases (gate + smoke on main's tip, then cut), health, and fixes via PRs.
+inbox (answer, approve gates **after reading the doc/diff**, hand off misroutes, check a blocked
+chain advanced when its blocker landed), releases (gate + smoke on main's tip, then cut), health, and fixes via PRs.
 Posts as `uqbar` (`tlon-cli post --as uqbar`); as `andrew` only when answering for him. Never:
 publish outside tlon (the canvas excepted), rewrite pushed history, delete data, merge another
 agent's PR without reviewing it, or decide scope/priority. **A new session should restart it**
@@ -43,16 +46,17 @@ agent's PR without reviewing it, or decide scope/priority. **A new session shoul
 ## 4 · Today's designs and the crew's queue
 
 Specs on main: `2026-10-08-uqbar-design.md`, `…-office-as-a-toy-design.md`, `…-souls-design.md`.
-Tickets with full briefs (`held` ones wait on the named blocker; take the label off when it lands):
+Tickets with full briefs. Step order is `blocks` links (intake skips a ticket while a blocker is
+open, so a chain advances by itself); `held` is left only on #80, Uqbar's own backfill task:
 
 | Tickets | What |
 |---|---|
 | #46 | Andrew's GitHub profile — a **draft for his approval**, never published by the crew |
-| #47–51 | Uqbar steps 2–6 (the book on the shelf, torn pages, marginalia, the `U` entry, small joys) — 48–51 held on 47 |
+| #47–51 | Uqbar steps 2–6 (the book on the shelf, torn pages, marginalia, the `U` entry, small joys) — 48–51 blocked by 47 |
 | #52–59 | the toy: sandbox mode, voices + **Scharlach the Dwight**, bathroom (Nina's wet pawprints), doorbell, events, the **wackiness dial** (#57: business → business casual → office party → rimworld), reactions, generators (#59, ollama flash by default) |
-| #60–64 | souls (SOUL.md per coworker from their Borges story, diaries) — 61–64 held |
+| #60–64 | souls (SOUL.md per coworker from their Borges story, diaries) — 61–64 blocked in step order |
 | #65–68 | hiring hall (swipe on generated people), cast editor (god view), parts library (accessories first — **Jude loves them** — plus procedural and model-invented parts), pet store (Borges' imaginary beings) |
-| #69 | **Gary the Dumpster Gremlin** (Jude: "murder trash hobo slappage") — a cartoon creature, held on #56 |
+| #69 | **Gary the Dumpster Gremlin** (Jude: "murder trash hobo slappage") — a cartoon creature, blocked by #56 |
 
 ## 5 · Waiting on Andrew
 
