@@ -171,9 +171,8 @@ defmodule Server.Life do
     do: attrs |> Map.put(:workspace_id, workspace_id) |> Quest.create_changeset() |> Repo.insert()
 
   @doc "The `GET /api/life` body for one workspace."
-  @spec status(integer) :: map
-  def status(workspace_id) do
-    now = Schedules.local_now()
+  @spec status(integer, DateTime.t()) :: map
+  def status(workspace_id, now \\ DateTime.utc_now()) do
     routines = Repo.all(from r in Routine, where: r.workspace_id == ^workspace_id and r.enabled)
     xp = xp(workspace_id)
 
@@ -197,12 +196,12 @@ defmodule Server.Life do
   end
 
   defp today(routines, now) do
-    today_date = DateTime.to_date(now)
+    today_date = Schedules.local_date(now)
 
     for routine <- routines,
         due_at = current_due_at(routine, now),
         due_at != nil,
-        Date.compare(DateTime.to_date(due_at), today_date) == :eq do
+        Date.compare(Schedules.local_date(due_at), today_date) == :eq do
       %{routine_id: routine.id, title: routine.title, due_at: due_at, done: has_run?(routine.id, due_at)}
     end
   end

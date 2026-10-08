@@ -326,6 +326,10 @@ defmodule Server.Schedules do
   @doc "The server's local wall-clock time now, as a UTC-labelled datetime — whose year and month a calendar shows."
   def local_now, do: to_local(DateTime.utc_now())
 
+  @doc "The server-local calendar date of a real UTC instant."
+  @spec local_date(DateTime.t()) :: Date.t()
+  def local_date(%DateTime{} = utc), do: utc |> to_local() |> DateTime.to_date()
+
   # local wall-clock time, carried as a UTC-labelled datetime (what Expression matches against),
   # through the OS's own timezone rules for that instant — so a date across a DST change converts
   # with the offset in force then, not now
