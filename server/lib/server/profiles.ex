@@ -345,7 +345,8 @@ defmodule Server.Profiles do
         "get_brief",
         "propose_habit"
       ],
-      "excludeTools" => ["register", "consult_peer", "open_thread", "close_thread"]
+      "excludeTools" =>
+        ["register", "consult_peer", "open_thread", "close_thread"] ++ ~w(release_status propose_release set_urgency)
     }
   }
 
@@ -371,6 +372,13 @@ defmodule Server.Profiles do
   @sheriff_mcp @tlon_mcp
                |> update_in(["tlon", "directTools"], &(&1 ++ ["machine_overview", "consult_peer"]))
                |> update_in(["tlon", "excludeTools"], &(&1 -- ["consult_peer"]))
+
+  # The PM owns what ships and in what order — the release and the backlog's urgency — and reads
+  # across the work to judge it; it neither edits code nor staffs.
+  @pm_release_tools ~w(release_status propose_release set_urgency)
+  @pm_mcp @tlon_mcp
+          |> update_in(["tlon", "directTools"], &(&1 ++ @pm_release_tools ++ ["machine_overview", "list_tickets"]))
+          |> update_in(["tlon", "excludeTools"], &((&1 -- @pm_release_tools) ++ ["rename_identifier", "edit_clause"]))
 
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
   # so filler progress pings are pure noise. Appended to the worker roles.
@@ -485,6 +493,30 @@ defmodule Server.Profiles do
   you did.#{@chat_etiquette}
   """
 
+  # The PM persona → `system_prompt.md` (pm-and-release design §1, §4, §6).
+  @pm_role """
+  You are {{handle}}, the PM — you own what ships and in what order: the backlog's urgency, what is
+  releasable, the release pointer (`live`, what the service runs) and the changelog. You do NOT own
+  code (writes are denied to you) or routing: tertius staffs whatever intake picks, the sheriff owns
+  red, the reviewer owns the diff.
+
+  WHAT IS RELEASABLE. `release_status` shows what runs, what main has that it doesn't, and the
+  mechanical checks on main's tip: the gate (check:main) and the smoke (release:smoke) passed on
+  exactly that commit, and nothing is mid-flight. Read those; never redo them. The fourth check is
+  yours alone: no track is half-shipped where Andrew would see it. Read the step tables (§8) in
+  docs/plans/ against what is waiting; a user-visible step whose track isn't whole waits for the rest.
+
+  CUTTING. When something releasable is waiting and whole, `propose_release(sha?, changelog)`. The
+  changelog is "what shipped to you" in Andrew's words — what he can now do or will notice — never
+  commit subjects. The server grades every change: if each fits his standing approval
+  (auto_land_risk) it cuts and says so; otherwise it reaches him as one gate, approve or not yet.
+  Don't propose again what he said not yet to unless something changed. A rollback is always his.
+
+  THE BACKLOG. Intake starts the most urgent unblocked ticket. `list_tickets` to read it;
+  `set_urgency(ticket_id, priority, why)` to move one — the root thread hears what's next and why.
+  Move urgency for a reason you can say in one line, and not to look busy.#{@chat_etiquette}
+  """
+
   # The researcher persona → `system_prompt.md`. The deep-research discipline, distilled.
   @researcher_role """
   You are {{handle}}, a deep RESEARCHER on this server task thread. Answer by fanning out
@@ -537,6 +569,7 @@ defmodule Server.Profiles do
   #   * builder   — TDD RED→GREEN→REFACTOR + verification-before-completion; can write.
   #   * planner   — writing-plans discipline (bite-sized TDD tasks, exact paths, DoD); can write.
   #   * sheriff   — owns red: triages every red signal on its beat, routes or fixes, escalates the real.
+  #   * pm        — owns what ships: releasability, the release pointer, the changelog, backlog urgency; no writes.
   #   * researcher — deep multi-source fan-out + adversarial verification; sandbox scoped per workspace (tunable).
   #   * assistant — general life-assistant over a non-code workspace's git-tracked paths (sandbox tunable).
   @archetypes %{
@@ -578,6 +611,14 @@ defmodule Server.Profiles do
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
       system_prompt: @sheriff_role,
+      add_extensions: [@footer_extension]
+    },
+    pm: %{
+      model: @sonnet,
+      mcp: @pm_mcp,
+      sandbox: @tlon_sandbox,
+      permissions: @reviewer_permissions,
+      system_prompt: @pm_role,
       add_extensions: [@footer_extension]
     },
     # researcher/assistant: @tlon_sandbox is the STARTING point — Slice 1 scopes it to the workspace's

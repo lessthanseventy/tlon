@@ -3,9 +3,12 @@
 # runs, built in the `.release` checkout beside the main one. Merging to main no longer deploys;
 # moving this pointer does.
 #
-#   release.sh cut [<commit>] [--rollback]   move live to <commit> (default origin/main): only a
+#   release.sh cut [<commit>] [--rollback] [--no-restart]
+#                                            move live to <commit> (default origin/main): only a
 #                                            fast-forward, only onto a commit on origin/main;
-#                                            --rollback allows going back to an older one
+#                                            --rollback allows going back to an older one;
+#                                            --no-restart leaves the restart to the caller (the PM's
+#                                            cut posts its changelog first, then restarts)
 #   release.sh status                        what runs, what main has that it doesn't, and
 #                                            whether main is releasable (the server's checks)
 #   release.sh build                         build .release at the current release (server:release;
@@ -51,8 +54,8 @@ case "$cmd" in
     ;;
 
   cut)
-    target="" rollback=""
-    for a in "$@"; do case "$a" in --rollback) rollback=1 ;; *) target="$a" ;; esac; done
+    target="" rollback="" restart=1
+    for a in "$@"; do case "$a" in --rollback) rollback=1 ;; --no-restart) restart="" ;; *) target="$a" ;; esac; done
     git fetch -q origin || { echo "release: can't fetch origin" >&2; exit 1; }
     to="$(git rev-parse -q --verify "${target:-origin/main}^{commit}")" || { echo "release: no commit ${target}" >&2; exit 1; }
     git merge-base --is-ancestor "$to" origin/main ||
@@ -71,6 +74,7 @@ case "$cmd" in
     echo "release → ${to:0:7}${from:+ (from ${from:0:7})}"
     [ -n "$from" ] && git log --format='  %h %s' "$from..$to"
 
+    [ -n "$restart" ] || exit 0
     if answer="$(curl -s -m 5 -X POST -H 'content-type: application/json' -d '{}' "$url/api/restart")" && [ -n "$answer" ]; then
       echo "restart: $answer"
     else
@@ -88,7 +92,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: release.sh cut [<commit>] [--rollback] | status | build" >&2
+    echo "usage: release.sh cut [<commit>] [--rollback] [--no-restart] | status | build" >&2
     exit 2
     ;;
 esac

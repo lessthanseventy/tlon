@@ -238,13 +238,7 @@ defmodule Server.Workline.Grade do
   """
   def grade(%Thread{} = thread, opts \\ []) do
     change = Keyword.get_lazy(opts, :change, fn -> Git.change(thread) end)
-
-    result =
-      case limits(change) do
-        [] -> ask(change, Keyword.get_lazy(opts, :docs, fn -> docs(thread) end))
-        limits -> {:ok, %{"limits" => limits}}
-      end
-
+    result = assess(change, fn -> Keyword.get_lazy(opts, :docs, fn -> docs(thread) end) end)
     record(thread, result)
 
     body =
@@ -255,6 +249,18 @@ defmodule Server.Workline.Grade do
 
     Server.Channel.post(%{thread_id: thread.id, author: "grader", body: body})
     result
+  end
+
+  @doc """
+  Grade `change` (`%{paths, deleted, lines, diff, files}`) against `docs` (`%{spec, plan}`, or a
+  function giving them, read only when the grader is asked): the limits first, then the grader.
+  Records and posts nothing — `grade/2` does that for a workline; a release grades its commits here.
+  """
+  def assess(change, docs) do
+    case limits(change) do
+      [] -> ask(change, if(is_function(docs, 0), do: docs.(), else: docs))
+      limits -> {:ok, %{"limits" => limits}}
+    end
   end
 
   defp docs(thread), do: %{spec: Git.doc(thread, "spec.md"), plan: Git.doc(thread, "plan.md")}

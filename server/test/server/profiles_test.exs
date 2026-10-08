@@ -230,6 +230,19 @@ defmodule Server.ProfilesTest do
       for staffing <- ["staff_child", "assign_lead"], do: refute(staffing in tlon["directTools"])
     end
 
+    test "the PM holds the release and backlog tools, writes no code, and no other archetype has them" do
+      pm = Profiles.archetype(:pm)
+      tools = ~w(release_status propose_release set_urgency)
+      for t <- tools, do: assert(t in pm.mcp["tlon"]["directTools"] and t not in pm.mcp["tlon"]["excludeTools"])
+      assert get_in(pm.permissions, ["permission", "write"]) == "deny"
+      for staffing <- ["staff_child", "assign_lead"], do: refute(staffing in pm.mcp["tlon"]["directTools"])
+
+      for {k, t} <- Profiles.archetypes(),
+          k != :pm,
+          tool <- tools,
+          do: assert(tool in t.mcp["tlon"]["excludeTools"], "#{k} reaches #{tool}")
+    end
+
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
       assert "machine_overview" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
     end
@@ -400,7 +413,7 @@ defmodule Server.ProfilesTest do
   describe "the archetype registry — role templates keyed by archetype atom" do
     test "the seed archetype set is present with sane defaults" do
       keys = Profiles.archetypes() |> Map.keys() |> Enum.sort()
-      assert keys == ~w(assistant builder planner researcher reviewer sheriff surveyor)a
+      assert keys == ~w(assistant builder planner pm researcher reviewer sheriff surveyor)a
     end
 
     test "reviewer archetype cannot write (deny floor), builder can" do

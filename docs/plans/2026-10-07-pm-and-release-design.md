@@ -1,7 +1,7 @@
 # A PM and a release pointer — what's on main is not what's shipped — design
 
 **Date:** 2026-10-07
-**Status:** approved by Andrew (calls in §9). Six steps in §8; 1–3 and 5 built.
+**Status:** approved by Andrew (calls in §9). Six steps in §8; 1–5 built (step 4: the `pm` archetype, `Server.Release.PM`).
 **Asked:** Andrew: *"not every PR at work is releasable. is there someone … watching over the
 process at large and saying like 'if we were to release today, it should be this commit on main'
 … this is quite literally a software factory version of a real office so what metaphors are we
@@ -115,9 +115,10 @@ The PM proposes a candidate commit on main. It is releasable when all four hold:
 Checks 1, 2 and 4 are mechanical. Each passes or fails, and the PM reads the result rather than
 re-doing it. Check 3 is the PM's judgment, and the reason the role exists.
 
-**Who approves.** The PM grades the release with the same `Server.Workline.Grade` axes,
-summed over what changed since the current `release`. If the grade fits the standing
-`auto_land_risk`, the PM cuts it. Otherwise it reaches Andrew as one `Needs` gate, "release
+**Who approves.** The PM grades the release with the same `Server.Workline.Grade` axes, commit
+by commit since the current `release`, and takes the max, axis by axis — not a sum, which would push
+any release of a few changes past a per-axis threshold none of them came near. If every commit fits
+the standing `auto_land_risk`, the PM cuts it. Otherwise it reaches Andrew as one `Needs` gate, "release
 <sha>: N changes, changelog, checks", with approve or not-yet. Anything the grader already
 holds for the operator (a migration, a dependency, gate files) always waits.
 
@@ -171,7 +172,7 @@ independent and urgent. Steps 2→3→4 stack. Step 5 can open any time after st
 | 1 | **Change window** — `quiet?/0` counts jobs, `server:restart` refuses unless quiet, Land retries an interrupted gate, Lifeline plugin | a killed Verify and a killed Land are each retried, not bounced; a restart during a verify is refused, `--force` restarts |
 | 2 | **The `release` ref** — `Release.Pointer`, `.release` worktree, `release:cut` / `release:status`, `after_merge` stops restarting; the ficciones side (`serverRel`, `?ref=release`) as its paired PR there | a cut to a commit not on main is refused; after a cut, the running service's version is the release sha while main is ahead |
 | 3 | **Releasable checks** — `check:main` records its sha; the scratch-release smoke script | a candidate whose nightly ran on a different sha is not releasable; a broken `/api/office` fails the smoke |
-| 4 | **The `pm` archetype** — role prompt, MCP tools (`release_status`, `propose_release`, `cut_release`, `set_urgency`, `flip_flag`), the release gate in `Needs`, the changelog | a driven session: the PM proposes, the gate reaches Andrew, approve cuts it, the changelog posts |
+| 4 | **The `pm` archetype** — role prompt, MCP tools (`release_status`, `propose_release` — which cuts under the standing approval, so there is no separate `cut_release` — and `set_urgency`; no `flip_flag` yet — a flip is the operator's `PATCH /api/flags/:name`), the release gate in `Needs`, the changelog | a driven session: the PM proposes, the gate reaches Andrew, approve cuts it, the changelog posts |
 | 5 | **Flags** — `fun_with_flags` (Ecto + Phoenix.PubSub), snapshot `flags` map, build mode behind `:build_mode` | with the flag off, the driven office has no `B`; on, it does |
 | 6 | **Sheriff postmortems** | a resolved incident yields one fact with the PR linked |
 

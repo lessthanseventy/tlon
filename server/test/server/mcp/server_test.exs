@@ -118,6 +118,10 @@ defmodule Server.MCP.ServerTest do
                "start_ticket",
                "write_note",
                "get_notes",
+               # the PM's (pm-and-release design §1)
+               "release_status",
+               "propose_release",
+               "set_urgency",
                # the source verbs (repo tools design, 2026-09-08)
                "rename_identifier",
                "outline_file",
@@ -837,6 +841,72 @@ defmodule Server.MCP.ServerTest do
     assert r["isError"]
     %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
     assert text =~ "999999"
+  end
+
+  describe "the PM's tools" do
+    setup do
+      {:ok, ws} = Server.Workspaces.create(%{name: "PMWS"})
+      {:ok, thread} = Channel.open_thread(%{title: "release desk", workspace_id: ws.id})
+      {:ok, agent} = Staff.register_agent(%{name: "beatriz", mandate: "pm", engine: "fresh"})
+      token = MCP.Tokens.mint(thread, agent)
+
+      repo = Path.join(System.tmp_dir!(), "pm-tools-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+      on_exit(fn -> File.rm_rf!(repo) end)
+
+      sh = fn cmd -> {_, 0} = System.cmd("sh", ["-c", cmd], cd: repo, stderr_to_stdout: true) end
+
+      sh.("""
+      git init -q && git config user.email t@t && git config user.name t &&
+      git commit -q --allow-empty -m seed && git branch live &&
+      git commit -q --allow-empty -m 'office: the lamp talks' && git update-ref refs/remotes/origin/main HEAD
+      """)
+
+      Application.put_env(:server, :release_root, repo)
+      on_exit(fn -> Application.delete_env(:server, :release_root) end)
+
+      %{ws: ws, token: token, session: handshake(token)}
+    end
+
+    test "release_status: what runs, what waits on main, and main's checks", %{token: token, session: session} do
+      status = token |> call(session, 2, "release_status", %{}) |> decode_tool_json()
+      assert [%{"subject" => "office: the lamp talks"}] = status["waiting"]
+      assert status["live"] != status["main"]
+      assert Enum.any?(status["checks"], &(&1 =~ "releasable: no"))
+    end
+
+    test "propose_release is refused unless main is releasable", %{token: token, session: session} do
+      r = call(token, session, 2, "propose_release", %{"changelog" => "The lamp talks."})
+      assert r["isError"]
+      %{"text" => text} = Enum.find(r["content"], &(&1["type"] == "text"))
+      assert text =~ "not releasable"
+    end
+
+    test "set_urgency moves a ticket's priority and says what's next and why on the root thread",
+         %{ws: ws, token: token, session: session} do
+      {:ok, low} = Server.Tickets.file(%{workspace_id: ws.id, title: "the lamp talks", priority: "low"})
+      {:ok, _} = Server.Tickets.file(%{workspace_id: ws.id, title: "the desk hums", priority: "med"})
+
+      r =
+        call(token, session, 2, "set_urgency", %{"ticket_id" => low.id, "priority" => "high", "why" => "Andrew asked"})
+
+      refute r["isError"]
+      assert Server.Tickets.get(low.id).priority == "high"
+
+      assert [note] = for(m <- Channel.thread_messages(Channel.machine_thread(ws.id)), m.author == "beatriz", do: m)
+      assert note.kind == "notice"
+      assert note.body =~ "##{low.id} the lamp talks → high: Andrew asked"
+      assert note.body =~ "next up: ##{low.id} the lamp talks"
+    end
+
+    test "set_urgency refuses a ticket from another workspace", %{token: token, session: session} do
+      {:ok, other} = Server.Workspaces.register(%{name: "Elsewhere"})
+      {:ok, t} = Server.Tickets.file(%{workspace_id: other.id, title: "theirs"})
+
+      r = call(token, session, 2, "set_urgency", %{"ticket_id" => t.id, "priority" => "high", "why" => "x"})
+      assert r["isError"]
+      assert Server.Tickets.get(t.id).priority == "med"
+    end
   end
 
   test "write_note defaults to the bound thread; get_notes reads it back" do

@@ -83,6 +83,10 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.StartTicket, name: "start_ticket")
   component(Server.MCP.Tool.WriteNote, name: "write_note")
   component(Server.MCP.Tool.GetNotes, name: "get_notes")
+  # The PM's (pm-and-release design §1): the release pointer and the backlog's urgency.
+  component(Server.MCP.Tool.ReleaseStatus, name: "release_status")
+  component(Server.MCP.Tool.ProposeRelease, name: "propose_release")
+  component(Server.MCP.Tool.SetUrgency, name: "set_urgency")
   component(Server.MCP.Resource.Brief, name: "brief")
   component(Server.MCP.Resource.Constraints, name: "constraints")
   component(Server.MCP.Resource.Habits, name: "habits")

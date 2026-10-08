@@ -12,7 +12,8 @@ defmodule Server.Attention do
   `tick/0` reconciles every workspace's coworker windows (the poller calls it every few seconds);
   `answer/3` sends the operator's reply into the pane as keys; `respond/3` is the one door every
   operator post takes — an answer when it names an option of an open prompt, a plain post
-  otherwise.
+  otherwise. A prompt with no `window` is no pane's: the PM's release gate (`Server.Release.PM`),
+  whose answer goes to the PM instead of a pane, and which no reconcile closes.
 
   Detection fails closed: a pane reads as waiting only on a positive match of a harness's own
   dialog — pi-permission-system's cursor-marked `▶ (y) Yes … enter confirm · esc deny`, Claude
@@ -112,7 +113,9 @@ defmodule Server.Attention do
           MapSet.put(acc, {tid, tab.name})
       end
 
+    # a prompt with no window (the PM's release gate) is no pane's to close
     for prompt <- open_prompts(workspace_id),
+        prompt.payload["window"],
         not MapSet.member?(seen, {prompt.thread_id, prompt.payload["window"]}),
         do: resolve(prompt, "window closed")
 
@@ -180,8 +183,18 @@ defmodule Server.Attention do
   defp scope_window(query, nil), do: query
   defp scope_window(query, window), do: where(query, [m], fragment("? ->> 'window'", m.payload) == ^window)
 
-  @doc "Is somebody on this thread waiting on the operator?"
-  def waiting?(thread_id), do: open_prompt(thread_id) != nil
+  @doc """
+  Is a pane on this thread sitting on a dialog? A prompt no pane holds (the release gate) doesn't
+  count: nothing typed into the thread could answer it by accident.
+  """
+  def waiting?(thread_id) do
+    Repo.exists?(
+      from m in Message,
+        where:
+          m.thread_id == ^thread_id and m.kind == "prompt" and is_nil(m.resolved_at) and
+            fragment("? ->> 'window' IS NOT NULL", m.payload)
+    )
+  end
 
   @doc "Every unresolved prompt on the workspace's open threads."
   def open_prompts(workspace_id) do
@@ -278,6 +291,13 @@ defmodule Server.Attention do
     end)
   end
 
+  # The release gate is no pane's: the answer is the PM's to act on (`Server.Release.PM.answered/2`).
+  defp answer(%Message{payload: %{"release" => _}} = prompt, author, body, key, _rest) do
+    reply = insert_answer(prompt, author, body)
+    Server.Release.PM.answered(prompt, key)
+    {:ok, reply}
+  end
+
   # pi confirms a letter by pressing it again; Claude Code takes the number outright. Free text
   # after the key (a reason, a redirection) follows as its own burst, then Enter.
   defp answer(%Message{payload: p} = prompt, author, body, key, rest) do
@@ -291,16 +311,20 @@ defmodule Server.Attention do
       _ = Tmux.submit(ws, window)
     end
 
+    {:ok, insert_answer(prompt, author, body)}
+  end
+
+  # delivered HERE: the answer has gone where it was for, so the switchboard must not type it again
+  defp insert_answer(prompt, author, body) do
     reply =
       %{thread_id: prompt.thread_id, author: author, body: body, reply_to: prompt.id}
       |> Message.post_changeset()
-      # delivered HERE: the keys just went into the pane, so the switchboard must not type it again
       |> Ecto.Changeset.put_change(:delivered_at, now())
       |> Repo.insert!()
 
     resolve(prompt, "answered: " <> String.trim(body))
     Bus.broadcast({:message_posted, reply})
-    {:ok, reply}
+    reply
   end
 
   defp keystrokes("pi", key), do: key <> key

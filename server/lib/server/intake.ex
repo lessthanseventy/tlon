@@ -78,7 +78,8 @@ defmodule Server.Intake do
     end
   end
 
-  defp next(ws) do
+  @doc "The ticket intake starts next in workspace `ws`: the most urgent backlog ticket nothing blocks, or nil."
+  def next(ws) do
     blocked = Server.Tickets.blocked_in_workspace(ws)
 
     from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog")
