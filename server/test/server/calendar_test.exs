@@ -51,4 +51,16 @@ defmodule Server.CalendarTest do
     assert Calendar.url(%{"ics" => "https://example.test/a.ics"}, dir) == {:ok, "https://example.test/a.ics"}
     assert {:error, _} = Calendar.url(%{"ics_secret" => "nope"}, dir)
   end
+
+  test "a day's birthdays and anniversaries across the sources, from their last good copy" do
+    ics =
+      "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:b@x\r\nDTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261009\r\nSUMMARY:Ana's birthday\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+
+    pid = start(fn _ -> {:ok, ics} end, [%{"name" => "family", "ics" => "https://example.test/b.ics"}])
+    :ok = Calendar.refresh(pid)
+
+    assert Calendar.celebrations(pid, ~D[2026-10-08]) == [%{title: "Ana's birthday", kind: "birthday"}]
+    assert Calendar.celebrations(pid, ~D[2026-10-09]) == []
+    assert Calendar.celebrations(:no_such_calendar, ~D[2026-10-08]) == []
+  end
 end

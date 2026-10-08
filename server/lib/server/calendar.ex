@@ -35,6 +35,16 @@ defmodule Server.Calendar do
     end
   end
 
+  @doc "The day's birthdays and anniversaries across the calendars (`Feed.celebrations/2`); [] when off."
+  @spec celebrations(GenServer.server(), Date.t()) :: [map()]
+  def celebrations(server \\ __MODULE__, day) do
+    if GenServer.whereis(server) do
+      for {_name, ics} <- GenServer.call(server, :feeds), c <- Feed.celebrations(ics, day), do: c
+    else
+      []
+    end
+  end
+
   @doc "Fetch every source now (and wait for it) — the timer's work, for a test or an operator."
   def refresh(server \\ __MODULE__), do: GenServer.call(server, :refresh, 60_000)
 
