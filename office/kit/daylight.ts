@@ -12,5 +12,5 @@ export function darkness(hour: number): number {
 /** how many of `n` lamps are on: the first as the light starts to fail, the last in full dark */
 export const lampsLit = (hour: number, n: number): number => Math.ceil(darkness(hour) * n)
 
-/** the pets turn in once it is fully dark */
-export const bedtime = (hour: number): boolean => darkness(hour) === 1
+/** full dark: the pets turn in, and you are off the clock */
+export const dark = (hour: number): boolean => darkness(hour) === 1

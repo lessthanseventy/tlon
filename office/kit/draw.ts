@@ -30,6 +30,10 @@ export class Scene {
   readonly items: Item[] = []
   /** drawn after every item: bubbles over heads, the focus arrow */
   readonly overhead: (() => void)[] = []
+  /** where each lamp's shade is: a lamp registers itself as it is drawn, and lights once it is dark */
+  readonly lamps: [number, number][] = []
+  /** it is the dark hours: you are in your pyjamas */
+  dark = false
   /** the 400 ms animation frame */
   readonly f: number
 
