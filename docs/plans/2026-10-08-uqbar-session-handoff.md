@@ -1,21 +1,21 @@
 # Handoff — the 2026-10-08 orchestrator session (Uqbar) → the next one
 
 **Written:** 2026-10-08, ~13:55, by the Claude Code session that ran the day (it calls itself
-**Uqbar**; see `2026-10-08-uqbar-design.md`). Read this, then `AGENTS.md`, then the memory index
+**Uqbar**; see `2026-10-08-uqbar-design.md`); brought up to date ~15:30, before Andrew's reboot.
+Read this, then `AGENTS.md`, then the memory index
 (`~/.claude/projects/-home-andrew-projects-tlon/memory/MEMORY.md`).
 
 ## 1 · Where things stand
 
-- **Live release:** `live` = `310bfe3` (the canvas). Service up; inbox (`Server.Office.Needs.list`)
-  reads clean.
-- **On main, not yet live (`e2029d5`):** #156 (a workline keeps the grade tertius staffed it at),
-  #159 (**the office strobe fix**: R no longer leaves the old process painting), #174's birthdays.
-  A gate + smoke run on `e2029d5` was started at ~13:55 (logs: `/tmp/claude/rel/gate13.log`,
-  `smoke13.log`). If both end `exit 0` with `ran-on … e2029d5`, run
-  `mise run release:cut -- <that sha>`.
-- **The strobe:** the office window Andrew has open runs the *old* code; the old process (pid
-  1190340) is paused with `kill -STOP` so only the child draws. **Don't press R in that window.**
-  Once #159 is live, he should close that window and open a fresh office; R is safe after.
+- **Live release:** `live` = `e2029d5` (cut 14:26, gate + smoke green): the strobe fix (#159), the
+  grade fix (#156), the birthdays. main is ahead only by docs. The office was restarted fresh on
+  the fixed code; R is safe.
+- **Talking in the office:** design `2026-10-08-office-talk-design.md`; tickets #70 (balloons
+  bigger, never overflowing) → #71 → #72 → #73, each `held` on the one before.
+- **#74:** KeepUp's drifted-main note — one per repo (it duplicated per count), routed to the
+  repo's workspace instead of the operator.
+- **Thread #1:** uqbar asked Andrew a Funes question (post #3886: what should tlon blur on
+  purpose?). His reply is still to come; answer it as uqbar there.
 
 ## 2 · What runs on its own (schedules on the live service)
 
@@ -56,10 +56,10 @@ Tickets with full briefs (`held` ones wait on the named blocker; take the label 
 
 ## 5 · Waiting on Andrew
 
-- `mise run home:switch` in `~/projects/ficciones` (the ficciones session rebased it; its AGENTS.md
-  keeps the switch his). That picks up workbench #7: the desktop's tlon follows `live`.
-- Four repos whose local `main` has unpushed commits (KeepUp's rollout notes): ficciones (6, the
-  other session's), excessibility (7), ex_riverside (23), menard (17).
+- The four drifted repos are level with origin: menard's were already upstream; excessibility
+  (#201) and ex_riverside (#1) were reviewed and merged; ficciones landed its own (workbench
+  #8–#11). Before ex_riverside's next `mise run deploy`, check prod's `~/riverside/start.sh` for
+  server-only edits — the deploy now overwrites it.
 - **Packaging for Jude and Robyn** (his next topic, not started) — see §7.
 
 ## 6 · Gotchas learned today (each also in memory)
