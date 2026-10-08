@@ -223,6 +223,20 @@ defmodule Server.WorktreeTest do
       assert {_, 0} = git.(["rev-parse", "--verify", String.trim(main)])
     end
 
+    test "holds/2 reads origin/main where there is one: merged there is merged, though this checkout lags", %{
+      repo: repo,
+      git: git
+    } do
+      {:ok, wt} = Worktree.ensure(repo, "landed")
+      File.write!(Path.join(wt, "work.txt"), "landed\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "work.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"])
+      assert Worktree.holds(repo, "landed") =~ "unmerged"
+
+      {_, 0} = git.(["update-ref", "refs/remotes/origin/main", "work/landed"])
+      assert Worktree.holds(repo, "landed") == nil
+    end
+
     test "remove/2 on a worktree that never existed is :none", %{repo: repo} do
       assert :none = Worktree.remove(repo, "ghost")
     end

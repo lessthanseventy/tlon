@@ -11,7 +11,8 @@ defmodule Server.Office.Needs do
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since), `suggestion` (the corkboard's suggestion box), `rollout` (what a
       merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
-      work: merge it or delete it — `Server.Maintain.Strays`).
+      work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
+      is its PR waiting on GitHub's checks, not stranded).
 
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
   behind it is resolved — approved, answered, filed — not when it is looked at.
@@ -24,6 +25,7 @@ defmodule Server.Office.Needs do
   alias Server.Thread
 
   @mention_days 7
+  @landing_grace_s 3600
 
   @doc "Every item waiting on the operator, across the workspaces."
   def list do
@@ -169,6 +171,7 @@ defmodule Server.Office.Needs do
 
   defp stranded do
     for %{repo: repo, name: name, thread: t} <- Server.Maintain.Strays.worktrees(),
+        not just_landed?(t),
         why = Server.Worktree.holds(repo, name) do
       %{
         key: "stranded:#{repo}:#{name}",
@@ -184,6 +187,21 @@ defmodule Server.Office.Needs do
       }
     end
   end
+
+  # a landing's PR waits on GitHub's checks before it merges; until then its commits are on no main,
+  # and that is the merge going as it should, not work left behind
+  defp just_landed?(%Thread{stage: "merged", id: id}) do
+    since = DateTime.add(DateTime.utc_now(), -@landing_grace_s, :second)
+
+    Repo.exists?(
+      from e in Server.Event,
+        where:
+          e.thread_id == ^id and e.kind == "stage_advanced" and
+            fragment("(?::jsonb ->> 'to') = 'merged'", e.detail) and e.created_at > ^since
+    )
+  end
+
+  defp just_landed?(_), do: false
 
   defp item(kind, level, %Thread{} = t, text, at, extra \\ %{}) do
     Map.merge(
