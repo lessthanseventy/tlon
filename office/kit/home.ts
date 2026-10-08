@@ -72,7 +72,7 @@ export function place(b: Build): Build {
   if (b.carrying) return b
   const existing = at(b.home, b.cursor)
   const kind = CATALOGUE[existing ? (CATALOGUE.indexOf(existing.kind) + 1) % CATALOGUE.length : 0]!
-  const tile: HomeTile = { kind, at: b.cursor }
+  const tile: HomeTile = existing?.rot ? { kind, at: b.cursor, rot: existing.rot } : { kind, at: b.cursor }
   const without = { tiles: b.home.tiles.filter((t) => t !== existing) }
   if (!canPlace(without, tile)) return { ...b, refused: true }
   return { ...b, home: { tiles: [...without.tiles, tile] }, refused: false, history: remember(b), writes: b.writes + 1 }
