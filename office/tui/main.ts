@@ -877,7 +877,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         if (c.more) rows.push({ segs: [dim(`  +${c.more} more`)] })
       }
       section("BLOCKERS — open issues", stuck.blockers); section("FAILED CHECKS", stuck.failed_checks); section("NOBODY LEADS", stuck.unled)
-      return { title: `TRIAGE · ${stuck.count} stuck`, rows: rows.length ? rows : [{ segs: [dim("nothing is stuck. the beacon is dark.")] }], actions: [back1] }
+      return { title: `TRIAGE · ${stuck.count} known problems · the sheriff's`, rows: rows.length ? rows : [{ segs: [dim("nothing is stuck. the beacon is dark.")] }], actions: [back1] }
     }
     case "health": {
       if (!rack) return { title: "THE RACK", rows: [{ segs: [dim("probing…")] }], actions: [back1] }
@@ -938,7 +938,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const rows: Row[] = [{ segs: [plain(all.awaiting ? `${all.awaiting} thread(s) wait on you across the office` : "nothing waits on you")] }]
       for (const x of all.workspaces) {
         const n = all.threads.filter((t) => t.workspace_id === x.id && needsYou(t)).length, s = all.triage[String(x.id)] ?? 0
-        rows.push({ segs: [key(x.id === ws ? "▸ " : "  "), plain(x.name.padEnd(16)), n ? pink(`${n} waiting  `) : dim(""), s ? pink(`${s} stuck`) : dim("")], open: () => goWs(x.id) })
+        rows.push({ segs: [key(x.id === ws ? "▸ " : "  "), plain(x.name.padEnd(16)), n ? pink(`${n} waiting  `) : dim(""), s ? dim(`${s} issues`) : dim("")], open: () => goWs(x.id) })
       }
       return {
         title: "WORKSPACES", rows,
