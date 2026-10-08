@@ -4,6 +4,12 @@ import type { Agents, LifeStatus } from "./types"
 /** level L starts at 100·L² xp (the server's curve); the bar only draws progress, never decides a level */
 const levelStart = (level: number) => 100 * level * level
 
+/** the highest level among the home workspaces, null where there is no life side */
+export const homeLevel = (a: Agents): number | null => {
+  const levels = Object.values(a.life ?? {}).map((l) => l.level)
+  return levels.length ? Math.max(...levels) : null
+}
+
 /** five cells for the way from `start` to `next` xp */
 export function lifeBar(xp: number, start: number, next: number): string {
   const f = next > start ? Math.min(1, Math.max(0, (xp - start) / (next - start))) : 0

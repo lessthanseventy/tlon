@@ -4,6 +4,7 @@
 // consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { asksYou } from "./crew"
+import { homeLevel } from "./life"
 import { looksGen, overrideFor } from "./looks"
 import type { Pets } from "./pets"
 import { CAT_NAME, lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
@@ -323,6 +324,11 @@ export class Sim<L extends { people: Seat[] }> {
     this.changed = true
   }
 
+  /** the home level on the last snapshot; null until one has one, so a start-up is only a baseline */
+  private levelSeen: number | null = null
+  /** a level-up in the snapshot: the same party as the Konami code; rooms add to it */
+  protected levelUp(_level: number) { this.disco() }
+
   /** the beat the room dances to now: a disco's, else none (a room with music says otherwise) */
   bpm(): number | null { return this.tick < this.discoUntil ? 140 : null }
 
@@ -364,6 +370,9 @@ export class Sim<L extends { people: Seat[] }> {
     if (a.ok) this.lastGood = a
     else if (this.lastGood) a = { ...this.lastGood, ok: false, note: a.note }
     this.tick++
+    const level = homeLevel(a)
+    if (level !== null && this.levelSeen !== null && level > this.levelSeen) this.levelUp(level)
+    this.levelSeen = level
     this.weather = a.weather ?? this.weather
     let changed = this.changed || this.tick % 4 === 0
     this.changed = false
