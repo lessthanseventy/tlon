@@ -17,7 +17,7 @@ defmodule Server.Workline.Scribe do
   Write `work/<slug>/<filename>` in the thread's repo (`Artifacts.Git.root/1`) and commit it. `{:ok, rel_path}` or `{:error, reason}`.
   """
   def commit(%Thread{slug: slug} = thread, filename, body, commit_message) do
-    root = Artifacts.Git.root(thread)
+    root = on_branch(Artifacts.Git.root(thread), slug)
     rel = Path.join(["work", slug, filename])
     abs = Path.join(root, rel)
 
@@ -61,6 +61,18 @@ defmodule Server.Workline.Scribe do
     from(m in Message, where: m.thread_id == ^id and m.author == "tlon", order_by: [asc: m.id], select: m.body)
     |> Repo.all()
     |> Enum.find(title, fn body -> not String.starts_with?(body, @process_glyphs) end)
+  end
+
+  # The workline's own checkout when its branch exists, so the artifact lands on work/<slug> and the
+  # main checkout's branch (the live service's HEAD) never collects other worklines' docs; the repo
+  # root only before there is a branch (a machine-born intent at its approval).
+  defp on_branch(root, slug) do
+    with {_, 0} <- git(root, ["rev-parse", "--verify", "--quiet", "refs/heads/work/#{slug}"]),
+         {:ok, wt} <- Server.Worktree.ensure(root, slug) do
+      wt
+    else
+      _ -> root
+    end
   end
 
   defp commit_if_dirty(root, rel, message) do

@@ -174,7 +174,8 @@ defmodule Server.Workline.Artifacts.Git do
   def diffstat(thread) do
     branch = "work/#{thread.slug}"
 
-    case git(thread, ["diff", "--shortstat", "HEAD..." <> branch]) do
+    # the change, not the workline's own docs (its spec, plan and review ride on the branch too)
+    case git(thread, ["diff", "--shortstat", "HEAD..." <> branch, "--", ".", ":!work/#{thread.slug}"]) do
       {out, 0} -> {:ok, if(String.trim(out) == "", do: "no change against HEAD", else: String.trim(out))}
       {_out, _} -> {:error, "no branch #{branch} to diff"}
     end

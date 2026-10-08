@@ -41,6 +41,23 @@ defmodule Server.WorklineReviewTest do
     assert {:ok, _} = Artifacts.Git.check(thread(), {:file, "review.md"})
   end
 
+  test "with the workline's branch there, review.md lands on it — never on the main checkout's branch", %{root: root} do
+    git = fn args -> System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
+    File.write!(Path.join(root, "seed"), "s")
+    {_, 0} = git.(["add", "seed"])
+    {_, 0} = git.(["commit", "-qm", "seed"])
+    {_, 0} = git.(["branch", "work/fence-test"])
+    {main_before, 0} = git.(["rev-parse", "HEAD"])
+
+    {:ok, _} = Review.submit(thread(), "## Verdict: approve\n\nclean", "lonnrot")
+
+    assert git.(["rev-parse", "HEAD"]) == {main_before, 0}
+    assert {"## Verdict: approve" <> _, 0} = git.(["show", "work/fence-test:work/fence-test/review.md"])
+
+    assert {:ok, "committed work/fence-test/review.md on work/fence-test"} =
+             Artifacts.Git.check(thread(), {:file, "review.md"})
+  end
+
   test "the review gate says what there is to decide on: the verdict line and the change's size", %{root: root} do
     git = fn args -> System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
     File.write!(Path.join(root, "seed"), "s")
@@ -176,6 +193,10 @@ defmodule Server.WorklineReviewTest do
 
     assert {:ok, "work/fence-test @ " <> _} = Artifacts.Git.check(thread, :branch)
     assert {:ok, _} = Review.submit(thread, "## Verdict: approve", "menard-machine")
-    assert File.exists?(Path.join(other, "work/fence-test/review.md"))
+
+    assert {"## Verdict: approve" <> _, 0} =
+             System.cmd("git", ["-C", other, "show", "work/fence-test:work/fence-test/review.md"],
+               stderr_to_stdout: true
+             )
   end
 end
