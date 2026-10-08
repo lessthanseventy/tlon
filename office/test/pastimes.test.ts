@@ -182,9 +182,7 @@ describe("a server restart", () => {
 
 describe("a birthday from the calendar", () => {
   const frame = (celebrations: Agents["celebrations"]) => {
-    const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), celebrations }, 1)
-    ;(room as unknown as { hour: () => number }).hour = () => 12
-    return chance(0.999, () => { room.step(a); return room.render(a, { picked: null, armed: null, person: null }, (s) => s.length * 2, new Date(2026, 9, 8, 12, 0, 0)).rgba.join() })
+    return chance(0.999, () => { const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), celebrations }, 1); (room as unknown as { hour: () => number }).hour = () => 12; room.step(a); return room.render(a, { picked: null, armed: null, person: null }, (s) => s.length * 2, new Date(2026, 9, 8, 12, 0, 0)).rgba.join() })
   }
   test("bunting goes up and a cake comes out", () => {
     const none = frame([])
