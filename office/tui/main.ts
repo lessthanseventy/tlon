@@ -9,7 +9,7 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
-import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
+import { drop, gridWindow, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
@@ -818,8 +818,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         draw()
       }
       const [cx, cy] = b.cursor
-      const xs = [...b.home.tiles.map((t) => t.at[0]), cx], ys = [...b.home.tiles.map((t) => t.at[1]), cy]
-      const x0 = Math.min(...xs) - 1, x1 = Math.max(...xs) + 1, y0 = Math.min(...ys) - 1, y1 = Math.max(...ys) + 1
+      const { x0, x1, y0, y1 } = gridWindow(b.home, b.cursor)
       const code = (t: HomeTile | undefined) => (t ? t.kind.slice(0, 2).toUpperCase() : "··")
       const rows: Row[] = []
       for (let y = y0; y <= y1; y++) {
