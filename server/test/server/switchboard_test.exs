@@ -66,6 +66,17 @@ defmodule Server.SwitchboardTest do
       refute_received {:woke, "wRobert", _}
     end
 
+    test "a notice wakes nobody — it is read on the next turn, not delivered" do
+      %{thread: thread} = staffed_thread()
+
+      {:ok, m} =
+        Channel.post(%{thread_id: thread.id, author: "tlon", body: "⟳ the server restarts now", kind: "notice"})
+
+      Switchboard.deliver(m)
+
+      refute_received {:woke, _, _}
+    end
+
     test "the lead's own top-level post wakes no agent — it is a report up to the human" do
       %{thread: thread} = staffed_thread()
       {:ok, m} = Channel.post(%{thread_id: thread.id, author: "Sandra", body: "shipped the fix"})

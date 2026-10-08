@@ -57,7 +57,7 @@ defmodule Server.Message do
       :payload
     ])
     |> validate_required([:thread_id, :author, :body])
-    |> validate_inclusion(:kind, ["chat", "prompt", "stall"])
+    |> validate_inclusion(:kind, ["chat", "prompt", "stall", "notice"])
     |> Server.Secrets.validate_no_secret(:body)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
   end

@@ -43,6 +43,7 @@
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
+#   announce-restart <why…>        a notice on every thread with a live session: the server is restarting
 #   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
@@ -379,6 +380,11 @@ case "$cmd" in
     exec "$SERVER" rpc "case Server.Workline.open(%{title: \"$(esc "$title")\", slug: \"$(esc "$slug")\"}) do {:ok, t} -> IO.puts(\"workline ##{t.id} #{t.slug} at #{t.stage} — folder work/#{t.slug}/\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\") end"
     ;;
 
+  announce-restart)
+    why="$*"; [ -n "$why" ] || why="the operator ran server:restart"
+    exec "$SERVER" rpc "Server.Rollout.announce_restart(\"$(esc "$why")\")"
+    ;;
+
   quiet)
     # Prints only: the expression runs inside the live node, where a halt would stop the service.
     exec "$SERVER" rpc 'case Server.Rollout.busy() do [] -> IO.puts("quiet"); b -> IO.puts("busy"); Enum.each(b, &IO.puts/1) end'
@@ -445,7 +451,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|dossier|post|shell-thread|close-thread|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
