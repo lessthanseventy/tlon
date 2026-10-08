@@ -1,6 +1,11 @@
 // The server's office snapshot as `Server.Office.status` returns it (`GET /api/office`, and
 // `scripts/tlon-cli.sh shell-status` for the desktop) — what every office surface reads.
 
+/** a routine whose current due is unmet; `window_remaining` seconds, negative once past its window */
+export type Due = { routine_id: number; title: string; due_at: string; window_remaining: number }
+/** a workspace's life summary on the snapshot (`Server.Life.status`, trimmed); full detail is `GET /api/life/:ws` */
+export type LifeSummary = { level: number; xp: number; due: Due[] }
+
 /** `prompt`: its coworker is sitting on a dialog (Server.Attention) — the ask, answered from the thread */
 /** `lead`: who it is staffed with; `live`: a tmux window is running it; `standing`: its workspace's lobby; `thinking`: who is mid-turn on it */
 export type Thread = { id: number; title: string; stage: string | null; awaiting: string | null; workspace_id?: number | null; lead?: string | null; live?: boolean; standing?: boolean; thinking?: string[]; prompt?: { summary: string; options?: { key: string; label: string }[] | null } | null }
@@ -49,6 +54,8 @@ export type Agents = {
   revs?: { office: string | null }
   /** the server's feature flags by name (`Server.Flags`): what the office shows of work that lands dark */
   flags?: Record<string, boolean>
+  /** the life side per `home` workspace id (`Server.Office.status`); absent for every other workspace */
+  life?: Record<string, LifeSummary>
   note?: string
 }
 /** a flag from the snapshot, never from anywhere else; one it doesn't name is off */
