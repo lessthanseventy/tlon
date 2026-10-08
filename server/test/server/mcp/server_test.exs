@@ -719,6 +719,20 @@ defmodule Server.MCP.ServerTest do
     assert %Thread{state: "open"} = Repo.get(Thread, lobby.id)
   end
 
+  test "finish on a workline that hasn't merged posts the summary and leaves it open — the merge queue closes it" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Landing"})
+    {:ok, w} = Server.Workline.open(%{title: "fanfare", slug: "fanfare-finish", stage: "review", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "nolan", mandate: "qa", engine: "fresh"})
+    token = MCP.Tokens.mint(w, agent)
+    session = handshake(token)
+
+    r = call(token, session, 2, "finish", %{"summary" => "QA passed"})
+    refute r["isError"]
+    assert decode_tool_json(r)["stays_open"] == true
+    assert %Thread{state: "open"} = Repo.get(Thread, w.id)
+    assert %{body: "QA passed"} = List.last(Channel.thread_messages(w))
+  end
+
   test "staff_child with a ticket_id moves that ticket into the thread it opens", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "yu-machine", mandate: "plan", engine: "fresh"})
     {:ok, ws} = Server.Workspaces.register(%{name: "Ticketed"})
