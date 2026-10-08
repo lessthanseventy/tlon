@@ -1,21 +1,30 @@
-APPROVE
+REQUEST_CHANGES (supersedes my earlier approve — grader caught a real bug I missed)
 
-Reviewed the 5-commit diff on work/floor-step-3-build-mode-and-the-first-ho against main (office/kit/home.ts, office/test/home.test.ts, office/tui/home.ts, office/tui/main.ts — 330 lines, no spec.md/plan.md committed for this step, consistent with the brief's "a doc from a stage this workline started after won't exist").
+Reviewed the 5-commit diff on work/floor-step-3-build-mode-and-the-first-ho against main (office/kit/home.ts, office/test/home.test.ts, office/tui/home.ts, office/tui/main.ts).
 
-**Spec compliance**
-- Build mode engine (`kit/home.ts`): place/pick-up/carry/drop/rotate/remove/undo, all gated correctly — every mutator but `move`/`pickUp` refuses while `carrying` (prevents losing or duplicating the carried tile), matching learning #339/#340.
-- Connectivity rule enforced via `connected()` (BFS over grid adjacency) and checked by both `drop` and `place` through `canPlace`; covered by tests for the straightforward and the "stranded tile" cases.
-- `writes` counter correctly distinguishes mutations that must persist from in-memory-only ones (`pickUp`/`move`/a refused `drop` don't bump it; `place`/`drop`/`remove`/`rotate`/`undo` do) — this is the fix for the earlier "pick-up writes home.json" bug, and `tui/main.ts`'s `mutate()` only calls `saveHome` when `writes` changed. Verified against home.test.ts's explicit write-count assertions.
-- `home.json` IO is cleanly out of `kit/` and into `tui/home.ts`, as intended; load validates tile shape (kind in CATALOGUE, numeric 2-tuple `at`) and drops anything malformed rather than trusting the file — tested with a mixed-garbage fixture.
-- TUI surface: `B` opens build mode (uppercase, per decision #338 to leave `b` for memory); arrow keys move, Enter picks up/drops, `n`/`x`/`r`/`u` cycle/remove/rotate/undo, Esc leaves. State persists across leave-and-reopen by design (`build` stays a module-level `Build | null`).
+**Bug: `remove()` has no connectivity check, unlike `drop`/`place`**
 
-**Non-blocking observations** (not requesting changes for these):
-1. `tui/main.ts`'s build-mode grid renders every cell in the bounding box of `[tiles ∪ cursor]`. Nothing clamps how far the cursor can move from the floor, so holding an arrow key can blow the bounding box out to a very wide/tall render. Low severity (single-user local TUI, no crash), but worth a follow-up if it's ever noticeably slow in practice.
-2. `place()` (the `n` key, cycling a cell's kind) drops any existing `rot` when it advances to the next kind in the catalogue — rotating then cycling the kind silently resets orientation. Likely fine since there's one tile shape this step, but flagging in case it surprises later.
-3. `refused` isn't cleared by `remove`/`rotate`/`undo`, only by `move`/`pickUp`/a successful `place`/`drop` — a stale "refused" banner could in theory survive past the action that caused it. Didn't find a path where this is user-visible given the current action set, but worth a glance if the refused-state UI changes.
+office/kit/home.ts's module comment states the invariant as "the floor stays one piece, or the drop is refused," and `drop`/`place` both gate through `canPlace` (which requires `connected()` on the *whole* resulting tile set). `remove()` does not:
 
-**Checks**
-- `mise run check` is green on this branch (recorded in the workline evidence), including office:check 124/0 and the two upstream PR #65 fixes applied for the ambient-env/night-owl issues — this branch itself needed no changes to pass.
-- Issue #4 (wide.test.ts golden-hash + pastimes.test.ts cold-day path, both deterministic) is confirmed pre-existing on origin/main itself and unrelated to this diff — not a reason to block this review.
+```
+export function remove(b: Build): Build {
+  if (b.carrying) return b
+  const tile = at(b.home, b.cursor)
+  if (!tile) return b
+  return { ...b, home: { tiles: b.home.tiles.filter((t) => t !== tile) }, history: remember(b), writes: b.writes + 1 }
+}
+```
 
-Test coverage (office/test/home.test.ts) is thorough: connectivity, overlap, the full build/pick-up/drop/refuse/rotate/remove/undo surface, the 10-entry history cap, the carrying-blocks-mutation invariant, and the home.json round-trip including malformed-file handling. No gaps found that would change the verdict.
+Traced the consequence: living(0,0)-kitchen(1,0)-bathroom(2,0), remove the middle tile → home is now two disconnected single tiles, persisted to home.json with no refusal. From there, `canPlace` requires the *entire* post-drop tile set to be connected, so once the floor is split, almost every future `place()`/`drop()` is refused (only a drop that exactly bridges the gap succeeds). Because `place`/`remove`/`rotate`/`undo` are all blocked while `carrying` (by design, to stop the carried tile being lost/duplicated), a player who picks up a tile off an already-disconnected floor has only `move`/`drop` left — and in configurations with more than one gap or a distant island, no drop reconnects everything, so the tile can't be placed back anywhere. That's a genuine soft-lock, not just a cosmetic gap.
+
+**Fix** (per the grader's proof, which I agree with):
+- In `remove()`, compute the tiles without the target and refuse (`{ ...b, refused: true }`, no write) if `!connected(rest)`.
+- Add a test: living(0,0)-kitchen(1,0)-bathroom(2,0), remove at (1,0) → refused, 3 tiles still there.
+- Add a test: pick up a tile and drop it back at its own original cell → succeeds (guards against a regression where `canPlace` rejects a no-op drop).
+
+**Also flagged, non-blocking but worth picking up in the same pass:**
+- `tui/main.ts`'s wiring (`saveHome` only called when `writes` changes, the key bindings) has no test — drive-office coverage (press B, n, esc; check `home.json` via `TLON_HOME` holds one tile; press B, Enter to pick it up and confirm the file is unchanged) would close that gap.
+- Grid render in build mode is unbounded by cursor distance from the floor (noted in my first pass, still true).
+- `place()`'s kind-cycle drops `rot` on the cell (noted in my first pass, still true).
+
+Sending back to build for the `remove()` fix and its two tests; the rest can ride along if convenient but isn't a blocker on its own.
