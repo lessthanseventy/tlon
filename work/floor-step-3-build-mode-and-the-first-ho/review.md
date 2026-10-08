@@ -1,16 +1,26 @@
-## Verdict: approve
+## Verdict: request_changes (supersedes my earlier approve)
 
-Reviewed the 4-commit diff on `work/floor-step-3-build-mode-and-the-first-ho` (`office/kit/home.ts`, `office/tui/home.ts`, `office/tui/main.ts`, `office/test/home.test.ts`). No `spec.md`/`plan.md` exist for this workline (expected — it started after those stages). Ran `bun test test/home.test.ts`: 13 pass, 0 fail, matching the verify-stage claim.
+A grader review on this thread caught a real bug my first pass missed. I reproduced it independently with a standalone script against `office/kit/home.ts` before writing this up — it's confirmed, not speculative.
 
-### What's correct
-- `connected`/`canPlace`: straightforward BFS over grid adjacency, correctly excludes the tile-in-motion before checking for overlap vs. connectivity split. `place()` builds its "without" set from the *existing* tile at the cursor before calling `canPlace`, so it doesn't double-count — verified by tracing the catalogue-cycling test.
-- The write-counter fix (`writes` field) is real: `pickUp`/`move`/refused `drop` leave `writes` unchanged, so the TUI's `mutate()` wrapper (`main.ts:787-792`) correctly skips `saveHome` for those paths — this is the exact bug described in the hronir build note, and it's covered by an explicit test (`expect(b.writes).toBe(0)` after pickup and after a refused drop).
-- Carrying a tile across an app-quit is safe: `pickUp` never removes the tile from disk until a successful `drop`/`place`, so there's no data-loss window.
-- `rotate` is cosmetic-only this step (every tile has doors on all sides per the home.ts header comment), consistent with "the first home tiles" scope.
-- Traced undo interacting with a concurrently-carried tile for a duplication bug — none found: any history snapshot is always taken *after* the carried tile has already been excluded from `home.tiles`, so undo can't reintroduce a duplicate of what's being carried.
+### Confirmed bug: carry + undo can duplicate a tile
+`pickUp` removes a tile from `home.tiles` into `carrying` **without pushing a history entry**. If an *earlier* mutation (on some other tile) already pushed a history entry that still contains the carried tile, pressing `undo` after the pickup pops that earlier snapshot back into `home.tiles` — while `carrying` still holds the same tile. Repro:
 
-### Minor, non-blocking
-- `main.ts:822` — the `u` (undo) key handler calls `saveHome(build.home)` unconditionally, bypassing the `wrote` check every other action in this card goes through (`mutate()`, `main.ts:787-791`). When `undo` is a no-op (empty history, e.g. first action in a fresh session), this still writes home.json — harmless since the content is identical, but it's an inconsistency with the write-counter discipline established by the prior bug fix. Worth a follow-up, not a blocker.
-- `remove()` doesn't check connectivity before taking a tile off the floor, so it can split the floor into disconnected pieces (undo-able, but the split is live until then). The code's own header comment scopes the "stays one piece or refused" invariant to drops/placement, not removal, so this isn't a spec violation — just worth knowing if a later step assumes the floor is always contiguous.
+1. `home = {living@(0,0), kitchen@(5,5)}`
+2. `rotate(living)` → pushes history entry `{living, kitchen}` (kitchen still present)
+3. move cursor to kitchen, `pickUp` → `home = {living'}`, `carrying = kitchen` (no history push)
+4. `undo` → pops the step-2 snapshot, which still has kitchen → `home = {living, kitchen}` **and** `carrying = kitchen`
 
-Nothing here rises to request_changes. Approving.
+Dropping now writes a second kitchen tile into `home.json`. Standalone test run confirmed: `home.tiles` contains kitchen AND `carrying.kind === "kitchen"` simultaneously after step 4.
+
+### Same root cause, silent data loss
+Because `pickUp` never records history and the carried tile is simply absent from `home` in memory, any *other* write while a tile is being carried (place/remove/rotate elsewhere) persists `home.json` **without** the carried tile. If the process dies in that window, the tile is gone — not just "unsaved," actually lost, since nothing on disk or in `carrying` survives a process restart (module-level `build` state is wiped). This only looked safe in my first pass because I only checked the case of quitting *immediately* after pickup with no intervening write.
+
+### Also flagged by the grader, worth fixing alongside
+- `saveHome` (`tui/home.ts`) has no try/catch, unlike the pattern elsewhere in this file's sibling (`writeState`) — a read-only config dir throws inside a key handler and can crash the whole TUI via the uncaughtException handler, not just build mode.
+- `loadHome` doesn't validate tile shape (`if (Array.isArray(j?.tiles)) return { tiles: j.tiles }`) — a malformed `home.json` (e.g. `{"tiles":[{}]}`) loads tiles with no `kind`/`at`, which then breaks `connected`/rendering downstream.
+- No test exercises the main.ts glue (write-only-when-`writes`-changed, `undo`'s unconditional save, or any carry+mutate-elsewhere interaction) — this is exactly the gap that let the duplication bug through.
+
+### Suggested fix (from the grader, which I agree with)
+Make `place`, `remove`, `rotate`, and `undo` no-op (return `b` unchanged) while `b.carrying` is set — carrying should block every other mutation until the tile is dropped. Add a test: pickUp, then attempt place/remove/undo elsewhere, assert the carried tile is unaffected and appears exactly once across `home.tiles` ∪ `carrying`. Separately: wrap `saveHome` in try/catch, and validate loaded tiles' shape against `CATALOGUE` and `at` being a numeric pair.
+
+Sending back to build.
