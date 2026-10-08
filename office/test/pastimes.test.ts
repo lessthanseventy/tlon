@@ -189,6 +189,17 @@ describe("a birthday from the calendar", () => {
     expect(frame([{ title: "Ana's birthday", kind: "birthday" }])).not.toBe(none)
     expect(frame(undefined)).toBe(none)
   })
+  test("the kitchen counter is drawn with the snapshot, so the cake sees the celebration", () => {
+    chance(0.999, () => {
+      const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), celebrations: [{ title: "Ana's birthday", kind: "birthday" }] }, 1)
+      const kitchen = (room as unknown as { kitchen: { draw: (sc: unknown, a: Agents, ...rest: unknown[]) => void } }).kitchen
+      const draw = kitchen.draw.bind(kitchen), seen: Agents["celebrations"][] = []
+      kitchen.draw = (sc, ag, ...rest) => { seen.push(ag.celebrations); draw(sc, ag, ...rest) }
+      room.step(a); room.render(a, { picked: null, armed: null, person: null }, (s) => s.length * 2, new Date(2026, 9, 8, 12, 0, 0))
+      expect(seen.length).toBeGreaterThan(0)
+      expect(seen.every((c) => c?.length === 1)).toBe(true)
+    })
+  })
   test("anniversaries get the same, but not the same frame as a birthday's cake alone", () => {
     expect(frame([{ title: "Bo", kind: "anniversary" }])).not.toBe(frame([]))
   })

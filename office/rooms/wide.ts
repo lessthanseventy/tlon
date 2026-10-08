@@ -300,7 +300,7 @@ export class WideRoom extends Sim<Layout> {
 
     // ── the lounge: rug, couch (its back toward you), lamp, beanbag; the kitchen along the wall ──
     this.lounge.draw(sc, a, l, measure, this.live(), focus)
-    this.pastimes(sc, focus)
+    this.pastimes(sc, a, l, measure, focus)
 
     // ── people, Nina ──
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")
@@ -431,9 +431,9 @@ export class WideRoom extends Sim<Layout> {
    */
   private live(): Live { return { at: (kind) => this.peopleAt(kind), using: (kind) => this.using(kind), cat: this.cat, actor: (agent) => this.actors.get(agent) } }
 
-  private pastimes(sc: Scene, focus: Focus) {
-    this.games.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live(), focus)
-    this.kitchen.draw(sc, EMPTY, this.plan.layout(EMPTY), () => 0, this.live(), focus)
+  private pastimes(sc: Scene, a: Agents, l: Layout, measure: Measure, focus: Focus) {
+    this.games.draw(sc, a, l, measure, this.live(), focus)
+    this.kitchen.draw(sc, a, l, measure, this.live(), focus)
     // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's (at 18)
     for (const [wx, plant] of [[this.z.L0 + 22, { x: this.z.L0 + 4, y: 175 }], [18, { x: 2, y: 159 }]] as const) {
       const n = Math.min(3, Math.floor((this.watered.get(wx) ?? 0) / 300))
