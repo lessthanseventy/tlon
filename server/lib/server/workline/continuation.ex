@@ -79,7 +79,8 @@ defmodule Server.Workline.Continuation do
   # it doesn't (the room shows who it truly waits on); else the operator decides — answer the lead,
   # hand it to someone else, or close it. Said once per stage: the payload marks which.
   defp stuck(thread, why, sent, after_id) do
-    if !stuck_said?(thread.id, after_id) do
+    if !stuck_said?(thread.id, after_id) and
+         Workline.escalate(thread, "#{sent} nudges at #{thread.stage} without moving") == :none do
       sheriff = Server.Sheriff.of(thread.workspace_id)
 
       if !sheriff do
@@ -135,11 +136,19 @@ defmodule Server.Workline.Continuation do
     ) || 0
   end
 
+  # an escalation hands the stage to a new lead, who gets the budget afresh
   defp sent_since(thread_id, after_id) do
+    escalated =
+      Repo.one(
+        from m in Message,
+          where: m.thread_id == ^thread_id and m.author == "tlon" and fragment("? \\? 'escalated_from'", m.payload),
+          select: max(m.id)
+      ) || 0
+
     Repo.aggregate(
       from(m in Message,
         where:
-          m.thread_id == ^thread_id and m.author == "tlon" and
+          m.thread_id == ^thread_id and m.author == "tlon" and m.id > ^escalated and
             fragment("(? ->> 'continue_after')::bigint", m.payload) == ^after_id
       ),
       :count

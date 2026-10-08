@@ -404,11 +404,17 @@ defmodule Server.Workline do
       })
 
     if verdict == "request_changes" do
-      bounce(
-        thread,
-        "the review requested changes",
-        "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
-      )
+      bounced =
+        bounce(
+          thread,
+          "the review requested changes",
+          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
+        )
+
+      if changes_requested(thread) >= 2,
+        do: escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
+
+      bounced
     else
       Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
       {:ok, thread}
@@ -744,6 +750,45 @@ defmodule Server.Workline do
   end
 
   @doc """
+  Hand a junior's workline up a grade (roster design §3): to the free senior (else greybeard) of
+  its kind nearest its specialty, saying why on the thread. `{:escalated, name}`, or `:none` when
+  the lead is no junior or nobody above it is free — the caller's usual path (the sheriff) then holds.
+  """
+  def escalate(%Thread{workspace_id: ws} = thread, why) when not is_nil(ws) do
+    bench = Server.Workspaces.bench(ws)
+    current = Server.Channel.thread_lead(thread.id)
+
+    with %Server.Coworker{grade: "junior", archetype: kind} = junior <- Enum.find(bench, &(&1.name == current)),
+         [_ | _] = above <-
+           Enum.filter(
+             bench,
+             &(&1.archetype == kind and &1.grade in ["senior", "greybeard"] and not leading_another?(&1, thread))
+           ),
+         {%Server.Coworker{name: name}, _} <-
+           Server.Roster.pick(Enum.map(above, &%{coworker: &1, model: nil}), %{
+             grade: "senior",
+             specialty: junior.specialty
+           }),
+         {:ok, _} <- Server.Channel.assign_lead(thread.id, name) do
+      close_leaf(thread)
+
+      {:ok, _} =
+        Server.Channel.post(%{
+          thread_id: thread.id,
+          author: "tlon",
+          body: "↑ #{name} takes this from #{current}: #{why}. Pick it up from the brief.",
+          payload: %{"escalated_from" => current}
+        })
+
+      {:escalated, name}
+    else
+      _ -> :none
+    end
+  end
+
+  def escalate(_thread, _why), do: :none
+
+  @doc """
   The server's pick of a `kind` on `workspace_id`'s bench for an ask (`text`), when a manager
   names no lead (`staff_child`): free seats first (leading no other live workline), by the grade
   the manager gave (else `Server.Roster.wanted_grade/2`'s) and the area the ask names. nil for a
@@ -925,5 +970,16 @@ defmodule Server.Workline do
       end)
 
     " — " <> Enum.join(why, "; ") <> ". Say so in review.md's first line."
+  end
+
+  # how many times this workline's review has asked for changes (each verdict is recorded evidence)
+  defp changes_requested(thread) do
+    Repo.aggregate(
+      from(e in Server.Event,
+        where:
+          e.thread_id == ^thread.id and e.kind == "check_failed" and e.correlation == ^"workline:#{thread.slug}:review"
+      ),
+      :count
+    )
   end
 end
