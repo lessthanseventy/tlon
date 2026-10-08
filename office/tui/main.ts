@@ -12,10 +12,10 @@ import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, 
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
-import { lifeHeader } from "../kit/life"
+import { lifeHeader, lifeRows } from "../kit/life"
 import { ACCESSORY, HAIRS, HAIR_ROLES, lookOf, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
-import { EMPTY, flagOn, type Agents, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
+import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
@@ -34,7 +34,7 @@ import { parseWhen, showWhen } from "./when"
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
-  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
+  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] }
   | { kind: "build" } | { kind: "settings" }
@@ -114,6 +114,7 @@ let officeRev: string | null | undefined
 /** the suggestion box: the crew's suggestions, waiting on you to file one or throw it out */
 let ideas: CorkNote[] = []
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
+let lifeCard: LifeStatus | null = null
 let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 
@@ -241,6 +242,7 @@ async function loadCard() {
     case "card": card = await data.workspaceCard(w); break
     case "settings": settings = await data.settings(); break
     case "calendar": cal = await data.schedules(w); break
+    case "life": lifeCard = (await data.life(w)) ?? lifeCard; break
     case "runs": case "run": board = (await data.runs(mode.id)) ?? board; cal ??= await data.schedules(w); break
     case "tray": trayRead = feed[0]?.at ?? trayRead; writeState(TRAY, trayRead); changed(); break
   }
@@ -625,6 +627,22 @@ function newSchedule(edit?: data.Schedule) {
     }, { text: edit ? showWhen(edit) : "" })
   }, { multiline: true, text: edit?.body, cycles })
 }
+/** a new routine (title, then how often) */
+function newRoutine() {
+  if (ws === null) return
+  const w = ws
+  ask("routine — what", (title) => {
+    if (!title.trim()) return
+    ask("every — a cron (0 9 * * *) or @daily / @weekly", (every) => {
+      if (every.trim()) void did(data.routineNew(w, title.trim(), every.trim())).then(loadCard).then(draw)
+    })
+  })
+}
+function newQuest() {
+  if (ws === null) return
+  const w = ws
+  ask("quest — what", (title) => { if (title.trim()) void did(data.questNew(w, title.trim())).then(loadCard).then(draw) })
+}
 const KIND: Record<string, string> = { message: "said", fact: "learned", issue: "raised", question: "asked", check_failed: "check failed", check_passed: "check passed", work_landed: "landed", stage_advanced: "advanced", handoff_opened: "handed off" }
 
 const back1: Action = { key: "esc", label: "back", run: () => { back(); roomChanged = true; draw() } }
@@ -643,6 +661,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "w", label: "in-tray", run: () => open({ kind: "tray" }) }, { key: "!", label: "triage", run: () => open({ kind: "triage" }) },
         { key: "a", label: "calendar", run: () => open({ kind: "calendar" }) }, { key: "o", label: "notes", run: () => open({ kind: "notes" }) },
         { key: "b", label: "memory", run: () => open({ kind: "memory" }) }, { key: "H", label: "the rack (health)", run: () => open({ kind: "health" }) },
+        ...(all.life?.[String(w)] ? [{ key: "L", label: "life", run: () => open({ kind: "life" }) }] : []),
         ...(flagOn(all, "build_mode") ? [{ key: "B", label: "build mode", run: () => open({ kind: "build" }) }] : []),
         { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
         { key: "q", label: "quit", run: quit },
@@ -765,6 +784,18 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           ] : []),
           back1,
         ],
+      }
+    }
+    case "life": {
+      const s = lifeCard
+      const rows: Row[] = s ? lifeRows(s).map((r) => ({
+        segs: [plain(r.text)],
+        open: () => void did(r.kind === "routine" ? data.routineDone(r.id, r.title) : data.questDone(r.id, r.title)).then(loadCard).then(draw),
+      })) : [{ segs: [dim("reading the day…")] }]
+      if (s && !rows.length) rows.push({ segs: [dim("nothing due, no open quests")] })
+      return {
+        title: s ? `LIFE · lv ${s.level} · ${s.xp} xp` : "LIFE", rows,
+        actions: [{ key: "r", label: "new routine", run: newRoutine }, { key: "q", label: "new quest", run: newQuest }, back1],
       }
     }
     case "runs": {
@@ -1433,6 +1464,7 @@ function onKey(k: string) {
     case "!": return open({ kind: "triage" })
     case "H": return open({ kind: "health" })
     case "b": return open({ kind: "memory" })
+    case "L": if (all.life?.[String(ws)]) open({ kind: "life" }); return
     case "B": if (flagOn(all, "build_mode")) open({ kind: "build" }); return
     case "W": return open({ kind: "boss" })
     case "p": room().pet(); changed(); return draw()
