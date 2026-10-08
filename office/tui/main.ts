@@ -34,7 +34,7 @@ type Mode =
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] }
-  | { kind: "build" }
+  | { kind: "build" } | { kind: "settings" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -195,7 +195,8 @@ async function loadCard() {
     case "health": rack = await data.health(); break
     case "memory": shelf = await data.memory(w); break
     case "ticket": case "column": tickets = (await data.board(w)) ?? tickets; break
-    case "card": [card, settings] = await Promise.all([data.workspaceCard(w), data.settings()]); break
+    case "card": card = await data.workspaceCard(w); break
+    case "settings": settings = await data.settings(); break
     case "calendar": cal = await data.schedules(w); break
     case "runs": case "run": board = (await data.runs(mode.id)) ?? board; cal ??= await data.schedules(w); break
     case "tray": trayRead = feed[0]?.at ?? trayRead; writeState(TRAY, trayRead); changed(); break
@@ -356,6 +357,7 @@ const VERBS: [string, () => void][] = [
   ["in-tray: what just happened", () => open({ kind: "tray" })], ["triage: what is stuck", () => open({ kind: "triage" })],
   ["health: the service and its box", () => open({ kind: "health" })], ["memory: pinned facts and habits", () => open({ kind: "memory" })],
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
+  ["settings: the running system's knobs, and a restart", () => open({ kind: "settings" })],
   ["crew", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
@@ -840,6 +842,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
             },
           },
           { key: "e", label: "this one's settings", run: () => open({ kind: "card" }) },
+          { key: "S", label: "the running system", run: () => open({ kind: "settings" }) },
           ...(w === null ? [] : [{ key: "d", label: "close this one", run: () => ask2(`close ${wsName()} (its threads move to another workspace)`, () => void did(data.workspaceDelete(w))) }]),
           { key: "+", label: "hire", run: hire },
           back1,
@@ -852,7 +855,6 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const reload = () => void loadCard().then(draw)
       const rows: Row[] = [
         { segs: [dim("type  "), plain(c.type), dim("   scope  "), plain(c.scope), dim("   icon  "), plain(c.icon ?? "—")] },
-        ...(settings ? [{ segs: [dim("banter  "), plain(settings.banter ? "on" : "off"), dim("   the model writing coworkers' small talk and the pets' lines, every workspace")] }] : []),
         { segs: [key(`REPOS · ${c.repos.length}`)] },
         ...c.repos.map((r): Row => ({ segs: [plain(`  ${r.path}`), dim(r.remote ? `  ${r.remote}` : "")], open: () => void 0, ref: r })),
       ]
@@ -863,9 +865,36 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           { key: "T", label: `type: ${c.type} → next`, run: () => void did(data.workspaceEdit(w, { type: ring(["code", "life", "blank"], c.type) })).then(reload) },
           { key: "s", label: `scope: ${c.scope} → next`, run: () => void did(data.workspaceEdit(w, { scope: ring(["project", "machine"], c.scope) })).then(reload) },
           { key: "I", label: "icon", run: () => ask("icon", (s) => void did(data.workspaceEdit(w, { icon: s.trim() })).then(reload), { text: c.icon ?? "" }) },
-          ...(settings ? [{ key: "b", label: `banter: ${settings.banter ? "on → off" : "off → on"}`, run: () => void did(data.settingsEdit({ banter: !settings!.banter })).then(reload) }] : []),
           { key: "+", label: "add a repo", run: () => ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(reload) }) },
           ...(repo ? [{ key: "-", label: `remove ${repo.path.split("/").pop()}`, run: () => ask2(`remove ${repo.path} from ${c.name}`, () => void did(data.repoRemove(repo.id)).then(reload)) }] : []),
+          back1,
+        ],
+      }
+    }
+    case "settings": {
+      if (!settings) return { title: "THE RUNNING SYSTEM", rows: [{ segs: [dim("reading…")] }], actions: [back1] }
+      const reload = () => void loadCard().then(draw)
+      const show = (k: data.Knob) => (k.value === null ? "off" : k.type === "bool" ? (k.value ? "on" : "off") : String(k.value) || "—")
+      const change = (k: data.Knob) => {
+        if (k.type === "bool") return void did(data.settingsEdit(k.key, !k.value)).then(reload)
+        const range = k.type === "int" ? ` (${k.min}–${k.max}${k.nullable ? ", empty: off" : ""})` : ""
+        ask(`${k.key}${range}`, (s) => {
+          const t = s.trim()
+          const v = k.type === "string" ? t : t === "" && k.nullable ? null : Number(t)
+          if (typeof v === "number" && !Number.isInteger(v)) return void (status = `${k.key} wants a whole number`)
+          void did(data.settingsEdit(k.key, v)).then(reload)
+        }, { text: k.value === null ? "" : String(k.value) })
+      }
+      const rows: Row[] = settings.knobs.map((k) => ({
+        segs: [plain(k.key.padEnd(24)), { s: show(k).padEnd(8), fg: k.value === k.default ? ROLE.prose : ROLE.key }, dim(k.boot ? "on restart  " : "            "), dim(k.doc)],
+        open: () => change(k), ref: k,
+      }))
+      if (settings.restart_pending) rows.unshift({ segs: [key("a restart is scheduled"), dim(" — it runs the moment nobody is mid-turn")] })
+      return {
+        title: "THE RUNNING SYSTEM · ⏎ changes the selected knob", rows,
+        actions: [
+          { key: "R", label: "restart the server (waits for quiet)", run: () => void did(data.restart()).then(reload) },
+          ...(settings.restart_pending ? [{ key: "x", label: "cancel the scheduled restart", run: () => void did(data.restartCancel()).then(reload) }] : []),
           back1,
         ],
       }
