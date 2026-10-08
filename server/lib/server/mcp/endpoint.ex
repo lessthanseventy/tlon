@@ -85,6 +85,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.GetNotes, name: "get_notes")
   # The PM's (pm-and-release design §1): the release pointer and the backlog's urgency.
   component(Server.MCP.Tool.ReleaseStatus, name: "release_status")
+  component(Server.MCP.Tool.CheckCandidate, name: "check_candidate")
   component(Server.MCP.Tool.ProposeRelease, name: "propose_release")
   component(Server.MCP.Tool.SetUrgency, name: "set_urgency")
   # QA's (roster design §5): what it saw driving a reviewed user-visible change.

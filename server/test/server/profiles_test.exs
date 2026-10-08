@@ -232,7 +232,7 @@ defmodule Server.ProfilesTest do
 
     test "the PM holds the release and backlog tools, writes no code, and no other archetype has them" do
       pm = Profiles.archetype(:pm)
-      tools = ~w(release_status propose_release set_urgency)
+      tools = ~w(release_status check_candidate propose_release set_urgency)
       for t <- tools, do: assert(t in pm.mcp["tlon"]["directTools"] and t not in pm.mcp["tlon"]["excludeTools"])
       assert get_in(pm.permissions, ["permission", "write"]) == "deny"
       for staffing <- ["staff_child", "assign_lead"], do: refute(staffing in pm.mcp["tlon"]["directTools"])

@@ -2,7 +2,7 @@ defmodule Server.Release.PM do
   @moduledoc """
   The PM's release desk (pm-and-release design §4, §6): what waits on main, a proposed cut, the
   gate it reaches the operator through, the cut, and its changelog. The `pm` archetype's tools
-  (`release_status`, `propose_release`) call it.
+  (`release_status`, `check_candidate`, `propose_release`) call it.
 
   **The grade is the max, not a sum.** A proposal is graded commit by commit with
   `Server.Workline.Grade.assess/2`, and fits the standing approval (`auto_land_risk`) only when every
@@ -24,7 +24,8 @@ defmodule Server.Release.PM do
 
   Opts stand in for the world in a test: `root:` (the tlon checkout; else the `:release_root` app
   env, else `Server.Profiles.tlon_root/0`), `script:`, `busy:` (for `Candidate.check/2`),
-  `restart:` (`fn why -> _ end`), `auto_land_risk:`.
+  `restart:` (`fn why -> _ end`), `auto_land_risk:`, `run:` (fires a schedule; else
+  `Server.Schedules.run_now/1`).
   """
   import Ecto.Query
 
@@ -38,6 +39,13 @@ defmodule Server.Release.PM do
 
   @options [%{"key" => "a", "label" => "approve"}, %{"key" => "n", "label" => "not yet"}]
 
+  # the checks a candidate needs run on it: {check name its run records, schedule title, command, cron}
+  @checks [
+    {"gate", "nightly gate on main", "mise run check:main", "0 3 * * *"},
+    {"smoke", "nightly smoke on main", "mise run release:smoke", "30 3 * * *"}
+  ]
+  @running_for 3600
+
   @doc "What runs (`live`), origin/main, the commits waiting (oldest first), and main's checks as lines."
   def status(opts \\ []) do
     root = root(opts)
@@ -48,6 +56,75 @@ defmodule Server.Release.PM do
       {:ok,
        %{live: live, main: main, waiting: commits(root, live, main), checks: Candidate.lines(main, check_opts(opts))}}
     end
+  end
+
+  @doc """
+  Run the gate and the smoke on main's tip now rather than waiting for the night: each fires its
+  schedule in `workspace_id` (a standing nightly one made if it has none), unless it already passed
+  on the tip or is running. Each run records the commit it checked, so `status/1` reads the verdict
+  once it finishes. `{:ok, [%{check, state: "started" | "passed" | "running", why}]}`.
+  """
+  def check(workspace_id, opts \\ []) do
+    root = root(opts)
+    fetch(root)
+    fire = opts[:run] || (&Server.Schedules.run_now/1)
+
+    with {:ok, main} <- rev(root, "origin/main") do
+      results = Candidate.check(main, check_opts(opts))
+
+      {:ok,
+       for {name, title, cmd, cron} <- @checks do
+         s = schedule(workspace_id, root, title, cmd, cron)
+
+         cond do
+           Enum.find(results, &(to_string(&1.check) == name)).ok ->
+             %{check: name, state: "passed", why: "#{cmd} already passed on #{short(main)}"}
+
+           running?(s) ->
+             %{check: name, state: "running", why: "#{cmd} is running now; read release_status when it finishes"}
+
+           true ->
+             fire.(s)
+             %{check: name, state: "started", why: "#{cmd} started on origin/main (#{short(main)})"}
+         end
+       end}
+    end
+  end
+
+  defp schedule(workspace_id, root, title, cmd, cron) do
+    case Repo.one(
+           from s in Server.Schedule,
+             where: s.workspace_id == ^workspace_id and s.kind == "script" and s.body == ^cmd,
+             order_by: [asc: s.id],
+             limit: 1
+         ) do
+      nil ->
+        {:ok, s} =
+          Server.Schedules.create(%{
+            workspace_id: workspace_id,
+            kind: "script",
+            title: title,
+            body: cmd,
+            cron: cron,
+            standing: true,
+            dir: root
+          })
+
+        s
+
+      s ->
+        s
+    end
+  end
+
+  # a run left `running` past the script timeout died with its node; it holds nothing
+  defp running?(s) do
+    since = DateTime.add(DateTime.utc_now(), -@running_for, :second)
+
+    Repo.exists?(
+      from r in Server.ScheduleRun,
+        where: r.schedule_id == ^s.id and r.status == "running" and r.started_at > ^since
+    )
   end
 
   @doc """

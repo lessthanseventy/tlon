@@ -117,6 +117,52 @@ defmodule Server.Release.PMTest do
     assert List.last(s.checks) == "releasable: yes"
   end
 
+  describe "check/2" do
+    setup ctx do
+      me = self()
+      %{opts: Keyword.put(ctx.opts, :run, &send(me, {:fired, &1.body}))}
+    end
+
+    test "fires the gate and the smoke on main's tip, making each its nightly schedule if it has none", ctx do
+      assert {:ok, results} = PM.check(ctx.ws.id, ctx.opts)
+      assert Enum.map(results, &{&1.check, &1.state}) == [{"gate", "started"}, {"smoke", "started"}]
+      assert_received {:fired, "mise run check:main"}
+      assert_received {:fired, "mise run release:smoke"}
+
+      bodies = for s <- Server.Schedules.in_workspace(ctx.ws.id), s.kind == "script", do: {s.body, s.standing, s.dir}
+      assert {"mise run check:main", true, ctx.repo} in bodies
+      assert {"mise run release:smoke", true, ctx.repo} in bodies
+
+      assert {:ok, _} = PM.check(ctx.ws.id, ctx.opts)
+      assert length(Server.Schedules.in_workspace(ctx.ws.id)) == 3
+    end
+
+    test "a check that already passed on main's tip, or is running now, is not fired again", ctx do
+      checks_pass!(ctx, ctx.main)
+      Repo.delete_all(from r in ScheduleRun, where: r.check_name == "smoke")
+
+      {:ok, smoke} =
+        Server.Schedules.create(%{
+          workspace_id: ctx.ws.id,
+          kind: "script",
+          title: "smoke",
+          body: "mise run release:smoke",
+          cron: "@daily"
+        })
+
+      Repo.insert!(%ScheduleRun{
+        schedule_id: smoke.id,
+        status: "running",
+        started_at: DateTime.truncate(DateTime.utc_now(), :second)
+      })
+
+      assert {:ok, [gate, running]} = PM.check(ctx.ws.id, ctx.opts)
+      assert {gate.check, gate.state} == {"gate", "passed"}
+      assert {running.check, running.state} == {"smoke", "running"}
+      refute_received {:fired, _}
+    end
+  end
+
   describe "propose/4" do
     test "refused unless releasable: the gate and the smoke on exactly that commit", ctx do
       assert {:error, why} = PM.propose(ctx.ws.id, nil, nil, ctx.opts)
