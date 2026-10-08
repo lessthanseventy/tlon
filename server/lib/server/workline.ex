@@ -391,6 +391,23 @@ defmodule Server.Workline do
   def land_queued(thread, _opts), do: {:ok, thread}
 
   @doc """
+  A landed workline whose PR GitHub can never merge (it conflicts with main, which moved under it
+  after it landed): reopened and bounced to build, its builder told `why`, so it comes back through
+  verify, review and the merge queue. Anything not `merged` is left as it is.
+  """
+  def reland(%Thread{stage: "merged"} = thread, why) do
+    Server.Channel.reopen_if_closed(thread.id)
+
+    bounce(
+      Repo.get!(Thread, thread.id),
+      why,
+      "#{why}: main moved under it after it landed. Rebase work/#{thread.slug} onto origin/main, resolve it, test"
+    )
+  end
+
+  def reland(thread, _why), do: {:ok, thread}
+
+  @doc """
   What a workline's gate is decided on, in one line: at review, the reviewer's verdict line and the
   change's size, and what approving does; at another gate, the stage's doc that is ready.
   """
@@ -555,7 +572,7 @@ defmodule Server.Workline do
             thread_id: thread.id,
             kind: "stage_advanced",
             correlation: "workline:#{thread.slug}",
-            detail: %{"from" => "review", "to" => "build", "bounced" => why}
+            detail: %{"from" => thread.stage, "to" => "build", "bounced" => why}
           })
 
         back

@@ -86,4 +86,28 @@ defmodule Server.WorklinePublishTest do
       assert [] = Publish.refresh_behind("/repo", run)
     end
   end
+
+  describe "conflicting/2 — a landing GitHub can never merge: main moved under it and they conflict" do
+    @prs Jason.encode!([
+           %{"number" => 73, "headRefName" => "work/tangled", "mergeStateStatus" => "DIRTY"},
+           %{"number" => 74, "headRefName" => "work/behind", "mergeStateStatus" => "BEHIND"},
+           %{"number" => 75, "headRefName" => "fix/mine", "mergeStateStatus" => "DIRTY"}
+         ])
+
+    test "its own landings that conflict, by slug — never a human's branch" do
+      run = runner([{&match?(["gh", "pr", "list" | _], &1), {@prs, 0}}])
+      assert [%{number: 73, slug: "tangled"}] = Publish.conflicting("/repo", run)
+    end
+
+    test "a repo gh can't read is nothing to do" do
+      run = runner([{&match?(["gh", "pr", "list" | _], &1), {"no git remotes found", 1}}])
+      assert [] = Publish.conflicting("/repo", run)
+    end
+
+    test "close/3 closes the PR, saying why, and keeps its branch for the next landing" do
+      run = runner([])
+      assert :ok = Publish.close("/repo", 73, "main moved under it", run)
+      assert_received {:ran, ["gh", "pr", "close", "73", "--comment", "main moved under it"]}
+    end
+  end
 end
