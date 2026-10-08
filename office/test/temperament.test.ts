@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { mulberry32 as rng } from "../kit/rng"
 import { CAT_BASE, destWeights, pickDest, type Dest, type Temperament } from "../kit/temperament"
 
 const T = (warmth: number, wits: number, energy: number): Temperament => ({ warmth, wits, energy })
 const DESTS = Object.keys(CAT_BASE) as Dest[]
 
-/** a seeded rng (mulberry32) so 10k ticks are the same ticks every run */
-function rng(seed: number) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 function share(t: Temperament, n = 10_000) {
   const r = rng(7), hits = Object.fromEntries(DESTS.map((d) => [d, 0])) as Record<Dest, number>
   for (let i = 0; i < n; i++) hits[pickDest(t, r())]++

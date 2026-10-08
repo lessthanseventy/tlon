@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing } from "../kit/draw"
-import { ARGOS, DEFAULT_PETS, resolvePets, TEMPERAMENTS } from "../kit/pets"
+import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, TEMPERAMENTS } from "../kit/pets"
+import { NINA, SWEET } from "../kit/voices"
 import { CAT, DOG } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom } from "../rooms/wide"
@@ -143,5 +144,31 @@ describe("pet presets", () => {
   test("an unknown preset, species or temperament name falls back", () => {
     const p = resolvePets({ preset: "nope", cat: { species: "dragon", temperament: "nope" } } as never)
     expect(p).toEqual(DEFAULT_PETS)
+  })
+})
+
+describe("the pet card's preview", () => {
+  const S = (warmth: number, wits: number, energy: number) => ({ ...DEFAULT_PETS.cat, temperament: { warmth, wits, energy } })
+  const asleep = (s: ReturnType<typeof S>) => { let n = 0; for (let t = 0; t < 400; t += 10) if (previewOf(s, t).mode === "sleep") n++; return n }
+  test("it is a pure function of the pet and the tick", () => {
+    for (const t of [0, 10, 95, 390]) expect(previewOf(S(0, 0, 0), t)).toEqual(previewOf(S(0, 0, 0), t))
+  })
+  test("a lazy pet is asleep more often than a playful one", () => {
+    expect(asleep(S(0, 0, -2))).toBeGreaterThan(asleep(S(0, 0, 2)))
+  })
+  test("a cold pet speaks only in Nina's own voice; a warm one eventually goes sweet", () => {
+    const all = [...Object.values(NINA).flatMap((v) => (Array.isArray(v) ? v : []))] as string[]
+    const sweet = Object.values(SWEET).flat() as string[]
+    for (let t = 0; t < 2000; t += 10) expect(all).toContain(previewOf(S(-2, 0, 0), t).line)
+    expect([...Array(200).keys()].some((i) => sweet.includes(previewOf(S(2, 0, 0), i * 10).line))).toBe(true)
+  })
+})
+
+describe("axis helpers", () => {
+  test("dots shows the axis as a position among five", () => {
+    expect([-2, -1, 0, 1, 2].map(dots)).toEqual(["●○○○○", "○●○○○", "○○●○○", "○○○●○", "○○○○●"])
+  })
+  test("cycleAxis steps forward and wraps", () => {
+    expect(cycleAxis(-2)).toBe(-1); expect(cycleAxis(1)).toBe(2); expect(cycleAxis(2)).toBe(-2)
   })
 })

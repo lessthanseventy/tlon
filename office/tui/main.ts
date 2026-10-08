@@ -9,7 +9,8 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
-import { resolvePets, type Pets } from "../kit/pets"
+import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
+import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
@@ -24,7 +25,7 @@ import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
 import { loadHome, saveHome } from "./home"
-import { loadPets, PETS_PATH } from "./pets"
+import { loadPets, PETS_PATH, savePets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader } from "./reader"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
@@ -86,6 +87,8 @@ let snapSel = false
 let confirm: { label: string; run: () => void } | null = null
 // the look card/editor's draft, not yet saved to looks.json; set on open, cleared on close/save
 let lookDraft: LookOverride | null = null
+// the pet card's draft (Nina's temperament, not yet saved to pets.json) and the preview row's clock
+let petDraft: PetSetting | null = null, previewTick = 0
 let editBuf: Record<"front" | "side" | "back", string[]> | null = null
 let editEntry: Record<"front" | "side" | "back", string[]> | null = null
 let editCursor = { x: 0, y: 0 }
@@ -281,6 +284,7 @@ function open(m: Mode) {
   mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") picked = m.tid
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
+  if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
   if (m.kind === "look") lookDraft = { ...lookOf(m.name), ...overrideFor(m.name) }
   const tid = openThread()
   void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(draw)
@@ -289,7 +293,7 @@ function open(m: Mode) {
 /** Esc: a card back to home, home to nothing picked; `all` drops both at once */
 function back(everything = false) {
   if (everything || mode.kind === "home") picked = null
-  mode = { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null; lookDraft = null
+  mode = { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null; lookDraft = null; petDraft = null
 }
 
 function act(x: Act) {
@@ -1100,9 +1104,21 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const busy = () => all.roster.filter((x) => x.workspace_id === ws && x.thinking).map((x) => x.agent)
       const cheer = (send: (name: string) => boolean) => doIt(() => { const who = busy(); if (who.length) send(who[Math.floor(Math.random() * who.length)]!) })
       if (mode.who === "cat") {
+        const draft = (petDraft ??= structuredClone((petsNow ?? resolvePets(loadPets())).cat))
+        const named = Object.entries(TEMPERAMENTS).find(([, t]) => AXES.every((a) => t[a] === draft.temperament[a]))?.[0]
+        const row = (label: string, value: string, cycle: () => void): Row => ({ segs: [dim(label.padEnd(12)), plain(value)], open: () => { cycle(); draw() } })
+        const beat = previewOf(draft, previewTick)
+        const rows: Row[] = [
+          { segs: [plain("your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.")] },
+          { segs: [dim("name".padEnd(12)), plain(draft.name)] },
+          row("temperament", named ?? "custom", () => { const names = Object.keys(TEMPERAMENTS); draft.temperament = { ...TEMPERAMENTS[names[(names.indexOf(named ?? "") + 1) % names.length]!]! } }),
+          ...AXES.map((a) => row(a, dots(draft.temperament[a]), () => { draft.temperament[a] = cycleAxis(draft.temperament[a]) })),
+          { segs: [dim("preview".padEnd(12)), plain(`${{ sleep: "z", sit: "·", play: "o", walk: ">" }[beat.mode]} ${beat.line}`)] },
+        ]
         return {
-          title: "NINA", rows: [{ segs: [plain("your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.")] }],
+          title: `${draft.name.toUpperCase()}`, rows,
           actions: [
+            { key: "S", label: "save her temperament", run: () => { savePets({ cat: { temperament: named ?? { ...draft.temperament } } }); petsSeen = ""; followPets(); back(); roomChanged = true; draw() } },
             { key: "p", label: "pat her", run: doIt(() => r.pet()) },
             { key: "z", label: "the zoomies", run: doIt(() => r.catDo("zoomies")) },
             { key: "y", label: "play with the yarn", run: doIt(() => r.catDo("play")) },
@@ -1673,6 +1689,7 @@ async function main() {
   await refresh()
   setInterval(refresh, 10_000)
   setInterval(pollPlayer, 2000)
+  setInterval(() => { if (mode.kind === "pet" && petDraft) { previewTick += 10; draw() } }, 1000)
   setInterval(() => { if (followPalette() || followLooks() || followPets()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started

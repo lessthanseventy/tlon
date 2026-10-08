@@ -6,8 +6,9 @@ import { dancing, drawFuss, type Scene } from "./draw"
 import { ROLE, tint } from "./palette"
 import { FUSS, keyOf, type Actor, type Fussing, type Pt, type Spot } from "./sim"
 import { CAT_NAME, DOG, DOG_NAME } from "./sprites"
-import { clampAxis, type Temperament } from "./temperament"
-import { pick, type Fuss } from "./voices"
+import { mulberry32 } from "./rng"
+import { clampAxis, pickDest, type Dest, type Temperament } from "./temperament"
+import { bucketFor, pick, type Fuss } from "./voices"
 
 /**
  * Argos: where he is, the waypoints he is walking, what he is doing, the row he walks along; what
@@ -235,4 +236,18 @@ function resolveSlot(base: PetSetting, f: SlotFile | undefined): PetSetting {
 export function resolvePets(f: PetsFile | undefined): Pets {
   const base = PRESETS[f?.preset ?? ""] ?? DEFAULT_PETS
   return { cat: resolveSlot(base.cat, f?.cat), dog: resolveSlot(base.dog, f?.dog) }
+}
+
+/** an axis, -2..2, as a position among five dots */
+export const dots = (n: number) => [-2, -1, 0, 1, 2].map((i) => (i === n ? "●" : "○")).join("")
+/** the next stop on an axis, wrapping from +2 back to -2 */
+export const cycleAxis = (n: number) => (n >= 2 ? -2 : n + 1)
+
+const PREVIEW_MODE: Record<Dest, "sleep" | "sit" | "play" | "walk"> = { nap: "sleep", desk: "sit", perch: "sit", litter: "sit", play: "play", spot: "walk" }
+/** what the pet card shows for a pet at `tick`: a new beat every 10 ticks, same pet and tick → same beat */
+export function previewOf(s: PetSetting, tick: number): { mode: "sleep" | "sit" | "play" | "walk"; line: string } {
+  const slot = Math.floor(tick / 10), r = mulberry32(slot * 7919 + 13)
+  const mode = PREVIEW_MODE[pickDest(s.temperament, r())]
+  const bucket = bucketFor(slot % 2 ? "pet" : "muse", s.temperament, r)
+  return { mode, line: bucket[Math.floor(r() * bucket.length)]!.replaceAll("{name}", "you") }
 }

@@ -16,7 +16,8 @@ linked window at a time, Ctrl-] back to the room).
   1x canvas and the **frame** a room hands a surface (`canvas.ts`), tlon's own bitmap font in two cuts (`font.ts`), the
   office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`),
   the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
-  what Nina says (`voices.ts`; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
+  a pet's temperament (`temperament.ts`: warmth/wits/energy, -2..2, as policy over the sim's chance tables; `pets.ts` resolves `pets.json` — `TLON_PETS`, polled live like `looks.json`, absent means today's room byte for byte),
+  what Nina says (`voices.ts`, sweet or sassy by warmth; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
   drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
   making a fuss of a pet), the furniture every room has (`furniture.ts`),
   the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen, and
@@ -33,7 +34,7 @@ linked window at a time, Ctrl-] back to the room).
   become tickets only when you file them.
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
-  `main.ts` is the room, its detail pane's cards and the finder (`/`); `reader.ts` a thread
+  `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `S` to save) and the finder (`/`); `reader.ts` a thread
   full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
   finder's matcher; `when.ts` reads a schedule's "when" (a cron, or a local time). The arcade's
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
