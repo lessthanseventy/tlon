@@ -35,6 +35,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/restart                 restart the service now if quiet, else schedule it for the first quiet
                                           moment: 202 + {"scheduled", "waiting_on"} ({"force": true}: now anyway)
       DELETE /api/restart                 drop a scheduled restart
+      PATCH  /api/flags/:name             {"enabled": bool} → Flags.set (404 for a flag the server hasn't)
       GET    /api/office/history          Office.Room.history (every closed thread, for the finder)
 
       GET    /api/threads/:id             Board.brief |> Brief.scope   (what get_dossier gives an agent)
@@ -211,6 +212,19 @@ defmodule Server.MCP.OperatorAPI do
     case Server.OperatorConfig.put_settings(changes) do
       :ok -> json(conn, 200, settings())
       {:error, why} -> json(conn, 422, %{error: why})
+    end
+  end
+
+  defp route(conn, "PATCH", "flags", [name]) do
+    case body(conn) do
+      {%{"enabled" => on?}, conn} when is_boolean(on?) ->
+        case Server.Flags.set(name, on?) do
+          {:ok, flag} -> json(conn, 200, flag)
+          {:error, why} -> json(conn, 404, %{error: why})
+        end
+
+      {_, conn} ->
+        json(conn, 422, %{error: ~s(expected {"enabled": true|false})})
     end
   end
 

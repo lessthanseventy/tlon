@@ -9,6 +9,10 @@ import Config
 Code.eval_file(Path.join(__DIR__, "support/test_database_name.exs"))
 test_database = Server.TestDatabaseName.compute(__DIR__, System.get_env("TLON_TEST_DATABASE"))
 
+# a cached toggle would outlive TestDB.clean! into the next test; with no cache there is nothing to bust
+config :fun_with_flags, :cache, enabled: false
+config :fun_with_flags, :cache_bust_notifications, enabled: false
+
 # Oban never runs jobs on its own in test — a test performs them.
 # No commit waits for the disk (synchronous_commit off): a test db needs none to outlive a crash,
 # and the wait was most of the suite's time — every test commits dozens of rows.

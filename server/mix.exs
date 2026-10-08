@@ -79,6 +79,9 @@ defmodule Server.MixProject do
     [
       # :inets (httpc) and :ssl ride in the release: the embedder and the weather call out with them
       extra_applications: [:logger, :inets, :ssl],
+      # started under Server.Supervisor, after Server.PubSub: its cache-bust listener subscribes
+      # there on start and gives up if the PubSub isn't up yet
+      included_applications: [:fun_with_flags],
       mod: {Server.Application, []}
     ]
   end
@@ -137,7 +140,9 @@ defmodule Server.MixProject do
       # shape and pipe style are never a review comment again.
       {:quokka, "~> 2.13", only: [:dev, :test], runtime: false},
       # iex> examples in @doc are formatted like the code around them
-      {:doctest_formatter, "~> 0.4", only: [:dev, :test], runtime: false}
+      {:doctest_formatter, "~> 0.4", only: [:dev, :test], runtime: false},
+      # Feature flags (Server.Flags) on the store's Postgres, cache busted over Server.PubSub.
+      {:fun_with_flags, "~> 1.13"}
     ]
   end
 

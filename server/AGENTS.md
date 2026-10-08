@@ -52,6 +52,10 @@ and every layer the spine design's re-laid §9 asked for
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit
   it checked, which `Server.Release.Candidate` reads. Crons read the server's local clock.
+- **feature flags** (`Server.Flags`) — `fun_with_flags` on the store's Postgres, each node's cache
+  busted over `Server.PubSub` (no Redis, no restart): work that lands dark ships behind a flag the
+  server names, off; the office gets every flag in its snapshot. Flip one with
+  `mise run server:cli -- flag <name> on|off` or `PATCH /api/flags/:name`.
 - **recall + forgetting** (`Server.Recall`, `Server.Search`) — the budgeted always-loaded set.
 - **seed + bootstrap** (`Server.Seed`, `Server.Bootstrap`) — the wipe-proof base knowledge
   (`priv/seed/repo_knowledge.exs` + the machine-appended `promoted_facts.exs`) and the default

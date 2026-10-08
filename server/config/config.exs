@@ -7,6 +7,18 @@ import Config
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 # the control-band sweeps (stale gates nagged, stalled worklines flagged), every half hour
 
+# Server.Flags: toggles in the store, each node's cache busted over the PubSub; the persistence
+# adapter is read at compile time (`mix deps.compile fun_with_flags --force` after changing it)
+config :fun_with_flags, :cache_bust_notifications,
+  enabled: true,
+  adapter: FunWithFlags.Notifications.PhoenixPubSub,
+  client: Server.PubSub
+
+config :fun_with_flags, :persistence, adapter: FunWithFlags.Store.Persistent.Ecto, repo: Server.Repo
+
+# fun_with_flags logs every flag read at debug — one per office poll
+config :logger, compile_time_purge_matching: [[application: :fun_with_flags, level_lower_than: :info]]
+
 # Phoenix + LiveView (one-brain piece D) — the same Bandit family as the MCP channel, a second
 # loopback listener; runtime.exs sets the port and the start flag, and derives the secrets.
 # the staffing pass (one-brain B/3): centre, tail and leaves of every workspace, each minute

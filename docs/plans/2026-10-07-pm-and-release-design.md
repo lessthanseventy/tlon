@@ -1,7 +1,7 @@
 # A PM and a release pointer — what's on main is not what's shipped — design
 
 **Date:** 2026-10-07
-**Status:** approved by Andrew (calls in §9); nothing built. Six steps in §8.
+**Status:** approved by Andrew (calls in §9). Six steps in §8; 1–3 and 5 built.
 **Asked:** Andrew: *"not every PR at work is releasable. is there someone … watching over the
 process at large and saying like 'if we were to release today, it should be this commit on main'
 … this is quite literally a software factory version of a real office so what metaphors are we
@@ -136,6 +136,11 @@ along with its branches in code, so flags don't pile up. That cleanup is a ticke
 
 The first user is floor step 3: build mode goes behind `:build_mode`, off until the life room
 (step 5) ships.
+
+Built (step 5): `Server.Flags` names the flags that exist (a name outside them is refused) and
+serves them all as the snapshot's `flags`; the office reads them with `flagOn` (`kit/types.ts`).
+A flip is `PATCH /api/flags/:name {"enabled": bool}` or `tlon-cli.sh flag <name> on|off`, for
+everyone; per-workspace actor gates are not wired yet.
 
 ## 6 · The PM's other jobs
 

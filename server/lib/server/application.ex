@@ -37,6 +37,7 @@ defmodule Server.Application do
     children =
       [
         {Phoenix.PubSub, name: Server.PubSub},
+        FunWithFlags.Supervisor,
         # Fire-and-forget best-effort work off the request path — today the embed-on-write embedder
         # (Server.Recall.embed_on_write): a crash or a slow ollama stays here, off bank_fact.
         {Task.Supervisor, name: Server.TaskSupervisor},
