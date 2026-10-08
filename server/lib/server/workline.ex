@@ -310,7 +310,7 @@ defmodule Server.Workline do
 
     with :ok <- verified_artifact(thread, checker),
          :ok <- qa_cleared(thread, opts) do
-      if queue?(thread, checker, opts), do: queue(thread), else: approve_now(thread, checker, opts)
+      if queue?(thread, checker, opts), do: queue(thread, "approved", thread.awaiting || "andrew"), else: approve_now(thread, checker, opts)
     end
   end
 
@@ -333,9 +333,11 @@ defmodule Server.Workline do
 
   defp queue?(_thread, _checker, _opts), do: false
 
-  defp queue(thread, why \\ "approved") do
+  defp queue(thread, why, by) do
     with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
+      record_approval(queued, by)
+
       post_brief(
         queued,
         "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, one landing at a time"
@@ -346,6 +348,73 @@ defmodule Server.Workline do
       {:error, why} ->
         {:ok, _} = thread |> Thread.workline_stage_changeset(%{awaiting: thread.awaiting}) |> Repo.update()
         {:error, {:queue, why}}
+    end
+  end
+
+  # what was approved is the branch at that commit: a later push needs approving again
+  defp record_approval(thread, by) do
+    Dossier.record_event(%{
+      thread_id: thread.id,
+      kind: "check_passed",
+      correlation: "workline:#{thread.slug}:approval",
+      detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => branch_head(thread)}
+    })
+  end
+
+  @doc """
+  The approval that still stands on a workline: the newest one recorded (`%{"by", "sha"}`, who
+  approved it into the merge queue and the commit `work/<slug>` was at), if the branch is at that
+  commit still; nil once it has moved, or when none was recorded.
+  """
+  def approval(%Thread{} = thread) do
+    correlation = "workline:#{thread.slug}:approval"
+
+    newest =
+      Repo.one(
+        from e in Server.Event,
+          where: e.thread_id == ^thread.id and e.correlation == ^correlation,
+          order_by: [desc: e.id],
+          limit: 1,
+          select: e.detail
+      )
+
+    with %{"sha" => sha} = detail when is_binary(sha) <- newest,
+         ^sha <- branch_head(thread),
+         do: Map.take(detail, ["by", "sha"]),
+         else: (_ -> nil)
+  end
+
+  defp branch_head(thread) do
+    case System.cmd("git", ["-C", Git.root(thread), "rev-parse", "--verify", "--quiet", "work/#{thread.slug}^{commit}"],
+           stderr_to_stdout: true
+         ) do
+      {sha, 0} -> String.trim(sha)
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Reopen a closed thread. A workline that was in the merge queue (at review, waiting on no one)
+  goes back into it while its approval stands (`approval/1`); one whose branch moved since is left
+  at review for its reviewer, saying so. `{:ok, thread}`.
+  """
+  def reopen(%Thread{} = thread) do
+    Server.Channel.reopen_if_closed(thread.id)
+    reopened = Repo.get!(Thread, thread.id)
+
+    case reopened do
+      %Thread{stage: "review", awaiting: nil} ->
+        case approval(reopened) do
+          %{"by" => by, "sha" => sha} ->
+            queue(reopened, "reopened — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands", by)
+
+          nil ->
+            post_brief(reopened, "reopened at review — no approval stands for work/#{reopened.slug} as it is now")
+            {:ok, reopened}
+        end
+
+      _ ->
+        {:ok, reopened}
     end
   end
 
@@ -386,6 +455,15 @@ defmodule Server.Workline do
           "the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto origin/main, fix it test-first"
         )
     end
+  end
+
+  def land_queued(%Thread{stage: "review", awaiting: nil, state: "closed"} = thread, _opts) do
+    post_brief(
+      thread,
+      "⧗ its turn in the merge queue came, but the thread is closed — nothing landed. `tlon-cli reopen #{thread.id}` puts it back in the queue while its approval stands"
+    )
+
+    {:ok, thread}
   end
 
   def land_queued(thread, _opts), do: {:ok, thread}
@@ -511,7 +589,7 @@ defmodule Server.Workline do
     checker = Keyword.get(opts, :artifacts, Git)
 
     if thread.stage == "review" and thread.awaiting == "andrew" and auto_land?(thread, checker, opts),
-      do: queue(thread, auto_land_note(thread, opts)),
+      do: queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
       else: {:ok, thread}
   end
 
@@ -666,7 +744,7 @@ defmodule Server.Workline do
 
   defp park(thread, checker, opts) do
     if thread.stage == "review" and auto_land?(thread, checker, opts),
-      do: queue(thread, auto_land_note(thread, opts)),
+      do: queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
       else: park_on_operator(thread, checker)
   end
 
