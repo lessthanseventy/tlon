@@ -235,8 +235,25 @@ defmodule Server.Workline do
           do: reverify(thread, why),
           else: {:error, {:artifact_missing, why}}
 
+      {:error, {:artifact_missing, _}} = refused when thread.stage == "review" ->
+        hand_to_qa(thread, opts) || refused
+
       other ->
         other
+    end
+  end
+
+  # a reviewer that approved in review.md and advanced (rather than `submit_review`) still owes
+  # QA: hand it to the qa seat as the verdict would, instead of refusing into a dead end
+  defp hand_to_qa(thread, opts) do
+    line = Keyword.get_lazy(opts, :review_line, fn -> Git.doc_line(thread, "review.md") end) || ""
+
+    with true <- line =~ ~r/approve/i and not (line =~ ~r/request.?changes/i),
+         {seat, paths} <- qa_owed(thread, opts),
+         false <- Server.Channel.thread_lead(thread.id) == seat.name do
+      {:ok, to_qa(thread, seat, paths)}
+    else
+      _ -> nil
     end
   end
 

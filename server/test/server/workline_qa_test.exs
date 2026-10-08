@@ -124,6 +124,24 @@ defmodule Server.WorklineQATest do
     assert Workline.at_gate?(Repo.get!(Thread, thread.id), opts)
   end
 
+  test "a reviewer who approves in review.md and advances (no submit_review) hands it to QA, not to a dead end" do
+    {thread, opts} = at_review("advanced", ["office/kit/home.ts"])
+    {:ok, _} = Channel.assign_lead(thread.id, "lonnrot")
+
+    assert {:ok, %Thread{stage: "review"}} =
+             Workline.advance(Repo.get!(Thread, thread.id), Keyword.put(opts, :review_line, "VERDICT: approve"))
+
+    assert Server.Channel.thread_lead(thread.id) == "nolan"
+    assert Enum.any?(bodies(thread), &(&1 =~ "QA"))
+  end
+
+  test "a review.md asking for changes still refuses the advance" do
+    {thread, opts} = at_review("changes", ["office/kit/home.ts"])
+
+    assert {:error, {:artifact_missing, _}} =
+             Workline.advance(Repo.get!(Thread, thread.id), Keyword.put(opts, :review_line, "VERDICT: request_changes"))
+  end
+
   test "an operator's approve can't land it past an owed QA" do
     {thread, opts} = at_review("held", ["office/kit/room.ts"])
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
