@@ -6,6 +6,13 @@ migration, `…_beatriz_is_the_pm.exs`); step 6 done: the `qa` archetype, the QA
 user-visible workline lands (`Server.Workline.qa_verdict/5`), nolan its seat (`…_nolan_is_qa.exs`).
 Seven steps in §8; Sonny (§5, step 7)
 was added after approval and its seat is a proposal.
+**As built (2026-10-08, from an audit):** step 4's greybeard routing, reviewer ≠ builder model and
+4b's escalation are built, but **junior routing is not**: `Roster.wanted_grade/2` returns the explicit
+grade, else greybeard, else senior. Intake has no risk signal for a ticket before it is graded, so
+"a junior for a grade-1 `office/` ticket" needs a decision on what grades a ticket up front. Steps 5
+and 7 (the seat table, Sonny) were **applied to the live database by hand**: no migration or seed
+records them, `bootstrap.ex` still seeds the four-seat default, and two builders the staffing pass
+hired on its own (`pierre`, `zunz`) sit ungraded (read as senior).
 **Asked:** Andrew: *"make sure hronir is doing what he should, that everyone has a clearly defined
 role, and that we aren't missing any roles/SMEs/different personalities amongst the same role.
 juniors vs. greybeards for like haiku->fable? … let's just use what we have and like make it what
