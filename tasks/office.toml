@@ -17,9 +17,9 @@ dir = "office"
 run = "bun test"
 
 ["office:check"]
-description = "office: the precommit gate — install (frozen), typecheck, tests"
+description = "office: the precommit gate — install (frozen), typecheck, tests at 03:00 and at 15:00 (a frozen clock: test/clock.ts)"
 dir = "office"
-run = "bun install --frozen-lockfile && bun run typecheck && bun test"
+run = "bun install --frozen-lockfile && bun run typecheck && OFFICE_TEST_HOUR=3 bun test && OFFICE_TEST_HOUR=15 bun test"
 
 ["office:build"]
 description = "office: the TUI as standalone executables, one per platform (macOS + Linux, arm64 + x64), in office/dist — no bun or checkout needed to run one"
