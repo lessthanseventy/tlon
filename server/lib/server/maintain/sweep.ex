@@ -63,7 +63,7 @@ defmodule Server.Maintain.Sweep do
               where: t.state == "open" and not is_nil(t.stage) and t.stage != "merged" and is_nil(t.awaiting)
           ),
         not Repo.exists?(from m in Server.Message, where: m.thread_id == ^t.id and m.created_at > ^since),
-        do: Server.Workline.Continuation.run(t.id)
+        do: Server.Workline.Continuation.run(t.id, quiet: true)
 
     :ok
   end
