@@ -143,6 +143,13 @@ defmodule Server.Rollout do
   @doc "Drop a scheduled restart. `:ok` whether or not one was."
   def cancel_restart do
     with pid when is_pid(pid) <- Process.whereis(@waiter) do
+      # unregistered first, so restart_pending?/0 is false once this returns, not once the kill lands
+      try do
+        Process.unregister(@waiter)
+      rescue
+        ArgumentError -> :ok
+      end
+
       Process.exit(pid, :kill)
       pause_gates(:resume_queue)
     end
