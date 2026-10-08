@@ -15,10 +15,13 @@ defmodule Server.WorkspaceAgent do
     field :agent_id, :integer
     field :archetype, :string
     field :sort, :integer, default: 0
+    field :grade, :string
+    field :specialty, :string
     field :created_at, :utc_datetime
   end
 
-  @mutable [:archetype, :sort]
+  @mutable [:archetype, :sort, :grade, :specialty]
+  @grades ~w(junior senior greybeard)
 
   @doc """
   Seat an agent on a workspace's bench. The DB's UNIQUE(workspace_id, agent_id) is the one guard
@@ -28,10 +31,12 @@ defmodule Server.WorkspaceAgent do
     %__MODULE__{}
     |> cast(attrs, [:workspace_id, :agent_id | @mutable])
     |> validate_required([:workspace_id, :agent_id])
+    |> validate_inclusion(:grade, @grades)
     |> unique_constraint([:workspace_id, :agent_id])
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
   end
 
   @doc "Edit a seat's archetype or order. Which workspace and which agent are its identity, not fields."
-  def edit_changeset(%__MODULE__{} = seat, attrs), do: cast(seat, attrs, @mutable)
+  def edit_changeset(%__MODULE__{} = seat, attrs),
+    do: seat |> cast(attrs, @mutable) |> validate_inclusion(:grade, @grades)
 end

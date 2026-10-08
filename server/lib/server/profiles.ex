@@ -675,16 +675,18 @@ defmodule Server.Profiles do
   @doc """
   Build a materialisation-ready `%Profile{}` from a roster entry `%{archetype:, name:, model:, knobs:}`:
   identity (`name` → socket/config_dir/handle) is the instance name, content comes from the archetype
-  template, and the system prompt is personalized with the instance handle. Model precedence (A3):
+  template, and the system prompt is personalized with the instance handle. Model precedence:
   roster-entry `model` > the (workspace, coworker) policy's `model` (`Server.Workspaces.set_policy/3`)
-  > archetype default. The harness follows the resolved model (`Server.Harness.resolve/2`).
+  > the config's `coworkers.<name>` > the seat's grade (`OperatorConfig.grade_model/1`) > archetype
+  default. The config and the grade apply to a seat, so a workspace-less fetch skips them. The
+  harness follows the resolved model (`Server.Harness.resolve/2`).
   """
   @spec instantiate(%{required(:archetype) => atom(), required(:name) => String.t(), optional(any()) => any()}) ::
           Profile.t()
   def instantiate(%{archetype: key, name: name} = entry, workspace_id \\ nil) do
     t = archetype(key)
     policy = policy_for(workspace_id, name)
-    model = entry[:model] || policy[:model] || t.model
+    model = entry[:model] || policy[:model] || policy[:configured] || policy[:graded] || t.model
 
     %Profile{
       name: name,
@@ -709,12 +711,23 @@ defmodule Server.Profiles do
   defp policy_for(nil, _name), do: %{}
 
   defp policy_for(workspace_id, name) do
-    with %Server.Coworker{agent_id: agent_id} <-
-           workspace_id |> Server.Workspaces.bench() |> Enum.find(&(&1.name == name)),
-         %Server.Policy{} = p <- Server.Workspaces.policy(workspace_id, agent_id) do
-      %{model: p.model && atomize_model(p.model), yolo: yolo_of(p.ask_default)}
-    else
-      _ -> %{}
+    workspace_id
+    |> Server.Workspaces.bench()
+    |> Enum.find(&(&1.name == name))
+    |> case do
+      %Server.Coworker{agent_id: agent_id, grade: grade} ->
+        seat = %{configured: OperatorConfig.coworker_model(name), graded: OperatorConfig.grade_model(grade)}
+
+        case Server.Workspaces.policy(workspace_id, agent_id) do
+          %Server.Policy{} = p ->
+            Map.merge(seat, %{model: p.model && atomize_model(p.model), yolo: yolo_of(p.ask_default)})
+
+          nil ->
+            seat
+        end
+
+      nil ->
+        %{}
     end
   rescue
     _ -> %{}

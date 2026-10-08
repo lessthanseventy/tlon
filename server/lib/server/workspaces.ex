@@ -262,7 +262,17 @@ defmodule Server.Workspaces do
       on: a.id == wa.agent_id,
       where: wa.workspace_id in ^workspace_ids,
       order_by: [asc: wa.sort, asc: wa.id],
-      select: {wa.workspace_id, %{id: wa.id, agent_id: a.id, name: a.name, archetype: wa.archetype, sort: wa.sort}}
+      select:
+        {wa.workspace_id,
+         %{
+           id: wa.id,
+           agent_id: a.id,
+           name: a.name,
+           archetype: wa.archetype,
+           sort: wa.sort,
+           grade: wa.grade,
+           specialty: wa.specialty
+         }}
     )
     |> Repo.all()
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
@@ -298,12 +308,24 @@ defmodule Server.Workspaces do
              workspace_id: workspace_id,
              agent_id: agent.id,
              archetype: archetype,
-             sort: attrs[:sort] || next_seat_sort(workspace_id)
+             sort: attrs[:sort] || next_seat_sort(workspace_id),
+             grade: attrs[:grade] || attrs["grade"],
+             specialty: attrs[:specialty] || attrs["specialty"]
            }
            |> WorkspaceAgent.seat_changeset()
            |> Repo.insert() do
       announce_workspace({:ok, row}, workspace_id)
-      {:ok, %Coworker{id: row.id, agent_id: agent.id, name: agent.name, archetype: row.archetype, sort: row.sort}}
+
+      {:ok,
+       %Coworker{
+         id: row.id,
+         agent_id: agent.id,
+         name: agent.name,
+         archetype: row.archetype,
+         sort: row.sort,
+         grade: row.grade,
+         specialty: row.specialty
+       }}
     end
   end
 
@@ -348,7 +370,15 @@ defmodule Server.Workspaces do
       on: a.id == wa.agent_id,
       where: wa.workspace_id == ^workspace_id,
       order_by: [asc: wa.sort, asc: wa.id],
-      select: %{id: wa.id, agent_id: a.id, name: a.name, archetype: wa.archetype, sort: wa.sort}
+      select: %{
+        id: wa.id,
+        agent_id: a.id,
+        name: a.name,
+        archetype: wa.archetype,
+        sort: wa.sort,
+        grade: wa.grade,
+        specialty: wa.specialty
+      }
     )
   end
 
