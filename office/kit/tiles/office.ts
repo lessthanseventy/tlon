@@ -137,8 +137,8 @@ function beacon(sc: Scene, stuck: number) {
     px(x + 3, y + 1, 3, 1, stuck ? ROLE.prose : ROLE.inactive)
     if (on) for (const [dx, dy] of [[-3, 1], [10, 1], [-2, -2], [9, -2]] as const) px(x + dx, y + dy, 2, 1, ROLE.alarm)
   })
-  if (stuck) sc.overhead.push(() => sc.text(`${stuck} stuck`, x + 4, y - 4, ROLE.alarm, 9))
-  sc.hits.push({ x: x - 3, y: y - 8, w: 15, h: 15, tip: stuck ? `the beacon: ${stuck} stuck — blockers, failed checks, threads nobody leads` : "the beacon: nothing is stuck", act: { kind: "beacon" } })
+  if (stuck) sc.overhead.push(() => sc.text(`${stuck} issues`, x + 4, y - 4, ROLE.alarm, 9))
+  sc.hits.push({ x: x - 3, y: y - 8, w: 15, h: 15, tip: stuck ? `the beacon: ${stuck} issues — the sheriff's to fix (open issues, failed checks, threads nobody leads); nothing for you to do` : "the beacon: nothing is stuck", act: { kind: "beacon" } })
 }
 
 /** the server rack: its lights blink green while the service is well, red while it needs a look */

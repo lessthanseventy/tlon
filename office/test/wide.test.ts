@@ -39,7 +39,8 @@ describe("the wide room", () => {
     const busy = tips(viewOf({ ...office(1), triage: { "1": 3, "2": 9 }, health: { state: "warn", problems: ["disk 95% full"] } }, 1), 4)
     expect(busy.get("tray")).toContain("4 new")
     // the beacon counts this workspace's stuck things, never another's
-    expect(busy.get("beacon")).toContain("3 stuck")
+    expect(busy.get("beacon")).toContain("3 issues")
+    expect(busy.get("beacon")).toContain("nothing for you to do")
     expect(busy.get("rack")).toContain("disk 95% full")
   })
 
