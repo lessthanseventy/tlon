@@ -1,0 +1,9 @@
+VERDICT: request_changes (one real issue, two small ones). Read from the diff only; I did not run the gates (the server's verify already recorded `mise run check` green).
+
+Spec §7 is met: bunting on the lounge, a cake on the kitchen counter, the crowd pulled to cooler/coffee. The feed is read from the existing config'd Calendar sources, so nothing reaches into the machine.
+
+1. **Every `Office.status/0` call re-parses every .ics feed.** `Server.Calendar.celebrations/2` (calendar.ex:40) runs `ICal.from_ics` on the full text of each feed through `Feed.celebrations`. `status/0` is what the TUI polls (`GET office`) and what Banter reads, so a large family or work feed gets parsed on every poll just to answer a once-a-day question. This is the blocking point. Fix: cache by day. Compute the celebrations on `:tick`/`refresh` in the Calendar GenServer, or memoize `{day, feeds}` in its state, so `celebrations/2` is a lookup.
+2. **A yearly series fires before its own start year.** `on_day?/3` (feed.ex) matches on month and day only, so an event with `RRULE:FREQ=YEARLY` and DTSTART in 2027 shows as a celebration in 2026. Add `Date.compare(day, d) != :lt` for yearly events, plus a test. `UNTIL` and `COUNT` are also ignored; either honour them or say so in the docstring.
+3. **Orphaned doc comment in `office/kit/types.ts`.** The new `/** today's birthdays… */` block is wedged between the weather doc comment and the `weather` field, so `weather` loses its doc. Move the celebrations line below the `weather` field.
+
+The rest is fine. The tests are meaningful: the feed cases cover yearly, non-yearly and non-all-day events, and there is a sim-weight test. The kitchen and lounge draws are guarded by `?.length`.
