@@ -5,6 +5,8 @@ defmodule Server.WorklineQATest do
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 
+  import Ecto.Query
+
   alias Server.Channel
   alias Server.Repo
   alias Server.Thread
@@ -114,6 +116,60 @@ defmodule Server.WorklineQATest do
     assert why =~ "QA"
     assert {:ok, %{awaiting: "andrew"}} = Workline.graded(held, opts)
     refute_enqueued(worker: Server.Jobs.Land)
+  end
+
+  test "the operator's approve skips an owed QA only when told to, with a reason, and says so" do
+    {thread, opts} = at_review("overridden", ["office/kit/room.ts"])
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
+    opts = Keyword.put(opts, :land, :queue)
+
+    assert {:error, :nothing_awaiting} = Workline.approve(Repo.get!(Thread, thread.id), opts)
+
+    assert {:error, :nothing_awaiting} =
+             Workline.approve(Repo.get!(Thread, thread.id), Keyword.put(opts, :skip_qa, " "))
+
+    refute_enqueued(worker: Server.Jobs.Land)
+
+    assert {:ok, %Thread{stage: "review", awaiting: nil}} =
+             Workline.approve(Repo.get!(Thread, thread.id), Keyword.put(opts, :skip_qa, "no display on this box"))
+
+    assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+
+    assert [%{kind: "check_passed", detail: %{"tail" => "skipped by the operator: no display on this box"}}] =
+             Repo.all(
+               from e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == "workline:overridden:qa"
+             )
+
+    assert Enum.any?(bodies(thread), &(&1 =~ "QA skipped by the operator" and &1 =~ "no display on this box"))
+  end
+
+  test "a parked gate's approve skips an owed QA the same way" do
+    {thread, opts} = at_review("parked-override", ["office/kit/room.ts"])
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
+    {:ok, held} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
+
+    assert {:ok, %Thread{awaiting: nil}} =
+             Workline.approve(held, opts ++ [land: :queue, skip_qa: "drove it myself"])
+
+    assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+  end
+
+  test "while QA is owed, the qa seat's brief and nudges are QA's, not the reviewer's" do
+    {thread, opts} = at_review("qa-led", ["office/tui/main.ts"])
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
+    led = Repo.get!(Thread, thread.id)
+
+    assert {:error, why} = Workline.owed_status(led, opts)
+    assert why =~ "submit_qa" and why =~ "release:smoke"
+    refute why =~ "submit_review"
+
+    :ok = Server.Workline.Continuation.run(led.id, opts)
+    nudge = thread |> bodies() |> Enum.find(&String.starts_with?(&1, "↻"))
+    assert nudge =~ "submit_qa"
+    refute nudge =~ "advance_stage" or nudge =~ "submit_review"
+
+    {:ok, _} = Workline.qa_verdict(led, "pass", "nolan", "=== after: R\n HOME", opts)
+    assert {:ok, _} = Workline.owed_status(Repo.get!(Thread, thread.id), opts)
   end
 
   defp skips_qa(slug, paths, qa?) do

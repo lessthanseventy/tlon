@@ -49,6 +49,7 @@
 #   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
+#     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
 set -euo pipefail
 
 # the release the service runs (.release, the release pointer's build), from the main checkout
@@ -440,12 +441,18 @@ case "$cmd" in
     ;;
 
   approve)
-    tid="${1:-}"
-    int "$tid" || { echo 'usage: tlon-cli.sh approve <thread-id>' >&2; exit 2; }
+    tid="${1:-}"; shift || true
+    int "$tid" || { echo 'usage: tlon-cli.sh approve <thread-id> [--skip-qa <reason…>]' >&2; exit 2; }
+    opts="[]"
+    if [ "${1:-}" = "--skip-qa" ]; then
+      shift
+      [ "$#" -gt 0 ] || { echo 'approve --skip-qa needs a reason' >&2; exit 2; }
+      opts="[skip_qa: \"$(esc "$*")\"]"
+    fi
     # Complete a workline's parked gate (awaiting: andrew) — the operator's approval verb.
     # approve RE-VERIFIES the owed artifact via git in the SERVICE node — like `advance`,
     # the service needs TLON_WORKLINE_ROOT pointed at the worktree.
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.approve(t) do {:ok, a} -> IO.puts(\"approved — thread #$tid now at #{a.stage}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.approve(t, $opts) do {:ok, a} -> IO.puts(\"approved — thread #$tid now at #{a.stage}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
     ;;
 
   delete-thread)

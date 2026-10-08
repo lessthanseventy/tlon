@@ -255,13 +255,30 @@ defmodule Server.Workline do
   park) cannot ride approval past the invariant. `{:ok, thread}`,
   `{:error, {:artifact_missing, why}}` (still parked), `{:error, :nothing_awaiting}`, or
   `{:error, :approving}` while another approval of it is landing.
+
+  `skip_qa: reason` lands a review past an owed QA pass (parked or not): the skip is recorded as its
+  QA verdict ("skipped by the operator: <reason>") and posted on the thread. Without it, or with a
+  blank reason, an owed QA refuses as before.
   """
   def approve(thread, opts \\ [])
 
-  def approve(%Thread{awaiting: awaiting} = thread, opts) when not is_nil(awaiting),
-    do: landing(thread.id, fn -> do_approve(thread, opts) end)
+  def approve(%Thread{} = thread, opts) do
+    reason = opts |> Keyword.get(:skip_qa) |> to_string() |> String.trim()
 
-  def approve(%Thread{}, _opts), do: {:error, :nothing_awaiting}
+    cond do
+      reason != "" and qa_owed(thread, opts) ->
+        landing(thread.id, fn ->
+          skip_qa(thread, reason)
+          do_approve(thread, opts)
+        end)
+
+      thread.awaiting ->
+        landing(thread.id, fn -> do_approve(thread, opts) end)
+
+      true ->
+        {:error, :nothing_awaiting}
+    end
+  end
 
   @doc """
   Run `fun` as `thread_id`'s one landing: a second caller while it runs gets `{:error, :approving}`
@@ -733,9 +750,19 @@ defmodule Server.Workline do
   def owed_status(%Thread{} = thread, opts) do
     checker = Keyword.get(opts, :artifacts, Git)
 
-    case verified_artifact(thread, checker) do
-      :ok -> {:ok, "#{thread.stage} artifact committed"}
+    with :ok <- verified_artifact(thread, checker),
+         :ok <- qa_cleared(thread, opts) do
+      {:ok, "#{thread.stage} artifact committed"}
+    else
       {:error, {:artifact_missing, why}} -> {:error, why}
+    end
+  end
+
+  @doc "Whether `thread` owes a QA pass at review and its qa seat is the one leading it. `opts` as `advance/2`'s."
+  def qa_leads?(thread, opts \\ []) do
+    case qa_owed(thread, opts) do
+      {seat, _paths} -> Server.Channel.thread_lead(thread.id) == seat.name
+      nil -> false
     end
   end
 
@@ -1036,10 +1063,23 @@ defmodule Server.Workline do
         :ok
 
       {seat, _paths} ->
-        {:error,
-         {:artifact_missing,
-          "QA hasn't passed this user-visible change: #{seat.name} drives it against a scratch release and files what it saw with submit_qa"}}
+        if Server.Channel.thread_lead(thread.id) == seat.name,
+          do: {:error, {:artifact_missing, "QA is yours: " <> qa_playbook(thread)}},
+          else:
+            {:error,
+             {:artifact_missing,
+              "QA hasn't passed this user-visible change: #{seat.name} drives it against a scratch release and files what it saw with submit_qa"}}
     end
+  end
+
+  defp qa_playbook(thread) do
+    """
+    drive the changed path as Andrew would, against a scratch release of work/#{thread.slug}: \
+    `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/#{thread.slug}` builds it on :4047 (db tlon_smoke), \
+    smokes it and keeps it up; drive it with `TLON_URL=http://127.0.0.1:4047 mise run office:drive -- <keys>`. \
+    Never :4040, the live service. Then submit_qa: pass, or fail with the finding — what you pressed and \
+    the screen text you saw.\
+    """
   end
 
   defp qa_owed(%Thread{stage: "review", workspace_id: ws} = thread, opts) when not is_nil(ws) do
@@ -1072,15 +1112,25 @@ defmodule Server.Workline do
   defp to_qa(thread, seat, paths) do
     handed = hand_to(thread, "qa", seat.name)
 
-    post_brief(handed, """
-    🎭 QA: the review approved a change Andrew will see (#{Enum.join(Enum.take(paths, 5), ", ")}). Drive \
-    the changed path as he would, against a scratch release of work/#{thread.slug}: \
-    `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/#{thread.slug}` builds it on :4047 (db tlon_smoke), \
-    smokes it and keeps it up; drive it with `TLON_URL=http://127.0.0.1:4047 mise run office:drive -- <keys>`. \
-    Never :4040, the live service. Then submit_qa: pass, or fail with the finding — what you pressed and \
-    the screen text you saw.\
-    """)
+    post_brief(
+      handed,
+      "🎭 QA: the review approved a change Andrew will see (#{Enum.join(Enum.take(paths, 5), ", ")}). " <>
+        String.capitalize(qa_playbook(thread))
+    )
 
     handed
+  end
+
+  defp skip_qa(thread, reason) do
+    {:ok, _} =
+      Dossier.record_check(%{
+        thread_id: thread.id,
+        cmd: "qa skipped by the operator",
+        exit: 0,
+        tail: "skipped by the operator: #{reason}",
+        correlation: "workline:#{thread.slug}:qa"
+      })
+
+    post_brief(thread, "⚠ QA skipped by the operator: #{reason}")
   end
 end

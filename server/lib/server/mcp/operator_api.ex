@@ -47,7 +47,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/close       Channel.close_thread: its sessions end, its ticket is done
       POST   /api/threads/:id/hand-off    {"agent"} → Staffing.hand_off (staffed now where Oban runs)
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
-      POST   /api/threads/:id/approve     Workline.approve: complete its parked gate
+      POST   /api/threads/:id/approve     {"skip_qa"?} → Workline.approve: complete its parked gate; skip_qa
+                                          (a reason) lands a review past an owed QA pass, recorded
       GET    /api/threads/:id/docs        Workline.Docs.list (the workline's docs: work/<slug>/*.md)
       GET    /api/threads/:id/docs/:name  Workline.Docs.read (one doc's text; "current" is the stage's)
       POST   /api/threads/:id/verify      run a workline's verify again (Jobs.Verify), as entering verify does; 409 off verify
@@ -272,7 +273,13 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["close"], t), do: reply(conn, Channel.close_thread(t), &thread_row/1)
   defp on_thread(conn, "POST", ["hand-off"], t), do: hand_off(conn, t)
   defp on_thread(conn, "POST", ["advance"], t), do: reply(conn, Workline.advance(t), &thread_row/1)
-  defp on_thread(conn, "POST", ["approve"], t), do: reply(conn, Workline.approve(t), &thread_row/1)
+
+  defp on_thread(conn, "POST", ["approve"], t) do
+    {b, conn} = body(conn)
+    opts = if is_binary(b["skip_qa"]), do: [skip_qa: b["skip_qa"]], else: []
+    reply(conn, Workline.approve(t, opts), &thread_row/1)
+  end
+
   defp on_thread(conn, "POST", ["track"], t), do: reply(conn, Workline.promote(t), &thread_row/1)
 
   defp on_thread(conn, "POST", ["verify"], %Thread{stage: "verify"} = t) do

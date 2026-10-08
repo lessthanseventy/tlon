@@ -45,7 +45,8 @@ and every layer the spine design's re-laid §9 asked for
   the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; GitHub merges it).
   An approved review of a change Andrew sees (`office/`, the operator API) goes to the bench's `qa`
   seat first: it drives the branch on a scratch release and files `submit_qa`; a fail bounces it to
-  build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`).
+  build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`) but the
+  operator's `approve <id> --skip-qa <why>` (API `{"skip_qa"}`), recorded as its QA verdict.
   An approving review is risk-graded by a model that didn't write it (`Server.Workline.Grade`, run by
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.
