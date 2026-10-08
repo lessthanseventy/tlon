@@ -137,8 +137,10 @@ defmodule Server.MCP.GatewayTest do
 
   test "POST /api/restart while busy schedules it, says what it waits on; DELETE drops it" do
     :ok = Server.Presence.Thinking.thinking(987_654, "hronir")
+    Application.put_env(:server, :restart_run, fn _force -> :ok end)
 
     on_exit(fn ->
+      Application.delete_env(:server, :restart_run)
       Server.Rollout.cancel_restart()
       Server.Presence.Thinking.idle(987_654, "hronir")
     end)

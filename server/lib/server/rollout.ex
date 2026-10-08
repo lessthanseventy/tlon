@@ -118,13 +118,14 @@ defmodule Server.Rollout do
   now, `:ok` or `{:error, why}`. Busy: one restart is scheduled for the first quiet moment — it
   waits as long as it takes, never forcing — and `{:scheduled, lines}` says what it waits on; a
   second ask while one is scheduled joins it. `why:` is what the workers' notice says; `run:`,
-  `busy:` and `poll_ms:` stand in for the restart, `busy/0` and the poll in a test.
+  `busy:` and `poll_ms:` stand in for the restart, `busy/0` and the poll in a test (the app env's
+  `:restart_run` for `run:` where a caller can't pass it, e.g. through the API).
   """
   def restart(opts \\ []) do
     why = Keyword.get(opts, :why, "the operator asked")
     busy = Keyword.get(opts, :busy, &busy/0)
 
-    case Keyword.get_lazy(opts, :run, fn -> systemd_restart(why) end) do
+    case Keyword.get_lazy(opts, :run, fn -> Application.get_env(:server, :restart_run) || systemd_restart(why) end) do
       nil -> {:error, "not under systemd: run mise run server:restart"}
       run -> restart(run, busy, Keyword.get(opts, :force, false), Keyword.get(opts, :poll_ms, @quiet_poll_ms))
     end
