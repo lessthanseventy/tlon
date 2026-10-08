@@ -41,4 +41,25 @@ defmodule Server.WorklinePublishTest do
     assert {:error, why} = Publish.publish("/repo", "tiles", "t", run)
     assert why =~ "push"
   end
+
+  describe "refresh_behind/2 — a landing GitHub won't merge because main moved under it" do
+    @prs Jason.encode!([
+           %{"number" => 69, "headRefName" => "work/floor", "mergeStateStatus" => "BEHIND", "autoMergeRequest" => %{}},
+           %{"number" => 70, "headRefName" => "work/clean", "mergeStateStatus" => "CLEAN", "autoMergeRequest" => %{}},
+           %{"number" => 71, "headRefName" => "fix/mine", "mergeStateStatus" => "BEHIND", "autoMergeRequest" => %{}},
+           %{"number" => 72, "headRefName" => "work/held", "mergeStateStatus" => "BEHIND", "autoMergeRequest" => nil}
+         ])
+
+    test "rebases only its own landings that wait on auto-merge and are behind — never a human's branch" do
+      run = runner([{&match?(["gh", "pr", "list" | _], &1), {@prs, 0}}])
+      assert [69] = Publish.refresh_behind("/repo", run)
+      assert_received {:ran, ["gh", "pr", "update-branch", "69", "--rebase"]}
+      refute_received {:ran, ["gh", "pr", "update-branch", _ | _]}
+    end
+
+    test "a repo gh can't read (no remote, no auth) is nothing to do" do
+      run = runner([{&match?(["gh", "pr", "list" | _], &1), {"no git remotes found", 1}}])
+      assert [] = Publish.refresh_behind("/repo", run)
+    end
+  end
 end

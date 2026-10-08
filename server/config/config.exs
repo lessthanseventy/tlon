@@ -21,6 +21,7 @@ config :server, Oban,
     {Oban.Plugins.Cron,
      crontab: [
        {"* * * * *", Server.Jobs.Drain},
+       {"*/5 * * * *", Server.Jobs.KeepUp},
        {"*/30 * * * *", Server.Jobs.Maintain},
        {"* * * * *", Server.Jobs.Staff},
 
