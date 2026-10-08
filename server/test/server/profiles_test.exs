@@ -165,7 +165,7 @@ defmodule Server.ProfilesTest do
     test "drives Sonnet, so at home it runs on the Claude Code harness" do
       assert Profiles.fetch("tertius").model == %{
                provider: "anthropic",
-               model: "claude-sonnet-5",
+               model: "claude-sonnet-5-5",
                thinking: "medium"
              }
 
@@ -257,7 +257,7 @@ defmodule Server.ProfilesTest do
       assert choices == Enum.uniq(choices)
       assert hd(choices) in defaults
 
-      for m <- ~w(claude-opus-5-5 claude-sonnet-5 claude-fable-5-1),
+      for m <- ~w(claude-opus-5-5 claude-sonnet-5-5 claude-haiku-5-5 claude-fable-5-1),
           do: assert(Enum.any?(choices, &(&1.provider == "anthropic" and &1.model == m)))
     end
   end
@@ -331,10 +331,10 @@ defmodule Server.ProfilesTest do
   end
 
   describe "the reviewer profile — the write-deny gate" do
-    test "reviewer is a fetchable profile on claude-sonnet-5 (its archetype default)" do
+    test "reviewer is a fetchable profile on claude-sonnet-5-5 (its archetype default)" do
       p = Profiles.fetch("reviewer")
       assert %Profile{name: "reviewer"} = p
-      assert p.model.model == "claude-sonnet-5"
+      assert p.model.model == "claude-sonnet-5-5"
     end
 
     test "its permission policy DENIES the write and edit tools but ALLOWS reads" do
@@ -510,25 +510,25 @@ defmodule Server.ProfilesTest do
       r = Profiles.render(Profiles.fetch("tertius"), %{}, %{})
       assert r.system_prompt == Profiles.archetype(:surveyor).system_prompt
       assert r.system_prompt =~ "tertius"
-      assert r.settings["defaultModel"] == "claude-sonnet-5"
+      assert r.settings["defaultModel"] == "claude-sonnet-5-5"
       assert r.settings["defaultProvider"] == "anthropic"
       assert r.settings["defaultThinkingLevel"] == "medium"
       assert "machine_overview" in r.mcp["mcpServers"]["tlon"]["directTools"]
     end
 
-    test "fetch('reviewer') INTENTIONALLY flips glm-5.2 → claude-sonnet-5 (A2: reviewer is not live-spawned)" do
+    test "fetch('reviewer') INTENTIONALLY flips glm-5.2 → claude-sonnet-5-5 (A2: reviewer is not live-spawned)" do
       # Pins the design-correct flip so it can't silently regress back to the legacy incidental glm.
       assert Profiles.fetch("reviewer").model == %{
                provider: "anthropic",
-               model: "claude-sonnet-5",
+               model: "claude-sonnet-5-5",
                thinking: "medium"
              }
     end
 
-    test "every archetype defaults to claude-sonnet-5 — Claude Code is the one harness Tlön spawns" do
+    test "every archetype defaults to claude-sonnet-5-5 — Claude Code is the one harness Tlön spawns" do
       for k <- ~w(surveyor reviewer planner builder researcher assistant)a do
-        assert Profiles.archetype(k).model.model == "claude-sonnet-5",
-               "archetype #{k} should default to claude-sonnet-5"
+        assert Profiles.archetype(k).model.model == "claude-sonnet-5-5",
+               "archetype #{k} should default to claude-sonnet-5-5"
       end
     end
 
@@ -541,7 +541,7 @@ defmodule Server.ProfilesTest do
       assert Enum.map(Profiles.all(), & &1.name) == ["tertius", "reviewer"]
       # all/0 flows through the same archetype path, so reviewer here is sonnet too (not the legacy glm).
       reviewer = Enum.find(Profiles.all(), &(&1.name == "reviewer"))
-      assert reviewer.model.model == "claude-sonnet-5"
+      assert reviewer.model.model == "claude-sonnet-5-5"
     end
   end
 

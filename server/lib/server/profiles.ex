@@ -514,12 +514,13 @@ defmodule Server.Profiles do
   # (`Server.Harness.resolve/2`) — the one harness Tlön spawns for now. Not a model-ring entry, and the
   # operator can still retarget any instance via the settings file (`Server.OperatorConfig`) or a
   # roster-entry override (that is how a pi coworker comes back).
-  @sonnet %{provider: "anthropic", model: "claude-sonnet-5", thinking: "medium"}
+  @sonnet %{provider: "anthropic", model: "claude-sonnet-5-5", thinking: "medium"}
 
   # The Claude models a coworker may be set to (`model_choices/0`), beside the ollama ring.
   @claude_choices [
     %{provider: "anthropic", model: "claude-opus-5-5", thinking: "medium"},
     @sonnet,
+    %{provider: "anthropic", model: "claude-haiku-5-5", thinking: "medium"},
     %{provider: "anthropic", model: "claude-fable-5-1", thinking: "medium"}
   ]
 

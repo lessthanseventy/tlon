@@ -11,7 +11,7 @@ defmodule Server.HarnessTest do
   alias Server.Profile
   alias Server.Profiles
 
-  @sonnet %{provider: "anthropic", model: "claude-sonnet-5", thinking: "medium"}
+  @sonnet %{provider: "anthropic", model: "claude-sonnet-5-5", thinking: "medium"}
   @glm %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}
 
   setup do
@@ -95,7 +95,7 @@ defmodule Server.HarnessTest do
       assert_flag(args, "--tools", "Read,Grep,Glob")
       assert_flag(args, "--permission-mode", "dontAsk")
       assert "--no-session-persistence" in args
-      assert_flag(args, "--model", "claude-sonnet-5")
+      assert_flag(args, "--model", "claude-sonnet-5-5")
       assert_flag(args, "--effort", "high")
       assert flag(args, "--append-system-prompt") =~ "You are hronir."
       assert flag(args, "--append-system-prompt") =~ "change nothing"
@@ -125,7 +125,7 @@ defmodule Server.HarnessTest do
       assert cmd =~ "adapters/claude-code/launch.sh"
       assert cmd =~ "TLON_ROLE_PROMPT_FILE="
       assert cmd =~ "profiles/vera/system_prompt.md"
-      assert cmd =~ "--model claude-sonnet-5"
+      assert cmd =~ "--model claude-sonnet-5-5"
       refute cmd =~ "PI_CODING_AGENT_DIR"
     end
 
@@ -147,7 +147,7 @@ defmodule Server.HarnessTest do
       p = %Profile{name: "plain", model: @sonnet}
       cmd = Harness.driver(:claude_code).launch_command(p)
       refute cmd =~ "TLON_ROLE_PROMPT_FILE"
-      assert String.contains?(cmd, "launch.sh --model claude-sonnet-5")
+      assert String.contains?(cmd, "launch.sh --model claude-sonnet-5-5")
     end
 
     test "pi: PI_CODING_AGENT_DIR + persona + provider-qualified --model" do
