@@ -181,6 +181,7 @@ defmodule Server.Office do
         thread_id: r.thread_id,
         title: r.thread_title,
         warm: Server.Presence.warm_for?(r.last_active_at, r.agent, ws),
+        warmth: Float.round(Server.Presence.warmth(r.last_active_at, r.agent, ws), 3),
         workspace_id: ws,
         archetype: seat && seat.archetype,
         lead: !!(seat && seat.lead?),

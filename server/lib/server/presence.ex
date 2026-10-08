@@ -40,12 +40,19 @@ defmodule Server.Presence do
   def warm_for?(nil, _agent, _ws, _now), do: false
 
   def warm_for?(%DateTime{} = at, agent, workspace_id, now) do
-    window =
-      if Server.OperatorConfig.warmth_seconds() == %{},
-        do: warmth_window(),
-        else: warmth_window(provider_of(agent, workspace_id))
+    DateTime.after?(at, DateTime.shift(now, second: -window_for(agent, workspace_id)))
+  end
 
-    DateTime.after?(at, DateTime.shift(now, second: -window))
+  @doc """
+  How much of its own warmth window `agent`'s session has left as of `now`: 1.0 just active, down
+  to 0.0 cold — what the office fades a coworker's mug and monitor by.
+  """
+  def warmth(at, agent, workspace_id, now \\ now())
+  def warmth(nil, _agent, _ws, _now), do: 0.0
+
+  def warmth(%DateTime{} = at, agent, workspace_id, now) do
+    window = window_for(agent, workspace_id)
+    max(0.0, 1.0 - DateTime.diff(now, at) / window)
   end
 
   # the provider the coworker's seat runs on in that workspace (its policy, else its archetype's)
@@ -82,4 +89,10 @@ defmodule Server.Presence do
   def clock_in(engine), do: Application.put_env(:server, :clocked_out_engines, clocked_out_engines() -- [engine])
 
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
+
+  defp window_for(agent, workspace_id) do
+    if Server.OperatorConfig.warmth_seconds() == %{},
+      do: warmth_window(),
+      else: warmth_window(provider_of(agent, workspace_id))
+  end
 end

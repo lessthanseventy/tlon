@@ -33,6 +33,15 @@ describe("warmth at the desk", () => {
     expect(steamOf(actor(room, "ashe").warmth)).toBe(3)
   })
 
+  test("the server's warmth rules: a fresh room (the TUI just restarted) shows a nearly cold coworker as nearly cold", () => {
+    const room = new WideRoom(560)
+    const a = office()
+    const view = viewOf({ ...a, notes: [], roster: a.roster.map((r) => (r.agent === "ashe" ? { ...r, warm: true, thinking: false, warmth: 0.05 } : r)) }, 1)
+    for (let i = 0; i < 5; i++) room.step(view)
+    expect(actor(room, "ashe").warmth).toBeCloseTo(0.05, 3)
+    expect(steamOf(actor(room, "ashe").warmth)).toBe(1)
+  })
+
   test("near the end of the warmth window the steam is thin and the monitor's glow is dim", () => {
     const room = new WideRoom(560)
     ;(room as unknown as { warmTicks: number }).warmTicks = 100

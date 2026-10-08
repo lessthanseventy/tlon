@@ -389,7 +389,7 @@ export class Sim<L extends { people: Seat[] }> {
         actor.seat = r; actor.leaving = false; continue
       }
       const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
-      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.warm || r.thinking ? 1 : 0 })
+      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.thinking ? 1 : r.warmth ?? (r.warm ? 1 : 0) })
     }
     if (a.ok) this.seeded = true
     // a wave on the way in (whoever walks in from the exit) and on the way out
@@ -407,7 +407,7 @@ export class Sim<L extends { people: Seat[] }> {
     for (const [k, actor] of this.actors) {
       const slot = asks.findIndex((r) => keyOf(r) === k)
       const home = plan.home(l, actor.seat.agent)
-      actor.warmth = actor.seat.thinking ? 1 : actor.seat.warm ? Math.max(0, 1 - (this.tick - actor.cooled) / this.warmTicks) : 0
+      actor.warmth = actor.seat.thinking ? 1 : actor.seat.warmth ?? (actor.seat.warm ? Math.max(0, 1 - (this.tick - actor.cooled) / this.warmTicks) : 0)
       let goal: Spot
       if (actor.leaving) goal = plan.exit
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
