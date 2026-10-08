@@ -206,24 +206,33 @@ defmodule Server.Arbiter.Tmux do
   end
 
   @doc """
-  Whether `text` we typed is still waiting in the harness's input line — the last `❯` line on the
-  `pane` — rather than taken (an empty input) or someone else's draft (text that isn't ours). A boot
-  that ate the start of it leaves the rest, which is still ours.
+  Whether `text` we typed is still waiting in the harness's input — the draft from the last `❯` line
+  down to the input box's border, every line of it — rather than taken (an empty input) or someone
+  else's draft (text that isn't ours). A boot that ate the start of it leaves the rest, which is
+  still ours; a poke typed under an earlier one that never went sits on a later line of the draft.
   """
   def pending?(pane, text) do
-    pane
-    |> String.split("\n")
-    |> Enum.filter(&String.starts_with?(String.trim_leading(&1), "❯"))
+    lines = String.split(pane, "\n")
+
+    lines
+    |> Enum.with_index()
+    |> Enum.filter(fn {l, _} -> prompt?(l) end)
     |> List.last()
     |> case do
       nil ->
         false
 
-      line ->
-        typed = line |> String.trim_leading() |> String.trim_leading("❯") |> String.trim()
-        typed != "" and String.contains?(text, String.slice(typed, 0, 24))
+      {_, at} ->
+        lines
+        |> Enum.drop(at)
+        |> Enum.take_while(&(not border?(&1)))
+        |> Enum.map(&(&1 |> String.trim_leading() |> String.trim_leading("❯") |> String.trim()))
+        |> Enum.any?(&(&1 != "" and String.contains?(text, String.slice(&1, 0, 24))))
     end
   end
+
+  defp prompt?(line), do: line |> String.trim_leading() |> String.starts_with?("❯")
+  defp border?(line), do: line |> String.trim_leading() |> String.starts_with?(["─", "╭", "│", "╰"])
 
   @doc """
   The pane shows an input line — pi's `tlon: registered` footer or a harness prompt `❯` — so the first
@@ -245,7 +254,8 @@ defmodule Server.Arbiter.Tmux do
   # takes an Enter: the text lands, the Enter is swallowed, and the coworker never starts. So after
   # the Enter, look again a few times; while our text still sits in the input, press Enter again.
   defp confirm(ws, index, text) do
-    delays = Application.get_env(:server, :tmux_confirm_ms, [2_000, 4_000, 8_000, 15_000])
+    # out to two minutes: a Claude Code session still loading its hooks and MCP servers takes that
+    delays = Application.get_env(:server, :tmux_confirm_ms, [2_000, 4_000, 8_000, 15_000, 30_000, 60_000])
 
     Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
       Enum.reduce_while(delays, nil, fn ms, _ ->
