@@ -1,6 +1,6 @@
 // The office's life, room-agnostic: who walks where and when — people to their desks when they
-// work (mid-turn), on call at a laptop when their session is up but they are not, to the lounge
-// when idle, into your queue when a thread waits on you, over to whoever they
+// work (mid-turn), and kept there, leaning back, while their session stays warm; to the lounge
+// when it goes cold, into your queue when a thread waits on you, over to whoever they
 // consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { asksYou } from "./crew"
@@ -11,7 +11,7 @@ import { NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
 export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read"
-export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "laptop"
+export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note"
 /**
  * A place to be: where to stand, the row you walk along to get there, how you stand once there;
  * `with`, where a partner stands (the far end of the ping-pong table, the other half of a chat) —
@@ -27,6 +27,8 @@ export type Actor = {
   doingSince: number; stretch: number
   /** a snack from the machine in hand until `snack`; the tick they last finished a turn; a high-five's hand up until `five`; a coffee with them until `mug` */
   snack: number; finished: number; five: number; mug: number
+  /** the tick their last turn ended (or they were first seen between turns), and how warm their session is now: 1 mid-turn or just after, 0 cold */
+  cooled: number; warmth: number
 }
 export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
 /**
@@ -66,8 +68,6 @@ export type Plan<L extends { people: Seat[] }> = {
   pen: Spot
   /** beside whoever is visited */
   visit(host: Actor): Spot
-  /** where someone whose session is up but who is not mid-turn waits, on call, at a laptop (a room without: the lounge) */
-  oncall?: Spot[]
   /** where to stand to drop a suggestion in the box, for a room with one (else they pin it on the board) */
   box?: Spot
   /** somewhere to stroll when the lounge is full */
@@ -83,6 +83,8 @@ export const spotKey = (s: Spot) => `${s.kind}:${s.x}:${s.y}`
 const VISIT_MS = 60_000, NOTE_MS = 45_000
 /** ticks a finished worker stretches at the desk before leaving it */
 export const STRETCH = 20
+/** the server's warmth window (`Server.Presence`, an hour by default) in ticks: a warm session's glow fades over it */
+export const WARM_TICKS = 36_000
 const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read"])
 /** what someone at a pastime says now and then (over their head): a nap on the couch is a "z" */
 const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], pool: ["!", "?"], read: ["…", "?", "♥"] }
@@ -131,6 +133,8 @@ export class Sim<L extends { people: Seat[] }> {
   protected discoUntil = 0
   /** the hour it is — a function, so a test can make it the small hours */
   protected hour = () => new Date().getHours()
+  /** the warmth window in ticks — a field, so a test can shorten it */
+  protected warmTicks = WARM_TICKS
 
   constructor(protected plan: Plan<L>) {
     this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null }
@@ -381,10 +385,11 @@ export class Sim<L extends { people: Seat[] }> {
         if ((r.doing ?? null) !== (actor.seat.doing ?? null)) { actor.doingSince = this.tick; if (r.doing) this.noticed(actor, r.doing) }
         // a turn just ended at the desk: a good stretch before getting up
         if (actor.seat.thinking && !r.thinking && actor.spot.kind === "desk" && !actor.moving) { actor.stretch = this.tick + STRETCH; actor.finished = this.tick; this.noticed(actor, "done") }
+        if (actor.seat.thinking && !r.thinking) actor.cooled = this.tick
         actor.seat = r; actor.leaving = false; continue
       }
       const at = this.seeded ? plan.exit : plan.home(l, r.agent) ?? plan.lounge[this.actors.size % plan.lounge.length]!
-      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0 })
+      this.actors.set(k, { seat: r, look: lookOf(r.agent), x: at.x, y: at.y, path: [], spot: at, spotKey: this.seeded ? "" : spotKey(at), pose: at.pose, face: at.face, moving: false, until: 0, emote: null, emoteUntil: 0, leaving: false, doingSince: this.tick, stretch: 0, snack: 0, finished: -1000, five: 0, mug: 0, cooled: this.tick, warmth: r.warm || r.thinking ? 1 : 0 })
     }
     if (a.ok) this.seeded = true
     // a wave on the way in (whoever walks in from the exit) and on the way out
@@ -402,13 +407,14 @@ export class Sim<L extends { people: Seat[] }> {
     for (const [k, actor] of this.actors) {
       const slot = asks.findIndex((r) => keyOf(r) === k)
       const home = plan.home(l, actor.seat.agent)
+      actor.warmth = actor.seat.thinking ? 1 : actor.seat.warm ? Math.max(0, 1 - (this.tick - actor.cooled) / this.warmTicks) : 0
       let goal: Spot
       if (actor.leaving) goal = plan.exit
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
       else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
       else if (writing.has(actor.seat.agent) || this.pins.has(actor.seat.agent)) goal = this.pins.get(actor.seat.agent)?.box && plan.box ? plan.box : plan.pen
       else if ((actor.seat.thinking || this.tick < actor.stretch) && home) goal = home
-      else if (actor.seat.warm && this.plan.oncall?.length) goal = this.oncallGoal(actor, held, l)
+      else if (actor.seat.warm && home) goal = home
       else goal = this.idleGoal(actor, held, l)
       const gk = spotKey(goal)
       if (gk !== actor.spotKey) {
@@ -486,12 +492,6 @@ export class Sim<L extends { people: Seat[] }> {
   private find(agent: string): Actor | undefined {
     const all = [...this.actors.values()].filter((x) => x.seat.agent === agent && !x.leaving)
     return all.find((x) => x.spot.kind === "desk") ?? all[0]
-  }
-
-  /** a free laptop seat, kept once taken; every seat taken, the lounge */
-  private oncallGoal(actor: Actor, held: Set<string>, l: L): Spot {
-    if (actor.spot.kind === "laptop") return actor.spot
-    return this.plan.oncall!.find((s) => !held.has(spotKey(s))) ?? this.idleGoal(actor, held, l)
   }
 
   private idleGoal(actor: Actor, held: Set<string>, l: L): Spot {

@@ -77,14 +77,14 @@ describe("the wide room", () => {
     expect(busy.get("rack")).toContain("disk 95% full")
   })
 
-  test("mid-turn works at a desk; warm but unbusy waits on call at a laptop; cold goes to the lounge", () => seeded(3, () => {
+  test("mid-turn works at a desk; warm but unbusy waits there too; cold goes to the lounge", () => seeded(3, () => {
     const a0 = office(2)
     const state = (i: number) => (i === 1 ? { warm: true, thinking: true } : i === 2 ? { warm: true, thinking: false } : { warm: false, thinking: false })
     const a = viewOf({ ...a0, roster: a0.roster.map((r, i) => ({ ...r, ...state(i) })) }, 1)
     const room = new WideRoom(560)
     for (let i = 0; i < 600; i++) room.step(a)
     const at = (name: string) => (room as unknown as { actors: Map<string, { spot: { kind: string } }> }).actors.get(name)!.spot.kind
-    expect([at("hronir"), at("w0")]).toEqual(["desk", "laptop"])
+    expect([at("hronir"), at("w0")]).toEqual(["desk", "desk"])
     expect(["couch", "cooler", "coffee", "roam"]).toContain(at("w1"))
     expect(crewOf(a).map((c) => [c.name, c.status])).toEqual([["tertius", "idle"], ["hronir", "working"], ["w0", "idle"], ["w1", "idle"]])
   }))
@@ -256,7 +256,7 @@ describe("the wide room", () => {
     for (const w of [540, 560, 700]) {
       const plan = widePlan(w), l = plan.layout(viewOf(office(8), 1))
       const homes = l.people.map((p) => plan.home(l, p.agent)).filter((s): s is Spot => !!s)
-      const spots = [...homes, ...plan.queue, ...plan.lounge, ...(plan.oncall ?? []), plan.exit, plan.pen, plan.roam(l)]
+      const spots = [...homes, ...plan.queue, ...plan.lounge, plan.exit, plan.pen, plan.roam(l)]
       const blocks = plan.blocks(l)
       const inside = (x: number, y: number) => blocks.find((b) => x > b.x && x < b.x + b.w - 1 && y > b.y && y < b.y + b.h - 1)
       for (const from of spots) for (const to of spots) {

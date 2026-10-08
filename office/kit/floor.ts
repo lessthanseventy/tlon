@@ -17,7 +17,7 @@ const FACTORIES: Record<TileKind, (z: Zones, w: number) => Tile<Layout>> = {
   lounge: loungeTile, kitchen: kitchenTile, games: gamesTile,
 }
 
-/** every spot kind that belongs in the Plan's flat `lounge` array — a worker idling, not queued or on call */
+/** every spot kind that belongs in the Plan's flat `lounge` array — a worker idling, not queued */
 const LOUNGE_KINDS: (Kind | Pastime)[] = [
   "couch", "cooler", "coffee", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read",
 ]
@@ -36,8 +36,6 @@ export function floorPlan(home: Home, w: number): Plan<Layout> & { blocks: (l: L
     // by kind, not by tile: idle-target order is load-bearing (sim.ts picks the first free spot), so
     // this reproduces the exact kind sequence the room drew its spots in before the cut
     lounge: LOUNGE_KINDS.flatMap((k) => tiles.flatMap((t) => t.spots(l0)[k] ?? [])),
-    // the meeting room's table, two laptops a side: where the warm but unbusy sit, on call
-    oncall: tiles.flatMap((t) => t.spots(l0).laptop ?? []),
     exit: { x: w - 3, y: HALL, aisle: HALL, pose: "stand", face: "right", kind: "exit" },
     pen: { x: z.F1 - 30, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
     // under the suggestion box on the wall between the notes board and the windows

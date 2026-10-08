@@ -11,6 +11,10 @@ import type { Agents } from "./types"
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
 /** what the surface has open, and `tray`: how much of the in-tray you have not read */
 export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number; board?: BoardCtx }
+/** a warm session's mug: three wisps of steam just after the turn, thinning to one as it goes cold, none when cold */
+export const steamOf = (warmth: number) => (warmth <= 0 ? 0 : Math.ceil(warmth * 3))
+/** a desk monitor's glow for its owner's warmth: lit mid-turn, dimming toward the dark as the session cools */
+export const glowOf = (warmth: number) => tint(ROLE.live, ROLE.ground, Math.max(0, Math.min(1, warmth)))
 /** a tool running this long (ticks) has its worker sweating */
 const SWEAT = 600
 /** something with a footprint: drawn in order of `base`, its feet's row, so nearer covers farther */
@@ -68,18 +72,18 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
     const doing = busy ? (seat.doing && ACTIVITY[seat.doing] ? seat.doing : "think") : null
     const working = busy && actor.spot.face !== "down" && doing !== "read" && doing !== "think"
     const stretching = sitting && !seat.thinking && sc.tick < actor.stretch
+    // between turns at the desk, the session still warm: leaning back, a mug steaming beside them
+    const lounging = sitting && actor.spot.kind === "desk" && !seat.thinking && !talking && !stretching && actor.warmth > 0
     const seatedFace: Dir = talking || actor.spot.face === "down" ? "down" : actor.spot.face
     const rows = figure(actor.look, seat.archetype, !!seat.lead, false, sitting ? seatedFace : couch ? "up" : actor.face, sitting || couch ? "sit" : "stand", step, shut)
     const top = sitting || couch ? actor.y - 14 : actor.y - 20 + (actor.moving && step === 2 ? -1 : 0)
     const left = actor.x - 6
     sc.item(sitting ? actor.y : actor.y + 0.5, () => {
       sc.blit(rows, left, top, paints(shirtOf(seat.archetype), actor.look))
-      if (sitting && actor.spot.kind === "laptop") {
-        // side-on, on their lap: the base toward them, its lid up on the far side, lit
-        const right = actor.spot.face === "right", lx = right ? actor.x + 2 : actor.x - 7
-        sc.px(lx, actor.y - 4, 6, 1, ROLE.inactive)
-        sc.px(right ? lx + 5 : lx, actor.y - 8, 1, 4, ROLE.inactive)
-        sc.px(right ? lx + 4 : lx + 1, actor.y - 7, 1, 2, ROLE.key)
+      if (lounging) {
+        // hands behind their head, elbows out
+        sc.px(left - 1, top + 4, 2, 1, ROLE.prose); sc.px(left + 11, top + 4, 2, 1, ROLE.prose)
+        sc.px(left, top + 2, 1, 2, ROLE.prose); sc.px(left + 11, top + 2, 1, 2, ROLE.prose)
       }
       if (working && actor.spot.face === "left") {
         // side-on at a table: a hand reaching for the keys, tapping
@@ -112,7 +116,13 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
         sc.px(left + 9, top + lift, 2, 1, ROLE.prose)
       }
     })
-    if (actor.mug > sc.tick) sc.item(actor.y + 0.6, () => {
+    if (lounging) sc.item(actor.y + 0.6, () => {
+      // the mug on the desk at their elbow: its steam thins as the session cools
+      const mx = left - 3, my = top, wisps = steamOf(actor.warmth), haze = tint(ROLE.prose, ROLE.ground, 0.35 + 0.5 * actor.warmth)
+      sc.px(mx, my, 2, 2, ROLE.prose); sc.px(mx + 2, my, 1, 1, ROLE.prose)
+      for (let k = 0; k < wisps; k++) sc.px(mx + ((sc.tick >> 3) + k) % 2, my - 2 - k * 2, 1, 1, haze)
+    })
+    else if (actor.mug > sc.tick) sc.item(actor.y + 0.6, () => {
       // a mug, in hand or on the desk beside them, steaming
       const mx = sitting ? left + 12 : left - 1, my = sitting ? top + 4 : top + 12
       sc.px(mx, my, 2, 2, ROLE.prose); sc.px(mx + 2, my, 1, 1, ROLE.prose)
@@ -121,7 +131,7 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
     if (actor.snack > sc.tick && !sitting) sc.item(actor.y + 0.6, () => sc.px(left + 10, top + 12 - ((sc.tick >> 3) % 4 === 0 ? 2 : 0), 2, 2, ROLE.alarm)) // a snack, a bite now and then
     if (sc.tick < actor.five) sc.item(actor.y + 0.6, () => { sc.px(left + 11, top + 1, 1, 10, ROLE.prose); sc.px(left + 10, top, 3, 2, ROLE.prose) }) // a hand up for the high-five
     const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null
-    sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : 20, tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : actor.spot.kind === "laptop" ? "on call, at a laptop in the meeting room" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
+    sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : 20, tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : lounging ? "between turns at their desk, still warm" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
     const said = talk.get(seat.agent)
     if (said?.text) sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: actor.x, top })
     sc.overhead.push(() => {

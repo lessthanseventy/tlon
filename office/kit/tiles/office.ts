@@ -2,7 +2,7 @@
 // the crew board, the manager's and the lead's desks, two tables of four, the filing cabinet, the
 // server rack, and your queue.
 import { fit, type Measure } from "../canvas"
-import type { Focus, Scene } from "../draw"
+import { glowOf, type Focus, type Scene } from "../draw"
 import { needsYou, tipOf } from "../crew"
 import { bossDesk, crewBoard, decor, execDesk } from "../furniture"
 import { ROLE, tint } from "../palette"
@@ -34,7 +34,9 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
         if (asks) sc.px(mx + 1, my + 1, 8, 5, f % 2 ? ROLE.attention : ROLE.raised)
         else {
           sc.px(mx + 1, my + 1, 8, 5, ROLE.ground)
-          if (seated) for (let ll = 0; ll < 3; ll++) sc.px(mx + 2, my + 1 + ll * 2, 1 + ((f + ll * 3 + c.x) % 6), 1, ROLE.live)
+          // the lines scroll mid-turn and hold still between turns, their glow fading as the session cools
+          const glow = owner?.warmth ?? 0
+          if (seated && glow > 0) for (let ll = 0; ll < 3; ll++) sc.px(mx + 2, my + 1 + ll * 2, owner!.seat.thinking ? 1 + ((f + ll * 3 + c.x) % 6) : 6 - ll * 2, 1, glowOf(glow))
         }
         if (owner) decor(sc, owner.look, c.x + 11, ty + 12)
       }
@@ -46,7 +48,7 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
         if (measure(c.agent.slice(0, 3), 11) <= SEAT_GAP) sc.text(fit(measure, c.agent, SEAT_GAP - 1, 11), c.x, ty + 37, asks ? ROLE.attention : seated ? shirtOf(p?.archetype) : ROLE.inactive, 11)
         if (p && p.thread_id > 0) sc.hits.push({ x: c.x - 5, y: ty + 3, w: 10, h: 9, tip: `${c.agent}'s terminal — click to look over their shoulder`, act: { kind: "terminal", tid: p.thread_id } })
         const hx = c.x - 10, hy = ty, hw = SEAT_GAP, hh = 39
-        const where = !owner ? "" : seated ? "working" : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : owner.spot.kind === "laptop" ? "on call, at a laptop in the meeting room" : `idle, at the ${owner.spot.kind}`
+        const where = !owner ? "" : seated ? (owner.seat.thinking ? "working" : "between turns, still warm") : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : `idle, at the ${owner.spot.kind}`
         const agentId = a.bench.find((b) => b.name === c.agent)?.agent_id ?? null
         sc.hits.push({ x: hx, y: hy, w: hw, h: hh, tip: p ? tipOf(p, a.threads.find((t) => t.id === p.thread_id), where) : c.agent, act: { kind: "person", agentId, name: c.agent, tid: p && p.thread_id > 0 ? p.thread_id : null } })
         if (p && p.thread_id > 0 && p.thread_id === focus.picked) sc.ink.push({ t: "brackets", x: hx, y: hy, w: hw, h: hh, color: ROLE.body })
