@@ -1,10 +1,11 @@
 // Home tiles as pixel art: `TILE_ART` maps a tile kind to the function that paints it, and
 // `renderHome` lays the build grid out as a Frame. A new tile kind plugs in by adding a key.
-import { Canvas } from "./canvas"
-import type { HomeTile } from "./home"
+import { Canvas, type Frame } from "./canvas"
+import { gridWindow, type Home, type HomeTile, type Pt } from "./home"
 import { ROLE, tint } from "./palette"
 
 export const TILE = 12
+const CELL = TILE + 2
 
 /** a square sprite turned clockwise by `rot` degrees */
 export function rotated(rows: string[], rot: 0 | 90 | 180 | 270 = 0): string[] {
@@ -54,4 +55,28 @@ const plainTile: TileArt = (c, x, y) => {
 
 export function paintTile(c: Canvas, x: number, y: number, t: HomeTile) {
   (TILE_ART[t.kind] ?? plainTile)(c, x, y, t)
+}
+
+export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number }
+
+/** the build grid as a Frame of w×h logical px: every cell of `gridWindow`, centred; no text, no hits */
+export function renderHome({ home, cursor, carrying, refused, w, h }: HomeView): Frame {
+  const c = new Canvas(w, h)
+  c.px(0, 0, w, h, ROLE.ground)
+  const win = gridWindow(home, cursor)
+  const ox = Math.floor((w - (win.x1 - win.x0 + 1) * CELL) / 2), oy = Math.floor((h - (win.y1 - win.y0 + 1) * CELL) / 2)
+  const pos = ([x, y]: Pt): Pt => [ox + (x - win.x0) * CELL + 1, oy + (y - win.y0) * CELL + 1]
+  for (let y = win.y0; y <= win.y1; y++) for (let x = win.x0; x <= win.x1; x++) {
+    const [px, py] = pos([x, y])
+    const t = home.tiles.find((q) => q.at[0] === x && q.at[1] === y)
+    if (t) paintTile(c, px, py, t)
+    else c.px(px, py, TILE, TILE, ROLE.raised)
+  }
+  const [cx, cy] = pos(cursor)
+  if (carrying) {
+    paintTile(c, cx, cy, { ...carrying, at: cursor })
+    c.glow(cx, cy, TILE, TILE, ROLE.ground, 0.45)
+  }
+  return { rgba: c.rgba, width: w, height: h, hits: [],
+    ink: [{ t: "brackets", x: cx - 1, y: cy - 1, w: TILE + 2, h: TILE + 2, color: refused ? ROLE.alarm : ROLE.attention }] }
 }
