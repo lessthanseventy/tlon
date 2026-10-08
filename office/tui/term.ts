@@ -10,7 +10,10 @@ export type Input =
   | { t: "da" }
 
 export const ESC = "\x1b"
-export const out = (s: string) => process.stdout.write(s)
+let muted = false
+export const out = (s: string) => { if (!muted) process.stdout.write(s) }
+/** this process has handed the terminal on (a relaunch): it writes nothing more, whatever still runs */
+export function mute() { muted = true }
 
 export function enter() {
   process.stdin.setRawMode(true)

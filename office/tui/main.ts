@@ -30,7 +30,7 @@ import { loadPets, PETS_PATH, savePets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader } from "./reader"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
-import { cells, enter, ESC, leave, line, out, query, tokenize, type Input, type Seg } from "./term"
+import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
@@ -416,8 +416,18 @@ const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev
 /** start this TUI over on the new code: hand the terminal back, run the same command, leave with its code */
+// every interval this process runs, so a relaunch can stop them all
+const timers: ReturnType<typeof setInterval>[] = []
+const every = (fn: () => unknown, ms: number) => { timers.push(setInterval(fn, ms)) }
+
 async function relaunch() {
   leave()
+  // hand the terminal over whole: a parent still ticking draws its own room on alternate frames
+  // with the child's (a strobe) and takes keys meant for it
+  mute()
+  for (const t of timers) clearInterval(t)
+  process.stdin.removeAllListeners("data")
+  process.stdin.pause()
   const child = Bun.spawn([process.execPath, ...process.argv.slice(1)], { stdio: ["inherit", "inherit", "inherit"], env: process.env })
   process.exit(await child.exited)
 }
@@ -1681,14 +1691,14 @@ async function main() {
     query(); setTimeout(() => { layoutScreen(); draw() }, 150)
   })
   await refresh()
-  setInterval(refresh, 10_000)
-  setInterval(pollPlayer, 2000)
-  setInterval(() => { if (mode.kind === "pet" && petDraft) { previewTick += 10; draw() } }, 1000)
-  setInterval(() => { if (followPalette() || followLooks() || followPets()) { frame = null; draw() } }, 1000)
+  every(refresh, 10_000)
+  every(pollPlayer, 2000)
+  every(() => { if (mode.kind === "pet" && petDraft) { previewTick += 10; draw() } }, 1000)
+  every(() => { if (followPalette() || followLooks() || followPets()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0
-  setInterval(async () => {
+  every(async () => {
     const f = await data.focus()
     if (!f || f.at <= seenFocus) return
     seenFocus = f.at
@@ -1697,11 +1707,11 @@ async function main() {
     openReader(f.thread_id, false)
   }, 1000)
   // a card showing a running coworker keeps their screen current
-  setInterval(() => {
+  every(() => {
     const tid = openThread()
     if (tid !== null && !zoom && !reader && threadOf(tid)?.live && !talkView.has(tid)) void peekScreen(tid).then((moved) => { if (moved) draw() })
   }, 1000)
   // the room's clock: 10 Hz, drawn only when it changed
-  setInterval(() => { if (!reader && room().step(view())) { changed(); draw() } }, 100)
+  every(() => { if (!reader && room().step(view())) { changed(); draw() } }, 100)
 }
 main()
