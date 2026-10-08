@@ -84,6 +84,8 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.WriteNote, name: "write_note")
   component(Server.MCP.Tool.GetNotes, name: "get_notes")
   # The PM's (pm-and-release design §1): the release pointer and the backlog's urgency.
+  # a coworker's own thread branch to GitHub (its pane's own pushes are refused by the pre-push hook)
+  component(Server.MCP.Tool.PushBranch, name: "push_branch")
   component(Server.MCP.Tool.ReleaseStatus, name: "release_status")
   component(Server.MCP.Tool.CheckCandidate, name: "check_candidate")
   component(Server.MCP.Tool.ProposeRelease, name: "propose_release")

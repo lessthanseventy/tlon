@@ -54,6 +54,22 @@ defmodule Server.Workline.Publish do
   end
 
   @doc """
+  Push one thread's branch to origin, force-with-lease — the only way a coworker's branch reaches
+  GitHub (`push_branch`; the pre-push hook refuses a coworker pane's own pushes). Only a
+  `work/<slug>` branch: never main, never anything else. `:ok` | `{:error, why}`.
+  """
+  def push_branch(repo, branch, run \\ &System.cmd/3) do
+    if Regex.match?(~r{\Awork/[a-z0-9][a-z0-9-]*\z}, branch) do
+      case run.("git", ["-C", repo, "push", "--force-with-lease", "origin", branch], cd: repo, stderr_to_stdout: true) do
+        {_, 0} -> :ok
+        {out, _} -> {:error, "push of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
+      end
+    else
+      {:error, "#{branch} is not a thread's work/<slug> branch — only those are pushed"}
+    end
+  end
+
+  @doc """
   Its landings GitHub can never merge: main moved under one after it landed and they now conflict
   (`DIRTY`), which no `update-branch` fixes. Each open PR on a `work/*` branch so marked, as
   `%{number, slug}`; a repo `gh` can't read is `[]`.
