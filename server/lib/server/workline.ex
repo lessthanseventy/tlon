@@ -327,8 +327,8 @@ defmodule Server.Workline do
   end
 
   @doc """
-  The merge queue's turn for `thread` (`Server.Jobs.Land`): land `work/<slug>` rebased onto main,
-  gated there before main moves. Green: merged, closed, published. A conflict or a red gate sends
+  The merge queue's turn for `thread` (`Server.Jobs.Land`): land `work/<slug>` rebased onto
+  origin's main and gated there (`Server.Workline.Merge`). Green: merged, closed, published. A conflict or a red gate sends
   it back to build, its builder told why — the operator approved; the fix is the builder's. A thread
   no longer queued (re-parked, closed, moved on) is left alone. `opts[:merge]`/`opts[:gate]` swap the
   merger and the gate (tests). `{:ok, thread}` | `{:error, {:bounced, why}}`.
@@ -360,7 +360,7 @@ defmodule Server.Workline do
         bounce(
           thread,
           why,
-          "the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto main, fix it test-first"
+          "the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto origin/main, fix it test-first"
         )
     end
   end
@@ -928,14 +928,14 @@ defmodule Server.Workline do
 
   # merged: the thread's work is done (closing it marks its ticket done), and what changed rolls out
   defp finish(thread, %{repo: repo, from: from, to: to}) do
-    post_brief(thread, "⤵ merged into main as #{String.slice(to, 0, 7)}")
     {:ok, _} = Server.Channel.close_thread(thread)
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
+    landed = "⤵ landed as #{String.slice(to, 0, 7)}"
 
     case Server.Workline.Publish.publish(repo, thread.slug, thread.title) do
-      {:ok, url} -> post_brief(thread, "⇪ published as #{url} (GitHub merges it once its checks pass)")
-      :none -> :ok
-      {:error, why} -> post_brief(thread, "⚠ landed here but not on GitHub: #{why}")
+      {:ok, url} -> post_brief(thread, "#{landed}; published as #{url} (GitHub merges it once its checks pass)")
+      :none -> post_brief(thread, landed)
+      {:error, why} -> post_brief(thread, "#{landed}, but not published to GitHub: #{why}")
     end
   rescue
     e ->

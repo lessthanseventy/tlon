@@ -1,9 +1,9 @@
 defmodule Server.Jobs.Land do
   @moduledoc """
   The merge queue: an approved workline's landing, one at a time (queue `landing`, concurrency 1).
-  `Server.Workline.land_queued/2` rebases `work/<slug>` onto main and gates it there before main
-  moves — so what lands is what was checked, on the main it lands on, never a verify against a main
-  that has moved since. The gate is the full check (`scripts/workline-verify.sh` with
+  `Server.Workline.land_queued/2` rebases `work/<slug>` onto origin's main and gates it there — so
+  what lands is what was checked, on the main it lands on, never a verify against a main that has
+  moved since. The gate is the full check (`scripts/workline-verify.sh` with
   `WORKLINE_GATE=1`: evidence recorded, nothing advanced, nothing posted).
   """
   use Oban.Worker,
