@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  canPlace, connected, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
+  CATALOGUE, canPlace, connected, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
 } from "../kit/home"
 import { loadHome, saveHome } from "../tui/home"
 
@@ -166,5 +166,24 @@ describe("home.json round trip", () => {
       writeFileSync(blocker, "not a directory")
       expect(() => saveHome({ tiles: [] }, join(blocker, "home.json"))).not.toThrow()
     } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+})
+
+describe("garden tile", () => {
+  test("the catalogue offers a garden, and place cycles onto it from street and wraps to living", () => {
+    expect(CATALOGUE).toContain("garden")
+    let b = startBuild({ tiles: [{ kind: "street", at: [0, 0] }] })
+    b = place(b)
+    expect(b.home.tiles[0]!.kind).toBe("garden")
+    b = place(b)
+    expect(b.home.tiles[0]!.kind).toBe("living")
+  })
+  test("a garden placed next to a living tile saves and loads back", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
+    try {
+      const home: Home = { tiles: [{ kind: "living", at: [0, 0] }, { kind: "garden", at: [1, 0] }] }
+      saveHome(home, join(dir, "home.json"))
+      expect(loadHome(join(dir, "home.json"))).toEqual(home)
+    } finally { rmSync(dir, { recursive: true }) }
   })
 })
