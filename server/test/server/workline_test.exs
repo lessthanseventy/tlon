@@ -784,7 +784,9 @@ defmodule Server.WorklineTest do
     test "a branch that moved since the approval voids it: reopen opens the thread and queues nothing", %{repo: repo} do
       queued = queued_lamp!()
 
-      git!(repo, ["commit", "-q", "--allow-empty", "-m", "more"])
+      File.write!(Path.join(repo, "lamp.ex"), "code\n")
+      git!(repo, ["add", "lamp.ex"])
+      git!(repo, ["commit", "-q", "-m", "more code"])
       git!(repo, ["branch", "-f", "work/lamp", "HEAD"])
       assert Workline.approval(queued) == nil
 
@@ -793,6 +795,28 @@ defmodule Server.WorklineTest do
       assert {:ok, %{state: "open", stage: "review"}} = Workline.reopen(closed)
       refute_enqueued(worker: Server.Jobs.Land)
       assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "no approval stands"))
+    end
+
+    test "the workline's own docs committed after the approval (a review verdict) leave it standing", %{repo: repo} do
+      queued = queued_lamp!()
+
+      File.mkdir_p!(Path.join(repo, "work/lamp"))
+      File.write!(Path.join(repo, "work/lamp/review.md"), "VERDICT: approve\n")
+      git!(repo, ["add", "work/lamp/review.md"])
+      git!(repo, ["commit", "-q", "-m", "review verdict"])
+      git!(repo, ["branch", "-f", "work/lamp", "HEAD"])
+
+      assert %{"by" => "andrew"} = Workline.approval(queued)
+    end
+
+    test "a closed workline whose landing is queued or running is not stranded work" do
+      queued = queued_lamp!()
+      {:ok, _} = Channel.close_thread(queued)
+      Repo.update_all(Oban.Job, set: [state: "completed"])
+      refute Server.Office.Needs.landing?(Repo.get!(Server.Thread, queued.id))
+
+      Repo.update_all(Oban.Job, set: [state: "available"])
+      assert Server.Office.Needs.landing?(Repo.get!(Server.Thread, queued.id))
     end
 
     test "a thread that isn't a workline just reopens" do

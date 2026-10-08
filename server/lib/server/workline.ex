@@ -365,8 +365,9 @@ defmodule Server.Workline do
 
   @doc """
   The approval that still stands on a workline: the newest one recorded (`%{"by", "sha"}`, who
-  approved it into the merge queue and the commit `work/<slug>` was at), if the branch is at that
-  commit still; nil once it has moved, or when none was recorded.
+  approved it into the merge queue and the commit `work/<slug>` was at), while the branch's code is
+  what it was then (its own docs, `work/<slug>/`, may have moved); nil once the code has changed,
+  or when none was recorded.
   """
   def approval(%Thread{} = thread) do
     correlation = "workline:#{thread.slug}:approval"
@@ -381,9 +382,23 @@ defmodule Server.Workline do
       )
 
     with %{"sha" => sha} = detail when is_binary(sha) <- newest,
-         ^sha <- branch_head(thread),
+         head when is_binary(head) <- branch_head(thread),
+         true <- same_code?(thread, sha, head),
          do: Map.take(detail, ["by", "sha"]),
          else: (_ -> nil)
+  end
+
+  # the server commits the workline's own docs (a review verdict) onto the branch after an approval;
+  # only a change outside work/<slug>/ is a change to what was approved
+  defp same_code?(_thread, sha, sha), do: true
+
+  defp same_code?(thread, sha, head) do
+    match?(
+      {_, 0},
+      System.cmd("git", ["-C", Git.root(thread), "diff", "--quiet", sha, head, "--", ".", ":!work/#{thread.slug}"],
+        stderr_to_stdout: true
+      )
+    )
   end
 
   defp branch_head(thread) do
