@@ -68,3 +68,20 @@ describe("warmth at the desk", () => {
     for (const n of names) expect(actor(room, n).spot.kind).not.toBe("desk")
   })
 })
+
+describe("the cat's temperament", () => {
+  type Internals = { cat: { path: { x: number; y: number }[] }; plan: { cat: { nap: { x: number; y: number }; desk: { x: number; y: number } } } }
+  /** the first place she sets off for once her opening nap is over, with every die rolled at 0.5 */
+  const firstDest = (temperament?: { warmth: number; wits: number; energy: number }) => {
+    const room = new WideRoom(560), real = Math.random, w = room as unknown as Internals & { setTemperament(t: unknown): void }
+    if (temperament) w.setTemperament(temperament)
+    Math.random = () => 0.5
+    try {
+      for (let i = 0; i < 400 && !w.cat.path.length; i++) room.step(viewOf(office(), 1))
+    } finally { Math.random = real }
+    const to = w.cat.path.at(-1)!
+    return to.x === w.plan.cat.desk.x && to.y === w.plan.cat.desk.y ? "desk" : to.x === w.plan.cat.nap.x && to.y === w.plan.cat.nap.y ? "nap" : "other"
+  }
+  test("an unset temperament is today's table: 0.5 is the desk", () => { expect(firstDest()).toBe("desk") })
+  test("a lazy cat at the same roll naps instead", () => { expect(firstDest({ warmth: 0, wits: 0, energy: -2 })).toBe("nap") })
+})

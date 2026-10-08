@@ -8,6 +8,7 @@ import { looksGen, overrideFor } from "./looks"
 import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
+import { lean, pickDest, type Dest, type Temperament } from "./temperament"
 import { NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
@@ -104,6 +105,8 @@ export type Party = { agent: string; until: number }
 
 export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
+  protected temperament: Temperament = { warmth: 0, wits: 0, energy: 0 }
+  setTemperament(t: Temperament) { this.temperament = t }
   protected actors = new Map<string, Actor>()
   protected tick = 0
   private seeded = false
@@ -201,6 +204,11 @@ export class Sim<L extends { people: Seat[] }> {
   /** is anyone settled at a spot of this kind (the TV is on while someone is on the couch) */
   protected using(kind: Kind) { return [...this.actors.values()].some((x) => x.spot.kind === kind && !x.moving) }
 
+  private dest(d: Dest): Pt {
+    const p = this.plan.cat
+    return d === "nap" ? p.nap : d === "desk" ? p.desk : d === "perch" ? pick(p.perches) : d === "play" ? p.play : d === "litter" ? p.litter : pick(p.spots)
+  }
+
   /** Nina: naps on your rug, sits and flicks her tail, wanders your floor and the lounge */
   private stepCat(): boolean {
     const c = this.cat, p = this.plan.cat
@@ -234,10 +242,10 @@ export class Sim<L extends { people: Seat[] }> {
     // nobody leaves her lonely: you pat her when she is on your desk, and anyone idling in the
     // lounge reaches down to her when she is close
     if (this.tick >= c.purr) {
-      if (at(p.desk) && Math.random() < 0.02) { c.purr = this.tick + 30; c.byYou = true; return true }
+      if (at(p.desk) && Math.random() < 0.02 * lean(this.temperament.warmth)) { c.purr = this.tick + 30; c.byYou = true; return true }
       // a fuss is an occasion, not a fixture: one at a time, and not while she still has the last to say
       if (c.mode !== "sleep" && !c.path.length && this.quiet(c.saidUntil)) for (const a of this.actors.values()) {
-        if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || Math.random() > 0.0015) continue
+        if (a.moving || a.path.length || !LOUNGING.has(a.spot.kind) || Math.abs(a.x - c.x) > 18 || Math.abs(a.y - c.y) > 16 || Math.random() > 0.0015 * lean(this.temperament.energy)) continue
         // a snack from the machine goes to her, whatever else they had in mind
         const kind = a.snack > this.tick ? "treat" : pick<Fuss>(["pat", "pat", "scratch", "treat"])
         if (kind === "treat") a.snack = 0
@@ -254,13 +262,12 @@ export class Sim<L extends { people: Seat[] }> {
     const typing = [...this.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && a.seat.thinking)
     if (typing.length && r > 0.97 && c.mode !== "sleep") return this.catKeyboard(pick(typing).seat.agent)
     // the small hours give her ideas
-    const leaps = r < (nightOwl(this.hour()) ? 0.15 : 0.05) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
+    const leaps = r < (nightOwl(this.hour()) ? 0.15 : 0.05) * lean(this.temperament.energy) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
     if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(Math.random() * 60); return true }
     const cold = (this.weather?.temp_c ?? 20) < 10
     const to = cold && p.warm && r < 0.35 ? p.warm
       : company && r < 0.3 ? pick(p.lounge)
-      : r < 0.45 ? p.nap : r < 0.55 ? p.desk : r < 0.7 ? pick(p.perches)
-        : r < 0.8 ? p.play : r < 0.85 ? p.litter : pick(p.spots)
+      : this.dest(pickDest(this.temperament, r))
     const down = p.via(c), up = p.via(to)
     c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]; c.mode = "walk"
     return true
