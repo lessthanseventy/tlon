@@ -1,2 +1,5 @@
 [test]
 preload = ["./test/clock.ts"]
+# CPU-bound render tests: correct, but a saturated box (a gate beside coworkers' suites) runs them
+# past bun's 5 s default
+timeout = 20000
