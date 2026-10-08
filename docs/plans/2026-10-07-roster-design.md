@@ -1,7 +1,8 @@
 # The roster — sixteen names, one coworker — design
 
 **Date:** 2026-10-07
-**Status:** approved by Andrew (calls in §7); step 1 done. Seven steps in §8; Sonny (§5, step 7)
+**Status:** approved by Andrew (calls in §7); step 1 done; of step 5, beatriz is the PM (a data
+migration, `…_beatriz_is_the_pm.exs`). Seven steps in §8; Sonny (§5, step 7)
 was added after approval and its seat is a proposal.
 **Asked:** Andrew: *"make sure hronir is doing what he should, that everyone has a clearly defined
 role, and that we aren't missing any roles/SMEs/different personalities amongst the same role.
