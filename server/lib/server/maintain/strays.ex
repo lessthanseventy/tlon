@@ -1,7 +1,8 @@
 defmodule Server.Maintain.Strays do
   @moduledoc """
-  Worktrees no thread is working in: a project's `.worktrees/<name>` whose thread is closed, gone,
-  or is its workspace's standing thread (the lobby never finishes, so work parked on it never
+  Worktrees no thread is working in: a project's `.worktrees/<name>` whose thread is closed, or
+  gone (a checkout made by hand, once a day passes with nothing done in it), or is its workspace's
+  standing thread (the lobby never finishes, so work parked on it never
   surfaces otherwise). The Maintain sweep removes the ones holding nothing; the rest are the
   needs list's stranded work (`Server.Office.Needs`), never deleted by a sweep.
   """
@@ -11,12 +12,15 @@ defmodule Server.Maintain.Strays do
   alias Server.Repo
   alias Server.Thread
 
+  @idle_s 24 * 3600
+
   @doc "Every stray worktree: `%{repo, name, thread}`, `thread` nil when there is none."
   def worktrees do
     for repo <- repos(),
         name <- Server.Worktree.names(repo),
-        thread = owner(name),
+        thread <- [owner(name)],
         stray?(thread),
+        thread || idle?(Server.Worktree.path(repo, name)),
         do: %{repo: repo, name: name, thread: thread}
   end
 
@@ -40,6 +44,17 @@ defmodule Server.Maintain.Strays do
   end
 
   defp owner(slug), do: Repo.get_by(Thread, slug: slug)
+
+  # a checkout made by hand has no thread; it is someone's work in progress until a day passes without
+  # anything staged or checked out in it
+  defp idle?(wt) do
+    with {index, 0} <- System.cmd("git", ["-C", wt, "rev-parse", "--path-format=absolute", "--git-path", "index"]),
+         {:ok, %File.Stat{mtime: mtime}} <- File.stat(String.trim(index), time: :posix) do
+      System.os_time(:second) - mtime > @idle_s
+    else
+      _ -> true
+    end
+  end
 
   defp stray?(nil), do: true
   defp stray?(%Thread{state: "closed"}), do: true

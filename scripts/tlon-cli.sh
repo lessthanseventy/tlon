@@ -37,6 +37,7 @@
 #   post <id> <text…>              post as the operator
 #   close-thread <id>              close a thread (its ticket is done; a child reports up)
 #   reopen <id>                    reopen a closed thread; a queued workline re-joins the merge queue if its approval stands
+#   reap                           the worktree sweep now: strays removed, the ones holding work kept with why
 #   delete-thread <id>             operator hard delete (messages go too; facts survive unlinked)
 #   forget-fact <id>               operator tombstone — out of recall, row kept
 #   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution
@@ -235,6 +236,11 @@ case "$cmd" in
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh reopen <thread-id>' >&2; exit 2; }
     exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); System.halt(1); t -> case Server.Workline.reopen(t) do {:ok, r} -> IO.puts(\"reopened thread #$tid — #{r.title}#{if r.stage, do: \" (#{r.stage})\"}\"); other -> IO.puts(\"reopened thread #$tid, but: #{inspect(other)}\"); System.halt(1) end end"
+    ;;
+
+  reap)
+    # The Maintain sweep's worktree step, run now (Server.Maintain.Sweep.reap_worktrees/0).
+    exec "$SERVER" rpc "case Server.Maintain.Sweep.reap_worktrees() do [] -> IO.puts(\"nothing to reap\"); rs -> for {path, r} <- rs, do: IO.puts(case r do {:removed, _} -> \"removed  #{path}\"; {:kept, why} -> \"kept     #{path}: #{why}\"; other -> \"#{inspect(other)}  #{path}\" end) end"
     ;;
 
   ticket-file)
@@ -487,7 +493,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac

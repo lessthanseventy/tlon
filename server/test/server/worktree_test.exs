@@ -199,6 +199,30 @@ defmodule Server.WorktreeTest do
       assert {:removed, _} = Worktree.remove(repo, "rebased")
     end
 
+    test "remove/2 reads the branch a checkout actually has, not only work/<name>", %{repo: repo, git: git} do
+      wt = Worktree.path(repo, "by-hand")
+      {_, 0} = git.(["worktree", "add", "-q", "-b", "office/by-hand", wt])
+      assert {:removed, ^wt} = Worktree.remove(repo, "by-hand")
+      {out, 0} = git.(["branch", "--list", "office/by-hand"])
+      assert String.trim(out) == ""
+
+      kept = Worktree.path(repo, "kept-by-hand")
+      {_, 0} = git.(["worktree", "add", "-q", "-b", "office/kept", kept])
+      File.write!(Path.join(kept, "work.txt"), "unmerged\n")
+      {_, 0} = System.cmd("git", ["-C", kept, "add", "work.txt"])
+      {_, 0} = System.cmd("git", ["-C", kept, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"])
+      assert {:kept, reason} = Worktree.remove(repo, "kept-by-hand")
+      assert reason =~ "office/kept has unmerged commits"
+    end
+
+    test "remove/2 of a detached checkout of main's commit drops the checkout and never main", %{repo: repo, git: git} do
+      wt = Worktree.path(repo, "t9")
+      {_, 0} = git.(["worktree", "add", "-q", "--detach", wt])
+      {main, 0} = git.(["symbolic-ref", "--short", "HEAD"])
+      assert {:removed, ^wt} = Worktree.remove(repo, "t9")
+      assert {_, 0} = git.(["rev-parse", "--verify", String.trim(main)])
+    end
+
     test "remove/2 on a worktree that never existed is :none", %{repo: repo} do
       assert :none = Worktree.remove(repo, "ghost")
     end

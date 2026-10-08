@@ -80,8 +80,10 @@ defmodule Server.Worktree do
         {:kept, reason}
 
       true ->
+        branch = checked_out(repo_path, slug)
+
         with {_out, 0} <- git(repo_path, ["worktree", "remove", wt]),
-             {_out, 0} <- git(repo_path, ["branch", "-D", branch(slug)]) do
+             {_out, 0} <- delete_branch(repo_path, branch) do
           {:removed, wt}
         else
           {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
@@ -92,7 +94,7 @@ defmodule Server.Worktree do
   @doc "Why a checkout must stay — uncommitted changes, or commits no other branch has — or nil."
   @spec holds(String.t(), String.t()) :: String.t() | nil
   def holds(repo_path, slug) do
-    branch = branch(slug)
+    branch = checked_out(repo_path, slug)
 
     cond do
       dirty?(path(repo_path, slug)) -> "#{branch} has uncommitted changes at #{path(repo_path, slug)}"
@@ -133,6 +135,31 @@ defmodule Server.Worktree do
     else
       {out, _} -> {:error, "git refused: #{String.slice(out, 0, 200)}"}
     end
+  end
+
+  # what the checkout has out — a branch made by hand need not be work/<slug>; detached, its commit
+  defp checked_out(repo_path, slug) do
+    wt = path(repo_path, slug)
+
+    case git(wt, ["symbolic-ref", "-q", "--short", "HEAD"]) do
+      {out, 0} ->
+        String.trim(out)
+
+      _ ->
+        case git(wt, ["rev-parse", "HEAD"]) do
+          {sha, 0} -> String.trim(sha)
+          _ -> branch(slug)
+        end
+    end
+  end
+
+  # never the main checkout's own branch, nor a commit (a detached checkout has no branch to drop)
+  defp delete_branch(repo_path, branch) do
+    {main, _} = git(repo_path, ["symbolic-ref", "-q", "--short", "HEAD"])
+
+    if branch != String.trim(main) and branch_exists?(repo_path, "refs/heads/#{branch}"),
+      do: git(repo_path, ["branch", "-D", branch]),
+      else: {"", 0}
   end
 
   defp dirty?(wt), do: match?({out, 0} when out != "", git(wt, ["status", "--porcelain"]))

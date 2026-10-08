@@ -42,4 +42,24 @@ defmodule Server.Maintain.StraysTest do
     refute File.exists?(done_wt)
     assert File.exists?(lobby_wt)
   end
+
+  test "reap_worktrees/0 says what it removed and what it kept, and why", %{repo: repo, ws: ws, project: p} do
+    {:ok, t} = Server.Channel.open_thread(%{title: "kept", scope: "machine", workspace_id: ws.id, project_id: p.id})
+    {:ok, kept} = Worktree.ensure(repo, Worktree.name_for(t))
+    File.write!(Path.join(kept, "wip.txt"), "wip\n")
+    {:ok, _} = Server.Channel.close_thread(t)
+    gone = Worktree.path(repo, "by-hand")
+    {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "office/by-hand", gone])
+    fresh = Worktree.path(repo, "fresh")
+    {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "office/fresh", fresh])
+    {index, 0} = System.cmd("git", ["-C", gone, "rev-parse", "--path-format=absolute", "--git-path", "index"])
+    File.touch!(String.trim(index), System.os_time(:second) - 2 * 86_400)
+
+    results = Map.new(Server.Maintain.Sweep.reap_worktrees())
+    assert results[gone] == {:removed, gone}
+    assert {:kept, why} = results[kept]
+    assert why =~ "uncommitted changes"
+    refute Map.has_key?(results, fresh)
+    assert File.exists?(fresh)
+  end
 end
