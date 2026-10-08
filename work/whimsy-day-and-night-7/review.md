@@ -1,19 +1,16 @@
 VERDICT: request_changes
 
-Reviewed commit 79ea6dd (office/kit/daylight.ts, rooms/wide.ts, tests) against §7: "Day and night: the floor's light follows the real clock; lamps come on tile by tile; a pet asleep at night, you in pyjamas after clock-out." I read the diff and surrounding code; I did not run the suite (the server's verify already recorded green on `mise run check`).
+Reviewed 7fa5196 (fixes to 79ea6dd) against §7 and my earlier review. Read the diff; probed one render; did not run the full gate.
 
-What is right
-- `darkness()` uses the same hours as the windows' sky (dusk 18:30–20:30, dawn 6:00–7:30). The ramp is continuous and tested.
-- Pet bedtime is gated on idle state (sit, no path, no errand, no fuss), so it never interrupts a walk. Clock-dependent existing tests are pinned to hour 16; golden hashes regenerated deliberately.
+Fixed and fine
+- Pyjamas (boss figure: no tie, planner colours, `dark` = clock-out), one `dark` predicate, `season()` on `darkness`, bedtime without Math.random, 0.4x lower bound on night luminance, 3am WCAG pass.
 
 Must fix
-1. Pyjamas are missing and the commit doesn't say so. §7 has four parts; three are delivered. daneri flagged the "clock-out" ambiguity on the thread, but neither the commit nor AGENTS.md records the gap. Either add pyjamas (night hours as clock-out, as daneri proposed) or state plainly that they are deferred to a follow-up.
-2. Four of the five "lamps" are not lamps. `nightfall` (wide.ts:324) hardcodes `[50,126]`, `[M0+MW/2,90]`, `[width-30,130]`, `[L0+60,160]`. The only lamp in the room is the lounge one near `L0+14,85` (grep finds no other lamp sprite). At night, warm pools will appear on bare floor or whatever sits there. Light real furniture, with positions taken from the plan/layout, or limit it to what exists.
+1. Only ONE lamp ever lights; the desk lamps never do. `execDesk` pushes to `sc.lamps` inside an `sc.item(...)` callback (office/kit/furniture.ts, `sc.lamps.push([d.x + d.w - 5, d.y + 15])`), and item callbacks run in `Scene.finish()`. But `WideRoom.render` calls `this.nightfall(sc, now)` BEFORE `return sc.finish()` (rooms/wide.ts:312-313), so `nightfall` reads `sc.lamps` when it holds only the lounge lamp (pushed outside an item, in lounge.ts). Probe: render at 03:00 with a manager+lead office (wcag.test's `office()`): `sc.lamps.length` is 1 before `finish()`, 3 after. So "lamps come on one by one" is a single lamp, and the commit/AGENTS.md claim that the manager/lead desk lamps light is false. The new lamp test only checks the lounge patch, so it passes.
+   Fix: register the desk lamp outside the item callback (as lounge.ts does), or run the lamp glow after items are drawn. Add a test: night render with manager and lead seated has sc.lamps.length >= 3 and a desk-lamp patch is brighter, relative to day, than distant floor.
 
 Should fix
-3. The dim is applied last, over everything below BAND including the windows, whose sky is already night-coloured. Check legibility of canvas-drawn text and the windows at full dark (office WCAG/themes rule), or dim before the windows/overlays.
-4. The wide-room test only asserts night luminance < 0.85 × day. That passes for a dim that crushes the UI. Add a lower bound, and assert that a lit-lamp pixel is brighter than the same pixel without lamps.
+2. Same ordering: the dim (`glow` of ROLE.ground from BAND down) is painted before furniture and people, so items/figures are drawn at full day brightness over a dimmed base. The 3am WCAG pass is green, but the floor won't read as dark around furniture. If intended, say so in `nightfall`'s doc; otherwise apply the dim after items (fixes 1 and 2 together).
 
-Nits
-- `season()` still uses `night = h>=19||h<6`, which differs from `darkness` (full dark from 20.5). Use one shared predicate for night.
-- `bedtime` calls `Math.random()` in `step`, which breaks determinism for any seeded test that doesn't pin the hour. Existing tests are pinned, but it is a trap for the next one.
+Nit
+- The lamp-pool test patch (L0+10..+18, y 62..70) only partly overlaps the glow (y 54..63); a patch on the shade (L0+14,58) would make it a tighter assertion.
