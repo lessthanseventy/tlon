@@ -10,7 +10,7 @@ import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
-import { overrideFor, useLookOverrides, type LookOverride } from "../kit/looks"
+import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { ACCESSORY, HAIRS, HAIR_ROLES, lookOf, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
@@ -1345,7 +1345,11 @@ function editorKey(k: string) {
     mode = { kind: "look", name }; sel = 0; snapSel = true; return draw()
   }
   if (k === "enter") {
-    if (lookDraft) lookDraft.custom = { front: [...editBuf.front], side: [...editBuf.side], back: [...editBuf.back] }
+    if (lookDraft) {
+      const custom = trimCustom(editBuf)
+      if (custom) lookDraft.custom = custom
+      else delete lookDraft.custom
+    }
     mode = { kind: "look", name }; sel = 0; snapSel = true; return draw()
   }
   if (k === ".") return paintAt(".")
