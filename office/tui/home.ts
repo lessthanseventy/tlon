@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { CATALOGUE, type Home, type HomeTile } from "../kit/home"
+import { CATALOGUE, type Build, type Home, type HomeTile } from "../kit/home"
 
 export const HOME_PATH = process.env.TLON_HOME
   ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/home.json")
@@ -27,4 +27,11 @@ export function saveHome(home: Home, path: string = HOME_PATH): void {
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, `${JSON.stringify(home, null, 2)}\n`)
   } catch { /* a read-only or blocked home: it just won't remember */ }
+}
+
+/** one build-mode step: applies `f`, and saves the home only when the step wrote (a move, a pick-up or a refused drop does not) */
+export function applyBuild(b: Build, f: (b: Build) => Build, save: (h: Home) => void = saveHome): Build {
+  const next = f(b)
+  if (next.writes !== b.writes) save(next.home)
+  return next
 }

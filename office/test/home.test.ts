@@ -5,7 +5,7 @@ import { join } from "node:path"
 import {
   canPlace, connected, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
 } from "../kit/home"
-import { loadHome, saveHome } from "../tui/home"
+import { applyBuild, loadHome, saveHome } from "../tui/home"
 
 const byAt = (x: HomeTile, y: HomeTile) => x.at[0] - y.at[0] || x.at[1] - y.at[1]
 
@@ -166,5 +166,41 @@ describe("home.json round trip", () => {
       writeFileSync(blocker, "not a directory")
       expect(() => saveHome({ tiles: [] }, join(blocker, "home.json"))).not.toThrow()
     } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+})
+
+describe("applyBuild: the TUI's build glue saves only when a change was written", () => {
+  const two: Home = { tiles: [{ kind: "living", at: [0, 0] }, { kind: "kitchen", at: [1, 0] }] }
+  const spy = () => { const saved: Home[] = []; return { saved, save: (h: Home) => void saved.push(h) } }
+
+  test("moving and picking up never save", () => {
+    const { saved, save } = spy()
+    let b = startBuild(two)
+    b = applyBuild(b, (x) => move(x, 1, 0), save)
+    b = applyBuild(b, pickUp, save)
+    expect(b.carrying?.kind).toBe("kitchen")
+    expect(saved).toEqual([])
+  })
+  test("a refused drop does not save; a successful drop saves once", () => {
+    const { saved, save } = spy()
+    let b = startBuild(two)
+    b = applyBuild(b, pickUp, save) // living at (0,0)
+    b = applyBuild(b, (x) => move(x, 5, 5), save)
+    b = applyBuild(b, drop, save) // an island: refused
+    expect(b.refused).toBe(true)
+    expect(saved).toEqual([])
+    b = applyBuild(b, (x) => move(x, -4, -5), save) // (1,0) is taken; (1,1) keeps the floor whole
+    b = applyBuild(b, (x) => move(x, 0, 1), save)
+    b = applyBuild(b, drop, save)
+    expect(saved.length).toBe(1)
+    expect(saved[0]).toEqual(b.home)
+  })
+  test("a placed tile and its undo each save once", () => {
+    const { saved, save } = spy()
+    let b = startBuild({ tiles: [] })
+    b = applyBuild(b, place, save)
+    b = applyBuild(b, undo, save)
+    expect(saved.length).toBe(2)
+    expect(b.home.tiles).toEqual([])
   })
 })
