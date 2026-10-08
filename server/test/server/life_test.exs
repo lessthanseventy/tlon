@@ -215,7 +215,9 @@ defmodule Server.LifeTest do
       ws_id = Ecto.UUID.generate()
       refute Server.Quest.create_changeset(%{workspace_id: ws_id, title: "q", xp: -5}).valid?
       refute Server.Routine.create_changeset(%{workspace_id: ws_id, title: "r", every: "@daily", xp: -1}).valid?
+
       refute Server.Routine.create_changeset(%{workspace_id: ws_id, title: "r", every: "@daily", window_minutes: -1}).valid?
+
       refute Server.Routine.update_changeset(%Server.Routine{}, %{title: "r", every: "@daily", xp: -1}).valid?
     end
   end
