@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -86,19 +86,35 @@ describe("build mode: place, pick up, drop, rotate, remove, undo", () => {
     expect(b.home).toBe(before)
     expect(b.writes).toBe(0) // so there is nothing a caller should persist: the file stays as it was
   })
-  test("remove takes a tile off the floor; rotate marks it; undo steps back", () => {
+  test("remove takes a tile off the floor; rotate marks it; undo steps back, and counts as a write", () => {
     let b = startBuild({ tiles: [{ kind: "living", at: [0, 0] }] })
     b = rotate(b)
     expect(b.home.tiles[0]!.rot).toBe(90)
     b = remove(b)
     expect(b.home.tiles).toEqual([])
+    const writes = b.writes
     b = undo(b)
     expect(b.home.tiles[0]!.kind).toBe("living")
+    expect(b.writes).toBe(writes + 1)
   })
   test("undo only remembers the last ten writes", () => {
     let b = startBuild({ tiles: [] })
     for (let i = 0; i < 15; i++) { b = move(b, 1, 0); b = place(b); b = move(b, -1, -1) }
     expect(b.history.length).toBe(10)
+  })
+  test("while carrying a tile, place/remove/rotate/undo elsewhere are refused — the carried tile can't be lost or duplicated", () => {
+    let b = startBuild({ tiles: [{ kind: "living", at: [0, 0] }, { kind: "kitchen", at: [5, 5] }] })
+    b = rotate(b) // history now holds a snapshot with kitchen@(5,5) present
+    b = move(b, 5, 5)
+    b = pickUp(b)
+    expect(b.carrying?.kind).toBe("kitchen")
+    const carrying = b
+    b = place(carrying); expect(b).toBe(carrying)
+    b = remove(carrying); expect(b).toBe(carrying)
+    b = rotate(carrying); expect(b).toBe(carrying)
+    b = undo(carrying); expect(b).toBe(carrying)
+    const all = [...carrying.home.tiles, carrying.carrying]
+    expect(all.filter((t) => t?.kind === "kitchen").length).toBe(1)
   })
 })
 
@@ -114,5 +130,23 @@ describe("home.json round trip", () => {
   })
   test("a missing file is an empty home, not a throw", () => {
     expect(loadHome(join(tmpdir(), "tlon-home-missing", "home.json"))).toEqual({ tiles: [] })
+  })
+  test("a malformed tile (bad kind, or no numeric `at`) is dropped, not loaded as-is", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
+    const path = join(dir, "home.json")
+    try {
+      writeFileSync(path, JSON.stringify({ tiles: [
+        {}, { kind: "not-a-kind", at: [0, 0] }, { kind: "living", at: ["x", 0] }, { kind: "kitchen", at: [1, 1] },
+      ] }))
+      expect(loadHome(path)).toEqual({ tiles: [{ kind: "kitchen", at: [1, 1] }] })
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+  test("saveHome to a path it cannot create does not throw", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
+    const blocker = join(dir, "blocker")
+    try {
+      writeFileSync(blocker, "not a directory")
+      expect(() => saveHome({ tiles: [] }, join(blocker, "home.json"))).not.toThrow()
+    } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 })
