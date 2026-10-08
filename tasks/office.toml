@@ -29,3 +29,8 @@ run = "for t in linux-x64 linux-arm64 darwin-arm64 darwin-x64; do bun build --co
 ["office:drive"]
 description = "office: drive the TUI headlessly in a private tmux — each arg a send-keys step, the screen printed after each (TLON_URL=http://127.0.0.1:4041 for server:dev); the drive-office skill"
 run = "scripts/office-drive.sh"
+
+["office:golden"]
+description = "office: re-hash the wide room's golden frames into office/test/golden.json (after a change meant to move its pixels)"
+dir = "office"
+run = "bun test/golden.ts"
