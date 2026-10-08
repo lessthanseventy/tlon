@@ -10,7 +10,7 @@ defmodule Server.Jobs.Verify do
   """
   use Oban.Worker,
     queue: :verify,
-    max_attempts: 1,
+    max_attempts: 3,
     unique: [period: 600, keys: [:thread_id], states: [:available, :scheduled, :executing]]
 
   import Ecto.Query
@@ -18,7 +18,7 @@ defmodule Server.Jobs.Verify do
   alias Server.Channel
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"thread_id" => tid, "slug" => slug}}) do
+  def perform(%Oban.Job{args: %{"thread_id" => tid, "slug" => slug}} = job) do
     script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
 
     # the workline's own checkout: the script borrows its installed deps for the throwaway one
@@ -28,35 +28,37 @@ defmodule Server.Jobs.Verify do
       !File.exists?(script) -> by_hand(tid, slug, "no tlon checkout at #{Server.Profiles.tlon_root()}")
       !System.find_executable("mise") -> by_hand(tid, slug, "no mise on the service's PATH")
       !is_binary(tree) -> by_hand(tid, slug, "no checkout of work/#{slug} (#{inspect(tree)})")
-      true -> run(script, tid, slug, tree)
+      true -> run(script, tid, slug, tree, job)
     end
   end
 
-  defp run(script, tid, slug, tree) do
+  defp run(script, tid, slug, tree, job) do
     since = last_verify_id(slug)
     result = System.cmd("bash", [script, to_string(tid), slug, tree], stderr_to_stdout: true)
-    red(tid, slug, since, result)
-
-    case result do
-      {_, 0} -> :ok
-      {out, code} -> {:error, "workline-verify exited #{code}: #{String.slice(out, -400, 400)}"}
-    end
+    finish(tid, slug, since, result, job)
   end
 
-  # red is the sheriff's: a fresh failed check, or a run that recorded nothing (it could not run)
-  defp red(tid, slug, since, {out, _code}) do
+  @doc """
+  How a run ends: one that recorded a result since `since` — green or red — is done, red going to
+  the sheriff. One that recorded nothing was cut off (a service restart, a signal) or could not
+  start, and is an error so Oban runs it again (`max_attempts` 3); only the last attempt tells the
+  sheriff it could not run.
+  """
+  def finish(tid, slug, since, {out, _code}, %{attempt: attempt, max_attempts: max}) do
     case {last_verify(slug), Channel.thread(tid)} do
-      {_, nil} ->
-        :ok
+      {%{id: id} = e, t} when id > since ->
+        if e.kind == "check_failed" and t,
+          do:
+            Server.Sheriff.report(
+              t,
+              "verify is red: #{e.detail["cmd"]} (exit #{e.detail["exit"]}) — #{tail(e.detail["tail"])}"
+            )
 
-      {%{id: id, kind: "check_passed"}, _} when id > since ->
         :ok
-
-      {%{id: id, kind: "check_failed", detail: d}, t} when id > since ->
-        Server.Sheriff.report(t, "verify is red: #{d["cmd"]} (exit #{d["exit"]}) — #{tail(d["tail"])}")
 
       {_, t} ->
-        Server.Sheriff.report(t, "verify could not run: #{tail(out)}")
+        if attempt >= max and t, do: Server.Sheriff.report(t, "verify could not run: #{tail(out)}")
+        {:error, "verify recorded nothing (attempt #{attempt}/#{max}): #{tail(out)}"}
     end
   end
 

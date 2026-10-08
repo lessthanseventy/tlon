@@ -29,4 +29,45 @@ defmodule Server.Jobs.VerifyTest do
     assert at_verify.stage == "verify"
     assert_enqueued(worker: Server.Jobs.Verify, args: %{thread_id: t.id, slug: "clock-fix"})
   end
+
+  describe "finish/5 — a run is done when it recorded a result; one killed before that is tried again" do
+    setup do
+      {:ok, t} = Workline.open(%{title: "lazy", slug: "lazy-compile", stage: "verify"})
+      %{t: t}
+    end
+
+    defp check!(t, exit) do
+      {:ok, e} =
+        Server.Dossier.record_check(%{
+          thread_id: t.id,
+          cmd: "mise run check",
+          exit: exit,
+          tail: "",
+          correlation: "workline:#{t.slug}:verify"
+        })
+
+      e
+    end
+
+    test "a recorded result, green or red, is the end of it: no retry", %{t: t} do
+      for exit <- [0, 1] do
+        since = check!(t, 0).id
+        check!(t, exit)
+        assert :ok = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", exit}, %{attempt: 1, max_attempts: 3})
+      end
+    end
+
+    test "nothing recorded — the run was killed (a restart, a signal) — is an error, so Oban runs it again", %{t: t} do
+      since = check!(t, 0).id
+
+      assert {:error, why} =
+               Server.Jobs.Verify.finish(t.id, t.slug, since, {"Terminated", 143}, %{attempt: 1, max_attempts: 3})
+
+      assert why =~ "recorded nothing"
+    end
+
+    test "the verifier is tried three times, not once" do
+      assert %{changes: %{max_attempts: 3}} = Server.Jobs.Verify.new(%{thread_id: 1, slug: "x"})
+    end
+  end
 end
