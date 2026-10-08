@@ -23,11 +23,14 @@ note() { if [ -n "${WORKLINE_GATE:-}" ]; then echo "$2"; else "$cli" note "$@"; 
 tree="${3:-$("$cli" worktree "$tid" 2>/dev/null)}"
 # The gate runs as a clean checkout would: none of the service's TLON_* variables (it inherits them
 # here — its ports, its real database — and a gate that boots the app would bind 4040 or touch the
-# live store), and its own test database, since a coworker running the suite in the same checkout
-# shares tlon_test and one run's setup wipes the other's tables (verify runs one at a time).
+# live store), and a test database of its own per workline and per role: a verify and a landing
+# run at once, and coworkers re-run verify by hand, so a shared name lets one run's setup drop the
+# database under another ({:error, :already_up}, tables wiped mid-suite).
 clean=(env)
 for v in $(compgen -e | grep '^TLON_'); do clean+=(-u "$v"); done
-clean+=(TLON_TEST_DATABASE=tlon_verify)
+role=verify; [ -n "${WORKLINE_GATE:-}" ] && role=land
+db="tlon_${role}_$(printf '%s' "$slug" | tr -c 'a-zA-Z0-9' '_' | tr 'A-Z' 'a-z')"
+clean+=(TLON_TEST_DATABASE="${db:0:63}")
 if [ ! -d "$tree" ]; then
   note "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
   echo "workline-verify: no checkout of work/$slug at $tree" >&2
