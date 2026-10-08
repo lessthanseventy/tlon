@@ -206,10 +206,10 @@ defmodule Server.Search do
 
     by_id = Map.new(rows, fn [id | _] = row -> {id, row} end)
 
-    Enum.map(ids, fn id ->
-      [id, thread_id, author, snippet, at] = by_id[id]
-      %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
-    end)
+    # a message deleted between the match and this read is skipped
+    for id <- ids,
+        [id, thread_id, author, snippet, at] <- [by_id[id]],
+        do: %{message_id: id, thread_id: thread_id, author: author, snippet: snippet, at: at}
   end
 
   defp with_window(shown, 0), do: shown

@@ -38,11 +38,11 @@ defmodule Server.Office.Weather do
 
   @doc "wttr.in's `format=j1` report as `%{kind, temp_c, desc}`, or nil when it is not one."
   def parse(body) do
-    with {:ok, %{"current_condition" => [c | _]}} <- JSON.decode(body),
+    with {:ok, %{"current_condition" => [c | _]}} when is_map(c) <- JSON.decode(body),
          {code, ""} <- Integer.parse(to_string(c["weatherCode"])),
          kind when is_binary(kind) <- kind(code) do
       temp = with t when is_binary(t) <- c["temp_C"], {n, ""} <- Integer.parse(t), do: n, else: (_ -> nil)
-      %{kind: kind, temp_c: temp, desc: String.trim(get_in(c, ["weatherDesc", Access.at(0), "value"]) || kind)}
+      %{kind: kind, temp_c: temp, desc: String.trim(desc(c["weatherDesc"]) || kind)}
     else
       _ -> nil
     end
@@ -93,4 +93,7 @@ defmodule Server.Office.Weather do
   rescue
     e -> {:error, e}
   end
+
+  defp desc([%{"value" => v} | _]) when is_binary(v), do: v
+  defp desc(_), do: nil
 end

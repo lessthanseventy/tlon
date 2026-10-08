@@ -109,7 +109,7 @@ defmodule Server.Attention do
     seen =
       for tab <- tabs, tid = tab.thread_id || standing, is_integer(tid), reduce: MapSet.new() do
         acc ->
-          reconcile(workspace_id, tid, tab.name, detect(capture(workspace_id, tab.index)))
+          reconcile_safely(workspace_id, tid, tab.name, detect(capture(workspace_id, tab.index)))
           MapSet.put(acc, {tid, tab.name})
       end
 
@@ -127,6 +127,13 @@ defmodule Server.Attention do
       {out, 0} when is_binary(out) -> out
       _ -> ""
     end
+  end
+
+  # one window's row the db refuses (pane text that won't store) doesn't stop the rest of the tick
+  defp reconcile_safely(workspace_id, thread_id, window, detected) do
+    reconcile(workspace_id, thread_id, window, detected)
+  rescue
+    e -> require(Logger) && Logger.error("attention #{workspace_id}/#{window}: #{Exception.message(e)}")
   end
 
   defp reconcile(workspace_id, thread_id, window, detected) do

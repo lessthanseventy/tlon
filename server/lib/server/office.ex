@@ -156,7 +156,7 @@ defmodule Server.Office do
 
   defp peek(ws, %{index: i}) do
     case Server.Tmux.run(ws, ["capture-pane", "-p", "-J", "-t", Server.Tmux.target(ws, i)]) do
-      {out, 0} -> String.trim_trailing(out)
+      {out, 0} -> out |> String.replace_invalid() |> String.trim_trailing()
       _ -> nil
     end
   end

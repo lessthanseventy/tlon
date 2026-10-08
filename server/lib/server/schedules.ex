@@ -194,9 +194,14 @@ defmodule Server.Schedules do
 
     result =
       if s.standing do
-        {:ok, t} = thread_for(s)
-        note(t.id, "⏰ #{s.title} — exit #{code}\n```\n#{String.slice(tail, -1500, 1500)}\n```")
-        Map.put(result, :thread_id, t.id)
+        case thread_for(s) do
+          {:ok, t} ->
+            note(t.id, "⏰ #{s.title} — exit #{code}\n```\n#{String.slice(tail, -1500, 1500)}\n```")
+            Map.put(result, :thread_id, t.id)
+
+          _ ->
+            result
+        end
       else
         result
       end

@@ -8,5 +8,8 @@ defmodule Server.Jobs do
   @doc "Insert `changeset` when Oban is up on this node; `{:error, :no_oban}` otherwise."
   def enqueue(%Ecto.Changeset{} = changeset) do
     if Oban.Registry.whereis(Oban), do: Oban.insert(changeset), else: {:error, :no_oban}
+  rescue
+    # a db fault while enqueueing is the caller's error to handle, never a raise through a GenServer
+    e -> {:error, Exception.message(e)}
   end
 end

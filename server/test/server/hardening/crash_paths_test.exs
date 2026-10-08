@@ -33,4 +33,11 @@ defmodule Server.Hardening.CrashPathsTest do
   test "a delivery that raises doesn't take the switchboard runner down" do
     assert {:noreply, %{}} = Server.Switchboard.Runner.handle_info({:message_posted, :not_a_message}, %{})
   end
+
+  test "a weather report in an unexpected shape is no report, not a crash" do
+    assert Server.Office.Weather.parse(~s({"current_condition": ["not a map"]})) == nil
+
+    assert %{kind: _} =
+             Server.Office.Weather.parse(~s({"current_condition": [{"weatherCode": "113", "weatherDesc": "flat"}]}))
+  end
 end
