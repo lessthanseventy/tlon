@@ -187,5 +187,26 @@ defmodule Server.LifeTest do
       assert is_list(status.quests)
       assert is_list(status.today)
     end
+
+    test "due and today compare real UTC instants, with local days for 'today'" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "life-status-#{System.unique_integer()}", type: "home"})
+
+      {:ok, routine} =
+        %{workspace_id: ws.id, title: "noon", every: "0 12 * * *"}
+        |> Server.Routine.create_changeset()
+        |> Ecto.Changeset.force_change(:created_at, ~U[2026-01-01 00:00:00Z])
+        |> Server.Repo.insert()
+
+      now = ~U[2026-03-10 20:00:00Z]
+      due_at = Server.Life.current_due_at(routine, now)
+
+      status = Server.Life.status(ws.id, now)
+
+      assert [%{due_at: ^due_at, window_remaining: remaining}] = status.due
+      assert remaining == DateTime.diff(DateTime.add(due_at, routine.window_minutes * 60), now)
+
+      same_day? = Server.Schedules.local_date(due_at) == Server.Schedules.local_date(now)
+      assert match?([%{routine_id: _}], status.today) == same_day?
+    end
   end
 end
