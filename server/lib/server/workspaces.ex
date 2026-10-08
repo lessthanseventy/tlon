@@ -274,6 +274,13 @@ defmodule Server.Workspaces do
   def lead(nil), do: nil
   def lead(workspace_id), do: workspace_id |> bench() |> Coworker.lead()
 
+  @doc "A workspace's manager: its meta seat (the surveyor), the one that routes and never works a thread. nil without one."
+  @spec manager(integer() | nil) :: Coworker.t() | nil
+  def manager(nil), do: nil
+
+  def manager(workspace_id),
+    do: workspace_id |> bench() |> Enum.find(&Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype))
+
   @doc """
   Seat a coworker on a workspace's bench, registering the `agent` if this handle is new — a bench
   you can name is a bench you can point at, so the agent exists from the moment it is seated rather

@@ -78,7 +78,7 @@ defmodule Server.Tickets do
   `{:ok, %{started: thread}}`, or `{:error, reason}`.
   """
   def route(%Ticket{} = ticket) do
-    case {manager(ticket.workspace_id), Server.Channel.machine_thread(ticket.workspace_id)} do
+    case {Server.Workspaces.manager(ticket.workspace_id), Server.Channel.machine_thread(ticket.workspace_id)} do
       {%Server.Coworker{name: name}, %Server.Thread{} = root} ->
         operator = Application.get_env(:server, :operator, "andrew")
 
@@ -306,14 +306,5 @@ defmodule Server.Tickets do
 
   defp next_sort(workspace_id) do
     (Repo.one(from t in Ticket, where: t.workspace_id == ^workspace_id, select: max(t.sort)) || 0) + 1
-  end
-
-  # The bench's manager: its meta seat, the one that routes and never works a thread.
-  defp manager(nil), do: nil
-
-  defp manager(workspace_id) do
-    workspace_id
-    |> Server.Workspaces.bench()
-    |> Enum.find(&Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype))
   end
 end

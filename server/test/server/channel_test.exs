@@ -260,7 +260,7 @@ defmodule Server.ChannelTest do
   end
 
   describe "the lead invariant — every thread opens with a lead (lead-as-manager)" do
-    test "a thread opens led by the workspace's builder coworker (seated, so already an agent)" do
+    test "a thread opens led by the workspace's manager, never a builder by default" do
       {:ok, ws} =
         Workspaces.register(%{
           name: "led",
@@ -275,7 +275,16 @@ defmodule Server.ChannelTest do
 
       # Seating a coworker registers its agent (UX slice 5) — a bench you cannot point at is not a
       # bench, so the lead exists before any thread asks for it rather than after.
-      assert Staff.agent_by_name("hronir"), "seating the bench registered the agent"
+      assert Staff.agent_by_name("tertius"), "seating the bench registered the agent"
+      {:ok, thread} = Channel.open_thread(%{title: "needs a lead", workspace_id: ws.id})
+
+      assert Channel.thread_lead(thread.id) == "tertius"
+    end
+
+    test "a bench with no manager falls back to its builder" do
+      {:ok, ws} =
+        Workspaces.register(%{name: "unmanaged", roster: [%{"archetype" => "builder", "name" => "hronir"}]})
+
       {:ok, thread} = Channel.open_thread(%{title: "needs a lead", workspace_id: ws.id})
 
       assert Channel.thread_lead(thread.id) == "hronir"

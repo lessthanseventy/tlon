@@ -18,7 +18,7 @@ and every layer the spine design's re-laid §9 asked for
   **Nothing ships that cannot be repaired at 2am.**
 - **thread + message** (`Server.Channel`) — the atom of work and the channel/§4 capture path.
   `delivered` is a separate column from `read`, and a sender cannot fake delivery (§5b.3). A thread is
-  born with a lead (`designated_lead/1`, the workspace roster's first builder) — the lead invariant.
+  born with a lead (`designated_lead/1`, the workspace's manager) — the lead invariant.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
   instance; warmth is measured from `last_active_at`, never a heartbeat.
 - **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;
