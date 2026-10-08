@@ -18,16 +18,12 @@ defmodule Server.Intake do
   alias Server.Thread
   alias Server.Ticket
 
-  @cap 4
-  @max_open 10
   @urgency %{"high" => 0, "med" => 1, "low" => 2}
-  @stalled_after 30 * 60
 
   @doc "One pass over every workspace with a backlog. `cap` and `route` override for a test."
   def run(opts \\ []) do
-    settings = Server.OperatorConfig.read()
-    cap = opts[:cap] || settings["max_worklines"] || @cap
-    max_open = opts[:max_open] || settings["max_open_worklines"] || @max_open
+    cap = opts[:cap] || Server.OperatorConfig.setting("max_worklines")
+    max_open = opts[:max_open] || Server.OperatorConfig.setting("max_open_worklines")
     route = opts[:route] || (&Server.Tickets.route/1)
 
     start_stalled(opts)
@@ -68,7 +64,8 @@ defmodule Server.Intake do
   end
 
   defp start_stalled(opts) do
-    for ticket <- stalled(opts[:stalled_after] || @stalled_after), do: start_stalled_ticket(ticket)
+    after_s = opts[:stalled_after] || Server.OperatorConfig.setting("stalled_ticket_minutes") * 60
+    for ticket <- stalled(after_s), do: start_stalled_ticket(ticket)
   end
 
   defp start_stalled_ticket(ticket) do

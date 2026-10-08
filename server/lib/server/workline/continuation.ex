@@ -24,7 +24,6 @@ defmodule Server.Workline.Continuation do
   alias Server.Thread
   alias Server.Workline
 
-  @default_max_turns 3
 
   @doc "Queue a continuation check for `thread_id`; never raises (an idle must not fail on it)."
   def schedule(thread_id) when is_integer(thread_id), do: Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id}))
@@ -35,7 +34,7 @@ defmodule Server.Workline.Continuation do
   not moved is nudged to advance too — on an ordinary idle that is only a turn ending mid-stage.
   """
   def run(thread_id, opts \\ []) do
-    max = Keyword.get(opts, :max_turns, @default_max_turns)
+    max = Keyword.get_lazy(opts, :max_turns, fn -> Server.OperatorConfig.setting("continuation_turns") end)
 
     with %Thread{state: "open", awaiting: nil} = thread <- Repo.get(Thread, thread_id),
          {:nudge, why, say} <- nudge(thread, opts),

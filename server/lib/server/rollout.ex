@@ -113,6 +113,26 @@ defmodule Server.Rollout do
   @doc "Whether a restart cuts nothing off now (`busy/0` is empty)."
   def quiet?, do: busy() == []
 
+  @doc """
+  The operator's restart (the office's button): `:ok` when the restart is handed to a transient
+  unit, `{:busy, lines}` while it would cut something off (unless `force: true`), `{:error, why}`
+  outside systemd.
+  """
+  def restart(opts \\ []) do
+    force = Keyword.get(opts, :force, false)
+
+    cond do
+      not force and not quiet?() ->
+        {:busy, busy()}
+
+      !(System.get_env("INVOCATION_ID") && System.find_executable("systemd-run")) ->
+        {:error, "not under systemd: run mise run server:restart"}
+
+      true ->
+        run_restart(Server.Profiles.tlon_root(), if(force, do: ["--", "--force"], else: []))
+    end
+  end
+
   defp restart_server(repo, tid) do
     if System.get_env("INVOCATION_ID") && System.find_executable("systemd-run") do
       Task.Supervisor.start_child(Server.TaskSupervisor, fn -> restart_when_quiet(repo, tid, @quiet_tries) end)
@@ -144,7 +164,7 @@ defmodule Server.Rollout do
     end
   end
 
-  defp run_restart(repo) do
+  defp run_restart(repo, extra \\ []) do
     env = for var <- ["PATH", "HOME", "XDG_RUNTIME_DIR"], v = System.get_env(var), do: ["-E", "#{var}=#{v}"]
 
     args =
@@ -157,10 +177,16 @@ defmodule Server.Rollout do
         "-p",
         "WorkingDirectory=#{repo}"
       ] ++
-        List.flatten(env) ++ ["mise", "run", "server:restart"]
+        List.flatten(env) ++ ["mise", "run", "server:restart"] ++ extra
 
-    {out, code} = System.cmd("systemd-run", args, stderr_to_stdout: true)
-    if code != 0, do: Logger.warning("rollout: the server restart could not be started: #{String.slice(out, 0, 300)}")
+    case System.cmd("systemd-run", args, stderr_to_stdout: true) do
+      {_, 0} ->
+        :ok
+
+      {out, _} ->
+        Logger.warning("rollout: the server restart could not be started: #{String.slice(out, 0, 300)}")
+        {:error, "the restart could not be started: #{String.slice(out, 0, 200)}"}
+    end
   end
 
   defp note_desktop(short) do

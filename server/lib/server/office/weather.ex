@@ -73,7 +73,7 @@ defmodule Server.Office.Weather do
 
   defp fetch do
     _ = Application.ensure_all_started([:inets, :ssl])
-    place = URI.encode(to_string(Server.OperatorConfig.read()["weather_location"] || ""))
+    place = URI.encode(Server.OperatorConfig.setting("weather_location"))
 
     ssl = [
       verify: :verify_peer,

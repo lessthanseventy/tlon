@@ -444,7 +444,7 @@ defmodule Server.Workline do
     do:
       "auto-approved by your standing approval (reviewed; #{Grade.line(grade(thread))}, none over #{Keyword.get_lazy(opts, :auto_land_risk, &auto_land_risk/0)})"
 
-  defp auto_land_risk, do: Server.OperatorConfig.read()["auto_land_risk"]
+  defp auto_land_risk, do: Server.OperatorConfig.setting("auto_land_risk")
 
   # the newest grade since the workline last entered review: nil if none, or the grader failed
   defp grade(thread) do
