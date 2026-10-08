@@ -62,6 +62,17 @@ defmodule Server.WorklineVerifyScriptTest do
            ]
   end
 
+  test "through mise, which prefixes every line with its task: the names still come out, unprefixed" do
+    prefixed = @exunit |> String.split("\n") |> Enum.map_join("\n", &"[test:elixir] #{&1}")
+
+    assert failures(prefixed) == [
+             "1) test greets the world (DemoTest) — test/demo_test.exs:3",
+             "2) doctest Demo.hello/0 (1) (DemoTest) — test/demo_test.exs:2"
+           ]
+
+    assert failures("[office:check] (fail) the clock reads 404 [0.90ms]") == ["(fail) the clock reads 404 [0.90ms]"]
+  end
+
   test "bun: each (fail) line" do
     assert failures(@bun) == ["(fail) the clock reads 404 [0.90ms]"]
   end

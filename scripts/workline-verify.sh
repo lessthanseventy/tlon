@@ -72,10 +72,12 @@ tree="$fresh"
 # result could not be recorded is a gate that never ran as far as the stage machine can tell,
 # so the failure is surfaced (stderr + the unrecorded flag) instead of dropped on the floor.
 unrecorded=0
-# The failing tests by name (ExUnit's "N) test … (Mod)" + its file:line, bun's "(fail) …"): a long
-# suite's last 400 bytes hold only its summary, and the lead would re-run it to learn what broke.
+# The failing tests by name (ExUnit's "N) test … (Mod)" + its file:line, bun's "(fail) …", read past
+# mise's "[task] " line prefix): a long suite's last 400 bytes hold only its summary, and the lead
+# would re-run it to learn what broke.
 failures() {
-  awk '/^ +[0-9]+\) (test|doctest|property) / { sub(/^ +/, ""); h = $0; getline; sub(/^ +/, ""); print h " — " $0; next }
+  awk '{ sub(/^\[[^]]*\] /, "") }
+       /^ +[0-9]+\) (test|doctest|property) / { sub(/^ +/, ""); h = $0; getline; sub(/^\[[^]]*\] /, ""); sub(/^ +/, ""); print h " — " $0; next }
        /^\(fail\) /' | cut -c1-160 | iconv -c -f utf-8 -t utf-8 | head -n 10
 }
 run_gate() {
