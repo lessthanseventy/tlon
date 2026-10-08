@@ -30,5 +30,27 @@ defmodule Server.Workline.Publish do
     end
   end
 
+  @doc """
+  Keep its landings mergeable: GitHub's main must be up to date before a PR merges, so a landing
+  published just before another merge sits `BEHIND` with auto-merge on and never lands. Each such
+  PR on a `work/*` branch — the server's own, never a human's — is rebased onto main by GitHub
+  (`gh pr update-branch --rebase`), which re-runs its checks and lets auto-merge go. Returns the
+  PR numbers it refreshed; a repo `gh` can't read is `[]`.
+  """
+  def refresh_behind(repo, run \\ &System.cmd/3) do
+    opts = [cd: repo, stderr_to_stdout: true]
+    fields = "number,headRefName,mergeStateStatus,autoMergeRequest"
+
+    with {out, 0} <- run.("gh", ["pr", "list", "--state", "open", "--json", fields], opts),
+         {:ok, prs} when is_list(prs) <- Jason.decode(out) do
+      for %{"number" => n, "headRefName" => "work/" <> _, "mergeStateStatus" => "BEHIND", "autoMergeRequest" => %{}} <-
+            prs,
+          match?({_, 0}, run.("gh", ["pr", "update-branch", to_string(n), "--rebase"], opts)),
+          do: n
+    else
+      _ -> []
+    end
+  end
+
   defp body(slug), do: "Workline `#{slug}`, approved at its review gate. Spec, plan and review are in `work/#{slug}/`."
 end
