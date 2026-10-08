@@ -258,6 +258,9 @@ defmodule Server.Rollout do
   # the rebuild-and-restart goes to a transient unit: the service stops under it and must not take it down
   defp systemd_restart(why) do
     if System.get_env("INVOCATION_ID") && System.find_executable("systemd-run"),
-      do: fn force -> run_restart(Server.Profiles.tlon_root(), why, if(force, do: ["--", "--force"], else: [])) end
+      do: &run_restart(Server.Profiles.tlon_root(), why, force_args(&1))
   end
+
+  defp force_args(true), do: ["--", "--force"]
+  defp force_args(false), do: []
 end

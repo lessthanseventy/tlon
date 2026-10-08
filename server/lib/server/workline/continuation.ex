@@ -24,7 +24,6 @@ defmodule Server.Workline.Continuation do
   alias Server.Thread
   alias Server.Workline
 
-
   @doc "Queue a continuation check for `thread_id`; never raises (an idle must not fail on it)."
   def schedule(thread_id) when is_integer(thread_id), do: Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id}))
 

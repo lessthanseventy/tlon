@@ -50,7 +50,13 @@ defmodule Server.RolloutTest do
 
     test "force: now, whatever is running" do
       me = self()
-      Rollout.restart(force: true, busy: fn -> ["a coworker is mid-turn on #1"] end, run: fn force -> send(me, {:ran, force}) end)
+
+      Rollout.restart(
+        force: true,
+        busy: fn -> ["a coworker is mid-turn on #1"] end,
+        run: fn force -> send(me, {:ran, force}) end
+      )
+
       assert_received {:ran, true}
     end
   end
