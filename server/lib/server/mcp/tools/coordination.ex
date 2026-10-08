@@ -60,13 +60,20 @@ defmodule Server.MCP.Tool.StaffChild do
     # reports up, and inherits the caller's project. An unbound caller opens a top-level thread.
     parent = identity.thread_id && Channel.thread(identity.thread_id)
 
-    with {:agent, %Agent{}} <- {:agent, Staff.agent_by_name(params[:lead])},
+    with :ok <- briefed(params[:brief]),
+         {:agent, %Agent{}} <- {:agent, Staff.agent_by_name(params[:lead])},
          {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
          {:ok, lead} <- staff(thread, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
          :ok <- promote_ticket(params[:ticket_id], thread.id) do
       ok(frame, %{"thread_id" => thread.id, "lead" => lead})
     else
+      :blank ->
+        fail(
+          frame,
+          "staff_child refused: the brief is empty — say what the child is to do or check (the text, file or diff)"
+        )
+
       {:agent, nil} ->
         fail(frame, "no registered agent named #{inspect(params[:lead])} — staff a handle from the workspace roster")
 
@@ -77,6 +84,9 @@ defmodule Server.MCP.Tool.StaffChild do
         fail(frame, "staff_child failed: #{inspect(reason)}")
     end
   end
+
+  defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
+  defp briefed(_), do: :blank
 
   # a plain thread takes the pick; a workline keeps one coworker to one workline (Workline.lead_for/2):
   # a busy or wrong-kind pick gives way to the one staffing chose when it opened, and the thread says why
@@ -283,10 +293,19 @@ defmodule Server.MCP.Tool.SpawnCrew do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
     role = Map.get(params, :role) || "reviewer"
+    task = params[:task]
 
-    case Crew.spawn_role(role, identity.thread_id, params[:task]) do
+    if not is_binary(task) or String.trim(task) == "" do
+      fail(frame, "spawn_crew refused: the task is empty — say what the #{role} is to do or check")
+    else
+      spawn_role(frame, role, identity.thread_id, task)
+    end
+  end
+
+  defp spawn_role(frame, role, thread_id, task) do
+    case Crew.spawn_role(role, thread_id, task) do
       {:ok, window} ->
-        ok(frame, %{"role" => role, "thread_id" => identity.thread_id, "window" => to_string(window)})
+        ok(frame, %{"role" => role, "thread_id" => thread_id, "window" => to_string(window)})
 
       {:error, :no_crew} ->
         fail(frame, "crew spawning is unavailable here — no crew backend is configured")

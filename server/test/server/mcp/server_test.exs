@@ -605,6 +605,30 @@ defmodule Server.MCP.ServerTest do
     assert first.body =~ "slice by slice"
   end
 
+  test "staff_child and spawn_crew refuse a blank brief, opening nothing", %{token: token} do
+    {:ok, _} = Staff.register_agent(%{name: "hronir-machine", mandate: "build", engine: "fresh"})
+    Application.put_env(:server, :crew, Server.Crew.Test)
+    Application.put_env(:server, :test_pid, self())
+    on_exit(fn -> Application.delete_env(:server, :crew) end)
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    before = Repo.aggregate(Thread, :count)
+
+    r =
+      call(token, session, 4, "staff_child", %{
+        "title" => "scratch check",
+        "lead" => "hronir-machine",
+        "brief" => "  \n"
+      })
+
+    assert r["isError"]
+    assert Repo.aggregate(Thread, :count) == before
+
+    assert call(token, session, 5, "spawn_crew", %{"task" => ""})["isError"]
+    refute_received {:crew_spawn, _, _, _}
+  end
+
   test "assign_lead (re)staffs an existing thread by id — tertius's orchestrator verb (Slice 4D)",
        %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "menard-machine", mandate: "review", engine: "fresh"})
