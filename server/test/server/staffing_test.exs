@@ -177,6 +177,75 @@ defmodule Server.StaffingTest do
     assert_receive {:tmux, ["-L", "tlon-workspace-" <> _ | _]}
   end
 
+  describe "the leaf cap — finish before start, and an idle leaf gives its seat up" do
+    setup %{ws: ws} do
+      path = Path.join(System.tmp_dir!(), "tlon-cap-#{System.unique_integer([:positive])}.json")
+      File.write!(path, ~s({"max_leaves": 1}))
+      previous = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        Application.put_env(:server, :operator_config_path, previous)
+        File.rm(path)
+      end)
+
+      %{ws: ws}
+    end
+
+    defp at_stage(thread, stage) do
+      thread |> Ecto.Changeset.change(stage: stage) |> Server.Repo.update!()
+    end
+
+    defp parked!(thread) do
+      :ok = Staffing.note_parked(thread.id)
+      thread
+    end
+
+    test "a parked review takes the seat of a build leaf whose coworker is idle", %{ws: ws, session: session} do
+      build = ws |> staffed_thread("borges") |> at_stage("build")
+      session!("borges", build.id, 600)
+      ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
+
+      tmux("0\tt#{build.id}\t#{build.id}\tdone\t1\tborges\t#{old()}\n")
+      assert :ok = Staffing.pass(ws.id)
+
+      yielded = "#{session}:0"
+      assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^yielded]}
+    end
+
+    test "a leaf mid-turn never gives its seat up", %{ws: ws, session: session} do
+      build = ws |> staffed_thread("borges") |> at_stage("build")
+      session!("borges", build.id, 60, true)
+      ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
+
+      tmux("0\tt#{build.id}\t#{build.id}\tdone\t1\tborges\t#{old()}\n")
+      assert :ok = Staffing.pass(ws.id)
+
+      busy = "#{session}:0"
+      refute_received {:tmux, ["-L", _, "kill-window", "-t", ^busy]}
+    end
+
+    test "a parked build never displaces an idle review", %{ws: ws, session: session} do
+      review = ws |> staffed_thread("borges") |> at_stage("review")
+      session!("borges", review.id, 600)
+      ws |> staffed_thread("hronir") |> at_stage("build") |> parked!()
+
+      tmux("0\tt#{review.id}\t#{review.id}\tdone\t1\tborges\t#{old()}\n")
+      assert :ok = Staffing.pass(ws.id)
+
+      kept = "#{session}:0"
+      refute_received {:tmux, ["-L", _, "kill-window", "-t", ^kept]}
+    end
+
+    test "a free seat goes to the parked thread nearest to shipping", %{ws: ws} do
+      review = ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
+      build = ws |> staffed_thread("borges") |> at_stage("build") |> parked!()
+
+      refute Staffing.seat_for?(build)
+      assert Staffing.seat_for?(review)
+    end
+  end
+
   describe "hand_off/2 — a running thread goes to another coworker" do
     test "restaffs it, posts the handoff as the operator, and ends the old worker's leaf so the next pass spawns the new one",
          %{ws: ws, sock: sock} do

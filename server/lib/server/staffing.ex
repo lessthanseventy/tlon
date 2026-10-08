@@ -8,7 +8,10 @@ defmodule Server.Staffing do
       mid-turn) and is past its boot grace is closed: the lounge is no window at all, and the next
       message spawns a fresh, brief-seeded session;
     * an orphan leaf (its thread closed or unstaffed while nobody looked) is swept;
-    * a stale coworker (a live process minting under a handle the bench no longer has) is torn down.
+    * a stale coworker (a live process minting under a handle the bench no longer has) is torn down;
+    * at the leaf cap with a thread parked, the leaf idle the longest gives its seat up — never one
+      mid-turn, never one nearer to done than what waits (`priority/1`; `seat_for?/2` reserves the
+      freed seat for the parked thread nearest to done).
 
   And it picks up a turn a machine restart cut off: a session still marked mid-turn
   (`Server.Presence.Thinking`'s durable mark) with no window left is ended, and its coworker is
@@ -59,10 +62,40 @@ defmodule Server.Staffing do
           |> reap_stale(bench, Tmux.list_windows(workspace_id))
           |> sweep_orphans(workspace_id, standing)
           |> sweep_cold(workspace_id, standing, bench)
+          |> yield_seat(workspace_id, standing, bench)
 
         resume_interrupted(workspace_id, tabs, standing)
         :ok
     end
+  end
+
+  @doc """
+  How near a thread is to done, for a seat under the leaf cap: 0 for review and verify (next to
+  shipping) and a plain thread (someone asked something), 1 for spec, plan and build, 2 for intent.
+  Lower goes first.
+  """
+  def priority(%Thread{stage: stage}) when stage in [nil, "review", "verify"], do: 0
+  def priority(%Thread{stage: "intent"}), do: 2
+  def priority(%Thread{}), do: 1
+
+  @doc """
+  The threads in `workspace_id` waiting for a seat: open, staffed, with no window in `tabs`, and
+  the leaf cap's parked note their latest message.
+  """
+  def parked(workspace_id, tabs) do
+    from(t in Thread, where: t.workspace_id == ^workspace_id and t.state == "open" and not is_nil(t.agent_id))
+    |> Repo.all()
+    |> Enum.filter(&(is_nil(Tmux.leaf_tab(tabs, &1.id)) and parked_note?(&1.id)))
+  end
+
+  @doc """
+  Whether a seat that comes free may go to `thread`: no thread nearer to done is parked waiting
+  for it. The arbiter asks before it spawns under the cap.
+  """
+  def seat_for?(%Thread{workspace_id: ws} = thread, tabs \\ nil) do
+    tabs = tabs || Tmux.list_windows(ws)
+    mine = priority(thread)
+    not Enum.any?(parked(ws, tabs), &(&1.id != thread.id and priority(&1) < mine))
   end
 
   # Tear down a coworker whose identity no longer matches the bench; the next message to whoever
@@ -231,7 +264,8 @@ defmodule Server.Staffing do
           author: "tlon",
           body:
             "⏸ parked — the leaf cap (#{OperatorConfig.max_leaves()}) is reached. This thread keeps its lead " <>
-              "and starts automatically when a seat frees (an idle leaf goes cold, or raise \"max_leaves\")."
+              "and starts automatically when a seat frees (the idlest leaf gives its seat up, nearest-to-done " <>
+              "work first, or raise \"max_leaves\")."
         })
     end
 
@@ -276,4 +310,66 @@ defmodule Server.Staffing do
 
   defp live_turn?(nil), do: false
   defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < @stale_turn_s
+
+  defp parked_note?(thread_id) do
+    last = Repo.one(from m in Message, where: m.thread_id == ^thread_id, order_by: [desc: m.id], limit: 1)
+    last != nil and last.author == "tlon" and String.starts_with?(last.body, "⏸ parked")
+  end
+
+  # At the cap with someone parked: the leaf idle the longest gives its seat up, so finished work
+  # isn't held behind a window nobody is using. Never a leaf mid-turn or still booting, never one
+  # nearer to done than what waits, and one per pass.
+  defp yield_seat(tabs, workspace_id, standing, bench) do
+    leaves = Enum.filter(tabs, &Tmux.leaf_window?/1)
+
+    with true <- length(leaves) >= OperatorConfig.max_leaves(),
+         [_ | _] = waiting <- parked(workspace_id, tabs),
+         %{} = tab <- idlest(leaves, standing, bench, waiting |> Enum.map(&priority/1) |> Enum.min()) do
+      Tmux.kill_window(workspace_id, tab.index)
+      tabs -- [tab]
+    else
+      _ -> tabs
+    end
+  end
+
+  defp idlest(leaves, standing, bench, wanted) do
+    seats = MapSet.new(bench, & &1.name)
+    now = System.os_time(:second)
+
+    leaves
+    |> Enum.flat_map(fn tab ->
+      with {thread_id, agent} when is_integer(thread_id) <- owner(tab, standing, seats),
+           true <- now - (tab.born || 0) > @boot_grace_s,
+           %Thread{} = thread <- Repo.get(Thread, thread_id),
+           true <- priority(thread) >= wanted,
+           {:idle, since} <- turn(thread_id, agent) do
+        [{since, tab}]
+      else
+        _ -> []
+      end
+    end)
+    |> Enum.min_by(&elem(&1, 0), DateTime, fn -> nil end)
+    |> then(&(&1 && elem(&1, 1)))
+  end
+
+  # whether the coworker's session on the thread is mid-turn, else when it was last active
+  defp turn(thread_id, agent) do
+    sessions =
+      Repo.all(
+        from s in Session,
+          join: a in Agent,
+          on: a.id == s.agent_id,
+          where: s.thread_id == ^thread_id and a.name == ^agent and is_nil(s.ended_at),
+          select: {s.last_active_at, s.thinking_since}
+      )
+
+    if Enum.any?(sessions, fn {_, thinking} -> live_turn?(thinking) end),
+      do: :busy,
+      else:
+        {:idle,
+         sessions
+         |> Enum.map(&elem(&1, 0))
+         |> Enum.reject(&is_nil/1)
+         |> Enum.min(DateTime, fn -> ~U[1970-01-01 00:00:00Z] end)}
+  end
 end
