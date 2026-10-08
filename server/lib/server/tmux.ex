@@ -43,6 +43,8 @@ defmodule Server.Tmux do
   # A command that may start a workspace's tmux server runs it in a systemd scope of its own when
   # the service runs under systemd: in the service's cgroup, every restart (a deploy) would take
   # every coworker down with it, mid-turn. Off systemd (a Mac, a dev shell) tmux runs as is.
+  # tlon.slice is where the host can weight/cap the office below the desktop (tmux's per-pane
+  # scopes inherit it); undefined, systemd makes it with defaults.
   defp scoped? do
     case Application.get_env(:server, :tmux_scope, :auto) do
       :auto -> System.get_env("INVOCATION_ID") != nil and System.find_executable("systemd-run") != nil
@@ -51,7 +53,14 @@ defmodule Server.Tmux do
   end
 
   defp scope_args(id),
-    do: ["--user", "--scope", "--quiet", "--collect", "--description=tlon coworkers, workspace #{id}"]
+    do: [
+      "--user",
+      "--scope",
+      "--quiet",
+      "--collect",
+      "--slice=tlon.slice",
+      "--description=tlon coworkers, workspace #{id}"
+    ]
 
   @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}"
 

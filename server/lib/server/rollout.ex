@@ -193,6 +193,7 @@ defmodule Server.Rollout do
         "--user",
         "--collect",
         "--quiet",
+        "--slice=tlon.slice",
         "--unit",
         "tlon-redeploy-#{System.os_time(:second)}",
         "-p",

@@ -170,7 +170,7 @@ defmodule Server.Arbiter.TmuxTest do
     end
 
     Tmux.run(ws.id, ["new-session", "-d", "-s", "w#{ws.id}"], runner: runner)
-    assert_received {:ran, "systemd-run", ["--user", "--scope", "--quiet", "--collect", _ | rest]}
+    assert_received {:ran, "systemd-run", ["--user", "--scope", "--quiet", "--collect", "--slice=tlon.slice", _ | rest]}
     assert ["tmux", "-L", _, "new-session" | _] = rest
 
     Tmux.run(ws.id, ["list-windows"], runner: runner)
