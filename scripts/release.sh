@@ -6,7 +6,8 @@
 #   release.sh cut [<commit>] [--rollback]   move live to <commit> (default origin/main): only a
 #                                            fast-forward, only onto a commit on origin/main;
 #                                            --rollback allows going back to an older one
-#   release.sh status                        what runs, what main has that it doesn't
+#   release.sh status                        what runs, what main has that it doesn't, and
+#                                            whether main is releasable (the server's checks)
 #   release.sh build                         build .release at the current release (server:release;
 #                                            a first install starts the pointer at origin/main)
 #
@@ -20,6 +21,7 @@ set -uo pipefail
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 rel="${TLON_RELEASE_DIR:-$root/.release}"
 url="${TLON_URL:-http://127.0.0.1:4040}"
+cli="${TLON_CLI:-$root/scripts/tlon-cli.sh}"
 git() { command git -C "$root" "$@"; }
 
 # .release checked out at $1 and its release built
@@ -43,6 +45,9 @@ case "$cmd" in
     waiting="$(git log --format='  %h %s' "$cur..$main")"
     if [ -z "$waiting" ]; then echo "nothing on main waits for a release"; else
       echo "on main, not released ($(printf '%s\n' "$waiting" | wc -l)):"; printf '%s\n' "$waiting"; fi
+    echo "checks on main ${main:0:7}:"
+    "$cli" releasable "$main" 2>/dev/null | sed 's/^/  /'
+    [ "${PIPESTATUS[0]}" -eq 0 ] || echo "  the server didn't answer — no checks to read"
     ;;
 
   cut)

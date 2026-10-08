@@ -50,7 +50,8 @@ and every layer the spine design's re-laid §9 asked for
   sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
-  `schedule_run` row (the automation board). Crons read the server's local clock.
+  `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit
+  it checked, which `Server.Release.Candidate` reads. Crons read the server's local clock.
 - **recall + forgetting** (`Server.Recall`, `Server.Search`) — the budgeted always-loaded set.
 - **seed + bootstrap** (`Server.Seed`, `Server.Bootstrap`) — the wipe-proof base knowledge
   (`priv/seed/repo_knowledge.exs` + the machine-appended `promoted_facts.exs`) and the default
@@ -122,6 +123,7 @@ the live node:
 
 - `mise run server:release` — build the release the service runs, in `.release/` at the release pointer.
 - `mise run release:cut` — ship: move the pointer to origin/main (or a commit on it), build, restart once quiet. A merge to main alone deploys nothing.
+- `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on :4047 and db `tlon_smoke` (never 4040 or `tlon`): `/api/office`, then the office driven headless; torn down after. `TLON_NODE` names its node beside `funes@`.
 - `mise run server:restart` — rebuild + restart the service (redeploy a server change). It refuses
   while a restart would cut work off (a coworker mid-turn, a verify or a landing running —
   `Server.Rollout.busy/0`); `-- --force` restarts anyway.

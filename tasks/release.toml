@@ -3,5 +3,9 @@ description = "release: move the release pointer (default origin/main; fast-forw
 run = "scripts/release.sh cut"
 
 ["release:status"]
-description = "release: what the service runs against what main has waiting"
+description = "release: what the service runs against what main has waiting, and whether main is releasable (gate, smoke, quiet)"
 run = "scripts/release.sh status"
+
+["release:smoke"]
+description = "release: smoke a candidate (default origin/main) — a scratch release on a scratch port and db, /api/office, the office driven headless; exit code is the verdict"
+run = "scripts/release-smoke.sh"

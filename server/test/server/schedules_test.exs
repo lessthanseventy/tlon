@@ -100,6 +100,17 @@ defmodule Server.SchedulesTest do
     assert %{status: "failed", exit: 3, output: "nope\n"} = Schedules.perform(run.id)
   end
 
+  test "a script that names the commit it checked records it on its run", %{ws: ws} do
+    sha = String.duplicate("a1", 20)
+    named = schedule!(ws, %{cron: "@daily", body: "echo ran-on: gate #{sha}; echo after"})
+    {:ok, run} = Schedules.run_now(named)
+    assert %{status: "ok", check_name: "gate", sha: ^sha} = Schedules.perform(run.id)
+
+    plain = schedule!(ws, %{cron: "@daily", body: "echo hello"})
+    {:ok, run} = Schedules.run_now(plain)
+    assert %{check_name: nil, sha: nil} = Schedules.perform(run.id)
+  end
+
   test "a script that reads its stdin ends instead of waiting on it", %{ws: ws} do
     s = schedule!(ws, %{cron: "@daily", body: "cat; echo done"})
     {:ok, run} = Schedules.run_now(s)

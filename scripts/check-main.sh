@@ -9,6 +9,7 @@ trap 'git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$di
 git -C "$root" worktree add -q --detach "$dir" origin/main || exit 1
 cd "$dir" || exit 1
 echo "check-main: origin/main @ $(git log -1 --format='%h %s')"
+sha="$(git rev-parse HEAD)"
 # The nightly schedule runs this from the service, whose TLON_* (its ports, its real database) a gate
 # that boots the app would inherit — and bind 4040 under the live service (:eaddrinuse).
 for v in $(compgen -e | grep '^TLON_'); do unset "$v"; done
@@ -26,4 +27,7 @@ if [ "$code" -ne 0 ]; then
   if [ -n "$fails" ]; then echo "--- failures:"; echo "$fails"; else echo "--- the end of the log:"; tail -n 30 "$log"; fi
 fi
 rm -f "$log"
+# last, past any failure output: the nightly's run records it (Server.ScheduleRun), so "the gate
+# passed on X" is a lookup
+echo "ran-on: gate $sha"
 exit "$code"

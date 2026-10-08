@@ -43,6 +43,7 @@
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
+#   releasable <sha>               the release checks on a commit (gate, smoke, quiet) and the verdict
 #   announce-restart <why…>        a notice on every thread with a live session: the server is restarting
 #   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
@@ -388,6 +389,12 @@ case "$cmd" in
   quiet)
     # Prints only: the expression runs inside the live node, where a halt would stop the service.
     exec "$SERVER" rpc 'case Server.Rollout.busy() do [] -> IO.puts("quiet"); b -> IO.puts("busy"); Enum.each(b, &IO.puts/1) end'
+    ;;
+
+  releasable)
+    sha="${1:-}"
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo 'usage: tlon-cli.sh releasable <full sha>' >&2; exit 2; }
+    exec "$SERVER" rpc "Enum.each(Server.Release.Candidate.lines(\"$sha\"), &IO.puts/1)"
     ;;
 
   worktree)
