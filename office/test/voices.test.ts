@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { bucketFor, NINA, SWEET } from "../kit/voices"
+import { bucketFor, NINA, SPECIES_VOICE, SWEET } from "../kit/voices"
 
 const W = (warmth: number) => ({ warmth, wits: 0, energy: 0 })
 
@@ -15,5 +15,10 @@ describe("bucketFor", () => {
   })
   test("an occasion with no sweet bucket falls back to NINA's", () => {
     expect(bucketFor("web", W(2), () => 0)).toBe(NINA.web)
+  })
+  test("a rabbit or bird speaks its own bucket, sweet when warm, and falls back to Nina for what it lacks", () => {
+    expect(bucketFor("pet", W(2), () => 0, "bird")).toBe(SPECIES_VOICE.bird.sweet.pet!)
+    expect(bucketFor("pet", W(0), () => 0, "rabbit")).toBe(SPECIES_VOICE.rabbit.sassy.pet!)
+    expect(bucketFor("web", W(0), () => 0, "bird")).toBe(NINA.web)
   })
 })

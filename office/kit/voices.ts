@@ -71,7 +71,41 @@ export const SWEET: Partial<Record<keyof typeof NINA, readonly string[]>> = {
 }
 
 /** sweet with odds (no roll at all when not warm: a seeded sequence must not shift) that grow with warmth (0 at neutral or cold, 0.9 at +2), else the sassy bucket */
-export function bucketFor(occasion: string, t: Temperament, rand: () => number): readonly string[] {
-  const sassy = (NINA as Record<string, unknown>)[occasion] as readonly string[], sweet = (SWEET as Record<string, readonly string[]>)[occasion]
+export function bucketFor(occasion: string, t: Temperament, rand: () => number, species = "cat"): readonly string[] {
+  const own = species === "rabbit" || species === "bird" ? SPECIES_VOICE[species] : null
+  const sassy = own?.sassy[occasion] ?? (NINA as Record<string, unknown>)[occasion] as readonly string[]
+  const sweet = own ? own.sweet[occasion] : (SWEET as Record<string, readonly string[]>)[occasion]
   return sweet && t.warmth > 0 && rand() < (Math.max(0, t.warmth) / 2) * 0.9 ? sweet : sassy
+}
+
+/** what a rabbit and a bird say, sassy or sweet by warmth; an occasion missing here falls back to Nina's lines */
+export const SPECIES_VOICE: Record<"rabbit" | "bird", { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> }> = {
+  rabbit: {
+    sassy: {
+      pet: ["Ears are off limits. Ask first.", "Fine. Two strokes. Count them."],
+      muse: ["The carrot situation is unacceptable.", "I could out-hop every one of you."],
+      wake: ["I was thinking. Horizontally.", "Who thumped? Oh. It was me."],
+      done: ["Done. Where is my carrot?", "Finally. Hop along, then."],
+    },
+    sweet: {
+      pet: ["*nose wiggles* More, please.", "Soft. You have soft hands."],
+      muse: ["Everyone is so nice to nap near.", "I like the quiet hours. And you."],
+      wake: ["Oh! Good morning. Hop hop.", "Mm. Did I miss anything lovely?"],
+      done: ["Well done! Binky!", "You did it. I'm doing a little hop."],
+    },
+  },
+  bird: {
+    sassy: {
+      pet: ["Hands off the feathers.", "One pat. Then I'm back on my perch."],
+      muse: ["I see everything from up here.", "That seed was stale. I said what I said."],
+      wake: ["Tweet. That means go away.", "I was NOT dozing. I was surveying."],
+      done: ["Done? Chirp. Obviously.", "About time. Seed, please."],
+    },
+    sweet: {
+      pet: ["Tweet! Right there, thank you.", "*fluffs up* Lovely."],
+      muse: ["The light is so nice on my perch today.", "I could sing for everyone. I think I will."],
+      wake: ["Good morning! Chirp chirp!", "Oh, hello, friend!"],
+      done: ["You did it! I'll sing for you.", "Hooray! Tweet tweet!"],
+    },
+  },
 }

@@ -150,6 +150,37 @@ export const CAT = {
 }
 export const CAT_NAME = "Nina"
 
+// the cat slot's other pets, drawn like Nina (facing right; k fur, e eye, c eye shut, t tail, p pink)
+// with no collar, so no gems. `hop` lifts a frame a pixel: the top row is dropped, the feet leave the ground.
+const hop = (rows: string[]) => [...rows.slice(1), ".".repeat(rows[0]!.length)]
+const shut = (rows: string[]) => rows.map((r) => r.replaceAll("e", "c"))
+const RABBIT_SIT = ["........k..k.", "........k..k.", "........kkkk.", "........kekk.", "........kkkkp", "......kkkkkk.", ".....kkkkkkk.", "....kkkkkkkk.", "...ttkkkkkkk.", "...tkkk.kk.k."]
+const rabbitSit = [RABBIT_SIT, ["........kk.k.", ...RABBIT_SIT.slice(1)], ["........k.kk.", ...RABBIT_SIT.slice(1)]]
+export const RABBIT = {
+  sit: rabbitSit,
+  blink: [shut(RABBIT_SIT)],
+  groom: [shut(RABBIT_SIT), shut(rabbitSit[1]!)],
+  walk: [RABBIT_SIT, hop(RABBIT_SIT), RABBIT_SIT, hop(RABBIT_SIT)],
+  sleep: [[".............", ".....kk.kk...", "....kkkkkkk..", "...kkkckkkkp.", "..tkkkkkkkkk.", "..ttkkkkkkk.."], [".............", ".............", "....kkkkkkk..", "...kkkckkkkp.", "..tkkkkkkkkk.", "..ttkkkkkkk.."]],
+  play: [hop(RABBIT_SIT), RABBIT_SIT],
+  stretch: [hop(RABBIT_SIT)],
+}
+
+const BIRD_SIT = ["....kkk..", "...kkekp.", "...kkkk..", "..kkkkkk.", ".kkkkkkk.", "tkkkkkkk.", "tt.kkkk..", "...p.p..."]
+const birdSit = [BIRD_SIT, [...BIRD_SIT.slice(0, 5), "tkkkkkkk.", "t..kkkk..", BIRD_SIT[7]!], [...BIRD_SIT.slice(0, 5), "kkkkkkkk.", "ttt.kkkk.", BIRD_SIT[7]!]]
+export const BIRD = {
+  sit: birdSit,
+  blink: [shut(BIRD_SIT)],
+  groom: [shut(BIRD_SIT), shut(birdSit[1]!)],
+  walk: [BIRD_SIT, hop(BIRD_SIT), birdSit[1]!, hop(birdSit[1]!)],
+  sleep: [[".........", "...kkkk..", "..kkckkp.", ".kkkkkkk.", "tkkkkkkk.", ".kkkkkk.."], [".........", ".........", "..kkckkp.", ".kkkkkkk.", "tkkkkkkk.", ".kkkkkk.."]],
+  play: [hop(BIRD_SIT), BIRD_SIT],
+  stretch: [["....kkk..", "...kkekp.", "kk.kkkk..", "kkkkkkkk.", ".kkkkkkk.", "tkkkkkkk.", "tt.kkkk..", "...p.p..."]],
+}
+
+/** the art the cat slot's species draws with */
+export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD }
+
 // Argos, the office dog (Borges' "The Immortal"), facing right: coat (k), ears (e), eye (i), nose
 // (n), tongue (p), tail (t), an eye shut (c)
 export const DOG = {

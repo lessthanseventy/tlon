@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing } from "../kit/draw"
-import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, TEMPERAMENTS } from "../kit/pets"
+import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, speciesBase, SPECIES_VOICE, TEMPERAMENTS } from "../kit/pets"
 import { NINA, SWEET } from "../kit/voices"
-import { CAT, DOG } from "../kit/sprites"
+import { CAT, DOG, SPECIES_ART } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom } from "../rooms/wide"
 
@@ -32,7 +32,7 @@ const balloons = (room: WideRoom, a: Agents) => room.render(a, focus, measure).i
 
 describe("the pets' sprites", () => {
   test("every frame is a rectangle", () => {
-    for (const [name, frames] of [...Object.entries(CAT), ...Object.entries(DOG)]) for (const rows of frames) {
+    for (const [name, frames] of [...Object.entries(CAT), ...Object.entries(DOG), ...Object.values(SPECIES_ART).flatMap((a) => Object.entries(a))]) for (const rows of frames) {
       expect({ name, widths: new Set(rows.map((r) => r.length)).size }).toEqual({ name, widths: 1 })
     }
   })
@@ -170,5 +170,35 @@ describe("axis helpers", () => {
   })
   test("cycleAxis steps forward and wraps", () => {
     expect(cycleAxis(-2)).toBe(-1); expect(cycleAxis(1)).toBe(2); expect(cycleAxis(2)).toBe(-2)
+  })
+})
+
+describe("the cat slot's species", () => {
+  const POSES = { sit: 3, walk: 4, sleep: 2, play: 2, stretch: 1, groom: 2, blink: 1 } as const
+  test("every species has the frames drawCat reads, and no collar gems", () => {
+    for (const [sp, art] of Object.entries(SPECIES_ART)) for (const [pose, n] of Object.entries(POSES)) {
+      const frames = (art as Record<string, string[][]>)[pose]!
+      expect({ sp, pose, n: frames.length }).toEqual({ sp, pose, n })
+      if (sp !== "cat") for (const rows of frames) expect(rows.join("")).not.toMatch(/[gj]/)
+    }
+  })
+  test("each species' destination table sums to 1 and stays positive", () => {
+    for (const sp of ["cat", "rabbit", "bird"] as const) {
+      const w = Object.values(speciesBase(sp))
+      expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10)
+      for (const v of w) expect(v).toBeGreaterThan(0)
+    }
+    expect(speciesBase("bird").perch).toBeGreaterThan(speciesBase("rabbit").perch)
+  })
+  test("the cat slot takes cat, rabbit or bird; the dog slot stays a dog", () => {
+    expect(resolvePets({ cat: { species: "bird" } }).cat.species).toBe("bird")
+    expect(resolvePets({ cat: { species: "rabbit" } }).cat.species).toBe("rabbit")
+    expect(resolvePets({ dog: { species: "bird" } } as never).dog.species).toBe("dog")
+  })
+  test("rabbit and bird talk in their own voices", () => {
+    for (const sp of ["rabbit", "bird"] as const) for (const occ of ["pet", "muse", "wake", "done"]) {
+      const v = SPECIES_VOICE[sp]
+      expect(v.sassy[occ]!.length).toBeGreaterThan(0); expect(v.sweet[occ]!.length).toBeGreaterThan(0)
+    }
   })
 })
