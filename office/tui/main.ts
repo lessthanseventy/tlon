@@ -110,6 +110,7 @@ let drag: { col: number; row: number } | null = null
 let build: Build | null = null
 // the room moved (re-render its frame); its art changed (resend the image)
 let roomChanged = true, imageDirty = true, homeShown = false
+let homeNow = loadHome()
 
 // what the open card reads, fetched when it opens and on every refresh while it stays open
 let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.Triage | null = null, rack: data.Health | null = null
@@ -132,7 +133,7 @@ const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
   return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])) }
 }
-const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); if (petsNow) r.setPets(petsNow) } return r }
+const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow) } return r }
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
 const wsName = (id = ws) => all.workspaces.find((w) => w.id === id)?.name ?? "—"
 const unread = () => feed.filter((x) => x.at > trayRead && x.who !== OPERATOR).length
@@ -1212,7 +1213,7 @@ function layoutScreen() {
     }
   }
   if (next !== wide) { wide = next; rooms.clear() }
-  g = { ...(wide ? geometry(wide, WIDE_H, colsN, rowsN, DETAIL + 3, cell, kitty) : geometry(W, H, colsN, rowsN, DETAIL + 3, cell, kitty)), row: 1 }
+  g = { ...(wide ? geometry(wide, (r0 => (r0 instanceof WideRoom ? r0.height : WIDE_H))(room()), colsN, rowsN, DETAIL + 3, cell, kitty) : geometry(W, H, colsN, rowsN, DETAIL + 3, cell, kitty)), row: 1 }
   const vw = Math.min(g.floorW, (g.cols * g.cw) / g.k), vh = Math.min(g.floorH, (g.rows * g.ch) / g.k)
   viewport = follow
     ? centerViewport({ x: 0, y: 0, w: vw, h: vh }, OFF_W / 2, (BAND + OFF_DOOR) / 2, g.floorW, g.floorH)
@@ -1251,7 +1252,11 @@ function draw() {
   const building = mode.kind === "build" && build !== null
   const fresh = !frame
   // leaving build mode puts the room back, however the mode was left
-  if (!building && homeShown) { roomChanged = true; imageDirty = true }
+  if (!building && homeShown) {
+    roomChanged = true; imageDirty = true
+    homeNow = loadHome()
+    for (const r of rooms.values()) if (r instanceof WideRoom) r.setHome(homeNow)
+  }
   homeShown = building
   const vp = building ? { x: 0, y: 0, w: viewport.w, h: viewport.h } : viewport
   if (building) {
