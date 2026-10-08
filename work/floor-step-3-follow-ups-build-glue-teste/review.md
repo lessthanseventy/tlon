@@ -1,9 +1,11 @@
-VERDICT: approve
+# Review — floor-step-3 follow-ups: APPROVE
 
-Read the diff (main...HEAD, office/ only, 4 files). I did not re-run the gate; the server's verify recorded `mise run check` green.
+Read the diff (office/kit/home.ts, tui/home.ts, tui/main.ts, test/home.test.ts). I did not re-run tests; the server's VERIFY recorded `mise run check` green on this branch.
 
-1. applyBuild (tui/home.ts): saves only when `writes` changed, and main.ts now calls it. The save is injectable, so the spy tests cover pick-up/move (no save), refused drop (no save), successful drop (one save), and place plus undo (two saves).
-2. place() keeps `rot` when it cycles the kind. `existing?.rot` is falsy for rot 0 or undefined, so the tile stays unrotated, which is the same result. The test covers rot 90.
-3. gridWindow/GRID_MAX: under the cap it matches the old tiles-plus-cursor-plus-margin box. Past the cap it centres a window on the cursor, so the cursor always stays inside and the size is capped. The test checks the cap and containment for three far cursors. Tiles outside the window are not drawn, which is an acceptable tradeoff.
+- **applyBuild**: same logic as the inline glue it replaces (save only when `writes` changed), injectable `save`, spy-tested for move/pick-up/refused drop/successful drop/place/undo. main.ts is a clean swap.
+- **rot kept**: `place` carries `existing.rot` when cycling the kind. `rot` 0 or undefined falls to the plain tile, which is equivalent. Test covers 90.
+- **gridWindow/GRID_MAX**: under the cap it is the old tiles+cursor+margin box; over it, a window of exactly GRID_MAX centred on the cursor, so the cursor is always inside. Test covers far cursors on both axes.
 
-Nits, not blocking: the cap test only runs far-cursor cases. A cursor near the cap boundary, 14 to 16 cells, would be a cheap extra case.
+Nits, not blocking:
+- When the window is clamped, tiles outside it are not drawn, with no indicator. Acceptable for a cap.
+- Single-line commit-per-concern split matches the ticket.
