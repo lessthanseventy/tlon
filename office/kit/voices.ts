@@ -2,6 +2,7 @@
 // (`Server.Office.Pets`, through `Sim.hear`). She is a princess and a diva — a cat of some renown, in
 // her own opinion, in a jewelled collar — and the office exists to admire her. Argos' lines are his
 // room's (rooms/wide.ts): he lives only there.
+import type { Temperament } from "./temperament"
 
 export const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)]!
 
@@ -58,4 +59,19 @@ export const NINA = {
     belly: ["The belly is NOT for touching. It's a TRAP."],
     treat: ["A tribute! I accept your offering.", "nom. Adequate. Bring more.", "nom nom. You may live."],
   } satisfies Record<Fuss, string[]>,
+}
+
+/** Nina's warm bucket (`warmth` > 0): the same occasions, none of the edge. Missing occasions stay sassy. */
+export const SWEET: Partial<Record<keyof typeof NINA, readonly string[]>> = {
+  pet: ["Oh, that's lovely. Don't stop.", "prrr... you're my favourite person.", "Yes please. Right there."],
+  wake: ["Oh! Hello. Was I snoring?", "Mm. Good morning, everyone."],
+  muse: ["I love it when everyone's here.", "The sunbeam is warm and so are you.", "Good day for a good nap."],
+  done: ["Well done. Genuinely.", "Done! I knew you could."],
+  cheer: ["{name}, you're doing so well.", "{name}! I believe in you. Truly."],
+}
+
+/** sweet with odds (no roll at all when not warm: a seeded sequence must not shift) that grow with warmth (0 at neutral or cold, 0.9 at +2), else the sassy bucket */
+export function bucketFor(occasion: string, t: Temperament, rand: () => number): readonly string[] {
+  const sassy = (NINA as Record<string, readonly string[]>)[occasion]!, sweet = (SWEET as Record<string, readonly string[]>)[occasion]
+  return sweet && t.warmth > 0 && rand() < (Math.max(0, t.warmth) / 2) * 0.9 ? sweet : sassy
 }

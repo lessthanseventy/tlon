@@ -85,3 +85,18 @@ describe("the cat's temperament", () => {
   test("an unset temperament is today's table: 0.5 is the desk", () => { expect(firstDest()).toBe("desk") })
   test("a lazy cat at the same roll naps instead", () => { expect(firstDest({ warmth: 0, wits: 0, energy: -2 })).toBe("nap") })
 })
+
+describe("Nina's voice follows her warmth", () => {
+  test("a warm cat, patted, says a sweet line; an unset one a sassy one", async () => {
+    const { NINA, SWEET } = await import("../kit/voices")
+    const said = (t?: { warmth: number; wits: number; energy: number }) => {
+      const room = new WideRoom(560), real = Math.random, w = room as unknown as { cat: { said: string | null }; setTemperament(t: unknown): void }
+      if (t) w.setTemperament(t)
+      Math.random = () => 0
+      try { room.pet() } finally { Math.random = real }
+      return w.cat.said!
+    }
+    expect(SWEET.pet).toContain(said({ warmth: 2, wits: 0, energy: 0 }))
+    expect(NINA.pet).toContain(said())
+  })
+})
