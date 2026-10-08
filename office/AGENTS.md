@@ -20,6 +20,7 @@ linked window at a time, Ctrl-] back to the room).
   what Nina says (`voices.ts`, sweet or sassy by warmth; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
   drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
   making a fuss of a pet), the furniture every room has (`furniture.ts`),
+  the home's tiles as pixel art (`homeart.ts`: `TILE_ART`, kind → painter, a missing kind draws plain; `renderHome` the build grid as a Frame),
   the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen, and
   an aquarium).
 - `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
