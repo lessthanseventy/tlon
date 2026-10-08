@@ -120,7 +120,8 @@ self-contained local `mix release` run by `systemd.user.services.tlon` (flake.ni
 on a schema it can't repair), and a named node + cookie (`rel/env.sh.eex`) so the operator can reach
 the live node:
 
-- `mise run server:release` — build the release the service runs.
+- `mise run server:release` — build the release the service runs, in `.release/` at the release pointer.
+- `mise run release:cut` — ship: move the pointer to origin/main (or a commit on it), build, restart once quiet. A merge to main alone deploys nothing.
 - `mise run server:restart` — rebuild + restart the service (redeploy a server change). It refuses
   while a restart would cut work off (a coworker mid-turn, a verify or a landing running —
   `Server.Rollout.busy/0`); `-- --force` restarts anyway.
