@@ -1,14 +1,13 @@
-VERDICT: approve (partial scope — the fence is OPEN, see below)
+VERDICT: approve
 
-Reviewed 4be1def (office/kit/home.ts, office/test/home.test.ts). Read the diff only; I did not run the gate myself. The server's verify run recorded `mise run check` green.
+Scope: garden tile kind (22fb740) plus its art (96e283f): office/kit/home.ts, office/kit/homeart.ts, and the home and homeart tests. I read the diff only. I did not run the gate myself; the server recorded `mise run check` green on 96e283f.
 
-Correct:
-- `garden` is added to `HomeTileKind` and `CATALOGUE`, appended last. `place()` therefore cycles street→garden→living, and the wrap back to living is tested.
-- The save/load round trip with a garden next to a living tile is tested. Connectivity is unchanged because it is pure grid adjacency, so the drop rules are not affected.
-- The change is surgical, with no stray edits. The tests cover the cycling order and persistence.
+The earlier open item is closed. The first review noted the fence and garden drawing were missing. 96e283f adds the `garden` sprite: a fence row, then bed rows with plants and dirt. It also adds the `garden` palette. The sprite is 12x12, matching the other kinds, and it uses only roles that already exist (structure, live, borderInactive, attention).
 
-Open (not blocking this slice, but not done):
-- The goal says "a garden tile (with fence)". Only the tile kind exists. There is no fence and no garden drawing. The builder reports there is no home-tile renderer at all, so nothing draws any tile kind from home.json. I could not find one either (grep for "street" hits only kit/home.ts and its test).
-- No spec.md or plan.md exists on main or on the branch, so I could not check against a written spec. I judged against the goal line and the builder's note.
-- The fence and garden art need a follow-up ticket that lands after a tile renderer exists (siblings #173 and #175 touch floor render). Whoever merges this should file it. Merging this as "garden tile with fence" would overstate what it does.
-- The CATALOGUE order is the build-mode cycle order. Garden now sits between street and living, which is fine.
+Checks:
+- `garden` is last in CATALOGUE, so build-mode `place` cycles street→garden→living. The wrap is tested.
+- A garden next to a living tile saves and loads back unchanged. Connectivity is still pure grid adjacency.
+- The rotation test loops over CATALOGUE, so it now covers garden.
+- The no-art fallback test used `garden` as its art-less example, which would now be false. It uses a stand-in kind `shed` instead, and the test still checks the same thing.
+
+Not verified: how the sprite looks on screen. QA is nolan's step via submit_qa, which I have not seen pass. This approval does not claim visual QA.
