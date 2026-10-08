@@ -97,14 +97,20 @@ defmodule Server.Maintain.Sweep do
     :ok
   end
 
-  # never the lobby's: every coworker's home window runs in it, and pulling it out from under a live
-  # session drops whatever that session was doing
   defp sweep_worktrees do
-    for %{repo: repo, name: name, thread: thread} <- Server.Maintain.Strays.worktrees(),
-        not (thread && Server.Channel.root_machine_thread?(thread)),
-        do: Server.Worktree.remove(repo, name)
-
+    reap_worktrees()
     :ok
+  end
+
+  @doc """
+  The worktree sweep on its own, now (`tlon-cli reap`): every stray worktree removed unless it
+  holds work, never the lobby's (every coworker's home window runs in it). Each as `{path, result}`,
+  the result `Server.Worktree.remove/2`'s.
+  """
+  def reap_worktrees do
+    for %{repo: repo, name: name, thread: thread} <- Server.Maintain.Strays.worktrees(),
+        !(thread && Server.Channel.root_machine_thread?(thread)),
+        do: {Server.Worktree.path(repo, name), Server.Worktree.remove(repo, name)}
   end
 
   defp sweep_gates(opts) do
