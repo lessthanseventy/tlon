@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { lifeBar, lifeHeader, lifeRows } from "../kit/life"
+import { homeLevel, lifeBar, lifeHeader, lifeRows } from "../kit/life"
 import { EMPTY } from "../kit/types"
 
 describe("lifeBar", () => {
@@ -31,5 +31,15 @@ describe("lifeRows", () => {
       ["routine", 1, "teeth · 10m left · streak 3"],
       ["quest", 5, "book dentist · +20 xp"],
     ])
+  })
+})
+
+describe("homeLevel", () => {
+  const w = (level: number) => ({ level, xp: 0, due: [] })
+  test("the highest level among home workspaces", () =>
+    expect(homeLevel({ ...EMPTY, life: { "7": w(2), "8": w(5) } })).toBe(5))
+  test("null with no life side", () => {
+    expect(homeLevel(EMPTY)).toBeNull()
+    expect(homeLevel({ ...EMPTY, life: {} })).toBeNull()
   })
 })

@@ -7,7 +7,7 @@ import { kitchenTile } from "../kit/tiles/kitchen"
 import { loungeTile } from "../kit/tiles/lounge"
 import { meetingTile } from "../kit/tiles/meeting"
 import { officeTile } from "../kit/tiles/office"
-import type { Agents } from "../kit/types"
+import { type Agents, EMPTY } from "../kit/types"
 import { WIDE_H, WideRoom, widePlan, zones } from "../rooms/wide"
 import { focus, frameHashes, GOLDEN, measure, office, seeded } from "./golden"
 
@@ -119,6 +119,14 @@ describe("the wide room", () => {
     room.disco()
     expect([...r.actors.values()].every((x) => x.emote === "♥")).toBe(true)
     expect(room.bpm()).toBeGreaterThan(120)
+
+    // a level-up in the snapshot throws the party; the first snapshot is only a baseline
+    const lv = (level: number): Agents => ({ ...EMPTY, ok: true, life: { "7": { level, xp: 0, due: [] } } })
+    const lvRoom = new WideRoom(560)
+    lvRoom.step(lv(3))
+    expect(lvRoom.bpm()).toBeNull()
+    lvRoom.step(lv(4))
+    expect(lvRoom.bpm()).toBeGreaterThan(120)
 
     // the small hours: someone at their desk yawns
     r.hour = () => 2
