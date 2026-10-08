@@ -97,6 +97,24 @@ describe("build mode: place, pick up, drop, rotate, remove, undo", () => {
     expect(b.home.tiles[0]!.kind).toBe("living")
     expect(b.writes).toBe(writes + 1)
   })
+  test("remove refuses a tile whose removal would split the floor in two", () => {
+    let b = startBuild({
+      tiles: [{ kind: "living", at: [0, 0] }, { kind: "kitchen", at: [1, 0] }, { kind: "bathroom", at: [2, 0] }],
+    })
+    b = move(b, 1, 0) // cursor onto the middle tile
+    const before = b.home
+    b = remove(b)
+    expect(b.refused).toBe(true)
+    expect(b.home).toBe(before)
+    expect(b.home.tiles.length).toBe(3)
+  })
+  test("dropping a carried tile back at its own original cell succeeds", () => {
+    let b = startBuild({ tiles: [{ kind: "living", at: [0, 0] }] })
+    b = pickUp(b)
+    b = drop(b)
+    expect(b.refused).toBe(false)
+    expect(b.home.tiles).toEqual([{ kind: "living", at: [0, 0] }])
+  })
   test("undo only remembers the last ten writes", () => {
     let b = startBuild({ tiles: [] })
     for (let i = 0; i < 15; i++) { b = move(b, 1, 0); b = place(b); b = move(b, -1, -1) }
