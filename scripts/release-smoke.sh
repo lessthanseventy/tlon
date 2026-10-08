@@ -9,10 +9,12 @@
 # TLON_SMOKE_PORT (4047) and TLON_SMOKE_DATABASE (tlon_smoke) name the scratch ones; the service's
 # 4040 and `tlon` are refused. TLON_SMOKE_URL smokes a server already up there instead: nothing is
 # built, started or recorded. A run ends `ran-on: smoke <sha>`, which a scheduled run records.
+# TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped.
 set -uo pipefail
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 port="${TLON_SMOKE_PORT:-4047}" db="${TLON_SMOKE_DATABASE:-tlon_smoke}" url="${TLON_SMOKE_URL:-}"
+hold="${TLON_SMOKE_HOLD:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
 fail() { echo "smoke FAILED: $* (the log: $log)"; exit 1; }
 
@@ -33,6 +35,7 @@ cleanup() {
   [ -z "$ok" ] || rm -f "$log"
 }
 trap cleanup EXIT
+trap 'exit 143' TERM INT
 
 if [ -z "$url" ]; then
   [ "$port" != 4040 ] || fail "4040 is the service's port"
@@ -105,4 +108,9 @@ echo "smoke: the office drove ✓"
 ok=1
 echo "smoke passed${sha:+ on ${sha:0:7}}"
 [ -n "$sha" ] && echo "ran-on: smoke $sha"
+if [ -n "$hold" ] && [ -n "$node" ]; then
+  echo "smoke: holding $url up — TLON_URL=$url mise run office:drive -- <keys>; stop this to tear it down"
+  trap 'exit 0' TERM INT
+  wait "$node"
+fi
 exit 0

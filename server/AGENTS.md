@@ -43,6 +43,9 @@ and every layer the spine design's re-laid §9 asked for
   (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
   entering verify queues the verifier on the service (`Server.Jobs.Verify`); approving review queues
   the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; GitHub merges it).
+  An approved review of a change Andrew sees (`office/`, the operator API) goes to the bench's `qa`
+  seat first: it drives the branch on a scratch release and files `submit_qa`; a fail bounces it to
+  build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`).
   An approving review is risk-graded by a model that didn't write it (`Server.Workline.Grade`, run by
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.
@@ -132,7 +135,7 @@ the live node:
 
 - `mise run server:release` — build the release the service runs, in `.release/` at the release pointer.
 - `mise run release:cut` — ship: move the pointer to origin/main (or a commit on it), build, restart once quiet. A merge to main alone deploys nothing.
-- `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on :4047 and db `tlon_smoke` (never 4040 or `tlon`): `/api/office`, then the office driven headless; torn down after. `TLON_NODE` names its node beside `funes@`.
+- `mise run release:smoke -- [<sha>]` — the candidate as a scratch release on :4047 and db `tlon_smoke` (never 4040 or `tlon`): `/api/office`, then the office driven headless; torn down after (`TLON_SMOKE_HOLD=1` keeps a passing node up to drive, as QA does). `TLON_NODE` names its node beside `funes@`.
 - `mise run server:restart` — rebuild + restart the service (redeploy a server change). It refuses
   while a restart would cut work off (a coworker mid-turn, a verify or a landing running —
   `Server.Rollout.busy/0`); `-- --force` restarts anyway.

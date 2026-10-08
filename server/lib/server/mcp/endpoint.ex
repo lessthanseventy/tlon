@@ -87,6 +87,8 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.ReleaseStatus, name: "release_status")
   component(Server.MCP.Tool.ProposeRelease, name: "propose_release")
   component(Server.MCP.Tool.SetUrgency, name: "set_urgency")
+  # QA's (roster design §5): what it saw driving a reviewed user-visible change.
+  component(Server.MCP.Tool.SubmitQA, name: "submit_qa")
   component(Server.MCP.Resource.Brief, name: "brief")
   component(Server.MCP.Resource.Constraints, name: "constraints")
   component(Server.MCP.Resource.Habits, name: "habits")

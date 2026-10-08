@@ -83,3 +83,43 @@ defmodule Server.MCP.Tool.SubmitReview do
   defp known_verdict(v) when v in ~w(approve request_changes), do: :ok
   defp known_verdict(v), do: {:error, {:bad_verdict, v}}
 end
+
+defmodule Server.MCP.Tool.SubmitQA do
+  @moduledoc """
+  QA's door (roster design §5): after driving a reviewed user-visible change on a scratch release,
+  file what you saw — `pass`, or `fail` with the finding (`Server.Workline.qa_verdict/5`). A fail
+  sends the workline back to build with your report; a pass moves it to the merge gate.
+  Identity-bound to THIS thread, refused outside the review stage.
+  """
+  use Server.MCP.Tool
+
+  alias Server.Channel
+  alias Server.Workline
+
+  schema do
+    field :verdict, :string, required: true, description: "pass | fail"
+
+    field :report, :string,
+      required: true,
+      description: "What you pressed and the screen text you saw; for a fail, the one thing that is wrong"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+
+    case Channel.thread(identity.thread_id) do
+      nil ->
+        fail(frame, "no such thread: #{identity.thread_id}")
+
+      thread ->
+        case Workline.qa_verdict(thread, params[:verdict], identity.agent, params[:report]) do
+          {:error, {:bounced, _}} -> ok(frame, %{"verdict" => "fail", "next" => "sent back to build"})
+          {:error, {:bad_verdict, v}} -> fail(frame, "verdict must be pass or fail, not #{inspect(v)}")
+          {:error, {:not_in_review, stage}} -> fail(frame, "not in review — this workline is at #{stage}")
+          {:error, reason} -> fail(frame, "QA passed, but it could not move on: #{inspect(reason)}")
+          {_, moved} -> ok(frame, %{"verdict" => "pass", "stage" => moved.stage, "awaiting" => moved.awaiting})
+        end
+    end
+  end
+end
