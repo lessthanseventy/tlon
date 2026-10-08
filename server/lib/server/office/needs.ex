@@ -36,7 +36,7 @@ defmodule Server.Office.Needs do
     blocking = waits(open, prompts) ++ red_verifies(open)
     decide = mentions(open, operator) ++ suggestions(open) ++ rollout() ++ stranded()
 
-    Enum.sort_by(blocking, & &1.at) ++ Enum.sort_by(decide, & &1.at)
+    Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
   end
 
   # a pane on a prompt is a dialog; else an `awaiting` is a gate (workline at its gate) or a question
