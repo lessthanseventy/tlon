@@ -92,10 +92,11 @@ defmodule Server.Rollout do
 
   @doc """
   What a restart would cut off right now, one line each: a coworker mid-turn, a verify or a landing
-  executing (their gate scripts die with the server). `[]` is the change window open.
+  executing (their gate scripts die with the server). `[]` is the change window open. `thinking`
+  is who is mid-turn, by thread (the live tracker's unless given).
   """
-  def busy do
-    turns = for {tid, _} <- Server.Presence.Thinking.thinking_all(), do: "a coworker is mid-turn on ##{tid}"
+  def busy(thinking \\ Server.Presence.Thinking.thinking_all()) do
+    turns = for {tid, _} <- thinking, do: "a coworker is mid-turn on ##{tid}"
 
     jobs =
       for {queue, args} <-
