@@ -93,6 +93,49 @@ defmodule Server.Workline.ContinuationTest do
     assert [_] = continuations(v.id)
   end
 
+  describe "escalation up a grade (roster design §3)" do
+    setup do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Graded"})
+
+      {:ok, _} =
+        Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "junior", specialty: "office"})
+
+      {:ok, _} =
+        Server.Workspaces.seat(ws.id, %{name: "ireneo", archetype: "builder", grade: "senior", specialty: "server"})
+
+      {:ok, _} =
+        Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", grade: "senior", specialty: "office"})
+
+      {:ok, t} = Workline.open(%{title: "lamp tile", slug: "lamp", stage: "build", workspace_id: ws.id})
+      {:ok, _} = Server.Channel.assign_lead(t.id, "daneri")
+      %{t: t}
+    end
+
+    test "a junior out of nudges hands the workline to a senior of its specialty, who gets a fresh budget", %{t: t} do
+      for _ <- 1..4, do: Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+
+      assert Server.Channel.thread_lead(t.id) == "emma"
+      refute Repo.exists?(from m in Message, where: m.thread_id == ^t.id and like(m.body, "⚠ stuck%"))
+
+      before = length(continuations(t.id))
+      :ok = Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+      assert length(continuations(t.id)) == before + 1
+    end
+
+    test "a second request_changes on a junior's workline hands it to a senior", %{t: t} do
+      at_review = fn ->
+        {1, _} = Repo.update_all(from(th in Server.Thread, where: th.id == ^t.id), set: [stage: "review"])
+        Repo.get!(Server.Thread, t.id)
+      end
+
+      {:error, {:bounced, _}} = Workline.review_verdict(at_review.(), "request_changes", "lonnrot")
+      assert Server.Channel.thread_lead(t.id) == "daneri"
+
+      {:error, {:bounced, _}} = Workline.review_verdict(at_review.(), "request_changes", "lonnrot")
+      assert Server.Channel.thread_lead(t.id) == "emma"
+    end
+  end
+
   test "where a sheriff owns red, running out of nudges goes to the sheriff — it does not wait on the operator" do
     {:ok, ws} = Server.Workspaces.register(%{name: "Sheriffed"})
     {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
