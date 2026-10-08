@@ -118,4 +118,39 @@ defmodule Server.Calendar.FeedTest do
     {from, to} = window("2026-10-08T00:00:00Z", "2026-10-09T00:00:00Z")
     assert Feed.occurrences("<html>not a calendar</html>", from, to) == []
   end
+
+  describe "celebrations/2" do
+    test "an all-day birthday or anniversary on the day, a yearly one included; other all-day events and other days are not" do
+      feed =
+        ics(
+          vevent(["UID:b1@x", "DTSTART;VALUE=DATE:20261008", "DTEND;VALUE=DATE:20261009", "SUMMARY:Ana's birthday"]) <>
+            vevent([
+              "UID:b2@x",
+              "DTSTART;VALUE=DATE:19900308",
+              "DTEND;VALUE=DATE:19900309",
+              "RRULE:FREQ=YEARLY",
+              "SUMMARY:Work anniversary: Bo"
+            ]) <>
+            vevent([
+              "UID:b3@x",
+              "DTSTART;VALUE=DATE:19900108",
+              "DTEND;VALUE=DATE:19900109",
+              "RRULE:FREQ=YEARLY",
+              "SUMMARY:Cy's Birthday"
+            ]) <>
+            vevent(["UID:h@x", "DTSTART;VALUE=DATE:20261008", "DTEND;VALUE=DATE:20261009", "SUMMARY:Holiday"]) <>
+            vevent(["UID:t@x", "DTSTART:20261008T160000Z", "DTEND:20261008T163000Z", "SUMMARY:Birthday sync"])
+        )
+
+      assert Feed.celebrations(feed, ~D[2026-10-08]) == [%{title: "Ana's birthday", kind: "birthday"}]
+
+      assert Feed.celebrations(feed, ~D[2026-03-08]) == [%{title: "Work anniversary: Bo", kind: "anniversary"}]
+      assert Feed.celebrations(feed, ~D[2026-01-08]) == [%{title: "Cy's Birthday", kind: "birthday"}]
+      assert Feed.celebrations(feed, ~D[2026-10-09]) == []
+    end
+
+    test "a feed that isn't one is no celebrations, not a crash" do
+      assert Feed.celebrations("<html>nope</html>", ~D[2026-10-08]) == []
+    end
+  end
 end

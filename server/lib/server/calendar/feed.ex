@@ -34,6 +34,31 @@ defmodule Server.Calendar.Feed do
     |> Enum.sort_by(& &1.start, DateTime)
   end
 
+  @celebration ~r/birthday|anniversary/i
+
+  @doc """
+  The all-day birthdays and anniversaries on `day`, as `%{title, kind}` (`kind` "birthday" or
+  "anniversary", by the title). A yearly series (`RRULE:FREQ=YEARLY`, how Google keeps a birthday)
+  falls on its month and day every year; any other all-day event only on its own date.
+  """
+  @spec celebrations(String.t(), Date.t()) :: [%{title: String.t(), kind: String.t()}]
+  def celebrations(ics, day) do
+    for %{dtstart: %Date{} = d, summary: title} = e when is_binary(title) <- parse(ics),
+        kind = celebration_kind(title),
+        on_day?(e, d, day),
+        do: %{title: title, kind: kind}
+  end
+
+  defp celebration_kind(title) do
+    case Regex.run(@celebration, title) do
+      [word] -> String.downcase(word)
+      _ -> nil
+    end
+  end
+
+  defp on_day?(%{rrule: %{frequency: :yearly}}, d, day), do: {d.month, d.day} == {day.month, day.day}
+  defp on_day?(_e, d, day), do: d == day
+
   defp parse(ics) do
     case ICal.from_ics(ics) do
       %ICal{events: events} -> events
