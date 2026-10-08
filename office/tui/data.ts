@@ -4,10 +4,11 @@
 import { EMPTY, type Agents, type CorkNote, type ThreadView } from "../kit/types"
 import type { Target } from "./terminal"
 
-const BASE = (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/$/, "")
+// read per call, not at load: a test (or a relaunch) that points TLON_URL elsewhere is believed
+const base = () => (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/$/, "")
 
 async function call(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
-  const r = await fetch(`${BASE}/api${path}`, {
+  const r = await fetch(`${base()}/api${path}`, {
     method,
     headers: body === undefined ? {} : { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -25,7 +26,7 @@ export async function status(): Promise<Agents> {
       bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs,
     }
   } catch {
-    return { ...EMPTY, note: `channel down (${BASE})` }
+    return { ...EMPTY, note: `channel down (${base()})` }
   }
 }
 /** where a thread's coworker runs (its tmux socket, session, window), or null when it has no window */
