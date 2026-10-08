@@ -186,6 +186,8 @@ describe("the wide room", () => {
   // up to 400k ticks of the room: seconds of CPU, more when the gate runs every suite at once
   test("Nina and Argos get up to things, and Argos still keeps off the furniture doing it", () => seeded(7, () => {
     const room = new WideRoom(696), a = viewOf(office(6), 1), plan = widePlan(696), blocks = plan.blocks(plan.layout(a))
+    // by day: after dark the pets are in bed
+    ;(room as unknown as { hour: () => number }).hour = () => 16
     const kinds = new Set<string>()
     for (let i = 0; i < 400_000 && kinds.size < 2; i++) {
       room.step(a)
