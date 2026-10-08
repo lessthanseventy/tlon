@@ -1,30 +1,26 @@
-REQUEST_CHANGES (supersedes my earlier approve — grader caught a real bug I missed)
+# Review: floor-step-3-build-mode-and-the-first-ho (round 3)
 
-Reviewed the 5-commit diff on work/floor-step-3-build-mode-and-the-first-ho against main (office/kit/home.ts, office/test/home.test.ts, office/tui/home.ts, office/tui/main.ts).
+**Verdict: approve**
 
-**Bug: `remove()` has no connectivity check, unlike `drop`/`place`**
+## Scope
 
-office/kit/home.ts's module comment states the invariant as "the floor stays one piece, or the drop is refused," and `drop`/`place` both gate through `canPlace` (which requires `connected()` on the *whole* resulting tile set). `remove()` does not:
+Reviewing the delta since the last approved round: commit `04eb942`, "office: remove() refuses a removal that would split the floor" — the fix for the connectivity gap this review's prior round (grader + reviewer) flagged in `remove()`.
 
-```
-export function remove(b: Build): Build {
-  if (b.carrying) return b
-  const tile = at(b.home, b.cursor)
-  if (!tile) return b
-  return { ...b, home: { tiles: b.home.tiles.filter((t) => t !== tile) }, history: remember(b), writes: b.writes + 1 }
-}
-```
+## Findings
 
-Traced the consequence: living(0,0)-kitchen(1,0)-bathroom(2,0), remove the middle tile → home is now two disconnected single tiles, persisted to home.json with no refusal. From there, `canPlace` requires the *entire* post-drop tile set to be connected, so once the floor is split, almost every future `place()`/`drop()` is refused (only a drop that exactly bridges the gap succeeds). Because `place`/`remove`/`rotate`/`undo` are all blocked while `carrying` (by design, to stop the carried tile being lost/duplicated), a player who picks up a tile off an already-disconnected floor has only `move`/`drop` left — and in configurations with more than one gap or a distant island, no drop reconnects everything, so the tile can't be placed back anywhere. That's a genuine soft-lock, not just a cosmetic gap.
+None blocking.
 
-**Fix** (per the grader's proof, which I agree with):
-- In `remove()`, compute the tiles without the target and refuse (`{ ...b, refused: true }`, no write) if `!connected(rest)`.
-- Add a test: living(0,0)-kitchen(1,0)-bathroom(2,0), remove at (1,0) → refused, 3 tiles still there.
-- Add a test: pick up a tile and drop it back at its own original cell → succeeds (guards against a regression where `canPlace` rejects a no-op drop).
+- `remove()` now mirrors `drop()`/`place()`: it computes `rest` and refuses (`refused: true`, no write, `home` untouched) when `connected(rest)` is false, exactly as requested. Verified by reading `office/kit/home.ts:82-89` — `connected(rest)` with `rest.length <= 1` is trivially true, so removing down to 0 or 1 tiles is never wrongly refused.
+- Two new tests cover it: the disconnect-refusal case (remove the middle of a 3-in-a-row line, expect `refused` and `home` unchanged by reference) and a regression guard (dropping a carried tile back onto its own original cell still succeeds, i.e. `canPlace` doesn't reject a no-op).
+- Ran `bun test test/home.test.ts` locally: 18 pass / 0 fail.
+- `tsc --noEmit` reported clean per the builder's message; not independently re-run here, but the diff is a 3-line engine change plus tests, low risk of a type error.
 
-**Also flagged, non-blocking but worth picking up in the same pass:**
-- `tui/main.ts`'s wiring (`saveHome` only called when `writes` changes, the key bindings) has no test — drive-office coverage (press B, n, esc; check `home.json` via `TLON_HOME` holds one tile; press B, Enter to pick it up and confirm the file is unchanged) would close that gap.
-- Grid render in build mode is unbounded by cursor distance from the floor (noted in my first pass, still true).
-- `place()`'s kind-cycle drops `rot` on the cell (noted in my first pass, still true).
+## Carried-over non-blocking notes (from the prior approved round, still true, still not blockers)
 
-Sending back to build for the `remove()` fix and its two tests; the rest can ride along if convenient but isn't a blocker on its own.
+1. Unbounded grid render if the cursor wanders far from the origin.
+2. `place()` drops `rot` when cycling a kind at an occupied cell.
+3. `main.ts` wiring (save-on-write-counter, `B`/undo key handling) has no drive-office end-to-end coverage — the pure engine is well tested, the TUI glue is not.
+
+## Note on issue #4
+
+The verify failures reported for this workline (`wide.test.ts` golden-hash, `pastimes.test.ts` cold-day path) are a pre-existing, deterministic failure on `origin/main` itself, confirmed by the builder and independently by `daneri` on both `origin/main` and the pre-fix commit `2d2c87a`. It is unrelated to this workline's diff (`office/kit/home.ts`, `office/tui/home.ts`, `office/tui/main.ts`, `office/test/home.test.ts` only) and is tracked separately as issue #4. Not a review blocker for this workline; it is a verify/CI-gate problem for the whole server, not a defect in this change.
