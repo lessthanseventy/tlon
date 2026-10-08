@@ -18,6 +18,8 @@ config :server, Oban,
   queues: [default: 5, maintain: 1, staff: 1, verify: 1, landing: 1, schedules: 2],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
+    # a job left `executing` by a stopped node is rescued — after longer than any gate runs (~10 min)
+    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 30)},
     {Oban.Plugins.Cron,
      crontab: [
        {"* * * * *", Server.Jobs.Drain},

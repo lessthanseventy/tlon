@@ -8,18 +8,22 @@ defmodule Server.Jobs.Land do
   """
   use Oban.Worker,
     queue: :landing,
-    max_attempts: 1,
+    max_attempts: 3,
     unique: [period: :infinity, keys: [:thread_id], states: [:available, :scheduled, :executing]]
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"thread_id" => tid}}) do
+  def perform(%Oban.Job{args: %{"thread_id" => tid}, attempt: attempt, max_attempts: max}) do
     case Server.Repo.get(Server.Thread, tid) do
       nil ->
         :ok
 
       thread ->
-        Server.Workline.land_queued(thread)
-        :ok
+        # a gate cut off (a restart) leaves the landing queued; this attempt fails so Oban runs it
+        # again, and only the last one cut off bounces it
+        case Server.Workline.land_queued(thread, last: attempt >= max) do
+          {:error, {:interrupted, why}} -> {:error, why}
+          _ -> :ok
+        end
     end
   end
 
@@ -27,20 +31,31 @@ defmodule Server.Jobs.Land do
   def gate(thread, _repo, _branch) do
     script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
 
-    with {:ok, tree} <- Server.worktree_for_thread(thread),
-         {_, 0} <-
-           System.cmd("bash", [script, to_string(thread.id), thread.slug, tree],
-             env: [{"WORKLINE_GATE", "1"}],
-             stderr_to_stdout: true
-           ) do
-      {:ok, :green}
-    else
+    case Server.worktree_for_thread(thread) do
+      {:ok, tree} ->
+        "bash"
+        |> System.cmd([script, to_string(thread.id), thread.slug, tree],
+          env: [{"WORKLINE_GATE", "1"}],
+          stderr_to_stdout: true
+        )
+        |> gate_result()
+
       {:error, why} ->
         {:error, "there is no checkout of it to gate (#{inspect(why)})."}
-
-      {out, code} ->
-        {:error,
-         "the full check on main with this branch is red (exit #{code}): #{String.slice(String.trim(out), -2000, 2000)}"}
     end
   end
+
+  @doc """
+  The gate's run → its verdict: exit 0 green; killed by a signal (128 + n — a service restart's
+  SIGTERM is 143) is `{:interrupted, why}`, a gate that never finished, not a red; anything else red.
+  """
+  def gate_result({_out, 0}), do: {:ok, :green}
+
+  def gate_result({_out, code}) when code > 128,
+    do: {:error, {:interrupted, "the gate was cut off before it finished (killed, exit #{code})"}}
+
+  def gate_result({out, code}),
+    do:
+      {:error,
+       "the full check on main with this branch is red (exit #{code}): #{String.slice(String.trim(out), -2000, 2000)}"}
 end
