@@ -39,7 +39,8 @@ defmodule Server.Calendar.Feed do
   @doc """
   The all-day birthdays and anniversaries on `day`, as `%{title, kind}` (`kind` "birthday" or
   "anniversary", by the title). A yearly series (`RRULE:FREQ=YEARLY`, how Google keeps a birthday)
-  falls on its month and day every year; any other all-day event only on its own date.
+  falls on its month and day every year from its start year on (`UNTIL` and `COUNT` are not
+  read); any other all-day event only on its own date.
   """
   @spec celebrations(String.t(), Date.t()) :: [%{title: String.t(), kind: String.t()}]
   def celebrations(ics, day) do
@@ -56,7 +57,9 @@ defmodule Server.Calendar.Feed do
     end
   end
 
-  defp on_day?(%{rrule: %{frequency: :yearly}}, d, day), do: {d.month, d.day} == {day.month, day.day}
+  defp on_day?(%{rrule: %{frequency: :yearly}}, d, day),
+    do: {d.month, d.day} == {day.month, day.day} and Date.compare(day, d) != :lt
+
   defp on_day?(_e, d, day), do: d == day
 
   defp parse(ics) do
