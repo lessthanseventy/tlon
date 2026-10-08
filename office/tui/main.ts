@@ -20,7 +20,7 @@ import * as data from "./data"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
-import { loadHome, saveHome } from "./home"
+import { applyBuild, loadHome } from "./home"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader } from "./reader"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
@@ -814,10 +814,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (!build) build = startBuild(loadHome())
       const b = build
       const mutate = (f: (b: Build) => Build): (() => void) => () => {
-        const next = f(build!)
-        const wrote = next.writes !== build!.writes
-        build = next
-        if (wrote) saveHome(build.home)
+        build = applyBuild(build!, f)
         draw()
       }
       const [cx, cy] = b.cursor
