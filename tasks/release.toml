@@ -1,0 +1,7 @@
+["release:cut"]
+description = "release: move the release pointer (default origin/main; fast-forward only, merged work only; `-- --rollback` to go back), build it in .release, restart once quiet"
+run = "scripts/release.sh cut"
+
+["release:status"]
+description = "release: what the service runs against what main has waiting"
+run = "scripts/release.sh status"

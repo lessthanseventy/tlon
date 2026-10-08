@@ -14,7 +14,8 @@ control loop, not two, and no second way to run anything:
 
 - `mise run check` — names gate + server, adapters and office gates + the task manual; the green-before-commit gate.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
-- `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to redeploy/inspect/watch it.
+- `mise run server:release` / `server:restart` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to rebuild/inspect/watch it.
+- `mise run release:cut` / `release:status` — what the service runs is the **release pointer** (`refs/heads/release`, built in `.release/`), not main: a merge ships when a cut moves the pointer (fast-forward, merged work only; `-- --rollback` to go back). `scripts/release.sh`.
 - `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against
   server recall on the throwaway `tlon_bench` db, never the live store; `bench/longmemeval/bridge.exs` says what each
   `TLON_BENCH_MODE` measures, and `-- --memory bm25` runs the keyword reference on the same slice.

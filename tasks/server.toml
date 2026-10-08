@@ -54,12 +54,11 @@ run = "TLON_START_MCP=1 iex -S mix"
 # home-manager systemd --user service. A release bundles ERTS, so the unit runs one
 # absolute path with nothing on PATH, and `remote`/`rpc` reach the LIVE node.
 ["server:release"]
-description = "server: build the self-contained release the always-up service runs (prod)"
-dir = "server"
-run = "MIX_ENV=prod mix release --overwrite"
+description = "server: build the release the always-up service runs, in .release at the release pointer (a first install starts it at origin/main)"
+run = "scripts/release.sh build"
 
 ["server:restart"]
-description = "server: rebuild the release + restart the always-up service (redeploy a server change)"
+description = "server: rebuild the release at the pointer + restart the always-up service (to ship new code, release:cut)"
 depends = ["server:release"]
 # refuses while a restart would cut work off (a verify, a landing, a turn); `-- --force` overrides
 run = "scripts/server-restart.sh"

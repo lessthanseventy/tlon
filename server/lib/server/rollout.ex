@@ -4,9 +4,8 @@ defmodule Server.Rollout do
   often the code it runs. After a workline merges (`after_merge/1`), the changed paths say which
   parts moved (`parts/1`):
 
-    * the server — restarted once nobody is mid-turn (a coworker's turn is never cut), as a
-      transient systemd unit, so the restart outlives the service it stops; outside systemd the
-      thread is told the command to run;
+    * the server — nothing runs it yet: the service runs the release pointer (`scripts/release.sh`),
+      so a merge waits for the next `release:cut`, and the thread says so;
     * the office TUI — nothing here: the snapshot carries the office's revision (`revs/0`) and a
       TUI started on an older one offers a reload;
     * the room kit (`office/kit`, `office/rooms`) — the desktop shell bundles it, and that is the
@@ -48,7 +47,7 @@ defmodule Server.Rollout do
     own? = Path.expand(repo) == Path.expand(Server.Profiles.tlon_root())
 
     lines =
-      if(own? and :server in parts, do: [restart_server()], else: []) ++
+      if(own? and :server in parts, do: ["the server ships with the next release:cut"], else: []) ++
         if(own? and MapSet.intersection(parts, MapSet.new([:office_tui, :office_room])) != MapSet.new(),
           do: ["office TUIs offer a reload"],
           else: []
@@ -180,14 +179,6 @@ defmodule Server.Rollout do
         do: {:ok, _} = Server.Channel.post(%{thread_id: tid, author: "tlon", body: body, kind: "notice"})
 
     :ok
-  end
-
-  defp restart_server do
-    case restart(why: "a merge changed the server") do
-      :ok -> "the server restarts now"
-      {:scheduled, _} -> "the server restarts once nobody is mid-turn"
-      {:error, _} -> "the server needs a restart: mise run server:restart"
-    end
   end
 
   defp run_restart(repo, why, extra) do
