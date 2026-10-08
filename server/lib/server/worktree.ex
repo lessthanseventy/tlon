@@ -198,9 +198,14 @@ defmodule Server.Worktree do
   defp add(repo_path, wt, slug) do
     branch = branch(slug)
 
-    # a new branch starts from main, not whatever the checkout happens to be on — a side branch's
-    # commits would ride along into the workline and land with it
-    base = if branch_exists?(repo_path, "main"), do: ["main"], else: []
+    # a new branch starts from what was approved and merged — origin/main — not whatever the checkout
+    # is on: local main carries the server's own commits and a side branch's would ride along
+    base =
+      cond do
+        branch_exists?(repo_path, "origin/main") -> ["origin/main"]
+        branch_exists?(repo_path, "main") -> ["main"]
+        true -> []
+      end
 
     args =
       if branch_exists?(repo_path, branch),
