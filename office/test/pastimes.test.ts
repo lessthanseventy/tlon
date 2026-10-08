@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import type { Actor } from "../kit/sim"
 import { EMPTY, type Agents } from "../kit/types"
+import { moment } from "../kit/sim"
 import { WideRoom, widePlan } from "../rooms/wide"
 
 /** run `f` with Math.random fixed at `r`: every chance taken (0), or none (0.999) */
@@ -177,4 +178,24 @@ describe("a server restart", () => {
     room.step(viewOf(office(names), 1))
     expect([...inside(room).actors.values()].every((x) => !x.leaving && x.spotKey !== "")).toBe(true)
   }))
+})
+
+describe("a birthday from the calendar", () => {
+  const frame = (celebrations: Agents["celebrations"]) => {
+    const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), celebrations }, 1)
+    ;(room as unknown as { hour: () => number }).hour = () => 12
+    return chance(0.999, () => { room.step(a); return room.render(a, { picked: null, armed: null, person: null }, (s) => s.length * 2, new Date(2026, 9, 8, 12, 0, 0)).rgba.join() })
+  }
+  test("bunting goes up and a cake comes out", () => {
+    const none = frame([])
+    expect(frame([{ title: "Ana's birthday", kind: "birthday" }])).not.toBe(none)
+    expect(frame(undefined)).toBe(none)
+  })
+  test("anniversaries get the same, but not the same frame as a birthday's cake alone", () => {
+    expect(frame([{ title: "Bo", kind: "anniversary" }])).not.toBe(frame([]))
+  })
+  test("the coworkers crowd to the kitchen counter: the cooler and coffee pull harder", () => {
+    for (const kind of ["cooler", "coffee"]) expect(moment(kind, 12, undefined, true)).toBeGreaterThan(moment(kind, 12, undefined, false))
+    expect(moment("arcade", 12, undefined, true)).toBe(moment("arcade", 12, undefined, false))
+  })
 })

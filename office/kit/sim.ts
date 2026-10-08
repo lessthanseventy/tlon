@@ -93,7 +93,9 @@ const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade",
 /** what someone at a pastime says now and then (over their head): a nap on the couch is a "z" */
 const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], pool: ["!", "?"], read: ["…", "?", "♥"] }
 /** how the hour pulls at a pastime: coffee in the morning, the machine at lunch, the windows and the couch at night */
-function moment(kind: string, hour: number, weather?: string) {
+export function moment(kind: string, hour: number, weather?: string, party = false) {
+  // a birthday: the crowd gathers at the kitchen counter, cake and a drink
+  if (party && (kind === "cooler" || kind === "coffee")) return 5
   // the weather out the window pulls first: in for the couch and a book when it pours, out to the glass when it snows
   if (weather === "rain" || weather === "storm") return kind === "couch" || kind === "read" ? 3 : kind === "window" || kind === "arcade" ? 2 : 1
   if (weather === "snow") return kind === "window" ? 4 : kind === "coffee" ? 2 : 1
@@ -126,6 +128,7 @@ export class Sim<L extends { people: Seat[] }> {
   protected party: Party | null = null
   /** the weather outside, from the snapshot: it pulls at what people do, and Nina wants warm when it's cold */
   protected weather: Agents["weather"] = null
+  protected celebrating = false
   /** the office corkboard's notes (`pinboard`), and notes on their way up: an author walks to the board and reads theirs out */
   protected cork: CorkNote[] = []
   private pins = new Map<string, { text: string; until: number; box: boolean }>()
@@ -374,6 +377,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (level !== null && this.levelSeen !== null && level > this.levelSeen) this.levelUp(level)
     this.levelSeen = level
     this.weather = a.weather ?? this.weather
+    this.celebrating = (a.celebrations ?? []).length > 0
     let changed = this.changed || this.tick % 4 === 0
     this.changed = false
     for (const [k, v] of this.talk) if (this.tick > v.until) { this.talk.delete(k); changed = true }
@@ -525,7 +529,7 @@ export class Sim<L extends { people: Seat[] }> {
     const waiting = free.filter((s) => s.with && held.has(spotKey({ ...s, ...s.with })))
     if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
     // their favourite pulls three times as hard, and the hour has its say
-    const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind)
+    const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind, this.celebrating)
     let roll = Math.random() * free.reduce((n, s) => n + weight(s), 0)
     return free.find((s) => (roll -= weight(s)) < 0) ?? this.plan.roam(l)
   }
