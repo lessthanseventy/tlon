@@ -273,6 +273,16 @@ defmodule Server.Workline.GradeTest do
              )
     end
 
+    test "assess/2 grades a change outside any workline and records nothing", %{fake: fake} do
+      fake.(answer(@low, "return pick(line, recent)"))
+      assert {:ok, %{"scores" => @low, "limits" => []}} = Grade.assess(change(), %{spec: "s", plan: nil})
+
+      assert {:ok, %{"limits" => ["a database migration"]}} =
+               Grade.assess(change(%{paths: ["server/priv/repo/migrations/1_x.exs"]}), %{spec: "s", plan: nil})
+
+      assert Server.Repo.aggregate(Server.Event, :count) == 0
+    end
+
     test "an answer that isn't a grade is recorded as a failed grade", %{fake: fake, thread: thread} do
       fake.("looks fine to me")
       assert {:error, why} = Grade.grade(thread, change: change(), docs: %{spec: "s", plan: "p"})

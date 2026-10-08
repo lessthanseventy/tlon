@@ -67,6 +67,15 @@ defmodule Server.ReleaseScriptTest do
     assert rev(Path.join(ctx.repo, ".release"), "HEAD") == rev(ctx.repo, "origin/main")
   end
 
+  test "--no-restart cuts and builds but leaves the restart to the caller", ctx do
+    File.write!(Path.join(ctx.bin, "curl"), ~s{#!/bin/sh\necho called >> "$(dirname "$0")/curl.log"\n})
+
+    assert {out, 0} = release(ctx, ["cut", "--no-restart"])
+    refute out =~ "restart:"
+    refute File.exists?(Path.join(ctx.bin, "curl.log"))
+    assert rev(ctx.repo, "live") == rev(ctx.repo, "origin/main")
+  end
+
   test "back is a rollback: refused without --rollback, done with it", ctx do
     assert {_, 0} = release(ctx, ["cut"])
     assert {out, 1} = release(ctx, ["cut", rev(ctx.repo, "main~1")])

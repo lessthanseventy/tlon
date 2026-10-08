@@ -48,6 +48,11 @@ and every layer the spine design's re-laid §9 asked for
   lands without them.
   Red — a red verify, a bounce, a stuck workline, a failed schedule run — goes to the workspace's
   sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list.
+- **the PM** (`Server.Release.PM`, bench archetype `pm`) — what ships: `release_status`,
+  `propose_release` (graded commit by commit with `Grade.assess/2`, the max per axis; under
+  `auto_land_risk` it cuts, else one gate on the root thread — a window-less `prompt` answered through
+  `Attention.respond/3`), the changelog posted and recorded as event `release:<sha>`, and
+  `set_urgency` on the backlog. Work runs in `Server.Jobs.Release`; tests hand it a repo (`:release_root`).
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit

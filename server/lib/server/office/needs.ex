@@ -6,7 +6,7 @@ defmodule Server.Office.Needs do
 
     * **blocking** — work has stopped until the operator acts:
       `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
-      sits on a prompt: pick an option), `verify_failed` (a workline whose last gate run was red —
+      sits on a prompt, or the PM's release gate waits: pick an option), `verify_failed` (a workline whose last gate run was red —
       only where the workspace has no sheriff, who owns red there: `Server.Sheriff`);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since), `suggestion` (the corkboard's suggestion box), `rollout` (what a

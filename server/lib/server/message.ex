@@ -26,7 +26,8 @@ defmodule Server.Message do
     field :origin_thread_id, :integer
     field :mirrored, :boolean, default: false
     # `chat` is a message; `prompt` is a coworker WAITING on the operator (Server.Attention) — the
-    # dialog's options ride `payload`, and `resolved_at`/`resolution` say how it ended. `stall` is a
+    # dialog's options ride `payload`, and `resolved_at`/`resolution` say how it ended; one with no
+    # `window` is no pane's (the PM's release gate, `payload["release"]`). `stall` is a
     # coworker mid-turn whose pane froze (Server.Attention.Stall), resolved the same way.
     field :kind, :string, default: "chat"
     field :payload, :map
