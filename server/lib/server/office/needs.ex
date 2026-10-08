@@ -172,7 +172,7 @@ defmodule Server.Office.Needs do
   defp stranded do
     for %{repo: repo, name: name, thread: t} <- Server.Maintain.Strays.worktrees(),
         not just_landed?(t),
-        not (t && landing?(t)),
+        !(t && landing?(t)),
         why = Server.Worktree.holds(repo, name) do
       %{
         key: "stranded:#{repo}:#{name}",

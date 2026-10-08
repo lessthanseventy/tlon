@@ -62,4 +62,14 @@ defmodule Server.Maintain.StraysTest do
     refute Map.has_key?(results, fresh)
     assert File.exists?(fresh)
   end
+
+  test "a stranded worktree with no thread is on the needs list — and the list doesn't fall over on it", %{repo: repo} do
+    held = Worktree.path(repo, "by-hand-held")
+    {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "office/held", held])
+    File.write!(Path.join(held, "wip.txt"), "wip\n")
+    {index, 0} = System.cmd("git", ["-C", held, "rev-parse", "--path-format=absolute", "--git-path", "index"])
+    File.touch!(String.trim(index), System.os_time(:second) - 2 * 86_400)
+
+    assert [%{kind: "stranded", thread_id: nil}] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded"))
+  end
 end
