@@ -28,6 +28,7 @@ defmodule Server.MCP.Brief do
       "todos" => capped(scope.todos, &todo/1),
       "next" => next(scope.next),
       "lead" => scope.lead,
+      "opening" => scope.opening && message(scope.opening),
       "done" => capped(scope.done, &done_entry/1),
       "learnings" => capped(scope.learnings, &fact/1),
       "unknowns" => capped(scope.unknowns, &question/1),

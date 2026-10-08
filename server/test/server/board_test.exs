@@ -182,6 +182,20 @@ defmodule Server.BoardTest do
       assert scope.done.more == 1
     end
 
+    test "OPENING carries the operator's first message whole, after it has left RECENT" do
+      {:ok, thread} = Channel.open_thread(%{title: "a long ask"})
+      ask = "the ask, in full\n" <> String.duplicate("every word of it. ", 200)
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "andrew", body: ask})
+      for n <- 1..8, do: {:ok, _} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "nudge #{n}"})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "a later word"})
+
+      brief = Board.brief(thread)
+
+      refute Enum.any?(brief.recent, &(&1.body == ask))
+      assert brief.opening.body == ask
+      assert Server.MCP.Brief.scope(brief)["opening"]["body"] == ask
+    end
+
     test "an unassigned thread has a nil lead, and empty sections count zero" do
       {:ok, thread} = Channel.open_thread(%{title: "unstaffed"})
       scope = Board.brief(thread)

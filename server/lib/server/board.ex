@@ -174,7 +174,8 @@ defmodule Server.Board do
 
   @doc """
   The IN SCOPE brief for a thread — read fresh from the DB (the argument is just an
-  id handle): GOAL (title), the assigned lead, TODOS with the derived NEXT, DONE (the
+  id handle): GOAL (title), the assigned lead, OPENING (the operator's first message, whole),
+  TODOS with the derived NEXT, DONE (the
   merged todo + `work_landed` view), LEARNINGS, UNKNOWNS, BLOCKERS and CHECKS each
   `%{shown, more}`, and RECENT (the message tail).
   """
@@ -196,6 +197,8 @@ defmodule Server.Board do
       thread: thread,
       goal: thread.title,
       lead: lead_name(thread),
+      # OPENING — the operator's first words on the thread, uncut, so a lead never asks for its brief.
+      opening: Channel.opening_operator_message(thread.id),
       todos: todos,
       # NEXT is derived, never stored (§5/§6): the head of the open todos, or nil.
       next: List.first(todos.shown),

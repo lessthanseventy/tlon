@@ -361,6 +361,19 @@ defmodule Server.Channel do
   end
 
   @doc """
+  The first message on `thread_id` authored by the configured operator, or nil: the ask a thread
+  was opened with, kept whole in the brief after it has scrolled out of the recent tail.
+  """
+  def opening_operator_message(thread_id) do
+    Repo.one(
+      from m in Message,
+        where: m.thread_id == ^thread_id and fragment("lower(?)", m.author) == ^operator(),
+        order_by: [asc: m.id],
+        limit: 1
+    )
+  end
+
+  @doc """
   Is `author` the configured operator (config `:operator`, case-insensitive)? The one
   operator-detection seam — renderers color by it, `latest_operator_message/1` queries by it,
   `Dossier.bank_stated_fact/2` gates `stated` provenance on it.
