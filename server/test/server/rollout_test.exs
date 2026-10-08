@@ -33,8 +33,9 @@ defmodule Server.RolloutTest do
     test "busy: scheduled, and it runs (unforced) the moment the last turn ends" do
       me = self()
       run = fn force -> send(me, {:ran, force}) end
-      {:ok, mid_turn} = Elixir.Agent.start_link(fn -> %{987_655 => "emma"} end)
-      busy = fn -> Rollout.busy(Elixir.Agent.get(mid_turn, & &1)) end
+      # the test's own busy lines, never Rollout.busy/1: that reads every executing job in the db
+      {:ok, mid_turn} = Elixir.Agent.start_link(fn -> ["a coworker is mid-turn on #987655"] end)
+      busy = fn -> Elixir.Agent.get(mid_turn, & &1) end
       on_exit(fn -> Rollout.cancel_restart() end)
 
       assert {:scheduled, lines} = Rollout.restart(run: run, busy: busy, poll_ms: 20)
@@ -43,7 +44,7 @@ defmodule Server.RolloutTest do
       assert {:scheduled, _} = Rollout.restart(run: run, busy: busy, poll_ms: 20)
       refute_receive {:ran, _}, 60
 
-      Elixir.Agent.update(mid_turn, fn _ -> %{} end)
+      Elixir.Agent.update(mid_turn, fn _ -> [] end)
       assert_receive {:ran, false}, 500
       refute_receive {:ran, _}, 100
     end
