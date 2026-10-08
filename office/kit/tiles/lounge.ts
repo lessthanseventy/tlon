@@ -25,8 +25,12 @@ export function loungeTile(z: Zones): Tile<Layout> {
       pet: [at(L0 + 90, 118, 118, "right", "pet"), at(L0 + 40, 106, 106, "right", "pet")],
       read: [{ x: shelf.x + 8, y: 84, aisle: 94, pose: "sit", face: "down", kind: "read" }],
     }),
-    draw(sc: Scene, _a: Agents, _l: Layout, _m: Measure) {
+    draw(sc: Scene, a: Agents, _l: Layout, _m: Measure) {
       const px = sc.px.bind(sc), blit = sc.blit.bind(sc)
+      if (a.celebrations?.length) {
+        // bunting strung over the living area: a line of pennants in turn
+        for (let i = 0; i < 22; i++) px(L0 + 12 + i * 4, 40 + (i % 2), 2, 2 + (i % 2), [ROLE.alarm, ROLE.key, ROLE.live, ROLE.attention][i % 4]!)
+      }
       // the rug, the couch (its back toward you), a lamp, a beanbag
       px(L0 + 34, 48, 54, 14, ROLE.structure); px(L0 + 35, 49, 52, 12, ROLE.borderInactive)
       for (let i = 0; i < 8; i++) px(L0 + 38 + i * 6, 52 + (i % 2) * 4, 2, 2, ROLE.meta)
