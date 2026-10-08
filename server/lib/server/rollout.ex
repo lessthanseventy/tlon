@@ -22,7 +22,7 @@ defmodule Server.Rollout do
   require Logger
 
   @quiet_poll_ms 10_000
-  @quiet_tries 60
+  @waiter :tlon_restart_waiter
 
   def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
@@ -48,7 +48,7 @@ defmodule Server.Rollout do
     own? = Path.expand(repo) == Path.expand(Server.Profiles.tlon_root())
 
     lines =
-      if(own? and :server in parts, do: [restart_server(repo, tid)], else: []) ++
+      if(own? and :server in parts, do: [restart_server()], else: []) ++
         if(own? and MapSet.intersection(parts, MapSet.new([:office_tui, :office_room])) != MapSet.new(),
           do: ["office TUIs offer a reload"],
           else: []
@@ -114,23 +114,35 @@ defmodule Server.Rollout do
   def quiet?, do: busy() == []
 
   @doc """
-  The operator's restart (the office's button): `:ok` when the restart is handed to a transient
-  unit, `{:busy, lines}` while it would cut something off (unless `force: true`), `{:error, why}`
-  outside systemd.
+  Restart the server — the office's button and a merge's rollout alike. Quiet (or `force: true`):
+  now, `:ok` or `{:error, why}`. Busy: one restart is scheduled for the first quiet moment — it
+  waits as long as it takes, never forcing — and `{:scheduled, lines}` says what it waits on; a
+  second ask while one is scheduled joins it. `why:` is what the workers' notice says; `run:`,
+  `busy:` and `poll_ms:` stand in for the restart, `busy/0` and the poll in a test.
   """
   def restart(opts \\ []) do
-    force = Keyword.get(opts, :force, false)
+    why = Keyword.get(opts, :why, "the operator asked")
+    busy = Keyword.get(opts, :busy, &busy/0)
 
-    cond do
-      not force and not quiet?() ->
-        {:busy, busy()}
-
-      !(System.get_env("INVOCATION_ID") && System.find_executable("systemd-run")) ->
-        {:error, "not under systemd: run mise run server:restart"}
-
-      true ->
-        run_restart(Server.Profiles.tlon_root(), "the operator asked", if(force, do: ["--", "--force"], else: []))
+    case Keyword.get_lazy(opts, :run, fn -> systemd_restart(why) end) do
+      nil -> {:error, "not under systemd: run mise run server:restart"}
+      run -> restart(run, busy, Keyword.get(opts, :force, false), Keyword.get(opts, :poll_ms, @quiet_poll_ms))
     end
+  end
+
+  defp restart(run, _busy, true, _poll_ms), do: run.(true)
+
+  defp restart(run, busy, false, poll_ms) do
+    if busy.() == [], do: run.(false), else: schedule(run, busy, poll_ms)
+  end
+
+  @doc "Whether a restart is scheduled for the first quiet moment."
+  def restart_pending?, do: Process.whereis(@waiter) != nil
+
+  @doc "Drop a scheduled restart. `:ok` whether or not one was."
+  def cancel_restart do
+    with pid when is_pid(pid) <- Process.whereis(@waiter), do: Process.exit(pid, :kill)
+    :ok
   end
 
   @doc """
@@ -158,38 +170,15 @@ defmodule Server.Rollout do
     :ok
   end
 
-  defp restart_server(repo, tid) do
-    if System.get_env("INVOCATION_ID") && System.find_executable("systemd-run") do
-      Task.Supervisor.start_child(Server.TaskSupervisor, fn -> restart_when_quiet(repo, tid, @quiet_tries) end)
-      "the server restarts once nobody is mid-turn"
-    else
-      "the server needs a restart: mise run server:restart"
+  defp restart_server do
+    case restart(why: "a merge changed the server") do
+      :ok -> "the server restarts now"
+      {:scheduled, _} -> "the server restarts once nobody is mid-turn"
+      {:error, _} -> "the server needs a restart: mise run server:restart"
     end
   end
 
-  # Wait for a moment no coworker is mid-turn (or give up waiting and say so), then hand the
-  # rebuild-and-restart to a transient unit: the service stops under it and must not take it down.
-  defp restart_when_quiet(repo, tid, 0) do
-    Server.Channel.post(%{
-      thread_id: tid,
-      author: "tlon",
-      body:
-        "⟳ the server restart is still waiting — someone has been mid-turn for ten minutes; run mise run server:restart when it suits"
-    })
-
-    run_restart(repo, "a merge changed the server")
-  end
-
-  defp restart_when_quiet(repo, tid, tries) do
-    if quiet?() do
-      run_restart(repo, "a merge changed the server")
-    else
-      Process.sleep(@quiet_poll_ms)
-      restart_when_quiet(repo, tid, tries - 1)
-    end
-  end
-
-  defp run_restart(repo, why, extra \\ []) do
+  defp run_restart(repo, why, extra) do
     env =
       Enum.map(
         [
@@ -243,5 +232,32 @@ defmodule Server.Rollout do
   def handle_cast({:note, text}, state) do
     note = %{id: state.next, text: text, at: System.system_time(:second)}
     {:noreply, %{state | notes: [note | state.notes], next: state.next + 1}}
+  end
+
+  defp schedule(run, busy, poll_ms) do
+    if !restart_pending?() do
+      {:ok, _} =
+        Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+          Process.register(self(), @waiter)
+          wait_then(run, busy, poll_ms)
+        end)
+    end
+
+    {:scheduled, busy.()}
+  end
+
+  defp wait_then(run, busy, poll_ms) do
+    if busy.() == [] do
+      run.(false)
+    else
+      Process.sleep(poll_ms)
+      wait_then(run, busy, poll_ms)
+    end
+  end
+
+  # the rebuild-and-restart goes to a transient unit: the service stops under it and must not take it down
+  defp systemd_restart(why) do
+    if System.get_env("INVOCATION_ID") && System.find_executable("systemd-run"),
+      do: fn force -> run_restart(Server.Profiles.tlon_root(), why, if(force, do: ["--", "--force"], else: [])) end
   end
 end

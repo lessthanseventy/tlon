@@ -29,6 +29,32 @@ defmodule Server.RolloutTest do
     assert sha == nil or String.length(sha) == 40
   end
 
+  describe "restart/1 — the operator's restart waits for quiet, never refuses" do
+    test "busy: scheduled, and it runs (unforced) the moment the last turn ends" do
+      me = self()
+      run = fn force -> send(me, {:ran, force}) end
+      {:ok, mid_turn} = Elixir.Agent.start_link(fn -> %{987_655 => "emma"} end)
+      busy = fn -> Rollout.busy(Elixir.Agent.get(mid_turn, & &1)) end
+      on_exit(fn -> Rollout.cancel_restart() end)
+
+      assert {:scheduled, lines} = Rollout.restart(run: run, busy: busy, poll_ms: 20)
+      assert Enum.any?(lines, &(&1 =~ "#987655"))
+      assert Rollout.restart_pending?()
+      assert {:scheduled, _} = Rollout.restart(run: run, busy: busy, poll_ms: 20)
+      refute_receive {:ran, _}, 60
+
+      Elixir.Agent.update(mid_turn, fn _ -> %{} end)
+      assert_receive {:ran, false}, 500
+      refute_receive {:ran, _}, 100
+    end
+
+    test "force: now, whatever is running" do
+      me = self()
+      Rollout.restart(force: true, busy: fn -> ["a coworker is mid-turn on #1"] end, run: fn force -> send(me, {:ran, force}) end)
+      assert_received {:ran, true}
+    end
+  end
+
   describe "announce_restart/1 — the workers hear a restart" do
     setup do
       Server.TestDB.clean!()
