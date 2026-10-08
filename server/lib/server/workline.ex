@@ -1173,8 +1173,8 @@ defmodule Server.Workline do
   defp qa_playbook(thread) do
     """
     drive the changed path as Andrew would, against a scratch release of work/#{thread.slug}: \
-    `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/#{thread.slug}` builds it on :4047 (db tlon_smoke), \
-    smokes it and keeps it up; drive it with `TLON_URL=http://127.0.0.1:4047 mise run office:drive -- <keys>`. \
+    `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/#{thread.slug}` builds it on its own port and db (it prints the url), \
+    smokes it and keeps it up; drive it with `TLON_URL=<the url it printed> mise run office:drive -- <keys>`. \
     Never :4040, the live service. Then submit_qa: pass, or fail with the finding — what you pressed and \
     the screen text you saw.\
     """
