@@ -100,8 +100,9 @@ defmodule Server.Arbiter.Tmux do
 
   defp under_cap(_tabs, _thread, true), do: :ok
 
-  defp under_cap(tabs, %Thread{id: id}, false) do
-    if Enum.count(tabs, &Tmux.leaf_window?/1) < Server.OperatorConfig.max_leaves() do
+  defp under_cap(tabs, %Thread{id: id} = thread, false) do
+    if Enum.count(tabs, &Tmux.leaf_window?/1) < Server.OperatorConfig.max_leaves() and
+         Server.Staffing.seat_for?(thread, tabs) do
       :ok
     else
       Server.Staffing.note_parked(id)
