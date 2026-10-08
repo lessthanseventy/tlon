@@ -176,7 +176,7 @@ defmodule Server.Rollout do
       "⟳ the server is restarting (#{why}). A tool call in the next minute may fail: retry it, and don't read it as the server being down."
 
     for tid <- threads,
-        do: {:ok, _} = Server.Channel.post(%{thread_id: tid, author: "tlon", body: body, kind: "notice"})
+        do: _ = Server.Channel.post(%{thread_id: tid, author: "tlon", body: body, kind: "notice"})
 
     :ok
   end

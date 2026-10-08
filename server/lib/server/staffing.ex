@@ -177,9 +177,10 @@ defmodule Server.Staffing do
   defp resume_interrupted(workspace_id, tabs, standing) do
     for %{session_id: sid, thread_id: tid, agent: agent} <- Staff.interrupted(workspace_id),
         not has_window?(tabs, tid, agent, standing) do
-      {:ok, _} = Staff.end_session(Repo.get!(Session, sid))
+      # one row gone or one post refused doesn't stop the rest of the pass
+      with %Session{} = session <- Repo.get(Session, sid), do: Staff.end_session(session)
 
-      {:ok, _} =
+      _ =
         Channel.post(%{
           thread_id: tid,
           author: "tlon",
