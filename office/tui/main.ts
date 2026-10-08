@@ -819,7 +819,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           { key: "n", label: "new tile (cycles the kind)", run: mutate((x) => place(x)) },
           { key: "x", label: "remove", run: mutate((x) => remove(x)) },
           { key: "r", label: "rotate", run: mutate((x) => rotate(x)) },
-          { key: "u", label: "undo", run: () => { build = undo(build!); saveHome(build.home); draw() } },
+          { key: "u", label: "undo", run: mutate((x) => undo(x)) },
           { key: "esc", label: "leave", run: () => { back(true); roomChanged = true; draw() } },
         ],
       }

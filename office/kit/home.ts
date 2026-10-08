@@ -69,6 +69,7 @@ export function drop(b: Build): Build {
 
 /** cycles the catalogue onto the cursor's cell: empty → the first kind, a tile there → its successor */
 export function place(b: Build): Build {
+  if (b.carrying) return b
   const existing = at(b.home, b.cursor)
   const kind = CATALOGUE[existing ? (CATALOGUE.indexOf(existing.kind) + 1) % CATALOGUE.length : 0]!
   const tile: HomeTile = { kind, at: b.cursor }
@@ -78,12 +79,14 @@ export function place(b: Build): Build {
 }
 
 export function remove(b: Build): Build {
+  if (b.carrying) return b
   const tile = at(b.home, b.cursor)
   if (!tile) return b
   return { ...b, home: { tiles: b.home.tiles.filter((t) => t !== tile) }, history: remember(b), writes: b.writes + 1 }
 }
 
 export function rotate(b: Build): Build {
+  if (b.carrying) return b
   const tile = at(b.home, b.cursor)
   if (!tile) return b
   const rot = (((tile.rot ?? 0) + 90) % 360) as HomeTile["rot"]
@@ -91,6 +94,7 @@ export function rotate(b: Build): Build {
 }
 
 export function undo(b: Build): Build {
+  if (b.carrying) return b
   if (!b.history.length) return b
-  return { ...b, home: b.history[b.history.length - 1]!, history: b.history.slice(0, -1) }
+  return { ...b, home: b.history[b.history.length - 1]!, history: b.history.slice(0, -1), writes: b.writes + 1 }
 }
