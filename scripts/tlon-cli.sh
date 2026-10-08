@@ -39,6 +39,7 @@
 #   close-thread <id>              close a thread (its ticket is done; a child reports up)
 #   reopen <id>                    reopen a closed thread; a queued workline re-joins the merge queue if its approval stands
 #   reap                           the worktree sweep now: strays removed, the ones holding work kept with why
+#   canvas                         repaint the GitHub contribution-graph canvas now (Server.Canvas.Paint)
 #   delete-thread <id>             operator hard delete (messages go too; facts survive unlinked)
 #   forget-fact <id>               operator tombstone — out of recall, row kept
 #   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution
@@ -237,6 +238,11 @@ case "$cmd" in
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh reopen <thread-id>' >&2; exit 2; }
     exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> case Server.Workline.reopen(t) do {:ok, r} -> IO.puts(\"reopened thread #$tid — #{r.title}#{if r.stage, do: \" (#{r.stage})\"}\"); other -> IO.puts(\"reopened thread #$tid, but: #{inspect(other)}\"); raise(\"refused\") end end"
+    ;;
+
+  canvas)
+    # Today's picture from the canvas thread (or Life's next step), force-pushed to the canvas repo.
+    exec "$SERVER" rpc "case Server.Canvas.Paint.run() do {:ok, r} -> IO.puts(\"painted the canvas: #{r.source}, #{r.commits} commits\"); {:error, why} -> IO.puts(why); raise(\"refused\") end"
     ;;
 
   reap)
@@ -502,7 +508,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
