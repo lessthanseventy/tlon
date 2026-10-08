@@ -186,7 +186,7 @@ defmodule Server.Schedules do
   defp work(%Schedule{kind: "script"} = s) do
     {code, out} = shell(s.body, dir_for(s))
     tail = String.slice(out, -@output_cap, @output_cap)
-    result = %{status: if(code == 0, do: "ok", else: "failed"), exit: code, output: tail}
+    result = Map.merge(%{status: if(code == 0, do: "ok", else: "failed"), exit: code, output: tail}, ran_on(out))
 
     result =
       if s.standing do
@@ -347,4 +347,12 @@ defmodule Server.Schedules do
   defp naive_utc(erl), do: erl |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
 
   defp operator, do: Application.get_env(:server, :operator, "andrew")
+
+  # the last `ran-on: <check> <sha>` line a script printed: the commit it checked
+  defp ran_on(out) do
+    case Regex.scan(~r/^ran-on: (\S+) ([0-9a-f]{40})$/m, out) do
+      [] -> %{}
+      found -> with [_, check, sha] <- List.last(found), do: %{check_name: check, sha: sha}
+    end
+  end
 end

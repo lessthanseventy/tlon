@@ -39,9 +39,16 @@ defmodule Server.ReleaseScriptTest do
     out
   end
 
-  defp release(%{repo: repo, bin: bin}, args) do
-    env = [{"PATH", "#{bin}:#{System.get_env("PATH")}"}, {"TLON_RELEASE_DIR", Path.join(repo, ".release")}]
+  defp release(%{repo: repo, bin: bin}, args, env \\ []) do
+    env = [{"PATH", "#{bin}:#{System.get_env("PATH")}"}, {"TLON_RELEASE_DIR", Path.join(repo, ".release")} | env]
     System.cmd("bash", [Path.join(repo, "scripts/release.sh") | args], cd: repo, env: env, stderr_to_stdout: true)
+  end
+
+  defp cli!(%{bin: bin}, body) do
+    path = Path.join(bin, "tlon-cli")
+    File.write!(path, "#!/bin/sh\n#{body}\n")
+    File.chmod!(path, 0o755)
+    [{"TLON_CLI", path}]
   end
 
   defp rev(repo, ref), do: repo |> sh!("git rev-parse #{ref}") |> String.trim()
@@ -73,5 +80,18 @@ defmodule Server.ReleaseScriptTest do
     assert {out, 0} = release(ctx, ["status"])
     assert out =~ "not released (1)"
     assert out =~ "two"
+  end
+
+  test "status reads origin/main's releasability off the server, and says when it can't", ctx do
+    main = rev(ctx.repo, "origin/main")
+    assert {_, 0} = release(ctx, ["cut", rev(ctx.repo, "main~1")])
+
+    asked = cli!(ctx, ~s([ "$1 $2" = "releasable #{main}" ] && echo "gate  ✓ passed" && echo "releasable: yes"))
+    assert {out, 0} = release(ctx, ["status"], asked)
+    assert out =~ "gate  ✓ passed"
+    assert out =~ "releasable: yes"
+
+    assert {out, 0} = release(ctx, ["status"], cli!(ctx, "exit 1"))
+    assert out =~ "the server didn't answer"
   end
 end
