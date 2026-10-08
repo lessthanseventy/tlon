@@ -57,6 +57,8 @@ describe("the wide room", () => {
     }
     for (const [w, hash] of Object.entries(golden)) {
       const room = new WideRoom(Number(w)), a = viewOf(office(6), 1)
+      // a fixed hour for the steps, as for the render: who lounges where follows the clock
+      ;(room as unknown as { hour: () => number }).hour = () => 16
       for (let i = 0; i < 300; i++) room.step(a)
       const fr = room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0))
       const got = createHash("sha256").update(Buffer.from(fr.rgba)).digest("hex")

@@ -154,6 +154,8 @@ describe("the corkboard", () => {
 describe("the cold", () => {
   test("on a cold day Nina makes for the radiator", () => {
     const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), weather: { kind: "snow", temp_c: -2, desc: "snow" } }, 1), r = inside(room)
+    // midday: in the small hours the same roll sends her zooming instead
+    ;(r as unknown as { hour: () => number }).hour = () => 12
     chance(0.999, () => room.step(a))
     Object.assign(r.cat, { mode: "sit", path: [], until: 0, purr: 0, stretch: 0, saidUntil: r.tick + 1000 })
     chance(0.1, () => room.step(a))

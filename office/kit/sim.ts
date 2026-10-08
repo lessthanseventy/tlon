@@ -499,7 +499,7 @@ export class Sim<L extends { people: Seat[] }> {
     const waiting = free.filter((s) => s.with && held.has(spotKey({ ...s, ...s.with })))
     if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
     // their favourite pulls three times as hard, and the hour has its say
-    const hour = new Date().getHours(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind)
+    const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind)
     let roll = Math.random() * free.reduce((n, s) => n + weight(s), 0)
     return free.find((s) => (roll -= weight(s)) < 0) ?? this.plan.roam(l)
   }
