@@ -339,12 +339,20 @@ defmodule Server.Workline do
     merger = Keyword.get(opts, :merge, Server.Workline.Merge)
     gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(thread, &1, &2) end)
     repo = Git.root(thread)
+    last? = Keyword.get(opts, :last, false)
 
     case merger.merge(repo, thread.slug, gate: gate) do
       {:ok, moved} ->
         {:ok, flipped} = flip(thread)
         finish(flipped, Map.put(moved, :repo, repo))
         {:ok, flipped}
+
+      {:error, {:interrupted, why}} when not last? ->
+        {:error, {:interrupted, why}}
+
+      {:error, {:interrupted, why}} ->
+        Server.Sheriff.report(thread, "the merge queue's gate was cut off three times: #{why}")
+        bounce(thread, why, "the merge queue's gate was cut off three times (#{why}); verify again, then approve")
 
       {:error, why} ->
         Server.Sheriff.report(thread, "the merge queue bounced it back to build: #{why}")

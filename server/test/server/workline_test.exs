@@ -395,6 +395,21 @@ defmodule Server.WorklineTest do
       assert summary =~ "(blast: the merge queue)"
     end
 
+    test "its turn, the gate cut off (a restart killed it): it stays queued for the retry, never bounced" do
+      thread = open!(%{slug: "cut-off", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+      {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+      gate = fn _, _ -> {:error, {:interrupted, "the gate was killed (exit 143)"}} end
+
+      assert {:error, {:interrupted, _}} = Workline.land_queued(queued, merge: Merges, gate: gate)
+      assert %Server.Thread{stage: "review", awaiting: nil} = Repo.get(Server.Thread, thread.id)
+
+      # the last attempt cut off too: back to build, saying so
+      assert {:error, {:bounced, why}} = Workline.land_queued(queued, merge: Merges, gate: gate, last: true)
+      assert why =~ "killed"
+      assert %Server.Thread{stage: "build"} = Repo.get(Server.Thread, thread.id)
+    end
+
     test "a thread no longer queued (re-parked, closed, moved on) is left alone" do
       thread = open!(%{slug: "not-queued", stage: "review"})
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)

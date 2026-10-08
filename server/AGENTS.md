@@ -121,7 +121,9 @@ on a schema it can't repair), and a named node + cookie (`rel/env.sh.eex`) so th
 the live node:
 
 - `mise run server:release` — build the release the service runs.
-- `mise run server:restart` — rebuild + restart the service (redeploy a server change).
+- `mise run server:restart` — rebuild + restart the service (redeploy a server change). It refuses
+  while a restart would cut work off (a coworker mid-turn, a verify or a landing running —
+  `Server.Rollout.busy/0`); `-- --force` restarts anyway.
 - `mise run server:console` — remote iex INTO the running service node.
 - `mise run server:logs` — follow the service's journal.
 

@@ -17,6 +17,8 @@ defmodule Server.Rollout do
   """
   use GenServer
 
+  import Ecto.Query
+
   require Logger
 
   @quiet_poll_ms 10_000
@@ -88,6 +90,28 @@ defmodule Server.Rollout do
     _ -> %{office: nil}
   end
 
+  @doc """
+  What a restart would cut off right now, one line each: a coworker mid-turn, a verify or a landing
+  executing (their gate scripts die with the server). `[]` is the change window open.
+  """
+  def busy do
+    turns = for {tid, _} <- Server.Presence.Thinking.thinking_all(), do: "a coworker is mid-turn on ##{tid}"
+
+    jobs =
+      for {queue, args} <-
+            Server.Repo.all(
+              from j in Oban.Job,
+                where: j.queue in ["verify", "landing"] and j.state == "executing",
+                select: {j.queue, j.args}
+            ),
+          do: "the #{if queue == "verify", do: "verify", else: "landing"} of ##{args["thread_id"]} is running"
+
+    turns ++ jobs
+  end
+
+  @doc "Whether a restart cuts nothing off now (`busy/0` is empty)."
+  def quiet?, do: busy() == []
+
   defp restart_server(repo, tid) do
     if System.get_env("INVOCATION_ID") && System.find_executable("systemd-run") do
       Task.Supervisor.start_child(Server.TaskSupervisor, fn -> restart_when_quiet(repo, tid, @quiet_tries) end)
@@ -111,7 +135,7 @@ defmodule Server.Rollout do
   end
 
   defp restart_when_quiet(repo, tid, tries) do
-    if Server.Presence.Thinking.thinking_all() == %{} do
+    if quiet?() do
       run_restart(repo)
     else
       Process.sleep(@quiet_poll_ms)

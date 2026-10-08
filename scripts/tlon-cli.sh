@@ -42,6 +42,7 @@
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
+#   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
 #   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
@@ -376,6 +377,11 @@ case "$cmd" in
     # Open a workline at stage intent — the operator's kickoff. The stage machine takes it
     # from here (advance_stage / approve).
     exec "$SERVER" rpc "case Server.Workline.open(%{title: \"$(esc "$title")\", slug: \"$(esc "$slug")\"}) do {:ok, t} -> IO.puts(\"workline ##{t.id} #{t.slug} at #{t.stage} — folder work/#{t.slug}/\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\") end"
+    ;;
+
+  quiet)
+    # Prints only: the expression runs inside the live node, where a halt would stop the service.
+    exec "$SERVER" rpc 'case Server.Rollout.busy() do [] -> IO.puts("quiet"); b -> IO.puts("busy"); Enum.each(b, &IO.puts/1) end'
     ;;
 
   worktree)
