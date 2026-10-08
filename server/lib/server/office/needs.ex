@@ -12,7 +12,7 @@ defmodule Server.Office.Needs do
       with no reply from them since), `suggestion` (the corkboard's suggestion box), `rollout` (what a
       merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
       work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
-      is its PR waiting on GitHub's checks, not stranded).
+      is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded).
 
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
   behind it is resolved — approved, answered, filed — not when it is looked at.
@@ -172,6 +172,7 @@ defmodule Server.Office.Needs do
   defp stranded do
     for %{repo: repo, name: name, thread: t} <- Server.Maintain.Strays.worktrees(),
         not just_landed?(t),
+        not (t && landing?(t)),
         why = Server.Worktree.holds(repo, name) do
       %{
         key: "stranded:#{repo}:#{name}",
@@ -202,6 +203,16 @@ defmodule Server.Office.Needs do
   end
 
   defp just_landed?(_), do: false
+
+  @doc "Whether a landing of `thread` is queued or running in the merge queue (`Server.Jobs.Land`)."
+  def landing?(%Thread{id: id}) do
+    Repo.exists?(
+      from j in Oban.Job,
+        where:
+          j.worker == "Server.Jobs.Land" and j.state in ["available", "scheduled", "executing", "retryable"] and
+            fragment("(? ->> 'thread_id')::int = ?", j.args, ^id)
+    )
+  end
 
   defp item(kind, level, %Thread{} = t, text, at, extra \\ %{}) do
     Map.merge(
