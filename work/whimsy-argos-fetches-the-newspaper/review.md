@@ -1,14 +1,8 @@
-APPROVE — whimsy: Argos fetches the newspaper
+REQUEST_CHANGES — supersedes my earlier approve. The grader's two points both check out against the branch, and I missed them.
 
-Scope: pure office/ change (pets.ts +1 line, wide.ts step() +4/-1, one test). No server/ touch, no new Dog field — matches the three locked decisions in spec.md.
+1. Fuss/scuffle guard (office/rooms/wide.ts, step()). The paper trigger checks only `!dog.path.length`, mode, `quiet`. stepDog's own idle roll also requires `!d.fuss` and returns early on `ctx.antic` (pets.ts:148-149). Without those, Argos can be sent to the office mid-fuss or mid-scuffle. Fix: add `!this.antic && !this.dog.fuss` to the paper guard.
+2. Unrelated files on the branch. `git diff main...HEAD` includes review.md for floor-step-3-follow-ups-build-glue-teste, whimsy-birthdays-from-the-calendar-7 and whimsy-day-and-night-7 (the last records request_changes). They are other worklines' workline commits (3dbc2a4, d254dc5, 1092b15, ccba074, 20abd54), outside this PR's scope. They must not ride in on this PR. Rebase them out (or confirm they are already on main and the branch just needs a rebase onto current main), per the repo's linear-history rule.
+3. Note the else-if reorder of the muse chime in the commit message as a deliberate departure from the plan. It is needed, since otherwise muse speaking makes `quiet` false and paper never fires in the test.
+4. Optional: add a test that muse still fires when the paper roll misses.
 
-Checked by reading the diff against spec.md/plan.md:
-- ARGOS.paper: 3 canned lines, same shape as rally/muse, no {name}. As specced.
-- step(): idle chance 1/2200, guarded by !dog.path.length, not asleep, and quiet(saidUntil) — never retargets a walking dog or talks over a balloon. Reuses dogDo("office"), then overwrites the line via dogSay(paper); dogDo/stepDog untouched.
-- Test (red commit df50c38 precedes feat 19b002f) drives the room with chance≈1 and asserts mode "walk", said ∈ ARGOS.paper, and a balloon at the dog's x. Tests behavior, not just data.
-- Gate: the brief's recorded checks show `mise run check` exit 0 on this branch. I did not re-run it myself.
-
-Notes (non-blocking):
-1. Deviation from plan: the muse chime became `else if` of the new branch (plan had two independent ifs). Better — one tick can't double-write `said`.
-2. Lines say "morning"/"evening edition" with no day-gating — harmless, matches decision 2.
-3. Not verified: live rendering in the office TUI (no drive-office run by me).
+Everything else stands: the paper lines, the dogDo("office") reuse, and the red-then-green test.
