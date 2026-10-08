@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
-  canPlace, connected, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
+  canPlace, connected, gridWindow, GRID_MAX, drop, move, pickUp, place, remove, rotate, startBuild, undo, type Home, type HomeTile,
 } from "../kit/home"
 import { applyBuild, loadHome, saveHome } from "../tui/home"
 
@@ -210,5 +210,22 @@ describe("place keeps a tile's rotation when it cycles the kind", () => {
     let b = startBuild({ tiles: [{ kind: "living", at: [0, 0], rot: 90 }] })
     b = place(b)
     expect(b.home.tiles).toEqual([{ kind: "kitchen", at: [0, 0], rot: 90 }])
+  })
+})
+
+describe("gridWindow bounds the build grid", () => {
+  test("a small home is its tiles and cursor, with a cell of margin", () => {
+    const w = gridWindow({ tiles: [{ kind: "living", at: [0, 0] }, { kind: "kitchen", at: [1, 0] }] }, [1, 0])
+    expect(w).toEqual({ x0: -1, x1: 2, y0: -1, y1: 1 })
+  })
+  test("a cursor far from the origin never grows the grid past the cap, and stays inside it", () => {
+    const home: Home = { tiles: [{ kind: "living", at: [0, 0] }] }
+    for (const cur of [[500, -300], [-1000, 1000], [3, 40]] as [number, number][]) {
+      const w = gridWindow(home, cur)
+      expect(w.x1 - w.x0 + 1).toBeLessThanOrEqual(GRID_MAX[0])
+      expect(w.y1 - w.y0 + 1).toBeLessThanOrEqual(GRID_MAX[1])
+      expect(cur[0]).toBeGreaterThanOrEqual(w.x0); expect(cur[0]).toBeLessThanOrEqual(w.x1)
+      expect(cur[1]).toBeGreaterThanOrEqual(w.y0); expect(cur[1]).toBeLessThanOrEqual(w.y1)
+    }
   })
 })
