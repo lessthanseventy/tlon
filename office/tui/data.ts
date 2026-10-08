@@ -137,8 +137,9 @@ export const memory = (ws: number) => read<Memory>(`/office/memory/${ws}`)
 export const board = (ws: number) => read<BoardTicket[]>(`/office/tickets/${ws}`)
 /** a workspace's settings and repos */
 export const workspaceCard = (ws: number) => read<WorkspaceCard>(`/office/workspace/${ws}`)
-/** the office's switches, machine-wide, from the server's settings file */
-export type Settings = { banter: boolean }
+/** the running system's knobs, machine-wide, from the server's settings file; `boot` ones take on a restart */
+export type Knob = { key: string; type: "int" | "bool" | "string"; value: number | boolean | string | null; default: number | boolean | string | null; min?: number; max?: number; nullable?: boolean; boot: boolean; doc: string }
+export type Settings = { knobs: Knob[]; restart_pending: boolean }
 export const settings = () => read<Settings>("/settings")
 /** every closed thread, for the finder */
 export const history = () => read<Closed[]>("/office/history")
@@ -167,7 +168,11 @@ export const unseat = (seat: number, name: string) => send("DELETE", `letting ${
 
 export const workspaceNew = (name: string, template: string) => write(`opening ${name}`, "/workspaces", { name, template }, (j) => `opened ${j.name}`)
 export const workspaceEdit = (ws: number, patch: { type?: string; scope?: string; icon?: string }) => send("PATCH", "changing the workspace", `/workspaces/${ws}`, () => "workspace changed", patch)
-export const settingsEdit = (patch: Partial<Settings>) => send("PATCH", "changing the settings", "/settings", (j) => `banter ${j.banter ? "on" : "off"}`, patch)
+export const settingsEdit = (key: string, value: unknown) => send("PATCH", `changing ${key}`, "/settings", () => `${key} → ${value ?? "off"}`, { [key]: value })
+/** restart the server now if nothing is mid-turn, else at the first quiet moment; `force` now regardless */
+export const restart = (force = false) =>
+  write("restarting the server", "/restart", { force }, (j) => (j.scheduled ? `restart scheduled — waiting on ${j.waiting_on.length}: ${j.waiting_on.join("; ")}` : "the server is restarting"))
+export const restartCancel = () => send("DELETE", "cancelling the restart", "/restart", () => "the scheduled restart is cancelled")
 export const workspaceDelete = (ws: number) => send("DELETE", "closing the workspace", `/workspaces/${ws}`, () => "workspace closed")
 export const repoAdd = (ws: number, path: string) => write(`adding ${path}`, `/workspaces/${ws}/repos`, { path }, () => `added ${path}`)
 export const repoRemove = (id: number) => send("DELETE", "removing the repo", `/repos/${id}`, () => "repo removed")
