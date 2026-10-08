@@ -104,6 +104,7 @@ export class Sim<L extends { people: Seat[] }> {
   protected actors = new Map<string, Actor>()
   protected tick = 0
   private seeded = false
+  private lastGood: Agents | null = null
   /** an actor's current spot on the floor, by agent name — null if they aren't seated here */
   at(agent: string): Spot | null { return this.actors.get(agent)?.spot ?? null }
   /** who you are talking to, by agent name: `text` null while they think, then what they said */
@@ -343,6 +344,9 @@ export class Sim<L extends { people: Seat[] }> {
    * only then.
    */
   step(a: Agents): boolean {
+    // the channel down (a server restart) is a pause: the room carries on from the last good look
+    if (a.ok) this.lastGood = a
+    else if (this.lastGood) a = { ...this.lastGood, ok: false, note: a.note }
     this.tick++
     this.weather = a.weather ?? this.weather
     let changed = this.changed || this.tick % 4 === 0

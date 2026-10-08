@@ -162,3 +162,16 @@ describe("the cold", () => {
     expect((r.cat.path as { x: number; y: number }[]).at(-1)).toEqual({ x: 7, y: 115 })
   })
 })
+
+describe("a server restart", () => {
+  test("the channel down is a pause, not everyone walking out and back in", () => chance(0.999, () => {
+    const names = ["hronir", "yu", "ashe"], room = new WideRoom(560)
+    for (let i = 0; i < 50; i++) room.step(viewOf(office(names), 1))
+    const where = () => [...inside(room).actors.values()].map((x) => `${x.seat.agent}@${x.spotKey}:${x.leaving}`).sort()
+    const before = where()
+    for (let i = 0; i < 30; i++) room.step(viewOf({ ...EMPTY, note: "channel down" }, 1))
+    expect(where()).toEqual(before)
+    room.step(viewOf(office(names), 1))
+    expect([...inside(room).actors.values()].every((x) => !x.leaving && x.spotKey !== "")).toBe(true)
+  }))
+})
