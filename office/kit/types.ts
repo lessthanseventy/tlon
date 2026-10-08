@@ -47,8 +47,12 @@ export type Agents = {
   weather?: { kind: "clear" | "partly" | "cloudy" | "fog" | "rain" | "snow" | "storm"; temp_c: number | null; desc: string } | null
   /** the office code's revision on main: a TUI started on another offers a reload (`Server.Rollout`) */
   revs?: { office: string | null }
+  /** the server's feature flags by name (`Server.Flags`): what the office shows of work that lands dark */
+  flags?: Record<string, boolean>
   note?: string
 }
+/** a flag from the snapshot, never from anywhere else; one it doesn't name is off */
+export const flagOn = (a: Agents, name: string): boolean => a.flags?.[name] === true
 /** a thread for a close look: a page of its messages (`more`: older ones remain), and what its worker's pane shows now */
 export type ThreadView = { messages: { id: number; author: string; body: string; at: string; kind: string }[]; more?: boolean; peek: string | null; window: string | null }
 

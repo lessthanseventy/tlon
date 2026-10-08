@@ -135,6 +135,18 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  test "PATCH /api/flags/:name flips a flag; the office snapshot shows it; an unknown name is a 404" do
+    assert {200, %{"flags" => %{"build_mode" => false}}} = get_json("/api/office")
+
+    assert {200, %{"name" => "build_mode", "enabled" => true}} =
+             request_json(:patch, "/api/flags/build_mode", %{"enabled" => true})
+
+    assert {200, %{"flags" => %{"build_mode" => true}}} = get_json("/api/office")
+    assert {200, %{"enabled" => false}} = request_json(:patch, "/api/flags/build_mode", %{"enabled" => false})
+    assert {404, %{"error" => _}} = request_json(:patch, "/api/flags/nope", %{"enabled" => true})
+    assert {422, %{"error" => _}} = request_json(:patch, "/api/flags/build_mode", %{"enabled" => "yes"})
+  end
+
   test "POST /api/restart while busy schedules it, says what it waits on; DELETE drops it" do
     :ok = Server.Presence.Thinking.thinking(987_654, "hronir")
     Application.put_env(:server, :restart_run, fn _force -> :ok end)

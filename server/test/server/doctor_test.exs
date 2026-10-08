@@ -16,6 +16,7 @@ defmodule Server.DoctorTest do
                "collection",
                "event",
                "fact",
+               "fun_with_flags_toggles",
                "habit",
                "issue",
                "message",

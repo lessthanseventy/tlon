@@ -13,7 +13,7 @@ import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { shirtOf } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
-import { EMPTY, type Agents, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
+import { EMPTY, flagOn, type Agents, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
@@ -600,7 +600,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "w", label: "in-tray", run: () => open({ kind: "tray" }) }, { key: "!", label: "triage", run: () => open({ kind: "triage" }) },
         { key: "a", label: "calendar", run: () => open({ kind: "calendar" }) }, { key: "o", label: "notes", run: () => open({ kind: "notes" }) },
         { key: "b", label: "memory", run: () => open({ kind: "memory" }) }, { key: "H", label: "the rack (health)", run: () => open({ kind: "health" }) },
-        { key: "B", label: "build mode", run: () => open({ kind: "build" }) },
+        ...(flagOn(all, "build_mode") ? [{ key: "B", label: "build mode", run: () => open({ kind: "build" }) }] : []),
         { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
         { key: "q", label: "quit", run: quit },
       ]
@@ -1302,7 +1302,7 @@ function onKey(k: string) {
     case "!": return open({ kind: "triage" })
     case "H": return open({ kind: "health" })
     case "b": return open({ kind: "memory" })
-    case "B": return open({ kind: "build" })
+    case "B": if (flagOn(all, "build_mode")) open({ kind: "build" }); return
     case "W": return open({ kind: "boss" })
     case "p": room().pet(); changed(); return draw()
   }

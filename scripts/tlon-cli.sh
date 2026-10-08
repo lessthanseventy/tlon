@@ -42,6 +42,7 @@
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
+#   flag <name> on|off             turn a feature flag on or off for everyone (Server.Flags)
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
 #   releasable <sha>               the release checks on a commit (gate, smoke, quiet) and the verdict
 #   announce-restart <why…>        a notice on every thread with a live session: the server is restarting
@@ -390,6 +391,14 @@ case "$cmd" in
     exec "$SERVER" rpc "Server.Rollout.announce_restart(\"$(esc "$why")\")"
     ;;
 
+  flag)
+    name="${1:-}"; state="${2:-}"
+    { [[ "$name" =~ ^[a-z_]+$ ]] && [[ "$state" =~ ^(on|off)$ ]]; } || { echo 'usage: tlon-cli.sh flag <name> on|off' >&2; exit 2; }
+    on=false; [ "$state" = on ] && on=true
+    # Prints only: the expression runs inside the live node, where a halt would stop the service.
+    exec "$SERVER" rpc "case Server.Flags.set(\"$name\", $on) do {:ok, f} -> IO.puts(\"#{f.name} is now $state\"); {:error, why} -> IO.puts(why) end"
+    ;;
+
   quiet)
     # Prints only: the expression runs inside the live node, where a halt would stop the service.
     exec "$SERVER" rpc 'case Server.Rollout.busy() do [] -> IO.puts("quiet"); b -> IO.puts("busy"); Enum.each(b, &IO.puts/1) end'
@@ -462,7 +471,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac

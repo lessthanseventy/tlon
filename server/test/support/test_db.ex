@@ -18,6 +18,7 @@ defmodule Server.TestDB do
     # test that reads the table (all_enqueued, a JSONL export).
     "oban_jobs",
     "collection",
+    "fun_with_flags_toggles",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.
     Server.Ticket,
