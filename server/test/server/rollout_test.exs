@@ -29,6 +29,28 @@ defmodule Server.RolloutTest do
     assert sha == nil or String.length(sha) == 40
   end
 
+  describe "announce_restart/1 — the workers hear a restart" do
+    setup do
+      Server.TestDB.clean!()
+      :ok
+    end
+
+    test "every open thread with a live session gets one notice; a thread with none hears nothing" do
+      {:ok, agent} = Server.Staff.register_agent(%{name: "ireneo", mandate: "build", engine: "fresh"})
+      {:ok, live} = Server.Channel.open_thread(%{title: "live"})
+      {:ok, ended} = Server.Channel.open_thread(%{title: "ended"})
+      {:ok, _} = Server.Staff.start_session(%{agent_id: agent.id, thread_id: live.id})
+      {:ok, s} = Server.Staff.start_session(%{agent_id: agent.id, thread_id: ended.id})
+      {:ok, _} = Server.Staff.end_session(s)
+
+      :ok = Rollout.announce_restart("the operator restarted it")
+
+      assert [%{kind: "notice", author: "tlon", body: body}] = Server.Channel.thread_messages(live)
+      assert body =~ "the operator restarted it"
+      assert Server.Channel.thread_messages(ended) == []
+    end
+  end
+
   describe "busy/0 and quiet?/0 — the change window a restart waits for" do
     setup do
       Server.TestDB.clean!()

@@ -18,4 +18,7 @@ if [ "${1:-}" != "--force" ]; then
   fi
 fi
 
+# the workers hear it as a notice on their threads (it wakes nobody); a server that can't be asked is skipped
+"$cli" announce-restart "${TLON_RESTART_WHY:-the operator ran server:restart}" >/dev/null 2>&1 || true
+
 systemctl --user restart tlon && systemctl --user --no-pager status tlon | head -12

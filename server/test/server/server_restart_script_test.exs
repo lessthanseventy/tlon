@@ -16,7 +16,8 @@ defmodule Server.ServerRestartScriptTest do
 
   defp run(dir, quiet_says, args \\ []) do
     cli = Path.join(dir, "cli")
-    File.write!(cli, "#!/bin/sh\n#{quiet_says}\n")
+    announce = ~s(if [ "$1" = announce-restart ]; then echo "cli $*" >> #{dir}/ran; exit 0; fi)
+    File.write!(cli, "#!/bin/sh\n#{announce}\n#{quiet_says}\n")
     File.chmod!(cli, 0o755)
     env = [{"TLON_CLI", cli}, {"PATH", "#{dir}:#{System.get_env("PATH")}"}]
     {out, code} = System.cmd("bash", [@script | args], env: env, stderr_to_stdout: true)
@@ -26,6 +27,13 @@ defmodule Server.ServerRestartScriptTest do
   test "quiet: it restarts", %{dir: dir} do
     assert {_, 0, {:ok, ran}} = run(dir, "echo quiet")
     assert ran =~ "systemctl --user restart tlon"
+  end
+
+  test "the workers hear it first: the cli announces the restart, then it restarts", %{dir: dir} do
+    assert {_, 0, {:ok, ran}} = run(dir, "echo quiet")
+    assert [announce, restart | _status] = String.split(ran, "\n", trim: true)
+    assert announce == "cli announce-restart the operator ran server:restart"
+    assert restart =~ "restart tlon"
   end
 
   test "busy: it refuses, saying what a restart would cut off, and restarts nothing", %{dir: dir} do

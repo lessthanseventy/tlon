@@ -129,8 +129,33 @@ defmodule Server.Rollout do
         {:error, "not under systemd: run mise run server:restart"}
 
       true ->
-        run_restart(Server.Profiles.tlon_root(), if(force, do: ["--", "--force"], else: []))
+        run_restart(Server.Profiles.tlon_root(), "the operator asked", if(force, do: ["--", "--force"], else: []))
     end
+  end
+
+  @doc """
+  Tell every open thread with a live session that the server is restarting (`why` says who asked),
+  as a `notice`: it wakes nobody, so announcing a restart never makes anyone busy. `:ok`.
+  `scripts/server-restart.sh` calls it (`tlon-cli announce-restart`), the one door every restart takes.
+  """
+  def announce_restart(why) do
+    threads =
+      Server.Repo.all(
+        from t in Server.Thread,
+          join: s in Server.Session,
+          on: s.thread_id == t.id and is_nil(s.ended_at),
+          where: t.state == "open",
+          distinct: true,
+          select: t.id
+      )
+
+    body =
+      "⟳ the server is restarting (#{why}). A tool call in the next minute may fail: retry it, and don't read it as the server being down."
+
+    for tid <- threads,
+        do: {:ok, _} = Server.Channel.post(%{thread_id: tid, author: "tlon", body: body, kind: "notice"})
+
+    :ok
   end
 
   defp restart_server(repo, tid) do
@@ -152,20 +177,27 @@ defmodule Server.Rollout do
         "⟳ the server restart is still waiting — someone has been mid-turn for ten minutes; run mise run server:restart when it suits"
     })
 
-    run_restart(repo)
+    run_restart(repo, "a merge changed the server")
   end
 
   defp restart_when_quiet(repo, tid, tries) do
     if quiet?() do
-      run_restart(repo)
+      run_restart(repo, "a merge changed the server")
     else
       Process.sleep(@quiet_poll_ms)
       restart_when_quiet(repo, tid, tries - 1)
     end
   end
 
-  defp run_restart(repo, extra \\ []) do
-    env = for var <- ["PATH", "HOME", "XDG_RUNTIME_DIR"], v = System.get_env(var), do: ["-E", "#{var}=#{v}"]
+  defp run_restart(repo, why, extra \\ []) do
+    env =
+      Enum.map(
+        [
+          {"TLON_RESTART_WHY", why}
+          | for(var <- ["PATH", "HOME", "XDG_RUNTIME_DIR"], v = System.get_env(var), do: {var, v})
+        ],
+        fn {var, v} -> ["-E", "#{var}=#{v}"] end
+      )
 
     args =
       [
