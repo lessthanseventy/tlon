@@ -36,8 +36,16 @@ defmodule Server.Tmux do
     runner = Keyword.get_lazy(opts, :runner, fn -> Application.get_env(:server, :tmux_cmd, &System.cmd/3) end)
 
     if "new-session" in args and scoped?(),
-      do: runner.("systemd-run", scope_args(id) ++ ["tmux" | argv(id, args)], stderr_to_stdout: true),
-      else: runner.("tmux", argv(id, args), stderr_to_stdout: true)
+      do: call(runner, "systemd-run", scope_args(id) ++ ["tmux" | argv(id, args)]),
+      else: call(runner, "tmux", argv(id, args))
+  end
+
+  # a binary missing from the service's PATH (System.cmd raises :enoent) is a fault like any other:
+  # a value, so the office snapshot and the switchboard that read tmux never fall over on it
+  defp call(runner, cmd, args) do
+    runner.(cmd, args, stderr_to_stdout: true)
+  rescue
+    e in ErlangError -> {"#{cmd} not found or not runnable (#{inspect(e.original)})", 127}
   end
 
   # A command that may start a workspace's tmux server runs it in a systemd scope of its own when

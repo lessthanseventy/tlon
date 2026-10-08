@@ -38,7 +38,7 @@ defmodule Server.Switchboard.Runner do
     # honestly (§8) if the schema is behind, or the message table may not exist and
     # we would crash-loop the supervisor.
     case Doctor.pending() do
-      [] -> Switchboard.drain()
+      [] -> safely("drain", fn -> Switchboard.drain() end)
       pending -> Logger.warning("switchboard idle: #{length(pending)} pending migration(s)")
     end
 
@@ -47,11 +47,19 @@ defmodule Server.Switchboard.Runner do
 
   @impl true
   def handle_info({:message_posted, message}, state) do
-    Switchboard.deliver(message)
+    safely("deliver", fn -> Switchboard.deliver(message) end)
     {:noreply, state}
   end
 
   # A long-lived subscriber must not crash on a stray message (a late monitor,
   # a library info): ignore anything we do not handle.
   def handle_info(_msg, state), do: {:noreply, state}
+
+  # a delivery that raises would crash this process, and its restart re-drains the same message: a
+  # crash loop past the supervisor's limit takes the whole application down with it
+  defp safely(what, fun) do
+    fun.()
+  rescue
+    e -> Logger.error("switchboard #{what} failed: #{Exception.message(e)}")
+  end
 end

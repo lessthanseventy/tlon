@@ -59,7 +59,11 @@ defmodule Server.Schedule do
         cs
 
       {c, nil} ->
-        if match?({:ok, _}, Oban.Cron.Expression.parse(c)), do: cs, else: add_error(cs, :cron, "not a cron: #{c}")
+        case Oban.Cron.Expression.parse(c) do
+          {:ok, %{reboot?: true}} -> add_error(cs, :cron, "needs a next time: @reboot has none")
+          {:ok, _} -> cs
+          _ -> add_error(cs, :cron, "not a cron: #{c}")
+        end
     end
   end
 end

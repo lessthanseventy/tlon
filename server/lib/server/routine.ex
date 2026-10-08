@@ -53,9 +53,11 @@ defmodule Server.Routine do
         cs
 
       every ->
-        if match?({:ok, _}, Oban.Cron.Expression.parse(every)),
-          do: cs,
-          else: add_error(cs, :every, "not a cron: #{every}")
+        case Oban.Cron.Expression.parse(every) do
+          {:ok, %{reboot?: true}} -> add_error(cs, :every, "needs a next time: @reboot has none")
+          {:ok, _} -> cs
+          _ -> add_error(cs, :every, "not a cron: #{every}")
+        end
     end
   end
 end
