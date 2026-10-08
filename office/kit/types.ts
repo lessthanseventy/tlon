@@ -5,6 +5,9 @@
 export type Due = { routine_id: number; title: string; due_at: string; window_remaining: number }
 /** a workspace's life summary on the snapshot (`Server.Life.status`, trimmed); full detail is `GET /api/life/:ws` */
 export type LifeSummary = { level: number; xp: number; due: Due[] }
+export type LifeQuest = { id: number; title: string; due_at: string | null; xp: number }
+/** `GET /api/life/:ws`: a home workspace's life card body */
+export type LifeStatus = { xp: number; level: number; next_level_at: number; streaks: Record<string, number>; due: Due[]; quests: LifeQuest[]; today: { routine_id: number; title: string; due_at: string; done: boolean }[] }
 
 /** `prompt`: its coworker is sitting on a dialog (Server.Attention) — the ask, answered from the thread */
 /** `lead`: who it is staffed with; `live`: a tmux window is running it; `standing`: its workspace's lobby; `thinking`: who is mid-turn on it */

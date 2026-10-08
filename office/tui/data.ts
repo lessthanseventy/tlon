@@ -1,7 +1,7 @@
 // The TUI's line to the server: the operator API over loopback HTTP (Server.MCP.OperatorAPI) — the
 // always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
 // beside it: a compiled TUI runs anywhere the server answers.
-import { EMPTY, type Agents, type CorkNote, type ThreadView } from "../kit/types"
+import { EMPTY, type Agents, type CorkNote, type LifeStatus, type ThreadView } from "../kit/types"
 import type { Target } from "./terminal"
 
 // read per call, not at load: a test (or a relaunch) that points TLON_URL elsewhere is believed
@@ -116,6 +116,17 @@ export async function page(id: number, before: number): Promise<ThreadView | nul
 async function read<T>(path: string): Promise<T | null> {
   try { const r = await call("GET", path); return r.status === 200 ? r.json : null } catch { return null }
 }
+/** a home workspace's life card body */
+export const life = (ws: number) => read<LifeStatus>(`/life/${ws}`)
+/** stamp a routine done; says so, and shouts a level-up */
+export const routineDone = (id: number, title: string) =>
+  write(`stamping ${title}`, `/life/routines/${id}/done`, {}, (j) => `${title} done${j.level_up ? " — level up!" : ""}`)
+export const questDone = (id: number, title: string) =>
+  write(`finishing ${title}`, `/life/quests/${id}/done`, {}, (j) => `${title} done${j.level_up ? " — level up!" : ""}`)
+export const routineNew = (ws: number, title: string, every: string) =>
+  write("adding the routine", `/life/${ws}/routines`, { title, every }, (j) => `added ${j.title}`)
+export const questNew = (ws: number, title: string) =>
+  write("adding the quest", `/life/${ws}/quests`, { title }, (j) => `added ${j.title}`)
 export type Activity = { kind: string; at: string; thread_id: number | null; who: string | null; text: string }[]
 export type Capped<T> = { shown: T[]; more: number }
 export type Stuck = { thread_id: number; title: string; text: string }
