@@ -27,7 +27,8 @@ defmodule Server.ReleaseScriptTest do
     git config user.email t@t && git config user.name t &&
     git add -A && git commit -qm one && git branch -M main && git push -q origin main &&
     git commit -q --allow-empty -m two && git push -q origin main &&
-    git checkout -qb side && git commit -q --allow-empty -m unmerged && git checkout -q main
+    git checkout -qb side && git commit -q --allow-empty -m unmerged && git checkout -q main &&
+    git branch release/pointer
     """)
 
     %{repo: repo, bin: bin}
@@ -48,14 +49,14 @@ defmodule Server.ReleaseScriptTest do
   test "a cut to a commit not on origin/main is refused", ctx do
     assert {out, 1} = release(ctx, ["cut", rev(ctx.repo, "side")])
     assert out =~ "not on origin/main"
-    assert {_, 1} = System.cmd("git", ["-C", ctx.repo, "rev-parse", "-q", "--verify", "refs/heads/release"])
+    assert {_, 1} = System.cmd("git", ["-C", ctx.repo, "rev-parse", "-q", "--verify", "refs/heads/live"])
   end
 
   test "a cut moves release forward, checks .release out at it, and asks for a restart", ctx do
     assert {out, 0} = release(ctx, ["cut", rev(ctx.repo, "main~1")])
     assert out =~ "restart:"
     assert {_, 0} = release(ctx, ["cut"])
-    assert rev(ctx.repo, "release") == rev(ctx.repo, "origin/main")
+    assert rev(ctx.repo, "live") == rev(ctx.repo, "origin/main")
     assert rev(Path.join(ctx.repo, ".release"), "HEAD") == rev(ctx.repo, "origin/main")
   end
 
@@ -64,7 +65,7 @@ defmodule Server.ReleaseScriptTest do
     assert {out, 1} = release(ctx, ["cut", rev(ctx.repo, "main~1")])
     assert out =~ "--rollback"
     assert {_, 0} = release(ctx, ["cut", rev(ctx.repo, "main~1"), "--rollback"])
-    assert rev(ctx.repo, "release") == rev(ctx.repo, "main~1")
+    assert rev(ctx.repo, "live") == rev(ctx.repo, "main~1")
   end
 
   test "status names what main has that the release doesn't", ctx do

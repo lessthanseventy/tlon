@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# The release pointer (pm-and-release design §3): `refs/heads/release` is what the always-up service
+# The release pointer (pm-and-release design §3): `refs/heads/live` is what the always-up service
 # runs, built in the `.release` checkout beside the main one. Merging to main no longer deploys;
 # moving this pointer does.
 #
-#   release.sh cut [<commit>] [--rollback]   move release to <commit> (default origin/main): only a
+#   release.sh cut [<commit>] [--rollback]   move live to <commit> (default origin/main): only a
 #                                            fast-forward, only onto a commit on origin/main;
 #                                            --rollback allows going back to an older one
 #   release.sh status                        what runs, what main has that it doesn't
 #   release.sh build                         build .release at the current release (server:release;
 #                                            a first install starts the pointer at origin/main)
 #
-# A cut moves the ref, pushes it, checks .release out at it, builds the release there, and asks
+# The ref is `live`, not `release`: branches named release/* (here and on GitHub) rule a bare
+# `release` branch out. A cut moves the ref, pushes it, checks .release out at it, builds the release there, and asks
 # the running server for a quiet restart (it drains first); a server that can't be asked is
 # restarted outright — down is what needs it. Plain git and the server's own door, so it works at
 # 2am with the service down.
@@ -35,7 +36,7 @@ cmd="${1:-status}"; shift || true
 case "$cmd" in
   status)
     git fetch -q origin 2>/dev/null
-    cur="$(git rev-parse -q --verify refs/heads/release)" || { echo "no release cut yet — mise run release:cut"; exit 0; }
+    cur="$(git rev-parse -q --verify refs/heads/live)" || { echo "no release cut yet — mise run release:cut"; exit 0; }
     main="$(git rev-parse origin/main)"
     echo "release   $(git log -1 --format='%h %s' "$cur")"
     echo "main      $(git log -1 --format='%h %s' "$main")"
@@ -51,14 +52,14 @@ case "$cmd" in
     to="$(git rev-parse -q --verify "${target:-origin/main}^{commit}")" || { echo "release: no commit ${target}" >&2; exit 1; }
     git merge-base --is-ancestor "$to" origin/main ||
       { echo "release refused: ${to:0:7} is not on origin/main — only merged work ships" >&2; exit 1; }
-    from="$(git rev-parse -q --verify refs/heads/release)"
+    from="$(git rev-parse -q --verify refs/heads/live)"
     if [ -n "$from" ] && [ -z "$rollback" ] && ! git merge-base --is-ancestor "$from" "$to"; then
       echo "release refused: ${to:0:7} is behind or beside the current release ${from:0:7} — a rollback is --rollback" >&2
       exit 1
     fi
 
-    git branch -f release "$to" || exit 1
-    git push -q ${rollback:+--force} origin release 2>/dev/null || echo "release: moved here; the push to origin failed (pushed next cut)" >&2
+    git branch -f live "$to" || exit 1
+    git push -q ${rollback:+--force} origin live 2>/dev/null || echo "release: moved here; the push to origin failed (pushed next cut)" >&2
 
     build_at "$to" || exit 1
 
@@ -74,9 +75,9 @@ case "$cmd" in
     ;;
 
   build)
-    cur="$(git rev-parse -q --verify refs/heads/release)" || {
+    cur="$(git rev-parse -q --verify refs/heads/live)" || {
       git fetch -q origin 2>/dev/null
-      cur="$(git rev-parse origin/main)" && git branch -f release "$cur"
+      cur="$(git rev-parse origin/main)" && git branch -f live "$cur"
     }
     build_at "$cur"
     ;;
