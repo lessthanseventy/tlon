@@ -141,7 +141,11 @@ defmodule Server.Rollout do
 
   @doc "Drop a scheduled restart. `:ok` whether or not one was."
   def cancel_restart do
-    with pid when is_pid(pid) <- Process.whereis(@waiter), do: Process.exit(pid, :kill)
+    with pid when is_pid(pid) <- Process.whereis(@waiter) do
+      Process.exit(pid, :kill)
+      pause_gates(:resume_queue)
+    end
+
     :ok
   end
 
@@ -245,6 +249,7 @@ defmodule Server.Rollout do
 
       try do
         Process.register(pid, @waiter)
+        pause_gates(:pause_queue)
         send(pid, :go)
       rescue
         ArgumentError -> Process.exit(pid, :kill)
@@ -271,4 +276,14 @@ defmodule Server.Rollout do
 
   defp force_args(true), do: ["--", "--force"]
   defp force_args(false), do: []
+
+  # no new verify or landing starts while a restart waits for the ones running to finish; a boot
+  # starts its queues unpaused. Best-effort: a node without those queues running (a test) is a no-op.
+  defp pause_gates(verb) do
+    for q <- [:verify, :landing], do: apply(Oban, verb, [[queue: q]])
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
 end
