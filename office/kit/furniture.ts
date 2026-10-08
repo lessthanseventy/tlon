@@ -82,6 +82,7 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
     sc.px(sx - 7, d.y + 1, 14, 16, ROLE.structure); sc.px(sx - 6, d.y + 2, 12, 14, ROLE.borderInactive)
     sc.px(sx - 7, d.y + 1, 14, 1, ROLE.body)
   })
+  sc.lamps.push([d.x + d.w - 5, d.y + 15])
   sc.item(d.y + 31, () => {
     for (const mx of [sx - 14, sx + 4]) { sc.px(mx, d.y + 11, 10, 7, ROLE.inactive); sc.px(mx + 1, d.y + 12, 8, 5, ROLE.edge); sc.px(mx + 4, d.y + 18, 2, 1, ROLE.inactive) }
     sc.px(d.x + 1, d.y + 19, d.w - 2, 2, ROLE.structure)
@@ -89,7 +90,6 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
     sc.px(d.x + 2, d.y + 22, d.w - 4, 9, ROLE.borderInactive)
     sc.px(d.x + 8, d.y + 25, 4, 1, ROLE.body); sc.px(d.x + d.w - 12, d.y + 25, 4, 1, ROLE.body)
     sc.blit(["sss.", ".s..", ".s..", "ooo."], d.x + d.w - 6, d.y + 15, { s: ROLE.body, o: ROLE.inactive })
-    sc.lamps.push([d.x + d.w - 5, d.y + 15])
     const th = threadOf(d.seat.thread_id)
     if (d.kind === "manager") {
       const routed = a.tickets.filter((x) => x.routed).length

@@ -159,6 +159,16 @@ describe("the wide room", () => {
     expect(tip({})).not.toContain("scheduled")
   })
 
+  test("at night every lamp is registered before the glow is painted: lounge, manager and lead desks", () => {
+    const room = new WideRoom(560), a = viewOf(office(3), 1), seen: number[] = []
+    const r = room as unknown as { nightfall: (sc: { lamps: unknown[] }, now: Date) => void }
+    const real = r.nightfall.bind(room)
+    r.nightfall = (sc, now) => { seen.push(sc.lamps.length); real(sc, now) }
+    for (let i = 0; i < 300; i++) room.step(a)
+    room.render(a, focus, measure, new Date(2026, 9, 5, 3, 0))
+    expect(seen).toEqual([3])
+  })
+
   test("a full office of ten seats everyone, each at their own place", () => {
     const room = new WideRoom(560), a = viewOf(office(8), 1)
     for (let i = 0; i < 400; i++) room.step(a)
