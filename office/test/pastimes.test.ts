@@ -78,8 +78,11 @@ describe("the date", () => {
 })
 
 describe("the weather", () => {
+  // one room for every frame: a room's first render is most of the cost, and eight under a loaded
+  // gate ran past bun's 5 s timeout
+  let shared: WideRoom | null = null
   const draw = (weather: Agents["weather"], hour: number) => {
-    const room = new WideRoom(560), a = viewOf({ ...office(["hronir"]), weather }, 1)
+    const room = (shared ??= new WideRoom(560)), a = viewOf({ ...office(["hronir"]), weather }, 1)
     room.step(a)
     return room.render(a, { picked: null, armed: null, person: null }, (s) => s.length * 2, new Date(2026, 2, 6, hour, 0))
   }
