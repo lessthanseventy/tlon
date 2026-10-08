@@ -9,6 +9,7 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
+import { resolvePets, type Pets } from "../kit/pets"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build, type HomeTile } from "../kit/home"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
@@ -23,6 +24,7 @@ import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
 import { loadHome, saveHome } from "./home"
+import { loadPets, PETS_PATH } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader } from "./reader"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
@@ -124,7 +126,7 @@ const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
   return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])) }
 }
-const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); return r }
+const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); if (petsNow) r.setPets(petsNow) } return r }
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
 const wsName = (id = ws) => all.workspaces.find((w) => w.id === id)?.name ?? "—"
 const unread = () => feed.filter((x) => x.at > trayRead && x.who !== OPERATOR).length
@@ -151,6 +153,24 @@ function followLooks(): boolean {
     if (seen === looksSeen) return false
     looksSeen = seen
     useLookOverrides(JSON.parse(readFileSync(real, "utf8")) as Record<string, LookOverride>)
+    return true
+  } catch { return false }
+}
+
+let petsSeen = "", petsNow: Pets | null = null
+/**
+ * take pets.json if it changed since last look; true when it did. With no file the Sim keeps its
+ * unset temperament, so today's room is unchanged byte for byte (the `classic` preset is not neutral).
+ */
+function followPets(): boolean {
+  try {
+    const real = realpathSync(PETS_PATH), seen = `${real}@${statSync(real).mtimeMs}`
+    if (seen === petsSeen) return false
+    petsSeen = seen
+    const file = loadPets(real)
+    if (!file) return false
+    petsNow = resolvePets(file)
+    for (const r of rooms.values()) r.setPets(petsNow)
     return true
   } catch { return false }
 }
@@ -1620,6 +1640,7 @@ async function main() {
   if (!process.stdin.isTTY) { console.error("office: needs a terminal"); process.exit(1) }
   followPalette()
   followLooks()
+  followPets()
   enter()
   process.on("uncaughtException", (e) => { leave(); console.error(e); process.exit(1) })
   let pending = "", detected = false
@@ -1652,7 +1673,7 @@ async function main() {
   await refresh()
   setInterval(refresh, 10_000)
   setInterval(pollPlayer, 2000)
-  setInterval(() => { if (followPalette() || followLooks()) { frame = null; draw() } }, 1000)
+  setInterval(() => { if (followPalette() || followLooks() || followPets()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0

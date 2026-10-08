@@ -5,7 +5,8 @@
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { asksYou } from "./crew"
 import { looksGen, overrideFor } from "./looks"
-import { lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
+import type { Pets } from "./pets"
+import { CAT_NAME, lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, type Dest, type Temperament } from "./temperament"
@@ -38,7 +39,7 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
  * is saying, from `saidFrom` until `saidUntil`; `stretch`: the tick her wake-up stretch ends; `fuss`: a worker making
  * a fuss of her, from where they are
  */
-export type Cat = { x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" } | null }
+export type Cat = { name: string; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" } | null }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
@@ -107,6 +108,8 @@ export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
   protected temperament: Temperament = { warmth: 0, wits: 0, energy: 0 }
   setTemperament(t: Temperament) { this.temperament = t }
+  /** pets.json, resolved: the cat slot's name and temperament */
+  setPets(p: Pets) { this.cat.name = p.cat.name; this.setTemperament(p.cat.temperament) }
   protected actors = new Map<string, Actor>()
   protected tick = 0
   private seeded = false
@@ -141,7 +144,7 @@ export class Sim<L extends { people: Seat[] }> {
   protected warmTicks = WARM_TICKS
 
   constructor(protected plan: Plan<L>) {
-    this.cat = { ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null }
+    this.cat = { name: CAT_NAME, ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null }
   }
 
   /** a click on Nina: she purrs for a few seconds, and wakes (with a stretch) if she was asleep */
@@ -178,7 +181,7 @@ export class Sim<L extends { people: Seat[] }> {
    * it is about.
    */
   protected line(pet: string, occasion: string, canned: readonly string[], name = "", parts?: Parameters<typeof riff>[0]) {
-    if (pet === "Nina" && canned === (NINA as Record<string, readonly string[]>)[occasion]) canned = bucketFor(occasion, this.temperament, Math.random)
+    if (pet === "Nina" && canned === (NINA as Record<string, unknown>)[occasion]) canned = bucketFor(occasion, this.temperament, Math.random)
     const fresh = this.voices[pet]?.[occasion] ?? [], unsaid = fresh.filter((l) => !this.spoken.has(l))
     const l = unsaid.length ? pick(unsaid)
       : parts && Math.random() < 0.5 ? riff(parts)

@@ -100,3 +100,14 @@ describe("Nina's voice follows her warmth", () => {
     expect(NINA.pet).toContain(said())
   })
 })
+
+describe("setPets", () => {
+  test("the cat slot takes the file's name and temperament", async () => {
+    const { resolvePets, TEMPERAMENTS } = await import("../kit/pets")
+    const room = new WideRoom(560), w = room as unknown as { cat: { name: string }; temperament: unknown }
+    expect(w.cat.name).toBe("Nina")
+    room.setPets(resolvePets({ cat: { name: "Mimi", temperament: "zen" } }))
+    expect(w.cat.name).toBe("Mimi")
+    expect(w.temperament).toEqual(TEMPERAMENTS.zen)
+  })
+})
