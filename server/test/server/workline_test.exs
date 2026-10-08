@@ -731,4 +731,74 @@ defmodule Server.WorklineTest do
       assert tracked.slug == "thread-#{plain.id}"
     end
   end
+
+  describe "the approval record, and reopen/1" do
+    setup do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      repo = Path.join(System.tmp_dir!(), "approval-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+      git!(repo, ["init", "-q", "-b", "main"])
+      git!(repo, ["commit", "-q", "--allow-empty", "-m", "seed"])
+      git!(repo, ["branch", "work/lamp"])
+      Application.put_env(:server, :workline_root, repo)
+
+      on_exit(fn ->
+        Application.delete_env(:server, :workline_root)
+        File.rm_rf!(repo)
+      end)
+
+      %{repo: repo}
+    end
+
+    defp git!(repo, args) do
+      {out, 0} =
+        System.cmd("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true)
+
+      out
+    end
+
+    defp head(repo), do: repo |> git!(["rev-parse", "work/lamp"]) |> String.trim()
+
+    defp queued_lamp! do
+      thread = open!(%{slug: "lamp", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+      {:ok, queued} = Workline.approve(parked, artifacts: AllPresent, land: :queue)
+      queued
+    end
+
+    test "approving into the merge queue records who and the branch commit; a closed thread's turn lands nothing and says so; reopen re-queues it",
+         %{repo: repo} do
+      queued = queued_lamp!()
+      sha = head(repo)
+      assert %{"by" => "andrew", "sha" => ^sha} = Workline.approval(queued)
+
+      {:ok, closed} = Channel.close_thread(queued)
+      assert {:ok, _} = Workline.land_queued(Repo.get!(Server.Thread, closed.id), merge: Merges)
+      assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "closed" and &1.body =~ "reopen #{queued.id}"))
+
+      Repo.update_all(Oban.Job, set: [state: "completed"])
+      assert {:ok, %{state: "open", stage: "review", awaiting: nil}} = Workline.reopen(closed)
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: queued.id})
+    end
+
+    test "a branch that moved since the approval voids it: reopen opens the thread and queues nothing", %{repo: repo} do
+      queued = queued_lamp!()
+
+      git!(repo, ["commit", "-q", "--allow-empty", "-m", "more"])
+      git!(repo, ["branch", "-f", "work/lamp", "HEAD"])
+      assert Workline.approval(queued) == nil
+
+      {:ok, closed} = Channel.close_thread(queued)
+      Repo.update_all(Oban.Job, set: [state: "completed"])
+      assert {:ok, %{state: "open", stage: "review"}} = Workline.reopen(closed)
+      refute_enqueued(worker: Server.Jobs.Land)
+      assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "no approval stands"))
+    end
+
+    test "a thread that isn't a workline just reopens" do
+      {:ok, t} = Channel.open_thread(%{title: "chat"})
+      {:ok, closed} = Channel.close_thread(t)
+      assert {:ok, %{state: "open"}} = Workline.reopen(closed)
+    end
+  end
 end
