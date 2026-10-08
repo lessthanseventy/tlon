@@ -11,7 +11,9 @@ set -uo pipefail
 tid="${1:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
 slug="${2:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+# the main checkout, even when this copy runs inside a worktree: its scripts and server are the ones
+# that answer, and a worktree's own root would resolve the thread's checkout under itself
+root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 cli="$root/scripts/tlon-cli.sh"
 # WORKLINE_GATE=1: the merge queue's gate (Server.Jobs.Land) — the same check and evidence, but it
 # never advances and posts nothing; it says what broke on stdout and the landing tells the thread
