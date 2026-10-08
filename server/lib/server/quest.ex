@@ -25,6 +25,7 @@ defmodule Server.Quest do
     %__MODULE__{}
     |> cast(attrs, [:workspace_id | @mutable])
     |> validate_required([:workspace_id, :title])
+    |> validate_number(:xp, greater_than_or_equal_to: 0)
     |> foreign_key_constraint(:workspace_id)
     |> put_change(:created_at, now)
     |> put_change(:updated_at, now)

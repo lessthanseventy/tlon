@@ -30,6 +30,8 @@ defmodule Server.Routine do
     |> cast(attrs, [:workspace_id | @mutable])
     |> validate_required([:workspace_id, :title, :every])
     |> validate_every()
+    |> validate_number(:xp, greater_than_or_equal_to: 0)
+    |> validate_number(:window_minutes, greater_than_or_equal_to: 0)
     |> foreign_key_constraint(:workspace_id)
     |> put_change(:created_at, now)
     |> put_change(:updated_at, now)
@@ -40,6 +42,8 @@ defmodule Server.Routine do
     |> cast(attrs, @mutable)
     |> validate_required([:title, :every])
     |> validate_every()
+    |> validate_number(:xp, greater_than_or_equal_to: 0)
+    |> validate_number(:window_minutes, greater_than_or_equal_to: 0)
     |> put_change(:updated_at, DateTime.truncate(DateTime.utc_now(), :second))
   end
 
