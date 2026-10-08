@@ -111,3 +111,18 @@ describe("setPets", () => {
     expect(w.temperament).toEqual(TEMPERAMENTS.zen)
   })
 })
+
+describe("a bird in the cat's slot", () => {
+  test("at the same 0.5 roll she goes to a perch, not the desk", async () => {
+    const { resolvePets } = await import("../kit/pets")
+    const room = new WideRoom(560), real = Math.random
+    type W = { cat: { path: { x: number; y: number }[]; species: string }; plan: { cat: { perches: { x: number; y: number }[] } } }
+    const w = room as unknown as W
+    room.setPets(resolvePets({ cat: { species: "bird", temperament: { warmth: 0, wits: 0, energy: 0 } } }))
+    expect(w.cat.species).toBe("bird")
+    Math.random = () => 0.5
+    try { for (let i = 0; i < 400 && !w.cat.path.length; i++) room.step(viewOf(office(), 1)) } finally { Math.random = real }
+    const to = w.cat.path.at(-1)!
+    expect(w.plan.cat.perches.some((p) => p.x === to.x && p.y === to.y)).toBe(true)
+  })
+})

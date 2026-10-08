@@ -5,7 +5,7 @@ import { Canvas, balloonLines, type Frame, type Hit, type Ink } from "./canvas"
 import { tipOf, type BoardCtx } from "./crew"
 import { ROLE, tint } from "./palette"
 import { FUSS, type Actor, type Cat, type Fussing } from "./sim"
-import { ACTIVITY, ARROW, BUBBLE, CAT, figure, GLYPH, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
+import { ACTIVITY, ARROW, BUBBLE, SPECIES_ART, figure, GLYPH, paints, PLANE, shirtOf, THOUGHT, type Dir } from "./sprites"
 import type { Agents } from "./types"
 
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
@@ -173,7 +173,7 @@ export function dancing(mode: string, fuss: Fussing | null, bpm: number | null):
 
 /** Nina, with a light rim so a black cat reads on any floor; `over` is the depth to draw her at when she is up on furniture */
 export function drawCat(sc: Scene, c: Cat, over: number | null, bpm: number | null) {
-  const f = sc.f
+  const f = sc.f, CAT = SPECIES_ART[c.species]
   const grooming = c.mode === "sit" && (f + c.until) % 30 < 6
   const dance = dancing(c.mode, c.fuss, bpm)
   const phase = dance ? Math.floor((sc.tick * bpm!) / 300) % 2 : 0

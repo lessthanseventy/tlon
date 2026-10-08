@@ -1111,6 +1111,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         const rows: Row[] = [
           { segs: [plain("your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.")] },
           { segs: [dim("name".padEnd(12)), plain(draft.name)] },
+          row("species", draft.species, () => { draft.species = cycleVal(["cat", "rabbit", "bird"] as const, draft.species as "cat") }),
           row("temperament", named ?? "custom", () => { const names = Object.keys(TEMPERAMENTS); draft.temperament = { ...TEMPERAMENTS[names[(names.indexOf(named ?? "") + 1) % names.length]!]! } }),
           ...AXES.map((a) => row(a, dots(draft.temperament[a]), () => { draft.temperament[a] = cycleAxis(draft.temperament[a]) })),
           { segs: [dim("preview".padEnd(12)), plain(`${{ sleep: "z", sit: "·", play: "o", walk: ">" }[beat.mode]} ${beat.line}`)] },
@@ -1118,7 +1119,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         return {
           title: `${draft.name.toUpperCase()}`, rows,
           actions: [
-            { key: "S", label: "save her temperament", run: () => { savePets({ cat: { temperament: named ?? { ...draft.temperament } } }); petsSeen = ""; followPets(); back(); roomChanged = true; draw() } },
+            { key: "S", label: "save her temperament", run: () => { savePets({ cat: { species: draft.species, temperament: named ?? { ...draft.temperament } } }); petsSeen = ""; followPets(); back(); roomChanged = true; draw() } },
             { key: "p", label: "pat her", run: doIt(() => r.pet()) },
             { key: "z", label: "the zoomies", run: doIt(() => r.catDo("zoomies")) },
             { key: "y", label: "play with the yarn", run: doIt(() => r.catDo("play")) },

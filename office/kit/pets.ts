@@ -196,7 +196,9 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
   if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
 }
 
-export const SPECIES = ["cat", "dog"] as const
+export const SPECIES = ["cat", "dog", "rabbit", "bird"] as const
+/** what each slot may hold: the cat slot is the room's cat-family pet */
+const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird"], dog: ["dog"] } as const
 /** grows with the roster, never ahead of it */
 export type Species = (typeof SPECIES)[number]
 export type PetSetting = { name: string; species: Species; temperament: Temperament }
@@ -219,7 +221,7 @@ export const DEFAULT_PETS: Pets = {
 }
 export const PRESETS: Record<string, Pets> = { "nina-and-argos": DEFAULT_PETS }
 
-function resolveSlot(base: PetSetting, f: SlotFile | undefined): PetSetting {
+function resolveSlot(slot: keyof typeof SLOT_SPECIES, base: PetSetting, f: SlotFile | undefined): PetSetting {
   if (!f || typeof f !== "object") return base
   const t = f.temperament
   const temperament = typeof t === "string" ? (TEMPERAMENTS[t] ?? base.temperament)
@@ -227,7 +229,7 @@ function resolveSlot(base: PetSetting, f: SlotFile | undefined): PetSetting {
     : base.temperament
   return {
     name: typeof f.name === "string" && f.name.trim() ? f.name.trim() : base.name,
-    species: SPECIES.includes(f.species as Species) ? f.species! : base.species,
+    species: (SLOT_SPECIES[slot] as readonly string[]).includes(f.species as string) ? f.species! : base.species,
     temperament,
   }
 }
@@ -235,7 +237,7 @@ function resolveSlot(base: PetSetting, f: SlotFile | undefined): PetSetting {
 /** a preset plus the file's overrides: only what the file names changes */
 export function resolvePets(f: PetsFile | undefined): Pets {
   const base = PRESETS[f?.preset ?? ""] ?? DEFAULT_PETS
-  return { cat: resolveSlot(base.cat, f?.cat), dog: resolveSlot(base.dog, f?.dog) }
+  return { cat: resolveSlot("cat", base.cat, f?.cat), dog: resolveSlot("dog", base.dog, f?.dog) }
 }
 
 /** an axis, -2..2, as a position among five dots */
@@ -251,3 +253,6 @@ export function previewOf(s: PetSetting, tick: number): { mode: "sleep" | "sit" 
   const bucket = bucketFor(slot % 2 ? "pet" : "muse", s.temperament, r)
   return { mode, line: bucket[Math.floor(r() * bucket.length)]!.replaceAll("{name}", "you") }
 }
+
+export { speciesBase } from "./temperament"
+export { SPECIES_VOICE } from "./voices"

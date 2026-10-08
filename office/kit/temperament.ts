@@ -30,3 +30,10 @@ export function pickDest(t: Temperament, r: number, base?: Record<Dest, number>)
   for (const d of Object.keys(w) as Dest[]) { acc += w[d]; if (r < acc) return d }
   return "spot"
 }
+
+/** where each cat-slot species spends its day; every weight stays above 0 (`destWeights` scales, never adds) */
+const SPECIES_BASE: Record<"rabbit" | "bird", Record<Dest, number>> = {
+  rabbit: { nap: 0.3, play: 0.2, spot: 0.25, desk: 0.1, litter: 0.1, perch: 0.05 },
+  bird: { perch: 0.5, nap: 0.15, spot: 0.15, play: 0.1, desk: 0.05, litter: 0.05 },
+}
+export const speciesBase = (sp: string): Record<Dest, number> => (sp === "rabbit" || sp === "bird" ? SPECIES_BASE[sp] : CAT_BASE)
