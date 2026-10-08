@@ -60,7 +60,7 @@ defmodule Server.Workline.Continuation do
     case Workline.owed_status(thread, opts) do
       {:error, why} ->
         {:nudge, why,
-         "its owed artifact is not there: #{why}. #{land(thread.stage)}, or post on the thread why you cannot."}
+         "its owed artifact is not there: #{why}. #{land(thread, opts)}, or post on the thread why you cannot."}
 
       {:ok, have} ->
         if opts[:quiet],
@@ -155,7 +155,13 @@ defmodule Server.Workline.Continuation do
     )
   end
 
-  # a reviewer cannot write files: its artifact lands through submit_review, which commits it
-  defp land("review"), do: "Land it with submit_review — the server commits review.md (then call advance_stage)"
-  defp land(_stage), do: "Commit it (then call advance_stage)"
+  # a reviewer cannot write files: its artifact lands through submit_review, which commits it; an
+  # owed QA's lands through submit_qa, whose pass hands it on to the merge gate
+  defp land(%Thread{stage: "review"} = thread, opts) do
+    if Workline.qa_leads?(thread, opts),
+      do: "File what you saw with submit_qa — a pass hands it to the merge gate itself",
+      else: "Land it with submit_review — the server commits review.md (then call advance_stage)"
+  end
+
+  defp land(_thread, _opts), do: "Commit it (then call advance_stage)"
 end
