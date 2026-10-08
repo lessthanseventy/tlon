@@ -307,7 +307,8 @@ defmodule Server.MCP.Tool.Finish do
   Close out your own thread — `finish(summary)`: when its work is done AND verified. The summary is
   posted as your last word on the thread, then the thread closes: a child reports up to its
   manager, and the ticket it came from is marked done. Only your own thread — closing another is
-  the manager's call. If you were wrong, the operator's next reply reopens it.
+  the manager's call. If you were wrong, the operator's next reply reopens it. A workline that
+  hasn't merged stays open (the summary is still posted): the merge queue closes it when it lands.
   """
   use Server.MCP.Tool
 
@@ -324,9 +325,17 @@ defmodule Server.MCP.Tool.Finish do
     with {:ok, _} <- Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params[:summary]}),
          %Server.Thread{} = thread <- Channel.thread(identity.thread_id),
          false <- Channel.standing?(thread),
+         false <- unmerged_workline?(thread),
          {:ok, closed} <- Channel.close_thread(thread) do
       ok(frame, %{"closed" => closed.id})
     else
+      # a workline closes when it lands; closed early, its landing looks like stranded work
+      :workline ->
+        ok(frame, %{
+          "stays_open" => true,
+          "why" => "a workline closes itself when it merges — the merge queue does that, not finish"
+        })
+
       # the lobby holds every coworker's window: the summary is posted, the thread stays open
       true ->
         ok(frame, %{"stays_open" => true, "why" => "this is the workspace's standing thread — it is never closed"})
@@ -338,6 +347,9 @@ defmodule Server.MCP.Tool.Finish do
         reply(frame, other, & &1)
     end
   end
+
+  defp unmerged_workline?(%Server.Thread{stage: stage}) when stage not in [nil, "merged"], do: :workline
+  defp unmerged_workline?(_thread), do: false
 end
 
 defmodule Server.MCP.Tool.ResolveQuestion do
