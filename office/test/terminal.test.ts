@@ -35,3 +35,23 @@ test("a window's screen arrives, keys typed into it come back", async () => {
   await until(() => sessions() === "w9")
   expect(sessions()).toBe("w9")
 }, 30_000)
+
+test("the placeholder window's own output never reaches the view — only the coworker's pane does", async () => {
+  const sock = `tlon-office-test-ph-${process.pid}`
+  const t = (...a: string[]) => Bun.spawnSync(["tmux", "-L", sock, ...a])
+  try {
+    t("new-session", "-d", "-s", "w8", "-n", "lead", "-x", "60", "-y", "10", "sh -c 'printf \"the coworker\\n\"; exec cat'")
+    // the shell a control-mode client's placeholder window runs: a login shell's banner (a fortune) in life
+    t("set-option", "-g", "default-command", "printf 'from the placeholder\\n'; exec cat")
+    const until = async (ok: () => boolean) => { for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50) }
+    const view = new TerminalView({ socket: sock, session: "w8", window: "lead" }, 40, 8, () => {}, () => {})
+    const text = () => rows(view.vt).map((r) => r.replace(/\x1b\[[0-9;]*m/g, "")).join("\n")
+    await until(() => text().includes("the coworker"))
+    await Bun.sleep(200)
+    expect(text()).toContain("the coworker")
+    expect(text()).not.toContain("from the placeholder")
+    view.close()
+  } finally {
+    t("kill-server")
+  }
+}, 30_000)

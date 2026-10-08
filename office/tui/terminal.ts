@@ -66,7 +66,9 @@ export class TerminalView {
   private readonly proc: Subprocess<"pipe", "pipe", "ignore">
   private readonly name = `tlon-office-${process.pid}-${Math.random().toString(36).slice(2, 7)}`
   private pane: string | null = null
-  private pending: Uint8Array[] = []
+  // output that arrived before the pane was known, by pane: the placeholder window's shell (a login
+  // banner, a fortune) prints too, and only the coworker's pane may reach the view
+  private pending: { pane: string; bytes: Uint8Array }[] = []
   private replies: ((lines: string[]) => void)[] = []
   private block: string[] | null = null
   private mine = false
@@ -92,7 +94,7 @@ export class TerminalView {
     const screen = await this.cmd(`capture-pane -p -e -t ${pane}`)
     this.vt.write(`\x1b[2J\x1b[H${screen.join("\r\n")}\x1b[${Number(cy) + 1};${Number(cx) + 1}H`)
     this.pane = pane
-    for (const b of this.pending) this.vt.write(b)
+    for (const b of this.pending) if (b.pane === pane) this.vt.write(b.bytes)
     this.pending = []
     this.changed()
   }
@@ -126,7 +128,7 @@ export class TerminalView {
     if (head.startsWith("%begin ")) { this.block = []; this.mine = head.trim().split(" ")[3] === "1"; return }
     if (head.startsWith("%output ")) {
       const sp = head.indexOf(" ", 8), pane = head.slice(8, sp)
-      if (this.pane === null) { this.pending.push(unescape(b.subarray(sp + 1))); return }
+      if (this.pane === null) { this.pending.push({ pane, bytes: unescape(b.subarray(sp + 1)) }); return }
       if (pane !== this.pane) return
       this.vt.write(unescape(b.subarray(sp + 1)), () => this.changed())
       return
