@@ -120,6 +120,7 @@ defmodule Server.MCP.ServerTest do
                "get_notes",
                # the PM's (pm-and-release design §1)
                "release_status",
+               "check_candidate",
                "propose_release",
                "set_urgency",
                # QA's (roster design §5)

@@ -28,6 +28,35 @@ defmodule Server.MCP.Tool.ReleaseStatus do
   end
 end
 
+defmodule Server.MCP.Tool.CheckCandidate do
+  @moduledoc """
+  Run the gate and the smoke on main's tip now (`Server.Release.PM.check/2`) instead of waiting for
+  the nightly: each already passed there, or running, is left be. The runs take minutes; their
+  verdicts show in `release_status` once they finish.
+  """
+  use Server.MCP.Tool
+
+  alias Server.MCP.Tool
+  alias Server.Release.PM
+
+  schema do
+  end
+
+  @impl true
+  def execute(_params, frame) do
+    with ws when not is_nil(ws) <- Tool.workspace_of(Identity.from_frame(frame)),
+         {:ok, results} <- PM.check(ws) do
+      ok(frame, %{
+        "checks" => Enum.map(results, &%{"check" => &1.check, "state" => &1.state, "why" => &1.why}),
+        "next" => "the gate takes ~10 min, the smoke a few; read release_status after"
+      })
+    else
+      nil -> fail(frame, "no workspace bound to this session")
+      {:error, why} -> fail(frame, why)
+    end
+  end
+end
+
 defmodule Server.MCP.Tool.ProposeRelease do
   @moduledoc """
   Propose a release (`Server.Release.PM.propose/4`): refused unless the commit is on main, ahead of

@@ -347,7 +347,7 @@ defmodule Server.Profiles do
       ],
       "excludeTools" =>
         ["register", "consult_peer", "open_thread", "close_thread"] ++
-          ~w(release_status propose_release set_urgency submit_qa)
+          ~w(release_status check_candidate propose_release set_urgency submit_qa)
     }
   }
 
@@ -376,7 +376,7 @@ defmodule Server.Profiles do
 
   # The PM owns what ships and in what order — the release and the backlog's urgency — and reads
   # across the work to judge it; it neither edits code nor staffs.
-  @pm_release_tools ~w(release_status propose_release set_urgency)
+  @pm_release_tools ~w(release_status check_candidate propose_release set_urgency)
   @pm_mcp @tlon_mcp
           |> update_in(["tlon", "directTools"], &(&1 ++ @pm_release_tools ++ ["machine_overview", "list_tickets"]))
           |> update_in(["tlon", "excludeTools"], &((&1 -- @pm_release_tools) ++ ["rename_identifier", "edit_clause"]))
@@ -511,8 +511,10 @@ defmodule Server.Profiles do
 
   WHAT IS RELEASABLE. `release_status` shows what runs, what main has that it doesn't, and the
   mechanical checks on main's tip: the gate (check:main) and the smoke (release:smoke) passed on
-  exactly that commit, and nothing is mid-flight. Read those; never redo them. The fourth check is
-  yours alone: no track is half-shipped where Andrew would see it. Read the step tables (§8) in
+  exactly that commit, and nothing is mid-flight. Read those; never redo them. They run nightly;
+  when work waits and main's tip hasn't been checked, `check_candidate` runs them now (minutes),
+  and `release_status` has the verdict once they finish. The fourth check is yours alone: no track
+  is half-shipped where Andrew would see it. Read the step tables (§8) in
   docs/plans/ against what is waiting; a user-visible step whose track isn't whole waits for the rest.
 
   CUTTING. When something releasable is waiting and whole, `propose_release(sha?, changelog)`. The
