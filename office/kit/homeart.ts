@@ -28,6 +28,8 @@ export const SPRITES: Record<string, string[]> = {
             ".qqqqqq.....", ".qqqqqq.....", ".qqqqqq.....", "............", "............", "............"],
   street: ["kkkkkkkkkkkk", "kkkkkkkkkkkk", "eeeeeeeeeeee", "eeeeeeeeeeee", "eeeeeeeeeeee", "ddeeddeeddee",
            "eeeeeeeeeeee", "eeeeeeeeeeee", "eeeeeeeeeeee", "kkkkkkkkkkkk", "kkkkkkkkkkkk", "kkkkkkkkkkkk"],
+  garden: ["f.f.f.f.f.f.", "ffffffffffff", "............", ".gg.gg.gg.gg", ".gg.gg.gg.gg", "............",
+           ".dd.dd.dd.dd", ".dd.dd.dd.dd", "............", "..ll.....ll.", "............", "............"],
 }
 
 const floor = () => tint(ROLE.structure, ROLE.ground, 0.3)
@@ -37,6 +39,7 @@ const PALETTES = (): Record<string, Record<string, string>> => ({
   bathroom: { b: tint(ROLE.key, ROLE.ground, 0.6), s: ROLE.key, p: ROLE.prose, m: ROLE.body },
   bedroom: { p: ROLE.prose, q: ROLE.planner, n: ROLE.structure },
   street: { k: ROLE.borderInactive, e: ROLE.edge, d: ROLE.prose },
+  garden: { f: ROLE.structure, g: ROLE.live, d: ROLE.borderInactive, l: ROLE.attention },
 })
 
 /** kind → how to paint it. A kind absent here falls back to `plainTile`; later work adds its key. */

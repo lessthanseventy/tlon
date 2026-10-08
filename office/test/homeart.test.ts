@@ -29,12 +29,12 @@ describe("sprites", () => {
     for (const kind of CATALOGUE) expect(paint({ kind, at: [0, 0], rot: 90 })).not.toBe(paint({ kind, at: [0, 0] }))
   })
   test("a kind with no art still draws (plain tile), and the hook takes over once registered", () => {
-    const garden = { kind: "garden", at: [0, 0] } as unknown as HomeTile
+    const garden = { kind: "shed", at: [0, 0] } as unknown as HomeTile
     const plain = paint(garden)
     expect(plain).not.toBe(paint({ kind: "living", at: [0, 0] }))
     let called = 0
-    TILE_ART.garden = (c, x, y) => { called++; c.px(x, y, TILE, TILE, "#112233") }
-    try { expect(paint(garden)).not.toBe(plain); expect(called).toBe(1) } finally { delete TILE_ART.garden }
+    TILE_ART.shed = (c, x, y) => { called++; c.px(x, y, TILE, TILE, "#112233") }
+    try { expect(paint(garden)).not.toBe(plain); expect(called).toBe(1) } finally { delete TILE_ART.shed }
   })
 })
 
