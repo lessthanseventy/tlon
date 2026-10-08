@@ -32,6 +32,10 @@ defmodule Server.OfficeTest do
       assert Enum.any?(s.archetypes, &(&1.name == "builder" and &1.meta == false))
     end
 
+    test "carries today's celebrations (none when the calendar is off)" do
+      assert Office.status().celebrations == []
+    end
+
     test "a thread carries who is mid-turn on it — a declared thinking, not a warm session", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "busy", workspace_id: ws.id})
       :ok = Server.Presence.Thinking.thinking(t.id, "hronir")

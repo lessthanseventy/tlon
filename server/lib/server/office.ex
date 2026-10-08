@@ -21,8 +21,9 @@ defmodule Server.Office do
   mid-turn on it), projects, unstarted tickets, notes, the consults and hand-offs of the last
   three minutes, the archetypes and model choices, counts, how many
   threads await the operator, each workspace's triage count (the beacon), the service's health
-  (the rack), the days this month each workspace has something scheduled (the wall calendar) and
-  the feature flags (`Server.Flags.office/0`).
+  (the rack), the days this month each workspace has something scheduled (the wall calendar),
+  today's birthdays and anniversaries (`celebrations`, from the .ics feeds) and the feature flags
+  (`Server.Flags.office/0`).
   A surface shows one workspace and filters by `workspace_id`.
   """
   @spec status() :: map()
@@ -54,7 +55,8 @@ defmodule Server.Office do
       # a TUI started on an older office revision offers a reload (Server.Rollout)
       revs: Server.Rollout.revs(),
       flags: Server.Flags.office(),
-      calendar: Room.calendar(ws_ids)
+      calendar: Room.calendar(ws_ids),
+      celebrations: Server.Calendar.celebrations(Date.from_erl!(elem(:calendar.local_time(), 0)))
     }
   end
 
