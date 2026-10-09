@@ -306,6 +306,15 @@ defmodule Server.MCP.GatewayTest do
       assert {404, _} = get_json("/api/office/threads/999999")
     end
 
+    test "POST /api/office/asks/:id answers that ask by its key; a key it doesn't offer is refused", %{thread: t} do
+      {:ok, a} = Server.Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
+      assert {409, _} = post_json("/api/office/asks/#{a.id}", %{key: "9"})
+      assert {200, %{"ok" => true}} = post_json("/api/office/asks/#{a.id}", %{key: "2"})
+      assert Server.Repo.get!(Server.Message, a.id).resolution == "answered: hold"
+      assert {409, _} = post_json("/api/office/asks/#{a.id}", %{key: "1"})
+      assert {400, _} = post_json("/api/office/asks/#{a.id}", %{nope: 1})
+    end
+
     test "POST /api/tickets files one; /route and /start hand it on; /api/threads/:id/close closes" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
       {201, tk} = post_json("/api/tickets", %{workspace_id: ws.id, title: "from the TUI"})

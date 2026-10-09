@@ -20,6 +20,9 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
       GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky — each with its actions)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
+      POST   /api/office/asks/:id         Attention.answer_ask {"key"} (one ask answered by its option key)
+      POST   /api/office/jobs/:id/retry   Office.Needs.retry_job (a failed job, run again)
+      DELETE /api/office/jobs/:id         Office.Needs.dismiss_job (a failed job the operator has seen)
       GET    /api/office/suggestions/:ws  Office.Corkboard.suggestions (the suggestion box)
       DELETE /api/office/suggestions/:ws/:id  Office.Corkboard.drop (filed as a ticket, or thrown out)
       GET    /api/office/activity/:ws     Office.Room.activity (what just happened: the in-tray)
@@ -147,6 +150,33 @@ defmodule Server.MCP.OperatorAPI do
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"thread_id": n})})
+    end
+  end
+
+  defp route(conn, "POST", "office", ["asks", id]) do
+    with {n, ""} <- Integer.parse(id),
+         {%{"key" => key}, conn} when is_binary(key) <- body(conn) do
+      case Server.Attention.answer_ask(n, operator(), key) do
+        {:ok, reply} -> json(conn, 200, %{ok: true, message_id: reply.id})
+        {:error, why} -> json(conn, 409, %{error: "ask #{id}: #{why}"})
+      end
+    else
+      {_, %Plug.Conn{} = conn} -> json(conn, 400, %{error: ~s(expected {"key": "1"})})
+      _ -> json(conn, 404, %{error: "no ask #{id}"})
+    end
+  end
+
+  defp route(conn, "POST", "office", ["jobs", id, "retry"]) do
+    case Integer.parse(id) do
+      {n, ""} -> json(conn, 200, %{ok: Server.Office.Needs.retry_job(n) == :ok})
+      _ -> json(conn, 404, %{error: "no job #{id}"})
+    end
+  end
+
+  defp route(conn, "DELETE", "office", ["jobs", id]) do
+    case Integer.parse(id) do
+      {n, ""} -> json(conn, 200, %{ok: Server.Office.Needs.dismiss_job(n) == :ok})
+      _ -> json(conn, 404, %{error: "no job #{id}"})
     end
   end
 

@@ -93,4 +93,79 @@ defmodule Server.Office.NeedsTest do
     {:ok, _} = Server.Attention.ask(b.id, "yu", "blocked on you")
     assert [%{level: "blocking"}, %{level: "decide"}] = Needs.list()
   end
+
+  describe "asks, seats and failed jobs — each with its answers" do
+    test "every ask is its own blocking item, answered by its own id", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+      {:ok, a} = Server.Attention.ask(t.id, "tertius", "weather: start now?", ["go", "hold"])
+      {:ok, b} = Server.Attention.ask(t.id, "tertius", "north wall?", ["go", "drop it"])
+
+      assert [
+               %{
+                 kind: "ask",
+                 level: "blocking",
+                 ref: ra,
+                 text: "tertius: weather: start now?",
+                 options: [%{"key" => "1", "label" => "go"}, _]
+               },
+               %{kind: "ask", ref: rb}
+             ] = Needs.list()
+
+      assert {ra, rb} == {a.id, b.id}
+      {:ok, _} = Server.Attention.answer_ask(a.id, "andrew", "1")
+      assert [%{kind: "ask", ref: ^rb}] = Needs.list()
+    end
+
+    test "threads parked on the leaf cap are one seats item that offers a bigger cap" do
+      {:ok, ws} =
+        Server.Workspaces.register(%{
+          name: "Seats",
+          roster: [%{archetype: "builder", name: "hronir"}, %{archetype: "planner", name: "borges"}]
+        })
+
+      for who <- ["hronir", "borges"] do
+        {:ok, t} = Channel.open_thread(%{title: "for #{who}", scope: "machine", workspace_id: ws.id})
+        {:ok, _} = Channel.assign_lead(t.id, who)
+        :ok = Server.Staffing.note_parked(t.id)
+      end
+
+      cap = Server.OperatorConfig.max_leaves()
+
+      assert [%{kind: "seats", level: "decide", workspace_id: wid, ref: target, text: text, options: [%{"key" => "1"}]}] =
+               Needs.list()
+
+      assert wid == ws.id
+      assert target == min(cap + 2, 12)
+      assert text =~ "2 threads wait for a seat"
+    end
+
+    test "a job discarded today is to decide until it is dismissed" do
+      {:ok, job} = %{} |> Oban.Job.new(worker: "Server.Jobs.KeepUp", queue: "default") |> Server.Repo.insert()
+
+      job
+      |> Ecto.Changeset.change(
+        state: "discarded",
+        attempted_at: DateTime.utc_now(),
+        errors: [%{"error" => "** (RuntimeError) boom"}]
+      )
+      |> Server.Repo.update!()
+
+      assert [
+               %{
+                 kind: "job_failed",
+                 level: "decide",
+                 ref: ref,
+                 title: "Server.Jobs.KeepUp failed",
+                 text: "** (RuntimeError) boom"
+               }
+             ] =
+               Needs.list()
+
+      assert ref == job.id
+      assert Server.Office.Room.health().failed_jobs == 1
+      :ok = Needs.dismiss_job(job.id)
+      assert Needs.list() == []
+      assert Server.Office.Room.health().failed_jobs == 0
+    end
+  end
 end

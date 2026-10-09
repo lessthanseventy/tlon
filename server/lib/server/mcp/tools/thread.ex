@@ -278,27 +278,41 @@ end
 
 defmodule Server.MCP.Tool.AskOperator do
   @moduledoc """
-  Ask the operator something only they can answer — `ask_operator(question)`: a decision, a
-  preference, an approval. The question is posted on this thread and the thread parks on the
-  operator, so it reaches them as waiting on them (a toast, the inbox) instead of sitting as an
-  unread message; their reply clears it. Use it whenever you would otherwise end a message with a
-  question for them. A gap in the WORK that you can research is `raise_question`, not this.
+  Ask the operator something only they can answer — `ask_operator(question, options)`: a decision,
+  a preference, an approval. With `options` (the answers, e.g. ["go", "hold"]) it is an ask: one
+  decision, answered with a key from their inbox, the answer posted back to you on this thread;
+  call it once per decision, never several in one question. Without options the question is posted
+  and the thread parks on the operator until they reply. Use it whenever you would otherwise end a
+  message with a question for them. A gap in the WORK that you can research is `raise_question`.
   """
   use Server.MCP.Tool
 
   alias Server.Attention
 
   schema do
-    field :question, :string, required: true, description: "What you need the operator to decide or answer"
+    field :question, :string,
+      required: true,
+      description: "What you need the operator to decide or answer — one decision"
+
+    field :options, {:list, :string},
+      description: ~s(The answers they pick from, e.g. ["go", "hold"] — each becomes a key in their inbox)
   end
 
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    identity.thread_id
-    |> Attention.ask(identity.agent, params[:question])
-    |> then(&reply(frame, &1, fn message -> %{"message_id" => message.id, "awaiting" => "operator"} end))
+    case params[:options] do
+      [_ | _] = options ->
+        identity.thread_id
+        |> Attention.ask(identity.agent, params[:question], options)
+        |> then(&reply(frame, &1, fn m -> %{"message_id" => m.id, "ask" => true, "options" => length(options)} end))
+
+      _ ->
+        identity.thread_id
+        |> Attention.ask(identity.agent, params[:question])
+        |> then(&reply(frame, &1, fn message -> %{"message_id" => message.id, "awaiting" => "operator"} end))
+    end
   end
 end
 

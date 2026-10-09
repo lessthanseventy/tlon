@@ -6,13 +6,17 @@ defmodule Server.Office.Needs do
 
     * **blocking** — work has stopped until the operator acts:
       `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
-      sits on a prompt, or the PM's release gate waits: pick an option), `verify_failed` (a workline whose last gate run was red —
+      sits on a prompt, or the PM's release gate waits: pick an option), `ask` (one decision a
+      coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id,
+      answered by key), `verify_failed` (a workline whose last gate run was red —
       only where the workspace has no sheriff, who owns red there: `Server.Sheriff`);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since), `suggestion` (the corkboard's suggestion box), `rollout` (what a
       merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
       work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
-      is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded).
+      is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded),
+      `seats` (threads parked on the leaf cap, per workspace: `ref` the bigger cap it offers),
+      `job_failed` (a background job discarded in the last day: retry or dismiss, `ref` the job).
 
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
   behind it is resolved — approved, answered, filed — not when it is looked at.
@@ -33,8 +37,8 @@ defmodule Server.Office.Needs do
     open = Repo.all(from t in Thread, where: t.state == "open")
     prompts = Server.Attention.open_prompts_by_thread()
 
-    blocking = waits(open, prompts) ++ red_verifies(open)
-    decide = mentions(open, operator) ++ suggestions(open) ++ rollout() ++ stranded()
+    blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open)
+    decide = mentions(open, operator) ++ suggestions(open) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs()
 
     Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
   end
@@ -80,6 +84,92 @@ defmodule Server.Office.Needs do
   end
 
   defp prompt_at(id), do: Repo.one(from m in Message, where: m.id == ^id, select: m.created_at)
+
+  # each ask is its own decision: answered by its id, so two on one thread never cross
+  defp asks(open) do
+    by_id = Map.new(open, &{&1.id, &1})
+
+    for m <- Server.Attention.open_asks(), t = by_id[m.thread_id] do
+      item("ask", "blocking", t, "#{m.payload["ask"]}: #{m.payload["summary"]}", m.created_at, %{
+        key: "ask:#{m.id}",
+        options: m.payload["options"],
+        ref: m.id
+      })
+    end
+  end
+
+  # threads parked on the leaf cap: the cause of empty desks, with the bigger cap as its answer
+  defp seats(open) do
+    knob = Enum.find(Server.OperatorConfig.knobs(), &(&1.key == "max_leaves"))
+    cap = knob.value
+    target = min(cap + 2, knob.max)
+
+    for {ws, threads} <-
+          open |> Enum.filter(&(&1.agent_id && Server.Staffing.parked_note?(&1.id))) |> Enum.group_by(& &1.workspace_id),
+        cap < target do
+      %{
+        key: "seats:#{ws}",
+        kind: "seats",
+        level: "decide",
+        thread_id: nil,
+        workspace_id: ws,
+        title: "work waits for a seat",
+        text:
+          "#{length(threads)} threads wait for a seat (the leaf cap is #{cap}): " <>
+            Enum.map_join(threads, ", ", &"##{&1.id} #{&1.title}"),
+        at: threads |> Enum.map(& &1.created_at) |> Enum.min(DateTime),
+        options: [%{"key" => "1", "label" => "raise the cap to #{target}"}],
+        ref: target
+      }
+    end
+  end
+
+  @doc "Background jobs discarded in the last day that nobody has dismissed (`dismiss_job/1`)."
+  def failed_jobs_query do
+    day = DateTime.add(DateTime.utc_now(), -86_400)
+
+    from j in Oban.Job,
+      where:
+        j.state in ["discarded", "retryable"] and j.attempted_at > ^day and
+          fragment("NOT coalesce((? ->> 'dismissed')::boolean, false)", j.meta)
+  end
+
+  defp failed_jobs do
+    for j <- Repo.all(failed_jobs_query()) do
+      %{
+        key: "job:#{j.id}",
+        kind: "job_failed",
+        level: "decide",
+        thread_id: nil,
+        workspace_id: nil,
+        title: "#{j.worker} failed",
+        text: last_error(j.errors),
+        at: j.attempted_at,
+        options: nil,
+        ref: j.id
+      }
+    end
+  end
+
+  defp last_error([_ | _] = errors), do: errors |> List.last() |> Map.get("error", "no error recorded")
+  defp last_error(_), do: "no error recorded"
+
+  @doc "The operator has seen a failed job: it leaves the list and the rack's count. `:ok`."
+  def dismiss_job(id) do
+    {_, _} =
+      Repo.update_all(
+        from(j in Oban.Job,
+          where: j.id == ^id,
+          update: [set: [meta: fragment("coalesce(?, '{}'::jsonb) || '{\"dismissed\": true}'::jsonb", j.meta)]]
+        ),
+        []
+      )
+
+    :ok
+  end
+
+  @doc "Run a failed job again. `:ok`."
+  def retry_job(id), do: Oban.retry_job(id)
 
   # a workline sitting at verify whose newest verify run was red — where no sheriff owns red
   defp red_verifies(open) do

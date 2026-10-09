@@ -209,4 +209,42 @@ defmodule Server.AttentionTest do
       assert Attention.waiting?(t.id)
     end
   end
+
+  describe "ask/4 — a decision with its answers attached" do
+    test "an ask is a pane-less prompt per decision: the thread doesn't park, nothing waits in a pane",
+         %{thread: t} do
+      assert {:ok, a} = Attention.ask(t.id, "tertius", "ireneo's weather: start now?", ["go", "hold"])
+      assert {:ok, b} = Attention.ask(t.id, "tertius", "lonnrot's north wall?", ["go", "fold into #172"])
+
+      assert Enum.map(prompts(t.id), & &1.id) == [a.id, b.id]
+      assert a.payload["ask"] == "tertius"
+      assert a.payload["options"] == [%{"key" => "1", "label" => "go"}, %{"key" => "2", "label" => "hold"}]
+      assert Repo.get!(Server.Thread, t.id).awaiting == nil
+      refute Attention.waiting?(t.id)
+      refute Map.has_key?(Attention.open_prompts_by_thread(), t.id)
+    end
+
+    test "answering one by id posts it to the asker and resolves only that ask", %{thread: t} do
+      {:ok, a} = Attention.ask(t.id, "tertius", "ireneo's weather: start now?", ["go", "hold"])
+      {:ok, b} = Attention.ask(t.id, "tertius", "lonnrot's north wall?", ["go", "fold into #172"])
+
+      assert {:ok, reply} = Attention.answer_ask(a.id, "andrew", "2")
+      assert %Message{author: "andrew", reply_to: reply_to, delivered_at: nil, body: body} = reply
+      assert reply_to == a.id
+      assert body == "@tertius ireneo's weather: start now? → hold"
+      assert Repo.get!(Message, a.id).resolution == "answered: hold"
+      assert Repo.get!(Message, b.id).resolved_at == nil
+      assert {:error, :answered} = Attention.answer_ask(a.id, "andrew", "1")
+      assert {:error, :no_such_option} = Attention.answer_ask(b.id, "andrew", "7")
+    end
+
+    test "a reply on the thread that names an option answers the newest ask", %{thread: t} do
+      {:ok, a} = Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
+
+      assert {:ok, %Message{body: "@tertius start now? → go — after the cut"}} =
+               Attention.respond(t.id, "andrew", "go after the cut")
+
+      assert Repo.get!(Message, a.id).resolution == "answered: go"
+    end
+  end
 end
