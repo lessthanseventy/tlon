@@ -165,6 +165,35 @@ defmodule Server.AttentionTest do
     end
   end
 
+  test "the sweep forgets the limit memory of a pane whose window is gone", %{ws: ws, thread: t} do
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+    seen = fn -> Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"] || %{} end
+
+    Process.put(:screen, limit)
+    tmux("1\tt#{t.id}\t#{t.id}\t\t123\thronir\t\n")
+    :ok = Attention.tick(ws.id)
+    assert Map.keys(seen.()) == ["hronir/#{t.id}/t#{t.id}"]
+
+    Process.put(:screen, "")
+    tmux("2\tother\t#{t.id}\t\t123\thronir\t\n")
+    :ok = Attention.tick(ws.id)
+    assert seen.() == %{}
+  end
+
+  test "an empty window list is not read as every pane gone", %{ws: ws, thread: t} do
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+
+    Process.put(:screen, limit)
+    tmux("1\tt#{t.id}\t#{t.id}\t\t123\thronir\t\n")
+    :ok = Attention.tick(ws.id)
+
+    tmux("")
+    :ok = Attention.tick(ws.id)
+    assert Map.keys(Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"]) == ["hronir/#{t.id}/t#{t.id}"]
+  end
+
   describe "respond/3 — the operator's one door" do
     setup %{ws: ws, thread: t} do
       tmux(leaf(t.id))
