@@ -268,4 +268,25 @@ defmodule Server.EpicsTest do
       assert {:ok, _} = Tickets.adopt(e.id, [a.id])
     end
   end
+
+  describe "tlon-cli epic filing" do
+    @cli Path.expand("../../../scripts/tlon-cli.sh", __DIR__)
+
+    test "epic-new and epic-add are commands, and are in the usage line" do
+      src = File.read!(@cli)
+      assert src =~ ~r/^  epic-new\)/m
+      assert src =~ ~r/^  epic-add\)/m
+      assert src =~ "|epic-new|epic-add|"
+    end
+
+    test "what epic-new calls files an epic; what epic-add calls refuses a second parent", %{ws: ws} do
+      {:ok, e} = Tickets.file(%{workspace_id: ws.id, project_id: nil, title: "Toy", body: "", kind: "epic"})
+      assert e.kind == "epic"
+      t = file(ws, "a")
+      {:ok, _} = Tickets.adopt(e.id, [t.id])
+      other = epic(ws, "Other")
+      assert {:error, {id, _}} = Tickets.adopt(other.id, [t.id])
+      assert id == t.id
+    end
+  end
 end
