@@ -10,7 +10,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/sidebar                 Board.sidebar
       GET    /api/roster                  Staff.roster
       GET    /api/office                  Office.status (every workspace: roster, benches, threads, …)
-      GET    /api/office/threads/:id      Office.thread_view (a page of messages, ?before=<id> for older, + what its pane shows)
+      GET    /api/office/threads/:id      Office.thread_view (a page of messages, ?before=<id> for older, + what its pane shows + its activity feed)
       GET    /api/office/archive/:ws      Office.archive (a workspace's done tickets + closed threads)
       GET    /api/office/banter/:ws       Office.Banter.lines (recent small talk; asking may write the next line)
       GET    /api/office/pets/:ws         Office.Pets.voices (the pets' lines by occasion; asking may write a batch)
