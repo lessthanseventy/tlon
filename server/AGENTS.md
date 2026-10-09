@@ -70,6 +70,13 @@ and every layer the spine design's re-laid §9 asked for
   Red — a red verify, a bounce, a stuck workline, a failed schedule run — goes to the workspace's
   sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list;
   a beat incident resolved naming its PR is banked as a `postmortem:` fact.
+- **the toy's generators** (`Server.Generator`, `Server.Persona`, `Server.ToyPool`) — cheap model
+  calls (`:generator_cmd`/`:generator_model`, default pi on the flat ollama flash model), never on a
+  render path: `Generator.run/1` is the one door (banter on, `:generator_daily_cap` per day counted in
+  `generator_call`, failures included). A seat's persona (`workspace_agent.persona`, with its seed)
+  is made at hire or by `tlon-cli persona <ws> <name> [--reroll]`, falling back to the §2 voice table;
+  `ToyPool` holds doorbell visitors (weekly), per-seat reaction lines per event, and puns, read as
+  `[]` until generated so callers use their handwritten lines.
 - **the PM** (`Server.Release.PM`, bench archetype `pm`) — what ships: `release_status`,
   `propose_release` (graded commit by commit with `Grade.assess/2`, the max per axis; under
   `auto_land_risk` it cuts, else one gate on the root thread — a window-less `prompt` answered through

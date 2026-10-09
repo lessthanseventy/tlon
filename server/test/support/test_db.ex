@@ -19,6 +19,8 @@ defmodule Server.TestDB do
     "oban_jobs",
     "collection",
     "fun_with_flags_toggles",
+    "generator_call",
+    "toy_pool",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.
     Server.Ticket,
