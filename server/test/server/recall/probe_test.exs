@@ -7,7 +7,12 @@ defmodule Server.Recall.ProbeTest do
     repo = Path.join(System.tmp_dir!(), "probe-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(repo, "server/lib"))
     File.mkdir_p!(Path.join(repo, "tasks"))
-    File.write!(Path.join(repo, "server/lib/a.ex"), "defmodule Server.A do\n  def go, do: 1\nend\n")
+
+    File.write!(
+      Path.join(repo, "server/lib/a.ex"),
+      "defmodule Server.A do\n  def go, do: 1\nend\ndefmodule Server.AB do\n  def good, do: 1\nend\n"
+    )
+
     File.write!(Path.join(repo, "tasks/x.toml"), "[tasks.\"office:golden\"]\n")
 
     git = fn args -> {_, 0} = System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
@@ -31,6 +36,12 @@ defmodule Server.Recall.ProbeTest do
     refute Probe.found?(repo, {:function, "gone"})
     refute Probe.found?(repo, {:path, "server/nope.ex"})
     refute Probe.found?(repo, {:task, "no:task"})
+  end
+
+  test "a name that is only a prefix of a surviving one is a miss", %{repo: repo} do
+    refute Probe.found?(repo, {:module, "Server"})
+    refute Probe.found?(repo, {:function, "g"})
+    refute Probe.found?(repo, {:function, "g?"})
   end
 
   test "a needle that looks like a flag is data, not an option", %{repo: repo} do
