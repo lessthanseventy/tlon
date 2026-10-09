@@ -11,9 +11,17 @@ defmodule Server.Jobs.Land do
     max_attempts: 3,
     unique: [period: :infinity, keys: [:thread_id], states: [:available, :scheduled, :executing]]
 
+  import Ecto.Query
+
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"thread_id" => tid}, attempt: attempt, max_attempts: max}) do
-    case Server.Repo.get(Server.Thread, tid) do
+    # read under the lock a send-back moves it under, so a send-back at the same instant is seen
+    {:ok, thread} =
+      Server.Repo.transaction(fn ->
+        Server.Repo.one(from t in Server.Thread, where: t.id == ^tid, lock: "FOR UPDATE")
+      end)
+
+    case thread do
       nil ->
         :ok
 

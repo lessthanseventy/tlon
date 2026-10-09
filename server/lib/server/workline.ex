@@ -695,12 +695,13 @@ defmodule Server.Workline do
   end
 
   defp bounce(thread, why, headline) do
-    move_back(
-      thread,
-      "build",
-      why,
-      "↩ back to build — #{headline}, then advance_stage; it comes back through verify and review."
-    )
+    {:ok, _} =
+      move_back(
+        thread,
+        "build",
+        why,
+        "↩ back to build — #{headline}, then advance_stage; it comes back through verify and review."
+      )
 
     {:error, {:bounced, why}}
   end
@@ -715,12 +716,14 @@ defmodule Server.Workline do
   stage}}` | `{:error, {:in_flight, why}}` | `{:error, {:not_behind, stage}}` | `{:error, {:not_yours, why}}`.
   """
   def send_back(%Thread{} = thread, to, why, by) do
-    with :ok <- movable(thread),
-         :ok <- not_in_flight(thread),
-         :ok <- behind(thread, to),
-         :ok <- may_send_back(thread, to, by) do
-      {:ok, move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by))}
+    allowed = fn locked ->
+      with :ok <- movable(locked),
+           :ok <- not_in_flight(locked),
+           :ok <- behind(locked, to),
+           do: may_send_back(locked, to, by)
     end
+
+    move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by), allowed)
   end
 
   @doc """
@@ -1366,27 +1369,42 @@ defmodule Server.Workline do
   defp manager_leads?(thread), do: Server.Channel.manager_on_workline?(thread, Server.Channel.thread_lead(thread.id))
 
   # back to `to` on the same thread and branch: the stage and its ledger row in one write, the
-  # stage's lead staffed and handed `brief`
-  defp move_back(thread, to, why, brief) do
-    {:ok, back} =
-      Repo.transaction(fn ->
-        {:ok, back} = thread |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
+  # stage's lead staffed and handed `brief`. `allowed` is judged on the row locked FOR UPDATE, the
+  # lock the landing reads it under (`Server.Jobs.Land`), so a landing starting at the same instant
+  # either sees the move or is seen by `allowed`.
+  defp move_back(thread, to, why, brief, allowed \\ fn _ -> :ok end) do
+    fn ->
+      locked = Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
 
-        {:ok, _event} =
-          Dossier.record_event(%{
-            thread_id: thread.id,
-            kind: "stage_advanced",
-            correlation: "workline:#{thread.slug}",
-            detail: %{"from" => thread.stage, "to" => to, "bounced" => why}
-          })
+      case allowed.(locked) do
+        :ok ->
+          {:ok, back} = locked |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
 
-        back
-      end)
+          {:ok, _event} =
+            Dossier.record_event(%{
+              thread_id: thread.id,
+              kind: "stage_advanced",
+              correlation: "workline:#{thread.slug}",
+              detail: %{"from" => locked.stage, "to" => to, "bounced" => why}
+            })
 
-    back = restaff(back)
-    Server.Bus.broadcast({:workline_advanced, back})
-    post_brief(back, brief)
-    back
+          back
+
+        {:error, refusal} ->
+          Repo.rollback(refusal)
+      end
+    end
+    |> Repo.transaction()
+    |> case do
+      {:ok, back} ->
+        back = restaff(back)
+        Server.Bus.broadcast({:workline_advanced, back})
+        post_brief(back, brief)
+        {:ok, back}
+
+      {:error, refusal} ->
+        {:error, refusal}
+    end
   end
 
   defp behind(%Thread{stage: stage}, to) do
