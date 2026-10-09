@@ -124,6 +124,15 @@ defmodule Server.AlertsTest do
     assert [%{label: "Join", open: "https://meet.google.com/abc"}] = a.actions
   end
 
+  test "a parked thread getting its seat is info: one toast per seating, nothing to do, last in the list" do
+    seated = %{id: 90, thread_id: 7, body: "emma sat down on #7 — the finder", created_at: @now}
+
+    assert [%{level: "sticky"}, info] = Alerts.build([need("mention", %{level: "decide"})], [], @now, seated: [seated])
+
+    assert %{key: "seated:90", level: "info", kind: "seated", title: "emma sat down on #7 — the finder"} = info
+    assert info.thread_id == 7 and info.at == @now and info.actions == []
+  end
+
   test "alarms first, then decisions, then sticky" do
     alerts =
       Alerts.build([need("mention", %{level: "decide"}), need("gate")], [meeting(~U[2026-10-08 16:00:00Z])], @now)
