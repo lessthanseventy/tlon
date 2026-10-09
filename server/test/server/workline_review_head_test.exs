@@ -122,6 +122,19 @@ defmodule Server.WorklineReviewHeadTest do
     assert %Thread{stage: "build", state: "open"} = Repo.get!(Thread, thread.id)
   end
 
+  test "a branch rebased onto a newer main since its review is the same change, and lands", %{root: root} do
+    thread = at_review(root, "rebased")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    {:ok, queued} = thread |> parked() |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+    commit(root, "lib/elsewhere.ex", "main moved")
+    git(root, ["checkout", "-q", "work/rebased"])
+    git(root, ["rebase", "-q", "main"])
+    git(root, ["checkout", "-q", "main"])
+
+    assert {:ok, %{stage: "merged"}} = Workline.land_queued(queued, merge: Merges)
+  end
+
   test "back at review, the reviewer is pointed at what changed since it last looked", %{root: root} do
     thread = at_review(root, "again")
     {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", artifacts: AllPresent)
