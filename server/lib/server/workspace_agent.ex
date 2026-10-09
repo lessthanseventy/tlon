@@ -18,6 +18,7 @@ defmodule Server.WorkspaceAgent do
     field :grade, :string
     field :specialty, :string
     field :crew, :string, default: "all"
+    field :persona, :map
     field :created_at, :utc_datetime
   end
 
