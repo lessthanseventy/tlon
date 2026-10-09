@@ -224,6 +224,15 @@ defmodule Server.WorklineReviewHeadTest do
     assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "nothing landed"))
   end
 
+  test "an approval the merge queue can't take leaves the gate parked on the operator", %{root: root} do
+    thread = at_review(root, "unqueued")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    gate = parked(thread)
+
+    assert {:error, {:queue, :no_oban}} = Workline.approve(gate, artifacts: AllPresent, land: :queue)
+    assert %Thread{stage: "review", awaiting: "andrew"} = Repo.get!(Thread, thread.id)
+  end
+
   test "a closed workline doesn't advance", %{root: root} do
     thread = at_review(root, "closed-early")
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
