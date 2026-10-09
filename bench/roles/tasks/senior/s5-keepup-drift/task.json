@@ -1,0 +1,1 @@
+{"tier": "full", "snapshot": {"parent": "1b21aaacc166ba6033b4fc5bfdc0bd8fbe331c82", "solution": "4e0aae807332e57f4946f92777df762134e57e59"}, "grader": {"kind": "check", "cmd": "cd server && mix test test/server/jobs/keep_up_test.exs"}}

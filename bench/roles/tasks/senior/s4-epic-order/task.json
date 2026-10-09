@@ -1,0 +1,1 @@
+{"tier": "full", "snapshot": {"parent": "b62e58b24fafd1f800f57dce917d1d4685c1da16", "solution": "4ab4d566291252a8cb377f8845cccb9f69e28d9e"}, "grader": {"kind": "check", "cmd": "cd server && mix test test/server/epics_test.exs"}}

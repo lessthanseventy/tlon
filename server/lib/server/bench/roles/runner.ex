@@ -140,7 +140,7 @@ defmodule Server.Bench.Roles.Runner do
   @doc "Drop the test database `task_env/1` named, once its run is over."
   def drop_database(env) do
     db = env |> List.keyfind("TLON_TEST_DATABASE", 0) |> elem(1)
-    System.cmd("dropdb", ["--if-exists", db], stderr_to_stdout: true)
+    System.cmd("dropdb", ["--if-exists", "--force", db], stderr_to_stdout: true)
   end
 
   defp seed(repo, work) do
@@ -161,7 +161,7 @@ defmodule Server.Bench.Roles.Runner do
     live = Path.join(root, "server")
     build = Path.join(work, "server/_build")
     File.mkdir_p!(build)
-    File.cp_r!(Path.join(live, "_build/test"), Path.join(build, "test"))
+    {_, 0} = System.cmd("cp", ["-r", "--reflink=auto", Path.join(live, "_build/test"), Path.join(build, "test")])
     File.rm_rf!(Path.join(build, "test/lib/server"))
     File.ln_s!(Path.join(live, "deps"), Path.join(work, "server/deps"))
     commit_fixture(work)

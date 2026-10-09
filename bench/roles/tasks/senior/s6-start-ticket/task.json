@@ -1,0 +1,1 @@
+{"tier": "full", "snapshot": {"parent": "0fb7f05386e976b94d3d900a62d3baabe46198dc", "solution": "5023af67d34ef0fae538c8ad8320c9bacc896a60"}, "grader": {"kind": "check", "cmd": "cd server && mix test test/server/mcp/server_test.exs"}}
