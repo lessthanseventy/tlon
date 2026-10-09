@@ -74,3 +74,21 @@ describe("the data views", () => {
     expect(cols[4]!.items.map((i) => i.who)).toEqual(["hronir"])
   })
 })
+
+import { geometry, measureFor, textLayer } from "../tui/paint"
+
+describe("two speakers' balloons", () => {
+  test("adjacent speakers' long lines both show, on separate rows", () => {
+    const room = new RailRoom(), a = viewOf(office(3), 1)
+    settle(room, a)
+    room.say("w0", "ALPHA " + "long words keep coming here ".repeat(4))
+    room.say("w1", "OMEGA " + "long words keep coming here ".repeat(4))
+    const g = geometry(W, H, 60, 70, 17, { w: 10, h: 20 }, false)
+    const fr = room.render(a, focus, measureFor(g))
+    const rows = textLayer(fr, g).map((r) => r.replace(/\x1b\[[\d;]*m/g, ""))
+    const at = (t: string) => rows.findIndex((r) => r.includes(t))
+    expect(at("ALPHA")).toBeGreaterThanOrEqual(0)
+    expect(at("OMEGA")).toBeGreaterThanOrEqual(0)
+    expect(at("ALPHA")).not.toBe(at("OMEGA"))
+  })
+})
