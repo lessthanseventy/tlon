@@ -475,7 +475,12 @@ export class Sim<L extends { people: Seat[] }> {
       const home = plan.home(l, actor.seat.agent)
       actor.warmth = actor.seat.thinking ? 1 : actor.seat.warmth ?? (actor.seat.warm ? Math.max(0, 1 - (this.tick - actor.cooled) / this.warmTicks) : 0)
       let goal: Spot
-      if (actor.leaving) goal = plan.exit
+      if (this.fire && !actor.leaving) {
+        const muster = plan.muster ?? [plan.exit]
+        goal = muster[[...this.actors.keys()].indexOf(k) % muster.length]!
+        if (actor.mug < this.tick + 100) actor.mug = this.tick + 3000
+      }
+      else if (actor.leaving) goal = plan.exit
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
       else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
       else if (writing.has(actor.seat.agent) || this.pins.has(actor.seat.agent)) goal = this.pins.get(actor.seat.agent)?.box && plan.box ? plan.box : plan.pen
@@ -490,6 +495,7 @@ export class Sim<L extends { people: Seat[] }> {
         actor.path = plan.route(actor.x, from, goal)
         actor.spot = goal; actor.spotKey = gk; actor.pose = "stand"
         if (goal.kind === "queue") this.noticed(actor, "queue")
+        if (this.fire) { actor.emote = "!"; actor.emoteUntil = this.tick + 30 }
         // a pastime holds them a minute or two before the next
         actor.until = this.tick + 400 + Math.floor(Math.random() * 800)
       }

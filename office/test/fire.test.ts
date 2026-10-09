@@ -27,3 +27,17 @@ describe("fire drill", () => {
     expect(r.onFire).toBe(false)
   })
 })
+
+describe("the drill", () => {
+  test("on fire, everyone ends at a muster spot holding a mug; all distinct; they return after", () => {
+    const r = new WideRoom(696) as any
+    run(r, up, 300)
+    run(r, down, FIRE_GRACE + 1200)
+    const actors = [...r.actors.values()] as any[]
+    expect(actors.length).toBeGreaterThan(0)
+    for (const a of actors) { expect(a.spot.kind).toBe("exit"); expect(a.moving).toBe(false); expect(a.mug).toBeGreaterThan(r.tick) }
+    expect(new Set(actors.map((a) => `${a.x}:${a.y}`)).size).toBe(actors.length)
+    run(r, up, 1500)
+    for (const a of r.actors.values()) expect(a.spot.kind).not.toBe("exit")
+  })
+})
