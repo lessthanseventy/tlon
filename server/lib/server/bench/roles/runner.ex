@@ -16,6 +16,7 @@ defmodule Server.Bench.Roles.Runner do
   @timeout_s %{"builder" => 900}
   @default_timeout_s 300
   @check_timeout_s 300
+  @source_check_timeout_s 900
 
   @doc """
   Run `suite` for `roles` (role names), each on its routed model or `opts[:model]` (a model map).
@@ -82,10 +83,11 @@ defmodule Server.Bench.Roles.Runner do
     work = Path.join(System.tmp_dir!(), "tlon-bench-#{task.set}-#{task.id}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(work)
     if task.repo, do: seed(task.repo, work)
+    if task.source, do: seed_source(Profiles.tlon_root(), task.source, work)
 
     t0 = System.monotonic_time(:millisecond)
     timeout = Map.get(@timeout_s, task.set, @default_timeout_s)
-    {out, code} = sh(Roles.argv(profile, task.prompt, task.set == "builder"), work, timeout, false)
+    {out, code} = sh(Roles.argv(profile, task.prompt, !!(task.repo || task.source)), work, timeout, false)
     wall = (System.monotonic_time(:millisecond) - t0) / 1000
     {reply, usage} = Roles.parse_output(profile.harness, out)
 
@@ -114,13 +116,32 @@ defmodule Server.Bench.Roles.Runner do
   defp grade(%{grader: %{"kind" => "check", "cmd" => cmd}} = task, _reply, work, _judge) do
     hidden = Path.join(task.dir, "check")
     if File.dir?(hidden), do: File.cp_r!(hidden, work)
-    {out, code} = sh(["sh", "-c", cmd], work, @check_timeout_s, true)
+    check_timeout = if task.source, do: @source_check_timeout_s, else: @check_timeout_s
+    {out, code} = sh(["sh", "-c", cmd], work, check_timeout, true)
     detail = if code == 0, do: "ok", else: "check exit #{code}: " <> (out |> String.trim() |> String.slice(-300, 300))
     %{passed: code == 0, score: nil, detail: detail}
   end
 
   defp seed(repo, work) do
     File.cp_r!(repo, work)
+    commit_fixture(work)
+  end
+
+  @doc """
+  Seed `work` with `server/` as it was at the parent of `sha` in the repo at `root` (the state the
+  real workline started from), plus the live `_build` so a task compiles incrementally; committed as
+  the fixture.
+  """
+  def seed_source(root, sha, work) do
+    {_, 0} =
+      System.cmd("sh", ["-c", ~s(git -C "$0" archive "$1^" server | tar -x -C "$2"), root, sha, work])
+
+    build = Path.join(root, "server/_build")
+    if File.dir?(build), do: System.cmd("cp", ["-r", "--reflink=auto", build, Path.join(work, "server/_build")])
+    commit_fixture(work)
+  end
+
+  defp commit_fixture(work) do
     git = &System.cmd("git", ["-c", "user.name=bench", "-c", "user.email=bench@localhost" | &1], cd: work)
     git.(["init", "-q"])
     git.(["add", "-A"])
