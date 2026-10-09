@@ -31,3 +31,9 @@ export function toy() {
   }
 }
 export type Toy = ReturnType<typeof toy>
+
+/** the sandbox's play keys, as the help line lists them; `toyKey()` in main.ts handles each */
+export const PLAY: { key: string; label: string }[] = [
+  { key: "d", label: "doorbell" }, { key: "e", label: "event" }, { key: "t", label: "treat" }, { key: "f", label: "fire drill" },
+  { key: "n", label: "night" }, { key: "w", label: "weather" }, { key: "p", label: "pet" }, { key: "c", label: "call over" },
+]

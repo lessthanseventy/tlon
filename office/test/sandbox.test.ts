@@ -27,3 +27,11 @@ test("night toggles a clock override", () => {
   t.toggleNight(); expect(t.now().getHours()).toBe(23)
   t.toggleNight(); expect(t.now().getHours()).toBe(new Date().getHours())
 })
+
+test("the help line's play keys are the keys toyKey() handles", async () => {
+  const { PLAY } = await import("../tui/sandbox")
+  expect(PLAY.map((p) => p.key).join("")).toBe("detfnwpc")
+  const src = await Bun.file(new URL("../tui/main.ts", import.meta.url)).text()
+  const body = src.slice(src.indexOf("function toyKey("), src.indexOf("function onKey("))
+  for (const { key } of PLAY) expect(body).toContain(`case "${key}"`)
+})
