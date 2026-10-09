@@ -5,8 +5,8 @@ defmodule Server.Alerts do
 
     * **alarm** — a meeting from `alarm_minutes` (settings file, default 5) before it starts until
       ten minutes in: full screen, with Join;
-    * **decision** — work has stopped on a choice (a gate, a dialog, a question): a banner with
-      its answers;
+    * **decision** — work has stopped on a choice (a gate, a dialog, a question, a coworker's
+      ask): a banner with its answers;
     * **sticky** — wants the operator, nothing waits on it (a red verify, a mention): stays until
       dismissed or resolved. A suggestion or a rollout note raises nothing here: the office's
       inbox has it.
@@ -61,7 +61,7 @@ defmodule Server.Alerts do
   end
 
   defp from_need(n) do
-    level = if n.kind in ~w(gate dialog question), do: "decision", else: "sticky"
+    level = if n.kind in ~w(gate dialog question ask), do: "decision", else: "sticky"
 
     %{
       key: n.key,
@@ -80,6 +80,14 @@ defmodule Server.Alerts do
 
   defp actions(%{kind: "dialog", thread_id: t, options: options}),
     do: Enum.map(options || [], &call(&1["label"], "/messages", t, %{body: &1["key"]})) ++ [other(t)]
+
+  # by the ask's own id, so two asks on one thread never cross
+  defp actions(%{kind: "ask", ref: id, options: options}),
+    do:
+      for(
+        o <- options || [],
+        do: %{label: o["label"], method: "POST", path: "/api/office/asks/#{id}", body: %{key: o["key"]}}
+      )
 
   defp actions(%{kind: k, thread_id: t}) when k in ~w(question mention),
     do: ["Reply…" |> call("/messages", t) |> Map.put(:input, "body")]
