@@ -80,10 +80,48 @@ defmodule Server.Channel do
     end
   end
 
-  @doc ~s{Close a thread. Its messages are untouched — history outlives the close. A CHILD thread
+  @doc """
+  Close a thread. Its messages are untouched — history outlives the close. A CHILD thread
   (one with a `parent_thread_id`, Slice 4D) reports up on close: funes posts a system summary into
-  the parent thread, `@mentioning` its lead so the switchboard wakes them.}
-  def close_thread(%Thread{} = thread) do
+  the parent thread, `@mentioning` its lead so the switchboard wakes them.
+
+  A plain thread (no stage) whose checkout holds unmerged work is NOT closed — closing would strand
+  the branch. It is tracked as a workline instead (`Server.Workline.promote/1`) and this returns
+  `{:tracked, thread}`.
+  """
+  def close_thread(%Thread{stage: nil} = thread) do
+    case stranded_reason(thread) do
+      nil -> do_close(thread)
+      reason -> track_instead(thread, reason)
+    end
+  end
+
+  def close_thread(%Thread{} = thread), do: do_close(thread)
+
+  defp stranded_reason(thread) do
+    with {:ok, repo} <- Server.repo_for_thread(thread),
+         false <- root_machine_thread?(thread) do
+      Server.Worktree.stranded(repo, Server.Worktree.name_for(thread))
+    else
+      _ -> nil
+    end
+  end
+
+  defp track_instead(thread, reason) do
+    with {:ok, tracked} <- Server.Workline.promote(thread) do
+      mention = if lead = thread_lead(thread.id), do: "@#{lead} ", else: ""
+
+      post(%{
+        thread_id: thread.id,
+        author: "tlon",
+        body: "#{mention}⚠ not closed: #{reason}. Tracked as workline #{tracked.slug} at build — finish it and let it merge."
+      })
+
+      {:tracked, tracked}
+    end
+  end
+
+  defp do_close(%Thread{} = thread) do
     result =
       thread
       |> Thread.state_changeset("closed")

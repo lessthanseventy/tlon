@@ -719,6 +719,36 @@ defmodule Server.MCP.ServerTest do
     assert %Thread{state: "open"} = Repo.get(Thread, lobby.id)
   end
 
+  test "close_thread on a plain thread holding unmerged commits tracks it and says stays_open" do
+    repo = Path.join(System.tmp_dir!(), "close-tool-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(repo)
+    on_exit(fn -> File.rm_rf!(repo) end)
+    git = fn dir, args -> System.cmd("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true) end
+    {_, 0} = git.(repo, ["init", "-q", "-b", "main"])
+    File.write!(Path.join(repo, "README"), "seed\n")
+    {_, 0} = git.(repo, ["add", "README"])
+    {_, 0} = git.(repo, ["commit", "-qm", "seed"])
+
+    {:ok, ws} = Server.Workspaces.register(%{name: "Strand"})
+    {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "p", repos: [%{"name" => "r", "path" => repo}]})
+    {:ok, plain} = Channel.open_thread(%{title: "plain", workspace_id: ws.id, project_id: project.id})
+    {:ok, wt} = Server.Worktree.ensure(repo, "t#{plain.id}")
+    File.write!(Path.join(wt, "w.txt"), "x\n")
+    {_, 0} = git.(wt, ["add", "w.txt"])
+    {_, 0} = git.(wt, ["commit", "-qm", "work"])
+
+    {:ok, caller} = Channel.open_thread(%{title: "caller", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "closer", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(caller, agent)
+    session = handshake(token)
+    call(token, session, 2, "register", %{})
+
+    r = call(token, session, 3, "close_thread", %{"thread_id" => plain.id})
+    refute r["isError"]
+    assert decode_tool_json(r)["stays_open"] == true
+    assert %Thread{state: "open", stage: "build"} = Repo.get(Thread, plain.id)
+  end
+
   test "finish on a workline that hasn't merged posts the summary and leaves it open — the merge queue closes it" do
     {:ok, ws} = Server.Workspaces.register(%{name: "Landing"})
     {:ok, w} = Server.Workline.open(%{title: "fanfare", slug: "fanfare-finish", stage: "review", workspace_id: ws.id})
