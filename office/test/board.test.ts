@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { boardColumns, cardState } from "../kit/crew"
-import { EMPTY, type Agents, type Seat, type Thread } from "../kit/types"
+import { boardColumns, cardState, epicChildren } from "../kit/crew"
+import { EMPTY, type Agents, type Seat, type Thread, type Ticket } from "../kit/types"
 
 const thread = (id: number, over: Partial<Thread> = {}): Thread => ({ id, title: `t${id}`, stage: "build", awaiting: null, workspace_id: 1, lead: "ireneo", seat: "idle", ...over })
 const seat = (thread_id: number, over: Partial<Seat> = {}): Seat => ({ agent: "ireneo", thread_id, title: "", warm: false, workspace_id: 1, ...over })
@@ -59,5 +59,21 @@ describe("who's doing what", () => {
   test("a parked workline stays in its stage, marked parked", () => {
     const a = snap([thread(3, { stage: "plan", seat: "parked" })])
     expect(boardColumns(a).find((c) => c.name === "PLAN")!.items[0]!.state?.kind).toBe("parked")
+  })
+})
+
+describe("epics on the TICKETS column", () => {
+  const tk = (id: number, over: Partial<Ticket> = {}): Ticket => ({ id, workspace_id: 1, project_id: null, title: `k${id}`, priority: "normal", kind: "ticket", epic_id: null, ...over })
+  const toy = tk(50, { title: "Toy", kind: "epic", done: 2, total: 13, next: { id: 52, title: "sandbox mode" } })
+  const a = { ...snap([]), tickets: [toy, tk(52, { epic_id: 50, title: "sandbox mode" }), tk(53, { epic_id: 50 }), tk(46, { title: "profile" })] }
+  test("one row per epic, its children hidden, loose tickets kept", () => {
+    const items = boardColumns(a)[0]!.items
+    expect(items.map((x) => x.title)).toEqual(["Toy 2/13 → #52 sandbox mode", "profile"])
+    expect(items[0]!.act).toEqual({ kind: "epic", id: 50 })
+  })
+  test("an epic with no free child says so; opening one lists its children", () => {
+    const quiet = { ...a, tickets: [{ ...toy, next: null }, ...a.tickets.slice(1)] }
+    expect(boardColumns(quiet)[0]!.items[0]!.title).toBe("Toy 2/13")
+    expect(epicChildren(a, 50).map((t) => t.id)).toEqual([52, 53])
   })
 })
