@@ -221,3 +221,24 @@ describe("a birthday from the calendar", () => {
     expect(moment("arcade", 12, undefined, true)).toBe(moment("arcade", 12, undefined, false))
   })
 })
+
+describe("the toy's one-key happenings", () => {
+  const a = () => viewOf(office(["hronir", "yu"]), 1)
+  test("play rings every head with a !, and one person says a line", () => {
+    const room = new WideRoom(560)
+    for (let i = 0; i < 50; i++) room.step(a())
+    room.play("doorbell")
+    const r = room as unknown as { actors: Map<string, { emote: string | null }>; talk: Map<string, { text: string | null }> }
+    expect([...r.actors.values()].every((x) => x.emote === "!")).toBe(true)
+    expect([...r.talk.values()].some((t) => t.text)).toBe(true)
+  })
+  test("pat gives that coworker a heart; false for a stranger", () => {
+    const room = new WideRoom(560); room.step(a())
+    expect(room.pat("yu")).toBe(true); expect(room.pat("nobody")).toBe(false)
+    expect(inside(room).actors.get("yu")!.emote).toBe("♥")
+  })
+  test("setClock moves the hour the sim and the dark follow", () => {
+    const room = new WideRoom(560); room.setClock(() => new Date(2026, 9, 8, 23))
+    expect((room as unknown as { hour: () => number }).hour()).toBe(23)
+  })
+})

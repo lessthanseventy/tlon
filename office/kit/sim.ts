@@ -331,6 +331,26 @@ export class Sim<L extends { people: Seat[] }> {
     this.changed = true
   }
 
+  /** the toy's one-key happenings; steps 3–5 of the toy design give each a scene — this is the stand-in */
+  play(kind: "doorbell" | "event" | "drill") {
+    const line = { doorbell: "Ding dong!", event: "Did anyone else hear that?", drill: "Fire drill! Everybody out!" }[kind]
+    for (const x of this.actors.values()) { x.emote = "!"; x.emoteUntil = this.tick + 60 }
+    const first = this.actors.keys().next().value
+    if (first) this.say(first, line)
+    this.changed = true
+  }
+
+  /** a pat for whoever (their name); false when they aren't in the room */
+  pat(name: string): boolean {
+    const x = this.actors.get(name)
+    if (!x) return false
+    x.emote = "♥"; x.emoteUntil = this.tick + 60; this.changed = true
+    return true
+  }
+
+  /** the clock the room runs on (the sandbox's `n`) */
+  setClock(now: () => Date) { this.hour = () => now().getHours() }
+
   /** the home level on the last snapshot; null until one has one, so a start-up is only a baseline */
   private levelSeen: number | null = null
   /** a level-up in the snapshot: the same party as the Konami code; rooms add to it */
