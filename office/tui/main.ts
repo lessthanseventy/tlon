@@ -1244,7 +1244,7 @@ function layoutScreen() {
     }
   }
   if (next !== wide) { wide = next; rooms.clear() }
-  g = { ...(wide ? geometry(wide, (r0 => (r0 instanceof WideRoom ? r0.height : WIDE_H))(room()), colsN, rowsN, DETAIL + 3, cell, kitty) : geometry(W, H, colsN, rowsN, DETAIL + 3, cell, kitty)), row: 1 }
+  g = { ...(wide ? geometry(wide, (r0 => (r0 instanceof WideRoom ? r0.height : WIDE_H))(room()), colsN, rowsN, DETAIL + 3, cell, kitty, WIDE_H) : geometry(W, H, colsN, rowsN, DETAIL + 3, cell, kitty)), row: 1 }
   const vw = Math.min(g.floorW, (g.cols * g.cw) / g.k), vh = Math.min(g.floorH, (g.rows * g.ch) / g.k)
   viewport = follow
     ? centerViewport({ x: 0, y: 0, w: vw, h: vh }, OFF_W / 2, (BAND + OFF_DOOR) / 2, g.floorW, g.floorH)
