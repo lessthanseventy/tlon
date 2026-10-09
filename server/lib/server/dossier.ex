@@ -248,7 +248,11 @@ defmodule Server.Dossier do
       thread_id: attrs[:thread_id],
       kind: kind,
       correlation: attrs[:correlation],
-      detail: %{"cmd" => attrs[:cmd], "exit" => exit, "tail" => attrs[:tail]}
+      detail:
+        Map.merge(
+          %{"cmd" => attrs[:cmd], "exit" => exit, "tail" => attrs[:tail]},
+          if(attrs[:sha], do: %{"sha" => attrs[:sha]}, else: %{})
+        )
     })
   end
 

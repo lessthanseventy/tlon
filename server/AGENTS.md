@@ -56,6 +56,10 @@ and every layer the spine design's re-laid §9 asked for
   only, never while its verify or landing is queued or running. A reviewer's or QA's non-blocking
   findings are `follow_ups` on `submit_review`/`submit_qa`: tickets tied to the workline, `held`
   until its thread closes, then left to intake (one closed unmerged says so in each ticket).
+  A review approves the code it read: its verdict records the branch's commit, and code committed
+  after it (its own `work/<slug>/` docs aside) sends the workline back to build at approval or at its
+  landing, never landing on the old verdict. Back at review, the reviewer's brief points at the diff
+  since its last verdict.
   An approving review is risk-graded by a model that didn't write it (`Server.Workline.Grade`, run by
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.
