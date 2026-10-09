@@ -30,3 +30,15 @@ test("life reads the card's body and a stamp reports a level-up", async () => {
   expect((await data.life(7))?.level).toBe(2)
   expect(await data.routineDone(1, "teeth")).toContain("level up")
 })
+
+test("a fake source answers every call; a write says it's a toy", async () => {
+  const data = await import("../tui/data")
+  const { toy } = await import("../tui/sandbox")
+  data.useFake(toy())
+  try {
+    const all = await data.status()
+    expect(all.ok).toBe(true); expect(all.bench.length).toBeGreaterThan(3)
+    expect(await data.needs()).toEqual([])
+    expect(await data.ticketFile(1, "x")).toContain("toy")
+  } finally { data.useFake(null) }
+})
