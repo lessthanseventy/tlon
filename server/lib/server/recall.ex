@@ -247,6 +247,42 @@ defmodule Server.Recall do
     e -> {:error, e}
   end
 
+  @doc """
+  Embed what embed-on-write missed — facts and chat messages still without a vector, at most
+  `:limit` (default 50) — and stop at the first failure, so a down embedder costs one call, not a
+  batch. The maintenance sweep runs it, so a gap left by embedder downtime fills in by itself.
+  `:embed` replaces the embedder (a test seam). Returns how many it embedded.
+  """
+  @spec embed_missing(keyword()) :: non_neg_integer()
+  def embed_missing(opts \\ []) do
+    limit = Keyword.get(opts, :limit, 50)
+
+    embed =
+      Keyword.get(opts, :embed, fn
+        %Fact{} = f -> embed_fact(f)
+        %Message{} = m -> embed_message(m)
+      end)
+
+    facts = Repo.all(from f in Fact, where: is_nil(f.embedding), order_by: [desc: f.id], limit: ^limit)
+
+    messages =
+      Repo.all(
+        from m in Message,
+          where: is_nil(m.embedding) and m.kind == "chat",
+          order_by: [desc: m.id],
+          limit: ^limit
+      )
+
+    (facts ++ messages)
+    |> Enum.take(limit)
+    |> Enum.reduce_while(0, fn row, n ->
+      case embed.(row) do
+        {:ok, _} -> {:cont, n + 1}
+        _ -> {:halt, n}
+      end
+    end)
+  end
+
   defp embedding_model, do: get_in(Application.get_env(:server, :embedding, []), [:model]) || "nomic-embed-text"
 
   @doc """
