@@ -6,6 +6,11 @@ description = "office: the TUI — the room in a terminal over the live server (
 dir = "office"
 run = "bun tui/main.ts"
 
+["office:sandbox"]
+description = "office: the TUI on a made-up world — no server, nothing staffed, everything pokeable (d e t f n w p c on the help line)"
+dir = "office"
+run = "bun tui/main.ts --sandbox"
+
 ["office:import-sprite"]
 description = "office: import a 12x22 (or 48x22, four views) PNG into looks.json as that agent's custom sprite — every pixel snapped to the nearest palette role"
 dir = "office"

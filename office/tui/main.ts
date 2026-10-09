@@ -23,6 +23,7 @@ import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Cowork
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
 import * as data from "./data"
+import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
@@ -76,6 +77,10 @@ function saveLook(name: string, draft: LookOverride) {
   writeState(LOOKS, JSON.stringify(all, null, 2))
   looksSeen = "" // our own write: make the next poll re-read it instead of treating it as already seen
 }
+
+// `--sandbox`: the TUI on a made-up world (tui/sandbox.ts) instead of the server
+const world = process.argv.includes("--sandbox") || process.env.OFFICE_SANDBOX === "1" ? toy() : null
+if (world) data.useFake(world)
 
 let all: Agents = { ...EMPTY, note: "…" }
 let ws: number | null = Number(readState(STATE)) || null
@@ -1287,7 +1292,7 @@ function draw() {
   if (building) {
     frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs) })
     imageDirty = true
-  } else if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g)); roomChanged = false }
+  } else if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g), world?.now()); roomChanged = false }
   const seen = clipFrame(frame!, vp)
   if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, vp); sentImage = true; imageDirty = false }
   if (!g.kitty) textLayer(seen, g, vp).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
@@ -1354,7 +1359,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   // the foot lists what the actions column can't show (all of it, with no column), then the globals;
   // its height and the column's room depend on each other, so settle them together
   const claimed = new Set(acts.map((x) => x.key))
-  const globals = GLOBALS.filter((h) => !h.key.split(" ").some((k) => claimed.has(k)))
+  const globals = [...(world ? PLAY : []), ...GLOBALS.filter((h) => !h.key.split(" ").some((k) => claimed.has(k)))]
   let footN = 1, room = 0, win: Window, awin: Window = { first: 0, count: 0, above: 0, below: 0 }, foot: Hint[][] = []
   for (let pass = 0; pass < 3; pass++) {
     room = Math.max(1, termRows - footN - 1 - top)
@@ -1474,6 +1479,24 @@ function editorKey(k: string) {
 // the last keys pressed, for the Konami code
 let keyLog: string[] = []
 
+/** sandbox only: one key, one thing to do with the toy; true when the key was one of them */
+function toyKey(k: string): boolean {
+  if (!world) return false
+  const r = room(), under = mode.kind === "person" ? mode.name : null
+  switch (k) {
+    case "d": r.play("doorbell"); status = "ding dong"; break
+    case "e": r.play("event"); status = "something's up"; break
+    case "f": r.play("drill"); status = "fire drill!"; break
+    case "t": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
+    case "n": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
+    case "w": world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break
+    case "p": if (mode.kind === "pet" && mode.who === "dog" && r instanceof WideRoom) r.patDog(); else if (under) r.pat(under); else r.pet(); status = "pat pat"; break
+    case "c": world.callOver(under ?? world.snapshot().bench[1]!.name); status = `calling someone over to ${under ?? "the desk"}`; void refresh(); break
+    default: return false
+  }
+  changed(); draw(); return true
+}
+
 function onKey(k: string) {
   keyLog = [...keyLog, k].slice(-KONAMI.length)
   if (isKonami(keyLog)) { keyLog = []; room().disco(); status = "↑↑↓↓←→←→BA — everybody dance"; changed(); return draw() }
@@ -1488,6 +1511,7 @@ function onKey(k: string) {
     if (r !== "done") void r.then(draw)
     return draw()
   }
+  if (toyKey(k)) return
   // the card's own actions first: a key there means what its actions pane says
   const name = k === " " ? "space" : k
   const own = detail().actions.find((x) => x.key === name)
