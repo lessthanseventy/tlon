@@ -4,8 +4,9 @@ defmodule Server.Jobs.KeepUp do
   auto-merge can go (`Server.Workline.Publish.refresh_behind/2`), those that now conflict with main
   are closed and their worklines sent back to build (`Server.Workline.reland/2`) rather than left
   stranded with their threads closed, and its main checkout is brought
-  level with origin/main, fast-forward only (`follow_main/2`); one that has drifted is a note for
-  the operator, never a merge.
+  level with origin/main, fast-forward only (`follow_main/2`); one that has drifted is never a merge: it is one ticket (and one lobby post) in the workspace whose
+  project owns the repo, or one keyed note for the operator when none does, updated in place and
+  cleared when main is level again.
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 120]
 
@@ -35,14 +36,62 @@ defmodule Server.Jobs.KeepUp do
     end
   end
 
-  defp drifted(repo, {:diverged, n}) do
-    text =
-      "#{repo}: local main has #{n} commit(s) origin/main doesn't — move them to a branch, then reset main to origin/main"
+  @doc false
+  # One note per repo. A repo a project owns goes to that project's workspace: its lobby hears it once
+  # and one ticket carries the count for the crew to land; the operator is not asked. A repo no
+  # project owns has no crew to hand it to, so it stays a single keyed note for the operator.
+  def drifted(repo, {:diverged, n}) do
+    title = "land local main's #{n} commit#{if n == 1, do: "", else: "s"}"
 
-    if !Enum.any?(Server.Rollout.pending(), &(&1.text == text)), do: GenServer.cast(Server.Rollout, {:note, text})
+    case owner(repo) do
+      nil ->
+        Server.Rollout.note(
+          {:drift, repo},
+          "#{repo}: local main has #{n} commit(s) origin/main doesn't — move them to a branch, then reset main to origin/main"
+        )
+
+      ws ->
+        route(ws, repo, title, n)
+    end
   end
 
-  defp drifted(_repo, _result), do: :ok
+  def drifted(repo, _level) do
+    Server.Rollout.clear({:drift, repo})
+
+    with ws when not is_nil(ws) <- owner(repo), %Server.Ticket{} = t <- open_ticket(ws, repo) do
+      Server.Tickets.update(t, %{status: "done"})
+    end
+
+    :ok
+  end
+
+  defp route(ws, repo, title, n) do
+    body =
+      "#{repo}: local main has #{n} commit(s) origin/main doesn't. Review them and land them as a workline; never reset main under a live session."
+
+    case open_ticket(ws, repo) do
+      nil ->
+        {:ok, _} = Server.Tickets.file(%{workspace_id: ws, title: title, body: body, labels: [label(repo)]})
+
+        with %Server.Thread{id: tid} <- Server.Channel.machine_thread(ws),
+             do: Server.Channel.post(%{thread_id: tid, author: "tlon", body: "⚠ " <> title <> " — " <> body})
+
+      t ->
+        Server.Tickets.update(t, %{title: title, body: body})
+    end
+
+    :ok
+  end
+
+  defp label(repo), do: "drift:" <> repo
+
+  defp open_ticket(ws, repo), do: Enum.find(Server.Tickets.open_in_workspace(ws), &(label(repo) in (&1.labels || [])))
+
+  defp owner(repo) do
+    Enum.find_value(Server.Repo.all(Server.Project), fn p ->
+      if Server.Projects.primary_repo_path(p) == {:ok, repo}, do: p.workspace_id
+    end)
+  end
 
   defp repos do
     Server.Project

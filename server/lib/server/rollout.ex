@@ -13,6 +13,10 @@ defmodule Server.Rollout do
       machine's config.
 
   The thread gets one line saying what was rolled out.
+
+  Notes live in this process's state, so a restart drops them and the next check refiles them. That
+  is fine for a note a check keeps true: `note/2` is keyed, so refiling after a restart makes one
+  note, not a pile, and `clear/1` removes it when the check passes again.
   """
   use GenServer
 
@@ -64,6 +68,12 @@ defmodule Server.Rollout do
 
   @doc "Notes waiting on the operator — what a rollout could not do itself. `[%{id, text, at}]`."
   def pending, do: if(GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, :pending), else: [])
+
+  @doc "File note `text` under `key`: a note already filed under it has its text replaced in place."
+  def note(key, text), do: GenServer.cast(__MODULE__, {:note, key, text})
+
+  @doc "Drop the note filed under `key`, if any."
+  def clear(key), do: GenServer.cast(__MODULE__, {:clear, key})
 
   @doc "Done with note `id` (the operator did it, or doesn't need to)."
   def dismiss(id), do: if(GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:dismiss, id}), else: :ok)
@@ -237,6 +247,19 @@ defmodule Server.Rollout do
     note = %{id: state.next, text: text, at: System.system_time(:second)}
     {:noreply, %{state | notes: [note | state.notes], next: state.next + 1}}
   end
+
+  def handle_cast({:note, key, text}, state) do
+    case Enum.find(state.notes, &(&1[:key] == key)) do
+      nil ->
+        note = %{id: state.next, key: key, text: text, at: System.system_time(:second)}
+        {:noreply, %{state | notes: [note | state.notes], next: state.next + 1}}
+
+      %{id: id} ->
+        {:noreply, %{state | notes: Enum.map(state.notes, &if(&1.id == id, do: %{&1 | text: text}, else: &1))}}
+    end
+  end
+
+  def handle_cast({:clear, key}, state), do: {:noreply, %{state | notes: Enum.reject(state.notes, &(&1[:key] == key))}}
 
   defp schedule(run, busy, poll_ms) do
     if !restart_pending?() do
