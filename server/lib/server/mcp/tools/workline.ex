@@ -89,7 +89,9 @@ defmodule Server.MCP.Tool.SubmitQA do
   QA's door (roster design §5): after driving a reviewed user-visible change on a scratch release,
   file what you saw — `pass`, or `fail` with the finding (`Server.Workline.qa_verdict/5`). A fail
   sends the workline back to build with your report; a pass moves it to the merge gate.
-  Identity-bound to THIS thread, refused outside the review stage.
+  Lands on THIS thread, or on `thread_id` — the workline QA'd — when the caller is a `qa` seat on
+  that workline's bench: a QA session can be bound to another thread (the lobby) than the one it
+  was called to. Refused outside the review stage.
   """
   use Server.MCP.Tool
 
@@ -102,24 +104,39 @@ defmodule Server.MCP.Tool.SubmitQA do
     field :report, :string,
       required: true,
       description: "What you pressed and the screen text you saw; for a fail, the one thing that is wrong"
+
+    field :thread_id, :integer,
+      description: "The workline you QA'd (its #id), when your session is bound to another thread"
   end
 
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
+    thread_id = params[:thread_id] || identity.thread_id
 
-    case Channel.thread(identity.thread_id) do
+    case Channel.thread(thread_id) do
       nil ->
-        fail(frame, "no such thread: #{identity.thread_id}")
+        fail(frame, "no such thread: #{thread_id}")
 
       thread ->
-        case Workline.qa_verdict(thread, params[:verdict], identity.agent, params[:report]) do
-          {:error, {:bounced, _}} -> ok(frame, %{"verdict" => "fail", "next" => "sent back to build"})
-          {:error, {:bad_verdict, v}} -> fail(frame, "verdict must be pass or fail, not #{inspect(v)}")
-          {:error, {:not_in_review, stage}} -> fail(frame, "not in review — this workline is at #{stage}")
-          {:error, reason} -> fail(frame, "QA passed, but it could not move on: #{inspect(reason)}")
-          {_, moved} -> ok(frame, %{"verdict" => "pass", "stage" => moved.stage, "awaiting" => moved.awaiting})
-        end
+        if thread_id == identity.thread_id or qa_seat?(thread, identity.agent),
+          do: verdict(thread, params, identity.agent, frame),
+          else: fail(frame, "#{identity.agent} is not a qa seat on thread #{thread_id}'s bench")
+    end
+  end
+
+  defp qa_seat?(%{workspace_id: nil}, _agent), do: false
+
+  defp qa_seat?(thread, agent),
+    do: thread.workspace_id |> Server.Workspaces.bench() |> Enum.any?(&(&1.archetype == "qa" and &1.name == agent))
+
+  defp verdict(thread, params, agent, frame) do
+    case Workline.qa_verdict(thread, params[:verdict], agent, params[:report]) do
+      {:error, {:bounced, _}} -> ok(frame, %{"verdict" => "fail", "next" => "sent back to build"})
+      {:error, {:bad_verdict, v}} -> fail(frame, "verdict must be pass or fail, not #{inspect(v)}")
+      {:error, {:not_in_review, stage}} -> fail(frame, "not in review — this workline is at #{stage}")
+      {:error, reason} -> fail(frame, "QA passed, but it could not move on: #{inspect(reason)}")
+      {_, moved} -> ok(frame, %{"verdict" => "pass", "stage" => moved.stage, "awaiting" => moved.awaiting})
     end
   end
 end

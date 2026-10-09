@@ -1008,6 +1008,33 @@ defmodule Server.MCP.ServerTest do
     assert again["isError"]
   end
 
+  test "submit_qa with thread_id: the bench's qa seat bound elsewhere files on that workline; a non-qa is refused" do
+    roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "qa", "name" => "nolan"}]
+    {:ok, ws} = Server.Workspaces.register(%{name: "QA off-thread", roster: roster})
+
+    {:ok, workline} =
+      Server.Workline.open(%{title: "office: R", slug: "qa-off-thread", stage: "review", workspace_id: ws.id})
+
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby"})
+    args = %{"verdict" => "fail", "report" => "after R: 'R reloads'", "thread_id" => workline.id}
+
+    emma = Staff.agent_by_name("emma")
+    emma_token = MCP.Tokens.mint(lobby, emma)
+    refused = call(emma_token, handshake(emma_token), 2, "submit_qa", args)
+    assert refused["isError"]
+    assert hd(refused["content"])["text"] =~ "qa seat"
+    assert %Thread{stage: "review"} = Repo.get!(Thread, workline.id)
+
+    nolan = Staff.agent_by_name("nolan")
+    nolan_token = MCP.Tokens.mint(lobby, nolan)
+    r = call(nolan_token, handshake(nolan_token), 2, "submit_qa", args)
+
+    refute r["isError"]
+    assert %Thread{stage: "build"} = Repo.get!(Thread, workline.id)
+    assert Enum.any?(Channel.thread_messages(workline), &(&1.body =~ "R reloads"))
+    assert %Thread{stage: nil} = Repo.get!(Thread, lobby.id)
+  end
+
   test "write_note defaults to the bound thread; get_notes reads it back" do
     {:ok, thread} = Channel.open_thread(%{title: "notes thread"})
     {:ok, agent} = Staff.register_agent(%{name: "Noter", mandate: "build", engine: "fresh"})
