@@ -838,4 +838,26 @@ defmodule Server.WorklineTest do
       assert {:ok, %{state: "open"}} = Workline.reopen(closed)
     end
   end
+
+  test "landed_since: each landing (a stage_advanced to merged) since then, newest first, with its thread's title" do
+    t = open!(%{title: "Mailbox: letters", slug: "mailbox"})
+    now = DateTime.utc_now()
+
+    stage! = fn to, at ->
+      Repo.insert!(%Event{
+        thread_id: t.id,
+        kind: "stage_advanced",
+        correlation: "workline:mailbox",
+        detail: %{"from" => "review", "to" => to},
+        created_at: DateTime.truncate(at, :second)
+      })
+    end
+
+    _old = stage!.("merged", DateTime.add(now, -3600))
+    _bounce = stage!.("build", DateTime.add(now, -60))
+    landed = stage!.("merged", now)
+
+    assert [%{id: id, thread_id: tid, title: "Mailbox: letters"}] = Workline.landed_since(DateTime.add(now, -600))
+    assert id == landed.id and tid == t.id
+  end
 end

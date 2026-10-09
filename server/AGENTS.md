@@ -61,6 +61,8 @@ and every layer the spine design's re-laid §9 asked for
   `auto_land_risk` it cuts, else one gate on the root thread — a window-less `prompt` answered through
   `Attention.respond/3`), the changelog posted and recorded as event `release:<sha>`, and
   `set_urgency` on the backlog. Work runs in `Server.Jobs.Release`; tests hand it a repo (`:release_root`).
+  The service's boot says `release <sha> is live` once per new pointer (`note_live/1`), which the
+  desktop toasts.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit

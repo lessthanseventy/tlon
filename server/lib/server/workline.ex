@@ -523,6 +523,24 @@ defmodule Server.Workline do
   def reland(thread, _why), do: {:ok, thread}
 
   @doc """
+  The landings (a `stage_advanced` to `merged`) recorded at or after `since`, newest first:
+  `[%{id, thread_id, title, created_at}]`, `id` the event's. A landing `reland/2` bounced and that
+  landed again is two.
+  """
+  def landed_since(%DateTime{} = since) do
+    Repo.all(
+      from e in Server.Event,
+        join: t in Thread,
+        on: t.id == e.thread_id,
+        where:
+          e.kind == "stage_advanced" and fragment("(?::jsonb ->> 'to') = 'merged'", e.detail) and
+            e.created_at >= ^since,
+        order_by: [desc: e.id],
+        select: %{id: e.id, thread_id: t.id, title: t.title, created_at: e.created_at}
+    )
+  end
+
+  @doc """
   What a workline's gate is decided on, in one line: at review, the reviewer's verdict line and the
   change's size, and what approving does; at another gate, the stage's doc that is ready.
   """
