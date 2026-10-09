@@ -468,6 +468,22 @@ defmodule Server.MCP.ServerTest do
     assert %{body: "A or B?"} = List.last(Channel.thread_messages(thread))
   end
 
+  test "ask_operator with `about` names the thread the decision is about, so its close withdraws it",
+       %{token: token, thread: thread} do
+    {:ok, about} = Channel.open_thread(%{title: "toy step 1"})
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    refute call(token, session, 4, "ask_operator", %{
+             "question" => "how should it move?",
+             "options" => ["allow", "advance"],
+             "about" => about.id
+           })["isError"]
+
+    assert [%{thread_id: thread_id, payload: %{"about" => about_id}}] = Server.Attention.open_asks()
+    assert {thread_id, about_id} == {thread.id, about.id}
+  end
+
   test "resolve_question refuses a question on another thread — identity scoping", %{token: token} do
     {:ok, other} = Channel.open_thread(%{title: "elsewhere"})
     {:ok, foreign} = Dossier.raise_question(%{thread_id: other.id, text: "not yours"})
