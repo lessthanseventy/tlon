@@ -41,7 +41,7 @@ import { parseWhen, showWhen } from "./when"
 import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
 type Mode =
-  | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
+  | { kind: "home" } | { kind: "crew" } | { kind: "shifts" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
@@ -153,6 +153,11 @@ let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 
 const view = () => viewOf(all, ws)
+/** the shift on, once anyone is on a shift of their own; nothing for a workspace with no shifts set */
+const shiftHeader = () =>
+  (all.shifts ?? []).some((x) => x.workspace_id === ws && x.crew !== "all")
+    ? all.workspaces.find((w) => w.id === ws)?.shift === "night" ? "☾ night shift" : "☼ day shift"
+    : null
 /** what the board reads beyond the snapshot: the leaf cap, and which threads are on the needs list */
 const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
@@ -475,7 +480,7 @@ const VERBS: [string, () => void][] = [
   ["health: the service and its box", () => open({ kind: "health" })], ["memory: pinned facts and habits", () => open({ kind: "memory" })],
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
   ["settings: the running system's knobs, and a restart", () => open({ kind: "settings" })],
-  ["crew", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
+  ["crew", () => open({ kind: "crew" })], ["shifts", () => open({ kind: "shifts" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
   ["the arcade", () => open({ kind: "arcade" })], ["the suggestion box", () => open({ kind: "ideas" })],
@@ -756,10 +761,28 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `CREW · ${crew.length} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
         rows,
-        actions: [{ key: "+", label: "hire", run: hire },
+        actions: [{ key: "+", label: "hire", run: hire }, { key: "S", label: "shifts", run: () => open({ kind: "shifts" }) },
           { key: "s", label: `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`, run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
           { key: "g", label: `group: ${crewGroup?.name ?? "none"} → ${next(CREW_GROUP_MODES, crewGroup)?.name ?? "none"}`, run: () => resort(() => { crewGroup = next(CREW_GROUP_MODES, crewGroup) }) },
           ...seatActions(chosen), back1],
+      }
+    }
+    case "shifts": {
+      const seats = (all.shifts ?? []).filter((x) => x.workspace_id === ws)
+      const on = all.workspaces.find((w) => w.id === ws)?.shift ?? "day", other = on === "day" ? "night" : "day"
+      const rows: Row[] = []
+      for (const [crew, label] of [["day", "☼ DAY"], ["night", "☾ NIGHT"], ["all", "BOTH SHIFTS"]] as const) {
+        const group = seats.filter((x) => x.crew === crew)
+        rows.push({ segs: [key(`${label} · ${group.length}`), crew === on ? { s: "  on now", fg: ROLE.live, bold: true } : dim("")] })
+        for (const x of group) rows.push({ segs: [plain("  "), { s: x.name.padEnd(12), fg: shirtOf(x.archetype) }, dim(x.archetype ?? "")], ref: String(x.seat_id) })
+      }
+      const chosen = seats.find((x) => String(x.seat_id) === rows[sel]?.ref)
+      const put = (k: string, crew: "day" | "night" | "all", label: string): Action => ({ key: k, label, run: () => { if (chosen) void did(data.seatShift(chosen.seat_id, chosen.name, crew)) } })
+      return {
+        title: `SHIFTS · ${on === "night" ? "☾ the night" : "☼ the day"} shift is on`,
+        rows,
+        actions: [put("d", "day", "on days"), put("n", "night", "on nights"), put("b", "all", "on both"),
+          { key: "S", label: `start the ${other} shift`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } }, back1],
       }
     }
     case "person": {
@@ -1276,6 +1299,7 @@ function draw() {
     ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }] : []),
     ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
     ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),
+    ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: () => open({ kind: "shifts" }) }] : []),
     ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
     ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
     ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),

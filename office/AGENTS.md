@@ -45,7 +45,7 @@ linked window at a time, Ctrl-] back to the room).
   world and the play-key table, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only.
   `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `S` to save) and the finder (`/`); `talk.ts` what `m` (to a person) and `'` (to the office) post, on the workspace lobby; `reader.ts` a thread
   full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
-  finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). The arcade's
+  finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). The shift board (`S` on the crew screen, `shifts` in the finder, or a click on the header's shift) puts each seat on days, nights or both and starts the other shift; the header shows the shift once anyone is on one. The arcade's
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
   zoomed like a coworker's terminal. It is the
   operator's surface. Its header carries what waits on you (`⚑ N blocking · M to decide`, from

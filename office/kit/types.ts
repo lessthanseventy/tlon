@@ -42,7 +42,10 @@ export type Agents = {
   bench: Coworker[]
   projects: { id: number; workspace_id: number; name: string }[]
   tickets: Ticket[]
-  workspaces: { id: number; name: string }[]
+  /** `shift` is the crew on now (`Server.Shifts`); absent from an older server */
+  workspaces: { id: number; name: string; shift?: "day" | "night" }[]
+  /** the shift board: every seat, both crews, each on `day`, `night` or `all` (both) */
+  shifts?: { workspace_id: number; seat_id: number; name: string; archetype: string | null; crew: "all" | "day" | "night" }[]
   archetypes: Archetype[]
   models: ModelChoice[]
   notes: Note[]
