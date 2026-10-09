@@ -1,0 +1,179 @@
+[
+  {
+    "archetype": "reviewer",
+    "calls": 2,
+    "commit": "1a56791",
+    "effort": "medium",
+    "grade": null,
+    "harness": "claude_code",
+    "model": "anthropic/claude-sonnet-5-5",
+    "role": "reviewer",
+    "rubric": null,
+    "started_at": "2026-10-09T06:12:50Z",
+    "suite": "canary",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "c1-unscoped-query",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 5318,
+          "cache_write": 5434,
+          "cost_usd": 0.0293736,
+          "input": 2,
+          "output": 657,
+          "turns": 1
+        },
+        "wall_s": 10.005
+      },
+      {
+        "detail": "ok",
+        "id": "c2-clean-helper",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 5318,
+          "cache_write": 5433,
+          "cost_usd": 0.0282096,
+          "input": 2,
+          "output": 541,
+          "turns": 1
+        },
+        "wall_s": 10.392
+      }
+    ],
+    "tiers": {
+      "canary": {
+        "passed": 2,
+        "total": 2
+      }
+    },
+    "usage": {
+      "cost_usd": 0.0576,
+      "input": 21507,
+      "output": 1198
+    },
+    "wall_s": 20.4
+  },
+  {
+    "archetype": "builder",
+    "calls": 2,
+    "commit": "1a56791",
+    "effort": "low",
+    "grade": "junior",
+    "harness": "claude_code",
+    "model": "anthropic/claude-haiku-5-5",
+    "role": "builder-junior",
+    "rubric": null,
+    "started_at": "2026-10-09T06:13:11Z",
+    "suite": "canary",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "c1-slugify",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 64020,
+          "cache_write": 8912,
+          "cost_usd": 0.0034561,
+          "input": 10,
+          "output": 2065,
+          "turns": 7
+        },
+        "wall_s": 24.57
+      },
+      {
+        "detail": "ok",
+        "id": "c2-pager",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 63810,
+          "cache_write": 8683,
+          "cost_usd": 0.0033402,
+          "input": 10,
+          "output": 1929,
+          "turns": 7
+        },
+        "wall_s": 25.191
+      }
+    ],
+    "tiers": {
+      "canary": {
+        "passed": 2,
+        "total": 2
+      }
+    },
+    "usage": {
+      "cost_usd": 0.0068,
+      "input": 145445,
+      "output": 3994
+    },
+    "wall_s": 49.8
+  },
+  {
+    "calls": 2,
+    "started_at": "2026-10-09T06:14:19Z",
+    "usage": {
+      "input": 5637,
+      "output": 294,
+      "cost_usd": null
+    },
+    "commit": "1a56791",
+    "role": "librarian",
+    "grade": "senior",
+    "suite": "canary",
+    "model": "ollama-cloud/deepseek-v4.1-flash",
+    "tiers": {
+      "canary": {
+        "total": 2,
+        "passed": 2
+      }
+    },
+    "wall_s": 9.0,
+    "harness": "pi",
+    "archetype": "librarian",
+    "rubric": null,
+    "tasks": [
+      {
+        "id": "c1-restates",
+        "usage": {
+          "input": 2787,
+          "output": 156,
+          "cache_read": 0,
+          "cache_write": 0,
+          "turns": 1,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 4.501,
+        "passed": true,
+        "detail": "ok",
+        "tier": "canary"
+      },
+      {
+        "id": "c2-corrects",
+        "usage": {
+          "input": 1314,
+          "output": 138,
+          "cache_read": 1536,
+          "cache_write": 0,
+          "turns": 1,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 4.495,
+        "passed": true,
+        "detail": "ok",
+        "tier": "canary"
+      }
+    ],
+    "effort": "medium"
+  }
+]
