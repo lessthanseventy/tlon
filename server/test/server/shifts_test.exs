@@ -87,6 +87,38 @@ defmodule Server.ShiftsTest do
     assert {:error, :not_found} = Shifts.switch(999_999, "night")
   end
 
+  test "Claude's usage-limit line, as Claude Code prints it, reads as out of quota; talk about limits doesn't" do
+    assert Shifts.out_of_quota?("  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver).\n")
+    assert Shifts.out_of_quota?("❯ \n  5-hour limit reached ∙ resets 5pm\n")
+    assert Shifts.out_of_quota?("You've hit your limit · resets 9am (America/Denver)")
+    refute Shifts.out_of_quota?("  the rate limiter caps requests; when the limit is reached it waits")
+    refute Shifts.out_of_quota?("")
+  end
+
+  test "out of quota on the day shift: the night crew comes on and the lobby hears why — once", %{ws: ws} do
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, limit)
+    assert Shifts.current(ws.id) == "night"
+    assert [note] = lobby |> Channel.thread_messages() |> Enum.map(& &1.body) |> Enum.filter(&(&1 =~ "usage limit"))
+    assert note =~ "reset at 5pm"
+
+    assert :ok = Shifts.quota_check(ws.id, limit)
+    {:ok, plain} = Workspaces.register(%{name: "No night crew"})
+    assert :ok = Shifts.quota_check(plain.id, limit)
+    assert Shifts.current(plain.id) == "day"
+  end
+
+  test "a manager on one shift still routes on the other when that shift has none", %{ws: ws} do
+    {:ok, ws2} = Workspaces.register(%{name: "Day manager"})
+    {:ok, _} = Workspaces.seat(ws2.id, %{name: "tertius-d", archetype: "surveyor", crew: "day"})
+    {:ok, _} = Workspaces.seat(ws2.id, %{name: "night-b", archetype: "builder", crew: "night"})
+    {:ok, _} = Shifts.switch(ws2.id, "night")
+    assert Workspaces.manager(ws2.id).name == "tertius-d"
+    assert Workspaces.manager(ws.id).name == "tertius"
+  end
+
   test "a seat is put on a shift from the board; switching to the shift on changes nothing", %{
     ws: ws,
     dahlmann: dahlmann

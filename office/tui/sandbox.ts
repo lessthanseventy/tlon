@@ -18,7 +18,7 @@ export function toy() {
   const roster = threads.map((t) => ({ agent: t.lead, thread_id: t.id, title: t.title, warm: true, thinking: t.id % 2 === 0, workspace_id: 1 }))
   return {
     snapshot(): Agents {
-      const shifts = bench.map((b, i) => ({ workspace_id: 1, seat_id: b.seat_id, name: b.name, archetype: b.archetype, crew: (i < 6 ? "day" : i < 9 ? "night" : "all") as "day" | "night" | "all" }))
+      const shifts = bench.map((b, i) => ({ workspace_id: 1, seat_id: b.seat_id, name: b.name, archetype: b.archetype, crew: (i < 6 ? "day" : "night") as "day" | "night" | "all" }))
       return { ...EMPTY, ok: true, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "" }, { name: "sheriff", meta: false, read_only: true, model: "" }], bench, threads, roster, weather: { ...WEATHER[w]! }, visits }
     },
     nextWeather() { w = (w + 1) % WEATHER.length },

@@ -41,7 +41,7 @@ import { parseWhen, showWhen } from "./when"
 import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
 type Mode =
-  | { kind: "home" } | { kind: "crew" } | { kind: "shifts" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
+  | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
@@ -95,6 +95,9 @@ let tip = "", status = ""
 let headHits: { from: number; to: number; go: () => void }[] = []
 // how the list cards are ordered (`s` sort, `g` group): kept across visits
 const CREW_GROUP_MODES = [null, ...CREW_GROUPS]
+const CREW_TABS = ["day", "night", "all"] as const
+const TAB_LABEL = { day: "☼ day", night: "☾ night", all: "all" } as const
+let crewTab: (typeof CREW_TABS)[number] = "all"
 let crewSort = CREW_SORTS[0]!, crewGroup: (typeof CREW_GROUP_MODES)[number] = null
 type Item = ReturnType<typeof boardColumns>[number]["items"][number]
 const COL_SORTS: Sort<Item>[] = [{ name: "board", cmp: () => 0 }, { name: "title", cmp: (a, b) => a.title.localeCompare(b.title) }, { name: "who", cmp: (a, b) => (a.who ?? "~").localeCompare(b.who ?? "~") }]
@@ -480,7 +483,7 @@ const VERBS: [string, () => void][] = [
   ["health: the service and its box", () => open({ kind: "health" })], ["memory: pinned facts and habits", () => open({ kind: "memory" })],
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
   ["settings: the running system's knobs, and a restart", () => open({ kind: "settings" })],
-  ["crew", () => open({ kind: "crew" })], ["shifts", () => open({ kind: "shifts" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
+  ["crew", () => open({ kind: "crew" })], ["shifts", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
   ["the arcade", () => open({ kind: "arcade" })], ["the suggestion box", () => open({ kind: "ideas" })],
@@ -742,47 +745,42 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `WAITING ON YOU · ${waiting.length}`, rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => openReader(t.id, false) })), actions }
     }
     case "crew": {
-      const crew = crewOf(a)
-      const rows: Row[] = []
-      for (const g of arrange(crew, crewSort.cmp, crewGroup)) {
+      // tabs: the day crew, the night crew, everyone; the crew on shift has the live status
+      const seats = (all.shifts ?? []).filter((x) => x.workspace_id === ws)
+      const on = all.workspaces.find((w) => w.id === ws)?.shift ?? "day", other = on === "day" ? "night" : "day"
+      const live = crewOf(a)
+      const inTab = (name: string) => crewTab === "all" || seats.find((x) => x.name === name)?.crew === crewTab
+      const crew = [...live, ...seats.filter((x) => !live.some((c) => c.name === x.name)).map((x) => ({ name: x.name, archetype: x.archetype, status: "off", thread: null, title: "", manager: false, lead: false }))].filter((c) => inTab(c.name))
+      const shiftOf = (name: string) => seats.find((x) => x.name === name)?.crew
+      const tabs: Seg[] = (["day", "night", "all"] as const).flatMap((t) => [t === crewTab ? { s: ` ${TAB_LABEL[t]} `, fg: ROLE.ground, bg: ROLE.key, bold: true } : dim(` ${TAB_LABEL[t]} `), plain(" ")])
+      const rows: Row[] = [{ segs: [...tabs, dim(`   the ${on} shift is on`)] }]
+      for (const g of arrange(crew as any, crewSort.cmp, crewGroup)) {
         if (g.label !== null) rows.push({ segs: [key(`${g.label} · ${g.items.length}`)] })
-        for (const c of g.items) {
+        for (const c of g.items as any[]) {
           const b = a.bench.find((x) => x.name === c.name), arch = a.archetypes.find((x) => x.name === c.archetype)
           const model = b?.model ? b.model.model : arch?.model?.split("/").pop() ?? ""
+          const off = c.status === "off", shift = shiftOf(c.name)
           rows.push({
-            segs: [{ s: c.status === "working" ? "● " : c.status === "waiting" ? "! " : "○ ", fg: c.status === "working" ? ROLE.live : c.status === "waiting" ? ROLE.attention : ROLE.inactive },
-              { s: c.name.padEnd(10), fg: shirtOf(c.archetype) }, dim(`${c.manager ? "manager" : c.archetype ?? "?"}${c.lead ? " · lead" : ""}`.padEnd(18)), key(model.padEnd(16)), dim(`${b?.ask ?? ""}`.padEnd(6)),
-              dim(c.thread !== null ? `#${c.thread} ${c.title}` : "on the bench")],
+            segs: [{ s: off ? "◌ " : c.status === "working" ? "● " : c.status === "waiting" ? "! " : "○ ", fg: off ? ROLE.inactive : c.status === "working" ? ROLE.live : c.status === "waiting" ? ROLE.attention : ROLE.inactive },
+              { s: c.name.padEnd(10), fg: off ? ROLE.inactive : shirtOf(c.archetype) }, dim(`${c.manager ? "manager" : c.archetype ?? "?"}${c.lead ? " · lead" : ""}`.padEnd(18)), key(model.padEnd(16)),
+              dim((shift === "night" ? "☾ nights" : shift === "day" ? "☼ days" : "both").padEnd(10)),
+              dim(off ? "off shift" : c.thread !== null ? `#${c.thread} ${c.title}` : "on the bench")],
             open: () => open({ kind: "person", name: c.name }), ref: c.name,
           })
         }
       }
-      const chosen = a.bench.find((x) => x.name === rows[sel]?.ref)
+      const chosen = a.bench.find((x) => x.name === rows[sel]?.ref), seat = seats.find((x) => x.name === rows[sel]?.ref)
+      const put = (k: string, crewTo: "day" | "night"): Action => ({ key: k, label: `on ${crewTo === "day" ? "days" : "nights"}`, run: () => { if (seat) void did(data.seatShift(seat.seat_id, seat.name, crewTo)) } })
       return {
-        title: `CREW · ${crew.length} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
+        title: `CREW · ${crew.length} · ${TAB_LABEL[crewTab]} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
         rows,
-        actions: [{ key: "+", label: "hire", run: hire }, { key: "S", label: "shifts", run: () => open({ kind: "shifts" }) },
+        actions: [{ key: "v", label: `tab: ${TAB_LABEL[next(CREW_TABS, crewTab)]}`, run: () => { crewTab = next(CREW_TABS, crewTab); sel = 0; draw() } },
+          put("d", "day"), put("n", "night"),
+          { key: "S", label: `start the ${other} shift`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } },
+          { key: "+", label: "hire", run: hire },
           { key: "s", label: `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`, run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
           { key: "g", label: `group: ${crewGroup?.name ?? "none"} → ${next(CREW_GROUP_MODES, crewGroup)?.name ?? "none"}`, run: () => resort(() => { crewGroup = next(CREW_GROUP_MODES, crewGroup) }) },
           ...seatActions(chosen), back1],
-      }
-    }
-    case "shifts": {
-      const seats = (all.shifts ?? []).filter((x) => x.workspace_id === ws)
-      const on = all.workspaces.find((w) => w.id === ws)?.shift ?? "day", other = on === "day" ? "night" : "day"
-      const rows: Row[] = []
-      for (const [crew, label] of [["day", "☼ DAY"], ["night", "☾ NIGHT"], ["all", "BOTH SHIFTS"]] as const) {
-        const group = seats.filter((x) => x.crew === crew)
-        rows.push({ segs: [key(`${label} · ${group.length}`), crew === on ? { s: "  on now", fg: ROLE.live, bold: true } : dim("")] })
-        for (const x of group) rows.push({ segs: [plain("  "), { s: x.name.padEnd(12), fg: shirtOf(x.archetype) }, dim(x.archetype ?? "")], ref: String(x.seat_id) })
-      }
-      const chosen = seats.find((x) => String(x.seat_id) === rows[sel]?.ref)
-      const put = (k: string, crew: "day" | "night" | "all", label: string): Action => ({ key: k, label, run: () => { if (chosen) void did(data.seatShift(chosen.seat_id, chosen.name, crew)) } })
-      return {
-        title: `SHIFTS · ${on === "night" ? "☾ the night" : "☼ the day"} shift is on`,
-        rows,
-        actions: [put("d", "day", "on days"), put("n", "night", "on nights"), put("b", "all", "on both"),
-          { key: "S", label: `start the ${other} shift`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } }, back1],
       }
     }
     case "person": {
@@ -1299,7 +1297,7 @@ function draw() {
     ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }] : []),
     ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
     ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),
-    ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: () => open({ kind: "shifts" }) }] : []),
+    ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: () => open({ kind: "crew" }) }] : []),
     ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
     ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
     ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),

@@ -1105,7 +1105,8 @@ defmodule Server.Workline do
   stage's kind (intent takes anyone on the bench) and lead no other live workline — else whoever
   staffing put there when the workline opened, and why. A pick from off the bench (a registered
   agent the bench does not seat), or a workline staffing left without a lead, takes the pick as
-  asked. `{:ok, name, :as_asked | {:instead, why}}`.
+  asked. A pick off shift counts as on the bench: a manager may ask for someone off shift by name,
+  and the kind and busy checks still apply. `{:ok, name, :as_asked | {:instead, why}}`.
   """
   def lead_for(%Thread{} = thread, wanted) do
     current = Server.Channel.thread_lead(thread.id)
