@@ -319,6 +319,33 @@ defmodule Server.Staffing do
   end
 
   @doc """
+  Say that a thread parked on the leaf cap got its seat: a `notice` (it wakes nobody) from `tlon`,
+  payload `seated: agent`, which ends the parked note's run as the latest message — so one per
+  seating. The office's in-tray shows it; `Server.Alerts` raises it as info. `:ok`.
+  """
+  def note_seated(%Thread{} = thread, agent) do
+    _ =
+      Channel.post(%{
+        thread_id: thread.id,
+        author: "tlon",
+        kind: "notice",
+        body: "#{agent} sat down on ##{thread.id} — #{thread.title}",
+        payload: %{"seated" => agent}
+      })
+
+    :ok
+  end
+
+  @doc "The seatings (`note_seated/2`) posted at or after `since`, newest first."
+  def seated_since(%DateTime{} = since) do
+    Repo.all(
+      from m in Message,
+        where: m.kind == "notice" and m.created_at >= ^since and fragment("? \\? 'seated'", m.payload),
+        order_by: [desc: m.id]
+    )
+  end
+
+  @doc """
   The coworker windows whose identity has gone stale: their live process still holds a `TLON_AUTHOR`
   that is no longer a handle on this workspace's bench. Conservative: a window is stale only when
   its author is READ successfully and is positively absent — an unreadable `/proc` is left alone.

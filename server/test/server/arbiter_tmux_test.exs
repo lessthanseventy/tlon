@@ -158,6 +158,24 @@ defmodule Server.Arbiter.TmuxTest do
     assert [%{author: "tlon", body: "⏸ parked" <> _}] = Channel.thread_messages(t)
   end
 
+  test "spawn: a parked thread that gets its seat says so, once — a thread never parked says nothing",
+       %{thread: t, exports: exports} do
+    leaves = Enum.map_join(1..6, fn i -> "#{i}\tleaf#{i}\t#{900_000 + i}\tdone\t#{i}\tx\t1\n" end)
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {leaves, 0}}))
+    assert {:error, :at_cap} = Arbiter.Tmux.spawn(exports)
+
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {"", 1}}))
+    assert {:ok, _} = Arbiter.Tmux.spawn(exports)
+    assert {:ok, _} = Arbiter.Tmux.spawn(exports)
+
+    assert [_parked, seated] = Channel.thread_messages(t)
+    assert seated.kind == "notice" and seated.payload == %{"seated" => "claude-code"}
+    assert seated.body == "claude-code sat down on ##{t.id} — spawn me"
+    assert [%{id: id}] = Server.Staffing.seated_since(DateTime.add(DateTime.utc_now(), -60))
+    assert id == seated.id
+    assert [] == Server.Staffing.seated_since(DateTime.add(DateTime.utc_now(), 60))
+  end
+
   test "spawn: a standing duty's leaf takes no seat — at the cap counting it, a work thread still spawns",
        %{ws: ws, exports: exports} do
     {:ok, duty} = Channel.open_thread(%{title: "inbox sweep", scope: "machine", workspace_id: ws.id})

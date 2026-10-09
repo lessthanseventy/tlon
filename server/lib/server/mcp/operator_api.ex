@@ -18,7 +18,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/focus            Office.Focus.latest (the newest "show thread N" request)
       POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks the office TUI to open a thread
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
-      GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky — each with its actions)
+      GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky, info — each with its actions)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
       POST   /api/office/asks/:id         Attention.answer_ask {"key"} (one ask answered by its option key)
       POST   /api/office/jobs/:id/retry   Office.Needs.retry_job (a failed job, run again)

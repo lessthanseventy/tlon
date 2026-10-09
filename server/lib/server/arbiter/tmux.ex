@@ -55,6 +55,7 @@ defmodule Server.Arbiter.Tmux do
          standing? = standing?(ws, thread),
          tabs = Tmux.list_windows(ws),
          :absent <- running(tabs, thread, author, standing?),
+         parked? = Server.Staffing.parked_note?(thread_id),
          :ok <- under_cap(tabs, thread, standing?) do
       leaf_thread = if(!standing?, do: thread_id)
       window = if standing?, do: author, else: "t#{thread_id}"
@@ -69,6 +70,7 @@ defmodule Server.Arbiter.Tmux do
       case Tmux.run(ws, args) do
         {_out, 0} ->
           tag(ws, window, leaf_thread, author)
+          _ = parked? and Server.Staffing.note_seated(thread, author)
           {:ok, target(ws, window)}
 
         {out, _} ->
