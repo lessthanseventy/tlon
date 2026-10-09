@@ -88,19 +88,38 @@ defmodule Server.Office.CorkboardTest do
     end
   end
 
-  test "a suggestion goes in the box, apart from the chatter, and leaves it when dropped" do
+  test "a suggestion goes in the box on the standing thread, apart from the chatter, survives a restart, and leaves when dropped" do
+    Server.TestDB.clean!()
+    {:ok, ws} = Server.Workspaces.register(%{name: "Boxed"})
+    {:ok, root} = Server.Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
+    {:ok, _} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id})
     start_supervised!(Corkboard)
 
     GenServer.cast(
       Corkboard,
-      {:pinned, 9, %{author: "ashe", kind: "suggestion", body: "log first-failure times", re: nil}}
+      {:pinned, ws.id, %{author: "ashe", kind: "suggestion", body: "log first-failure times", re: nil}}
     )
 
-    GenServer.cast(Corkboard, {:pinned, 9, %{author: "yu", kind: "joke", body: "a joke", re: nil}})
+    GenServer.cast(Corkboard, {:pinned, ws.id, %{author: "yu", kind: "joke", body: "a joke", re: nil}})
+    refute Enum.any?(:sys.get_state(Corkboard)[ws.id].notes, &(&1.kind == "suggestion"))
 
-    assert [%{id: id, author: "ashe", body: "log first-failure times"}] = Corkboard.suggestions(9)
-    refute Enum.any?(:sys.get_state(Corkboard)[9].notes, &(&1.kind == "suggestion"))
-    assert :ok = Corkboard.drop(9, id)
-    assert Corkboard.suggestions(9) == []
+    stop_supervised!(Corkboard)
+    start_supervised!(Corkboard)
+
+    assert [%{id: id, author: "ashe", kind: "suggestion", body: "log first-failure times", re: nil, at: at}] =
+             Corkboard.suggestions(ws.id)
+
+    assert is_integer(at)
+
+    assert %Server.Message{thread_id: thread_id, kind: "suggestion", delivered_at: %DateTime{}, body: body} =
+             Server.Repo.get(Server.Message, id)
+
+    assert thread_id == root.id and body =~ "corkboard suggestion"
+    assert [%{kind: "suggestion", ref: ^id, text: "log first-failure times"}] = Server.Office.Needs.list()
+
+    assert :ok = Corkboard.drop(ws.id, id)
+    assert Corkboard.suggestions(ws.id) == []
+    assert %Server.Message{resolved_at: %DateTime{}} = Server.Repo.get(Server.Message, id)
+    assert Server.Office.Needs.list() == []
   end
 end
