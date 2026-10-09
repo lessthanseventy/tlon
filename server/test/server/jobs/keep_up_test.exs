@@ -73,5 +73,21 @@ defmodule Server.Jobs.KeepUpTest do
 
       assert Tickets.open_in_workspace(ws.id) == []
     end
+
+    test "a failed or skipped check changes nothing", %{ws: ws} do
+      KeepUp.drifted("/r/owned", {:diverged, 4})
+      KeepUp.drifted("/r/owned", {:error, "fetch failed"})
+      KeepUp.drifted("/r/owned", :skipped)
+
+      assert [%{title: "land local main's 4 commits"}] = Tickets.open_in_workspace(ws.id)
+    end
+  end
+
+  test "a failed or skipped check leaves an unowned repo's note" do
+    KeepUp.drifted("/r/orphan", {:diverged, 3})
+    KeepUp.drifted("/r/orphan", {:error, "x"})
+    KeepUp.drifted("/r/orphan", :skipped)
+
+    assert [_] = notes("/r/orphan")
   end
 end
