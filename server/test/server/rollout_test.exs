@@ -17,6 +17,16 @@ defmodule Server.RolloutTest do
     assert Rollout.parts(["docs/x.md"]) == MapSet.new()
   end
 
+  test "a merge whose range git can't diff says so on the thread instead of raising" do
+    {:ok, thread} = Server.Channel.open_thread(%{title: "landed"})
+
+    assert :ok = Rollout.after_merge(%{repo: File.cwd!(), from: "a", to: "b", thread_id: thread.id})
+
+    assert [%{author: "tlon", body: body}] = Server.Channel.thread_messages(thread)
+    assert body =~ "rollout unknown"
+    assert body =~ "a..b"
+  end
+
   test "a note for the operator is pending until dismissed" do
     GenServer.cast(Rollout, {:note, "pin tlon"})
     assert %{id: id} = Enum.find(Rollout.pending(), &(&1.text == "pin tlon"))
