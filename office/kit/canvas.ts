@@ -50,17 +50,22 @@ export function fit(measure: Measure, name: string, w: number, size: number) {
   while (n.length > 2 && measure(n, size) > w) n = n.slice(0, -1)
   return n === name ? name : `${n.slice(0, -1)}.`
 }
-/** what someone said, as a balloon's few lines: ASCII (a toy font has no fallback), ~26 a line */
-export function balloonLines(said: string): string[] {
+/** what someone said, as a balloon's few lines: ASCII (a toy font has no fallback), 34x4 by default, a word longer than a line hard-broken */
+export function balloonLines(said: string, width = 34, rows = 4): string[] {
   const flat = said.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...")
     .replace(/[^\x20-\x7e]/g, "").replace(/\s+/g, " ").trim()
   const lines: string[] = []
   let line = ""
-  for (const w of flat.split(" ")) {
-    if ((line + " " + w).trim().length > 26) { lines.push(line); line = w } else line = (line + " " + w).trim()
-    if (lines.length === 3) break
+  for (let w of flat.split(" ").filter(Boolean)) {
+    while (w.length > width) {
+      if (line) { lines.push(line); line = "" }
+      lines.push(w.slice(0, width)); w = w.slice(width)
+    }
+    if (line && line.length + 1 + w.length > width) { lines.push(line); line = w } else line = line ? `${line} ${w}` : w
   }
-  if (lines.length < 3 && line) lines.push(line)
-  if (lines.join(" ").length < flat.length) lines[lines.length - 1] = lines[lines.length - 1]!.slice(0, 23) + "..."
-  return lines
+  if (line) lines.push(line)
+  if (lines.length <= rows) return lines
+  const kept = lines.slice(0, rows)
+  kept[rows - 1] = kept[rows - 1]!.slice(0, Math.max(0, width - 3)).trimEnd() + "..."
+  return kept
 }
