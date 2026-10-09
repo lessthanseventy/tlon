@@ -247,3 +247,25 @@ export function drawParty(sc: Scene, x: number, y: number, left: number) {
     }
   })
 }
+
+/** the server closet: a grey rack with a light per shelf — green while the channel is up, red while it burns */
+export function drawCloset(sc: Scene, r: { x: number; y: number; w: number; h: number }, burning: boolean) {
+  sc.px(r.x, r.y, r.w, r.h, ROLE.edge); sc.px(r.x + 1, r.y + 1, r.w - 2, r.h - 2, tint(ROLE.prose, ROLE.ground, 0.5))
+  for (let y = r.y + 4; y < r.y + r.h - 3; y += 5) {
+    sc.px(r.x + 2, y, r.w - 4, 3, ROLE.ground)
+    sc.px(r.x + r.w - 4, y + 1, 1, 1, burning && sc.tick % 6 < 3 ? ROLE.prose : burning ? ROLE.alarm : ROLE.live)
+  }
+}
+
+/** flames licking up the closet's front and smoke curling off its top, both moving with the tick */
+export function drawFire(sc: Scene, r: { x: number; y: number; w: number; h: number }) {
+  const beat = Math.floor(sc.tick / 3)
+  for (let i = 0; i < 3; i++) {
+    const h = 6 + ((beat + i * 2) % 3) * 3, x = r.x + 1 + i * 4, y = r.y + r.h - h
+    sc.px(x, y, 3, h, ROLE.alarm); sc.px(x + 1, y + Math.floor(h / 3), 1, h - Math.floor(h / 3), ROLE.attention)
+  }
+  for (let i = 0; i < 4; i++) {
+    const age = (sc.tick + i * 9) % 36, y = r.y - 2 - Math.floor(age / 2)
+    sc.px(r.x + 2 + ((i * 5 + (age >> 3)) % 8), y, 2, 2, tint(ROLE.prose, ROLE.ground, 0.6 * (1 - age / 36)))
+  }
+}

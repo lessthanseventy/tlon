@@ -10,11 +10,11 @@ import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, peopleOf, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
-import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
+import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
 import { ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
 import { Sim, type Actor, type Pt, type Spot } from "../kit/sim"
-import type { Live } from "../kit/tiles"
+import type { Live, Rect } from "../kit/tiles"
 import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { meetingTile } from "../kit/tiles/meeting"
@@ -74,6 +74,9 @@ export function corner(z: Zones) {
     pool: { x: z.L0 + 68, y: 166, w: 26, h: 12 },
   }
 }
+
+/** the server closet: a rack by the office's door, clear of every lane — what burns when the channel is down */
+export const closet = (): Rect => ({ x: 2, y: 158, w: 12, h: 26 })
 
 /** where Nina sits to watch the fish: on the floor in front of the aquarium */
 export function fishWatch(z: Zones): Pt { const t = corner(z).tank; return { x: t.x + 15, y: t.y + t.h + 8 } }
@@ -324,6 +327,8 @@ export class WideRoom extends Sim<Layout> {
     for (let i = 0; i < 7; i++) for (const [dx, dy, w] of [[1, 0, 1], [0, 1, 3], [1, 2, 1]] as const) px(20 + i * 9 + dx, 124 + dy, w, 1, ROLE.assistant)
     this.catCorner.draw(sc, a, l, measure, this.live(), focus)
     this.office.draw(sc, a, l, measure, this.live(), focus)
+    drawCloset(sc, closet(), this.fire)
+    if (this.fire) drawFire(sc, closet())
 
     // ── the meeting room: glass, a round table, its chairs ──
     this.meeting.draw(sc, a, l, measure, this.live(), focus)
@@ -350,6 +355,7 @@ export class WideRoom extends Sim<Layout> {
     if (this.tick < this.discoUntil) for (const x of this.actors.values()) drawParty(sc, x.x, x.y, (this.discoUntil - this.tick) % 60)
 
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
+    if (this.fire) text("FIRE DRILL", (F0 + F1) / 2, 132, ROLE.alarm)
     this.nightfall(sc, now)
     paintAnnex(sc.cv, this.home, WIDE_H)
     return sc.finish()
