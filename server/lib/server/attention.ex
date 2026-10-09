@@ -281,9 +281,10 @@ defmodule Server.Attention do
   A decision with its answers attached — `ask_operator(question, options)`'s door. One pane-less
   `prompt` per decision (payload `ask: author`), keyed `1`, `2`, …; the thread does not park, and
   a thread holds as many asks as it has decisions. Answered by id (`answer_ask/3`) or by a reply
-  on the thread that names an option. `{:ok, prompt}`.
+  on the thread that names an option. `about` is the thread the decision is about when it isn't
+  `thread_id`: when that thread closes the ask is withdrawn (`withdraw_asks_about/1`). `{:ok, prompt}`.
   """
-  def ask(thread_id, author, question, [_ | _] = options) do
+  def ask(thread_id, author, question, [_ | _] = options, about \\ nil) do
     options = options |> Enum.with_index(1) |> Enum.map(fn {label, i} -> %{"key" => "#{i}", "label" => label} end)
     body = "⚑ #{author} asks — #{question}\n" <> Enum.map_join(options, " · ", &"(#{&1["key"]}) #{&1["label"]}")
 
@@ -292,7 +293,11 @@ defmodule Server.Attention do
       author: author,
       body: body,
       kind: "prompt",
-      payload: %{"ask" => author, "summary" => question, "options" => options}
+      payload:
+        Map.merge(
+          %{"ask" => author, "summary" => question, "options" => options},
+          if(about, do: %{"about" => about}, else: %{})
+        )
     }
     |> Message.post_changeset()
     |> Ecto.Changeset.put_change(:delivered_at, now())
@@ -301,6 +306,30 @@ defmodule Server.Attention do
       {:ok, m} -> {:ok, tap(m, &Bus.broadcast({:message_posted, &1}))}
       error -> error
     end
+  end
+
+  @doc """
+  Withdraw every open ask about `thread_id` (`ask/5`'s `about`): that thread closed, so nothing is
+  left to decide. Each asker is told on the thread it asked from, so it stops chasing the decision.
+  """
+  def withdraw_asks_about(thread_id) do
+    from(m in Message,
+      where:
+        m.kind == "prompt" and is_nil(m.resolved_at) and
+          fragment("? ->> 'about'", m.payload) == ^to_string(thread_id)
+    )
+    |> Repo.all()
+    |> Enum.each(fn ask ->
+      resolve(ask, "withdrawn: ##{thread_id} closed")
+
+      Channel.post(%{
+        thread_id: ask.thread_id,
+        author: "tlon",
+        reply_to: ask.id,
+        body:
+          "@#{ask.payload["ask"]} your ask is withdrawn: ##{thread_id} closed, so there is nothing left to decide — “#{ask.payload["summary"]}”"
+      })
+    end)
   end
 
   @doc "Answer the ask `id` with one of its option keys (text after the key rides along)."

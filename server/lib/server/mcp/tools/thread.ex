@@ -290,7 +290,9 @@ defmodule Server.MCP.Tool.AskOperator do
   Ask the operator something only they can answer — `ask_operator(question, options)`: a decision,
   a preference, an approval. With `options` (the answers, e.g. ["go", "hold"]) it is an ask: one
   decision, answered with a key from their inbox, the answer posted back to you on this thread;
-  call it once per decision, never several in one question. Without options the question is posted
+  call it once per decision, never several in one question. A decision about another thread (a
+  workline you chase, not your own) names it in `about`: when that thread closes the ask is
+  withdrawn and you are told, so you never chase a decision that already happened. Without options the question is posted
   and the thread parks on the operator until they reply. Use it whenever you would otherwise end a
   message with a question for them. A gap in the WORK that you can research is `raise_question`.
   """
@@ -305,6 +307,10 @@ defmodule Server.MCP.Tool.AskOperator do
 
     field :options, {:list, :string},
       description: ~s(The answers they pick from, e.g. ["go", "hold"] — each becomes a key in their inbox)
+
+    field :about, :integer,
+      description:
+        "The thread id this decision is about, when it isn't your own — the ask is withdrawn if that thread closes first"
   end
 
   @impl true
@@ -314,7 +320,7 @@ defmodule Server.MCP.Tool.AskOperator do
     case params[:options] do
       [_ | _] = options ->
         identity.thread_id
-        |> Attention.ask(identity.agent, params[:question], options)
+        |> Attention.ask(identity.agent, params[:question], options, params[:about])
         |> then(&reply(frame, &1, fn m -> %{"message_id" => m.id, "ask" => true, "options" => length(options)} end))
 
       _ ->

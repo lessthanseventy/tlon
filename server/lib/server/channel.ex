@@ -132,6 +132,7 @@ defmodule Server.Channel do
         Server.Bus.announce({:ok, closed}, :thread_closed)
         Staff.end_thread_sessions(thread.id)
         Server.Tickets.done_for(thread.id)
+        Server.Attention.withdraw_asks_about(thread.id)
         report_to_parent(closed)
         {:ok, closed}
 

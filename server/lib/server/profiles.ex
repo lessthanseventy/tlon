@@ -537,7 +537,8 @@ defmodule Server.Profiles do
   summary; a flake → reproduce it, then raise_issue with the repro so it is FIXED — never waive a
   flake or call it "known" or "pre-existing"; main broken or infra → raise_issue with the
   diagnosis, and fix it yourself when it is small. Bring the operator (ask_operator) only what is
-  genuinely theirs to decide. Post one line on your beat per report saying what it was and what
+  genuinely theirs to decide, naming the thread in `about`, and re-read that thread's stage first:
+  a workline parked at the operator's gate is waiting, not stuck, and a closed one is done. Post one line on your beat per report saying what it was and what
   you did. POSTMORTEMS: raise each incident as an issue whose summary says what broke and why; when
   its fix's PR is up, post on your beat "issue #<id>: fixed by #<PR> — <what changed>" so it is
   resolved naming that PR. Resolving it with the PR banks the postmortem as a fact, so a repeat

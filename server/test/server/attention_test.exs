@@ -246,5 +246,26 @@ defmodule Server.AttentionTest do
 
       assert Repo.get!(Message, a.id).resolution == "answered: go"
     end
+
+    test "an ask about another thread is withdrawn when that thread closes, and the asker is told",
+         %{thread: t} do
+      {:ok, about} = Channel.open_thread(%{title: "toy step 1"})
+      {:ok, other} = Channel.open_thread(%{title: "still going"})
+      {:ok, a} = Attention.ask(t.id, "scharlach", "how should it move?", ["allow", "advance"], about.id)
+      {:ok, b} = Attention.ask(t.id, "scharlach", "and this one?", ["go", "hold"], other.id)
+
+      {:ok, _} = Channel.close_thread(about)
+
+      assert Repo.get!(Message, a.id).resolution == "withdrawn: ##{about.id} closed"
+      assert Repo.get!(Message, b.id).resolved_at == nil
+      assert Enum.map(Attention.open_asks(), & &1.id) == [b.id]
+
+      assert [%Message{author: "tlon", reply_to: reply_to, body: body}] =
+               Repo.all(from m in Message, where: m.thread_id == ^t.id and m.kind == "chat")
+
+      assert reply_to == a.id
+      assert body =~ "@scharlach"
+      assert body =~ "##{about.id} closed"
+    end
   end
 end
