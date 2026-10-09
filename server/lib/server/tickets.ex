@@ -91,8 +91,10 @@ defmodule Server.Tickets do
   them to staff it (`staff_child` with the `ticket_id`, which moves the ticket into the thread they
   open). The ticket is marked `todo`: handed over, not started. A workspace with no manager or no
   root thread starts the ticket with its lead instead. `{:ok, %{routed_to: name}}` or
-  `{:ok, %{started: thread}}`, or `{:error, reason}`.
+  `{:ok, %{started: thread}}`, or `{:error, reason}`. An epic is never work: `{:error, :epic}`.
   """
+  def route(%Ticket{kind: "epic"}), do: {:error, :epic}
+
   def route(%Ticket{} = ticket) do
     case {Server.Workspaces.manager(ticket.workspace_id), Server.Channel.machine_thread(ticket.workspace_id)} do
       {%Server.Coworker{name: name}, %Server.Thread{} = root} ->
@@ -127,9 +129,12 @@ defmodule Server.Tickets do
   operator's post, so its lead is staffed like any ask), and the ticket promoted into it. `agent_id`
   hands the thread to that coworker; without one, or when it is the manager (who never leads a
   workline), the promotion staffs a builder — or, with none on the bench to staff, leaves it unled.
-  `{:ok, thread}` or `{:error, reason}`.
+  `{:ok, thread}` or `{:error, reason}`; an epic is never work: `{:error, :epic}`.
   """
-  def start_thread(%Ticket{} = ticket, agent_id \\ nil) do
+  def start_thread(ticket, agent_id \\ nil)
+  def start_thread(%Ticket{kind: "epic"}, _agent_id), do: {:error, :epic}
+
+  def start_thread(%Ticket{} = ticket, agent_id) do
     operator = Application.get_env(:server, :operator, "andrew")
     ask = Enum.join(Enum.reject([ticket.title, ticket.body, "(ticket ##{ticket.id})"], &(&1 in [nil, ""])), "\n\n")
 
