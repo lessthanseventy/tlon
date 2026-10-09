@@ -206,6 +206,25 @@ defmodule Server.WorklineReviewHeadTest do
     assert {:awaiting, _} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
   end
 
+  test "a round-one review from before shas were recorded still counts: round two needs its own verdict",
+       %{root: root} do
+    thread = at_review(root, "legacy-second-round")
+    {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", artifacts: AllPresent)
+
+    Repo.update_all(
+      from(e in Server.Event,
+        where: e.thread_id == ^thread.id and e.correlation == "workline:legacy-second-round:review"
+      ),
+      set: [detail: %{"exit" => 1}]
+    )
+
+    {:ok, verifying} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+    {:ok, reviewing} = Workline.advance(verifying, artifacts: AllPresent)
+
+    assert {:error, {:artifact_missing, why}} = Workline.advance(reviewing, artifacts: AllPresent)
+    assert why =~ "this round"
+  end
+
   test "a bounce while the landing's gate runs wins: nothing lands, the builder keeps it", %{root: root} do
     thread = at_review(root, "bounced-mid-landing")
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
