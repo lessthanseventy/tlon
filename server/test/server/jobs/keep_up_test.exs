@@ -97,6 +97,51 @@ defmodule Server.Jobs.KeepUpTest do
     end
   end
 
+  describe "a landed workline whose PR's checks went red" do
+    setup do
+      {:ok, ws} = Workspaces.register(%{name: "Watched"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      {:ok, t} = Server.Workline.open(%{title: "lamp", slug: "lamp", stage: "review", workspace_id: ws.id})
+      Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "merged"])
+      %{thread: t}
+    end
+
+    defp gh(prs) do
+      fn cmd, args, _opts ->
+        send(self(), {:ran, [cmd | args]})
+
+        case args do
+          ["pr", "list" | _] -> {Jason.encode!(prs), 0}
+          _ -> {"", 0}
+        end
+      end
+    end
+
+    @red [%{"number" => 9, "headRefName" => "work/lamp", "statusCheckRollup" => [%{"conclusion" => "FAILURE"}]}]
+
+    test "is reported to the sheriff, its PR closed and the workline back at build", %{thread: t} do
+      KeepUp.red_checks("/repo", gh(@red))
+
+      assert_received {:ran, ["gh", "pr", "close", "9", "--comment", comment]}
+      assert comment =~ "checks"
+      assert %Server.Thread{stage: "build", state: "open"} = Repo.get!(Server.Thread, t.id)
+
+      beat =
+        Repo.one!(from b in Server.Thread, where: b.workspace_id == ^t.workspace_id and b.title == "sheriff's beat")
+
+      assert [%Message{body: body}] = Repo.all(from m in Message, where: m.thread_id == ^beat.id and like(m.body, "🚨%"))
+      assert body =~ "PR #9" and body =~ "red"
+    end
+
+    test "a PR whose workline has not landed is left alone", %{thread: t} do
+      Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "review"])
+      KeepUp.red_checks("/repo", gh(@red))
+
+      refute_received {:ran, ["gh", "pr", "close" | _]}
+      assert %Server.Thread{stage: "review"} = Repo.get!(Server.Thread, t.id)
+    end
+  end
+
   test "a failed or skipped check leaves an unowned repo's note" do
     KeepUp.drifted("/r/orphan", {:diverged, 3})
     KeepUp.drifted("/r/orphan", {:error, "x"})

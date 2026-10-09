@@ -87,6 +87,30 @@ defmodule Server.Workline.Publish do
     end
   end
 
+  @doc """
+  Its landings whose checks went red: auto-merge waits on green, so such a PR stays open for good
+  (`BEHIND`/`DIRTY` it is not). Each open PR on a `work/*` branch with a failed check, as
+  `%{number, slug}`; one still pending is not failing. A repo `gh` can't read is `[]`.
+  """
+  def failing(repo, run \\ &System.cmd/3) do
+    opts = [cd: repo, stderr_to_stdout: true]
+
+    with {out, 0} <-
+           run.("gh", ["pr", "list", "--state", "open", "--json", "number,headRefName,statusCheckRollup"], opts),
+         {:ok, prs} when is_list(prs) <- Jason.decode(out) do
+      for %{"number" => n, "headRefName" => "work/" <> slug} = pr <- prs,
+          Enum.any?(pr["statusCheckRollup"] || [], &red?/1),
+          do: %{number: n, slug: slug}
+    else
+      _ -> []
+    end
+  end
+
+  # a CheckRun carries `conclusion`, a commit status `state`
+  defp red?(%{"conclusion" => c}) when c in ["FAILURE", "TIMED_OUT", "STARTUP_FAILURE"], do: true
+  defp red?(%{"state" => s}) when s in ["FAILURE", "ERROR"], do: true
+  defp red?(_), do: false
+
   @doc "Close PR `number`, saying why; its branch stays for the next landing to push and open anew."
   def close(repo, number, why, run \\ &System.cmd/3) do
     case run.("gh", ["pr", "close", to_string(number), "--comment", why], cd: repo, stderr_to_stdout: true) do

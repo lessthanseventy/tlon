@@ -87,6 +87,33 @@ defmodule Server.WorklinePublishTest do
     end
   end
 
+  describe "failing/2 — a landing whose checks went red, so auto-merge never fires" do
+    @red Jason.encode!([
+           %{
+             "number" => 80,
+             "headRefName" => "work/red",
+             "statusCheckRollup" => [
+               %{"conclusion" => "SUCCESS", "name" => "lint"},
+               %{"conclusion" => "FAILURE", "name" => "check"}
+             ]
+           },
+           %{"number" => 81, "headRefName" => "work/green", "statusCheckRollup" => [%{"conclusion" => "SUCCESS"}]},
+           %{"number" => 82, "headRefName" => "work/pending", "statusCheckRollup" => [%{"conclusion" => ""}]},
+           %{"number" => 83, "headRefName" => "work/status", "statusCheckRollup" => [%{"state" => "ERROR"}]},
+           %{"number" => 84, "headRefName" => "fix/mine", "statusCheckRollup" => [%{"conclusion" => "FAILURE"}]}
+         ])
+
+    test "its own PRs with a failed check, by slug — never pending, green or a human's branch" do
+      run = runner([{&match?(["gh", "pr", "list" | _], &1), {@red, 0}}])
+      assert [%{number: 80, slug: "red"}, %{number: 83, slug: "status"}] = Publish.failing("/repo", run)
+    end
+
+    test "a repo gh can't read is nothing to do" do
+      run = runner([{&match?(["gh", "pr", "list" | _], &1), {"no git remotes found", 1}}])
+      assert [] = Publish.failing("/repo", run)
+    end
+  end
+
   describe "conflicting/2 — a landing GitHub can never merge: main moved under it and they conflict" do
     @prs Jason.encode!([
            %{"number" => 73, "headRefName" => "work/tangled", "mergeStateStatus" => "DIRTY"},

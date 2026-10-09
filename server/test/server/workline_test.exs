@@ -832,6 +832,32 @@ defmodule Server.WorklineTest do
       assert Server.Office.Needs.landing?(Repo.get!(Server.Thread, queued.id))
     end
 
+    test "requeue_stranded: an approved review with no landing job (Lifeline rescued or discarded it) is queued again",
+         %{repo: repo} do
+      queued = queued_lamp!()
+
+      # a landing queued or running is left alone
+      assert [] = Workline.requeue_stranded()
+      assert Server.Office.Needs.landing?(Repo.get!(Server.Thread, queued.id))
+
+      Repo.update_all(Oban.Job, set: [state: "discarded"])
+      assert [%{id: id}] = Workline.requeue_stranded()
+      assert id == queued.id
+      assert Server.Office.Needs.landing?(Repo.get!(Server.Thread, queued.id))
+      assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "queued again"))
+
+      # now it has a job: a second sweep does not stack another
+      assert [] = Workline.requeue_stranded()
+
+      # a branch that moved since voids the approval: nothing to requeue
+      Repo.update_all(Oban.Job, set: [state: "discarded"])
+      File.write!(Path.join(repo, "lamp.ex"), "code\n")
+      git!(repo, ["add", "lamp.ex"])
+      git!(repo, ["commit", "-q", "-m", "more code"])
+      git!(repo, ["branch", "-f", "work/lamp", "HEAD"])
+      assert [] = Workline.requeue_stranded()
+    end
+
     test "a thread that isn't a workline just reopens" do
       {:ok, t} = Channel.open_thread(%{title: "chat"})
       {:ok, closed} = Channel.close_thread(t)

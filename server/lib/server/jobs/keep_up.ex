@@ -3,7 +3,8 @@ defmodule Server.Jobs.KeepUp do
   Every few minutes, each project repo's landings that GitHub left behind main are rebased so their
   auto-merge can go (`Server.Workline.Publish.refresh_behind/2`), those that now conflict with main
   are closed and their worklines sent back to build (`Server.Workline.reland/2`) rather than left
-  stranded with their threads closed, and its main checkout is brought level with origin/main,
+  stranded with their threads closed, and those whose checks went red (so auto-merge never fires)
+  are reported to the workspace's sheriff, closed and sent back the same way, and its main checkout is brought level with origin/main,
   fast-forward only (`follow_main/2`).
 
   A main that has drifted is never merged: it is one ticket (and one lobby post) in the workspace
@@ -16,6 +17,7 @@ defmodule Server.Jobs.KeepUp do
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
     for repo <- repos(), do: keep_up(repo)
+    requeue_stranded()
 
     :ok
   end
@@ -24,6 +26,7 @@ defmodule Server.Jobs.KeepUp do
   defp keep_up(repo) do
     Server.Workline.Publish.refresh_behind(repo)
     reland(repo)
+    red_checks(repo)
     drifted(repo, Server.Workline.Publish.follow_main(repo))
   rescue
     e -> require(Logger) && Logger.error("keep_up #{repo}: #{Exception.message(e)}")
@@ -36,6 +39,25 @@ defmodule Server.Jobs.KeepUp do
 
       with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to rebase it"),
            do: Server.Workline.reland(t, why)
+    end
+  end
+
+  # approved worklines whose Land job Lifeline rescued or discarded wait at review with nothing queued
+  defp requeue_stranded do
+    Server.Workline.requeue_stranded()
+  rescue
+    e -> require(Logger) && Logger.error("keep_up requeue_stranded: #{Exception.message(e)}")
+  end
+
+  @doc false
+  def red_checks(repo, run \\ &System.cmd/3) do
+    for %{number: n, slug: slug} <- Server.Workline.Publish.failing(repo, run),
+        %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
+      why = "its PR ##{n}'s checks went red"
+      Server.Sheriff.report(t, "#{why}, so GitHub will never merge it; the workline is back at build")
+
+      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to fix it", run),
+           do: Server.Workline.reland(t, why, "#{why}. Fix work/#{t.slug} until its checks pass, test")
     end
   end
 
