@@ -64,7 +64,7 @@ export async function corkboard(ws: number): Promise<CorkNote[]> {
 }
 /** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
 export type Need = {
-  key: string; kind: "gate" | "question" | "dialog" | "verify_failed" | "mention" | "suggestion" | "rollout"
+  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "mention" | "suggestion" | "rollout" | "seats" | "job_failed"
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
 }
@@ -73,6 +73,9 @@ export async function needs(): Promise<Need[]> {
   try { const r = await call("GET", "/office/needs"); return r.status === 200 ? r.json : [] } catch { return [] }
 }
 export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `/threads/${tid}/verify`, {}, () => `verify on #${tid} queued`)
+export const answerAsk = (id: number, key: string) => write("answering", `/office/asks/${id}`, { key }, () => "answered")
+export const retryJob = (id: number) => write("retrying the job", `/office/jobs/${id}/retry`, {}, () => "running it again")
+export const dismissJob = (id: number) => send("DELETE", "clearing the job", `/office/jobs/${id}`, () => "dismissed")
 export const dismissRollout = (id: number) => send("DELETE", "clearing the note", `/office/rollout/${id}`, () => "done")
 /** the suggestion box: the crew's suggestions not yet filed or thrown out */
 export async function suggestions(ws: number): Promise<CorkNote[]> {
