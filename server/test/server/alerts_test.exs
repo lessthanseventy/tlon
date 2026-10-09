@@ -68,6 +68,24 @@ defmodule Server.AlertsTest do
     assert [%{label: "Reply…", input: "body", path: "/api/threads/8/messages"}] = q.actions
   end
 
+  test "a coworker's ask is a decision, each of its answers a click that answers it by its id" do
+    ask =
+      need("ask", %{
+        key: "ask:41",
+        ref: 41,
+        text: "emma: ship it?",
+        options: [%{"key" => "1", "label" => "Ship"}, %{"key" => "2", "label" => "Hold"}]
+      })
+
+    [a] = Alerts.build([ask], [], @now)
+    assert a.level == "decision" and a.key == "ask:41"
+
+    assert [
+             %{label: "Ship", method: "POST", path: "/api/office/asks/41", body: %{key: "1"}},
+             %{label: "Hold", method: "POST", path: "/api/office/asks/41", body: %{key: "2"}}
+           ] = a.actions
+  end
+
   test "what to decide when convenient is sticky, never an interruption" do
     alerts =
       Alerts.build(
