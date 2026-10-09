@@ -44,6 +44,7 @@ defmodule Server.WorkspaceAgent do
     do:
       seat
       |> cast(attrs, @mutable)
+      |> validate_required([:crew])
       |> validate_inclusion(:grade, @grades)
       |> validate_inclusion(:crew, ~w(all day night))
       |> validate_archetype()

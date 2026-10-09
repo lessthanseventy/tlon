@@ -24,21 +24,26 @@ defmodule Server.Shifts do
   @doc """
   Put the workspace on shift `to`. Each open workline led by someone going off is restaffed from the
   crew coming on (`restaffed`); a plain thread they lead waits for them (`waiting`). Switching to the
-  shift already on changes nothing. `{:ok, %{restaffed, waiting}}` | `{:error, :unknown_shift}`.
+  shift already on changes nothing. `{:ok, %{restaffed, waiting}}` |
+  `{:error, :unknown_shift | :not_found}`.
   """
   def switch(workspace_id, to) when to in @shifts do
-    if current(workspace_id) == to do
-      {:ok, %{restaffed: [], waiting: []}}
-    else
-      {1, _} = Repo.update_all(from(w in Workspace, where: w.id == ^workspace_id), set: [shift: to])
-      announce(workspace_id)
-      going = workspace_id |> Workspaces.bench_all() |> Enum.filter(&(&1.crew not in ["all", to]))
-
-      {:ok, workspace_id |> led_by(going) |> Enum.reduce(%{restaffed: [], waiting: []}, &change_over(&1, &2, to))}
+    cond do
+      is_nil(Repo.get(Workspace, workspace_id)) -> {:error, :not_found}
+      current(workspace_id) == to -> {:ok, %{restaffed: [], waiting: []}}
+      true -> switch_to(workspace_id, to)
     end
   end
 
   def switch(_workspace_id, _to), do: {:error, :unknown_shift}
+
+  @doc """
+  The crew a seat hired now joins: the shift on, once the workspace has crews; with none set, both,
+  so a bench with no shifts stays without them.
+  """
+  def hire_crew(workspace_id) do
+    if Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew != "all")), do: current(workspace_id), else: "all"
+  end
 
   @doc "Put a seat on a shift: `day`, `night` or `all` (both). `{:ok, seat}` | `{:error, changeset | :not_found}`."
   def assign(seat_id, crew) do
@@ -47,6 +52,13 @@ defmodule Server.Shifts do
       announce(seat.workspace_id)
       {:ok, seat}
     end
+  end
+
+  defp switch_to(workspace_id, to) do
+    {1, _} = Repo.update_all(from(w in Workspace, where: w.id == ^workspace_id), set: [shift: to])
+    announce(workspace_id)
+    going = workspace_id |> Workspaces.bench_all() |> Enum.filter(&(&1.crew not in ["all", to]))
+    {:ok, workspace_id |> led_by(going) |> Enum.reduce(%{restaffed: [], waiting: []}, &change_over(&1, &2, to))}
   end
 
   defp announce(workspace_id), do: Server.Bus.broadcast({:workspace_edited, Repo.get!(Workspace, workspace_id)})
@@ -63,10 +75,18 @@ defmodule Server.Shifts do
     )
   end
 
+  # restaffed only when the lead actually changed: with nobody of the kind on shift, restaff says so
+  # itself and the workline waits
   defp change_over(%Thread{stage: stage} = thread, acc, to) when stage not in [nil, "merged"] do
-    note(thread, "#{mark(to)} the #{to} shift is on: whoever is on shift for #{stage} picks this workline up.")
+    before = Channel.thread_lead(thread.id)
     {:ok, _} = Server.Workline.restaff_now(thread)
-    %{acc | restaffed: acc.restaffed ++ [thread.id]}
+
+    if Channel.thread_lead(thread.id) == before do
+      %{acc | waiting: acc.waiting ++ [thread.id]}
+    else
+      note(thread, "#{mark(to)} the #{to} shift is on: the crew on shift picks this workline up at #{stage}.")
+      %{acc | restaffed: acc.restaffed ++ [thread.id]}
+    end
   end
 
   defp change_over(thread, acc, to) do
@@ -75,7 +95,7 @@ defmodule Server.Shifts do
   end
 
   defp mark("night"), do: "☾"
-  defp mark("day"), do: "☀"
+  defp mark("day"), do: "☼"
 
   defp note(thread, body), do: {:ok, _} = Channel.post(%{thread_id: thread.id, author: "tlon", body: body})
 end

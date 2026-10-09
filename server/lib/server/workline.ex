@@ -1030,7 +1030,8 @@ defmodule Server.Workline do
         thread
 
       free != [] ->
-        builder = Enum.find(bench, &(&1.name == current))
+        # the lead going off: off shift after a shift change, so looked up on the whole bench
+        builder = thread.workspace_id |> Server.Workspaces.bench_all() |> Enum.find(&(&1.name == current))
         candidates = Enum.map(free, &%{coworker: &1, model: seat_model(thread.workspace_id, &1)})
         {pick, short} = Server.Roster.pick(candidates, wanted(thread, kind, builder))
         hand_to(thread, kind, pick.name, shortfall(short, builder, thread.workspace_id))
@@ -1051,7 +1052,8 @@ defmodule Server.Workline do
     bench = Server.Workspaces.bench(ws)
     current = Server.Channel.thread_lead(thread.id)
 
-    with %Server.Coworker{grade: "junior", archetype: kind} = junior <- Enum.find(bench, &(&1.name == current)),
+    with %Server.Coworker{grade: "junior", archetype: kind} = junior <-
+           ws |> Server.Workspaces.bench_all() |> Enum.find(&(&1.name == current)),
          [_ | _] = above <-
            Enum.filter(
              bench,
@@ -1108,7 +1110,9 @@ defmodule Server.Workline do
   def lead_for(%Thread{} = thread, wanted) do
     current = Server.Channel.thread_lead(thread.id)
     kind = @staff_by_stage[thread.stage]
-    seat = thread.workspace_id && thread.workspace_id |> Server.Workspaces.bench() |> Enum.find(&(&1.name == wanted))
+
+    seat =
+      thread.workspace_id && thread.workspace_id |> Server.Workspaces.bench_all() |> Enum.find(&(&1.name == wanted))
 
     cond do
       is_nil(current) or is_nil(seat) ->
@@ -1143,7 +1147,7 @@ defmodule Server.Workline do
     name = Enum.find(@hire_names, &(not MapSet.member?(taken, &1))) || "#{kind}-#{System.unique_integer([:positive])}"
     ws = thread.workspace_id
 
-    case Server.Workspaces.seat(ws, %{name: name, archetype: kind}) do
+    case Server.Workspaces.seat(ws, %{name: name, archetype: kind, crew: Server.Shifts.hire_crew(ws)}) do
       {:ok, hired} ->
         with %{model: model} when not is_nil(model) <-
                Enum.find_value(peers, &Server.Workspaces.policy(ws, &1.agent_id)) do

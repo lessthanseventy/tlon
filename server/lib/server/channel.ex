@@ -516,7 +516,7 @@ defmodule Server.Channel do
 
   def manager_on_workline?(%Thread{workspace_id: ws}, handle) do
     ws
-    |> Server.Workspaces.bench()
+    |> Server.Workspaces.bench_all()
     |> Enum.any?(&(&1.name == handle and Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype)))
   end
 
