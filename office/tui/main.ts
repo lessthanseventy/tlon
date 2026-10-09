@@ -82,6 +82,8 @@ const rooms = new Map<number, RailRoom | WideRoom>()
 const threads = new Map<number, ThreadView>()
 let mode: Mode = { kind: "home" }, picked: number | null = null, sel = 0
 let tip = "", status = ""
+/** the header's clickable spans, in 1-based columns, as last drawn */
+let headHits: { from: number; to: number; go: () => void }[] = []
 let input: Prompt | null = null
 // a card just opened: its cursor goes to the first row you can act on, once there is one
 let snapSel = false
@@ -1225,15 +1227,19 @@ function draw() {
   let o = `${ESC}[?2026h${ESC}[?25l`
   // header: the workspace, and what waits elsewhere
   const blocking = needs.filter((n) => n.level === "blocking").length, deciding = needs.length - blocking
-  o += `${ESC}[1;1H` + line([{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
+  const head: (Seg & { go?: () => void })[] = [{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
     ...(all.ok ? [] : [{ s: `  ${all.note ?? "channel down"}`, fg: ROLE.alarm }]),
-    ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true }] : []),
-    ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body }] : []),
-    ...(needs.length ? [dim("  (i)")] : []),
+    ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }] : []),
+    ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
+    ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),
     ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
     ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
-    ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm }] : []),
-    ...(process.env.OFFICE_DEBUG ? [dim(`  viewport ${Math.round(viewport.x)},${Math.round(viewport.y)}`)] : [])], colsN)
+    ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),
+    ...(process.env.OFFICE_DEBUG ? [dim(`  viewport ${Math.round(viewport.x)},${Math.round(viewport.y)}`)] : [])]
+  headHits = []
+  let hx = 1
+  for (const s of head) { const w = cells(s.s); if (s.go) headHits.push({ from: hx, to: hx + w - 1, go: s.go }); hx += w }
+  o += `${ESC}[1;1H` + line(head, colsN)
   // the room
   const room0 = room()
   const building = mode.kind === "build" && build !== null
@@ -1544,6 +1550,7 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
   const h = hitAt(clipFrame(frame, viewport), g, m.col, m.row, viewport)
   if (m.motion) { const t = h?.tip ?? ""; if (t !== tip) { tip = t; draw() } return }
   if (!m.press || m.button !== 0) return
+  if (m.row === 1) return headHits.find((x) => m.col >= x.from && m.col <= x.to)?.go()
   const inRoom = inRoom0
   if (h) return act(h.act)
   // a click on bare floor clears the slate, as on the desktop
