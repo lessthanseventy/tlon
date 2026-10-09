@@ -71,21 +71,29 @@ defmodule Server.Jobs.KeepUp do
   # an error or a skipped check says nothing about drift: leave the note and ticket as they are
   def drifted(_repo, _other), do: :ok
 
+  # An owned repo's drift must reach someone: with no lobby to post on, or a ticket write that failed,
+  # it falls back to the keyed operator note rather than vanishing.
   defp route(ws, repo, title, n) do
     body =
       "#{repo}: local main has #{n} commit(s) origin/main doesn't. Review them and land them as a workline; never reset main under a live session."
 
-    case open_ticket(ws, repo) do
-      nil ->
-        {:ok, _} = Server.Tickets.file(%{workspace_id: ws, title: title, body: body, labels: [label(repo)]})
+    lobby = Server.Channel.machine_thread(ws)
 
-        with %Server.Thread{id: tid} <- Server.Channel.machine_thread(ws),
-             do: Server.Channel.post(%{thread_id: tid, author: "tlon", body: "⚠ " <> title <> " — " <> body})
+    posted =
+      case open_ticket(ws, repo) do
+        nil ->
+          with {:ok, _} <- Server.Tickets.file(%{workspace_id: ws, title: title, body: body, labels: [label(repo)]}),
+               %Server.Thread{id: tid} <- lobby,
+               {:ok, _} <- Server.Channel.post(%{thread_id: tid, author: "tlon", body: "⚠ " <> title <> " — " <> body}),
+               do: :ok
 
-      t ->
-        Server.Tickets.update(t, %{title: title, body: body})
-    end
+        t ->
+          with {:ok, _} <- Server.Tickets.update(t, %{title: title, body: body}),
+               %Server.Thread{} <- lobby,
+               do: :ok
+      end
 
+    if posted != :ok, do: Server.Rollout.note({:drift, repo}, body)
     :ok
   end
 
