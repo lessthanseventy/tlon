@@ -397,6 +397,12 @@ function needActions(n: data.Need): Action[] {
   const acts: Action[] = [
     ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
     ...(n.kind === "dialog" && tid ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.post(tid, o.key)).then(after) })) : []),
+    ...(n.kind === "ask" && n.ref ? (n.options ?? []).slice(0, 9).map((o): Action => ({ key: o.key, label: o.label, run: () => void did(data.answerAsk(n.ref!, o.key)).then(after) })) : []),
+    ...(n.kind === "seats" && n.ref ? [{ key: "1", label: `raise the cap to ${n.ref}`, run: () => void did(data.settingsEdit("max_leaves", n.ref)).then(after) }] : []),
+    ...(n.kind === "job_failed" && n.ref ? [
+      { key: "R", label: "run it again", run: () => void did(data.retryJob(n.ref!)).then(after) },
+      { key: "d", label: "dismiss", run: () => void did(data.dismissJob(n.ref!)).then(after) },
+    ] : []),
     ...((n.kind === "question" || n.kind === "mention") && tid ? [{ key: "r", label: "reply", run: () => reply(tid) }] : []),
     ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
     ...(n.kind === "suggestion" && w !== null && n.ref ? [
@@ -412,8 +418,8 @@ function needActions(n: data.Need): Action[] {
 /** what waits on you: one at a time when anything does — the whole list is a key away */
 function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
 /** a need's one-line name: what kind, and where */
-const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", verify_failed: "verify red", mention: "mentioned you", suggestion: "suggestion", rollout: "rollout" }
-const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, verify_failed: ROLE.alarm, mention: ROLE.body, suggestion: ROLE.assistant, rollout: ROLE.live }
+const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", mention: "mentioned you", suggestion: "suggestion", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed" }
+const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, mention: ROLE.body, suggestion: ROLE.assistant, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev
