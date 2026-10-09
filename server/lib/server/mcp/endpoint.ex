@@ -41,6 +41,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.AssignLead, name: "assign_lead")
   component(Server.MCP.Tool.AdvanceStage, name: "advance_stage")
   component(Server.MCP.Tool.SubmitReview, name: "submit_review")
+  component(Server.MCP.Tool.SendBack, name: "send_back")
   component(Server.MCP.Tool.SwitchThread, name: "switch_thread")
   component(Server.MCP.Tool.ConsultPeer, name: "consult_peer")
   component(Server.MCP.Tool.StaffChild, name: "staff_child")

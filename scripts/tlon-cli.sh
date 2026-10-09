@@ -48,6 +48,7 @@
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
 #   advance <id>                   advance a workline past its current stage (verifier green path)
+#   send-back <id> spec|plan|build <why…>  move a workline back on its own branch, the build kept to improve
 #   flag <name> on|off             turn a feature flag on or off for everyone (Server.Flags)
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
 #   releasable <sha>               the release checks on a commit (gate, smoke, quiet) and the verdict
@@ -473,6 +474,13 @@ case "$cmd" in
     # Advance a workline past its current stage (the git artifact checker runs in the SERVICE
     # node — set TLON_WORKLINE_ROOT there). The verifier script's green-path exit.
     exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.advance(t) do {:ok, a} -> IO.puts(\"advanced — thread #$tid now at #{a.stage}\"); {:awaiting, a} -> IO.puts(\"gated at #{a.stage} — awaiting #{a.awaiting}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
+    ;;
+
+  send-back)
+    tid="${1:-}"; to="${2:-}"; shift 2 2>/dev/null || true
+    { int "$tid" && [[ "$to" =~ ^(spec|plan|build)$ ]] && [ -n "$*" ]; } ||
+      { echo 'usage: tlon-cli.sh send-back <thread-id> spec|plan|build <why…>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> raise(\"no thread #$tid\"); t -> case Server.Workline.send_back(t, \"$to\", \"$(esc "$*")\", Application.get_env(:server, :operator, \"andrew\")) do {:ok, b} -> IO.puts(\"sent back — thread #$tid now at #{b.stage}, led by #{Server.Channel.thread_lead(b.id)}\"); {:error, why} -> IO.puts(:stderr, \"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   record-verify)

@@ -694,28 +694,57 @@ defmodule Server.Workline do
     )
   end
 
-  # back to build: the stage and its ledger row in one write, the builder restaffed and told why
   defp bounce(thread, why, headline) do
-    {:ok, back} =
-      Repo.transaction(fn ->
-        {:ok, back} = thread |> Thread.workline_stage_changeset(%{stage: "build", awaiting: nil}) |> Repo.update()
+    move_back(
+      thread,
+      "build",
+      why,
+      "↩ back to build — #{headline}, then advance_stage; it comes back through verify and review."
+    )
 
-        {:ok, _event} =
-          Dossier.record_event(%{
-            thread_id: thread.id,
-            kind: "stage_advanced",
-            correlation: "workline:#{thread.slug}",
-            detail: %{"from" => thread.stage, "to" => "build", "bounced" => why}
+    {:error, {:bounced, why}}
+  end
+
+  @doc """
+  Send `thread` back to an earlier working stage (`spec`, `plan` or `build`) on the same thread and
+  branch: what was built and reviewed stays, and the stage's lead is told to improve it, not redo
+  it. Back to build is the call of the workline's lead (its reviewer, QA or builder); back to plan or
+  spec reshapes the build, a coherence call, so it is the tech lead's (`Server.Coworker.lead/1`) or
+  the operator's. `{:ok, thread}` | `{:error, {:not_behind, stage}}` | `{:error, {:not_yours, why}}`.
+  """
+  def send_back(%Thread{} = thread, to, why, by) do
+    with :ok <- behind(thread, to),
+         :ok <- may_send_back(thread, to, by) do
+      {:ok, move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by))}
+    end
+  end
+
+  @doc """
+  File a reviewer's or QA's non-blocking findings as follow-up tickets: each text's first line is
+  its title, the rest its body. Tied to the workline and labelled `follow-up` and `held`, so intake
+  leaves them until the workline merges; the merge lifts the hold and they reach the manager like
+  any ticket. Blank ones are skipped. `{:ok, tickets}`.
+  """
+  def follow_ups(%Thread{} = thread, author, items) do
+    tickets =
+      for text <- items, String.trim(text) != "" do
+        [title | rest] = text |> String.trim() |> String.split("\n", parts: 2)
+        origin = "Follow-up from ##{thread.id} (#{thread.title}), raised by #{author}. Held until ##{thread.id} merges."
+
+        {:ok, ticket} =
+          Server.Tickets.file(%{
+            workspace_id: thread.workspace_id || Server.Bootstrap.default_workspace_id(),
+            project_id: thread.project_id,
+            title: String.trim(title),
+            body: Enum.join(Enum.reject([String.trim(Enum.join(rest)), origin], &(&1 == "")), "\n\n"),
+            labels: ["follow-up", "held"]
           })
 
-        back
-      end)
+        {:ok, _} = Server.Tickets.tie(ticket, thread.id, "relates")
+        ticket
+      end
 
-    back = restaff(back)
-    Server.Bus.broadcast({:workline_advanced, back})
-
-    post_brief(back, "↩ back to build — #{headline}, then advance_stage; it comes back through verify and review.")
-    {:error, {:bounced, why}}
+    {:ok, tickets}
   end
 
   @doc """
@@ -1152,6 +1181,7 @@ defmodule Server.Workline do
   # merged: the thread's work is done (closing it marks its ticket done), and what changed rolls out
   defp finish(thread, %{repo: repo, from: from, to: to}) do
     {:ok, _} = Server.Channel.close_thread(thread)
+    release_follow_ups(thread)
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
     landed = "⤵ landed as #{String.slice(to, 0, 7)}"
 
@@ -1306,4 +1336,95 @@ defmodule Server.Workline do
   end
 
   defp manager_leads?(thread), do: Server.Channel.manager_on_workline?(thread, Server.Channel.thread_lead(thread.id))
+
+  # back to `to` on the same thread and branch: the stage and its ledger row in one write, the
+  # stage's lead staffed and handed `brief`
+  defp move_back(thread, to, why, brief) do
+    {:ok, back} =
+      Repo.transaction(fn ->
+        {:ok, back} = thread |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
+
+        {:ok, _event} =
+          Dossier.record_event(%{
+            thread_id: thread.id,
+            kind: "stage_advanced",
+            correlation: "workline:#{thread.slug}",
+            detail: %{"from" => thread.stage, "to" => to, "bounced" => why}
+          })
+
+        back
+      end)
+
+    back = restaff(back)
+    Server.Bus.broadcast({:workline_advanced, back})
+    post_brief(back, brief)
+    back
+  end
+
+  defp behind(%Thread{stage: stage}, to) do
+    index = &Enum.find_index(@stages, fn s -> s == &1 end)
+
+    if to in ~w(spec plan build) and stage in @stages and index.(to) < index.(stage),
+      do: :ok,
+      else: {:error, {:not_behind, to}}
+  end
+
+  defp may_send_back(thread, to, by) do
+    tech = tech_lead(thread)
+    lead = Server.Channel.thread_lead(thread.id)
+
+    cond do
+      by == Application.get_env(:server, :operator, "andrew") or by == tech ->
+        :ok
+
+      to == "build" and by == lead ->
+        :ok
+
+      to == "build" ->
+        {:error,
+         {:not_yours, "only ##{thread.id}'s lead (#{lead}), the tech lead or the operator sends it back to build"}}
+
+      true ->
+        {:error,
+         {:not_yours,
+          "back to #{to} is the tech lead's call: say why on the thread and @#{tech || "andrew"}, who decides"}}
+    end
+  end
+
+  defp tech_lead(%Thread{workspace_id: nil}), do: nil
+
+  defp tech_lead(%Thread{workspace_id: ws}) do
+    ws
+    |> Server.Workspaces.bench()
+    |> Server.Coworker.lead()
+    |> case do
+      %{name: name} -> name
+      nil -> nil
+    end
+  end
+
+  defp send_back_brief("build", why, by),
+    do:
+      "↩ back to build — sent back by #{by}: #{why}. The branch keeps the build and its review: fix what's named, then advance_stage; it comes back through verify and review."
+
+  defp send_back_brief(to, why, by),
+    do:
+      "↩ back to #{to} — sent back by #{by}: #{why}. The branch keeps the build and review.md: revise #{to}.md to say what changes and what stays, so the build is improved, not redone; then advance_stage."
+
+  # merged: its held follow-ups go to intake
+  defp release_follow_ups(thread) do
+    held =
+      from(t in Server.Ticket,
+        join: tt in Server.TicketThread,
+        on: tt.ticket_id == t.id,
+        where: tt.thread_id == ^thread.id and tt.kind == "relates"
+      )
+      |> Repo.all()
+      |> Enum.filter(&(is_list(&1.labels) and "follow-up" in &1.labels and "held" in &1.labels))
+
+    for t <- held, do: {:ok, _} = Server.Tickets.update(t, %{labels: t.labels -- ["held"]})
+
+    if held != [],
+      do: post_brief(thread, "↗ follow-ups to intake: " <> Enum.map_join(held, ", ", &"##{&1.id} #{&1.title}"))
+  end
 end
