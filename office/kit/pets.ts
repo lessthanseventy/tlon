@@ -38,6 +38,7 @@ export const ARGOS = {
   shipped: ["{name} SHIPPED IT! Sing, O Muse!", "A homecoming worthy of Odysseus, {name}!"],
   rally: ["BALL. Ball ball ball. BALL.", "Left! Right! Left! I can't take it!"],
   paper: ["The morning news! I fetch it like a trophy from Troy!", "Dispatches! Sing, O Muse, of the evening edition!", "I bring news. I do not read it. Reading is for the gods."],
+  smoke: ["SMOKE! Smoke! SMOKE!", "Is it a squirrel? It smells like a squirrel.", "WOOF! The server closet is on fire!", "I have seen Troy burn. This is worse. Bark."],
   fuss: {
     pat: ["Yes! The head! The good head!", "Thank you, {name}! Thank you thank you!"],
     scratch: ["Ohh, the ear. The leg's going. Can't stop it.", "There! THERE! O, {name}, there!"],
