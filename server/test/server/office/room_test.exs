@@ -100,7 +100,7 @@ defmodule Server.Office.RoomTest do
       %{epics: [row], loose: [l]} = Room.board(ws.id)
       assert %{id: toy_id, title: "Toy", done: 1, total: 2, priority: "high", status: "doing"} = row
       assert toy_id == toy.id
-      assert Enum.map(row.children, & &1.id) |> Enum.sort() == [a.id, b.id]
+      assert row.children |> Enum.map(& &1.id) |> Enum.sort() == [a.id, b.id]
       assert l.id == loose.id
     end
 

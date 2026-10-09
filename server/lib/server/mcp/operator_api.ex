@@ -271,8 +271,9 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "office", ["health"]), do: json(conn, 200, Room.health())
   defp route(conn, "GET", "office", ["history"]), do: json(conn, 200, Room.history())
 
-  defp route(conn, "GET", "office", [read, ws]) when read in ~w(activity triage memory tickets board workspace schedules),
-    do: with_workspace(conn, ws, &json(conn, 200, apply(Room, String.to_existing_atom(read), [&1.id])))
+  defp route(conn, "GET", "office", [read, ws])
+       when read in ~w(activity triage memory tickets board workspace schedules),
+       do: with_workspace(conn, ws, &json(conn, 200, apply(Room, String.to_existing_atom(read), [&1.id])))
 
   defp route(conn, "POST", "threads", []), do: new_thread(conn)
   defp route(conn, method, "threads", [id | rest]), do: with_thread(conn, id, &on_thread(conn, method, rest, &1))
@@ -494,7 +495,13 @@ defmodule Server.MCP.OperatorAPI do
       {%{"workspace_id" => ws, "title" => title} = b, conn} when is_integer(ws) and is_binary(title) ->
         reply(
           conn,
-          Tickets.file(%{workspace_id: ws, title: title, project_id: b["project_id"], body: b["body"] || "", epic_id: b["epic_id"]}),
+          Tickets.file(%{
+            workspace_id: ws,
+            title: title,
+            project_id: b["project_id"],
+            body: b["body"] || "",
+            epic_id: b["epic_id"]
+          }),
           &ticket/1,
           201
         )

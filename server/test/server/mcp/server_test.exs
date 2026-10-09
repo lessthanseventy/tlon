@@ -895,7 +895,7 @@ defmodule Server.MCP.ServerTest do
 
     refused = call(token, session, 4, "file_ticket", %{"title" => "bad", "epic_id" => plain["id"]})
     assert refused["isError"]
-    refute Server.Tickets.in_workspace(ws.id) |> Enum.any?(&(&1.title == "bad"))
+    refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "bad"))
   end
 
   test "file_ticket lands in the bound thread's workspace; list_tickets reads it back" do
