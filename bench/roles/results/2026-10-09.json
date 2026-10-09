@@ -118,60 +118,183 @@
     "wall_s": 49.8
   },
   {
+    "archetype": "librarian",
     "calls": 2,
-    "started_at": "2026-10-09T06:14:19Z",
-    "usage": {
-      "input": 5637,
-      "output": 294,
-      "cost_usd": null
-    },
     "commit": "1a56791",
-    "role": "librarian",
+    "effort": "medium",
     "grade": "senior",
-    "suite": "canary",
+    "harness": "pi",
     "model": "ollama-cloud/deepseek-v4.1-flash",
+    "role": "librarian",
+    "rubric": null,
+    "started_at": "2026-10-09T06:14:19Z",
+    "suite": "canary",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "c1-restates",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 2787,
+          "output": 156,
+          "turns": 1
+        },
+        "wall_s": 4.501
+      },
+      {
+        "detail": "ok",
+        "id": "c2-corrects",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 1536,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 1314,
+          "output": 138,
+          "turns": 1
+        },
+        "wall_s": 4.495
+      }
+    ],
     "tiers": {
       "canary": {
-        "total": 2,
-        "passed": 2
+        "passed": 2,
+        "total": 2
       }
     },
-    "wall_s": 9.0,
-    "harness": "pi",
-    "archetype": "librarian",
+    "usage": {
+      "cost_usd": null,
+      "input": 5637,
+      "output": 294
+    },
+    "wall_s": 9.0
+  },
+  {
+    "calls": 6,
+    "started_at": "2026-10-09T07:51:13Z",
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cost_usd": null
+    },
+    "commit": "16d6626",
+    "role": "builder-senior",
+    "model": "anthropic/claude-sonnet-5-5",
+    "grade": "senior",
+    "suite": "full",
+    "tiers": {
+      "full": {
+        "total": 6,
+        "passed": 3
+      }
+    },
+    "wall_s": 1804.4,
+    "harness": "claude_code",
+    "archetype": "builder",
     "rubric": null,
     "tasks": [
       {
-        "id": "c1-restates",
+        "id": "s1-stranded-close",
         "usage": {
-          "input": 2787,
-          "output": 156,
+          "input": 0,
+          "output": 0,
           "cache_read": 0,
           "cache_write": 0,
-          "turns": 1,
+          "turns": 0,
           "cost_usd": null
         },
         "score": null,
-        "wall_s": 4.501,
-        "passed": true,
-        "detail": "ok",
-        "tier": "canary"
+        "wall_s": 300.629,
+        "passed": false,
+        "detail": "harness exit 124; check exit 2: exs:722\n     Assertion with == failed\n     code:  assert decode_tool_json(r)[\"stays_open\"] == true\n     left:  nil\n     right: true\n     stacktrace:\n       test/server/mcp/server_test.exs:748: (test)\n\n\nFinished in 3.8 seconds (0.00s async, 3.8s sync)\n\nResult: 1/3 passed, 101 excluded\nFailed: 2 tests",
+        "tier": "full"
       },
       {
-        "id": "c2-corrects",
+        "id": "s2-intake-closed-slot",
         "usage": {
-          "input": 1314,
-          "output": 138,
-          "cache_read": 1536,
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
           "cache_write": 0,
-          "turns": 1,
+          "turns": 0,
           "cost_usd": null
         },
         "score": null,
-        "wall_s": 4.495,
+        "wall_s": 300.63,
+        "passed": false,
+        "detail": "harness exit 124; check exit 2: .exs:163\n     Assertion failed, no matching message after 0ms\n     The process mailbox is empty.\n     code: assert_received {:routed, id}\n     stacktrace:\n       test/server/intake_test.exs:172: (test)\n\n\nFinished in 0.9 seconds (0.00s async, 0.9s sync)\n\nResult: 0/1 passed, 11 excluded\nFailed: 1 test",
+        "tier": "full"
+      },
+      {
+        "id": "s3-epic-parent-law",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "turns": 0,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 300.691,
         "passed": true,
-        "detail": "ok",
-        "tier": "canary"
+        "detail": "harness exit 124; ok",
+        "tier": "full"
+      },
+      {
+        "id": "s4-epic-intake",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "turns": 0,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 300.799,
+        "passed": true,
+        "detail": "harness exit 124; ok",
+        "tier": "full"
+      },
+      {
+        "id": "s5-keepup-drift-note",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "turns": 0,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 300.489,
+        "passed": false,
+        "detail": "harness exit 124; check exit 2: ed or private\n     code: KeepUp.drifted(\"/r/owned\", {:diverged, 4})\n     stacktrace:\n       (server 0.2.0) Server.Jobs.KeepUp.drifted(\"/r/owned\", {:diverged, 4})\n       test/server/jobs/keep_up_test.exs:63: (test)\n\n\nFinished in 0.6 seconds (0.00s async, 0.6s sync)\n\nResult: 0/5 passed\nFailed: 5 tests",
+        "tier": "full"
+      },
+      {
+        "id": "s6-staffing-windowless",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cache_read": 0,
+          "cache_write": 0,
+          "turns": 0,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 301.114,
+        "passed": true,
+        "detail": "harness exit 124; ok",
+        "tier": "full"
       }
     ],
     "effort": "medium"

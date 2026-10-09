@@ -12,6 +12,7 @@ where the harness reports none.
 
 | date | role | model | effort | harness | commit | suite | canary | full | rubric | wall | tokens in/out | cost |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-09 | builder-senior | anthropic/claude-sonnet-5-5 | medium | claude_code | 16d6626 | full | – | 3/6 | – | 1804.4s | 0/0 | – |
 | 2026-10-09 | librarian | ollama-cloud/deepseek-v4.1-flash | medium | pi | 1a56791 | canary | 2/2 | – | – | 9.0s | 5637/294 | – |
 | 2026-10-09 | builder-junior | anthropic/claude-haiku-5-5 | low | claude_code | 1a56791 | canary | 2/2 | – | – | 49.8s | 145445/3994 | $0.007 |
 | 2026-10-09 | reviewer | anthropic/claude-sonnet-5-5 | medium | claude_code | 1a56791 | canary | 2/2 | – | – | 20.4s | 21507/1198 | $0.058 |
