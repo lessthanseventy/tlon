@@ -51,6 +51,18 @@ defmodule Server.AlertsTest do
            ] = a.actions
   end
 
+  test "a review gate can also be sent back, to build or to plan, saying why" do
+    [a] = Alerts.build([need("gate", %{stage: "review"})], [], @now)
+
+    assert [
+             %{label: "Read it"},
+             %{label: "Approve"},
+             %{label: "Back to build…", path: "/api/threads/7/send_back", body: %{stage: "build"}, input: "why"},
+             %{label: "Back to plan…", path: "/api/threads/7/send_back", body: %{stage: "plan"}, input: "why"},
+             %{label: "Other…"}
+           ] = a.actions
+  end
+
   test "a dialog is a decision with its own options; a question takes a reply" do
     [d, q] =
       Alerts.build(

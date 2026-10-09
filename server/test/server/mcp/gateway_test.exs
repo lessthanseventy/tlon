@@ -325,6 +325,16 @@ defmodule Server.MCP.GatewayTest do
       assert {400, _} = post_json("/api/office/asks/#{a.id}", %{nope: 1})
     end
 
+    test "POST /api/threads/:id/send_back moves a workline back as the operator, saying why" do
+      {:ok, wl} = Server.Workline.open(%{title: "send me back", slug: "send-me-back", stage: "review"})
+      assert {400, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "plan"})
+
+      assert {200, %{"stage" => "plan"}} =
+               post_json("/api/threads/#{wl.id}/send_back", %{stage: "plan", why: "wrong shape"})
+
+      assert {409, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "build", why: "forward"})
+    end
+
     test "POST /api/tickets files one; /route and /start hand it on; /api/threads/:id/close closes" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
       {201, tk} = post_json("/api/tickets", %{workspace_id: ws.id, title: "from the TUI"})
