@@ -169,15 +169,19 @@ export function textLayer(fr: Frame, g: Geometry, viewport: Viewport = { x: 0, y
     ;[...s].forEach((ch, i) => { const c = r[col + i]; if (c) { c.ch = ch; c.fg = fg; c.bg = bg ?? c.bg; c.ink = true } })
   }
   const toCol = (x: number) => Math.floor((x * g.k) / g.cw), toRow = (y: number) => Math.floor((y * g.k - 0.01) / g.ch)
+  const taken: Box[] = []
   for (const i of fr.ink) {
     if (i.t === "text") put(i.align === "center" ? toCol(i.x) - Math.floor(i.s.length / 2) : toCol(i.x), toRow(i.y), i.s, i.color)
     else if (i.t === "brackets") {
       const c0 = toCol(i.x), c1 = toCol(i.x + i.w) - 1, r0 = toRow(i.y + 0.5), r1 = toRow(i.y + i.h)
       put(c0, r0, "┌", i.color); put(c1, r0, "┐", i.color); put(c0, r1, "└", i.color); put(c1, r1, "┘", i.color)
     } else {
-      const wide = Math.max(...i.lines.map((l) => l.length)) + 2
-      const c0 = Math.max(0, Math.min(g.cols - wide, toCol(i.cx) - Math.floor(wide / 2))), r0 = Math.max(0, toRow(i.top) - i.lines.length - 1)
-      i.lines.forEach((l, j) => put(c0, r0 + j, ` ${l.padEnd(wide - 2)} `, ROLE.fieldInk, ROLE.prose))
+      const lines = Math.max(...i.lines.map((l) => l.length)) > cols0 - 2 ? balloonLines(i.lines.join(" "), Math.max(1, cols0 - 2)) : i.lines
+      const wide = Math.max(...lines.map((l) => l.length)) + 2
+      const box = placeBox({ w: wide, h: lines.length }, toCol(i.cx - viewport.x), toRow(i.top - viewport.y) - 1, { x: 0, y: 0, w: cols0, h: rows0 }, taken, 1)
+      if (!box) continue
+      taken.push(box)
+      lines.forEach((l, j) => put(box.x, box.y + j, ` ${l.padEnd(wide - 2)} `, ROLE.fieldInk, ROLE.prose))
     }
   }
   return cells.map((r) => {
