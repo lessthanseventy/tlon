@@ -204,7 +204,9 @@ defmodule Server.Office.Needs do
     like = "%@#{operator}%"
 
     from(m in Message,
-      where: m.thread_id in ^ids and m.author != ^operator and ilike(m.body, ^like) and m.created_at > ^since,
+      where:
+        m.thread_id in ^ids and m.kind != "suggestion" and m.author != ^operator and ilike(m.body, ^like) and
+          m.created_at > ^since,
       order_by: [desc: m.id]
     )
     |> Repo.all()

@@ -195,11 +195,11 @@ defmodule Server.Switchboard do
   #   * @mentions -> the named coworkers — one with no place on this thread (not on it, not its
   #     lead) in their own window on the workspace's standing thread, told how to answer
   #   * neither (a plain top-level post) -> the thread's LEAD (its assigned agent)
-  #   * a `notice` -> nobody: it is read on the next turn
+  #   * a `notice` -> nobody: it is read on the next turn; a corkboard `suggestion`, nobody ever
   # minus the message's own author — you are never woken by your own words. The
   # lead stays informed without being cc'd because coworkers report back to the
   # thread (their top-level posts wake the lead).
-  defp recipients(%Message{kind: "notice"}), do: []
+  defp recipients(%Message{kind: kind}) when kind in ["notice", "suggestion"], do: []
 
   defp recipients(%Message{} = message) do
     # Match author↔agent case-INSENSITIVELY throughout (as @mentions already do), so

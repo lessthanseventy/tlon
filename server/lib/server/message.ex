@@ -29,6 +29,7 @@ defmodule Server.Message do
     # dialog's options ride `payload`, and `resolved_at`/`resolution` say how it ended; one with no
     # `window` is no pane's (the PM's release gate, `payload["release"]`). `stall` is a
     # coworker mid-turn whose pane froze (Server.Attention.Stall), resolved the same way.
+    # `suggestion` is the corkboard's suggestion box (Server.Office.Corkboard), resolved when it leaves it.
     field :kind, :string, default: "chat"
     field :payload, :map
     field :resolved_at, :utc_datetime
@@ -58,14 +59,14 @@ defmodule Server.Message do
       :payload
     ])
     |> validate_required([:thread_id, :author, :body])
-    |> validate_inclusion(:kind, ["chat", "prompt", "stall", "notice"])
+    |> validate_inclusion(:kind, ["chat", "prompt", "stall", "notice", "suggestion"])
     |> Server.Secrets.validate_no_secret(:body)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
   end
 
-  @doc "Close a `prompt` or `stall`: how it ended — `answered: y`, `answered in the terminal`, `pane moved`, `window closed`."
+  @doc "Close a `prompt`, `stall` or `suggestion`: how it ended — `answered: y`, `answered in the terminal`, `pane moved`, `window closed`."
   def resolve_changeset(%__MODULE__{kind: kind} = prompt, resolution)
-      when kind in ["prompt", "stall"] and is_binary(resolution) do
+      when kind in ["prompt", "stall", "suggestion"] and is_binary(resolution) do
     change(prompt, resolved_at: DateTime.truncate(DateTime.utc_now(), :second), resolution: resolution)
   end
 end

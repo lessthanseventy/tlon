@@ -7,15 +7,24 @@ defmodule Server.Office.Corkboard do
   and the kind (`pick/4`), the model only writes it.
 
   Office chatter, not working memory: kept in memory here, the newest `@keep` per workspace, and
-  never written to `Server.Notes`, which the coworkers read as they work. A suggestion goes in the
-  suggestion box instead (`suggestions/1`, the newest `@keep_ideas`), apart from the chatter so it
-  is never crowded out by it; it leaves the box when the operator files it as a ticket or throws
-  it out (`drop/2`). Lazy like banter — a note is only written while an office
-  asks (`notes/1`), at most one per workspace every `@every_s` — and on and off with it.
+  never written to `Server.Notes`, which the coworkers read as they work. A suggestion is not
+  chatter: it goes in the suggestion box (`suggestions/1`, the newest `@keep_ideas`), a `suggestion`
+  message on the workspace's standing thread (`Server.Channel.machine_thread/1`) — stored delivered,
+  so it wakes nobody, yet a coworker's history search finds it and a restart keeps it. It leaves
+  the box, resolved, when the operator files it as a ticket or throws it out (`drop/2`). Lazy like
+  banter — a note is only written while an office asks (`notes/1`), at most one per workspace every
+  `@every_s` — and on and off with it.
   """
   use GenServer
 
+  import Ecto.Query
+
+  alias Server.Message
   alias Server.Office.Banter
+  alias Server.Repo
+  alias Server.Thread
+
+  require Logger
 
   @every_s 480
   @keep 12
@@ -41,16 +50,40 @@ defmodule Server.Office.Corkboard do
       else: []
   end
 
-  @doc "The suggestion box, newest first: the suggestions not yet filed or thrown out, shaped as `notes/1`'s."
+  @doc """
+  The suggestion box, newest first: the workspace's unresolved `suggestion` messages, shaped as
+  `notes/1`'s (`id` the message's id).
+  """
   @spec suggestions(integer()) :: [map()]
   def suggestions(workspace_id) do
-    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:suggestions, workspace_id}), else: []
+    from(m in in_box(workspace_id), order_by: [desc: m.id], limit: @keep_ideas)
+    |> Repo.all()
+    |> Enum.map(
+      &%{
+        id: &1.id,
+        author: &1.author,
+        kind: "suggestion",
+        body: &1.payload["note"],
+        re: nil,
+        at: DateTime.to_unix(&1.created_at)
+      }
+    )
   end
 
-  @doc "Take suggestion `id` out of the box — filed as a ticket, or thrown out. `:ok` either way."
+  @doc "Take suggestion `id` out of the box — filed as a ticket, or thrown out — by resolving its message. `:ok` either way."
   @spec drop(integer(), integer()) :: :ok
   def drop(workspace_id, id) do
-    if GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:drop, workspace_id, id}), else: :ok
+    with %Message{} = m <- Repo.one(from m in in_box(workspace_id), where: m.id == ^id),
+         do: m |> Message.resolve_changeset("out of the box") |> Repo.update()
+
+    :ok
+  end
+
+  defp in_box(workspace_id) do
+    from m in Message,
+      join: t in Thread,
+      on: t.id == m.thread_id,
+      where: t.workspace_id == ^workspace_id and m.kind == "suggestion" and is_nil(m.resolved_at)
   end
 
   @doc """
@@ -129,29 +162,40 @@ defmodule Server.Office.Corkboard do
     {:reply, entry.notes, Map.put(state, ws, %{entry | at: if(now - entry.at >= @every_s, do: now, else: entry.at)})}
   end
 
-  def handle_call({:suggestions, ws}, _from, state), do: {:reply, entry(state, ws).ideas, state}
-
-  def handle_call({:drop, ws, id}, _from, state) do
-    entry = entry(state, ws)
-    {:reply, :ok, Map.put(state, ws, %{entry | ideas: Enum.reject(entry.ideas, &(&1.id == id))})}
-  end
-
   @impl true
   def handle_cast({:pinned, _ws, nil}, state), do: {:noreply, state}
+
+  def handle_cast({:pinned, ws, %{kind: "suggestion"} = note}, state) do
+    file(ws, note)
+    {:noreply, state}
+  end
 
   def handle_cast({:pinned, ws, note}, state) do
     entry = entry(state, ws)
     note = Map.merge(note, %{id: entry.next, at: System.system_time(:second)})
-
-    entry =
-      if note.kind == "suggestion",
-        do: %{entry | ideas: Enum.take([note | entry.ideas], @keep_ideas)},
-        else: %{entry | notes: Enum.take([note | entry.notes], @keep)}
-
-    {:noreply, Map.put(state, ws, %{entry | next: entry.next + 1})}
+    {:noreply, Map.put(state, ws, %{entry | notes: Enum.take([note | entry.notes], @keep), next: entry.next + 1})}
   end
 
-  defp entry(state, ws), do: Map.get(state, ws, %{notes: [], ideas: [], at: 0, next: 1})
+  defp entry(state, ws), do: Map.get(state, ws, %{notes: [], at: 0, next: 1})
+
+  defp file(ws, note) do
+    with %Thread{id: thread_id} <- Server.Channel.machine_thread(ws),
+         {:ok, message} <-
+           %{
+             thread_id: thread_id,
+             author: note.author,
+             kind: "suggestion",
+             body: "corkboard suggestion from #{note.author}: #{note.body}",
+             payload: %{"note" => note.body}
+           }
+           |> Message.post_changeset()
+           |> Ecto.Changeset.put_change(:delivered_at, DateTime.truncate(DateTime.utc_now(), :second))
+           |> Repo.insert() do
+      Server.Recall.embed_on_write(message)
+    else
+      other -> Logger.warning("corkboard: suggestion from #{note.author} not filed: #{inspect(other)}")
+    end
+  end
 
   defp write(ws, board) do
     ctx = Banter.context(ws)
