@@ -109,6 +109,19 @@ describe("the wide room", () => {
     expect(room.catCheer("nobody-here")).toBe(false)
   }))
 
+  test("Nina carries a letter to someone: they get an envelope, she says so", () => seeded(11, () => {
+    const a0 = office(0)
+    const a = viewOf({ ...a0, roster: a0.roster.map((r) => (r.agent === "hronir" ? { ...r, warm: true, thinking: true } : r)) }, 1)
+    const room = new WideRoom(560)
+    for (let i = 0; i < 600; i++) room.step(a)
+    const r = room as unknown as { cat: { path: unknown[]; said: string | null }; actors: Map<string, { emote: string | null }> }
+    expect(room.catLetter("hronir")).toBe(true)
+    for (let i = 0; i < 3_000 && r.cat.path.length; i++) room.step(a)
+    expect(r.cat.said).toContain("hronir")
+    expect(r.actors.get("hronir")!.emote).toBe("✉")
+    expect(room.catLetter("nobody-here")).toBe(false)
+  }))
+
   test("easter eggs in the room: the cat on the keyboard, the howl, the disco, the night owls", () => seeded(11, () => {
     const a0 = office(0)
     const a = viewOf({ ...a0, roster: a0.roster.map((r) => (r.agent === "hronir" ? { ...r, warm: true, thinking: true } : r)) }, 1)
