@@ -14,7 +14,7 @@ linked window at a time, Ctrl-] back to the room).
 
 - `kit/` — what every office surface shares: the snapshot's types (`types.ts`, the shape of
   `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
-  whiteboard's columns), sprites and looks (`sprites.ts`), the colour roles (`palette.ts`), the
+  whiteboard's columns), sprites and looks (`sprites.ts`), the parts library (`parts.ts`: slots, dials, `rollLook`), the colour roles (`palette.ts`), the
   1x canvas and the **frame** a room hands a surface (`canvas.ts`; its speech balloons are 34×4 with long words hard-broken, placed by `balloon.ts` so none leaves the viewport or overlaps another), tlon's own bitmap font in two cuts (`font.ts`), the
   office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`; a channel down `FIRE_GRACE` ticks in a room that has seen it up sets `Sim.fire`: the crew musters at `plan.muster` with coffee, Argos barks, `closet()` in `rooms/wide.ts` burns),
   the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
@@ -83,6 +83,7 @@ linked window at a time, Ctrl-] back to the room).
   port, `TLON_URL` to point elsewhere; `tui/data.ts`). Its read models are `Server.Office`, the same
   function `tlon-cli.sh shell-status` serves the desktop — a new read is a context function and a
   route first, never a query in the client. That is what lets a compiled TUI run with no checkout.
+- **Every worn part is data in `kit/parts.ts`** — a new hat is a `PARTS` entry whose test is the data gate, never a branch in `figure()`; `lookOf` must not gain fields (it would restyle everyone).
 
 ## Gotchas
 

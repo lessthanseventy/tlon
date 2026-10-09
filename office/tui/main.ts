@@ -17,7 +17,8 @@ import { mailbox } from "../kit/mailbox"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
-import { ACCESSORY, HAIR_STYLES, HAIR_ROLES, lookOf, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
+import { nextPart, SLOTS } from "../kit/parts"
+import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
@@ -118,6 +119,7 @@ let snapSel = false
 let confirm: { label: string; run: () => void } | null = null
 // the look card/editor's draft, not yet saved to looks.json; set on open, cleared on close/save
 let lookDraft: LookOverride | null = null
+let rolls = 0
 // the pet card's draft (Nina's temperament, not yet saved to pets.json) and the preview row's clock
 let petDraft: PetSetting | null = null, previewTick = 0
 let editBuf: Record<"front" | "side" | "back", string[]> | null = null
@@ -1253,12 +1255,19 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         field("skin", draft.skinRole ?? "default", () => { draft.skinRole = cycleOpt(SKIN_ROLES, draft.skinRole) }),
         field("outfit", draft.outfit ?? "none", () => { draft.outfit = cycleOpt(Object.keys(OUTFIT) as Outfit[], draft.outfit) }),
         field("accessory", draft.accessory ?? "none", () => { draft.accessory = cycleOpt(Object.keys(ACCESSORY) as Accessory[], draft.accessory) }),
+        field("build", draft.body ?? "average", () => { draft.body = cycleVal(BODIES, draft.body ?? "average") }),
+        ...SLOTS.map((slot) => field(slot, draft.parts?.[slot]?.id ?? "none", () => {
+          const next = nextPart(slot, draft.parts?.[slot]), parts = { ...draft.parts }
+          if (next) parts[slot] = next; else delete parts[slot]
+          draft.parts = parts
+        })),
       ]
       return {
         title: `LOOK · ${name.toUpperCase()}`, rows,
         actions: [
           // not "enter": rows[sel].open() (field-cycling) owns Enter here, same as every other card with cycled rows
           { key: "s", label: "save", run: () => { saveLook(name, draft); lookDraft = null; back(); roomChanged = true; draw() } },
+          { key: "r", label: "roll", run: () => { Object.assign(draft, rollLook(`${name}:${rolls++}`)); draw() } },
           { key: "e", label: "draw a custom look", run: () => {
             editBuf = { front: draft.custom?.front ? [...draft.custom.front] : blankBuf(), side: draft.custom?.side ? [...draft.custom.side] : blankBuf(), back: draft.custom?.back ? [...draft.custom.back] : blankBuf() }
             editEntry = { front: [...editBuf.front], side: [...editBuf.side], back: [...editBuf.back] }
