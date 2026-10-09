@@ -369,7 +369,13 @@ defmodule Server.Workline do
       {:ok, queued}
     else
       {:error, why} ->
-        {:ok, _} = thread |> Thread.workline_stage_changeset(%{awaiting: thread.awaiting}) |> Repo.update()
+        # back on whoever held the gate: from the row as written, or the change is a no-op on `thread`
+        {:ok, _} =
+          Thread
+          |> Repo.get!(thread.id)
+          |> Thread.workline_stage_changeset(%{awaiting: thread.awaiting})
+          |> Repo.update()
+
         {:error, {:queue, why}}
     end
   end
