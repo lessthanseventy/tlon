@@ -312,7 +312,8 @@ defmodule Server.Staffing do
   defp live_turn?(nil), do: false
   defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < @stale_turn_s
 
-  defp parked_note?(thread_id) do
+  @doc "Whether the thread's latest message is the leaf cap's parked note: it waits for a seat."
+  def parked_note?(thread_id) do
     last = Repo.one(from m in Message, where: m.thread_id == ^thread_id, order_by: [desc: m.id], limit: 1)
     last != nil and last.author == "tlon" and String.starts_with?(last.body, "⏸ parked")
   end

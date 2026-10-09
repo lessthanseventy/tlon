@@ -216,9 +216,21 @@ defmodule Server.Attention do
 
   @doc "The open prompts keyed by thread — one query for a sidebar: `%{thread_id => %{id, summary, options}}`."
   def open_prompts_by_thread do
-    from(m in Message, where: m.kind == "prompt" and is_nil(m.resolved_at), order_by: [asc: m.id])
+    from(m in Message,
+      where: m.kind == "prompt" and is_nil(m.resolved_at) and fragment("NOT (? \\? 'ask')", m.payload),
+      order_by: [asc: m.id]
+    )
     |> Repo.all()
     |> Map.new(&{&1.thread_id, %{id: &1.id, summary: &1.payload["summary"], options: &1.payload["options"]}})
+  end
+
+  @doc "Every unanswered ask (`ask/4`), oldest first."
+  def open_asks do
+    Repo.all(
+      from m in Message,
+        where: m.kind == "prompt" and is_nil(m.resolved_at) and fragment("? \\? 'ask'", m.payload),
+        order_by: [asc: m.id]
+    )
   end
 
   # ---- answering ----------------------------------------------------------------------------
@@ -265,6 +277,49 @@ defmodule Server.Attention do
     end
   end
 
+  @doc """
+  A decision with its answers attached — `ask_operator(question, options)`'s door. One pane-less
+  `prompt` per decision (payload `ask: author`), keyed `1`, `2`, …; the thread does not park, and
+  a thread holds as many asks as it has decisions. Answered by id (`answer_ask/3`) or by a reply
+  on the thread that names an option. `{:ok, prompt}`.
+  """
+  def ask(thread_id, author, question, [_ | _] = options) do
+    options = options |> Enum.with_index(1) |> Enum.map(fn {label, i} -> %{"key" => "#{i}", "label" => label} end)
+    body = "⚑ #{author} asks — #{question}\n" <> Enum.map_join(options, " · ", &"(#{&1["key"]}) #{&1["label"]}")
+
+    %{
+      thread_id: thread_id,
+      author: author,
+      body: body,
+      kind: "prompt",
+      payload: %{"ask" => author, "summary" => question, "options" => options}
+    }
+    |> Message.post_changeset()
+    |> Ecto.Changeset.put_change(:delivered_at, now())
+    |> Repo.insert()
+    |> case do
+      {:ok, m} -> {:ok, tap(m, &Bus.broadcast({:message_posted, &1}))}
+      error -> error
+    end
+  end
+
+  @doc "Answer the ask `id` with one of its option keys (text after the key rides along)."
+  def answer_ask(id, author, body) when is_binary(body) do
+    case Repo.get(Message, id) do
+      %Message{kind: "prompt", payload: %{"ask" => _}, resolved_at: nil} = prompt ->
+        case pick(prompt, body) do
+          {key, rest} -> answer(prompt, author, body, key, rest)
+          nil -> {:error, :no_such_option}
+        end
+
+      %Message{kind: "prompt", payload: %{"ask" => _}} ->
+        {:error, :answered}
+
+      _ ->
+        {:error, :not_found}
+    end
+  end
+
   # A reply settles a worker's question. A workline standing at its gate (`Workline.at_gate?/2`) is
   # waiting on an approval, which only `approve` gives — a reply there is just a reply.
   defp answered(thread_id) do
@@ -279,8 +334,23 @@ defmodule Server.Attention do
     end
   end
 
+  # An ask's reply may lead with the label and say more: `go after the cut`.
+  defp pick(%Message{payload: %{"ask" => _, "options" => options}} = prompt, body) do
+    trimmed = String.trim(body)
+
+    Enum.find_value(options, fn %{"key" => key, "label" => label} ->
+      case Regex.run(~r/^#{Regex.escape(label)}(?:\s+(.*))?$/is, trimmed) do
+        [_] -> {key, ""}
+        [_, rest] -> {key, rest}
+        nil -> nil
+      end
+    end) || pick_key(prompt, trimmed)
+  end
+
+  defp pick(prompt, body), do: pick_key(prompt, String.trim(body))
+
   # `y` / `n` / `2` / `yes` / `No, provide reason` — the first word (or the whole label) picks.
-  defp pick(%Message{payload: %{"options" => options}}, body) do
+  defp pick_key(%Message{payload: %{"options" => options}}, body) do
     trimmed = String.trim(body)
 
     {first, rest} =
@@ -296,6 +366,23 @@ defmodule Server.Attention do
         true -> nil
       end
     end)
+  end
+
+  # An ask is no pane's: the answer goes to the asker as a post the switchboard delivers.
+  defp answer(
+         %Message{payload: %{"ask" => asker, "summary" => q, "options" => opts}} = prompt,
+         author,
+         _body,
+         key,
+         rest
+       ) do
+    label = Enum.find_value(opts, &(&1["key"] == key && &1["label"]))
+    text = "@#{asker} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
+
+    with {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: prompt.id}) do
+      resolve(prompt, "answered: " <> label)
+      {:ok, reply}
+    end
   end
 
   # The release gate is no pane's: the answer is the PM's to act on (`Server.Release.PM.answered/2`).

@@ -128,16 +128,7 @@ defmodule Server.Office.Room do
   @spec health() :: map()
   def health do
     db = match?({:ok, _}, Repo.query("SELECT 1"))
-    day = DateTime.add(DateTime.utc_now(), -86_400)
-
-    failed_jobs =
-      if db do
-        Repo.one(
-          from j in "oban_jobs",
-            where: j.state in ["discarded", "retryable"] and j.attempted_at > ^day,
-            select: count(j.id)
-        )
-      end
+    failed_jobs = if db, do: Repo.aggregate(Server.Office.Needs.failed_jobs_query(), :count)
 
     h = %{
       version: to_string(Application.spec(:server, :vsn)),
