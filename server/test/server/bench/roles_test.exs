@@ -46,6 +46,28 @@ defmodule Server.Bench.RolesTest do
     end
   end
 
+  describe "a task sourced from a commit" do
+    defp source_task!(source) do
+      tmp = tmp!()
+      dir = Path.join([tmp, "senior", "s0"])
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "prompt.md"), "build it")
+      meta = %{"tier" => "full", "grader" => %{"kind" => "check", "cmd" => "true"}, "source" => source}
+      File.write!(Path.join(dir, "task.json"), JSON.encode!(meta))
+      tmp
+    end
+
+    test "loads with its commit and no repo" do
+      tmp = source_task!(%{"commit" => "abc1234"})
+      assert [%{source: "abc1234", repo: nil}] = Roles.load(tmp, "senior", "full")
+    end
+
+    test "a commit that is not a hex sha is refused" do
+      tmp = source_task!(%{"commit" => "main"})
+      assert_raise RuntimeError, ~r/bad task.json/, fn -> Roles.load(tmp, "senior", "full") end
+    end
+  end
+
   describe "grade_json/2" do
     @expect %{
       "verdict" => %{"equals" => "request_changes"},
