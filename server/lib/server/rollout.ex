@@ -44,26 +44,25 @@ defmodule Server.Rollout do
     |> MapSet.delete(nil)
   end
 
-  @doc "Roll out a merge: `%{repo, from, to, thread_id}`, `from`..`to` the main commits it moved."
-  def after_merge(%{repo: repo, from: from, to: to, thread_id: tid}) do
-    {out, 0} = System.cmd("git", ["-C", repo, "diff", "--name-only", from, to])
-    parts = out |> String.split("\n", trim: true) |> parts()
-    own? = Path.expand(repo) == Path.expand(Server.Profiles.tlon_root())
+  @doc """
+  Roll out a merge: `%{repo, from, to, thread_id}`, `from`..`to` the main commits it moved. A range
+  git can't diff is said on the thread, never raised: the landing still publishes after it.
+  """
+  def after_merge(%{repo: repo, from: from, to: to, thread_id: tid} = merge) do
+    case System.cmd("git", ["-C", repo, "diff", "--name-only", from, to], stderr_to_stdout: true) do
+      {out, 0} ->
+        roll_out(merge, out |> String.split("\n", trim: true) |> parts())
 
-    lines =
-      if(own? and :server in parts, do: ["the server ships with the next release:cut"], else: []) ++
-        if(own? and MapSet.intersection(parts, MapSet.new([:office_tui, :office_room])) != MapSet.new(),
-          do: ["office TUIs offer a reload"],
-          else: []
-        ) ++
-        if(own? and :office_room in parts, do: [note_desktop(String.slice(to, 0, 7))], else: [])
-
-    if lines != [],
-      do:
+      {_, code} ->
         {:ok, _} =
-          Server.Channel.post(%{thread_id: tid, author: "tlon", body: "⟳ rolled out: " <> Enum.join(lines, " · ")})
+          Server.Channel.post(%{
+            thread_id: tid,
+            author: "tlon",
+            body: "⟳ rollout unknown: git diff #{from}..#{to} exited #{code} in #{repo}, so what changed is unread"
+          })
 
-    :ok
+        :ok
+    end
   end
 
   @doc "Notes waiting on the operator — what a rollout could not do itself. `[%{id, text, at}]`."
@@ -308,5 +307,24 @@ defmodule Server.Rollout do
     _ -> :ok
   catch
     _, _ -> :ok
+  end
+
+  defp roll_out(%{repo: repo, to: to, thread_id: tid}, parts) do
+    own? = Path.expand(repo) == Path.expand(Server.Profiles.tlon_root())
+
+    lines =
+      if(own? and :server in parts, do: ["the server ships with the next release:cut"], else: []) ++
+        if(own? and MapSet.intersection(parts, MapSet.new([:office_tui, :office_room])) != MapSet.new(),
+          do: ["office TUIs offer a reload"],
+          else: []
+        ) ++
+        if(own? and :office_room in parts, do: [note_desktop(String.slice(to, 0, 7))], else: [])
+
+    if lines != [],
+      do:
+        {:ok, _} =
+          Server.Channel.post(%{thread_id: tid, author: "tlon", body: "⟳ rolled out: " <> Enum.join(lines, " · ")})
+
+    :ok
   end
 end
