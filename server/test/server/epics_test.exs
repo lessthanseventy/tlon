@@ -2,6 +2,7 @@ defmodule Server.EpicsTest do
   # Epics (design 2026-10-08): a ticket of kind "epic" holds other tickets via `parent` links and is never work.
   use ExUnit.Case, async: false
 
+  alias Server.Intake
   alias Server.Repo
   alias Server.Tickets
 
@@ -131,6 +132,73 @@ defmodule Server.EpicsTest do
       :ok = Tickets.unlink(e.id, a.id, "parent")
       assert status(e) == "backlog"
       assert status(epic(ws, "Empty")) == "backlog"
+    end
+  end
+
+  describe "intake" do
+    defp adopt(e, c), do: {:ok, _} = Tickets.link(e.id, c.id, "parent")
+
+    test "never picks an epic", %{ws: ws} do
+      epic(ws, "Toy", %{priority: "high"})
+      assert Intake.next(ws.id) == nil
+    end
+
+    test "a child inherits a high epic over a med loose ticket", %{ws: ws} do
+      e = epic(ws, "Toy", %{priority: "high"})
+      c = file(ws, "child")
+      adopt(e, c)
+      file(ws, "loose newer")
+      assert Intake.next(ws.id).id == c.id
+    end
+
+    test "an epic's own priority never lowers a child's", %{ws: ws} do
+      e = epic(ws, "Toy", %{priority: "low"})
+      c = file(ws, "child", %{priority: "high"})
+      adopt(e, c)
+      file(ws, "loose", %{priority: "med"})
+      assert Intake.next(ws.id).id == c.id
+    end
+
+    test "within an epic the lowest sort goes first, not the newest", %{ws: ws} do
+      e = epic(ws, "Toy")
+      first = file(ws, "step 1", %{sort: 1})
+      second = file(ws, "step 2", %{sort: 2})
+      third = file(ws, "step 3", %{sort: 3})
+      for c <- [third, first, second], do: adopt(e, c)
+      assert Intake.next(ws.id).id == first.id
+      {:ok, _} = Tickets.update(first, %{status: "done"})
+      assert Intake.next(ws.id).id == second.id
+    end
+
+    test "equally urgent: the child of a doing epic beats a newer loose ticket and an unstarted epic's child",
+         %{ws: ws} do
+      started = epic(ws, "Started")
+      started_done = file(ws, "s1", %{sort: 1})
+      started_next = file(ws, "s2", %{sort: 2})
+      adopt(started, started_done)
+      adopt(started, started_next)
+      {:ok, _} = Tickets.update(started_done, %{status: "done"})
+      assert Tickets.get(started.id).status == "doing"
+
+      fresh = epic(ws, "Fresh")
+      adopt(fresh, file(ws, "f1", %{sort: 99}))
+      file(ws, "loose newest", %{sort: 100})
+
+      assert Intake.next(ws.id).id == started_next.id
+    end
+
+    test "loose tickets keep newest-first and a blocked step is skipped", %{ws: ws} do
+      file(ws, "old")
+      new = file(ws, "new")
+      assert Intake.next(ws.id).id == new.id
+
+      e = epic(ws, "Toy", %{priority: "high"})
+      s1 = file(ws, "s1", %{sort: 1})
+      s2 = file(ws, "s2", %{sort: 2})
+      adopt(e, s1)
+      adopt(e, s2)
+      {:ok, _} = Tickets.link(s1.id, s2.id, "blocks")
+      assert Intake.next(ws.id).id == s1.id
     end
   end
 end
