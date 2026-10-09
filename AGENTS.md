@@ -27,15 +27,17 @@ a task in `tasks/<group>.toml` (mise.toml includes them)** — never a prose ins
 ### Picking a pi model — the routing, as tasks ("litellm but not")
 
 Two subscriptions, two buckets. The **$100 Claude plan** is the scarce, high-value bucket (5-hour +
-weekly caps); the **$20 ollama.com plan** is the flat all-night workhorse. Neither charges per token —
-"cost" means *which rate-limited bucket am I draining*, so the rule is: **push work down to the cheapest
-bucket that can still do it well.** pi (the harness) rides the ollama bucket; Claude Code is the Claude
-bucket — kept as two tools so a switch never drains the wrong one.
+weekly caps); the **ollama.com Pro plan** is the all-night workhorse. ollama.com now meters plans in
+monthly usage credits spent at per-model per-token rates; accounts still on a legacy plan (this one, as of
+2026-10) get a short session window and a weekly cap instead. Either way "cost" means *which capped bucket
+am I draining*, so the rule is: **push work down to the cheapest bucket that can still do it well.**
+pi (the harness) rides the ollama bucket; Claude Code is the Claude bucket — kept as two tools so a switch never drains the wrong one.
 
 Inside the ollama bucket the routing is not a proxy — it's five mise tasks, each a named model profile
 (the loop *is* the aliasing layer). Bare `pi` already starts on `ollama-cloud/deepseek-v4.1-flash` — the
- efficient-MoE default that drains the short rate-limit window far slower than a reasoning model
- (run `mise run ollama:usage` to see the session/weekly caps and per-model request counts); these pin an
+ efficient-MoE default that drains the plan far slower than a reasoning model
+ (run `mise run ollama:usage` to see credits used of included and the reset date, or the legacy session/weekly
+ meters, plus daily request counts); these pin an
 alternate, and in-session `Ctrl+P` cycles the same ring. Pass a one-shot with `-- -p "…"`.
 
 | Task | Model | Reach for it when |
@@ -53,8 +55,9 @@ Claude Code (its own MCP adapter, `headersHelper`-authed). If the server channel
 still launches — just not as a citizen.
 
 The bare default is `deepseek-v4.1-flash`, not glm-5.2, precisely because glm-5.2 is a reasoning model
-whose thinking tokens drain the short rate-limit window fast — run `mise run ollama:usage` to watch
-the session cap move per model. Two things that bite: **glm-5.2 is a reasoning model** (separate
+whose thinking tokens drain the plan fast: on credits every thinking token is billed output, on a legacy
+plan they trip the session window. `mise run ollama:usage` shows the meter move; ollama.com does not
+break usage down by model yet. Two things that bite: **glm-5.2 is a reasoning model** (separate
 `reasoning` + `content` fields) — give it token headroom or `content` comes back empty while thinking
 eats the budget; and **`kimi-k3` is
 deliberately absent** — ollama.com serves it as *extra* usage (HTTP 402), billed per-token on top of the

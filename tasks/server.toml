@@ -137,7 +137,7 @@ description = "Sweep all captured run logs (.logs/) — they self-cap at CAP_KEE
 run = "rm -rf .logs && echo 'swept .logs/'"
 
 ["ollama:usage"]
-description = "ollama.com: read the plan/rate-limit dashboard (session + weekly caps, per-model request counts) via /api/usage — the insight layer for model choice"
+description = "ollama.com: read the plan meters — included credits used + reset date (or a legacy plan's session/weekly caps) via /api/balance, 7-day requests and spend via /api/usage"
 run = "scripts/ollama-usage.sh"
 
 ["watch"]

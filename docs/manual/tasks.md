@@ -69,7 +69,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
-| `ollama:usage` | ollama.com: read the plan/rate-limit dashboard (session + weekly caps, per-model request counts) via /api/usage — the insight layer for model choice |
+| `ollama:usage` | ollama.com: read the plan meters — included credits used + reset date (or a legacy plan's session/weekly caps) via /api/balance, 7-day requests and spend via /api/usage |
 
 ## pi
 
