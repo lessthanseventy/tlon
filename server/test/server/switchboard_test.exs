@@ -492,6 +492,24 @@ defmodule Server.SwitchboardTest do
       refute_received {:spawned, _}
     end
 
+    test "a message with nobody to deliver to is settled by the drain, not read again every minute" do
+      {:ok, thread} = Channel.open_thread(%{title: "own beat"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+      {:ok, own} = Channel.post(%{thread_id: thread.id, author: "Carl", body: "beat report: all quiet"})
+      {:ok, notice} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "⟳ restarting", kind: "notice"})
+
+      {:ok, done} = Channel.open_thread(%{title: "done with"})
+      {:ok, _} = Staff.assign(done, carl)
+      {:ok, backlog} = Channel.post(%{thread_id: done.id, author: "stakeholder", body: "one more thing"})
+      {:ok, _} = Channel.close_thread(Channel.thread(done.id))
+
+      Switchboard.drain()
+
+      for m <- [own, notice, backlog], do: assert(Repo.get!(Message, m.id).delivered_at, "#{m.body} left pending")
+      refute_received {:spawned, _}
+    end
+
     test "the drain retries the spawn for a pending message nobody warm is addressed by" do
       {:ok, thread} = Channel.open_thread(%{title: "left waiting"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})
