@@ -116,7 +116,9 @@ defmodule Server.Office do
       page
       |> Enum.take(@page)
       |> Enum.reverse()
-      |> Enum.map(&%{id: &1.id, author: &1.author, body: &1.body, at: &1.created_at, kind: &1.kind, reply_to: &1.reply_to})
+      |> Enum.map(
+        &%{id: &1.id, author: &1.author, body: &1.body, at: &1.created_at, kind: &1.kind, reply_to: &1.reply_to}
+      )
 
     tab = window_of(t)
 
