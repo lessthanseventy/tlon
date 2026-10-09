@@ -4,22 +4,16 @@ defmodule Server.Persona do
   a voice line, stored as JSON on the `workspace_agent` row beside the `seed` that drew it. Voice
   only, never a different decision (toy design §2).
 
-  Written by the cheap model tier (`Server.ModelCli`; `config :server, generator_cmd:,
-  generator_model:`, default `pi` on `ollama-cloud/deepseek-v4.1-flash`, the flat ollama bucket)
-  at hire or on `tlon-cli persona <name> [--reroll]` — never on a render path: `get/2` only reads.
+  Written by the cheap model tier (`Server.Generator`) at hire or on `tlon-cli persona <name> [--reroll]` — never on a render path: `get/2` only reads.
 
   The seed is the whole draw: it picks the quirk themes handed to the model and, with no model, the
-  fallback's backstory and quirks, so one seed always asks the same question. A call is made only
-  while banter is on and fewer than `:generator_daily_cap` (default 50) were made today; otherwise,
-  and when a call fails or its reply does not parse, the seat gets the handwritten fallback (the §2
-  voice table, `"source" => "fallback"`).
+  fallback's backstory and quirks, so one seed always asks the same question. When the generator is
+  off or capped, a call fails or its reply does not parse, the seat gets the handwritten fallback
+  (the §2 voice table, `"source" => "fallback"`).
   """
   import Ecto.Query
 
   alias Server.{Repo, WorkspaceAgent}
-
-  @cap 50
-  @default {"pi", "ollama-cloud/deepseek-v4.1-flash"}
 
   @voices %{
     "scharlach" => "crisp and slightly too formal; enforces the rules and enjoys it too much",
@@ -88,17 +82,13 @@ defmodule Server.Persona do
 
       {_agent, row} ->
         seed = opts[:seed] || :rand.uniform(1_000_000)
-        today = Date.to_iso8601(Date.utc_today())
-
-        persona =
-          if allowed?(today), do: ask(name, row.archetype, seed, today), else: fallback(name, row.archetype, seed)
-
+        persona = ask(name, row.archetype, seed)
         {:ok, _} = row |> Ecto.Changeset.change(persona: persona) |> Repo.update()
         {:ok, persona}
     end
   end
 
-  defp ask(name, archetype, seed, today) do
+  defp ask(name, archetype, seed) do
     prompt = """
     You write the persona of one coworker in a pixel-art office of AI coworkers. The name is
     #{name}, a #{archetype}. Their voice, to start from: #{voice(name, archetype)}.
@@ -109,13 +99,10 @@ defmodule Server.Persona do
     "hobby": "", "catchphrase": "", "pet_peeve": ""}, "voice": "<one line on how they talk>"}
     """
 
-    result =
-      Server.ModelCli.prompt(prompt, :generator_cmd, :generator_model, @default)
-
-    with {:ok, out} <- result, %{} = p <- parse(out) do
-      Map.merge(p, %{"seed" => seed, "source" => "model", "called_on" => today})
+    with {:ok, out} <- Server.Generator.run(prompt), %{} = p <- parse(out) do
+      Map.merge(p, %{"seed" => seed, "source" => "model"})
     else
-      _ -> name |> fallback(archetype, seed) |> Map.put("called_on", today)
+      _ -> fallback(name, archetype, seed)
     end
   end
 
@@ -147,14 +134,6 @@ defmodule Server.Persona do
   end
 
   defp voice(name, archetype), do: Map.get(@voices, name) || Map.get(@archetype_voices, archetype) || @generic_voice
-
-  defp allowed?(today) do
-    Server.OperatorConfig.banter?() and calls_on(today) < Application.get_env(:server, :generator_daily_cap, @cap)
-  end
-
-  defp calls_on(day) do
-    Repo.one(from wa in WorkspaceAgent, where: fragment("?->>'called_on' = ?", wa.persona, ^day), select: count())
-  end
 
   # the seed alone picks: each slot reads its own position, so one seed always draws the same set
   defp pick(list, seed, slot), do: Enum.at(list, rem(seed + slot * 7919, length(list)))
