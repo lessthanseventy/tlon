@@ -3,6 +3,10 @@ defmodule Server.Recall.CodeRefsTest do
 
   alias Server.Recall.CodeRefs
 
+  test "a function ref to a module the project does not own is not a ref" do
+    assert CodeRefs.extract("use `Repo.all/1` and `Enum.map/2`") == []
+  end
+
   test "module, path, function and task refs" do
     t = "Server.Maintain.Sweep.run/1 in `server/lib/server/maintain/sweep.ex`; `mise run office:golden`; Server.Fact"
 
