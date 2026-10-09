@@ -31,6 +31,15 @@ describe("paint", () => {
     expect([g.k, g.cols, g.rows, g.col]).toEqual([5, 72, 48, 14])
     expect(geometry(144, 190, 40, 80, 17, { w: 10, h: 20 }, true).k).toBe(2)
   })
+  test("a floor taller than what it is fitted to keeps the fitted scale and scrolls the rest", () => {
+    // 23 rows × 20px = 460px: 190 tall fits at 2×, 250 tall alone would drop it to 1×
+    const fitted = geometry(144, 190, 100, 40, 17, { w: 10, h: 20 }, true)
+    const g = geometry(144, 250, 100, 40, 17, { w: 10, h: 20 }, true, 190)
+    expect(fitted.k).toBe(2)
+    expect(g.k).toBe(2)
+    expect(g.floorH).toBe(250)
+    expect(g.rows).toBe(23)
+  })
   test("half blocks: text lands on the cell under its logical position; clicks map back", () => {
     const g = { k: 2, cw: 4, ch: 8, col: 3, row: 1, cols: 10, rows: 5, kitty: false, floorW: 20, floorH: 20 }
     const fr = frame(20, 20, {
