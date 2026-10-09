@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { loadSouls, parseSoul, soulFor, soulsGen, soulsSignature, useSouls } from "../kit/souls"
+import { loadSouls, parseSoul, soulLines, soulFor, soulsGen, soulsSignature, useSouls } from "../kit/souls"
 
 const FIXTURE = await Bun.file(join(import.meta.dir, "fixtures/daneri.md")).text()
 
@@ -63,5 +63,19 @@ describe("polling a souls dir", () => {
     useSouls(loadSouls(dir))
     expect(soulFor("daneri")?.sections["Fears"]).toBe("Silence.")
     useSouls({})
+  })
+})
+
+describe("soulLines", () => {
+  test("the card lists each filled section as a heading and its text, Diary last", () => {
+    expect(soulLines(parseSoul("## Diary\nd\n\n## Wants\nw\n## Fears\n"))).toEqual([
+      { head: "Wants", text: "w" }, { head: "Diary", text: "d" },
+    ])
+  })
+  test("a file with no headings shows raw", () => {
+    expect(soulLines(parseSoul("just words\n"))).toEqual([{ head: "", text: "just words" }])
+  })
+  test("an empty file shows nothing", () => {
+    expect(soulLines(parseSoul(""))).toEqual([])
   })
 })
