@@ -31,6 +31,7 @@ defmodule Server.MCP.Brief do
       "opening" => scope.opening && message(scope.opening),
       "done" => capped(scope.done, &done_entry/1),
       "learnings" => capped(scope.learnings, &fact/1),
+      "knowledge" => capped(scope.knowledge, &fact/1),
       "unknowns" => capped(scope.unknowns, &question/1),
       "blockers" => capped(scope.blockers, &issue/1),
       "checks" => capped(scope.checks, &check/1),
