@@ -1,12 +1,10 @@
 VERDICT: approve
 
-Re-review of e13951c (the fix for nolan's QA fail), on top of the earlier-approved talk work (talk.ts, m/' wiring).
+Re-review after emma's rebase onto origin/main (the AGENTS.md conflict).
 
-- The collision was `M` twice on a coworker card: "move to project…" (threadActions, main.ts:519) and "model…" (seatActions, :534). The first one won, so the model picker was unreachable.
-- Fix: move-to-project is now `P`. I listed every key on the coworker card in main.ts: m (talk), enter/c (live), v r A > S t g d h P x D (thread), M y C - (seat), l, esc. No key appears twice, and `P` is free.
-- Spec: `m` posts `@name …` to the lobby and `'` posts unaddressed to the lobby. QA already drove both and they worked, with rows `@tertius hi tertius from QA` and `hello office from nolan QA`.
+- Diff vs plan: talk.ts (lobbyOf/speech/say), `m` on a coworker card posts `@name …` to the lobby, `'` posts unaddressed. Both match the spec. talk.test.ts covers lobby choice, addressing, the post path and the no-lobby case.
+- Keys: the coworker card has v r A > S t g d h P x D (thread), M y C - (seat), m (talk), l, esc. No duplicates after the rebase. `M` is the model picker and `P` is move-to-project. `'` is a new global and is not claimed elsewhere.
+- office/AGENTS.md keeps main's sandbox lines and adds the `talk.ts` pointer, so the doc is in sync.
+- I read the diff and grepped the key map. I did not run the suite. Per the thread, emma ran office:check at 318 pass / 0 fail after the rebase, and the server's verify stage passed.
 
-Open, not blocking:
-- There is no unit test for the card key map, because it lives in tui/main.ts, which can't be imported. The fix is checked by typecheck and by reading, not by a test. A key-uniqueness assertion would catch this class of bug. That would be its own change.
-- I did not run anything myself. The server gate passed on this branch, per the brief. emma ran the office suite in the sandbox: 307 pass, and the 2 tmux failures are sandbox-only (terminal.test.ts is 3/3 green unsandboxed).
-- QA has to re-drive once: Tab to a coworker's card, `M` should open `TERTIUS'S MODEL`, and `P` the project picker.
+Open, not blocking: nothing tests that the card keys are unique, because that map lives in tui/main.ts, which can't be imported. That would be its own change.
