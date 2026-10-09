@@ -12,6 +12,9 @@ defmodule Server.Source.ToolsTest do
     {:ok, thread} = Server.Channel.open_thread(%{title: "tools", workspace_id: ws.id, project_id: p.id})
     {:ok, wt} = Server.worktree_for_thread(thread)
 
+    # its own formatter root, so a stray .formatter.exs above the temp dir (/tmp) can't reach the test
+    File.write!(Path.join(wt, ".formatter.exs"), "[]\n")
+
     File.write!(
       Path.join(wt, "demo.ex"),
       "defmodule Demo do\n  def old_name(x), do: x\n  def two, do: old_name(1)\nend\n"
