@@ -9,24 +9,10 @@ defmodule Server.Workline.ContinuationTest do
   alias Server.Message
   alias Server.Presence.Thinking
   alias Server.Repo
+  alias Server.TestArtifacts.Missing
+  alias Server.TestArtifacts.Present
   alias Server.Workline
   alias Server.Workline.Continuation
-
-  defmodule Missing do
-    @moduledoc false
-    @behaviour Server.Workline.Artifacts
-
-    @impl true
-    def check(_thread, _requirement), do: {:error, "work/x/plan.md is not committed"}
-  end
-
-  defmodule Present do
-    @moduledoc false
-    @behaviour Server.Workline.Artifacts
-
-    @impl true
-    def check(_thread, _requirement), do: {:ok, "committed"}
-  end
 
   setup do
     Server.TestDB.clean!()
