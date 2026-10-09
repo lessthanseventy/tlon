@@ -61,6 +61,25 @@ defmodule Server.CanvasTest do
     assert Canvas.commits_for(1) < Canvas.commits_for(4)
   end
 
+  test "shades scale to the busiest real day: shade 4 tops it, each shade in its own quarter of the top" do
+    top = Canvas.commits_for(4, 425)
+    assert top == 426
+
+    for shade <- 1..3 do
+      n = Canvas.commits_for(shade, 425)
+      assert n > top * (shade - 1) / 4 and n <= top * shade / 4
+    end
+
+    assert Canvas.commits_for(4, 0) == Canvas.commits_for(4)
+  end
+
+  test "the real peak is the busiest day once the canvas's own commits are taken out" do
+    totals = %{~D[2026-09-01] => 430, ~D[2026-09-02] => 425, ~D[2026-09-03] => 9}
+    canvas = %{~D[2026-09-01] => 426}
+    assert Canvas.real_peak(totals, canvas) == 425
+    assert Canvas.real_peak(%{}, %{}) == 0
+  end
+
   defp put(blank, row, col),
     do: blank |> Enum.at(row) |> String.to_charlist() |> List.replace_at(col, ?#) |> to_string()
 end
