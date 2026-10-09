@@ -32,6 +32,10 @@ defmodule Server.MCP.Tool.StaffChild do
 
   The lead resolves BEFORE the thread opens, so a bad handle refuses cleanly instead of leaving an
   orphan lead-less thread — the machine-chat silence bug's tool-side twin.
+
+  From the workspace's lobby (its standing thread) only the manager staffs: who works on what is
+  its call. A lead there is refused — it staffs sub-efforts from the thread it leads, and asks the
+  manager for new work.
   """
   use Server.MCP.Tool
 
@@ -72,6 +76,7 @@ defmodule Server.MCP.Tool.StaffChild do
     params = Map.put(params, :lead, params[:lead] || picked(params, parent))
 
     with :ok <- briefed(params[:brief]),
+         :ok <- routes_here(parent, identity.agent_id),
          {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
          {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
          {:ok, thread} <- graded(thread, params[:grade]),
@@ -84,6 +89,12 @@ defmodule Server.MCP.Tool.StaffChild do
         fail(
           frame,
           "staff_child refused: the brief is empty — say what the child is to do or check (the text, file or diff)"
+        )
+
+      {:manager, manager} ->
+        fail(
+          frame,
+          "staff_child refused: from the lobby only #{manager} staffs. Staff a sub-effort from the thread you lead, or ask #{manager} for new work."
         )
 
       {:agent, nil} ->
@@ -107,6 +118,16 @@ defmodule Server.MCP.Tool.StaffChild do
   # the manager's grade stays on the thread, so each stage's lead is picked at it, not re-guessed
   defp graded(thread, nil), do: {:ok, thread}
   defp graded(thread, grade), do: thread |> Ecto.Changeset.change(grade: grade) |> Server.Repo.update()
+
+  defp routes_here(parent, agent_id) do
+    with true <- parent != nil and Channel.standing?(parent),
+         %Server.Coworker{agent_id: manager_id} when manager_id != agent_id <-
+           Server.Workspaces.manager(parent.workspace_id) do
+      {:manager, Server.Repo.get!(Agent, manager_id).name}
+    else
+      _ -> :ok
+    end
+  end
 
   defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
   defp briefed(_), do: :blank

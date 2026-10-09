@@ -699,6 +699,32 @@ defmodule Server.MCP.ServerTest do
     assert decode_tool_json(r)["lead"] == "daneri"
   end
 
+  test "only the manager staffs from the lobby — a lead there is refused, opening nothing" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Routing"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius", archetype: "surveyor"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "ireneo", archetype: "builder"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "builder"})
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    ask = %{"title" => "build the plan", "lead" => "ireneo", "brief" => "Build T1→T6."}
+
+    yu = Staff.agent_by_name("yu")
+    token = MCP.Tokens.mint(lobby, yu)
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    before = Repo.aggregate(Thread, :count)
+
+    r = call(token, session, 4, "staff_child", ask)
+    assert r["isError"]
+    assert get_in(r, ["content", Access.at(0), "text"]) =~ "tertius"
+    assert Repo.aggregate(Thread, :count) == before
+
+    tertius = Staff.agent_by_name("tertius")
+    token = MCP.Tokens.mint(lobby, tertius)
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    refute call(token, session, 4, "staff_child", ask)["isError"]
+  end
+
   test "staff_child and spawn_crew refuse a blank brief, opening nothing", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "hronir-machine", mandate: "build", engine: "fresh"})
     Application.put_env(:server, :crew, Server.Crew.Test)
