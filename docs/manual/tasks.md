@@ -63,6 +63,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `office:golden` | office: re-hash the wide room's golden frames into office/test/golden.json (after a change meant to move its pixels) |
 | `office:import-sprite` | office: import a 12x22 (or 48x22, four views) PNG into looks.json as that agent's custom sprite — every pixel snapped to the nearest palette role |
 | `office:run` | office: the TUI — the room in a terminal over the live server (kitty graphics in ghostty/kitty/WezTerm, half blocks elsewhere; OFFICE_GRAPHICS=blocks\|kitty to force) |
+| `office:sandbox` | office: the TUI on a made-up world — no server, nothing staffed, everything pokeable (d e t f n w p c on the help line) |
 | `office:test` | office: the kit, room and TUI unit suite (bun test) |
 | `office:watch` | office: re-run the suite on every change (cap signal) |
 
