@@ -59,6 +59,34 @@ defmodule Server.OfficeTest do
       assert %{thinking: false, doing: nil} = Enum.find(Office.status().roster, &(&1.agent == "hronir"))
     end
 
+    test "a thread carries where its lead is — at a desk, parked for a seat, or idle", %{ws: ws} do
+      for name <- ~w(hronir borges otto), do: {:ok, _} = Workspaces.seat(ws.id, %{name: name, archetype: "builder"})
+
+      staffed = fn title, lead ->
+        {:ok, t} = Channel.open_thread(%{title: title, workspace_id: ws.id})
+        {:ok, _} = Channel.assign_lead(t.id, lead)
+        t
+      end
+
+      desk = staffed.("at a desk", "hronir")
+      {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("hronir").id, thread_id: desk.id})
+      parked = staffed.("parked", "borges")
+      :ok = Server.Staffing.note_parked(parked.id)
+      idle = staffed.("idle", "otto")
+
+      seat = fn t -> Enum.find(Office.status().threads, &(&1.id == t.id)).seat end
+      assert {seat.(desk), seat.(parked), seat.(idle)} == {"desk", "parked", "idle"}
+    end
+
+    test "a thread says whether it is a standing duty — the sheriff's beat, a schedule's — not work",
+         %{ws: ws} do
+      {:ok, beat} = Channel.open_thread(%{title: Server.Sheriff.beat_title(), workspace_id: ws.id})
+      {:ok, work} = Channel.open_thread(%{title: "a fix", workspace_id: ws.id})
+
+      duty = fn t -> Enum.find(Office.status().threads, &(&1.id == t.id)).duty end
+      assert {duty.(beat), duty.(work)} == {true, false}
+    end
+
     test "carries each workspace's triage count and the service's health", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "stuck", workspace_id: ws.id})
       {:ok, _} = Server.Dossier.raise_issue(%{thread_id: t.id, summary: "blocked"})

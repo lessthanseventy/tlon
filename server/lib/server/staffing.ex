@@ -98,9 +98,11 @@ defmodule Server.Staffing do
   """
   def duty_thread?(thread_id), do: MapSet.member?(duty_threads([thread_id]), thread_id)
 
-  defp duty_threads([]), do: MapSet.new()
+  @doc "Which of `ids` are standing duties (`duty_thread?/1`), in one round of queries."
+  @spec duty_threads([integer()]) :: MapSet.t(integer())
+  def duty_threads([]), do: MapSet.new()
 
-  defp duty_threads(ids) do
+  def duty_threads(ids) do
     standing = from(s in Schedule, where: s.thread_id in ^ids, select: s.thread_id)
 
     runs =
