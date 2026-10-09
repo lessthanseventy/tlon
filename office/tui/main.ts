@@ -30,6 +30,7 @@ import { applyBuild, loadHome } from "./home"
 import { loadPets, PETS_PATH, savePets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader } from "./reader"
+import { timelineRows } from "./timeline"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
 import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
@@ -547,11 +548,10 @@ const key = (s: string): Seg => ({ s, fg: ROLE.key }), pink = (s: string): Seg =
 const cols = () => process.stdout.columns ?? 80
 
 /**
- * Coworkers' screens, by thread: their window as it is now, captured from the workspace's tmux
- * (read-only, so it never resizes their window), shown in a card in place of the conversation —
- * `c` flips to the conversation, ⏎ steps into the session itself.
+ * Threads whose card shows the conversation instead of the running coworkers' activity timeline
+ * (`tui/timeline.ts`, from the thread view's `activity`) — `c` flips, ⏎ steps into the session itself.
  */
-const screens = new Map<number, string[]>(), targets = new Map<number, Target | null>(), talkView = new Set<number>()
+const talkView = new Set<number>()
 /** playerctl, polled every ~2s: feeds the wide room's stereo marquee + dance trigger */
 function pollPlayer() {
   const rm = room()
@@ -563,23 +563,19 @@ function pollPlayer() {
     rm.setPlayer(null)
   }
 }
-async function peekScreen(tid: number) {
-  if (!targets.has(tid)) targets.set(tid, await data.terminal(tid))
-  const t = targets.get(tid)
-  if (!t) return false
-  const r = Bun.spawnSync(["tmux", "-L", t.socket, "capture-pane", "-p", "-t", `${t.session}:${t.window}`])
-  if (r.exitCode !== 0) { targets.delete(tid); screens.delete(tid); return false }
-  const lines = r.stdout.toString().replace(/\s+$/, "").split("\n")
-  const was = screens.get(tid)
-  screens.set(tid, lines)
-  return !was || was.join("\n") !== lines.join("\n")
+/** refresh a thread's close look; true when its activity feed moved */
+async function pollActivity(tid: number) {
+  const was = threads.get(tid)?.activity?.at(-1)
+  await loadThread(tid)
+  const now = threads.get(tid)?.activity?.at(-1)
+  return was?.at !== now?.at || was?.summary !== now?.summary
 }
-/** the actions a running thread's card adds: step into the session, flip screen and conversation */
+/** the actions a running thread's card adds: step into the session, flip activity and conversation */
 function liveActions(tid: number): Action[] {
   if (!threadOf(tid)?.live) return []
   return [
     { key: "enter", label: "step into their session", run: () => void zoomInto(tid) },
-    { key: "c", label: talkView.has(tid) ? "their screen" : "the conversation", run: () => { if (!talkView.delete(tid)) talkView.add(tid); draw() } },
+    { key: "c", label: talkView.has(tid) ? "their activity" : "the conversation", run: () => { if (!talkView.delete(tid)) talkView.add(tid); draw() } },
   ]
 }
 /** an author's colour: you in pink, the server dim, a coworker in their archetype's */
@@ -613,12 +609,13 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
     out.push({ segs: [pink("asks: "), plain(th.prompt.summary)] })
     th.prompt.options?.forEach((o, i) => out.push({ segs: [key(` ${i + 1} `), plain(o.label)], open: () => did(data.post(tid, o.key)) }))
   } else if (th?.awaiting && !st) out.push({ segs: [pink(`awaits ${th.awaiting}${th.stage ? " — A approves" : ""}`)] })
-  // a running coworker's screen, as it is now — unless you flipped to the conversation
-  const screen = th?.live && !talkView.has(tid) ? screens.get(tid) : undefined
-  if (screen) {
-    const room = paneRows() - above - out.length - 1, w = paneW() - 4
-    out.push({ segs: [{ s: " LIVE ", fg: ROLE.ground, bg: ROLE.live, bold: true }, dim("  their screen now · ⏎ step in · c the conversation")] })
-    for (const l of screen.slice(-room)) out.push({ segs: [{ s: "│ ", fg: ROLE.live }, { s: l.slice(0, w), fg: ROLE.prose }] })
+  // a running thread's activity, every event the server keeps: the pane opens on the newest and
+  // scrolls back (pgup/pgdn, the wheel) — unless you flipped to the conversation
+  if (th?.live && !talkView.has(tid)) {
+    const feed = v?.activity ?? [], live = new Set(all.roster.filter((r) => r.thread_id === tid && r.thinking).map((r) => r.agent))
+    out.push({ segs: [{ s: " LIVE ", fg: ROLE.ground, bg: ROLE.live, bold: true }, dim("  what they're doing · ⏎ step in · c the conversation")] })
+    if (!feed.length) out.push({ segs: [dim("  nothing reported yet — ⏎ steps into their screen")] })
+    out.push(...timelineRows(feed, { width: paneW() - 2, colorOf: authorColor, live }))
     return out
   }
   // the conversation's tail, wrapped, as much as fits; `v` reads the whole of it
@@ -1752,10 +1749,10 @@ async function main() {
     goThread(f.thread_id, threadOf(f.thread_id)?.workspace_id)
     openReader(f.thread_id, false)
   }, 1000)
-  // a card showing a running coworker keeps their screen current
+  // a card showing a running coworker keeps their activity current
   every(() => {
     const tid = openThread()
-    if (tid !== null && !zoom && !reader && threadOf(tid)?.live && !talkView.has(tid)) void peekScreen(tid).then((moved) => { if (moved) draw() })
+    if (tid !== null && !zoom && !reader && threadOf(tid)?.live && !talkView.has(tid)) void pollActivity(tid).then((moved) => { if (moved) draw() })
   }, 1000)
   // the room's clock: 10 Hz, drawn only when it changed
   every(() => { if (!reader && room().step(view())) { changed(); draw() } }, 100)
