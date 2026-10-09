@@ -11,15 +11,20 @@ defmodule Server.Workline.Brief do
 
   alias Server.Thread
 
-  @doc "The brief for the stage the workline just ENTERED (merged → a completion note)."
-  def stage_message(%Thread{stage: "merged"} = t) do
+  @doc """
+  The brief for the stage the workline just ENTERED (merged → a completion note). `last_reviewed:`
+  the commit a previous review read: a returning reviewer is pointed at what changed since.
+  """
+  def stage_message(thread, opts \\ [])
+
+  def stage_message(%Thread{stage: "merged"} = t, _opts) do
     "✅ workline #{t.slug} is merged — the chain is complete. History: work/#{t.slug}/ + this thread."
   end
 
-  def stage_message(%Thread{} = t) do
+  def stage_message(%Thread{} = t, opts) do
     String.trim("""
     ▶ #{String.upcase(t.stage)} — workline #{t.slug}
-    Read: #{read_list(t)}#{skipped_note(t)}
+    Read: #{read_list(t)}#{skipped_note(t)}#{since_last_review(t, opts[:last_reviewed])}
     #{playbook(t)}#{routing_note(t)}
     #{exit_line(t)}#{gate_note(t.stage)}
     """)
@@ -106,6 +111,12 @@ defmodule Server.Workline.Brief do
     do: "#{dir(t)}/spec.md · #{dir(t)}/plan.md · the diff on branch work/#{t.slug}#{brief_tail(t)}"
 
   defp brief_tail(_t), do: " · get_brief for live state"
+
+  defp since_last_review(t, sha) when is_binary(sha),
+    do:
+      "\nYou reviewed this before, at #{String.slice(sha, 0, 7)}: read your #{dir(t)}/review.md, then what changed since — `git diff #{sha}..work/#{t.slug} -- . ':!#{dir(t)}'` — and check your findings were fixed."
+
+  defp since_last_review(_t, _sha), do: ""
 
   defp owed(%{stage: "intent"} = t), do: "#{dir(t)}/intent.md"
   defp owed(%{stage: "spec"} = t), do: "#{dir(t)}/spec.md"

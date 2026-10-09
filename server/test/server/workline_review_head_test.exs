@@ -1,0 +1,139 @@
+defmodule Server.WorklineReviewHeadTest do
+  # A review approves the code it read: its verdict records the branch's commit, and code committed
+  # after it sends the workline back to build like any other change, never landing on the old
+  # approval (the workline's own docs, work/<slug>/, may move: review.md is committed after the
+  # verdict). Coming back, the reviewer is pointed at what changed since its last look.
+  use ExUnit.Case, async: false
+
+  import Ecto.Query
+
+  alias Server.Channel
+  alias Server.Repo
+  alias Server.Thread
+  alias Server.Workline
+
+  defmodule AllPresent do
+    @moduledoc false
+    @behaviour Server.Workline.Artifacts
+
+    @impl true
+    def check(_thread, {:file, name}), do: {:ok, "committed #{name}"}
+    def check(_thread, :branch), do: {:ok, "work/x @ abc123"}
+    def check(_thread, :checks), do: {:ok, "1 verify check_passed"}
+  end
+
+  defmodule Merges do
+    @moduledoc false
+    def merge(_repo, _slug, _opts \\ []), do: {:ok, %{from: "a", to: "b"}}
+  end
+
+  setup do
+    Server.TestDB.clean!()
+    root = Path.join(System.tmp_dir!(), "review-head-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(root)
+    git(root, ["init", "-q", "-b", "main"])
+    git(root, ["config", "user.email", "t@t"])
+    git(root, ["config", "user.name", "t"])
+    commit(root, "seed", "s")
+    previous = Application.get_env(:server, :workline_root)
+    Application.put_env(:server, :workline_root, root)
+
+    on_exit(fn ->
+      Application.put_env(:server, :workline_root, previous)
+      File.rm_rf!(root)
+    end)
+
+    %{root: root}
+  end
+
+  defp git(root, args), do: {_, 0} = System.cmd("git", ["-C", root | args], stderr_to_stdout: true)
+
+  defp commit(root, path, text) do
+    File.mkdir_p!(Path.dirname(Path.join(root, path)))
+    File.write!(Path.join(root, path), text)
+    git(root, ["add", "-A"])
+    git(root, ["commit", "-qm", path])
+  end
+
+  # a workline at review whose branch carries one change
+  defp at_review(root, slug) do
+    git(root, ["checkout", "-q", "-b", "work/#{slug}"])
+    commit(root, "lib/#{slug}.ex", "v1")
+    git(root, ["checkout", "-q", "main"])
+
+    roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "reviewer", "name" => "lonnrot"}]
+    {:ok, ws} = Server.Workspaces.register(%{name: "Head #{slug}", roster: roster})
+    {:ok, built} = Workline.open(%{title: "t #{slug}", slug: slug, stage: "build", workspace_id: ws.id})
+    {:ok, _} = Channel.assign_lead(built.id, "emma")
+    {:ok, verifying} = Workline.advance(Repo.get!(Thread, built.id), artifacts: AllPresent)
+    {:ok, reviewing} = Workline.advance(verifying, artifacts: AllPresent)
+    reviewing
+  end
+
+  defp on_branch(root, slug, path, text) do
+    git(root, ["checkout", "-q", "work/#{slug}"])
+    commit(root, path, text)
+    git(root, ["checkout", "-q", "main"])
+  end
+
+  defp parked(thread) do
+    {:awaiting, parked} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+    parked
+  end
+
+  test "a review verdict records the commit it read", %{root: root} do
+    thread = at_review(root, "records")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+
+    sha =
+      Repo.one(
+        from e in Server.Event,
+          where: e.thread_id == ^thread.id and e.correlation == "workline:records:review",
+          select: e.detail
+      )["sha"]
+
+    assert {head, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/records"])
+    assert sha == String.trim(head)
+  end
+
+  test "the reviewed code lands, docs committed after it or not; code committed after it goes back to build",
+       %{root: root} do
+    same = at_review(root, "same")
+    {:ok, _} = Workline.review_verdict(same, "approve", "lonnrot", artifacts: AllPresent)
+    on_branch(root, "same", "work/same/review.md", "approve")
+    assert {:ok, %{stage: "merged"}} = Workline.approve(parked(same), artifacts: AllPresent, merge: Merges)
+
+    moved = at_review(root, "moved")
+    {:ok, _} = Workline.review_verdict(moved, "approve", "lonnrot", artifacts: AllPresent)
+    on_branch(root, "moved", "lib/moved.ex", "v2")
+
+    assert {:error, {:bounced, why}} = Workline.approve(parked(moved), artifacts: AllPresent, merge: Merges)
+    assert why =~ "after its review"
+    assert %Thread{stage: "build"} = Repo.get!(Thread, moved.id)
+  end
+
+  test "a landing whose code moved since its review goes back to build, unmerged", %{root: root} do
+    thread = at_review(root, "queued")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    {:ok, queued} = thread |> parked() |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+    on_branch(root, "queued", "lib/queued.ex", "v2")
+
+    assert {:error, {:bounced, _}} = Workline.land_queued(queued, merge: Merges)
+    assert %Thread{stage: "build", state: "open"} = Repo.get!(Thread, thread.id)
+  end
+
+  test "back at review, the reviewer is pointed at what changed since it last looked", %{root: root} do
+    thread = at_review(root, "again")
+    {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", artifacts: AllPresent)
+    {seen, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/again"])
+    on_branch(root, "again", "lib/again.ex", "v2")
+    {:ok, verifying} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+    {:ok, _} = Workline.advance(verifying, artifacts: AllPresent)
+
+    brief =
+      thread |> Channel.thread_messages() |> Enum.map(& &1.body) |> Enum.filter(&(&1 =~ "▶ REVIEW")) |> List.last()
+
+    assert brief =~ "#{String.trim(seen)}..work/again"
+    assert brief =~ "review.md"
+  end
+end

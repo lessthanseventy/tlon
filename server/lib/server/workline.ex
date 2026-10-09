@@ -328,6 +328,7 @@ defmodule Server.Workline do
     end
 
     with :ok <- verified_artifact(thread, checker),
+         :ok <- reviewed_current(thread),
          :ok <- qa_cleared(thread, opts) do
       if queue?(thread, checker, opts),
         do: queue(thread, "approved", thread.awaiting || "andrew"),
@@ -469,27 +470,29 @@ defmodule Server.Workline do
     repo = Git.root(thread)
     last? = Keyword.get(opts, :last, false)
 
-    case merger.merge(repo, thread.slug, gate: gate) do
-      {:ok, moved} ->
-        {:ok, flipped} = flip(thread)
-        finish(flipped, Map.put(moved, :repo, repo))
-        {:ok, flipped}
+    with :ok <- reviewed_current(thread) do
+      case merger.merge(repo, thread.slug, gate: gate) do
+        {:ok, moved} ->
+          {:ok, flipped} = flip(thread)
+          finish(flipped, Map.put(moved, :repo, repo))
+          {:ok, flipped}
 
-      {:error, {:interrupted, why}} when not last? ->
-        {:error, {:interrupted, why}}
+        {:error, {:interrupted, why}} when not last? ->
+          {:error, {:interrupted, why}}
 
-      {:error, {:interrupted, why}} ->
-        Server.Sheriff.report(thread, "the merge queue's gate was cut off three times: #{why}")
-        bounce(thread, why, "the merge queue's gate was cut off three times (#{why}); verify again, then approve")
+        {:error, {:interrupted, why}} ->
+          Server.Sheriff.report(thread, "the merge queue's gate was cut off three times: #{why}")
+          bounce(thread, why, "the merge queue's gate was cut off three times (#{why}); verify again, then approve")
 
-      {:error, why} ->
-        Server.Sheriff.report(thread, "the merge queue bounced it back to build: #{why}")
+        {:error, why} ->
+          Server.Sheriff.report(thread, "the merge queue bounced it back to build: #{why}")
 
-        bounce(
-          thread,
-          why,
-          "the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto origin/main, fix it test-first"
-        )
+          bounce(
+            thread,
+            why,
+            "the merge queue couldn't land it: #{why} Rebase work/#{thread.slug} onto origin/main, fix it test-first"
+          )
+      end
     end
   end
 
@@ -577,7 +580,8 @@ defmodule Server.Workline do
         cmd: "review verdict by #{author}",
         exit: if(verdict == "approve", do: 0, else: 1),
         tail: verdict,
-        correlation: "workline:#{thread.slug}:review"
+        correlation: "workline:#{thread.slug}:review",
+        sha: branch_head(thread)
       })
 
     if verdict == "request_changes" do
@@ -928,7 +932,11 @@ defmodule Server.Workline do
     # last stage's worker still leading this one.
     flipped = restaff(flipped)
     Server.Bus.broadcast({:workline_advanced, flipped})
-    post_brief(flipped, Brief.stage_message(flipped))
+
+    post_brief(
+      flipped,
+      Brief.stage_message(flipped, last_reviewed: flipped.stage == "review" && last_reviewed(flipped))
+    )
 
     if flipped.stage == "verify",
       do: Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: flipped.id, slug: flipped.slug}))
@@ -1488,5 +1496,34 @@ defmodule Server.Workline do
         {:error,
          {:in_flight, "its #{if q == "verify", do: "verify", else: "landing"} is queued or running; let it finish"}}
     end
+  end
+
+  # the review approved the code it read (its verdict's `sha`): code committed after it goes back
+  # to build like any other change, through verify and a review of what changed
+  defp reviewed_current(%Thread{stage: "review"} = thread) do
+    with %{detail: %{"sha" => seen}} when is_binary(seen) <- since_review(thread, "workline:#{thread.slug}:review"),
+         now when is_binary(now) <- branch_head(thread),
+         false <- same_code?(thread, seen, now) do
+      bounce(
+        thread,
+        "work/#{thread.slug} has code committed after its review",
+        "work/#{thread.slug} has code committed after its review (reviewed at #{String.slice(seen, 0, 7)}, now #{String.slice(now, 0, 7)}): it comes back through verify and a review of what changed"
+      )
+    else
+      _ -> :ok
+    end
+  end
+
+  defp reviewed_current(_thread), do: :ok
+
+  # the newest review verdict's commit, any round: where a returning reviewer last looked
+  defp last_reviewed(thread) do
+    Repo.one(
+      from e in Server.Event,
+        where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review",
+        order_by: [desc: e.id],
+        limit: 1,
+        select: fragment("(?::jsonb ->> 'sha')", e.detail)
+    )
   end
 end
