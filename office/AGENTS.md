@@ -16,7 +16,7 @@ linked window at a time, Ctrl-] back to the room).
   `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
   whiteboard's columns), sprites and looks (`sprites.ts`), the colour roles (`palette.ts`), the
   1x canvas and the **frame** a room hands a surface (`canvas.ts`; its speech balloons are 34×4 with long words hard-broken, placed by `balloon.ts` so none leaves the viewport or overlaps another), tlon's own bitmap font in two cuts (`font.ts`), the
-  office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`),
+  office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`; a channel down `FIRE_GRACE` ticks in a room that has seen it up sets `Sim.fire`: the crew musters at `plan.muster` with coffee, Argos barks, `closet()` in `rooms/wide.ts` burns),
   the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
   a pet's temperament (`temperament.ts`: warmth/wits/energy, -2..2, as policy over the sim's chance tables; `pets.ts` resolves `pets.json` — `TLON_PETS`; the cat slot is a cat, rabbit or bird, polled live like `looks.json`, absent means today's room byte for byte),
   what Nina says (`voices.ts`, sweet or sassy by warmth; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
