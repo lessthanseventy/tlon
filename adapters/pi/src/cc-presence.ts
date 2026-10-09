@@ -1,14 +1,14 @@
 // adapters — the claude-code adapter's thinking-presence declare. claude-machine has no
 // persistent extension process, so each hook fire is a fresh bun process (same shape as
 // cc-capture.ts): UserPromptSubmit declares thinking, PreToolUse says what tool is running
-// ("doing", the tool read from the hook's stdin), Stop/SessionEnd declare idle — the verb rides argv. Reuses mcp.ts's TlonClient; identity is the TLON_* env, the tools are
+// ("doing", the tool and its one-line summary read from the hook's stdin), Stop/SessionEnd declare idle — the verb rides argv. Reuses mcp.ts's TlonClient; identity is the TLON_* env, the tools are
 // argless self-thread declares.
 //
 // Same failure discipline as the other hooks: the server down, no identity, a slow connect —
 // all silent no-ops, hard-bounded so a wedged connect can never hold the session's hook.
 
 import { argv } from "node:process";
-import { doingOf } from "./doing.ts";
+import { doingOf, summaryOf } from "./doing.ts";
 import { readHookInput, runHook } from "./hook.ts";
 import { TlonClient, identityFromEnv } from "./mcp.ts";
 
@@ -34,8 +34,9 @@ async function declare(): Promise<void> {
   if (verb === "start") {
     await client.register(process.env.TMUX_PANE);
   } else if (verb === "doing") {
-    const input = await readHookInput<{ tool_name?: string; tool_input?: unknown }>();
-    if (input?.tool_name) await client.presenceDoing(doingOf(input.tool_name, input.tool_input));
+    const input = await readHookInput<{ tool_name?: string; tool_input?: unknown; cwd?: string }>();
+    if (input?.tool_name)
+      await client.presenceDoing(doingOf(input.tool_name, input.tool_input), summaryOf(input.tool_name, input.tool_input, input.cwd ?? process.cwd()));
   } else if (verb === "idle") {
     await client.presenceIdle();
   } else {

@@ -142,9 +142,10 @@ export class TlonClient {
     await this.#callTool("presence_thinking", {});
   }
 
-  // What the declared turn is doing now; no `what` = back to plain thinking.
-  async presenceDoing(what?: Doing): Promise<void> {
-    await this.#callTool("presence_doing", what ? { what } : {});
+  // What the declared turn is doing now; no `what` = back to plain thinking. A `summary` also
+  // lands the call on the thread's activity feed (doing.ts `summaryOf`).
+  async presenceDoing(what?: Doing, summary?: string): Promise<void> {
+    await this.#callTool("presence_doing", { ...(what ? { what } : {}), ...(summary ? { summary } : {}) });
   }
 
   async presenceIdle(): Promise<void> {
