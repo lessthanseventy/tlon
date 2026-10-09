@@ -145,12 +145,23 @@ defmodule Server.ShiftsTest do
     assert Shifts.current(ws.id) == "day"
   end
 
-  test "the reset time is read off Claude's line, as the next local moment it names" do
+  test "the reset time is read off Claude's line, as the next local moment it names; a guess says so" do
     now = ~N[2026-10-09 15:10:00]
-    assert Shifts.reset_at("Your limit will reset at 5pm (America/Denver).", now) == ~N[2026-10-09 17:00:00]
-    assert Shifts.reset_at("5-hour limit reached ∙ resets 9:30am", now) == ~N[2026-10-10 09:30:00]
-    assert Shifts.reset_at("weekly limit reached ∙ resets Mon 9:00 AM", now) == ~N[2026-10-12 09:00:00]
-    assert Shifts.reset_at("limit reached, no time given", now) == ~N[2026-10-09 20:10:00]
+    assert Shifts.reset_at("Your limit will reset at 5pm (America/Denver).", now) == {~N[2026-10-09 17:00:00], :exact}
+    assert Shifts.reset_at("5-hour limit reached ∙ resets 9:30am", now) == {~N[2026-10-10 09:30:00], :exact}
+    assert Shifts.reset_at("weekly limit reached ∙ resets Mon 9:00 AM", now) == {~N[2026-10-12 09:00:00], :exact}
+    assert Shifts.reset_at("Weekly limit reached ∙ resets Sunday", now) == {~N[2026-10-11 00:00:00], :estimated}
+    assert Shifts.reset_at("limit reached, no time given", now) == {~N[2026-10-09 20:10:00], :estimated}
+  end
+
+  test "a reminder pending from an earlier limit is cancelled when the day crew comes back", %{ws: ws} do
+    {:ok, _lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+    {:ok, _} = Shifts.switch(ws.id, "day")
+    :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", "❯ clear")
+    {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+    assert [_one] = all_enqueued(worker: Server.Jobs.ShiftBack)
   end
 
   test "the offer to put the day crew back comes at the reset, only if the night shift is still on", %{ws: ws} do
