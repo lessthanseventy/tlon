@@ -36,6 +36,22 @@ defmodule Server.Bench.RolesTest do
       end
     end
 
+    test "a senior task is a pinned snapshot: its parent sha, no fixture repo" do
+      tmp = tmp!()
+      dir = Path.join([tmp, "senior", "s9"])
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "prompt.md"), "build it")
+
+      File.write!(
+        Path.join(dir, "task.json"),
+        ~s({"tier": "full", "snapshot": {"parent": "abc1234"}, "grader": {"kind": "check", "cmd": "true"}})
+      )
+
+      assert [%{id: "s9", snapshot: %{"parent" => "abc1234"}, repo: nil}] = Roles.load(tmp, "senior", "full")
+      assert Roles.roles()["builder-senior"].set == "senior"
+      assert Roles.roles()["builder-junior"].set == "builder"
+    end
+
     test "a task.json without a valid grader is refused" do
       tmp = tmp!()
       dir = Path.join([tmp, "reviewer", "x1"])

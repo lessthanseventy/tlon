@@ -23,7 +23,7 @@ defmodule Server.Bench.Roles do
   # and the task set it answers
   @roles %{
     "builder-junior" => %{archetype: :builder, grade: "junior", set: "builder"},
-    "builder-senior" => %{archetype: :builder, grade: "senior", set: "builder"},
+    "builder-senior" => %{archetype: :builder, grade: "senior", set: "senior"},
     "reviewer" => %{archetype: :reviewer, grade: nil, set: "reviewer"},
     "planner" => %{archetype: :planner, grade: nil, set: "planner"},
     "qa" => %{archetype: :qa, grade: nil, set: "qa"},
@@ -120,7 +120,8 @@ defmodule Server.Bench.Roles do
       tier: meta["tier"],
       grader: meta["grader"],
       prompt: dir |> Path.join("prompt.md") |> File.read!(),
-      repo: if(File.dir?(repo), do: repo)
+      repo: if(File.dir?(repo), do: repo),
+      snapshot: meta["snapshot"]
     }
 
     if !(t.tier in @tiers and valid_grader?(t.grader)), do: raise("bench task #{set}/#{t.id}: bad task.json")
