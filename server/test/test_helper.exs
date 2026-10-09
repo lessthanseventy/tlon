@@ -17,4 +17,5 @@ config = Server.Repo.config()
 {:ok, _} = Server.Repo.start_link()
 Ecto.Migrator.run(Server.Repo, :up, all: true)
 
-ExUnit.start()
+# :bench_snapshot tests seed whole snapshots and compile them — `mise run bench:senior-verify`
+ExUnit.start(exclude: [:bench_snapshot])

@@ -137,8 +137,9 @@ defmodule Server.Bench.Roles.Runner do
     [{"TLON_TEST_DATABASE", "tlon_bench_#{slug}_#{System.unique_integer([:positive])}"}]
   end
 
-  defp drop_database(env) do
-    db = List.keyfind(env, "TLON_TEST_DATABASE", 0) |> elem(1)
+  @doc "Drop the test database `task_env/1` named, once its run is over."
+  def drop_database(env) do
+    db = env |> List.keyfind("TLON_TEST_DATABASE", 0) |> elem(1)
     System.cmd("dropdb", ["--if-exists", db], stderr_to_stdout: true)
   end
 

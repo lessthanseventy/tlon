@@ -8,3 +8,8 @@ run = "bench/longmemeval/run.sh"
 description = "bench: can each coworker role do its job on its routed model — frozen tasks per role, graded, usage recorded; results in bench/roles/results/, table in bench/roles/README.md — `-- --suite canary|full [--role R] [--model provider/model[:effort]]`"
 dir = "server"
 run = "mix server.bench_roles"
+
+["bench:senior-verify"]
+description = "bench: every senior task's hidden check is red at its pinned parent commit and green with the real solution applied — slow (compiles each snapshot); excluded from server:test"
+dir = "server"
+run = "mix test --only bench_snapshot test/server/bench/senior_snapshot_test.exs"

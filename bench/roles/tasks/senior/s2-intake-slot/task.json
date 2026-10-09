@@ -1,0 +1,1 @@
+{"tier": "canary", "snapshot": {"parent": "575dfb8c8dfd914771ce00891529af941d93ff6e", "solution": "272a75e13ef90c02d748111d3ac2ef2f450142f0"}, "grader": {"kind": "check", "cmd": "cd server && mix test test/server/intake_test.exs"}}

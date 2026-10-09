@@ -18,7 +18,9 @@ defmodule Server.Bench.RolesTest do
       for set <- @sets do
         canary = Roles.load(@tasks, set, "canary")
         full = Roles.load(@tasks, set, "full")
-        assert length(canary) >= 2, "#{set} has #{length(canary)} canary tasks"
+        # a senior task takes half an hour and a whole suite run: its canary is the one smallest task
+        min = if set == "senior", do: 1, else: 2
+        assert length(canary) >= min, "#{set} has #{length(canary)} canary tasks"
         assert Enum.all?(canary, &(&1.tier == "canary"))
         assert MapSet.subset?(MapSet.new(canary, & &1.id), MapSet.new(full, & &1.id))
       end
