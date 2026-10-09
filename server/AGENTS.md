@@ -83,8 +83,9 @@ and every layer the spine design's re-laid §9 asked for
   superseded fact is demoted: a newer fact supersedes an older one in its scope when it restates it
   (`Server.Recall.Supersede`, exact or cosine ≥ 0.92) or a model judges it restates or corrects it
   (the turn-pass extractor's labels, `Server.Recall.Judge` for every other bank). Judged supersedes
-  ship dark behind the `:judged_supersede` flag — off, only `supersede_proposed` events, applied or
-  rejected by `Supersede.apply_proposal/1` / `reject_proposal/2`. A stated fact is never judged away;
+  ship dark behind the `:judged_supersede` flag — off, only `supersede_proposed` events, which the
+  librarian decides (`Server.Librarian.decide/4` → `Supersede.apply_proposal/1` /
+  `reject_proposal/2`). A stated fact is never judged away;
   a correction of one is an ask to the operator.
 - **seed + bootstrap** (`Server.Seed`, `Server.Bootstrap`) — the wipe-proof base knowledge
   (`priv/seed/repo_knowledge.exs` + the machine-appended `promoted_facts.exs`) and the default
