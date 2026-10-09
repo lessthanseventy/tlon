@@ -578,11 +578,18 @@ defmodule Server.Profiles do
   """
 
   # The coworker-driver ring the SETTINGS panel cycles (leader `m`) — ollama-only, no anthropic-via-pi
-  # (see the moduledoc for why). Claude proper is the `hronir` window.
+  # (see the moduledoc for why). Claude proper is the `hronir` window. `kimi-k3` stays out: ollama.com
+  # bills it per token on top of the plan.
   @model_ring [
     %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"},
     %{provider: "ollama-cloud", model: "kimi-k2.7-code", thinking: "medium"},
-    %{provider: "ollama-cloud", model: "deepseek-v4-pro", thinking: "high"}
+    %{provider: "ollama-cloud", model: "deepseek-v4-pro", thinking: "high"},
+    %{provider: "ollama-cloud", model: "deepseek-v4.1-flash", thinking: "medium"},
+    %{provider: "ollama-cloud", model: "glm-5.3", thinking: "medium"},
+    %{provider: "ollama-cloud", model: "glm-5.3-flash", thinking: "medium"},
+    %{provider: "ollama-cloud", model: "kimi-k2.6", thinking: "medium"},
+    %{provider: "ollama-cloud", model: "minimax-m3", thinking: "medium"},
+    %{provider: "ollama-cloud", model: "minimax-m2.7", thinking: "medium"}
   ]
 
   # Every archetype's default: real Claude, which at home resolves to the Claude Code harness
