@@ -59,6 +59,8 @@ config :server, start_consult_mirror: false
 # so the application does not start it. The DB is the suite's own `tlon_test`,
 # never the real one.
 config :server, start_repo: false
+# The supersede judge (Server.Recall.Judge) never reaches a model from the suite; its tests hand one in.
+config :server, supersede_judge_cmd: "/nonexistent/tlon-test-judge-cli"
 
 # a wake's look-again for a swallowed Enter (Server.Arbiter.Tmux): off, but where a test turns it on
 config :server, tmux_confirm_ms: []
