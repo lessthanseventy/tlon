@@ -229,7 +229,7 @@ case "$cmd" in
     # The operator closes a thread: its sessions end, a child reports up, its ticket is done.
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh close-thread <thread-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> {:ok, _} = Server.Channel.close_thread(t); IO.puts(\"closed thread #$tid — #{t.title}\") end"
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> case Server.Channel.close_thread(t) do {:ok, _} -> IO.puts(\"closed thread #$tid — #{t.title}\"); {:tracked, w} -> IO.puts(\"not closed: #$tid holds unmerged work — tracked as workline #{w.slug} at build\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   reopen)
