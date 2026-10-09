@@ -221,4 +221,25 @@ defmodule Server.EpicsTest do
       assert Intake.next(ws.id).id == s1.id
     end
   end
+
+  describe "filing into an epic" do
+    test "epic_id files the ticket as the epic's child", %{ws: ws} do
+      e = epic(ws, "Toy")
+      t = file(ws, "step 1", %{epic_id: e.id})
+      assert Tickets.epic_of(t.id) == e.id
+    end
+
+    test "a bad epic_id files nothing and says why", %{ws: ws} do
+      plain = file(ws, "not an epic")
+      before = length(Tickets.in_workspace(ws.id))
+      assert {:error, cs} = Tickets.file(%{workspace_id: ws.id, title: "orphan", epic_id: plain.id})
+      assert {:from_id, _} = List.keyfind(cs.errors, :from_id, 0)
+      assert length(Tickets.in_workspace(ws.id)) == before
+    end
+
+    test "an epic cannot be filed under an epic", %{ws: ws} do
+      e = epic(ws, "Toy")
+      assert {:error, _} = Tickets.file(%{workspace_id: ws.id, title: "inner", kind: "epic", epic_id: e.id})
+    end
+  end
 end

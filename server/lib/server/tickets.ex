@@ -17,14 +17,31 @@ defmodule Server.Tickets do
   alias Server.TicketLink
   alias Server.TicketThread
 
-  @doc "File a ticket. `{:ok, ticket}` or `{:error, changeset}`."
+  @doc """
+  File a ticket. `{:ok, ticket}` or `{:error, changeset}`. With `epic_id` the ticket is filed as that epic's child in
+  the same transaction, so a refused parent (not an epic, an epic under an epic) files nothing.
+  """
   def file(attrs) do
+    {epic_id, attrs} = attrs |> Map.new() |> Map.pop(:epic_id)
+
     attrs
-    |> Map.new()
     |> Map.put_new_lazy(:sort, fn -> next_sort(attrs[:workspace_id] || attrs["workspace_id"]) end)
     |> Ticket.file_changeset()
-    |> Repo.insert()
+    |> insert_under(epic_id)
     |> Bus.announce(:ticket_filed)
+  end
+
+  defp insert_under(changeset, nil), do: Repo.insert(changeset)
+
+  defp insert_under(changeset, epic_id) do
+    Repo.transaction(fn ->
+      with {:ok, ticket} <- Repo.insert(changeset),
+           {:ok, _} <- link(epic_id, ticket.id, "parent") do
+        ticket
+      else
+        {:error, cs} -> Repo.rollback(cs)
+      end
+    end)
   end
 
   @doc """
