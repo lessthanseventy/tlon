@@ -19,9 +19,22 @@ defmodule Server.BootstrapTest do
     assert {:ok, workspace} = Bootstrap.ensure()
     assert workspace.name == "Machine"
     assert workspace.scope == "machine"
-    assert Enum.map(Workspaces.bench(workspace.id), & &1.name) == ["tertius", "hronir", "reviewer", "planner"]
+    assert Enum.map(Workspaces.bench(workspace.id), & &1.name) == ["tertius", "hronir", "reviewer", "planner", "quain"]
     assert [%{id: id}] = Workspaces.all()
     assert id == workspace.id
+  end
+
+  test "the default bench's librarian is a senior seat on the cheap workhorse, with its sweep scheduled" do
+    {:ok, workspace} = Bootstrap.ensure()
+    quain = Server.Librarian.of(workspace.id)
+    assert %{name: "quain", grade: "senior"} = quain
+
+    assert %{provider: "ollama-cloud", model: "deepseek-v4.1-flash"} =
+             Server.Profiles.instantiate(Server.Profiles.roster_entry(quain), workspace.id).model
+
+    assert [%{cron: "0 7 * * *", agent: "quain"}, %{agent: "quain"}] = Server.Schedules.in_workspace(workspace.id)
+    {:ok, _} = Bootstrap.ensure()
+    assert length(Server.Schedules.in_workspace(workspace.id)) == 2
   end
 
   test "an existing workspace is left untouched — no second seed, name preserved" do

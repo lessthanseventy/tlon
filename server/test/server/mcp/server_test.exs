@@ -127,6 +127,12 @@ defmodule Server.MCP.ServerTest do
                "set_urgency",
                # QA's (roster design §5)
                "submit_qa",
+               # the librarian's
+               "supersede_fact",
+               "forget_fact",
+               "review_proposals",
+               "decide_proposal",
+               "knowledge_report",
                "life_status",
                "routine_create",
                "routine_update",
@@ -1059,6 +1065,46 @@ defmodule Server.MCP.ServerTest do
     assert %Thread{stage: "build"} = Repo.get!(Thread, workline.id)
     assert Enum.any?(Channel.thread_messages(workline), &(&1.body =~ "R reloads"))
     assert %Thread{stage: nil} = Repo.get!(Thread, lobby.id)
+  end
+
+  test "the librarian's tools over the wire: a stated fact is refused, a proposal is listed, no judge says so" do
+    {:ok, ws} =
+      Server.Workspaces.register(%{name: "Stacks", roster: [%{"archetype" => "librarian", "name" => "quain"}]})
+
+    {:ok, thread} = Channel.open_thread(%{title: "sweep", workspace_id: ws.id})
+    bank = &Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", provenance: &2, text: &1})
+    {:ok, stated} = bank.("never push to main", "stated")
+    {:ok, old} = bank.("x is 1", "derived")
+    {:ok, new} = bank.("x is 2", "derived")
+
+    {:ok, e} =
+      Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: "supersede_proposed",
+        correlation: "fact:#{new.id}",
+        detail: %{"old" => old.id, "verdict" => "supersedes", "reason" => "x changed", "how" => "judge"}
+      })
+
+    quain = Staff.agent_by_name("quain")
+    token = MCP.Tokens.mint(thread, quain)
+    session = handshake(token)
+
+    refused = call(token, session, 2, "supersede_fact", %{"old_id" => stated.id, "new_id" => new.id, "reason" => "old"})
+    assert refused["isError"]
+    assert hd(refused["content"])["text"] =~ "stated"
+
+    assert [%{"event_id" => id, "new" => %{"text" => "x is 2"}, "old" => %{"text" => "x is 1"}}] =
+             decode_tool_json(call(token, session, 3, "review_proposals", %{}))
+
+    assert id == e.id
+
+    # a module with no apply_proposal/1 stands in for a server without the judge
+    Application.put_env(:server, :supersede_judge, Server.MCP.ServerTest)
+    on_exit(fn -> Application.delete_env(:server, :supersede_judge) end)
+    undecided = call(token, session, 4, "decide_proposal", %{"event_id" => e.id, "decision" => "apply"})
+    assert undecided["isError"]
+    assert hd(undecided["content"])["text"] =~ "isn't installed"
+    assert Repo.get!(Fact, new.id).supersedes == nil
   end
 
   test "write_note defaults to the bound thread; get_notes reads it back" do

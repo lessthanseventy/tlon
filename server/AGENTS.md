@@ -63,6 +63,13 @@ and every layer the spine design's re-laid §9 asked for
   `set_urgency` on the backlog. Work runs in `Server.Jobs.Release`; tests hand it a repo (`:release_root`).
   The service's boot says `release <sha> is live` once per new pointer (`note_live/1`), which the
   desktop toasts.
+- **the librarian** (`Server.Librarian`, bench archetype `librarian`, the default bench's `quain`) —
+  the office's memory: it decides the correction judge's `supersede_proposed` events
+  (`review_proposals`/`decide_proposal`, through `Server.Recall.Supersede.apply_proposal/1` and
+  `reject_proposal/2` — absent, it says the judge isn't installed), retires or tombstones facts
+  (`supersede_fact`/`forget_fact`, the reason recorded as a `superseded`/`forgotten` event; a
+  `stated` fact is refused), and posts the weekly counts in the lobby (`knowledge_report`). Its
+  sweep (daily 07:00) and report (Mondays 07:30) are standing schedules, `ensure_schedules/2`.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit

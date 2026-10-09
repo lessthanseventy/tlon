@@ -251,10 +251,12 @@ defmodule Server.Schedules do
     end
   end
 
-  # a script's output for the record: on the thread, but delivered at birth — it is for the
-  # operator to read, not a wake for the thread's lead
-  defp note(tid, body) do
-    %{thread_id: tid, author: "tlon", body: body}
+  @doc """
+  A post for the record (a script's output, the librarian's weekly report): on the thread, but
+  delivered at birth — it is for the operator to read, not a wake for the thread's lead.
+  """
+  def note(tid, body, author \\ "tlon") do
+    %{thread_id: tid, author: author, body: body}
     |> Message.post_changeset()
     |> Ecto.Changeset.put_change(:delivered_at, DateTime.truncate(DateTime.utc_now(), :second))
     |> Repo.insert!()

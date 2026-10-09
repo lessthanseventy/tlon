@@ -24,6 +24,15 @@ describe("outfit and accessory overlays", () => {
   })
 })
 
+describe("archetype gear", () => {
+  test("the librarian carries a book, so it isn't a default figure", () => {
+    for (const dir of ["down", "left"] as const) {
+      const plain = figure(lookOf("quain"), null, false, false, dir, "stand", 0, false)
+      expect(figure(lookOf("quain"), "librarian", false, false, dir, "stand", 0, false)).not.toEqual(plain)
+    }
+  })
+})
+
 describe("custom sprite override", () => {
   test("a custom view replaces the generated base but keeps gear and the sit/mirror rules", () => {
     const custom = { front: Array.from({ length: 20 }, (_, i) => (i === 0 ? "kkkkkkkkkkkk" : "............")) }

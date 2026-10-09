@@ -56,6 +56,7 @@ const GEAR: Record<string, Gear> = {
     side: { 2: "....eeeee...", 5: ".......e....", 6: ".......e....", 7: "..eeeeee...." },
   },
   researcher: { front: { 10: "........ggg.", 11: ".......g...g", 12: "........ggg.", 13: ".......c...." }, side: { 10: ".ggg........", 11: "g...g.......", 12: ".ggg........", 13: "....c......." } },
+  librarian: { front: { 11: "...wwwkwww..", 12: "...wwwkwww..", 13: "...ccccccc.." }, side: { 11: ".wwkww......", 12: ".ccccc......" } },
   planner: { front: { 11: ".......cc...", 12: "......wwww..", 13: "......wwww..", 14: "......wwww.." }, side: { 11: "..cc........", 12: ".wwww.......", 13: ".wwww......." } },
 }
 export const OUTFIT: Record<Outfit, Gear> = {

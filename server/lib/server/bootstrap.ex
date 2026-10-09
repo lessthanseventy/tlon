@@ -32,7 +32,13 @@ defmodule Server.Bootstrap do
       %{"archetype" => "surveyor", "name" => "tertius"},
       %{"archetype" => "builder", "name" => "hronir"},
       %{"archetype" => "reviewer", "name" => "reviewer"},
-      %{"archetype" => "planner", "name" => "planner"}
+      %{"archetype" => "planner", "name" => "planner"},
+      %{
+        "archetype" => "librarian",
+        "name" => "quain",
+        "grade" => "senior",
+        "model" => "ollama-cloud/deepseek-v4.1-flash"
+      }
     ]
   }
 
@@ -102,8 +108,14 @@ defmodule Server.Bootstrap do
 
   defp default_workspace do
     case Repo.one(from w in Workspace, order_by: [asc: w.id], limit: 1) do
-      nil -> Workspaces.register(@default)
-      %Workspace{} = workspace -> {:ok, workspace}
+      nil ->
+        with {:ok, ws} <- Workspaces.register(@default) do
+          _ = Server.Librarian.ensure_schedules(ws.id, "quain")
+          {:ok, ws}
+        end
+
+      %Workspace{} = workspace ->
+        {:ok, workspace}
     end
   end
 
