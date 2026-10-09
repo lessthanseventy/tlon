@@ -212,10 +212,26 @@ defmodule Server.MCP.Tool.SendBack do
          {:ok, back} <- Workline.send_back(thread, params[:stage], params[:why], identity.agent) do
       ok(frame, %{"thread_id" => back.id, "stage" => back.stage, "lead" => Channel.thread_lead(back.id)})
     else
-      %Server.Thread{} -> fail(frame, "send_back refused: that thread is not a workline")
-      {:error, {:not_behind, to}} -> fail(frame, "send_back refused: #{to} is not a working stage behind this one")
-      {:error, {:not_yours, why}} -> fail(frame, "send_back refused: #{why}")
-      {:error, why} -> fail(frame, "send_back refused: #{inspect(why)}")
+      %Server.Thread{} ->
+        fail(frame, "send_back refused: that thread is not a workline")
+
+      {:error, {:not_movable, "merged"}} ->
+        fail(frame, "send_back refused: it merged; a merged workline relands instead")
+
+      {:error, {:not_movable, stage}} ->
+        fail(frame, "send_back refused: a workline at #{stage} has nothing behind it to go back to")
+
+      {:error, {:in_flight, why}} ->
+        fail(frame, "send_back refused: #{why}")
+
+      {:error, {:not_behind, to}} ->
+        fail(frame, "send_back refused: #{to} is not a working stage behind this one")
+
+      {:error, {:not_yours, why}} ->
+        fail(frame, "send_back refused: #{why}")
+
+      {:error, why} ->
+        fail(frame, "send_back refused: #{inspect(why)}")
     end
   end
 end

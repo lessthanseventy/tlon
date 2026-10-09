@@ -47,7 +47,7 @@
 #   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution
 #   workline "<title>" <slug>      open a workline at stage intent (operator kickoff)
 #   track <id>                     promote a plain thread into a workline at build (opt-in)
-#   advance <id>                   advance a workline past its current stage (verifier green path)
+#   advance <id> [from-stage]      advance a workline past its current stage, only from from-stage when given (verifier green path)
 #   send-back <id> spec|plan|build <why…>  move a workline back on its own branch, the build kept to improve
 #   flag <name> on|off             turn a feature flag on or off for everyone (Server.Flags)
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
@@ -469,11 +469,12 @@ case "$cmd" in
     ;;
 
   advance)
-    tid="${1:-}"
-    int "$tid" || { echo 'usage: tlon-cli.sh advance <thread-id>' >&2; exit 2; }
+    tid="${1:-}"; from="${2:-}"
+    { int "$tid" && [[ "$from" =~ ^[a-z]*$ ]]; } || { echo 'usage: tlon-cli.sh advance <thread-id> [from-stage]' >&2; exit 2; }
     # Advance a workline past its current stage (the git artifact checker runs in the SERVICE
-    # node — set TLON_WORKLINE_ROOT there). The verifier script's green-path exit.
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); t -> case Server.Workline.advance(t) do {:ok, a} -> IO.puts(\"advanced — thread #$tid now at #{a.stage}\"); {:awaiting, a} -> IO.puts(\"gated at #{a.stage} — awaiting #{a.awaiting}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
+    # node — set TLON_WORKLINE_ROOT there). The verifier script's green-path exit. With
+    # `from-stage`, only from that stage: a workline sent back while its gate ran stays where it was sent.
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); %{stage: s} when \"$from\" != \"\" and s != \"$from\" -> IO.puts(\"not advanced — thread #$tid is at #{s} now, not $from\"); t -> case Server.Workline.advance(t) do {:ok, a} -> IO.puts(\"advanced — thread #$tid now at #{a.stage}\"); {:awaiting, a} -> IO.puts(\"gated at #{a.stage} — awaiting #{a.awaiting}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
     ;;
 
   send-back)

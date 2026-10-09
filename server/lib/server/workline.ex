@@ -710,10 +710,14 @@ defmodule Server.Workline do
   branch: what was built and reviewed stays, and the stage's lead is told to improve it, not redo
   it. Back to build is the call of the workline's lead (its reviewer, QA or builder); back to plan or
   spec reshapes the build, a coherence call, so it is the tech lead's (`Server.Coworker.lead/1`) or
-  the operator's. `{:ok, thread}` | `{:error, {:not_behind, stage}}` | `{:error, {:not_yours, why}}`.
+  the operator's. An open workline only, and not while its verify or landing is queued or running:
+  either would move it on from under the send-back. `{:ok, thread}` | `{:error, {:not_movable,
+  stage}}` | `{:error, {:in_flight, why}}` | `{:error, {:not_behind, stage}}` | `{:error, {:not_yours, why}}`.
   """
   def send_back(%Thread{} = thread, to, why, by) do
-    with :ok <- behind(thread, to),
+    with :ok <- movable(thread),
+         :ok <- not_in_flight(thread),
+         :ok <- behind(thread, to),
          :ok <- may_send_back(thread, to, by) do
       {:ok, move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by))}
     end
@@ -722,13 +726,17 @@ defmodule Server.Workline do
   @doc """
   File a reviewer's or QA's non-blocking findings as follow-up tickets: each text's first line is
   its title, the rest its body. Tied to the workline and labelled `follow-up` and `held`, so intake
-  leaves them until the workline merges; the merge lifts the hold and they reach the manager like
-  any ticket. Blank ones are skipped. `{:ok, tickets}`.
+  leaves them until its thread closes (`release_follow_ups/1`, run by the close); then they reach the
+  manager like any ticket. Blank ones, and a title already filed on the workline, are skipped. `{:ok, tickets}`.
   """
   def follow_ups(%Thread{} = thread, author, items) do
+    filed = thread.id |> tied_follow_ups() |> MapSet.new(& &1.title)
+
     tickets =
-      for text <- items, String.trim(text) != "" do
-        [title | rest] = text |> String.trim() |> String.split("\n", parts: 2)
+      for text <- items,
+          String.trim(text) != "",
+          [title | rest] = text |> String.trim() |> String.split("\n", parts: 2),
+          not MapSet.member?(filed, String.trim(title)) do
         origin = "Follow-up from ##{thread.id} (#{thread.title}), raised by #{author}. Held until ##{thread.id} merges."
 
         {:ok, ticket} =
@@ -745,6 +753,27 @@ defmodule Server.Workline do
       end
 
     {:ok, tickets}
+  end
+
+  @doc """
+  Lift the hold on a closing workline's follow-ups so intake routes them. One that closed without
+  merging says so in each ticket's body, for the manager to check it still applies.
+  """
+  def release_follow_ups(%Thread{} = thread) do
+    held = thread.id |> tied_follow_ups() |> Enum.filter(&("held" in &1.labels))
+
+    note =
+      if thread.stage == "merged",
+        do: "",
+        else: "\n\nIts workline (##{thread.id}) closed without merging: check this still applies."
+
+    for t <- held,
+        do: {:ok, _} = Server.Tickets.update(t, %{labels: t.labels -- ["held"], body: (t.body || "") <> note})
+
+    if held != [],
+      do: post_brief(thread, "↗ follow-ups to intake: " <> Enum.map_join(held, ", ", &"##{&1.id} #{&1.title}"))
+
+    :ok
   end
 
   @doc """
@@ -1181,7 +1210,6 @@ defmodule Server.Workline do
   # merged: the thread's work is done (closing it marks its ticket done), and what changed rolls out
   defp finish(thread, %{repo: repo, from: from, to: to}) do
     {:ok, _} = Server.Channel.close_thread(thread)
-    release_follow_ups(thread)
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
     landed = "⤵ landed as #{String.slice(to, 0, 7)}"
 
@@ -1411,20 +1439,36 @@ defmodule Server.Workline do
     do:
       "↩ back to #{to} — sent back by #{by}: #{why}. The branch keeps the build and review.md: revise #{to}.md to say what changes and what stays, so the build is improved, not redone; then advance_stage."
 
-  # merged: its held follow-ups go to intake
-  defp release_follow_ups(thread) do
-    held =
-      from(t in Server.Ticket,
-        join: tt in Server.TicketThread,
-        on: tt.ticket_id == t.id,
-        where: tt.thread_id == ^thread.id and tt.kind == "relates"
+  defp tied_follow_ups(thread_id) do
+    from(t in Server.Ticket,
+      join: tt in Server.TicketThread,
+      on: tt.ticket_id == t.id,
+      where: tt.thread_id == ^thread_id and tt.kind == "relates"
+    )
+    |> Repo.all()
+    |> Enum.filter(&(is_list(&1.labels) and "follow-up" in &1.labels))
+  end
+
+  defp movable(%Thread{state: "open", stage: stage}) when stage in ~w(plan build verify review), do: :ok
+  defp movable(%Thread{stage: stage}), do: {:error, {:not_movable, stage}}
+
+  defp not_in_flight(thread) do
+    queues =
+      Repo.all(
+        from j in Oban.Job,
+          where:
+            j.queue in ["verify", "landing"] and j.state in ["available", "scheduled", "executing", "retryable"] and
+              fragment("?->>'thread_id'", j.args) == ^to_string(thread.id),
+          select: j.queue
       )
-      |> Repo.all()
-      |> Enum.filter(&(is_list(&1.labels) and "follow-up" in &1.labels and "held" in &1.labels))
 
-    for t <- held, do: {:ok, _} = Server.Tickets.update(t, %{labels: t.labels -- ["held"]})
+    case queues do
+      [] ->
+        :ok
 
-    if held != [],
-      do: post_brief(thread, "↗ follow-ups to intake: " <> Enum.map_join(held, ", ", &"##{&1.id} #{&1.title}"))
+      [q | _] ->
+        {:error,
+         {:in_flight, "its #{if q == "verify", do: "verify", else: "landing"} is queued or running; let it finish"}}
+    end
   end
 end

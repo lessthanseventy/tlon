@@ -109,7 +109,7 @@ if [ -n "${WORKLINE_GATE:-}" ]; then
   printf '%s\n' "$gate_tail"
   exit 1
 elif [ "$fail" -eq 0 ] && [ "$unrecorded" -eq 0 ]; then
-  "$cli" advance "$tid"
+  "$cli" advance "$tid" verify
 elif [ "$fail" -eq 0 ]; then
   # Green gates with no evidence on record cannot advance: the verify stage owes a CHECKS
   # artifact, and advancing here would be exactly the self-report this script exists to replace.
