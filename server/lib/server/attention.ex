@@ -419,10 +419,12 @@ defmodule Server.Attention do
     label = Enum.find_value(opts, &(&1["key"] == key && &1["label"]))
     text = "@#{asker} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
 
+    # the night shift's offer (Server.Shifts): its first answer puts the day crew back, before the
+    # ask is resolved, so a switch that fails leaves it open to answer again
+    with %{"shift_back" => ws} when key == "1" <- prompt.payload, do: {:ok, _} = Server.Shifts.switch(ws, "day")
+
     with {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: prompt.id}) do
-      resolve(prompt, "answered: " <> label)
-      # the night shift's offer (Server.Shifts): its first answer puts the day crew back
-      with %{"shift_back" => ws} when key == "1" <- prompt.payload, do: Server.Shifts.switch(ws, "day")
+      resolve(Repo.get!(Message, prompt.id), "answered: " <> label)
       {:ok, reply}
     end
   end

@@ -85,6 +85,7 @@ defmodule Server.Shifts do
   defp switch_to(workspace_id, to) do
     {1, _} = Repo.update_all(from(w in Workspace, where: w.id == ^workspace_id), set: [shift: to])
     announce(workspace_id)
+    if to == "day", do: withdraw_offers(workspace_id)
     going = workspace_id |> Workspaces.bench_all() |> Enum.filter(&(&1.crew not in ["all", to]))
     {:ok, workspace_id |> led_by(going) |> Enum.reduce(%{restaffed: [], waiting: []}, &change_over(&1, &2, to))}
   end
@@ -170,30 +171,76 @@ defmodule Server.Shifts do
     end
   end
 
+  # nights now; the offer to put the day crew back waits for the reset (Server.Jobs.ShiftBack)
   defp nights_for(workspace_id, line, after_line) do
     {:ok, _} = switch(workspace_id, "night")
+    local = reset_at(line <> "\n" <> after_line, NaiveDateTime.from_erl!(:calendar.local_time()))
+    label = Calendar.strftime(local, "%a %-I:%M%P")
+    utc = local |> NaiveDateTime.to_erl() |> :calendar.local_time_to_universal_time_dst() |> List.last()
 
-    reset =
-      with [r] <- Regex.run(~r/reset[s]?[^\n]*/i, line <> "\n" <> after_line), do: " (Claude says: #{String.trim(r)})"
+    later =
+      case Server.Jobs.enqueue(
+             Server.Jobs.ShiftBack.new(%{workspace_id: workspace_id, reset: label},
+               scheduled_at: DateTime.from_naive!(NaiveDateTime.from_erl!(utc), "Etc/UTC")
+             )
+           ) do
+        {:ok, _} ->
+          "At the reset (#{label}) you'll be asked whether to put the day crew back."
 
-    with %Thread{id: lobby} <- Channel.machine_thread(workspace_id) do
-      note(%Thread{id: lobby}, "☾ Claude's usage limit is reached, so the night shift is on#{reset}.")
+        {:error, _} ->
+          "It resets #{label}; S on the crew screen puts the day crew back (the reminder couldn't be scheduled)."
+      end
 
+    with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
+         do: note(%Thread{id: lobby}, "☾ Claude's usage limit is reached, so the night shift is on. #{later}")
+
+    {:switched, "night"}
+  end
+
+  @doc """
+  The reset Claude's limit line names, as the next local moment it falls on after `now` (a naive
+  local time): `5pm`, `9:30am`, `Mon 9:00 AM`. With no time in it, five hours on (the session window).
+  """
+  def reset_at(text, now) do
+    case Regex.run(
+           ~r/resets?\s+(?:at\s+)?(?:(mon|tue|wed|thu|fri|sat|sun)\w*\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i,
+           text
+         ) do
+      [_, day, h, m, ap | _] ->
+        next_at(now, day, String.to_integer(h), if(m == "", do: 0, else: String.to_integer(m)), ap)
+
+      _ ->
+        NaiveDateTime.add(now, 5 * 3600)
+    end
+  end
+
+  @doc """
+  The reset has come (`Server.Jobs.ShiftBack`): still on the night shift, the lobby gets an ask with
+  its answers attached — `day shift back` puts the day crew back. Already on days, nothing. `:ok`.
+  """
+  def offer_day(workspace_id, reset) do
+    with "night" <- current(workspace_id),
+         %Thread{id: lobby} <- Channel.machine_thread(workspace_id) do
       {:ok, _} =
         Server.Attention.ask(
           lobby,
           "tlon",
-          "Put the day crew back? Claude's limit#{reset} — answer once it has reset (or S on the crew screen).",
+          "Claude's limit has reset (#{reset}). Put the day crew back?",
           ["day shift back", "stay on nights"],
           nil,
           %{"shift_back" => workspace_id}
         )
     end
 
-    {:switched, "night"}
+    :ok
   end
 
-  @doc "Forget the limit memory of every pane not in `panes` (`\"agent/thread/window\"`): they are gone."
+  @doc """
+  Forget the limit memory of every pane not in `panes` (`\"agent/thread/window\"`): they are gone. An
+  empty read (tmux failing to list) is not an empty office, so it forgets nothing.
+  """
+  def prune(_workspace_id, %MapSet{map: map}) when map_size(map) == 0, do: :ok
+
   def prune(workspace_id, panes) do
     seen = seen(workspace_id)
     kept = Map.filter(seen, fn {key, _} -> MapSet.member?(panes, key) end)
@@ -203,4 +250,24 @@ defmodule Server.Shifts do
 
   # the line's fingerprint, not its text: knobs reach every coworker's brief, and pane text is untrusted
   defp fingerprint(line), do: :sha256 |> :crypto.hash(line) |> Base.encode16(case: :lower) |> binary_part(0, 16)
+
+  # the day crew is back however it came: an open offer to bring it back has nothing left to ask
+  defp withdraw_offers(workspace_id) do
+    for ask <- Server.Attention.open_asks(),
+        ask.payload["shift_back"] == workspace_id,
+        do: Server.Attention.resolve(ask, "withdrawn: the day shift is on")
+  end
+
+  defp next_at(now, day, h, m, ap) do
+    hour = rem(h, 12) + if(String.downcase(ap) == "p", do: 12, else: 0)
+    at = %{now | hour: hour, minute: m, second: 0, microsecond: {0, 0}}
+    wanted = if day != "", do: Enum.find_index(~w(mon tue wed thu fri sat sun), &(&1 == String.downcase(day))) + 1
+
+    0..7
+    |> Enum.find(fn d ->
+      t = NaiveDateTime.add(at, d * 86_400)
+      NaiveDateTime.after?(t, now) and (is_nil(wanted) or Date.day_of_week(t) == wanted)
+    end)
+    |> then(&NaiveDateTime.add(at, &1 * 86_400))
+  end
 end
