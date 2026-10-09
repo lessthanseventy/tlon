@@ -103,6 +103,12 @@ defmodule Server.Worktree do
     end
   end
 
+  @doc "Why closing the thread would strand its checkout — `holds/2`, but nil when no checkout exists."
+  @spec stranded(String.t(), String.t()) :: String.t() | nil
+  def stranded(repo_path, slug) do
+    if File.exists?(Path.join(path(repo_path, slug), ".git")), do: holds(repo_path, slug)
+  end
+
   @doc "The checkouts under `repo_path`'s `.worktrees/`, by name."
   @spec names(String.t()) :: [String.t()]
   def names(repo_path) do
