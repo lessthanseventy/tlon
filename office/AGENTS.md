@@ -49,8 +49,8 @@ linked window at a time, Ctrl-] back to the room).
   `GET /api/office/needs`), `i` (or a click on it) opens that queue with each item's own actions, a click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
   office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,
   read only from the snapshot (`flagOn` in `kit/types.ts`): `B`, build mode, is there only with
-  `build_mode` on. A running coworker's card shows their live screen
-  (captured, never resized; `c` the conversation, ⏎ step in). Under the room the pane splits: what you clicked on the left, what you can
+  `build_mode` on. A running coworker's card shows their activity timeline
+  (`timeline.ts`, from the thread view's `activity`, which the harnesses' tool hooks feed: one line per tool call, a glyph and colour per kind, grouped by coworker in their shirt colour, a rule per fresh turn, newest at the bottom, scrolled with the card; `c` the conversation, ⏎ step into their real screen). Under the room the pane splits: what you clicked on the left, what you can
   do to it on the right — each card's actions (`detail()`) are its keys, its clickable list and
   its docs at once, so they cannot drift apart. A card's rows scroll (`tui/pane.ts`: with the
   selection, or pgup/pgdn and the wheel, `↑/↓ N more` where rows hide); the foot lists the actions
