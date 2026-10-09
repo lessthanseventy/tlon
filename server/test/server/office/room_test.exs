@@ -83,4 +83,57 @@ defmodule Server.Office.RoomTest do
     assert [%{id: id, title: "wire the tray"}] = Room.history()
     assert id == ctx.t.id
   end
+
+  describe "board: epics with progress" do
+    setup ctx do
+      mk = fn attrs -> elem(Tickets.file(Map.merge(%{workspace_id: ctx.ws.id}, attrs)), 1) end
+      %{mk: mk}
+    end
+
+    test "groups children under their epic with done/total, and the rest as loose", %{ws: ws, mk: mk} do
+      toy = mk.(%{title: "Toy", kind: "epic", priority: "high"})
+      a = mk.(%{title: "a", epic_id: toy.id, sort: 1})
+      b = mk.(%{title: "b", epic_id: toy.id, sort: 2})
+      loose = mk.(%{title: "loose"})
+      {:ok, _} = Tickets.update(a, %{status: "done"})
+
+      %{epics: [row], loose: [l]} = Room.board(ws.id)
+      assert %{id: toy_id, title: "Toy", done: 1, total: 2, priority: "high", status: "doing"} = row
+      assert toy_id == toy.id
+      assert Enum.map(row.children, & &1.id) |> Enum.sort() == [a.id, b.id]
+      assert l.id == loose.id
+    end
+
+    test "next is the lowest-sort free child: skips done, blocked and held", %{ws: ws, mk: mk} do
+      e = mk.(%{title: "E", kind: "epic"})
+      done = mk.(%{title: "done", epic_id: e.id, sort: 1})
+      blocked = mk.(%{title: "blocked", epic_id: e.id, sort: 2})
+      _held = mk.(%{title: "held", epic_id: e.id, sort: 3, labels: ["held"]})
+      free = mk.(%{title: "free", epic_id: e.id, sort: 4})
+      blocker = mk.(%{title: "blocker"})
+      {:ok, _} = Tickets.update(done, %{status: "done"})
+      {:ok, _} = Tickets.link(blocker.id, blocked.id, "blocks")
+
+      %{epics: [row]} = Room.board(ws.id)
+      assert row.next == %{id: free.id, title: "free"}
+    end
+
+    test "an epic with nothing free has next nil; a child's effective priority is its epic's when higher",
+         %{ws: ws, mk: mk} do
+      e = mk.(%{title: "E", kind: "epic", priority: "high"})
+      c = mk.(%{title: "c", epic_id: e.id, priority: "low"})
+      {:ok, _} = Tickets.update(c, %{status: "done"})
+
+      %{epics: [row]} = Room.board(ws.id)
+      assert row.next == nil
+      assert [%{effective_priority: "high"}] = row.children
+    end
+
+    test "epics order by urgency, then board order; no epics is just loose", %{ws: ws, mk: mk} do
+      lo = mk.(%{title: "lo", kind: "epic", priority: "low"})
+      hi = mk.(%{title: "hi", kind: "epic", priority: "high"})
+      assert [hi.id, lo.id] == Enum.map(Room.board(ws.id).epics, & &1.id)
+      assert %{epics: [], loose: []} = Room.board(elem(Workspaces.register(%{name: "Empty"}), 1).id)
+    end
+  end
 end
