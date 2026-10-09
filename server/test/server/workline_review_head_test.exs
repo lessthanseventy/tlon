@@ -27,6 +27,13 @@ defmodule Server.WorklineReviewHeadTest do
     def merge(_repo, _slug, _opts \\ []), do: {:ok, %{from: "a", to: "b"}}
   end
 
+  defmodule GatedMerges do
+    @moduledoc false
+    def merge(repo, slug, opts) do
+      with {:ok, :green} <- Keyword.fetch!(opts, :gate).(repo, "work/#{slug}"), do: {:ok, %{from: "a", to: "b"}}
+    end
+  end
+
   setup do
     Server.TestDB.clean!()
     root = Path.join(System.tmp_dir!(), "review-head-#{System.unique_integer([:positive])}")
@@ -197,6 +204,32 @@ defmodule Server.WorklineReviewHeadTest do
 
     {:ok, _} = Workline.review_verdict(reviewing, "approve", "lonnrot", artifacts: AllPresent)
     assert {:awaiting, _} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+  end
+
+  test "a bounce while the landing's gate runs wins: nothing lands, the builder keeps it", %{root: root} do
+    thread = at_review(root, "bounced-mid-landing")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    {:ok, queued} = thread |> parked() |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+    # QA fails the workline while the landing's gate is running; the gate still comes back green
+    gate = fn _repo, _branch ->
+      {:error, {:bounced, _}} =
+        Workline.qa_verdict(Repo.get!(Thread, thread.id), "fail", "nolan", "R doesn't reload", artifacts: AllPresent)
+
+      {:ok, :green}
+    end
+
+    assert {:ok, _} = Workline.land_queued(queued, merge: GatedMerges, gate: gate)
+    assert %Thread{stage: "build", state: "open"} = Repo.get!(Thread, thread.id)
+    assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "nothing landed"))
+  end
+
+  test "a closed workline doesn't advance", %{root: root} do
+    thread = at_review(root, "closed-early")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    {:ok, _} = Channel.close_thread(Repo.get!(Thread, thread.id))
+    assert {:error, _} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+    assert %Thread{stage: "review", awaiting: nil} = Repo.get!(Thread, thread.id)
   end
 
   test "back at review, the reviewer is pointed at what changed since it last looked", %{root: root} do
