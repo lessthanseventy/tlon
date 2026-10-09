@@ -411,11 +411,22 @@ defmodule Server.MCP.GatewayTest do
 
       {200, a} = post_json(url, %{})
       assert is_integer(a["seed"]) and a["voice"] =~ "careful"
-      {200, b} = post_json(url, %{reroll: true})
-      assert b["seed"] != a["seed"]
+      {409, _} = post_json(url, %{reroll: true})
       {200, c} = request_json(:patch, url, %{voice: "calm"})
-      assert c["voice"] == "calm" and c["seed"] == b["seed"]
+      assert c["voice"] == "calm" and c["seed"] == a["seed"]
       assert {404, _} = post_json("/api/workspaces/#{ws.id}/coworkers/999999/persona", %{})
+    end
+
+    test "hiring over HTTP gives the seat a persona, made off the request" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {201, c} = post_json("/api/workspaces/#{ws.id}/coworkers", %{name: "yu", archetype: "builder"})
+
+      persona =
+        Enum.find_value(1..50, fn _ ->
+          Server.Persona.get(ws.id, c["name"]) || (Process.sleep(20) && nil)
+        end)
+
+      assert %{"voice" => _} = persona
     end
 
     test "tickets: change a field, delete" do

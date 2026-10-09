@@ -127,6 +127,23 @@ defmodule Server.PersonaTest do
     assert Persona.get(ws.id, "lonnrot") == b
   end
 
+  test "edit keeps only string values and ignores a non-map quirks", %{ws: ws} do
+    {:ok, a} = Persona.generate(ws.id, "lonnrot", seed: 42)
+    assert {:ok, b} = Persona.edit(ws.id, "lonnrot", %{"backstory" => 5, "voice" => "  calm  ", "quirks" => "x"})
+    assert b["backstory"] == a["backstory"]
+    assert b["voice"] == "calm"
+    assert b["quirks"] == a["quirks"]
+    assert {:ok, c} = Persona.edit(ws.id, "lonnrot", %{"quirks" => %{"hobby" => 7, "catchphrase" => "Aha."}})
+    assert c["quirks"]["hobby"] == a["quirks"]["hobby"] and c["quirks"]["catchphrase"] == "Aha."
+  end
+
+  test "reroll keeps the stored persona when the generator gave no model one", %{ws: ws, cli: cli} do
+    {:ok, a} = Persona.generate(ws.id, "lonnrot", seed: 42)
+    File.write!(cli, "#!/bin/sh\nexit 3\n")
+    assert {:error, :generator_unavailable} = Persona.reroll(ws.id, "lonnrot")
+    assert Persona.get(ws.id, "lonnrot") == a
+  end
+
   test "the office snapshot's bench carries the seat's persona", %{ws: ws} do
     seat = fn -> Enum.find(Server.Office.status().bench, &(&1.name == "lonnrot")) end
     assert seat.().persona == nil

@@ -74,24 +74,33 @@ defmodule Server.Persona do
   @spec edit(integer(), String.t(), map()) :: {:ok, map()} | {:error, :no_seat}
   def edit(workspace_id, name, attrs) do
     with {:ok, p} <- ensure(workspace_id, name) do
-      quirks = Map.merge(p["quirks"], Map.take(attrs["quirks"] || %{}, @quirk_keys))
-      p = p |> Map.merge(Map.take(attrs, ~w(backstory voice))) |> Map.merge(%{"quirks" => quirks, "edited" => true})
+      quirks = Map.merge(p["quirks"], text_fields(attrs["quirks"], @quirk_keys))
+
+      p =
+        p
+        |> Map.merge(text_fields(attrs, ~w(backstory voice)))
+        |> Map.merge(%{"quirks" => quirks, "edited" => true})
+
       {_agent, row} = seat(workspace_id, name)
       {:ok, _} = row |> Ecto.Changeset.change(persona: p) |> Repo.update()
       {:ok, p}
     end
   end
 
-  @doc "Generate afresh from a new random seed (different from the stored one) and store it."
-  @spec reroll(integer(), String.t()) :: {:ok, map()} | {:error, :no_seat}
+  @doc """
+  Generate afresh from a new random seed (different from the stored one) and store it. A reroll
+  that the model did not answer (banter off, cap hit, call failed) is refused and keeps the stored
+  persona, so a model-written or hand-edited one is never replaced by a fallback.
+  """
+  @spec reroll(integer(), String.t()) :: {:ok, map()} | {:error, :no_seat | :generator_unavailable}
   def reroll(workspace_id, name) do
     old = get(workspace_id, name)
     seed = Enum.find(Stream.repeatedly(fn -> :rand.uniform(1_000_000) end), &(&1 != (old && old["seed"])))
-    generate(workspace_id, name, seed: seed)
+    generate(workspace_id, name, seed: seed, model_only: true)
   end
 
   @doc "Generate and store a persona for the seat. `opts[:seed]` makes it reproducible."
-  @spec generate(integer(), String.t(), keyword()) :: {:ok, map()} | {:error, :no_seat}
+  @spec generate(integer(), String.t(), keyword()) :: {:ok, map()} | {:error, :no_seat | :generator_unavailable}
   def generate(workspace_id, name, opts \\ []) do
     case seat(workspace_id, name) do
       nil ->
@@ -100,10 +109,22 @@ defmodule Server.Persona do
       {_agent, row} ->
         seed = opts[:seed] || :rand.uniform(1_000_000)
         persona = ask(name, row.archetype, seed)
-        {:ok, _} = row |> Ecto.Changeset.change(persona: persona) |> Repo.update()
-        {:ok, persona}
+
+        if opts[:model_only] && persona["source"] != "model" do
+          {:error, :generator_unavailable}
+        else
+          {:ok, _} = row |> Ecto.Changeset.change(persona: persona) |> Repo.update()
+          {:ok, persona}
+        end
     end
   end
+
+  # only trimmed, non-empty strings of the named keys; anything else is dropped
+  defp text_fields(%{} = attrs, keys) do
+    for k <- keys, is_binary(v = attrs[k]), (t = String.trim(v)) != "", into: %{}, do: {k, String.slice(t, 0, 300)}
+  end
+
+  defp text_fields(_, _), do: %{}
 
   defp ask(name, archetype, seed) do
     prompt = """
