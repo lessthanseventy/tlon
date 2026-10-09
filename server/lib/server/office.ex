@@ -101,7 +101,8 @@ defmodule Server.Office do
   One thread up close: a page of its messages, oldest first — the newest #{@page}, or with `before`
   the #{@page} before that message id; `more` says older ones remain — and what its worker's pane
   shows now: the thread's own window, or the lead's window for a standing thread; `peek`/`window`
-  nil when nothing runs it.
+  nil when nothing runs it. `activity`: what its coworkers have done, oldest first
+  (`Server.Presence.Thinking.activity/2`) — the card's timeline.
   """
   @spec thread_view(Server.Thread.t(), integer() | nil) :: map()
   def thread_view(%Server.Thread{} = t, before \\ nil) do
@@ -122,7 +123,8 @@ defmodule Server.Office do
       messages: messages,
       more: length(page) > @page,
       peek: tab && peek(t.workspace_id, tab),
-      window: tab && tab.name
+      window: tab && tab.name,
+      activity: activity(t.id)
     }
   end
 
@@ -396,4 +398,10 @@ defmodule Server.Office do
   end
 
   defp key(m), do: "#{m.provider}/#{m.model}"
+
+  defp activity(thread_id) do
+    Server.Presence.Thinking.activity(thread_id)
+  catch
+    :exit, _ -> []
+  end
 end

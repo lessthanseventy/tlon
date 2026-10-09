@@ -123,6 +123,68 @@ defmodule Server.Presence.ThinkingTest do
     assert_received {:presence_idle, %{thread_id: 7, agent: "hronir"}}
   end
 
+  describe "activity" do
+    test "what a coworker did lands on the thread's feed, oldest first, turn or no turn" do
+      store = start_store([])
+
+      Thinking.record(store, 7, "hronir", "read", "Read · lib/server/ticket.ex")
+      Thinking.record(store, 7, "tertius", "test", "Bash · mise run check")
+
+      assert [
+               %{thread_id: 7, agent: "hronir", kind: "read", summary: "Read · lib/server/ticket.ex", at: %DateTime{}},
+               %{agent: "tertius", kind: "test", summary: "Bash · mise run check"}
+             ] = Thinking.activity(store, 7)
+
+      assert Thinking.activity(store, 9) == []
+    end
+
+    test "a tool the server has no kind for is a plain tool event" do
+      store = start_store([])
+      Thinking.record(store, 7, "hronir", nil, "TodoWrite")
+      assert [%{kind: "tool", summary: "TodoWrite"}] = Thinking.activity(store, 7)
+    end
+
+    test "the feed keeps the newest events per thread, up to the cap" do
+      store = start_store([])
+      cap = Thinking.activity_cap()
+      for i <- 1..(cap + 5), do: Thinking.record(store, 7, "hronir", "bash", "Bash · step #{i}")
+
+      feed = Thinking.activity(store, 7)
+      assert length(feed) == cap
+      assert hd(feed).summary == "Bash · step 6"
+      assert List.last(feed).summary == "Bash · step #{cap + 5}"
+    end
+
+    test "a summary is one line, capped, with anything that looks like a secret redacted" do
+      store = start_store([])
+      Thinking.record(store, 7, "hronir", "bash", "Bash · curl -H 'Authorization: Bearer abc.def-123' x\nsecond line")
+      Thinking.record(store, 7, "hronir", "bash", "Bash · OLLAMA_API_KEY=sk-live1234567890abcdef run")
+      Thinking.record(store, 7, "hronir", "bash", "Bash · " <> String.duplicate("x", 500))
+
+      [a, b, c] = store |> Thinking.activity(7) |> Enum.map(& &1.summary)
+      refute a =~ "abc.def-123" or a =~ "second line"
+      refute b =~ "sk-live1234567890abcdef"
+      assert b =~ "OLLAMA_API_KEY=…"
+      assert String.length(c) <= 120
+    end
+
+    test "a fresh turn marks the feed" do
+      store = start_store(turn_gap_seconds: 0)
+      Thinking.thinking(store, 7, "hronir")
+      Thinking.idle(store, 7, "hronir")
+      Thinking.thinking(store, 7, "hronir")
+      assert [%{kind: "thinking"}, %{kind: "thinking"}] = Thinking.activity(store, 7)
+    end
+
+    test "a turn straight after a turn does not mark the feed again" do
+      store = start_store(turn_gap_seconds: 3600)
+      Thinking.thinking(store, 7, "hronir")
+      Thinking.idle(store, 7, "hronir")
+      Thinking.thinking(store, 7, "hronir")
+      assert [%{kind: "thinking"}] = Thinking.activity(store, 7)
+    end
+  end
+
   test "the sweep keeps entries younger than the max" do
     store = start_store(max_seconds: 3600)
 

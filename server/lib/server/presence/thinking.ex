@@ -12,6 +12,14 @@ defmodule Server.Presence.Thinking do
   as thinking forever. Every transition broadcasts on `server:presence` and the
   thread topic (`Server.Bus`), and marks the agent's session (`Staff.mark_thinking/3`): the
   durable half, so a turn a machine restart cut off can be picked up (`Server.Staffing`).
+
+  Beside it, each thread's ACTIVITY feed: the last 100 things its coworkers did
+  (`%{thread_id, agent, at, kind, summary}`, oldest first) — a tool call as the harness's hook
+  reported it (`presence_doing` with a `summary`: "Bash · mise run check"), a post, and a
+  `thinking` mark when a turn starts after a pause (`:turn_gap_seconds`, default 30s, so a
+  harness that declares a turn per model step does not mark every step). A summary is one line,
+  capped and redacted (`record/5`), never file contents. The office's thread card reads it
+  (`Server.Office.thread_view/2`). In memory like the rest: a restart starts the feeds empty.
   """
   use GenServer
 
@@ -21,6 +29,18 @@ defmodule Server.Presence.Thinking do
 
   @default_max_seconds 600
   @sweep_interval_ms 60_000
+  @activity_cap 100
+  @default_turn_gap_seconds 30
+  @summary_max 120
+  # a credential in a command line: an auth header's value, a NAME_KEY=/token= assignment, a
+  # well-known token prefix, or a long opaque run
+  @secrets [
+    {~r/(bearer|basic|token)\s+\S+/i, "\\1 …"},
+    {~r/\b([A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD)[A-Z0-9_]*|token|key|secret|password|passwd|api[_-]?key)=\S+/i,
+     "\\1=…"},
+    {~r/\b(?:sk|pk|rk|ghp|gho|ghs|ghu|github_pat|glpat|xox[abpr]|AKIA)[-_][A-Za-z0-9_\-]{8,}/, "…"},
+    {~r/[A-Za-z0-9+_\-]{40,}/, "…"}
+  ]
 
   def start_link(opts) do
     {name, opts} = Keyword.pop(opts, :name, __MODULE__)
@@ -40,6 +60,20 @@ defmodule Server.Presence.Thinking do
   """
   def doing(store \\ __MODULE__, thread_id, agent, what), do: GenServer.call(store, {:doing, thread_id, agent, what})
 
+  @doc """
+  Add to `thread_id`'s activity feed: `agent` did a `kind` of thing (`nil` = a tool the server has
+  no kind for, read as `"tool"`), said in one line. The summary is cut to its first line and
+  #{@summary_max} characters, with anything that looks like a credential redacted.
+  """
+  def record(store \\ __MODULE__, thread_id, agent, kind, summary) when is_binary(summary),
+    do: GenServer.call(store, {:record, thread_id, agent, kind || "tool", clean(summary)})
+
+  @doc "`thread_id`'s activity feed, oldest first: `[%{thread_id, agent, at, kind, summary}]`."
+  def activity(store \\ __MODULE__, thread_id), do: GenServer.call(store, {:activity, thread_id})
+
+  @doc "How many events a thread's feed keeps."
+  def activity_cap, do: @activity_cap
+
   @doc "Who is thinking on `thread_id`: `[%{agent, started_at, doing}]`, empty when nobody."
   def thinking_for(store \\ __MODULE__, thread_id), do: GenServer.call(store, {:thinking_for, thread_id})
 
@@ -53,17 +87,34 @@ defmodule Server.Presence.Thinking do
   def init(opts) do
     max = Keyword.get(opts, :max_seconds, Application.get_env(:server, :thinking_max_seconds, @default_max_seconds))
     interval = Keyword.get(opts, :sweep_interval_ms, @sweep_interval_ms)
+    gap = Keyword.get(opts, :turn_gap_seconds, @default_turn_gap_seconds)
     Process.send_after(self(), :sweep, interval)
-    {:ok, %{entries: %{}, doing: %{}, max_seconds: max, interval: interval}}
+
+    {:ok, %{entries: %{}, doing: %{}, activity: %{}, idled: %{}, max_seconds: max, interval: interval, turn_gap: gap}}
   end
 
   @impl true
   def handle_call({:thinking, thread_id, agent}, _from, state) do
     started_at = now()
+    key = {thread_id, agent}
     durable(thread_id, agent, started_at)
     Bus.broadcast({:presence_thinking, %{thread_id: thread_id, agent: agent, started_at: started_at}})
-    {:reply, :ok, put_in(state.entries[{thread_id, agent}], started_at)}
+
+    fresh? =
+      not Map.has_key?(state.entries, key) and
+        case state.idled[key] do
+          nil -> true
+          at -> DateTime.diff(started_at, at, :second) >= state.turn_gap
+        end
+
+    state = if fresh?, do: push(state, thread_id, agent, "thinking", "thinking"), else: state
+    {:reply, :ok, put_in(state.entries[key], started_at)}
   end
+
+  def handle_call({:record, thread_id, agent, kind, summary}, _from, state),
+    do: {:reply, :ok, push(state, thread_id, agent, kind, summary)}
+
+  def handle_call({:activity, thread_id}, _from, state), do: {:reply, Map.get(state.activity, thread_id, []), state}
 
   def handle_call({:idle, thread_id, agent}, _from, state) do
     next = clear(state, thread_id, agent)
@@ -129,8 +180,26 @@ defmodule Server.Presence.Thinking do
 
         # the turn ended: queue its memory pass (a no-op unless the pass is on and Oban runs here)
         _ = TurnPass.schedule(thread_id)
-        %{state | entries: entries, doing: Map.delete(state.doing, {thread_id, agent})}
+
+        %{
+          state
+          | entries: entries,
+            doing: Map.delete(state.doing, {thread_id, agent}),
+            idled: Map.put(state.idled, {thread_id, agent}, now())
+        }
     end
+  end
+
+  defp push(state, thread_id, agent, kind, summary) do
+    event = %{thread_id: thread_id, agent: agent, at: now(), kind: kind, summary: summary}
+    feed = Map.get(state.activity, thread_id, []) ++ [event]
+    %{state | activity: Map.put(state.activity, thread_id, Enum.take(feed, -@activity_cap))}
+  end
+
+  defp clean(summary) do
+    line = summary |> String.split("\n", parts: 2) |> hd() |> String.trim()
+    line = Enum.reduce(@secrets, line, fn {re, with}, acc -> Regex.replace(re, acc, with) end)
+    if String.length(line) > @summary_max, do: String.slice(line, 0, @summary_max - 1) <> "…", else: line
   end
 
   # the session row's mark (Staff.mark_thinking): best-effort, presence never fails on the db

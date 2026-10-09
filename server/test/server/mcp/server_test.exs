@@ -1062,6 +1062,24 @@ defmodule Server.MCP.ServerTest do
     assert [%{doing: nil}] = Server.Presence.Thinking.thinking_for(thread.id)
   end
 
+  test "presence_doing with a summary lands on the thread's activity feed, as do posts" do
+    {:ok, thread} = Channel.open_thread(%{title: "busy thread"})
+    {:ok, agent} = Staff.register_agent(%{name: "Doer", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    refute call(token, session, 2, "presence_doing", %{"what" => "test", "summary" => "Bash · mise run check"})[
+             "isError"
+           ]
+
+    call(token, session, 3, "post_message", %{"body" => "green\nmore detail"})
+
+    assert [
+             %{agent: "Doer", kind: "test", summary: "Bash · mise run check"},
+             %{kind: "post", summary: "Post · green"}
+           ] = Server.Presence.Thinking.activity(thread.id)
+  end
+
   defp handshake(token) do
     {200, headers, _} = post(token, nil, initialize_request())
     session = header(headers, "mcp-session-id")

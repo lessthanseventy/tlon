@@ -46,9 +46,18 @@ defmodule Server.MCP.Tool.PostMessage do
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    %{thread_id: identity.thread_id, author: identity.agent, body: params[:body], reply_to: params[:reply_to]}
-    |> Channel.post()
-    |> then(&reply(frame, &1, fn message -> %{"message_id" => message.id} end))
+    result =
+      Channel.post(%{
+        thread_id: identity.thread_id,
+        author: identity.agent,
+        body: params[:body],
+        reply_to: params[:reply_to]
+      })
+
+    with {:ok, _} <- result,
+         do: Server.Presence.Thinking.record(identity.thread_id, identity.agent, "post", "Post · " <> params[:body])
+
+    reply(frame, result, fn message -> %{"message_id" => message.id} end)
   end
 end
 
@@ -530,7 +539,9 @@ defmodule Server.MCP.Tool.PresenceDoing do
   @moduledoc """
   Say what THIS connection's agent is doing inside its declared turn — call as a tool
   starts (and with no `what` as it ends), so the office can show it. A no-op outside a
-  declared turn, so a hook can fire it without waiting on the answer.
+  declared turn, so a hook can fire it without waiting on the answer. With a `summary` the
+  call also lands on the thread's activity feed (`Server.Presence.Thinking.record/5`), turn
+  or no turn — the tool call happened either way.
   """
   use Server.MCP.Tool
 
@@ -540,12 +551,17 @@ defmodule Server.MCP.Tool.PresenceDoing do
     field :what, :enum,
       values: ["read", "edit", "bash", "search", "web", "test", "delegate"],
       description: "The kind of tool running now; omit when it finished and you are thinking again"
+
+    field :summary, :string,
+      description:
+        "The tool call in one line, for the activity feed: \"Bash · mise run check\" — its target, never contents"
   end
 
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
     :ok = Thinking.doing(identity.thread_id, identity.agent, params[:what])
+    if s = params[:summary], do: :ok = Thinking.record(identity.thread_id, identity.agent, params[:what], s)
     ok(frame, %{"doing" => params[:what], "thread_id" => identity.thread_id})
   end
 end

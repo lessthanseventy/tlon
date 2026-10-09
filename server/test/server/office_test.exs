@@ -148,7 +148,19 @@ defmodule Server.OfficeTest do
 
       assert v.messages |> Enum.map(& &1.body) |> Enum.take(-2) == ["first", "second"]
       assert v.peek == nil and v.window == nil
+      assert v.activity == []
       assert is_binary(JSON.encode!(v))
+    end
+
+    test "what its coworkers have been doing, newest last", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
+      Server.Presence.Thinking.record(t.id, "hronir", "edit", "Edit · office/kit/crew.ts")
+      Server.Presence.Thinking.record(t.id, "hronir", "test", "Bash · mise run check")
+
+      assert [%{kind: "edit", agent: "hronir"}, %{kind: "test", summary: "Bash · mise run check"}] =
+               Office.thread_view(t).activity
+
+      assert JSON.encode!(Office.thread_view(t)) =~ ~s("activity":[{)
     end
   end
 end
