@@ -221,4 +221,30 @@ defmodule Server.EpicsTest do
       assert {:error, _} = Tickets.file(%{workspace_id: ws.id, title: "inner", kind: "epic", epic_id: e.id})
     end
   end
+
+  describe "adopting tickets into an epic" do
+    test "ties each ticket to the epic", %{ws: ws} do
+      e = epic(ws, "Toy")
+      [a, b] = [file(ws, "a"), file(ws, "b")]
+      assert {:ok, [_, _]} = Tickets.adopt(e.id, [a.id, b.id])
+      assert Tickets.epic_of(a.id) == e.id and Tickets.epic_of(b.id) == e.id
+    end
+
+    test "a ticket that already has another parent is refused, and nothing is tied", %{ws: ws} do
+      [e1, e2] = [epic(ws, "One"), epic(ws, "Two")]
+      [a, b] = [file(ws, "a"), file(ws, "b")]
+      {:ok, _} = Tickets.adopt(e1.id, [b.id])
+      assert {:error, {id, cs}} = Tickets.adopt(e2.id, [a.id, b.id])
+      assert id == b.id
+      assert {:to_id, {"already has a parent epic", _}} = List.keyfind(cs.errors, :to_id, 0)
+      assert Tickets.epic_of(a.id) == nil
+    end
+
+    test "adopting what is already the epic's child is a no-op", %{ws: ws} do
+      e = epic(ws, "Toy")
+      a = file(ws, "a")
+      {:ok, _} = Tickets.adopt(e.id, [a.id])
+      assert {:ok, _} = Tickets.adopt(e.id, [a.id])
+    end
+  end
 end
