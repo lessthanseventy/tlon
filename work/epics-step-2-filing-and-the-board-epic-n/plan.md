@@ -12,9 +12,9 @@ Assumptions (say if wrong):
 - "The board payload" = `Server.Office.Room` (the office's ticket data), served at `GET /api/office/…/:ws`. The existing
   flat `Room.tickets/1` / `/api/office/tickets/:ws` stay untouched (the office TUI reads them until step 3); the grouped
   read is a NEW `Room.board/1` at `/api/office/board/:ws`.
-- Epic row = `done/total` over its children, its effective priority (higher of own and… an epic has no parent, so just its
-  own priority — the *children's* effective priority is max(own, epic)), and its **next free child**: the lowest-`sort`
-  (then lowest id) child that is `backlog`, not blocked by an unfinished ticket, not labelled `held` — exactly intake's
+- Epic row = `done/total` over its children, its own priority (an epic has no parent, so that is its effective priority;
+  each child carries `effective_priority` = the higher of its own and its epic's), and its **next free child**: the
+  lowest-`sort` (then lowest id) child that is `backlog`, not blocked by an unfinished ticket, not labelled `held` — intake's
   "free" test.
 - `epic_id` is for filing only (`Tickets.file`, MCP `file_ticket`, `POST /api/tickets`); not on `update_ticket`
   (`epic-add` / `Tickets.adopt` is the move-an-existing-ticket door).
