@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { crewOf, peopleOf, viewOf } from "../kit/crew"
-import { office } from "./golden"
+import { focus, measure, office, seeded } from "./golden"
 
 const withUqbar = (thinking = false) => {
   const a = office(3)
@@ -21,8 +21,9 @@ describe("uqbar in the view", () => {
   })
 })
 
-import { FRAMES, goalOf, modeOf, moodOf, RIBBON, stepBook, wiggle, type Book } from "../kit/uqbar"
-import { ROLE } from "../kit/palette"
+import { FRAMES, goalOf, modeOf, moodOf, RIBBON, spineHome, stepBook, wiggle, type Book } from "../kit/uqbar"
+import { ROLE, tint } from "../kit/palette"
+import { corner, WideRoom, zones } from "../rooms/wide"
 
 describe("the volume", () => {
   test("every frame is rectangular, 12 wide at most, and uses only known paint", () => {
@@ -65,5 +66,47 @@ describe("the volume", () => {
     const on = Array.from({ length: 1800 }, (_, t) => wiggle(t)).filter(Boolean).length
     expect(on).toBeGreaterThan(0); expect(on).toBeLessThan(20)
     expect(wiggle(5)).toBe(wiggle(5 + 1800))
+  })
+})
+
+const WIDTH = 696, NOW = new Date(2026, 9, 5, 21, 0)
+const OX = () => tint(ROLE.alarm, ROLE.ground, 0.6).toUpperCase()
+const px = (fr: { rgba: Uint8ClampedArray | Uint8Array; width: number }, x: number, y: number) => {
+  const i = (y * fr.width + x) * 4
+  return "#" + [0, 1, 2].map((k) => fr.rgba[i + k]!.toString(16).padStart(2, "0")).join("").toUpperCase()
+}
+const shot = (a: ReturnType<typeof withUqbar>, ticks: number) => seeded(3, () => {
+  const room = new WideRoom(WIDTH), v = viewOf(a, 1)
+  room.render(v, focus, measure, NOW) // the whiteboard's perches come from a render
+  for (let i = 0; i < ticks; i++) room.step(v)
+  return room.render(v, focus, measure, NOW)
+})
+const spot = () => spineHome(corner(zones(WIDTH)).shelf)
+
+describe("uqbar in the wide room", () => {
+  test("no session: one extra spine on the shelf, no book anywhere else", () => {
+    const fr = shot(office(3) as never, 300), h = spot()
+    expect(px(fr, h.x, h.y + 3)).toBe(OX())
+    expect(fr.hits.some((x) => x.tip?.startsWith("Uqbar"))).toBe(false)
+  })
+  test("a live session: the spine is gone and the book perches on its focus card", () => {
+    const fr = shot(withUqbar(true), 600), h = spot()
+    expect(px(fr, h.x, h.y + 3)).not.toBe(OX())
+    const book = fr.hits.find((x) => x.tip?.startsWith("Uqbar"))!
+    const card = fr.hits.find((x) => x.tip?.startsWith("#101 "))!
+    expect(book).toBeDefined(); expect(card).toBeDefined()
+    expect(book.y).toBeLessThan(41)
+    expect(book.x).toBeGreaterThanOrEqual(card.x); expect(book.x).toBeLessThanOrEqual(card.x + card.w)
+    expect(book.tip).toContain("working")
+  })
+  test("the session ends: it flies home and the spine is back", () => {
+    seeded(3, () => {
+      const room = new WideRoom(WIDTH), up = viewOf(withUqbar(), 1), down = viewOf(office(3), 1)
+      room.render(up, focus, measure, NOW)
+      for (let i = 0; i < 600; i++) room.step(up)
+      for (let i = 0; i < 600; i++) room.step(down)
+      const fr = room.render(down, focus, measure, NOW)
+      expect(px(fr, spot().x, spot().y + 3)).toBe(OX())
+    })
   })
 })
