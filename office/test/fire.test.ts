@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
+import { ARGOS } from "../kit/pets"
 import { FIRE_GRACE } from "../kit/sim"
 import { WideRoom } from "../rooms/wide"
 import { office } from "./wcag.test"
@@ -39,5 +40,17 @@ describe("the drill", () => {
     expect(new Set(actors.map((a) => `${a.x}:${a.y}`)).size).toBe(actors.length)
     run(r, up, 1500)
     for (const a of r.actors.values()) expect(a.spot.kind).not.toBe("exit")
+  })
+})
+
+describe("Argos in the smoke", () => {
+  test("he leaves for the muster and barks smoke lines while it burns", () => {
+    const r = new WideRoom(696) as any
+    run(r, up, 300)
+    const said = new Set<string>()
+    for (let i = 0; i < FIRE_GRACE + 900; i++) { r.step(down()); if (r.dog.said) said.add(r.dog.said) }
+    expect(r.dog.mode).not.toBe("sleep")
+    expect(r.dog.y).toBeGreaterThan(160)
+    expect([...said].some((s) => ARGOS.smoke.includes(s))).toBe(true)
   })
 })

@@ -220,6 +220,16 @@ export class WideRoom extends Sim<Layout> {
     })
   }
 
+  /** a fire drill: Argos trots to the last muster place and barks at the smoke */
+  private dogSmoke() {
+    const d = this.dog, m = this.plan.muster!.at(-1)!
+    if (!d.path.length && (d.x !== m.x || d.y !== m.y)) {
+      d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, m)]
+      d.aisle = m.aisle; d.mode = "walk"; d.fuss = null
+    }
+    if (this.quiet(d.saidUntil) && Math.random() < 1 / 40) this.dogSay(this.argos("smoke"))
+  }
+
   /**
    * The room's tick, and the TV's show at half its rate. Whoever's settled on the couch picks up the
    * remote now and then (about once a minute and a quarter each) and flips the channel.
@@ -232,7 +242,8 @@ export class WideRoom extends Sim<Layout> {
       if (c.mode === "sit" && !c.path.length && !c.errand && !c.fuss) this.catDo("nap")
       if (d.mode === "sit" && !d.path.length && !d.fuss) this.dogDo("bed")
     }
-    if (!this.dog.path.length && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 2200) {
+    if (this.fire) this.dogSmoke()
+    else if (!this.dog.path.length && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 2200) {
       this.dogDo("office")
       this.dogSay(this.argos("paper"))
     } else if (this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 1800) this.dogSay(this.argos("muse"))
