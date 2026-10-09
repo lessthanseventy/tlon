@@ -22,7 +22,7 @@ import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
-import { say } from "./talk"
+import { say, lobbyOf, replies } from "./talk"
 import * as data from "./data"
 import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
@@ -290,6 +290,24 @@ async function chatter() {
     if (heard.has(k)) continue
     heard.add(k)
     room().say(b.agent, b.line)
+    changed()
+  }
+  await answers(ws)
+}
+/** the operator's answers: a lobby post answering you is a balloon over its author, and a notification when a card covers the room */
+let answered: Set<number> | null = null
+async function answers(w: number) {
+  const lobby = lobbyOf(view().threads, w)
+  const v = lobby === null ? null : await data.thread(lobby)
+  if (!v) return
+  const fresh = replies(v.messages, OPERATOR).filter((r) => !answered?.has(r.id))
+  const first = answered === null
+  answered ??= new Set()
+  for (const r of fresh) {
+    answered.add(r.id)
+    if (first) continue
+    room().say(r.agent, r.line)
+    if (mode.kind !== "home") notify(`${r.agent} answered`, r.line)
     changed()
   }
 }

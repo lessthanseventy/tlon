@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { lobbyOf, speech, say } from "../tui/talk"
+import { lobbyOf, speech, say, replies } from "../tui/talk"
 
 const th = (id: number, ws: number, standing: boolean) => ({ id, title: "lobby", stage: null, awaiting: null, workspace_id: ws, standing })
 
@@ -27,4 +27,15 @@ describe("talk", () => {
     ])
   })
   test("no lobby, no post", async () => { expect(await say([], 1, null, "x")).toMatch(/no lobby/) })
+})
+
+describe("replies", () => {
+  const m = (id: number, author: string, body: string, reply_to: number | null = null) => ({ id, author, body, at: "", kind: "chat", reply_to })
+  test("a post by X after the operator's @X, or replying to an operator post, is X answering", () => {
+    const got = replies([m(1, "andrew", "@ada how goes it"), m(2, "ada", "fine"), m(3, "bo", "unrelated"), m(4, "andrew", "ok"), m(5, "bo", "answer", 4), m(6, "tlon", "sys", 4)], "andrew")
+    expect(got).toEqual([{ id: 2, agent: "ada", line: "fine" }, { id: 5, agent: "bo", line: "answer" }])
+  })
+  test("nothing the operator said, nothing answered", () => {
+    expect(replies([m(1, "ada", "hi"), m(2, "andrew", "@ada x"), m(3, "andrew", "y")], "andrew")).toEqual([])
+  })
 })

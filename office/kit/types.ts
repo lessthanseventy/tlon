@@ -73,6 +73,6 @@ export const flagOn = (a: Agents, name: string): boolean => a.flags?.[name] === 
 /** one thing a coworker did on a thread (`Server.Presence.Thinking`'s feed): a tool call ("Bash · mise run check"), a post, or `thinking` as a turn starts */
 export type Activity = { thread_id: number; agent: string; at: string; kind: string; summary: string }
 /** a thread for a close look: a page of its messages (`more`: older ones remain), what its worker's pane shows now, and its activity feed, oldest first */
-export type ThreadView = { messages: { id: number; author: string; body: string; at: string; kind: string }[]; more?: boolean; peek: string | null; window: string | null; activity?: Activity[] }
+export type ThreadView = { messages: { id: number; author: string; body: string; at: string; kind: string; reply_to?: number | null }[]; more?: boolean; peek: string | null; window: string | null; activity?: Activity[] }
 
 export const EMPTY: Agents = { ok: false, roster: [], threads: [], counts: {}, awaiting: 0, bench: [], projects: [], tickets: [], workspaces: [], archetypes: [], models: [], notes: [], visits: [], triage: {}, health: null, calendar: {} }

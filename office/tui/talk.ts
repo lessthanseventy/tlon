@@ -20,3 +20,20 @@ export async function say(threads: Thread[], ws: number | null, to: string | nul
   const r = await data.post(lobby, body)
   return r.startsWith("sent") ? (to ? `said to ${to}` : "said to the office") : r
 }
+
+type Said = { id: number; author: string; body: string; kind?: string; reply_to?: number | null }
+
+/** the lobby's posts answering the operator: a reply to one of their posts, or a post by X after an operator `@X` */
+export function replies(msgs: Said[], operator: string): { id: number; agent: string; line: string }[] {
+  const mine = new Set<number>(), out: { id: number; agent: string; line: string }[] = []
+  let asked = new Set<string>()
+  for (const m of msgs) {
+    if (m.author === operator) {
+      mine.add(m.id)
+      asked = new Set([...m.body.matchAll(/@([\w-]+)/g)].map((x) => x[1]!))
+    } else if (m.author !== "tlon" && ((m.reply_to != null && mine.has(m.reply_to)) || asked.has(m.author))) {
+      out.push({ id: m.id, agent: m.author, line: m.body })
+    }
+  }
+  return out
+}
