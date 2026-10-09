@@ -5,20 +5,18 @@ itself **Uqbar**; see `2026-10-08-uqbar-design.md`). Andrew handed it the delega
 me for awhile"). Read this, then `AGENTS.md`, then the memory index
 (`~/.claude/projects/-home-andrew-projects-tlon/memory/MEMORY.md`).
 
-## 1 · Where things stand
+## 1 · Where things stand (2026-10-09, early morning)
 
-- **Live release:** `7b54006`, then a cut of main once #191 lands (check `git rev-parse --short
-  live`). Every cut tonight ran `mise run check:main` on the exact tip first. After a cut, the
-  operator's TUI needs `R` (its header says "office updated · R reloads").
-- **Nothing is in flight on the board.** Tickets #70 (speech balloons) and #74 (KeepUp: one drifted
-  note per repo) are routed to tertius ("2 to staff" on his desk); intake starts them itself after
-  30 minutes. #85 (epics: guard the parent law in the db; an epic's status is derived only) is in
-  the backlog.
-- **In flight as PRs (four agents, launched together):** ficciones — the desktop renders tlon's ask
-  answers and `info` toasts, and pi's `models.json` matches what ollama.com serves; tlon — the
-  suggestion box leaves the inbox (it is banter, not a request), QA can record a verdict for a
-  workline its session isn't bound to, and "it took effect" toasts for a landing and a release.
-  Merge, gate main, cut, and `machine:update` for the ficciones half.
+- **Live release:** `2d7766f` (check `git rev-parse --short live`); the operator's TUI needs `R`.
+- **In flight:** #202 speech balloons, #203 sandbox mode (step 1 of the toy for Jude and Robyn) and
+  #204 Uqbar's volume at review/QA; #205 (memory pass banks junk `...` facts) in review; #206 (facts
+  about code carry a recheck) in verify. Ticket #90 (a senior-builder bench from real merged
+  worklines; hronir picks the tasks) is with intake.
+- **The bench:** a second QA, **treviranus** (Haiku), beside nolan, who was the bottleneck.
+  **quain**, the librarian (`Server.Librarian`, flash), sweeps daily at 07:00 (schedule #7) and
+  reports on the office's knowledge Mondays 07:30 (#8). The nightly role-bench canary is schedule #9
+  (04:30). Senior builders stay on Sonnet: on the current fixtures Sonnet and flash both score 4/4,
+  so the bench can't tell them apart until #90 lands. ashe (researcher) stays on flash.
 
 ## 2 · What changed tonight (all on main)
 
@@ -45,6 +43,17 @@ me for awhile"). Read this, then `AGENTS.md`, then the memory index
 - **Tasks:** `mise run server:stop` (service + every coworker pane). The inbox sweep (schedule #3)
   no longer @mentions Andrew or relays what the inbox already shows.
 
+- **After midnight:** the db hunt (undeliverable messages settle, close clears `awaiting`, an index
+  on `message.created_at`); stale sessions end and missing embeddings fill in the sweep; the
+  structured activity feed (`office/tui/timeline.ts`); toasts for a landing and a release; the brief
+  carries what the office knows (`Recall.thread_knowledge/2`) and reading a fact cites it;
+  supersede (cosine ≥ 0.92, backfilled: 26 superseded) and the correction judge (dark behind
+  `:judged_supersede`; quain reviews its proposals); the role bench (`mise run bench:roles`).
+- **A lead woken on the lobby** can act on the workline it leads: `advance_stage`, `push_branch` and
+  `submit_review` take `thread_id`, honoured only for the caller's own thread
+  (`Server.MCP.Tool.acting_thread/2`). `switch_thread` can't help a Claude Code pane — its MCP auth
+  is fixed at launch.
+
 ## 3 · The delegate loop
 
 Andrew asked this session to stand in for him. It ran a self-paced `/loop`: releases (gate main's
@@ -55,26 +64,28 @@ Never: publish outside tlon, rewrite pushed history, delete data, decide scope h
 push to an auto-merge-armed PR, @mention a coworker on a thread they don't lead. **A new session
 restarts it** if Andrew wants it (the loop doesn't carry over).
 
-## 4 · Gotchas learned tonight (each also in memory where it lasts)
+## 4 · Gotchas, and the rule for them
+
+A quirk seen twice gets root-caused before it is worked around again (Andrew, 2026-10-09). The
+ones that recurred tonight, each with its cause:
 
 - **`.git/config.lock` is Claude Code's sandbox**, not a stale lock: bwrap's mount target for a
-  protected path, held as long as any sandboxed command runs. Don't `rm` it. Work in a detached
-  worktree and `git push origin HEAD:refs/heads/<branch>`; `gh pr create --head <branch>`.
-- **A Monitor runs sandboxed** and can't reach the node (rpc returns nothing): watch GitHub
-  (`git ls-remote`, `gh pr view`) instead.
-- **Smoke builds leaked** 22 GB of the RAM-backed `/tmp` when restarts SIGKILLed held smokes; each
-  smoke now sweeps abandoned builds first. Check `df -h /tmp` after a busy day.
-- **A gate approval can come back:** a workline owing QA returns to review after QA and needs a
-  second approve.
-- **Merging fast moves main under a builder** mid-verify (hronir rebased #197 twice tonight).
-- **zsh**: `$b:server/…` is a history modifier — write `"$b:server/…"` or `${b}`. And never `pkill -f`
-  a pattern your own command line contains.
-- **Corkboard suggestions are banter** written in a coworker's voice; until the PR above lands they
-  still reach the inbox. Don't staff one without a real ask behind it (#198 was).
+  protected path. Don't `rm` it. Work in a detached worktree, `git push origin HEAD:refs/heads/<b>`,
+  `gh pr create --head <b>`.
+- **A Monitor runs sandboxed:** `gh` there has no credentials (HTTP 401 on every call) and rpc to the
+  node returns nothing. Watch with `git ls-remote origin`, and print any error — a watch that treats
+  an error as "not yet" looks like silence for 30 minutes.
+- **Auto-merge armed after every check passed never fires** (it waits for a next check). Re-check a
+  PR after arming; CLEAN and still OPEN means merge it directly.
+- **Merging fast moves main under a builder** mid-verify; its rebase-and-gate restarts. Hold merges
+  while a workline verifies, unless it is the one landing.
+- **Smoke builds** sweep abandoned `/tmp/tlon-smoke-*` first; still check `df -h /tmp` after a busy day.
+- **A gate approval can come back:** a workline owing QA returns to review and needs a second approve.
+- **zsh**: `$b:server/…` is a history modifier — write `${b}`. Never `pkill -f` a pattern your own
+  command line contains.
 
 ## 5 · Waiting on Andrew
 
 - The drafted Claude Code bug report about the sandbox lock (review it with `/feedback`).
-- The desktop half of the alert changes needs `mise run machine:update` once its ficciones PR merges.
-- Packaging for Jude and Robyn (sandbox mode, #52) is still the next topic; see the previous
-  version of this file in git history for the notes.
+- The auto-hired seat `planner-4485`: keep or let go.
+- Whether flash is fit for any senior role — waits on #90's numbers.
