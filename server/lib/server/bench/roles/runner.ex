@@ -13,7 +13,7 @@ defmodule Server.Bench.Roles.Runner do
   alias Server.Profile
   alias Server.Profiles
 
-  @timeout_s %{"builder" => 900}
+  @timeout_s %{"builder" => 900, "senior" => 1800}
   @default_timeout_s 300
   @check_timeout_s 300
   @source_check_timeout_s 900
@@ -86,13 +86,14 @@ defmodule Server.Bench.Roles.Runner do
     if task.source, do: seed_source(Profiles.tlon_root(), task.source, work)
 
     t0 = System.monotonic_time(:millisecond)
-    timeout = Map.get(@timeout_s, task.set, @default_timeout_s)
-    {out, code} = sh(Roles.argv(profile, task.prompt, !!(task.repo || task.source)), work, timeout, false)
+    env = task_env(task)
+    {out, code} = sh(Roles.argv(profile, task.prompt, !!(task.repo || task.source)), work, timeout_s(task), false, env)
     wall = (System.monotonic_time(:millisecond) - t0) / 1000
     {reply, usage} = Roles.parse_output(profile.harness, out)
 
-    grade = grade(task, reply, work, judge)
+    grade = grade(task, reply, work, judge, env)
     File.rm_rf!(work)
+    drop_database(env)
 
     detail = if code == 0, do: grade.detail, else: "harness exit #{code}; #{grade.detail}"
     info("  #{if grade.passed, do: "✓", else: "✗"} #{task.tier}/#{task.id} #{Float.round(wall, 1)}s — #{detail}")
@@ -108,18 +109,37 @@ defmodule Server.Bench.Roles.Runner do
     }
   end
 
-  defp grade(%{grader: %{"kind" => "json"} = g}, reply, _work, _judge), do: Roles.grade_json(g, reply)
+  defp grade(%{grader: %{"kind" => "json"} = g}, reply, _work, _judge, _env), do: Roles.grade_json(g, reply)
 
-  defp grade(%{grader: %{"kind" => "judge"} = g} = task, reply, _work, judge),
+  defp grade(%{grader: %{"kind" => "judge"} = g} = task, reply, _work, judge, _env),
     do: Roles.grade_judged(g, judge.score(Roles.judge_prompt(g, task.prompt, reply)))
 
-  defp grade(%{grader: %{"kind" => "check", "cmd" => cmd}} = task, _reply, work, _judge) do
+  defp grade(%{grader: %{"kind" => "check", "cmd" => cmd}} = task, _reply, work, _judge, env) do
     hidden = Path.join(task.dir, "check")
     if File.dir?(hidden), do: File.cp_r!(hidden, work)
     check_timeout = if task.source, do: @source_check_timeout_s, else: @check_timeout_s
-    {out, code} = sh(["sh", "-c", cmd], work, check_timeout, true)
+    {out, code} = sh(["sh", "-c", cmd], work, check_timeout, true, env)
     detail = if code == 0, do: "ok", else: "check exit #{code}: " <> (out |> String.trim() |> String.slice(-300, 300))
     %{passed: code == 0, score: nil, detail: detail}
+  end
+
+  @doc "Seconds a task's role gets: half an hour for a sourced (senior) task."
+  def timeout_s(task), do: Map.get(@timeout_s, task.set, @default_timeout_s)
+
+  @doc """
+  The env a task's shell commands (the role's and the check) run with: a database of its own. A
+  workdir has a `.git` directory, which `config/test.exs` reads as the main checkout, so without
+  this every run would drop and recreate the live `tlon_test`.
+  """
+  def task_env(task) do
+    slug = String.replace(task.id, ~r/[^a-z0-9]+/i, "_")
+    [{"TLON_TEST_DATABASE", "tlon_bench_#{slug}_#{System.unique_integer([:positive])}"}]
+  end
+
+  @doc "Drop the database `task_env/1` named, forcing out any process the role left connected."
+  def drop_database(env) do
+    {_, db} = List.keyfind(env, "TLON_TEST_DATABASE", 0)
+    System.cmd("dropdb", ["--if-exists", "--force", db], stderr_to_stdout: true)
   end
 
   defp seed(repo, work) do
@@ -139,6 +159,9 @@ defmodule Server.Bench.Roles.Runner do
     for dir <- ~w(_build deps), File.dir?(Path.join([root, "server", dir])) do
       System.cmd("cp", ["-r", "--reflink=auto", Path.join([root, "server", dir]), Path.join([work, "server", dir])])
     end
+
+    # the copy's mtimes are fresh, so the live app's beams would look newer than the snapshot's sources
+    for beams <- Path.wildcard(Path.join(work, "server/_build/*/lib/server")), do: File.rm_rf!(beams)
 
     commit_fixture(work)
   end
@@ -173,7 +196,9 @@ defmodule Server.Bench.Roles.Runner do
       File.mkdir_p!(work)
       seed_source(root, task.source, work)
       apply_reference(root, task.source, work)
-      grade = grade(task, nil, work, nil)
+      env = task_env(task)
+      grade = grade(task, nil, work, nil, env)
+      drop_database(env)
       File.rm_rf!(work)
       {task, grade}
     end
@@ -188,11 +213,11 @@ defmodule Server.Bench.Roles.Runner do
 
   # nothing on stdin (`pi -p` would wait on it), bounded by `timeout`; a harness launched from inside
   # a Claude Code session must not believe it is nested in one
-  defp sh(argv, dir, timeout, merge?) do
+  defp sh(argv, dir, timeout, merge?, env) do
     System.cmd("sh", ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout) | argv],
       cd: dir,
       stderr_to_stdout: merge?,
-      env: [{"CLAUDECODE", nil}, {"CLAUDE_CODE_ENTRYPOINT", nil}]
+      env: [{"CLAUDECODE", nil}, {"CLAUDE_CODE_ENTRYPOINT", nil} | env]
     )
   end
 

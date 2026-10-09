@@ -68,7 +68,9 @@ defmodule Server.Bench.Roles do
     case p.harness do
       :claude_code ->
         tools = if write?, do: ["--allowedTools", "Edit,Write,Bash"], else: []
-        swap_tools(base, write?, "Read,Grep,Glob,Edit,Write,Bash") ++ tools ++ ["--output-format", "json"]
+
+        swap_tools(base, write?, "Read,Grep,Glob,Edit,Write,Bash") ++
+          tools ++ ["--output-format", "stream-json", "--verbose"]
 
       :pi ->
         swap_tools(base, write?, "read,grep,find,ls,edit,write,bash") ++ ["--mode", "json"]
@@ -215,8 +217,9 @@ defmodule Server.Bench.Roles do
     do: %{passed: false, score: nil, detail: "judge failed: #{inspect(reason)}"}
 
   @doc """
-  A harness's machine-readable stdout → `{reply, usage}`. `:claude_code` prints one JSON result
-  (`--output-format json`); `:pi` prints an event per line (`--mode json`), whose assistant
+  A harness's machine-readable stdout → `{reply, usage}`. `:claude_code` prints an event per line
+  (`--output-format stream-json`) ending in a result; a run killed by the timeout has none, so its
+  usage is summed from the assistant events it did stream. `:pi` prints an event per line (`--mode json`), whose assistant
   `message_end`s carry the usage. Usage is `%{input, output, cache_read, cache_write, cost_usd,
   turns}`; `cost_usd` is nil when the harness reports none.
   """
@@ -227,7 +230,7 @@ defmodule Server.Bench.Roles do
     |> Enum.find_value(&decode_result/1)
     |> case do
       nil ->
-        {out, usage(%{})}
+        {out, streamed_usage(out)}
 
       r ->
         u = r["usage"] || %{}
@@ -266,6 +269,23 @@ defmodule Server.Bench.Roles do
        cache_write: sum.("cacheWrite"),
        turns: length(msgs)
      })}
+  end
+
+  defp streamed_usage(out) do
+    msgs =
+      for line <- String.split(out, "\n", trim: true),
+          {:ok, %{"type" => "assistant", "message" => %{"usage" => u}}} <- [JSON.decode(line)],
+          do: u
+
+    sum = fn key -> msgs |> Enum.map(&(&1[key] || 0)) |> Enum.sum() end
+
+    usage(%{
+      input: sum.("input_tokens"),
+      output: sum.("output_tokens"),
+      cache_read: sum.("cache_read_input_tokens"),
+      cache_write: sum.("cache_creation_input_tokens"),
+      turns: length(msgs)
+    })
   end
 
   defp decode_result(line) do

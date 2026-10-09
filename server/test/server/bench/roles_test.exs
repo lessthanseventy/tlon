@@ -198,14 +198,14 @@ defmodule Server.Bench.RolesTest do
       %Server.Profile{name: "bench-x", harness: harness, model: model, system_prompt: "You are bench-x."}
     end
 
-    test "claude_code: the aside's flags, JSON out, and the write tools only for a role that writes" do
+    test "claude_code: the aside's flags, streamed JSON out, and the write tools only for a role that writes" do
       p = profile(:claude_code, %{provider: "anthropic", model: "claude-haiku-5-5", thinking: "low"})
       read = Roles.argv(p, "do it", false)
       write = Roles.argv(p, "do it", true)
 
       assert ["claude", "-p", "do it" | _] = read
       assert read |> Enum.chunk_every(2, 1) |> Enum.member?(["--tools", "Read,Grep,Glob"])
-      assert read |> Enum.chunk_every(2, 1) |> Enum.member?(["--output-format", "json"])
+      assert read |> Enum.chunk_every(2, 1) |> Enum.member?(["--output-format", "stream-json"])
       assert read |> Enum.chunk_every(2, 1) |> Enum.member?(["--effort", "low"])
       refute "--allowedTools" in read
       assert write |> Enum.chunk_every(2, 1) |> Enum.member?(["--tools", "Read,Grep,Glob,Edit,Write,Bash"])
