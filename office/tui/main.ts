@@ -14,6 +14,7 @@ import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
+import { loadSouls, soulFor, soulLines, soulsSignature, useSouls } from "../kit/souls"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
@@ -67,6 +68,9 @@ const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 const PALETTE = process.env.TLON_PALETTE ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/palette.json")
 // per-agent look overrides, same poll shape as PALETTE above
 const LOOKS = process.env.TLON_LOOKS ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/looks.json")
+
+// per-coworker SOUL.md files, one `<name>.md` each, polled like LOOKS
+const SOULS = process.env.TLON_SOULS ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/souls")
 
 const readState = (p: string) => { try { return readFileSync(p, "utf8").trim() } catch { return "" } }
 const writeState = (p: string, s: string) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, s) } catch { /* a read-only home: it just won't remember */ } }
@@ -202,6 +206,16 @@ function followLooks(): boolean {
     useLookOverrides(JSON.parse(readFileSync(real, "utf8")) as Record<string, LookOverride>)
     return true
   } catch { return false }
+}
+
+let soulsSeen = ""
+/** take the machine's souls dir if a file came, went or changed; true when it did */
+function followSouls(): boolean {
+  const seen = soulsSignature(SOULS)
+  if (seen === soulsSeen) return false
+  soulsSeen = seen
+  useSouls(loadSouls(SOULS))
+  return true
 }
 
 let petsSeen = "", petsNow: Pets | null = null
@@ -822,7 +836,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         segs: [{ s: ` ${c.name} `, fg: ROLE.ground, bg: shirtOf(c.archetype), bold: true }, plain(" "), { s: ` ${where}${doing ? ` · ${doing}` : ""} `, fg: ROLE.ground, bg: pill },
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
       }
-      const rows = c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]
+      const soul = soulFor(name)
+      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
+      const rows = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
       return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, ...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {
@@ -1803,6 +1819,7 @@ async function main() {
   if (!process.stdin.isTTY) { console.error("office: needs a terminal"); process.exit(1) }
   followPalette()
   followLooks()
+  followSouls()
   followPets()
   enter()
   process.on("uncaughtException", (e) => { leave(); console.error(e); process.exit(1) })
@@ -1837,7 +1854,7 @@ async function main() {
   every(refresh, 10_000)
   every(pollPlayer, 2000)
   every(() => { if (mode.kind === "pet" && petDraft) { previewTick += 10; draw() } }, 1000)
-  every(() => { if (followPalette() || followLooks() || followPets()) { frame = null; draw() } }, 1000)
+  every(() => { if (followPalette() || followLooks() || followSouls() || followPets()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0

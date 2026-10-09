@@ -43,3 +43,12 @@ export function loadSouls(dir: string): Record<string, Soul> {
   }
   return out
 }
+
+/** what a card shows: the known sections in design order then any extras, filled ones only; a file with no headings shows raw */
+export function soulLines(s: Soul): { head: string; text: string }[] {
+  const known = new Set<string>(SOUL_SECTIONS)
+  const order = [...SOUL_SECTIONS.filter(h => h !== "Diary"), ...Object.keys(s.sections).filter(h => !known.has(h)), "Diary"]
+  const lines = order.filter(h => s.sections[h]).map(h => ({ head: h, text: s.sections[h]! }))
+  const raw = s.raw.trim()
+  return lines.length || !raw ? lines : [{ head: "", text: raw }]
+}
