@@ -118,57 +118,186 @@
     "wall_s": 49.8
   },
   {
+    "archetype": "librarian",
     "calls": 2,
-    "started_at": "2026-10-09T06:14:19Z",
-    "usage": {
-      "input": 5637,
-      "output": 294,
-      "cost_usd": null
-    },
     "commit": "1a56791",
-    "role": "librarian",
+    "effort": "medium",
     "grade": "senior",
-    "suite": "canary",
+    "harness": "pi",
     "model": "ollama-cloud/deepseek-v4.1-flash",
+    "role": "librarian",
+    "rubric": null,
+    "started_at": "2026-10-09T06:14:19Z",
+    "suite": "canary",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "c1-restates",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 0,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 2787,
+          "output": 156,
+          "turns": 1
+        },
+        "wall_s": 4.501
+      },
+      {
+        "detail": "ok",
+        "id": "c2-corrects",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 1536,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 1314,
+          "output": 138,
+          "turns": 1
+        },
+        "wall_s": 4.495
+      }
+    ],
     "tiers": {
       "canary": {
-        "total": 2,
-        "passed": 2
+        "passed": 2,
+        "total": 2
       }
     },
-    "wall_s": 9.0,
+    "usage": {
+      "cost_usd": null,
+      "input": 5637,
+      "output": 294
+    },
+    "wall_s": 9.0
+  },
+  {
+    "archetype": "builder",
+    "calls": 1,
+    "commit": "cd77238",
+    "effort": "medium",
+    "grade": "senior",
+    "harness": "claude_code",
+    "model": "anthropic/claude-sonnet-5-5",
+    "role": "builder-senior",
+    "rubric": null,
+    "started_at": "2026-10-09T07:11:47Z",
+    "suite": "canary",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "s2-intake-slot",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 198344,
+          "cache_write": 16212,
+          "cost_usd": 0.13340079999999999,
+          "input": 22,
+          "output": 2884,
+          "turns": 12
+        },
+        "wall_s": 177.596
+      }
+    ],
+    "tiers": {
+      "canary": {
+        "passed": 1,
+        "total": 1
+      }
+    },
+    "usage": {
+      "cost_usd": 0.1334,
+      "input": 214578,
+      "output": 2884
+    },
+    "wall_s": 177.6
+  },
+  {
+    "archetype": "builder",
+    "calls": 1,
+    "commit": "cd77238",
+    "effort": "medium",
+    "grade": "senior",
     "harness": "pi",
-    "archetype": "librarian",
+    "model": "ollama-cloud/deepseek-v4.1-flash",
+    "role": "builder-senior",
+    "rubric": null,
+    "started_at": "2026-10-09T07:17:36Z",
+    "suite": "canary",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "s2-intake-slot",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 399872,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 23022,
+          "output": 8519,
+          "turns": 22
+        },
+        "wall_s": 419.231
+      }
+    ],
+    "tiers": {
+      "canary": {
+        "passed": 1,
+        "total": 1
+      }
+    },
+    "usage": {
+      "cost_usd": null,
+      "input": 422894,
+      "output": 8519
+    },
+    "wall_s": 419.2
+  },
+  {
+    "calls": 1,
+    "started_at": "2026-10-09T07:15:10Z",
+    "usage": {
+      "input": 745969,
+      "output": 10837,
+      "cost_usd": null
+    },
+    "commit": "cd77238",
+    "role": "builder-senior",
+    "model": "ollama-cloud/deepseek-v4.1-flash",
+    "grade": "senior",
+    "suite": "canary",
+    "tiers": {
+      "canary": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "wall_s": 629.9,
+    "harness": "pi",
+    "archetype": "builder",
     "rubric": null,
     "tasks": [
       {
-        "id": "c1-restates",
+        "id": "s2-intake-slot",
         "usage": {
-          "input": 2787,
-          "output": 156,
-          "cache_read": 0,
+          "input": 26097,
+          "output": 10837,
+          "cache_read": 719872,
           "cache_write": 0,
-          "turns": 1,
+          "turns": 34,
           "cost_usd": null
         },
         "score": null,
-        "wall_s": 4.501,
-        "passed": true,
-        "detail": "ok",
-        "tier": "canary"
-      },
-      {
-        "id": "c2-corrects",
-        "usage": {
-          "input": 1314,
-          "output": 138,
-          "cache_read": 1536,
-          "cache_write": 0,
-          "turns": 1,
-          "cost_usd": null
-        },
-        "score": null,
-        "wall_s": 4.495,
+        "wall_s": 629.936,
         "passed": true,
         "detail": "ok",
         "tier": "canary"

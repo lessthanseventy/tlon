@@ -47,5 +47,18 @@ defmodule Server.Bench.Roles.RunnerTest do
       assert a != b
       assert a =~ ~r/^tlon_bench_s2_intake_slot_\d+$/
     end
+
+    test "drop_database removes a database a lingering process is still connected to" do
+      [{"TLON_TEST_DATABASE", db}] = env = Runner.task_env(%{id: "drop-me"})
+      {_, 0} = System.cmd("createdb", [db])
+      port = Port.open({:spawn_executable, System.find_executable("psql")}, [:binary, args: [db]])
+      Process.sleep(500)
+
+      Runner.drop_database(env)
+      Port.close(port)
+
+      {dbs, 0} = System.cmd("psql", ["-Atc", "select datname from pg_database", "postgres"])
+      refute db in String.split(dbs, "\n", trim: true)
+    end
   end
 end
