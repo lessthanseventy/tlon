@@ -4,6 +4,7 @@ defmodule Server.ShiftsTest do
   # workspace with no shifts set works as it always has. A shift change restaffs a workline led by
   # someone going off the workline's own way; a plain thread waits for its lead's shift.
   use ExUnit.Case, async: false
+  use Oban.Testing, repo: Server.Repo
 
   alias Server.Channel
   alias Server.Shifts
@@ -11,6 +12,7 @@ defmodule Server.ShiftsTest do
 
   setup do
     Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
     {:ok, ws} = Workspaces.register(%{name: "Shifts"})
     {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius", archetype: "surveyor"})
     {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "day"})
@@ -102,7 +104,7 @@ defmodule Server.ShiftsTest do
     assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
     assert Shifts.current(ws.id) == "night"
     assert [note] = lobby |> Channel.thread_messages() |> Enum.map(& &1.body) |> Enum.filter(&(&1 =~ "usage limit"))
-    assert note =~ "reset at 5pm"
+    assert note =~ "5:00pm"
     refute note =~ "later output"
 
     # the operator puts the day crew back; the same line still on screen doesn't send it off again
@@ -143,33 +145,56 @@ defmodule Server.ShiftsTest do
     assert Shifts.current(ws.id) == "day"
   end
 
-  test "the limit's night shift comes with an offer to put the day crew back, answered from the inbox", %{ws: ws} do
+  test "the reset time is read off Claude's line, as the next local moment it names" do
+    now = ~N[2026-10-09 15:10:00]
+    assert Shifts.reset_at("Your limit will reset at 5pm (America/Denver).", now) == ~N[2026-10-09 17:00:00]
+    assert Shifts.reset_at("5-hour limit reached ∙ resets 9:30am", now) == ~N[2026-10-10 09:30:00]
+    assert Shifts.reset_at("weekly limit reached ∙ resets Mon 9:00 AM", now) == ~N[2026-10-12 09:00:00]
+    assert Shifts.reset_at("limit reached, no time given", now) == ~N[2026-10-09 20:10:00]
+  end
+
+  test "the offer to put the day crew back comes at the reset, only if the night shift is still on", %{ws: ws} do
     {:ok, _lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
     limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
     {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+    assert Server.Attention.open_asks() == []
+    assert_enqueued(worker: Server.Jobs.ShiftBack, args: %{workspace_id: ws.id})
 
+    # the reset comes (Server.Jobs.ShiftBack): the offer, answered from the inbox
+    :ok = Shifts.offer_day(ws.id, "5pm")
     assert [ask] = Server.Attention.open_asks()
     assert Enum.map(ask.payload["options"], & &1["label"]) == ["day shift back", "stay on nights"]
-    assert ask.payload["summary"] =~ "reset at 5pm"
-
-    assert {:ok, _} = Server.Attention.answer_ask(ask.id, "andrew", "2")
-    assert Shifts.current(ws.id) == "night"
-
-    {:ok, _} = Shifts.switch(ws.id, "day")
-    :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", "❯ clear")
-    {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
-    [again] = Server.Attention.open_asks()
-    assert {:ok, _} = Server.Attention.answer_ask(again.id, "andrew", "1")
+    assert {:ok, _} = Server.Attention.answer_ask(ask.id, "andrew", "1")
     assert Shifts.current(ws.id) == "day"
+
+    # the operator put the day crew back before the reset: no offer
+    {:ok, _} = Shifts.switch(ws.id, "night")
+    {:ok, _} = Shifts.switch(ws.id, "day")
+    :ok = Shifts.offer_day(ws.id, "5pm")
+    assert Server.Attention.open_asks() == []
   end
 
-  test "memory for panes no longer there is pruned", %{ws: ws} do
+  test "an open offer is withdrawn when the day crew comes back another way", %{ws: ws} do
+    {:ok, _lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    {:ok, _} = Shifts.switch(ws.id, "night")
+    :ok = Shifts.offer_day(ws.id, "5pm")
+    assert [ask] = Server.Attention.open_asks()
+    {:ok, _} = Shifts.switch(ws.id, "day")
+    assert Server.Attention.open_asks() == []
+    assert Server.Repo.get!(Server.Message, ask.id).resolution =~ "shift"
+  end
+
+  test "memory for panes no longer there is pruned; an empty read prunes nothing", %{ws: ws} do
     limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
     Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
     Shifts.quota_check(ws.id, "hronir", "2/w2", limit)
+    :ok = Shifts.prune(ws.id, MapSet.new())
+    assert ws.id |> seen_keys() |> length() == 2
     :ok = Shifts.prune(ws.id, MapSet.new(["hronir/2/w2"]))
-    assert Map.keys(Server.Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"]) == ["hronir/2/w2"]
+    assert seen_keys(ws.id) == ["hronir/2/w2"]
   end
+
+  defp seen_keys(ws_id), do: Map.keys(Server.Repo.get!(Server.Workspace, ws_id).knobs["limits_seen"])
 
   test "only a Claude coworker's pane counts: a pi pane printing the words switches nothing", %{ws: ws} do
     emma = Server.Staff.agent_by_name("emma")

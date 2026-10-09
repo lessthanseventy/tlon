@@ -156,6 +156,11 @@ let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 
 const view = () => viewOf(all, ws)
+/** a click on the header's shift: the other shift starts */
+const toggleShift = () => {
+  if (ws === null) return
+  void did(data.shiftSwitch(ws, all.workspaces.find((w) => w.id === ws)?.shift === "night" ? "day" : "night"))
+}
 /** the shift on, once anyone is on a shift of their own; nothing for a workspace with no shifts set */
 const shiftHeader = () =>
   (all.shifts ?? []).some((x) => x.workspace_id === ws && x.crew !== "all")
@@ -1297,7 +1302,7 @@ function draw() {
     ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }] : []),
     ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
     ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),
-    ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: () => open({ kind: "crew" }) }] : []),
+    ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: toggleShift }] : []),
     ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
     ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
     ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),
