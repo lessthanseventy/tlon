@@ -35,6 +35,10 @@ describe("replies", () => {
     const got = replies([m(1, "andrew", "@ada how goes it"), m(2, "ada", "fine"), m(3, "bo", "unrelated"), m(4, "andrew", "ok"), m(5, "bo", "answer", 4), m(6, "tlon", "sys", 4)], "andrew")
     expect(got).toEqual([{ id: 2, agent: "ada", line: "fine" }, { id: 5, agent: "bo", line: "answer" }])
   })
+  test("an @X answer is X's next post only, not their later chatter", () => {
+    const got = replies([m(1, "andrew", "@ada how goes it"), m(2, "ada", "fine"), m(3, "ada", "also lunch")], "andrew")
+    expect(got).toEqual([{ id: 2, agent: "ada", line: "fine" }])
+  })
   test("nothing the operator said, nothing answered", () => {
     expect(replies([m(1, "ada", "hi"), m(2, "andrew", "@ada x"), m(3, "andrew", "y")], "andrew")).toEqual([])
   })

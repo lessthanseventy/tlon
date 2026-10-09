@@ -164,6 +164,16 @@ defmodule Server.OfficeTest do
       assert is_binary(JSON.encode!(v))
     end
 
+    test "each message carries the one it replies to", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
+      {:ok, q} = Channel.post(%{thread_id: t.id, author: "andrew", body: "q?"})
+      {:ok, r} = Channel.post(%{thread_id: t.id, author: "ada", body: "a", reply_to: q.id})
+
+      assert %{reply_to: nil} = Enum.find(Office.thread_view(t).messages, &(&1.id == q.id))
+      assert %{reply_to: rid} = Enum.find(Office.thread_view(t).messages, &(&1.id == r.id))
+      assert rid == q.id
+    end
+
     test "what its coworkers have been doing, newest last", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "t", workspace_id: ws.id})
       Server.Presence.Thinking.record(t.id, "hronir", "edit", "Edit · office/kit/crew.ts")
