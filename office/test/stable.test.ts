@@ -25,7 +25,7 @@ describe("existing looks are stable", () => {
     }
     for (const [n, [hair, hairRole]] of Object.entries(want)) {
       const l = lookOf(n)
-      expect([l.hair, l.hairRole]).toEqual([hair, hairRole])
+      expect([l.hair, l.hairRole] as string[]).toEqual([hair, hairRole])
       expect(l.body).toBeUndefined()
       expect(l.parts).toBeUndefined()
     }
