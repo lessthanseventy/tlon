@@ -82,6 +82,6 @@ defmodule Server.Memory.Extractor.Claude do
 
   # The model sometimes answers with a placeholder ("...") — 15 of those were banked once.
   # A claim needs at least a few real letters/digits to be worth remembering.
-  @min_alnum 8
+  @min_alnum 5
   defp junk?(text), do: length(Regex.scan(~r/[\p{L}\p{N}]/u, text)) < @min_alnum
 end
