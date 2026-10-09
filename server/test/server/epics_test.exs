@@ -75,4 +75,13 @@ defmodule Server.EpicsTest do
       assert {"only an epic can be a parent", _} = cs.errors[:from_id]
     end
   end
+
+  describe "an epic is never work" do
+    test "start_thread and route refuse it", %{ws: ws} do
+      e = epic(ws, "Toy")
+      assert {:error, :epic} = Tickets.start_thread(e)
+      assert {:error, :epic} = Tickets.route(e)
+      assert Tickets.get(e.id).status == "backlog"
+    end
+  end
 end
