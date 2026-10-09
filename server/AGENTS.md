@@ -95,7 +95,9 @@ and every layer the spine design's re-laid §9 asked for
 - **the role bench** (`Server.Bench.Roles`, `../bench/roles/`) — each role's frozen tasks run headless
   through the profile a coworker of it gets (`Harness.aside/2`'s argv, its routed model or `--model`),
   graded (a hidden check, JSON fields, or the eval judge), usage recorded; `mise run bench:roles`.
-  The gate tests its pure parts, and that every builder fixture's check is red before any work.
+  The gate tests its pure parts, and that every builder fixture's check is red before any work. The
+  `senior` builder set is real merged worklines (`task.json` `source.commit`: the workdir is `git archive <sha>^ server`,
+  the hidden check that workline's own tests); `--oracle` proves each green on the real diff.
 
 Still deferred: the engine-credit half of presence (clocked-out from spent credits/rate-limit), the
 human-notification path, and the `Sense` collectors. (A mention of a coworker who isn't on the
