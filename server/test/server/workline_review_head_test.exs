@@ -184,6 +184,21 @@ defmodule Server.WorklineReviewHeadTest do
     assert log =~ "can't compare"
   end
 
+  test "back at review, the last round's review.md doesn't pass it: this round needs its own verdict",
+       %{root: root} do
+    thread = at_review(root, "second-round")
+    {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", artifacts: AllPresent)
+    {:ok, verifying} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+    {:ok, reviewing} = Workline.advance(verifying, artifacts: AllPresent)
+
+    assert {:error, {:artifact_missing, why}} = Workline.advance(reviewing, artifacts: AllPresent)
+    assert why =~ "this round"
+    assert %Thread{stage: "review", awaiting: nil} = Repo.get!(Thread, thread.id)
+
+    {:ok, _} = Workline.review_verdict(reviewing, "approve", "lonnrot", artifacts: AllPresent)
+    assert {:awaiting, _} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
+  end
+
   test "back at review, the reviewer is pointed at what changed since it last looked", %{root: root} do
     thread = at_review(root, "again")
     {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", artifacts: AllPresent)
