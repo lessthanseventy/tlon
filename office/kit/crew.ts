@@ -99,27 +99,28 @@ export function crewOf(a: Agents): Crew[] {
 
 /** a workline's stages, in order */
 export const STAGES = ["intent", "spec", "plan", "build", "verify", "review"]
-// TICKETS (unstarted) and DOING (a started plain thread — no workline stage) before the stages
+// TICKETS (unstarted) and DOING (a plain thread — no workline stage — someone is at a desk on) before the stages
 const STAGE_COL: Record<string, number> = { intent: 2, spec: 2, plan: 3, build: 4, verify: 4, review: 5 }
 export const COLS = ["TICKETS", "DOING", "SPEC", "PLAN", "BUILD", "REVIEW"]
 /** one note on the whiteboard: what a click on it does, and what its sticky and its list row say */
 export type BoardItem = { act: Act; title: string; who: string | null; stage: string; asks: boolean; archetype: string | null; high: boolean; routed?: boolean; state?: CardState | null }
-/** where a workline stands: its lead on it now (▶), staffed but nobody on it and why (⏸), or waiting on you (⚑) */
-export type CardState = { kind: "running" | "parked" | "needs"; why: string; atCap?: boolean }
+/** where a workline stands, from the server's `seat`: its lead at a desk (▶), parked for a seat under the leaf cap (⏸), nobody at a desk (○), or waiting on you (⚑) */
+export type CardState = { kind: "running" | "parked" | "idle" | "needs"; why: string; atCap?: boolean }
 /** what a board knows beyond the snapshot: the leaf cap (`max_leaves` from the settings) and the threads on the needs list */
 export type BoardCtx = { maxLeaves?: number | null; needs?: number[] }
-export const STATE_GLYPH: Record<CardState["kind"], string> = { running: "▶", parked: "⏸", needs: "⚑" }
+export const STATE_GLYPH: Record<CardState["kind"], string> = { running: "▶", parked: "⏸", idle: "○", needs: "⚑" }
 
 /** a thread's card state, or null when nobody leads it */
 export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState | null {
   if (needsYou(th) || ctx.needs?.includes(th.id)) return { kind: "needs", why: th.prompt ? `asks: ${th.prompt.summary}` : th.awaiting ? `awaits ${th.awaiting}` : "waiting on you" }
   if (!th.lead) return null
-  const s = a.roster.find((r) => r.thread_id === th.id && r.agent === th.lead && (r.warm || r.thinking))
-  if (s) return { kind: "running", why: s.thinking ? `${th.lead} is on it` : `${th.lead} is on call` }
-  // the cap counts a workspace's leaf windows: its open threads with a window, its lobby aside
-  const open = a.threads.filter((t) => t.workspace_id === th.workspace_id && t.live && !t.standing).length
-  if (ctx.maxLeaves != null && open >= ctx.maxLeaves) return { kind: "parked", why: `waiting for a slot (${open}/${ctx.maxLeaves})`, atCap: true }
-  return { kind: "parked", why: `waiting for ${th.lead}` }
+  if (th.seat === "desk") return { kind: "running", why: th.thinking?.includes(th.lead) ? `${th.lead} is on it` : `${th.lead} is at a desk` }
+  if (th.seat === "parked") {
+    // the cap counts a workspace's seated leaf windows: its lobby and its standing duties take none
+    const seated = a.threads.filter((t) => t.workspace_id === th.workspace_id && t.live && !t.standing && !t.duty).length
+    return { kind: "parked", why: ctx.maxLeaves != null ? `waiting for a seat (${seated}/${ctx.maxLeaves})` : "waiting for a seat", atCap: true }
+  }
+  return { kind: "idle", why: `${th.lead} is not at a desk` }
 }
 
 /** the whiteboard's columns — a board draws them as stickies, a column card as rows */
@@ -128,7 +129,8 @@ export function boardColumns(a: Agents, ctx: BoardCtx = {}): { name: string; ite
   for (const tk of a.tickets as Ticket[])
     cols[0]!.push({ act: { kind: "ticket", id: tk.id }, title: tk.title, who: null, stage: tk.routed ? "with the manager" : "ticket", asks: false, archetype: null, high: tk.priority === "high", routed: !!tk.routed })
   for (const th of a.threads) {
-    const c = th.stage ? STAGE_COL[th.stage] : th.lead && !th.standing ? 1 : undefined
+    if (th.duty) continue
+    const c = th.stage ? STAGE_COL[th.stage] : th.lead && !th.standing && th.seat === "desk" ? 1 : undefined
     if (c === undefined) continue
     const r = a.roster.find((x) => x.thread_id === th.id)
     cols[c]!.push({ act: { kind: "thread", tid: th.id }, title: th.title, who: r?.agent ?? th.lead ?? null, stage: th.stage ?? "doing", asks: needsYou(th), archetype: r?.archetype ?? null, high: false, state: cardState(a, th, ctx) })

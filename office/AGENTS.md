@@ -4,9 +4,11 @@ The office is the server's state as a room: coworkers at desks when they work �
 leaning back with a steaming mug, while their session stays warm (the steam and their screen's
 glow fade over the warmth window, from the turn's end as the sim saw it) — in the lounge when
 cold, queued at your door when a thread waits on you; the whiteboard holds the worklines, each
-marked where it stands (`cardState` in `kit/crew.ts`: ▶ its lead is on it, ⏸ parked and why — the
-leaf cap or its lead — ⚑ it needs you; a thread's card names the one key that moves it), the crew
-board who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
+marked where it stands (`cardState` in `kit/crew.ts`, read from the server's `seat` on each
+thread: ▶ its lead is at a desk, ⏸ parked for a seat under the leaf cap, ○ idle — nobody at a desk —
+⚑ it needs you; a thread's card names the one key that moves it). DOING is a plain thread someone is
+at a desk on; standing duties (`duty`: a schedule's threads, the sheriff's beat) are not work and stay
+off the board. The crew board says who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
 terminals the TUI zooms into (`tui/terminal.ts`: tmux control mode on the workspace's tmux, one
 linked window at a time, Ctrl-] back to the room).
 

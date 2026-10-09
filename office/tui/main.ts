@@ -609,7 +609,7 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
     ],
   })
   // a board card's state, and the one thing that moves it
-  const st = th && (th.stage || (th.lead && !th.standing)) ? cardState(view(), th, boardCtx()) : null
+  const st = th && !th.duty && (th.stage || (th.lead && !th.standing)) ? cardState(view(), th, boardCtx()) : null
   if (th && st) { const n = nextStep(th, st); out.push({ segs: [stateSeg(st), { s: st.why, fg: st.kind === "needs" ? ROLE.attention : ROLE.prose }, dim("  → "), key(`${n.key} `), plain(n.label)] }) }
   if (th?.prompt) {
     out.push({ segs: [pink("asks: "), plain(th.prompt.summary)] })
@@ -636,7 +636,7 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   if (!v?.messages.length && v?.peek) for (const l of v.peek.split("\n").filter((x) => x.trim()).slice(-4)) out.push({ segs: [dim(l)] })
   return out
 }
-/** a card state's glyph: ▶ running, ⏸ parked, ⚑ needs you */
+/** a card state's glyph: ▶ at a desk, ⏸ parked, ○ idle, ⚑ needs you */
 const stateSeg = (st: CardState): Seg => ({ s: `${STATE_GLYPH[st.kind]} `, fg: st.kind === "running" ? ROLE.live : st.kind === "needs" ? ROLE.attention : ROLE.inactive, bold: true })
 /** the one thing to do about a board card, by where it stands */
 function nextStep(th: Thread, st: CardState): { key: string; label: string } {
