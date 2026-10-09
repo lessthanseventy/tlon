@@ -8,8 +8,7 @@ defmodule Server.Alerts do
     * **decision** — work has stopped on a choice (a gate, a dialog, a question, a coworker's
       ask): a banner with its answers;
     * **sticky** — wants the operator, nothing waits on it (a red verify, a mention): stays until
-      dismissed or resolved. A suggestion or a rollout note raises nothing here: the office's
-      inbox has it;
+      dismissed or resolved. A rollout note raises nothing here: the office's inbox has it;
     * **info** — something the operator set going took effect where they can't see it (kind
       `seated`: a thread parked on the leaf cap got its coworker, `Server.Staffing.note_seated/2`):
       a toast that goes by on its own, no actions. One per happening, keyed by it, and listed for
@@ -22,8 +21,8 @@ defmodule Server.Alerts do
   """
 
   @alarm_minutes 5
-  # the corkboard's chatter and a rollout's housekeeping: the inbox has them, the desktop doesn't
-  @inbox_only ~w(suggestion rollout)
+  # a rollout's housekeeping: the inbox has it, the desktop doesn't
+  @inbox_only ~w(rollout)
   @alarm_after_s 600
   @info_s 600
 

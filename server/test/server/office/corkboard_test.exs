@@ -114,12 +114,11 @@ defmodule Server.Office.CorkboardTest do
     assert %Server.Message{thread_id: thread_id, kind: "suggestion", delivered_at: %DateTime{}, body: body} =
              Server.Repo.get(Server.Message, id)
 
-    assert thread_id == root.id and body =~ "corkboard suggestion"
-    assert [%{kind: "suggestion", ref: ^id, text: "log first-failure times"}] = Server.Office.Needs.list()
+    assert thread_id == root.id and body =~ "corkboard idea" and body =~ "banter" and body =~ "nobody asked"
+    assert body =~ "log first-failure times"
 
     assert :ok = Corkboard.drop(ws.id, id)
     assert Corkboard.suggestions(ws.id) == []
     assert %Server.Message{resolved_at: %DateTime{}} = Server.Repo.get(Server.Message, id)
-    assert Server.Office.Needs.list() == []
   end
 end

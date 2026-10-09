@@ -98,11 +98,10 @@ defmodule Server.AlertsTest do
     assert Enum.any?(List.last(alerts).actions, &(&1.path == "/api/threads/9/verify"))
   end
 
-  test "the corkboard's suggestions and rollout notes stay in the inbox — no card on the desktop" do
+  test "rollout notes stay in the inbox — no card on the desktop" do
     alerts =
       Alerts.build(
         [
-          need("suggestion", %{level: "decide"}),
           need("rollout", %{level: "decide"}),
           need("mention", %{level: "decide"})
         ],

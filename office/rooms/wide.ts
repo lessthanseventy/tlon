@@ -537,7 +537,7 @@ export class WideRoom extends Sim<Layout> {
     for (let k = 0; k < n; k++) px(x0 + 1 + k * 2, 13 - (k % 2), 2, 4, ROLE.prose)
     px(x0, 16, 10, 12, ROLE.structure); px(x0 + 1, 17, 8, 1, ROLE.borderInactive); px(x0 + 2, 19, 6, 1, ROLE.fieldInk)
     px(x0 + 3, 22, 4, 3, ROLE.body) // its label plate
-    sc.hits.push({ x: x0 - 1, y: 10, w: 12, h: 19, tip: `the suggestion box: ${this.ideas.length ? `${this.ideas.length} suggestion(s)` : "empty"} - click to read`, act: { kind: "ideas" } })
+    sc.hits.push({ x: x0 - 1, y: 10, w: 12, h: 19, tip: `the suggestion box: ${this.ideas.length ? `${this.ideas.length} banter idea(s)` : "empty"} - click to read`, act: { kind: "ideas" } })
   }
 
   /** windows on the sky as it is outside: night with its stars, dawn and dusk, day */
