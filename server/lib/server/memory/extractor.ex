@@ -34,9 +34,10 @@ defmodule Server.Memory.Extractor.Claude do
   return at most 3 facts worth remembering across sessions: decisions made, constraints
   stated, lessons learned. Skip chatter, status, and anything the EXISTING FACTS already
   cover. For each fact you return, say how it relates to the EXISTING FACTS:
-  - "verdict": "corrects", "old": <its #number> — it shows that existing fact is wrong or out of
-    date (the behaviour was changed, the decision reversed, the value changed);
-  - "verdict": "restates", "old": <its #number> — it says what that fact says, in better words;
+  - "verdict": "corrects", "old": <its #number> — it and that existing fact cannot both be true
+    now (the behaviour was changed, the decision reversed, the value changed);
+  - "verdict": "restates", "old": <its #number> — it says EVERYTHING that fact says, in better
+    words; if that fact has any detail yours lacks, it is "new";
   - "verdict": "new" — anything else, including detail that leaves the existing fact true.
   When unsure, "new". Respond with ONLY a JSON object:
   {"facts": [{"kind": "decision"|"constraint"|"learned", "text": "<one claim>", "intent": "<what it's for>",

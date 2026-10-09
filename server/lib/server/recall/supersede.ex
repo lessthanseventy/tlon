@@ -188,14 +188,17 @@ defmodule Server.Recall.Supersede do
   defp open_proposal(event_id) do
     case Repo.get(Event, event_id) do
       %Event{kind: "supersede_proposed"} = proposal ->
-        resolved =
-          Repo.all(
+        # The librarian's rule (Server.Librarian.proposals/1): any later event on the fact but a use,
+        # a check or another proposal is a decision.
+        decided =
+          Repo.exists?(
             from e in Event,
-              where: e.correlation == ^proposal.correlation and e.kind in ["superseded", "supersede_rejected"],
-              select: e.detail
+              where:
+                e.correlation == ^proposal.correlation and e.id > ^proposal.id and
+                  e.kind not in ~w(cited check_passed check_failed supersede_proposed)
           )
 
-        if Enum.any?(resolved, &(&1["proposal"] == proposal.id)), do: {:error, :resolved}, else: {:ok, proposal}
+        if decided, do: {:error, :resolved}, else: {:ok, proposal}
 
       _ ->
         {:error, :not_found}

@@ -150,6 +150,19 @@ defmodule Server.Recall.JudgeTest do
     assert {:error, :resolved} = Supersede.reject_proposal(proposal.id, "too late")
   end
 
+  test "the librarian lists the proposal and applies it through this module", %{a: a, b: b} do
+    old = bank(a, "in_flight counts every todo ticket", [1.0, 0.0])
+    new = bank(b, "in_flight skips a todo ticket whose thread is closed", @related)
+    Judge.judge(new, model: verdict("corrects", old.id, "the fix"))
+    [proposal] = events("supersede_proposed")
+
+    assert [%{event_id: id, verdict: "corrects", how: "judged"}] = Server.Librarian.proposals(nil)
+    assert id == proposal.id
+    assert {:ok, %Fact{}} = Server.Librarian.decide(proposal.id, "apply", nil)
+    assert supersedes(new) == old.id
+    assert Server.Librarian.proposals(nil) == []
+  end
+
   test "reject_proposal records why and supersedes nothing", %{a: a, b: b} do
     old = bank(a, "in_flight counts every todo ticket", [1.0, 0.0])
     new = bank(b, "in_flight skips a todo ticket whose thread is closed", @related)

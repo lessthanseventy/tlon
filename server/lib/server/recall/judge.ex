@@ -28,9 +28,12 @@ defmodule Server.Recall.Judge do
 
   @contract """
   You keep a project's memory honest. Compare the NEW fact with each OLDER fact and answer ONE of:
-  - "restates": the NEW fact says what an older fact already says; the older copy adds nothing.
-  - "corrects": the NEW fact says an older fact is wrong or out of date (the behaviour it describes
-    was changed, a decision was reversed, a value changed), so the older fact should stop being trusted.
+  - "restates": the NEW fact says EVERYTHING an older fact says (it may say more), so the older copy
+    adds nothing. If the older fact has any detail the NEW one lacks — a remedy, a reason, a general
+    rule the NEW fact is one case of — it is not a restatement: answer "new".
+  - "corrects": the NEW fact and an older fact cannot both be true now (the behaviour it describes
+    was changed, a decision was reversed, a value or an owner changed), so the older fact should stop
+    being trusted. Two facts that use different numbers for one thing are not a contradiction.
   - "new": anything else — it adds detail, is about a different thing, or both stay true together
     (a history of what happened before a fix, a cause and its fix, two halves of one design).
   When unsure, answer "new". Respond with ONLY a JSON object:
