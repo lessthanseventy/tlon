@@ -20,7 +20,10 @@ defmodule Server.MCP.Tool.GetBrief do
 end
 
 defmodule Server.MCP.Tool.GetFacts do
-  @moduledoc "Every fact on this thread, newest first — the full read past the brief's cap."
+  @moduledoc """
+  Every fact on this thread, newest first — the full read past the brief's cap. Each fact read is
+  cited (`Server.Dossier.cite_facts/3`), so facts a coworker reaches for stay strong in recall.
+  """
   use Server.MCP.Tool
 
   alias Server.Dossier
@@ -33,7 +36,9 @@ defmodule Server.MCP.Tool.GetFacts do
   @impl true
   def execute(_params, frame) do
     identity = Identity.from_frame(frame)
-    ok(frame, %Thread{id: identity.thread_id} |> Dossier.facts_for_thread() |> Enum.map(&MCP.Brief.fact/1))
+    facts = Dossier.facts_for_thread(%Thread{id: identity.thread_id})
+    Dossier.cite_facts(Enum.map(facts, & &1.id), identity.thread_id, %{"agent" => identity.agent, "via" => "get_facts"})
+    ok(frame, Enum.map(facts, &MCP.Brief.fact/1))
   end
 end
 
@@ -96,10 +101,12 @@ defmodule Server.MCP.Tool.SearchFacts do
   @moduledoc """
   Search the FACT corpus — the whole ledger, past the brief's cap. Full-text, bm25-ranked. Use it
   to find a banked finding by a remembered word when it is not in the current thread's brief.
-  Returns a `%{shown, more}` cut (fact id, thread, kind, text, snippet).
+  Returns a `%{shown, more}` cut (fact id, thread, kind, text, snippet). Each fact shown is cited
+  (`Server.Dossier.cite_facts/3`) on the caller's thread.
   """
   use Server.MCP.Tool
 
+  alias Server.Dossier
   alias Server.Search
 
   schema do
@@ -111,7 +118,13 @@ defmodule Server.MCP.Tool.SearchFacts do
   end
 
   @impl true
-  def execute(params, frame), do: ok(frame, Search.facts(params[:query], params[:limit] || 10))
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+    found = Search.facts(params[:query], params[:limit] || 10)
+    cited = Enum.map(found.shown, & &1.fact_id)
+    Dossier.cite_facts(cited, identity.thread_id, %{"agent" => identity.agent, "via" => "search_facts"})
+    ok(frame, found)
+  end
 end
 
 defmodule Server.MCP.Tool.MachineOverview do

@@ -277,6 +277,43 @@ defmodule Server.Dossier do
   end
 
   @doc """
+  Record that a coworker USED facts — asked for them (`get_facts`) or found them by a query
+  (`search_facts`): one `cited` event per fact, on the citing thread, correlated `fact:<id>`, which
+  `Server.Recall` counts as a strength touch. At most one per (fact, thread) per UTC day, so a
+  re-read loop does not inflate it. A fact merely shown in a brief is exposure, not use — never
+  cited. Not announced on the bus: a citation is recall bookkeeping, not activity. `detail` says
+  who cited and through what. Returns how many were recorded.
+  """
+  def cite_facts(fact_ids, thread_id, detail \\ %{})
+  def cite_facts([], _thread_id, _detail), do: 0
+  def cite_facts(_fact_ids, nil, _detail), do: 0
+
+  def cite_facts(fact_ids, thread_id, detail) do
+    today = DateTime.new!(Date.utc_today(), ~T[00:00:00])
+    correlations = fact_ids |> Enum.uniq() |> Enum.map(&"fact:#{&1}")
+
+    already =
+      from(e in Event,
+        where:
+          e.thread_id == ^thread_id and e.kind == "cited" and e.correlation in ^correlations and
+            e.created_at >= ^today,
+        select: e.correlation
+      )
+      |> Repo.all()
+      |> MapSet.new()
+
+    fresh = Enum.reject(correlations, &MapSet.member?(already, &1))
+
+    for correlation <- fresh do
+      %{thread_id: thread_id, kind: "cited", correlation: correlation, detail: detail}
+      |> Event.record_changeset()
+      |> Repo.insert!()
+    end
+
+    length(fresh)
+  end
+
+  @doc """
   A thread's recent checks (CHECKS), ranked and cut (§5): `%{shown, more}`, at most five
   `check_passed`/`check_failed` events, newest first — so the brief shows the current
   verification state (last check red or green), not a self-reported one.
