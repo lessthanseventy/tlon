@@ -39,7 +39,7 @@ its thread, its brief and what the office knows.
 ![A workline's card: its stages, the coworker on it, and their live session streaming in](docs/screenshots/workline.png)
 
 - The **server** verifies, not the builder: it runs the full gate on the branch and records the evidence.
-- A **reviewer** on a different model than the builder reads the change. Its verdict is tied to the
+- A **reviewer**, preferably on a different model than the builder's, reads the change. Its verdict is tied to the
   commit it read; code committed afterwards goes back to build rather than landing on an old approval.
 - A model that didn't write it **grades the risk**. Under your standing approval, low-risk changes land
   on their own; everything else waits for you.
@@ -54,8 +54,8 @@ Threads you can read and reply to, a finder, an inbox, tickets and epics, notes,
 settings, a calendar, the office's memory: all in the room.
 
 **Memory.** Coworkers bank what they learn as facts with provenance; recall puts the relevant ones
-in every brief. A newer fact that restates or corrects an older one retires it, and facts that name
-code are rechecked when the code moves.
+in every brief. A newer fact that restates an older one retires it, a correction goes to the
+librarian to decide, and facts that name code are rechecked on a schedule.
 
 **Measured.** `mise run bench:roles` checks whether each role can do its job on the model it's routed
 to, and at what cost, so routing is a measurement rather than a guess.
