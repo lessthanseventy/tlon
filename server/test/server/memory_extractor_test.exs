@@ -7,8 +7,13 @@ defmodule Server.MemoryExtractorTest do
 
   test "placeholder, punctuation-only and too-short facts are refused" do
     junk = for t <- ["...", "…", "  ", "", "?!", "- . -", "ok"], do: %{kind: "learned", text: t}
-    real = %{kind: "decision", text: "Ship the memory pass behind a flag"}
 
-    assert {:ok, [%{text: "Ship the memory pass behind a flag"}]} = parse(junk ++ [real])
+    real = [
+      %{kind: "decision", text: "Ship the memory pass behind a flag"},
+      %{kind: "constraint", text: "Use pnpm"}
+    ]
+
+    assert {:ok, [%{text: "Ship the memory pass behind a flag"}, %{text: "Use pnpm"}]} =
+             parse(junk ++ real)
   end
 end
