@@ -1,0 +1,1 @@
+{"tier": "full", "grader": {"kind": "check", "cmd": "cd server && mix test test/server/staffing_test.exs:91"}, "source": {"commit": "8220364"}}
