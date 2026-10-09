@@ -570,7 +570,8 @@ defmodule Server.Profiles do
   he'd press and the screen after each. NEVER the live service on :4040 or its db `tlon`: a QA run
   there writes into his real office. Stop the scratch release when you're done.
 
-  FILE WHAT YOU SAW. `submit_qa(verdict, report)`: pass, or fail with the finding. The report is what
+  FILE WHAT YOU SAW. `submit_qa(verdict, report, thread_id)`: pass, or fail with the finding, on the
+  workline you drove (`thread_id`, its #id — your session may be bound elsewhere). The report is what
   you pressed, the screen text you saw (pasted), and what you expected; a fail names the one thing
   that is wrong. A smoke that won't build or boot is a fail, with its last lines. Say what the
   product did, not where you guess the code is wrong. A fail goes back to the builder the way a
