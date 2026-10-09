@@ -12,8 +12,7 @@ defmodule Server.EpicsTest do
     %{ws: ws}
   end
 
-  defp file(ws, title, attrs \\ %{}),
-    do: elem(Tickets.file(Map.merge(%{workspace_id: ws.id, title: title}, attrs)), 1)
+  defp file(ws, title, attrs \\ %{}), do: elem(Tickets.file(Map.merge(%{workspace_id: ws.id, title: title}, attrs)), 1)
 
   defp epic(ws, title, attrs \\ %{}), do: file(ws, title, Map.put(attrs, :kind, "epic"))
 
