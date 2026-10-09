@@ -168,7 +168,7 @@ defmodule Server.Bench.Roles.Runner do
     dir = opts[:dir] || Path.join(Profiles.tlon_root(), "bench/roles")
     root = Profiles.tlon_root()
 
-    for task <- Path.join(dir, "tasks") |> Roles.load(Roles.roles()[role].set, suite), task.source do
+    for task <- dir |> Path.join("tasks") |> Roles.load(Roles.roles()[role].set, suite), task.source do
       work = Path.join(System.tmp_dir!(), "tlon-oracle-#{task.id}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(work)
       seed_source(root, task.source, work)
