@@ -9,7 +9,8 @@ defmodule Server.Staffing do
       message spawns a fresh, brief-seeded session;
     * an orphan leaf (its thread closed or unstaffed while nobody looked) is swept;
     * a stale coworker (a live process minting under a handle the bench no longer has) is torn down;
-    * at the leaf cap with a thread parked, the leaf idle the longest gives its seat up — never one
+    * at the leaf cap with a thread parked, the leaf idle the longest gives its seat up (only a
+      work leaf holds a seat — a standing duty's, `seated_leaves/1`, never counts) — never one
       mid-turn, never one nearer to done than what waits (`priority/1`; `seat_for?/2` reserves the
       freed seat for the parked thread nearest to done).
 
@@ -30,6 +31,8 @@ defmodule Server.Staffing do
   alias Server.OperatorConfig
   alias Server.Presence
   alias Server.Repo
+  alias Server.Schedule
+  alias Server.ScheduleRun
   alias Server.Session
   alias Server.Staff
   alias Server.Thread
@@ -77,6 +80,48 @@ defmodule Server.Staffing do
   def priority(%Thread{stage: stage}) when stage in [nil, "review", "verify"], do: 0
   def priority(%Thread{stage: "intent"}), do: 2
   def priority(%Thread{}), do: 1
+
+  @doc """
+  The leaves that hold a seat under the leaf cap: every leaf window but a standing duty's. A duty
+  (`duty_thread?/1`) runs on its own clock, so it neither takes a seat nor waits for one.
+  """
+  @spec seated_leaves([Tmux.tab()]) :: [Tmux.tab()]
+  def seated_leaves(tabs) do
+    leaves = Enum.filter(tabs, &Tmux.leaf_window?/1)
+    duties = duty_threads(Enum.flat_map(leaves, &List.wrap(leaf_thread(&1))))
+    Enum.reject(leaves, &MapSet.member?(duties, leaf_thread(&1)))
+  end
+
+  @doc """
+  Whether a thread is a standing duty, not work: a schedule's (its standing thread, or an agent
+  run's firing) or the sheriff's beat.
+  """
+  def duty_thread?(thread_id), do: MapSet.member?(duty_threads([thread_id]), thread_id)
+
+  defp duty_threads([]), do: MapSet.new()
+
+  defp duty_threads(ids) do
+    standing = from(s in Schedule, where: s.thread_id in ^ids, select: s.thread_id)
+
+    runs =
+      from(r in ScheduleRun,
+        join: s in assoc(r, :schedule),
+        where: r.thread_id in ^ids and s.kind == "agent",
+        select: r.thread_id
+      )
+
+    beats = from(t in Thread, where: t.id in ^ids and t.title == ^Server.Sheriff.beat_title(), select: t.id)
+    MapSet.new(Repo.all(standing) ++ Repo.all(runs) ++ Repo.all(beats))
+  end
+
+  defp leaf_thread(%{thread_id: tid}) when is_integer(tid), do: tid
+
+  defp leaf_thread(%{name: name}) do
+    case Regex.run(~r/\At(\d+)\z/, name) do
+      [_, id] -> String.to_integer(id)
+      nil -> nil
+    end
+  end
 
   @doc """
   The threads in `workspace_id` waiting for a seat: open, staffed, with no window in `tabs`, and
@@ -322,7 +367,7 @@ defmodule Server.Staffing do
   # isn't held behind a window nobody is using. Never a leaf mid-turn or still booting, never one
   # nearer to done than what waits, and one per pass.
   defp yield_seat(tabs, workspace_id, standing, bench) do
-    leaves = Enum.filter(tabs, &Tmux.leaf_window?/1)
+    leaves = seated_leaves(tabs)
 
     with true <- length(leaves) >= OperatorConfig.max_leaves(),
          [_ | _] = waiting <- parked(workspace_id, tabs),
