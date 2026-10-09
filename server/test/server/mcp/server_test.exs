@@ -523,6 +523,32 @@ defmodule Server.MCP.ServerTest do
     assert length(facts) == 7
   end
 
+  test "a get_facts read cites each returned fact once a day, and a cited fact outranks an uncited peer",
+       %{thread: thread, token: token} do
+    session = handshake(token)
+    fact_ids = for n <- 1..2, do: bank!(thread, "fact #{n}").id
+
+    call(token, session, 3, "get_facts", %{})
+    call(token, session, 4, "get_facts", %{})
+
+    assert Enum.sort(cited_fact_ids(thread)) == Enum.sort(fact_ids)
+
+    peer = bank!(thread, "an uncited peer")
+    set = Server.Recall.working_set_for_thread(thread, include_pinned: false)
+    strength = Map.new(set, &{&1.id, &1.strength})
+    assert strength[hd(fact_ids)] > strength[peer.id]
+  end
+
+  test "search_facts cites only the facts that matched its query", %{thread: thread, token: token} do
+    session = handshake(token)
+    hit = bank!(thread, "the gate runs unsandboxed")
+    _miss = bank!(thread, "postgres is the truth")
+
+    call(token, session, 3, "search_facts", %{"query" => "unsandboxed"})
+
+    assert cited_fact_ids(thread) == [hit.id]
+  end
+
   test "the brief and the always-loaded constraints are readable as MCP resources",
        %{thread: thread, token: token} do
     # The free half of anubis: the same single reads (Board.brief,
@@ -1078,6 +1104,17 @@ defmodule Server.MCP.ServerTest do
              %{agent: "Doer", kind: "test", summary: "Bash · mise run check"},
              %{kind: "post", summary: "Post · green"}
            ] = Server.Presence.Thinking.activity(thread.id)
+  end
+
+  defp bank!(thread, text) do
+    {:ok, fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: text, provenance: "derived"})
+    fact
+  end
+
+  defp cited_fact_ids(thread) do
+    from(e in Server.Event, where: e.thread_id == ^thread.id and e.kind == "cited", select: e.correlation)
+    |> Repo.all()
+    |> Enum.map(fn "fact:" <> id -> String.to_integer(id) end)
   end
 
   defp handshake(token) do
