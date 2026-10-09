@@ -36,7 +36,8 @@ from, and posts to, that node's world.
   thinking and the switchboard's wake checks cannot see it.
 - **What it is doing.** A `PreToolUse` hook, `thinking-hook.sh doing`, tells the server which kind
   of tool is about to run (`presence_doing`, mapped by `pi/src/doing.ts`), so the office animates
-  it. It runs detached — a tool never waits on it — and the label holds until the next tool or
+  it, and the call in one line (`summaryOf`: "Bash · mise run check", the tool and its target —
+  never contents — redacted) for the thread card's activity timeline. It runs detached — a tool never waits on it — and the label holds until the next tool or
   the turn's end, since a detached `PostToolUse` could overtake it.
 - **Door 2 — the brief.** [`brief-hook.sh`](brief-hook.sh) is a `SessionStart` hook. Claude
   Code adds its plain stdout to the session context, so on start / resume / clear it renders

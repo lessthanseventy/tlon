@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { renderBrief, type Dossier } from "./brief.ts";
 import { TlonClient, TlonUnreachable, identityFromEnv } from "./mcp.ts";
 import { detectCorrection } from "./recall.ts";
-import { doingOf } from "./doing.ts";
+import { doingOf, summaryOf } from "./doing.ts";
 import {
   buildExtractionPrompt,
   deltaSince,
@@ -219,7 +219,7 @@ export default function adapters(pi: ExtensionAPI): void {
   pi.on("tool_execution_start", async (event) => {
     if (!client) return;
     try {
-      await client.presenceDoing(doingOf(event.toolName, event.args));
+      await client.presenceDoing(doingOf(event.toolName, event.args), summaryOf(event.toolName, event.args, process.cwd()));
     } catch {
       // best-effort
     }

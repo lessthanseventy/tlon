@@ -81,8 +81,9 @@ test("presenceThinking / presenceIdle call their argless self-thread tools", asy
       return new Response("", { status: 202 });
     }
     if (body.includes('"tools/call"')) {
-      const name = (JSON.parse(body) as { params: { name: string } }).params.name;
+      const { name, arguments: args } = (JSON.parse(body) as { params: { name: string; arguments: unknown } }).params;
       called.push(name);
+      if (name === "presence_doing") doing.push(args);
       return new Response(
         'event: message\ndata: {"jsonrpc":"2.0","id":2,"result":{"content":[],"isError":false}}\n',
         { status: 200, headers: { "content-type": "text/event-stream" } },
@@ -91,14 +92,17 @@ test("presenceThinking / presenceIdle call their argless self-thread tools", asy
     return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
   });
   globalThis.fetch = fn as unknown as typeof fetch;
+  const doing: unknown[] = [];
 
   const c = new TlonClient({ url: "http://127.0.0.1:4041/mcp", threadId: 11, agent: "pi-machine" });
   await c.connect();
   await c.presenceThinking();
-  await c.presenceDoing("edit");
+  await c.presenceDoing("edit", "Edit · src/a.ts");
+  await c.presenceDoing();
   await c.presenceIdle();
 
-  expect(called).toEqual(["presence_thinking", "presence_doing", "presence_idle"]);
+  expect(called).toEqual(["presence_thinking", "presence_doing", "presence_doing", "presence_idle"]);
+  expect(doing).toEqual([{ what: "edit", summary: "Edit · src/a.ts" }, {}]);
 });
 
 // postMessage: pin the tool name + body arg go

@@ -19,7 +19,8 @@ adapters/
   pi/                  the pi adapter (TypeScript, bun)
     src/extension.ts   pi's lifecycle hooks: register, brief, widget, cadence capture,
                        thinking presence (and which tool is running)
-    src/doing.ts       a tool call → the office's kind of work (read/edit/bash/…), both adapters
+    src/doing.ts       a tool call → the office's kind of work (read/edit/bash/…) and its
+                       one-line, redacted summary for the activity feed, both adapters
     src/brief.ts       the honest brief renderer (pure, unit-tested)
     src/mcp.ts         a minimal MCP client — the extension's own door to server — and
                        identityFromEnv(), the one parse of the TLON_* identity
