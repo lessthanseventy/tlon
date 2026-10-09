@@ -30,9 +30,10 @@ dir="" node="" sha="" ok="" office="$root"
 cleanup() {
   if [ -n "$node" ]; then kill "$node" 2>/dev/null; wait "$node" 2>/dev/null; fi
   if [ -n "$dir" ]; then
-    (cd "$dir/server" && MIX_ENV=prod TLON_DATABASE="$db" mix ecto.drop --quiet --force --force-drop) >>"$log" 2>&1
+    # the 2 GB build goes before the slow drop, so a SIGKILL mid-cleanup leaves less in RAM-backed /tmp
     git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1
     rm -rf "$dir"
+    psql -h "${PGHOST:-/run/postgresql}" -d postgres -qc "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >>"$log" 2>&1
   fi
   [ -z "$ok" ] || rm -f "$log"
 }
@@ -49,6 +50,15 @@ if [ -z "$url" ]; then
   sha="$(git -C "$root" rev-parse -q --verify "${1:-origin/main}^{commit}")" || fail "no commit ${1:-origin/main}"
   echo "smoke: ${sha:0:7} on :$port, database $db"
 
+  # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep any build
+  # no process is using before making another
+  for stale in "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
+    stale="${stale%/}"; [ -d "$stale/server" ] || continue
+    # in use: named in a command line (the node, the drive) or the working directory of one (mix)
+    pgrep -f "$stale/" >/dev/null && continue
+    find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" 2>/dev/null | grep -q . && continue
+    git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1; rm -rf "$stale"
+  done
   dir="$(mktemp -d -t tlon-smoke-XXXXXX)"
   git -C "$root" worktree add -q --detach "$dir" "$sha" || fail "can't check out ${sha:0:7}"
   office="$dir"
