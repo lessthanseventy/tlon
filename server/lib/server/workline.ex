@@ -408,17 +408,24 @@ defmodule Server.Workline do
          else: (_ -> nil)
   end
 
-  # the server commits the workline's own docs (a review verdict) onto the branch after an approval;
-  # only a change outside work/<slug>/ is a change to what was approved
+  # The branch's own change, not its tree: the patch-ids of its commits since main, those touching
+  # only work/<slug>/ left out (the server commits review.md after a verdict). A rebase onto a newer
+  # main (the merge queue keeps its rebase across a cut-off gate) is the same change; an amended or
+  # new code commit is not. A git error reads as changed, and says so.
   defp same_code?(_thread, sha, sha), do: true
 
   defp same_code?(thread, sha, head) do
-    match?(
-      {_, 0},
-      System.cmd("git", ["-C", Git.root(thread), "diff", "--quiet", sha, head, "--", ".", ":!work/#{thread.slug}"],
-        stderr_to_stdout: true
-      )
-    )
+    root = Git.root(thread)
+
+    with base when is_binary(base) <- main_ref(root),
+         {:ok, seen} <- patch_ids(root, base, sha, thread.slug),
+         {:ok, now} <- patch_ids(root, base, head, thread.slug) do
+      if seen == [] and now == [], do: same_tree?(root, sha, head, thread.slug), else: seen == now
+    else
+      why ->
+        require(Logger) && Logger.warning("workline #{thread.slug}: can't compare #{sha} with #{head}: #{inspect(why)}")
+        false
+    end
   end
 
   defp branch_head(thread) do
@@ -1525,5 +1532,32 @@ defmodule Server.Workline do
         limit: 1,
         select: fragment("(?::jsonb ->> 'sha')", e.detail)
     )
+  end
+
+  # no commits of its own on either side (its code is on main already): the trees decide
+  defp same_tree?(root, sha, head, slug),
+    do:
+      match?(
+        {_, 0},
+        System.cmd("git", ["-C", root, "diff", "--quiet", sha, head, "--", ".", ":!work/#{slug}"],
+          stderr_to_stdout: true
+        )
+      )
+
+  defp main_ref(root) do
+    Enum.find(
+      ["origin/main", "main"],
+      &match?({_, 0}, System.cmd("git", ["-C", root, "rev-parse", "--verify", "--quiet", &1], stderr_to_stdout: true))
+    )
+  end
+
+  defp patch_ids(root, base, ref, slug) do
+    script =
+      ~s(git -C "$1" log -p --no-merges --reverse --format='commit %H' "$2..$3" -- . ":!work/$4" | git patch-id --stable)
+
+    case System.cmd("sh", ["-c", script, "sh", root, base, ref, slug], stderr_to_stdout: true) do
+      {out, 0} -> {:ok, out |> String.split("\n", trim: true) |> Enum.map(&hd(String.split(&1, " ")))}
+      {out, code} -> {:error, {code, String.slice(out, 0, 200)}}
+    end
   end
 end
