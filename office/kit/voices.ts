@@ -52,6 +52,8 @@ export const NINA = {
   keyboard: ["This is my desk now.", "I fixed your code, {name}. You're welcome.", "Warm. Mine. Go away.", "I'm helping.", "Your keyboard is my cushion now, {name}."],
   // you send her over to someone: she tells them so, in her way
   cheer: ["{name}. Your code is almost as elegant as me.", "{name}, I've decided you're doing well. You're welcome.", "Keep going, {name}. I'll supervise. From your keyboard.", "{name}, a princess believes in you. Briefly.", "{name}! That test will pass. I've commanded it.", "{name}, you may pet me when you've shipped. Not before."],
+  // she carries a letter from the mailbox to someone
+  letter: ["{name}, post for you. I only chewed the corner.", "{name}. A letter. Do not ask where I have been.", "Special delivery, {name}. Tip accepted in treats."],
   // a worker fussing over her
   fuss: {
     pat: ["Gentle. I'm priceless.", "Head pats are a privilege, peasant.", "prrr... you may continue."],

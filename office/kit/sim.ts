@@ -40,7 +40,7 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
  * is saying, from `saidFrom` until `saidUntil`; `stretch`: the tick her wake-up stretch ends; `fuss`: a worker making
  * a fuss of her, from where they are
  */
-export type Cat = { name: string; species: "cat" | "rabbit" | "bird"; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" } | null }
+export type Cat = { name: string; species: "cat" | "rabbit" | "bird"; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" } | null }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
@@ -234,6 +234,7 @@ export class Sim<L extends { people: Seat[] }> {
         const { name, kind } = c.errand, host = this.actors.get(name)
         c.errand = null; c.mode = "sit"; c.until = this.tick + (kind === "keys" ? 400 : 200)
         if (host && kind === "cheer") { host.emote = "♥"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "cheer", NINA.cheer, name), 70) }
+        if (host && kind === "letter") { host.emote = "✉"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "letter", NINA.letter, name), 70) }
         // she sits on their keyboard: whatever they were typing, this is what they type now
         if (host && kind === "keys") { this.say(name, keyMash()); this.catSay(this.line("Nina", "keyboard", NINA.keyboard, name), 70, 20) }
         return true
@@ -310,7 +311,10 @@ export class Sim<L extends { people: Seat[] }> {
   /** Nina goes and sits on someone's keyboard (their name); false when they aren't in the room */
   catKeyboard(name: string): boolean { return this.catErrand(name, "keys") }
 
-  private catErrand(name: string, kind: "cheer" | "keys"): boolean {
+  /** Nina carries a letter from the mailbox to someone (their name); false when they aren't in the room */
+  catLetter(name: string): boolean { return this.catErrand(name, "letter") }
+
+  private catErrand(name: string, kind: "cheer" | "keys" | "letter"): boolean {
     const host = this.actors.get(name)
     if (!host) return false
     const c = this.cat, p = this.plan.cat, to = this.plan.visit(host)
