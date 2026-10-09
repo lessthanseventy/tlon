@@ -4,7 +4,9 @@ defmodule Server.Recall.Recheck do
   `origin/main` of the thread's project repos, and record `check_passed` (every ref found) or
   `check_failed` (one is gone), correlated `fact:<id>` so `Server.Recall.Strength` weighs it.
   Nothing is recorded for prose, a fact with no project repo, or a fact already rechecked in the
-  last 24h. The server never runs the fact's own `check_cmd`.
+  last 24h, or a project whose repos have no `origin/main` to probe. The server never runs the
+  fact's own `check_cmd`. Its only state is those events; to undo, delete `check_passed` and
+  `check_failed` events whose detail is like `%server recheck: %`.
   """
   import Ecto.Query
 
@@ -51,10 +53,17 @@ defmodule Server.Recall.Recheck do
   defp repo_paths(thread_id) do
     with %Thread{project_id: pid} when not is_nil(pid) <- Repo.get(Thread, thread_id),
          %Server.Project{repos: repos} <- Server.Projects.get(pid) do
-      for %{"path" => path} <- repos || [], do: path
+      for %{"path" => path} <- repos || [], has_origin_main?(path), do: path
     else
       _ -> []
     end
+  end
+
+  defp has_origin_main?(path) do
+    match?(
+      {_, 0},
+      System.cmd("git", ["-C", path, "rev-parse", "--verify", "-q", "origin/main"], stderr_to_stdout: true)
+    )
   end
 
   # `detail` is a text column, hence the substring match

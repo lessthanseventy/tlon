@@ -70,6 +70,21 @@ defmodule Server.Recall.RecheckTest do
     assert checks(f) == ["check_passed"]
   end
 
+  test "a repo with no origin/main is skipped, not failed", %{thread: t} do
+    {:ok, ws} = Server.Workspaces.register(%{name: "W2"})
+    bare = Path.join(System.tmp_dir!(), "recheck-bare-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(bare)
+    {_, 0} = System.cmd("git", ["-C", bare, "init", "-q"], stderr_to_stdout: true)
+    on_exit(fn -> File.rm_rf!(bare) end)
+
+    {:ok, p} = Server.Projects.register(%{workspace_id: ws.id, name: "q", repos: [%{"name" => "b", "path" => bare}]})
+    {:ok, t2} = Channel.open_thread(%{title: "t2", workspace_id: ws.id, project_id: p.id})
+    f = fact(t2, "`Server.A` exists")
+    assert {:ok, :skipped} = Recheck.run(f)
+    assert checks(f) == []
+    _ = t
+  end
+
   defp strength(f) do
     now = DateTime.utc_now()
 

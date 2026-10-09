@@ -130,6 +130,10 @@ defmodule Server.Maintain.Sweep do
       if left == 0, do: {:halt, 0}, else: {:cont, left}
     end)
     |> then(fn _ -> :ok end)
+  rescue
+    e ->
+      Logger.warning("fact recheck sweep failed: #{Exception.message(e)}")
+      :ok
   end
 
   defp recheck(fact) do
