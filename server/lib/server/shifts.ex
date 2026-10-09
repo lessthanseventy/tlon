@@ -16,6 +16,8 @@ defmodule Server.Shifts do
   alias Server.WorkspaceAgent
   alias Server.Workspaces
 
+  require Logger
+
   @shifts ~w(day night)
 
   # Claude Code's own usage-limit line, anchored to how it prints it, so a pane that only talks
@@ -300,6 +302,9 @@ defmodule Server.Shifts do
             fragment("(? ->> 'workspace_id')::int = ?", j.args, ^workspace_id)
     )
   rescue
-    _ -> :ok
+    # a failed cancel must not break the limit switch, but it leaves a stale reminder behind
+    e ->
+      Logger.warning("shift reminder cancel failed for workspace #{workspace_id}: #{Exception.message(e)}")
+      :ok
   end
 end
