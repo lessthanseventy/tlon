@@ -521,7 +521,7 @@ function threadActions(tid: number, inReader = false): Action[] {
       },
     },
     {
-      key: "M", label: "move to project…", run: () => {
+      key: "P", label: "move to project…", run: () => {
         find(`MOVE #${tid} TO PROJECT`, view().projects.map((p) => ({ segs: [{ s: p.name, fg: ROLE.prose }], text: p.name, run: () => { picker = null; void did(data.move(tid, p.id)) } })))
       },
     },
