@@ -4,6 +4,7 @@
 // the lead's desks, the crew board, two tables of four), a glass meeting room, the lounge with its
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
+import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, stepBook, type Book, type Pt as Perch } from "../kit/uqbar"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
@@ -124,6 +125,10 @@ export class WideRoom extends Sim<Layout> {
   private readonly catCorner: ReturnType<typeof catCornerTile>
   private readonly office: ReturnType<typeof officeTile>
   private antic: Antic | null = null
+  /** Uqbar's volume (kit/uqbar.ts); `cards` is each whiteboard line's perch from the last render, one frame late */
+  private book: Book
+  private readonly cards = new Map<number, Perch>()
+  private boardEdge: Perch = { x: 0, y: 1 }
   private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -136,8 +141,14 @@ export class WideRoom extends Sim<Layout> {
     this.lounge = loungeTile(this.z)
     this.catCorner = catCornerTile(this.z)
     this.office = officeTile(this.z)
+    this.book = { ...spineHome(corner(this.z).shelf), flying: false, riffle: 0 }
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
+  }
+  /** Uqbar's volume one tick toward where it wants to be; true while it is in the air */
+  private stepVolume(a: Agents): boolean {
+    this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.boardEdge, spineHome(corner(this.z).shelf)))
+    return this.book.flying
   }
   /** Argos says something (after `delay`, when he is answering) */
   private dogSay(text: string, delay = 0) { const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
@@ -214,7 +225,7 @@ export class WideRoom extends Sim<Layout> {
    * remote now and then (about once a minute and a quarter each) and flips the channel.
    */
   override step(a: Agents): boolean {
-    const moved = [this.stepDog(), this.stepAntics(), super.step(a)].some(Boolean)
+    const moved = [this.stepDog(), this.stepAntics(), this.stepVolume(a), super.step(a)].some(Boolean)
     // after dark the pets turn in, once whatever they were up to is done
     if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog
@@ -309,6 +320,9 @@ export class WideRoom extends Sim<Layout> {
     // ── the lounge: rug, couch (its back toward you), lamp, beanbag; the kitchen along the wall ──
     this.lounge.draw(sc, a, l, measure, this.live(), focus)
     this.pastimes(sc, a, l, measure, focus)
+    const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
+    drawShelf(sc, shelf, mode === "shelved", !!a.uqbar)
+    drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null)
 
     // ── people, Nina ──
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")
@@ -482,6 +496,7 @@ export class WideRoom extends Sim<Layout> {
   /** the whiteboard: the worklines by stage, each one a readable line in its coworker's colour, marked with where it stands */
   private whiteboard(sc: Scene, a: Agents, measure: Measure, x0: number, x1: number, ctx: BoardCtx = {}) {
     const { px } = { px: sc.px.bind(sc) }
+    this.cards.clear(); this.boardEdge = { x: x1 - 24, y: 1 }
     px(x0 - 1, 2, x1 - x0 + 2, 39, ROLE.structure); px(x0, 3, x1 - x0, 36, ROLE.ground); px(x0, 39, x1 - x0, 2, ROLE.borderInactive)
     const cols = boardColumns(a, ctx), colW = (x1 - x0) / cols.length
     cols.forEach((col, c) => {
@@ -499,6 +514,7 @@ export class WideRoom extends Sim<Layout> {
         const colour = it.asks ? (sc.f % 2 ? ROLE.attention : ROLE.prose) : it.act.kind === "ticket" ? (it.routed ? ROLE.meta : ROLE.prose) : it.who ? shirtOf(it.archetype) : ROLE.inactive
         if (it.state) sc.blit(STATE_ICON[it.state.kind], cx + 3, y - 4, { k: colour })
         else px(cx + 3, y - 3, 2, 2, colour)
+        if (it.act.kind === "thread") this.cards.set(it.act.tid, { x: cx + colW - 13, y: y - 8 })
         sc.text(fit(measure, `#${id} ${it.title}`, colW - 9, 9), cx + 7, y, colour, 9, "left")
         const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""
         sc.hits.push({ x: cx + 1, y: y - lh + 1, w: colW - 2, h: lh, tip: `#${id} ${it.title}\n${it.stage}${it.who ? ` · ${it.who}` : ""}${state}`, act: it.act })
