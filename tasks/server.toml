@@ -63,6 +63,10 @@ depends = ["server:release"]
 # refuses while a restart would cut work off (a verify, a landing, a turn); `-- --force` overrides
 run = "scripts/server-restart.sh"
 
+["server:stop"]
+description = "server: stop the office — the always-up service and every coworker pane in tlon.slice (server:restart brings it back)"
+run = "systemctl --user stop tlon.slice && echo 'tlon stopped: service and coworkers (mise run server:restart to start it)'"
+
 ["server:console"]
 description = "server: remote iex INTO the running service node — inspect/mint against the live channel"
 run = ".release/server/_build/prod/rel/server/bin/server remote"
