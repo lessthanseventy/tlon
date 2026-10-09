@@ -35,3 +35,36 @@ describe("geometry", () => {
     expect(g.kitty).toBe(false)
   })
 })
+
+import { inkInto } from "../tui/paint"
+import { balloonLines } from "../kit/canvas"
+
+describe("inkInto balloons (kitty)", () => {
+  const W = 200, H = 120, view = { x: 20, y: 10, w: 100, h: 80 }
+  const render = (cxs: number[], text = "x".repeat(80) + " and then some more words to wrap around") => {
+    const big = new Uint8Array(W * H * 4)
+    inkInto(big, W, H, cxs.map((cx) => ({ t: "balloon" as const, lines: balloonLines(text), cx: cx / 2, top: 60 })), 2, 1, undefined, view)
+    return big
+  }
+  const bounds = (big: Uint8Array) => {
+    let x0 = W, y0 = H, x1 = -1, y1 = -1
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (big[(y * W + x) * 4 + 3]) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
+    return { x0, y0, x1, y1 }
+  }
+  test("a long balloon at the viewport's edges and middle stays inside it", () => {
+    for (const cx of [view.x, 70, view.x + view.w]) {
+      const b = bounds(render([cx]))
+      expect(b.x1).toBeGreaterThan(-1)
+      expect(b.x0).toBeGreaterThanOrEqual(view.x)
+      expect(b.y0).toBeGreaterThanOrEqual(view.y)
+      expect(b.x1).toBeLessThan(view.x + view.w)
+      expect(b.y1).toBeLessThan(view.y + view.h)
+    }
+  })
+  test("two balloons side by side do not overlap", () => {
+    const t = "hello there", a = bounds(render([60], t)), c = bounds(render([66], t)), both = bounds(render([60, 66], t))
+    const area = (b: ReturnType<typeof bounds>) => (b.x1 - b.x0 + 1) * (b.y1 - b.y0 + 1)
+    expect(both.y0).toBeLessThan(Math.min(a.y0, c.y0)) // the second was nudged up
+    expect(area(both)).toBeGreaterThan(area(a))
+  })
+})

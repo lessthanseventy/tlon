@@ -2,7 +2,8 @@
 // pixels so it stays crisp, its text, brackets and balloons drawn into it with a bitmap font at the
 // desktop's sizes. Without, it is half blocks — two art pixels per cell — with the text as terminal
 // text on the cells. Either way clicks map back to the room's logical pixels.
-import type { Frame, Hit, Ink, Measure } from "../kit/canvas"
+import { balloonLines, type Frame, type Hit, type Ink, type Measure } from "../kit/canvas"
+import { placeBox, type Box } from "../kit/balloon"
 import { BODY, SMALL, type Cut } from "../kit/font"
 import { contrast, rgb, ROLE } from "../kit/palette"
 import { png } from "./png"
@@ -60,7 +61,8 @@ export function backingFor(text: string) { return contrast(text, ROLE.ground) >=
  * balloons. Text whose colour falls under 4.5:1 against the art behind it gets a solid backing
  * (WCAG 1.4.3); `backed` collects each label's colour and the colour actually behind it.
  */
-export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number, zoom: number, backed?: { text: string; behind: string }[]) {
+export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number, zoom: number, backed?: { text: string; behind: string }[], view: Box = { x: 0, y: 0, w, h }) {
+  const taken: Box[] = []
   const fill = (x: number, y: number, fw: number, fh: number, c: string) => {
     const [r, g, b] = rgb(c)
     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + fh)); j++)
@@ -93,11 +95,17 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
         fill(dx > 0 ? x : x - t, dy > 0 ? y : y - arm, t, arm, i.color)
       }
     } else {
-      const font = BODY, sc = zoom, lh = (font.h + 1) * sc, pad = 3 * sc
-      const bw = Math.max(...i.lines.map((l) => l.length)) * font.w * sc + pad * 2, bh = i.lines.length * lh + pad * 2
-      const bx = Math.min(Math.max(i.cx * k - bw / 2, 2), w - bw - 2), by = Math.max(2, i.top * k - bh - 3 * k)
-      fill(bx, by, bw, bh, ROLE.prose); fill(i.cx * k - k, by + bh, 2 * k, 2 * k, ROLE.prose)
-      i.lines.forEach((l, n) => write(l, Math.round(bx + pad), Math.round(by + pad + n * lh + font.ascent * sc), ROLE.fieldInk, font, sc))
+      const font = BODY, sc = zoom, lh = (font.h + 1) * sc, pad = 4 * sc
+      const maxCols = Math.floor((view.w - 2 * pad) / (font.w * sc))
+      const widest = Math.max(...i.lines.map((l) => l.length))
+      const lines = maxCols < widest ? balloonLines(i.lines.join(" "), Math.max(1, maxCols)) : i.lines
+      const size = { w: Math.max(...lines.map((l) => l.length)) * font.w * sc + pad * 2, h: lines.length * lh + pad * 2 }
+      const box = placeBox(size, i.cx * k, i.top * k - 3 * k, view, taken, lh)
+      if (!box) continue
+      taken.push(box)
+      fill(box.x, box.y, box.w, box.h, ROLE.prose)
+      if (box.y + box.h + 2 * k <= view.y + view.h) fill(box.tail - k, box.y + box.h, 2 * k, 2 * k, ROLE.prose)
+      lines.forEach((l, n) => write(l, Math.round(box.x + pad), Math.round(box.y + pad + n * lh + font.ascent * sc), ROLE.fieldInk, font, sc))
     }
   }
 }
@@ -117,7 +125,7 @@ export function kittyImage(fr: Frame, g: Geometry, viewport: Viewport): string {
     const sy = Math.floor(y / g.k) * fr.width, row = y * w
     for (let x = 0; x < w; x++) dst[row + x] = src[sy + Math.floor(x / g.k)]!
   }
-  inkInto(big, w, h, fr.ink, g.k, textScale(g))
+  inkInto(big, w, h, fr.ink, g.k, textScale(g), undefined, { x: viewport.x * g.k, y: viewport.y * g.k, w: viewport.w * g.k, h: viewport.h * g.k })
   const data = png(w, h, big).toString("base64")
   let o = ""
   if (data !== lastImageData) {
