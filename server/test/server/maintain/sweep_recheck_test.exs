@@ -50,4 +50,11 @@ defmodule Server.Maintain.SweepRecheckTest do
     Sweep.run()
     assert length(kinds()) == 25
   end
+
+  test "prose facts do not starve a code fact out of the batch", %{thread: t} do
+    for i <- 1..30, do: fact(t, "prose note number #{i}")
+    fact(t, "`Server.Gone` does the work")
+    Sweep.run()
+    assert kinds() == ["check_failed"]
+  end
 end

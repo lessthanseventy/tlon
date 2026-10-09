@@ -37,6 +37,8 @@ defmodule Server.Maintain.Sweep do
   alias Server.Thread
   alias Server.Workline
 
+  require Logger
+
   @defaults [
     gate_stale_ms: to_timeout(day: 1),
     stalled_ms: to_timeout(day: 3),
@@ -113,25 +115,30 @@ defmodule Server.Maintain.Sweep do
         group_by: e.correlation,
         select: %{correlation: e.correlation, at: max(e.created_at)}
 
-    for fact <-
-          Repo.all(
-            from f in Server.Fact,
-              left_join: c in subquery(last_check),
-              on: c.correlation == fragment("'fact:' || ?", f.id),
-              where:
-                is_nil(f.forgotten_at) and not is_nil(f.thread_id) and
-                  f.id not in subquery(from s in Server.Fact, where: not is_nil(s.supersedes), select: s.supersedes),
-              order_by: [asc_nulls_first: c.at, asc: f.id],
-              limit: @recheck_batch
-          ) do
-      try do
-        Server.Recall.Recheck.run(fact)
-      rescue
-        _ -> :ok
-      end
-    end
+    # prose and ref-less facts record nothing, so the batch counts only facts that got a verdict
+    from(f in Server.Fact,
+      left_join: c in subquery(last_check),
+      on: c.correlation == fragment("'fact:' || ?", f.id),
+      where:
+        is_nil(f.forgotten_at) and not is_nil(f.thread_id) and
+          f.id not in subquery(from s in Server.Fact, where: not is_nil(s.supersedes), select: s.supersedes),
+      order_by: [asc_nulls_first: c.at, asc: f.id]
+    )
+    |> Repo.all()
+    |> Enum.reduce_while(@recheck_batch, fn fact, left ->
+      left = if recheck(fact) == :skipped, do: left, else: left - 1
+      if left == 0, do: {:halt, 0}, else: {:cont, left}
+    end)
+    |> then(fn _ -> :ok end)
+  end
 
-    :ok
+  defp recheck(fact) do
+    {:ok, verdict} = Server.Recall.Recheck.run(fact)
+    verdict
+  rescue
+    e ->
+      Logger.warning("recheck of fact #{fact.id} failed: #{Exception.message(e)}")
+      :skipped
   end
 
   defp sweep_worktrees do

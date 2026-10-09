@@ -3,7 +3,8 @@ defmodule Server.Recall.CodeRefs do
   The code symbols a fact's text names, as a pure function of the text — nothing is stored, so a
   rule change applies to every fact on the next sweep. Refs are `{:module, name}`,
   `{:function, name}`, `{:path, path}` and `{:task, name}`. A fact that asserts an absence yields
-  none: a passing probe would boost a claim the code now contradicts.
+  none: a passing probe would boost a claim the code now contradicts. A `Mod.fun/1` ref keeps
+  only `fun`, so it is a weak signal: any `def fun` on main satisfies it.
   """
 
   @module ~r/\bServer(?:\.[A-Z][A-Za-z0-9]*)+/
