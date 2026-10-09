@@ -335,6 +335,25 @@ defmodule Server.MCP.GatewayTest do
       assert {409, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "build", why: "forward"})
     end
 
+    test "the shift board: the snapshot carries each shift and every seat's; seats are put on one, the shift switched" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Board"})
+      {:ok, day} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "day"})
+      {:ok, night} = Server.Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder"})
+
+      assert {200, %{"crew" => "night"}} = request_json(:patch, "/api/seats/#{night.id}", %{crew: "night"})
+      assert {422, _} = request_json(:patch, "/api/seats/#{night.id}", %{crew: "dusk"})
+
+      {200, office} = get_json("/api/office")
+      assert %{"shift" => "day"} = Enum.find(office["workspaces"], &(&1["id"] == ws.id))
+      board = Enum.filter(office["shifts"], &(&1["workspace_id"] == ws.id))
+      assert Enum.map(board, &{&1["seat_id"], &1["crew"]}) == [{day.id, "day"}, {night.id, "night"}]
+
+      assert {200, %{"shift" => "night"}} = post_json("/api/office/shift", %{workspace_id: ws.id, shift: "night"})
+      assert {400, _} = post_json("/api/office/shift", %{workspace_id: ws.id, shift: "dusk"})
+      {200, office} = get_json("/api/office")
+      assert Enum.map(Enum.filter(office["bench"], &(&1["workspace_id"] == ws.id)), & &1["name"]) == ["dahlmann"]
+    end
+
     test "POST /api/tickets files one; /route and /start hand it on; /api/threads/:id/close closes" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
       {201, tk} = post_json("/api/tickets", %{workspace_id: ws.id, title: "from the TUI"})

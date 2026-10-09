@@ -254,7 +254,14 @@ defmodule Server.Workspaces do
   joining `workspace_agent` to `agent` and deciding for itself who the lead is.
   """
   @spec bench(integer()) :: [Coworker.t()]
-  def bench(workspace_id), do: workspace_id |> bench_query() |> Repo.all() |> to_bench()
+  def bench(workspace_id), do: workspace_id |> bench_query() |> on_shift() |> Repo.all() |> to_bench()
+
+  @doc """
+  Every seat on the bench, both crews, each with its `crew` — the roster as hired, for the screens
+  that show who is off shift. Staffing reads `bench/1`, the crew on shift.
+  """
+  @spec bench_all(integer()) :: [Coworker.t()]
+  def bench_all(workspace_id), do: workspace_id |> bench_query() |> Repo.all() |> to_bench()
 
   @doc """
   The benches of many workspaces at once, as `%{workspace_id => [coworker]}`, in ONE query — the
@@ -265,7 +272,9 @@ defmodule Server.Workspaces do
     from(wa in WorkspaceAgent,
       join: a in Server.Agent,
       on: a.id == wa.agent_id,
-      where: wa.workspace_id in ^workspace_ids,
+      join: w in Server.Workspace,
+      on: w.id == wa.workspace_id,
+      where: wa.workspace_id in ^workspace_ids and (wa.crew == "all" or wa.crew == w.shift),
       order_by: [asc: wa.sort, asc: wa.id],
       select:
         {wa.workspace_id,
@@ -276,7 +285,8 @@ defmodule Server.Workspaces do
            archetype: wa.archetype,
            sort: wa.sort,
            grade: wa.grade,
-           specialty: wa.specialty
+           specialty: wa.specialty,
+           crew: wa.crew
          }}
     )
     |> Repo.all()
@@ -315,7 +325,8 @@ defmodule Server.Workspaces do
              archetype: archetype,
              sort: attrs[:sort] || next_seat_sort(workspace_id),
              grade: attrs[:grade] || attrs["grade"],
-             specialty: attrs[:specialty] || attrs["specialty"]
+             specialty: attrs[:specialty] || attrs["specialty"],
+             crew: attrs[:crew] || attrs["crew"] || "all"
            }
            |> WorkspaceAgent.seat_changeset()
            |> Repo.insert() do
@@ -382,7 +393,8 @@ defmodule Server.Workspaces do
         archetype: wa.archetype,
         sort: wa.sort,
         grade: wa.grade,
-        specialty: wa.specialty
+        specialty: wa.specialty,
+        crew: wa.crew
       }
     )
   end
@@ -520,5 +532,13 @@ defmodule Server.Workspaces do
   defp with_effort(m, effort) do
     m = Map.new(m, fn {k, v} -> {to_string(k), v} end)
     if effort, do: Map.put(m, "thinking", effort), else: m
+  end
+
+  # the crew on duty, and the seats on both
+  defp on_shift(query) do
+    from [wa] in query,
+      join: w in Server.Workspace,
+      on: w.id == wa.workspace_id,
+      where: wa.crew == "all" or wa.crew == w.shift
   end
 end

@@ -705,6 +705,13 @@ defmodule Server.Workline do
   end
 
   @doc """
+  Staff `thread`'s current stage again from the bench as it is now — after a shift change, so a
+  workline led by someone gone off shift is picked up by the crew on, the way any stage is staffed.
+  `{:ok, thread}`.
+  """
+  def restaff_now(%Thread{} = thread), do: {:ok, restaff(thread)}
+
+  @doc """
   Send `thread` back to an earlier working stage (`spec`, `plan` or `build`) on the same thread and
   branch: what was built and reviewed stays, and the stage's lead is told to improve it, not redo
   it. Back to build is the call of the workline's lead (its reviewer, QA or builder); back to plan or

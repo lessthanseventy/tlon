@@ -43,7 +43,7 @@ defmodule Server.OfficeTest do
 
       s = Office.status()
 
-      assert %{id: ws.id, name: "Machine"} in s.workspaces
+      assert %{id: ws.id, name: "Machine", shift: "day"} in s.workspaces
       assert Enum.any?(s.bench, &(&1.workspace_id == ws.id and &1.name == "hronir" and &1.agent_id == seat.agent_id))
       assert %{id: tid, title: "wire the office", workspace_id: wsid} = Enum.find(s.threads, &(&1.id == t.id))
       assert {tid, wsid} == {t.id, ws.id}

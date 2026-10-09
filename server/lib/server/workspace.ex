@@ -26,6 +26,7 @@ defmodule Server.Workspace do
     field :knobs, Server.JSONColumn
     # where a thread with no project lands (boot repair, imports); set once, then only by hand
     field :default_project_id, :integer
+    field :shift, :string, default: "day"
     field :created_at, :utc_datetime
   end
 

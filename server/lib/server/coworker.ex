@@ -20,7 +20,17 @@ defmodule Server.Coworker do
   # Only the NAME is enforced: it is the identity (the handle, the window, the agent's own name).
   # `agent_id` is the DB pointer and is absent in a pure render fixture, which has no DB.
   @enforce_keys [:name]
-  defstruct [:id, :agent_id, :name, :archetype, :sort, :grade, :specialty, lead?: false]
+  defstruct [
+    :id,
+    :agent_id,
+    :name,
+    :archetype,
+    :sort,
+    :grade,
+    :specialty,
+    crew: "all",
+    lead?: false
+  ]
 
   @type t :: %__MODULE__{
           id: integer() | nil,
@@ -30,6 +40,7 @@ defmodule Server.Coworker do
           sort: integer() | nil,
           grade: String.t() | nil,
           specialty: String.t() | nil,
+          crew: String.t(),
           lead?: boolean()
         }
 

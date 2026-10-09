@@ -17,10 +17,11 @@ defmodule Server.WorkspaceAgent do
     field :sort, :integer, default: 0
     field :grade, :string
     field :specialty, :string
+    field :crew, :string, default: "all"
     field :created_at, :utc_datetime
   end
 
-  @mutable [:archetype, :sort, :grade, :specialty]
+  @mutable [:archetype, :sort, :grade, :specialty, :crew]
   @grades ~w(junior senior greybeard)
 
   @doc """
@@ -32,6 +33,7 @@ defmodule Server.WorkspaceAgent do
     |> cast(attrs, [:workspace_id, :agent_id | @mutable])
     |> validate_required([:workspace_id, :agent_id])
     |> validate_inclusion(:grade, @grades)
+    |> validate_inclusion(:crew, ~w(all day night))
     |> validate_archetype()
     |> unique_constraint([:workspace_id, :agent_id])
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
@@ -39,7 +41,12 @@ defmodule Server.WorkspaceAgent do
 
   @doc "Edit a seat's archetype or order. Which workspace and which agent are its identity, not fields."
   def edit_changeset(%__MODULE__{} = seat, attrs),
-    do: seat |> cast(attrs, @mutable) |> validate_inclusion(:grade, @grades) |> validate_archetype()
+    do:
+      seat
+      |> cast(attrs, @mutable)
+      |> validate_inclusion(:grade, @grades)
+      |> validate_inclusion(:crew, ~w(all day night))
+      |> validate_archetype()
 
   # one the role registry can't resolve would crash every read that instantiates the seat's profile
   defp validate_archetype(cs) do
