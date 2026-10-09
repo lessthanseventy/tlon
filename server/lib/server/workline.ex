@@ -1536,8 +1536,7 @@ defmodule Server.Workline do
   defp reviewed_before?(thread),
     do:
       Repo.exists?(
-        from e in Server.Event,
-          where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review"
+        from e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review"
       )
 
   # no commits of its own on either side (its code is on main already): the trees decide
