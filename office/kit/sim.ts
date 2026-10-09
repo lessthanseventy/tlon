@@ -89,6 +89,8 @@ export const spotKey = (s: Spot) => `${s.kind}:${s.x}:${s.y}`
 const VISIT_MS = 60_000, NOTE_MS = 45_000
 /** ticks a finished worker stretches at the desk before leaving it */
 export const STRETCH = 20
+/** ticks the channel stays down before the closet catches fire (a restart blip stays quiet) */
+export const FIRE_GRACE = 100
 /** the server's warmth window (`Server.Presence`, an hour by default) in ticks: a warm session's glow fades over it */
 export const WARM_TICKS = 36_000
 const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read"])
@@ -118,6 +120,10 @@ export class Sim<L extends { people: Seat[] }> {
   protected actors = new Map<string, Actor>()
   protected tick = 0
   private seeded = false
+  private downSince = -1
+  protected fire = false
+  /** the channel has been down long enough that the server closet burns */
+  get onFire() { return this.fire }
   private lastGood: Agents | null = null
   /** an actor's current spot on the floor, by agent name — null if they aren't seated here */
   at(agent: string): Spot | null { return this.actors.get(agent)?.spot ?? null }
@@ -395,10 +401,18 @@ export class Sim<L extends { people: Seat[] }> {
    * only then.
    */
   step(a: Agents): boolean {
+    const ok = a.ok
     // the channel down (a server restart) is a pause: the room carries on from the last good look
     if (a.ok) this.lastGood = a
     else if (this.lastGood) a = { ...this.lastGood, ok: false, note: a.note }
     this.tick++
+    if (ok) {
+      if (this.fire) this.changed = true
+      this.downSince = -1; this.fire = false
+    } else {
+      if (this.downSince < 0) this.downSince = this.tick
+      if (this.seeded && !this.fire && this.tick - this.downSince >= FIRE_GRACE) { this.fire = true; this.changed = true }
+    }
     const level = homeLevel(a)
     if (level !== null && this.levelSeen !== null && level > this.levelSeen) this.levelUp(level)
     this.levelSeen = level
