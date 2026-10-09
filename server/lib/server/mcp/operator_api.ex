@@ -93,6 +93,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/workspaces/:id/coworkers/:agent_id/clear  Staffing.clear_context: its sessions end and
                                           its windows close; the next message spawns it fresh
       DELETE /api/seats/:id               Workspaces.unseat (the agent itself survives)
+      PATCH  /api/seats/:id               {"crew": "day" | "night" | "all"} → Shifts.assign: the seat's shift (422 otherwise)
+      POST   /api/office/shift            {"workspace_id", "shift"} → Shifts.switch: the shift on; its worklines restaffed
       DELETE /api/facts/:id               Dossier.forget_fact (a tombstone: out of recall, row kept)
       POST   /api/issues/:id/resolve      {"resolution"?} → Dossier.resolve_issue
       POST   /api/habits/:id/approve      Server.approve_habit (…/reject: Server.reject_habit)
@@ -154,6 +156,19 @@ defmodule Server.MCP.OperatorAPI do
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"thread_id": n})})
+    end
+  end
+
+  defp route(conn, "POST", "office", ["shift"]) do
+    case body(conn) do
+      {%{"workspace_id" => ws, "shift" => shift}, conn} when is_integer(ws) ->
+        case Server.Shifts.switch(ws, shift) do
+          {:ok, moved} -> json(conn, 200, Map.put(moved, :shift, shift))
+          {:error, why} -> json(conn, 400, %{error: inspect(why)})
+        end
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"workspace_id": n, "shift": "day" | "night"})})
     end
   end
 
@@ -294,6 +309,14 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, method, "workspaces", rest), do: on_workspaces(conn, method, rest)
   defp route(conn, "DELETE", "seats", [id]), do: with_int(conn, id, &fire(conn, &1))
+
+  defp route(conn, "PATCH", "seats", [id]) do
+    with_int(conn, id, fn seat_id ->
+      {b, conn} = body(conn)
+      reply(conn, Server.Shifts.assign(seat_id, b["crew"]), &%{seat_id: &1.id, crew: &1.crew})
+    end)
+  end
+
   defp route(conn, "DELETE", "facts", [id]), do: with_row(conn, Server.Fact, id, &forget(conn, &1))
   defp route(conn, "POST", "issues", [id, "resolve"]), do: with_row(conn, Server.Issue, id, &resolve(conn, &1))
 

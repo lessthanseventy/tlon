@@ -47,7 +47,8 @@ defmodule Server.Office do
       tickets: tickets(ws_ids),
       notes: notes(projects),
       visits: visits(),
-      workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name}),
+      workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name, shift: &1.shift}),
+      shifts: shifts(ws_ids),
       archetypes: archetypes(),
       models: models(),
       counts: Map.new(Repo.all(from(t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}))),
@@ -201,6 +202,13 @@ defmodule Server.Office do
         doing: turn && turn.doing
       }
     end)
+  end
+
+  # the shift board: every seat, both crews, and the shift it is on (`all` for both)
+  defp shifts(ws_ids) do
+    for ws <- ws_ids,
+        c <- Server.Workspaces.bench_all(ws),
+        do: %{workspace_id: ws, seat_id: c.id, name: c.name, archetype: c.archetype, crew: c.crew}
   end
 
   defp bench(benches) do
