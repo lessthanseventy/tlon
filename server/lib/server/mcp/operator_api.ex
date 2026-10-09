@@ -798,6 +798,7 @@ defmodule Server.MCP.OperatorAPI do
       {%{"name" => name, "archetype" => arch} = b, conn} when is_binary(name) and is_binary(arch) ->
         with {:ok, c} <- Workspaces.seat(ws.id, %{name: name, archetype: arch}),
              {:ok, _} <- Workspaces.retarget(ws.id, c.agent_id, knobs(b)) do
+          Task.Supervisor.start_child(Server.TaskSupervisor, fn -> Server.Persona.ensure(ws.id, c.name) end)
           json(conn, 201, %{seat_id: c.id, agent_id: c.agent_id, name: c.name, archetype: c.archetype})
         else
           {:error, why} -> refused(conn, why)
