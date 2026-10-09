@@ -43,7 +43,7 @@ linked window at a time, Ctrl-] back to the room).
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
   zoomed like a coworker's terminal. It is the
   operator's surface. Its header carries what waits on you (`⚑ N blocking · M to decide`, from
-  `GET /api/office/needs`), `i` opens that queue with each item's own actions, and a TUI on an older
+  `GET /api/office/needs`), `i` (or a click on it) opens that queue with each item's own actions, a click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
   office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,
   read only from the snapshot (`flagOn` in `kit/types.ts`): `B`, build mode, is there only with
   `build_mode` on. A running coworker's card shows their live screen
