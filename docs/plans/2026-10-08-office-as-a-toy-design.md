@@ -137,7 +137,7 @@ One place, the office settings panel (`office.json`): `mode` (`office` | `sandbo
 
 | # | Step | Check |
 |---|---|---|
-| 1 | **Sandbox mode**: a fake snapshot source in `tui/data.ts`, `office:sandbox`, the play keys | the TUI runs with no server; each key does what §1 says |
+| 1 | **Sandbox mode**: a fake snapshot source in `tui/data.ts`, `office:sandbox`, the play keys | the TUI runs with no server; each key does what §1 says — built; `Sim.play` is the stand-in steps 3–5 replace |
 | 2 | **Voices**: a voice per seat (posts and room lines), the §2 table; Scharlach's nameplate, ledger and mug | each seat's banter reads in its voice; the ledger ticks on a red build |
 | 3 | **The bathroom**: the room, its pastime, Nina drinking from the tub, fading pawprints | Nina's trip leaves prints that fade; deterministic under the test seed |
 | 4 | **Front door and doorbell**: the door, the bell, the visitors in §5 | a ring brings a coworker to the door and a visitor in it; a cut brings pizza |

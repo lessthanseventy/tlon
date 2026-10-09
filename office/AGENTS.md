@@ -41,6 +41,8 @@ linked window at a time, Ctrl-] back to the room).
   lounge, a cake on the kitchen counter, and pulls the idle crowd to the cooler and coffee.
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
+  `mise run office:sandbox` (`--sandbox`, or `OFFICE_SANDBOX=1`) runs it on a made-up world, no server: `tui/sandbox.ts` is the
+  world and the play-key table, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only.
   `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `S` to save) and the finder (`/`); `reader.ts` a thread
   full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
   finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). The arcade's
@@ -77,7 +79,7 @@ linked window at a time, Ctrl-] back to the room).
   machine's when it hands them in: `~/.config/tlon/palette.json` (`TLON_PALETTE` to point elsewhere;
   `{ "role": {…} }` or the bare map), re-read within a second of the file — or the link to it — changing,
   so a theme switch follows live. tlon never goes looking for a desktop's theme; the machine links it here.
-- **The TUI talks to the server only over the operator API** (`/api/*` on the service's loopback
+- **The TUI talks to the server only over the operator API** (or, in `--sandbox`, to `tui/sandbox.ts`) (`/api/*` on the service's loopback
   port, `TLON_URL` to point elsewhere; `tui/data.ts`). Its read models are `Server.Office`, the same
   function `tlon-cli.sh shell-status` serves the desktop — a new read is a context function and a
   route first, never a query in the client. That is what lets a compiled TUI run with no checkout.
