@@ -22,6 +22,7 @@ import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
+import { say } from "./talk"
 import * as data from "./data"
 import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
@@ -376,6 +377,12 @@ function newNote() {
   const w = ws
   ask("a note for the corkboard", (s) => { if (s.trim()) did(data.note(w, s.trim())) }, { multiline: true })
 }
+/** speak to a coworker (`to`) or, with null, to the office — the speech composer */
+function talk(to: string | null) {
+  if (ws === null) return
+  const w = ws
+  ask(to ? `say to ${to}` : "say to the office", (s) => { void did(say(view().threads, w, to, s)) }, { multiline: true })
+}
 function reply(tid: number) { openReader(tid, true) }
 function hire() {
   if (ws === null) return
@@ -529,7 +536,7 @@ function seatActions(b: Coworker | undefined): Action[] {
   if (!b || w === null) return []
   return [
     {
-      key: "m", label: "model…", run: () => {
+      key: "M", label: "model…", run: () => {
         const models = [{ label: `the archetype's (${a.archetypes.find((x) => x.name === b.archetype)?.model ?? "?"})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
         find(`${b.name.toUpperCase()}'S MODEL`, models.map((m) => ({ segs: [plain(m.label)], text: m.label, run: () => { picker = null; void did(data.retarget(w, b.agent_id, { model: m.value })) } })))
       },
@@ -769,7 +776,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
       }
       const rows = c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]
-      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
+      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, ...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {
       const tid = mode.tid
@@ -1313,7 +1320,7 @@ const keyName = (k: string) => ({ space: "␣", enter: "⏎", right: "→", left
 /** the actions take j/k and enter when the card's rows have nothing to open */
 const actionsFocused = () => !rows.some((r) => r.open)
 /** the keys that work everywhere a card's own actions don't claim them */
-const GLOBALS: Hint[] = [{ key: "/", label: "find" }, { key: "i", label: "inbox" }, { key: "tab", label: "crew" }, { key: "[ ]", label: "workspace" }, { key: "esc", label: "back" }, { key: "q", label: "quit" }]
+const GLOBALS: Hint[] = [{ key: "/", label: "find" }, { key: "'", label: "talk to the office" }, { key: "i", label: "inbox" }, { key: "tab", label: "crew" }, { key: "[ ]", label: "workspace" }, { key: "esc", label: "back" }, { key: "q", label: "quit" }]
 /** a window's line `i`, as a row index, an "↑ N more" (-1) or "↓ N more" (-2), or nothing */
 function lineOf(w: Window, i: number): number | undefined {
   if (w.above && i === 0) return -1
@@ -1559,6 +1566,7 @@ function onKey(k: string) {
     case "/": case "ctrl-k": return void finder()
     case "i": return inbox()
     case "R": if (updated()) void relaunch(); return
+    case "'": return talk(null)
     case "n": return newThread()
     case "N": return newTicket()
     case "c": return open({ kind: "crew" })
