@@ -29,7 +29,9 @@ defmodule Server.OfficeTest do
       {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
       {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("uqbar").id, thread_id: t.id})
 
-      assert %{thread_id: tid, workspace_id: wsid, thinking: false} = Enum.find(Office.status().roster, &(&1.agent == "uqbar"))
+      assert %{thread_id: tid, workspace_id: wsid, thinking: false} =
+               Enum.find(Office.status().roster, &(&1.agent == "uqbar"))
+
       assert {tid, wsid} == {t.id, ws.id}
       refute Enum.any?(Office.status().bench, &(&1.name == "uqbar"))
     end
