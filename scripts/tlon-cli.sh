@@ -22,6 +22,8 @@
 #   shell-dossier <id>             a thread's brief as JSON, for the shell's AGENTS pane
 #   shell-thread <id>              a thread's last messages + its worker's pane, for the office's wide view
 #   ticket-file <ws> <proj|-> <title> [body…]   file a ticket (the shell's office)
+#   epic-new <ws> <title> [body…]               file an epic (a ticket of kind epic)
+#   epic-add <epic> <ticket…>                   tie tickets to an epic (one parent each, all or nothing)
 #   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
 #   ticket-route <ticket>                       send a ticket to the workspace's manager to staff
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
@@ -257,6 +259,24 @@ case "$cmd" in
       { echo 'usage: tlon-cli.sh ticket-file <workspace-id> <project-id|-> <title> [body…]' >&2; exit 2; }
     [ "$proj" = "-" ] && proj=nil
     exec "$SERVER" rpc "case Server.Tickets.file(%{workspace_id: $ws, project_id: $proj, title: \"$(esc "$title")\", body: \"$(esc "$*")\"}) do {:ok, t} -> IO.puts(\"filed ticket ##{t.id} — #{t.title}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
+    ;;
+
+  epic-new)
+    # File an epic: epic-new <workspace-id> <title> [body…]   (its design doc goes in the body)
+    ws="${1:-}"; title="${2:-}"; shift 2 2>/dev/null || true
+    { int "$ws" && [ -n "$title" ]; } ||
+      { echo 'usage: tlon-cli.sh epic-new <workspace-id> <title> [body…]' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Tickets.file(%{workspace_id: $ws, kind: \"epic\", title: \"$(esc "$title")\", body: \"$(esc "$*")\"}) do {:ok, t} -> IO.puts(\"filed epic ##{t.id} — #{t.title}\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
+    ;;
+
+  epic-add)
+    # Tie existing tickets to an epic, all or nothing: epic-add <epic-id> <ticket-id…>
+    ep="${1:-}"; shift 1 2>/dev/null || true
+    { int "$ep" && [ "$#" -gt 0 ]; } ||
+      { echo 'usage: tlon-cli.sh epic-add <epic-id> <ticket-id…>' >&2; exit 2; }
+    for tk in "$@"; do int "$tk" || { echo "not a ticket id: $tk" >&2; exit 2; }; done
+    ids=$(IFS=,; echo "$*")
+    exec "$SERVER" rpc "case Server.Tickets.adopt($ep, [$ids]) do {:ok, ids} -> IO.puts(\"epic #$ep now holds #{length(ids)} ticket(s)\"); {:error, {id, cs}} -> IO.puts(\"refused ##{id}: #{inspect(cs.errors)}\"); raise(\"refused\") end"
     ;;
 
   ticket-route)
@@ -508,7 +528,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
