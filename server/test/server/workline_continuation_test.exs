@@ -156,6 +156,18 @@ defmodule Server.Workline.ContinuationTest do
     assert continuations(plain.id) == []
   end
 
+  test "a workline waiting in the merge queue isn't nudged: an advance there would pull it out of the queue" do
+    {:ok, r} = Workline.open(%{title: "land it", slug: "landing-quietly", stage: "review"})
+    job = Repo.insert!(Server.Jobs.Land.new(%{thread_id: r.id}))
+
+    :ok = Continuation.run(r.id, artifacts: Present, quiet: true)
+    assert continuations(r.id) == []
+
+    job |> Ecto.Changeset.change(state: "completed") |> Repo.update!()
+    :ok = Continuation.run(r.id, artifacts: Present, quiet: true)
+    assert [_] = continuations(r.id)
+  end
+
   test "quiet for the band with its artifact there: a nudge to advance, or to say what is left", %{thread: t} do
     :ok = Continuation.run(t.id, artifacts: Present, quiet: true)
 

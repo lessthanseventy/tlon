@@ -126,6 +126,9 @@ defmodule Server.Workline.Continuation do
     )
   end
 
+  # waiting in the merge queue: a nudge to advance would park it on the operator and drop the landing
+  defp verifying?(%Thread{stage: "review"} = thread), do: Server.Office.Needs.landing?(thread)
+
   defp verifying?(_thread), do: false
 
   defp last_advance_id(thread_id) do
