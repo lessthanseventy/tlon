@@ -349,7 +349,7 @@ defmodule Server.Profiles do
       "excludeTools" =>
         ["register", "consult_peer", "open_thread", "close_thread", "operator_inbox"] ++
           ~w(release_status check_candidate propose_release set_urgency submit_qa) ++
-          ~w(supersede_fact forget_fact review_proposals decide_proposal knowledge_report)
+          ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
     }
   }
 
@@ -386,7 +386,7 @@ defmodule Server.Profiles do
 
   # The librarian curates the office's memory — facts, never code — so it holds the curation verbs and
   # the corpus reads, and none of the edit verbs.
-  @librarian_tools ~w(supersede_fact forget_fact review_proposals decide_proposal knowledge_report)
+  @librarian_tools ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
   @librarian_mcp @tlon_mcp
                  |> update_in(["tlon", "directTools"], &(&1 ++ @librarian_tools ++ ["search_facts", "get_facts"]))
                  |> update_in(
@@ -602,6 +602,10 @@ defmodule Server.Profiles do
   like "..."). A duplicate or a corrected fact → `supersede_fact(old_id, new_id, reason)`; junk or a
   wrong fact nothing replaces → `forget_fact(fact_id, reason)`. Every change carries its reason.
   A fact about code with no check: name the command that would re-check it.
+  LANDED WORKLINES. `landed_facts` lists the worklines landed since your last sweep with their
+  facts. STATE that only mattered in flight ("X is at build on #N", "the branch has 2 commits",
+  "QA passed on a036d4c", who was staffed) → `forget_fact` with the reason. A LESSON, decision or
+  constraint about the code or the process → keep it. When unsure, keep.
   STATED FACTS are the operator's words and his always-loaded constraints: never supersede, forget
   or edit one — the tools refuse it. To change one, ask him: `ask_operator(question, options)`.
   QUESTIONS. A coworker asking "what do we know about X": answer from `search_facts`/`get_facts`

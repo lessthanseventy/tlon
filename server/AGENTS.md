@@ -67,7 +67,8 @@ and every layer the spine design's re-laid §9 asked for
   the office's memory: it decides the correction judge's `supersede_proposed` events
   (`review_proposals`/`decide_proposal`, through `Server.Recall.Supersede.apply_proposal/1` and
   `reject_proposal/2` — absent, it says the judge isn't installed), retires or tombstones facts
-  (`supersede_fact`/`forget_fact`, the reason recorded as a `superseded`/`forgotten` event; a
+  (`supersede_fact`/`forget_fact`, the reason recorded as a `superseded`/`forgotten` event; a landed
+  workline's in-flight state forgotten, its lessons kept — `landed_facts`; a
   `stated` fact is refused), and posts the weekly counts in the lobby (`knowledge_report`). Its
   sweep (daily 07:00) and report (Mondays 07:30) are standing schedules, `ensure_schedules/2`.
 - **the calendar** (`Server.Schedules`) — agent runs, worklines and scripts on a cron or once, fired by

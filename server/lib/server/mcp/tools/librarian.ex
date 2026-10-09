@@ -115,6 +115,26 @@ defmodule Server.MCP.Tool.DecideProposal do
   end
 end
 
+defmodule Server.MCP.Tool.LandedFacts do
+  @moduledoc """
+  Worklines in this workspace that landed in the last `hours` (default 24), each with its thread's
+  live facts — stated ones are never listed. Sort each: STATE that only mattered while it was in
+  flight (its stage, its branch's commits, a QA pass on a sha, who was staffed) → forget_fact with
+  the reason; a LESSON, decision or constraint about the code or the process → keep. Unsure: keep.
+  """
+  use Server.MCP.Tool
+
+  schema do
+    field :hours, :integer, description: "How far back to look, in hours (default 24 — the last sweep)"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    since = DateTime.add(DateTime.utc_now(), -(params[:hours] || 24) * 3600)
+    ok(frame, Server.Librarian.landed_facts(Server.MCP.Tool.workspace_of(Identity.from_frame(frame)), since))
+  end
+end
+
 defmodule Server.MCP.Tool.KnowledgeReport do
   @moduledoc """
   The weekly state of the office's knowledge, posted in this workspace's lobby: the server counts

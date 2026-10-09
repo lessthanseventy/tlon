@@ -132,6 +132,7 @@ defmodule Server.MCP.ServerTest do
                "forget_fact",
                "review_proposals",
                "decide_proposal",
+               "landed_facts",
                "knowledge_report",
                "life_status",
                "routine_create",
