@@ -494,6 +494,17 @@ defmodule Server.ChannelTest do
       refute report.body =~ "@"
     end
 
+    test "closing a child twice reports once — a second close, even from a stale struct, is a no-op" do
+      {:ok, parent} = Channel.open_thread(%{title: "the epic"})
+      {:ok, child} = Channel.open_thread(%{title: "landed twice", parent_thread_id: parent.id})
+
+      {:ok, _} = Channel.close_thread(child)
+      {:ok, again} = Channel.close_thread(child)
+
+      assert again.state == "closed"
+      assert [_one] = Channel.thread_messages(parent)
+    end
+
     test "closing a TOP-LEVEL thread (no parent) posts no report" do
       {:ok, thread} = Channel.open_thread(%{title: "standalone"})
       {:ok, _} = Channel.close_thread(thread)

@@ -122,20 +122,22 @@ defmodule Server.Channel do
     end
   end
 
+  # One conditional UPDATE, so of two closes racing (a landing and a lead's close_thread) only the
+  # one that moved the row reports up; the other, or a close from a stale struct, reads the row back.
   defp do_close(%Thread{} = thread) do
-    result =
-      thread
-      |> Thread.state_changeset("closed")
-      |> Repo.update()
-      |> Server.Bus.announce(:thread_closed)
+    open = from(t in Thread, where: t.id == ^thread.id and t.state != "closed", select: t)
 
-    with {:ok, _closed} <- result do
-      Staff.end_thread_sessions(thread.id)
-      Server.Tickets.done_for(thread.id)
-      report_to_parent(thread)
+    case Repo.update_all(open, set: [state: "closed", awaiting: nil]) do
+      {1, [closed]} ->
+        Server.Bus.announce({:ok, closed}, :thread_closed)
+        Staff.end_thread_sessions(thread.id)
+        Server.Tickets.done_for(thread.id)
+        report_to_parent(closed)
+        {:ok, closed}
+
+      {0, _} ->
+        {:ok, Repo.get!(Thread, thread.id)}
     end
-
-    result
   end
 
   # The report-up wake: a closed child posts `✅ child #N “title” closed` into its parent, prefixed
