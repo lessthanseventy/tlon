@@ -2,6 +2,7 @@
 // in a paint map at draw time, so every colour is a ROLE. Looks and habits come from a hash of the
 // agent's name, gear from its archetype — the same person looks the same in every room.
 import { ROLE, type Role } from "./palette"
+import { gearOf, idsIn, PARTS, SLOTS, type PartSpec, type Slot, type View } from "./parts"
 
 export type Dir = "down" | "up" | "left" | "right"
 export type Pose = "stand" | "sit" | "couch"
@@ -14,7 +15,7 @@ export type Accessory = "glasses" | "headphones"
 export type Look = {
   hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number
   skinRole?: Role; outfit?: Outfit; accessory?: Accessory
-  body?: Body
+  body?: Body; parts?: Partial<Record<Slot, PartSpec>>
   custom?: Partial<Record<"front" | "side" | "back", string[]>>
 }
 export const SKIN_ROLES: Role[] = ["builder", "surveyor", "reviewer", "assistant", "planner", "body"]
@@ -39,7 +40,7 @@ const TOP: Record<Hair, string[]> = {
 /** hairless from the side (the hair's own rows turn to skin) before its overlay */
 const SIDE_BARE = new Set<Hair>(["bald", "mohawk"])
 /** a style's side-view rows over SIDE_HEAD */
-const SIDE_OVER: Partial<Record<Hair, Record<number, string>>> = {
+const SIDE_OVER: Partial<Record<Hair, View>> = {
   bun: { 0: ".......hh...", 1: "......hhhh.." },
   spiky: { 1: "....h.h.h..." },
   curly: { 1: "....hhhhh...", 2: "...hhhhhhhh.", 3: "..hhhhhhhhhh" },
@@ -101,7 +102,7 @@ const bodyOf = (look: Look): Body => (look.custom ? "average" : look.body ?? "av
 export const heightOf = (look: Look) => 15 + BODY[bodyOf(look)].legs.stand!.length
 
 // archetype gear, as row overlays per view
-type Gear = { front?: Record<number, string>; side?: Record<number, string>; back?: Record<number, string> }
+type Gear = { front?: View; side?: View; back?: View }
 const HARDHAT = { 1: "....yyyy....", 2: "..yyyyyyyy..", 3: ".yyyyyyyyyy." }
 const SAFARI = { 1: "...cccccc...", 2: "...cccccc...", 3: "cccccccccccc" }
 const GEAR: Record<string, Gear> = {
@@ -260,12 +261,22 @@ export const DOG = {
 }
 export const DOG_NAME = "Argos"
 
-function overlay(rows: string[], over: Record<number, string> | undefined) {
+/** `over` onto `rows`: a letter paints, `.` leaves the pixel, `_` clears it; `behind` paints only the clear pixels */
+function overlay(rows: string[], over: View | undefined, behind = false) {
   if (!over) return
   for (const [k, o] of Object.entries(over)) {
-    const i = Number(k), r = rows[i]!.split("")
-    for (let c = 0; c < o.length; c++) if (o[c] !== ".") r[c] = o[c]!
+    const i = Number(k)
+    if (!o || i >= rows.length) continue
+    const r = rows[i]!.split("")
+    for (let c = 0; c < o.length; c++) if (o[c] !== "." && (!behind || r[c] === ".")) r[c] = o[c] === "_" ? "." : o[c]!
     rows[i] = r.join("")
+  }
+}
+/** the look's parts in these slots, painted in the order given */
+function wear(rows: string[], look: Look, view: "front" | "side" | "back", slots: Slot[]) {
+  for (const slot of slots) {
+    const spec = look.parts?.[slot], gear = spec && gearOf(spec)
+    if (gear) overlay(rows, gear[view], slot === "back" && view !== "back")
   }
 }
 
@@ -297,7 +308,9 @@ export function figure(look: Look, archetype: string | null | undefined, lead: b
     rows = [...top, ...face4, ...body.torso, ...(pose === "couch" ? body.legs.couch! : step === 1 ? body.legs.a! : step === 2 ? body.legs.b! : body.legs.stand!)]
   }
   if (look.outfit) overlay(rows, view === "front" ? OUTFIT[look.outfit].front : view === "back" ? OUTFIT[look.outfit].back : OUTFIT[look.outfit].side)
+  wear(rows, look, view, ["back", "neck", "mouth"])
   if (look.accessory) overlay(rows, view === "front" ? ACCESSORY[look.accessory].front : view === "back" ? ACCESSORY[look.accessory].back : ACCESSORY[look.accessory].side)
+  wear(rows, look, view, ["eyes", "head", "hand"])
   const gear = GEAR[archetype ?? ""]
   overlay(rows, view === "front" ? gear?.front : view === "back" ? gear?.back : gear?.side)
   if (view === "front" && lead) overlay(rows, BADGE)
@@ -317,6 +330,18 @@ export function lookOf(name: string): Look {
     slow: ((h >>> 20) & 1) === 1,
     blink: (h >>> 22) % 50,
   }
+}
+/** a seeded roll of the new look fields: a build, and in each slot a part (or none) with its dials; lookOf never calls it */
+export function rollLook(seed: string): Pick<Look, "body" | "parts"> {
+  const pick = <T>(xs: readonly T[], key: string) => xs[hash(seed + key) % xs.length]!
+  const parts: NonNullable<Look["parts"]> = {}
+  for (const slot of SLOTS) {
+    const ids = idsIn(slot), n = hash(seed + slot) % (ids.length + 1)
+    if (n === ids.length) continue
+    const id = ids[n]!
+    parts[slot] = { id, dials: Object.fromEntries(Object.entries(PARTS[id]!.dials).map(([k, opts]) => [k, pick(opts, slot + k)])) }
+  }
+  return { body: pick(BODIES, "body"), parts }
 }
 export const BOSS_LOOK: Look = { hair: "mop", hairRole: "structure", decor: 1, fav: "board", emote: "…", slow: false, blink: 7 }
 
