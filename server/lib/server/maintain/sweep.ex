@@ -20,6 +20,8 @@ defmodule Server.Maintain.Sweep do
       work stays, for the operator (the needs list's stranded work)
     * a fact or chat message still without an embedding (the embedder was down when it was
       written) → embedded now, a batch per sweep (`Server.Recall.embed_missing/1`)
+    * a live fact that names code → probed against `origin/main` and given a `check_passed` or
+      `check_failed` (`Server.Recall.Recheck`), the least recently checked first, a batch per sweep
 
   Stateless: nag recency derives from the durable nag message, a flag from its slug row —
   so `Server.Jobs.Maintain` runs it on Oban's cron (one-brain piece E, slice 2) with nothing
@@ -51,6 +53,7 @@ defmodule Server.Maintain.Sweep do
     sweep_quiet(opts)
     sweep_tickets()
     sweep_worktrees()
+    sweep_fact_rechecks()
     # embed-on-write is best-effort: what an embedder outage missed is caught up here
     _ = Server.Recall.embed_missing()
     :ok
@@ -96,6 +99,36 @@ defmodule Server.Maintain.Sweep do
 
     for ticket <- Repo.all(from t in Server.Ticket, where: t.id in ^started and t.status in ~w(backlog todo)) do
       Server.Tickets.update(ticket, %{status: "doing"})
+    end
+
+    :ok
+  end
+
+  @recheck_batch 25
+
+  defp sweep_fact_rechecks do
+    last_check =
+      from e in Event,
+        where: e.kind in ["check_passed", "check_failed"] and like(e.detail, "%server recheck: %"),
+        group_by: e.correlation,
+        select: %{correlation: e.correlation, at: max(e.created_at)}
+
+    for fact <-
+          Repo.all(
+            from f in Server.Fact,
+              left_join: c in subquery(last_check),
+              on: c.correlation == fragment("'fact:' || ?", f.id),
+              where:
+                is_nil(f.forgotten_at) and not is_nil(f.thread_id) and
+                  f.id not in subquery(from s in Server.Fact, where: not is_nil(s.supersedes), select: s.supersedes),
+              order_by: [asc_nulls_first: c.at, asc: f.id],
+              limit: @recheck_batch
+          ) do
+      try do
+        Server.Recall.Recheck.run(fact)
+      rescue
+        _ -> :ok
+      end
     end
 
     :ok
