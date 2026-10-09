@@ -16,6 +16,7 @@ defmodule Server.Recall do
   alias Server.Message
   alias Server.Recall.Embedding
   alias Server.Recall.Strength
+  alias Server.Recall.Supersede
   alias Server.Repo
   alias Server.Thread
 
@@ -188,10 +189,15 @@ defmodule Server.Recall do
   defp keyword_relevance(nil, _ids), do: nil
   defp keyword_relevance(query, ids), do: Server.Search.fact_relevance(query, ids)
 
-  @doc "Store a fact's embedding vector + model (written after `bank_fact`, off the write path)."
+  @doc """
+  Store a fact's embedding vector + model (written after `bank_fact`, off the write path), then let
+  it supersede the older live fact in its scope it restates (`Server.Recall.Supersede`).
+  """
   @spec store_embedding(Fact.t(), [float()], String.t()) :: {:ok, Fact.t()} | {:error, term()}
   def store_embedding(%Fact{} = fact, vector, model) do
-    fact |> Fact.embedding_changeset(vector, model) |> Repo.update()
+    with {:ok, fact} <- fact |> Fact.embedding_changeset(vector, model) |> Repo.update() do
+      {:ok, Supersede.supersede(fact)}
+    end
   end
 
   @doc """
