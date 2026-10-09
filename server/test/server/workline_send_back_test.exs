@@ -150,6 +150,7 @@ defmodule Server.WorklineSendBackTest do
       thread = at_review("repeat")
       {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nfirst review"])
       assert {:ok, []} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nsecond review"])
+      assert {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["twice\n\na", "twice\n\nb"])
     end
 
     test "a blank follow-up files nothing" do

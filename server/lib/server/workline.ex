@@ -733,11 +733,11 @@ defmodule Server.Workline do
     filed = thread.id |> tied_follow_ups() |> MapSet.new(& &1.title)
 
     tickets =
-      for text <- items,
+      for text <- Enum.uniq_by(items, &(&1 |> String.trim() |> String.split("\n", parts: 2) |> hd())),
           String.trim(text) != "",
           [title | rest] = text |> String.trim() |> String.split("\n", parts: 2),
           not MapSet.member?(filed, String.trim(title)) do
-        origin = "Follow-up from ##{thread.id} (#{thread.title}), raised by #{author}. Held until ##{thread.id} merges."
+        origin = "Follow-up from ##{thread.id} (#{thread.title}), raised by #{author}. Held until ##{thread.id} closes."
 
         {:ok, ticket} =
           Server.Tickets.file(%{

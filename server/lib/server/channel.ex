@@ -133,8 +133,8 @@ defmodule Server.Channel do
         Staff.end_thread_sessions(thread.id)
         Server.Tickets.done_for(thread.id)
         Server.Attention.withdraw_asks_about(thread.id)
-        Server.Workline.release_follow_ups(closed)
         report_to_parent(closed)
+        release_follow_ups(closed)
         {:ok, closed}
 
       {0, _} ->
@@ -142,9 +142,6 @@ defmodule Server.Channel do
     end
   end
 
-  # The report-up wake: a closed child posts `✅ child #N “title” closed` into its parent, prefixed
-  # with `@<lead>` when the parent has one (the mention wakes the manager). Best-effort — a report
-  # failure never blocks the close. Top-level threads (no parent) report nothing.
   defp report_to_parent(%Thread{parent_thread_id: nil}), do: :ok
 
   defp report_to_parent(%Thread{parent_thread_id: parent_id} = child) do
@@ -532,5 +529,15 @@ defmodule Server.Channel do
         where: t.id == ^thread_id,
         select: a.name
     )
+  end
+
+  # The report-up wake: a closed child posts `✅ child #N “title” closed` into its parent, prefixed
+  # with `@<lead>` when the parent has one (the mention wakes the manager). Best-effort — a report
+  # failure never blocks the close. Top-level threads (no parent) report nothing.
+  # best-effort, as the report is: a ticket that won't update never fails the close
+  defp release_follow_ups(closed) do
+    Server.Workline.release_follow_ups(closed)
+  rescue
+    e -> require(Logger) && Logger.warning("follow-ups of ##{closed.id} not released: #{Exception.message(e)}")
   end
 end
