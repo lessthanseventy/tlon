@@ -451,10 +451,14 @@ defmodule Server.Workline do
     end
   end
 
+  @discarded_cap 3
+
   @doc """
   Landings that went missing: open worklines at review, waiting on no one, whose approval still
   stands but with no landing queued or running (a `Server.Jobs.Land` Lifeline rescued past its
-  attempts or Oban discarded). Each is queued again; returns those threads.
+  attempts or Oban discarded). Each is queued again; returns those threads. One whose landing has
+  been discarded #{@discarded_cap} times is left at review, already reported to the sheriff each time, rather
+  than crashing in a loop.
   """
   def requeue_stranded do
     stranded =
@@ -462,6 +466,7 @@ defmodule Server.Workline do
 
     for thread <- stranded,
         not Server.Office.Needs.landing?(thread),
+        discarded_landings(thread) < @discarded_cap,
         %{"by" => by, "sha" => sha} <- [approval(thread)],
         {:ok, queued} <- [
           queue(
@@ -472,6 +477,17 @@ defmodule Server.Workline do
         ] do
       queued
     end
+  end
+
+  defp discarded_landings(%Thread{id: id}) do
+    Repo.aggregate(
+      from(j in Oban.Job,
+        where:
+          j.worker == "Server.Jobs.Land" and j.state == "discarded" and
+            fragment("(? ->> 'thread_id')::int = ?", j.args, ^id)
+      ),
+      :count
+    )
   end
 
   @doc """

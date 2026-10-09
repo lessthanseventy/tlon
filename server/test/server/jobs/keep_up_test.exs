@@ -133,6 +133,21 @@ defmodule Server.Jobs.KeepUpTest do
       assert body =~ "PR #9" and body =~ "red"
     end
 
+    test "a PR that will not close is not reported, so the next tick does not repeat the report", %{thread: t} do
+      run = fn cmd, args, _opts ->
+        case args do
+          ["pr", "list" | _] -> {Jason.encode!(@red), 0}
+          ["pr", "close" | _] -> {"gh: boom", 1}
+          _ -> {cmd, 0}
+        end
+      end
+
+      KeepUp.red_checks("/repo", run)
+
+      assert %Server.Thread{stage: "merged"} = Repo.get!(Server.Thread, t.id)
+      assert [] = Repo.all(from m in Message, where: like(m.body, "🚨%"))
+    end
+
     test "a PR whose workline has not landed is left alone", %{thread: t} do
       Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "review"])
       KeepUp.red_checks("/repo", gh(@red))
