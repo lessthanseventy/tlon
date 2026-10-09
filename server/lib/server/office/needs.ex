@@ -59,7 +59,7 @@ defmodule Server.Office.Needs do
 
   defp wait(%Thread{stage: stage} = t, nil) when not is_nil(stage) do
     if Server.Workline.at_gate?(t),
-      do: item("gate", "blocking", t, gate_text(t, stage), t.created_at),
+      do: item("gate", "blocking", t, gate_text(t, stage), t.created_at, %{stage: stage}),
       else: question(t)
   end
 

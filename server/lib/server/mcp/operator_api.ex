@@ -54,6 +54,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
       POST   /api/threads/:id/approve     {"skip_qa"?} → Workline.approve: complete its parked gate; skip_qa
                                           (a reason) lands a review past an owed QA pass, recorded
+      POST   /api/threads/:id/send_back   {"stage", "why"} → Workline.send_back as the operator: back to
+                                          spec/plan/build on its own branch (400 without a why, 409 refused)
       GET    /api/threads/:id/docs        Workline.Docs.list (the workline's docs: work/<slug>/*.md)
       GET    /api/threads/:id/docs/:name  Workline.Docs.read (one doc's text; "current" is the stage's)
       POST   /api/threads/:id/verify      run a workline's verify again (Jobs.Verify), as entering verify does; 409 off verify
@@ -341,6 +343,19 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp on_thread(conn, "POST", ["track"], t), do: reply(conn, Workline.promote(t), &thread_row/1)
+
+  defp on_thread(conn, "POST", ["send_back"], t) do
+    {b, conn} = body(conn)
+
+    if is_binary(b["stage"]) and is_binary(b["why"]) and String.trim(b["why"]) != "",
+      do:
+        reply(
+          conn,
+          Workline.send_back(t, b["stage"], b["why"], Application.get_env(:server, :operator, "andrew")),
+          &thread_row/1
+        ),
+      else: json(conn, 400, %{error: "send_back takes a stage and a why"})
+  end
 
   defp on_thread(conn, "POST", ["verify"], %Thread{stage: "verify"} = t) do
     case Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: t.id, slug: t.slug})) do

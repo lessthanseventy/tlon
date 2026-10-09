@@ -110,6 +110,10 @@ defmodule Server.Alerts do
     }
   end
 
+  # a review gate has a build behind it, so it can also go back: to build for the code, to plan for its shape
+  defp actions(%{kind: "gate", thread_id: t, stage: "review"}),
+    do: [read_doc(t), call("Approve", "/approve", t), send_back("build", t), send_back("plan", t), other(t)]
+
   defp actions(%{kind: "gate", thread_id: t}), do: [read_doc(t), call("Approve", "/approve", t), other(t)]
 
   defp actions(%{kind: "dialog", thread_id: t, options: options}),
@@ -140,4 +144,6 @@ defmodule Server.Alerts do
   defp read_doc(t), do: %{label: "Read it", read: "/api/threads/#{t}/docs/current"}
 
   defp other(t), do: "Other…" |> call("/messages", t) |> Map.put(:input, "body")
+
+  defp send_back(stage, t), do: "Back to #{stage}…" |> call("/send_back", t, %{stage: stage}) |> Map.put(:input, "why")
 end
