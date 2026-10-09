@@ -233,6 +233,27 @@ defmodule Server.WorklineReviewHeadTest do
     assert %Thread{stage: "review", awaiting: "andrew"} = Repo.get!(Thread, thread.id)
   end
 
+  test "merged but not published: the sheriff hears of it, not only the closed thread", %{root: root} do
+    git(root, ["remote", "add", "origin", Path.join(root, "no-such-remote.git")])
+    roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "sheriff", "name" => "scharlach"}]
+    {:ok, ws} = Server.Workspaces.register(%{name: "Unpublished", roster: roster})
+    git(root, ["checkout", "-q", "-b", "work/unpublished"])
+    commit(root, "lib/unpublished.ex", "v1")
+    git(root, ["checkout", "-q", "main"])
+    {:ok, t} = Workline.open(%{title: "t unpublished", slug: "unpublished", stage: "review", workspace_id: ws.id})
+    {:awaiting, gate} = Workline.advance(t, artifacts: AllPresent)
+
+    {:ok, %{stage: "merged"}} = Workline.approve(gate, artifacts: AllPresent, merge: Merges)
+
+    told =
+      Repo.all(
+        from m in Server.Message, where: m.thread_id != ^t.id and like(m.body, "%not published%"), select: m.body
+      )
+
+    assert [report] = told
+    assert report =~ "unpublished"
+  end
+
   test "a closed workline doesn't advance", %{root: root} do
     thread = at_review(root, "closed-early")
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
