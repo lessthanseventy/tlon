@@ -115,6 +115,15 @@ defmodule Server.Attention do
           MapSet.put(acc, {tid, tab.name})
       end
 
+    panes =
+      for tab <- tabs,
+          tid = tab.thread_id || standing,
+          is_integer(tid),
+          into: MapSet.new(),
+          do: "#{tab.agent}/#{tid}/#{tab.name}"
+
+    Server.Shifts.prune(workspace_id, panes)
+
     # a prompt with no window (the PM's release gate) is no pane's to close
     for prompt <- open_prompts(workspace_id),
         prompt.payload["window"],
@@ -286,7 +295,7 @@ defmodule Server.Attention do
   on the thread that names an option. `about` is the thread the decision is about when it isn't
   `thread_id`: when that thread closes the ask is withdrawn (`withdraw_asks_about/1`). `{:ok, prompt}`.
   """
-  def ask(thread_id, author, question, [_ | _] = options, about \\ nil) do
+  def ask(thread_id, author, question, [_ | _] = options, about \\ nil, extra \\ %{}) do
     options = options |> Enum.with_index(1) |> Enum.map(fn {label, i} -> %{"key" => "#{i}", "label" => label} end)
     body = "⚑ #{author} asks — #{question}\n" <> Enum.map_join(options, " · ", &"(#{&1["key"]}) #{&1["label"]}")
 
@@ -297,7 +306,7 @@ defmodule Server.Attention do
       kind: "prompt",
       payload:
         Map.merge(
-          %{"ask" => author, "summary" => question, "options" => options},
+          Map.merge(%{"ask" => author, "summary" => question, "options" => options}, extra),
           if(about, do: %{"about" => about}, else: %{})
         )
     }
@@ -412,6 +421,8 @@ defmodule Server.Attention do
 
     with {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: prompt.id}) do
       resolve(prompt, "answered: " <> label)
+      # the night shift's offer (Server.Shifts): its first answer puts the day crew back
+      with %{"shift_back" => ws} when key == "1" <- prompt.payload, do: Server.Shifts.switch(ws, "day")
       {:ok, reply}
     end
   end

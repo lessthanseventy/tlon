@@ -143,6 +143,34 @@ defmodule Server.ShiftsTest do
     assert Shifts.current(ws.id) == "day"
   end
 
+  test "the limit's night shift comes with an offer to put the day crew back, answered from the inbox", %{ws: ws} do
+    {:ok, _lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+
+    assert [ask] = Server.Attention.open_asks()
+    assert Enum.map(ask.payload["options"], & &1["label"]) == ["day shift back", "stay on nights"]
+    assert ask.payload["summary"] =~ "reset at 5pm"
+
+    assert {:ok, _} = Server.Attention.answer_ask(ask.id, "andrew", "2")
+    assert Shifts.current(ws.id) == "night"
+
+    {:ok, _} = Shifts.switch(ws.id, "day")
+    :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", "❯ clear")
+    {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+    [again] = Server.Attention.open_asks()
+    assert {:ok, _} = Server.Attention.answer_ask(again.id, "andrew", "1")
+    assert Shifts.current(ws.id) == "day"
+  end
+
+  test "memory for panes no longer there is pruned", %{ws: ws} do
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+    Shifts.quota_check(ws.id, "hronir", "2/w2", limit)
+    :ok = Shifts.prune(ws.id, MapSet.new(["hronir/2/w2"]))
+    assert Map.keys(Server.Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"]) == ["hronir/2/w2"]
+  end
+
   test "only a Claude coworker's pane counts: a pi pane printing the words switches nothing", %{ws: ws} do
     emma = Server.Staff.agent_by_name("emma")
     {:ok, _} = Workspaces.retarget(ws.id, emma.id, %{model: "ollama-cloud/glm-5.2"})

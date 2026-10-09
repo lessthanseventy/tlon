@@ -176,14 +176,29 @@ defmodule Server.Shifts do
     reset =
       with [r] <- Regex.run(~r/reset[s]?[^\n]*/i, line <> "\n" <> after_line), do: " (Claude says: #{String.trim(r)})"
 
-    with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
-         do:
-           note(
-             %Thread{id: lobby},
-             "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, S on the crew screen puts the day crew back."
-           )
+    with %Thread{id: lobby} <- Channel.machine_thread(workspace_id) do
+      note(%Thread{id: lobby}, "☾ Claude's usage limit is reached, so the night shift is on#{reset}.")
+
+      {:ok, _} =
+        Server.Attention.ask(
+          lobby,
+          "tlon",
+          "Put the day crew back? Claude's limit#{reset} — answer once it has reset (or S on the crew screen).",
+          ["day shift back", "stay on nights"],
+          nil,
+          %{"shift_back" => workspace_id}
+        )
+    end
 
     {:switched, "night"}
+  end
+
+  @doc "Forget the limit memory of every pane not in `panes` (`\"agent/thread/window\"`): they are gone."
+  def prune(workspace_id, panes) do
+    seen = seen(workspace_id)
+    kept = Map.filter(seen, fn {key, _} -> MapSet.member?(panes, key) end)
+    if map_size(kept) != map_size(seen), do: put_seen(workspace_id, kept)
+    :ok
   end
 
   # the line's fingerprint, not its text: knobs reach every coworker's brief, and pane text is untrusted
