@@ -348,7 +348,8 @@ defmodule Server.Profiles do
       ],
       "excludeTools" =>
         ["register", "consult_peer", "open_thread", "close_thread", "operator_inbox"] ++
-          ~w(release_status check_candidate propose_release set_urgency submit_qa)
+          ~w(release_status check_candidate propose_release set_urgency submit_qa) ++
+          ~w(supersede_fact forget_fact review_proposals decide_proposal knowledge_report)
     }
   }
 
@@ -382,6 +383,16 @@ defmodule Server.Profiles do
   @pm_mcp @tlon_mcp
           |> update_in(["tlon", "directTools"], &(&1 ++ @pm_release_tools ++ ["machine_overview", "list_tickets"]))
           |> update_in(["tlon", "excludeTools"], &((&1 -- @pm_release_tools) ++ ["rename_identifier", "edit_clause"]))
+
+  # The librarian curates the office's memory — facts, never code — so it holds the curation verbs and
+  # the corpus reads, and none of the edit verbs.
+  @librarian_tools ~w(supersede_fact forget_fact review_proposals decide_proposal knowledge_report)
+  @librarian_mcp @tlon_mcp
+                 |> update_in(["tlon", "directTools"], &(&1 ++ @librarian_tools ++ ["search_facts", "get_facts"]))
+                 |> update_in(
+                   ["tlon", "excludeTools"],
+                   &((&1 -- @librarian_tools) ++ ["rename_identifier", "edit_clause"])
+                 )
 
   # QA uses the product and files what it saw; it neither edits code nor reviews the diff.
   @qa_mcp @reviewer_mcp
@@ -578,6 +589,27 @@ defmodule Server.Profiles do
   review requesting changes does; a pass moves it to the merge gate.#{@chat_etiquette}
   """
 
+  # The librarian persona → `system_prompt.md`. Inward: the office's own memory (the researcher looks out).
+  @librarian_role """
+  You are {{handle}}, the LIBRARIAN — you own the office's memory: the facts every brief recalls.
+  You look inward, at what the office already knows (the researcher looks outward). You do NOT
+  touch code (writes are denied to you), decide scope, or route work.
+
+  PROPOSALS. The correction judge files `supersede_proposed` events when a new fact seems to
+  correct an older one. `review_proposals` lists the open ones with both facts' text; read both,
+  then `decide_proposal(event_id, apply|reject, reason)`.
+  CURATION. Daily: `search_facts` for duplicates, stale or wrong facts, and junk (placeholder text
+  like "..."). A duplicate or a corrected fact → `supersede_fact(old_id, new_id, reason)`; junk or a
+  wrong fact nothing replaces → `forget_fact(fact_id, reason)`. Every change carries its reason.
+  A fact about code with no check: name the command that would re-check it.
+  STATED FACTS are the operator's words and his always-loaded constraints: never supersede, forget
+  or edit one — the tools refuse it. To change one, ask him: `ask_operator(question, options)`.
+  QUESTIONS. A coworker asking "what do we know about X": answer from `search_facts`/`get_facts`
+  (that cites what you used), with the fact ids, and say where the record is thin.
+  WEEKLY. `knowledge_report(notes)` posts the counts in the lobby; your notes say what changed and
+  what is shaky, three lines at most, with no @mention of the operator.#{@chat_etiquette}
+  """
+
   # The researcher persona → `system_prompt.md`. The deep-research discipline, distilled.
   @researcher_role """
   You are {{handle}}, a deep RESEARCHER on this server task thread. Answer by fanning out
@@ -639,6 +671,7 @@ defmodule Server.Profiles do
   #   * sheriff   — owns red: triages every red signal on its beat, routes or fixes, escalates the real.
   #   * pm        — owns what ships: releasability, the release pointer, the changelog, backlog urgency; no writes.
   #   * qa        — drives a reviewed user-visible change on a scratch release and files what it saw; no writes.
+  #   * librarian — owns the memory: decides the judge's proposals, supersedes/forgets with a reason; no writes.
   #   * researcher — deep multi-source fan-out + adversarial verification; sandbox scoped per workspace (tunable).
   #   * assistant — general life-assistant over a non-code workspace's git-tracked paths (sandbox tunable).
   @archetypes %{
@@ -696,6 +729,14 @@ defmodule Server.Profiles do
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
       system_prompt: @qa_role,
+      add_extensions: [@footer_extension]
+    },
+    librarian: %{
+      model: @sonnet,
+      mcp: @librarian_mcp,
+      sandbox: @tlon_sandbox,
+      permissions: @reviewer_permissions,
+      system_prompt: @librarian_role,
       add_extensions: [@footer_extension]
     },
     # researcher/assistant: @tlon_sandbox is the STARTING point — Slice 1 scopes it to the workspace's

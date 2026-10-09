@@ -256,6 +256,26 @@ defmodule Server.ProfilesTest do
       for {k, t} <- Profiles.archetypes(), k != :qa, do: assert("submit_qa" in t.mcp["tlon"]["excludeTools"], "#{k}")
     end
 
+    test "the librarian curates the office's memory with its own tools, writes no code, and no other archetype has them" do
+      lib = Profiles.instantiate(%{archetype: :librarian, name: "quain"})
+      tools = ~w(supersede_fact forget_fact review_proposals decide_proposal knowledge_report)
+      tlon = lib.mcp["tlon"]
+
+      for t <- tools ++ ~w(search_facts get_facts),
+          do: assert(t in tlon["directTools"] and t not in tlon["excludeTools"], t)
+
+      for cut <- ~w(edit_clause rename_identifier staff_child assign_lead), do: refute(cut in tlon["directTools"])
+      assert get_in(lib.permissions, ["permission", "write"]) == "deny"
+
+      for duty <- ["supersede_proposed", "ask_operator", "never", "STATED", "lobby", "quain"],
+          do: assert(lib.system_prompt =~ duty, duty)
+
+      for {k, t} <- Profiles.archetypes(),
+          k != :librarian,
+          tool <- tools,
+          do: assert(tool in t.mcp["tlon"]["excludeTools"], "#{k} reaches #{tool}")
+    end
+
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
       assert "machine_overview" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
       assert "operator_inbox" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
@@ -437,7 +457,7 @@ defmodule Server.ProfilesTest do
   describe "the archetype registry — role templates keyed by archetype atom" do
     test "the seed archetype set is present with sane defaults" do
       keys = Profiles.archetypes() |> Map.keys() |> Enum.sort()
-      assert keys == ~w(assistant builder planner pm qa researcher reviewer sheriff surveyor)a
+      assert keys == ~w(assistant builder librarian planner pm qa researcher reviewer sheriff surveyor)a
     end
 
     test "reviewer archetype cannot write (deny floor), builder can" do

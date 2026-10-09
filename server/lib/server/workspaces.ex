@@ -25,7 +25,11 @@ defmodule Server.Workspaces do
       # …and with its scope and its bench as rows (UX slice 5). A template/seed hands both over at
       # birth so a fresh workspace is never a workspace with nowhere to work and nobody to work.
       Enum.each(repos, &add_repo(workspace.id, &1))
-      bench |> Enum.with_index() |> Enum.each(fn {entry, i} -> seat(workspace.id, Map.put(entry, :sort, i)) end)
+
+      bench
+      |> Enum.with_index()
+      |> Enum.each(fn {entry, i} -> seat_at_birth(workspace.id, Map.put(entry, :sort, i)) end)
+
       Bus.announce({:ok, workspace}, :workspace_registered)
     end
   end
@@ -412,8 +416,21 @@ defmodule Server.Workspaces do
 
   defp normalize_seat(%{} = entry) do
     entry = Map.new(entry)
-    %{name: entry[:name] || entry["name"], archetype: entry[:archetype] || entry["archetype"]}
+
+    %{
+      name: entry[:name] || entry["name"],
+      archetype: entry[:archetype] || entry["archetype"],
+      grade: entry[:grade] || entry["grade"],
+      model: entry[:model] || entry["model"]
+    }
   end
+
+  # A birth seat may name its model (a `"provider/model"` key): it becomes the seat's policy.
+  defp seat_at_birth(workspace_id, %{model: model} = entry) when is_binary(model) do
+    with {:ok, c} <- seat(workspace_id, entry), do: retarget(workspace_id, c.agent_id, %{model: model})
+  end
+
+  defp seat_at_birth(workspace_id, entry), do: seat(workspace_id, entry)
 
   @doc "The policy for one coworker in one workspace, or nil (inherit everything)."
   @spec policy(integer(), integer()) :: Policy.t() | nil
