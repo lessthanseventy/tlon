@@ -122,6 +122,27 @@ defmodule Server.WorklineSendBackTest do
       assert %Thread{stage: "review"} = Repo.get!(Thread, thread.id)
     end
 
+    test "a landing that starts while a send-back holds the row waits, then finds it moved and does nothing" do
+      thread = at_review("lands-after")
+      test = self()
+
+      sender =
+        Task.async(fn ->
+          Repo.transaction(fn ->
+            locked = Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
+            {:ok, _} = locked |> Thread.workline_stage_changeset(%{stage: "plan"}) |> Repo.update()
+            send(test, :moving)
+            Process.sleep(300)
+          end)
+        end)
+
+      assert_receive :moving
+      job = %Oban.Job{args: %{"thread_id" => thread.id}, attempt: 1, max_attempts: 3}
+      assert :ok = Server.Jobs.Land.perform(job)
+      Task.await(sender)
+      assert %Thread{stage: "plan", state: "open"} = Repo.get!(Thread, thread.id)
+    end
+
     test "only backwards, only to a working stage" do
       thread = at_review("forward")
       assert {:error, {:not_behind, "review"}} = Workline.send_back(thread, "review", "x", "hronir")

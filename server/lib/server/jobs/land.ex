@@ -15,7 +15,8 @@ defmodule Server.Jobs.Land do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"thread_id" => tid}, attempt: attempt, max_attempts: max}) do
-    # read under the lock a send-back moves it under, so a send-back at the same instant is seen
+    # the lock only orders this read against a send-back (which moves the row under it): one in
+    # flight is seen; it doesn't guard the landing, which send-back refuses once this job exists
     {:ok, thread} =
       Server.Repo.transaction(fn ->
         Server.Repo.one(from t in Server.Thread, where: t.id == ^tid, lock: "FOR UPDATE")
