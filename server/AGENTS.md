@@ -79,7 +79,13 @@ and every layer the spine design's re-laid §9 asked for
   busted over `Server.PubSub` (no Redis, no restart): work that lands dark ships behind a flag the
   server names, off; the office gets every flag in its snapshot. Flip one with
   `mise run server:cli -- flag <name> on|off` or `PATCH /api/flags/:name`.
-- **recall + forgetting** (`Server.Recall`, `Server.Search`) — the budgeted always-loaded set.
+- **recall + forgetting** (`Server.Recall`, `Server.Search`) — the budgeted always-loaded set. A
+  superseded fact is demoted: a newer fact supersedes an older one in its scope when it restates it
+  (`Server.Recall.Supersede`, exact or cosine ≥ 0.92) or a model judges it restates or corrects it
+  (the turn-pass extractor's labels, `Server.Recall.Judge` for every other bank). Judged supersedes
+  ship dark behind the `:judged_supersede` flag — off, only `supersede_proposed` events, applied or
+  rejected by `Supersede.apply_proposal/1` / `reject_proposal/2`. A stated fact is never judged away;
+  a correction of one is an ask to the operator.
 - **seed + bootstrap** (`Server.Seed`, `Server.Bootstrap`) — the wipe-proof base knowledge
   (`priv/seed/repo_knowledge.exs` + the machine-appended `promoted_facts.exs`) and the default
   workspace, applied idempotently on every boot.

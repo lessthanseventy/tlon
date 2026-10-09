@@ -114,6 +114,121 @@ defmodule Server.MemoryTurnPassTest do
     assert :ok = TurnPass.run(0, extractor: StubExtractor, min_messages: 1)
   end
 
+  describe "labelling against the nearest live facts in scope" do
+    # The extractor names, per candidate, whether it is new or restates/corrects an existing fact it
+    # was shown; the pass sends that verdict to Supersede.judged/5 (how: "extracted").
+    defmodule LabellingExtractor do
+      @moduledoc false
+      @behaviour Extractor
+
+      @impl true
+      def extract(_messages, existing) do
+        send(self(), {:shown, Enum.map(existing, & &1.id)})
+        [target | _] = Enum.filter(existing, &(&1.text =~ "every todo"))
+
+        {:ok,
+         [
+           %{
+             kind: "learned",
+             text: "in_flight skips a todo ticket whose promoted thread is closed",
+             verdict: "corrects",
+             old: target.id,
+             reason: "the fix changed what in_flight counts"
+           }
+         ]}
+      end
+    end
+
+    defmodule InventingExtractor do
+      @moduledoc false
+      @behaviour Extractor
+
+      @impl true
+      def extract(_messages, _existing),
+        do: {:ok, [%{kind: "learned", text: "a claim", verdict: "corrects", old: 999_999, reason: "made up"}]}
+    end
+
+    setup do
+      {:ok, ws} = Server.Workspaces.register(%{name: "labels"})
+      {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "tlon", repos: []})
+      {:ok, other} = Server.Projects.register(%{workspace_id: ws.id, name: "other", repos: []})
+      {:ok, here} = Channel.open_thread(%{title: "here", workspace_id: ws.id, project_id: project.id})
+      {:ok, sibling} = Channel.open_thread(%{title: "sibling", workspace_id: ws.id, project_id: project.id})
+      {:ok, away} = Channel.open_thread(%{title: "away", workspace_id: ws.id, project_id: other.id})
+
+      {:ok, old} =
+        Server.Dossier.bank_fact(%{
+          thread_id: sibling.id,
+          kind: "learned",
+          text: "in_flight counts every todo ticket",
+          provenance: "derived"
+        })
+
+      {:ok, elsewhere} =
+        Server.Dossier.bank_fact(%{
+          thread_id: away.id,
+          kind: "learned",
+          text: "in_flight counts every todo ticket",
+          provenance: "derived"
+        })
+
+      for body <- ["why is the todo ticket holding a slot", "in_flight counts every todo", "fixed in 11de4ca"] do
+        {:ok, _} = Channel.post(%{thread_id: here.id, author: "hronir-machine", body: body})
+      end
+
+      %{here: here, old: old, elsewhere: elsewhere}
+    end
+
+    defp down_embedder(_text), do: {:error, :econnrefused}
+
+    test "with the embedder down, keyword neighbours from the project are shown — never another project's",
+         %{here: here, old: old, elsewhere: elsewhere} do
+      :ok = TurnPass.run(here.id, extractor: LabellingExtractor, min_messages: 3, embed: &down_embedder/1)
+
+      assert_received {:shown, ids}
+      assert old.id in ids
+      refute elsewhere.id in ids
+    end
+
+    test "flag off: the extractor's correction is a proposal", %{here: here, old: old} do
+      :ok = TurnPass.run(here.id, extractor: LabellingExtractor, min_messages: 3, embed: &down_embedder/1)
+
+      new = Repo.get_by!(Fact, thread_id: here.id)
+      assert is_nil(new.supersedes)
+      assert [event] = Repo.all_by(Server.Event, kind: "supersede_proposed")
+      assert event.correlation == "fact:#{new.id}"
+      assert event.detail["how"] == "extracted"
+      assert event.detail["old"] == old.id
+      assert event.detail["reason"] == "the fix changed what in_flight counts"
+    end
+
+    test "flag on: the extractor's correction supersedes", %{here: here, old: old} do
+      {:ok, true} = FunWithFlags.enable(:judged_supersede)
+      :ok = TurnPass.run(here.id, extractor: LabellingExtractor, min_messages: 3, embed: &down_embedder/1)
+
+      assert Repo.get_by!(Fact, thread_id: here.id).supersedes == old.id
+      assert [%{detail: %{"how" => "extracted"}}] = Repo.all_by(Server.Event, kind: "superseded")
+    end
+
+    test "a verdict on a fact the extractor was never shown is dropped; the fact still banks", %{here: here} do
+      {:ok, true} = FunWithFlags.enable(:judged_supersede)
+      :ok = TurnPass.run(here.id, extractor: InventingExtractor, min_messages: 3, embed: &down_embedder/1)
+
+      assert %Fact{supersedes: nil} = Repo.get_by!(Fact, thread_id: here.id)
+      assert Repo.aggregate(Server.Event, :count) == 0
+    end
+  end
+
+  test "the CLI extractor reads each candidate's verdict, defaulting to new" do
+    out =
+      ~s({"facts": [{"kind": "learned", "text": "a", "verdict": "corrects", "old": 7, "reason": "r"},) <>
+        ~s( {"kind": "decision", "text": "b"}]})
+
+    assert {:ok, [a, b]} = Extractor.Claude.parse(out)
+    assert %{verdict: "corrects", old: 7, reason: "r"} = a
+    assert %{verdict: "new", old: nil} = b
+  end
+
   describe "schedule/1" do
     setup do
       previous = Application.get_env(:server, :memory_pass)

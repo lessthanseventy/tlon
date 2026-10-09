@@ -15,6 +15,7 @@ defmodule Server.Recall do
   alias Server.Fact
   alias Server.Message
   alias Server.Recall.Embedding
+  alias Server.Recall.Judge
   alias Server.Recall.Strength
   alias Server.Recall.Supersede
   alias Server.Repo
@@ -245,16 +246,23 @@ defmodule Server.Recall do
   slow/down embedder never blocks the `bank_fact` reply, and its crash can't take the caller. Called
   from the MCP write path (`Server.MCP.Tool.BankFact`); returns the fact unchanged (a side effect on
   the write result, never load-bearing). A node with no embedder just no-ops (`embed_fact` is
-  best-effort — recall falls back to keyword + strength).
+  best-effort — recall falls back to keyword + strength). Once embedded, a fact that restates
+  nothing outright is judged against its related facts (`Server.Recall.Judge`) — unless `judge:
+  false`, which the turn pass passes, its extractor having judged its facts already.
   """
-  @spec embed_on_write(Fact.t()) :: Fact.t()
-  @spec embed_on_write(Message.t()) :: Message.t()
-  def embed_on_write(%Fact{} = fact) do
-    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> embed_fact(fact) end)
+  @spec embed_on_write(Fact.t(), keyword()) :: Fact.t()
+  @spec embed_on_write(Message.t(), keyword()) :: Message.t()
+  def embed_on_write(fact_or_message, opts \\ [])
+
+  def embed_on_write(%Fact{} = fact, opts) do
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+      with {:ok, embedded} <- embed_fact(fact), true <- Keyword.get(opts, :judge, true), do: Judge.judge(embedded)
+    end)
+
     fact
   end
 
-  def embed_on_write(%Message{} = message) do
+  def embed_on_write(%Message{} = message, _opts) do
     Task.Supervisor.start_child(Server.TaskSupervisor, fn -> embed_message(message) end)
     message
   end

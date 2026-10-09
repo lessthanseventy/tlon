@@ -19,14 +19,14 @@ defmodule Server.ModelCli do
   }
 
   @doc """
-  Run `prompt` through the configured CLI with stdin closed, cut off after `:model_cli_timeout_s`
-  (120). `{:ok, stdout}`, or `{:error, {:model_cli_timeout, s} | {:model_cli_missing, msg} |
-  {:model_cli_exit, code, msg}}`.
+  Run `prompt` through the configured CLI with stdin closed, cut off after `opts[:timeout_s]`, else
+  `:model_cli_timeout_s` (120). `{:ok, stdout}`, or `{:error, {:model_cli_timeout, s} |
+  {:model_cli_missing, msg} | {:model_cli_exit, code, msg}}`.
   """
-  def prompt(prompt, cmd_key, model_key, {default_cmd, default_model} \\ {"claude", "haiku"}) do
+  def prompt(prompt, cmd_key, model_key, {default_cmd, default_model} \\ {"claude", "haiku"}, opts \\ []) do
     cmd = Application.get_env(:server, cmd_key, default_cmd)
     model = Application.get_env(:server, model_key, default_model)
-    timeout = Application.get_env(:server, :model_cli_timeout_s, 120)
+    timeout = opts[:timeout_s] || Application.get_env(:server, :model_cli_timeout_s, 120)
 
     # System.cmd leaves stdin an open pipe, and `pi -p` reads it as the rest of the prompt — it
     # waits forever. The CLI gets /dev/null, and `timeout` bounds a call that hangs regardless.
