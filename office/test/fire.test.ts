@@ -4,7 +4,7 @@ import { ARGOS } from "../kit/pets"
 import { FIRE_GRACE } from "../kit/sim"
 import { createHash } from "node:crypto"
 import { closet, corner, WideRoom, widePlan, zones } from "../rooms/wide"
-import { focus, measure } from "./golden"
+import { focus, measure, seeded } from "./golden"
 import { office } from "./wcag.test"
 
 const up = () => viewOf(office(), 1)
@@ -54,6 +54,16 @@ describe("Argos in the smoke", () => {
     expect(r.dog.mode).not.toBe("sleep")
     expect(r.dog.y).toBeGreaterThan(160)
     expect([...said].some((s) => ARGOS.smoke.includes(s))).toBe(true)
+  })
+})
+
+describe("Argos holds at the muster", () => {
+  test("whatever the dice, he is still out there once the fire has burned a while", () => {
+    for (let seed = 1; seed <= 40; seed++) seeded(seed, () => {
+      const r = new WideRoom(696) as any
+      run(r, up, 300); run(r, down, FIRE_GRACE + 900)
+      expect(r.dog.y, `seed ${seed}`).toBeGreaterThan(160)
+    })
   })
 })
 

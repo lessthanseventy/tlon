@@ -229,7 +229,7 @@ export class WideRoom extends Sim<Layout> {
     if (!d.path.length && (d.x !== m.x || d.y !== m.y)) {
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, m)]
       d.aisle = m.aisle; d.mode = "walk"; d.fuss = null
-    }
+    } else if (!d.path.length) d.until = this.tick + 200 // stays put: stepDog would roam him off when this runs out
     if (this.quiet(d.saidUntil) && Math.random() < 1 / 40) this.dogSay(this.argos("smoke"))
   }
 
