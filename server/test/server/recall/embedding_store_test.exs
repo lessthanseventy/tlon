@@ -26,4 +26,25 @@ defmodule Server.Recall.EmbeddingStoreTest do
     assert reloaded.embedding == [0.1, 0.2, 0.3]
     assert reloaded.embedding_model == "nomic-embed-text"
   end
+
+  test "embed_missing fills what embed-on-write missed — facts and chat — and stops when the embedder is down" do
+    {:ok, thread} = Channel.open_thread(%{title: "gaps"})
+    {:ok, m} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "a chat line"})
+
+    fake = fn
+      %Fact{} = f ->
+        Recall.store_embedding(f, [0.5], "fake")
+
+      %Server.Message{} = msg ->
+        msg |> Ecto.Changeset.change(embedding: [0.5], embedding_model: "fake") |> Repo.update()
+    end
+
+    assert Recall.embed_missing(embed: fake) >= 2
+    assert Repo.get(Server.Message, m.id).embedding == [0.5]
+    assert Fact |> Repo.all() |> Enum.all?(& &1.embedding)
+
+    {:ok, m2} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "another"})
+    assert Recall.embed_missing(embed: fn _ -> {:error, :econnrefused} end) == 0
+    assert is_nil(Repo.get(Server.Message, m2.id).embedding)
+  end
 end

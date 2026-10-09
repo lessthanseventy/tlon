@@ -18,6 +18,8 @@ defmodule Server.Maintain.Sweep do
     * a worktree no thread is working in (`Server.Maintain.Strays`) → removed when it holds
       nothing, unless it is the lobby's, which the coworkers' home windows run in; one holding
       work stays, for the operator (the needs list's stranded work)
+    * a fact or chat message still without an embedding (the embedder was down when it was
+      written) → embedded now, a batch per sweep (`Server.Recall.embed_missing/1`)
 
   Stateless: nag recency derives from the durable nag message, a flag from its slug row —
   so `Server.Jobs.Maintain` runs it on Oban's cron (one-brain piece E, slice 2) with nothing
@@ -49,6 +51,8 @@ defmodule Server.Maintain.Sweep do
     sweep_quiet(opts)
     sweep_tickets()
     sweep_worktrees()
+    # embed-on-write is best-effort: what an embedder outage missed is caught up here
+    _ = Server.Recall.embed_missing()
     :ok
   end
 
