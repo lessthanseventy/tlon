@@ -102,6 +102,26 @@ defmodule Server.WorklineSendBackTest do
       assert %Thread{stage: "review"} = Repo.get!(Thread, landing.id)
     end
 
+    test "a landing queued while the send-back waits on the row is seen once the lock is let go" do
+      thread = at_review("racing")
+      test = self()
+
+      racer =
+        Task.async(fn ->
+          Repo.transaction(fn ->
+            Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
+            %{thread_id: thread.id} |> Server.Jobs.Land.new() |> Repo.insert!()
+            send(test, :locked)
+            Process.sleep(300)
+          end)
+        end)
+
+      assert_receive :locked
+      assert {:error, {:in_flight, _}} = Workline.send_back(thread, "plan", "x", "hronir")
+      Task.await(racer)
+      assert %Thread{stage: "review"} = Repo.get!(Thread, thread.id)
+    end
+
     test "only backwards, only to a working stage" do
       thread = at_review("forward")
       assert {:error, {:not_behind, "review"}} = Workline.send_back(thread, "review", "x", "hronir")
