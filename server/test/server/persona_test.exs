@@ -27,7 +27,7 @@ defmodule Server.PersonaTest do
     Application.put_env(:server, :generator_cmd, cli)
 
     on_exit(fn ->
-      Application.delete_env(:server, :generator_cmd)
+      Application.put_env(:server, :generator_cmd, "/nonexistent/tlon-test-generator")
       Application.delete_env(:server, :generator_daily_cap)
       File.rm_rf!(dir)
     end)
@@ -108,5 +108,29 @@ defmodule Server.PersonaTest do
 
   test "an unknown seat is an error", %{ws: ws} do
     assert {:error, :no_seat} = Persona.generate(ws.id, "nobody", seed: 1)
+  end
+
+  test "edit changes the named fields, keeps the seed, and marks it edited", %{ws: ws} do
+    {:ok, a} = Persona.generate(ws.id, "lonnrot", seed: 42)
+
+    assert {:ok, b} =
+             Persona.edit(ws.id, "lonnrot", %{
+               "voice" => "terse",
+               "quirks" => %{"hobby" => "go"},
+               "seed" => 9,
+               "nope" => 1
+             })
+
+    assert b["voice"] == "terse" and b["seed"] == 42 and b["edited"] == true
+    assert b["quirks"]["hobby"] == "go" and b["quirks"]["catchphrase"] == a["quirks"]["catchphrase"]
+    refute Map.has_key?(b, "nope")
+    assert Persona.get(ws.id, "lonnrot") == b
+  end
+
+  test "the office snapshot's bench carries the seat's persona", %{ws: ws} do
+    seat = fn -> Enum.find(Server.Office.status().bench, &(&1.name == "lonnrot")) end
+    assert seat.().persona == nil
+    {:ok, p} = Persona.generate(ws.id, "lonnrot", seed: 3)
+    assert seat.().persona == p
   end
 end

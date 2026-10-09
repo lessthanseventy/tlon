@@ -15,6 +15,8 @@ defmodule Server.Persona do
 
   alias Server.{Repo, WorkspaceAgent}
 
+  @quirk_keys ~w(desk_object hobby catchphrase pet_peeve)
+
   @voices %{
     "scharlach" => "crisp and slightly too formal; enforces the rules and enjoys it too much",
     "tertius" => "dry, unflappable, has seen it all",
@@ -62,6 +64,21 @@ defmodule Server.Persona do
       nil -> {:error, :no_seat}
       {_agent, %{persona: %{} = p}} -> {:ok, p}
       {_agent, _row} -> generate(workspace_id, name)
+    end
+  end
+
+  @doc """
+  Edit the seat's persona by hand: `backstory`, `voice` and any of the four `quirks`, nothing else
+  (the seed stays the one that drew it). Made first when the seat has none. Marked `"edited"`.
+  """
+  @spec edit(integer(), String.t(), map()) :: {:ok, map()} | {:error, :no_seat}
+  def edit(workspace_id, name, attrs) do
+    with {:ok, p} <- ensure(workspace_id, name) do
+      quirks = Map.merge(p["quirks"], Map.take(attrs["quirks"] || %{}, @quirk_keys))
+      p = p |> Map.merge(Map.take(attrs, ~w(backstory voice))) |> Map.merge(%{"quirks" => quirks, "edited" => true})
+      {_agent, row} = seat(workspace_id, name)
+      {:ok, _} = row |> Ecto.Changeset.change(persona: p) |> Repo.update()
+      {:ok, p}
     end
   end
 
@@ -125,8 +142,8 @@ defmodule Server.Persona do
   def parse(out) do
     Server.JsonBlob.first_valid(out, fn
       %{"backstory" => b, "quirks" => %{} = q, "voice" => v} when is_binary(b) and is_binary(v) ->
-        keys = ~w(desk_object hobby catchphrase pet_peeve)
-        if Enum.all?(keys, &is_binary(q[&1])), do: %{"backstory" => b, "quirks" => Map.take(q, keys), "voice" => v}
+        if Enum.all?(@quirk_keys, &is_binary(q[&1])),
+          do: %{"backstory" => b, "quirks" => Map.take(q, @quirk_keys), "voice" => v}
 
       _ ->
         nil

@@ -404,6 +404,20 @@ defmodule Server.MCP.GatewayTest do
       assert {404, _} = request_json(:delete, "/api/workspaces/#{ws["id"]}", %{})
     end
 
+    test "a coworker's persona: made, rerolled and edited over HTTP" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
+      {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "builder"})
+      url = "/api/workspaces/#{ws.id}/coworkers/#{seat.agent_id}/persona"
+
+      {200, a} = post_json(url, %{})
+      assert is_integer(a["seed"]) and a["voice"] =~ "careful"
+      {200, b} = post_json(url, %{reroll: true})
+      assert b["seed"] != a["seed"]
+      {200, c} = request_json(:patch, url, %{voice: "calm"})
+      assert c["voice"] == "calm" and c["seed"] == b["seed"]
+      assert {404, _} = post_json("/api/workspaces/#{ws.id}/coworkers/999999/persona", %{})
+    end
+
     test "tickets: change a field, delete" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Office"})
       {:ok, tk} = Server.Tickets.file(%{workspace_id: ws.id, title: "a"})

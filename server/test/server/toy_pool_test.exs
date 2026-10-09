@@ -21,7 +21,7 @@ defmodule Server.ToyPoolTest do
     Application.put_env(:server, :generator_cmd, cli)
 
     on_exit(fn ->
-      Application.delete_env(:server, :generator_cmd)
+      Application.put_env(:server, :generator_cmd, "/nonexistent/tlon-test-generator")
       Application.delete_env(:server, :generator_daily_cap)
       File.rm_rf!(dir)
     end)

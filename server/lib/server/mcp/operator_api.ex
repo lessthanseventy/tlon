@@ -87,6 +87,8 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/workspaces/:id          Workspaces.remove (its threads move on; the last is refused)
       POST   /api/workspaces/:id/coworkers  {"name", "archetype", "model"?, "effort"?, "ask"?} → seat + retarget; 201
       PATCH  /api/workspaces/:id/coworkers/:agent_id  {"model"?, "effort"?, "ask"?} → Workspaces.retarget
+      POST   /api/workspaces/:id/coworkers/:agent_id/persona  {"reroll"?} → its persona, made if none (Server.Persona)
+      PATCH  /api/workspaces/:id/coworkers/:agent_id/persona  {"backstory"?, "voice"?, "quirks"?} → Persona.edit
                                           ("inherit" puts a knob back to the archetype's; absent leaves it)
       POST   /api/workspaces/:id/coworkers/:agent_id/aside  {"question"} → Office.aside_spec: the
                                           command to run and where — the CALLER runs it
@@ -436,6 +438,9 @@ defmodule Server.MCP.OperatorAPI do
 
   defp on_workspaces(conn, "PATCH", [id, "coworkers", a]),
     do: with_workspace(conn, id, &with_int(conn, a, fn agent -> retarget(conn, &1, agent) end))
+
+  defp on_workspaces(conn, method, [id, "coworkers", a, "persona"]) when method in ["POST", "PATCH"],
+    do: with_workspace(conn, id, &with_int(conn, a, fn agent -> persona(conn, &1, agent, method) end))
 
   defp on_workspaces(conn, "POST", [id, "coworkers", a, "aside"]),
     do: with_workspace(conn, id, &with_int(conn, a, fn agent -> aside(conn, &1, agent) end))
@@ -806,6 +811,26 @@ defmodule Server.MCP.OperatorAPI do
   defp retarget(conn, ws, agent) do
     {b, conn} = body(conn)
     reply(conn, Workspaces.retarget(ws.id, agent, knobs(b)), &policy_row/1)
+  end
+
+  # POST makes the seat's persona (or `{"reroll": true}` draws a new seed); PATCH edits it by hand
+  defp persona(conn, ws, agent_id, method) do
+    case Enum.find(Workspaces.bench(ws.id), &(&1.agent_id == agent_id)) do
+      nil ->
+        json(conn, 404, %{error: "no coworker #{agent_id} on #{ws.name}"})
+
+      c ->
+        {b, conn} = body(conn)
+
+        result =
+          cond do
+            method == "PATCH" -> Server.Persona.edit(ws.id, c.name, b)
+            b["reroll"] == true -> Server.Persona.reroll(ws.id, c.name)
+            true -> Server.Persona.ensure(ws.id, c.name)
+          end
+
+        reply(conn, result, & &1)
+    end
   end
 
   # a seated coworker's context cleared: its sessions end, its windows close; the next message spawns it fresh
