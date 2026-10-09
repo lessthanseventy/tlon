@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { glowOf, steamOf } from "../kit/draw"
 import { ROLE } from "../kit/palette"
-import { MEET_BOTTOM, WideRoom, zones } from "../rooms/wide"
+import { MEET_BOTTOM, WideRoom, widePlan, zones } from "../rooms/wide"
 import { office } from "./wcag.test"
 
 describe("Sim.at", () => {
@@ -124,5 +124,17 @@ describe("a bird in the cat's slot", () => {
     try { for (let i = 0; i < 400 && !w.cat.path.length; i++) room.step(viewOf(office(), 1)) } finally { Math.random = real }
     const to = w.cat.path.at(-1)!
     expect(w.plan.cat.perches.some((p) => p.x === to.x && p.y === to.y)).toBe(true)
+  })
+})
+
+describe("the fire-drill muster", () => {
+  test("the floor plan has a muster spot per crew slot, outside by the exit, none sharing a place or standing in furniture", () => {
+    const p = widePlan(696), blocks = p.blocks(p.layout(viewOf(office(), 1)))
+    expect(p.muster!.length).toBeGreaterThanOrEqual(12)
+    expect(new Set(p.muster!.map((s) => `${s.x}:${s.y}`)).size).toBe(p.muster!.length)
+    for (const s of p.muster!) {
+      expect(s.kind).toBe("exit")
+      expect(blocks.some((b) => s.x >= b.x && s.x < b.x + b.w && s.y >= b.y && s.y < b.y + b.h)).toBe(false)
+    }
   })
 })
