@@ -2,7 +2,7 @@ import Config
 
 # The suite's own database on the local Postgres, DROPPED and created fresh per run by test_helper —
 # so two checkouts sharing one would delete it under each other mid-run. Each checkout gets its own:
-# a worktree at .worktrees/<name> uses tlon_test_<name>, the main checkout tlon_test.
+# any git worktree uses tlon_test_<name>_<hash of its path>, the main checkout tlon_test.
 # TLON_TEST_DATABASE names another (a second suite in the same checkout).
 # The naming rule lives in Server.TestDatabaseName (config/support/), tested directly by
 # test/server/test_database_name_test.exs — a config file itself can't be run by ExUnit.
