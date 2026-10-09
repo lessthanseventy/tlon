@@ -129,15 +129,17 @@ defmodule Server.Bench.Roles.Runner do
 
   @doc """
   Seed `work` with `server/` as it was at the parent of `sha` in the repo at `root` (the state the
-  real workline started from), plus the live `_build` so a task compiles incrementally; committed as
+  real workline started from), plus the live `_build` and `deps` so a task compiles incrementally and needs no network; committed as
   the fixture.
   """
   def seed_source(root, sha, work) do
     {_, 0} =
       System.cmd("sh", ["-c", ~s(git -C "$0" archive "$1^" server | tar -x -C "$2"), root, sha, work])
 
-    build = Path.join(root, "server/_build")
-    if File.dir?(build), do: System.cmd("cp", ["-r", "--reflink=auto", build, Path.join(work, "server/_build")])
+    for dir <- ~w(_build deps), File.dir?(Path.join([root, "server", dir])) do
+      System.cmd("cp", ["-r", "--reflink=auto", Path.join([root, "server", dir]), Path.join([work, "server", dir])])
+    end
+
     commit_fixture(work)
   end
 
