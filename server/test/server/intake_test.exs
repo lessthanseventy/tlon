@@ -160,6 +160,19 @@ defmodule Server.IntakeTest do
     end
   end
 
+  test "a todo ticket whose promoted thread closed unmerged holds no slot", %{ws: ws, route: route} do
+    stuck = file(ws, "stuck", "low")
+    {:ok, stuck} = Tickets.update(stuck, %{status: "todo"})
+    thread = Server.Repo.insert!(Server.Thread.open_changeset(%{title: "gave up", workspace_id: ws.id}))
+    {:ok, _} = thread |> Server.Thread.state_changeset("closed") |> Server.Repo.update()
+    {:ok, _} = Tickets.tie(stuck, thread.id, "promoted")
+    next = file(ws, "next", "high")
+
+    Intake.run(cap: 1, route: route)
+    assert_received {:routed, id}
+    assert id == next.id
+  end
+
   test "the intake is on the cron" do
     crontab =
       Enum.find_value(Application.get_env(:server, Oban)[:plugins], fn
