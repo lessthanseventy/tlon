@@ -114,7 +114,8 @@ defmodule Server.Channel do
       post(%{
         thread_id: thread.id,
         author: "tlon",
-        body: "#{mention}⚠ not closed: #{reason}. Tracked as workline #{tracked.slug} at build — finish it and let it merge."
+        body:
+          "#{mention}⚠ not closed: #{reason}. Tracked as workline #{tracked.slug} at build — finish it and let it merge."
       })
 
       {:tracked, tracked}

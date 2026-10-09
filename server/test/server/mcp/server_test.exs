@@ -723,14 +723,21 @@ defmodule Server.MCP.ServerTest do
     repo = Path.join(System.tmp_dir!(), "close-tool-#{System.unique_integer([:positive])}")
     File.mkdir_p!(repo)
     on_exit(fn -> File.rm_rf!(repo) end)
-    git = fn dir, args -> System.cmd("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true) end
+
+    git = fn dir, args ->
+      System.cmd("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true)
+    end
+
     {_, 0} = git.(repo, ["init", "-q", "-b", "main"])
     File.write!(Path.join(repo, "README"), "seed\n")
     {_, 0} = git.(repo, ["add", "README"])
     {_, 0} = git.(repo, ["commit", "-qm", "seed"])
 
     {:ok, ws} = Server.Workspaces.register(%{name: "Strand"})
-    {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "p", repos: [%{"name" => "r", "path" => repo}]})
+
+    {:ok, project} =
+      Server.Projects.register(%{workspace_id: ws.id, name: "p", repos: [%{"name" => "r", "path" => repo}]})
+
     {:ok, plain} = Channel.open_thread(%{title: "plain", workspace_id: ws.id, project_id: project.id})
     {:ok, wt} = Server.Worktree.ensure(repo, "t#{plain.id}")
     File.write!(Path.join(wt, "w.txt"), "x\n")

@@ -321,6 +321,7 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp on_thread(conn, "POST", ["messages"], t), do: post(conn, t)
+
   defp on_thread(conn, "POST", ["close"], t) do
     case Channel.close_thread(t) do
       {:tracked, tracked} -> reply(conn, {:ok, tracked}, &thread_row/1)
