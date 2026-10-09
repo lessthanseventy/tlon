@@ -243,6 +243,51 @@ defmodule Server.WorklineReviewHeadTest do
     assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "nothing landed"))
   end
 
+  test "the moved-workline brief wakes the lead the bounce staffed, not the reviewer who held it",
+       %{root: root} do
+    Application.put_env(:server, :arbiter, Server.Arbiter.Test)
+    Application.put_env(:server, :test_pid, self())
+
+    on_exit(fn ->
+      Application.delete_env(:server, :arbiter)
+      Application.delete_env(:server, :test_pid)
+    end)
+
+    thread = at_review(root, "moved-wake")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    {:ok, queued} = thread |> parked() |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+    for {name, pane} <- [{"emma", "wEmma"}, {"lonnrot", "wLonnrot"}] do
+      agent = Repo.get_by!(Server.Agent, name: name)
+      {:ok, _} = Server.Staff.start_session(%{agent_id: agent.id, thread_id: thread.id, pane_ref: pane})
+    end
+
+    gate = fn _repo, _branch ->
+      {:error, {:bounced, _}} =
+        Workline.qa_verdict(Repo.get!(Thread, thread.id), "fail", "nolan", "R doesn't reload", artifacts: AllPresent)
+
+      {:ok, :green}
+    end
+
+    assert {:ok, _} = Workline.land_queued(queued, merge: GatedMerges, gate: gate)
+    assert Channel.thread_lead(thread.id) == "emma"
+
+    flush_woken()
+    moved = Enum.find(Channel.thread_messages(thread), &(&1.body =~ "nothing landed"))
+    Server.Switchboard.deliver(moved)
+
+    assert_received {:woke, "wEmma", _}
+    refute_received {:woke, "wLonnrot", _}
+  end
+
+  defp flush_woken do
+    receive do
+      {:woke, _, _} -> flush_woken()
+    after
+      0 -> :ok
+    end
+  end
+
   test "an approval the merge queue can't take leaves the gate parked on the operator", %{root: root} do
     thread = at_review(root, "unqueued")
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
