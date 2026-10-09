@@ -4,7 +4,14 @@ alias Ecto.Adapters.Postgres
 # repo under :test (config/test.exs), so the harness owns its lifecycle.
 config = Server.Repo.config()
 
-_ = Postgres.storage_down(config)
+# force_drop: a connection left over from an earlier run would otherwise make the drop fail
+# quietly and the create below report :already_up.
+:ok =
+  case Postgres.storage_down(Keyword.put(config, :force_drop, true)) do
+    {:error, :already_down} -> :ok
+    other -> other
+  end
+
 :ok = Postgres.storage_up(config)
 
 {:ok, _} = Server.Repo.start_link()
