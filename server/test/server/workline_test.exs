@@ -858,6 +858,20 @@ defmodule Server.WorklineTest do
       assert [] = Workline.requeue_stranded()
     end
 
+    test "requeue_stranded: a landing that keeps being discarded is requeued a bounded number of times" do
+      queued = queued_lamp!()
+
+      for _ <- 1..2 do
+        Repo.update_all(Oban.Job, set: [state: "discarded"])
+        assert [%{id: id}] = Workline.requeue_stranded()
+        assert id == queued.id
+      end
+
+      Repo.update_all(Oban.Job, set: [state: "discarded"])
+      assert [] = Workline.requeue_stranded()
+      refute Server.Office.Needs.landing?(Repo.get!(Server.Thread, queued.id))
+    end
+
     test "a thread that isn't a workline just reopens" do
       {:ok, t} = Channel.open_thread(%{title: "chat"})
       {:ok, closed} = Channel.close_thread(t)

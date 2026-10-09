@@ -4,8 +4,8 @@ defmodule Server.Jobs.KeepUp do
   auto-merge can go (`Server.Workline.Publish.refresh_behind/2`), those that now conflict with main
   are closed and their worklines sent back to build (`Server.Workline.reland/2`) rather than left
   stranded with their threads closed, and those whose checks went red (so auto-merge never fires)
-  are reported to the workspace's sheriff, closed and sent back the same way, and its main checkout is brought level with origin/main,
-  fast-forward only (`follow_main/2`).
+  are closed, reported to the workspace's sheriff and sent back the same way, and its main
+  checkout is brought level with origin/main, fast-forward only (`follow_main/2`).
 
   A main that has drifted is never merged: it is one ticket (and one lobby post) in the workspace
   whose project owns the repo, or one keyed note for the operator when none does, updated in place
@@ -54,10 +54,11 @@ defmodule Server.Jobs.KeepUp do
     for %{number: n, slug: slug} <- Server.Workline.Publish.failing(repo, run),
         %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
       why = "its PR ##{n}'s checks went red"
-      Server.Sheriff.report(t, "#{why}, so GitHub will never merge it; the workline is back at build")
 
-      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to fix it", run),
-           do: Server.Workline.reland(t, why, "#{why}. Fix work/#{t.slug} until its checks pass, test")
+      with :ok <- Server.Workline.Publish.close(repo, n, "#{why}; the workline is back at build to fix it", run) do
+        Server.Sheriff.report(t, "#{why}, so GitHub will never merge it; the workline is back at build")
+        Server.Workline.reland(t, why, "#{why}. Fix work/#{t.slug} until its checks pass, test")
+      end
     end
   end
 
