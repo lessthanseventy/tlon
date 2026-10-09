@@ -33,6 +33,8 @@ export type Ticket = { id: number; workspace_id: number; project_id: number | nu
 export type Agents = {
   ok: boolean
   roster: Seat[]
+  /** uqbar's open session, if any (kit/uqbar.ts): lifted out of the roster by viewOf, so it never gets a desk */
+  uqbar?: Seat | null
   /** every open thread, newest first; a staffed one carries its roster entry */
   threads: Thread[]
   counts: Record<string, number>

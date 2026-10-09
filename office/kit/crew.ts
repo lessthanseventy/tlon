@@ -46,7 +46,8 @@ export function busiest(a: Agents): number | null {
 export function viewOf(a: Agents, ws: number | null): Agents {
   const threads = a.threads.filter((t) => t.workspace_id === ws)
   const bench = a.bench.filter((c) => c.workspace_id === ws)
-  const sessions = a.roster.filter((r) => r.workspace_id === ws)
+  const sessions = a.roster.filter((r) => r.workspace_id === ws && r.agent !== "uqbar")
+  const uqbar = a.roster.find((r) => r.agent === "uqbar") ?? null
   // a desk for every staffed open thread, not only the ones with a session: a Claude Code worker
   // registers none until it calls register. Without one, a thread's own running window means
   // working — but not the lobby's, whose lead runs there all day
@@ -57,7 +58,7 @@ export function viewOf(a: Agents, ws: number | null): Agents {
       return { agent: t.lead!, thread_id: t.id, title: t.title, warm: !!t.live && !t.standing, thinking: !!t.thinking?.includes(t.lead!), archetype: c?.archetype ?? null, lead: c?.lead ?? false, workspace_id: ws }
     })
   return {
-    ...a, threads, roster: [...sessions, ...unregistered], bench,
+    ...a, threads, roster: [...sessions, ...unregistered], bench, uqbar,
     tickets: a.tickets.filter((t) => t.workspace_id === ws), projects: a.projects.filter((p) => p.workspace_id === ws),
     notes: a.notes.filter((n) => n.workspace_id === ws || n.workspace_id === null), visits: a.visits.filter((v) => v.workspace_id === ws),
     awaiting: threads.filter(needsYou).length,
