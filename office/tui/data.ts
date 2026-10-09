@@ -190,6 +190,10 @@ export const hire = (ws: number, name: string, archetype: string) => write(`hiri
 export const seatShift = (seat: number, name: string, crew: "day" | "night" | "all") => send("PATCH", `putting ${name} on ${crew === "all" ? "both shifts" : `the ${crew} shift`}`, `/seats/${seat}`, () => `${name} is on ${crew === "all" ? "both shifts" : `the ${crew} shift`}`, { crew })
 export const shiftSwitch = (ws: number, shift: "day" | "night") => write(`starting the ${shift} shift`, "/office/shift", { workspace_id: ws, shift }, (j) => `the ${shift} shift is on · ${j.restaffed?.length ?? 0} worklines restaffed, ${j.waiting?.length ?? 0} threads waiting`)
 export const retarget = (ws: number, agent: number, knobs: { model?: string; ask?: string }) => send("PATCH", "changing a coworker", `/workspaces/${ws}/coworkers/${agent}`, (j) => `now ${j.model ? `${j.model.provider}/${j.model.model}` : "the archetype's model"} · ${j.ask ?? "the archetype's ask"}`, knobs)
+/** a seat's persona: made if none, or `reroll` for a new seed */
+export const persona = (ws: number, agent: number, reroll = false) => send("POST", "making a persona", `/workspaces/${ws}/coworkers/${agent}/persona`, (j) => `persona: seed ${j.seed}`, { reroll })
+/** change what a person wrote into a persona: `voice`, `backstory` or `quirks` */
+export const personaEdit = (ws: number, agent: number, fields: { voice?: string; backstory?: string; quirks?: Record<string, string> }) => send("PATCH", "editing a persona", `/workspaces/${ws}/coworkers/${agent}/persona`, () => "persona changed", fields)
 export const unseat = (seat: number, name: string) => send("DELETE", `letting ${name} go`, `/seats/${seat}`, () => `${name} is off the bench`)
 
 export const workspaceNew = (name: string, template: string) => write(`opening ${name}`, "/workspaces", { name, template }, (j) => `opened ${j.name}`)
