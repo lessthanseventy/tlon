@@ -178,7 +178,7 @@ defmodule Server.Office.Banter do
   def scene(ctx) do
     people =
       Enum.map_join(ctx.crew, "\n", fn c ->
-        "- #{c.name}, #{c.archetype}#{if c.lead, do: " (lead)"}: #{if c.thread, do: thread_line(c.thread), else: "on the bench, idle"}"
+        "- #{c.name}, #{c.archetype}#{if c.lead, do: " (tech lead)"}: #{if c.thread, do: thread_line(c.thread), else: "on the bench, idle"}"
       end)
 
     "THE OFFICE:\n#{people}\nTickets waiting: #{ctx.tickets |> Enum.take(5) |> Enum.join("; ")}"

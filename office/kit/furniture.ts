@@ -107,7 +107,7 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
   sc.item(d.y + 32, () => {
     const p = d.seat
     // the name at body size, the role a step smaller beside it
-    const tail = d.kind === "manager" ? "(manager)" : "(lead)", tw = measure(tail, 9), colour = there ? shirtOf(p.archetype) : ROLE.inactive
+    const tail = d.kind === "manager" ? "(manager)" : "(tech lead)", tw = measure(tail, 9), colour = there ? shirtOf(p.archetype) : ROLE.inactive
     const name = fit(measure, p.agent, d.w - 4 - tw, 12), nw = measure(name, 12), x = d.x + d.w / 2 - (nw + 2 + tw) / 2
     sc.text(name, x, d.y + 38 - 2 / 3, colour, 12, "left"); sc.text(tail, x + nw + 2, d.y + 38 - 2 / 3, colour, 9, "left")
     const agentId = a.bench.find((b) => b.name === p.agent)?.agent_id ?? null

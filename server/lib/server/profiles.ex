@@ -430,9 +430,10 @@ defmodule Server.Profiles do
       hands itself on by stage (spec/plan → planner, build/verify → builder, review → reviewer), so
       pick the lead for the stage it starts at.
     * Before you file or staff work, CHECK IT: what's asked must be in the ticket in its source's
-      own words (quote the message or suggestion, with its id) — never only your summary of it —
-      and it must not already be on origin/main (`search_history`, the merged worklines). Work that
-      is already done or has no source text is closed or held, never staffed.
+      own words (quote the message or suggestion, with its id) — never only your summary of it.
+      Then ask the workspace's TECH LEAD (its lead builder, named on the bench) for his read with a
+      post naming him on the lobby: already on main? overlaps a workline in flight? which grade?
+      spec first? Staff by his read; work he calls done, duplicate or sourceless is closed or held.
     * A ticket you can't staff yet because it waits on something: `update_ticket` it to backlog
       with the `held` label and the reason in its body. Intake leaves a held ticket alone (never
       routes it, never auto-starts it) until you take the label off.
@@ -486,6 +487,21 @@ defmodule Server.Profiles do
   """
 
   # The builder persona → `system_prompt.md`. TDD + verification-before-completion, distilled.
+  # Appended to the brief of the seat that is its workspace's lead (`lead_duties/2`).
+  @tech_lead """
+  YOU ARE ALSO THIS WORKSPACE'S TECH LEAD. tertius owns the flow (who does what, when); you own the
+  work's coherence (what, and how). Your judgment comes before your own building:
+    * Before a workline is staffed, tertius asks you for your read. Answer on that thread: is it
+      already on origin/main (check the log and search_history), does it overlap a workline in
+      flight (the same files — say which and propose an order), what grade it needs (junior for
+      small mechanical changes, greybeard for migrations, gates and the engine), and whether it
+      needs a spec first. Work that is done, duplicate or sourceless: say close or hold, and why.
+    * Builders bring you their technical questions before the operator. Settle what you can; only
+      scope, priority and taste go to the operator, as ask_operator with options.
+    * Hold back a workline that would collide with one in flight until the first lands.
+    * Build only greybeard work, and only when nothing waits on your read.
+  """
+
   @builder_role """
   You are {{handle}}, an implementation BUILDER on this server task thread. You work strictly
   test-first: RED — write the failing test and RUN it, watch it fail for the right reason; GREEN —
@@ -805,7 +821,7 @@ defmodule Server.Profiles do
       model: model,
       sandbox: t.sandbox,
       permissions: apply_yolo_override(t.permissions, policy[:yolo]),
-      system_prompt: personalize(t.system_prompt, name)
+      system_prompt: personalize(t.system_prompt, name) <> lead_duties(workspace_id, name)
     }
   end
 
@@ -931,6 +947,16 @@ defmodule Server.Profiles do
   # unchanged — String.replace is a no-op, so those personas stay byte-identical. Every
   # archetype carries a prompt (Elixir 1.20's type checker proved a nil clause dead).
   defp personalize(prompt, name), do: String.replace(prompt, "{{handle}}", name)
+
+  # The workspace's lead (its first builder, `Server.Coworker.lead/1`) is its tech lead.
+  defp lead_duties(nil, _name), do: ""
+
+  defp lead_duties(workspace_id, name) do
+    case Server.Workspaces.lead(workspace_id) do
+      %{name: ^name} -> "\n\n" <> @tech_lead
+      _ -> ""
+    end
+  end
 
   @doc "The ring entry after `current` (matched on provider+model), wrapping; unknown → the ring head."
   @spec next_model(map() | nil) :: map()

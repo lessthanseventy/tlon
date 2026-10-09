@@ -60,4 +60,13 @@ defmodule Server.GradeTest do
   test "a grade outside the three is refused", %{ws: ws} do
     assert {:error, _} = Workspaces.seat(ws.id, %{name: "nobody", archetype: "builder", grade: "intern"})
   end
+
+  test "the bench's lead is its tech lead: his brief carries the duties, another builder's doesn't", %{ws: ws} do
+    lead = Workspaces.lead(ws.id)
+    other = ws.id |> Workspaces.bench() |> Enum.find(&(&1.archetype == "builder" and &1.name != lead.name))
+    brief = fn c -> (c |> Profiles.roster_entry() |> Profiles.instantiate(ws.id)).system_prompt end
+
+    assert brief.(lead) =~ "TECH LEAD"
+    refute brief.(other) =~ "TECH LEAD"
+  end
 end
