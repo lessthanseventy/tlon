@@ -1,27 +1,74 @@
 # tlon
 
-**The name.** Borges' *Ficciones* (1944) names the machine this grew up on; this repo is named for
-one story in it: **Tlön**, from "Tlön, Uqbar, Orbis Tertius" (1940), where scholars find an encyclopedia of
-an invented planet and, as they study the fiction, it bleeds into reality and overwrites it. That is
-exactly what the product does — you author a fictional organization (a cast of agents, workspaces,
-knobs) and, through use, it becomes real work in your actual repo. The fiction overwrites reality.
+**An office for a crew of AI coworkers, in your terminal.** You hand them tickets; they plan, build,
+verify, review and land the work in your repo, through a pipeline that won't merge what nobody
+checked. You watch it happen in a pixel-art room, and they come to your door when something is yours
+to decide.
 
-Tlön is **many UIs over one memory** — a communication, planning, and coordination surface for a crew
-of AI agents. Three internal apps make it up, named for what they do:
+![The office at work: the crew at their desks and in the lounge, the worklines on the whiteboard, a coworker's quip in a speech balloon, and the crew's corkboard of notes to each other below](docs/screenshots/office.png)
 
-- **`server`** — the shared spine: the data model, the communication bus, the single-writer discipline,
-  the always-up MCP channel. (The memory concept is *Funes the Memorious* — the man who could not
-  forget — living on in the recall engine.)
-- **`office`** — the pixel-art room over the spine, in your terminal: coworkers at their desks when
-  they work, queued at your door when a thread waits on you, the worklines on the whiteboard, Nina the
-  cat. Click or key into anyone to read their thread and reply; the finder, inbox, tickets, notes,
-  memory and the crew's hiring and settings are all in the room.
-- **`adapters`** — the hands: how a working agent (Claude Code, pi) reaches the spine, wakes up already
-  knowing its thread, and banks what it learns.
+Some moods, from the [sandbox](#try-it-without-a-server):
 
-A **workspace** is a project inside Tlön (*ficciones*, the machine, is one). The crew keep their Borges
-names — **tertius** (the Orbis Tertius meta-agent), **hronir** (the builder). Cute names only for
-things with personality; everything else is called what it is.
+<table>
+<tr>
+<td colspan="2"><img src="docs/screenshots/day.png" alt="A quiet day: the crew at their desks, Nina the cat on the rug"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/night.png" alt="The office at night: dark windows, stars, the crew heading home"></td>
+<td><img src="docs/screenshots/firedrill.png" alt="A fire drill: the crew files out under alarm marks, a balloon says Fire drill! Everybody out!"></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/doorbell.png" alt="The doorbell: Ding dong! in the lounge"></td>
+<td><img src="docs/screenshots/event.png" alt="An event: Did anyone else hear that?"></td>
+</tr>
+</table>
+
+## What it does
+
+**The crew.** Each coworker is a named agent with a role and a model routed to it: a **manager**
+(tertius) who triages tickets and staffs them, **builders** (the first is the tech lead, who owns the
+work's coherence), **planners**, **reviewers**, **QA**, a **sheriff** who owns anything red, a **PM**
+who decides what ships, a **librarian** who keeps the office's memory honest, a **researcher** and an
+**assistant**. They run in real harnesses (Claude Code or [pi](https://github.com/badlogic/pi-mono)),
+each in its own terminal, and join the office as citizens over MCP: a coworker wakes already knowing
+its thread, its brief and what the office knows.
+
+**Worklines.** Real work moves through stages, each owing an artifact before it can move on:
+`intent → spec → plan → build → verify → review → merged`.
+
+![A workline's card: its stages, the coworker on it, and their live session streaming in](docs/screenshots/workline.png)
+
+- The **server** verifies, not the builder: it runs the full gate on the branch and records the evidence.
+- A **reviewer** on a different model than the builder reads the change. Its verdict is tied to the
+  commit it read; code committed afterwards goes back to build rather than landing on an old approval.
+- A model that didn't write it **grades the risk**. Under your standing approval, low-risk changes land
+  on their own; everything else waits for you.
+- **QA** drives anything you'd see, on a scratch release, before it lands.
+- The **merge queue** rebases onto main, gates it again, and opens the PR.
+- Work can be **sent back** to an earlier stage on the same branch, the build kept to improve, and a
+  reviewer's non-blocking findings become **follow-up tickets** instead of nits that block or vanish.
+
+**Your desk.** What needs you arrives as one decision with its answers attached: approve a landing,
+send it back, pick between two options a coworker laid out. Everything else stays out of your way.
+Threads you can read and reply to, a finder, an inbox, tickets and epics, notes, the crew's hiring and
+settings, a calendar, the office's memory: all in the room.
+
+**Memory.** Coworkers bank what they learn as facts with provenance; recall puts the relevant ones
+in every brief. A newer fact that restates or corrects an older one retires it, and facts that name
+code are rechecked when the code moves.
+
+**Measured.** `mise run bench:roles` checks whether each role can do its job on the model it's routed
+to, and at what cost, so routing is a measurement rather than a guess.
+
+## Try it without a server
+
+The office has a sandbox: a made-up world with its own crew and play keys (`d` doorbell, `e` event,
+`t` treat, `f` fire drill, `n` night, `w` weather, `p` pet, `c` call over). The moods above come from it.
+
+```sh
+OFFICE_SANDBOX=1 tlon office      # from a release
+mise run office:sandbox           # from a checkout
+```
 
 ## Install
 
@@ -87,3 +134,13 @@ tlon/
 [mise](https://mise.jdx.dev) brings the toolchains (Erlang, Elixir, bun). `mise run server:setup` once,
 `mise run office:run` for the office over a running server, `mise run server:package` to build the
 executables above. Start with `AGENTS.md`; the gate is `mise run check`.
+
+## The name
+
+Borges' *Ficciones* (1944) names the machine this grew up on; this repo is named for one story in it:
+**Tlön**, from "Tlön, Uqbar, Orbis Tertius" (1940), where scholars find an encyclopedia of an invented
+planet and, as they study the fiction, it bleeds into reality and overwrites it. That is what the
+office does: you author a fictional organization — a cast of agents, workspaces, knobs — and through
+use it becomes real work in your actual repo. The crew keep their Borges names (**tertius**, the Orbis
+Tertius manager; **hronir**, the builder; the memory engine is *Funes the Memorious*, the man who
+could not forget). Cute names only for things with personality; everything else is called what it is.
