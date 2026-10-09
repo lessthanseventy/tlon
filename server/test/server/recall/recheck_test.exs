@@ -23,7 +23,10 @@ defmodule Server.Recall.RecheckTest do
     on_exit(fn -> File.rm_rf!(repo) end)
 
     {:ok, ws} = Server.Workspaces.register(%{name: "W"})
-    {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "p", repos: [%{"name" => "t", "path" => repo}]})
+
+    {:ok, project} =
+      Server.Projects.register(%{workspace_id: ws.id, name: "p", repos: [%{"name" => "t", "path" => repo}]})
+
     {:ok, thread} = Channel.open_thread(%{title: "t", workspace_id: ws.id, project_id: project.id})
     %{thread: thread}
   end
@@ -33,7 +36,8 @@ defmodule Server.Recall.RecheckTest do
     f
   end
 
-  defp checks(f), do: Repo.all(from e in Event, where: e.correlation == ^"fact:#{f.id}" and like(e.kind, "check_%"), select: e.kind)
+  defp checks(f),
+    do: Repo.all(from e in Event, where: e.correlation == ^"fact:#{f.id}" and like(e.kind, "check_%"), select: e.kind)
 
   test "a fact whose refs exist passes", %{thread: t} do
     f = fact(t, "`Server.A` exists in server/lib/a.ex")

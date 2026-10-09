@@ -11,8 +11,7 @@ defmodule Server.Recall.Probe do
   def found?(repo, {:function, name}), do: grep(repo, "def " <> name)
   def found?(repo, {:task, name}), do: grep(repo, name, ["--", "mise.toml", "tasks"])
 
-  defp grep(repo, needle, paths \\ []),
-    do: git(repo, ["grep", "-q", "-F", "-e", needle, "origin/main"] ++ paths)
+  defp grep(repo, needle, paths \\ []), do: git(repo, ["grep", "-q", "-F", "-e", needle, "origin/main"] ++ paths)
 
   defp git(repo, args) do
     {_, status} = System.cmd("git", ["-C", repo | args], stderr_to_stdout: true)

@@ -39,7 +39,7 @@ defmodule Server.Recall.Recheck do
         thread_id: fact.thread_id,
         exit: if(missing == [], do: 0, else: 1),
         cmd: @prefix <> summary(refs),
-        tail: if(missing == [], do: nil, else: "gone: " <> summary(missing)),
+        tail: if(missing != [], do: "gone: " <> summary(missing)),
         correlation: "fact:#{fact.id}"
       })
 
