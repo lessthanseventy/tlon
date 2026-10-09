@@ -69,6 +69,18 @@ defmodule Server.Jobs.KeepUpTest do
       assert [_one] = Repo.all(from m in Message, where: m.thread_id == ^lobby.id and m.author == "tlon")
     end
 
+    test "no lobby to post on falls back to the keyed operator note", %{ws: ws, lobby: lobby} do
+      Repo.delete_all(from m in Message, where: m.thread_id == ^lobby.id)
+      Repo.delete!(lobby)
+
+      KeepUp.drifted("/r/owned", {:diverged, 4})
+      KeepUp.drifted("/r/owned", {:diverged, 5})
+
+      assert [%{text: text}] = notes("/r/owned")
+      assert text =~ "5 commit"
+      assert [_] = Tickets.open_in_workspace(ws.id)
+    end
+
     test "main level again closes the ticket", %{ws: ws} do
       KeepUp.drifted("/r/owned", {:diverged, 4})
       KeepUp.drifted("/r/owned", :forwarded)
