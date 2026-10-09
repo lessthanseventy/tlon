@@ -103,6 +103,24 @@ defmodule Server.Tickets do
   def epic_of(ticket_id),
     do: Repo.one(from l in TicketLink, where: l.to_id == ^ticket_id and l.kind == "parent", select: l.from_id)
 
+  @doc """
+  Tie each of `ticket_ids` to the epic `epic_id` (a `parent` link). All or nothing: the first refusal rolls the rest
+  back and is returned as `{:error, {ticket_id, changeset}}` so a caller can name the ticket. `{:ok, ticket_ids}`.
+  """
+  @spec adopt(integer(), [integer()]) :: {:ok, [integer()]} | {:error, {integer(), Ecto.Changeset.t()}}
+  def adopt(epic_id, ticket_ids) do
+    Repo.transaction(fn ->
+      Enum.each(ticket_ids, fn id ->
+        case link(epic_id, id, "parent") do
+          {:ok, _} -> :ok
+          {:error, cs} -> Repo.rollback({id, cs})
+        end
+      end)
+
+      ticket_ids
+    end)
+  end
+
   @doc "Promote a ticket into the thread it became (links it + moves it to `doing`)."
   def promote(%Ticket{} = ticket, thread_id) do
     with {:ok, _tie} <- tie(ticket, thread_id, "promoted") do
