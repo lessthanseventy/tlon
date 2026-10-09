@@ -221,8 +221,8 @@ defmodule Server.MemoryTurnPassTest do
 
   test "the CLI extractor reads each candidate's verdict, defaulting to new" do
     out =
-      ~s({"facts": [{"kind": "learned", "text": "a", "verdict": "corrects", "old": 7, "reason": "r"},) <>
-        ~s( {"kind": "decision", "text": "b"}]})
+      ~s({"facts": [{"kind": "learned", "text": "Use pnpm for installs", "verdict": "corrects", "old": 7, "reason": "r"},) <>
+        ~s( {"kind": "decision", "text": "Ship behind a flag"}]})
 
     assert {:ok, [a, b]} = Extractor.Claude.parse(out)
     assert %{verdict: "corrects", old: 7, reason: "r"} = a
