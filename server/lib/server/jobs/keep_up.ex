@@ -3,10 +3,13 @@ defmodule Server.Jobs.KeepUp do
   Every few minutes, each project repo's landings that GitHub left behind main are rebased so their
   auto-merge can go (`Server.Workline.Publish.refresh_behind/2`), those that now conflict with main
   are closed and their worklines sent back to build (`Server.Workline.reland/2`) rather than left
-  stranded with their threads closed, and its main checkout is brought
-  level with origin/main, fast-forward only (`follow_main/2`); one that has drifted is never a merge: it is one ticket (and one lobby post) in the workspace whose
-  project owns the repo, or one keyed note for the operator when none does, updated in place and
-  cleared when main is level again.
+  stranded with their threads closed, and its main checkout is brought level with origin/main,
+  fast-forward only (`follow_main/2`).
+
+  A main that has drifted is never merged: it is one ticket (and one lobby post) in the workspace
+  whose project owns the repo, or one keyed note for the operator when none does, updated in place
+  and cleared only when main is level again. Whether the operator should also hear when the crew
+  can't handle a drift (a live session committing to that main) is open.
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 120]
 
@@ -55,7 +58,7 @@ defmodule Server.Jobs.KeepUp do
     end
   end
 
-  def drifted(repo, _level) do
+  def drifted(repo, :forwarded) do
     Server.Rollout.clear({:drift, repo})
 
     with ws when not is_nil(ws) <- owner(repo), %Server.Ticket{} = t <- open_ticket(ws, repo) do
@@ -64,6 +67,9 @@ defmodule Server.Jobs.KeepUp do
 
     :ok
   end
+
+  # an error or a skipped check says nothing about drift: leave the note and ticket as they are
+  def drifted(_repo, _other), do: :ok
 
   defp route(ws, repo, title, n) do
     body =
