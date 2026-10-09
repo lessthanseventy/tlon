@@ -161,6 +161,7 @@ defmodule Server.MCP.Tool.FileTicket do
     field :priority, :enum, values: ["low", "med", "high"], default: "med"
     field :labels, {:list, :string}, default: [], description: "Freeform labels"
     field :assignee, :string, description: "Who it's for (an agent handle or the operator), optional"
+    field :epic_id, :integer, description: "File the ticket as a child of this epic (a ticket of kind epic), optional"
   end
 
   @impl true
