@@ -200,6 +200,13 @@ defmodule Server.ChannelTest do
       assert t1 |> Channel.thread_messages() |> Enum.map(& &1.body) == ["mine"]
     end
 
+    test "a closed thread no longer waits on anyone" do
+      {:ok, t} = Channel.open_thread(%{title: "asked"})
+      {:ok, _} = Server.Attention.ask(t.id, "daneri", "A or B?")
+      {:ok, closed} = Channel.close_thread(Channel.thread(t.id))
+      assert %{state: "closed", awaiting: nil} = Server.Repo.get!(Server.Thread, closed.id)
+    end
+
     test "open_threads/0 returns open PROJECT threads and omits closed and machine-scope ones" do
       {:ok, open} = Channel.open_thread(%{title: "still open"})
       {:ok, done} = Channel.open_thread(%{title: "finished"})
