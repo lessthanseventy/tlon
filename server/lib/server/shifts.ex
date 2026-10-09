@@ -18,6 +18,10 @@ defmodule Server.Shifts do
 
   @shifts ~w(day night)
 
+  # Claude Code's own usage-limit line, anchored to how it prints it, so a pane that only talks
+  # about limits never reads as out of quota
+  @quota_out ~r/^\s*(⎿\s*)?(Claude usage limit reached|(5-hour|weekly|session) limit reached\b|You've hit your (usage )?limit\b)/miu
+
   @doc "The workspace's shift, `day` or `night`."
   def current(workspace_id), do: Repo.one(from w in Workspace, where: w.id == ^workspace_id, select: w.shift) || "day"
 
@@ -43,6 +47,35 @@ defmodule Server.Shifts do
   """
   def hire_crew(workspace_id) do
     if Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew != "all")), do: current(workspace_id), else: "all"
+  end
+
+  @doc "Whether a pane's text shows Claude Code's usage limit reached."
+  def out_of_quota?(text) when is_binary(text), do: Regex.match?(@quota_out, text)
+
+  @doc """
+  A coworker's pane text, read by the attention sweep: Claude's usage limit reached on the day shift,
+  with a night crew to come on, puts the night shift on and tells the lobby why (the board's `S` puts
+  the day crew back after the reset). Once: on the night shift there is nothing to switch.
+  `{:switched, "night"}` | `:ok`.
+  """
+  def quota_check(workspace_id, text) do
+    with true <- out_of_quota?(text),
+         "day" <- current(workspace_id),
+         true <- Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew == "night")),
+         {:ok, _} <- switch(workspace_id, "night") do
+      reset = with [line] <- Regex.run(~r/reset[s]?[^\n]*/i, text), do: " (Claude says: #{String.trim(line)})"
+
+      with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
+           do:
+             note(
+               %Thread{id: lobby},
+               "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, the shift board's S puts the day crew back."
+             )
+
+      {:switched, "night"}
+    else
+      _ -> :ok
+    end
   end
 
   @doc "Put a seat on a shift: `day`, `night` or `all` (both). `{:ok, seat}` | `{:error, changeset | :not_found}`."

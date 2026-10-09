@@ -109,7 +109,9 @@ defmodule Server.Attention do
     seen =
       for tab <- tabs, tid = tab.thread_id || standing, is_integer(tid), reduce: MapSet.new() do
         acc ->
-          reconcile_safely(workspace_id, tid, tab.name, detect(capture(workspace_id, tab.index)))
+          text = capture(workspace_id, tab.index)
+          reconcile_safely(workspace_id, tid, tab.name, detect(text))
+          Server.Shifts.quota_check(workspace_id, text)
           MapSet.put(acc, {tid, tab.name})
       end
 

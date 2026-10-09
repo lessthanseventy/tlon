@@ -303,8 +303,11 @@ defmodule Server.Workspaces do
   @spec manager(integer() | nil) :: Coworker.t() | nil
   def manager(nil), do: nil
 
-  def manager(workspace_id),
-    do: workspace_id |> bench() |> Enum.find(&Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype))
+  # the manager on shift, else the one off: intake always has someone to route it
+  def manager(workspace_id) do
+    meta? = &Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype)
+    Enum.find(bench(workspace_id), meta?) || Enum.find(bench_all(workspace_id), meta?)
+  end
 
   @doc """
   Seat a coworker on a workspace's bench, registering the `agent` if this handle is new — a bench
