@@ -225,7 +225,8 @@ defmodule Server.Office do
         archetype: c.archetype,
         lead: c.lead?,
         model: p && p.model,
-        ask: p && p.ask_default
+        ask: p && p.ask_default,
+        persona: c.persona
       }
     end
   end

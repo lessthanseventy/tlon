@@ -286,7 +286,8 @@ defmodule Server.Workspaces do
            sort: wa.sort,
            grade: wa.grade,
            specialty: wa.specialty,
-           crew: wa.crew
+           crew: wa.crew,
+           persona: wa.persona
          }}
     )
     |> Repo.all()
@@ -396,7 +397,8 @@ defmodule Server.Workspaces do
         sort: wa.sort,
         grade: wa.grade,
         specialty: wa.specialty,
-        crew: wa.crew
+        crew: wa.crew,
+        persona: wa.persona
       }
     )
   end

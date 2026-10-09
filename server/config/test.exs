@@ -35,6 +35,7 @@ config :server, Server.Web.Endpoint,
 
 config :server, bootstrap: false
 config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
+config :server, generator_cmd: "/nonexistent/tlon-test-generator"
 
 # Test transcripts are written moments before they are imported; nothing here is a live session.
 # Imported sessions are titled by a model CLI in prod; here there is none, so the first-line fallback

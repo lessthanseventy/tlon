@@ -28,6 +28,7 @@ defmodule Server.Coworker do
     :sort,
     :grade,
     :specialty,
+    :persona,
     crew: "all",
     lead?: false
   ]
@@ -41,6 +42,7 @@ defmodule Server.Coworker do
           grade: String.t() | nil,
           specialty: String.t() | nil,
           crew: String.t(),
+          persona: map() | nil,
           lead?: boolean()
         }
 
