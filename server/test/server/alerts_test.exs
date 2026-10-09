@@ -133,6 +133,25 @@ defmodule Server.AlertsTest do
     assert info.thread_id == 7 and info.at == @now and info.actions == []
   end
 
+  test "a workline landing is info: one toast per landing, naming the thread, nothing to do" do
+    landed = %{id: 51, thread_id: 185, title: "Mailbox: letters reach the street", created_at: @now}
+
+    assert [info] = Alerts.build([], [], @now, landed: [landed])
+
+    assert %{key: "landed:51", level: "info", kind: "landed", title: "#185 landed — Mailbox: letters reach the street"} =
+             info
+
+    assert info.thread_id == 185 and info.at == @now and info.actions == []
+  end
+
+  test "a release going live is info: one toast per boot onto a new release" do
+    live = %{id: 92, thread_id: 1, body: "release 7b54006 is live — 3 changes", created_at: @now}
+
+    assert [info] = Alerts.build([], [], @now, live: [live])
+    assert %{key: "live:92", level: "info", kind: "live", title: "release 7b54006 is live — 3 changes"} = info
+    assert info.actions == []
+  end
+
   test "alarms first, then decisions, then sticky" do
     alerts =
       Alerts.build([need("mention", %{level: "decide"}), need("gate")], [meeting(~U[2026-10-08 16:00:00Z])], @now)

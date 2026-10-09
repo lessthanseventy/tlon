@@ -212,6 +212,56 @@ defmodule Server.Release.PM do
   end
 
   @doc """
+  Say on the root thread that the service runs a new release, once per release: the release
+  pointer (`refs/heads/live` — a cut moves it only after building it, so a boot runs what it
+  names) against the newest one said. The notice reads `release <sha> is live — N changes`
+  (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha}`. No
+  pointer or no root thread says nothing. `:ok`. `opts`: `root:`.
+  """
+  def note_live(opts \\ []) do
+    root = root(opts)
+
+    said =
+      Repo.one(
+        from m in Message,
+          where: m.kind == "notice" and fragment("? \\? 'live'", m.payload),
+          order_by: [desc: m.id],
+          limit: 1
+      )
+
+    prev = said && said.payload["live"]
+
+    with {:ok, sha} when sha != prev <- live(root),
+         %Thread{id: tid} <- Channel.machine_thread() do
+      body = "release #{short(sha)} is live" <> since_last(root, prev, sha)
+      _ = Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: body, payload: %{"live" => sha}})
+    end
+
+    :ok
+  end
+
+  defp since_last(_root, nil, _sha), do: ""
+
+  defp since_last(root, prev, sha) do
+    case git(root, ["merge-base", "--is-ancestor", prev, sha]) do
+      {_, 0} -> " — " <> changes(length(commits(root, prev, sha)))
+      _ -> " — back from #{short(prev)}"
+    end
+  end
+
+  defp changes(1), do: "1 change"
+  defp changes(n), do: "#{n} changes"
+
+  @doc "The live-release notices (`note_live/1`) posted at or after `since`, newest first."
+  def live_since(%DateTime{} = since) do
+    Repo.all(
+      from m in Message,
+        where: m.kind == "notice" and m.created_at >= ^since and fragment("? \\? 'live'", m.payload),
+        order_by: [desc: m.id]
+    )
+  end
+
+  @doc """
   The operator answered a release gate (`Server.Attention.respond/3` has resolved it): `"a"`
   queues the cut, `"n"` holds it.
   """

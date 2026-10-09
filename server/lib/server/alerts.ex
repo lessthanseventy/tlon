@@ -10,10 +10,12 @@ defmodule Server.Alerts do
     * **sticky** — wants the operator, nothing waits on it (a red verify, a mention): stays until
       dismissed or resolved. A suggestion or a rollout note raises nothing here: the office's
       inbox has it;
-    * **info** — something the operator set going took effect where they can't see it (kind
-      `seated`: a thread parked on the leaf cap got its coworker, `Server.Staffing.note_seated/2`):
-      a toast that goes by on its own, no actions. One per happening, keyed by it, and listed for
-      ten minutes after.
+    * **info** — something the operator set going took effect where they can't see it: a toast
+      that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
+      minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
+      (`Server.Staffing.note_seated/2`); `landed`, a workline reached `merged`
+      (`Server.Workline.landed_since/1`, its `stage_advanced` event); `live`, the service booted
+      on a new release (`Server.Release.PM.note_live/1`).
 
   Each alert is `%{key, level, kind, title, body, at, thread_id, link, actions}`; an action is a
   call on the operator API (`method`, `path`, `body`, and `input` naming the body field a typed
@@ -32,13 +34,19 @@ defmodule Server.Alerts do
     now = DateTime.utc_now()
     minutes = Server.OperatorConfig.setting("alarm_minutes")
     window = {DateTime.add(now, -@alarm_after_s), DateTime.add(now, minutes * 60)}
-    seated = Server.Staffing.seated_since(DateTime.add(now, -@info_s))
-    build(Server.Office.Needs.list(), Server.Calendar.upcoming(window), now, alarm_minutes: minutes, seated: seated)
+    since = DateTime.add(now, -@info_s)
+
+    build(Server.Office.Needs.list(), Server.Calendar.upcoming(window), now,
+      alarm_minutes: minutes,
+      seated: Server.Staffing.seated_since(since),
+      landed: Server.Workline.landed_since(since),
+      live: Server.Release.PM.live_since(since)
+    )
   end
 
   @doc """
-  The alerts for these needs and meetings at `now` — `list/0` without the reads. `seated:` the
-  seating notices to raise as info.
+  The alerts for these needs and meetings at `now` — `list/0` without the reads. Raised as info:
+  `seated:` the seating notices, `landed:` the landings, `live:` the live-release notices.
   """
   def build(needs, meetings, now, opts \\ []) do
     lead = Keyword.get(opts, :alarm_minutes, @alarm_minutes) * 60
@@ -53,15 +61,18 @@ defmodule Server.Alerts do
 
     Enum.sort_by(alarms, & &1.at, DateTime) ++
       Enum.filter(from_needs, &(&1.level == "decision")) ++
-      Enum.filter(from_needs, &(&1.level == "sticky")) ++ Enum.map(Keyword.get(opts, :seated, []), &seated/1)
+      Enum.filter(from_needs, &(&1.level == "sticky")) ++
+      Enum.map(Keyword.get(opts, :seated, []), &info("seated", &1, &1.body)) ++
+      Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, "##{&1.thread_id} landed — #{&1.title}")) ++
+      Enum.map(Keyword.get(opts, :live, []), &info("live", &1, &1.body))
   end
 
-  defp seated(m) do
+  defp info(kind, m, title) do
     %{
-      key: "seated:#{m.id}",
+      key: "#{kind}:#{m.id}",
       level: "info",
-      kind: "seated",
-      title: m.body,
+      kind: kind,
+      title: title,
       body: nil,
       at: m.created_at,
       thread_id: m.thread_id,

@@ -334,6 +334,40 @@ defmodule Server.Release.PMTest do
     end
   end
 
+  describe "note_live/1 (the service booting on what the pointer names)" do
+    test "a boot on a new release says so once, with how many changes it brought; a rollback says where from",
+         ctx do
+      %{ws: ws, repo: repo, live: seed, main: main} = ctx
+      since = DateTime.add(DateTime.utc_now(), -60)
+
+      assert :ok = PM.note_live(root: repo)
+      assert List.last(bodies(ws)) == "release #{String.slice(seed, 0, 7)} is live"
+
+      assert :ok = PM.note_live(root: repo)
+      assert [%{payload: %{"live" => ^seed}}] = PM.live_since(since)
+
+      git!(repo, ["branch", "-f", "live", main])
+      assert :ok = PM.note_live(root: repo)
+      assert List.last(bodies(ws)) == "release #{String.slice(main, 0, 7)} is live — 2 changes"
+
+      git!(repo, ["branch", "-f", "live", seed])
+      assert :ok = PM.note_live(root: repo)
+
+      assert List.last(bodies(ws)) ==
+               "release #{String.slice(seed, 0, 7)} is live — back from #{String.slice(main, 0, 7)}"
+
+      assert [%{payload: %{"live" => ^seed}}, %{payload: %{"live" => ^main}}, _] = PM.live_since(since)
+      assert [] == PM.live_since(DateTime.add(DateTime.utc_now(), 60))
+    end
+
+    test "no release cut yet records nothing", %{ws: ws, repo: repo} do
+      git!(repo, ["branch", "-D", "live"])
+      assert :ok = PM.note_live(root: repo)
+      assert [] == PM.live_since(DateTime.add(DateTime.utc_now(), -60))
+      refute Enum.any?(bodies(ws), &(&1 =~ "is live"))
+    end
+  end
+
   defp workline_merged!(ws, title, at) do
     {:ok, t} =
       Server.Workline.open(%{title: title, slug: "w#{System.unique_integer([:positive])}", workspace_id: ws.id})
