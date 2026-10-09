@@ -7,7 +7,10 @@ defmodule Server.Bench.Roles do
 
   A task is a directory `bench/roles/tasks/<set>/<id>/`: `prompt.md` (what the role is asked),
   `task.json` (`tier` — `canary` or `full` — and `grader`), and for a builder `repo/`, the fixture
-  repo it works in. Graders:
+  repo it works in. A `senior` task has no `repo/`: its `task.json` carries `snapshot` — `parent`, a
+  commit of this checkout whose `server/` tree it is seeded with (`Runner.seed_snapshot/2`), and
+  `solution`, the commit that fixed it, used only by `mise run bench:senior-verify` — and its `check/`
+  is the test files as that commit left them. Graders:
 
     * `check` — `cmd` run in the workdir after the role is done, pass on exit 0. The task's
       `check/` files are copied over the workdir first: the acceptance test the role never saw,
@@ -338,7 +341,9 @@ defmodule Server.Bench.Roles do
 
     `mise run bench:roles -- --suite canary|full [--role R] [--model provider/model[:effort]]`.
     Roles: #{@roles |> Map.keys() |> Enum.sort() |> Enum.join(", ")}. Tasks are frozen fixtures under
-    `tasks/<set>/<id>/` (`Server.Bench.Roles` documents the format). A cell is passed/total for that
+    `tasks/<set>/<id>/` (`Server.Bench.Roles` documents the format; the `senior` set is real commits,
+    each pinned at its parent and checked by the commit's own tests — `mise run bench:senior-verify` proves
+    every check red at the parent and green with the real fix). A cell is passed/total for that
     tier; *rubric* is the judged tasks' 1–5 average; *tokens* is input (cache included) / output;
     *cost* is the harness's list-price figure (Claude Code reports one; a plan bills none of it), `–`
     where the harness reports none.

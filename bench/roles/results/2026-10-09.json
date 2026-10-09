@@ -263,44 +263,298 @@
     "wall_s": 419.2
   },
   {
+    "archetype": "builder",
     "calls": 1,
+    "commit": "cd77238",
+    "effort": "medium",
+    "grade": "senior",
+    "harness": "pi",
+    "model": "ollama-cloud/deepseek-v4.1-flash",
+    "role": "builder-senior",
+    "rubric": null,
     "started_at": "2026-10-09T07:15:10Z",
+    "suite": "canary",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "s2-intake-slot",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 719872,
+          "cache_write": 0,
+          "cost_usd": null,
+          "input": 26097,
+          "output": 10837,
+          "turns": 34
+        },
+        "wall_s": 629.936
+      }
+    ],
+    "tiers": {
+      "canary": {
+        "passed": 1,
+        "total": 1
+      }
+    },
     "usage": {
+      "cost_usd": null,
       "input": 745969,
-      "output": 10837,
+      "output": 10837
+    },
+    "wall_s": 629.9
+  },
+  {
+    "archetype": "builder",
+    "calls": 6,
+    "commit": "61700db",
+    "effort": "medium",
+    "grade": "senior",
+    "harness": "claude_code",
+    "model": "anthropic/claude-sonnet-5-5",
+    "role": "builder-senior",
+    "rubric": null,
+    "started_at": "2026-10-09T07:49:40Z",
+    "suite": "full",
+    "tasks": [
+      {
+        "detail": "ok",
+        "id": "s1-stranded-close",
+        "passed": true,
+        "score": null,
+        "tier": "full",
+        "usage": {
+          "cache_read": 691438,
+          "cache_write": 40546,
+          "cost_usd": 0.39761559999999996,
+          "input": 42,
+          "output": 9706,
+          "turns": 21
+        },
+        "wall_s": 567.764
+      },
+      {
+        "detail": "ok",
+        "id": "s2-intake-slot",
+        "passed": true,
+        "score": null,
+        "tier": "canary",
+        "usage": {
+          "cache_read": 20888,
+          "cache_write": 1097,
+          "cost_usd": 0.12104200000000001,
+          "input": 4,
+          "output": 67,
+          "turns": 1
+        },
+        "wall_s": 191.915
+      },
+      {
+        "detail": "ok",
+        "id": "s3-parent-law",
+        "passed": true,
+        "score": null,
+        "tier": "full",
+        "usage": {
+          "cache_read": 69345,
+          "cache_write": 1844,
+          "cost_usd": 0.1643164,
+          "input": 8,
+          "output": 659,
+          "turns": 3
+        },
+        "wall_s": 218.681
+      },
+      {
+        "detail": "ok",
+        "id": "s4-epic-order",
+        "passed": true,
+        "score": null,
+        "tier": "full",
+        "usage": {
+          "cache_read": 195998,
+          "cache_write": 20794,
+          "cost_usd": 0.1757156,
+          "input": 20,
+          "output": 5330,
+          "turns": 10
+        },
+        "wall_s": 226.33
+      },
+      {
+        "detail": "ok",
+        "id": "s5-keepup-drift",
+        "passed": true,
+        "score": null,
+        "tier": "full",
+        "usage": {
+          "cache_read": 229804,
+          "cache_write": 27019,
+          "cost_usd": 0.20544679999999998,
+          "input": 20,
+          "output": 5137,
+          "turns": 10
+        },
+        "wall_s": 175.143
+      },
+      {
+        "detail": "ok",
+        "id": "s6-start-ticket",
+        "passed": true,
+        "score": null,
+        "tier": "full",
+        "usage": {
+          "cache_read": 239830,
+          "cache_write": 24857,
+          "cost_usd": 0.18568800000000002,
+          "input": 22,
+          "output": 3825,
+          "turns": 15
+        },
+        "wall_s": 224.602
+      }
+    ],
+    "tiers": {
+      "canary": {
+        "passed": 1,
+        "total": 1
+      },
+      "full": {
+        "passed": 5,
+        "total": 5
+      }
+    },
+    "usage": {
+      "cost_usd": 1.2498,
+      "input": 1563576,
+      "output": 24724
+    },
+    "wall_s": 1604.4
+  },
+  {
+    "calls": 6,
+    "started_at": "2026-10-09T08:18:31Z",
+    "usage": {
+      "input": 14265361,
+      "output": 155815,
       "cost_usd": null
     },
-    "commit": "cd77238",
+    "commit": "61700db",
     "role": "builder-senior",
     "model": "ollama-cloud/deepseek-v4.1-flash",
     "grade": "senior",
-    "suite": "canary",
+    "suite": "full",
     "tiers": {
       "canary": {
         "total": 1,
         "passed": 1
+      },
+      "full": {
+        "total": 5,
+        "passed": 5
       }
     },
-    "wall_s": 629.9,
+    "wall_s": 3157.0,
     "harness": "pi",
     "archetype": "builder",
     "rubric": null,
     "tasks": [
       {
-        "id": "s2-intake-slot",
+        "id": "s1-stranded-close",
         "usage": {
-          "input": 26097,
-          "output": 10837,
-          "cache_read": 719872,
+          "input": 97178,
+          "output": 47284,
+          "cache_read": 6189952,
           "cache_write": 0,
-          "turns": 34,
+          "turns": 72,
           "cost_usd": null
         },
         "score": null,
-        "wall_s": 629.936,
+        "wall_s": 835.803,
+        "passed": true,
+        "detail": "ok",
+        "tier": "full"
+      },
+      {
+        "id": "s2-intake-slot",
+        "usage": {
+          "input": 23200,
+          "output": 7526,
+          "cache_read": 388352,
+          "cache_write": 0,
+          "turns": 21,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 533.51,
         "passed": true,
         "detail": "ok",
         "tier": "canary"
+      },
+      {
+        "id": "s3-parent-law",
+        "usage": {
+          "input": 27437,
+          "output": 11266,
+          "cache_read": 629760,
+          "cache_write": 0,
+          "turns": 27,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 385.567,
+        "passed": true,
+        "detail": "ok",
+        "tier": "full"
+      },
+      {
+        "id": "s4-epic-order",
+        "usage": {
+          "input": 41605,
+          "output": 36343,
+          "cache_read": 1561344,
+          "cache_write": 0,
+          "turns": 36,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 369.7,
+        "passed": true,
+        "detail": "ok",
+        "tier": "full"
+      },
+      {
+        "id": "s5-keepup-drift",
+        "usage": {
+          "input": 64150,
+          "output": 28357,
+          "cache_read": 2448384,
+          "cache_write": 0,
+          "turns": 45,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 513.138,
+        "passed": true,
+        "detail": "ok",
+        "tier": "full"
+      },
+      {
+        "id": "s6-start-ticket",
+        "usage": {
+          "input": 58511,
+          "output": 25039,
+          "cache_read": 2735488,
+          "cache_write": 0,
+          "turns": 53,
+          "cost_usd": null
+        },
+        "score": null,
+        "wall_s": 519.247,
+        "passed": true,
+        "detail": "ok",
+        "tier": "full"
       }
     ],
     "effort": "medium"
