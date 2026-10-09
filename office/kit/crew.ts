@@ -18,6 +18,7 @@ export type Act =
   | { kind: "calendar" }
   | { kind: "tv" }
   | { kind: "stereo" }
+  | { kind: "poster" }
   | { kind: "arcade" }
   | { kind: "weather" }
   | { kind: "ideas" }

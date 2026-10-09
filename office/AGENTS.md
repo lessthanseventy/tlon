@@ -28,7 +28,7 @@ linked window at a time, Ctrl-] back to the room).
 - `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
   terminal); `wide.ts`, the TUI's full-width room (office, floor, meeting room, lounge, a long back
   wall with the whiteboard, notes, calendar, windows on the real weather (`weather` on the
-  snapshot), clock, TV), and the pastimes idle coworkers
+  snapshot), clock, TV, and — where the wall has room — the poster of the day, `kit/poster.ts`), and the pastimes idle coworkers
   move between (`Pastime` in `sim.ts`): a games corner (arcade cabinets, ping-pong), an aquarium,
   the windows, the plants, a chat, the pets, a snack machine, foosball, pool, a reading nook. A home from `home.json` hangs below as an annex (`setHome`; no tiles → the frame is unchanged). A
   thread that ships throws its lead a party; a finished turn high-fives whoever it passes. The
