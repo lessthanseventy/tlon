@@ -6,5 +6,6 @@ defmodule Server.Jobs.ShiftBack do
   use Oban.Worker, queue: :default, max_attempts: 3
 
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"workspace_id" => ws, "reset" => reset}}), do: Server.Shifts.offer_day(ws, reset)
+  def perform(%Oban.Job{args: %{"workspace_id" => ws, "reset" => reset} = args}),
+    do: Server.Shifts.offer_day(ws, reset, args["estimated"] == true)
 end

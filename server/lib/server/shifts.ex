@@ -85,7 +85,12 @@ defmodule Server.Shifts do
   defp switch_to(workspace_id, to) do
     {1, _} = Repo.update_all(from(w in Workspace, where: w.id == ^workspace_id), set: [shift: to])
     announce(workspace_id)
-    if to == "day", do: withdraw_offers(workspace_id)
+
+    if to == "day" do
+      withdraw_offers(workspace_id)
+      cancel_reminders(workspace_id)
+    end
+
     going = workspace_id |> Workspaces.bench_all() |> Enum.filter(&(&1.crew not in ["all", to]))
     {:ok, workspace_id |> led_by(going) |> Enum.reduce(%{restaffed: [], waiting: []}, &change_over(&1, &2, to))}
   end
@@ -174,14 +179,14 @@ defmodule Server.Shifts do
   # nights now; the offer to put the day crew back waits for the reset (Server.Jobs.ShiftBack)
   defp nights_for(workspace_id, line, after_line) do
     {:ok, _} = switch(workspace_id, "night")
-    local = reset_at(line <> "\n" <> after_line, NaiveDateTime.from_erl!(:calendar.local_time()))
-    label = Calendar.strftime(local, "%a %-I:%M%P")
-    utc = local |> NaiveDateTime.to_erl() |> :calendar.local_time_to_universal_time_dst() |> List.last()
+    {local, how} = reset_at(line <> "\n" <> after_line, NaiveDateTime.from_erl!(:calendar.local_time()))
+    label = Calendar.strftime(local, "%a %-I:%M%P") <> if(how == :estimated, do: ", estimated", else: "")
+    cancel_reminders(workspace_id)
 
     later =
       case Server.Jobs.enqueue(
-             Server.Jobs.ShiftBack.new(%{workspace_id: workspace_id, reset: label},
-               scheduled_at: DateTime.from_naive!(NaiveDateTime.from_erl!(utc), "Etc/UTC")
+             Server.Jobs.ShiftBack.new(%{workspace_id: workspace_id, reset: label, estimated: how == :estimated},
+               scheduled_at: to_utc(local)
              )
            ) do
         {:ok, _} ->
@@ -199,18 +204,22 @@ defmodule Server.Shifts do
 
   @doc """
   The reset Claude's limit line names, as the next local moment it falls on after `now` (a naive
-  local time): `5pm`, `9:30am`, `Mon 9:00 AM`. With no time in it, five hours on (the session window).
+  local time), and whether the line said so (`:exact`: `5pm`, `9:30am`, `Mon 9:00 AM`) or it is a
+  guess (`:estimated`: a bare weekday is the start of that day; nothing at all, five hours on, the
+  session window). The server's clock is the local one: right while Claude runs on this box.
   """
   def reset_at(text, now) do
-    case Regex.run(
-           ~r/resets?\s+(?:at\s+)?(?:(mon|tue|wed|thu|fri|sat|sun)\w*\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i,
-           text
-         ) do
-      [_, day, h, m, ap | _] ->
-        next_at(now, day, String.to_integer(h), if(m == "", do: 0, else: String.to_integer(m)), ap)
+    timed = ~r/resets?\s+(?:at\s+)?(?:(mon|tue|wed|thu|fri|sat|sun)\w*\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m/i
+
+    case {Regex.run(timed, text), Regex.run(~r/resets?\s+(?:on\s+)?(mon|tue|wed|thu|fri|sat|sun)\w*/i, text)} do
+      {[_, day, h, m, ap | _], _} ->
+        {next_at(now, day, String.to_integer(h), if(m == "", do: 0, else: String.to_integer(m)), ap), :exact}
+
+      {nil, [_, day]} ->
+        {next_at(now, day, 12, 0, "a"), :estimated}
 
       _ ->
-        NaiveDateTime.add(now, 5 * 3600)
+        {NaiveDateTime.add(now, 5 * 3600), :estimated}
     end
   end
 
@@ -218,14 +227,14 @@ defmodule Server.Shifts do
   The reset has come (`Server.Jobs.ShiftBack`): still on the night shift, the lobby gets an ask with
   its answers attached — `day shift back` puts the day crew back. Already on days, nothing. `:ok`.
   """
-  def offer_day(workspace_id, reset) do
+  def offer_day(workspace_id, reset, estimated \\ false) do
     with "night" <- current(workspace_id),
          %Thread{id: lobby} <- Channel.machine_thread(workspace_id) do
       {:ok, _} =
         Server.Attention.ask(
           lobby,
           "tlon",
-          "Claude's limit has reset (#{reset}). Put the day crew back?",
+          "Claude's limit #{if estimated, do: "should have reset", else: "has reset"} (#{reset}). Put the day crew back?",
           ["day shift back", "stay on nights"],
           nil,
           %{"shift_back" => workspace_id}
@@ -269,5 +278,28 @@ defmodule Server.Shifts do
       NaiveDateTime.after?(t, now) and (is_nil(wanted) or Date.day_of_week(t) == wanted)
     end)
     |> then(&NaiveDateTime.add(at, &1 * 86_400))
+  end
+
+  # a local time as UTC; one that a spring-forward skips doesn't exist, so an hour on
+  defp to_utc(local) do
+    local
+    |> NaiveDateTime.to_erl()
+    |> :calendar.local_time_to_universal_time_dst()
+    |> case do
+      [] -> to_utc(NaiveDateTime.add(local, 3600))
+      times -> times |> List.last() |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
+    end
+  end
+
+  # a reminder still queued from an earlier limit belongs to a shift that is over
+  defp cancel_reminders(workspace_id) do
+    Oban.cancel_all_jobs(
+      from j in Oban.Job,
+        where:
+          j.worker == "Server.Jobs.ShiftBack" and j.state in ["scheduled", "available"] and
+            fragment("(? ->> 'workspace_id')::int = ?", j.args, ^workspace_id)
+    )
+  rescue
+    _ -> :ok
   end
 end
