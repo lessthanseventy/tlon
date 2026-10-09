@@ -65,10 +65,10 @@ defmodule Server.Ticket do
     |> put_change(:updated_at, now)
   end
 
-  @doc "Update a ticket's mutable fields (status/priority/title/body/labels/assignee/project). Re-stamps `updated_at`."
+  @doc "Update a ticket's mutable fields (status/priority/title/body/labels/assignee/project). An epic's status is derived, so it is not cast. Re-stamps `updated_at`."
   def update_changeset(%__MODULE__{} = ticket, attrs) do
     ticket
-    |> cast(attrs, @mutable)
+    |> cast(attrs, if(ticket.kind == "epic", do: List.delete(@mutable, :status), else: @mutable))
     |> validate_required([:title])
     |> validate_sets()
     |> stamp_closed()

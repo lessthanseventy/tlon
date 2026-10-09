@@ -43,6 +43,7 @@ defmodule Server.TicketLink do
     |> validate_not_self()
     |> validate_parent_law()
     |> unique_constraint([:from_id, :to_id, :kind], name: :ticket_link_from_id_to_id_kind_index)
+    |> unique_constraint(:to_id, name: :ticket_link_one_parent, message: "already has a parent epic")
     |> foreign_key_constraint(:from_id)
     |> foreign_key_constraint(:to_id)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))

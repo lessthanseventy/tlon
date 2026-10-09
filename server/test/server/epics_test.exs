@@ -31,6 +31,14 @@ defmodule Server.EpicsTest do
       end
     end
 
+    test "an epic's status cannot be set by hand; a ticket's still can", %{ws: ws} do
+      e = epic(ws, "Toy")
+      {:ok, e} = Tickets.update(e, %{status: "done", title: "Renamed"})
+      assert e.status == "backlog"
+      assert e.title == "Renamed"
+      assert {:ok, %{status: "doing"}} = Tickets.update(file(ws, "plain"), %{status: "doing"})
+    end
+
     test "kind cannot be changed by update", %{ws: ws} do
       t = file(ws, "plain")
       {:ok, t} = Tickets.update(t, %{kind: "epic"})
@@ -55,6 +63,19 @@ defmodule Server.EpicsTest do
       {:ok, _} = Tickets.link(e1.id, c.id, "parent")
       assert {:error, cs} = Tickets.link(e2.id, c.id, "parent")
       assert {"already has a parent epic", _} = cs.errors[:to_id]
+    end
+
+    test "the DB refuses a second parent even if the changeset check is raced past", %{ws: ws} do
+      [e1, e2] = [epic(ws, "One"), epic(ws, "Two")]
+      c = file(ws, "child")
+      {:ok, _} = Tickets.link(e1.id, c.id, "parent")
+
+      assert_raise Postgrex.Error, ~r/ticket_link_one_parent/, fn ->
+        Repo.query!("INSERT INTO ticket_link (from_id, to_id, kind, created_at) VALUES ($1, $2, 'parent', now())", [
+          e2.id,
+          c.id
+        ])
+      end
     end
 
     test "adopting twice into the same epic stays idempotent", %{ws: ws} do
