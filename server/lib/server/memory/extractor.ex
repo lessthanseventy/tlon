@@ -70,6 +70,7 @@ defmodule Server.Memory.Extractor.Claude do
   defp shape(%{"facts" => facts}) when is_list(facts) do
     facts
     |> Enum.filter(&match?(%{"kind" => k, "text" => t} when is_binary(t) and k in ~w(decision constraint learned), &1))
+    |> Enum.reject(&junk?(&1["text"]))
     |> Enum.map(fn f ->
       verdict = if f["verdict"] in ~w(restates corrects) and is_integer(f["old"]), do: f["verdict"], else: "new"
       old = if verdict != "new", do: f["old"]
@@ -78,4 +79,9 @@ defmodule Server.Memory.Extractor.Claude do
   end
 
   defp shape(_decoded), do: nil
+
+  # The model sometimes answers with a placeholder ("...") — 15 of those were banked once.
+  # A claim needs at least a few real letters/digits to be worth remembering.
+  @min_alnum 8
+  defp junk?(text), do: length(Regex.scan(~r/[\p{L}\p{N}]/u, text)) < @min_alnum
 end
