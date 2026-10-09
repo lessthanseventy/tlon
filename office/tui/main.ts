@@ -1160,6 +1160,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
             { key: "c", label: "come to my desk", run: doIt(() => r.catDo("come")) },
             { key: "s", label: "go have a nap", run: doIt(() => r.catDo("nap")) },
             ...(busy().length ? [{ key: "g", label: "go cheer someone on", run: cheer((name) => r.catCheer(name)) }] : []),
+            ...(busy().length ? [{ key: "l", label: "Nina carries a letter", run: cheer((name) => r.catLetter(name)) }] : []),
             back1,
           ],
         }
