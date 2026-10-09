@@ -281,6 +281,19 @@ defmodule Server.StaffingTest do
       assert Channel.thread_lead(thread.id) == "borges"
       refute_received {:tmux, [_, _, "kill-window" | _]}
     end
+
+    test "the manager never leads a workline: handing one to them is refused and changes nothing", %{ws: ws} do
+      build = ws |> staffed_thread("borges") |> Ecto.Changeset.change(stage: "build") |> Server.Repo.update!()
+      tmux("0\trufus\t\t\t1\n")
+
+      assert {:error, :manager_leads_no_workline} = Staffing.hand_off(build.id, "rufus")
+      assert Channel.thread_lead(build.id) == "borges"
+      assert Channel.thread_messages(build) == []
+      refute_received {:tmux, [_, _, "kill-window" | _]}
+
+      plain = staffed_thread(ws, "borges")
+      assert {:ok, _} = Staffing.hand_off(plain.id, "rufus")
+    end
   end
 
   describe "stale_coworkers/3 — a rename left a process minting under a handle the bench lost" do
