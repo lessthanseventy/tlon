@@ -6,8 +6,9 @@ defmodule Server.Bench.Roles do
   `Server.Bench.Roles.Runner`'s.
 
   A task is a directory `bench/roles/tasks/<set>/<id>/`: `prompt.md` (what the role is asked),
-  `task.json` (`tier` — `canary` or `full` — and `grader`), and for a builder `repo/`, the fixture
-  repo it works in. Graders:
+  `task.json` (`tier` — `canary` or `full` — and `grader`), and for a builder either `repo/`, the
+  fixture repo it works in, or `"source": {"commit": sha}`, a real tlon commit whose parent's `server/`
+  is the starting state. Graders:
 
     * `check` — `cmd` run in the workdir after the role is done, pass on exit 0. The task's
       `check/` files are copied over the workdir first: the acceptance test the role never saw,
@@ -120,12 +121,18 @@ defmodule Server.Bench.Roles do
       tier: meta["tier"],
       grader: meta["grader"],
       prompt: dir |> Path.join("prompt.md") |> File.read!(),
-      repo: if(File.dir?(repo), do: repo)
+      repo: if(File.dir?(repo), do: repo),
+      source: get_in(meta, ["source", "commit"])
     }
 
-    if !(t.tier in @tiers and valid_grader?(t.grader)), do: raise("bench task #{set}/#{t.id}: bad task.json")
+    if !(t.tier in @tiers and valid_grader?(t.grader) and valid_source?(t.source)),
+      do: raise("bench task #{set}/#{t.id}: bad task.json")
+
     t
   end
+
+  defp valid_source?(nil), do: true
+  defp valid_source?(sha), do: is_binary(sha) and sha =~ ~r/^[0-9a-f]{7,40}$/
 
   defp valid_grader?(%{"kind" => "check", "cmd" => cmd}) when is_binary(cmd), do: true
   defp valid_grader?(%{"kind" => "json", "expect" => e}) when is_map(e) and map_size(e) > 0, do: true
