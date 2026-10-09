@@ -8,6 +8,8 @@ defmodule Server.Office.NeedsTest do
 
   setup do
     Server.TestDB.clean!()
+    # Rollout's notes are global process state (a drifted main files one); the list must start without them
+    for n <- Server.Rollout.pending(), do: Server.Rollout.dismiss(n.id)
     {:ok, ws} = Server.Workspaces.register(%{name: "Needy"})
     %{ws: ws}
   end
