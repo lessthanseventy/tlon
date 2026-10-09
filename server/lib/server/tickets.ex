@@ -48,13 +48,50 @@ defmodule Server.Tickets do
 
   @doc "Update a ticket's mutable fields. `{:ok, ticket}` or `{:error, changeset}`."
   def update(%Ticket{} = ticket, attrs) do
-    ticket |> Ticket.update_changeset(attrs) |> Repo.update() |> Bus.announce(:ticket_updated)
+    result = ticket |> Ticket.update_changeset(attrs) |> Repo.update() |> Bus.announce(:ticket_updated)
+    refresh_epic(epic_of(ticket.id))
+    result
   end
+
+  @doc """
+  Re-derive the status of the epic `epic_id` from its children (`Ticket.epic_status/1`), announcing a change.
+  A no-op for nil or a ticket that is not an epic. Called after every write that can move a child's status or
+  membership; it writes the epic directly, never through `update/2`, so it cannot recurse.
+  """
+  @spec refresh_epic(integer() | nil) :: :ok
+  def refresh_epic(nil), do: :ok
+
+  def refresh_epic(epic_id) do
+    with %Ticket{kind: "epic"} = epic <- get(epic_id) do
+      statuses =
+        Repo.all(
+          from l in TicketLink,
+            join: c in Ticket,
+            on: c.id == l.to_id,
+            where: l.from_id == ^epic_id and l.kind == "parent",
+            select: c.status
+        )
+
+      derived = Ticket.epic_status(statuses)
+
+      if derived != epic.status,
+        do: epic |> Ticket.derive_changeset(derived) |> Repo.update() |> Bus.announce(:ticket_updated)
+    end
+
+    :ok
+  end
+
+  @doc "The epic a ticket belongs to (its `parent` link's `from`), or nil."
+  @spec epic_of(integer()) :: integer() | nil
+  def epic_of(ticket_id),
+    do: Repo.one(from l in TicketLink, where: l.to_id == ^ticket_id and l.kind == "parent", select: l.from_id)
 
   @doc "Promote a ticket into the thread it became (links it + moves it to `doing`)."
   def promote(%Ticket{} = ticket, thread_id) do
     with {:ok, _tie} <- tie(ticket, thread_id, "promoted") do
-      ticket |> Ticket.start_changeset() |> Repo.update() |> Bus.announce(:ticket_updated)
+      result = ticket |> Ticket.start_changeset() |> Repo.update() |> Bus.announce(:ticket_updated)
+      refresh_epic(epic_of(ticket.id))
+      result
     end
   end
 
@@ -199,7 +236,10 @@ defmodule Server.Tickets do
 
   @doc "Remove a ticket."
   def remove(%Ticket{} = ticket) do
-    ticket |> Repo.delete() |> Bus.announce(:ticket_removed)
+    epic = epic_of(ticket.id)
+    result = ticket |> Repo.delete() |> Bus.announce(:ticket_removed)
+    refresh_epic(epic)
+    result
   end
 
   @doc """
@@ -213,6 +253,7 @@ defmodule Server.Tickets do
     |> TicketLink.changeset()
     |> Repo.insert(on_conflict: :nothing)
     |> announce_ticket(to_id)
+    |> tap(fn result -> if kind == "parent" and match?({:ok, _}, result), do: refresh_epic(from_id) end)
   end
 
   @doc "Remove a link. One that is not there is `:ok` — the end state is what was asked for."
@@ -220,6 +261,7 @@ defmodule Server.Tickets do
   def unlink(from_id, to_id, kind) do
     Repo.delete_all(from(l in TicketLink, where: l.from_id == ^from_id and l.to_id == ^to_id and l.kind == ^kind))
     announce_ticket({:ok, :unlinked}, to_id)
+    if kind == "parent", do: refresh_epic(from_id)
     :ok
   end
 
