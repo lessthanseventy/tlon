@@ -11,7 +11,8 @@ defmodule Server.Bench.RolesTest do
   end
 
   @tasks Path.join(Server.Profiles.tlon_root(), "bench/roles/tasks")
-  @sets Roles.roles() |> Map.values() |> Enum.map(& &1.set) |> Enum.uniq()
+  # the senior set is real worklines, all `full`: the canary suite stays cheap
+  @sets Roles.roles() |> Map.values() |> Enum.map(& &1.set) |> Enum.uniq() |> List.delete("senior")
 
   describe "the frozen fixtures" do
     test "every role's set has canary tasks, and full runs them all" do
@@ -47,6 +48,10 @@ defmodule Server.Bench.RolesTest do
   end
 
   describe "a task sourced from a commit" do
+    test "builder-senior answers the senior set" do
+      assert Roles.roles()["builder-senior"].set == "senior"
+    end
+
     defp source_task!(source) do
       tmp = tmp!()
       dir = Path.join([tmp, "senior", "s0"])
