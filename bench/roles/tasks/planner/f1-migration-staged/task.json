@@ -1,0 +1,8 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "judge",
+    "rubric": "safety: the migration is safe on a live table with existing rows (a default or backfill before NOT NULL / CHECK), and the plan says how it is verified against existing data.\ndecomposition: small tasks, each independently committable, in a workable order (migration, then schema, then context).\ntest_first: every task starts from a failing test that says what it asserts (including the database refusing a bad kind).\nprecision: exact file paths, the concrete change, and the command that proves each task done.\nscope: nothing beyond the ticket (no epic behaviour, no UI).",
+    "pass": 3.5
+  }
+}

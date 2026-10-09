@@ -1,0 +1,11 @@
+{
+  "tier": "canary",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "action": {"equals": "staff"},
+      "lead": {"equals": "pierre"},
+      "stage": {"equals": "build"}
+    }
+  }
+}

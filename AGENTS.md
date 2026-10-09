@@ -19,6 +19,10 @@ control loop, not two, and no second way to run anything:
 - `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against
   server recall on the throwaway `tlon_bench` db, never the live store; `bench/longmemeval/bridge.exs` says what each
   `TLON_BENCH_MODE` measures, and `-- --memory bm25` runs the keyword reference on the same slice.
+- `mise run bench:roles -- --suite canary|full [--role R] [--model provider/model[:effort]]` — can each coworker
+  role do its job on the model it is routed to, and at what cost: frozen tasks per role (`bench/roles/tasks/`),
+  graded, run headless through the role's own harness; `bench/roles/README.md` is the table, newest first. It
+  spends real plan quota and touches no db (`Server.Bench.Roles`).
 
 On the home machine, installing and updating the service is ficciones' job (its `home:switch` and
 `machine:update`); here you build and restart the release. mise owns the dev runtimes. **If a command belongs in the loop, it becomes

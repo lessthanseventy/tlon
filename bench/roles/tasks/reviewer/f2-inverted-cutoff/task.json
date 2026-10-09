@@ -1,0 +1,10 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "verdict": {"equals": "request_changes"},
+      "findings": {"matches": "invert|revers|backward|opposite|wrong direction|flipped|should be <|(ends|reaps|kills|ending|reaping) (the |every |only )?(fresh|recent|active|live)|>\\s*\\^?cutoff"}
+    }
+  }
+}

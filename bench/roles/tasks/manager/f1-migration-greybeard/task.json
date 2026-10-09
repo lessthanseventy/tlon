@@ -1,0 +1,12 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "action": {"equals": "staff"},
+      "lead": {"in": ["yu", null]},
+      "grade": {"equals": "greybeard"},
+      "stage": {"equals": "build"}
+    }
+  }
+}

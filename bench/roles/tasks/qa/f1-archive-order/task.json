@@ -1,0 +1,10 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "verdict": {"equals": "fail"},
+      "finding": {"matches": "order|oldest|newest|sort|ascending|revers"}
+    }
+  }
+}

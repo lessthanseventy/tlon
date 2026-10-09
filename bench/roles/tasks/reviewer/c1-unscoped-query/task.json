@@ -1,0 +1,10 @@
+{
+  "tier": "canary",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "verdict": {"equals": "request_changes"},
+      "findings": {"matches": "workspace"}
+    }
+  }
+}

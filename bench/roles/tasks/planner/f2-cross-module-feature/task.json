@@ -1,0 +1,8 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "judge",
+    "rubric": "decomposition: the server half and the office half are separate tasks, each independently committable, server first, in a workable order.\ntest_first: every task starts from a failing test (ExUnit for the server, bun test for the office) that says what it asserts.\nprecision: exact file paths, the concrete change, and the command that proves each task done (mise run server:test, mise run office:check).\nscope: nothing beyond the ticket (no new alert kinds, settings or refactors).",
+    "pass": 3.5
+  }
+}

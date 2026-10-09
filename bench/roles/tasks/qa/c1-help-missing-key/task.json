@@ -1,0 +1,10 @@
+{
+  "tier": "canary",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "verdict": {"equals": "fail"},
+      "finding": {"matches": "\\bR\\b|refresh"}
+    }
+  }
+}

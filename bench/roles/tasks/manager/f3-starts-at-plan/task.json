@@ -1,0 +1,11 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "action": {"equals": "staff"},
+      "lead": {"equals": "runeberg"},
+      "stage": {"equals": "plan"}
+    }
+  }
+}

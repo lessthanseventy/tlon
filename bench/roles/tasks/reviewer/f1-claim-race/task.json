@@ -1,0 +1,10 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "verdict": {"equals": "request_changes"},
+      "findings": {"matches": "race|concurren|atomic|toctou|lock|simultaneous|at the same time|both (builders )?claim|between the (read|get)"}
+    }
+  }
+}

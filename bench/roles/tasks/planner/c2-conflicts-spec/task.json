@@ -1,0 +1,10 @@
+{
+  "tier": "canary",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "decision": {"equals": "ask"},
+      "question": {"matches": "spec|tombstone|never delete|history|evidence|§4"}
+    }
+  }
+}

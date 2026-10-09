@@ -1,0 +1,10 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "action": {"in": ["close", "hold"]},
+      "lead": {"equals": null}
+    }
+  }
+}
