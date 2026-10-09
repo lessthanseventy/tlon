@@ -14,6 +14,8 @@ defmodule Server.Jobs.KeepUpTest do
   setup do
     Server.TestDB.clean!()
     for n <- Rollout.pending(), do: Rollout.dismiss(n.id)
+    # the notes live in the Rollout process, not the db: left behind they are the next test's rollout items
+    on_exit(fn -> for n <- Rollout.pending(), do: Rollout.dismiss(n.id) end)
     :ok
   end
 
