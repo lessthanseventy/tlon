@@ -24,6 +24,16 @@ defmodule Server.OfficeTest do
   end
 
   describe "status/0" do
+    test "an outside citizen's open session is on the roster, with its thread as the focus", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "a focus", workspace_id: ws.id})
+      {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("uqbar").id, thread_id: t.id})
+
+      assert %{thread_id: tid, workspace_id: wsid, thinking: false} = Enum.find(Office.status().roster, &(&1.agent == "uqbar"))
+      assert {tid, wsid} == {t.id, ws.id}
+      refute Enum.any?(Office.status().bench, &(&1.name == "uqbar"))
+    end
+
     test "carries the workspaces, their benches, open threads and unstarted tickets", %{ws: ws} do
       {:ok, seat} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
       {:ok, t} = Channel.open_thread(%{title: "wire the office", workspace_id: ws.id})
