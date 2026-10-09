@@ -8,6 +8,15 @@ defmodule Server.OfficeTest do
   alias Server.Tickets
   alias Server.Workspaces
 
+  # a fake tmux whose list-windows prints `out` (index, name, thread, opening, pid, agent, born)
+  defp windows(out) do
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      if "list-windows" in args, do: {out, 0}, else: {"", 0}
+    end)
+
+    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+  end
+
   setup do
     Server.TestDB.clean!()
     {:ok, ws} = Workspaces.register(%{name: "Machine"})
@@ -68,14 +77,22 @@ defmodule Server.OfficeTest do
         t
       end
 
+      for name <- ~w(dana), do: {:ok, _} = Workspaces.seat(ws.id, %{name: name, archetype: "builder"})
       desk = staffed.("at a desk", "hronir")
       {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("hronir").id, thread_id: desk.id})
       parked = staffed.("parked", "borges")
       :ok = Server.Staffing.note_parked(parked.id)
       idle = staffed.("idle", "otto")
+      # a warm session whose window is gone (the pane closed, the session never ended) is no desk
+      gone = staffed.("window gone", "dana")
+      {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("dana").id, thread_id: gone.id})
+      windows("0\tt#{desk.id}\t#{desk.id}\t\t\thronir\t")
 
-      seat = fn t -> Enum.find(Office.status().threads, &(&1.id == t.id)).seat end
-      assert {seat.(desk), seat.(parked), seat.(idle)} == {"desk", "parked", "idle"}
+      status = Office.status()
+      seat = fn t -> Enum.find(status.threads, &(&1.id == t.id)).seat end
+      assert {seat.(desk), seat.(parked), seat.(idle), seat.(gone)} == {"desk", "parked", "idle", "idle"}
+      assert %{warm: false} = Enum.find(status.roster, &(&1.agent == "dana"))
+      assert %{warm: true} = Enum.find(status.roster, &(&1.agent == "hronir"))
     end
 
     test "a thread says whether it is a standing duty — the sheriff's beat, a schedule's — not work",

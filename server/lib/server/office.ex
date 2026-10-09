@@ -18,7 +18,7 @@ defmodule Server.Office do
   Every workspace at once: the roster (each row with its thread's workspace, bench seat, and
   whether that agent is mid-turn), the benches with their policies, the open threads (lead,
   whether a window runs it, whether it is the workspace's standing thread, any open prompt, who is
-  mid-turn on it, `seat`: its lead at a `"desk"` (a window, a warm session), `"parked"` for a seat
+  mid-turn on it, `seat`: its lead at a `"desk"` (a window runs it, or a warm session with a window to wake in), `"parked"` for a seat
   under the leaf cap (`Server.Staffing.parked_note?/1`) or `"idle"`, and `duty`: a standing duty,
   not work (`Server.Staffing.duty_threads/1`)), projects, unstarted tickets, notes, the consults and hand-offs of the last
   three minutes, the archetypes and model choices, counts, how many
@@ -36,12 +36,13 @@ defmodule Server.Office do
     projects = for ws <- ws_ids, p <- Server.Projects.in_workspace(ws), do: %{id: p.id, workspace_id: ws, name: p.name}
     prompts = Server.Attention.open_prompts_by_thread()
     thinking = thinking()
-    roster = roster(benches, thinking)
+    tabs = Map.new(ws_ids, &{&1, Server.Tmux.list_windows(&1)})
+    roster = roster(benches, thinking, tabs)
 
     %{
       roster: roster,
       bench: bench(benches),
-      threads: threads(ws_ids, prompts, thinking, roster),
+      threads: threads(ws_ids, prompts, thinking, roster, tabs),
       projects: projects,
       tickets: tickets(ws_ids),
       notes: notes(projects),
@@ -174,7 +175,7 @@ defmodule Server.Office do
     :exit, _ -> %{}
   end
 
-  defp roster(benches, thinking) do
+  defp roster(benches, thinking, tabs) do
     rows = Server.Staff.roster()
     thread_ws = rows |> Enum.map(& &1.thread_id) |> workspaces_of()
     everyone = List.flatten(Map.values(benches))
@@ -183,13 +184,14 @@ defmodule Server.Office do
       ws = thread_ws[r.thread_id]
       seat = Enum.find(Map.get(benches, ws, []), &(&1.name == r.agent)) || Enum.find(everyone, &(&1.name == r.agent))
       turn = Enum.find(Map.get(thinking, r.thread_id, []), &(&1.agent == r.agent))
+      windowed = windowed?(Map.get(tabs, ws, []), r.thread_id, r.agent)
 
       %{
         agent: r.agent,
         thread_id: r.thread_id,
         title: r.thread_title,
-        warm: Server.Presence.warm_for?(r.last_active_at, r.agent, ws),
-        warmth: Float.round(Server.Presence.warmth(r.last_active_at, r.agent, ws), 3),
+        warm: windowed and Server.Presence.warm_for?(r.last_active_at, r.agent, ws),
+        warmth: if(windowed, do: Float.round(Server.Presence.warmth(r.last_active_at, r.agent, ws), 3), else: 0.0),
         workspace_id: ws,
         archetype: seat && seat.archetype,
         lead: !!(seat && seat.lead?),
@@ -221,9 +223,16 @@ defmodule Server.Office do
   # whether it is the standing thread of its workspace
   defp home_ws_ids(wss), do: wss |> Enum.filter(&(&1.type == "home")) |> Enum.map(& &1.id)
 
-  defp threads(ws_ids, prompts, thinking, roster) do
-    tabs = Map.new(ws_ids, &{&1, Server.Tmux.list_windows(&1)})
+  # a session is only warm with a window to wake in: the thread's leaf, or the coworker's own on the standing thread
+  defp windowed?(tabs, thread_id, agent) do
+    Enum.any?(tabs, fn tab ->
+      leaf? = (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and tab.agent in [nil, agent]
+      own? = tab.thread_id == nil and (tab.agent || tab.name) == agent
+      leaf? or own?
+    end)
+  end
 
+  defp threads(ws_ids, prompts, thinking, roster, tabs) do
     standing =
       Map.new(ws_ids, fn ws ->
         {ws, with(%{id: id} <- Server.Channel.machine_thread(ws), do: id)}
