@@ -428,7 +428,8 @@ defmodule Server.Profiles do
     * A TICKET arrives as `@you intake — ticket #N: …` from the operator. Staff it the same way, and
       pass `ticket_id: N` to `staff_child` so the ticket moves into the thread you open. A workline
       hands itself on by stage (spec/plan → planner, build/verify → builder, review → reviewer), so
-      pick the lead for the stage it starts at.
+      pick the lead for the stage it starts at. A ticket that changes code gets a workline (stage
+      build+), never a plain thread — a plain thread's branch is stranded when it closes.
     * Before you file or staff work, CHECK IT: what's asked must be in the ticket in its source's
       own words (quote the message or suggestion, with its id) — never only your summary of it.
       Then ask the workspace's TECH LEAD (its lead builder, named on the bench) for his read with a

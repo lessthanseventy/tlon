@@ -48,6 +48,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/messages    {"body"} → Attention.respond as the operator: answers an open
                                           prompt, reopens a closed thread, else posts; 201 + the message
       POST   /api/threads/:id/close       Channel.close_thread: its sessions end, its ticket is done
+                                          (a plain thread with unmerged work is tracked at build instead, left open)
       POST   /api/threads/:id/hand-off    {"agent"} → Staffing.hand_off (staffed now where Oban runs)
       POST   /api/threads/:id/advance     Workline.advance (409 when it can't: not a workline, gated, …)
       POST   /api/threads/:id/approve     {"skip_qa"?} → Workline.approve: complete its parked gate; skip_qa
@@ -320,7 +321,13 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp on_thread(conn, "POST", ["messages"], t), do: post(conn, t)
-  defp on_thread(conn, "POST", ["close"], t), do: reply(conn, Channel.close_thread(t), &thread_row/1)
+  defp on_thread(conn, "POST", ["close"], t) do
+    case Channel.close_thread(t) do
+      {:tracked, tracked} -> reply(conn, {:ok, tracked}, &thread_row/1)
+      result -> reply(conn, result, &thread_row/1)
+    end
+  end
+
   defp on_thread(conn, "POST", ["hand-off"], t), do: hand_off(conn, t)
   defp on_thread(conn, "POST", ["advance"], t), do: reply(conn, Workline.advance(t), &thread_row/1)
 

@@ -36,6 +36,44 @@ defmodule Server.ChannelTest do
     end
   end
 
+  describe "close_thread/1 — a plain thread that holds unmerged work is tracked, not stranded" do
+    setup do
+      tmp = Path.join(System.tmp_dir!(), "close-track-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(tmp)
+      git = fn dir, args -> System.cmd("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true) end
+      {_, 0} = git.(tmp, ["init", "-q", "-b", "main"])
+      File.write!(Path.join(tmp, "README"), "seed\n")
+      {_, 0} = git.(tmp, ["add", "README"])
+      {_, 0} = git.(tmp, ["commit", "-qm", "seed"])
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      {:ok, ws} = Workspaces.register(%{name: "Home"})
+      {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "proj", repos: [%{"name" => "r", "path" => tmp}]})
+      {:ok, thread} = Channel.open_thread(%{title: "plain work", workspace_id: ws.id, project_id: project.id})
+      %{repo: tmp, git: git, thread: thread}
+    end
+
+    test "unmerged commits → {:tracked, build workline}, thread stays open, checkout kept", ctx do
+      %{repo: repo, git: git, thread: thread} = ctx
+      {:ok, wt} = Server.Worktree.ensure(repo, "t#{thread.id}")
+      File.write!(Path.join(wt, "work.txt"), "x\n")
+      {_, 0} = git.(wt, ["add", "work.txt"])
+      {_, 0} = git.(wt, ["commit", "-qm", "work"])
+
+      assert {:tracked, t} = Channel.close_thread(thread)
+      assert t.stage == "build"
+      assert t.state == "open"
+      assert t.slug in Server.Worktree.names(repo)
+      assert Enum.any?(Channel.thread_messages(thread), &(&1.author == "tlon" and &1.body =~ "unmerged"))
+    end
+
+    test "no commits → closes as before", %{repo: repo, thread: thread} do
+      {:ok, _} = Server.Worktree.ensure(repo, "t#{thread.id}")
+      assert {:ok, closed} = Channel.close_thread(thread)
+      assert closed.state == "closed"
+    end
+  end
+
   describe "post/1 — the capture path" do
     setup do
       {:ok, thread} = Channel.open_thread(%{title: "a subject"})

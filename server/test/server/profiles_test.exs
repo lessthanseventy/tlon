@@ -217,6 +217,7 @@ defmodule Server.ProfilesTest do
       # The delegation toolset the mandate names — staffing, not building.
       assert p.system_prompt =~ "staff_child"
       assert p.system_prompt =~ "assign_lead"
+      assert p.system_prompt =~ "changes code gets a workline"
     end
 
     test "render carries the persona through to the materialised files" do
