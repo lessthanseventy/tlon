@@ -163,6 +163,12 @@ defmodule Server.Workline do
 
       {:ok, {:promoted, tracked}} ->
         Server.Bus.broadcast({:workline_advanced, tracked})
+        # a thread opens with the manager as its lead; a workline is a builder's
+        tracked =
+          if Server.Channel.manager_on_workline?(tracked, Server.Channel.thread_lead(tracked.id)),
+            do: restaff(tracked),
+            else: tracked
+
         post_brief(tracked, Brief.stage_message(tracked))
         {:ok, tracked}
 

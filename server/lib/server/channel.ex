@@ -458,13 +458,26 @@ defmodule Server.Channel do
   @doc """
   Staff `thread_id` with the agent named `handle` — a resolve-then-assign in one call. `{:ok, thread}` on success; `{:error,
   :no_agent}` when the handle has never registered (a coworker not yet staffed — a no-op, not a
-  crash); `{:error, :no_thread}` when the thread id doesn't resolve.
+  crash); `{:error, :no_thread}` when the thread id doesn't resolve; `{:error,
+  :manager_leads_no_workline}` when `handle` is the workspace's manager (a meta seat, who staffs
+  work and never writes it) and the thread is a workline.
   """
   def assign_lead(thread_id, handle) do
     with %Agent{} = agent <- Staff.agent_by_name(handle) || {:error, :no_agent},
-         %Thread{} = thread <- thread(thread_id) || {:error, :no_thread} do
+         %Thread{} = thread <- thread(thread_id) || {:error, :no_thread},
+         false <- manager_on_workline?(thread, handle) and {:error, :manager_leads_no_workline} do
       Staff.assign(thread, agent)
     end
+  end
+
+  @doc "Whether `handle` sits on `thread`'s workspace bench as a meta seat (the manager) and the thread is a workline."
+  def manager_on_workline?(%Thread{stage: nil}, _handle), do: false
+  def manager_on_workline?(%Thread{workspace_id: nil}, _handle), do: false
+
+  def manager_on_workline?(%Thread{workspace_id: ws}, handle) do
+    ws
+    |> Server.Workspaces.bench()
+    |> Enum.any?(&(&1.name == handle and Server.Profiles.meta?(Server.Profiles.roster_entry(&1).archetype)))
   end
 
   @doc "The name of the agent staffed on `thread_id` (its lead), or nil if unassigned/absent."

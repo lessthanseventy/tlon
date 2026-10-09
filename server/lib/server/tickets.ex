@@ -124,8 +124,9 @@ defmodule Server.Tickets do
   @doc """
   Start work on a ticket: a workline at build on the ticket's project (`Server.Workline.promote/1`,
   so it is verified, reviewed and risk-graded like any other) whose opening post is the ticket (the
-  operator's post, so its lead is staffed like any ask), and the ticket promoted into it. `agent_id` hands the thread to that coworker instead of the
-  workspace's lead. `{:ok, thread}` or `{:error, reason}`.
+  operator's post, so its lead is staffed like any ask), and the ticket promoted into it. `agent_id`
+  hands the thread to that coworker; without one, or when it is the manager (who never leads a
+  workline), the promotion staffs a builder. `{:ok, thread}` or `{:error, reason}`.
   """
   def start_thread(%Ticket{} = ticket, agent_id \\ nil) do
     operator = Application.get_env(:server, :operator, "andrew")
