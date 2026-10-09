@@ -31,7 +31,12 @@ defmodule Server.Hardening.CrashPathsTest do
   end
 
   test "a delivery that raises doesn't take the switchboard runner down" do
-    assert {:noreply, %{}} = Server.Switchboard.Runner.handle_info({:message_posted, :not_a_message}, %{})
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:noreply, %{}} = Server.Switchboard.Runner.handle_info({:message_posted, :not_a_message}, %{})
+      end)
+
+    assert log =~ "switchboard deliver failed"
   end
 
   test "a weather report in an unexpected shape is no report, not a crash" do
