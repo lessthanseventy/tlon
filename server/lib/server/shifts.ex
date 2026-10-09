@@ -17,8 +17,6 @@ defmodule Server.Shifts do
   alias Server.Workspaces
 
   @shifts ~w(day night)
-  # a limit line still on screen this long after it was acted on is a new limit, not the old one
-  @refire_s 6 * 3600
 
   # Claude Code's own usage-limit line, anchored to how it prints it, so a pane that only talks
   # about limits never reads as out of quota
@@ -58,31 +56,18 @@ defmodule Server.Shifts do
   Coworker `agent`'s pane text, read by the attention sweep: on a Claude Code pane, Claude's usage
   limit reached on the day shift, with a night crew to come on, puts the night shift on and tells
   the lobby why (the crew screen's `S` puts the day crew back after the reset). A limit line acts
-  once: it stays on screen until the pane scrolls, so the same line within six hours of acting on it
-  is not acted on again. `{:switched, "night"}` | `:ok`.
+  once: it stays on screen until the pane scrolls, so each coworker's line is remembered (in the
+  workspace, across restarts) until their pane no longer shows one. A window with no coworker
+  tagged on it is never read. `{:switched, "night"}` | `:ok`.
   """
   def quota_check(workspace_id, agent, text) do
-    with "anthropic" <- Server.Presence.provider_of(agent, workspace_id),
-         {line, after_line} <- limit_line(text),
-         true <- fresh?(workspace_id, line),
-         "day" <- current(workspace_id),
-         true <- Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew == "night")),
-         {:ok, _} <- switch(workspace_id, "night") do
-      :persistent_term.put({__MODULE__, :limit, workspace_id}, {line, System.os_time(:second)})
-
-      reset =
-        with [r] <- Regex.run(~r/reset[s]?[^\n]*/i, line <> "\n" <> after_line), do: " (Claude says: #{String.trim(r)})"
-
-      with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
-           do:
-             note(
-               %Thread{id: lobby},
-               "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, S on the crew screen puts the day crew back."
-             )
-
-      {:switched, "night"}
+    if Server.Presence.provider_of(agent, workspace_id) == "anthropic" do
+      case limit_line(text) do
+        nil -> forget(workspace_id, agent)
+        {line, after_line} -> on_limit(workspace_id, agent, line, after_line)
+      end
     else
-      _ -> :ok
+      :ok
     end
   end
 
@@ -148,10 +133,43 @@ defmodule Server.Shifts do
          do: {Enum.at(lines, i), Enum.at(lines, i + 1) || ""}
   end
 
-  defp fresh?(workspace_id, line) do
-    case :persistent_term.get({__MODULE__, :limit, workspace_id}, nil) do
-      {^line, at} -> System.os_time(:second) - at > @refire_s
-      _ -> true
+  # each Claude coworker's limit line already acted on, in the workspace's knobs so a restart keeps
+  # it: the same line still on screen is the old limit; a pane without one forgets it
+  defp seen(workspace_id), do: (Repo.get!(Workspace, workspace_id).knobs || %{})["limits_seen"] || %{}
+
+  defp remember(workspace_id, agent, line), do: put_seen(workspace_id, Map.put(seen(workspace_id), agent, line))
+
+  defp forget(workspace_id, agent) do
+    seen = seen(workspace_id)
+    if Map.has_key?(seen, agent), do: put_seen(workspace_id, Map.delete(seen, agent))
+    :ok
+  end
+
+  defp put_seen(workspace_id, seen) do
+    workspace = Repo.get!(Workspace, workspace_id)
+    {:ok, _} = Workspaces.edit(workspace, %{knobs: Map.put(workspace.knobs || %{}, "limits_seen", seen)})
+    :ok
+  end
+
+  defp on_limit(workspace_id, agent, line, after_line) do
+    with true <- seen(workspace_id)[agent] != line,
+         :ok <- remember(workspace_id, agent, line),
+         "day" <- current(workspace_id),
+         true <- Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew == "night")),
+         {:ok, _} <- switch(workspace_id, "night") do
+      reset =
+        with [r] <- Regex.run(~r/reset[s]?[^\n]*/i, line <> "\n" <> after_line), do: " (Claude says: #{String.trim(r)})"
+
+      with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
+           do:
+             note(
+               %Thread{id: lobby},
+               "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, S on the crew screen puts the day crew back."
+             )
+
+      {:switched, "night"}
+    else
+      _ -> :ok
     end
   end
 end

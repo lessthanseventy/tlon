@@ -115,6 +115,22 @@ defmodule Server.ShiftsTest do
     assert Shifts.current(plain.id) == "day"
   end
 
+  test "a limit line is remembered until its pane stops showing it — in the db, so a restart keeps it", %{ws: ws} do
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", limit)
+
+    assert Server.Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"] == %{"hronir" => limit}
+
+    {:ok, _} = Shifts.switch(ws.id, "day")
+    assert :ok = Shifts.quota_check(ws.id, "hronir", limit)
+    assert Shifts.current(ws.id) == "day"
+
+    # the pane moves on: forgotten, so the next limit is a new one
+    assert :ok = Shifts.quota_check(ws.id, "hronir", "❯ carrying on")
+    assert Server.Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"] == %{}
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", limit)
+  end
+
   test "only a Claude coworker's pane counts: a pi pane printing the words switches nothing", %{ws: ws} do
     emma = Server.Staff.agent_by_name("emma")
     {:ok, _} = Workspaces.retarget(ws.id, emma.id, %{model: "ollama-cloud/glm-5.2"})
