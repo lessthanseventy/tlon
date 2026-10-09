@@ -301,17 +301,28 @@ defmodule Server.Office do
   defp seat(_id, nil, false), do: "idle"
   defp seat(id, _lead, false), do: if(Server.Staffing.parked_note?(id), do: "parked", else: "idle")
 
+  # An epic is a row (progress, its next free child) while any child is unfinished; a child names its epic.
   defp tickets(ws_ids) do
-    for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing" do
+    for ws <- ws_ids, t <- Server.Tickets.open_in_workspace(ws), t.status != "doing" or t.kind == "epic" do
       %{
         id: t.id,
         workspace_id: ws,
         project_id: t.project_id,
         title: t.title,
         priority: t.priority,
-        routed: t.status == "todo"
+        routed: t.status == "todo",
+        kind: t.kind,
+        epic_id: Server.Tickets.epic_of(t.id)
       }
     end
+    |> add_progress(ws_ids)
+  end
+
+  defp add_progress(rows, ws_ids) do
+    progress =
+      for ws <- ws_ids, e <- Server.Office.Room.board(ws).epics, into: %{}, do: {e.id, Map.take(e, [:done, :total, :next])}
+
+    Enum.map(rows, &Map.merge(&1, Map.get(progress, &1.id, %{})))
   end
 
   # notes, newest first, placed in a workspace by their scope (a global one in none)
