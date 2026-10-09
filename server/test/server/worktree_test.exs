@@ -152,6 +152,25 @@ defmodule Server.WorktreeTest do
     end
   end
 
+  describe "stranded/2" do
+    test "nil when there is no checkout", %{repo: repo} do
+      assert Worktree.stranded(repo, "ghost") == nil
+    end
+
+    test "nil for a checkout with nothing to lose", %{repo: repo} do
+      {:ok, _} = Worktree.ensure(repo, "clean")
+      assert Worktree.stranded(repo, "clean") == nil
+    end
+
+    test "names the unmerged commits a close would strand", %{repo: repo} do
+      {:ok, wt} = Worktree.ensure(repo, "busy")
+      File.write!(Path.join(wt, "work.txt"), "unmerged\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "work.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"])
+      assert Worktree.stranded(repo, "busy") =~ "unmerged"
+    end
+  end
+
   describe "remove/2 and rename/3 — the cleanup and promotion paths" do
     test "remove/2 drops a clean, unmerged-nothing worktree and its branch", %{repo: repo} do
       {:ok, wt} = Worktree.ensure(repo, "tidy")
