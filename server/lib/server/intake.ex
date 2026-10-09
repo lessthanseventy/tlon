@@ -81,16 +81,53 @@ defmodule Server.Intake do
 
   @doc """
   The ticket intake starts next in workspace `ws`: the most urgent backlog ticket nothing blocks, or
-  nil. Equally urgent ones go in board order (`Server.Tickets.in_workspace/1`), the top first.
+  nil. An epic is never routed; its children are, by the higher of their own and their epic's priority,
+  the children of an epic already `doing` first, each epic's lowest-`sort` step before its later ones.
+  Equally urgent loose tickets go in board order (`Server.Tickets.in_workspace/1`), the top first.
   """
   def next(ws) do
     blocked = Server.Tickets.blocked_in_workspace(ws)
+    epics = epics_of(ws)
 
-    from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog")
+    from(t in Ticket, where: t.workspace_id == ^ws and t.status == "backlog" and t.kind == "ticket")
     |> Repo.all()
     |> Enum.reject(&(MapSet.member?(blocked, &1.id) or held?(&1)))
-    |> Enum.min_by(&{Map.get(@urgency, &1.priority, 1), -(&1.sort || 0), -&1.id}, fn -> nil end)
+    |> first_step_of_each_epic(epics)
+    |> Enum.min_by(&rank(&1, epics), fn -> nil end)
   end
+
+  # %{child_id => epic}: which epic (if any) each ticket of the workspace belongs to
+  defp epics_of(ws) do
+    from(l in Server.TicketLink,
+      join: e in Ticket,
+      on: e.id == l.from_id,
+      where: l.kind == "parent" and e.workspace_id == ^ws,
+      select: {l.to_id, e}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
+  # step order inside an epic: only its lowest-sort candidate may compete with the rest
+  defp first_step_of_each_epic(tickets, epics) do
+    {children, loose} = Enum.split_with(tickets, &Map.has_key?(epics, &1.id))
+
+    firsts =
+      children
+      |> Enum.group_by(&epics[&1.id].id)
+      |> Enum.map(fn {_epic, steps} -> Enum.min_by(steps, &{&1.sort || 0, &1.id}) end)
+
+    loose ++ firsts
+  end
+
+  # effective priority = the higher of the ticket's and its epic's; a doing epic's child goes before the rest
+  defp rank(ticket, epics) do
+    epic = epics[ticket.id]
+    urgency = Enum.min([urgency(ticket) | List.wrap(epic && urgency(epic))])
+    {urgency, if(epic && epic.status == "doing", do: 0, else: 1), -(ticket.sort || 0), -ticket.id}
+  end
+
+  defp urgency(%Ticket{priority: priority}), do: Map.get(@urgency, priority, 1)
 
   defp held?(%Ticket{labels: labels}), do: is_list(labels) and "held" in labels
 end
