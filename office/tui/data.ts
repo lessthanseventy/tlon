@@ -32,7 +32,7 @@ export async function status(): Promise<Agents> {
     if (status !== 200 || !j) throw new Error(`office ${status}`)
     return {
       ok: true, roster: j.roster ?? [], threads: j.threads ?? [], counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
-      bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, flags: j.flags ?? {}, life: j.life ?? {},
+      bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], shifts: j.shifts ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, flags: j.flags ?? {}, life: j.life ?? {},
     }
   } catch {
     return { ...EMPTY, note: `channel down (${base()})` }
@@ -187,6 +187,8 @@ export const ticketUnblock = (id: number, by: number) => send("DELETE", `unblock
 
 export const hire = (ws: number, name: string, archetype: string) => write(`hiring ${name}`, `/workspaces/${ws}/coworkers`, { name, archetype }, () => `hired ${name}, a ${archetype}`)
 /** a coworker's model or ask policy; "inherit" puts it back to the archetype's */
+export const seatShift = (seat: number, name: string, crew: "day" | "night" | "all") => send("PATCH", `putting ${name} on ${crew === "all" ? "both shifts" : `the ${crew} shift`}`, `/seats/${seat}`, () => `${name} is on ${crew === "all" ? "both shifts" : `the ${crew} shift`}`, { crew })
+export const shiftSwitch = (ws: number, shift: "day" | "night") => write(`starting the ${shift} shift`, "/office/shift", { workspace_id: ws, shift }, (j) => `the ${shift} shift is on · ${j.restaffed?.length ?? 0} worklines restaffed, ${j.waiting?.length ?? 0} threads waiting`)
 export const retarget = (ws: number, agent: number, knobs: { model?: string; ask?: string }) => send("PATCH", "changing a coworker", `/workspaces/${ws}/coworkers/${agent}`, (j) => `now ${j.model ? `${j.model.provider}/${j.model.model}` : "the archetype's model"} · ${j.ask ?? "the archetype's ask"}`, knobs)
 export const unseat = (seat: number, name: string) => send("DELETE", `letting ${name} go`, `/seats/${seat}`, () => `${name} is off the bench`)
 
