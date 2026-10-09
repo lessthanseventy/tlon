@@ -29,11 +29,29 @@ defmodule Server.Jobs.Land do
       thread ->
         # a gate cut off (a restart) leaves the landing queued; this attempt fails so Oban runs it
         # again, and only the last one cut off bounces it
-        case Server.Workline.land_queued(thread, last: attempt >= max) do
+        case reported(thread, attempt, max, fn -> Server.Workline.land_queued(thread, last: attempt >= max) end) do
           {:error, {:interrupted, why}} -> {:error, why}
           _ -> :ok
         end
     end
+  end
+
+  @doc """
+  Run a landing attempt. One that raises on the last attempt is about to be discarded, leaving the
+  workline at review with nothing queued, so the sheriff is told before it raises on to Oban.
+  """
+  def reported(thread, attempt, max, land) do
+    land.()
+  rescue
+    e ->
+      if attempt >= max,
+        do:
+          Server.Sheriff.report(
+            thread,
+            "the merge queue's landing of work/#{thread.slug} crashed on its last attempt, so nothing landed and it waits at review with nothing queued: #{Exception.message(e)}"
+          )
+
+      reraise e, __STACKTRACE__
   end
 
   @doc "The landing's gate: the full check on the rebased branch, in the workline's own repo."
