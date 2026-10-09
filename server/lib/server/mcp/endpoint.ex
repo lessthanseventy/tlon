@@ -99,6 +99,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.ForgetFact, name: "forget_fact")
   component(Server.MCP.Tool.ReviewProposals, name: "review_proposals")
   component(Server.MCP.Tool.DecideProposal, name: "decide_proposal")
+  component(Server.MCP.Tool.LandedFacts, name: "landed_facts")
   component(Server.MCP.Tool.KnowledgeReport, name: "knowledge_report")
   component(Server.MCP.Tool.LifeStatus, name: "life_status")
   component(Server.MCP.Tool.RoutineCreate, name: "routine_create")

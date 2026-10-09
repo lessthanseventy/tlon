@@ -173,6 +173,34 @@ defmodule Server.LibrarianTest do
     end
   end
 
+  describe "landed_facts/2" do
+    test "a workline landed since lists its live facts; a stated one is never offered", %{ws: ws, t: t} do
+      {:ok, landed} = Channel.open_thread(%{title: "office: R", workspace_id: ws.id})
+      state = fact!(landed, "office: R is at build on ##{landed.id}")
+      lesson = fact!(landed, "the room redraws only on a snapshot change")
+      fact!(landed, "never redraw on a timer", "stated")
+      gone = fact!(landed, "the branch has 2 commits")
+      {:ok, _} = Dossier.forget_fact(gone)
+      fact!(t, "still in flight")
+
+      {:ok, _} =
+        Dossier.record_event(%{
+          thread_id: landed.id,
+          kind: "stage_advanced",
+          detail: %{"from" => "review", "to" => "merged"}
+        })
+
+      since = DateTime.add(DateTime.utc_now(), -3600)
+      assert [%{thread_id: id, title: "office: R", facts: facts}] = Librarian.landed_facts(ws.id, since)
+      assert id == landed.id
+      assert facts |> Enum.map(& &1.id) |> Enum.sort() == Enum.sort([state.id, lesson.id])
+
+      assert Librarian.landed_facts(ws.id, DateTime.add(DateTime.utc_now(), 3600)) == []
+      {:ok, other} = Workspaces.register(%{name: "Elsewhere"})
+      assert Librarian.landed_facts(other.id, since) == []
+    end
+  end
+
   describe "report/3" do
     test "posts the counts and the librarian's notes in the lobby, waking no one", %{ws: ws, t: t} do
       fact!(t, "a stated rule", "stated")
@@ -197,7 +225,7 @@ defmodule Server.LibrarianTest do
     test "a daily sweep and a weekly report for the seat, once", %{ws: ws} do
       [sweep, weekly] = Librarian.ensure_schedules(ws.id, "quain")
       assert sweep.cron == "0 7 * * *" and sweep.agent == "quain" and sweep.standing and sweep.kind == "agent"
-      assert sweep.body =~ "review_proposals"
+      assert sweep.body =~ "review_proposals" and sweep.body =~ "landed_facts"
       assert weekly.cron == "30 7 * * 1" and weekly.body =~ "knowledge_report"
 
       Librarian.ensure_schedules(ws.id, "quain")

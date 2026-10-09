@@ -33,7 +33,10 @@ defmodule Server.Librarian do
       decide_proposal apply or reject, with the reason. 2) search_facts for duplicates, stale or \
       wrong facts, and placeholder junk ("...", empty restatements): supersede_fact or forget_fact \
       each, with the reason. A stated fact is not yours to change: ask_operator instead. 3) A fact \
-      about code with no check: name the command that would re-check it in your summary. Post one \
+      about code with no check: name the command that would re-check it in your summary. \
+      4) landed_facts: for each workline landed since yesterday, forget_fact the state that only \
+      mattered in flight (its stage, branch commits, a QA pass on a sha, who was staffed), with the \
+      reason; keep every lesson or decision — when unsure, keep. Post one \
       summary on this thread: what you changed and what waits on the operator.\
       """
     },
@@ -146,6 +149,38 @@ defmodule Server.Librarian do
 
   defp decided("reject", event, reason) do
     with :ok <- reason(reason), do: judge(:reject_proposal, [event.id, reason])
+  end
+
+  @doc """
+  The worklines in a workspace that landed (`Server.Workline.landed_since/1`) at or after `since`,
+  newest first, each with its thread's live facts that are not `stated` — the candidates to sort
+  into state that only mattered in flight (forget it) and lessons (keep them). A stated fact is
+  never offered. `[%{thread_id, title, landed_at, facts: [%{id, text, provenance}]}]`.
+  """
+  def landed_facts(workspace_id, %DateTime{} = since) do
+    landings =
+      since
+      |> Server.Workline.landed_since()
+      |> Enum.uniq_by(& &1.thread_id)
+
+    ids = Enum.map(landings, & &1.thread_id)
+
+    here =
+      MapSet.new(
+        Repo.all(from t in Server.Thread, where: t.id in ^ids and t.workspace_id == ^workspace_id, select: t.id)
+      )
+
+    facts =
+      from(f in Fact,
+        where: f.thread_id in ^MapSet.to_list(here) and is_nil(f.forgotten_at) and f.provenance != "stated",
+        order_by: [asc: f.id]
+      )
+      |> Repo.all()
+      |> Enum.group_by(& &1.thread_id, &brief/1)
+
+    for l <- landings, MapSet.member?(here, l.thread_id) do
+      %{thread_id: l.thread_id, title: l.title, landed_at: l.created_at, facts: facts[l.thread_id] || []}
+    end
   end
 
   @doc """

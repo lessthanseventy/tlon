@@ -258,7 +258,7 @@ defmodule Server.ProfilesTest do
 
     test "the librarian curates the office's memory with its own tools, writes no code, and no other archetype has them" do
       lib = Profiles.instantiate(%{archetype: :librarian, name: "quain"})
-      tools = ~w(supersede_fact forget_fact review_proposals decide_proposal knowledge_report)
+      tools = ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
       tlon = lib.mcp["tlon"]
 
       for t <- tools ++ ~w(search_facts get_facts),
@@ -267,7 +267,7 @@ defmodule Server.ProfilesTest do
       for cut <- ~w(edit_clause rename_identifier staff_child assign_lead), do: refute(cut in tlon["directTools"])
       assert get_in(lib.permissions, ["permission", "write"]) == "deny"
 
-      for duty <- ["supersede_proposed", "ask_operator", "never", "STATED", "lobby", "quain"],
+      for duty <- ["supersede_proposed", "ask_operator", "never", "STATED", "lobby", "quain", "landed_facts", "keep"],
           do: assert(lib.system_prompt =~ duty, duty)
 
       for {k, t} <- Profiles.archetypes(),
