@@ -1,20 +1,11 @@
-# Review: merge queue — requeue lost landings, send back red-check landings
+**Verdict: approve.** Round 2, read from `git diff main...HEAD` (117f093); I did not run the suite — gate evidence on the thread shows `mise run check` green.
 
-**Verdict: request_changes** (one blocking finding, one smaller; the rest reads correct).
+Both round-1 findings are fixed, each with a test:
 
-Read from `git diff main...HEAD`; I did not run the suite (the gate evidence on the thread shows `mise run check` green).
+1. `requeue_stranded/0` is bounded: a thread with ≥3 discarded `Server.Jobs.Land` jobs is left at review (test: "bounded number of times").
+2. `KeepUp.red_checks/2` closes the PR first and reports/relands only on `:ok`; a failed close is silent and retried next tick (test: "a PR that will not close is not reported").
 
-## Blocking
+Unchanged and still fine: `Publish.failing/2` filtering, `reland/3` default arg, `approval/1` voiding on a moved branch, `landing?/1` preventing a stacked job.
 
-1. **`Workline.requeue_stranded/0` retries a crashing landing forever.** It requeues any review/open/unawaited thread with a standing approval and no live Land job, every KeepUp tick (~5 min). `Land` is `max_attempts: 3`, and `Land.reported/4` posts to the sheriff on each last-attempt crash. A landing that crashes deterministically (no checkout, raise in the rebase) therefore goes: 3 attempts, discarded, requeued, 3 attempts, discarded… with a sheriff report and a "queued again" brief post each cycle. Before this change it parked once with one report. Bound it: e.g. skip a thread that already has ≥ N discarded `Server.Jobs.Land` jobs for its id (one `Repo.aggregate(:count)` on `Oban.Job` with `state == "discarded"` and `args->>'thread_id'`), and let that last one stay reported. The new test should cover the cap.
-
-## Smaller (fix with the above)
-
-2. **`KeepUp.red_checks/2` reports before it closes.** `Sheriff.report` runs first, and the report says the workline "is back at build" before it is. If `Publish.close` fails (gh error), the PR stays open and failing, so the next tick reports to the sheriff again, every 5 min, with a claim that is false. Close and reland first, report on success (or report once on failure and not again).
-
-## Checked, fine
-
-- `Publish.failing/2`: only `work/*` open PRs, pending is not red, CheckRun `conclusion` and commit-status `state` both handled, unreadable repo → `[]`. Tests cover each.
-- `reland/3` default arg keeps the old two-arg callers and the non-merged passthrough.
-- `requeue_stranded` correctly voids on a moved branch (via `approval/1`) and does not stack a second job (`landing?/1`).
-- Docs: `KeepUp` moduledoc updated; the new sentence is one long line, wrap it.
+## Follow-up (non-blocking)
+The discard count is per thread and never resets, so a thread that hit the cap, then gets a fixed and re-approved branch, is not auto-requeued until Oban prunes its old discarded jobs. Count only discards after the current approval.
