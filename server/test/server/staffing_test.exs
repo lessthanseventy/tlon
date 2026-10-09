@@ -88,6 +88,19 @@ defmodule Server.StaffingTest do
     for i <- 1..3, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
   end
 
+  test "an idle session whose window is gone is ended; one whose window still runs stays", %{ws: ws} do
+    gone = staffed_thread(ws, "hronir")
+    lost = session!("hronir", gone.id, 1_200)
+    here = staffed_thread(ws, "borges")
+    kept = session!("borges", here.id, 1_200)
+
+    tmux("0\tt#{here.id}\t#{here.id}\tdone\t1\tborges\t#{old()}\n")
+    assert :ok = Staffing.pass(ws.id)
+
+    assert Server.Repo.get!(Server.Session, lost.id).ended_at
+    refute Server.Repo.get!(Server.Session, kept.id).ended_at
+  end
+
   test "a mid-turn mark a day old is a turn a lost connection never ended: its window is swept",
        %{ws: ws, session: session} do
     thread = staffed_thread(ws, "borges")
