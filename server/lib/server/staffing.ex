@@ -68,8 +68,39 @@ defmodule Server.Staffing do
           |> yield_seat(workspace_id, standing, bench)
 
         resume_interrupted(workspace_id, tabs, standing)
+        end_windowless(workspace_id, tabs, standing, bench)
         :ok
     end
+  end
+
+  # A session whose window is gone (swept cold, a stop or restart killed it) is over, but only its
+  # successor would ever end it, so the room and roster went on counting it. Mid-turn ones are
+  # resume_interrupted's; a session idle under the boot grace may still be booting.
+  defp end_windowless(workspace_id, tabs, standing, bench) do
+    names = MapSet.new(bench, & &1.name)
+    idle_since = DateTime.add(DateTime.utc_now(), -@boot_grace_s, :second)
+
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      join: t in Thread,
+      on: t.id == s.thread_id,
+      where:
+        is_nil(s.ended_at) and is_nil(s.thinking_since) and t.workspace_id == ^workspace_id and
+          s.last_active_at < ^idle_since,
+      select: {s, a.name}
+    )
+    |> Repo.all()
+    |> Enum.filter(fn {s, name} -> MapSet.member?(names, name) and not windowed?(tabs, s.thread_id, name, standing) end)
+    |> Enum.each(fn {s, _} -> Staff.end_session(s) end)
+  end
+
+  defp windowed?(tabs, thread_id, name, standing) do
+    Enum.any?(tabs, fn tab ->
+      leaf? = (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and tab.agent in [nil, name]
+      own? = thread_id == standing and tab.thread_id == nil and (tab.agent || tab.name) == name
+      leaf? or own?
+    end)
   end
 
   @doc """
