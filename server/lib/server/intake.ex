@@ -47,7 +47,22 @@ defmodule Server.Intake do
 
     all = Repo.aggregate(open, :count)
     waiting = Repo.aggregate(from(t in open, where: not is_nil(t.awaiting)), :count)
-    routed = Repo.aggregate(from(t in Ticket, where: t.workspace_id == ^ws and t.status == "todo"), :count)
+
+    # a `todo` ticket whose promoted thread closed holds no slot — nothing else would ever move it on
+    routed =
+      from(t in Ticket,
+        where: t.workspace_id == ^ws and t.status == "todo",
+        where:
+          not exists(
+            from tt in Server.TicketThread,
+              join: th in Thread,
+              on: th.id == tt.thread_id,
+              where: tt.ticket_id == parent_as(:t).id and tt.kind == "promoted" and th.state == "closed"
+          )
+      )
+      |> from(as: :t)
+      |> Repo.aggregate(:count)
+
     {all - waiting + routed, all + routed}
   end
 
