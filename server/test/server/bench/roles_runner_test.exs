@@ -20,6 +20,14 @@ defmodule Server.Bench.Roles.RunnerTest do
       assert String.split(log, "\n", trim: true) == ["fixture"]
     end
 
+    test "the lock is the live checkout's, so the shared deps always match it" do
+      work = tmp!()
+      Runner.seed_snapshot("0fb7f05", work)
+      live = Path.join(Server.Profiles.tlon_root(), "server/mix.lock")
+
+      assert File.read!(Path.join(work, "server/mix.lock")) == File.read!(live)
+    end
+
     test "the build is a private copy of the live one, never a link into it" do
       work = tmp!()
       Runner.seed_snapshot("HEAD", work)

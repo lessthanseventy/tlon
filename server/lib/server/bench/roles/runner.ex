@@ -152,7 +152,8 @@ defmodule Server.Bench.Roles.Runner do
   Seed `work` with the `server/` tree as of commit `sha` of this checkout, committed as the
   fixture. The deps' compiled build is copied in (a cold compile of them is minutes) but not the
   app's own: its beams would be newer than the snapshot's sources, and mix would trust them. The
-  copy is private, so a check cannot recompile into the live `_build`; `deps/` is only read.
+  copy is private, so a check cannot recompile into the live `_build`; `deps/` is only read, and the
+  lock is the live one so an older snapshot is never refused for deps it was not locked to.
   """
   def seed_snapshot(sha, work) do
     root = Profiles.tlon_root()
@@ -164,6 +165,7 @@ defmodule Server.Bench.Roles.Runner do
     {_, 0} = System.cmd("cp", ["-r", "--reflink=auto", Path.join(live, "_build/test"), Path.join(build, "test")])
     File.rm_rf!(Path.join(build, "test/lib/server"))
     File.ln_s!(Path.join(live, "deps"), Path.join(work, "server/deps"))
+    File.cp!(Path.join(live, "mix.lock"), Path.join(work, "server/mix.lock"))
     commit_fixture(work)
   end
 
