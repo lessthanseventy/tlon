@@ -40,7 +40,11 @@ defmodule Server.ChannelTest do
     setup do
       tmp = Path.join(System.tmp_dir!(), "close-track-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(tmp)
-      git = fn dir, args -> System.cmd("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true) end
+
+      git = fn dir, args ->
+        System.cmd("git", ["-C", dir, "-c", "user.email=t@t", "-c", "user.name=t" | args], stderr_to_stdout: true)
+      end
+
       {_, 0} = git.(tmp, ["init", "-q", "-b", "main"])
       File.write!(Path.join(tmp, "README"), "seed\n")
       {_, 0} = git.(tmp, ["add", "README"])
@@ -48,7 +52,10 @@ defmodule Server.ChannelTest do
       on_exit(fn -> File.rm_rf!(tmp) end)
 
       {:ok, ws} = Workspaces.register(%{name: "Home"})
-      {:ok, project} = Server.Projects.register(%{workspace_id: ws.id, name: "proj", repos: [%{"name" => "r", "path" => tmp}]})
+
+      {:ok, project} =
+        Server.Projects.register(%{workspace_id: ws.id, name: "proj", repos: [%{"name" => "r", "path" => tmp}]})
+
       {:ok, thread} = Channel.open_thread(%{title: "plain work", workspace_id: ws.id, project_id: project.id})
       %{repo: tmp, git: git, thread: thread}
     end

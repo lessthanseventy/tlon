@@ -344,7 +344,11 @@ defmodule Server.MCP.Tool.Finish do
       ok(frame, %{"closed" => closed.id})
     else
       {:tracked, tracked} ->
-        ok(frame, %{"stays_open" => true, "tracked" => tracked.slug, "why" => "unmerged commits — tracked as a workline instead of closed"})
+        ok(frame, %{
+          "stays_open" => true,
+          "tracked" => tracked.slug,
+          "why" => "unmerged commits — tracked as a workline instead of closed"
+        })
 
       # a workline closes when it lands; closed early, its landing looks like stranded work
       :workline ->

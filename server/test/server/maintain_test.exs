@@ -227,7 +227,8 @@ defmodule Server.MaintainTest do
         System.cmd("git", ["-C", held_wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "unmerged work"])
 
       {:ok, _} = Server.Channel.close_thread(done)
-      {:ok, _} = Server.Channel.close_thread(held)
+      # close_thread now tracks a plain thread holding work; strand it the other way (closed row, work left behind)
+      {:ok, _} = held |> Server.Thread.state_changeset("closed") |> Server.Repo.update()
 
       sweep()
 

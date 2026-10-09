@@ -192,14 +192,22 @@ defmodule Server.MCP.Tool.CloseThread do
             "thread #{thread.id} is the workspace's standing thread — every coworker's window lives on it; it is never closed"
           )
         else
-          case Channel.close_thread(thread) do
-            {:ok, closed} ->
-              ok(frame, %{"closed" => closed.id, "state" => closed.state})
-
-            {:tracked, tracked} ->
-              ok(frame, %{"stays_open" => true, "tracked" => tracked.slug, "why" => "unmerged commits — tracked as a workline instead of closed"})
-          end
+          close(frame, thread)
         end
+    end
+  end
+
+  defp close(frame, thread) do
+    case Channel.close_thread(thread) do
+      {:ok, closed} ->
+        ok(frame, %{"closed" => closed.id, "state" => closed.state})
+
+      {:tracked, tracked} ->
+        ok(frame, %{
+          "stays_open" => true,
+          "tracked" => tracked.slug,
+          "why" => "unmerged commits — tracked as a workline instead of closed"
+        })
     end
   end
 end
