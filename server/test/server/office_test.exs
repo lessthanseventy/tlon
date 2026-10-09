@@ -62,7 +62,9 @@ defmodule Server.OfficeTest do
 
       ts = Office.status().tickets
 
-      assert %{kind: "epic", done: 1, total: 2, next: %{id: nid, title: "sandbox mode"}} = Enum.find(ts, &(&1.id == epic.id))
+      assert %{kind: "epic", done: 1, total: 2, next: %{id: nid, title: "sandbox mode"}} =
+               Enum.find(ts, &(&1.id == epic.id))
+
       assert nid == one.id
       assert %{kind: "ticket", epic_id: eid} = Enum.find(ts, &(&1.id == one.id))
       assert eid == epic.id
