@@ -3,11 +3,20 @@
 // beside it: a compiled TUI runs anywhere the server answers.
 import { EMPTY, type Agents, type CorkNote, type LifeStatus, type ThreadView } from "../kit/types"
 import type { Target } from "./terminal"
+import type { Toy } from "./sandbox"
 
 // read per call, not at load: a test (or a relaunch) that points TLON_URL elsewhere is believed
 const base = () => (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/$/, "")
 
+let fake: Toy | null = null
+/** the sandbox's world instead of the server (`office --sandbox`) */
+export const useFake = (t: Toy | null) => { fake = t }
+
 async function call(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
+  if (fake) {
+    if (method !== "GET") return { status: 409, json: { error: "it's a toy — nothing here to change" } }
+    return path === "/office" ? { status: 200, json: fake.snapshot() } : { status: 404, json: null }
+  }
   const r = await fetch(`${base()}/api${path}`, {
     method,
     headers: body === undefined ? {} : { "content-type": "application/json" },
