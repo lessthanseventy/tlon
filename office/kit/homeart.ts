@@ -2,6 +2,7 @@
 // `renderHome` lays the build grid out as a Frame. A new tile kind plugs in by adding a key.
 import { Canvas, type Frame } from "./canvas"
 import { gridWindow, type Home, type HomeTile, type Pt } from "./home"
+import { paintMailboxTile, type Mailbox } from "./mailbox"
 import { ROLE, tint } from "./palette"
 
 export const TILE = 12
@@ -66,8 +67,9 @@ function weatherOnGarden(c: Canvas, x: number, y: number, weather: string) {
   }
 }
 
-export function paintTile(c: Canvas, x: number, y: number, t: HomeTile, weather?: string | null) {
+export function paintTile(c: Canvas, x: number, y: number, t: HomeTile, weather?: string | null, mail?: Mailbox | null) {
   (TILE_ART[t.kind] ?? plainTile)(c, x, y, t)
+  if (t.kind === "street" && mail) paintMailboxTile(c, x, y, mail)
   if (t.kind === "garden" && weather) weatherOnGarden(c, x, y, weather)
 }
 
@@ -85,10 +87,10 @@ export function paintAnnex(c: Canvas, h: Home, y: number) {
   for (const t of h.tiles) paintTile(c, ANNEX_PAD + (t.at[0] - x0) * CELL + 1, y + ANNEX_PAD + (t.at[1] - y0) * CELL + 1, t)
 }
 
-export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null }
+export type HomeView = { home: Home; cursor: Pt; carrying: HomeTile | null; refused: boolean; w: number; h: number; weather?: string | null; mail?: Mailbox | null }
 
 /** the build grid as a Frame of w×h logical px: every cell of `gridWindow`, centred; no text, no hits */
-export function renderHome({ home, cursor, carrying, refused, w, h, weather }: HomeView): Frame {
+export function renderHome({ home, cursor, carrying, refused, w, h, weather, mail }: HomeView): Frame {
   const c = new Canvas(w, h)
   c.px(0, 0, w, h, ROLE.ground)
   const win = gridWindow(home, cursor)
@@ -97,7 +99,7 @@ export function renderHome({ home, cursor, carrying, refused, w, h, weather }: H
   for (let y = win.y0; y <= win.y1; y++) for (let x = win.x0; x <= win.x1; x++) {
     const [px, py] = pos([x, y])
     const t = home.tiles.find((q) => q.at[0] === x && q.at[1] === y)
-    if (t) paintTile(c, px, py, t, weather)
+    if (t) paintTile(c, px, py, t, weather, mail)
     else c.px(px, py, TILE, TILE, ROLE.raised)
   }
   const [cx, cy] = pos(cursor)

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Canvas } from "../kit/canvas"
 import { CATALOGUE, type Home, type HomeTile } from "../kit/home"
+import { mailbox } from "../kit/mailbox"
 import { ANNEX_PAD, SPRITES, TILE, TILE_ART, annexHeight, paintAnnex, paintTile, renderHome, rotated } from "../kit/homeart"
 import { ROLE } from "../kit/palette"
 
@@ -125,5 +126,38 @@ describe("annex", () => {
     paintTile(ref, 0, 0, one.tiles[0]!)
     const at = (cv: Canvas, x: number, y: number) => Buffer.from(cv.rgba).readUInt32LE((y * cv.width + x) * 4)
     expect(at(c, ANNEX_PAD + 1 + 5, ANNEX_PAD + 1 + 5)).toBe(at(ref, 5, 5))
+  })
+})
+
+describe("the mailbox on the street tile", () => {
+  const street: HomeTile = { kind: "street", at: [0, 0] }
+  const dec = { level: "decide" as const }, blk = { level: "blocking" as const }
+  const mail = (needs: { level: "blocking" | "decide" }[] | undefined, t: HomeTile = street) => {
+    const c = new Canvas(TILE + 8, TILE + 8); paintTile(c, 4, 4, t, null, needs && mailbox(needs)); return c
+  }
+  const hex = (c: Canvas) => Buffer.from(c.rgba).toString("hex")
+  test("letters change the street; an empty box is still a box", () => {
+    expect(hex(mail([dec]))).not.toBe(hex(mail([])))
+    expect(hex(mail([]))).not.toBe(hex(mail(undefined)))
+  })
+  test("a blocking need raises the flag", () => {
+    expect(hex(mail([blk]))).not.toBe(hex(mail([dec])))
+  })
+  test("only the street has a mailbox", () => {
+    for (const kind of CATALOGUE.filter((k) => k !== "street")) {
+      const t: HomeTile = { kind, at: [0, 0] }
+      expect(hex(mail([blk], t))).toBe(hex(mail(undefined, t)))
+    }
+  })
+  test("it stays inside the tile", () => {
+    mail([blk, dec]).rgba.forEach((v, i) => {
+      const p = i >> 2, x = p % (TILE + 8), y = Math.floor(p / (TILE + 8))
+      if (x < 4 || x >= 4 + TILE || y < 4 || y >= 4 + TILE) expect(v).toBe(0)
+    })
+  })
+  test("renderHome carries it through", () => {
+    const home = { tiles: [street] }
+    const f = (m?: ReturnType<typeof mailbox>) => Buffer.from(renderHome({ home, cursor: [0, 0], carrying: null, refused: false, w: 60, h: 60, mail: m }).rgba).toString("hex")
+    expect(f(mailbox([blk]))).not.toBe(f())
   })
 })

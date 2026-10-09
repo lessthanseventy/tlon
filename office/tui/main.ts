@@ -13,6 +13,7 @@ import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting,
 import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
+import { mailbox } from "../kit/mailbox"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
@@ -1289,7 +1290,7 @@ function draw() {
   homeShown = building
   const vp = building ? { x: 0, y: 0, w: viewport.w, h: viewport.h } : viewport
   if (building) {
-    frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind })
+    frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs) })
     imageDirty = true
   } else if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g)); roomChanged = false }
   const seen = clipFrame(frame!, vp)

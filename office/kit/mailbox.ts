@@ -1,5 +1,6 @@
 // The mailbox on the street tile: the operator's needs queue (`Server.Office.Needs`) as letters.
 // Blocking needs raise the flag, so the state is never colour alone.
+import type { Canvas } from "./canvas"
 import type { Scene } from "./draw"
 import { ROLE } from "./palette"
 
@@ -23,4 +24,13 @@ export function drawMailbox(sc: Scene, x: number, y: number, mb: Mailbox) {
     if (mb.flagUp) { px(x + 12, y - 24, 1, 8, ROLE.inactive); px(x + 13, y - 24, 4, 3, ROLE.attention) }
     else px(x + 12, y - 15, 3, 1, ROLE.inactive)
   })
+}
+
+/** the box small enough for a street tile at (x, y): on the top curb, flag to its right; stays inside the 12px tile */
+export function paintMailboxTile(c: Canvas, x: number, y: number, mb: Mailbox) {
+  c.px(x + 8, y + 3, 1, 3, ROLE.inactive)
+  c.px(x + 6, y + 1, 5, 3, ROLE.key)
+  for (let i = 0; i < mb.letters; i++) c.px(x + 6 + i, y, 1, 1, ROLE.prose)
+  if (mb.flagUp) c.px(x + 11, y, 1, 3, ROLE.attention)
+  else c.px(x + 11, y + 3, 1, 1, ROLE.inactive)
 }
