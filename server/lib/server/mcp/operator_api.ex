@@ -29,6 +29,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/triage/:ws       Office.Room.triage (blockers, failed checks, unled threads: the beacon)
       GET    /api/office/memory/:ws       Office.Room.memory (pinned facts, habits to review: the bookshelf)
       GET    /api/office/tickets/:ws      Office.Room.tickets (the whole board, every status, with blockers)
+      GET    /api/office/board/:ws        Office.Room.board (the backlog grouped by epic, with progress)
       GET    /api/office/workspace/:ws    Office.Room.workspace (type, scope, icon, repos: its config card)
       GET    /api/office/schedules/:ws    Office.Room.schedules (the wall calendar: each schedule, its next
                                           firing, its days this month, its last run)
@@ -270,7 +271,7 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "office", ["health"]), do: json(conn, 200, Room.health())
   defp route(conn, "GET", "office", ["history"]), do: json(conn, 200, Room.history())
 
-  defp route(conn, "GET", "office", [read, ws]) when read in ~w(activity triage memory tickets workspace schedules),
+  defp route(conn, "GET", "office", [read, ws]) when read in ~w(activity triage memory tickets board workspace schedules),
     do: with_workspace(conn, ws, &json(conn, 200, apply(Room, String.to_existing_atom(read), [&1.id])))
 
   defp route(conn, "POST", "threads", []), do: new_thread(conn)

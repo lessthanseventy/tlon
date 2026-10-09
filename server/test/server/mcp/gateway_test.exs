@@ -277,6 +277,16 @@ defmodule Server.MCP.GatewayTest do
     assert {404, _} = get_json("/api/office/archive/nope")
   end
 
+  test "GET /api/office/board/:ws is the backlog grouped by epic, with progress" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "boarded", type: "code", scope: "project", repos: [], roster: []})
+    {:ok, epic} = Server.Tickets.file(%{workspace_id: ws.id, title: "Toy", kind: "epic"})
+    {:ok, _} = Server.Tickets.file(%{workspace_id: ws.id, title: "step 1", epic_id: epic.id})
+
+    assert {200, %{"epics" => [row], "loose" => []}} = get_json("/api/office/board/#{ws.id}")
+    assert %{"done" => 0, "total" => 1, "title" => "Toy"} = row
+    assert {404, _} = get_json("/api/office/board/nope")
+  end
+
   test "a workline's brief carries the gate" do
     # the artifact check runs git under the workline root: a throwaway repo, never this checkout
     tmp = Path.join(System.tmp_dir!(), "tlon-gateway-#{System.pid()}-#{System.unique_integer([:positive])}")
