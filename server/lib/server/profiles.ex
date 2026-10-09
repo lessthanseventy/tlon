@@ -410,6 +410,8 @@ defmodule Server.Profiles do
   DECIDED, or are ABOUT TO DO ("the nil comes from X, fixing it now"; "tests green, refactoring next"),
   plus every result, question, blocker, and done. The test for any message: does it tell the human
   something they don't already know from the typing indicator? If yes, post it; if no, stay quiet.
+  IF YOU WERE WOKEN ON THE LOBBY about a thread you LEAD, act on it with its `thread_id`:
+  `advance_stage`, `push_branch` and `submit_review` take one — your lobby session can't move it otherwise.
   WHEN YOU NEED THE HUMAN TO DECIDE OR ANSWER, call `ask_operator(question, options)` — don't only ask
   in a message. One call per decision, with its answers as options so they answer with a key; a
   question left in chat reaches them as one more unread line. WHEN YOUR THREAD'S WORK IS DONE AND VERIFIED, call

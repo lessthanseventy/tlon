@@ -1068,6 +1068,30 @@ defmodule Server.MCP.ServerTest do
     assert %Thread{stage: nil} = Repo.get!(Thread, lobby.id)
   end
 
+  test "a lead woken on the lobby acts on the workline it leads by thread_id; a non-lead is refused" do
+    roster = [%{"archetype" => "builder", "name" => "emma"}, %{"archetype" => "qa", "name" => "nolan"}]
+    {:ok, ws} = Server.Workspaces.register(%{name: "Lobby-bound", roster: roster})
+    {:ok, workline} = Server.Workline.open(%{title: "fix", slug: "lobby-bound", stage: "build", workspace_id: ws.id})
+    {:ok, _} = Channel.assign_lead(workline.id, "emma")
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby"})
+
+    emma = Staff.agent_by_name("emma")
+    token = MCP.Tokens.mint(lobby, emma)
+    r = call(token, handshake(token), 2, "advance_stage", %{"thread_id" => workline.id})
+    # it reached the workline: the build stage owes a commit this test never made
+    assert hd(r["content"])["text"] =~ "owed artifact"
+
+    nolan = Staff.agent_by_name("nolan")
+    ntoken = MCP.Tokens.mint(lobby, nolan)
+    refused = call(ntoken, handshake(ntoken), 2, "advance_stage", %{"thread_id" => workline.id})
+    assert refused["isError"]
+    assert hd(refused["content"])["text"] =~ "lead"
+    assert %Thread{stage: "build"} = Repo.get!(Thread, workline.id)
+
+    pushed = call(ntoken, handshake(ntoken), 3, "push_branch", %{"thread_id" => workline.id})
+    assert pushed["isError"] and hd(pushed["content"])["text"] =~ "lead"
+  end
+
   test "the librarian's tools over the wire: a stated fact is refused, a proposal is listed, no judge says so" do
     {:ok, ws} =
       Server.Workspaces.register(%{name: "Stacks", roster: [%{"archetype" => "librarian", "name" => "quain"}]})
