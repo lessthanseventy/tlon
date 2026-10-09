@@ -67,7 +67,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/worklines               {"title", "slug"} → Workline.open at intent; 201
       POST   /api/notes                   {"workspace_id", "body"} → Notes.write as the operator; 201
 
-      POST   /api/tickets                 {"workspace_id", "title", "project_id"?, "body"?} → Tickets.file; 201
+      POST   /api/tickets                 {"workspace_id", "title", "project_id"?, "body"?, "epic_id"?} → Tickets.file; 201
       PATCH  /api/tickets/:id             {"status"?, "title"?, "body"?} → Tickets.update
       DELETE /api/tickets/:id             Tickets.remove
       POST   /api/tickets/:id/route       Tickets.route: to the workspace's manager (no manager: its lead starts it)
@@ -493,7 +493,7 @@ defmodule Server.MCP.OperatorAPI do
       {%{"workspace_id" => ws, "title" => title} = b, conn} when is_integer(ws) and is_binary(title) ->
         reply(
           conn,
-          Tickets.file(%{workspace_id: ws, title: title, project_id: b["project_id"], body: b["body"] || ""}),
+          Tickets.file(%{workspace_id: ws, title: title, project_id: b["project_id"], body: b["body"] || "", epic_id: b["epic_id"]}),
           &ticket/1,
           201
         )

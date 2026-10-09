@@ -216,6 +216,7 @@ defmodule Server.MCP.Brief do
       "priority" => t.priority,
       "labels" => t.labels,
       "assignee" => t.assignee,
+      "epic_id" => Server.Tickets.epic_of(t.id),
       # UX slice 4: a ticket ties to MANY threads, so the single promoted_thread_id is gone. The
       # promoted one is named on its own because it is the tie a caller usually means.
       "promoted_thread_id" => promoted_thread_id(t.id),

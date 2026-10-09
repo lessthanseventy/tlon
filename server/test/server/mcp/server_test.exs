@@ -879,6 +879,25 @@ defmodule Server.MCP.ServerTest do
     assert text =~ "unavailable"
   end
 
+  test "file_ticket with epic_id files the ticket into that epic; a non-epic parent is refused" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "EpicWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "EpicFiler", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    {:ok, epic} = Server.Tickets.file(%{workspace_id: ws.id, title: "Toy", kind: "epic"})
+
+    filed = token |> call(session, 2, "file_ticket", %{"title" => "step 1", "epic_id" => epic.id}) |> decode_tool_json()
+    assert filed["epic_id"] == epic.id
+
+    plain = token |> call(session, 3, "file_ticket", %{"title" => "loose"}) |> decode_tool_json()
+    assert plain["epic_id"] == nil
+
+    refused = call(token, session, 4, "file_ticket", %{"title" => "bad", "epic_id" => plain["id"]})
+    assert refused["isError"]
+    refute Server.Tickets.in_workspace(ws.id) |> Enum.any?(&(&1.title == "bad"))
+  end
+
   test "file_ticket lands in the bound thread's workspace; list_tickets reads it back" do
     {:ok, ws} = Server.Workspaces.register(%{name: "TicketWS"})
     {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
