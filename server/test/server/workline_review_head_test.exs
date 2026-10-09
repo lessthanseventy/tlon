@@ -135,6 +135,55 @@ defmodule Server.WorklineReviewHeadTest do
     assert {:ok, %{stage: "merged"}} = Workline.land_queued(queued, merge: Merges)
   end
 
+  test "commits main took on its own drop out: the rest, rebased, is the same change", %{root: root} do
+    thread = at_review(root, "absorbed")
+    on_branch(root, "absorbed", "lib/absorbed_two.ex", "two")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    {:ok, queued} = thread |> parked() |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+    {first, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/absorbed~1"])
+    git(root, ["cherry-pick", String.trim(first)])
+    git(root, ["checkout", "-q", "work/absorbed"])
+    git(root, ["rebase", "-q", "main"])
+    git(root, ["checkout", "-q", "main"])
+
+    assert {:ok, %{stage: "merged"}} = Workline.land_queued(queued, merge: Merges)
+  end
+
+  test "a rebase that resolved a conflict goes back to build, saying so", %{root: root} do
+    thread = at_review(root, "clash")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+    {:ok, queued} = thread |> parked() |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+    commit(root, "lib/clash.ex", "main's v1")
+    git(root, ["checkout", "-q", "work/clash"])
+    {_, _} = System.cmd("git", ["-C", root, "rebase", "main"], stderr_to_stdout: true)
+    File.write!(Path.join(root, "lib/clash.ex"), "v1, resolved")
+    git(root, ["add", "lib/clash.ex"])
+    git(root, ["-c", "core.editor=true", "rebase", "--continue"])
+    git(root, ["checkout", "-q", "main"])
+
+    assert {:error, {:bounced, why}} = Workline.land_queued(queued, merge: Merges)
+    assert why =~ "conflict"
+  end
+
+  test "a reviewed commit git can no longer read is a change, and is logged", %{root: root} do
+    thread = at_review(root, "unreadable")
+    {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+
+    Repo.update_all(
+      from(e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == "workline:unreadable:review"),
+      set: [detail: %{"exit" => 0, "sha" => String.duplicate("0", 40)}]
+    )
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:error, {:bounced, _}} = Workline.approve(parked(thread), artifacts: AllPresent, merge: Merges)
+      end)
+
+    assert log =~ "can't compare"
+  end
+
   test "back at review, the reviewer is pointed at what changed since it last looked", %{root: root} do
     thread = at_review(root, "again")
     {:error, {:bounced, _}} = Workline.review_verdict(thread, "request_changes", "lonnrot", artifacts: AllPresent)

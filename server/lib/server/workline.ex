@@ -408,25 +408,7 @@ defmodule Server.Workline do
          else: (_ -> nil)
   end
 
-  # The branch's own change, not its tree: the patch-ids of its commits since main, those touching
-  # only work/<slug>/ left out (the server commits review.md after a verdict). A rebase onto a newer
-  # main (the merge queue keeps its rebase across a cut-off gate) is the same change; an amended or
-  # new code commit is not. A git error reads as changed, and says so.
-  defp same_code?(_thread, sha, sha), do: true
-
-  defp same_code?(thread, sha, head) do
-    root = Git.root(thread)
-
-    with base when is_binary(base) <- main_ref(root),
-         {:ok, seen} <- patch_ids(root, base, sha, thread.slug),
-         {:ok, now} <- patch_ids(root, base, head, thread.slug) do
-      if seen == [] and now == [], do: same_tree?(root, sha, head, thread.slug), else: seen == now
-    else
-      why ->
-        require(Logger) && Logger.warning("workline #{thread.slug}: can't compare #{sha} with #{head}: #{inspect(why)}")
-        false
-    end
-  end
+  defp same_code?(thread, sha, head), do: compare_code(thread, sha, head) == :same
 
   defp branch_head(thread) do
     case System.cmd("git", ["-C", Git.root(thread), "rev-parse", "--verify", "--quiet", "work/#{thread.slug}^{commit}"],
@@ -1510,11 +1492,16 @@ defmodule Server.Workline do
   defp reviewed_current(%Thread{stage: "review"} = thread) do
     with %{detail: %{"sha" => seen}} when is_binary(seen) <- since_review(thread, "workline:#{thread.slug}:review"),
          now when is_binary(now) <- branch_head(thread),
-         false <- same_code?(thread, seen, now) do
+         {:changed, how} <- compare_code(thread, seen, now) do
+      why =
+        if how == :conflicts,
+          do: "work/#{thread.slug} was rebased onto main with conflicts resolved after its review",
+          else: "work/#{thread.slug} has code committed after its review"
+
       bounce(
         thread,
-        "work/#{thread.slug} has code committed after its review",
-        "work/#{thread.slug} has code committed after its review (reviewed at #{String.slice(seen, 0, 7)}, now #{String.slice(now, 0, 7)}): it comes back through verify and a review of what changed"
+        why,
+        "#{why} (reviewed at #{String.slice(seen, 0, 7)}, now #{String.slice(now, 0, 7)}): it comes back through verify and a review of what changed"
       )
     else
       _ -> :ok
@@ -1551,13 +1538,71 @@ defmodule Server.Workline do
     )
   end
 
-  defp patch_ids(root, base, ref, slug) do
-    script =
-      ~s(git -C "$1" log -p --no-merges --reverse --format='commit %H' "$2..$3" -- . ":!work/$4" | git patch-id --stable)
+  # `{subject, patch-id}` of each of `ref`'s commits main doesn't have that touches code, oldest first
+  defp own_patches(root, base, ref, slug) do
+    case System.cmd("git", ["-C", root, "cherry", base, ref], stderr_to_stdout: true) do
+      {out, 0} ->
+        commits = for "+ " <> c <- String.split(out, "\n", trim: true), do: c
+        patches_of(root, slug, commits)
 
-    case System.cmd("sh", ["-c", script, "sh", root, base, ref, slug], stderr_to_stdout: true) do
-      {out, 0} -> {:ok, out |> String.split("\n", trim: true) |> Enum.map(&hd(String.split(&1, " ")))}
+      {out, code} ->
+        {:error, {code, String.slice(out, 0, 200)}}
+    end
+  end
+
+  defp patches_of(_root, _slug, []), do: {:ok, []}
+
+  defp patches_of(root, slug, commits) do
+    # pipefail: a git failure is the pipeline's, not hidden behind patch-id's exit
+    script = ~s(git -C "$1" show --format='commit %H' "${@:3}" -- . ":!work/$2" | git patch-id --stable)
+
+    with {ids, 0} <-
+           System.cmd("bash", ["-o", "pipefail", "-c", script, "bash", root, slug | commits], stderr_to_stdout: true),
+         {subjects, 0} <-
+           System.cmd("git", ["-C", root, "show", "-s", "--format=%H%x09%s" | commits], stderr_to_stdout: true) do
+      id_of =
+        Map.new(String.split(ids, "\n", trim: true), &(&1 |> String.split(" ") |> Enum.reverse() |> List.to_tuple()))
+
+      subject_of =
+        Map.new(String.split(subjects, "\n", trim: true), &(&1 |> String.split("\t", parts: 2) |> List.to_tuple()))
+
+      {:ok, for(c <- commits, id = id_of[c], do: {subject_of[c], id})}
+    else
       {out, code} -> {:error, {code, String.slice(out, 0, 200)}}
+    end
+  end
+
+  # The branch's own change at `head` against what was judged at `sha`, not their trees: its commits
+  # main doesn't already have (`git cherry`, so a commit main took on its own drops out), each by the
+  # patch-id of its code (work/<slug>/ left out: the server commits review.md after a verdict). A
+  # rebase onto a newer main (the merge queue keeps its rebase across a cut-off gate) is `:same`; the
+  # same commits with other patches are `{:changed, :conflicts}`, a resolved rebase; anything else
+  # `{:changed, :code}`. A git error is `{:changed, :unreadable}`, and logged.
+  defp compare_code(_thread, sha, sha), do: :same
+
+  defp compare_code(thread, sha, head) do
+    root = Git.root(thread)
+
+    with base when is_binary(base) <- main_ref(root),
+         {:ok, seen} <- own_patches(root, base, sha, thread.slug),
+         {:ok, now} <- own_patches(root, base, head, thread.slug) do
+      cond do
+        seen == [] and now == [] ->
+          if same_tree?(root, sha, head, thread.slug), do: :same, else: {:changed, :code}
+
+        Enum.map(seen, &elem(&1, 1)) == Enum.map(now, &elem(&1, 1)) ->
+          :same
+
+        Enum.map(seen, &elem(&1, 0)) == Enum.map(now, &elem(&1, 0)) ->
+          {:changed, :conflicts}
+
+        true ->
+          {:changed, :code}
+      end
+    else
+      why ->
+        require(Logger) && Logger.warning("workline #{thread.slug}: can't compare #{sha} with #{head}: #{inspect(why)}")
+        {:changed, :unreadable}
     end
   end
 end
