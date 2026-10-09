@@ -7,9 +7,9 @@ export type Dir = "down" | "up" | "left" | "right"
 export type Pose = "stand" | "sit" | "couch"
 /** where someone likes to idle */
 export type Fav = "board" | "couch" | "cooler" | "coffee"
-export type Hair = "mop" | "spiky" | "bun" | "long" | "bald"
+export type Hair = "mop" | "spiky" | "bun" | "long" | "bald" | "curly" | "mohawk" | "parted"
 export type Body = "average" | "tall" | "short" | "round"
-export type Outfit = "hoodie" | "labcoat"
+export type Outfit = "hoodie" | "labcoat" | "apron" | "suit" | "poncho"
 export type Accessory = "glasses" | "headphones"
 export type Look = {
   hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number
@@ -21,7 +21,10 @@ export const SKIN_ROLES: Role[] = ["builder", "surveyor", "reviewer", "assistant
 
 export function hash(s: string) { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0 }
 
+/** the styles lookOf rolls from: fixed, because a name hashes to an index into it */
 export const HAIRS: Hair[] = ["mop", "spiky", "bun", "long", "bald"]
+/** every style, for the look card and rollLook; lookOf never picks past HAIRS */
+export const HAIR_STYLES: Hair[] = [...HAIRS, "curly", "mohawk", "parted"]
 export const HAIR_ROLES: Role[] = ["inactive", "structure", "meta", "borderInactive"]
 const TOP: Record<Hair, string[]> = {
   mop: ["............", "............", "....hhhh....", "..hhhhhhhh..", "..hhhhhhhh..", "..hffffffh.."],
@@ -29,6 +32,18 @@ const TOP: Record<Hair, string[]> = {
   bun: [".....hh.....", "....hhhh....", "....hhhh....", "..hhhhhhhh..", "..hhhhhhhh..", "..hffffffh.."],
   long: ["............", "............", "...hhhhhh...", "..hhhhhhhh..", ".hhhhhhhhhh.", ".hhffffffhh."],
   bald: ["............", "............", "............", "...ffffff...", "..ffffffff..", "..ffffffff.."],
+  curly: ["............", "...hhhhhh...", "..hhhhhhhh..", ".hhhhhhhhhh.", ".hhhhhhhhhh.", "..hffffffh.."],
+  mohawk: ["............", ".....hh.....", "....hhhh....", "...fhhhhf...", "..ffhhhhff..", "..ffffffff.."],
+  parted: ["............", "...hhhhh....", "..hhhhhhhh..", "..hhhfhhhh..", "..hhhhhhhh..", "..hffffffh.."],
+}
+/** hairless from the side (the hair's own rows turn to skin) before its overlay */
+const SIDE_BARE = new Set<Hair>(["bald", "mohawk"])
+/** a style's side-view rows over SIDE_HEAD */
+const SIDE_OVER: Partial<Record<Hair, Record<number, string>>> = {
+  bun: { 0: ".......hh...", 1: "......hhhh.." },
+  spiky: { 1: "....h.h.h..." },
+  curly: { 1: "....hhhhh...", 2: "...hhhhhhhh.", 3: "..hhhhhhhhhh" },
+  mohawk: { 1: "....hhh.....", 2: "....hhhh....", 3: "....hhhh...." },
 }
 const FACE = ["..fkffffkf..", "..ffffffff..", "...ffkkff...", ".....ff....."]
 const SHUT = "..fkkffkkf.."
@@ -103,6 +118,9 @@ const GEAR: Record<string, Gear> = {
   planner: { front: { 11: ".......cc...", 12: "......wwww..", 13: "......wwww..", 14: "......wwww.." }, side: { 11: "..cc........", 12: ".wwww.......", 13: ".wwww......." } },
 }
 export const OUTFIT: Record<Outfit, Gear> = {
+  apron: { front: { 11: "...wwwwww...", 12: "...wwwwww...", 13: "...wwwwww...", 14: "...wwwwww..." }, back: { 11: ".....ww.....", 12: ".....ww....." }, side: { 11: "...wwww.....", 12: "...wwww.....", 13: "...wwww.....", 14: "...wwww....." } },
+  suit: { front: { 10: "..kk....kk..", 11: "..kk.ww.kk..", 12: "..kkk..kkk..", 13: "..kkk..kkk.." }, back: { 10: ".kkkkkkkkkk.", 11: ".kkkkkkkkkk.", 12: ".kkkkkkkkkk." }, side: { 10: "...kkkkkk...", 11: "...kkkkkk...", 12: "...kkkkkk..." } },
+  poncho: { front: { 10: ".rrrrrrrrrr.", 11: "rrrrrrrrrrrr", 12: "rr.rrrrrr.rr" }, back: { 10: ".rrrrrrrrrr.", 11: "rrrrrrrrrrrr", 12: "rr.rrrrrr.rr" }, side: { 10: "..rrrrrrrr..", 11: "..rrrrrrrr..", 12: "..rrrrrrrr.." } },
   hoodie: { front: { 10: ".oooooooooo.", 11: ".oo........o" }, back: { 10: ".oooooooooo." }, side: { 10: "..oooooooo.." } },
   labcoat: { front: { 9: ".wwwwwwwwww.", 10: "ww........ww", 11: "ww........ww" }, back: { 9: ".wwwwwwwwww." }, side: { 9: "wwwwwwwwwwww" } },
 }
@@ -260,9 +278,8 @@ export function figure(look: Look, archetype: string | null | undefined, lead: b
   if (look.custom?.[view]) {
     rows = [...look.custom[view]!]
   } else if (view === "side") {
-    rows = SIDE_HEAD.map((r, i) => (bald && i >= 2 && i <= 7 ? r.replaceAll("h", "f") : r))
-    if (look.hair === "bun") overlay(rows, { 0: ".......hh...", 1: "......hhhh.." })
-    if (look.hair === "spiky") overlay(rows, { 1: "....h.h.h..." })
+    rows = SIDE_HEAD.map((r, i) => (SIDE_BARE.has(look.hair) && i >= 2 && i <= 7 ? r.replaceAll("h", "f") : r))
+    overlay(rows, SIDE_OVER[look.hair])
     rows.push(...body.sideTorso, ...(pose !== "stand" ? body.legs.sideStand! : step === 0 ? body.legs.sideStand! : step === 1 ? body.legs.sideA! : body.legs.sideB!))
   } else {
     const top = [...TOP[look.hair]]
