@@ -61,6 +61,32 @@ defmodule Server.ShiftsTest do
     assert built |> Channel.thread_messages() |> Enum.any?(&(&1.body =~ "night shift is on"))
   end
 
+  test "off shift is still on the bench for everything but picking: its model, the manager rule, a hire",
+       %{ws: ws, dahlmann: dahlmann} do
+    {:ok, _} = Shifts.switch(ws.id, "night")
+    hronir = Server.Staff.agent_by_name("hronir")
+    assert {:ok, _} = Workspaces.retarget(ws.id, hronir.id, %{model: "anthropic/claude-haiku-5-5"})
+
+    {:ok, day_manager} = Workspaces.seat(ws.id, %{name: "tertius-day", archetype: "surveyor", crew: "day"})
+    {:ok, wl} = Server.Workline.open(%{title: "w", slug: "managed", stage: "build", workspace_id: ws.id})
+    assert {:error, _} = Channel.assign_lead(wl.id, day_manager.name)
+
+    assert Shifts.hire_crew(ws.id) == "night"
+    {:ok, plain} = Workspaces.register(%{name: "Unshifted"})
+    assert Shifts.hire_crew(plain.id) == "all"
+    assert dahlmann.crew == "night"
+  end
+
+  test "a workline whose kind has nobody on the incoming shift waits, and isn't claimed as restaffed", %{ws: ws} do
+    {:ok, _} = Workspaces.seat(ws.id, %{name: "lonnrot", archetype: "reviewer", crew: "day"})
+    {:ok, rv} = Server.Workline.open(%{title: "review it", slug: "reviewing", stage: "review", workspace_id: ws.id})
+    {:ok, _} = Channel.assign_lead(rv.id, "lonnrot")
+
+    assert {:ok, %{restaffed: [], waiting: [waiting]}} = Shifts.switch(ws.id, "night")
+    assert waiting == rv.id
+    assert {:error, :not_found} = Shifts.switch(999_999, "night")
+  end
+
   test "a seat is put on a shift from the board; switching to the shift on changes nothing", %{
     ws: ws,
     dahlmann: dahlmann

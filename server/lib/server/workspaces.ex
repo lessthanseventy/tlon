@@ -340,7 +340,8 @@ defmodule Server.Workspaces do
          archetype: row.archetype,
          sort: row.sort,
          grade: row.grade,
-         specialty: row.specialty
+         specialty: row.specialty,
+         crew: row.crew
        }}
     end
   end
@@ -522,7 +523,7 @@ defmodule Server.Workspaces do
         m
 
       _ ->
-        case Enum.find(bench(ws), &(&1.agent_id == agent)) do
+        case Enum.find(bench_all(ws), &(&1.agent_id == agent)) do
           nil -> nil
           c -> c |> Server.Profiles.roster_entry() |> Server.Profiles.instantiate(ws) |> Map.fetch!(:model)
         end

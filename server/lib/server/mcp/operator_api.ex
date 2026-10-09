@@ -164,6 +164,7 @@ defmodule Server.MCP.OperatorAPI do
       {%{"workspace_id" => ws, "shift" => shift}, conn} when is_integer(ws) ->
         case Server.Shifts.switch(ws, shift) do
           {:ok, moved} -> json(conn, 200, Map.put(moved, :shift, shift))
+          {:error, :not_found} -> json(conn, 404, %{error: "no workspace #{ws}"})
           {:error, why} -> json(conn, 400, %{error: inspect(why)})
         end
 
@@ -800,7 +801,7 @@ defmodule Server.MCP.OperatorAPI do
 
   # a seated coworker's context cleared: its sessions end, its windows close; the next message spawns it fresh
   defp clear(conn, ws, agent_id) do
-    case Enum.find(Workspaces.bench(ws.id), &(&1.agent_id == agent_id)) do
+    case Enum.find(Workspaces.bench_all(ws.id), &(&1.agent_id == agent_id)) do
       nil -> json(conn, 404, %{error: "no coworker #{agent_id} on #{ws.name}"})
       c -> reply(conn, {:ok, Server.Staffing.clear_context(ws.id, c.name)}, fn _ -> %{cleared: c.name} end)
     end

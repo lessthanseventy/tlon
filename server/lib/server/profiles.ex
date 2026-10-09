@@ -890,7 +890,7 @@ defmodule Server.Profiles do
 
   defp policy_for(workspace_id, name) do
     workspace_id
-    |> Server.Workspaces.bench()
+    |> Server.Workspaces.bench_all()
     |> Enum.find(&(&1.name == name))
     |> case do
       %Server.Coworker{agent_id: agent_id, grade: grade} ->

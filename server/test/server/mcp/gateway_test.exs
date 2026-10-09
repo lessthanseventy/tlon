@@ -342,6 +342,8 @@ defmodule Server.MCP.GatewayTest do
 
       assert {200, %{"crew" => "night"}} = request_json(:patch, "/api/seats/#{night.id}", %{crew: "night"})
       assert {422, _} = request_json(:patch, "/api/seats/#{night.id}", %{crew: "dusk"})
+      assert {422, _} = request_json(:patch, "/api/seats/#{night.id}", %{})
+      assert {404, _} = post_json("/api/office/shift", %{workspace_id: 999_999, shift: "night"})
 
       {200, office} = get_json("/api/office")
       assert %{"shift" => "day"} = Enum.find(office["workspaces"], &(&1["id"] == ws.id))

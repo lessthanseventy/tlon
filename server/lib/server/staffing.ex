@@ -53,7 +53,9 @@ defmodule Server.Staffing do
 
   @doc "The pass over one workspace: reap stale, sweep orphans and the cold, pick up cut-off turns."
   def pass(workspace_id) do
-    case Workspaces.bench(workspace_id) do
+    # housekeeping over everyone hired: a pane whose coworker went off shift finishes its turn and is
+    # swept cold like any other, never reaped as a stranger mid-turn
+    case Workspaces.bench_all(workspace_id) do
       [] ->
         :ok
 

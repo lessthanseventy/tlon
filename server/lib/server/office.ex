@@ -138,7 +138,7 @@ defmodule Server.Office do
   @spec aside_spec(integer(), integer(), String.t()) ::
           {:ok, %{argv: [String.t()], cwd: String.t() | nil}} | {:error, :not_on_bench}
   def aside_spec(workspace_id, agent_id, question) do
-    case Enum.find(Server.Workspaces.bench(workspace_id), &(&1.agent_id == agent_id)) do
+    case Enum.find(Server.Workspaces.bench_all(workspace_id), &(&1.agent_id == agent_id)) do
       nil ->
         {:error, :not_on_bench}
 
