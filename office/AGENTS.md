@@ -15,7 +15,7 @@ linked window at a time, Ctrl-] back to the room).
 - `kit/` — what every office surface shares: the snapshot's types (`types.ts`, the shape of
   `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
   whiteboard's columns), sprites and looks (`sprites.ts`), the colour roles (`palette.ts`), the
-  1x canvas and the **frame** a room hands a surface (`canvas.ts`), tlon's own bitmap font in two cuts (`font.ts`), the
+  1x canvas and the **frame** a room hands a surface (`canvas.ts`; its speech balloons are 34×4 with long words hard-broken, placed by `balloon.ts` so none leaves the viewport or overlaps another), tlon's own bitmap font in two cuts (`font.ts`), the
   office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`),
   the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
   a pet's temperament (`temperament.ts`: warmth/wits/energy, -2..2, as policy over the sim's chance tables; `pets.ts` resolves `pets.json` — `TLON_PETS`; the cat slot is a cat, rabbit or bird, polled live like `looks.json`, absent means today's room byte for byte),
