@@ -53,6 +53,23 @@ defmodule Server.OfficeTest do
       assert Enum.any?(s.archetypes, &(&1.name == "builder" and &1.meta == false))
     end
 
+    test "tickets carry their epic: an epic is a row with progress and its next child, children name it", %{ws: ws} do
+      {:ok, epic} = Tickets.file(%{workspace_id: ws.id, title: "Toy", kind: "epic"})
+      {:ok, one} = Tickets.file(%{workspace_id: ws.id, title: "sandbox mode", epic_id: epic.id})
+      {:ok, done} = Tickets.file(%{workspace_id: ws.id, title: "shipped", epic_id: epic.id})
+      {:ok, _} = Tickets.update(done, %{status: "done"})
+      {:ok, loose} = Tickets.file(%{workspace_id: ws.id, title: "loose one"})
+
+      ts = Office.status().tickets
+
+      assert %{kind: "epic", done: 1, total: 2, next: %{id: nid, title: "sandbox mode"}} = Enum.find(ts, &(&1.id == epic.id))
+      assert nid == one.id
+      assert %{kind: "ticket", epic_id: eid} = Enum.find(ts, &(&1.id == one.id))
+      assert eid == epic.id
+      assert %{kind: "ticket", epic_id: nil} = Enum.find(ts, &(&1.id == loose.id))
+      refute Enum.any?(ts, &(&1.id == done.id))
+    end
+
     test "carries today's celebrations (none when the calendar is off)" do
       assert Office.status().celebrations == []
     end
