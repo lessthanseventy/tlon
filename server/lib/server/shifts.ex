@@ -17,6 +17,8 @@ defmodule Server.Shifts do
   alias Server.Workspaces
 
   @shifts ~w(day night)
+  # a limit line still on screen this long after it was acted on is a new limit, not the old one
+  @refire_s 6 * 3600
 
   # Claude Code's own usage-limit line, anchored to how it prints it, so a pane that only talks
   # about limits never reads as out of quota
@@ -53,23 +55,29 @@ defmodule Server.Shifts do
   def out_of_quota?(text) when is_binary(text), do: Regex.match?(@quota_out, text)
 
   @doc """
-  A coworker's pane text, read by the attention sweep: Claude's usage limit reached on the day shift,
-  with a night crew to come on, puts the night shift on and tells the lobby why (the board's `S` puts
-  the day crew back after the reset). Once: on the night shift there is nothing to switch.
-  `{:switched, "night"}` | `:ok`.
+  Coworker `agent`'s pane text, read by the attention sweep: on a Claude Code pane, Claude's usage
+  limit reached on the day shift, with a night crew to come on, puts the night shift on and tells
+  the lobby why (the crew screen's `S` puts the day crew back after the reset). A limit line acts
+  once: it stays on screen until the pane scrolls, so the same line within six hours of acting on it
+  is not acted on again. `{:switched, "night"}` | `:ok`.
   """
-  def quota_check(workspace_id, text) do
-    with true <- out_of_quota?(text),
+  def quota_check(workspace_id, agent, text) do
+    with "anthropic" <- Server.Presence.provider_of(agent, workspace_id),
+         {line, after_line} <- limit_line(text),
+         true <- fresh?(workspace_id, line),
          "day" <- current(workspace_id),
          true <- Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew == "night")),
          {:ok, _} <- switch(workspace_id, "night") do
-      reset = with [line] <- Regex.run(~r/reset[s]?[^\n]*/i, text), do: " (Claude says: #{String.trim(line)})"
+      :persistent_term.put({__MODULE__, :limit, workspace_id}, {line, System.os_time(:second)})
+
+      reset =
+        with [r] <- Regex.run(~r/reset[s]?[^\n]*/i, line <> "\n" <> after_line), do: " (Claude says: #{String.trim(r)})"
 
       with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
            do:
              note(
                %Thread{id: lobby},
-               "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, the shift board's S puts the day crew back."
+               "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, S on the crew screen puts the day crew back."
              )
 
       {:switched, "night"}
@@ -131,4 +139,19 @@ defmodule Server.Shifts do
   defp mark("day"), do: "☼"
 
   defp note(thread, body), do: {:ok, _} = Channel.post(%{thread_id: thread.id, author: "tlon", body: body})
+
+  # the limit line and the line after it (Claude Code may put the reset time there)
+  defp limit_line(text) do
+    lines = String.split(text, "\n")
+
+    with i when is_integer(i) <- Enum.find_index(lines, &Regex.match?(@quota_out, &1)),
+         do: {Enum.at(lines, i), Enum.at(lines, i + 1) || ""}
+  end
+
+  defp fresh?(workspace_id, line) do
+    case :persistent_term.get({__MODULE__, :limit, workspace_id}, nil) do
+      {^line, at} -> System.os_time(:second) - at > @refire_s
+      _ -> true
+    end
+  end
 end

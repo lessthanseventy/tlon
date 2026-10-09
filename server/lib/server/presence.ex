@@ -55,8 +55,8 @@ defmodule Server.Presence do
     max(0.0, 1.0 - DateTime.diff(now, at) / window)
   end
 
-  # the provider the coworker's seat runs on in that workspace (its policy, else its archetype's)
-  defp provider_of(agent, workspace_id) do
+  @doc "The provider the coworker's seat runs on in that workspace (its policy, else its archetype's), or nil."
+  def provider_of(agent, workspace_id) do
     with %{} = seat <- Enum.find(Server.Workspaces.bench_all(workspace_id), &(&1.name == agent)),
          %{model: %{provider: p}} <- Server.Profiles.instantiate(Server.Profiles.roster_entry(seat), workspace_id) do
       p
