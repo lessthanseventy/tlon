@@ -21,6 +21,9 @@ defmodule Server.Sheriff do
 
   @beat "sheriff's beat"
 
+  @doc "The title of a workspace's beat thread."
+  def beat_title, do: @beat
+
   @doc "The workspace's sheriff on its bench, or nil."
   def of(workspace_id) when is_integer(workspace_id),
     do: workspace_id |> Server.Workspaces.bench() |> Enum.find(&(&1.archetype == "sheriff"))

@@ -3,7 +3,7 @@ defmodule Server.Arbiter.Tmux do
   The server's terminal backend, and the ONE arbiter: spawn a coworker when a message needs them
   and wake it, with no UI open. The coworker is a window in the workspace's private tmux session
   (`Server.Tmux` naming) — one per coworker on the standing thread, one leaf per other thread under
-  the leaf cap — tagged with whose it is and when it was born, which the staffing pass reads to
+  the leaf cap (a standing duty's leaf takes no seat, `Server.Staffing.seated_leaves/1`) — tagged with whose it is and when it was born, which the staffing pass reads to
   close it once it goes cold. The harness is the coworker's profile's (`Server.Harness`).
   """
   @behaviour Server.Arbiter
@@ -43,9 +43,10 @@ defmodule Server.Arbiter.Tmux do
   end
 
   # A coworker's window: on the workspace's standing thread one per coworker, named after them;
-  # on any other thread the thread's one leaf, `t<id>`, under the leaf cap (a thread past it is
-  # told so once, and its message waits for the drain). Tagged with its coworker and its birth (a
-  # leaf with its thread too), which is how the staffing pass knows whose it is and when it goes cold.
+  # on any other thread the thread's one leaf, `t<id>`, under the leaf cap — a duty neither takes
+  # a seat nor waits for one (a thread past it is told so once, and its message waits for the
+  # drain). Tagged with its coworker and its birth (a leaf with its thread too), which is how the
+  # staffing pass knows whose it is and when it goes cold.
   @impl true
   def spawn(exports) do
     with {:ok, thread_id, author} <- identity(exports),
@@ -101,12 +102,17 @@ defmodule Server.Arbiter.Tmux do
   defp under_cap(_tabs, _thread, true), do: :ok
 
   defp under_cap(tabs, %Thread{id: id} = thread, false) do
-    if Enum.count(tabs, &Tmux.leaf_window?/1) < Server.OperatorConfig.max_leaves() and
-         Server.Staffing.seat_for?(thread, tabs) do
-      :ok
-    else
-      Server.Staffing.note_parked(id)
-      {:error, :at_cap}
+    cond do
+      Server.Staffing.duty_thread?(id) ->
+        :ok
+
+      length(Server.Staffing.seated_leaves(tabs)) < Server.OperatorConfig.max_leaves() and
+          Server.Staffing.seat_for?(thread, tabs) ->
+        :ok
+
+      true ->
+        Server.Staffing.note_parked(id)
+        {:error, :at_cap}
     end
   end
 

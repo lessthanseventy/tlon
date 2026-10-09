@@ -209,10 +209,11 @@ defmodule Server.OperatorConfig do
   defp environment_key(_map), do: nil
 
   @doc """
-  The maximum number of CONCURRENT leaf sessions the staffing pass will spawn (the runaway-fleet
-  circuit breaker — every leaf is a live harness, most of them on the Claude subscription at
-  home). Config key `"max_leaves"`; default #{6}. Threads staffed past the cap stay open and
-  keep their lead; they just wait ("parked") until a seat frees.
+  The maximum number of CONCURRENT leaf sessions on work threads the staffing pass will spawn (the
+  runaway-fleet circuit breaker — every leaf is a live harness, most of them on the Claude
+  subscription at home); a standing duty's leaf takes no seat (`Server.Staffing.seated_leaves/1`).
+  Config key `"max_leaves"`; default #{6}. Threads staffed past the cap stay open and keep their
+  lead; they just wait ("parked") until a seat frees.
   """
   @spec max_leaves(String.t()) :: pos_integer()
   def max_leaves(path \\ path()), do: setting("max_leaves", path)

@@ -237,6 +237,18 @@ defmodule Server.StaffingTest do
       refute_received {:tmux, ["-L", _, "kill-window", "-t", ^kept]}
     end
 
+    test "the sheriff's beat takes no seat: its idle leaf is never yielded to parked work", %{ws: ws, session: session} do
+      beat = staffed_thread(ws, "hronir", "sheriff's beat")
+      session!("hronir", beat.id, 600)
+      ws |> staffed_thread("borges") |> at_stage("review") |> parked!()
+
+      tmux("0\tt#{beat.id}\t#{beat.id}\tdone\t1\thronir\t#{old()}\n")
+      assert :ok = Staffing.pass(ws.id)
+
+      duty = "#{session}:0"
+      refute_received {:tmux, ["-L", _, "kill-window", "-t", ^duty]}
+    end
+
     test "a free seat goes to the parked thread nearest to shipping", %{ws: ws} do
       review = ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
       build = ws |> staffed_thread("borges") |> at_stage("build") |> parked!()

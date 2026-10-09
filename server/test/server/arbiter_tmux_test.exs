@@ -158,6 +158,23 @@ defmodule Server.Arbiter.TmuxTest do
     assert [%{author: "tlon", body: "⏸ parked" <> _}] = Channel.thread_messages(t)
   end
 
+  test "spawn: a standing duty's leaf takes no seat — at the cap counting it, a work thread still spawns",
+       %{ws: ws, exports: exports} do
+    {:ok, duty} = Channel.open_thread(%{title: "inbox sweep", scope: "machine", workspace_id: ws.id})
+
+    %{workspace_id: ws.id, kind: "agent", title: "inbox sweep", body: "sweep", cron: "@hourly", standing: true}
+    |> Server.Schedule.create_changeset()
+    |> Ecto.Changeset.put_change(:thread_id, duty.id)
+    |> Server.Repo.insert!()
+
+    work = Enum.map_join(1..5, fn i -> "#{i}\tleaf#{i}\t#{900_000 + i}\tdone\t#{i}\tx\t1\n" end)
+    leaves = work <> "6\tt#{duty.id}\t#{duty.id}\tdone\t6\ttertius\t1\n"
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {leaves, 0}}))
+
+    assert {:ok, _} = Arbiter.Tmux.spawn(exports)
+    assert_received {:tmux, ["-L", _, "new-window" | _]}
+  end
+
   test "under systemd, starting a workspace's tmux runs it in a scope of its own — so a restart can't take it; other commands don't",
        %{ws: ws} do
     pid = self()
