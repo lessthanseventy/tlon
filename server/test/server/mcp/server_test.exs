@@ -73,6 +73,7 @@ defmodule Server.MCP.ServerTest do
                "post_message",
                "advance_stage",
                "submit_review",
+               "send_back",
                "bank_fact",
                "raise_issue",
                "record_done",
@@ -697,6 +698,69 @@ defmodule Server.MCP.ServerTest do
       })
 
     assert decode_tool_json(r)["lead"] == "daneri"
+  end
+
+  describe "send_back and follow-ups" do
+    setup do
+      roster = [
+        %{"archetype" => "builder", "name" => "hronir"},
+        %{"archetype" => "planner", "name" => "yu"},
+        %{"archetype" => "reviewer", "name" => "lonnrot"},
+        %{"archetype" => "qa", "name" => "nolan"}
+      ]
+
+      {:ok, ws} = Server.Workspaces.register(%{name: "Backwards", roster: roster})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+
+      {:ok, wl} =
+        Server.Workline.open(%{title: "bench: shape", slug: "shape", stage: "review", workspace_id: ws.id})
+
+      %{lobby: lobby, wl: wl}
+    end
+
+    defp as(name, thread) do
+      token = MCP.Tokens.mint(thread, Staff.agent_by_name(name))
+      session = handshake(token)
+      call(token, session, 3, "register", %{})
+      {token, session}
+    end
+
+    test "the tech lead sends a workline back to plan from the lobby; a reviewer is told to ask him",
+         %{lobby: lobby, wl: wl} do
+      {token, session} = as("lonnrot", lobby)
+      ask = %{"stage" => "plan", "why" => "the fixtures share one db", "thread_id" => wl.id}
+      r = call(token, session, 4, "send_back", ask)
+      assert r["isError"]
+      assert get_in(r, ["content", Access.at(0), "text"]) =~ "hronir"
+      assert Repo.get!(Thread, wl.id).stage == "review"
+
+      {token, session} = as("hronir", lobby)
+      refute call(token, session, 4, "send_back", ask)["isError"]
+      assert Repo.get!(Thread, wl.id).stage == "plan"
+    end
+
+    test "submit_qa files its follow-ups as held tickets on the workline", %{wl: wl} do
+      {token, session} = as("nolan", wl)
+
+      r =
+        call(token, session, 4, "submit_qa", %{
+          "verdict" => "fail",
+          "report" => "R doesn't reload",
+          "follow_ups" => ["the help line wraps at 80 cols"]
+        })
+
+      refute r["isError"]
+      assert decode_tool_json(r)["follow_ups"] == 1
+      assert [t] = Repo.all(from t in Server.Ticket, where: t.title == "the help line wraps at 80 cols")
+      assert "held" in t.labels
+    end
+
+    test "a refused submit_qa files no follow-ups", %{wl: wl} do
+      {token, session} = as("nolan", wl)
+      ask = %{"verdict" => "maybe", "report" => "r", "follow_ups" => ["never filed"]}
+      assert call(token, session, 4, "submit_qa", ask)["isError"]
+      assert Repo.all(from t in Server.Ticket, where: t.title == "never filed") == []
+    end
   end
 
   test "only the manager staffs from the lobby — a lead there is refused, opening nothing" do

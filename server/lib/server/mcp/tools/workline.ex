@@ -44,7 +44,8 @@ defmodule Server.MCP.Tool.SubmitReview do
   work/<slug>/review.md itself — the reviewer profile structurally cannot (write/edit
   denied). On THIS thread, or with `thread_id` one you lead; refused outside the review stage. The `verdict`
   is recorded too (`Server.Workline.review_verdict/3`): `request_changes` sends the workline back
-  to build at once; after `approve`, call advance_stage to hand it to the merge gate.
+  to build at once; after `approve`, call advance_stage to hand it to the merge gate. A finding that
+  shouldn't block goes in `follow_ups`: each becomes a ticket held until the workline merges.
   """
   use Server.MCP.Tool
 
@@ -57,6 +58,10 @@ defmodule Server.MCP.Tool.SubmitReview do
 
     field :thread_id, :integer,
       description: "The workline you lead, when your session is bound to another thread (e.g. the lobby)"
+
+    field :follow_ups, {:list, :string},
+      description:
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges"
   end
 
   @impl true
@@ -66,12 +71,24 @@ defmodule Server.MCP.Tool.SubmitReview do
     with %Server.Thread{} = thread <- acting_thread(params, frame),
          :ok <- known_verdict(params[:verdict]),
          {:ok, rel} <- Review.submit(thread, params[:body], identity.agent) do
+      {:ok, filed} = Server.Workline.follow_ups(thread, identity.agent, params[:follow_ups] || [])
+
       case Server.Workline.review_verdict(thread, params[:verdict], identity.agent) do
         {:ok, _} ->
-          ok(frame, %{"committed" => rel, "verdict" => "approve", "next" => "call advance_stage"})
+          ok(frame, %{
+            "committed" => rel,
+            "verdict" => "approve",
+            "follow_ups" => length(filed),
+            "next" => "call advance_stage"
+          })
 
         {:error, {:bounced, _}} ->
-          ok(frame, %{"committed" => rel, "verdict" => "request_changes", "next" => "sent back to build"})
+          ok(frame, %{
+            "committed" => rel,
+            "verdict" => "request_changes",
+            "follow_ups" => length(filed),
+            "next" => "sent back to build"
+          })
 
         {:error, reason} ->
           fail(frame, "verdict not recorded: #{inspect(reason)}")
@@ -95,7 +112,8 @@ defmodule Server.MCP.Tool.SubmitQA do
   sends the workline back to build with your report; a pass moves it to the merge gate.
   Lands on THIS thread, or on `thread_id` — the workline QA'd — when the caller is a `qa` seat on
   that workline's bench: a QA session can be bound to another thread (the lobby) than the one it
-  was called to. Refused outside the review stage.
+  was called to. Refused outside the review stage. A finding that shouldn't block goes in
+  `follow_ups`: each becomes a ticket held until the workline merges.
   """
   use Server.MCP.Tool
 
@@ -111,6 +129,10 @@ defmodule Server.MCP.Tool.SubmitQA do
 
     field :thread_id, :integer,
       description: "The workline you QA'd (its #id), when your session is bound to another thread"
+
+    field :follow_ups, {:list, :string},
+      description:
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges"
   end
 
   @impl true
@@ -135,12 +157,65 @@ defmodule Server.MCP.Tool.SubmitQA do
     do: thread.workspace_id |> Server.Workspaces.bench() |> Enum.any?(&(&1.archetype == "qa" and &1.name == agent))
 
   defp verdict(thread, params, agent, frame) do
+    {:ok, filed} =
+      if thread.stage == "review" and params[:verdict] in ~w(pass fail),
+        do: Workline.follow_ups(thread, agent, params[:follow_ups] || []),
+        else: {:ok, []}
+
+    n = length(filed)
+
     case Workline.qa_verdict(thread, params[:verdict], agent, params[:report]) do
-      {:error, {:bounced, _}} -> ok(frame, %{"verdict" => "fail", "next" => "sent back to build"})
-      {:error, {:bad_verdict, v}} -> fail(frame, "verdict must be pass or fail, not #{inspect(v)}")
-      {:error, {:not_in_review, stage}} -> fail(frame, "not in review — this workline is at #{stage}")
-      {:error, reason} -> fail(frame, "QA passed, but it could not move on: #{inspect(reason)}")
-      {_, moved} -> ok(frame, %{"verdict" => "pass", "stage" => moved.stage, "awaiting" => moved.awaiting})
+      {:error, {:bounced, _}} ->
+        ok(frame, %{"verdict" => "fail", "follow_ups" => n, "next" => "sent back to build"})
+
+      {:error, {:bad_verdict, v}} ->
+        fail(frame, "verdict must be pass or fail, not #{inspect(v)}")
+
+      {:error, {:not_in_review, stage}} ->
+        fail(frame, "not in review — this workline is at #{stage}")
+
+      {:error, reason} ->
+        fail(frame, "QA passed, but it could not move on: #{inspect(reason)}")
+
+      {_, moved} ->
+        ok(frame, %{"verdict" => "pass", "follow_ups" => n, "stage" => moved.stage, "awaiting" => moved.awaiting})
+    end
+  end
+end
+
+defmodule Server.MCP.Tool.SendBack do
+  @moduledoc """
+  Send a workline back to an earlier stage, on the same thread and branch — what was built and
+  reviewed stays, and the stage's lead improves it rather than starting over
+  (`Server.Workline.send_back/4`). Back to build: the workline's lead. Back to plan or spec: the tech
+  lead only, since it reshapes the build; anyone else is told to ask him.
+  """
+  use Server.MCP.Tool
+
+  alias Server.Channel
+  alias Server.Workline
+
+  schema do
+    field :stage, :enum, values: ["spec", "plan", "build"], required: true, description: "The stage to send it back to"
+    field :why, :string, required: true, description: "What is wrong, so the stage's lead knows what to change"
+
+    field :thread_id, :integer,
+      description: "The workline (its #id), when it isn't the thread your session is bound to (e.g. the lobby)"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    identity = Identity.from_frame(frame)
+
+    with %Server.Thread{stage: stage} = thread when not is_nil(stage) <-
+           Channel.thread(params[:thread_id] || identity.thread_id) || {:error, "no such thread"},
+         {:ok, back} <- Workline.send_back(thread, params[:stage], params[:why], identity.agent) do
+      ok(frame, %{"thread_id" => back.id, "stage" => back.stage, "lead" => Channel.thread_lead(back.id)})
+    else
+      %Server.Thread{} -> fail(frame, "send_back refused: that thread is not a workline")
+      {:error, {:not_behind, to}} -> fail(frame, "send_back refused: #{to} is not a working stage behind this one")
+      {:error, {:not_yours, why}} -> fail(frame, "send_back refused: #{why}")
+      {:error, why} -> fail(frame, "send_back refused: #{inspect(why)}")
     end
   end
 end

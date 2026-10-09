@@ -50,6 +50,11 @@ and every layer the spine design's re-laid §9 asked for
   `thread_id`, which only a `qa` seat on its bench may name — its session may be bound elsewhere); a fail bounces it to
   build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`) but the
   operator's `approve <id> --skip-qa <why>` (API `{"skip_qa"}`), recorded as its QA verdict.
+  A workline moves backwards on its own thread and branch, the build kept to improve, never redone
+  (`Server.Workline.send_back/4`, the `send_back` tool, `tlon-cli send-back`): back to build by its
+  lead, back to plan or spec only by the tech lead (a coherence call) or the operator. A reviewer's
+  or QA's non-blocking findings are `follow_ups` on `submit_review`/`submit_qa`: tickets tied to the
+  workline, `held` until it merges, then left to intake.
   An approving review is risk-graded by a model that didn't write it (`Server.Workline.Grade`, run by
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.
