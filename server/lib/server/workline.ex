@@ -1532,6 +1532,14 @@ defmodule Server.Workline do
     )
   end
 
+  # any review verdict, even one from before verdicts recorded a sha
+  defp reviewed_before?(thread),
+    do:
+      Repo.exists?(
+        from e in Server.Event,
+          where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:review"
+      )
+
   # no commits of its own on either side (its code is on main already): the trees decide
   defp same_tree?(root, sha, head, slug),
     do:
@@ -1608,7 +1616,7 @@ defmodule Server.Workline do
   # review.md stays on the branch across rounds: back at review after a bounce, the file is the last
   # round's, so only a verdict since the workline re-entered review is this round's review
   defp this_round({:ok, _} = ok, %Thread{stage: "review"} = thread) do
-    if is_nil(since_review(thread, "workline:#{thread.slug}:review")) and last_reviewed(thread) != nil,
+    if is_nil(since_review(thread, "workline:#{thread.slug}:review")) and reviewed_before?(thread),
       do: {:error, "work/#{thread.slug}/review.md is the last round's — submit_review this round's verdict"},
       else: ok
   end
