@@ -163,11 +163,7 @@ defmodule Server.Workline do
 
       {:ok, {:promoted, tracked}} ->
         Server.Bus.broadcast({:workline_advanced, tracked})
-        # a thread opens with the manager as its lead; a workline is a builder's
-        tracked =
-          if Server.Channel.manager_on_workline?(tracked, Server.Channel.thread_lead(tracked.id)),
-            do: restaff(tracked),
-            else: tracked
+        tracked = unseat_manager(tracked)
 
         post_brief(tracked, Brief.stage_message(tracked))
         {:ok, tracked}
@@ -1271,4 +1267,25 @@ defmodule Server.Workline do
 
     post_brief(thread, "⚠ QA skipped by the operator: #{reason}")
   end
+
+  # A thread opens with the manager as its lead; a workline is a builder's — a free one, else one
+  # hired beside the bench's busy builders (restaff). A bench with no builder to give it to leaves
+  # it unled for triage: the manager never keeps it.
+  defp unseat_manager(thread) do
+    if manager_leads?(thread) do
+      restaffed = restaff(thread)
+
+      if manager_leads?(restaffed) do
+        close_leaf(restaffed)
+        {:ok, unled} = Server.Staff.unassign(restaffed)
+        unled
+      else
+        restaffed
+      end
+    else
+      thread
+    end
+  end
+
+  defp manager_leads?(thread), do: Server.Channel.manager_on_workline?(thread, Server.Channel.thread_lead(thread.id))
 end

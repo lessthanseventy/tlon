@@ -66,6 +66,14 @@ defmodule Server.Staff do
     |> Server.Bus.announce(:thread_assigned)
   end
 
+  @doc "Leave a thread with no lead, so triage shows it unled for someone to staff."
+  def unassign(%Thread{} = thread) do
+    thread
+    |> Ecto.Changeset.change(agent_id: nil)
+    |> Repo.update()
+    |> Server.Bus.announce(:thread_assigned)
+  end
+
   @doc "The threads an agent is staffed on (an agent maps to many threads, §3), newest first."
   def threads_for(%Agent{} = agent) do
     Repo.all(from t in Thread, where: t.agent_id == ^agent.id, order_by: [desc: t.id])
