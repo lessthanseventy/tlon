@@ -469,19 +469,7 @@ defmodule Server.Workline do
     with :ok <- reviewed_current(thread) do
       case merger.merge(repo, thread.slug, gate: gate) do
         {:ok, moved} ->
-          case flip(thread) do
-            {:ok, flipped} ->
-              finish(flipped, Map.put(moved, :repo, repo))
-              {:ok, flipped}
-
-            {:error, {:moved, now}} ->
-              post_brief(
-                thread,
-                "⚠ the merge queue's gate passed, but the workline moved to #{now} while it ran — nothing landed."
-              )
-
-              {:ok, Repo.get!(Thread, thread.id)}
-          end
+          landed(thread, Map.put(moved, :repo, repo))
 
         {:error, {:interrupted, why}} when not last? ->
           {:error, {:interrupted, why}}
@@ -823,7 +811,8 @@ defmodule Server.Workline do
   defp verified_artifact(thread, checker) do
     requirement = Map.fetch!(@owed, thread.stage)
 
-    checker.check(thread, requirement)
+    thread
+    |> checker.check(requirement)
     |> this_round(thread)
     |> case do
       {:ok, evidence} ->
@@ -1608,19 +1597,7 @@ defmodule Server.Workline do
     with base when is_binary(base) <- main_ref(root),
          {:ok, seen} <- own_patches(root, base, sha, thread.slug),
          {:ok, now} <- own_patches(root, base, head, thread.slug) do
-      cond do
-        seen == [] and now == [] ->
-          if same_tree?(root, sha, head, thread.slug), do: :same, else: {:changed, :code}
-
-        Enum.map(seen, &elem(&1, 1)) == Enum.map(now, &elem(&1, 1)) ->
-          :same
-
-        Enum.map(seen, &elem(&1, 0)) == Enum.map(now, &elem(&1, 0)) ->
-          {:changed, :conflicts}
-
-        true ->
-          {:changed, :code}
-      end
+      patches_compared(seen, now, fn -> same_tree?(root, sha, head, thread.slug) end)
     else
       why ->
         require(Logger) && Logger.warning("workline #{thread.slug}: can't compare #{sha} with #{head}: #{inspect(why)}")
@@ -1637,6 +1614,36 @@ defmodule Server.Workline do
   end
 
   defp this_round(result, _thread), do: result
+
+  # `{subject, patch-id}` lists: the same patches are the same change; the same commits with other
+  # patches, a rebase whose conflicts were resolved. No commits of its own on either side (its code
+  # is on main already): `same_tree?` decides.
+  defp patches_compared([], [], same_tree?), do: if(same_tree?.(), do: :same, else: {:changed, :code})
+
+  defp patches_compared(seen, now, _same_tree?) do
+    cond do
+      Enum.map(seen, &elem(&1, 1)) == Enum.map(now, &elem(&1, 1)) -> :same
+      Enum.map(seen, &elem(&1, 0)) == Enum.map(now, &elem(&1, 0)) -> {:changed, :conflicts}
+      true -> {:changed, :code}
+    end
+  end
+
+  # the gate passed: flip it to merged unless it moved off review while the gate ran
+  defp landed(thread, moved) do
+    case flip(thread) do
+      {:ok, flipped} ->
+        finish(flipped, moved)
+        {:ok, flipped}
+
+      {:error, {:moved, now}} ->
+        post_brief(
+          thread,
+          "⚠ the merge queue's gate passed, but the workline moved to #{now} while it ran — nothing landed."
+        )
+
+        {:ok, Repo.get!(Thread, thread.id)}
+    end
+  end
 
   defp still_open(%Thread{state: "closed"}), do: {:error, :closed}
   defp still_open(_thread), do: :ok

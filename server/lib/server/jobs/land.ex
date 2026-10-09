@@ -22,18 +22,7 @@ defmodule Server.Jobs.Land do
         Server.Repo.one(from t in Server.Thread, where: t.id == ^tid, lock: "FOR UPDATE")
       end)
 
-    case thread do
-      nil ->
-        :ok
-
-      thread ->
-        # a gate cut off (a restart) leaves the landing queued; this attempt fails so Oban runs it
-        # again, and only the last one cut off bounces it
-        case reported(thread, attempt, max, fn -> Server.Workline.land_queued(thread, last: attempt >= max) end) do
-          {:error, {:interrupted, why}} -> {:error, why}
-          _ -> :ok
-        end
-    end
+    if thread, do: land(thread, attempt, max), else: :ok
   end
 
   @doc """
@@ -85,4 +74,13 @@ defmodule Server.Jobs.Land do
     do:
       {:error,
        "the full check on main with this branch is red (exit #{code}): #{String.slice(String.trim(out), -2000, 2000)}"}
+
+  # a gate cut off (a restart) leaves the landing queued; this attempt fails so Oban runs it again,
+  # and only the last one cut off bounces it
+  defp land(thread, attempt, max) do
+    case reported(thread, attempt, max, fn -> Server.Workline.land_queued(thread, last: attempt >= max) end) do
+      {:error, {:interrupted, why}} -> {:error, why}
+      _ -> :ok
+    end
+  end
 end
