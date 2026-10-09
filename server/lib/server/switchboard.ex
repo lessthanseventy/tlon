@@ -164,13 +164,23 @@ defmodule Server.Switchboard do
 
     case recipients(message) do
       [] ->
-        # nobody warm is addressed: open their panes (a no-op while one is still booting)
-        maybe_spawn_absent(message)
+        # nobody warm is addressed: open their panes (a no-op while one is still booting); a message
+        # that can reach nobody at all is settled, or every drain would read it again forever
+        if reaches_nobody?(message), do: claim([message.id]), else: maybe_spawn_absent(message)
         []
 
       sessions ->
         if claim([message.id]) > 0, do: Enum.map(sessions, &{&1, message.id}), else: []
     end
+  end
+
+  defp reaches_nobody?(%Message{kind: kind}) when kind in ["notice", "suggestion"], do: true
+
+  defp reaches_nobody?(%Message{} = message) do
+    author = String.downcase(message.author)
+
+    match?(%Thread{state: "closed"}, Repo.get(Thread, message.thread_id)) or
+      message |> target_names() |> Enum.all?(&(String.downcase(&1) == author))
   end
 
   # Atomically flip delivered_at to now for the still-undelivered messages among
