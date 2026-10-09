@@ -157,6 +157,15 @@ defmodule Server.TicketsTest do
       assert lead == builder.agent_id
     end
 
+    test "a started ticket on a bench with only the manager is left unled, never the manager's" do
+      {:ok, ws} = Workspaces.create(%{name: "Manager only"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius-o", archetype: "surveyor"})
+      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "build the sweep"})
+
+      assert {:ok, %{id: id, stage: "build", agent_id: nil}} = Tickets.start_thread(t)
+      assert Server.Channel.thread_lead(id) == nil
+    end
+
     test "route with no manager on the bench starts the ticket with the lead" do
       {:ok, ws} = Workspaces.create(%{name: "Unmanaged"})
       {:ok, lead} = Workspaces.seat(ws.id, %{name: "hronir-u", archetype: "builder"})
