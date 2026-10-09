@@ -68,3 +68,30 @@ describe("inkInto balloons (kitty)", () => {
     expect(area(both)).toBeGreaterThan(area(a))
   })
 })
+
+describe("textLayer balloons (blocks)", () => {
+  const floorW = 80, floorH = 60
+  const g = { k: 1, cw: 1, ch: 2, col: 0, row: 0, cols: 80, rows: 30, kitty: false, floorW, floorH }
+  const frame = (ink: any[]) => ({ rgba: new Uint8Array(floorW * floorH * 4).fill(255), width: floorW, height: floorH, ink, hits: [] })
+  const balloon = (text: string, cx: number) => ({ t: "balloon" as const, lines: balloonLines(text), cx, top: 40 })
+  test("an 80-char word at each edge stays inside the room, rows keep their width", () => {
+    for (const cx of [0, 40, floorW]) {
+      const rows = textLayer(frame([balloon("x".repeat(80), cx)]), g).map(strip)
+      for (const r of rows) expect(r.length).toBe(80)
+      expect(rows.join("").split("x").length - 1).toBe(80)
+    }
+  })
+  test("a panned viewport puts the balloon on the speaker's column", () => {
+    const rows = textLayer(frame([balloon("hi", 60)]), g, { x: 50, y: 0, w: 30, h: 60 }).map(strip)
+    const at = rows.map((r) => r.indexOf("hi")).find((i) => i >= 0)!
+    expect(at).toBeGreaterThanOrEqual(8)
+    expect(at).toBeLessThanOrEqual(12)
+  })
+  test("two speakers 3 cells apart: both balloons show, on different rows", () => {
+    const rows = textLayer(frame([balloon("alpha", 40), balloon("bravo", 43)]), g).map(strip)
+    const a = rows.findIndex((r) => r.includes("alpha")), b = rows.findIndex((r) => r.includes("bravo"))
+    expect(a).toBeGreaterThanOrEqual(0)
+    expect(b).toBeGreaterThanOrEqual(0)
+    expect(a).not.toBe(b)
+  })
+})
