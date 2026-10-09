@@ -133,6 +133,7 @@ defmodule Server.Channel do
         Staff.end_thread_sessions(thread.id)
         Server.Tickets.done_for(thread.id)
         Server.Attention.withdraw_asks_about(thread.id)
+        Server.Workline.release_follow_ups(closed)
         report_to_parent(closed)
         {:ok, closed}
 

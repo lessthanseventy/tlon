@@ -83,6 +83,25 @@ defmodule Server.WorklineSendBackTest do
       assert {:ok, %Thread{stage: "spec"}} = Workline.send_back(other, "spec", "wrong problem", "andrew")
     end
 
+    test "a builder who isn't its lead can't send it back at all" do
+      thread = at_review("not-lead")
+      assert {:error, {:not_yours, _}} = Workline.send_back(thread, "build", "x", "emma")
+    end
+
+    test "a merged workline isn't sent back — it relands; a landing or verify in flight is let finish" do
+      merged = at_review("landed")
+      {:awaiting, parked} = Workline.advance(Repo.get!(Thread, merged.id), artifacts: AllPresent)
+      {:ok, _} = Workline.approve(parked, artifacts: AllPresent, merge: Merges)
+      landed = Repo.get!(Thread, merged.id)
+      assert {:error, {:not_movable, "merged"}} = Workline.send_back(landed, "build", "x", "andrew")
+
+      landing = at_review("landing")
+      %{thread_id: landing.id} |> Server.Jobs.Land.new() |> Repo.insert!()
+      assert {:error, {:in_flight, why}} = Workline.send_back(landing, "plan", "x", "hronir")
+      assert why =~ "landing"
+      assert %Thread{stage: "review"} = Repo.get!(Thread, landing.id)
+    end
+
     test "only backwards, only to a working stage" do
       thread = at_review("forward")
       assert {:error, {:not_behind, "review"}} = Workline.send_back(thread, "review", "x", "hronir")
@@ -114,6 +133,23 @@ defmodule Server.WorklineSendBackTest do
       refute "held" in released.labels
       assert "follow-up" in released.labels
       assert Enum.any?(bodies(thread), &(&1 =~ "follow-up" and &1 =~ "##{ticket.id}"))
+    end
+
+    test "closed without merging, its follow-ups still reach intake, saying so" do
+      thread = at_review("abandoned")
+      {:ok, [ticket]} = Workline.follow_ups(thread, "lonnrot", ["a real nit"])
+
+      {:ok, _} = Channel.close_thread(Repo.get!(Thread, thread.id))
+
+      released = Repo.get!(Server.Ticket, ticket.id)
+      refute "held" in released.labels
+      assert released.body =~ "closed without merging"
+    end
+
+    test "a follow-up already filed on the workline isn't filed again" do
+      thread = at_review("repeat")
+      {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nfirst review"])
+      assert {:ok, []} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nsecond review"])
     end
 
     test "a blank follow-up files nothing" do
