@@ -271,6 +271,12 @@ defmodule Server.ProfilesTest do
       assert Enum.all?(Profiles.model_ring(), &(&1.provider == "ollama-cloud"))
     end
 
+    test "the plan's cheap workhorse is on it; the per-token kimi-k3 never is" do
+      models = Enum.map(Profiles.model_ring(), & &1.model)
+      assert "deepseek-v4.1-flash" in models
+      refute "kimi-k3" in models
+    end
+
     test "next_model advances and wraps; unknown or nil restarts at the head" do
       [first, second | _] = Profiles.model_ring()
       assert Profiles.next_model(first) == second
