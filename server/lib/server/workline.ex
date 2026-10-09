@@ -227,7 +227,8 @@ defmodule Server.Workline do
   def advance(%Thread{} = thread, opts \\ []) do
     checker = Keyword.get(opts, :artifacts, Git)
 
-    with :ok <- advanceable(thread, checker),
+    with :ok <- still_open(thread),
+         :ok <- advanceable(thread, checker),
          :ok <- verified_artifact(thread, checker),
          :ok <- qa_cleared(thread, opts) do
       if gated?(thread), do: park(thread, checker, opts), else: flip(thread)
@@ -462,9 +463,19 @@ defmodule Server.Workline do
     with :ok <- reviewed_current(thread) do
       case merger.merge(repo, thread.slug, gate: gate) do
         {:ok, moved} ->
-          {:ok, flipped} = flip(thread)
-          finish(flipped, Map.put(moved, :repo, repo))
-          {:ok, flipped}
+          case flip(thread) do
+            {:ok, flipped} ->
+              finish(flipped, Map.put(moved, :repo, repo))
+              {:ok, flipped}
+
+            {:error, {:moved, now}} ->
+              post_brief(
+                thread,
+                "⚠ the merge queue's gate passed, but the workline moved to #{now} while it ran — nothing landed."
+              )
+
+              {:ok, Repo.get!(Thread, thread.id)}
+          end
 
         {:error, {:interrupted, why}} when not last? ->
           {:error, {:interrupted, why}}
@@ -900,39 +911,36 @@ defmodule Server.Workline do
     |> Enum.map(&%{cmd: &1.detail["cmd"], exit: &1.detail["exit"]})
   end
 
-  # One transaction: the stage flip and its ledger row commit together or not at all.
+  # One transaction: the stage flip and its ledger row commit together or not at all, on the row
+  # locked FOR UPDATE and only from the stage `thread` was read at, open: a landing or an advance
+  # working from a stale read (a bounce, a second advance, a close since) flips nothing,
+  # `{:error, {:moved, stage}}`.
   defp flip(thread) do
     to = next(thread.stage)
 
-    {:ok, flipped} =
-      Repo.transaction(fn ->
-        {:ok, flipped} = thread |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
+    fn ->
+      locked = Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
 
-        {:ok, _event} =
-          Dossier.record_event(%{
-            thread_id: thread.id,
-            kind: "stage_advanced",
-            correlation: "workline:#{thread.slug}",
-            detail: %{"from" => thread.stage, "to" => to}
-          })
+      if locked.stage != thread.stage or locked.state != "open",
+        do: Repo.rollback({:moved, if(locked.state == "open", do: locked.stage, else: "closed")})
 
-        flipped
-      end)
+      {:ok, flipped} = locked |> Thread.workline_stage_changeset(%{stage: to, awaiting: nil}) |> Repo.update()
 
-    # Restaff BEFORE broadcasting: subscribers acting on the advance must never observe the
-    # last stage's worker still leading this one.
-    flipped = restaff(flipped)
-    Server.Bus.broadcast({:workline_advanced, flipped})
+      {:ok, _event} =
+        Dossier.record_event(%{
+          thread_id: thread.id,
+          kind: "stage_advanced",
+          correlation: "workline:#{thread.slug}",
+          detail: %{"from" => thread.stage, "to" => to}
+        })
 
-    post_brief(
-      flipped,
-      Brief.stage_message(flipped, last_reviewed: flipped.stage == "review" && last_reviewed(flipped))
-    )
-
-    if flipped.stage == "verify",
-      do: Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: flipped.id, slug: flipped.slug}))
-
-    {:ok, flipped}
+      flipped
+    end
+    |> Repo.transaction()
+    |> case do
+      {:ok, flipped} -> flipped_after(flipped)
+      {:error, moved} -> {:error, moved}
+    end
   end
 
   # The brief IS the wake: a server-authored message rides the lead-wake path (slice 2).
@@ -1617,4 +1625,24 @@ defmodule Server.Workline do
   end
 
   defp this_round(result, _thread), do: result
+
+  defp still_open(%Thread{state: "closed"}), do: {:error, :closed}
+  defp still_open(_thread), do: :ok
+
+  defp flipped_after(flipped) do
+    # Restaff BEFORE broadcasting: subscribers acting on the advance must never observe the
+    # last stage's worker still leading this one.
+    flipped = restaff(flipped)
+    Server.Bus.broadcast({:workline_advanced, flipped})
+
+    post_brief(
+      flipped,
+      Brief.stage_message(flipped, last_reviewed: flipped.stage == "review" && last_reviewed(flipped))
+    )
+
+    if flipped.stage == "verify",
+      do: Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: flipped.id, slug: flipped.slug}))
+
+    {:ok, flipped}
+  end
 end
