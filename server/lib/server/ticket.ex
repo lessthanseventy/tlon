@@ -51,6 +51,13 @@ defmodule Server.Ticket do
 
   @mutable [:title, :body, :status, :priority, :labels, :assignee, :project_id, :sort]
 
+  @urgency %{"high" => 0, "med" => 1, "low" => 2}
+
+  @doc "A priority's rank, 0 the most urgent — lower sorts first. An unknown priority ranks as `med`."
+  @spec urgency(%__MODULE__{} | String.t()) :: non_neg_integer()
+  def urgency(%__MODULE__{priority: priority}), do: urgency(priority)
+  def urgency(priority), do: Map.get(@urgency, priority, 1)
+
   @doc "File a ticket. `workspace_id` + `title` required; status defaults to `backlog`. Stamps both times."
   def file_changeset(attrs) do
     now = DateTime.truncate(DateTime.utc_now(), :second)

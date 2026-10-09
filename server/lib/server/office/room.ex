@@ -14,12 +14,14 @@ defmodule Server.Office.Room do
   alias Server.Dossier
   alias Server.Event
   alias Server.Fact
+  alias Server.Intake
   alias Server.Issue
   alias Server.Message
   alias Server.Question
   alias Server.Repo
   alias Server.Schedules
   alias Server.Thread
+  alias Server.Ticket
   alias Server.Tickets
 
   @cap 5
@@ -234,6 +236,75 @@ defmodule Server.Office.Room do
         blocked_by: Tickets.blockers(t.id)
       }
     end
+  end
+
+  @doc """
+  A workspace's backlog grouped by epic: `%{epics: [row], loose: [ticket]}`. Each epic row carries `done`/`total` over its
+  children, its own `priority`, `status` (derived), its `children` (each with `epic_id` and the `effective_priority` —
+  the higher of its own and its epic's) and `next`: `%{id, title}` of its lowest-`sort` child that is `backlog`,
+  unblocked and not held (what intake would start), or nil. Epics sort most urgent first, then board order.
+  Tickets with no epic are `loose`. Flat reads stay in `tickets/1`.
+  """
+  @spec board(integer()) :: %{epics: [map()], loose: [map()]}
+  def board(workspace_id) do
+    all = Tickets.in_workspace(workspace_id)
+    blocked = Tickets.blocked_in_workspace(workspace_id)
+    by_id = Map.new(all, &{&1.id, &1})
+
+    parent_of =
+      from(l in Server.TicketLink,
+        join: e in Ticket,
+        on: e.id == l.from_id,
+        where: l.kind == "parent" and e.workspace_id == ^workspace_id,
+        select: {l.to_id, l.from_id}
+      )
+      |> Repo.all()
+      |> Map.new()
+
+    {epics, tickets} = Enum.split_with(all, &(&1.kind == "epic"))
+    {kids, loose} = Enum.split_with(tickets, &Map.has_key?(parent_of, &1.id))
+    kids_of = Enum.group_by(kids, &parent_of[&1.id])
+
+    rows =
+      for e <- epics do
+        children = Map.get(kids_of, e.id, [])
+
+        free =
+          Enum.filter(children, &(&1.status == "backlog" and not MapSet.member?(blocked, &1.id) and not Intake.held?(&1)))
+
+        next = Enum.min_by(free, &{&1.sort || 0, &1.id}, fn -> nil end)
+
+        %{
+          id: e.id,
+          title: e.title,
+          body: e.body,
+          status: e.status,
+          priority: e.priority,
+          labels: e.labels,
+          done: Enum.count(children, &(&1.status == "done")),
+          total: length(children),
+          next: next && %{id: next.id, title: next.title},
+          children: Enum.map(children, &board_ticket(&1, by_id[parent_of[&1.id]], blocked))
+        }
+      end
+
+    %{
+      epics: Enum.sort_by(rows, &Ticket.urgency(&1.priority)),
+      loose: Enum.map(loose, &board_ticket(&1, nil, blocked))
+    }
+  end
+
+  defp board_ticket(t, epic, blocked) do
+    %{
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      effective_priority: Enum.min_by([t.priority | List.wrap(epic && epic.priority)], &Ticket.urgency/1),
+      epic_id: epic && epic.id,
+      blocked: MapSet.member?(blocked, t.id),
+      held: Intake.held?(t)
+    }
   end
 
   @doc "A workspace's settings, for its config card: type, scope, icon, and its repos in order. nil for none."

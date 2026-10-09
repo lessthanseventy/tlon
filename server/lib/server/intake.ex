@@ -19,8 +19,6 @@ defmodule Server.Intake do
   alias Server.Thread
   alias Server.Ticket
 
-  @urgency %{"high" => 0, "med" => 1, "low" => 2}
-
   @doc "One pass over every workspace with a backlog. `cap` and `route` override for a test."
   def run(opts \\ []) do
     cap = opts[:cap] || Server.OperatorConfig.setting("max_worklines")
@@ -138,11 +136,10 @@ defmodule Server.Intake do
   # effective priority = the higher of the ticket's and its epic's; a doing epic's child goes before the rest
   defp rank(ticket, epics) do
     epic = epics[ticket.id]
-    urgency = Enum.min([urgency(ticket) | List.wrap(epic && urgency(epic))])
+    urgency = Enum.min([Ticket.urgency(ticket) | List.wrap(epic && Ticket.urgency(epic))])
     {urgency, if(epic && epic.status == "doing", do: 0, else: 1), -(ticket.sort || 0), -ticket.id}
   end
 
-  defp urgency(%Ticket{priority: priority}), do: Map.get(@urgency, priority, 1)
-
-  defp held?(%Ticket{labels: labels}), do: is_list(labels) and "held" in labels
+  @doc "Whether a ticket is parked by the `held` label — intake never starts it."
+  def held?(%Ticket{labels: labels}), do: is_list(labels) and "held" in labels
 end
