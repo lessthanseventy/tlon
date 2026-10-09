@@ -6,6 +6,7 @@
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
+import { posterOf } from "../kit/poster"
 import { fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, peopleOf, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
@@ -292,6 +293,7 @@ export class WideRoom extends Sim<Layout> {
     this.season(sc, now)
     this.tv(sc, L0 + 36)
     this.stereo(sc, Math.min(L0 + 96, W - 46))
+    this.poster(sc, Math.min(L0 + 96, W - 46) + 48, now)
     this.clock(sc, W - 24, now)
 
     // ── your office: glass on the floor's side, a door at the bottom; your desk; Nina's corner ──
@@ -629,6 +631,16 @@ export class WideRoom extends Sim<Layout> {
       tip: this.player ? `the stereo: ${this.player.text}` : "the stereo: idle — no signal",
       act: { kind: "stereo" },
     })
+  }
+
+  /** the poster of the day, hung only where the wall has room between the stereo and the clock */
+  private poster(sc: Scene, x0: number, now: Date) {
+    const w = 14
+    if (x0 + w > this.width - 34) return
+    const line = posterOf(now)
+    sc.px(x0, 6, w, 20, ROLE.structure); sc.px(x0 + 1, 7, w - 2, 18, ROLE.prose)
+    sc.px(x0 + 3, 10, w - 6, 5, ROLE.alarm); for (let i = 0; i < 3; i++) sc.px(x0 + 3, 17 + i * 2, w - 6, 1, ROLE.inactive)
+    sc.hits.push({ x: x0, y: 6, w, h: 20, tip: `the poster: ${line}`, act: { kind: "poster" } })
   }
 
   /** the clock on the wall, telling the real time */
