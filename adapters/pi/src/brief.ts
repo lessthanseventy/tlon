@@ -95,6 +95,9 @@ export interface Dossier {
   todos: Capped<Todo>;
   next: Todo | null;
   learnings: Capped<Fact>;
+  // What the operator pinned and the project learned on other threads. Optional: a server from
+  // before it still renders.
+  knowledge?: Capped<Fact>;
   unknowns: Capped<Question>;
   done: Capped<DoneEntry>;
   blockers: Capped<Blocker>;
@@ -148,6 +151,12 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string):
     lines.push("", "## What's known");
     for (const f of d.learnings.shown) lines.push(renderFact(f));
     pushMore(lines, d.learnings.more, "learnings");
+  }
+
+  if (d.knowledge && d.knowledge.shown.length > 0) {
+    lines.push("", "## What the office knows  (pinned, and learned on other threads)");
+    for (const f of d.knowledge.shown) lines.push(renderFact(f));
+    pushMore(lines, d.knowledge.more, "knowledge");
   }
 
   if (d.unknowns.shown.length > 0) {

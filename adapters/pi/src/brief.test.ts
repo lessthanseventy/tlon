@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderBrief, type Dossier } from "./brief.ts";
+import { renderBrief, type Dossier, type Fact } from "./brief.ts";
 
 // A fixed "now" so staleness is deterministic. Every `at` below is offset from it.
 const NOW = new Date("2026-08-16T12:00:00Z");
@@ -287,6 +287,23 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
     expect(out).toContain("40m ago");
     expect(out.toLowerCase()).toContain("unrecorded");
   });
+
+  test("what the office knows from other threads gets its own section, after the thread's own", () => {
+    const fact = (id: number, text: string): Fact => ({ id, kind: "learned", text, provenance: "derived", check_cmd: null, certainty: "opinion", at: minsAgo(30) })
+    const out = renderBrief(
+      dossier({ learnings: { shown: [fact(1, "own lesson")], more: 0 }, knowledge: { shown: [fact(2, "drift is one note per repo")], more: 40 } }),
+      NOW,
+    )
+    expect(out).toContain("## What the office knows")
+    expect(out).toContain("drift is one note per repo")
+    expect(out.indexOf("own lesson")).toBeLessThan(out.indexOf("drift is one note per repo"))
+    expect(out).toContain("40")
+  })
+
+  test("a server from before knowledge renders without it", () => {
+    const out = renderBrief(dossier(), NOW)
+    expect(out).not.toContain("## What the office knows")
+  })
 
   test("a thread with nothing banked says so — never a false-empty confidence", () => {
     const out = renderBrief(dossier(), NOW);

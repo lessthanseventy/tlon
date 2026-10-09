@@ -196,11 +196,36 @@ defmodule Server.BoardTest do
       assert Server.MCP.Brief.scope(brief)["opening"]["body"] == ask
     end
 
+    test "knowledge: a new thread starts from what the office pinned and its project learned elsewhere" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Knowing"})
+      {:ok, project} = Server.Projects.register(%{name: "tlon", workspace_id: ws.id})
+      {:ok, older} = Channel.open_thread(%{title: "keepup drift", workspace_id: ws.id, project_id: project.id})
+      {:ok, fresh} = Channel.open_thread(%{title: "drift notes again", workspace_id: ws.id, project_id: project.id})
+
+      bank = fn t, kind, prov, text ->
+        {:ok, f} = Dossier.bank_fact(%{thread_id: t.id, kind: kind, provenance: prov, text: text})
+        f
+      end
+
+      elsewhere = bank.(older, "learned", "derived", "KeepUp keeps one drift note per repo")
+      pinned = bank.(older, "constraint", "stated", "Every command in the loop is a mise task")
+      own = bank.(fresh, "learned", "derived", "this thread's own lesson")
+
+      ids = fn capped -> Enum.map(capped.shown, & &1.id) end
+      scope = Board.brief(fresh)
+      assert elsewhere.id in ids.(scope.knowledge)
+      assert pinned.id in ids.(scope.knowledge)
+      refute own.id in ids.(scope.knowledge)
+      assert own.id in ids.(scope.learnings)
+      assert %{"knowledge" => %{"shown" => [_ | _], "more" => _}} = Server.MCP.Brief.scope(scope)
+    end
+
     test "an unassigned thread has a nil lead, and empty sections count zero" do
       {:ok, thread} = Channel.open_thread(%{title: "unstaffed"})
       scope = Board.brief(thread)
       assert scope.lead == nil
       assert scope.learnings == %{shown: [], more: 0}
+      assert scope.knowledge == %{shown: [], more: 0}
       assert scope.unknowns == %{shown: [], more: 0}
       assert scope.checks == %{shown: [], more: 0}
       assert scope.done == %{shown: [], more: 0}

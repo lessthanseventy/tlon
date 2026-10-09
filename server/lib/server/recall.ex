@@ -148,6 +148,28 @@ defmodule Server.Recall do
     %{shown: shown, more: max(total - length(shown), 0)}
   end
 
+  @doc """
+  What the rest of the office knows that bears on `thread`: the brief's cross-thread working set —
+  the operator's pinned constraints and what the thread's project learned on other threads, ranked by
+  relevance × strength to the same budget — minus the thread's own facts (its `thread_learnings/2`).
+  `more` counts the candidates that fell out of budget (still on disk; `get_facts`/`search_history`).
+  """
+  @spec thread_knowledge(Thread.t(), keyword()) :: %{shown: [Fact.t()], more: non_neg_integer()}
+  def thread_knowledge(%Thread{} = thread, opts \\ []) do
+    shown =
+      thread
+      |> working_set_for_thread(opts)
+      |> Enum.map(& &1.fact)
+      |> Enum.reject(&(&1.thread_id == thread.id))
+
+    pool =
+      (Dossier.always_loaded_constraints() ++ Dossier.facts_for_project(thread))
+      |> Enum.uniq_by(& &1.id)
+      |> Enum.count(&(&1.thread_id != thread.id))
+
+    %{shown: shown, more: max(pool - length(shown), 0)}
+  end
+
   # The query's embedding: a precomputed `:query_embedding` (the test/cached path), else embed the
   # `:query` string via ollama, else nil (a session-start recall with no query → uniform relevance).
   defp query_vector(opts) do

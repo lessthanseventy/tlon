@@ -207,6 +207,9 @@ defmodule Server.Board do
       # design: `docs/plans/2026-08-19-funes-forgetting-design.md`) — not a recency window; `more`
       # counts what fell out of budget (still on disk, `get_facts` returns the total).
       learnings: Recall.thread_learnings(thread, query: recall_query(thread)),
+      # KNOWLEDGE — what the operator pinned and the project learned on OTHER threads, ranked the
+      # same way, so a new lead starts from what the office already knows (`Recall.thread_knowledge/2`).
+      knowledge: Recall.thread_knowledge(thread, query: recall_query(thread)),
       # UNKNOWNS beside FACTS — knowing what you don't know is first-class (§4a).
       unknowns: Dossier.open_questions_for_thread(thread),
       blockers: Dossier.open_issues_for_thread(thread),
