@@ -54,9 +54,8 @@ defmodule Server.Thread do
   follows: an invalid state is refused by SQLite (it raises), never by a second
   guard that could drift from the DB's.
   """
-  def state_changeset(thread, state) do
-    change(thread, state: state)
-  end
+  def state_changeset(thread, "closed"), do: change(thread, state: "closed", awaiting: nil)
+  def state_changeset(thread, state), do: change(thread, state: state)
 
   @doc ~s{A new WORKLINE thread (slice 1): opens at stage "intent", machine-scoped by default.
   `attrs` is atom-keyed (internal callers only). `born` defaults to "operator"; the Maintain
