@@ -806,7 +806,9 @@ defmodule Server.Workline do
   defp verified_artifact(thread, checker) do
     requirement = Map.fetch!(@owed, thread.stage)
 
-    case checker.check(thread, requirement) do
+    checker.check(thread, requirement)
+    |> this_round(thread)
+    |> case do
       {:ok, evidence} ->
         record_artifact_check(thread, requirement, 0, evidence)
         :ok
@@ -1605,4 +1607,14 @@ defmodule Server.Workline do
         {:changed, :unreadable}
     end
   end
+
+  # review.md stays on the branch across rounds: back at review after a bounce, the file is the last
+  # round's, so only a verdict since the workline re-entered review is this round's review
+  defp this_round({:ok, _} = ok, %Thread{stage: "review"} = thread) do
+    if is_nil(since_review(thread, "workline:#{thread.slug}:review")) and last_reviewed(thread) != nil,
+      do: {:error, "work/#{thread.slug}/review.md is the last round's — submit_review this round's verdict"},
+      else: ok
+  end
+
+  defp this_round(result, _thread), do: result
 end
