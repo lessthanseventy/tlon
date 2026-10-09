@@ -10,8 +10,11 @@ defmodule Server.Office.Corkboard do
   never written to `Server.Notes`, which the coworkers read as they work. A suggestion is not
   chatter: it goes in the suggestion box (`suggestions/1`, the newest `@keep_ideas`), a `suggestion`
   message on the workspace's standing thread (`Server.Channel.machine_thread/1`) — stored delivered,
-  so it wakes nobody, yet a coworker's history search finds it and a restart keeps it. It leaves
-  the box, resolved, when the operator files it as a ticket or throws it out (`drop/2`). Lazy like
+  so it wakes nobody, yet a coworker's history search finds it and a restart keeps it. Its body
+  says it is a banter-written idea nobody asked for, and it never reaches the operator's needs
+  (`Server.Office.Needs`): the model wrote it in a coworker's voice, so read as a request it would
+  get built though no one wanted it. It leaves the box, resolved, when the operator files it as a
+  ticket or throws it out (`drop/2`). Lazy like
   banter — a note is only written while an office asks (`notes/1`), at most one per workspace every
   `@every_s` — and on and off with it.
   """
@@ -185,7 +188,8 @@ defmodule Server.Office.Corkboard do
              thread_id: thread_id,
              author: note.author,
              kind: "suggestion",
-             body: "corkboard suggestion from #{note.author}: #{note.body}",
+             body:
+               "corkboard idea, written by the office's banter in #{note.author}'s voice (nobody asked for it): #{note.body}",
              payload: %{"note" => note.body}
            }
            |> Message.post_changeset()

@@ -138,7 +138,7 @@ let cork: CorkNote[] = []
 let needs: data.Need[] = []
 /** the office revision this TUI started on: when main's moves past it, R reloads */
 let officeRev: string | null | undefined
-/** the suggestion box: the crew's suggestions, waiting on you to file one or throw it out */
+/** the suggestion box: corkboard ideas the banter wrote in a coworker's voice (never a request), for you to file or throw out */
 let ideas: CorkNote[] = []
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
 let lifeCard: LifeStatus | null = null
@@ -411,7 +411,7 @@ function openBabel() { open({ kind: "babel", page: babelPage(DETAIL - 2, Math.ma
 
 /** what can be done about one waiting item — the inbox's list and its one-at-a-time card share these */
 function needActions(n: data.Need): Action[] {
-  const tid = n.thread_id ?? null, w = n.workspace_id ?? ws
+  const tid = n.thread_id ?? null
   const after = () => void refresh()
   const acts: Action[] = [
     ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
@@ -424,10 +424,6 @@ function needActions(n: data.Need): Action[] {
     ] : []),
     ...((n.kind === "question" || n.kind === "mention") && tid ? [{ key: "r", label: "reply", run: () => reply(tid) }] : []),
     ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
-    ...(n.kind === "suggestion" && w !== null && n.ref ? [
-      { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, n.text)).then(() => data.dropSuggestion(w, n.ref!)).then(after) },
-      { key: "d", label: "throw it out", run: () => void data.dropSuggestion(w, n.ref!).then(after) },
-    ] : []),
     ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
     ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
   ]
@@ -437,8 +433,8 @@ function needActions(n: data.Need): Action[] {
 /** what waits on you: one at a time when anything does — the whole list is a key away */
 function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
 /** a need's one-line name: what kind, and where */
-const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", mention: "mentioned you", suggestion: "suggestion", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed" }
-const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, mention: ROLE.body, suggestion: ROLE.assistant, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm }
+const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed" }
+const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev
@@ -1061,7 +1057,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const row = (n: data.Need): Row => ({
         segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(n.thread_id ? [tidSeg(n.thread_id)] : []),
           { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), { s: n.text.replace(/\s+/g, " "), fg: n.level === "blocking" ? ROLE.prose : ROLE.inactive }],
-        open: n.thread_id ? () => openReader(n.thread_id!, false) : n.kind === "suggestion" ? () => open({ kind: "ideas" }) : undefined, ref: n,
+        open: n.thread_id ? () => openReader(n.thread_id!, false) : undefined, ref: n,
       })
       const blocking = needs.filter((n) => n.level === "blocking"), deciding = needs.filter((n) => n.level === "decide")
       const live = all.threads.filter((t) => t.live && !t.standing && !needs.some((n) => n.thread_id === t.id))
@@ -1107,12 +1103,13 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "ideas": {
-      const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
-      const rows: Row[] = ideas.map((n) => ({ segs: [who(n.author), plain(n.body)], ref: n }))
+      // the banter model wrote these in a coworker's voice: say so, or one reads as their request
+      const who = (name: string) => ({ s: `${name}'s voice: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
+      const rows: Row[] = ideas.map((n) => ({ segs: [dim("banter, in "), who(n.author), plain(n.body)], ref: n }))
       const picked = rows[sel]?.ref as CorkNote | undefined, w = ws
       const gone = (id: number) => { ideas = ideas.filter((x) => x.id !== id); room().suggestionBox(ideas) }
       return {
-        title: `SUGGESTIONS · ${ideas.length}`, rows: rows.length ? rows : [{ segs: [dim("the box is empty. the crew drops ideas in it as they work.")] }],
+        title: `CORKBOARD IDEAS · ${ideas.length} · written by the office's banter, nobody asked`, rows: rows.length ? rows : [{ segs: [dim("the box is empty. the office's banter drops ideas in it as the crew works.")] }],
         actions: [
           ...(picked && w !== null ? [
             { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, picked.body)).then(() => data.dropSuggestion(w, picked.id)).then(() => { gone(picked.id); draw() }) },

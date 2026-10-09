@@ -34,7 +34,8 @@ linked window at a time, Ctrl-] back to the room).
   thread that ships throws its lead a party; a finished turn high-fives whoever it passes. The
   notes board also carries the crew's chatter (`CorkNote`, from `Server.Office.Corkboard`), kept
   apart from the notes they work from; their suggestions go in the suggestion box beside it, and
-  become tickets only when you file them.
+  become tickets only when you file them. Those are banter written in a coworker's voice, not their
+  request: the box labels them so, and they never reach the needs queue (`i`).
   A birthday or anniversary on the calendar feeds (`celebrations` on the snapshot) puts bunting over the
   lounge, a cake on the kitchen counter, and pulls the idle crowd to the cooler and coffee.
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run

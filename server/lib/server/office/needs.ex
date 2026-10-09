@@ -11,7 +11,7 @@ defmodule Server.Office.Needs do
       answered by key), `verify_failed` (a workline whose last gate run was red —
       only where the workspace has no sheriff, who owns red there: `Server.Sheriff`);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
-      with no reply from them since), `suggestion` (the corkboard's suggestion box), `rollout` (what a
+      with no reply from them since), `rollout` (what a
       merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
       work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
       is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded),
@@ -20,6 +20,10 @@ defmodule Server.Office.Needs do
 
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
   behind it is resolved — approved, answered, filed — not when it is looked at.
+
+  Only what someone actually asked for, or the machine actually needs, is here: the corkboard's
+  suggestions are banter written in a coworker's voice, not their request, so they stay in its
+  suggestion box (`Server.Office.Corkboard.suggestions/1`) and never reach this list.
   """
   import Ecto.Query
 
@@ -38,7 +42,7 @@ defmodule Server.Office.Needs do
     prompts = Server.Attention.open_prompts_by_thread()
 
     blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open)
-    decide = mentions(open, operator) ++ suggestions(open) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs()
+    decide = mentions(open, operator) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs()
 
     Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
   end
@@ -223,25 +227,6 @@ defmodule Server.Office.Needs do
         from e in Event,
           where: e.thread_id == ^m.thread_id and e.kind == "stage_advanced" and e.created_at >= ^m.created_at
       )
-  end
-
-  defp suggestions(open) do
-    workspaces = open |> Enum.map(& &1.workspace_id) |> Enum.reject(&is_nil/1) |> Enum.uniq()
-
-    for ws <- workspaces, s <- Server.Office.Corkboard.suggestions(ws) do
-      %{
-        key: "suggestion:#{ws}:#{s.id}",
-        kind: "suggestion",
-        level: "decide",
-        thread_id: nil,
-        workspace_id: ws,
-        title: "suggestion from #{s.author}",
-        text: s.body,
-        at: DateTime.from_unix!(s.at),
-        options: nil,
-        ref: s.id
-      }
-    end
   end
 
   defp rollout do

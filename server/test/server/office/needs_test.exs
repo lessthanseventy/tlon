@@ -94,6 +94,22 @@ defmodule Server.Office.NeedsTest do
     assert [%{level: "blocking"}, %{level: "decide"}] = Needs.list()
   end
 
+  test "a corkboard suggestion is banter, not a request: it stays in the suggestion box, out of the list",
+       %{ws: ws} do
+    {:ok, _} = Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
+    {:ok, _} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    start_supervised!(Server.Office.Corkboard)
+
+    GenServer.cast(
+      Server.Office.Corkboard,
+      {:pinned, ws.id, %{author: "lonnrot", kind: "suggestion", body: "a north wall for the lobby", re: nil}}
+    )
+
+    :sys.get_state(Server.Office.Corkboard)
+    assert [%{author: "lonnrot"}] = Server.Office.Corkboard.suggestions(ws.id)
+    assert kinds(ws) == []
+  end
+
   describe "asks, seats and failed jobs — each with its answers" do
     test "every ask is its own blocking item, answered by its own id", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
