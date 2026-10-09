@@ -270,7 +270,10 @@ defmodule Server.Office.Room do
         children = Map.get(kids_of, e.id, [])
 
         free =
-          Enum.filter(children, &(&1.status == "backlog" and not MapSet.member?(blocked, &1.id) and not Intake.held?(&1)))
+          Enum.filter(
+            children,
+            &(&1.status == "backlog" and not MapSet.member?(blocked, &1.id) and not Intake.held?(&1))
+          )
 
         next = Enum.min_by(free, &{&1.sort || 0, &1.id}, fn -> nil end)
 

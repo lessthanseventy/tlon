@@ -110,15 +110,16 @@ defmodule Server.Tickets do
   @spec adopt(integer(), [integer()]) :: {:ok, [integer()]} | {:error, {integer(), Ecto.Changeset.t()}}
   def adopt(epic_id, ticket_ids) do
     Repo.transaction(fn ->
-      Enum.each(ticket_ids, fn id ->
-        case link(epic_id, id, "parent") do
-          {:ok, _} -> :ok
-          {:error, cs} -> Repo.rollback({id, cs})
-        end
-      end)
-
+      Enum.each(ticket_ids, &adopt_one(epic_id, &1))
       ticket_ids
     end)
+  end
+
+  defp adopt_one(epic_id, id) do
+    case link(epic_id, id, "parent") do
+      {:ok, _} -> :ok
+      {:error, cs} -> Repo.rollback({id, cs})
+    end
   end
 
   @doc "Promote a ticket into the thread it became (links it + moves it to `doing`)."
