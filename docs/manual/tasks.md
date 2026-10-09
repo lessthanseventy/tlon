@@ -25,7 +25,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | verb | does |
 |---|---|
 | `bench:longmemeval` | bench: LongMemEval (agent-memory-benchmark's harness, ollama.com answers + judges) against server recall on the tlon_bench db — `-- -q 20`; TLON_BENCH_MODE=messages\|facts, `-- --memory bm25` for the reference |
-| `bench:roles` | bench: can each coworker role do its job on its routed model — frozen tasks per role, graded, usage recorded; results in bench/roles/results/, table in bench/roles/README.md — `-- --suite canary\|full [--role R] [--model provider/model[:effort]]` |
+| `bench:roles` | bench: can each coworker role do its job on its routed model — frozen tasks per role, graded, usage recorded; results in bench/roles/results/, table in bench/roles/README.md — `-- --suite canary\|full [--role R] [--model provider/model[:effort]] [--oracle]` (`--oracle` grades the real solution of each commit-sourced task, no model) |
 
 ## cap
 
