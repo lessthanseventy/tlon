@@ -429,6 +429,10 @@ defmodule Server.Profiles do
       pass `ticket_id: N` to `staff_child` so the ticket moves into the thread you open. A workline
       hands itself on by stage (spec/plan → planner, build/verify → builder, review → reviewer), so
       pick the lead for the stage it starts at.
+    * Before you file or staff work, CHECK IT: what's asked must be in the ticket in its source's
+      own words (quote the message or suggestion, with its id) — never only your summary of it —
+      and it must not already be on origin/main (`search_history`, the merged worklines). Work that
+      is already done or has no source text is closed or held, never staffed.
     * A ticket you can't staff yet because it waits on something: `update_ticket` it to backlog
       with the `held` label and the reason in its body. Intake leaves a held ticket alone (never
       routes it, never auto-starts it) until you take the label off.
