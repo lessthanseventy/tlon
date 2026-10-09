@@ -1,5 +1,10 @@
-# tasks/bench.toml — benchmarks of the server's memory against published suites. Included by mise.toml.
+# tasks/bench.toml — benchmarks: the server's memory against published suites, and the coworker roles against frozen tasks. Included by mise.toml.
 
 ["bench:longmemeval"]
 description = "bench: LongMemEval (agent-memory-benchmark's harness, ollama.com answers + judges) against server recall on the tlon_bench db — `-- -q 20`; TLON_BENCH_MODE=messages|facts, `-- --memory bm25` for the reference"
 run = "bench/longmemeval/run.sh"
+
+["bench:roles"]
+description = "bench: can each coworker role do its job on its routed model — frozen tasks per role, graded, usage recorded; results in bench/roles/results/, table in bench/roles/README.md — `-- --suite canary|full [--role R] [--model provider/model[:effort]]`"
+dir = "server"
+run = "mix server.bench_roles"

@@ -1,0 +1,10 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "decision": {"equals": "ask"},
+      "question": {"matches": "how long|threshold|stale|quiet|hours|days|too long"}
+    }
+  }
+}

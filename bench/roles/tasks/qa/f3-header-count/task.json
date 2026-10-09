@@ -1,0 +1,10 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "verdict": {"equals": "fail"},
+      "finding": {"matches": "count|4 threads|three|\\b3\\b|mismatch|disagree|doesn.t match|does not match|only.*listed"}
+    }
+  }
+}

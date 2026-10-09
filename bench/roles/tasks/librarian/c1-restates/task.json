@@ -1,0 +1,1 @@
+{"tier": "canary", "grader": {"kind": "json", "expect": {"relation": {"equals": "restates"}}}}

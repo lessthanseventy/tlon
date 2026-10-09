@@ -1,0 +1,10 @@
+{
+  "tier": "full",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "verdict": {"equals": "request_changes"},
+      "findings": {"matches": "token|secret|bearer|authori[sz]ation|credential"}
+    }
+  }
+}

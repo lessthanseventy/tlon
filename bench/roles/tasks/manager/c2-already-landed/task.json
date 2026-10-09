@@ -1,0 +1,9 @@
+{
+  "tier": "canary",
+  "grader": {
+    "kind": "json",
+    "expect": {
+      "action": {"equals": "close"}
+    }
+  }
+}
