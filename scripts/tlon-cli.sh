@@ -27,6 +27,7 @@
 #   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
 #   ticket-route <ticket>                       send a ticket to the workspace's manager to staff
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
+#   persona <ws> <name> [--reroll]               a seat's persona as JSON (made once at hire); --reroll draws a new seed
 #   coworker-set <ws> <agent-id> <model> <effort> <ask>  retarget one (from its next session)
 #   workspace-new <name> [repo-path]            a new workspace, with a repo when given
 #   aside <ws> <agent-id> <question…>           ask a coworker one thing, outside any thread
@@ -301,9 +302,17 @@ case "$cmd" in
     ws="${1:-}"; name="${2:-}"; arch="${3:-}"; model="${4:--}"; effort="${5:--}"; ask="${6:--}"
     { int "$ws" && [ -n "$name" ] && [ -n "$arch" ] && knobs "$model" "$effort" "$ask"; } ||
       { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype> [<provider/model>|- [low|medium|high|xhigh|max|- [ask|allow|-]]]' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
+    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:ok, _} = Server.Persona.ensure($ws, c.name); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
     ;;
 
+  persona)
+    # persona <workspace-id> <name> [--reroll]: show a seat's persona (generating it once), or draw a new one
+    ws="${1:-}"; name="${2:-}"; flag="${3:-}"
+    { int "$ws" && [ -n "$name" ]; } ||\
+      { echo 'usage: tlon-cli.sh persona <workspace-id> <name> [--reroll]' >&2; exit 2; }
+    fn=ensure; [ "$flag" = "--reroll" ] && fn=reroll
+    exec "$SERVER" rpc "case Server.Persona.$fn($ws, \"$(esc "$name")\") do {:ok, p} -> IO.puts(JSON.encode!(p)); {:error, e} -> IO.puts(\"refused: #{inspect(e)}\"); raise(\"refused\") end"
+    ;;
   coworker-set)
     # Retarget a coworker in a workspace (from its next session): model, effort, ask/allow.
     # `inherit` puts a knob back to the archetype default; `-` leaves it as it is.
@@ -537,7 +546,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
