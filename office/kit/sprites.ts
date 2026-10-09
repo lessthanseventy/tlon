@@ -8,11 +8,13 @@ export type Pose = "stand" | "sit" | "couch"
 /** where someone likes to idle */
 export type Fav = "board" | "couch" | "cooler" | "coffee"
 export type Hair = "mop" | "spiky" | "bun" | "long" | "bald"
+export type Body = "average" | "tall" | "short" | "round"
 export type Outfit = "hoodie" | "labcoat"
 export type Accessory = "glasses" | "headphones"
 export type Look = {
   hair: Hair; hairRole: Role; decor: number; fav: Fav; emote: string; slow: boolean; blink: number
   skinRole?: Role; outfit?: Outfit; accessory?: Accessory
+  body?: Body
   custom?: Partial<Record<"front" | "side" | "back", string[]>>
 }
 export const SKIN_ROLES: Role[] = ["builder", "surveyor", "reviewer", "assistant", "planner", "body"]
@@ -42,6 +44,47 @@ const LEGS: Record<string, string[]> = {
   sideA: ["...pppppp...", "...pp..pp...", "..pp....pp..", ".pp......pp.", ".bb......bb."],
   sideB: ["...pppppp...", "....pppp....", "....pppp....", "....pp.p....", "...bbbbb...."],
 }
+/** body shapes: all 12 wide, with the torso rows (10-14) in place so every overlay below stays valid;
+ * a shape differs in its torso's width and in how many leg rows it stands on (tall 7, short 3), so
+ * its walk and sit frames are drawn here once */
+export const BODIES: Body[] = ["average", "tall", "short", "round"]
+const BODY: Record<Body, { torso: string[]; sideTorso: string[]; legs: Record<string, string[]> }> = {
+  average: { torso: TORSO, sideTorso: SIDE_TORSO, legs: LEGS },
+  round: {
+    torso: [".ssssssssss.", "ssssssssssss", "ssssssssssss", "fssssssssssf", ".ssssssssss."],
+    sideTorso: ["..ssssssss..", "..ssssssss..", "..sfssssss..", "..ssssssss..", "..ssssssss.."],
+    legs: LEGS,
+  },
+  tall: {
+    torso: TORSO, sideTorso: SIDE_TORSO,
+    legs: {
+      stand: ["..pppppppp..", "..ppp..ppp..", "..pp....pp..", "..pp....pp..", "..pp....pp..", "..pp....pp..", "..bb....bb.."],
+      a: ["..pppppppp..", "..ppp..ppp..", "..pp....pp..", "..pp....pp..", "..pp....pp..", "..bb....pp..", "........bb.."],
+      b: ["..pppppppp..", "..ppp..ppp..", "..pp....pp..", "..pp....pp..", "..pp....pp..", "..pp....bb..", "..bb........"],
+      couch: ["..pppppppp..", "..pppppppp..", "..pp....pp..", "..pp....pp..", "..pp....pp..", "..bb....bb..", "............"],
+      sideStand: ["...pppppp...", "....pppp....", "....pp.p....", "....pp.p....", "....pp.p....", "....pp.p....", "...bbb.bb..."],
+      sideA: ["...pppppp...", "...pp..pp...", "..pp....pp..", "..pp....pp..", ".pp......pp.", ".pp......pp.", ".bb......bb."],
+      sideB: ["...pppppp...", "....pppp....", "....pppp....", "....pppp....", "....pp.p....", "....pp.p....", "...bbbbb...."],
+    },
+  },
+  short: {
+    torso: TORSO, sideTorso: SIDE_TORSO,
+    legs: {
+      stand: ["..pppppppp..", "..pp....pp..", "..bb....bb.."],
+      a: ["..pppppppp..", "..bb....pp..", "........bb.."],
+      b: ["..pppppppp..", "..pp....bb..", "..bb........"],
+      couch: ["..pppppppp..", "..pppppppp..", "..bb....bb.."],
+      sideStand: ["...pppppp...", "....pp.p....", "...bbb.bb..."],
+      sideA: ["...pppppp...", "..pp....pp..", ".bb......bb."],
+      sideB: ["...pppppp...", "....pppp....", "...bbbbb...."],
+    },
+  },
+}
+/** custom views are drawn 20 tall, so a custom look keeps the average build for its generated views */
+const bodyOf = (look: Look): Body => (look.custom ? "average" : look.body ?? "average")
+/** rows a standing figure of this look is tall: where its head sits above its feet */
+export const heightOf = (look: Look) => 15 + BODY[bodyOf(look)].legs.stand!.length
+
 // archetype gear, as row overlays per view
 type Gear = { front?: Record<number, string>; side?: Record<number, string>; back?: Record<number, string> }
 const HARDHAT = { 1: "....yyyy....", 2: "..yyyyyyyy..", 3: ".yyyyyyyyyy." }
@@ -208,10 +251,11 @@ function overlay(rows: string[], over: Record<number, string> | undefined) {
   }
 }
 
-/** a 20-row figure (or 14 rows seated), facing `face` */
+/** a figure (`heightOf` rows, 20 for the average build; 14 seated), facing `face` */
 export function figure(look: Look, archetype: string | null | undefined, lead: boolean, boss: boolean, face: Dir, pose: Pose, step: number, shut: boolean): string[] {
   const view = face === "up" ? "back" : face === "left" || face === "right" ? "side" : "front"
   const bald = look.hair === "bald"
+  const body = BODY[bodyOf(look)]
   let rows: string[]
   if (look.custom?.[view]) {
     rows = [...look.custom[view]!]
@@ -219,7 +263,7 @@ export function figure(look: Look, archetype: string | null | undefined, lead: b
     rows = SIDE_HEAD.map((r, i) => (bald && i >= 2 && i <= 7 ? r.replaceAll("h", "f") : r))
     if (look.hair === "bun") overlay(rows, { 0: ".......hh...", 1: "......hhhh.." })
     if (look.hair === "spiky") overlay(rows, { 1: "....h.h.h..." })
-    rows.push(...SIDE_TORSO, ...(pose !== "stand" ? LEGS.sideStand! : step === 0 ? LEGS.sideStand! : step === 1 ? LEGS.sideA! : LEGS.sideB!))
+    rows.push(...body.sideTorso, ...(pose !== "stand" ? body.legs.sideStand! : step === 0 ? body.legs.sideStand! : step === 1 ? body.legs.sideA! : body.legs.sideB!))
   } else {
     const top = [...TOP[look.hair]]
     let face4 = [...FACE]
@@ -233,7 +277,7 @@ export function figure(look: Look, archetype: string | null | undefined, lead: b
       if (look.hair === "long") face4 = face4.map((r, i) => (i < 3 ? `.h${r.slice(2, 10)}h.` : r))
       if (bald) face4[1] = "..ffhhhhff.." // the mustache
     }
-    rows = [...top, ...face4, ...TORSO, ...(pose === "couch" ? LEGS.couch! : step === 1 ? LEGS.a! : step === 2 ? LEGS.b! : LEGS.stand!)]
+    rows = [...top, ...face4, ...body.torso, ...(pose === "couch" ? body.legs.couch! : step === 1 ? body.legs.a! : step === 2 ? body.legs.b! : body.legs.stand!)]
   }
   if (look.outfit) overlay(rows, view === "front" ? OUTFIT[look.outfit].front : view === "back" ? OUTFIT[look.outfit].back : OUTFIT[look.outfit].side)
   if (look.accessory) overlay(rows, view === "front" ? ACCESSORY[look.accessory].front : view === "back" ? ACCESSORY[look.accessory].back : ACCESSORY[look.accessory].side)
