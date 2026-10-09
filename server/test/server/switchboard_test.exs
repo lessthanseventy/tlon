@@ -426,7 +426,7 @@ defmodule Server.SwitchboardTest do
     test "on the workspace's standing thread an @mentioned absent coworker IS spawned — one pane each there" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
       {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
-      {:ok, _dana} = Staff.register_agent(%{name: "Dana", mandate: "review", engine: "fresh"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "Dana", archetype: "builder"})
       lead = Channel.thread_lead(lobby.id)
 
       {:ok, m} = Channel.post(%{thread_id: lobby.id, author: "stakeholder", body: "@Dana are you around?"})
@@ -436,6 +436,20 @@ defmodule Server.SwitchboardTest do
       assert exports =~ ~s(TLON_AUTHOR="Dana")
       # a window of her own there — the lobby keeps its lead
       assert Channel.thread_lead(lobby.id) == lead
+    end
+
+    test "an @mentioned agent off the bench (an outside citizen) is never spawned; a bench coworker is" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Lobbyland"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "Dana", archetype: "builder"})
+      {:ok, _uqbar} = Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "fresh"})
+
+      {:ok, m} = Channel.post(%{thread_id: lobby.id, author: "stakeholder", body: "@uqbar @Dana thoughts?"})
+      assert {:pending, _} = Switchboard.deliver(m)
+
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="Dana")
+      refute_received {:spawned, _}
     end
 
     test "a warm session whose pane has closed is ended; the message stays pending and its lead is spawned fresh" do
@@ -528,7 +542,7 @@ defmodule Server.SwitchboardTest do
       {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
       {:ok, task} = Channel.open_thread(%{title: "ticket 13", workspace_id: ws.id})
       {:ok, daneri} = Staff.register_agent(%{name: "Daneri", mandate: "build", engine: "fresh"})
-      {:ok, _tertius} = Staff.register_agent(%{name: "Tertius", mandate: "manage", engine: "fresh"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "Tertius", archetype: "builder"})
       {:ok, _} = Staff.assign(task, daneri)
 
       {:ok, m} = Channel.post(%{thread_id: task.id, author: "Daneri", body: "@Tertius blocked"})
