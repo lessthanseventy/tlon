@@ -452,6 +452,29 @@ defmodule Server.Workline do
   end
 
   @doc """
+  Landings that went missing: open worklines at review, waiting on no one, whose approval still
+  stands but with no landing queued or running (a `Server.Jobs.Land` Lifeline rescued past its
+  attempts or Oban discarded). Each is queued again; returns those threads.
+  """
+  def requeue_stranded do
+    stranded =
+      Repo.all(from t in Thread, where: t.stage == "review" and t.state == "open" and is_nil(t.awaiting))
+
+    for thread <- stranded,
+        not Server.Office.Needs.landing?(thread),
+        %{"by" => by, "sha" => sha} <- [approval(thread)],
+        {:ok, queued} <- [
+          queue(
+            thread,
+            "its landing was lost — #{by}'s approval at #{String.slice(sha, 0, 7)} still stands, queued again",
+            by
+          )
+        ] do
+      queued
+    end
+  end
+
+  @doc """
   The merge queue's turn for `thread` (`Server.Jobs.Land`): land `work/<slug>` rebased onto
   origin's main and gated there (`Server.Workline.Merge`). Green: merged, closed, published. A conflict or a red gate sends
   it back to build, its builder told why — the operator approved; the fix is the builder's. A thread
@@ -504,20 +527,24 @@ defmodule Server.Workline do
   @doc """
   A landed workline whose PR GitHub can never merge (it conflicts with main, which moved under it
   after it landed): reopened and bounced to build, its builder told `why`, so it comes back through
-  verify, review and the merge queue. Anything not `merged` is left as it is.
+  verify, review and the merge queue. `todo` replaces the default rebase instruction when it was
+  something else that failed. Anything not `merged` is left as it is.
   """
-  def reland(%Thread{stage: "merged"} = thread, why) do
+  def reland(thread, why, todo \\ nil)
+
+  def reland(%Thread{stage: "merged"} = thread, why, todo) do
     Server.Channel.reopen_if_closed(thread.id)
     Server.Tickets.undone_for(thread.id)
 
     bounce(
       Repo.get!(Thread, thread.id),
       why,
-      "#{why}: main moved under it after it landed. Rebase work/#{thread.slug} onto origin/main, resolve it, test"
+      todo ||
+        "#{why}: main moved under it after it landed. Rebase work/#{thread.slug} onto origin/main, resolve it, test"
     )
   end
 
-  def reland(thread, _why), do: {:ok, thread}
+  def reland(thread, _why, _todo), do: {:ok, thread}
 
   @doc """
   The landings (a `stage_advanced` to `merged`) recorded at or after `since`, newest first:
