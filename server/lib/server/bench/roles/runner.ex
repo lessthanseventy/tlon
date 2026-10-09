@@ -141,6 +141,42 @@ defmodule Server.Bench.Roles.Runner do
     commit_fixture(work)
   end
 
+  @doc "What the real workline changed under `server/` except its tests (which stay hidden), as a patch."
+  def reference_patch(root, sha) do
+    {patch, 0} =
+      System.cmd("git", ["-C", root, "diff", "#{sha}^", sha, "--", "server", ":(exclude)server/test"])
+
+    patch
+  end
+
+  @doc "Apply the real workline's non-test change to `work`: what a model that solved the task would leave."
+  def apply_reference(root, sha, work) do
+    patch = Path.join(work, ".reference.patch")
+    File.write!(patch, reference_patch(root, sha))
+    {_, 0} = System.cmd("git", ["apply", ".reference.patch"], cd: work, stderr_to_stdout: true)
+    File.rm!(patch)
+    :ok
+  end
+
+  @doc """
+  Grade every sourced task of `role`'s set with the real solution applied instead of a model: proves
+  each fixture is green on the reference. Returns `[{task, grade}]`; spends no model quota.
+  """
+  def oracle(suite, role, opts \\ []) do
+    dir = opts[:dir] || Path.join(Profiles.tlon_root(), "bench/roles")
+    root = Profiles.tlon_root()
+
+    for task <- Path.join(dir, "tasks") |> Roles.load(Roles.roles()[role].set, suite), task.source do
+      work = Path.join(System.tmp_dir!(), "tlon-oracle-#{task.id}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(work)
+      seed_source(root, task.source, work)
+      apply_reference(root, task.source, work)
+      grade = grade(task, nil, work, nil)
+      File.rm_rf!(work)
+      {task, grade}
+    end
+  end
+
   defp commit_fixture(work) do
     git = &System.cmd("git", ["-c", "user.name=bench", "-c", "user.email=bench@localhost" | &1], cd: work)
     git.(["init", "-q"])
