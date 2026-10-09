@@ -37,4 +37,42 @@ defmodule Server.EpicsTest do
       assert t.kind == "ticket"
     end
   end
+
+  describe "the parent law" do
+    test "an epic adopts a ticket; read both ways", %{ws: ws} do
+      e = epic(ws, "Toy")
+      c = file(ws, "child")
+      assert {:ok, _} = Tickets.link(e.id, c.id, "parent")
+      assert [%{kind: "parent", direction: :out, ticket_id: cid}] = Tickets.links_of(e.id)
+      assert cid == c.id
+      assert [%{kind: "parent", direction: :in}] = Tickets.links_of(c.id)
+    end
+
+    test "a second parent is refused", %{ws: ws} do
+      e1 = epic(ws, "One")
+      e2 = epic(ws, "Two")
+      c = file(ws, "child")
+      {:ok, _} = Tickets.link(e1.id, c.id, "parent")
+      assert {:error, cs} = Tickets.link(e2.id, c.id, "parent")
+      assert {"already has a parent epic", _} = cs.errors[:to_id]
+    end
+
+    test "adopting twice into the same epic stays idempotent", %{ws: ws} do
+      e = epic(ws, "Toy")
+      c = file(ws, "child")
+      {:ok, _} = Tickets.link(e.id, c.id, "parent")
+      assert {:ok, _} = Tickets.link(e.id, c.id, "parent")
+    end
+
+    test "no epic under an epic, and only an epic is a parent", %{ws: ws} do
+      outer = epic(ws, "Outer")
+      inner = epic(ws, "Inner")
+      plain = file(ws, "plain")
+      other = file(ws, "other")
+      assert {:error, cs} = Tickets.link(outer.id, inner.id, "parent")
+      assert {"an epic cannot have a parent", _} = cs.errors[:to_id]
+      assert {:error, cs} = Tickets.link(plain.id, other.id, "parent")
+      assert {"only an epic can be a parent", _} = cs.errors[:from_id]
+    end
+  end
 end
