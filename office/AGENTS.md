@@ -8,7 +8,7 @@ marked where it stands (`cardState` in `kit/crew.ts`, read from the server's `se
 thread: ▶ its lead is at a desk, ⏸ parked for a seat under the leaf cap, ○ idle — nobody at a desk —
 ⚑ it needs you; a thread's card names the one key that moves it). DOING is a plain thread someone is
 at a desk on; standing duties (`duty`: a schedule's threads, the sheriff's beat) are not work and stay
-off the board. The crew board says who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
+off the board. The TICKETS column shows one row per epic (`Toy 2/13 → #52 sandbox mode`, from the snapshot's `kind`/`epic_id`/progress), its children hidden until ⏎ opens the epic; a ticket's card names its epic. The crew board says who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
 terminals the TUI zooms into (`tui/terminal.ts`: tmux control mode on the workspace's tmux, one
 linked window at a time, Ctrl-] back to the room).
 

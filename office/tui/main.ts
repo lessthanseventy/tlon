@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
-import { boardColumns, busiest, cardState, COLS, crewOf, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
@@ -43,7 +43,7 @@ import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
-  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "calendar" } | { kind: "life" }
+  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] }
   | { kind: "build" } | { kind: "settings" }
@@ -303,7 +303,7 @@ async function loadCard() {
     case "triage": stuck = await data.triage(w); break
     case "health": rack = await data.health(); break
     case "memory": shelf = await data.memory(w); break
-    case "ticket": case "column": tickets = (await data.board(w)) ?? tickets; break
+    case "ticket": case "epic": case "column": tickets = (await data.board(w)) ?? tickets; break
     case "card": card = await data.workspaceCard(w); break
     case "settings": settings = await data.settings(); break
     case "calendar": cal = await data.schedules(w); break
@@ -342,6 +342,7 @@ function act(x: Act) {
   switch (x.kind) {
     case "thread": return open({ kind: "thread", tid: x.tid })
     case "ticket": return open({ kind: "ticket", id: x.id })
+    case "epic": return open({ kind: "epic", id: x.id })
     case "person": return open({ kind: "person", name: x.name })
     case "column": return open({ kind: "column", col: x.col })
     case "notes": return open({ kind: "notes" })
@@ -818,7 +819,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         rows: items.map((x) => {
           const blocked = x.act.kind === "ticket" && (tickets.find((t) => t.id === (x.act as { id: number }).id)?.blocked_by.length ?? 0) > 0
           return {
-            segs: [...(x.state ? [stateSeg(x.state)] : []), key(x.act.kind === "ticket" ? `#${x.act.id} ` : x.act.kind === "thread" ? `#${x.act.tid} ` : ""), plain(x.title), dim(`  ${x.stage}${x.who ? ` · ${x.who}` : ""}`),
+            segs: [...(x.state ? [stateSeg(x.state)] : []), key(x.act.kind === "ticket" || x.act.kind === "epic" ? `#${x.act.id} ` : x.act.kind === "thread" ? `#${x.act.tid} ` : ""), plain(x.title), dim(`  ${x.stage}${x.who ? ` · ${x.who}` : ""}`),
               ...(x.state ? [{ s: `  ${x.state.why}`, fg: x.state.kind === "needs" ? ROLE.attention : ROLE.inactive }] : x.asks ? [pink("  waiting on you")] : []), ...(blocked ? [pink("  ⊘ blocked")] : [])],
             open: () => act(x.act), ref: JSON.stringify(x.act),
           }
@@ -831,11 +832,24 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ],
       }
     }
+    case "epic": {
+      const id = mode.id, ep = a.tickets.find((t) => t.id === id)
+      if (!ep) return { title: `EPIC #${id}`, rows: [{ segs: [dim("finished or gone")] }], actions: [back1] }
+      const kids = epicChildren(a, id)
+      return {
+        title: `EPIC #${id} · ${ep.done ?? 0}/${ep.total ?? 0}`,
+        rows: [{ segs: [plain(ep.title)] }, { segs: [dim(`${ep.priority} priority${ep.next ? ` · next #${ep.next.id} ${ep.next.title}` : ""}`)] },
+          ...kids.map((k) => ({ segs: [key(`#${k.id} `), plain(k.title), dim(`  ${k.routed ? "with the manager" : "ticket"}`)], open: () => act({ kind: "ticket", id: k.id }), ref: JSON.stringify({ kind: "ticket", id: k.id }) }))],
+        actions: [back1],
+      }
+    }
     case "ticket": {
       const id = mode.id
       const tk = a.tickets.find((t) => t.id === id), full = tickets.find((t) => t.id === id)
       if (!tk) return { title: `TICKET #${id}`, rows: [{ segs: [dim("started or gone")] }], actions: [back1] }
       const rows: Row[] = [{ segs: [plain(tk.title)] }, { segs: [dim(`${tk.priority} priority${tk.routed ? " · with the manager to staff" : ""}`)] }]
+      const parent = tk.epic_id != null ? a.tickets.find((t) => t.id === tk.epic_id) : undefined
+      if (parent) rows.push({ segs: [dim("epic "), key(`#${parent.id} `), plain(parent.title)] })
       for (const by of full?.blocked_by ?? []) rows.push({ segs: [pink("⊘ blocked by "), key(`#${by} `), plain(tickets.find((t) => t.id === by)?.title ?? "")] })
       if (full?.body) for (const l of wrap(full.body, cols() - 40)) rows.push({ segs: [dim(l)] })
       return {

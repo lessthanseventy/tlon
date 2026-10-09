@@ -7,6 +7,7 @@ import type { Agents, Seat, Thread, Ticket } from "./types"
 export type Act =
   | { kind: "thread"; tid: number }
   | { kind: "ticket"; id: number }
+  | { kind: "epic"; id: number }
   | { kind: "person"; agentId: number | null; name: string; tid: number | null }
   | { kind: "hire" }
   | { kind: "pen" }
@@ -125,11 +126,21 @@ export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState 
   return { kind: "idle", why: `${th.lead} is not at a desk` }
 }
 
+/** an epic's unstarted children, in the snapshot's order */
+export const epicChildren = (a: Agents, id: number): Ticket[] => (a.tickets as Ticket[]).filter((t) => t.epic_id === id)
+
 /** the whiteboard's columns — a board draws them as stickies, a column card as rows */
 export function boardColumns(a: Agents, ctx: BoardCtx = {}): { name: string; items: BoardItem[] }[] {
   const cols: BoardItem[][] = COLS.map(() => [])
-  for (const tk of a.tickets as Ticket[])
+  for (const tk of a.tickets as Ticket[]) {
+    if (tk.epic_id != null) continue
+    if (tk.kind === "epic") {
+      const next = tk.next ? ` → #${tk.next.id} ${tk.next.title}` : ""
+      cols[0]!.push({ act: { kind: "epic", id: tk.id }, title: `${tk.title} ${tk.done ?? 0}/${tk.total ?? 0}${next}`, who: null, stage: "epic", asks: false, archetype: null, high: tk.priority === "high" })
+      continue
+    }
     cols[0]!.push({ act: { kind: "ticket", id: tk.id }, title: tk.title, who: null, stage: tk.routed ? "with the manager" : "ticket", asks: false, archetype: null, high: tk.priority === "high", routed: !!tk.routed })
+  }
   for (const th of a.threads) {
     if (th.duty) continue
     const c = th.stage ? STAGE_COL[th.stage] : th.lead && !th.standing && th.seat === "desk" ? 1 : undefined
