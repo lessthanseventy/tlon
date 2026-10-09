@@ -243,7 +243,7 @@ export class WideRoom extends Sim<Layout> {
     if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog
       if (c.mode === "sit" && !c.path.length && !c.errand && !c.fuss) this.catDo("nap")
-      if (d.mode === "sit" && !d.path.length && !d.fuss) this.dogDo("bed")
+      if (d.mode === "sit" && !d.path.length && !d.fuss && !this.fire) this.dogDo("bed")
     }
     if (this.fire) this.dogSmoke()
     else if (!this.dog.path.length && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 2200) {
