@@ -6,6 +6,8 @@ defmodule Server.ShiftsTest do
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 
+  import ExUnit.CaptureLog
+
   alias Server.Channel
   alias Server.Shifts
   alias Server.Workspaces
@@ -162,6 +164,19 @@ defmodule Server.ShiftsTest do
     :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", "❯ clear")
     {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
     assert [_one] = all_enqueued(worker: Server.Jobs.ShiftBack)
+  end
+
+  test "a reminder cancel that fails is logged, and the switch still goes through", %{ws: ws} do
+    {:ok, _} = Shifts.switch(ws.id, "night")
+    # no Oban instance: the cancel raises
+    :ok = stop_supervised(Oban)
+
+    log = capture_log(fn -> assert {:ok, _} = Shifts.switch(ws.id, "day") end)
+
+    assert log =~ "[warning]"
+    assert log =~ "reminder"
+    assert log =~ "workspace #{ws.id}"
+    assert Shifts.current(ws.id) == "day"
   end
 
   test "the offer to put the day crew back comes at the reset, only if the night shift is still on", %{ws: ws} do
