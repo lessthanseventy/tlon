@@ -7,8 +7,10 @@ defmodule Server.Canvas.Paint do
 
   Today's picture is the newest one a coworker posted on the workspace's `canvas` thread in the last
   day; with none, Life steps yesterday's canvas; a canvas Life has emptied or frozen is reseeded from
-  the date. Opts: `remote:`, `today:`, `author: {name, email}`, `picture:` (text, over the thread's),
-  `workspace_id:` (default 1).
+  the date. Each shade is scaled over the busiest real day on the graph (GitHub's daily totals, read
+  with `gh`, less the canvas's own commits); when GitHub can't be read the result's `peak` is nil and
+  the canvas paints a quiet graph's shades. Opts: `remote:`, `today:`, `author: {name, email}`,
+  `picture:` (text, over the thread's), `peak:` (over GitHub's), `workspace_id:` (default 1).
   """
   import Ecto.Query
 
@@ -20,7 +22,8 @@ defmodule Server.Canvas.Paint do
   # canvas
 
   This repository draws on my GitHub contribution graph. Its commits are empty and backdated;
-  each shaded day gets a handful, so a picture shows up in the graph. It is art, not activity.
+  each shaded day gets enough to outnumber my busiest real day, so a picture shows up over real
+  work. It is art, not activity, and it inflates my contribution count accordingly.
 
   The picture comes from the coworkers in my office ([tlon](https://github.com/lessthanseventy/tlon)):
   one of them posts a 52 × 7 drawing on a thread, and a scheduled job repaints this history from it
@@ -29,20 +32,21 @@ defmodule Server.Canvas.Paint do
   `canvas.txt` is today's grid.
   """
 
-  @doc "Paint today's canvas. `{:ok, %{source, commits}}` | `{:error, why}`."
+  @doc "Paint today's canvas. `{:ok, %{source, commits, peak}}` | `{:error, why}`."
   def run(opts \\ []) do
     today = Keyword.get_lazy(opts, :today, fn -> Server.Schedules.local_date(DateTime.utc_now()) end)
     remote = Keyword.get(opts, :remote, Application.get_env(:server, :canvas_remote, @remote))
     author = Keyword.get_lazy(opts, :author, &author/0)
 
     {source, grid} = pick(opts, remote, today)
-    plan = Canvas.plan(grid, today)
+    peak = Keyword.get_lazy(opts, :peak, fn -> real_peak(remote) end)
+    plan = Canvas.plan(grid, today, peak || 0)
     dir = Path.join(System.tmp_dir!(), "canvas-paint-#{System.unique_integer([:positive])}")
 
     try do
       with :ok <- build(dir, plan, grid, author, today),
            :ok <- push(dir, remote) do
-        {:ok, %{source: source, commits: plan |> Map.values() |> Enum.sum()}}
+        {:ok, %{source: source, commits: plan |> Map.values() |> Enum.sum(), peak: peak}}
       end
     after
       File.rm_rf(dir)
@@ -100,6 +104,53 @@ defmodule Server.Canvas.Paint do
         grid
       else
         _ -> nil
+      end
+    after
+      File.rm_rf(tmp)
+    end
+  end
+
+  # nil when GitHub can't be read (no github.com remote, no gh, an error): the quiet-graph shades
+  defp real_peak(remote) do
+    with [_, login] <- Regex.run(~r{github\.com[/:]([^/]+)/}, remote),
+         {:ok, totals} <- calendar(login) do
+      Canvas.real_peak(totals, painted(remote))
+    else
+      _ -> nil
+    end
+  end
+
+  defp calendar(login) do
+    query =
+      "query($login:String!){user(login:$login){contributionsCollection{contributionCalendar{weeks{contributionDays{date contributionCount}}}}}}"
+
+    with {out, 0} <- System.cmd("gh", ["api", "graphql", "-f", "query=#{query}", "-F", "login=#{login}"]),
+         {:ok, %{"data" => %{"user" => %{"contributionsCollection" => %{"contributionCalendar" => cal}}}}} <-
+           Jason.decode(out) do
+      {:ok,
+       for(
+         w <- cal["weeks"],
+         d <- w["contributionDays"],
+         into: %{},
+         do: {Date.from_iso8601!(d["date"]), d["contributionCount"]}
+       )}
+    else
+      _ -> :error
+    end
+  rescue
+    ErlangError -> :error
+  end
+
+  # the canvas's own pixel commits per day, read from the history it pushed last
+  defp painted(remote) do
+    tmp = Path.join(System.tmp_dir!(), "canvas-painted-#{System.unique_integer([:positive])}")
+
+    try do
+      with {_, 0} <- System.cmd("git", ["clone", "-q", "--bare", remote, tmp], stderr_to_stdout: true),
+           {out, 0} <- git(tmp, ["log", "--format=%ad", "--date=short", "--grep=^pixel$"]) do
+        out |> String.split("\n", trim: true) |> Enum.frequencies_by(&Date.from_iso8601!/1)
+      else
+        _ -> %{}
       end
     after
       File.rm_rf(tmp)

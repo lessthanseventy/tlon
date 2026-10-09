@@ -2,8 +2,9 @@ defmodule Server.Canvas do
   @moduledoc """
   Andrew's GitHub contribution graph as a canvas: 52 week columns × 7 day rows (Sunday on top), the
   last column being this week. A picture is seven lines of `.` (blank) and `1`–`4` or `#` (shade 1–4,
-  `#` the darkest); a shaded day is painted with backdated empty commits, more for a darker shade
-  (`Server.Canvas.Paint` does the git). With no new picture the canvas plays Conway's Life, one
+  `#` the darkest); a shaded day is painted with backdated empty commits, more for a darker shade,
+  scaled over the busiest real day so the picture reads over real work (`Server.Canvas.Paint` does
+  the git). With no new picture the canvas plays Conway's Life, one
   generation a day, on a torus.
 
   Pure: grids are maps of `{col, row} => shade`, every cell present.
@@ -11,7 +12,7 @@ defmodule Server.Canvas do
 
   @width 52
   @height 7
-  @commits %{1 => 3, 2 => 6, 3 => 9, 4 => 12}
+  @quiet_top 12
 
   @type grid :: %{{non_neg_integer(), non_neg_integer()} => 0..4}
 
@@ -72,19 +73,32 @@ defmodule Server.Canvas do
   @doc "A blank grid."
   def blank, do: for(col <- 0..(@width - 1), row <- 0..(@height - 1), into: %{}, do: {{col, row}, 0})
 
-  @doc "Every shaded day up to `today` with how many commits paint it."
-  @spec plan(grid(), Date.t()) :: %{Date.t() => pos_integer()}
-  def plan(grid, today) do
+  @doc "Every shaded day up to `today` with how many commits paint it, over a busiest real day of `peak`."
+  @spec plan(grid(), Date.t(), non_neg_integer()) :: %{Date.t() => pos_integer()}
+  def plan(grid, today, peak \\ 0) do
     for {{col, row}, s} <- grid,
         s > 0,
         date = date_at(col, row, today),
         Date.compare(date, today) != :gt,
         into: %{},
-        do: {date, commits_for(s)}
+        do: {date, commits_for(s, peak)}
   end
 
-  @doc "Commits for a shade: enough above a normal day that the picture reads over real work."
-  def commits_for(shade), do: Map.fetch!(@commits, shade)
+  @doc """
+  Commits for a shade on a graph whose busiest real day is `peak`. GitHub shades a day by its quarter
+  of the busiest day, so shade 4 is one more than `peak` (it becomes the busiest day) and shades 1–3
+  sit mid-quarter beneath it. A quiet graph tops out at #{@quiet_top}.
+  """
+  def commits_for(shade, peak \\ 0) when shade in 1..4 do
+    top = max(peak + 1, @quiet_top)
+    if shade == 4, do: top, else: ceil(top * (2 * shade - 1) / 8)
+  end
+
+  @doc "The busiest real day: each day's total (`date => count`) less the canvas's own commits on it."
+  @spec real_peak(%{Date.t() => non_neg_integer()}, %{Date.t() => non_neg_integer()}) :: non_neg_integer()
+  def real_peak(totals, canvas) do
+    totals |> Enum.map(fn {date, n} -> n - Map.get(canvas, date, 0) end) |> Enum.max(fn -> 0 end) |> max(0)
+  end
 
   @doc "The grid as the picture text it parses from."
   @spec to_text(grid()) :: String.t()

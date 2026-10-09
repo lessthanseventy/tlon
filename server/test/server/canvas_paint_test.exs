@@ -37,6 +37,17 @@ defmodule Server.Canvas.PaintTest do
     assert git(remote, ["log", "-1", "--format=%ae", "main"]) =~ "a@example.com"
   end
 
+  test "a peak paints each shade over it: the darkest day outnumbers the busiest real one", %{
+    remote: remote,
+    opts: opts
+  } do
+    picture = Enum.join(["#" <> String.duplicate(".", 51) | List.duplicate(String.duplicate(".", 52), 6)], "\n")
+    assert {:ok, %{peak: 100}} = opts |> Keyword.put(:picture, picture) |> Keyword.put(:peak, 100) |> Paint.run()
+
+    dates = remote |> git(["log", "--format=%ad", "--date=short", "main"]) |> String.split("\n", trim: true)
+    assert Enum.count(dates, &(&1 == Date.to_iso8601(Canvas.date_at(0, 0, @today)))) == 101
+  end
+
   test "with no picture it plays Life from yesterday's canvas, and repaints the whole history", %{
     remote: remote,
     opts: opts
