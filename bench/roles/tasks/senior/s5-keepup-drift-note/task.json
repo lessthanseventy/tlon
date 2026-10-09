@@ -1,0 +1,1 @@
+{"tier": "full", "grader": {"kind": "check", "cmd": "cd server && mix test test/server/jobs/keep_up_test.exs"}, "source": {"commit": "4e0aae8"}}

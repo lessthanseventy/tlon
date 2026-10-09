@@ -1,0 +1,1 @@
+{"tier": "full", "grader": {"kind": "check", "cmd": "cd server && mix test test/server/epics_test.exs:41"}, "source": {"commit": "0044dd0"}}

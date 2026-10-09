@@ -1,0 +1,1 @@
+{"tier": "full", "grader": {"kind": "check", "cmd": "cd server && mix test test/server/mcp/server_test.exs:117 test/server/mcp/server_test.exs:747 test/server/mcp/server_test.exs:774"}, "source": {"commit": "5023af6"}}
