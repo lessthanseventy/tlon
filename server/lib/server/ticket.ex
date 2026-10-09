@@ -1,7 +1,7 @@
 defmodule Server.Ticket do
   @moduledoc """
   A ticket (2026-08-30): a first-class, workspace-scoped issue — the lightweight terminal
-  tracker (GitHub-Issues-light, no epics/sprints/ceremony). 2-second capture that does NOT
+  tracker (GitHub-Issues-light, no sprints/ceremony). 2-second capture that does NOT
   spin up a thread; it **promotes** into one when work starts. Distinct from `Server.Issue`
   (a blocker raised *on* a thread).
 
@@ -10,6 +10,10 @@ defmodule Server.Ticket do
   (`promoted`/`relates`) — the many-to-many that replaced the single `promoted_thread_id` column,
   so promotion is one KIND of tie rather than a second mechanism. `sort` orders it within its
   status column (the board's order, persisted); `closed_at` stamps when it reached `done`.
+
+  `kind` is `ticket` or `epic`. An epic holds other tickets through `parent` links (stored `from = epic, to =
+  child`; one parent per ticket, no epic under an epic — `Server.TicketLink`), is never work (`Server.Intake` skips it,
+  `Server.Tickets.start_thread/2` refuses it), and its `status` is derived from its children (`Server.Tickets.refresh_epic/1`).
 
   `status` (backlog|todo|doing|done) and `priority` (low|med|high) are DB-CHECK'd closed sets,
   re-validated app-side because tickets arrive from MCP callers (a bad value should fail as a
@@ -22,10 +26,12 @@ defmodule Server.Ticket do
 
   @statuses ~w(backlog todo doing done)
   @priorities ~w(low med high)
+  @kinds ~w(ticket epic)
 
   schema "ticket" do
     field :title, :string
     field :body, :string, default: ""
+    field :kind, :string, default: "ticket"
     field :status, :string, default: "backlog"
     field :priority, :string, default: "med"
     field :labels, Server.JSONColumn
@@ -50,7 +56,7 @@ defmodule Server.Ticket do
     now = DateTime.truncate(DateTime.utc_now(), :second)
 
     %__MODULE__{}
-    |> cast(attrs, [:workspace_id, :backend, :external_key, :external_url | @mutable])
+    |> cast(attrs, [:workspace_id, :kind, :backend, :external_key, :external_url | @mutable])
     |> validate_required([:workspace_id, :title])
     |> validate_sets()
     |> foreign_key_constraint(:workspace_id)
@@ -85,6 +91,7 @@ defmodule Server.Ticket do
     changeset
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:priority, @priorities)
+    |> validate_inclusion(:kind, @kinds)
   end
 
   # `closed_at` follows `status` rather than being set by hand: reaching `done` stamps it, leaving
