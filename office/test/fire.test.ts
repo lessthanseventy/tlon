@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { ARGOS } from "../kit/pets"
 import { FIRE_GRACE } from "../kit/sim"
-import { WideRoom } from "../rooms/wide"
+import { createHash } from "node:crypto"
+import { closet, corner, WideRoom, widePlan, zones } from "../rooms/wide"
+import { focus, measure } from "./golden"
 import { office } from "./wcag.test"
 
 const up = () => viewOf(office(), 1)
@@ -52,5 +54,25 @@ describe("Argos in the smoke", () => {
     expect(r.dog.mode).not.toBe("sleep")
     expect(r.dog.y).toBeGreaterThan(160)
     expect([...said].some((s) => ARGOS.smoke.includes(s))).toBe(true)
+  })
+})
+
+describe("the server closet", () => {
+  test("it stands clear of the furniture and the pastimes", () => {
+    const z = zones(696), c = closet(), p = widePlan(696)
+    const rects = [...p.blocks(p.layout(up())), ...Object.values(corner(z)).flat()]
+    for (const q of rects) expect(c.x + c.w <= q.x || q.x + q.w <= c.x || c.y + c.h <= q.y || q.y + q.h <= c.y).toBe(true)
+  })
+  test("a burning room draws flames and smoke at the closet; a calm one does not", () => {
+    const calm = new WideRoom(696), hot = new WideRoom(696), c = closet()
+    run(calm, up, 300); run(hot, up, 300); run(hot, down, FIRE_GRACE + 5)
+    const at = new Date(2026, 9, 9, 15)
+    const patch = (r: WideRoom, f: typeof up) => {
+      const fr = r.render(f(), focus, measure, at), out: number[] = []
+      for (let y = c.y - 24; y < c.y + c.h; y++) for (let x = c.x - 4; x < c.x + c.w + 4; x++) out.push(...fr.rgba.slice((y * fr.width + x) * 4, (y * fr.width + x) * 4 + 4))
+      return createHash("sha256").update(Buffer.from(out)).digest("hex")
+    }
+    expect(hot.onFire).toBe(true)
+    expect(patch(hot, down)).not.toBe(patch(calm, up))
   })
 })
