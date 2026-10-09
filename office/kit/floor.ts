@@ -37,6 +37,9 @@ export function floorPlan(home: Home, w: number): Plan<Layout> & { blocks: (l: L
     // this reproduces the exact kind sequence the room drew its spots in before the cut
     lounge: LOUNGE_KINDS.flatMap((k) => tiles.flatMap((t) => t.spots(l0)[k] ?? [])),
     exit: { x: w - 3, y: HALL, aisle: HALL, pose: "stand", face: "right", kind: "exit" },
+    muster: Array.from({ length: 16 }, (_, i) => ({
+      x: w - 8 - (i % 4) * 9, y: HALL - 2 - Math.floor(i / 4) * 5, aisle: HALL, pose: "stand" as const, face: "down" as const, kind: "exit" as const,
+    })),
     pen: { x: z.F1 - 30, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
     // under the suggestion box on the wall between the notes board and the windows
     box: { x: z.F1 + 1, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },

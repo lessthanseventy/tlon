@@ -69,6 +69,8 @@ export type Plan<L extends { people: Seat[] }> = {
   queue: Spot[]
   lounge: Spot[]
   exit: Spot
+  /** where the crew stands during a fire drill; a room without it uses `exit` */
+  muster?: Spot[]
   pen: Spot
   /** beside whoever is visited */
   visit(host: Actor): Spot
