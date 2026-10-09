@@ -1232,13 +1232,19 @@ defmodule Server.Workline do
     case Server.Workline.Publish.publish(repo, thread.slug, thread.title) do
       {:ok, url} -> post_brief(thread, "#{landed}; published as #{url} (GitHub merges it once its checks pass)")
       :none -> post_brief(thread, landed)
-      {:error, why} -> post_brief(thread, "#{landed}, but not published to GitHub: #{why}")
+      {:error, why} -> unpublished(thread, "#{landed}, but not published to GitHub: #{why}")
     end
   rescue
     e ->
       why = "merged, but its close-out failed (not published to GitHub): #{Exception.message(e)}"
       require(Logger) && Logger.warning("workline #{thread.slug}: #{why}")
-      post_brief(thread, "⚠ #{why}")
+      unpublished(thread, "⚠ #{why}")
+  end
+
+  # the thread is closed by now and wakes no one: the sheriff is told too, so the work reaches main
+  defp unpublished(thread, why) do
+    post_brief(thread, why)
+    Server.Sheriff.report(thread, "work/#{thread.slug} — #{why}")
   end
 
   # what the stage's lead should be: the grade and area the ask names; for a review, also not the
