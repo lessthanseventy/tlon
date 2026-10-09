@@ -281,10 +281,17 @@ defmodule Server.Switchboard do
       author = String.downcase(message.author)
       standing? = match?(%Thread{id: ^thread_id}, Server.Channel.machine_thread(thread.workspace_id))
 
+      # only the lead or a bench seat is ours to staff: an outside citizen (`Server.Outside`) runs its own session
+      benched =
+        if thread.workspace_id,
+          do: MapSet.new(Server.Workspaces.bench(thread.workspace_id), & &1.agent_id),
+          else: MapSet.new()
+
       spawned =
         for name <- target_names(message),
             String.downcase(name) != author,
             %Agent{} = agent <- [Staff.agent_by_name(name)],
+            agent.id == thread.agent_id or agent.id in benched,
             home = spawn_home(thread, agent, standing?),
             home != nil,
             not has_warm_session?(home, agent),
