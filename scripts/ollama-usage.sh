@@ -1,51 +1,65 @@
 #!/usr/bin/env bash
-# ollama-usage — read the ollama.com plan/rate-limit dashboard via GET /api/usage.
+# ollama-usage — read the ollama.com plan meters: GET /api/balance (what is left this period)
+# and GET /api/usage?range=7d (requests, and spend + tokens where the plan reports them).
 #
-# Two windows bound the $20 plan, plus paid/per-token activity:
-#   session — a SHORT rolling rate-limit window: a reasoning model (glm-5.2) emits
-#             enough thinking tokens per request to trip it mid-session and throttle.
-#   weekly  — the rolling plan cap (the actual "run out of plan" ceiling).
-# `usage` is a 0-1 fraction of the window's cap; `activity.cost` is per-token usage
-# (kimi-k3 and other extra-billed models) over the last 4 weeks — should stay 0.00 on
-# a plan-only diet. Per-model request_count shows WHICH model is draining a window —
-# the insight layer for model choice (see AGENTS.md § Picking a pi model).
+# Credit plans get included credits in USD per monthly period (`balance_usd` of `allowance_usd`,
+# resetting at `period.until`), billed per model per token. Legacy plans instead get a short
+# session window and a weekly cap as `remaining_percent` + `resets_at`, and /api/usage omits
+# cost and tokens for their requests. Neither endpoint breaks usage down by model yet
+# (docs.ollama.com/api/cloud-usage: "coming soon"). Both allow 10 requests/minute per user.
 set -euo pipefail
 
 : "${OLLAMA_API_KEY:?OLLAMA_API_KEY is required (mise.toml [env] sets it from the agenix secret)}"
 
-raw="$(curl -fsS -H "Authorization: Bearer $OLLAMA_API_KEY" https://ollama.com/api/usage)"
+get() { curl -fsS -H "Authorization: Bearer $OLLAMA_API_KEY" "https://ollama.com$1"; }
 
-python3 - "$raw" <<'PY'
+balance="$(get /api/balance)"
+usage="$(get '/api/usage?range=7d')"
+
+python3 - "$balance" "$usage" <<'PY'
 import json, sys
 
-d = json.loads(sys.argv[1])
+b = json.loads(sys.argv[1])
+u = json.loads(sys.argv[2])
+inc = b.get("included") or {}
 
-def pct(x):
-    return f"{x * 100:.2f}%" if isinstance(x, (int, float)) else "?"
+def usd(x):
+    if not isinstance(x, (int, float)):
+        return "?"
+    return f"${x:,.2f}" if x >= 1 or x == 0 else f"${x:.4f}"
 
-act = d.get("activity", {})
-period = act.get("period", {}) or {}
-print("== paid / per-token usage (last 4 weeks) ==")
-start = (period.get("starting_at") or "?")[:10]
-end = (period.get("ending_at") or "?")[:10]
-print(f"  cost: {act.get('cost','?')}   ({start} → {end})")
-models = act.get("models", []) or []
-if models:
-    for m in models:
-        print(f"    {m.get('name','?'):24} cost={m.get('cost','?')}  reqs={m.get('request_count','?')}")
+if "allowance_usd" in inc:
+    allowance, left = inc["allowance_usd"], inc.get("balance_usd")
+    used = allowance - left if isinstance(left, (int, float)) else None
+    pct = f"{used / allowance * 100:.1f}%" if used is not None and allowance else "?"
+    period = inc.get("period") or {}
+    print("== included credits (this period) ==")
+    print(f"  used {usd(used)} of {usd(allowance)} ({pct})   left {usd(left)}")
+    print(f"  period {(period.get('from') or '?')[:10]} → resets {period.get('until') or '?'}")
+elif "session" in inc or "weekly" in inc:
+    print("== legacy plan limits (no credits on this account yet) ==")
+    for name in ("session", "weekly"):
+        w = inc.get(name) or {}
+        rem = w.get("remaining_percent")
+        used = f"{100 - rem:.2f}%" if isinstance(rem, (int, float)) else "?"
+        print(f"  {name:8} used {used:>7}   resets {w.get('resets_at', '?')}")
 else:
-    print("    (no billable usage — plan-only 👍)")
+    print(f"== included: unrecognised /api/balance shape: {json.dumps(inc)} ==")
 
-def show(window, label):
-    w = (d.get("limits", {}) or {}).get(window, {}) or {}
-    print(f"\n== {label} ({window}) — {pct(w.get('usage', 0))} of cap ==")
-    rows = w.get("models", []) or []
-    if rows:
-        for m in rows:
-            print(f"    {m.get('name','?'):24} requests={m.get('request_count','?')}")
-    else:
-        print("    (idle)")
+print(f"  purchased credits left: {usd((b.get('purchased') or {}).get('balance_usd'))}")
 
-show("session", "short rate-limit window  ← the one that throttles mid-session")
-show("weekly",  "rolling plan cap         ← the actual 'run out of plan' ceiling")
+t = u.get("totals") or {}
+print(f"\n== last 7 days ({(u.get('from') or '?')[:10]} → now) ==")
+line = f"  requests {t.get('request_count', '?')}"
+if "usage_usd" in t:
+    line += (f"   spend {usd(t['usage_usd'])}   tokens in {t.get('input_tokens', '?')}"
+             f" (cached {t.get('cached_input_tokens', '?')}) out {t.get('output_tokens', '?')}")
+else:
+    line += "   (no spend/token counts: ollama.com omits them for legacy-plan requests)"
+print(line)
+for k in u.get("buckets") or []:
+    cost = f"  {usd(k['usage_usd'])}" if "usage_usd" in k else ""
+    mark = " (so far)" if k.get("partial") else ""
+    print(f"    {(k.get('from') or '?')[:10]}  {k.get('request_count', 0):>6} reqs{cost}{mark}")
+print("  per-model breakdown: not exposed by ollama.com's API yet")
 PY
