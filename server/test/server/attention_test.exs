@@ -85,9 +85,9 @@ defmodule Server.AttentionTest do
     {:ok, gated} =
       Server.Workline.open(%{title: "review it", slug: "gated-#{System.unique_integer([:positive])}", stage: "review"})
 
-    assert Server.Workline.at_gate?(gated, artifacts: Server.Workline.ContinuationTest.Present)
-    refute Server.Workline.at_gate?(gated, artifacts: Server.Workline.ContinuationTest.Missing)
-    refute Server.Workline.at_gate?(%{gated | stage: "verify"}, artifacts: Server.Workline.ContinuationTest.Present)
+    assert Server.Workline.at_gate?(gated, artifacts: Server.TestArtifacts.Present)
+    refute Server.Workline.at_gate?(gated, artifacts: Server.TestArtifacts.Missing)
+    refute Server.Workline.at_gate?(%{gated | stage: "verify"}, artifacts: Server.TestArtifacts.Present)
   end
 
   test "respond/3 reopens a closed thread before posting — the one door reopens too", %{thread: t} do
