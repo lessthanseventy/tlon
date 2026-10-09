@@ -111,7 +111,7 @@ defmodule Server.Attention do
         acc ->
           text = capture(workspace_id, tab.index)
           reconcile_safely(workspace_id, tid, tab.name, detect(text))
-          Server.Shifts.quota_check(workspace_id, text)
+          quota_safely(workspace_id, tab.agent, text)
           MapSet.put(acc, {tid, tab.name})
       end
 
@@ -456,4 +456,13 @@ defmodule Server.Attention do
   defp keystrokes(_harness, key), do: key
 
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
+
+  # a fault switching shifts doesn't stop the rest of the tick either
+  defp quota_safely(workspace_id, agent, text) do
+    Server.Shifts.quota_check(workspace_id, agent, text)
+  rescue
+    e ->
+      require(Logger) &&
+        Logger.error("attention #{workspace_id}: shift switch on a usage limit failed: #{Exception.message(e)}")
+  end
 end

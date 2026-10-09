@@ -97,26 +97,38 @@ defmodule Server.ShiftsTest do
 
   test "out of quota on the day shift: the night crew comes on and the lobby hears why — once", %{ws: ws} do
     {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
-    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver).\nsome later output"
 
-    assert {:switched, "night"} = Shifts.quota_check(ws.id, limit)
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", limit)
     assert Shifts.current(ws.id) == "night"
     assert [note] = lobby |> Channel.thread_messages() |> Enum.map(& &1.body) |> Enum.filter(&(&1 =~ "usage limit"))
     assert note =~ "reset at 5pm"
+    refute note =~ "later output"
 
-    assert :ok = Shifts.quota_check(ws.id, limit)
+    # the operator puts the day crew back; the same line still on screen doesn't send it off again
+    {:ok, _} = Shifts.switch(ws.id, "day")
+    assert :ok = Shifts.quota_check(ws.id, "hronir", limit)
+    assert Shifts.current(ws.id) == "day"
+
     {:ok, plain} = Workspaces.register(%{name: "No night crew"})
-    assert :ok = Shifts.quota_check(plain.id, limit)
+    assert :ok = Shifts.quota_check(plain.id, "hronir", limit)
     assert Shifts.current(plain.id) == "day"
   end
 
-  test "a manager on one shift still routes on the other when that shift has none", %{ws: ws} do
+  test "only a Claude coworker's pane counts: a pi pane printing the words switches nothing", %{ws: ws} do
+    emma = Server.Staff.agent_by_name("emma")
+    {:ok, _} = Workspaces.retarget(ws.id, emma.id, %{model: "ollama-cloud/glm-5.2"})
+    assert :ok = Shifts.quota_check(ws.id, "emma", "Weekly limit reached ∙ resets Sunday")
+    assert Shifts.current(ws.id) == "day"
+  end
+
+  test "the day crew rests at night: a manager only on days routes nothing on nights" do
     {:ok, ws2} = Workspaces.register(%{name: "Day manager"})
     {:ok, _} = Workspaces.seat(ws2.id, %{name: "tertius-d", archetype: "surveyor", crew: "day"})
     {:ok, _} = Workspaces.seat(ws2.id, %{name: "night-b", archetype: "builder", crew: "night"})
-    {:ok, _} = Shifts.switch(ws2.id, "night")
     assert Workspaces.manager(ws2.id).name == "tertius-d"
-    assert Workspaces.manager(ws.id).name == "tertius"
+    {:ok, _} = Shifts.switch(ws2.id, "night")
+    assert Workspaces.manager(ws2.id) == nil
   end
 
   test "a seat is put on a shift from the board; switching to the shift on changes nothing", %{

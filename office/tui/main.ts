@@ -96,7 +96,7 @@ let headHits: { from: number; to: number; go: () => void }[] = []
 // how the list cards are ordered (`s` sort, `g` group): kept across visits
 const CREW_GROUP_MODES = [null, ...CREW_GROUPS]
 const CREW_TABS = ["day", "night", "all"] as const
-const TAB_LABEL = { day: "☼ day", night: "☾ night", all: "all" } as const
+const TAB_LABEL = { day: "☼ day", night: "☾ night", all: "everyone" } as const
 let crewTab: (typeof CREW_TABS)[number] = "all"
 let crewSort = CREW_SORTS[0]!, crewGroup: (typeof CREW_GROUP_MODES)[number] = null
 type Item = ReturnType<typeof boardColumns>[number]["items"][number]
@@ -770,12 +770,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         }
       }
       const chosen = a.bench.find((x) => x.name === rows[sel]?.ref), seat = seats.find((x) => x.name === rows[sel]?.ref)
-      const put = (k: string, crewTo: "day" | "night"): Action => ({ key: k, label: `on ${crewTo === "day" ? "days" : "nights"}`, run: () => { if (seat) void did(data.seatShift(seat.seat_id, seat.name, crewTo)) } })
+      const put = (k: string, crewTo: "day" | "night" | "all"): Action => ({ key: k, label: crewTo === "all" ? "on both" : `on ${crewTo === "day" ? "days" : "nights"}`, run: () => { if (seat) void did(data.seatShift(seat.seat_id, seat.name, crewTo)) } })
       return {
         title: `CREW · ${crew.length} · ${TAB_LABEL[crewTab]} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
         rows,
         actions: [{ key: "v", label: `tab: ${TAB_LABEL[next(CREW_TABS, crewTab)]}`, run: () => { crewTab = next(CREW_TABS, crewTab); sel = 0; draw() } },
-          put("d", "day"), put("n", "night"),
+          put("d", "day"), put("n", "night"), put("b", "all"),
           { key: "S", label: `start the ${other} shift`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } },
           { key: "+", label: "hire", run: hire },
           { key: "s", label: `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`, run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
