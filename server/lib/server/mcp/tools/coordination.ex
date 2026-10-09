@@ -208,6 +208,9 @@ defmodule Server.MCP.Tool.CloseThread do
           "tracked" => tracked.slug,
           "why" => "unmerged commits — tracked as a workline instead of closed"
         })
+
+      {:error, why} ->
+        fail(frame, "thread #{thread.id} was not closed: #{inspect(why)}")
     end
   end
 end
