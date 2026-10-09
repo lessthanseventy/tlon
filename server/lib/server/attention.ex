@@ -111,7 +111,7 @@ defmodule Server.Attention do
         acc ->
           text = capture(workspace_id, tab.index)
           reconcile_safely(workspace_id, tid, tab.name, detect(text))
-          quota_safely(workspace_id, tab.agent, text)
+          quota_safely(workspace_id, tab.agent, "#{tid}/#{tab.name}", text)
           MapSet.put(acc, {tid, tab.name})
       end
 
@@ -458,8 +458,8 @@ defmodule Server.Attention do
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
 
   # a fault switching shifts doesn't stop the rest of the tick either
-  defp quota_safely(workspace_id, agent, text) do
-    Server.Shifts.quota_check(workspace_id, agent, text)
+  defp quota_safely(workspace_id, agent, pane, text) do
+    Server.Shifts.quota_check(workspace_id, agent, pane, text)
   rescue
     e ->
       require(Logger) &&

@@ -56,15 +56,17 @@ defmodule Server.Shifts do
   Coworker `agent`'s pane text, read by the attention sweep: on a Claude Code pane, Claude's usage
   limit reached on the day shift, with a night crew to come on, puts the night shift on and tells
   the lobby why (the crew screen's `S` puts the day crew back after the reset). A limit line acts
-  once: it stays on screen until the pane scrolls, so each coworker's line is remembered (in the
-  workspace, across restarts) until their pane no longer shows one. A window with no coworker
-  tagged on it is never read. `{:switched, "night"}` | `:ok`.
+  once: it stays on screen until the pane scrolls, so each pane's line (`pane`, the tab's thread and
+  window) is remembered by fingerprint, in the workspace across restarts, until that pane no longer
+  shows one. A window with no coworker tagged on it is never read. `{:switched, "night"}` | `:ok`.
   """
-  def quota_check(workspace_id, agent, text) do
+  def quota_check(workspace_id, agent, pane, text) do
     if Server.Presence.provider_of(agent, workspace_id) == "anthropic" do
+      key = "#{agent}/#{pane}"
+
       case limit_line(text) do
-        nil -> forget(workspace_id, agent)
-        {line, after_line} -> on_limit(workspace_id, agent, line, after_line)
+        nil -> forget(workspace_id, key)
+        {line, after_line} -> on_limit(workspace_id, key, line, after_line)
       end
     else
       :ok
@@ -133,8 +135,8 @@ defmodule Server.Shifts do
          do: {Enum.at(lines, i), Enum.at(lines, i + 1) || ""}
   end
 
-  # each Claude coworker's limit line already acted on, in the workspace's knobs so a restart keeps
-  # it: the same line still on screen is the old limit; a pane without one forgets it
+  # each Claude pane's limit line already acted on (by fingerprint), in the workspace's knobs so a
+  # restart keeps it: the same line still on that pane is the old limit; the pane without one forgets it
   defp seen(workspace_id), do: (Repo.get!(Workspace, workspace_id).knobs || %{})["limits_seen"] || %{}
 
   defp remember(workspace_id, agent, line), do: put_seen(workspace_id, Map.put(seen(workspace_id), agent, line))
@@ -151,25 +153,39 @@ defmodule Server.Shifts do
     :ok
   end
 
-  defp on_limit(workspace_id, agent, line, after_line) do
-    with true <- seen(workspace_id)[agent] != line,
-         :ok <- remember(workspace_id, agent, line),
-         "day" <- current(workspace_id),
-         true <- Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew == "night")),
-         {:ok, _} <- switch(workspace_id, "night") do
-      reset =
-        with [r] <- Regex.run(~r/reset[s]?[^\n]*/i, line <> "\n" <> after_line), do: " (Claude says: #{String.trim(r)})"
+  # remembered once acted on (switched, or nothing to switch to): a switch that raises is retried
+  defp on_limit(workspace_id, key, line, after_line) do
+    mark = fingerprint(line)
 
-      with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
-           do:
-             note(
-               %Thread{id: lobby},
-               "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, S on the crew screen puts the day crew back."
-             )
-
-      {:switched, "night"}
+    if seen(workspace_id)[key] == mark do
+      :ok
     else
-      _ -> :ok
+      night_crew? = Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew == "night"))
+
+      result =
+        if current(workspace_id) == "day" and night_crew?, do: nights_for(workspace_id, line, after_line), else: :ok
+
+      remember(workspace_id, key, mark)
+      result
     end
   end
+
+  defp nights_for(workspace_id, line, after_line) do
+    {:ok, _} = switch(workspace_id, "night")
+
+    reset =
+      with [r] <- Regex.run(~r/reset[s]?[^\n]*/i, line <> "\n" <> after_line), do: " (Claude says: #{String.trim(r)})"
+
+    with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
+         do:
+           note(
+             %Thread{id: lobby},
+             "☾ Claude's usage limit is reached, so the night shift is on#{reset}. After the reset, S on the crew screen puts the day crew back."
+           )
+
+    {:switched, "night"}
+  end
+
+  # the line's fingerprint, not its text: knobs reach every coworker's brief, and pane text is untrusted
+  defp fingerprint(line), do: :sha256 |> :crypto.hash(line) |> Base.encode16(case: :lower) |> binary_part(0, 16)
 end

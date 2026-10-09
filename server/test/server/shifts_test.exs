@@ -99,7 +99,7 @@ defmodule Server.ShiftsTest do
     {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
     limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver).\nsome later output"
 
-    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", limit)
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
     assert Shifts.current(ws.id) == "night"
     assert [note] = lobby |> Channel.thread_messages() |> Enum.map(& &1.body) |> Enum.filter(&(&1 =~ "usage limit"))
     assert note =~ "reset at 5pm"
@@ -107,34 +107,46 @@ defmodule Server.ShiftsTest do
 
     # the operator puts the day crew back; the same line still on screen doesn't send it off again
     {:ok, _} = Shifts.switch(ws.id, "day")
-    assert :ok = Shifts.quota_check(ws.id, "hronir", limit)
+    assert :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
     assert Shifts.current(ws.id) == "day"
 
     {:ok, plain} = Workspaces.register(%{name: "No night crew"})
-    assert :ok = Shifts.quota_check(plain.id, "hronir", limit)
+    assert :ok = Shifts.quota_check(plain.id, "hronir", "1/w1", limit)
     assert Shifts.current(plain.id) == "day"
   end
 
   test "a limit line is remembered until its pane stops showing it — in the db, so a restart keeps it", %{ws: ws} do
     limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
-    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", limit)
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
 
-    assert Server.Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"] == %{"hronir" => limit}
+    seen = Server.Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"]
+    assert Map.keys(seen) == ["hronir/1/w1"]
+    refute seen |> Map.values() |> Enum.any?(&String.contains?(&1, "usage limit"))
 
     {:ok, _} = Shifts.switch(ws.id, "day")
-    assert :ok = Shifts.quota_check(ws.id, "hronir", limit)
+    assert :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
     assert Shifts.current(ws.id) == "day"
 
     # the pane moves on: forgotten, so the next limit is a new one
-    assert :ok = Shifts.quota_check(ws.id, "hronir", "❯ carrying on")
+    assert :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", "❯ carrying on")
     assert Server.Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"] == %{}
-    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", limit)
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+  end
+
+  test "two panes of one coworker, one showing the limit: each keeps its own memory, no flapping", %{ws: ws} do
+    limit = "  ⎿  Claude usage limit reached. Your limit will reset at 5pm (America/Denver)."
+    assert {:switched, "night"} = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+    assert :ok = Shifts.quota_check(ws.id, "hronir", "2/w2", "❯ clean")
+    {:ok, _} = Shifts.switch(ws.id, "day")
+    assert :ok = Shifts.quota_check(ws.id, "hronir", "1/w1", limit)
+    assert :ok = Shifts.quota_check(ws.id, "hronir", "2/w2", "❯ clean")
+    assert Shifts.current(ws.id) == "day"
   end
 
   test "only a Claude coworker's pane counts: a pi pane printing the words switches nothing", %{ws: ws} do
     emma = Server.Staff.agent_by_name("emma")
     {:ok, _} = Workspaces.retarget(ws.id, emma.id, %{model: "ollama-cloud/glm-5.2"})
-    assert :ok = Shifts.quota_check(ws.id, "emma", "Weekly limit reached ∙ resets Sunday")
+    assert :ok = Shifts.quota_check(ws.id, "emma", "1/w1", "Weekly limit reached ∙ resets Sunday")
     assert Shifts.current(ws.id) == "day"
   end
 
