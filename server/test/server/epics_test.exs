@@ -84,4 +84,53 @@ defmodule Server.EpicsTest do
       assert Tickets.get(e.id).status == "backlog"
     end
   end
+
+  describe "derived epic status" do
+    setup %{ws: ws} do
+      e = epic(ws, "Toy")
+      [a, b] = for t <- ["a", "b"], do: file(ws, t)
+      for c <- [a, b], do: {:ok, _} = Tickets.link(e.id, c.id, "parent")
+      %{e: e, a: a, b: b}
+    end
+
+    defp status(e), do: Tickets.get(e.id).status
+
+    test "backlog until a child starts, doing after, done when the last child closes", %{e: e, a: a, b: b} do
+      assert status(e) == "backlog"
+      {:ok, a} = Tickets.update(a, %{status: "todo"})
+      assert status(e) == "backlog"
+      {:ok, a} = Tickets.update(a, %{status: "doing"})
+      assert status(e) == "doing"
+      {:ok, _} = Tickets.update(a, %{status: "done"})
+      assert status(e) == "doing"
+      {:ok, _} = Tickets.update(b, %{status: "done"})
+      assert status(e) == "done"
+      assert Tickets.get(e.id).closed_at
+    end
+
+    test "promote starts the epic; a reopened or added child sends it back to doing", %{ws: ws, e: e, a: a, b: b} do
+      {:ok, _} = Tickets.update(a, %{status: "done"})
+      {:ok, b} = Tickets.update(b, %{status: "done"})
+      assert status(e) == "done"
+      {:ok, b} = Tickets.update(b, %{status: "doing"})
+      assert status(e) == "doing"
+      {:ok, _} = Tickets.update(b, %{status: "done"})
+      assert status(e) == "done"
+      c = file(ws, "late addition")
+      {:ok, _} = Tickets.link(e.id, c.id, "parent")
+      assert status(e) == "doing"
+      Tickets.remove(c)
+      assert status(e) == "done"
+    end
+
+    test "unlinking the only unfinished child can close the epic; an epic with no children is backlog",
+         %{ws: ws, e: e, a: a, b: b} do
+      {:ok, _} = Tickets.update(a, %{status: "done"})
+      :ok = Tickets.unlink(e.id, b.id, "parent")
+      assert status(e) == "done"
+      :ok = Tickets.unlink(e.id, a.id, "parent")
+      assert status(e) == "backlog"
+      assert status(epic(ws, "Empty")) == "backlog"
+    end
+  end
 end

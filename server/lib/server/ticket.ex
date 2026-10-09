@@ -87,6 +87,26 @@ defmodule Server.Ticket do
     |> put_change(:updated_at, DateTime.truncate(DateTime.utc_now(), :second))
   end
 
+  @doc "An epic's status from its children's: `done` when all are done, `doing` once one has started, else `backlog`."
+  @spec epic_status([String.t()]) :: String.t()
+  def epic_status([]), do: "backlog"
+
+  def epic_status(statuses) do
+    cond do
+      Enum.all?(statuses, &(&1 == "done")) -> "done"
+      Enum.any?(statuses, &(&1 in ~w(doing done))) -> "doing"
+      true -> "backlog"
+    end
+  end
+
+  @doc "Set an epic's derived status (stamps `closed_at` like any status change)."
+  def derive_changeset(%__MODULE__{} = epic, status) do
+    epic
+    |> change(status: status)
+    |> stamp_closed()
+    |> put_change(:updated_at, DateTime.truncate(DateTime.utc_now(), :second))
+  end
+
   defp validate_sets(changeset) do
     changeset
     |> validate_inclusion(:status, @statuses)
