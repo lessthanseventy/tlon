@@ -6,7 +6,7 @@ defmodule Server.OneParentMigrationTest do
   alias Server.Repo
   alias Server.Tickets
 
-  @version 19_000_102_000_001
+  @version 99_000_102_000_001
 
   setup do
     Server.TestDB.clean!()

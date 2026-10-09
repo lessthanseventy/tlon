@@ -6,7 +6,7 @@ defmodule Server.NolanQaMigrationTest do
 
   alias Server.Workspaces
 
-  @version 19_000_101_000_001
+  @version 99_000_101_000_001
 
   setup do
     Server.TestDB.clean!()

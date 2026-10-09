@@ -6,7 +6,7 @@ defmodule Server.BeatrizPmMigrationTest do
 
   alias Server.Workspaces
 
-  @version 19_000_101_000_000
+  @version 99_000_101_000_000
 
   setup do
     Server.TestDB.clean!()
