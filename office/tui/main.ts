@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
+import { personaLines } from "../kit/persona"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
@@ -590,6 +591,20 @@ function seatActions(b: Coworker | undefined): Action[] {
       },
     },
     { key: "y", label: b.ask === "allow" ? "ask before acting" : "allow without asking", run: () => void did(data.retarget(w, b.agent_id, { ask: b.ask === "allow" ? "ask" : "allow" })) },
+    {
+      key: "E", label: "persona…", run: () => {
+        const p = b.persona
+        const items: { label: string; run: () => void }[] = [
+          { label: p ? "draw a new one (reroll)" : "make one", run: () => void did(data.persona(w, b.agent_id, !!p)) },
+          ...(p ? [
+            { label: "edit the voice", run: () => ask(`${b.name}'s voice`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { voice: s.trim() })) }, { text: p.voice }) },
+            { label: "edit the backstory", run: () => ask(`${b.name}'s backstory`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { backstory: s.trim() })) }, { text: p.backstory }) },
+            ...(["desk_object", "hobby", "catchphrase", "pet_peeve"] as const).map((k) => ({ label: `edit ${k.replace("_", " ")}`, run: () => ask(`${b.name}'s ${k.replace("_", " ")}`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { quirks: { [k]: s.trim() } })) }, { text: p.quirks[k] }) })),
+          ] : []),
+        ]
+        find(`${b.name.toUpperCase()}'S PERSONA`, items.map((i) => ({ segs: [plain(i.label)], text: i.label, run: () => { picker = null; i.run() } })))
+      },
+    },
     { key: "C", label: "clear context (fresh next time)", run: () => ask2(`clear ${b.name}'s context — their session ends, they start fresh when next needed`, () => did(data.clearContext(w, b.agent_id, b.name))) },
     { key: "-", label: "let go", run: () => ask2(`let ${b.name} go from ${wsName()} (the agent itself stays)`, () => did(data.unseat(b.seat_id, b.name))) },
   ]
@@ -838,7 +853,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
       const soul = soulFor(name)
       const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
-      const rows = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
+      const rows: Row[] = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
+      for (const l of personaLines(b?.persona, Math.max(20, cols() - 40))) rows.push({ segs: [dim(l)] })
       return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, ...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {

@@ -144,4 +144,4 @@ One place, the office settings panel (`office.json`): `mode` (`office` | `sandbo
 | 5 | **Events**: the zoo, the meteor, the fire drill, the power cut, the duck | each plays and tidies itself; none touches a thread or a turn |
 | 6 | **Whimsy and toggles** in the settings panel | `whimsy: off` plays nothing; one event toggled off never plays |
 | 7 | **The rest of the cast's room reactions** to events, in voice | every seat reacts to each event in its own way |
-| 8 | **Generators**: personas per seat, and pools of visitors, reactions and puns, on cheap model calls (`Server.Persona`, `Server.ToyPool`) | a hired seat gets a persona; `--reroll` records a new seed; the room renders with the model off — server side built; the office card's display/edit is open |
+| 8 | **Generators**: personas per seat, and pools of visitors, reactions and puns, on cheap model calls (`Server.Persona`, `Server.ToyPool`) | a hired seat gets a persona; `--reroll` records a new seed; the room renders with the model off — built: the person card shows the persona, `E` makes, rerolls and edits it |

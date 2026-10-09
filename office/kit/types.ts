@@ -16,8 +16,9 @@ export type Thread = { id: number; title: string; stage: string | null; awaiting
 export type Seat = { agent: string; thread_id: number; title: string; warm: boolean; warmth?: number; thinking?: boolean; doing?: string | null; archetype?: string | null; lead?: boolean; workspace_id?: number | null }
 /** a model as the server names it; `thinking` is the effort level */
 export type ModelSpec = { provider: string; model: string; thinking: string }
+import type { Persona } from "./persona"
 /** a coworker a workspace employs, on a thread or not; `model`/`ask` are its policy, null = the archetype's */
-export type Coworker = { workspace_id: number; seat_id: number; agent_id: number; name: string; archetype: string | null; lead: boolean; model: ModelSpec | null; ask: string | null }
+export type Coworker = { workspace_id: number; seat_id: number; agent_id: number; name: string; archetype: string | null; lead: boolean; model: ModelSpec | null; ask: string | null; persona?: Persona | null }
 /** what an archetype is beyond its prompt: `meta` never works a thread, `read_only` cannot write */
 export type Archetype = { name: string; meta: boolean; read_only: boolean; model: string }
 /** a model a coworker may run, keyed `provider/model`, with the harness it resolves to here */
