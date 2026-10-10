@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -149,14 +149,28 @@ describe("home.json round trip", () => {
   test("a missing file is an empty home, not a throw", () => {
     expect(loadHome(join(tmpdir(), "tlon-home-missing", "home.json"))).toEqual({ tiles: [] })
   })
-  test("a malformed tile (bad kind, or no numeric `at`) is dropped, not loaded as-is", () => {
+  test("a malformed tile (no kind, or no numeric `at`) is dropped, not loaded as-is", () => {
     const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
     const path = join(dir, "home.json")
     try {
       writeFileSync(path, JSON.stringify({ tiles: [
-        {}, { kind: "not-a-kind", at: [0, 0] }, { kind: "living", at: ["x", 0] }, { kind: "kitchen", at: [1, 1] },
+        {}, { kind: "living", at: ["x", 0] }, { kind: "kitchen", at: [1, 1] },
       ] }))
       expect(loadHome(path)).toEqual({ tiles: [{ kind: "kitchen", at: [1, 1] }] })
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+  test("a tile of an unknown kind survives a load/save round trip, but is not in the loaded home", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
+    const path = join(dir, "home.json")
+    const unknown = { kind: "not-a-kind", at: [9, 9], rot: 1 }
+    try {
+      writeFileSync(path, JSON.stringify({ tiles: [{ kind: "living", at: [0, 0] }, unknown] }))
+      const home = loadHome(path)
+      expect(home).toEqual({ tiles: [{ kind: "living", at: [0, 0] }] }) // not rendered, not in connected()/bounds
+      expect(connected(home.tiles)).toBe(true)
+      saveHome({ tiles: [...home.tiles, { kind: "kitchen", at: [1, 0] }] }, path)
+      expect(JSON.parse(readFileSync(path, "utf8")).tiles).toContainEqual(unknown)
+      expect(loadHome(path).tiles.map((t) => t.kind)).toEqual(["living", "kitchen"])
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
   test("saveHome to a path it cannot create does not throw", () => {
