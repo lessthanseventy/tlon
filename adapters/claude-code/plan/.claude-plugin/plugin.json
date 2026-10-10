@@ -1,0 +1,6 @@
+{
+  "name": "tlon-plan",
+  "version": "0.1.0",
+  "description": "A Claude-plan seat's budget: near the five-hour cap, every request runs at low effort",
+  "author": { "name": "Andrew Moore" }
+}

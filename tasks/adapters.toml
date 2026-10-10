@@ -39,6 +39,7 @@ dir = "adapters"
 run = """
 set -e
 claude plugin validate --strict .
+claude plugin validate --strict claude-code/plan
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 git ls-files --cached --others --exclude-standard | grep -v '\\.test\\.tsx\\?$' | cpio -pdm --quiet "$stage"

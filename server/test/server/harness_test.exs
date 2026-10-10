@@ -160,5 +160,24 @@ defmodule Server.HarnessTest do
       assert settings["permissions"]["additionalDirectories"] == ["/p/b", "/p/c"]
       assert settings["permissions"]["deny"] == ["mcp__tlon__close_thread", "Edit(//p/b/**)", "Edit(//p/c/**)"]
     end
+
+    test "launch.sh: only a seat on the Claude plan loads the plan's budget mod, the one that wraps the model's stream" do
+      launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
+
+      env = [
+        {"TLON_LAUNCH_DRYRUN", "1"},
+        {"TLON_MCP_URL", "http://127.0.0.1:1/mcp"},
+        {"TLON_THREAD", "7"},
+        {"TLON_AUTHOR", "hronir"}
+      ]
+
+      exec = fn provider ->
+        {out, 0} = System.cmd("bash", [launcher], env: [{"TLON_PROVIDER", provider} | env])
+        out |> String.split("\n") |> Enum.find(&String.starts_with?(&1, "exec: "))
+      end
+
+      assert exec.("anthropic") =~ "adapters/claude-code/plan"
+      refute exec.("ollama-cloud") =~ "adapters/claude-code/plan"
+    end
   end
 end

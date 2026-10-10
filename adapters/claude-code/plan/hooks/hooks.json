@@ -1,0 +1,4 @@
+{
+  "description": "A Claude-plan seat's budget",
+  "modules": ["../mod.ts"]
+}
