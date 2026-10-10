@@ -11,8 +11,8 @@ defmodule Server.Office.Writer do
   FLAVOUR, one line on the prompt, so one batch differs from the next in kind, not only in wording.
 
   How wild all of it is follows the operator's `wackiness` knob — the voice half of the toy design's
-  dial (business → rimworld): 0 business writes nothing (the office falls back to its few canned
-  lines), 1 business casual is wry and warm, 2 office party is bits and running gags, 3 rimworld is
+  dial (business → feral): 0 business writes nothing (the office falls back to its few canned
+  lines), 1 business casual is wry and warm, 2 office party is bits and running gags, 3 feral is
   moods that swing on what actually happened, grudges remembered and everything escalating.
 
   `config :server, banter_cmd:` (a test's stand-in CLI) pins every call to it instead.
@@ -40,7 +40,7 @@ defmodule Server.Office.Writer do
     1 => "business casual: personality, lightly — wry and warm, about today",
     2 => "office party: loud and silly — bits, running gags, inside jokes; nobody is entirely sensible",
     3 =>
-      "RIMWORLD: moods swing on what actually happened today (a red build sours someone for the afternoon, " <>
+      "FERAL: moods swing on what actually happened today (a red build sours someone for the afternoon, " <>
         "a merge makes someone insufferable), rivalries and grudges flare and are remembered, everything " <>
         "escalates and catastrophizes; the drama is the point, but never cruel"
   }
