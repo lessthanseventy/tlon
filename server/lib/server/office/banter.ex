@@ -1,9 +1,8 @@
 defmodule Server.Office.Banter do
   @moduledoc """
   The office's small talk: now and then a coworker says something — about their work, someone
-  else's, the boss, the room, or just a joke — written by the cheap model tier
-  (`Server.ModelCli`; `config :server, banter_cmd:, banter_model:`, default `pi` on
-  `ollama-cloud/deepseek-v4.1-flash`, the flat ollama bucket).
+  else's, the boss, the room, or just a joke — written by a cheap model in a drawn mood
+  (`Server.Office.Writer`: Haiku or deepseek by day, the ollama models by night).
 
   Each line is one of several KINDS of remark (`kinds/0`), drawn by weight (`pick/2`); a kind's
   weight reads the moment, so one that has nothing to say about it (no one else working, nothing
@@ -124,13 +123,7 @@ defmodule Server.Office.Banter do
     with [_ | _] <- ctx.crew,
          speaker = Enum.random(ctx.crew),
          {kind, ask} <- pick(ctx, speaker),
-         {:ok, out} <-
-           Server.ModelCli.prompt(
-             @voice <> "\n" <> scene(ctx) <> "\n\nNOW: " <> ask,
-             :banter_cmd,
-             :banter_model,
-             {"pi", "ollama-cloud/deepseek-v4.1-flash"}
-           ),
+         {:ok, out} <- Server.Office.Writer.write(@voice <> "\n" <> scene(ctx) <> "\n\nNOW: " <> ask, ws),
          line when is_binary(line) <- parse(out) do
       %{agent: speaker.name, line: line, kind: kind}
     else

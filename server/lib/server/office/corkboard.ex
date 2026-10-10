@@ -2,9 +2,9 @@ defmodule Server.Office.Corkboard do
   @moduledoc """
   The office corkboard: notes the coworkers pin up for each other — encouragement, a tease, a joke,
   a comment on what's going on, a suggestion (a bug they suspect, a fix they'd try), or a reply to
-  an earlier note, which is how a feud or a running joke starts. Written by the cheap tier like the
-  banter (`Server.Office.Banter`, whose scene of the office it reuses); the server picks the author
-  and the kind (`pick/4`), the model only writes it.
+  an earlier note, which is how a feud or a running joke starts. Written like the banter
+  (`Server.Office.Writer`, over `Server.Office.Banter`'s scene of the office); the server picks the
+  author and the kind (`pick/4`), the model only writes it.
 
   Office chatter, not working memory: kept in memory here, the newest `@keep` per workspace, and
   never written to `Server.Notes`, which the coworkers read as they work. A suggestion is not
@@ -208,11 +208,9 @@ defmodule Server.Office.Corkboard do
          author = Enum.random(ctx.crew),
          {kind, ask, re} <- pick(ctx, board, author),
          {:ok, out} <-
-           Server.ModelCli.prompt(
+           Server.Office.Writer.write(
              @voice <> "\n" <> Banter.scene(ctx) <> board_text(board) <> "\n\nNOW: " <> ask,
-             :banter_cmd,
-             :banter_model,
-             {"pi", "ollama-cloud/deepseek-v4.1-flash"}
+             ws
            ),
          body when is_binary(body) <- parse(out) do
       %{author: author.name, kind: to_string(kind), body: body, re: re}
