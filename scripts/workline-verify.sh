@@ -132,5 +132,5 @@ elif [ "$fail" -eq 0 ]; then
 else
   note "$tid" "verify FAILED for workline $slug — ${fails:+failing:
 $fails
-}see the check_failed evidence (workline:$slug:verify); fix on branch work/$slug, then re-run: mise run workline:verify -- $tid $slug"
+}see the check_failed evidence (workline:$slug:verify); fix it on work/$slug, push it (push_branch), then call advance_stage: the server runs verify again"
 fi
