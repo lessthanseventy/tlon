@@ -64,14 +64,20 @@ defmodule Server.Intake do
     {all - waiting + routed, all + routed}
   end
 
-  # routed (`todo`) longer than `after_s` ago, with no thread it was started in
+  # routed (`todo`) longer than `after_s` ago, with no open thread it was started in: a closed one is a
+  # workline abandoned back to the backlog and routed again
   defp stalled(after_s) do
     cutoff = DateTime.add(DateTime.utc_now(), -after_s, :second)
 
     from(t in Ticket,
       where: t.status == "todo" and t.updated_at < ^cutoff,
       where:
-        not exists(from tt in Server.TicketThread, where: tt.ticket_id == parent_as(:t).id and tt.kind == "promoted")
+        not exists(
+          from tt in Server.TicketThread,
+            join: th in Thread,
+            on: th.id == tt.thread_id,
+            where: tt.ticket_id == parent_as(:t).id and tt.kind == "promoted" and th.state == "open"
+        )
     )
     |> from(as: :t)
     |> Repo.all()

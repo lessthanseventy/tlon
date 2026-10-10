@@ -154,6 +154,24 @@ defmodule Server.TicketsTest do
       assert body =~ "Abandoned in workline ##{dropped_line.id}: the design changed"
     end
 
+    test "a ticket starts once: done, in a thread or claimed by hand, it is refused" do
+      {:ok, ws} = Workspaces.create(%{name: "Once"})
+      {:ok, a} = Tickets.file(%{workspace_id: ws.id, title: "started"})
+      {:ok, b} = Tickets.file(%{workspace_id: ws.id, title: "claimed"})
+      {:ok, c} = Tickets.file(%{workspace_id: ws.id, title: "done"})
+      {:ok, line} = Tickets.start_thread(a)
+      {:ok, _} = Tickets.claim(b, "uqbar")
+      {:ok, _} = Tickets.update(c, %{status: "done"})
+
+      assert {:error, why} = Tickets.start_thread(Tickets.get(a.id))
+      assert why =~ "in thread ##{line.id}"
+      assert {:error, why} = Tickets.start_thread(Tickets.get(b.id))
+      assert why =~ "claimed by uqbar"
+      assert {:error, "ticket #" <> _} = Tickets.claim(Tickets.get(c.id), "uqbar")
+      assert [_] = Tickets.threads_of(a.id)
+      assert Tickets.threads_of(b.id) == []
+    end
+
     test "a plain thread or a merged workline closes by hand without a why" do
       {:ok, plain} = Channel.open_thread(%{title: "a question"})
       assert {:ok, %{state: "closed"}} = Channel.close_as(plain, nil)

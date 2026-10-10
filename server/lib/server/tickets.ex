@@ -229,7 +229,8 @@ defmodule Server.Tickets do
     ask = Enum.join(Enum.reject([ticket.title, ticket.body, "(ticket ##{ticket.id})"], &(&1 in [nil, ""])), "\n\n")
 
     # a workline before the ask is posted, so its lead is briefed for the stage it starts at
-    with {:ok, opened} <-
+    with :ok <- startable(ticket),
+         {:ok, opened} <-
            %{title: ticket.title, workspace_id: ticket.workspace_id, project_id: ticket.project_id, scope: "machine"}
            |> then(&if(agent_id, do: Map.put(&1, :agent_id, agent_id), else: &1))
            |> Server.Channel.open_thread(),
@@ -238,6 +239,35 @@ defmodule Server.Tickets do
          {:ok, _} <- Server.Attention.respond(thread.id, operator, ask) do
       {:ok, thread}
     end
+  end
+
+  @doc """
+  Whether work may start on a ticket: `:ok` in the backlog or routed (`todo`); `{:error, why}` when it
+  is done or already being worked (`doing`, in a thread or claimed by hand with `claim/2`). Every start
+  asks this first (`start_thread/2`, the manager's `staff_child`), so one ticket is never worked twice.
+  """
+  def startable(%Ticket{status: status}) when status in ~w(backlog todo), do: :ok
+  def startable(%Ticket{status: "done"} = ticket), do: {:error, "ticket ##{ticket.id} is done"}
+
+  def startable(%Ticket{} = ticket) do
+    places =
+      for {"promoted", id} <- threads_of(ticket.id),
+          match?(%Server.Thread{state: "open"}, Repo.get(Server.Thread, id)),
+          do: " in thread ##{id}"
+
+    by = if ticket.assignee, do: " — claimed by #{ticket.assignee}", else: ""
+    {:error, "ticket ##{ticket.id} is already #{ticket.status}#{Enum.join(places)}#{by}"}
+  end
+
+  @doc """
+  Claim a ticket for someone working it by hand, outside a thread (the operator, Uqbar): `doing`, with
+  them as its assignee, so intake and the manager leave it alone and the Maintain sweep doesn't return
+  it to the backlog. Refused as `startable/1` refuses; an epic is never work. Finish it with its status.
+  """
+  def claim(%Ticket{kind: "epic"}, _who), do: {:error, :epic}
+
+  def claim(%Ticket{} = ticket, who) do
+    with :ok <- startable(ticket), do: __MODULE__.update(ticket, %{status: "doing", assignee: who})
   end
 
   @doc """

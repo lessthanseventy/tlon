@@ -77,6 +77,7 @@ defmodule Server.MCP.Tool.StaffChild do
 
     with :ok <- briefed(params[:brief]),
          :ok <- routes_here(parent, identity.agent_id),
+         :ok <- ticket_free(params[:ticket_id]),
          {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
          {:ok, thread} <- open_child(params[:title], parent, params[:workline]),
          {:ok, thread} <- graded(thread, params[:grade]),
@@ -102,6 +103,9 @@ defmodule Server.MCP.Tool.StaffChild do
 
       {:error, %Ecto.Changeset{}} = error ->
         reply(frame, error, & &1)
+
+      {:error, reason} when is_binary(reason) ->
+        fail(frame, "staff_child refused: #{reason} — check the ticket before staffing it again")
 
       {:error, reason} ->
         fail(frame, "staff_child failed: #{inspect(reason)}")
@@ -167,6 +171,16 @@ defmodule Server.MCP.Tool.StaffChild do
         else: %{}
 
     Server.Workline.open_titled(title, stage, extra)
+  end
+
+  # checked before anything opens, so a refused ticket leaves no thread behind
+  defp ticket_free(nil), do: :ok
+
+  defp ticket_free(ticket_id) do
+    case Server.Tickets.get(ticket_id) do
+      nil -> {:error, "no ticket ##{ticket_id}"}
+      ticket -> Server.Tickets.startable(ticket)
+    end
   end
 
   # The ticket the work came from moves into the new thread (status doing, tied to it). An unknown

@@ -177,6 +177,16 @@ defmodule Server.MaintainTest do
       assert Repo.get!(Server.Ticket, busy.id).status == "doing"
     end
 
+    test "a ticket claimed by hand stays doing with no thread: someone is working it outside the office" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Claimed"})
+      {:ok, t} = Server.Tickets.file(%{workspace_id: ws.id, title: "uqbar has it"})
+      {:ok, _} = Server.Tickets.claim(t, "uqbar")
+
+      sweep()
+
+      assert %{status: "doing", assignee: "uqbar"} = Repo.get!(Server.Ticket, t.id)
+    end
+
     test "a ticket started on an open thread but still in the backlog is doing" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Board2"})
       {:ok, tk} = Server.Tickets.file(%{workspace_id: ws.id, title: "started"})

@@ -152,6 +152,24 @@ defmodule Server.IntakeTest do
       assert Tickets.threads_of(held.id) == []
     end
 
+    test "is started even when an earlier workline on it closed unmerged — that tie is history", %{
+      ws: ws,
+      route: route
+    } do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-j", archetype: "builder"})
+      again = routed(ws, "tried once", 31)
+      {:ok, old} = Server.Channel.open_thread(%{title: "first try", workspace_id: ws.id})
+      {:ok, _} = Tickets.tie(again, old.id, "promoted")
+      {:ok, _} = Server.Channel.close_thread(old)
+      at = DateTime.utc_now() |> DateTime.add(-31 * 60, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(x in Server.Ticket, where: x.id == ^again.id), set: [status: "todo", updated_at: at])
+
+      Intake.run(cap: 4, route: route)
+
+      assert %{status: "doing"} = Tickets.get(again.id)
+      assert length(Tickets.threads_of(again.id)) == 2
+    end
+
     test "is left with the manager inside the 30 minutes", %{ws: ws, route: route} do
       fresh = routed(ws, "just routed", 5)
       Intake.run(cap: 4, route: route)
