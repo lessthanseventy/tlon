@@ -30,7 +30,9 @@ execs Claude Code through `gateway.sh` with:
 `gateway.sh PROVIDER CMD…` turns `TLON_PROVIDER` (`ollama-cloud`, `ollama`, or none for the Claude
 plan) into Claude Code's gateway settings — `ANTHROPIC_BASE_URL`, the ollama key from the env or
 agenix, the model aliases pointed at ollama models — so a session on an ollama model never draws on
-the Claude plan. The server's aside, role bench and one-shots run through it too.
+the Claude plan. The server's aside, role bench and one-shots run through it too. On an
+`ollama-cloud` seat the key is exported as `ANTHROPIC_AUTH_TOKEN` into the `claude` process, so the
+seat's bash inherits it: anything the seat runs can read the ollama key, sandbox or not.
 
 ## The mod (`mod.ts`)
 
