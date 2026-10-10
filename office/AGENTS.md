@@ -27,7 +27,7 @@ linked window at a time, Ctrl-] back to the room).
   the home's tiles as pixel art (`homeart.ts`: `TILE_ART`, kind → painter, a missing kind draws plain; `renderHome` the build grid as a Frame, `paintAnnex` the placed tiles as a strip; the snapshot's weather rains and snows on the garden tile),
   the TV's channels (`tv.ts`: the desktop backdrop's ambient shows, retuned for a small screen, and
   an aquarium),
-  and Uqbar's volume (`uqbar.ts`: sprites, flight, the lounge shelf's extra spine; `viewOf` lifts agent `uqbar` out of the roster into `Agents.uqbar`, so it never gets a desk or a crew row).
+  and Uqbar's volume (`uqbar.ts`: sprites, flight, the lounge shelf's extra spine; `viewOf` lifts agent `uqbar` out of the roster into `Agents.uqbar`, so it never gets a desk or a crew row), and its posts as paper aeroplanes (`plane.ts`: pure flight, `freshPosts` off the activity feed, `handoffFrom` off `visits`; `WideRoom.fly` sends one to the thread lead's desk, else its card).
 - `rooms/` — rooms built from the kit: `rail.ts`, the desktop's right rail (and the TUI's on a narrow
   terminal); `wide.ts`, the TUI's full-width room (office, floor, meeting room, lounge, a long back
   wall with the whiteboard, notes, calendar, windows on the real weather (`weather` on the
