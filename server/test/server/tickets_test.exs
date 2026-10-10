@@ -133,6 +133,32 @@ defmodule Server.TicketsTest do
       assert %{status: "done"} = Tickets.get(shipped.id)
     end
 
+    test "an unmerged workline closes by hand only with a why, and the why decides its ticket" do
+      {:ok, ws} = Workspaces.create(%{name: "Why"})
+      {:ok, dup} = Tickets.file(%{workspace_id: ws.id, title: "built twice"})
+      {:ok, dropped} = Tickets.file(%{workspace_id: ws.id, title: "not worth it"})
+      {:ok, dup_line} = Tickets.start_thread(dup)
+      {:ok, dropped_line} = Tickets.start_thread(dropped)
+
+      assert {:error, :why_closed} = Channel.close_as(dup_line, nil)
+      assert {:error, :why_closed} = Channel.close_as(dup_line, {:superseded, "  "})
+      assert %{state: "open"} = Server.Repo.get!(Server.Thread, dup_line.id)
+
+      assert {:ok, %{state: "closed"}} = Channel.close_as(dup_line, {:superseded, "PR #234"})
+      assert %{status: "done", body: body} = Tickets.get(dup.id)
+      assert body =~ "Superseded by PR #234"
+      assert List.last(Channel.thread_messages(dup_line)).body =~ "superseded by PR #234"
+
+      assert {:ok, _} = Channel.close_as(dropped_line, {:abandoned, "the design changed"})
+      assert %{status: "backlog", body: body} = Tickets.get(dropped.id)
+      assert body =~ "Abandoned in workline ##{dropped_line.id}: the design changed"
+    end
+
+    test "a plain thread or a merged workline closes by hand without a why" do
+      {:ok, plain} = Channel.open_thread(%{title: "a question"})
+      assert {:ok, %{state: "closed"}} = Channel.close_as(plain, nil)
+    end
+
     test "a merged workline sent back (its PR conflicted) takes its ticket back to doing" do
       {:ok, ws} = Workspaces.create(%{name: "Reland"})
       {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "the garden tile"})

@@ -340,6 +340,21 @@ defmodule Server.MCP.ServerTest do
     assert call(token, session, 6, "close_thread", %{"thread_id" => 999_999})["isError"]
   end
 
+  test "close_thread on a workline that hasn't merged wants a why: superseded_by or abandoned", %{token: token} do
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    {:ok, line} = Server.Workline.open(%{title: "built twice", slug: "built-twice", stage: "build"})
+
+    r = call(token, session, 4, "close_thread", %{"thread_id" => line.id})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "superseded_by"
+    assert Repo.get(Thread, line.id).state == "open"
+
+    r = call(token, session, 5, "close_thread", %{"thread_id" => line.id, "superseded_by" => "PR #234"})
+    refute r["isError"]
+    assert Repo.get(Thread, line.id).state == "closed"
+  end
+
   test "consult_peer — ask a peer on another thread, the third cross-thread verb",
        %{thread: thread, token: token} do
     # A peer agent, staffed and live on its own thread.

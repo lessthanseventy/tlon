@@ -230,9 +230,13 @@ case "$cmd" in
 
   close-thread)
     # The operator closes a thread: its sessions end, a child reports up, its ticket is done.
-    tid="${1:-}"
-    int "$tid" || { echo 'usage: tlon-cli.sh close-thread <thread-id>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> case Server.Channel.close_thread(t) do {:ok, _} -> IO.puts(\"closed thread #$tid — #{t.title}\"); {:tracked, w} -> IO.puts(\"not closed: #$tid holds unmerged work — tracked as workline #{w.slug} at build\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
+    # A workline that hasn't merged needs a why (Server.Channel.close_as/2):
+    # close-thread <id> superseded <pr-or-commit…> | abandoned <why…>
+    tid="${1:-}"; kind="${2:-}"; shift 2 2>/dev/null || true; why="$*"
+    { int "$tid" && case "$kind" in '') true ;; superseded|abandoned) [ -n "$why" ] ;; *) false ;; esac; } ||
+      { echo 'usage: tlon-cli.sh close-thread <thread-id> [superseded <pr-or-commit…> | abandoned <why…>]' >&2; exit 2; }
+    if [ -n "$kind" ]; then reason="{:$kind, \"$(esc "$why")\"}"; else reason=nil; fi
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> case Server.Channel.close_as(t, $reason) do {:ok, _} -> IO.puts(\"closed thread #$tid — #{t.title}\"); {:tracked, w} -> IO.puts(\"not closed: #$tid holds unmerged work — tracked as workline #{w.slug} at build\"); {:error, :why_closed} -> IO.puts(\"refused: #$tid is a workline that hasn't merged — close-thread $tid superseded <pr-or-commit> | abandoned <why>\"); raise(\"refused\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   reopen)

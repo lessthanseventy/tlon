@@ -143,6 +143,23 @@ defmodule Server.Tickets do
     end
   end
 
+  @doc """
+  A workline closed unmerged, and why: `:superseded` (its work shipped elsewhere, `why` naming the PR
+  or commit) makes the tickets started into it done; `:abandoned` puts them back in the backlog now.
+  Either way the why is appended to the ticket's body, so intake and the next lead can read it.
+  """
+  def closed_unmerged(thread_id, kind, why) do
+    {status, note} =
+      case kind do
+        :superseded -> {"done", "Superseded by #{why} (workline ##{thread_id} closed unmerged)."}
+        :abandoned -> {"backlog", "Abandoned in workline ##{thread_id}: #{why}"}
+      end
+
+    thread_id
+    |> promoted(&(&1 != "done"))
+    |> Enum.each(&__MODULE__.update(&1, %{status: status, body: String.trim("#{&1.body}\n\n#{note}")}))
+  end
+
   @doc "A merged workline came back (reopened, or its PR conflicted): its done tickets are `doing` again."
   def undone_for(thread_id) do
     thread_id |> promoted(&(&1 == "done")) |> Enum.each(&__MODULE__.update(&1, %{status: "doing"}))
