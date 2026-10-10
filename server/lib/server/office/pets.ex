@@ -1,7 +1,7 @@
 defmodule Server.Office.Pets do
   @moduledoc """
-  The pets' voices: what Nina and Argos say, written in each one's personality by the cheap model
-  tier (`Server.ModelCli`, banter's `:banter_cmd`/`:banter_model`) — a personality, not a script.
+  The pets' voices: what Nina and Argos say, written in each one's personality by a cheap model in a
+  drawn mood (`Server.Office.Writer`, which follows the shift) — a personality, not a script.
 
   An office reacts to its pets instantly (a pat cannot wait on a model), so this does not write one
   line at a time: it writes a batch per pet, a few lines for each OCCASION (`occasions/1`: patted,
@@ -9,7 +9,8 @@ defmodule Server.Office.Pets do
   the office picks from the batch as things happen; a line about a coworker carries `{name}` for the
   office to fill in. Lazy like banter: batches are only written while an office asks (`voices/1`), at
   most one round (each pet's and the pair's) per workspace every `@every_s`. On and off with banter
-  (`Server.Office.Banter`). A reply that does not parse is dropped, and the last good batch stands.
+  (`Server.Office.Banter`). A reply that does not parse is dropped; a good one joins the last few
+  batches (up to `@keep` lines an occasion), so lines from different writers and moods mix.
 
   The scene is more than who sits where (`context/1`): what landed today, the last of the lobby's
   talk (releases, restarts, shift changes and what people said), the shift, the weather and the time
@@ -37,6 +38,7 @@ defmodule Server.Office.Pets do
     """
   }
   @lines_per 5
+  @keep 15
   @duo %{
     "sneak" => "Argos creeps up on Nina and shouts BOO; she is outraged",
     "bap" => "Nina bats the sleeping Argos awake",
@@ -267,8 +269,15 @@ defmodule Server.Office.Pets do
 
   def handle_cast({:wrote, ws, pet, lines}, state) do
     entry = Map.get(state, ws, %{voices: %{}, at: 0})
-    {:noreply, Map.put(state, ws, put_in(entry.voices[pet], lines))}
+    {:noreply, Map.put(state, ws, put_in(entry.voices[pet], merged(entry.voices[pet], lines)))}
   end
+
+  # a new batch joins the last ones instead of replacing them, so lines from different writers and
+  # flavours mix: the newest first, the oldest dropped past `@keep` per occasion
+  defp merged(nil, lines), do: lines
+
+  defp merged(old, lines),
+    do: Map.merge(old, lines, fn _occasion, was, new -> Enum.take(Enum.uniq(new ++ was), @keep) end)
 
   defp ask(ws) do
     me = self()
@@ -280,15 +289,14 @@ defmodule Server.Office.Pets do
     for pet <- ["duo" | Map.keys(@pets)],
         do:
           Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-            GenServer.cast(me, {:wrote, ws, pet, write(ctx, pet)})
+            GenServer.cast(me, {:wrote, ws, pet, write(ws, ctx, pet)})
           end)
   end
 
-  defp write(ctx, pet) do
+  defp write(ws, ctx, pet) do
     {ask, parse} = if pet == "duo", do: {prompt_duo(ctx), &parse_duo/1}, else: {prompt(pet, ctx), &parse(&1, pet)}
 
-    with {:ok, out} <-
-           Server.ModelCli.prompt(ask, :banter_cmd, :banter_model, {"pi", "ollama-cloud/deepseek-v4.1-flash"}),
+    with {:ok, out} <- Server.Office.Writer.write(ask, ws),
          %{} = lines when map_size(lines) > 0 <- parse.(out) do
       lines
     else

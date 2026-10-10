@@ -24,8 +24,16 @@ defmodule Server.ModelCli do
   {:model_cli_missing, msg} | {:model_cli_exit, code, msg}}`.
   """
   def prompt(prompt, cmd_key, model_key, {default_cmd, default_model} \\ {"claude", "haiku"}, opts \\ []) do
-    cmd = Application.get_env(:server, cmd_key, default_cmd)
-    model = Application.get_env(:server, model_key, default_model)
+    run(
+      prompt,
+      Application.get_env(:server, cmd_key, default_cmd),
+      Application.get_env(:server, model_key, default_model),
+      opts
+    )
+  end
+
+  @doc "`prompt/5` with the command and model named outright, for a caller that picks them itself."
+  def run(prompt, cmd, model, opts \\ []) do
     timeout = opts[:timeout_s] || Application.get_env(:server, :model_cli_timeout_s, 120)
 
     # System.cmd leaves stdin an open pipe, and `pi -p` reads it as the rest of the prompt — it
