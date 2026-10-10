@@ -79,6 +79,15 @@ defmodule Server.OperatorConfig do
       doc: "a workline quiet this long gets a nudge"
     },
     %{
+      key: "max_session_hours",
+      type: "int",
+      min: 1,
+      max: 24,
+      default: 3,
+      nullable: true,
+      doc: "a coworker's window older than this starts fresh at its next idle moment (off: only a cold one does)"
+    },
+    %{
       key: "stalled_ticket_minutes",
       type: "int",
       min: 5,

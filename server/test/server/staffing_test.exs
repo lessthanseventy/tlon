@@ -88,6 +88,29 @@ defmodule Server.StaffingTest do
     for i <- 1..3, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
   end
 
+  test "a window kept warm past max_session_hours starts fresh at an idle moment; a busy or young one stays",
+       %{ws: ws, standing: standing, sock: sock, session: session} do
+    thread = staffed_thread(ws, "borges")
+    four_hours = System.os_time(:second) - 4 * 3600
+    # hronir: warm (2 min ago, inside the cache window) but idle, on a 4-hour-old window
+    long = session!("hronir", standing.id, 120)
+    # borges: mid-turn on an equally old window; rufus: idle but on a young window
+    session!("borges", thread.id, 120, true)
+    session!("rufus", standing.id, 120)
+
+    tmux(
+      "0\thronir\t\t\t1\thronir\t#{four_hours}\n" <>
+        "1\tt#{thread.id}\t#{thread.id}\tdone\t2\tborges\t#{four_hours}\n2\trufus\t\t\t3\trufus\t#{old()}\n"
+    )
+
+    assert :ok = Staffing.pass(ws.id)
+
+    refreshed = "#{session}:0"
+    assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^refreshed]}
+    assert Server.Repo.get!(Server.Session, long.id).ended_at
+    for i <- 1..2, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
+  end
+
   test "an idle session whose window is gone is ended; one whose window still runs stays", %{ws: ws} do
     gone = staffed_thread(ws, "hronir")
     lost = session!("hronir", gone.id, 1_200)
