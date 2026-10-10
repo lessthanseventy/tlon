@@ -6,7 +6,8 @@ defmodule Server.ReleaseScriptTest do
   @script Path.expand("../../../scripts/release.sh", __DIR__)
 
   setup do
-    dir = Path.join(System.tmp_dir!(), "release-test-#{System.unique_integer([:positive])}")
+    # the OS pid too: unique_integer is only unique in this VM, and a killed run leaves its dir behind
+    dir = Path.join(System.tmp_dir!(), "release-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     on_exit(fn -> File.rm_rf!(dir) end)
     repo = Path.join(dir, "tlon")
     bin = Path.join(dir, "bin")
