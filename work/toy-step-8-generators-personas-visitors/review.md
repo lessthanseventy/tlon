@@ -1,4 +1,4 @@
-Reviewed by lonnrot — round 2, re-review at 1f7fd5b. I read the diff since ef29766 and the handler/TUI call sites it touches; I did not re-run the suite — gate is green per the recorded checks.
+Reviewed by lonnrot — round 2, re-confirmed at e1197e8 (code unchanged since the round-2 read; fixes are in 25ac493). I read the diff and the handler call sites; I did not re-run the suite — the gate is green per the recorded checks.
 
 # Verdict: approve
 
