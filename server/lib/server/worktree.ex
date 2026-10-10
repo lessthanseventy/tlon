@@ -93,11 +93,11 @@ defmodule Server.Worktree do
 
   @doc """
   Take down a checkout whose work was closed on purpose (superseded or abandoned,
-  `Server.Channel.close_as/2`) or that the operator took down from the inbox — and lose nothing: a
-  rebase, merge or cherry-pick left half done is aborted, what is uncommitted is committed on the
-  branch as work in progress, and a detached checkout's commits get a `rescued/<slug>` branch. The
-  branch stays, so all of it can still be found. `{:removed, path}` · `{:kept, reason}` when git
-  refuses · `:none`.
+  `Server.Channel.close_as/2`) or that the operator took down from the inbox — keeping its work: a
+  rebase, merge or cherry-pick left half done is aborted (its commits stay; conflict resolutions in
+  progress do not), what is uncommitted is committed on the branch as work in progress, and a
+  detached checkout's commits get a `rescued/<slug>-<sha>` branch. The branch stays, so all of it
+  can still be found. `{:removed, path}` · `{:kept, reason}` when git refuses · `:none`.
   """
   def retire(repo_path, slug) do
     wt = path(repo_path, slug)
@@ -356,7 +356,10 @@ defmodule Server.Worktree do
                "user.name=tlon",
                "-c",
                "user.email=tlon@localhost",
+               "-c",
+               "commit.gpgsign=false",
                "commit",
+               "--no-verify",
                "-qm",
                "wip: kept when its checkout was taken down"
              ]) do
@@ -375,7 +378,9 @@ defmodule Server.Worktree do
         :ok
 
       _ ->
-        case git(wt, ["branch", "-f", "rescued/#{slug}", "HEAD"]) do
+        {sha, _} = git(wt, ["rev-parse", "--short", "HEAD"])
+
+        case git(wt, ["branch", "-f", "rescued/#{slug}-#{String.trim(sha)}", "HEAD"]) do
           {_, 0} -> :ok
           {out, _} -> {:kept, "its detached commits could not be named: #{String.slice(out, 0, 200)}"}
         end
