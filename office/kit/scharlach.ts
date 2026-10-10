@@ -15,6 +15,13 @@ export type Ledger = { demerits: Map<string, number>; ticked: Set<number> }
 
 export const newLedger = (): Ledger => ({ demerits: new Map(), ticked: new Set() })
 
+/** the ledger as a card line: each coworker with demerits and their tally, or a clean bill */
+export function ledgerLines(l: Ledger, bench: readonly { name: string }[]): string[] {
+  const has = bench.map((c) => [c.name, demerits(l, c.name)] as const).filter(([, n]) => n > 0)
+  if (!has.length) return ["demerits: none — the office is behaving. For now."]
+  return ["demerits:", ...has.map(([name, n]) => `  ${name} ${n}`)]
+}
+
 /** how many demerits `agent` has on the ledger */
 export const demerits = (l: Ledger, agent: string): number => l.demerits.get(agent) ?? 0
 
@@ -30,7 +37,7 @@ export function tickRed(l: Ledger, agent: string): Ledger {
  * thread whose red clears is forgotten, so a fresh red on it ticks again. `threads` maps a thread id
  * to its lead. Returns a new ledger.
  */
-export function tickForRedThreads(l: Ledger, redIds: readonly number[], threads: { id: number; lead: string | null | undefined }[]): Ledger {
+export function tickForRedThreads(l: Ledger, redIds: readonly number[], threads: { id: number; lead?: string | null }[]): Ledger {
   const byId = new Map(threads.map((t) => [t.id, t.lead]))
   let next = l
   const ticked = new Set<number>()

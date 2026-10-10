@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { MUG, NAMEPLATE, SHERIFF, newLedger, tickRed, demerits, tickForRedThreads } from "../kit/scharlach"
+import { MUG, NAMEPLATE, SHERIFF, newLedger, tickRed, demerits, tickForRedThreads, ledgerLines } from "../kit/scharlach"
 
 describe("Scharlach's desk dressing", () => {
   test("the nameplate and the mug say what the design says", () => {
@@ -44,5 +44,23 @@ describe("the demerit ledger", () => {
     // the same red, seen again next refresh, does not re-tick
     l = tickForRedThreads(l, [1], threads)
     expect(demerits(l, "yu")).toBe(1)
+  })
+  test("a red that clears then re-reds ticks again", () => {
+    const threads = [{ id: 1, lead: "yu" }] as { id: number; lead: string }[]
+    let l = tickForRedThreads(newLedger(), [1], threads)
+    // red clears (no red ids) → the ticked memory drops it
+    l = tickForRedThreads(l, [], threads)
+    // red again → ticks once more
+    l = tickForRedThreads(l, [1], threads)
+    expect(demerits(l, "yu")).toBe(2)
+  })
+})
+
+describe("the ledger on Scharlach's card", () => {
+  test("empty reads a clean bill; each coworker with demerits gets a line", () => {
+    const bench = [{ name: "yu" }, { name: "tertius" }]
+    expect(ledgerLines(newLedger(), bench)).toEqual(["demerits: none — the office is behaving. For now."])
+    let l = tickRed(tickRed(newLedger(), "yu"), "tertius")
+    expect(ledgerLines(l, bench)).toEqual(["demerits:", "  yu 1", "  tertius 1"])
   })
 })
