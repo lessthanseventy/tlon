@@ -103,6 +103,24 @@ describe("the pets talk", () => {
     room.pet()
     expect(new Set([first, pets.cat.said])).toEqual(new Set(["Adore me, you.", "Kneel."]))
   }))
+
+  test("once every server line is said, they come round again rather than the canned ones", () => chance(0.999, () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1), pets = room as unknown as Pets
+    room.hear({ Nina: { pet: ["Adore me.", "Kneel."] } })
+    room.step(a)
+    for (let i = 0; i < 6; i++) { room.pet(); expect(["Adore me.", "Kneel."]).toContain(pets.cat.said!) }
+  }))
+
+  test("the pair's exchange is said turn by turn, each in its own pet's balloon, none overwritten early", () => {
+    const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1)
+    const r = room as unknown as Pets & { talkOut(o: string): boolean }
+    room.hear({ duo: { chat: [["Argos: Sing, O Muse, of Souls step 1!", "Nina: It shipped, darling. Calm yourself.", "Argos: TROY!"]] } })
+    expect(r.talkOut("chat")).toBe(true)
+    const heard: string[] = []
+    chance(0.999, () => { for (let i = 0; i < 200; i++) { room.step(a); for (const s of [r.dog.said, r.cat.said]) if (s && !heard.includes(s)) heard.push(s) } })
+    expect(heard).toEqual(["Sing, O Muse, of Souls step 1!", "It shipped, darling. Calm yourself.", "TROY!"])
+    expect(r.talkOut("sneak")).toBe(false)
+  })
 })
 
 describe("tempo-synced dance", () => {

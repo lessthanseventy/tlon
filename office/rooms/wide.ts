@@ -108,7 +108,7 @@ export const TRAY = { x: 4, y: 62 }
 export const widePlan = (w: number) => floorPlan(DEFAULT_OFFICE, w)
 
 /** Nina and Argos, up to something together */
-type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle"; until: number; trail: Pt[]; lap: Pt[] }
+type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle" | "chat"; until: number; trail: Pt[]; lap: Pt[] }
 
 // Argos' howl at a landing — the whole floor hears it
 const HOWLS = ["AWOOOOOOO! {name} SHIPPED!", "AWOOOO! Sing, O Muse, of {name}'s landing!", "AWOOOOOOOOO! A HOMECOMING!", "Awoo? AWOOOOOO! {name}!!"]
@@ -128,6 +128,8 @@ export class WideRoom extends Sim<Layout> {
   private readonly catCorner: ReturnType<typeof catCornerTile>
   private readonly office: ReturnType<typeof officeTile>
   private antic: Antic | null = null
+  /** an exchange's turns still to be said, each when its tick comes, so one pet's next turn never overwrites its last */
+  private turns: { who: "cat" | "dog"; text: string; at: number }[] = []
   /** Uqbar's volume (kit/uqbar.ts); `cards` is each whiteboard line's perch from the last render, one frame late */
   private book: Book
   private readonly cards = new Map<number, Perch>()
@@ -238,7 +240,7 @@ export class WideRoom extends Sim<Layout> {
    * remote now and then (about once a minute and a quarter each) and flips the channel.
    */
   override step(a: Agents): boolean {
-    const moved = [this.stepDog(), this.stepAntics(), this.stepVolume(a), super.step(a)].some(Boolean)
+    const moved = [this.stepDog(), this.stepTalk(), this.stepAntics(), this.stepVolume(a), super.step(a)].some(Boolean)
     // after dark the pets turn in, once whatever they were up to is done
     if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog
@@ -381,19 +383,36 @@ export class WideRoom extends Sim<Layout> {
    * chase round the room, or it all ends in a scuffle. The cat keeps to straight runs inside the
    * room's open floor; the dog walks the people's routes or follows her trail.
    */
+  /** the next due turn of an exchange, said */
+  private stepTalk(): boolean {
+    const due = this.turns.filter((t) => t.at <= this.tick)
+    if (!due.length) return false
+    this.turns = this.turns.filter((t) => t.at > this.tick)
+    for (const t of due) t.who === "cat" ? this.catSay(t.text, 38) : this.dogSay(t.text)
+    return true
+  }
+  /** the pair's exchange on `occasion` (the model's, `Sim.exchange`), queued turn by turn; false when it wrote none */
+  private talkOut(occasion: string): boolean {
+    const ex = this.exchange(occasion)
+    if (!ex) return false
+    ex.forEach((turn, i) => this.turns.push({ who: turn.startsWith("Nina:") ? "cat" : "dog", text: turn.replace(/^(Nina|Argos):\s*/, ""), at: this.tick + i * 42 }))
+    return true
+  }
   private stepAntics(): boolean {
     const c = this.cat, d = this.dog, now = this.tick
     // a pair of lines is an exchange: the second waits for the first, or their balloons collide
     const shout = (who: "cat" | "dog", text: string, reply = false) => (who === "cat" ? this.catSay(text, 25, reply ? 25 : 0) : this.dogSay(text, reply ? 25 : 0))
     const a = this.antic
     if (a) {
-      if (a.kind === "sneak" && !d.path.length) {
+      if (a.kind === "chat") {
+        if (now >= a.until) this.antic = null
+      } else if (a.kind === "sneak" && !d.path.length) {
         d.creep = false; d.mode = "sit"; d.until = now + 150
-        shout("dog", "BOO!"); shout("cat", "How DARE you.", true)
+        if (!this.talkOut("sneak")) { shout("dog", "BOO!"); shout("cat", "How DARE you.", true) }
         c.path = [this.catFlee(c)]; c.mode = "walk"; c.until = now + 250
         this.antic = null
       } else if (a.kind === "bap" && !c.path.length) {
-        shout("cat", "*bap* Up, peasant."); shout("dog", "!?", true)
+        if (!this.talkOut("bap")) { shout("cat", "*bap* Up, peasant."); shout("dog", "!?", true) }
         d.mode = "sit"; d.until = now + 120; c.mode = "sit"; c.until = now + 200
         this.antic = null
       } else if (a.kind === "chase") {
@@ -401,7 +420,7 @@ export class WideRoom extends Sim<Layout> {
         a.trail.push({ x: c.x, y: c.y })
         if (a.trail.length > 10) { const p = a.trail.shift()!; d.path = [p]; d.mode = "walk" }
         if (now >= a.until) {
-          shout("dog", "woof!")
+          if (!this.talkOut("chase")) shout("dog", "woof!")
           c.path = []; c.mode = "sit"; c.until = now + 200
           d.path = []; d.mode = "sit"; d.until = now + 150; d.aisle = d.y
           this.antic = null
@@ -409,7 +428,7 @@ export class WideRoom extends Sim<Layout> {
       } else if (a.kind === "scuffle" && now >= a.until) {
         c.path = [this.catFlee(c)]; c.mode = "walk"; c.until = now + 250
         d.until = now; d.mode = "sit"; d.aisle = d.y
-        shout("cat", "My COLLAR! Do you know what this cost?")
+        if (!this.talkOut("scuffle")) shout("cat", "My COLLAR! Do you know what this cost?")
         this.antic = null
       }
       return true
@@ -419,7 +438,11 @@ export class WideRoom extends Sim<Layout> {
     if (!room || room !== alsoHere || c.path.length || d.path.length || this.plan.cat.via(c)) return false
     const near = Math.abs(c.x - d.x) + Math.abs(c.y - d.y) < 60, r = Math.random()
     const lap = this.lapOf(room)
-    if (d.mode === "sleep" && c.mode !== "sleep") {
+    // both idle on the same floor: now and then they talk over the day instead of horsing about
+    if (c.mode !== "sleep" && d.mode !== "sleep" && r < 0.3 && this.talkOut("chat")) {
+      c.mode = "sit"; c.until = now + 300; d.mode = "sit"; d.until = now + 300
+      this.antic = { kind: "chat", until: now + 200, trail: [], lap }
+    } else if (d.mode === "sleep" && c.mode !== "sleep") {
       c.path = [{ x: d.x - 8, y: c.y }, { x: d.x - 8, y: d.y }]; c.mode = "walk"; c.until = now + 400
       this.antic = { kind: "bap", until: now + 400, trail: [], lap }
     } else if (c.mode !== "walk" && d.mode !== "sleep" && (!near || r < 0.4)) {

@@ -10,6 +10,12 @@ defmodule Server.Office.Pets do
   office to fill in. Lazy like banter: a batch is only written while an office asks (`voices/1`), at
   most one per pet per workspace every `@every_s`. On and off with banter (`Server.Office.Banter`). A
   reply that does not parse is dropped, and the last good batch stands.
+
+  The scene is more than who sits where (`context/1`): what landed today, the last of the lobby's
+  talk (releases, restarts, shift changes and what people said), the shift, the weather and the time
+  of day, so the lines are about this evening, not any evening. Besides each pet's own batch there is
+  the pair's (`"duo"`): their exchanges for the antics they get up to together and the chats they
+  have when both are idle, each exchange a list of `"Nina: …"` / `"Argos: …"` turns.
   """
   use GenServer
 
@@ -30,6 +36,15 @@ defmodule Server.Office.Pets do
     wine-dark sea, rosy-fingered dawn, Troy, Ithaca, the Muse) and is lost again to a squirrel.
     """
   }
+  @lines_per 5
+  @duo %{
+    "sneak" => "Argos creeps up on Nina and shouts BOO; she is outraged",
+    "bap" => "Nina bats the sleeping Argos awake",
+    "chase" => "the two of them have just chased each other round the room, and stop, out of breath",
+    "scuffle" => "a short scuffle, fur flying, then a truce",
+    "chat" =>
+      "both are idle on the floor and talk about what is going on in the office today (the news below): 2 to 4 turns"
+  }
   @tools ~w(read edit bash search web test delegate)
   @fusses %{
     "fuss_pat" => "{name}, a coworker, gives a pat on the head",
@@ -41,10 +56,11 @@ defmodule Server.Office.Pets do
   def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
   @doc """
-  Each pet's lines for this workspace, by name then occasion — `%{"Nina" => %{"pet" => [line]}}` —
-  and, when a pet's batch is stale, a new one asked for in the background. `%{}` where this is off.
+  Each pet's lines for this workspace, by name then occasion — `%{"Nina" => %{"pet" => [line]}}`,
+  and the pair's exchanges under `"duo"` (`%{"chat" => [["Nina: …", "Argos: …"]]}`) — and, when a
+  batch is stale, a new one asked for in the background. `%{}` where this is off.
   """
-  @spec voices(integer()) :: %{String.t() => %{String.t() => [String.t()]}}
+  @spec voices(integer()) :: %{String.t() => %{String.t() => [String.t() | [String.t()]]}}
   def voices(workspace_id) do
     if GenServer.whereis(__MODULE__) && Server.OperatorConfig.banter?(),
       do: GenServer.call(__MODULE__, {:voices, workspace_id}),
@@ -99,7 +115,61 @@ defmodule Server.Office.Pets do
   defp tool_gloss("test"), do: "running the tests"
   defp tool_gloss("delegate"), do: "handing work to another coworker"
 
-  @doc "What `pet` is asked: its personality, the office (`ctx` as `Banter.context/1` gives it), its occasions."
+  @doc """
+  The office as the pets see it: `Banter.context/1` plus what has been happening — `landed` (titles
+  that merged in the last 12 hours), `lobby` (the last of the workspace's standing thread, by
+  author), `shift`, `weather` and `clock` (the part of the day, local time).
+  """
+  def context(ws) do
+    root = Server.Channel.machine_thread(ws)
+    since = DateTime.add(DateTime.utc_now(), -12 * 3600, :second)
+
+    Map.merge(Banter.context(ws), %{
+      landed: since |> Server.Workline.landed_since() |> Enum.map(& &1.title) |> Enum.uniq() |> Enum.take(6),
+      lobby:
+        if(root,
+          do:
+            for(
+              m <- Server.Channel.recent_messages(root, 12),
+              m.kind != "suggestion",
+              do: "#{m.author}: #{clip(m.body)}"
+            ),
+          else: []
+        ),
+      shift: Server.Shifts.current(ws),
+      weather: Server.Office.Weather.now(),
+      clock: clock(:calendar.local_time())
+    })
+  end
+
+  @doc false
+  def clock({{_, _, _}, {h, _, _}}) do
+    cond do
+      h < 5 -> "the small hours of the night"
+      h < 12 -> "morning"
+      h < 17 -> "afternoon"
+      h < 21 -> "evening"
+      true -> "late evening"
+    end
+  end
+
+  @doc "The scene a pet's lines are about: who is here (`Banter.scene/1`), then what has been happening."
+  def scene(ctx) do
+    news =
+      Enum.filter(
+        [
+          ctx[:clock] && "It is #{ctx.clock}#{if ctx[:shift] == "night", do: ", and the night crew is on"}.",
+          is_map(ctx[:weather]) && "Outside: #{ctx.weather[:desc] || ctx.weather["desc"]}.",
+          ctx[:landed] not in [nil, []] && "Shipped today: #{Enum.join(ctx.landed, "; ")}.",
+          ctx[:lobby] not in [nil, []] && "Lately in the lobby:\n" <> Enum.map_join(ctx.lobby, "\n", &"- #{&1}")
+        ],
+        &is_binary/1
+      )
+
+    Enum.join([Banter.scene(ctx) | if(news == [], do: [], else: ["WHAT'S BEEN HAPPENING:" | news])], "\n")
+  end
+
+  @doc "What `pet` is asked: its personality, the office (`ctx` as `context/1` gives it), its occasions."
   def prompt(pet, ctx) do
     asks = Enum.map_join(occasions(pet), "\n", fn {k, what} -> ~s(- "#{k}": #{what}) end)
 
@@ -107,13 +177,36 @@ defmodule Server.Office.Pets do
     You write the lines of #{pet}, a pet in a pixel-art office of AI coworkers; each line is said
     out loud in a speech balloon over the pet.
     WHO #{String.upcase(pet)} IS: #{@pets[pet]}
-    #{Banter.scene(ctx)}
+    #{scene(ctx)}
 
-    For EACH occasion below write 3 different lines, each under 60 characters, in character and
-    funny; vary them. Where a line is about a coworker, write {name} for them, or use the names
-    above; a coworker is "they", never "he" or "she". No emoji, never cruel. Respond with ONLY a
-    JSON object:
-    {"lines": {"<occasion>": ["...", "...", "..."], ...}}
+    For EACH occasion below write #{@lines_per} different lines, each under 100 characters, in
+    character and funny; vary them in shape and length, and let several of them pick up something
+    from what's been happening (a thing that shipped, something said in the lobby, the hour, the
+    weather) rather than only the occasion itself. Where a line is about a coworker, write {name} for
+    them, or use the names above; a coworker is "they", never "he" or "she". No emoji, never cruel.
+    Respond with ONLY a JSON object:
+    {"lines": {"<occasion>": ["...", ...], ...}}
+    OCCASIONS:
+    #{asks}
+    """
+  end
+
+  @doc "What the pair is asked: both personalities, the office, and the exchanges they have together."
+  def prompt_duo(ctx) do
+    asks = Enum.map_join(@duo, "\n", fn {k, what} -> ~s(- "#{k}": #{what}) end)
+
+    """
+    You write short exchanges between the two pets of a pixel-art office of AI coworkers; each turn
+    is said out loud in a speech balloon over the pet who says it.
+    WHO NINA IS: #{@pets["Nina"]}
+    WHO ARGOS IS: #{@pets["Argos"]}
+    #{scene(ctx)}
+
+    For EACH occasion below write 4 different exchanges. An exchange is 2 to 4 turns, alternating,
+    each turn "Nina: ..." or "Argos: ..." and under 90 characters. Keep each in character; make them
+    funny and different from each other; the chats are about what's been happening, by name. A
+    coworker is "they", never "he" or "she". No emoji, never cruel. Respond with ONLY a JSON object:
+    {"exchanges": {"<occasion>": [["Argos: ...", "Nina: ..."], ...], ...}}
     OCCASIONS:
     #{asks}
     """
@@ -132,7 +225,24 @@ defmodule Server.Office.Pets do
     end)
   end
 
-  defp clean(lines), do: for(l <- lines, is_binary(l), l = String.trim(l), l != "", do: String.slice(l, 0, 90))
+  @doc false
+  def parse_duo(out) do
+    Server.JsonBlob.first_valid(out, fn
+      %{"exchanges" => ex} when is_map(ex) ->
+        for {k, list} <- ex,
+            Map.has_key?(@duo, k),
+            is_list(list),
+            list = exchanges(list),
+            list != [],
+            into: %{},
+            do: {k, list}
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp clean(lines), do: for(l <- lines, is_binary(l), l = String.trim(l), l != "", do: String.slice(l, 0, 120))
 
   @impl true
   def init(state), do: {:ok, state}
@@ -158,23 +268,33 @@ defmodule Server.Office.Pets do
   defp ask(ws) do
     me = self()
 
-    for pet <- Map.keys(@pets) do
+    for pet <- ["duo" | Map.keys(@pets)] do
       Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:wrote, ws, pet, write(ws, pet)}) end)
     end
   end
 
   defp write(ws, pet) do
+    ctx = context(ws)
+    {ask, parse} = if pet == "duo", do: {prompt_duo(ctx), &parse_duo/1}, else: {prompt(pet, ctx), &parse(&1, pet)}
+
     with {:ok, out} <-
-           Server.ModelCli.prompt(
-             prompt(pet, Banter.context(ws)),
-             :banter_cmd,
-             :banter_model,
-             {"pi", "ollama-cloud/deepseek-v4.1-flash"}
-           ),
-         %{} = lines when map_size(lines) > 0 <- parse(out, pet) do
+           Server.ModelCli.prompt(ask, :banter_cmd, :banter_model, {"pi", "ollama-cloud/deepseek-v4.1-flash"}),
+         %{} = lines when map_size(lines) > 0 <- parse.(out) do
       lines
     else
       _ -> nil
     end
+  end
+
+  defp clip(s), do: s |> String.replace(~r/\s+/, " ") |> String.slice(0, 140)
+
+  # an exchange is two or more turns, each said by one of the pair
+  defp exchanges(list) do
+    for turns <- list,
+        is_list(turns),
+        turns = clean(turns),
+        length(turns) >= 2,
+        Enum.all?(turns, &String.match?(&1, ~r/\A(Nina|Argos):\s*\S/)),
+        do: turns
   end
 end
