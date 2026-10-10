@@ -207,6 +207,19 @@ defmodule Server.WorktreeTest do
       {out, 0} = git.(["branch", "--list", "work/dropped"])
       assert String.trim(out) != ""
       assert :none = Worktree.retire(repo, "dropped")
+      # the uncommitted file went onto the branch, not into the void
+      assert {_, 0} = git.(["cat-file", "-e", "work/dropped:half.txt"])
+    end
+
+    test "retire/2 names a detached checkout's commits before it goes", %{repo: repo, git: git} do
+      {:ok, wt} = Worktree.ensure(repo, "loose")
+      {_, 0} = System.cmd("git", ["-C", wt, "checkout", "-q", "--detach"])
+      File.write!(Path.join(wt, "loose.txt"), "detached work\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "loose.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "loose"])
+
+      assert {:removed, _} = Worktree.retire(repo, "loose")
+      assert {_, 0} = git.(["cat-file", "-e", "rescued/loose:loose.txt"])
     end
 
     test "remove/2 drops a merged workline's worktree even with its docs folder on main", %{repo: repo, git: git} do

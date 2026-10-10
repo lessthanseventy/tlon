@@ -147,6 +147,23 @@ defmodule Server.Office.NeedsTest do
       assert List.last(Channel.thread_messages(t)).body =~ "@tertius andrew put your ask away"
     end
 
+    test "a put-away whose item is gone is forgotten, so a later one under its key shows", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "m", workspace_id: ws.id})
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "sonny", body: "@andrew a pumpkin"})
+      [%{key: key}] = Needs.list()
+      :ok = Needs.dismiss(key)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "andrew", body: "nice"})
+
+      assert Needs.list() == []
+      assert Server.Repo.aggregate("need_dismissal", :count) == 0
+    end
+
+    test "a key the list does not hold is refused, not remembered" do
+      assert {:error, :not_found} = Needs.dismiss("stranded:/nowhere:t9")
+      assert {:error, :not_found} = Needs.dismiss("ask:abc")
+      assert Server.Repo.aggregate("need_dismissal", :count) == 0
+    end
+
     test "work waits on a question: it is never put away", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "q", workspace_id: ws.id})
       {:ok, _} = Server.Attention.ask(t.id, "daneri", "A or B?")

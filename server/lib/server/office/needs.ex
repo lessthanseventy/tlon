@@ -40,18 +40,10 @@ defmodule Server.Office.Needs do
 
   @doc "Every item waiting on the operator, across the workspaces."
   def list do
-    operator = Application.get_env(:server, :operator, "andrew")
-    open = Repo.all(from t in Thread, where: t.state == "open")
-    prompts = Server.Attention.open_prompts_by_thread()
-
-    blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open)
-    decide = mentions(open, operator) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open)
+    items = all()
     away = Map.new(Repo.all(from d in "need_dismissal", select: {d.key, type(d.at, :utc_datetime)}))
-
-    Enum.reject(
-      Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime),
-      &put_away?(&1, away[&1.key])
-    )
+    prune(away, items)
+    Enum.reject(items, &put_away?(&1, away[&1.key]))
   end
 
   @doc """
@@ -59,22 +51,25 @@ defmodule Server.Office.Needs do
   something newer arrives under its key, a later mention on that thread say. An ask is withdrawn and
   its asker told; a failed job and a rollout note are dismissed as their kinds are. A gate, a dialog,
   a question or a red verify is never put away — work waits on it: approve, answer or fix it. `:ok`,
-  or `{:error, :blocking}`.
+  `{:error, :blocking}`, or `{:error, :not_found}` for a key the list does not hold.
   """
   def dismiss(key) do
-    case String.split(key, ":", parts: 2) do
-      [kind, _] when kind in ~w(gate dialog question verify_failed) ->
-        {:error, :blocking}
+    case Enum.find(all(), &(&1.key == key)) do
+      nil ->
+        {:error, :not_found}
 
-      ["ask", id] ->
-        withdraw_ask(String.to_integer(id))
+      %{kind: "ask", ref: id} ->
+        withdraw_ask(id)
         remember(key)
 
-      ["job", id] ->
-        dismiss_job(String.to_integer(id))
+      %{level: "blocking"} ->
+        {:error, :blocking}
 
-      ["rollout", id] ->
-        Server.Rollout.dismiss(String.to_integer(id))
+      %{kind: "job_failed", ref: id} ->
+        dismiss_job(id)
+
+      %{kind: "rollout", ref: id} ->
+        Server.Rollout.dismiss(id)
 
       _ ->
         remember(key)
@@ -364,7 +359,7 @@ defmodule Server.Office.Needs do
   end
 
   # put away stays away until something newer comes under the key; a stranded checkout or a seats
-  # count has no "newer", so it stays away until it is gone
+  # count has no "newer", so it stays away until it is gone (and its put-away with it, `prune/2`)
   defp put_away?(_item, nil), do: false
   defp put_away?(%{kind: kind}, _at) when kind in ~w(stranded seats), do: true
   defp put_away?(item, at), do: DateTime.compare(item.at, at) != :gt
@@ -401,5 +396,23 @@ defmodule Server.Office.Needs do
         ref: i.id
       })
     end
+  end
+
+  # everything, put away or not
+  defp all do
+    operator = Application.get_env(:server, :operator, "andrew")
+    open = Repo.all(from t in Thread, where: t.state == "open")
+    prompts = Server.Attention.open_prompts_by_thread()
+
+    blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open)
+    decide = mentions(open, operator) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open)
+    Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
+  end
+
+  # a put-away whose item is gone has nothing left to hide: a later item under the same key is new
+  defp prune(away, items) do
+    keys = MapSet.new(items, & &1.key)
+    gone = for {key, _} <- away, not MapSet.member?(keys, key), do: key
+    if gone != [], do: Repo.delete_all(from d in "need_dismissal", where: d.key in ^gone)
   end
 end
