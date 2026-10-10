@@ -63,11 +63,31 @@ defmodule Server.Office.Pets do
   batch is stale, a new one asked for in the background. `%{}` where this is off.
   """
   @spec voices(integer()) :: %{String.t() => %{String.t() => [String.t() | [String.t()]]}}
-  def voices(workspace_id) do
+  def voices(workspace_id, cat \\ nil) do
     if GenServer.whereis(__MODULE__) && Server.OperatorConfig.banter?(),
-      do: GenServer.call(__MODULE__, {:voices, workspace_id}),
+      do: GenServer.call(__MODULE__, {:voices, workspace_id, cat}),
       else: %{}
   end
+
+  @doc """
+  The cat slot as the office has it configured (its `pets.json`: name, species, and a temperament of
+  warmth, wits and energy from -2 to 2), in words for a prompt; "" when the office sent none.
+  """
+  def temperament(%{} = cat) do
+    words = [
+      axis(cat["warmth"], ["icy, a menace", "prickly", nil, "affectionate", "sweet as pie"]),
+      axis(cat["wits"], ["dim", "scatterbrained", nil, "sharp", "a scheming genius"]),
+      axis(cat["energy"], ["lazy", "sleepy", nil, "playful", "bouncing off the walls"])
+    ]
+
+    "IN THIS OFFICE: the cat slot is #{cat["name"] || "Nina"}, a #{cat["species"] || "cat"}" <>
+      case Enum.reject(words, &is_nil/1) do
+        [] -> "."
+        ws -> "; temperament: #{Enum.join(ws, ", ")}. Let it colour every line."
+      end
+  end
+
+  def temperament(_), do: ""
 
   @doc "A pet's occasions, `{name, what happened}`: what it may be asked to say something about."
   def occasions("Nina") do
@@ -184,6 +204,7 @@ defmodule Server.Office.Pets do
     You write the lines of #{pet}, a pet in a pixel-art office of AI coworkers; each line is said
     out loud in a speech balloon over the pet.
     WHO #{String.upcase(pet)} IS: #{@pets[pet]}
+    #{if pet == "Nina", do: ctx[:cat]}
     #{scene(ctx)}
 
     For EACH occasion below write #{@lines_per} different lines, each under 100 characters, in
@@ -206,6 +227,7 @@ defmodule Server.Office.Pets do
     You write short exchanges between the two pets of a pixel-art office of AI coworkers; each turn
     is said out loud in a speech balloon over the pet who says it.
     WHO NINA IS: #{@pets["Nina"]}
+    #{ctx[:cat]}
     WHO ARGOS IS: #{@pets["Argos"]}
     #{scene(ctx)}
 
@@ -255,11 +277,11 @@ defmodule Server.Office.Pets do
   def init(state), do: {:ok, state}
 
   @impl true
-  def handle_call({:voices, ws}, _from, state) do
+  def handle_call({:voices, ws, cat}, _from, state) do
     now = System.system_time(:second)
     %{voices: voices, at: at} = Map.get(state, ws, %{voices: %{}, at: 0})
 
-    if now - at >= @every_s, do: ask(ws)
+    if now - at >= @every_s, do: ask(ws, cat)
 
     {:reply, voices, Map.put(state, ws, %{voices: voices, at: if(now - at >= @every_s, do: now, else: at)})}
   end
@@ -279,10 +301,12 @@ defmodule Server.Office.Pets do
   defp merged(old, lines),
     do: Map.merge(old, lines, fn _occasion, was, new -> Enum.take(Enum.uniq(new ++ was), @keep) end)
 
-  defp ask(ws) do
+  defp ask(ws, cat) do
     me = self()
 
-    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> write_round(me, ws, context(ws)) end)
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+      write_round(me, ws, Map.put(context(ws), :cat, temperament(cat)))
+    end)
   end
 
   defp write_round(me, ws, ctx) do
@@ -323,4 +347,7 @@ defmodule Server.Office.Pets do
 
   defp listed(_head, items, _sep, _tail) when items in [nil, []], do: nil
   defp listed(head, items, sep, tail), do: head <> Enum.join(items, sep) <> tail
+
+  defp axis(n, words) when is_integer(n) and n in -2..2, do: Enum.at(words, n + 2)
+  defp axis(_, _), do: nil
 end

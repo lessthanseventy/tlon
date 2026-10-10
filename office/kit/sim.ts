@@ -16,6 +16,8 @@ import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./
 /** something to do with your idle time, where a room has the thing to do it with */
 export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read"
 export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note"
+/** the spots where two people settled together get talking (`Sim.together`) */
+const TOGETHER = new Set<string>(["pingpong", "foosball", "pool", "arcade", "couch", "coffee", "cooler", "vending", "chat"])
 /**
  * A place to be: where to stand, the row you walk along to get there, how you stand once there;
  * `with`, where a partner stands (the far end of the ping-pong table, the other half of a chat) —
@@ -117,6 +119,16 @@ export class Sim<L extends { people: Seat[] }> {
   setTemperament(t: Temperament) { this.temperament = t }
   /** pets.json, resolved: the cat slot's name and temperament */
   setPets(p: Pets) { this.cat.name = p.cat.name; this.cat.species = p.cat.species as Cat["species"]; this.setTemperament(p.cat.temperament) }
+  /** the cat slot as configured, for the server to write her lines in her temperament */
+  petProfile() { return { name: this.cat.name, species: this.cat.species, ...this.temperament } }
+  /**
+   * Who the room sees together — two at the same game or the couch or the coffee machine, or two
+   * passing in the hall — handed to `onTogether`, which asks the server what they say (each
+   * conversation its own model call, `Banter.talk`). The room asks now and then, never twice in a
+   * row; the server throttles too.
+   */
+  onTogether: ((situation: string, a: string, b: string) => void) | null = null
+  private askedTogether = -Infinity
   protected actors = new Map<string, Actor>()
   protected tick = 0
   private seeded = false
@@ -233,6 +245,20 @@ export class Sim<L extends { people: Seat[] }> {
   }
   /** someone was asked something (`text` null) or has answered; an answer shows for ~12 s */
   say(agent: string, text: string | null) { this.talk.set(agent, { text, until: text === null ? Infinity : this.tick + 120 }); this.changed = true }
+  private together() {
+    if (!this.onTogether || this.tick % 40 || this.tick - this.askedTogether < 400 || Math.random() > 0.3) return
+    const quiet = [...this.actors.values()].filter((x) => !x.leaving && !this.talk.has(x.seat.agent))
+    const settled = quiet.filter((x) => !x.moving && !x.path.length && TOGETHER.has(x.spot.kind))
+    const byKind = new Map<string, Actor[]>()
+    for (const x of settled) byKind.set(x.spot.kind, [...(byKind.get(x.spot.kind) ?? []), x])
+    const pairs: [string, Actor, Actor][] = [...byKind].filter(([, xs]) => xs.length >= 2).map(([k, xs]) => [k, xs[0]!, xs[1]!])
+    const walking = quiet.filter((x) => x.moving)
+    for (const a of walking) for (const b of walking) if (a !== b && Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < 10) pairs.push(["hall", a, b])
+    if (!pairs.length) return
+    const [situation, a, b] = pick(pairs)
+    this.askedTogether = this.tick
+    this.onTogether(situation, a.seat.agent, b.seat.agent)
+  }
   /** is anyone settled at a spot of this kind (the TV is on while someone is on the couch) */
   protected using(kind: Kind) { return [...this.actors.values()].some((x) => x.spot.kind === kind && !x.moving) }
 
@@ -437,6 +463,7 @@ export class Sim<L extends { people: Seat[] }> {
     let changed = this.changed || this.tick % 4 === 0
     this.changed = false
     for (const [k, v] of this.talk) if (this.tick > v.until) { this.talk.delete(k); changed = true }
+    this.together()
     const asleep = this.cat.mode === "sleep"
     if (this.stepCat()) changed = true
     // the night owls: in the small hours, someone at their desk yawns now and then

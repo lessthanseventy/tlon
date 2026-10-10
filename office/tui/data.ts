@@ -98,8 +98,13 @@ export async function suggestions(ws: number): Promise<CorkNote[]> {
 /** take a suggestion out of the box (it was filed, or thrown out) */
 export const dropSuggestion = (ws: number, id: number) => send("DELETE", "clearing the suggestion", `/office/suggestions/${ws}/${id}`, () => "out of the box")
 /** each pet's lines by occasion, written by the server's model (empty where it is off) */
-export async function pets(ws: number): Promise<Record<string, Record<string, string[] | string[][]>>> {
-  try { const r = await call("GET", `/office/pets/${ws}`); return r.status === 200 ? r.json : {} } catch { return {} }
+export async function pets(ws: number, cat?: { name: string; species: string; warmth: number; wits: number; energy: number }): Promise<Record<string, Record<string, string[] | string[][]>>> {
+  const q = cat ? `?${new URLSearchParams({ cat: cat.name, species: cat.species, warmth: String(cat.warmth), wits: String(cat.wits), energy: String(cat.energy) })}` : ""
+  try { const r = await call("GET", `/office/pets/${ws}${q}`); return r.status === 200 ? r.json : {} } catch { return {} }
+}
+/** two coworkers together in the room: what they say, written now by the server's model; [] when they talked a moment ago */
+export async function talk(ws: number, situation: string, a: string, b: string): Promise<{ who: string; line: string }[]> {
+  try { const r = await call("POST", `/office/talk/${ws}`, { situation, a, b }); return r.status === 200 ? r.json.turns ?? [] : [] } catch { return [] }
 }
 export async function thread(id: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}`); return r.status === 200 ? r.json : null } catch { return null }

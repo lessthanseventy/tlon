@@ -297,7 +297,10 @@ async function loadFeed() {
 const heard = new Set<string>()
 async function chatter() {
   if (ws === null) return
-  room().hear(await data.pets(ws))
+  room().hear(await data.pets(ws, room().petProfile()))
+  const here = ws
+  // two together in the room: the server writes what they say now, said turn by turn
+  room().onTogether = (situation, a, b) => void data.talk(here, situation, a, b).then((turns) => turns.forEach((t, i) => setTimeout(() => { room().say(t.who, t.line); changed() }, i * 5000)))
   cork = await data.corkboard(ws)
   room().pinboard(cork)
   ideas = await data.suggestions(ws)

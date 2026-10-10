@@ -19,6 +19,27 @@ defmodule Server.Office.WriterTest do
     assert Enum.all?(Writer.pool(ws.id), &match?({"pi", "ollama-cloud/" <> _}, &1))
   end
 
+  test "the wackiness dial's tone: business writes nothing, each level up is wilder" do
+    path = Path.join(System.tmp_dir!(), "wack-#{System.unique_integer([:positive])}.json")
+    prior = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+
+    on_exit(fn ->
+      if prior,
+        do: Application.put_env(:server, :operator_config_path, prior),
+        else: Application.delete_env(:server, :operator_config_path)
+
+      File.rm(path)
+    end)
+
+    File.write!(path, ~s({"wackiness": 0}))
+    assert Writer.tone() == nil
+    assert {:error, :business} = Writer.write("hi", 1)
+
+    File.write!(path, ~s({"wackiness": 3}))
+    assert Writer.tone() =~ "RIMWORLD"
+  end
+
   test "a stand-in CLI pins every call to it" do
     dir = Path.join(System.tmp_dir!(), "writer-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)

@@ -23,11 +23,13 @@ defmodule Server.Office.BanterTest do
 
     test "the roll walks the weights in order" do
       ctx = %{@quiet | crew: [@idle, @busy]}
-      # own_work (lonnrot's) 30, colleague 20, joke 25, room 12 → 87
+      # own_work (lonnrot's) 30, colleague 20, joke 25, room 12, chat 22 → 109
       assert {:own_work, ask} = Banter.pick(ctx, @busy, 0.0)
       assert ask =~ "lonnrot remarks on their OWN work" and ask =~ "fix it"
-      assert {:joke, _} = Banter.pick(ctx, @busy, 55 / 87)
-      assert {:room, _} = Banter.pick(ctx, @busy, 80 / 87)
+      assert {:joke, _} = Banter.pick(ctx, @busy, 55 / 109)
+      assert {:room, _} = Banter.pick(ctx, @busy, 80 / 109)
+      assert {:chat, ask} = Banter.pick(ctx, @busy, 100 / 109)
+      assert ask =~ "lonnrot" and ask =~ "hronir" and ask =~ "quick conversation"
     end
 
     test "the boss is fair game whenever they have spoken, not only when something waits" do
@@ -36,6 +38,59 @@ defmodule Server.Office.BanterTest do
       assert :boss in kinds
       assert {:boss, ask} = Enum.find(for(i <- 0..199, do: Banter.pick(ctx, @idle, i / 200)), &(elem(&1, 0) == :boss))
       assert ask =~ "make it look nice"
+    end
+  end
+
+  describe "talk/4 — two coworkers together in the room" do
+    setup do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "Lounge"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "reviewer"})
+
+      dir = Path.join(System.tmp_dir!(), "talk-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      cli = Path.join(dir, "model")
+      prompt = Path.join(dir, "prompt")
+
+      File.write!(cli, """
+      #!/bin/sh
+      printf '%s' "$2" > #{prompt}
+      echo '{"turns": [{"who": "hronir", "line": "Your serve."}, {"who": "yu", "line": "It always is."}, {"who": "ghost", "line": "boo"}]}'
+      """)
+
+      File.chmod!(cli, 0o755)
+      Application.put_env(:server, :banter_cmd, cli)
+
+      on_exit(fn ->
+        Application.delete_env(:server, :banter_cmd)
+        File.rm_rf!(dir)
+      end)
+
+      start_supervised!(Banter)
+      %{ws: ws, prompt: prompt}
+    end
+
+    test "is written now, about the two of them where they are; only their own turns are kept", %{
+      ws: ws,
+      prompt: prompt
+    } do
+      assert {:ok, [%{"who" => "hronir", "line" => "Your serve."}, %{"who" => "yu", "line" => "It always is."}]} =
+               Banter.talk(ws.id, "pingpong", "hronir", "yu")
+
+      asked = File.read!(prompt)
+      assert asked =~ "hronir (builder" and asked =~ "yu (reviewer" and asked =~ "ping-pong"
+    end
+
+    test "is throttled: the same workspace a moment later is busy, and the room just lets them be", %{ws: ws} do
+      assert {:ok, _} = Banter.talk(ws.id, "couch", "hronir", "yu")
+      assert {:error, :busy} = Banter.talk(ws.id, "hall", "yu", "hronir")
+    end
+
+    test "a situation or a person it doesn't know is refused, with no model call", %{ws: ws} do
+      assert {:error, :unknown} = Banter.talk(ws.id, "skydiving", "hronir", "yu")
+      assert {:error, :unknown} = Banter.talk(ws.id, "couch", "hronir", "nobody")
+      assert {:error, :unknown} = Banter.talk(ws.id, "couch", "hronir", "hronir")
     end
   end
 

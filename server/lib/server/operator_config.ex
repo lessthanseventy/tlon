@@ -88,6 +88,14 @@ defmodule Server.OperatorConfig do
       doc: "a coworker's window older than this starts fresh at its next idle moment (off: only a cold one does)"
     },
     %{
+      key: "wackiness",
+      type: "int",
+      min: 0,
+      max: 3,
+      default: 1,
+      doc: "how wild the office's voices are: 0 business (none), 1 business casual, 2 office party, 3 rimworld"
+    },
+    %{
       key: "stalled_ticket_minutes",
       type: "int",
       min: 5,
