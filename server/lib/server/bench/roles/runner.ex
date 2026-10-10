@@ -74,8 +74,7 @@ defmodule Server.Bench.Roles.Runner do
       %Profile{
         name: "bench-#{role}",
         archetype: r.archetype,
-        model: model,
-        harness: Server.Harness.resolve(model, OperatorConfig.environment())
+        model: model
       }
     end
   end
@@ -91,6 +90,9 @@ defmodule Server.Bench.Roles.Runner do
     {out, code} = sh(Roles.argv(profile, task.prompt, !!(task.repo || task.source)), work, timeout_s(task), false, env)
     wall = (System.monotonic_time(:millisecond) - t0) / 1000
     {reply, usage} = Roles.parse_output(profile.harness, out)
+    # off the Claude plan Claude Code still prices the run at Claude's rates: no cost is honest
+    usage =
+      if Server.Harness.ClaudeCode.provider(profile.model) == "anthropic", do: usage, else: %{usage | cost_usd: nil}
 
     grade = grade(task, reply, work, judge, env)
     File.rm_rf!(work)

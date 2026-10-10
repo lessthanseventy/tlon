@@ -5,116 +5,18 @@ defmodule Server.ProfilesTest do
   alias Server.Profile
   alias Server.Profiles
 
-  @base_settings %{
-    "extensions" => [
-      "/repo/modules/adapters/pi/src/extension.ts",
-      "/repo/modules/adapters/consult/src/extension.ts",
-      "/repo/modules/adapters/lsp/src/extension.ts",
-      "/repo/modules/adapters/reload/src/extension.ts"
-    ],
-    "defaultProvider" => "ollama-cloud",
-    "defaultModel" => "deepseek-v4-flash",
-    "skills" => ["/repo/modules/adapters/skills/*"]
-  }
-  @base_mcp %{"mcpServers" => %{"tlon" => %{"url" => "http://x/mcp"}}}
-
-  describe "render/3 — a profile is a diff over the base config" do
-    test "drops the named extensions, keeps the rest" do
-      r = Profiles.render(%Profile{name: "t", drop_extensions: ["/adapters/pi/"]}, @base_settings, @base_mcp)
-      refute Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/pi/"))
-      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/lsp/"))
-      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/consult/"))
-    end
-
-    test "mcp :none → empty mcpServers (self-contained); :base → inherits the base" do
-      assert Profiles.render(%Profile{name: "t", mcp: :none}, @base_settings, @base_mcp).mcp ==
-               %{"mcpServers" => %{}}
-
-      assert Profiles.render(%Profile{name: "t", mcp: :base}, @base_settings, @base_mcp).mcp == @base_mcp
-    end
-
-    test "model override replaces the base defaults; nil inherits them" do
-      r =
-        Profiles.render(
-          %Profile{name: "t", model: %{provider: "ollama-cloud", model: "deepseek-v4-pro", thinking: "high"}},
-          @base_settings,
-          @base_mcp
-        )
-
-      assert r.settings["defaultModel"] == "deepseek-v4-pro"
-      assert r.settings["defaultThinkingLevel"] == "high"
-
-      assert Profiles.render(%Profile{name: "t"}, @base_settings, @base_mcp).settings["defaultModel"] ==
-               "deepseek-v4-flash"
-    end
-
-    test "sandbox passes through untouched" do
-      assert Profiles.render(%Profile{name: "t", sandbox: %{"enabled" => true}}, @base_settings, @base_mcp).sandbox ==
-               %{"enabled" => true}
-    end
-
-    test "permissions pass through untouched" do
-      assert Profiles.render(
-               %Profile{name: "t", permissions: %{"yoloMode" => true}},
-               @base_settings,
-               @base_mcp
-             ).permissions ==
-               %{"yoloMode" => true}
-    end
-
-    test "add_extensions appends on top of the base (a coworker-specific / not-yet-flake-registered extension)" do
-      r =
-        Profiles.render(
-          %Profile{name: "t", add_extensions: ["/repo/modules/adapters/footer/src/footer.ts"]},
-          @base_settings,
-          @base_mcp
-        )
-
-      assert "/repo/modules/adapters/footer/src/footer.ts" in r.settings["extensions"]
-      # the base ones are still there
-      assert Enum.any?(r.settings["extensions"], &String.contains?(&1, "/adapters/lsp/"))
-    end
-
-    test "add wins over drop, and a doubly-present extension appears once" do
-      # add_extensions survives a drop pattern it would otherwise match...
-      r =
-        Profiles.render(
-          %Profile{
-            name: "t",
-            drop_extensions: ["/adapters/pi/"],
-            add_extensions: ["/repo/modules/adapters/pi/src/extension.ts"]
-          },
-          @base_settings,
-          @base_mcp
-        )
-
-      assert "/repo/modules/adapters/pi/src/extension.ts" in r.settings["extensions"]
-
-      # ...and once the base already lists an add, it isn't duplicated (idempotent post-home:switch).
-      base_with_footer =
-        Map.update!(@base_settings, "extensions", &(&1 ++ ["/repo/modules/adapters/footer/src/footer.ts"]))
-
-      r2 =
-        Profiles.render(
-          %Profile{name: "t", add_extensions: ["/repo/modules/adapters/footer/src/footer.ts"]},
-          base_with_footer,
-          @base_mcp
-        )
-
-      assert Enum.count(r2.settings["extensions"], &(&1 == "/repo/modules/adapters/footer/src/footer.ts")) == 1
+  describe "render/1 — the files a profile's dir needs" do
+    test "the sandbox and the persona pass through untouched" do
+      r = Profiles.render(%Profile{name: "t", sandbox: %{"enabled" => true}, system_prompt: "you are t"})
+      assert r == %{sandbox: %{"enabled" => true}, system_prompt: "you are t"}
     end
   end
 
   describe "the tertius (center) profile — machine-scope funes citizen + sandboxed" do
-    test "wires funes on the machine scope, keeps the adapters/pi adapter, sockets allowed in the sandbox" do
+    test "its tools are cut, not listed, and its sandbox allows sockets" do
       p = Profiles.fetch("tertius")
-      # Not severed: a funes server whose token binds to the machine thread (via the env
-      # tlon-cli.sh mints from), so Tlön gets its OWN dossier/logbook without a project bleed.
-      assert %{"tlon" => tlon} = p.mcp
-      assert tlon["url"] == "${TLON_MCP_URL}"
-      assert tlon["headers"]["Authorization"] =~ "tlon-cli.sh bearer"
-      # The adapters/pi funes adapter (brief + auto-capture) is KEPT now that it points at the machine thread.
-      assert p.drop_extensions == []
+      assert %{"tlon" => %{"excludeTools" => cuts}} = p.mcp
+      assert "register" in cuts
       assert p.sandbox["network"]["allowAllUnixSockets"] == true
     end
 
@@ -136,14 +38,7 @@ defmodule Server.ProfilesTest do
             "open_thread",
             "close_thread"
           ],
-          do: assert(kept in tlon["directTools"])
-    end
-
-    test "adds the generic footer back (its own package, not swept up by the adapters/pi drop)" do
-      p = Profiles.fetch("tertius")
-      assert Enum.any?(p.add_extensions, &String.ends_with?(&1, "/adapters/footer/src/footer.ts"))
-      # and the footer path does NOT match the funes-adapter drop, so it isn't a fight
-      refute Enum.any?(p.add_extensions, &String.contains?(&1, "/adapters/pi/"))
+          do: refute(kept in tlon["excludeTools"])
     end
 
     test "carries a per-coworker permission policy — yolo (autonomous), but sudo + secrets stay denied" do
@@ -157,19 +52,18 @@ defmodule Server.ProfilesTest do
       assert perms["permission"]["bash"]["mkfs*"] == "deny"
       assert perms["permission"]["path"]["*.env"] == "deny"
       assert perms["permission"]["path"]["~/.ssh/*"] == "deny"
-      assert perms["permission"]["path"]["~/.pi/agent/auth.json"] == "deny"
       # the point of all this: normal work just runs
       assert perms["permission"]["*"] == "allow"
     end
 
-    test "drives Sonnet, so at home it runs on the Claude Code harness" do
+    test "drives Sonnet, on the Claude Code harness" do
       assert Profiles.fetch("tertius").model == %{
                provider: "anthropic",
                model: "claude-sonnet-5-5",
                thinking: "medium"
              }
 
-      assert Server.Harness.resolve(Profiles.fetch("tertius").model, "home") == :claude_code
+      assert Profiles.fetch("tertius").harness == :claude_code
     end
 
     test "unknown profile → nil" do
@@ -221,22 +115,21 @@ defmodule Server.ProfilesTest do
     end
 
     test "render carries the persona through to the materialised files" do
-      assert Profiles.render(Profiles.fetch("tertius"), @base_settings, @base_mcp).system_prompt =~ "tertius"
+      assert Profiles.render(Profiles.fetch("tertius")).system_prompt =~ "tertius"
     end
 
     test "the sheriff reaches across to route red — machine_overview and consult_peer — but never staffs" do
       tlon = Profiles.archetype(:sheriff).mcp["tlon"]
-      assert "machine_overview" in tlon["directTools"] and "consult_peer" in tlon["directTools"]
-      refute "consult_peer" in tlon["excludeTools"]
-      for staffing <- ["staff_child", "assign_lead"], do: refute(staffing in tlon["directTools"])
+      refute "machine_overview" in tlon["excludeTools"] or "consult_peer" in tlon["excludeTools"]
+      for staffing <- ["staff_child", "assign_lead"], do: assert(staffing in tlon["excludeTools"])
     end
 
     test "the PM holds the release and backlog tools, writes no code, and no other archetype has them" do
       pm = Profiles.archetype(:pm)
       tools = ~w(release_status check_candidate propose_release set_urgency)
-      for t <- tools, do: assert(t in pm.mcp["tlon"]["directTools"] and t not in pm.mcp["tlon"]["excludeTools"])
+      for t <- tools, do: refute(t in pm.mcp["tlon"]["excludeTools"])
       assert get_in(pm.permissions, ["permission", "write"]) == "deny"
-      for staffing <- ["staff_child", "assign_lead"], do: refute(staffing in pm.mcp["tlon"]["directTools"])
+      for staffing <- ["staff_child", "assign_lead"], do: assert(staffing in pm.mcp["tlon"]["excludeTools"])
 
       for {k, t} <- Profiles.archetypes(),
           k != :pm,
@@ -246,7 +139,6 @@ defmodule Server.ProfilesTest do
 
     test "QA files its verdict with submit_qa, writes no code, and no other archetype has it" do
       qa = Profiles.archetype(:qa)
-      assert "submit_qa" in qa.mcp["tlon"]["directTools"]
       for cut <- ~w(submit_qa), do: refute(cut in qa.mcp["tlon"]["excludeTools"])
       for cut <- ~w(submit_review edit_clause rename_identifier), do: assert(cut in qa.mcp["tlon"]["excludeTools"])
       assert get_in(qa.permissions, ["permission", "write"]) == "deny"
@@ -261,10 +153,8 @@ defmodule Server.ProfilesTest do
       tools = ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
       tlon = lib.mcp["tlon"]
 
-      for t <- tools ++ ~w(search_facts get_facts),
-          do: assert(t in tlon["directTools"] and t not in tlon["excludeTools"], t)
-
-      for cut <- ~w(edit_clause rename_identifier staff_child assign_lead), do: refute(cut in tlon["directTools"])
+      for t <- tools ++ ~w(search_facts get_facts), do: refute(t in tlon["excludeTools"], t)
+      for cut <- ~w(edit_clause rename_identifier staff_child assign_lead), do: assert(cut in tlon["excludeTools"])
       assert get_in(lib.permissions, ["permission", "write"]) == "deny"
 
       for duty <- ["supersede_proposed", "ask_operator", "never", "STATED", "lobby", "quain", "landed_facts", "keep"],
@@ -277,12 +167,12 @@ defmodule Server.ProfilesTest do
     end
 
     test "gets the cross-leaf machine_overview read (slice 4) so it can see the leaves" do
-      assert "machine_overview" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
-      assert "operator_inbox" in Profiles.fetch("tertius").mcp["tlon"]["directTools"]
+      cuts = Profiles.fetch("tertius").mcp["tlon"]["excludeTools"]
+      refute "machine_overview" in cuts or "operator_inbox" in cuts
 
       for {k, t} <- Profiles.archetypes(),
           k != :surveyor,
-          do: refute("operator_inbox" in (t.mcp["tlon"]["directTools"] -- t.mcp["tlon"]["excludeTools"]), "#{k}")
+          do: assert("operator_inbox" in t.mcp["tlon"]["excludeTools"], "#{k}")
     end
   end
 
@@ -319,58 +209,23 @@ defmodule Server.ProfilesTest do
     end
   end
 
-  describe "materialise!/2 — writes the config dir from a base" do
+  describe "materialise!/2 — writes the config dir" do
     setup do
       tmp = Path.join(System.tmp_dir!(), "aleph-prof-#{System.pid()}-#{System.unique_integer([:positive])}")
-      base = Path.join(tmp, "agent")
-      File.mkdir_p!(base)
-      File.write!(Path.join(base, "settings.json"), Jason.encode!(@base_settings))
-      File.write!(Path.join(base, "mcp.json"), Jason.encode!(@base_mcp))
-
-      for f <- ~w(auth.json models.json models-store.json),
-          do: File.write!(Path.join(base, f), "{}")
-
       on_exit(fn -> File.rm_rf!(tmp) end)
-      %{base: base, root: Path.join(tmp, "profiles")}
+      %{root: Path.join(tmp, "profiles")}
     end
 
-    test "writes settings/mcp/sandbox and symlinks the shared files", %{base: base, root: root} do
-      dir = Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
+    test "writes the persona, the sandbox and the tmux config — nothing else", %{root: root} do
+      dir = Profiles.materialise!(Profiles.fetch("tertius"), root: root)
       assert dir == Path.join(root, "tertius")
-
-      settings = Jason.decode!(File.read!(Path.join(dir, "settings.json")))
-      # the adapters/pi funes adapter is KEPT now (brief + auto-capture pointed at the machine thread)
-      assert Enum.any?(settings["extensions"], &String.contains?(&1, "/adapters/pi/"))
-      mcp = Jason.decode!(File.read!(Path.join(dir, "mcp.json")))
-      assert mcp["mcpServers"]["tlon"]["url"] == "${TLON_MCP_URL}"
-      assert "consult_peer" in mcp["mcpServers"]["tlon"]["excludeTools"]
-      assert Jason.decode!(File.read!(Path.join(dir, "sandbox.json")))["enabled"] == true
-      # permission-system fail-closes to "ask" without a config in PI_CODING_AGENT_DIR, so the
-      # coworker gets its own config in the nested extension dir
-      perms = Jason.decode!(File.read!(Path.join(dir, "extensions/pi-permission-system/config.json")))
-      assert perms["yoloMode"] == true
-      assert perms["permission"]["bash"]["sudo *"] == "deny"
-      # the shared files are symlinks back to the base — one credential store, one model catalog
-      assert File.read_link!(Path.join(dir, "auth.json")) == Path.join(base, "auth.json")
-      refute File.exists?(Path.join(dir, "provider-failover.json"))
-    end
-
-    test "a profile left with the retired failover link loses it", %{base: base, root: root} do
-      dir = Path.join(root, "tertius")
-      File.mkdir_p!(dir)
-      File.ln_s!(Path.join(base, "provider-failover.json"), Path.join(dir, "provider-failover.json"))
-      Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
-      assert {:error, :enoent} = File.read_link(Path.join(dir, "provider-failover.json"))
-    end
-
-    test "a profile with a persona writes system_prompt.md (the tertius meta agent)", %{base: base, root: root} do
-      dir = Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
       assert File.read!(Path.join(dir, "system_prompt.md")) =~ "tertius"
+      assert Jason.decode!(File.read!(Path.join(dir, "sandbox.json")))["enabled"] == true
+      assert dir |> File.ls!() |> Enum.sort() == ~w(sandbox.json system_prompt.md tmux.conf)
     end
 
-    test "writes the coworker's persistence-free tmux.conf — fresh on rebuild, never resurrected",
-         %{base: base, root: root} do
-      dir = Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
+    test "writes the coworker's persistence-free tmux.conf — fresh on rebuild, never resurrected", %{root: root} do
+      dir = Profiles.materialise!(Profiles.fetch("tertius"), root: root)
       conf = File.read!(Path.join(dir, "tmux.conf"))
       # the interactive bits travel with the coworker...
       assert conf =~ "set -g mouse on"
@@ -381,9 +236,9 @@ defmodule Server.ProfilesTest do
       refute conf =~ "continuum"
     end
 
-    test "idempotent — a second materialise re-links without error", %{base: base, root: root} do
-      Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root)
-      assert Profiles.materialise!(Profiles.fetch("tertius"), base: base, root: root) == Path.join(root, "tertius")
+    test "idempotent — a second materialise rewrites without error", %{root: root} do
+      Profiles.materialise!(Profiles.fetch("tertius"), root: root)
+      assert Profiles.materialise!(Profiles.fetch("tertius"), root: root) == Path.join(root, "tertius")
     end
   end
 
@@ -427,17 +282,8 @@ defmodule Server.ProfilesTest do
       assert Profiles.fetch("reviewer").permissions["yoloMode"] == true
     end
 
-    test "materialise! writes the write-deny into the pi-permission-system config" do
-      root = Path.join(System.tmp_dir!(), "crew-mat-#{System.pid()}-#{System.unique_integer([:positive])}")
-      base = Path.join(root, "agent")
-      File.mkdir_p!(base)
-      File.write!(Path.join(base, "settings.json"), ~s({"extensions":[]}))
-      File.write!(Path.join(base, "mcp.json"), ~s({"mcpServers":{}}))
-
-      dir = Profiles.materialise!(Profiles.fetch("reviewer"), base: base, root: Path.join(root, "profiles"))
-      cfg = dir |> Path.join("extensions/pi-permission-system/config.json") |> File.read!() |> Jason.decode!()
-      assert cfg["permission"]["write"] == "deny"
-      assert cfg["permission"]["edit"] == "deny"
+    test "the write-deny lands as Claude Code deny rules for the file-writing tools" do
+      assert Server.Harness.ClaudeCode.launch_command(Profiles.fetch("reviewer")) =~ "Write,Edit,NotebookEdit"
     end
   end
 
@@ -491,7 +337,7 @@ defmodule Server.ProfilesTest do
       assert p.mcp == Profiles.archetype(:builder).mcp
     end
 
-    test "seat_profile reads the seat's own policy on its workspace: an ollama model spawns on pi, not Sonnet" do
+    test "seat_profile reads the seat's own policy on its workspace: an ollama model spawns on it, through Claude Code's gateway, not Sonnet" do
       Server.TestDB.clean!()
       {:ok, ws} = Server.Workspaces.register(%{name: "Night"})
       {:ok, c} = Server.Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder"})
@@ -499,7 +345,10 @@ defmodule Server.ProfilesTest do
 
       p = Profiles.seat_profile("dahlmann", Server.Workspaces.bench_all(ws.id), ws.id)
       assert %{provider: "ollama-cloud", model: "kimi-k2.7-code"} = p.model
-      assert p.harness == :pi
+      assert p.harness == :claude_code
+      launch = Server.Harness.ClaudeCode.launch_command(p)
+      assert launch =~ "TLON_PROVIDER=ollama-cloud"
+      assert launch =~ "--model kimi-k2.7-code"
     end
 
     test "model_label names the model a seat is launched on, from its policy; no seat, no label" do
@@ -508,7 +357,7 @@ defmodule Server.ProfilesTest do
       {:ok, c} = Server.Workspaces.seat(ws.id, %{name: "otalora", archetype: "builder"})
       {:ok, _} = Server.Workspaces.retarget(ws.id, c.agent_id, %{model: "ollama-cloud/kimi-k2.7-code"})
 
-      assert Profiles.model_label(ws.id, "otalora") == "ollama-cloud/kimi-k2.7-code (pi)"
+      assert Profiles.model_label(ws.id, "otalora") == "ollama-cloud/kimi-k2.7-code (claude_code)"
       assert Profiles.model_label(ws.id, "nobody") == nil
       assert Profiles.model_label(nil, "otalora") == nil
     end
@@ -586,13 +435,10 @@ defmodule Server.ProfilesTest do
   describe "fetch/1 resolves through the archetype registry (back-compat)" do
     # tertius is the live Tlön centre: its render carries the surveyor's model, role and tools.
     test "fetch('tertius') materialises the surveyor archetype (the live Tlön spawn)" do
-      r = Profiles.render(Profiles.fetch("tertius"), %{}, %{})
-      assert r.system_prompt == Profiles.archetype(:surveyor).system_prompt
-      assert r.system_prompt =~ "tertius"
-      assert r.settings["defaultModel"] == "claude-sonnet-5-5"
-      assert r.settings["defaultProvider"] == "anthropic"
-      assert r.settings["defaultThinkingLevel"] == "medium"
-      assert "machine_overview" in r.mcp["mcpServers"]["tlon"]["directTools"]
+      p = Profiles.fetch("tertius")
+      assert Profiles.render(p).system_prompt == Profiles.archetype(:surveyor).system_prompt
+      assert p.model == %{provider: "anthropic", model: "claude-sonnet-5-5", thinking: "medium"}
+      refute "machine_overview" in p.mcp["tlon"]["excludeTools"]
     end
 
     test "fetch('reviewer') INTENTIONALLY flips glm-5.2 → claude-sonnet-5-5 (A2: reviewer is not live-spawned)" do
@@ -625,7 +471,7 @@ defmodule Server.ProfilesTest do
   end
 
   describe "the config dir is keyed by workspace (UX slice 5)" do
-    test "materialises into config_dir — the path the launcher actually points pi at" do
+    test "materialises into config_dir — the path the launcher reads the persona from" do
       profile = %Profile{name: "amy", archetype: :builder, workspace_id: 7}
 
       assert Profiles.config_dir(profile) =~ "/profiles/w7/amy"
@@ -639,22 +485,22 @@ defmodule Server.ProfilesTest do
     end
 
     test "materialise! writes WHERE config_dir says — the two cannot disagree" do
-      root = Path.join(System.tmp_dir!(), "mat_#{System.pid()}_#{System.unique_integer([:positive])}")
-      base = Path.join(root, "agent")
-      File.mkdir_p!(base)
-      File.write!(Path.join(base, "settings.json"), "{}")
-      File.write!(Path.join(base, "mcp.json"), ~s({"mcpServers":{}}))
-      on_exit(fn -> File.rm_rf!(root) end)
+      state = Path.join(System.tmp_dir!(), "mat_#{System.pid()}_#{System.unique_integer([:positive])}")
+      on_exit(fn -> File.rm_rf!(state) end)
 
-      previous = System.get_env("PI_CODING_AGENT_DIR")
-      System.put_env("PI_CODING_AGENT_DIR", base)
-      on_exit(fn -> if previous, do: System.put_env("PI_CODING_AGENT_DIR", previous) end)
+      previous = System.get_env("XDG_STATE_HOME")
+      System.put_env("XDG_STATE_HOME", state)
+
+      on_exit(fn ->
+        if previous, do: System.put_env("XDG_STATE_HOME", previous), else: System.delete_env("XDG_STATE_HOME")
+      end)
 
       profile = %Profile{name: "amy", archetype: :builder, workspace_id: 7}
       dir = Profiles.materialise!(profile)
 
       assert dir == Profiles.config_dir(profile)
-      assert File.exists?(Path.join(dir, "settings.json"))
+      assert dir == Path.join([state, "tlon", "profiles", "w7", "amy"])
+      assert File.exists?(Path.join(dir, "tmux.conf"))
     end
   end
 end

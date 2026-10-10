@@ -140,33 +140,8 @@ defmodule Server.Bench.RolesTest do
                Roles.parse_output(:claude_code, out)
     end
 
-    test "pi: the last assistant message's text, usage summed over every assistant turn, no cost" do
-      turn = fn text, i, o ->
-        JSON.encode!(%{
-          type: "message_end",
-          message: %{role: "assistant", content: [%{type: "text", text: text}], usage: %{input: i, output: o}}
-        })
-      end
-
-      out =
-        Enum.join(
-          [
-            ~s({"type":"session"}),
-            JSON.encode!(%{type: "message_end", message: %{role: "user", content: "q", usage: %{input: 999}}}),
-            turn.("thinking aloud", 100, 5),
-            turn.("the answer", 200, 7),
-            ~s({"type":"agent_end"})
-          ],
-          "\n"
-        )
-
-      assert {"the answer", %{input: 300, output: 12, cache_read: 0, cost_usd: nil, turns: 2}} =
-               Roles.parse_output(:pi, out)
-    end
-
     test "output that isn't the harness's JSON is the reply, with zero usage" do
       assert {"boom", %{input: 0, output: 0}} = Roles.parse_output(:claude_code, "boom")
-      assert {"", %{turns: 0}} = Roles.parse_output(:pi, "boom")
     end
   end
 
@@ -203,7 +178,7 @@ defmodule Server.Bench.RolesTest do
       read = Roles.argv(p, "do it", false)
       write = Roles.argv(p, "do it", true)
 
-      assert ["claude", "-p", "do it" | _] = read
+      assert [_gateway, "anthropic", "claude", "-p", "do it" | _] = read
       assert read |> Enum.chunk_every(2, 1) |> Enum.member?(["--tools", "Read,Grep,Glob"])
       assert read |> Enum.chunk_every(2, 1) |> Enum.member?(["--output-format", "stream-json"])
       assert read |> Enum.chunk_every(2, 1) |> Enum.member?(["--effort", "low"])
@@ -216,13 +191,13 @@ defmodule Server.Bench.RolesTest do
       assert system =~ "BENCH:"
     end
 
-    test "pi: the provider-qualified model, JSON events, and the edit tools for a writer" do
-      p = profile(:pi, %{provider: "ollama-cloud", model: "deepseek-v4.1-flash", thinking: "medium"})
+    test "an ollama model: its provider's endpoint, by its own name, the edit tools for a writer" do
+      p = profile(:claude_code, %{provider: "ollama-cloud", model: "deepseek-v4.1-flash", thinking: "medium"})
       write = Roles.argv(p, "do it", true)
 
-      assert write |> Enum.chunk_every(2, 1) |> Enum.member?(["--model", "ollama-cloud/deepseek-v4.1-flash"])
-      assert write |> Enum.chunk_every(2, 1) |> Enum.member?(["--tools", "read,grep,find,ls,edit,write,bash"])
-      assert write |> Enum.chunk_every(2, 1) |> Enum.member?(["--mode", "json"])
+      assert [_gateway, "ollama-cloud", "claude" | _] = write
+      assert write |> Enum.chunk_every(2, 1) |> Enum.member?(["--model", "deepseek-v4.1-flash"])
+      assert write |> Enum.chunk_every(2, 1) |> Enum.member?(["--tools", "Read,Grep,Glob,Edit,Write,Bash"])
     end
   end
 

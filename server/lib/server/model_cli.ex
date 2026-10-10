@@ -11,12 +11,14 @@ defmodule Server.ModelCli do
   """
 
   @keys %{"OLLAMA_API_KEY" => "ollama-api-key"}
-  # a one-off call is headless: nothing saved, nothing discovered, nothing to trust or approve —
-  # a CLI that stopped to ask would only sit there until the timeout
-  @headless %{
-    "pi" => ~w(--no-session --no-extensions --no-approve),
-    "claude" => ~w(--no-session-persistence --permission-mode dontAsk)
-  }
+  # a one-off call is headless: nothing saved, nothing to trust or approve — a CLI that stopped to
+  # ask would only sit there until the timeout
+  @headless ~w(--no-session-persistence --permission-mode dontAsk)
+  @efforts ~w(low medium high xhigh max)
+  # Off the Claude plan a one-off is a bare completion: no tools, no project context, the system
+  # prompt alone — 79 tokens in, where Claude Code's own prompt is ~20k. `--bare` skips the Claude
+  # login, so a call on the plan keeps it.
+  @bare ["--bare", "--tools", "", "--system-prompt", "Answer the request exactly as asked."]
 
   @doc """
   Run `prompt` through the configured CLI with stdin closed, cut off after `opts[:timeout_s]`, else
@@ -32,15 +34,34 @@ defmodule Server.ModelCli do
     )
   end
 
-  @doc "`prompt/5` with the command and model named outright, for a caller that picks them itself."
+  @doc """
+  `prompt/5` with the command and model named outright, for a caller that picks them itself. A
+  `provider/model` model (`ollama-cloud/deepseek-v4.1-flash`) runs through `gateway.sh` on that
+  provider's endpoint; a bare one (`haiku`) on the operator's own Claude login.
+  """
   def run(prompt, cmd, model, opts \\ []) do
     timeout = opts[:timeout_s] || Application.get_env(:server, :model_cli_timeout_s, 120)
 
-    # System.cmd leaves stdin an open pipe, and `pi -p` reads it as the rest of the prompt — it
+    {provider, model} =
+      case String.split(model, "/", parts: 2) do
+        [p, m] -> {p, m}
+        [m] -> {"anthropic", m}
+      end
+
+    # `model:high` is a thinking level; any other suffix is the model's own tag (`qwen3-coder:30b`)
+    {model, effort} =
+      case String.split(model, ":") do
+        [m, e] when e in @efforts -> {m, ["--effort", e]}
+        _ -> {model, []}
+      end
+
+    flags = if provider == "anthropic", do: @headless ++ effort, else: @headless ++ effort ++ @bare
+
+    # System.cmd leaves stdin an open pipe, and a CLI may read it as the rest of the prompt — it
     # waits forever. The CLI gets /dev/null, and `timeout` bounds a call that hangs regardless.
     args =
-      ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout), cmd, "-p", prompt, "--model", model] ++
-        Map.get(@headless, Path.basename(cmd), [])
+      ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout), Server.Harness.ClaudeCode.gateway(), provider] ++
+        [cmd, "-p", prompt, "--model", model] ++ flags
 
     case System.cmd("sh", args, stderr_to_stdout: true, env: keys()) do
       {out, 0} -> {:ok, out}

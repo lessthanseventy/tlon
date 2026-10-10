@@ -18,7 +18,8 @@ defmodule Server.ModelCliTest do
   end
 
   test "the prompt and the model reach the CLI as -p and --model", %{dir: dir} do
-    assert {:ok, "-p hi --model m\n"} = ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s(echo "$@")), "m"})
+    assert {:ok, "-p hi --model m " <> _} =
+             ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s(echo "$@")), "m"})
   end
 
   test "a service with no OLLAMA_API_KEY in its env hands the CLI the machine's agenix key", %{dir: dir} do
@@ -40,20 +41,42 @@ defmodule Server.ModelCliTest do
              ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s(echo "$OLLAMA_API_KEY")), "m"})
   end
 
-  test "pi and claude run headless: no session saved, no extensions or trust to settle, nothing to ask",
+  test "a call on the Claude plan runs headless: no session saved, nothing to ask, the operator's own login",
        %{dir: dir} do
-    for name <- ["pi", "claude"] do
-      File.mkdir_p!(Path.join(dir, name))
-      path = Path.join([dir, name, name])
-      File.write!(path, ~s(#!/bin/sh\necho "$@"\n))
-      File.chmod!(path, 0o755)
-    end
+    assert {:ok, "anthropic -p hi --model haiku --no-session-persistence --permission-mode dontAsk\n"} =
+             ModelCli.prompt(
+               "hi",
+               :test_cmd,
+               :test_model,
+               {cli(dir, ~s(echo "${ANTHROPIC_BASE_URL:-anthropic} $@")), "haiku"}
+             )
+  end
 
-    assert {:ok, "-p hi --model m --no-session --no-extensions --no-approve\n"} =
-             ModelCli.prompt("hi", :test_cmd, :test_model, {Path.join([dir, "pi", "pi"]), "m"})
+  test "a provider/model call goes to that provider's endpoint, bare — no tools, no project context — its effort kept",
+       %{dir: dir} do
+    key = System.get_env("OLLAMA_API_KEY")
+    System.put_env("OLLAMA_API_KEY", "k")
+    on_exit(fn -> if key, do: System.put_env("OLLAMA_API_KEY", key), else: System.delete_env("OLLAMA_API_KEY") end)
 
-    assert {:ok, "-p hi --model m --no-session-persistence --permission-mode dontAsk\n"} =
-             ModelCli.prompt("hi", :test_cmd, :test_model, {Path.join([dir, "claude", "claude"]), "m"})
+    assert {:ok, out} =
+             ModelCli.prompt(
+               "hi",
+               :test_cmd,
+               :test_model,
+               {cli(dir, ~s(echo "$ANTHROPIC_BASE_URL $@")), "ollama-cloud/deepseek-v4-pro:high"}
+             )
+
+    assert out =~ "https://ollama.com -p hi --model deepseek-v4-pro "
+    assert out =~ "--effort high"
+    assert out =~ "--bare --tools  --system-prompt"
+  end
+
+  test "a model's own tag is not an effort", %{dir: dir} do
+    assert {:ok, out} =
+             ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s(echo "$@")), "ollama/qwen3-coder:30b"})
+
+    assert out =~ "--model qwen3-coder:30b"
+    refute out =~ "--effort"
   end
 
   test "a CLI that reads stdin still answers — stdin is closed, not a pipe left open", %{dir: dir} do

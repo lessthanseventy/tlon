@@ -18,10 +18,10 @@ defmodule Server.Office.Writer do
   `config :server, banter_cmd:` (a test's stand-in CLI) pins every call to it instead.
   """
 
-  @deepseek {"pi", "ollama-cloud/deepseek-v4.1-flash"}
+  @deepseek {"claude", "ollama-cloud/deepseek-v4.1-flash"}
   @pools %{
     "day" => [{"claude", "haiku"}, {"claude", "haiku"}, @deepseek],
-    "night" => [@deepseek, @deepseek, {"pi", "ollama-cloud/kimi-k2.7-code"}]
+    "night" => [@deepseek, @deepseek, {"claude", "ollama-cloud/kimi-k2.7-code"}]
   }
   @flavours [
     "deadpan and dry: understatement, a straight face",

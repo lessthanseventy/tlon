@@ -1,37 +1,29 @@
 defmodule Server.Profile do
   @moduledoc """
-  A **coworker profile** — the full pi configuration for one space's machine coworker. A space
-  names a profile; the server materialises it into a `PI_CODING_AGENT_DIR` (`Server.Profiles`) and
-  launches the coworker with it. Profiles differ on the four dimensions a coworker actually varies
-  on (design: `docs/plans/2026-08-17-pi-coworker-profiles-design.md`):
+  A **coworker profile** — what one space's machine coworker runs with. A space names a profile;
+  the server materialises its files (`Server.Profiles`) and launches the coworker with it through
+  its harness (`Server.Harness`). Profiles differ on the dimensions a coworker actually varies on
+  (design: `docs/plans/2026-08-17-pi-coworker-profiles-design.md`):
 
     * **tool / MCP surface** — `mcp` (`:base` inherit, `:none` self-contained, or an explicit
-      `%{server => config}`), `drop_extensions` (which base pi extensions to omit), and
-      `add_extensions` (extensions to add ON TOP, by absolute path — a coworker-specific extension,
-      or one the flake hasn't registered into the base yet, so it loads at the coworker's next
-      spawn without a `home:switch`).
-    * **model + thinking** — `model` (`%{provider, model, thinking}`, or `nil` to inherit the base
-      defaults).
-    * **system prompt / persona** — `system_prompt` (materialised to a file, passed as
-      `--append-system-prompt`).
-    * **sandbox** — `sandbox` (a pi-sandbox `sandbox.json` map, or `nil` for unconfined). Scoped to
-      the profile because pi-sandbox reads `sandbox.json` from `PI_CODING_AGENT_DIR`.
+      `%{server => %{"excludeTools" => [...]}}`: the tools cut from this coworker).
+    * **model + thinking** — `model` (`%{provider, model, thinking}`, or `nil` for the harness's
+      default).
+    * **system prompt / persona** — `system_prompt` (materialised to a file, appended to the
+      citizen prompt).
+    * **sandbox** — `sandbox` (Claude Code `sandbox` settings, or `nil` for unconfined).
+    * **permissions** — `permissions`: the deny floor (bash patterns, secret paths, the write fence)
+      and `yoloMode`, whether the coworker runs without asking.
 
   `workspace_id` is which workspace this instance belongs to. It rides on the profile so
   `config_dir/1` can key the materialised dir by it and `Server.Policy` can differ per workspace —
   the same coworker name may be trusted differently in two of them.
-
-  A profile is a small DIFF from the base `~/.pi/agent` config, not a full re-declaration — the base
-  (extensions, skills, model catalog, auth) stays the single source of truth; the profile drops,
-  replaces, and overlays.
   """
   @enforce_keys [:name]
   defstruct name: nil,
             archetype: nil,
             workspace_id: nil,
-            harness: :pi,
-            drop_extensions: [],
-            add_extensions: [],
+            harness: :claude_code,
             mcp: :base,
             model: nil,
             system_prompt: nil,
@@ -42,9 +34,7 @@ defmodule Server.Profile do
           name: String.t(),
           archetype: atom(),
           workspace_id: integer() | nil,
-          harness: :pi | :claude_code,
-          drop_extensions: [String.t()],
-          add_extensions: [String.t()],
+          harness: :claude_code,
           mcp: :base | :none | map(),
           model: %{provider: String.t(), model: String.t(), thinking: String.t()} | nil,
           system_prompt: String.t() | nil,
@@ -55,27 +45,17 @@ end
 
 defmodule Server.Profiles do
   @moduledoc """
-  The coworker-profile registry + materialiser. `fetch/1` looks a profile up by name; `render/3`
-  is the pure seam (profile + base config → the files a config dir needs); `materialise!/1` is the
-  IO wrapper that writes `~/.pi/profiles/<name>/` before a coworker spawns.
+  The coworker-profile registry + materialiser. `fetch/1` looks a profile up by name; `render/1`
+  is the pure seam (profile → the files its config dir needs); `materialise!/1` is the IO wrapper
+  that writes them before a coworker spawns.
 
-  Materialised layout (`PI_CODING_AGENT_DIR`):
+  Materialised layout (`config_dir/1`, under `$XDG_STATE_HOME/tlon/profiles`):
 
-      ~/.pi/profiles/<name>/
-        settings.json     profile-specific — base settings with extensions dropped + model overridden
-        mcp.json          profile-specific — the profile's MCP servers (`{}` = self-contained)
-        sandbox.json      profile-specific — pi-sandbox allowlist (only if profile.sandbox)
-        extensions/pi-permission-system/config.json
-                          profile-specific — permission policy + yoloMode (only if profile.permissions)
-        system_prompt.md  profile-specific — the persona (only if profile.system_prompt)
-        tmux.conf         profile-specific — the persistence-free config the workspace's tmux
-                          server boots from when this profile opens it (`Server.Tmux.socket/1`)
-        auth.json      ↳ symlink to ~/.pi/agent/auth.json       (shared credentials)
-        models.json    ↳ symlink to ~/.pi/agent/models.json     (shared model catalog)
-        models-store.json ↳ symlink                             (shared)
-
-        keybindings.json ↳ symlink                              (shared keymap — Ctrl+P/N nav)
-        sessions/         its own — each coworker resumes its own thread (reload --continue)
+      profiles/[w<id>/]<name>/
+        system_prompt.md  the persona (only if profile.system_prompt)
+        sandbox.json      the Claude Code sandbox settings (only if profile.sandbox)
+        tmux.conf         the persistence-free config the workspace's tmux server boots from when
+                          this profile opens it (`Server.Tmux.socket/1`)
 
   Idempotent + self-healing: re-materialised on every spawn, so editing a profile + respawning the
   coworker is the whole loop — no `home:switch`.
@@ -87,16 +67,14 @@ defmodule Server.Profiles do
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`.
 
   - **Machine-scope tlon citizen.** Its MCP (`@tertius_mcp`) binds every token to scope
-    `machine` (via `tlon-cli.sh bearer`), so its posts/facts/dones stay on machine threads, off
-    project threads (DB scope CHECK). `directTools` are the record/read verbs + `machine_overview`
-    (the cross-leaf read); `excludeTools` cuts `register` and `consult_peer` (the orchestrator keeps
-    `open_thread`/`close_thread`), and under Claude Code the same list rides as deny rules
+    `machine`, so its posts/facts/dones stay on machine threads, off project threads (DB scope
+    CHECK). Its `excludeTools` cut `register` and `consult_peer` (the orchestrator keeps
+    `open_thread`/`close_thread` and the cross-leaf `machine_overview`); they ride as deny rules
     (`Server.Harness.ClaudeCode`).
-  - **Driver.** Sonnet, so at home it runs on the Claude Code harness like every other coworker; a
-    workspace policy `model` is how it goes back to pi.
-  - **Sandboxed + yolo permissions.** `@tlon_sandbox` + `@tlon_permissions`: `yoloMode` auto-approves
-    asks so an autonomous coworker never stalls, but yolo is deny-PRESERVING, so the
-    catastrophic-command + secret-path floor still holds.
+  - **Driver.** Sonnet; a workspace policy `model` points it at any other model, ollama's included.
+  - **Sandboxed + yolo permissions.** `@tlon_sandbox` + `@tlon_permissions`: on a non-Anthropic
+    model `yoloMode` runs it in its sandbox with no prompts, so an autonomous coworker never stalls,
+    and the catastrophic-command + secret-path floor holds as deny rules.
   """
   alias Server.OperatorConfig
   alias Server.Profile
@@ -129,20 +107,20 @@ defmodule Server.Profiles do
   set -g mode-style 'bg=#3b4261,fg=#c0caf5'
   """
 
-  # The Tlön coworker's sandbox (pi-sandbox `sandbox.json`). Permissive enough that the adapters tooling
-  # keeps working under bubblewrap — the footgun class this session kept hitting:
-  #   * allowAllUnixSockets — the lsp shim binds/connects adapters-lspd.sock; reload/tmux use sockets too
+  # The Tlön coworker's sandbox (Claude Code `sandbox` settings, `sandbox.json`; launch.sh makes it
+  # strict). Permissive enough that the adapters tooling keeps working under bubblewrap:
+  #   * allowAllUnixSockets — the lspd daemon's socket; tmux uses sockets too
   #   * allowWrite the repo + /tmp + the socket dir + caches — the daemon writes the socket file, Expert
   #     writes its .expert index, edits land in the repo
   #   * allowedDomains — the hosts this repo's bash tasks reach (mirrors the machine sandbox allowlist)
-  # See [[pi-sandbox-adapters-allowlist]]. NOT model API calls (pi's own process, not bash).
+  # It fences bash only: model calls, MCP servers and the mod run in Claude Code's own process.
   #
   # bash runs under `bwrap --unshare-net`, so `127.0.0.1` inside a bash call is the coworker's OWN
   # empty netns, NOT the host's. Tlön's server is at `TLON_MCP_URL` = http://127.0.0.1:4041/mcp, so
   # `curl`ing it, `ss -tlnp`, and `mise run server:doctor|logs` ALWAYS fail here regardless of whether
   # server is up — `allowLocalBinding` only permits binding within that netns, and the socat proxy that
   # carries external traffic refuses loopback targets with a 403. There is no bash route, by design.
-  # The @tlon_mcp tools are unaffected: pi opens that connection from its own process, outside
+  # The @tlon_mcp tools are unaffected: Claude Code opens that connection from its own process, outside
   # bubblewrap (same reason model API calls work). This matters more for Tlön than for the
   # interactive agent — it runs autonomously, so a bash probe returning 000 with nobody to correct it
   # is how a coworker talks itself into "server is down" and stops posting. Use the server tools; a
@@ -152,10 +130,9 @@ defmodule Server.Profiles do
     "network" => %{
       "allowLocalBinding" => true,
       "allowAllUnixSockets" => true,
-      # Derived from real Claude + pi session history (not guesswork): the dev-infra hosts this
-      # machine's agents actually reach. An allowlist, NOT "*", stays the network fence for the
-      # cheap-model coworker; grep the transcripts + extend here when a genuinely new infra host
-      # shows up. Keep in sync with the flake's piPermissionSeed twin. See [[pi-sandbox-allowlist]].
+      # Derived from real session history (not guesswork): the dev-infra hosts this machine's agents
+      # actually reach. An allowlist, NOT "*", stays the network fence for the cheap-model coworker;
+      # grep the transcripts + extend here when a genuinely new infra host shows up.
       "allowedDomains" => [
         # source control + package registries
         "github.com",
@@ -187,7 +164,6 @@ defmodule Server.Profiles do
         "ollama.com",
         "*.ollama.com",
         "registry.ollama.ai",
-        "pi.dev",
         "modelcontextprotocol.io",
         "*.huggingface.co",
         # language + framework + tool docs
@@ -223,14 +199,11 @@ defmodule Server.Profiles do
         Path.expand("../../..", __DIR__),
         "/tmp",
         "$XDG_RUNTIME_DIR",
-        "~/.pi",
         "~/.cache",
         "~/.local"
       ],
-      # Reads (prompt-by-default otherwise): the repo and tlon's checkout, plus /nix/store +
-      # ~/.nix-profile so pi reading its OWN install/docs/extensions — and any flake-managed
-      # binary's files — never triggers a useless prompt (the store is immutable +
-      # workspace-readable). Config/cache dirs round it out.
+      # Reads re-opened inside a denied region: the repo and tlon's checkout, plus /nix/store +
+      # ~/.nix-profile (any flake-managed binary's files) and the config/cache dirs.
       "allowRead" => [
         @repo,
         Path.expand("../../..", __DIR__),
@@ -238,24 +211,17 @@ defmodule Server.Profiles do
         "~/.nix-profile",
         "~/.config",
         "~/.local",
-        "~/.pi",
         "~/.cache"
       ],
       "denyWrite" => [".env", ".env.*", "*.pem", "*.key"]
     }
   }
 
-  # The Tlön coworker's pi-permission-system policy (`extensions/pi-permission-system/config.json`).
-  # permission-system reads its "global" config from `PI_CODING_AGENT_DIR` and FAIL-CLOSES to
-  # "ask everything" when the file is absent — the same reason sandbox.json is per-profile — so the
-  # coworker needs its OWN copy; the flake seeds only `~/.pi/agent`, the interactive agent's dir.
-  #
-  # This is the per-coworker knob: the interactive agent (flake seed) keeps `ask` for the rare
-  # sudo/ambiguous call because a HUMAN is there to answer. Tlön runs AUTONOMOUSLY, so an `ask`
-  # would just hang it — `yoloMode: true` auto-approves asks instead (no prompts, no stalls). yolo
-  # is deny-PRESERVING, so the fence still holds: `sudo *` and the secret paths are `deny` (not
-  # `ask`), so even under yolo the coworker cannot sudo unattended or touch credentials. Everything
-  # else inside the sandbox's write allowlist just runs. See [[pi-permission-system-per-coworker]].
+  # The Tlön coworker's permission policy. Its `deny` entries are the floor, landed as Claude Code
+  # deny rules (`Server.Harness.ClaudeCode`), which hold in every permission mode: `sudo *` and the
+  # secret paths are denied even when the coworker runs without asking. `yoloMode` is the
+  # per-coworker knob (the CONFIG pane's ask-vs-allow): Tlön runs AUTONOMOUSLY, so an ask would just
+  # hang it, and on a sandboxed non-Anthropic model yolo runs it with no prompts at all.
   @tlon_permissions %{
     "yoloMode" => true,
     "permissionReviewLog" => true,
@@ -263,8 +229,8 @@ defmodule Server.Profiles do
       "*" => "allow",
       # bash: routine runs; sudo + the catastrophic-and-never-legitimate commands are DENY (terminal,
       # so they hold even under yolo — deny is the one thing yolo can't re-permit). This deterministic
-      # floor is intentionally NARROW: it is the last line, not the whole defense. The nuanced middle
-      # (novel/ambiguous bash) is the adapters bash-judge authorizer-link's job. See [[pi-bash-judge]].
+      # floor is intentionally NARROW: it is the last line, not the whole defense — the sandbox and the
+      # permission mode are the rest.
       "bash" => %{
         "*" => "allow",
         "sudo *" => "deny",
@@ -291,8 +257,7 @@ defmodule Server.Profiles do
         "*.key" => "deny",
         "*.pem" => "deny",
         "~/.aws/*" => "deny",
-        "~/.ssh/*" => "deny",
-        "~/.pi/agent/auth.json" => "deny"
+        "~/.ssh/*" => "deny"
       }
     }
   }
@@ -303,11 +268,9 @@ defmodule Server.Profiles do
   # through the "*" => "allow" fallback; yoloMode keeps those from stalling on an ask. The
   # catastrophic deny-floor rides along from @tlon_permissions unchanged. See the crew contract §A.
   #
-  # pi-permission-system per-tool surfaces: top-level keys are surface names; `write`/`edit` are the
-  # only built-in file WRITERS (reads are read/grep/find/ls), and a per-tool deny needs no path glob.
-  # Bash writes are token-gated, so we deny the common redirect/in-place forms — the airtight fence is
-  # the tool deny; the bash patterns are belt-and-suspenders for the MVP (the model-judge for the
-  # ambiguous middle is phase-2).
+  # `write`/`edit` denied is the file-writing tools denied (Write, Edit, NotebookEdit). Bash writes
+  # are pattern-gated, so the common redirect/in-place forms are denied too — the airtight fence is
+  # the tool deny; the bash patterns are belt-and-suspenders.
   @reviewer_permissions put_in(
                           @tlon_permissions,
                           ["permission"],
@@ -325,29 +288,12 @@ defmodule Server.Profiles do
                           })
                         )
 
-  # The dense statusline (adapters/footer) — its OWN package, not adapters/pi, so dropping the server
-  # adapter doesn't take the footer with it. Added explicitly so Tlön shows it at the next coworker
-  # spawn even before the flake registers it into the base config (which needs a home:switch).
-  @footer_extension Path.expand("../../../adapters/footer/src/footer.ts", __DIR__)
-
   # The machine-scope tlon surface (see § "The tertius coworker" in the moduledoc for why the tools
   # are cut this way). Base tool set; `@tertius_mcp` adds the cross-leaf read on top.
   @tlon_mcp %{
     "tlon" => %{
-      "url" => "${TLON_MCP_URL}",
-      "headers" => %{"Authorization" => "!#{Path.expand("../../../scripts/tlon-cli.sh", __DIR__)} bearer"},
-      "directTools" => [
-        "post_message",
-        "bank_fact",
-        "raise_issue",
-        "record_done",
-        "record_check",
-        "get_brief",
-        "propose_habit",
-        "push_branch"
-      ],
       "excludeTools" =>
-        ["register", "consult_peer", "open_thread", "close_thread", "operator_inbox"] ++
+        ["register", "consult_peer", "open_thread", "close_thread", "operator_inbox", "staff_child", "assign_lead"] ++
           ~w(release_status check_candidate propose_release set_urgency submit_qa) ++
           ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
     }
@@ -362,42 +308,37 @@ defmodule Server.Profiles do
   # (open a child thread + assign + brief), `assign_lead` (staff/reassign an existing thread), and
   # `open_thread`/`close_thread` (un-excluded here — the orchestrator opens untracked work and closes
   # finished children, which fires report-up). Workers stay self-contained; the vantage routes.
-  @tertius_mcp @tlon_mcp
-               |> update_in(
-                 ["tlon", "directTools"],
-                 &(&1 ++
-                     ["machine_overview", "staff_child", "assign_lead", "open_thread", "close_thread", "operator_inbox"])
+  @tertius_mcp update_in(
+                 @tlon_mcp,
+                 ["tlon", "excludeTools"],
+                 &(&1 -- ["open_thread", "close_thread", "operator_inbox", "staff_child", "assign_lead"])
                )
-               |> update_in(["tlon", "excludeTools"], &(&1 -- ["open_thread", "close_thread", "operator_inbox"]))
 
   # The sheriff routes red the way tertius routes work, so it is the one worker that reaches across:
   # the cross-thread read and `consult_peer` (to hand a lead its fix) — never the staffing verbs; it
   # tells leads, it does not reassign them.
-  @sheriff_mcp @tlon_mcp
-               |> update_in(["tlon", "directTools"], &(&1 ++ ["machine_overview", "consult_peer"]))
-               |> update_in(["tlon", "excludeTools"], &(&1 -- ["consult_peer"]))
+  @sheriff_mcp update_in(@tlon_mcp, ["tlon", "excludeTools"], &(&1 -- ["consult_peer"]))
 
   # The PM owns what ships and in what order — the release and the backlog's urgency — and reads
   # across the work to judge it; it neither edits code nor staffs.
   @pm_release_tools ~w(release_status check_candidate propose_release set_urgency)
-  @pm_mcp @tlon_mcp
-          |> update_in(["tlon", "directTools"], &(&1 ++ @pm_release_tools ++ ["machine_overview", "list_tickets"]))
-          |> update_in(["tlon", "excludeTools"], &((&1 -- @pm_release_tools) ++ ["rename_identifier", "edit_clause"]))
+  @pm_mcp update_in(
+            @tlon_mcp,
+            ["tlon", "excludeTools"],
+            &((&1 -- @pm_release_tools) ++ ["rename_identifier", "edit_clause"])
+          )
 
   # The librarian curates the office's memory — facts, never code — so it holds the curation verbs and
   # the corpus reads, and none of the edit verbs.
   @librarian_tools ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
-  @librarian_mcp @tlon_mcp
-                 |> update_in(["tlon", "directTools"], &(&1 ++ @librarian_tools ++ ["search_facts", "get_facts"]))
-                 |> update_in(
+  @librarian_mcp update_in(
+                   @tlon_mcp,
                    ["tlon", "excludeTools"],
                    &((&1 -- @librarian_tools) ++ ["rename_identifier", "edit_clause"])
                  )
 
   # QA uses the product and files what it saw; it neither edits code nor reviews the diff.
-  @qa_mcp @reviewer_mcp
-          |> update_in(["tlon", "directTools"], &(&1 ++ ["submit_qa"]))
-          |> update_in(["tlon", "excludeTools"], &((&1 -- ["submit_qa"]) ++ ["submit_review"]))
+  @qa_mcp update_in(@reviewer_mcp, ["tlon", "excludeTools"], &((&1 -- ["submit_qa"]) ++ ["submit_review"]))
 
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
   # so filler progress pings are pure noise. Appended to the worker roles.
@@ -451,7 +392,7 @@ defmodule Server.Profiles do
     * A ticket you can't staff yet because it waits on something: `update_ticket` it to backlog
       with the `held` label and the reason in its body. Intake leaves a held ticket alone (never
       routes it, never auto-starts it) until you take the label off.
-  NEVER launch a harness yourself (no `claude`/`pi` via shell): a bare spawn is invisible to the
+  NEVER launch a harness yourself (no `claude` via shell): a bare spawn is invisible to the
   board, posts to no thread, and dies with your session.
 
   REPORT-UP. A child thread reports back here when it closes (funes posts `✅ child #N … closed` and
@@ -646,9 +587,9 @@ defmodule Server.Profiles do
   outside the workspace you serve.
   """
 
-  # The coworker-driver ring the SETTINGS panel cycles (leader `m`) — ollama-only, no anthropic-via-pi
-  # (see the moduledoc for why). Claude proper is the `hronir` window. `kimi-k3` stays out: ollama.com
-  # bills it per token on top of the plan.
+  # The coworker-driver ring the SETTINGS panel cycles (leader `m`): the ollama models, each reached
+  # through Claude Code's gateway (`Server.Harness.ClaudeCode`). `kimi-k3` stays out: ollama.com bills
+  # it per token on top of the plan.
   @model_ring [
     %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"},
     %{provider: "ollama-cloud", model: "kimi-k2.7-code", thinking: "medium"},
@@ -661,10 +602,8 @@ defmodule Server.Profiles do
     %{provider: "ollama-cloud", model: "minimax-m2.7", thinking: "medium"}
   ]
 
-  # Every archetype's default: real Claude, which at home resolves to the Claude Code harness
-  # (`Server.Harness.resolve/2`) — the one harness Tlön spawns for now. Not a model-ring entry, and the
-  # operator can still retarget any instance via the settings file (`Server.OperatorConfig`) or a
-  # roster-entry override (that is how a pi coworker comes back).
+  # Every archetype's default: real Claude. Not a model-ring entry; the operator retargets any
+  # instance via the settings file (`Server.OperatorConfig`), a workspace policy or a roster entry.
   @sonnet %{provider: "anthropic", model: "claude-sonnet-5-5", thinking: "medium"}
 
   # The Claude models a coworker may be set to (`model_choices/0`), beside the ollama ring.
@@ -676,7 +615,7 @@ defmodule Server.Profiles do
   ]
 
   # The archetype registry — role TEMPLATES keyed by archetype atom. A template is the `%Profile{}`
-  # content fields minus `name` (`model`/`mcp`/`sandbox`/`permissions`/`system_prompt`/`add_extensions`);
+  # content fields minus `name` (`model`/`mcp`/`sandbox`/`permissions`/`system_prompt`);
   # `instantiate/1` (Task 3) stamps an instance `name` over one to mint a materialisation-ready profile.
   # Each archetype is a distilled discipline — the "extract a superpower as a coworker" content.
   #   * surveyor  — the tertius meta/synthesis role (machine_overview cross-leaf read).
@@ -695,64 +634,56 @@ defmodule Server.Profiles do
       mcp: @tertius_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
-      system_prompt: @tertius_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @tertius_role
     },
     reviewer: %{
       model: @sonnet,
       mcp: @reviewer_mcp,
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
-      system_prompt: @reviewer_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @reviewer_role
     },
     builder: %{
       model: @sonnet,
       mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
-      system_prompt: @builder_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @builder_role
     },
     planner: %{
       model: @sonnet,
       mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
-      system_prompt: @planner_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @planner_role
     },
     sheriff: %{
       model: @sonnet,
       mcp: @sheriff_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
-      system_prompt: @sheriff_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @sheriff_role
     },
     pm: %{
       model: @sonnet,
       mcp: @pm_mcp,
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
-      system_prompt: @pm_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @pm_role
     },
     qa: %{
       model: @sonnet,
       mcp: @qa_mcp,
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
-      system_prompt: @qa_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @qa_role
     },
     librarian: %{
       model: @sonnet,
       mcp: @librarian_mcp,
       sandbox: @tlon_sandbox,
       permissions: @reviewer_permissions,
-      system_prompt: @librarian_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @librarian_role
     },
     # researcher/assistant: @tlon_sandbox is the STARTING point — Slice 1 scopes it to the workspace's
     # own paths (journal/notes vs the ficciones repo). Tunable, not final.
@@ -761,16 +692,14 @@ defmodule Server.Profiles do
       mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
-      system_prompt: @researcher_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @researcher_role
     },
     assistant: %{
       model: @sonnet,
       mcp: @tlon_mcp,
       sandbox: @tlon_sandbox,
       permissions: @tlon_permissions,
-      system_prompt: @assistant_role,
-      add_extensions: [@footer_extension]
+      system_prompt: @assistant_role
     }
   }
 
@@ -856,8 +785,7 @@ defmodule Server.Profiles do
   template, and the system prompt is personalized with the instance handle. Model precedence:
   roster-entry `model` > the (workspace, coworker) policy's `model` (`Server.Workspaces.set_policy/3`)
   > the config's `coworkers.<name>` > the seat's grade (`OperatorConfig.grade_model/1`) > archetype
-  default. The config and the grade apply to a seat, so a workspace-less fetch skips them. The
-  harness follows the resolved model (`Server.Harness.resolve/2`).
+  default. The config and the grade apply to a seat, so a workspace-less fetch skips them.
   """
   @spec instantiate(%{required(:archetype) => atom(), required(:name) => String.t(), optional(any()) => any()}) ::
           Profile.t()
@@ -870,11 +798,7 @@ defmodule Server.Profiles do
       name: name,
       archetype: key,
       workspace_id: workspace_id,
-      # Slice D: the harness is an environment-resolved BINDING from the model (anthropic model at
-      # home → the official claude_code harness; else pi), not an archetype trait. A template
-      # `harness:` key stays an explicit pin (the escape hatch).
-      harness: t[:harness] || Server.Harness.resolve(model, OperatorConfig.environment()),
-      add_extensions: Map.get(t, :add_extensions, []),
+      harness: t[:harness] || :claude_code,
       mcp: t.mcp,
       model: model,
       sandbox: t.sandbox,
@@ -995,7 +919,7 @@ defmodule Server.Profiles do
 
   @doc """
   The model a seat actually runs, as one label for a commit trailer or a log — the launched profile's,
-  never what a model says it is: `"ollama-cloud/kimi-k2.7-code (pi)"`, `"anthropic/claude-sonnet-5-5
+  never what a model says it is: `"ollama-cloud/kimi-k2.7-code (claude_code)"`, `"anthropic/claude-sonnet-5-5
   (claude_code)"`. nil for a name with no seat on the workspace.
   """
   @spec model_label(integer() | nil, String.t()) :: String.t() | nil
@@ -1044,48 +968,10 @@ defmodule Server.Profiles do
   end
 
   @doc """
-  Pure: profile + the base `settings.json`/`mcp.json` maps → the files the profile's config dir needs.
-  Returns `%{settings: map, mcp: map, sandbox: map | nil, permissions: map | nil, system_prompt: binary | nil}`.
+  Pure: profile → the files its config dir needs. `%{sandbox: map | nil, system_prompt: binary | nil}`.
   """
-  @spec render(Profile.t(), map(), map()) :: %{
-          settings: map(),
-          mcp: map(),
-          sandbox: map() | nil,
-          permissions: map() | nil,
-          system_prompt: String.t() | nil
-        }
-  def render(%Profile{} = p, base_settings, base_mcp) do
-    # Drop, then add on top — the add wins, so an add_extensions path survives even if it would
-    # match a drop pattern. `uniq` keeps it idempotent once the flake also registers it into the base.
-    exts =
-      (base_settings["extensions"] || [])
-      |> Enum.reject(fn e -> Enum.any?(p.drop_extensions, &String.contains?(e, &1)) end)
-      |> Kernel.++(p.add_extensions)
-      |> Enum.uniq()
-
-    settings =
-      base_settings
-      |> Map.put("extensions", exts)
-      |> apply_model(p.model)
-
-    mcp =
-      case p.mcp do
-        :base -> base_mcp
-        :none -> %{"mcpServers" => %{}}
-        servers when is_map(servers) -> %{"mcpServers" => servers}
-      end
-
-    %{settings: settings, mcp: mcp, sandbox: p.sandbox, permissions: p.permissions, system_prompt: p.system_prompt}
-  end
-
-  defp apply_model(settings, nil), do: settings
-
-  defp apply_model(settings, %{provider: prov, model: model, thinking: think}) do
-    settings
-    |> Map.put("defaultProvider", prov)
-    |> Map.put("defaultModel", model)
-    |> Map.put("defaultThinkingLevel", think)
-  end
+  @spec render(Profile.t()) :: %{sandbox: map() | nil, system_prompt: String.t() | nil}
+  def render(%Profile{} = p), do: %{sandbox: p.sandbox, system_prompt: p.system_prompt}
 
   @doc """
   The ficciones repo root (matches flake.nix's `repo`) — coworkers/launchers outside this
@@ -1103,15 +989,15 @@ defmodule Server.Profiles do
   def tlon_root, do: Path.expand("../../..", __DIR__)
 
   @doc """
-  The config dir a profile materialises into (its `PI_CODING_AGENT_DIR`), keyed by workspace so
+  The config dir a profile materialises into, keyed by workspace so
   two workspaces can run the same coworker name under different policy. A workspace-less profile
   keeps the flat path.
   """
   @spec config_dir(Profile.t()) :: String.t()
   def config_dir(profile) do
     case profile do
-      %Profile{workspace_id: nil, name: n} -> Path.join([base_dir_root(), "profiles", n])
-      %Profile{workspace_id: id, name: n} -> Path.join([base_dir_root(), "profiles", "w#{id}", n])
+      %Profile{workspace_id: nil, name: n} -> Path.join(profiles_root(), n)
+      %Profile{workspace_id: id, name: n} -> Path.join([profiles_root(), "w#{id}", n])
     end
   end
 
@@ -1120,75 +1006,27 @@ defmodule Server.Profiles do
   def tmux_conf, do: @coworker_tmux_conf
 
   @doc """
-  Materialise a profile's config dir from the base `~/.pi/agent`. Reads the base settings/mcp, renders,
-  writes the profile-specific files, and symlinks the shared ones. Idempotent. Returns the dir.
+  Materialise a profile's config dir: its persona, its sandbox and the tmux config its workspace's
+  server boots from. Idempotent — re-materialised on every spawn, so editing a profile + respawning
+  the coworker is the whole loop. Returns the dir.
 
-  `opts[:base]` / `opts[:root]` override the base config dir and the profiles root (for tests).
+  `opts[:root]` overrides the profiles root (for tests).
   """
   @spec materialise!(Profile.t(), keyword()) :: String.t()
   def materialise!(%Profile{} = p, opts \\ []) do
-    base = opts[:base] || Path.join(base_dir_root(), "agent")
-    root = opts[:root] || Path.join(base_dir_root(), "profiles")
-    # The dir MUST be `config_dir/1`: the launcher points pi at that path, and materialising anywhere
-    # else writes a config the coworker never reads. pi-permission-system fail-closes on a missing
-    # config, so the two disagreeing is a coworker that silently will not start (2026-09-09: after
-    # config_dir became workspace-keyed, this still wrote the flat path).
-
-    dir = if opts[:root], do: Path.join(root, p.name), else: config_dir(p)
+    # The dir MUST be `config_dir/1`: the launcher reads the persona and sandbox from that path.
+    dir = if opts[:root], do: Path.join(opts[:root], p.name), else: config_dir(p)
     File.mkdir_p!(dir)
-
-    base_settings = read_json(Path.join(base, "settings.json"), %{})
-    base_mcp = read_json(Path.join(base, "mcp.json"), %{"mcpServers" => %{}})
-    r = render(p, base_settings, base_mcp)
-
-    write_json!(Path.join(dir, "settings.json"), r.settings)
-    write_json!(Path.join(dir, "mcp.json"), r.mcp)
-
+    r = render(p)
     if r.sandbox, do: write_json!(Path.join(dir, "sandbox.json"), r.sandbox)
-
-    # pi-permission-system reads its "global" config from PI_CODING_AGENT_DIR and fail-closes to
-    # "ask everything" when absent — so the coworker gets its OWN config in the nested extension dir.
-    if r.permissions do
-      pdir = Path.join(dir, "extensions/pi-permission-system")
-      File.mkdir_p!(pdir)
-      write_json!(Path.join(pdir, "config.json"), r.permissions)
-    end
-
     if r.system_prompt, do: File.write!(Path.join(dir, "system_prompt.md"), r.system_prompt)
     File.write!(Path.join(dir, "tmux.conf"), @coworker_tmux_conf)
-
-    # Shared, from the base: one credential store, one model catalog, one keymap. keybindings.json
-    # shares the base map (Ctrl+P/N → history/selector nav);
-    # pi reads it from PI_CODING_AGENT_DIR, so a coworker without the symlink keeps pi's default
-    # ctrl+p=model-cycle. Relink each time (idempotent). A missing base file just leaves a dangling
-    # link pi ignores.
-    # a shared file no longer shared: its link goes, rather than dangle
-    _ = File.rm(Path.join(dir, "provider-failover.json"))
-
-    for f <- ~w(auth.json models.json models-store.json keybindings.json) do
-      link = Path.join(dir, f)
-      _ = File.rm(link)
-      _ = File.ln_s(Path.join(base, f), link)
-    end
-
     dir
   end
 
-  # The pi config-dir root (honours PI_CODING_AGENT_DIR's parent so a redirected base still finds
-  # profiles beside it; falls back to ~/.pi).
-  defp base_dir_root do
-    case System.get_env("PI_CODING_AGENT_DIR") do
-      nil -> Path.expand("~/.pi")
-      dir -> Path.dirname(Path.expand(dir))
-    end
-  end
-
-  defp read_json(path, default) do
-    with {:ok, body} <- File.read(path), {:ok, map} <- Jason.decode(body) do
-      map
-    else
-      _ -> default
-    end
+  defp profiles_root do
+    state = System.get_env("XDG_STATE_HOME") || Path.expand("~/.local/state")
+    Path.join([state, "tlon", "profiles"])
   end
 
   defp write_json!(path, map), do: File.write!(path, Jason.encode!(map, pretty: true) <> "\n")

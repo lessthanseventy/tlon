@@ -40,13 +40,11 @@ defmodule Server.Arbiter.TmuxTest do
     end
   end
 
-  test "ready?: an input line on the pane — pi's registered footer or a harness prompt — else not yet" do
+  test "ready?: the harness's input line on the pane, else not yet" do
     handle = %{socket: "tlon-workspace-1", session: "w1", window: "t7"}
     Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"booting…", 0} end)
     refute Arbiter.Tmux.ready?(handle)
     Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"❯ \n⏵⏵ auto mode on", 0} end)
-    assert Arbiter.Tmux.ready?(handle)
-    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"tlon: registered — hronir on 7", 0} end)
     assert Arbiter.Tmux.ready?(handle)
   end
 
@@ -243,105 +241,16 @@ defmodule Server.Arbiter.TmuxTest do
     assert {:error, :no_thread} = Arbiter.Tmux.spawn(~s(export TLON_THREAD="999999"\nexport TLON_AUTHOR="x"))
   end
 
-  test "wake: finds the leaf by @funes_thread tag, types the prompt in one line, then Enter", %{thread: t} do
-    Application.put_env(:server, :tmux_submit_delay_ms, 0)
+  test "wake: queues the prompt, in one line, for the coworker's own session to take — nothing typed into the pane",
+       %{thread: t} do
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"2\tbuilder-spawn-me\t#{t.id}\t9\n", 0}}))
     assert :ok = Arbiter.Tmux.wake(%{thread_id: t.id, agent: "claude-code", pane_ref: nil}, "hello\nthere   friend")
-    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", target, "hello there friend"]}
-    assert target =~ ":2"
-    assert_received {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]}
-  end
-
-  test "pending?: our text still in the harness's input line — not its echo in the history, not someone else's draft" do
-    sent = "New message on thread 1 from andrew: @tertius intake — ticket #13: add first-failure times"
-
-    stuck =
-      "● hooks ran\n──────\n❯ New message on thread 1 from andrew: @tertius intake —\n  ticket #13: add first-failure times\n──────\n"
-
-    # a boot that ate the start: what's left is still ours
-    eaten = "──────\n❯ ticket #13: add first-failure times\n──────\n"
-    taken = "❯ New message on thread 1 from andrew: @tertius intake\n● on it\n──────\n❯ \n──────\n"
-    draft = "──────\n❯ andrew typing something else\n──────\n"
-    assert Arbiter.Tmux.pending?(stuck, sent) and Arbiter.Tmux.pending?(eaten, sent)
-    refute Arbiter.Tmux.pending?(taken, sent)
-    refute Arbiter.Tmux.pending?(draft, sent)
-  end
-
-  test "pending?: our text on a later line of a draft — a poke typed under an earlier one that never went" do
-    first = "New message on thread 145 from tlon: ⧗ approved — in the merge queue: it lands once rebased onto main"
-    second = "you have 1 unread message(s) on your threads"
-
-    # hronir's pane: a fresh session's boot ate the first poke's Enters, and the drain's poke landed under it
-    both =
-      "● agents-md: AGENTS.md loaded\n──────\n❯ #{first}\n  #{second}\n──────\n  ╭─────╮\n  │ ctx 0 │\n  ╰─────╯\n"
-
-    assert Arbiter.Tmux.pending?(both, second)
-    assert Arbiter.Tmux.pending?(both, first)
-    # the box's border and status lines below the draft are never read as part of it
-    refute Arbiter.Tmux.pending?("──────\n❯ \n──────\n  │ #{second} │\n", second)
-  end
-
-  test "wake: when the Enter was swallowed — the text still in the input — it presses Enter again", %{thread: t} do
-    Application.put_env(:server, :tmux_submit_delay_ms, 0)
-    Application.put_env(:server, :tmux_confirm_ms, [10])
-    on_exit(fn -> Application.delete_env(:server, :tmux_confirm_ms) end)
-
-    Application.put_env(
-      :server,
-      :tmux_cmd,
-      record(%{
-        "list-windows" => {"2\tbuilder-spawn-me\t#{t.id}\t9\n", 0},
-        "capture-pane" => {"──\n❯ ping from the server\n──\n", 0}
-      })
-    )
-
-    assert :ok = Arbiter.Tmux.wake(%{thread_id: t.id, agent: "claude-code", pane_ref: nil}, "ping from the server")
-    assert_received {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]}
-    assert_receive {:tmux, ["-L", _, "capture-pane" | _]}, 500
-    assert_receive {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]}, 500
-  end
-
-  test "wake: a pane that never takes the Enter is pressed at every look, then said so in the log", %{thread: t} do
-    Application.put_env(:server, :tmux_submit_delay_ms, 0)
-    Application.put_env(:server, :tmux_confirm_ms, [5, 5, 5])
-    on_exit(fn -> Application.delete_env(:server, :tmux_confirm_ms) end)
-
-    Application.put_env(
-      :server,
-      :tmux_cmd,
-      record(%{
-        "list-windows" => {"2\tbuilder-spawn-me\t#{t.id}\t9\n", 0},
-        "capture-pane" => {"──\n❯ stuck message\n──\n", 0}
-      })
-    )
-
-    log =
-      ExUnit.CaptureLog.capture_log(fn ->
-        assert :ok = Arbiter.Tmux.wake(%{thread_id: t.id, agent: "claude-code", pane_ref: nil}, "stuck message")
-        Process.sleep(200)
-      end)
-
-    # the first Enter, then one at each of the three looks
-    enters = for {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]} <- collect(), do: :enter
-    assert length(enters) == 4
-    assert log =~ "still holds its message unsent after every Enter"
-  end
-
-  defp collect(acc \\ []) do
-    receive do
-      m -> collect([m | acc])
-    after
-      0 -> Enum.reverse(acc)
-    end
-  end
-
-  test "the default looks reach about ten minutes: a slow Claude pane gets its Enter in the end" do
-    Application.delete_env(:server, :tmux_confirm_ms)
-    assert Enum.sum(Arbiter.Tmux.confirm_delays()) >= 540_000
+    refute_received {:tmux, ["-L", _, "send-keys" | _]}
+    assert Server.Wake.take(t.id, "claude-code") == ["hello there friend"]
+    assert Server.Wake.take(t.id, "claude-code") == []
   end
 
   test "wake: with no leaf, the lead's own (centre) window by name; none at all is :no_window", %{thread: t} do
-    Application.put_env(:server, :tmux_submit_delay_ms, 0)
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"0\tclaude-code\t\t9\n", 0}}))
     assert :ok = Arbiter.Tmux.wake(%{thread_id: t.id, agent: "claude-code"}, "hi")
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"", 0}}))
@@ -360,7 +269,7 @@ defmodule Server.Arbiter.TmuxTest do
   end
 
   @tag :tmux
-  test "REAL tmux: spawn onto a throwaway socket, the window carries the tag, a wake reaches its input", %{
+  test "REAL tmux: spawn onto a throwaway socket, the window carries the tag, a wake waits for its session", %{
     ws: ws,
     thread: t,
     exports: exports
@@ -370,8 +279,7 @@ defmodule Server.Arbiter.TmuxTest do
     sock = "tlon-test-#{System.unique_integer([:positive])}"
     runner = fn "tmux", ["-L", _ | rest], opts -> System.cmd("tmux", ["-L", sock | rest], opts) end
     Application.put_env(:server, :tmux_cmd, runner)
-    Application.put_env(:server, :tmux_submit_delay_ms, 100)
-    # `cat` echoes what it is sent — the cheapest thing that shows a wake arrived
+    # `cat` echoes what it is sent — the cheapest thing that shows nothing was typed
     Application.put_env(:server, :spawn_launcher_claude, "cat")
     on_exit(fn -> System.cmd("tmux", ["-L", sock, "kill-server"], stderr_to_stdout: true) end)
 
@@ -387,16 +295,15 @@ defmodule Server.Arbiter.TmuxTest do
     {pane, 0} =
       System.cmd("tmux", ["-L", sock, "capture-pane", "-p", "-t", Tmux.target(ws.id, window)], stderr_to_stdout: true)
 
-    assert pane =~ "ping from the server"
+    refute pane =~ "ping from the server"
+    assert Server.Wake.take(t.id, "claude-code") == ["ping from the server"]
   end
 
   test "wake: a %Server.Session{} row (the drain's shape) resolves its agent by id", %{thread: t} do
-    Application.put_env(:server, :tmux_submit_delay_ms, 0)
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"0\tclaude-code\t\t\t9\n", 0}}))
     agent = Staff.agent_by_name("claude-code")
     {:ok, session} = Staff.start_session(%{thread_id: t.id, agent_id: agent.id, pane_ref: "%0"})
     assert :ok = Arbiter.Tmux.wake(session, "hi")
-    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", target, "hi"]}
-    assert target =~ ":0"
+    assert Server.Wake.take(t.id, "claude-code") == ["hi"]
   end
 end

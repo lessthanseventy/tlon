@@ -16,9 +16,8 @@ defmodule Server.Attention do
   whose answer goes to the PM instead of a pane, and which no reconcile closes.
 
   Detection fails closed: a pane reads as waiting only on a positive match of a harness's own
-  dialog — pi-permission-system's cursor-marked `▶ (y) Yes … enter confirm · esc deny`, Claude
-  Code's cursor-marked `❯ 1. Yes` list under a `…?` question. A model's own numbered list has no
-  cursor; an unknown screen is not-waiting.
+  dialog — Claude Code's cursor-marked `❯ 1. Yes` list under a `…?` question. A model's own
+  numbered list has no cursor; an unknown screen is not-waiting.
   """
 
   import Ecto.Query
@@ -40,30 +39,7 @@ defmodule Server.Attention do
   @spec detect(String.t()) :: prompt() | nil
   def detect(text) when is_binary(text) do
     lines = text |> String.split("\n") |> Enum.map(&String.trim_trailing/1)
-    pi(lines) || claude(lines)
-  end
-
-  # pi-permission-system: `▶ (y) Yes` / `  (s) Yes, allow …` / … and the confirm line.
-  @pi_option ~r/^\s*(▶?)\s*\((\w)\)\s+(\S.*)$/u
-  @pi_confirm "enter confirm"
-
-  defp pi(lines) do
-    matches = for line <- lines, [_, cursor, key, label] <- [Regex.run(@pi_option, line)], do: {cursor, key, label}
-
-    if length(matches) >= 2 and Enum.any?(matches, &(elem(&1, 0) == "▶")) and
-         Enum.any?(lines, &String.contains?(&1, @pi_confirm)) do
-      %{harness: "pi", summary: pi_summary(lines), options: Enum.map(matches, fn {_, k, l} -> %{key: k, label: l} end)}
-    end
-  end
-
-  # The dialog names the command it is asking about; that line is the summary.
-  defp pi_summary(lines) do
-    Enum.find_value(lines, "permission", fn line ->
-      case Regex.run(~r/^\s*(?:full )?command\s*:\s*(.+)$/, line) do
-        [_, cmd] -> "bash: " <> String.trim(cmd)
-        nil -> nil
-      end
-    end)
+    claude(lines)
   end
 
   # Claude Code: a boxed dialog — `Do you want to proceed?` then `❯ 1. Yes` / `  2. …`. The box
@@ -441,7 +417,7 @@ defmodule Server.Attention do
   defp answer(%Message{payload: p} = prompt, author, body, key, rest) do
     ws = p["workspace_id"]
     window = "=" <> p["window"]
-    _ = Tmux.send_text(ws, window, keystrokes(p["harness"], key))
+    _ = Tmux.send_text(ws, window, key)
 
     if rest != "" do
       Process.sleep(Application.get_env(:server, :attention_settle_ms, 300))
@@ -464,9 +440,6 @@ defmodule Server.Attention do
     Bus.broadcast({:message_posted, reply})
     reply
   end
-
-  defp keystrokes("pi", key), do: key <> key
-  defp keystrokes(_harness, key), do: key
 
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
 

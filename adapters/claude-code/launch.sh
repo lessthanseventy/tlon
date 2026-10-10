@@ -94,29 +94,6 @@ if [ -n "${TLON_SANDBOX_FILE:-}" ] && [ -f "$TLON_SANDBOX_FILE" ]; then
   mode=dontAsk
 fi
 
-# An ollama model is reached through Claude Code's gateway setting (ollama.com and the local daemon
-# speak the Anthropic API), so every request the session makes — the model's, its subagents', the
-# background ones — goes to ollama, and none draws on the Claude plan. The model aliases point at
-# ollama models too, or a subagent asking for "haiku" would name a model ollama doesn't serve.
-model=""
-args=("$@")
-for i in "${!args[@]}"; do
-  [ "${args[$i]}" = "--model" ] && model="${args[$((i + 1))]:-}"
-done
-case "${TLON_PROVIDER:-anthropic}" in
-  ollama-cloud)
-    key="${OLLAMA_API_KEY:-$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agenix/ollama-api-key" 2>/dev/null || true)}"
-    [ -n "$key" ] || { echo "tlon: no OLLAMA_API_KEY (env or agenix) for an ollama-cloud model" >&2; exit 1; }
-    export ANTHROPIC_BASE_URL=https://ollama.com ANTHROPIC_AUTH_TOKEN="$key" ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4.1-flash
-    ;;
-  ollama)
-    export ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
-    ;;
-esac
-if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
-  unset ANTHROPIC_API_KEY
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="$model" ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
-fi
 
 # The citizen protocol, as a system prompt. Without it Claude Code treats a teammate's message
 # (typed into its input by the server's switchboard) like the
@@ -138,7 +115,7 @@ if [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ]; then
   printf 'mcp-config: %s\n' "$mcp_json"
   printf 'settings:   %s\n' "$settings_json"
   printf 'system:     %s\n' "$sys_prompt"
-  printf 'gateway:    %s\n' "${ANTHROPIC_BASE_URL:-anthropic}"
+  printf 'provider:   %s\n' "${TLON_PROVIDER:-anthropic}"
   printf 'exec: claude --permission-mode %s --append-system-prompt <…> --mcp-config <…> --settings <…> --plugin-dir %s %s\n' "$mode" "$plugin" "$*"
   exit 0
 fi
@@ -152,4 +129,5 @@ if command -v jq >/dev/null 2>&1; then
   jq --arg d "$PWD" '.projects[$d] = ((.projects[$d] // {}) + {hasTrustDialogAccepted: true})' "$cj" > "$cj.tmp" && mv "$cj.tmp" "$cj"
 fi
 
-exec claude --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" --plugin-dir "$plugin" "$@"
+# The provider's endpoint (gateway.sh): an ollama model never draws on the Claude plan.
+exec "$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" --plugin-dir "$plugin" "$@"

@@ -398,16 +398,8 @@ defmodule Server.Office do
   end
 
   defp models do
-    env = Server.OperatorConfig.environment()
-
     for m <- Server.Profiles.model_choices() do
-      %{
-        key: key(m),
-        provider: m.provider,
-        model: m.model,
-        thinking: m.thinking,
-        harness: Server.Harness.resolve(m, env)
-      }
+      %{key: key(m), provider: m.provider, model: m.model, thinking: m.thinking, harness: :claude_code}
     end
   end
 
