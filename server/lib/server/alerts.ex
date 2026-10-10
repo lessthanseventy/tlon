@@ -106,9 +106,16 @@ defmodule Server.Alerts do
       at: n.at,
       thread_id: n.thread_id,
       link: nil,
-      actions: actions(n)
+      actions: actions(n) ++ put_away(n)
     }
   end
+
+  # what nothing waits on can be put away on the server (`Office.Needs.dismiss/1`), so it leaves the
+  # office's inbox too, not only this surface
+  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind == "ask",
+    do: [%{label: "Put away", method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
+
+  defp put_away(_need), do: []
 
   # a review gate has a build behind it, so it can also go back: to build for the code, to plan for its shape
   defp actions(%{kind: "gate", thread_id: t, stage: "review"}),
@@ -134,6 +141,12 @@ defmodule Server.Alerts do
 
   defp actions(%{kind: "rollout", ref: id}),
     do: [%{label: "Done", method: "DELETE", path: "/api/office/rollout/#{id}", body: nil}]
+
+  defp actions(%{kind: "issue", ref: id}),
+    do: [%{label: "Resolve", method: "POST", path: "/api/issues/#{id}/resolve", body: %{}}]
+
+  defp actions(%{kind: "stranded", key: key}),
+    do: [%{label: "Take the checkout down", method: "POST", path: "/api/office/needs/retire", body: %{key: key}}]
 
   defp actions(_need), do: []
 
