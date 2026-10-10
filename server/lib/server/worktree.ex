@@ -93,15 +93,21 @@ defmodule Server.Worktree do
 
   @doc """
   Take down a checkout whose work was closed on purpose (superseded or abandoned,
-  `Server.Channel.close_as/2`), uncommitted changes and all. Its branch stays, so the commits can
-  still be found. `{:removed, path}` · `{:kept, reason}` when git refuses · `:none`.
+  `Server.Channel.close_as/2`) or that the operator took down from the inbox — and lose nothing: a
+  rebase, merge or cherry-pick left half done is aborted, what is uncommitted is committed on the
+  branch as work in progress, and a detached checkout's commits get a `rescued/<slug>` branch. The
+  branch stays, so all of it can still be found. `{:removed, path}` · `{:kept, reason}` when git
+  refuses · `:none`.
   """
   def retire(repo_path, slug) do
     wt = path(repo_path, slug)
 
     if File.exists?(Path.join(wt, ".git")) do
-      case git(repo_path, ["worktree", "remove", "--force", wt]) do
-        {_out, 0} -> {:removed, wt}
+      with :ok <- keep_work(wt, slug),
+           {_out, 0} <- git(repo_path, ["worktree", "remove", "--force", wt]) do
+        {:removed, wt}
+      else
+        {:kept, _} = kept -> kept
         {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
       end
     else
@@ -331,4 +337,48 @@ defmodule Server.Worktree do
   end
 
   defp git(repo_path, args), do: System.cmd("git", ["-C", repo_path | args], stderr_to_stdout: true)
+
+  # nothing the checkout holds may go with it: half-done operations undone, edits committed, a
+  # detached HEAD named
+  defp keep_work(wt, slug) do
+    for op <- ~w(rebase merge cherry-pick), do: git(wt, [op, "--abort"])
+
+    with :ok <- commit_dirty(wt),
+         do: name_detached(wt, slug)
+  end
+
+  defp commit_dirty(wt) do
+    if dirty?(wt) do
+      with {_, 0} <- git(wt, ["add", "-A"]),
+           {_, 0} <-
+             git(wt, [
+               "-c",
+               "user.name=tlon",
+               "-c",
+               "user.email=tlon@localhost",
+               "commit",
+               "-qm",
+               "wip: kept when its checkout was taken down"
+             ]) do
+        :ok
+      else
+        {out, _} -> {:kept, "its uncommitted work could not be committed: #{String.slice(out, 0, 200)}"}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp name_detached(wt, slug) do
+    case git(wt, ["symbolic-ref", "-q", "HEAD"]) do
+      {_, 0} ->
+        :ok
+
+      _ ->
+        case git(wt, ["branch", "-f", "rescued/#{slug}", "HEAD"]) do
+          {_, 0} -> :ok
+          {out, _} -> {:kept, "its detached commits could not be named: #{String.slice(out, 0, 200)}"}
+        end
+    end
+  end
 end
