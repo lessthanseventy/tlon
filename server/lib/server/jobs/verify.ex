@@ -22,9 +22,11 @@ defmodule Server.Jobs.Verify do
     script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
 
     # the workline's own checkout: the script borrows its installed deps for the throwaway one
-    tree = with %Server.Thread{} = t <- Channel.thread(tid), {:ok, path} <- Server.worktree_for_thread(t), do: path
+    thread = Channel.thread(tid)
+    tree = with %Server.Thread{} = t <- thread, {:ok, path} <- Server.worktree_for_thread(t), do: path
 
     cond do
+      match?(%Server.Thread{state: "closed"}, thread) -> {:cancel, "thread ##{tid} is closed"}
       !File.exists?(script) -> by_hand(tid, slug, "no tlon checkout at #{Server.Profiles.tlon_root()}")
       !System.find_executable("mise") -> by_hand(tid, slug, "no mise on the service's PATH")
       !is_binary(tree) -> by_hand(tid, slug, "no checkout of work/#{slug} (#{inspect(tree)})")
@@ -42,7 +44,7 @@ defmodule Server.Jobs.Verify do
   How a run ends: one that recorded a result since `since` — green or red — is done, red going to
   the sheriff. One that recorded nothing was cut off (a service restart, a signal) or could not
   start, and is an error so Oban runs it again (`max_attempts` 3); only the last attempt tells the
-  sheriff it could not run.
+  sheriff it could not run. A thread closed meanwhile is nobody's work: the job is cancelled, not retried.
   """
   def finish(tid, slug, since, {out, _code}, %{attempt: attempt, max_attempts: max}) do
     case {last_verify(slug), Channel.thread(tid)} do
@@ -55,6 +57,9 @@ defmodule Server.Jobs.Verify do
             )
 
         :ok
+
+      {_, %Server.Thread{state: "closed"}} ->
+        {:cancel, "thread ##{tid} is closed"}
 
       {_, t} ->
         if attempt >= max and t, do: Server.Sheriff.report(t, "verify could not run: #{tail(out)}")

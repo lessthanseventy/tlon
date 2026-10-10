@@ -66,6 +66,24 @@ defmodule Server.Jobs.VerifyTest do
       assert why =~ "recorded nothing"
     end
 
+    test "a thread closed while it ran is cancelled, not retried or reported", %{t: t} do
+      since = check!(t, 0).id
+      {:ok, _} = Server.Channel.close_thread(t)
+
+      assert {:cancel, why} =
+               Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 1}, %{attempt: 3, max_attempts: 3})
+
+      assert why =~ "closed"
+    end
+
+    test "a thread already closed is cancelled before anything runs", %{t: t} do
+      {:ok, _} = Server.Channel.close_thread(t)
+      n = Server.Repo.aggregate(Server.Message, :count)
+
+      assert {:cancel, _} = perform_job(Server.Jobs.Verify, %{thread_id: t.id, slug: t.slug})
+      assert Server.Repo.aggregate(Server.Message, :count) == n
+    end
+
     test "the verifier is tried three times, not once" do
       assert %{changes: %{max_attempts: 3}} = Server.Jobs.Verify.new(%{thread_id: 1, slug: "x"})
     end
