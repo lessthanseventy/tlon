@@ -814,6 +814,74 @@ defmodule Server.MCP.ServerTest do
     assert first.body =~ "slice by slice"
   end
 
+  test "the lead staffed onto a child is bound to the CHILD: a brief that names someone else must not take their seat" do
+    # The ticket (#152): leads staffed via staff_child came up bound to the parent (#1) and could not
+    # push_branch / advance_stage / record_check / submit_review for the thread they lead. The seat a
+    # lead gets comes from delivery: `Server.Switchboard` spawns whoever a message ADDRESSES, and a
+    # brief that @mentions anyone else addresses only them — the lead is never seated on the child.
+    Application.put_env(:server, :arbiter, Server.Arbiter.Test)
+    Application.put_env(:server, :test_pid, self())
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _ ->
+      send(self(), {:tmux, args})
+      {"", 0}
+    end)
+
+    on_exit(fn ->
+      Application.delete_env(:server, :arbiter)
+      Application.delete_env(:server, :test_pid)
+      Application.delete_env(:server, :tmux_cmd)
+    end)
+
+    {:ok, ws} =
+      Server.Workspaces.register(%{
+        name: "Seating",
+        roster: [
+          %{"archetype" => "builder", "name" => "daneri"},
+          %{"archetype" => "builder", "name" => "hronir"}
+        ]
+      })
+
+    # a citizen registered on the node but off this bench: the mention resolves, and wakes nobody
+    {:ok, _} = Staff.register_agent(%{name: "outsider", mandate: "build", engine: "fresh"})
+    {:ok, manager} = Staff.register_agent(%{name: "tertius", mandate: "route", engine: "fresh"})
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+
+    token = MCP.Tokens.mint(lobby, manager)
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r =
+      call(token, session, 4, "staff_child", %{
+        "title" => "the seating",
+        "lead" => "daneri",
+        "brief" => "@outsider have a look at this one — daneri leads it."
+      })
+
+    refute r["isError"]
+    child = decode_tool_json(r)["thread_id"]
+    assert Channel.thread_lead(child) == "daneri"
+
+    # what the switchboard does with that brief when the drain reaches it
+    brief = Repo.one!(from m in Message, where: m.thread_id == ^child, order_by: [desc: m.id], limit: 1)
+    Server.Switchboard.deliver(brief)
+
+    assert seated?(child, "daneri") =~ ~s(TLON_THREAD="#{child}")
+  end
+
+  # The seat the ticket is about: a pane bound to `thread_id` (TLON_THREAD) as `name`. A spawn bound
+  # anywhere else — the lobby, the parent, #1 — is the failure it names.
+  defp seated?(thread_id, name, tries \\ 4) do
+    receive do
+      {:spawned, exports} ->
+        if exports =~ ~s(TLON_THREAD="#{thread_id}") and exports =~ ~s(TLON_AUTHOR="#{name}"),
+          do: exports,
+          else: seated?(thread_id, name, tries - 1)
+    after
+      1_000 -> flunk("no pane came up bound to thread #{thread_id} as #{name}")
+    end
+  end
+
   test "staff_child refuses a ticket already worked, and opens nothing", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "hronir-dup", mandate: "build", engine: "fresh"})
     {:ok, ws} = Server.Workspaces.register(%{name: "Claims"})
