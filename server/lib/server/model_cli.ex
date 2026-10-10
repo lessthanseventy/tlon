@@ -42,20 +42,7 @@ defmodule Server.ModelCli do
   def run(prompt, cmd, model, opts \\ []) do
     timeout = opts[:timeout_s] || Application.get_env(:server, :model_cli_timeout_s, 120)
 
-    {provider, model} =
-      case String.split(model, "/", parts: 2) do
-        [p, m] -> {p, m}
-        [m] -> {"anthropic", m}
-      end
-
-    # `model:high` is a thinking level; any other suffix is the model's own tag (`qwen3-coder:30b`)
-    {model, effort} =
-      case String.split(model, ":") do
-        [m, e] when e in @efforts -> {m, ["--effort", e]}
-        _ -> {model, []}
-      end
-
-    flags = if provider == "anthropic", do: @headless ++ effort, else: @headless ++ effort ++ @bare
+    {provider, model, flags} = parse_model(model)
 
     # System.cmd leaves stdin an open pipe, and a CLI may read it as the rest of the prompt — it
     # waits forever. The CLI gets /dev/null, and `timeout` bounds a call that hangs regardless.
@@ -71,6 +58,24 @@ defmodule Server.ModelCli do
     end
   rescue
     e in ErlangError -> {:error, {:model_cli_missing, Exception.message(e)}}
+  end
+
+  defp parse_model(model) do
+    {provider, model} =
+      case String.split(model, "/", parts: 2) do
+        [p, m] -> {p, m}
+        [m] -> {"anthropic", m}
+      end
+
+    # `model:high` is a thinking level; any other suffix is the model's own tag (`qwen3-coder:30b`)
+    {model, effort} =
+      case String.split(model, ":") do
+        [m, e] when e in @efforts -> {m, ["--effort", e]}
+        _ -> {model, []}
+      end
+
+    flags = if provider == "anthropic", do: @headless ++ effort, else: @headless ++ effort ++ @bare
+    {provider, model, flags}
   end
 
   # each key the env lacks, from its agenix file when that is there
