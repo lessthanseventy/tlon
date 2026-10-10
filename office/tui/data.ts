@@ -73,7 +73,7 @@ export async function corkboard(ws: number): Promise<CorkNote[]> {
 }
 /** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
 export type Need = {
-  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "mention" | "rollout" | "seats" | "job_failed" | "stranded"
+  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "mention" | "rollout" | "seats" | "job_failed" | "stranded" | "issue"
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
 }
@@ -86,6 +86,11 @@ export const answerAsk = (id: number, key: string) => write("answering", `/offic
 export const retryJob = (id: number) => write("retrying the job", `/office/jobs/${id}/retry`, {}, () => "running it again")
 export const dismissJob = (id: number) => send("DELETE", "clearing the job", `/office/jobs/${id}`, () => "dismissed")
 export const dismissRollout = (id: number) => send("DELETE", "clearing the note", `/office/rollout/${id}`, () => "done")
+/** put an inbox item away without acting on it; one that work waits on is refused */
+export const dismissNeed = (key: string) => write("putting it away", "/office/needs/dismiss", { key }, () => "put away")
+/** a stranded checkout taken down, its branch kept */
+export const retireStranded = (key: string) => write("taking the checkout down", "/office/needs/retire", { key }, () => "checkout removed; branch kept")
+export const resolveIssue = (id: number) => write("resolving the issue", `/issues/${id}/resolve`, {}, () => "resolved")
 /** the suggestion box: the crew's suggestions not yet filed or thrown out */
 export async function suggestions(ws: number): Promise<CorkNote[]> {
   try { const r = await call("GET", `/office/suggestions/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }

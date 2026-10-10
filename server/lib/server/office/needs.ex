@@ -17,10 +17,12 @@ defmodule Server.Office.Needs do
       work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
       is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded),
       `seats` (threads parked on the leaf cap, per workspace: `ref` the bigger cap it offers),
-      `job_failed` (a background job discarded in the last day: retry or dismiss, `ref` the job).
+      `job_failed` (a background job discarded in the last day: retry or dismiss, `ref` the job),
+      `issue` (a blocker raised on an open thread and not resolved: resolve it, `ref` the issue).
 
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
-  behind it is resolved — approved, answered, filed — not when it is looked at.
+  behind it is resolved — approved, answered, filed — or when the operator puts it away (`dismiss/1`):
+  never because it was looked at.
 
   Only what someone actually asked for, or the machine actually needs, is here: the corkboard's
   suggestions are banter written in a coworker's voice, not their request, so they stay in its
@@ -43,9 +45,58 @@ defmodule Server.Office.Needs do
     prompts = Server.Attention.open_prompts_by_thread()
 
     blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open)
-    decide = mentions(open, operator) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs()
+    decide = mentions(open, operator) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open)
+    away = Map.new(Repo.all(from d in "need_dismissal", select: {d.key, type(d.at, :utc_datetime)}))
 
-    Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
+    Enum.reject(
+      Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime),
+      &put_away?(&1, away[&1.key])
+    )
+  end
+
+  @doc """
+  The operator puts an item away without acting on it (the inbox's `d`): it leaves the list until
+  something newer arrives under its key, a later mention on that thread say. An ask is withdrawn and
+  its asker told; a failed job and a rollout note are dismissed as their kinds are. A gate, a dialog,
+  a question or a red verify is never put away — work waits on it: approve, answer or fix it. `:ok`,
+  or `{:error, :blocking}`.
+  """
+  def dismiss(key) do
+    case String.split(key, ":", parts: 2) do
+      [kind, _] when kind in ~w(gate dialog question verify_failed) ->
+        {:error, :blocking}
+
+      ["ask", id] ->
+        withdraw_ask(String.to_integer(id))
+        remember(key)
+
+      ["job", id] ->
+        dismiss_job(String.to_integer(id))
+
+      ["rollout", id] ->
+        Server.Rollout.dismiss(String.to_integer(id))
+
+      _ ->
+        remember(key)
+    end
+  end
+
+  @doc """
+  The stranded checkout behind `key` taken down (`Server.Worktree.retire/2`): its branch stays. Only
+  one the list still shows as stranded — `{:error, :not_stranded}` otherwise. `:ok` or `{:error, why}`.
+  """
+  def retire_stranded(key) do
+    case Enum.find(stranded(), &(&1.key == key)) do
+      nil ->
+        {:error, :not_stranded}
+
+      %{repo: repo, name: name} ->
+        case Server.Worktree.retire(repo, name) do
+          {:removed, _} -> :ok
+          :none -> :ok
+          {:kept, why} -> {:error, why}
+        end
+    end
   end
 
   # a pane on a prompt is a dialog; else an `awaiting` is a gate (workline at its gate) or a question
@@ -254,6 +305,8 @@ defmodule Server.Office.Needs do
         why = Server.Worktree.holds(repo, name) do
       %{
         key: "stranded:#{repo}:#{name}",
+        repo: repo,
+        name: name,
         kind: "stranded",
         level: "decide",
         thread_id: t && t.id,
@@ -308,5 +361,45 @@ defmodule Server.Office.Needs do
       },
       extra
     )
+  end
+
+  # put away stays away until something newer comes under the key; a stranded checkout or a seats
+  # count has no "newer", so it stays away until it is gone
+  defp put_away?(_item, nil), do: false
+  defp put_away?(%{kind: kind}, _at) when kind in ~w(stranded seats), do: true
+  defp put_away?(item, at), do: DateTime.compare(item.at, at) != :gt
+
+  defp remember(key) do
+    now = DateTime.truncate(DateTime.utc_now(), :second)
+    Repo.insert_all("need_dismissal", [%{key: key, at: now}], on_conflict: {:replace, [:at]}, conflict_target: :key)
+    :ok
+  end
+
+  defp withdraw_ask(id) do
+    with %Message{kind: "prompt", resolved_at: nil} = ask <- Repo.get(Message, id) do
+      operator = Application.get_env(:server, :operator, "andrew")
+      Server.Attention.resolve(ask, "dismissed by #{operator}")
+
+      Server.Channel.post(%{
+        thread_id: ask.thread_id,
+        author: "tlon",
+        reply_to: ask.id,
+        body:
+          "@#{ask.payload["ask"]} #{operator} put your ask away without answering it: go on with your best judgement, or ask again if it still matters"
+      })
+    end
+  end
+
+  # an open blocker on an open thread
+  defp issues(open) do
+    by_id = Map.new(open, &{&1.id, &1})
+
+    for i <- Repo.all(from i in Server.Issue, where: i.state == "open" and not is_nil(i.thread_id)),
+        t = by_id[i.thread_id] do
+      item("issue", "decide", t, "#{i.found_by || "someone"}: #{i.summary}", i.created_at, %{
+        key: "issue:#{i.id}",
+        ref: i.id
+      })
+    end
   end
 end
