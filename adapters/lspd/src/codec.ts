@@ -1,7 +1,7 @@
 // The adapters-lspd wire protocol: length-prefixed JSON over a Unix socket, one message per
 // tool op. A 4-byte big-endian length prefix + the UTF-8 JSON body — unambiguous framing
 // (no escaping issues, unlike newline-delimited). Pure + unit-tested: the daemon and the
-// pi shim both speak it, so this codec is the one seam that must not drift.
+// lsp MCP server both speak it, so this codec is the one seam that must not drift.
 
 import type { LineRange } from "./impact.ts";
 

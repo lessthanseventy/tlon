@@ -84,7 +84,7 @@ function listening(server: net.Server): Promise<net.Server> {
   });
 }
 
-// A tiny client that speaks the codec — mirrors the pi shim's socket client.
+// A tiny client that speaks the codec — mirrors the lsp MCP server's socket client.
 function request(sockPath: string, req: LspdRequest): Promise<LspdResponse> {
   return new Promise((resolve, reject) => {
     const sock = net.createConnection(sockPath);

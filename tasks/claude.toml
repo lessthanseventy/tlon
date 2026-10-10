@@ -1,0 +1,24 @@
+# tasks/claude.toml — Claude Code on a chosen model, as a citizen of a server thread. Included by
+# mise.toml; `mise tasks` lists them all. Each is a model profile on the ollama bucket, reached
+# through Claude Code's gateway (adapters/claude-code/gateway.sh), so none draws on the Claude plan;
+# `server:claude` is the Claude plan itself. A trailing thread id joins it: `mise run claude:code -- 42`.
+
+["claude:balanced"]
+description = "Claude Code on glm-5.2 — the strong everyday driver (976K ctx)"
+run = "TLON_PROVIDER=ollama-cloud adapters/claude-code/launch.sh --model glm-5.2 --effort medium"
+
+["claude:deep"]
+description = "Claude Code on deepseek-v4-pro, effort high — hard reasoning, the tier before the Claude plan"
+run = "TLON_PROVIDER=ollama-cloud adapters/claude-code/launch.sh --model deepseek-v4-pro --effort high"
+
+["claude:code"]
+description = "Claude Code on kimi-k2.7-code — coding-heavy, fewer thinking tokens"
+run = "TLON_PROVIDER=ollama-cloud adapters/claude-code/launch.sh --model kimi-k2.7-code --effort medium"
+
+["claude:fast"]
+description = "Claude Code on deepseek-v4.1-flash, effort low — quick and cheap"
+run = "TLON_PROVIDER=ollama-cloud adapters/claude-code/launch.sh --model deepseek-v4.1-flash --effort low"
+
+["claude:local"]
+description = "Claude Code on qwen3-coder on the local ollama daemon — free, offline, no cloud budget"
+run = "TLON_PROVIDER=ollama adapters/claude-code/launch.sh --model qwen3-coder"

@@ -22,12 +22,14 @@ plugin="$(cd "$adapter/.." && pwd)"
 # boot script exported it before exec'ing this launcher), keep it as-is — per-connect minting targets TLON_MCP_URL's
 # origin, so the token is always minted in the same world that serves /mcp.
 if [ -z "${TLON_MCP_URL:-}" ] || [ -z "${TLON_THREAD:-}" ] || [ -z "${TLON_AUTHOR:-}" ]; then
-  # Optional leading numeric thread-id → join; otherwise open a fresh thread.
+  # A bare numeric argument, wherever it sits (mise appends `-- 42` after a task's model flags), is
+  # a thread to join; otherwise open a fresh thread.
   join_id=""
-  if [ -n "${1:-}" ] && [[ "$1" =~ ^[0-9]+$ ]]; then
-    join_id="$1"
-    shift
-  fi
+  rest=()
+  for arg in "$@"; do
+    if [ -z "$join_id" ] && [[ "$arg" =~ ^[0-9]+$ ]]; then join_id="$arg"; else rest+=("$arg"); fi
+  done
+  set -- "${rest[@]}"
 
   # The CLI's stderr passes through: its own error (no release, service down, no such
   # thread) is the diagnosis, so nothing here guesses at one.

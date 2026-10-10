@@ -71,7 +71,7 @@ and every layer the spine design's re-laid §9 asked for
   sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list;
   a beat incident resolved naming its PR is banked as a `postmortem:` fact.
 - **the toy's generators** (`Server.Generator`, `Server.Persona`, `Server.ToyPool`) — cheap model
-  calls (`:generator_cmd`/`:generator_model`, default pi on the flat ollama flash model), never on a
+  calls (`:generator_cmd`/`:generator_model`, default Claude Code, bare, on the flat ollama flash model), never on a
   render path: `Generator.run/1` is the one door (banter on, `:generator_daily_cap` per day counted in
   `generator_call`, failures included). A seat's persona (`workspace_agent.persona`, with its seed)
   is made at hire or by `tlon-cli persona <ws> <name> [--reroll]`, falling back to the §2 voice table;
@@ -213,7 +213,7 @@ The **shell parity pack** — operate the live channel from the shell, our peer 
 (all via `scripts/tlon-cli.sh` → `bin/server rpc` into the running node, so the service must be up):
 
 - `mise run server:spawn -- "<title>" <agent>` — open a thread, staff+register the agent, mint a
-  token, print the `export TLON_*` block for a pi pane.
+  token, print the `export TLON_*` block for a hand-run pane.
 - `mise run server:roster` — who's on the clock (live sessions, warm/cold).
 - `mise run server:dossier -- <thread-id>` — render a thread's brief (parity with get_dossier).
 - `mise run server:post -- <thread-id> <text…>` — post as the operator (parity with post_message).

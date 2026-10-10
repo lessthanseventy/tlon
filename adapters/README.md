@@ -1,69 +1,41 @@
 # adapters
 
 The hands of the stack. `server` remembers, `office` sees, **`adapters` acts** — it is how a
-working agent reaches server, wakes up already knowing its thread, and banks what it learns.
+working agent reaches the server, wakes up already knowing its thread, and banks what it learns.
 
-adapters is **vendor-agnostic**: the server's channel is MCP, so any harness can be a citizen of a
-thread. adapters holds one thin adapter per harness — **`pi/`** (for `pi`, and the models that
-run through it — codex, glm, kimi, …) and **`claude-code/`** — plus the pi extensions that are
-not server adapters at all (footer, consult, lsp, reload) but live here because they are
-the same kind of thing: TypeScript that pi loads straight from the repo, no build step.
-menard's pi adapter (the guard + format-on-save) is the exception — it ships from
-~/projects/menard, a standalone repo, and ficciones only points pi at it.
+Every coworker runs in Claude Code, on any model (an ollama one through Claude Code's gateway), and
+a **Claude Code mod** — `claude-code/mod.ts`, loaded with `--plugin-dir adapters` — is what makes the
+session a citizen of its thread.
 
 ## Layout
 
 ```
 adapters/
-  AGENTS.md            the module's law — read it first
-  pi/                  the pi adapter (TypeScript, bun)
-    src/extension.ts   pi's lifecycle hooks: register, brief, widget, cadence capture,
-                       thinking presence (and which tool is running)
-    src/doing.ts       a tool call → the office's kind of work (read/edit/bash/…) and its
-                       one-line, redacted summary for the activity feed, both adapters
-    src/brief.ts       the honest brief renderer (pure, unit-tested)
-    src/mcp.ts         a minimal MCP client — the extension's own door to server — and
-                       identityFromEnv(), the one parse of the TLON_* identity
-    src/capture.ts     delta-slicing, secret redaction, the extraction prompt (pure)
-    src/recall.ts      correction detection → a proposed habit (pure)
-    src/cc-*.ts        the claude-code capture hook's body,
-    src/hook.ts        one bun process per fire, run under hook.ts's ceiling
-    src/pi.ts          the slice of pi's ExtensionAPI adapters depends on
-    launch.sh          the `pi:*` model launcher — spawns/joins a thread, exports TLON_*
-  claude-code/         the Claude Code adapter: launch.sh (`server:claude`), the
-                       SessionStart / Stop hook shells (brief, capture), and mod.ts —
-                       presence, as a Claude Code mod (plugin root: adapters/)
-  footer/              a dense 2-line pi statusline — generic, NOT a server adapter
-  consult/             /consult and /fresh — delegate a prompt to a different model
-  menard/             (in ~/projects/menard) the guard + format-on-save for Elixir —
-                      menard is pi's Elixir toolchain, replacing the bare `mix format` that
-                      was adapters/fmt. Shipped from its own repo; its `install:pi` task wires
-                      it on a box without ficciones.
-  lsp/                 the pi shim for the five LSP tools (hover/definition/references/
-                       symbols/diagnostics) + `impact`; forwards over a unix socket to…
-  lspd/                …the LSP sidecar daemon that owns the warm language-server pool
-  reload/              `reload` — respawn pi in place and resume the session
-  skills/              harness-neutral discipline (installed into any harness)
-    coordinate-via-funes/  bank-what-you-learn/  keep-todos-current/  verify-with-evidence/
+  AGENTS.md              the module's law — read it first
+  .claude-plugin/        the tlon-citizen plugin's manifest (the plugin root is adapters/)
+  hooks/hooks.json       names the mod's hooks module
+  claude-code/
+    launch.sh            a citizen's window: identity, MCP servers, settings, the mod
+    gateway.sh           PROVIDER CMD… — a model's provider as Claude Code's environment
+    mod.ts               the mod: presence, brief, capture, wakes, band, commands, tools
+    mod.test.ts          its tests, in Claude Code's own kit
+    lib/                 its pure helpers, tested with bun (brief, capture, recall, doing, consult)
+  lsp/                   the LSP tools as a stdio MCP server, forwarding over a unix socket to…
+  lspd/                  …the LSP sidecar daemon that owns the warm language-server pool
+  skills/                harness-neutral discipline (a citizen loads them as /tlon-citizen:<name>)
+    coordinate-via-funes/  bank-what-you-learn/  keep-todos-current/  verify-with-evidence/  drive-office/
 ```
 
 ## Run it
 
 ```
-mise run adapters:pi:test       # the pi adapter's unit suite (bun)
-mise run adapters:pi:check      # install (frozen) + typecheck + tests — the pi package's gate
-mise run adapters:consult:check # …and the same gate per package:
-mise run adapters:lsp:check
-mise run adapters:lspd:check
-mise run adapters:reload:check
-mise run adapters:footer:check
-mise run adapters:typecheck     # tsc only, every package — the `reload` tool's safety gate
-mise run server:serve           # boot the server's channel against the scratch db for a hand-run pane
+mise run adapters:claude-code:check   # the mod's helpers: install (frozen) + typecheck + tests
+mise run adapters:claude-code:mod     # the mod: validate (strict) + its tests in Claude Code's kit
+mise run adapters:lsp:check           # the LSP MCP server
+mise run adapters:lspd:check          # the LSP daemon
+mise run server:claude                # a citizen on the Claude plan
+mise run claude:balanced              # …or on an ollama model (also claude:deep / code / fast / local)
 ```
 
-The pi-mcp-adapter config (the model's write verbs) is flake-owned: `serverMcpJson` in
-`flake.nix` writes `~/.pi/agent/mcp.json` with the `mcpServers.tlon` entry. The extensions and
-skills are wired into `~/.pi/agent/settings.json` by the flake's `manosWiring` activation.
-
-See `AGENTS.md` for the two-doors-one-token model, the install, and the boundaries every
-adapter holds to.
+See `AGENTS.md` for the boundaries every adapter holds to, and `claude-code/README.md` for what the
+mod does.

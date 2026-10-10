@@ -60,8 +60,8 @@ describe("findRootWith — walk up to a project marker", () => {
   test("mix.exs: finds the server root from a deep lib file", () => {
     expect(findRootWith(`${repo}/server/lib/server/mcp/gateway.ex`, "mix.exs")).toBe(`${repo}/server`);
   });
-  test("tsconfig.json: finds the adapters/consult root", () => {
-    expect(findRootWith(`${repo}/adapters/consult/src/extension.ts`, "tsconfig.json")).toBe(`${repo}/adapters/consult`);
+  test("tsconfig.json: finds the adapters/claude-code root", () => {
+    expect(findRootWith(`${repo}/adapters/claude-code/lib/brief.ts`, "tsconfig.json")).toBe(`${repo}/adapters/claude-code`);
   });
   test("mise.toml: finds the repo root from mise.toml itself", () => {
     expect(findRootWith(`${repo}/mise.toml`, "mise.toml")).toBe(repo);
@@ -69,6 +69,12 @@ describe("findRootWith — walk up to a project marker", () => {
   test("null when no marker is above the file", () => {
     expect(findRootWith("/tmp/orphan.ex", "mix.exs")).toBeNull();
   });
+});
+
+test("docs, mise tasks and CI files route to their servers", () => {
+  expect(adapterForFile("/r/AGENTS.md")?.name).toBe("markdown");
+  expect(adapterForFile("/r/tasks/server.toml")?.name).toBe("toml");
+  expect(adapterForFile("/r/.github/workflows/ci.yml")?.name).toBe("yaml");
 });
 
 describe("ADAPTERS — every adapter declares a server + extensions + a root finder", () => {

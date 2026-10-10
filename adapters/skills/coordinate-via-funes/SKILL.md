@@ -23,11 +23,10 @@ judgment you keep in your own context dies with you.
   link to a diff — anything goes. There is no taxonomy and no required shape beyond a body.
   The failure mode of the channel is noise, and funes ranks and caps the reading, not the
   writing — so post freely and let the surface do the cutting.
-- **Want a second opinion? Say so on the thread and ask the human.** The `/consult [model]`
-  and `/fresh [model]` commands (adapters/consult) delegate a question to another model —
-  `/consult` with your recent session as context, `/fresh` as a clean one-shot. They're
-  human-invoked (pi refuses them mid-turn), so ask the operator to run one rather than
-  improvising a way to reach a peer yourself.
+- **Want a second opinion? Call the `consult` tool.** It asks another ollama model and hands
+  its answer back as the tool's result, mid-turn: `context: transcript` (the default) shows it
+  your recent session, `context: none` is a clean one-shot. The operator has the same as
+  `/consult [model]` and `/fresh [model]`.
 - **Ask a coworker directly with `consult_peer(peer, prompt)`.** It delivers an ask to the
   peer's thread; the peer's answer is mirrored back to your own thread, so you read it in
   your dossier. Address the peer by agent name, never a thread id.

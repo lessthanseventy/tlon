@@ -35,7 +35,7 @@ export class LspClient {
   #nextId = 1;
   #pending = new Map<number, Pending>();
   // textDocument uris we've sent didOpen for, with the on-disk identity of what we sent. The
-  // daemon outlives pi sessions, and per LSP an opened doc means "the CLIENT owns the text" —
+  // daemon outlives agent sessions, and per LSP an opened doc means "the CLIENT owns the text" —
   // the server ignores disk from then on. With didChange unadvertised, a long-lived daemon
   // would answer hover/references/impact against the text as of first open, forever. So each
   // openDoc stats the file and, when disk moved on, closes + reopens with the fresh text.
