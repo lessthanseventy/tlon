@@ -37,7 +37,7 @@ defmodule Server.Office.WriterTest do
     assert {:error, :business} = Writer.write("hi", 1)
 
     File.write!(path, ~s({"wackiness": 3}))
-    assert Writer.tone() =~ "RIMWORLD"
+    assert Writer.tone() =~ "FERAL"
   end
 
   test "a stand-in CLI pins every call to it" do

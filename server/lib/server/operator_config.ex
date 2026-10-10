@@ -93,7 +93,7 @@ defmodule Server.OperatorConfig do
       min: 0,
       max: 3,
       default: 1,
-      doc: "how wild the office's voices are: 0 business (none), 1 business casual, 2 office party, 3 rimworld"
+      doc: "how wild the office's voices are: 0 business (none), 1 business casual, 2 office party, 3 feral"
     },
     %{
       key: "stalled_ticket_minutes",
