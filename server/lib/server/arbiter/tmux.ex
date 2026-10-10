@@ -181,7 +181,9 @@ defmodule Server.Arbiter.Tmux do
   # spawn-on-post and a staffing spawn can never disagree about a seat. Only an author with no seat
   # on the workspace's bench falls back to `launcher_by_engine/1`.
   defp launcher(ws, author) do
-    bench = Workspaces.bench(ws)
+    # everyone hired, not only the crew on shift: an off-shift seat's duty (the sheriff's beat, a
+    # nightly schedule) still runs as that seat, never as the engine fallback
+    bench = Workspaces.bench_all(ws)
 
     case Profiles.seat_profile(author, bench, ws) do
       %Profile{} = profile ->
