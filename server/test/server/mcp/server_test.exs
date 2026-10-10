@@ -47,6 +47,32 @@ defmodule Server.MCP.ServerTest do
     assert status == 401
   end
 
+  test "a 2026-07-28 client is served without a handshake, its bearer still naming who calls", %{token: token} do
+    meta = %{
+      "io.modelcontextprotocol/protocolVersion" => "2026-07-28",
+      "io.modelcontextprotocol/clientInfo" => %{"name" => "funes-test", "version" => "0.0.0"},
+      "io.modelcontextprotocol/clientCapabilities" => %{}
+    }
+
+    version = [{~c"mcp-protocol-version", ~c"2026-07-28"}]
+
+    {200, _, %{"result" => %{"tools" => tools}}} =
+      post(token, nil, request(2, "tools/list", %{"_meta" => meta}), [{~c"mcp-method", ~c"tools/list"} | version])
+
+    assert Enum.any?(tools, &(&1["name"] == "get_dossier"))
+
+    {200, _, %{"result" => result}} =
+      post(
+        token,
+        nil,
+        request(3, "tools/call", %{"name" => "get_dossier", "arguments" => %{}, "_meta" => meta}),
+        [{~c"mcp-method", ~c"tools/call"}, {~c"mcp-name", ~c"get_dossier"} | version]
+      )
+
+    refute result["isError"]
+    assert hd(result["content"])["text"] =~ "review PR 329"
+  end
+
   test "a token this node never minted is refused with 401" do
     {status, _headers, _body} = post("counterfeit", nil, initialize_request())
     assert status == 401
@@ -1468,9 +1494,9 @@ defmodule Server.MCP.ServerTest do
     %{"jsonrpc" => "2.0", "method" => method}
   end
 
-  defp post(token, session, body) do
+  defp post(token, session, body, extra_headers \\ []) do
     headers =
-      [{~c"accept", ~c"application/json, text/event-stream"}] ++
+      [{~c"accept", ~c"application/json, text/event-stream"} | extra_headers] ++
         if(token, do: [{~c"authorization", String.to_charlist("Bearer " <> token)}], else: []) ++
         if session, do: [{~c"mcp-session-id", String.to_charlist(session)}], else: []
 
