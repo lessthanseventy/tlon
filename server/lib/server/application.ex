@@ -15,6 +15,8 @@ defmodule Server.Application do
     # its stop timeout and marks every restart failed.
     :ok = :inet_db.set_lookup([:file, :dns])
 
+    Server.MCP.Tool.init_fence()
+
     # PubSub is always up — it is the switchboard's nudge and cheap to run, and the
     # test harness needs it so Channel.post can broadcast. The Repo is started
     # except under :test (the harness owns its lifecycle). The switchboard runner is
