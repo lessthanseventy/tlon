@@ -146,6 +146,8 @@ export class Sim<L extends { people: Seat[] }> {
   private corkSeen = false
   /** what the server's model wrote for each pet, by occasion (`hear`), and the lines already said */
   private voices: Record<string, Record<string, string[]>> = {}
+  /** the pair's exchanges by occasion, each a list of "Nina: …" / "Argos: …" turns */
+  private duo: Record<string, string[][]> = {}
   private spoken = new Set<string>()
   // the last lines said, so a pet doesn't say the same thing twice running
   private recent: string[] = []
@@ -184,20 +186,34 @@ export class Sim<L extends { people: Seat[] }> {
     this.ideas = ideas
     this.ideasSeen = true
   }
-  /** the pets' lines, fresh from the server (`GET /api/office/pets/:ws`) */
-  hear(voices: Record<string, Record<string, string[]>>) { this.voices = voices }
+  /** the pets' lines, fresh from the server (`GET /api/office/pets/:ws`); the pair's exchanges come as `duo` */
+  hear(voices: Record<string, Record<string, string[] | string[][]>>) {
+    const { duo, ...pets } = voices
+    this.voices = pets as Record<string, Record<string, string[]>>
+    this.duo = (duo ?? {}) as Record<string, string[][]>
+  }
+  /** an exchange the pair has on `occasion` that has not been had yet, else one not had lately; null when the model wrote none */
+  protected exchange(occasion: string): string[] | null {
+    const all = this.duo[occasion] ?? []
+    if (!all.length) return null
+    const key = (x: string[]) => x.join("\n"), unsaid = all.filter((x) => !this.spoken.has(key(x)))
+    const x = unsaid.length ? pick(unsaid) : all.find((y) => !this.recent.includes(key(y))) ?? pick(all)
+    this.spoken.add(key(x))
+    this.recent = [key(x), ...this.recent].slice(0, 8)
+    return x
+  }
   /**
-   * What `pet` says on `occasion`: a line the model wrote that has not been said yet, else (when
-   * it wrote none, or every one has been said) one of the `canned` ones — or, given `parts`, now and
-   * then one put together from them (`riff`) — never one of the last few said; `{name}` is whoever
-   * it is about.
+   * What `pet` says on `occasion`: a line the model wrote that has not been said yet, else one of
+   * its lines not said lately; only when it wrote none, one of the `canned` ones — or, given `parts`,
+   * now and then one put together from them (`riff`) — never one of the last few said; `{name}` is
+   * whoever it is about.
    */
   protected line(pet: string, occasion: string, canned: readonly string[], name = "", parts?: Parameters<typeof riff>[0]) {
     if (pet === "Nina" && canned === (NINA as Record<string, unknown>)[occasion]) canned = bucketFor(occasion, this.temperament, Math.random, this.cat.species)
     const fresh = this.voices[pet]?.[occasion] ?? [], unsaid = fresh.filter((l) => !this.spoken.has(l))
     const l = unsaid.length ? pick(unsaid)
-      : parts && Math.random() < 0.5 ? riff(parts)
-        : pickFresh(fresh.length && Math.random() < 0.5 ? fresh : canned, this.recent)
+      : fresh.length ? pickFresh(fresh, this.recent)
+        : parts && Math.random() < 0.5 ? riff(parts) : pickFresh(canned, this.recent)
     this.spoken.add(l)
     this.recent = [l, ...this.recent].slice(0, 8)
     return l.replaceAll("{name}", name || "you")

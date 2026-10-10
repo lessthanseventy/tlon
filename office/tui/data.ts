@@ -93,7 +93,7 @@ export async function suggestions(ws: number): Promise<CorkNote[]> {
 /** take a suggestion out of the box (it was filed, or thrown out) */
 export const dropSuggestion = (ws: number, id: number) => send("DELETE", "clearing the suggestion", `/office/suggestions/${ws}/${id}`, () => "out of the box")
 /** each pet's lines by occasion, written by the server's model (empty where it is off) */
-export async function pets(ws: number): Promise<Record<string, Record<string, string[]>>> {
+export async function pets(ws: number): Promise<Record<string, Record<string, string[] | string[][]>>> {
   try { const r = await call("GET", `/office/pets/${ws}`); return r.status === 200 ? r.json : {} } catch { return {} }
 }
 export async function thread(id: number): Promise<ThreadView | null> {

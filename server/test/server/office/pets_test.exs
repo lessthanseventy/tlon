@@ -47,7 +47,8 @@ defmodule Server.Office.PetsTest do
       assert voices["Nina"] == %{"pet" => ["Adore me, peasant."], "muse" => ["Sparkle check."]}
       # Argos has no "pet" occasion (his is "pat"): only what is his is kept
       assert voices["Argos"] == %{"muse" => ["Sparkle check."]}
-      assert File.read!(calls) == "x\nx\n"
+      # one batch per pet and one for the pair (whose reply here holds no exchanges, so none is kept)
+      assert File.read!(calls) == "x\nx\nx\n"
     end
 
     test "with the pets' voices off there is nothing, and nothing is asked", %{ws: ws} do
@@ -64,6 +65,36 @@ defmodule Server.Office.PetsTest do
     refute nina =~ ~s("belly":)
     assert Pets.prompt("Argos", ctx) =~ "Homer"
     assert Pets.prompt("Argos", ctx) =~ ~s("rally") and nina =~ ~s("shipped")
+  end
+
+  test "the scene carries what has been happening: the hour, the shift, the weather, what shipped, the lobby" do
+    ctx = %{
+      crew: [],
+      tickets: [],
+      clock: "evening",
+      shift: "night",
+      weather: %{kind: "rain", temp_c: 9, desc: "Light rain"},
+      landed: ["Souls step 1: SOUL.md files on the cards"],
+      lobby: ["uqbar: the toggle is in the sidebar now"]
+    }
+
+    for ask <- [Pets.prompt("Nina", ctx), Pets.prompt_duo(ctx)] do
+      assert ask =~ "It is evening, and the night crew is on."
+      assert ask =~ "Outside: Light rain."
+      assert ask =~ "Shipped today: Souls step 1"
+      assert ask =~ "- uqbar: the toggle is in the sidebar now"
+    end
+
+    assert Pets.prompt_duo(ctx) =~ "WHO NINA IS" and Pets.prompt_duo(ctx) =~ ~s("chat")
+    assert Pets.clock({{2026, 10, 9}, {2, 0, 0}}) == "the small hours of the night"
+  end
+
+  test "the pair's exchanges keep two or more turns, each said by Nina or Argos" do
+    out = ~s({"exchanges": {"chat": [["Argos: Troy shipped!", "Nina: It was Souls, darling."], ["Argos: alone"],
+             ["Nina: hm", "Gary: intruder"]], "nope": [["Nina: a", "Argos: b"]]}})
+
+    assert Pets.parse_duo(out) == %{"chat" => [["Argos: Troy shipped!", "Nina: It was Souls, darling."]]}
+    assert Pets.parse_duo("no json") == nil
   end
 
   test "a reply keeps only the pet's occasions, as trimmed, short, non-empty lines" do

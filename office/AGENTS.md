@@ -20,7 +20,7 @@ linked window at a time, Ctrl-] back to the room).
   the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
   a pet's temperament (`temperament.ts`: warmth/wits/energy, -2..2, as policy over the sim's chance tables; `pets.ts` resolves `pets.json` — `TLON_PETS`; the cat slot is a cat, rabbit or bird, polled live like `looks.json`, absent means today's room byte for byte),
   a coworker's soul (`souls.ts`: `~/.config/tlon/souls/<name>.md` — `TLON_SOULS` — parsed by `## ` headings into `sections`, forgiving; polled live by dir signature like `looks.json`; read-only on the person's card, nothing else consumes it yet, and a soul never decides work),
-  what Nina says (`voices.ts`, sweet or sassy by warmth; Argos, the wide room's dog, has his lines in `rooms/wide.ts`),
+  what Nina says (`voices.ts`, sweet or sassy by warmth; Argos, the wide room's dog, has his lines in `kit/pets.ts`) — the fallback only: the server's model lines come first (`Sim.hear`, `Server.Office.Pets`), and the pair's exchanges (`duo`) are said turn by turn (`WideRoom.talkOut`),
   drawing people and Nina into a `Scene` (`draw.ts`: what each worker is doing mid-turn, a worker
   making a fuss of a pet), the furniture every room has (`furniture.ts`),
   the home's tiles as pixel art (`homeart.ts`: `TILE_ART`, kind → painter, a missing kind draws plain; `renderHome` the build grid as a Frame, `paintAnnex` the placed tiles as a strip; the snapshot's weather rains and snows on the garden tile),
