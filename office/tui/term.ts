@@ -8,6 +8,7 @@ export type Input =
   | { t: "cell"; w: number; h: number }
   | { t: "graphics"; ok: boolean }
   | { t: "da" }
+  | { t: "focus"; on: boolean }
 
 export const ESC = "\x1b"
 let muted = false
@@ -19,12 +20,12 @@ export function enter() {
   process.stdin.setRawMode(true)
   process.stdin.resume()
   // alt screen, hide cursor, all-motion mouse in SGR form, bracketed paste (a pasted newline is
-  // text, not Enter); the window titled "tlon office" (the old title saved on the terminal's
+  // text, not Enter), focus reports (the margin fades only while looked at); the window titled "tlon office" (the old title saved on the terminal's
   // stack), so a window manager can match it
-  out(`${ESC}[?1049h${ESC}[?25l${ESC}[?1003h${ESC}[?1006h${ESC}[?2004h${ESC}[2J${ESC}[22;2t${ESC}]2;tlon office${ESC}\\`)
+  out(`${ESC}[?1049h${ESC}[?25l${ESC}[?1003h${ESC}[?1006h${ESC}[?2004h${ESC}[?1004h${ESC}[2J${ESC}[22;2t${ESC}]2;tlon office${ESC}\\`)
 }
 export function leave() {
-  out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[?25h${ESC}[?1049l${ESC}[23;2t`)
+  out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[?1004l${ESC}[?25h${ESC}[?1049l${ESC}[23;2t`)
   process.stdin.setRawMode(false)
 }
 /** ask for the cell size in pixels, and whether kitty graphics work (answered before the DA reply, or never) */
@@ -68,6 +69,7 @@ export function tokenize(buf: string): { inputs: Input[]; rest: string } {
     } else if ((m = s.match(/^\x1b\[6;(\d+);(\d+)t/))) inputs.push({ t: "cell", h: Number(m[1]), w: Number(m[2]) })
     else if ((m = s.match(/^\x1b_G([^\x1b]*)\x1b\\/))) inputs.push({ t: "graphics", ok: /;OK$/.test(m[1]!) })
     else if ((m = s.match(/^\x1b\[\?[\d;]*c/))) inputs.push({ t: "da" })
+    else if ((m = s.match(/^\x1b\[([IO])/))) inputs.push({ t: "focus", on: m[1] === "I" })
     else if ((m = s.match(/^\x1b(\[[\d;]*[~A-Zu]|O[A-D])/))) inputs.push({ t: "key", key: KEYS[m[1]!] ?? `esc${m[1]}` })
     // a sequence cut off at the chunk's end: wait for the rest
     else if (/^\x1b(\[[\d;<?]*|_G[^\x1b]*|_G[^\x1b]*\x1b|O)$/.test(s)) return { inputs, rest: s }
