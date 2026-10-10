@@ -141,11 +141,51 @@ defmodule Server.Office.Room do
       tmux: System.find_executable("tmux") != nil,
       disk_pct: disk_pct(),
       mem_pct: mem_pct(),
-      load: load()
+      load: load(),
+      checks: checks(),
+      merge_queue: if(db, do: merge_queue(), else: [])
     }
 
     problems = problems(h)
     Map.merge(h, %{state: if(problems == [], do: "ok", else: "warn"), problems: problems})
+  end
+
+  @doc """
+  The machine's checks queue (`scripts/checks-queue.sh`): the full check running now, as it said
+  when it took the lock, and the ones waiting their turn, each `"<command> (pid N) in <dir> since
+  HH:MM:SS"`. A waiter whose process is gone is not counted. `%{running: line | nil, waiting: [line]}`.
+  """
+  def checks(dir \\ System.get_env("XDG_RUNTIME_DIR") || "/tmp") do
+    running =
+      case File.read(Path.join(dir, "tlon-checks.holder")) do
+        {:ok, line} -> if String.trim(line) != "", do: String.trim(line)
+        _ -> nil
+      end
+
+    waiting =
+      for name <- ls(Path.join(dir, "tlon-checks.wait")),
+          File.exists?("/proc/#{name}"),
+          {:ok, line} <- [File.read(Path.join([dir, "tlon-checks.wait", name]))],
+          do: String.trim(line)
+
+    %{running: running, waiting: waiting}
+  end
+
+  @doc """
+  The merge queue: worklines approved and landing, one at a time (`Server.Jobs.Land`) — the one
+  being gated now first, then the queued in order. `[%{thread_id, title, state}]`, `state`
+  `"landing"` or `"queued"`.
+  """
+  def merge_queue do
+    from(j in Oban.Job,
+      join: t in Server.Thread,
+      on: t.id == type(fragment("(?->>'thread_id')", j.args), :integer),
+      where: j.worker == "Server.Jobs.Land" and j.state in ["executing", "available", "scheduled", "retryable"],
+      order_by: [desc: fragment("? = 'executing'", j.state), asc: j.id],
+      select: %{thread_id: t.id, title: t.title, state: j.state}
+    )
+    |> Repo.all()
+    |> Enum.map(&%{&1 | state: if(&1.state == "executing", do: "landing", else: "queued")})
   end
 
   defp problems(h) do
@@ -381,4 +421,11 @@ defmodule Server.Office.Room do
   @doc "Every closed thread, any workspace, newest first — what the finder searches beside the open ones."
   @spec history() :: [map()]
   def history, do: Enum.map(Channel.closed_threads(), &Map.take(&1, [:id, :title, :workspace_id, :at]))
+
+  defp ls(dir) do
+    case File.ls(dir) do
+      {:ok, names} -> Enum.sort(names)
+      _ -> []
+    end
+  end
 end

@@ -1040,6 +1040,15 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ok(true, `tlon ${rack.version}, up ${up}`), ok(rack.db, "the database answers"), ok(rack.jobs, rack.jobs ? "the job queue runs (staffing, sweeps, schedules)" : "no job queue on this node"),
         ok(rack.failed_jobs === 0, `${rack.failed_jobs} failed job(s) today`), ok(rack.tmux, "tmux is there for the coworkers"),
         { segs: [dim(`disk ${rack.disk_pct ?? "?"}% · memory ${rack.mem_pct ?? "?"}% · load ${rack.load ?? "?"}`)] },
+        { segs: [plain("")] },
+        { segs: [key("CHECKS QUEUE"), dim("  one full check at a time")] },
+        ...(rack.checks?.running ? [{ segs: [{ s: "▶ ", fg: ROLE.live }, plain(rack.checks.running)] }] : [{ segs: [dim("  idle")] }]),
+        ...(rack.checks?.waiting ?? []).map((w, i): Row => ({ segs: [dim(`${i + 1}. `), plain(w)] })),
+        { segs: [plain("")] },
+        { segs: [key("MERGE QUEUE"), dim("  approved worklines, landing one at a time")] },
+        ...((rack.merge_queue ?? []).length
+          ? (rack.merge_queue ?? []).map((m): Row => ({ segs: [{ s: m.state === "landing" ? "▶ " : "⧗ ", fg: m.state === "landing" ? ROLE.live : ROLE.inactive }, tidSeg(m.thread_id), plain(m.title)], open: () => goThread(m.thread_id, null) }))
+          : [{ segs: [dim("  empty")] }]),
       ]
       return { title: `THE RACK · ${rack.state === "ok" ? "all green" : "needs a look"}`, rows, actions: [back1] }
     }

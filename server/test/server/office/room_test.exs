@@ -1,3 +1,42 @@
+defmodule Server.Office.RoomChecksTest do
+  # The rack's queues: the machine's checks queue as its lock files say it, and the merge queue.
+  use ExUnit.Case, async: false
+  use Oban.Testing, repo: Server.Repo
+
+  import Ecto.Query
+
+  alias Server.Office.Room
+
+  test "the checks queue: who holds the lock and who waits, a waiter whose process is gone not counted" do
+    dir = Path.join(System.tmp_dir!(), "checks-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(Path.join(dir, "tlon-checks.wait"))
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    assert Room.checks(dir) == %{running: nil, waiting: []}
+
+    File.write!(Path.join(dir, "tlon-checks.holder"), "mise run check:all (pid 1) in /w since 21:49:17\n")
+    me = System.pid()
+    File.write!(Path.join([dir, "tlon-checks.wait", me]), "mise run check:all (pid #{me}) in /v since 21:50:00\n")
+    File.write!(Path.join([dir, "tlon-checks.wait", "999999999"]), "gone\n")
+
+    assert %{running: "mise run check:all (pid 1) in /w since 21:49:17", waiting: [waiter]} = Room.checks(dir)
+    assert waiter =~ "in /v"
+  end
+
+  test "the merge queue: the landing one first, then the queued, by thread" do
+    Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    {:ok, a} = Server.Channel.open_thread(%{title: "first approved"})
+    {:ok, b} = Server.Channel.open_thread(%{title: "second approved"})
+    {:ok, _} = %{thread_id: a.id} |> Server.Jobs.Land.new() |> Oban.insert()
+    {:ok, jb} = %{thread_id: b.id} |> Server.Jobs.Land.new() |> Oban.insert()
+    Server.Repo.update_all(from(j in Oban.Job, where: j.id == ^jb.id), set: [state: "executing"])
+
+    assert [%{title: "second approved", state: "landing"}, %{title: "first approved", state: "queued"}] =
+             Room.merge_queue()
+  end
+end
+
 defmodule Server.Office.RoomTest do
   # `Server.Office.Room` — the reads behind the office's things you open: the in-tray, the beacon,
   # the rack, the bookshelf, the ticket board, the finder's history.
