@@ -22,10 +22,20 @@ export function loadHome(path: string = HOME_PATH): Home {
   return { tiles: [] }
 }
 
+/** tiles on disk whose kind this build doesn't know (a reverted kind): kept opaque so a save doesn't lose them */
+function unknownTiles(path: string): unknown[] {
+  try {
+    const j = JSON.parse(readFileSync(path, "utf8"))
+    return (Array.isArray(j?.tiles) ? j.tiles : []).filter((t: { kind?: unknown } | null) =>
+      typeof t === "object" && t !== null && typeof t.kind === "string" && !CATALOGUE.includes(t.kind as HomeTile["kind"]))
+  } catch { return [] }
+}
+
 export function saveHome(home: Home, path: string = HOME_PATH): void {
   try {
     mkdirSync(dirname(path), { recursive: true })
-    writeFileSync(path, `${JSON.stringify(home, null, 2)}\n`)
+    const out = { ...home, tiles: [...home.tiles, ...unknownTiles(path)] }
+    writeFileSync(path, `${JSON.stringify(out, null, 2)}\n`)
   } catch { /* a read-only or blocked home: it just won't remember */ }
 }
 
