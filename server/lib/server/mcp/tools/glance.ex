@@ -25,7 +25,10 @@ defmodule Server.MCP.Tool.OfficeGlance do
   end
 
   defp glance(%Thread{workspace_id: ws} = thread, agent) when is_integer(ws) do
+    seat = Enum.find(Server.Workspaces.bench_all(ws), &(&1.name == agent))
+
     %{
+      archetype: seat && seat.archetype,
       crew: crew(ws, agent),
       red: red(ws, thread.id),
       persona: persona(ws, agent),
@@ -34,7 +37,7 @@ defmodule Server.MCP.Tool.OfficeGlance do
     }
   end
 
-  defp glance(_thread, _agent), do: %{crew: [], red: [], persona: nil, line: nil, landed: []}
+  defp glance(_thread, _agent), do: %{archetype: nil, crew: [], red: [], persona: nil, line: nil, landed: []}
 
   defp crew(ws, me) do
     turns = Server.Presence.Thinking.thinking_all()

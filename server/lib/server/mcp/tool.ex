@@ -48,9 +48,10 @@ defmodule Server.MCP.Tool do
   @spec refusal(module(), Frame.t()) :: String.t() | nil
   def refusal(module, frame) do
     name = tool_name(module)
-    identity = Server.MCP.Identity.from_frame(frame, touch: false)
 
-    with false <- name in @adapter_verbs,
+    with %{} <- Frame.authorization(frame),
+         identity = Server.MCP.Identity.from_frame(frame, touch: false),
+         false <- name in @adapter_verbs,
          %Server.Thread{workspace_id: ws} when is_integer(ws) <- Server.Repo.get(Server.Thread, identity.thread_id),
          %Server.Profile{mcp: %{"tlon" => %{"excludeTools" => cut}}} <-
            Server.Profiles.seat_profile(identity.agent, Server.Workspaces.bench_all(ws), ws),

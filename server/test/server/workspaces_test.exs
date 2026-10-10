@@ -389,7 +389,8 @@ defmodule Server.WorkspacesTest do
 
       profile = Server.Profiles.fetch("tertius", ws.id)
       assert profile.model == %{provider: "ollama-cloud", model: "glm-5.2", thinking: "medium"}
-      assert profile.harness == :pi, "a non-anthropic pin brings pi back — the harness follows the model"
+      assert profile.harness == :claude_code
+      assert Server.Harness.ClaudeCode.launch_command(profile) =~ "TLON_PROVIDER=ollama-cloud"
       assert Server.Profiles.fetch("tertius").model.model == "claude-sonnet-5-5"
     end
   end

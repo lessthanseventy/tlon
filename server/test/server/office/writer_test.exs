@@ -13,10 +13,10 @@ defmodule Server.Office.WriterTest do
   test "by day it is mostly Haiku with some deepseek; by night only the ollama models", %{ws: ws} do
     day = Writer.pool(ws.id)
     assert {"claude", "haiku"} in day and Enum.count(day, &(&1 == {"claude", "haiku"})) > 1
-    assert Enum.any?(day, &match?({"pi", _}, &1))
+    assert Enum.any?(day, &match?({"claude", "ollama-cloud/" <> _}, &1))
 
     {:ok, _} = Server.Shifts.switch(ws.id, "night")
-    assert Enum.all?(Writer.pool(ws.id), &match?({"pi", "ollama-cloud/" <> _}, &1))
+    assert Enum.all?(Writer.pool(ws.id), &match?({"claude", "ollama-cloud/" <> _}, &1))
   end
 
   test "the wackiness dial's tone: business writes nothing, each level up is wilder" do

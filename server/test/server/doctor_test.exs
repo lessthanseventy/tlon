@@ -38,6 +38,7 @@ defmodule Server.DoctorTest do
                "ticket_thread",
                "todo",
                "toy_pool",
+               "wake",
                "workspace",
                "workspace_agent",
                "workspace_policy",

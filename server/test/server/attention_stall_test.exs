@@ -73,7 +73,7 @@ defmodule Server.Attention.StallTest do
   test "a pane waiting on a permission dialog is the prompt's to report, not a stall", %{ws: ws, thread: t} do
     tmux(leaf(t.id))
     :ok = Thinking.thinking(t.id, "builder")
-    Process.put(:screen, File.read!("test/fixtures/panes/pi_permission_prompt.txt"))
+    Process.put(:screen, File.read!("test/fixtures/panes/claude_permission_prompt.txt"))
     :ok = Server.Attention.tick(ws.id)
 
     panes = Stall.tick(%{}, now: at(0))
