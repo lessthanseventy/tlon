@@ -64,3 +64,21 @@ export function drawPlane(sc: Scene, p: Plane) {
   const x = Math.round(p.at.x), y = Math.round(p.at.y)
   sc.overhead.push(() => sc.blit([...frame], x, y, { p: ROLE.prose, k: ROLE.fieldInk }))
 }
+
+const HANDOFF_WINDOW = 60_000
+/**
+ * Who held the thread before its lead, when a staffing hand-off (`visits`) to that lead is under a
+ * minute old: the post passes over them on its way. Only while a uqbar session is live; a true lead
+ * reassignment leaves no record to read.
+ */
+export function handoffFrom(
+  visits: { from: string; to: string; at: string }[],
+  a: { uqbar?: unknown; threads: { id: number; lead?: string | null }[] },
+  tid: number,
+  now: number,
+): string | null {
+  const lead = a.threads.find((t) => t.id === tid)?.lead
+  if (!a.uqbar || !lead) return null
+  const fresh = visits.filter((v) => v.to === lead && now - Date.parse(v.at) <= HANDOFF_WINDOW)
+  return fresh.reduce<typeof fresh[number] | null>((m, v) => (!m || v.at > m.at ? v : m), null)?.from ?? null
+}

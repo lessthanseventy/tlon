@@ -159,11 +159,12 @@ export class WideRoom extends Sim<Layout> {
     return this.book.flying
   }
   /** a uqbar post to thread `tid`: a page tears out of the book and flies to its lead's desk, else its card */
-  fly(tid: number, a: Agents) {
+  fly(tid: number, a: Agents, passing: string | null = null) {
     const lead = a.threads.find((t) => t.id === tid)?.lead
     const who = lead ? [...this.actors.values()].find((x) => x.seat.agent === lead) : undefined
     const to = who ? { x: who.x, y: who.y - 10 } : this.cards.get(tid) ?? this.boardEdge
-    this.planes.push(launch({ x: this.book.x, y: this.book.y }, [], to))
+    const old = passing ? this.actors.get(passing) : undefined
+    this.planes.push(launch({ x: this.book.x, y: this.book.y }, old ? [{ x: old.x, y: old.y - 10 }] : [], to))
   }
   private stepPlanes(): boolean {
     this.planes = this.planes.map(stepPlane).filter((p): p is Plane => p !== null)

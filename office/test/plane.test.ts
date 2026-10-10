@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { FOLD, FRAMES, TEAR, UNFOLD, caughtNth, drawPlane, freshPosts, launch, stepPlane, type Plane } from "../kit/plane"
+import { FOLD, FRAMES, TEAR, UNFOLD, caughtNth, drawPlane, freshPosts, handoffFrom, launch, stepPlane, type Plane } from "../kit/plane"
 import { Scene } from "../kit/draw"
 
 const run = (p: Plane | null, max = 500) => {
@@ -72,5 +72,23 @@ describe("drawing the plane", () => {
       drawPlane(sc, { phase, t: 2, at: { x: 5, y: 5 }, legs: [], hold: 0 })
       expect(sc.overhead.length - before, phase).toBe(1)
     }
+  })
+})
+
+describe("handoffFrom", () => {
+  const NOW = Date.parse("2026-10-10T03:00:00Z")
+  const visit = (from: string, to: string, secs: number) => ({ from, to, workspace_id: 1, at: new Date(NOW - secs * 1000).toISOString() })
+  const a = (live: boolean) => ({
+    uqbar: live ? { agent: "uqbar", thread_id: 1, title: "", warm: false } : null,
+    threads: [{ id: 7, lead: "w1" }],
+  })
+  test("the freshest staffing hand-off to the post's lead, within a minute: the old lead's name", () => {
+    const vs = [visit("a", "w1", 50), visit("b", "w1", 10), visit("c", "w9", 5)]
+    expect(handoffFrom(vs, a(true), 7, NOW)).toBe("b")
+  })
+  test("none when stale, when it was not to this lead, or when no uqbar session is live", () => {
+    expect(handoffFrom([visit("a", "w1", 90)], a(true), 7, NOW)).toBeNull()
+    expect(handoffFrom([visit("a", "w2", 5)], a(true), 7, NOW)).toBeNull()
+    expect(handoffFrom([visit("a", "w1", 5)], a(false), 7, NOW)).toBeNull()
   })
 })

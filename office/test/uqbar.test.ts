@@ -150,6 +150,18 @@ describe("torn pages", () => {
     expect(r.cards.has(102)).toBe(false)
     expect(last).toEqual((r as unknown as { boardEdge: { x: number; y: number } }).boardEdge)
   })
+  test("a hand-off flight passes over the old lead's desk first", () => {
+    const seen = seeded(3, () => {
+      const room = new WideRoom(WIDTH), v = viewOf(office(3), 1), r = room as unknown as Inner & { fly(t: number, a: unknown, p: string): void }
+      room.render(v, focus, measure, NOW)
+      for (let i = 0; i < 300; i++) room.step(v)
+      r.fly(102, v, "w1")
+      const old = r.actors.get("w1")!, hit: boolean[] = []
+      while (r.planes.length) { room.step(v); hit.push(r.planes.some((p) => p.phase === "glide" && p.at.x === old.x && p.at.y === old.y - 10)) }
+      return hit.some(Boolean)
+    })
+    expect(seen).toBe(true)
+  })
   test("no plane in flight: the golden frames do not move", () => {
     expect(frameHashes()).toEqual(JSON.parse(readFileSync(GOLDEN, "utf8")))
   })
