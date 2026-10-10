@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { contrast, ROLE } from "../kit/palette"
-import { FADE_S, FLOOR, HOLD_S, Looks, inkAlpha, linesOf, refsOf, tintInk, type Note } from "../kit/margin"
+import { FADE_S, FLOOR, HOLD_S, Looks, inkAlpha, linesOf, marginInk, refsOf, tintInk, type Note } from "../kit/margin"
 import { MIN_CONTRAST } from "../tui/paint"
 
 const note = (id: number, at: number, body = `n${id}`): Note => ({ id, author: "uqbar", body, at })
@@ -59,5 +59,22 @@ describe("lines", () => {
     expect(got[0]!.lit).toBe(true)
     expect(got[1]!.lit).toBe(false)
     expect(got[0]!.tid).toBe(107)
+  })
+})
+
+describe("marginInk", () => {
+  test("text ink anchored bottom-left of the viewport, newest on top, one hit per linked note", () => {
+    const notes = [note(2, 20, "#188 closed"), note(1, 10, "cut 650fa4a")]
+    const { ink, hits } = marginInk(notes, new Looks(0), null, { x: 50, y: 10, w: 300, h: 100 })
+    const texts = ink.flatMap((i) => (i.t === "text" ? [i] : []))
+    expect(texts.map((i) => i.s)).toEqual(["#188 closed", "cut 650fa4a"])
+    expect(texts[0]).toMatchObject({ x: 52, align: "left" })
+    expect(texts[0]!.y).toBeLessThan(texts[1]!.y)
+    expect(texts[1]!.y).toBeLessThanOrEqual(10 + 100)
+    expect(hits).toHaveLength(1)
+    expect(hits[0]!.act).toEqual({ kind: "thread", tid: 188 })
+    expect(hits[0]!.note).toBe(188)
+    expect(hits[0]!.y).toBeLessThanOrEqual(texts[0]!.y)
+    expect(hits[0]!.y + hits[0]!.h).toBeGreaterThan(texts[0]!.y)
   })
 })

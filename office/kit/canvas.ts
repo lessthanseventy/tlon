@@ -5,7 +5,8 @@ import { rgb } from "./palette"
 import type { Act } from "./crew"
 
 /** a click target, in logical pixels */
-export type Hit = { x: number; y: number; w: number; h: number; tip: string; act: Act }
+/** `note`: the thread a margin note names — hovering it lights that card (see kit/margin.ts) */
+export type Hit = { x: number; y: number; w: number; h: number; tip: string; act: Act; note?: number }
 /**
  * Over the art: text (`size` the font's px at the desktop's 3x — a hint; a terminal has one size),
  * the corner brackets around a picked person, and a speech balloon of a few wrapped lines.
