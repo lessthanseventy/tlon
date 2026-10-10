@@ -207,10 +207,10 @@ defmodule Server.EpicsTest do
       assert Intake.next(ws.id).id == started_next.id
     end
 
-    test "loose tickets keep newest-first and a blocked step is skipped", %{ws: ws} do
-      file(ws, "old")
-      new = file(ws, "new")
-      assert Intake.next(ws.id).id == new.id
+    test "loose tickets go filed-first and a blocked step is skipped", %{ws: ws} do
+      old = file(ws, "old")
+      file(ws, "new")
+      assert Intake.next(ws.id).id == old.id
 
       e = epic(ws, "Toy", %{priority: "high"})
       s1 = file(ws, "s1", %{sort: 1})

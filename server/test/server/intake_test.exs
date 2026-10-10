@@ -35,18 +35,21 @@ defmodule Server.IntakeTest do
     refute_received {:routed, _}
   end
 
-  test "among equally urgent tickets, the one on top of the board goes first", %{ws: ws, route: route} do
-    older = file(ws, "older")
-    newer = file(ws, "newer")
-    assert hd(Tickets.in_workspace(ws.id)).id == newer.id
-    assert Intake.next(ws.id).id == newer.id
+  test "among equally urgent tickets, the one on top of the board goes first: filed first, unless moved", %{
+    ws: ws,
+    route: route
+  } do
+    step1 = file(ws, "step 1")
+    step2 = file(ws, "step 2")
+    assert hd(Tickets.in_workspace(ws.id)).id == step1.id
+    assert Intake.next(ws.id).id == step1.id
 
-    :ok = Tickets.reorder(older, :up)
-    assert hd(Tickets.in_workspace(ws.id)).id == older.id
+    :ok = Tickets.reorder(step2, :up)
+    assert hd(Tickets.in_workspace(ws.id)).id == step2.id
 
     Intake.run(cap: 4, route: route)
     assert_received {:routed, id}
-    assert id == older.id
+    assert id == step2.id
   end
 
   test "a held ticket is never routed — the next one goes instead", %{ws: ws, route: route} do

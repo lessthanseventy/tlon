@@ -102,7 +102,8 @@ defmodule Server.Intake do
   The ticket intake starts next in workspace `ws`: the most urgent backlog ticket nothing blocks, or
   nil. An epic is never routed; its children are, by the higher of their own and their epic's priority,
   the children of an epic already `doing` first, each epic's lowest-`sort` step before its later ones.
-  Equally urgent loose tickets go in board order (`Server.Tickets.in_workspace/1`), the top first.
+  Equally urgent loose tickets go in board order (`Server.Tickets.in_workspace/1`), the top first:
+  filed first, taken first, unless someone moved one.
   """
   def next(ws) do
     blocked = Server.Tickets.blocked_in_workspace(ws)
@@ -143,7 +144,7 @@ defmodule Server.Intake do
   defp rank(ticket, epics) do
     epic = epics[ticket.id]
     urgency = Enum.min([Ticket.urgency(ticket) | List.wrap(epic && Ticket.urgency(epic))])
-    {urgency, if(epic && epic.status == "doing", do: 0, else: 1), -(ticket.sort || 0), -ticket.id}
+    {urgency, if(epic && epic.status == "doing", do: 0, else: 1), ticket.sort || 0, ticket.id}
   end
 
   @doc "Whether a ticket is parked by the `held` label — intake never starts it."
