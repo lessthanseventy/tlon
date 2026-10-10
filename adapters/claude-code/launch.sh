@@ -129,10 +129,20 @@ fi
 # Nobody is at the keyboard when the service spawns this window (one-brain B/3): pre-accept
 # Claude Code's folder-trust dialog for the directory it starts in, or the pane sits on the
 # prompt forever. The dirs Tlön spawns into are the operator's own repos and their worktrees.
-if command -v jq >/dev/null 2>&1; then
+# Concurrent boots take turns on a lock and each writes its own temp file, so no spawn loses
+# another's entry; a running Claude Code writing the file in between can still be overwritten.
+if command -v jq >/dev/null 2>&1 && command -v flock >/dev/null 2>&1; then
   cj="$HOME/.claude.json"
-  [ -s "$cj" ] || echo '{}' > "$cj"
-  jq --arg d "$PWD" '.projects[$d] = ((.projects[$d] // {}) + {hasTrustDialogAccepted: true})' "$cj" > "$cj.tmp" && mv "$cj.tmp" "$cj"
+  (
+    flock 9
+    [ -s "$cj" ] || echo '{}' > "$cj"
+    tmp="$(mktemp "$cj.XXXXXX")"
+    if jq --arg d "$PWD" '.projects[$d] = ((.projects[$d] // {}) + {hasTrustDialogAccepted: true})' "$cj" > "$tmp"; then
+      mv "$tmp" "$cj"
+    else
+      rm -f "$tmp"
+    fi
+  ) 9>"$cj.tlon-lock" || true
 fi
 
 # The provider's endpoint (gateway.sh): an ollama model never draws on the Claude plan.
