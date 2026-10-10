@@ -97,6 +97,7 @@ defmodule Server.MCP.ServerTest do
              Enum.sort([
                "register",
                "post_message",
+               "margin_note",
                "advance_stage",
                "submit_review",
                "send_back",
@@ -1535,6 +1536,26 @@ defmodule Server.MCP.ServerTest do
              %{agent: "Doer", kind: "test", summary: "Bash · mise run check"},
              %{kind: "post", summary: "Post · green"}
            ] = Server.Presence.Thinking.activity(thread.id)
+  end
+
+  test "margin_note writes one margin line on the workspace's root thread, as the bound agent; bad text writes nothing" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Margins"})
+    {:ok, root} = Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
+    {:ok, work} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "uqbar", mandate: "keeper", engine: "fresh"})
+    token = MCP.Tokens.mint(work, agent)
+    session = handshake(token)
+
+    refute call(token, session, 2, "margin_note", %{"text" => " #174 back to build "})["isError"]
+
+    assert [%Message{thread_id: tid, author: "uqbar", kind: "margin", body: "#174 back to build"}] =
+             Repo.all(from(m in Message, where: m.kind == "margin"))
+
+    assert tid == root.id
+
+    assert call(token, session, 3, "margin_note", %{"text" => "  "})["isError"]
+    assert call(token, session, 4, "margin_note", %{"text" => String.duplicate("x", 141)})["isError"]
+    assert Repo.aggregate(from(m in Message, where: m.kind == "margin"), :count) == 1
   end
 
   defp bank!(thread, text) do
