@@ -265,24 +265,48 @@ defmodule Server.Arbiter.Tmux do
   # takes an Enter: the text lands, the Enter is swallowed, and the coworker never starts. So after
   # the Enter, look again a few times; while our text still sits in the input, press Enter again.
   defp confirm(ws, index, text) do
-    # out to two minutes: a Claude Code session still loading its hooks and MCP servers takes that
-    delays = Application.get_env(:server, :tmux_confirm_ms, [2_000, 4_000, 8_000, 15_000, 30_000, 60_000])
+    # out to about ten minutes: a Claude Code pane still loading its hooks and MCP servers swallowed
+    # Enters for longer than the two minutes this once allowed, and the message sat typed and unsent
+    delays = confirm_delays()
 
     Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-      Enum.reduce_while(delays, nil, fn ms, _ ->
-        Process.sleep(ms)
-        look_again(ws, index, text)
-      end)
+      result =
+        delays
+        |> Enum.with_index(1)
+        |> Enum.reduce_while(:pending, fn {ms, n}, _ ->
+          Process.sleep(ms)
+          look_again(ws, index, text, n)
+        end)
+
+      if result == :pending,
+        do: Logger.warning("wake: window #{index} on workspace #{ws} still holds its message unsent after every Enter")
     end)
   end
 
+  @doc "The waits between looks at a woken pane (`config :server, :tmux_confirm_ms` overrides), in ms."
+  def confirm_delays,
+    do:
+      Application.get_env(:server, :tmux_confirm_ms, [
+        2_000,
+        4_000,
+        8_000,
+        15_000,
+        30_000,
+        60_000,
+        120_000,
+        180_000,
+        180_000
+      ])
+
   # one look at the pane: our text still waiting is another Enter and another look; anything else, done
-  defp look_again(ws, index, text) do
+  defp look_again(ws, index, text, n) do
     with {pane, 0} when is_binary(pane) <- Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, index)]),
          true <- pending?(pane, text) do
-      {:cont, Tmux.submit(ws, index)}
+      Logger.info("wake: window #{index} on workspace #{ws} still holds its message; Enter again (#{n})")
+      Tmux.submit(ws, index)
+      {:cont, :pending}
     else
-      _ -> {:halt, nil}
+      _ -> {:halt, :sent}
     end
   end
 end

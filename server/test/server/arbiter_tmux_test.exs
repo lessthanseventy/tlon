@@ -301,6 +301,45 @@ defmodule Server.Arbiter.TmuxTest do
     assert_receive {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]}, 500
   end
 
+  test "wake: a pane that never takes the Enter is pressed at every look, then said so in the log", %{thread: t} do
+    Application.put_env(:server, :tmux_submit_delay_ms, 0)
+    Application.put_env(:server, :tmux_confirm_ms, [5, 5, 5])
+    on_exit(fn -> Application.delete_env(:server, :tmux_confirm_ms) end)
+
+    Application.put_env(
+      :server,
+      :tmux_cmd,
+      record(%{
+        "list-windows" => {"2\tbuilder-spawn-me\t#{t.id}\t9\n", 0},
+        "capture-pane" => {"──\n❯ stuck message\n──\n", 0}
+      })
+    )
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert :ok = Arbiter.Tmux.wake(%{thread_id: t.id, agent: "claude-code", pane_ref: nil}, "stuck message")
+        Process.sleep(200)
+      end)
+
+    # the first Enter, then one at each of the three looks
+    enters = for {:tmux, ["-L", _, "send-keys", "-t", _, "Enter"]} <- collect(), do: :enter
+    assert length(enters) == 4
+    assert log =~ "still holds its message unsent after every Enter"
+  end
+
+  defp collect(acc \\ []) do
+    receive do
+      m -> collect([m | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
+  test "the default looks reach about ten minutes: a slow Claude pane gets its Enter in the end" do
+    Application.delete_env(:server, :tmux_confirm_ms)
+    assert Enum.sum(Arbiter.Tmux.confirm_delays()) >= 540_000
+  end
+
   test "wake: with no leaf, the lead's own (centre) window by name; none at all is :no_window", %{thread: t} do
     Application.put_env(:server, :tmux_submit_delay_ms, 0)
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"0\tclaude-code\t\t9\n", 0}}))
