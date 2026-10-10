@@ -12,6 +12,7 @@ defmodule Server.MCP.Tool do
 
   # the adapter's own verbs: a seat's cut list hides them from its model, while the mod calls them
   @adapter_verbs ~w(register)
+  @fence_ttl_ms 5_000
 
   defmacro __using__(_opts) do
     quote do
@@ -53,14 +54,41 @@ defmodule Server.MCP.Tool do
          identity = Server.MCP.Identity.from_frame(frame, touch: false),
          false <- name in @adapter_verbs,
          %Server.Thread{workspace_id: ws} when is_integer(ws) <- Server.Repo.get(Server.Thread, identity.thread_id),
-         %Server.Profile{mcp: %{"tlon" => %{"excludeTools" => cut}}} <-
-           Server.Profiles.seat_profile(identity.agent, Server.Workspaces.bench_all(ws), ws),
-         true <- name in cut do
+         true <- name in cut_tools(ws, identity.agent) do
       "#{identity.agent}'s seat does not have #{name}"
     else
       _ -> nil
     end
   end
+
+  @doc """
+  The tools `agent`'s seat on workspace `ws` cuts (`[]` with no seat), cached per seat for
+  #{@fence_ttl_ms}ms: every tool call asks, a pane's `take_wakes` every 3s, and the answer is a
+  whole bench read and a profile instantiated. A seat changed inside the TTL is fenced by its old
+  list until it runs out. `now` is monotonic milliseconds.
+  """
+  @spec cut_tools(integer(), String.t(), integer()) :: [String.t()]
+  def cut_tools(ws, agent, now \\ System.monotonic_time(:millisecond)) do
+    key = {ws, agent}
+
+    case :ets.lookup(__MODULE__, key) do
+      [{^key, at, cut}] when now - at < @fence_ttl_ms ->
+        cut
+
+      _ ->
+        cut =
+          case Server.Profiles.seat_profile(agent, Server.Workspaces.bench_all(ws), ws) do
+            %Server.Profile{mcp: %{"tlon" => %{"excludeTools" => cut}}} -> cut
+            _ -> []
+          end
+
+        :ets.insert(__MODULE__, {key, now, cut})
+        cut
+    end
+  end
+
+  @doc "Create the fence's cache table, owned by the calling process (the application's)."
+  def init_fence, do: :ets.new(__MODULE__, [:named_table, :public, read_concurrency: true])
 
   @typedoc "What a tool's `execute/2` returns."
   @type tool_reply :: {:reply, Response.t(), Frame.t()}
