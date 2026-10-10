@@ -91,6 +91,24 @@ defmodule Server.Worktree do
     end
   end
 
+  @doc """
+  Take down a checkout whose work was closed on purpose (superseded or abandoned,
+  `Server.Channel.close_as/2`), uncommitted changes and all. Its branch stays, so the commits can
+  still be found. `{:removed, path}` · `{:kept, reason}` when git refuses · `:none`.
+  """
+  def retire(repo_path, slug) do
+    wt = path(repo_path, slug)
+
+    if File.exists?(Path.join(wt, ".git")) do
+      case git(repo_path, ["worktree", "remove", "--force", wt]) do
+        {_out, 0} -> {:removed, wt}
+        {out, _} -> {:kept, "git refused: #{String.slice(out, 0, 200)}"}
+      end
+    else
+      :none
+    end
+  end
+
   @doc "Why a checkout must stay — uncommitted changes, or commits no other branch has — or nil."
   @spec holds(String.t(), String.t()) :: String.t() | nil
   def holds(repo_path, slug) do

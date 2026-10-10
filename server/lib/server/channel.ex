@@ -564,8 +564,21 @@ defmodule Server.Channel do
     with {:ok, closed} <- close_thread(thread) do
       Server.Tickets.closed_unmerged(thread.id, kind, why)
       said = if kind == :superseded, do: "superseded by #{why}", else: "abandoned: #{why}"
-      post(%{thread_id: thread.id, author: "tlon", body: "✕ closed unmerged — #{said}"})
+      post(%{thread_id: thread.id, author: "tlon", body: "✕ closed unmerged — #{said}#{retire_checkout(thread)}"})
       {:ok, closed}
+    end
+  end
+
+  # a checkout closed on purpose is not stranded work: it goes, and its branch stays to be found
+  defp retire_checkout(thread) do
+    name = Server.Worktree.name_for(thread)
+
+    with {:ok, repo} <- Server.repo_for_thread(thread),
+         {:removed, _} <- Server.Worktree.retire(repo, name) do
+      ". Its checkout is removed; branch #{Server.Worktree.branch(name)} is kept."
+    else
+      {:kept, why} -> ". Its checkout stays: #{why}"
+      _ -> ""
     end
   end
 end
