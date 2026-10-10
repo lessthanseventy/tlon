@@ -30,13 +30,15 @@ export class Looks {
   focus(on: boolean) { this.focused = on }
   /** advance the focused clock by `dt` seconds; unfocused time never counts */
   tick(dt: number) { if (this.focused) this.focusedS += dt }
-  /** a frame drew these notes: while focused they are looked at; a note older than the last look is already seen */
+  /** a frame drew these notes: a note older than the last look is already seen (aged by the wall
+   * gap) whether or not the frame was focused — a restart starts focused, so the look-back must age
+   * stale notes on the first frame; otherwise a freshly focused frame marks them seen now. */
   see(notes: Note[], focused: boolean) {
     this.focused = focused
     for (const n of notes) {
       if (this.seenAt.has(n.id)) continue
-      if (focused) this.seenAt.set(n.id, this.focusedS)
-      else if (n.at <= this.lookedAt) this.seenAt.set(n.id, this.focusedS - (this.lookedAt - n.at))
+      if (n.at <= this.lookedAt) this.seenAt.set(n.id, this.focusedS - (this.lookedAt - n.at))
+      else if (focused) this.seenAt.set(n.id, this.focusedS)
     }
   }
   alpha(n: Note): number {

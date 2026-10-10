@@ -47,6 +47,14 @@ describe("since you last looked", () => {
     expect(l.alpha(note(1, 0))).toBe(FLOOR)
     expect(l.alpha(note(2, 10_500))).toBe(1)
   })
+  // A fresh start begins focused (graceful degradation for terminals without DEC 1004), so the
+  // last-looked stamp must age a stale note on the first frame regardless of focus — or a restart
+  // brings already-faded notes back to full ink (plan §b "survives a restart").
+  test("a restart starts focused: a note older than the last-looked stamp is already faded", () => {
+    const l = new Looks(10_000)
+    l.see([note(1, 10_000 - (HOLD_S + FADE_S) - 5)], true)
+    expect(l.alpha(note(1, 0))).toBe(FLOOR)
+  })
 })
 describe("lines", () => {
   test("newest first, at most 5, each cut to 44 chars, lit when hovered thread is named", () => {
