@@ -7,8 +7,8 @@ defmodule Server.Presence.Engine do
   turn for nothing.
 
   A **capability, not a product** — symmetric with `Server.Arbiter`. §8 forbids the design
-  from naming a vendor, so which engine is spent (Claude's five-hour window, an ollama
-  flat plan that never is) lives entirely in the backend, chosen by config
+  from naming a vendor, so which engine is spent (Claude's five-hour window, an ollama plan's
+  session and weekly windows) lives entirely in the backend, chosen by config
   `:server, :engine_presence`, defaulting to `Available` — absent config, every engine is
   available, so the wake is gated on warmth alone (degrade honestly). The
   switchboard's `recipients/1` excludes a session whose engine is clocked out.
@@ -37,12 +37,12 @@ end
 
 defmodule Server.Presence.Engine.Manual do
   @moduledoc """
-  A HAND toggle — the concrete backend the dogfood hub runs. An engine is clocked out iff the
+  A HAND toggle. An engine is clocked out iff the
   operator has marked it so: it is in `Server.Presence.clocked_out_engines/0` (the app-env set,
   flipped by `Server.Presence.clock_out/1` / `clock_in/1`). No vendor is named or polled (§8) —
   when the scarce Claude window is spent, the operator flips it from `server:console` and the
-  switchboard stops poking Claude sessions; a real rate-limit reader is a later, local backend
-  swapped in the same seam. Tests drive it the same way (`put_env :clocked_out_engines`).
+  switchboard stops poking Claude sessions. The service runs `OllamaWindow`, which reads the
+  ollama plan's own meter; tests drive this one (`put_env :clocked_out_engines`).
   """
   @behaviour Server.Presence.Engine
 

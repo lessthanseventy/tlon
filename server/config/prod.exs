@@ -6,3 +6,6 @@ import Config
 # warnings, errors — not each SELECT. Dev/test keep :debug for the inner loop; this is
 # only the release the systemd unit runs. Bump back to :debug here + rebuild to trace.
 config :logger, level: :info
+
+# the service holds wakes for an ollama seat while the plan's window is spent, until it resets
+config :server, :engine_presence, Server.Presence.Engine.OllamaWindow
