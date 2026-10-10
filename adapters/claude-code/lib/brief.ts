@@ -124,7 +124,7 @@ const OPERATOR = "andrew";
 
 const CHATTER_TAIL = 5;
 
-export function renderBrief(d: Dossier, now: Date = new Date(), model?: string): string {
+export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, harness = "Claude Code"): string {
   const lines: string[] = [];
 
   const goal = d.goal ?? "(untitled thread)";
@@ -132,7 +132,7 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string):
   lines.push(`Lead: ${d.lead ?? "unstaffed"}  ·  thread ${d.thread_id}`);
   // The session states who it is, so a model signs its commits with its OWN name and can't
   // copy a wrong one from an example. AGENTS.md "commit as who you are" reads from here.
-  if (model) lines.push(`You are ${model} (pi).`);
+  if (model) lines.push(`You are ${model} (${harness}).`);
   lines.push(staleness(d, now));
   // Seancing (Gas Town/Beads): the brief is the budgeted VIEW of the record, not the record.
   // Say so, or a fresh session treats the cap as the whole truth.
