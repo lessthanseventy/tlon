@@ -193,14 +193,16 @@ defmodule Server.Profiles do
     },
     "filesystem" => %{
       # Writes: the repo (edits), tlon's own checkout, /tmp + the socket dir (adapters-lspd),
-      # caches. Never the nix store.
+      # caches. Never the nix store, nor all of ~/.local: each denyWrite match under a write root is
+      # a bwrap mount, and its container and game stores would take bwrap past 9000 arguments.
       "allowWrite" => [
         @repo,
         Path.expand("../../..", __DIR__),
         "/tmp",
         "$XDG_RUNTIME_DIR",
         "~/.cache",
-        "~/.local"
+        "~/.local/share/mise",
+        "~/.local/state"
       ],
       # Reads re-opened inside a denied region: the repo and tlon's checkout, plus /nix/store +
       # ~/.nix-profile (any flake-managed binary's files) and the config/cache dirs.
