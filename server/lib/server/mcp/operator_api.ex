@@ -28,6 +28,7 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/office/jobs/:id         Office.Needs.dismiss_job (a failed job the operator has seen)
       GET    /api/office/suggestions/:ws  Office.Corkboard.suggestions (the suggestion box)
       DELETE /api/office/suggestions/:ws/:id  Office.Corkboard.drop (filed as a ticket, or thrown out)
+      GET    /api/office/margin/:ws  Office.Margin.notes (Uqbar's margin notes)
       GET    /api/office/activity/:ws     Office.Room.activity (what just happened: the in-tray)
       GET    /api/office/triage/:ws       Office.Room.triage (blockers, failed checks, unled threads: the beacon)
       GET    /api/office/memory/:ws       Office.Room.memory (pinned facts, habits to review: the bookshelf)
@@ -246,6 +247,13 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "office", ["suggestions", ws]) do
     case Integer.parse(ws) do
       {id, ""} -> json(conn, 200, Server.Office.Corkboard.suggestions(id))
+      _ -> json(conn, 404, %{error: "no workspace #{ws}"})
+    end
+  end
+
+  defp route(conn, "GET", "office", ["margin", ws]) do
+    case Integer.parse(ws) do
+      {id, ""} -> json(conn, 200, Server.Office.Margin.notes(id))
       _ -> json(conn, 404, %{error: "no workspace #{ws}"})
     end
   end
