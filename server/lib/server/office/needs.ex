@@ -256,7 +256,7 @@ defmodule Server.Office.Needs do
 
     from(m in Message,
       where:
-        m.thread_id in ^ids and m.kind != "suggestion" and m.author != ^operator and ilike(m.body, ^like) and
+        m.thread_id in ^ids and m.kind not in ["suggestion", "margin"] and m.author != ^operator and ilike(m.body, ^like) and
           m.created_at > ^since,
       order_by: [desc: m.id]
     )
