@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { enter, leave, tokenize } from "../tui/term"
+import { ENTER, LEAVE, tokenize } from "../tui/term"
 
 describe("shift+arrow keys", () => {
   test("xterm SGR shift-modified arrows tokenize to shift-up/down/left/right", () => {
@@ -16,23 +16,8 @@ describe("focus reports", () => {
     expect(tokenize("\x1b[O").inputs).toEqual([{ t: "focus", on: false }])
     expect(tokenize("a\x1b[Ib").inputs.map((i) => i.t)).toEqual(["key", "focus", "key"])
   })
-  test("enter turns focus reporting on and leave turns it off", () => {
-    const writes: string[] = []
-    const real = process.stdout.write.bind(process.stdout)
-    const stdin = process.stdin as unknown as { setRawMode: unknown; resume: unknown }
-    const saved = { raw: stdin.setRawMode, resume: stdin.resume }
-    stdin.setRawMode = () => {}
-    stdin.resume = () => {}
-    process.stdout.write = ((s: string) => (writes.push(s), true)) as typeof process.stdout.write
-    try {
-      enter()
-      leave()
-    } finally {
-      process.stdout.write = real
-      stdin.setRawMode = saved.raw
-      stdin.resume = saved.resume
-    }
-    expect(writes[0]).toContain("\x1b[?1004h")
-    expect(writes[1]).toContain("\x1b[?1004l")
+  test("entering turns focus reporting on and leaving turns it off", () => {
+    expect(ENTER).toContain("\x1b[?1004h")
+    expect(LEAVE).toContain("\x1b[?1004l")
   })
 })

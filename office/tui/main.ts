@@ -9,6 +9,7 @@ import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { personaLines } from "../kit/persona"
+import { FLOOR, Looks, marginInk, type Note } from "../kit/margin"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
@@ -63,6 +64,7 @@ const DETAIL = 14 // the detail pane's rows, title included: fixed, so nothing b
 const STATE_DIR = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"), "tlon")
 const STATE = join(STATE_DIR, "office-workspace")
 const TRAY = join(STATE_DIR, "office-tray") // when you last read the in-tray
+const LOOKED = join(STATE_DIR, "margin-looked") // the last focused moment, epoch seconds: older margin notes start already seen
 const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
 // map). A link here that the machine repoints on a theme switch is followed within a second.
@@ -161,6 +163,12 @@ let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: da
 let lifeCard: LifeStatus | null = null
 let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
+/** Uqbar's margin notes; `looks` fades each by the time the window was focused after it was first seen */
+let notes: Note[] = []
+const looks = new Looks(Number(readState(LOOKED)) || 0)
+// a terminal that never reports focus is treated as always focused: notes fade from first sight
+let focused = true, lit: number | null = null
+const stampLooked = () => { looks.lookedAt = Math.floor(Date.now() / 1000); writeState(LOOKED, String(looks.lookedAt)) }
 
 const view = () => viewOf(all, ws)
 /** a click on the header's shift: the other shift starts */
@@ -280,7 +288,7 @@ async function refresh() {
   settleWorkspace()
   if (all.ok && before.ok) tellNews(before, beforeNeeds)
   const tid = openThread()
-  await Promise.all([tid !== null ? loadThread(tid) : null, reader ? reader.reload() : null, loadCard(), loadFeed()])
+  await Promise.all([tid !== null ? loadThread(tid) : null, reader ? reader.reload() : null, loadCard(), loadFeed(), loadMargin()])
   await chatter()
   draw()
 }
@@ -299,6 +307,7 @@ function notify(title: string, body: string) {
   const clean = (s: string) => s.replace(/[;\x07\x1b]/g, " ").slice(0, 200)
   out(`${ESC}]777;notify;${clean(title)};${clean(body)}${ESC}\\`)
 }
+async function loadMargin() { notes = ws === null ? [] : await data.margin(ws) }
 async function loadFeed() {
   if (ws === null) return
   const seen = new Set(feed.map((x) => `${x.at}${x.kind}${x.text}`)), first = !feed.length
@@ -1429,8 +1438,9 @@ function draw() {
   if (building) {
     frame = renderHome({ home: build!.home, cursor: build!.cursor, carrying: build!.carrying, refused: build!.refused, w: Math.ceil(vp.w), h: Math.ceil(vp.h), weather: a.weather?.kind, mail: mailbox(needs) })
     imageDirty = true
-  } else if (fresh || roomChanged) { frame = room0.render(a, { picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g), world?.now()); roomChanged = false }
+  } else if (fresh || roomChanged) { frame = room0.render(a, { picked: lit ?? picked, armed: null, person: mode.kind === "person" ? mode.name : null, tray: unread(), board: boardCtx() }, measureFor(g), world?.now()); roomChanged = false }
   const seen = clipFrame(frame!, vp)
+  if (!building) addMargin(seen, vp)
   if (g.kitty && (!sentImage || fresh || imageDirty || panned)) { o += kittyImage(seen, g, vp); sentImage = true; imageDirty = false }
   if (!g.kitty) textLayer(seen, g, vp).forEach((l, i) => { o += `${ESC}[${g.row + 1 + i};${g.col + 1}H${l}` })
   panned = false
@@ -1692,7 +1702,9 @@ function onKey(k: string) {
       return draw()
     }
     case "pgdn": case "pgup": return page(k === "pgdn" ? 1 : -1)
-    case "enter": return onActions ? acts[asel]?.run() : rows[sel]?.open?.()
+    case "enter":
+      if (mode.kind === "home" && lit !== null && !reader) return act({ kind: "thread", tid: lit })
+      return onActions ? acts[asel]?.run() : rows[sel]?.open?.()
     case "/": case "ctrl-k": return void finder()
     case "i": return inbox()
     case "R": if (updated()) void relaunch(); return
@@ -1729,6 +1741,14 @@ function onPaste(text: string) {
   if (reader) { reader.paste(text); return draw() }
 }
 
+/** the margin notes over a clipped frame: text ink after the clip so a pan can't push it off-screen, hits first so they win */
+function addMargin(fr: Frame, vp: Viewport) {
+  looks.see(notes, focused)
+  const m = marginInk(notes, looks, lit, vp, g ? measureFor(g) : undefined)
+  fr.ink.push(...m.ink)
+  fr.hits.unshift(...m.hits)
+}
+
 function onMouse(m: Extract<Input, { t: "mouse" }>) {
   if (!frame || !g || reader) return
   const inRoom0 = m.row - 1 >= g.row && m.row - 1 < g.row + g.rows
@@ -1745,8 +1765,15 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
   drag = null
   // the wheel over the pane scrolls it
   if (m.press && (m.button === 64 || m.button === 65) && m.row > pane.top) return page(m.button === 65 ? 1 : -1, 3)
-  const h = hitAt(clipFrame(frame, viewport), g, m.col, m.row, viewport)
-  if (m.motion) { const t = h?.tip ?? ""; if (t !== tip) { tip = t; draw() } return }
+  const clipped = clipFrame(frame, viewport)
+  addMargin(clipped, viewport)
+  const h = hitAt(clipped, g, m.col, m.row, viewport)
+  if (m.motion) {
+    const t = h?.tip ?? "", over = h?.note ?? null
+    if (over !== lit) { lit = over; roomChanged = true; return draw() }
+    if (t !== tip) { tip = t; draw() }
+    return
+  }
   if (!m.press || m.button !== 0) return
   if (m.row === 1) return headHits.find((x) => m.col >= x.from && m.col <= x.to)?.go()
   const inRoom = inRoom0
@@ -1882,6 +1909,7 @@ async function main() {
         else if (!detected) continue
         else if (i.t === "key") onKey(i.key)
         else if (i.t === "paste") onPaste(i.text)
+        else if (i.t === "focus") { focused = i.on; looks.focus(i.on); if (!i.on) stampLooked(); draw() }
         else if (i.t === "mouse") onMouse(i)
       }
     })
@@ -1899,6 +1927,8 @@ async function main() {
   await refresh()
   every(refresh, 10_000)
   every(pollPlayer, 2000)
+  let sec = 0
+  every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (!reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
   every(() => { if (mode.kind === "pet" && petDraft) { previewTick += 10; draw() } }, 1000)
   every(() => { if (followPalette() || followLooks() || followSouls() || followPets()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
