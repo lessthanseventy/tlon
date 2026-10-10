@@ -73,7 +73,7 @@ export async function corkboard(ws: number): Promise<CorkNote[]> {
 }
 /** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
 export type Need = {
-  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "mention" | "rollout" | "seats" | "job_failed"
+  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "mention" | "rollout" | "seats" | "job_failed" | "stranded"
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
 }
