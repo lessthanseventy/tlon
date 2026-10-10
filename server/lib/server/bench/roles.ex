@@ -260,11 +260,13 @@ defmodule Server.Bench.Roles do
   end
 
   # stream-json emits one assistant event per content block, each repeating its message's id and
-  # usage: count each id once (events without an id each count)
+  # usage — output_tokens grows across them, so the last one per id is the message's final tally:
+  # count each id once (events without an id each count)
   defp streamed_usage(events) do
     msgs =
       events
       |> Enum.filter(&is_map(&1["usage"]))
+      |> Enum.reverse()
       |> Enum.uniq_by(&(&1["id"] || make_ref()))
       |> Enum.map(& &1["usage"])
 

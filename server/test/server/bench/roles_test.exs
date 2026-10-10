@@ -140,6 +140,23 @@ defmodule Server.Bench.RolesTest do
                Roles.parse_output(:claude_code, out)
     end
 
+    test "claude_code, no result (timeout): a message streamed per content block counts once, at its final output" do
+      ev = fn id, out, text ->
+        JSON.encode!(%{
+          type: "assistant",
+          message: %{
+            id: id,
+            content: [%{type: "text", text: text}],
+            usage: %{input_tokens: 10, output_tokens: out, cache_read_input_tokens: 5, cache_creation_input_tokens: 1}
+          }
+        })
+      end
+
+      out = Enum.join([ev.("m1", 2, "a"), ev.("m1", 40, "b"), ev.("m2", 3, "c"), ev.("m2", 7, "d")], "\n")
+
+      assert {"d", %{input: 20, output: 47, cache_read: 10, cache_write: 2, turns: 2}} =
+               Roles.parse_output(:claude_code, out)
+    end
     test "output that isn't the harness's JSON is the reply, with zero usage" do
       assert {"boom", %{input: 0, output: 0}} = Roles.parse_output(:claude_code, "boom")
     end
