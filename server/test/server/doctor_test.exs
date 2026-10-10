@@ -21,6 +21,7 @@ defmodule Server.DoctorTest do
                "habit",
                "issue",
                "message",
+               "need_dismissal",
                "note",
                "playbook",
                "project",

@@ -94,8 +94,26 @@ defmodule Server.AlertsTest do
 
     assert [
              %{label: "Ship", method: "POST", path: "/api/office/asks/41", body: %{key: "1"}},
-             %{label: "Hold", method: "POST", path: "/api/office/asks/41", body: %{key: "2"}}
+             %{label: "Hold", method: "POST", path: "/api/office/asks/41", body: %{key: "2"}},
+             %{label: "Put away", method: "POST", path: "/api/office/needs/dismiss", body: %{key: "ask:41"}}
            ] = a.actions
+  end
+
+  test "what nothing waits on is put away on the server; an issue resolves, a stranded checkout comes down" do
+    [mention, issue, stranded] =
+      Alerts.build(
+        [
+          need("mention", %{level: "decide", key: "mention:3"}),
+          need("issue", %{level: "decide", key: "issue:5", ref: 5}),
+          need("stranded", %{level: "decide", key: "stranded:/r:w"})
+        ],
+        [],
+        @now
+      )
+
+    assert %{path: "/api/office/needs/dismiss", body: %{key: "mention:3"}} = List.last(mention.actions)
+    assert [%{label: "Resolve", path: "/api/issues/5/resolve"}, %{label: "Put away"}] = issue.actions
+    assert [%{path: "/api/office/needs/retire", body: %{key: "stranded:/r:w"}}, %{label: "Put away"}] = stranded.actions
   end
 
   test "what to decide when convenient is sticky, never an interruption" do
