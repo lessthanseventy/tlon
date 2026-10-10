@@ -54,8 +54,17 @@ repo="$(cd "$(git -C "$tree" rev-parse --path-format=absolute --git-common-dir)/
 # checkout: a fix that reached main after the branch was cut reaches its verify too, and the lead's
 # own worktree is never touched.
 "$(dirname "$0")/git-fetch-origin.sh" "$repo" main || { note "$tid" "verify can't run: fetching origin/main failed in $repo" || true; exit 1; }
-fresh="$(mktemp -d -t "tlon-verify-XXXXXX")"
-trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"' EXIT
+# a verify SIGKILLed mid-cleanup (a service stop outlasting its timeout) leaves its checkout and the
+# repo's worktree entry: sweep any no process is using. This run holds its own by standing in it.
+for stale in "${TMPDIR:-/tmp}"/tlon-verify-*/; do
+  stale="${stale%/}"; [ -d "$stale" ] || continue
+  pgrep -f "$stale" >/dev/null && continue
+  [ -n "$(find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" -print -quit 2>/dev/null)" ] && continue
+  rm -rf "$stale"
+done
+git -C "$repo" worktree prune
+fresh="$(mktemp -d -t "tlon-verify-XXXXXX")" && cd "$fresh" || exit 1
+trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"; git -C "$repo" worktree prune' EXIT
 git -C "$repo" worktree add -q --detach "$fresh" "work/$slug" || exit 1
 if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
   git -C "$fresh" rebase --abort >/dev/null 2>&1
