@@ -257,19 +257,21 @@ describe("the wide room", () => {
     ;(room as unknown as { hour: () => number }).hour = () => 16
     const c = (room as unknown as { cat: { x: number; y: number; mode: string; leaps: { x: number; y: number }[] } }).cat
     const visited = new Set<string>()
-    let runs = 0, was = c.mode
-    for (let i = 0; i < 400_000 && runs < 3; i++) {
-      room.step(a)
-      if (c.mode === "zoom" && c.leaps.some((q) => q.x === c.x && q.y === c.y)) visited.add(`${c.x},${c.y}`)
-      if (was === "zoom" && c.mode !== "zoom") {
-        runs++
-        expect({ mode: c.mode, at: [c.x, c.y] }).toEqual({ mode: "sit", at: [c.leaps[0]!.x, c.leaps[0]!.y] })
+    let runs = 0
+    // each run started outright (the boss's zoomies), not waited for: chance took 400k steps
+    for (let run = 0; run < 3; run++) {
+      for (let i = 0; i < 2_000 && !room.catDo("zoomies"); i++) room.step(a)
+      expect(c.mode).toBe("zoom")
+      for (let i = 0; i < 20_000 && c.mode === "zoom"; i++) {
+        room.step(a)
+        if (c.mode === "zoom" && c.leaps.some((q) => q.x === c.x && q.y === c.y)) visited.add(`${c.x},${c.y}`)
       }
-      was = c.mode
+      runs++
+      expect({ mode: c.mode, at: [c.x, c.y] }).toEqual({ mode: "sit", at: [c.leaps[0]!.x, c.leaps[0]!.y] })
     }
     expect(runs).toBe(3)
     expect(visited.size).toBeGreaterThanOrEqual(3)
-  }), 30_000)
+  }))
 
   // every route between every fixed spot, at three widths: seconds of CPU, more under a full gate
   test("no walk crosses the furniture", () => {
