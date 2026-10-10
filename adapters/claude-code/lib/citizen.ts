@@ -134,6 +134,12 @@ export function gateOf(command: string, cwd: string, mainCheckout: string, home 
   return null;
 }
 
+/** The operator API at the server's origin (TLON_MCP_URL ends in /mcp); the default release's without one. */
+export function operatorApi(mcpUrl: string | undefined): string {
+  const origin = mcpUrl?.match(/^https?:\/\/[^/]+/)?.[0];
+  return `${origin ?? "http://127.0.0.1:4040"}/api`;
+}
+
 /** The commit trailer for the model that is actually running, on the address of its provider. */
 export function attribution(model: string, onOllama: boolean): string {
   return `Co-Authored-By: ${model} <noreply@${onOllama ? "ollama.com" : "anthropic.com"}>`;
