@@ -61,7 +61,7 @@ defmodule Server.MCP.Tool.SubmitReview do
 
     field :follow_ups, {:list, :string},
       description:
-        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges"
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges. This list REPLACES the follow-ups an earlier review of this workline filed: list every non-blocking finding still open, not only new ones"
   end
 
   @impl true
@@ -132,7 +132,7 @@ defmodule Server.MCP.Tool.SubmitQA do
 
     field :follow_ups, {:list, :string},
       description:
-        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges"
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges. This list REPLACES the follow-ups an earlier QA pass of this workline filed: list every finding still open"
   end
 
   @impl true
@@ -159,7 +159,7 @@ defmodule Server.MCP.Tool.SubmitQA do
   defp verdict(thread, params, agent, frame) do
     {:ok, filed} =
       if thread.stage == "review" and params[:verdict] in ~w(pass fail),
-        do: Workline.follow_ups(thread, agent, params[:follow_ups] || []),
+        do: Workline.follow_ups(thread, agent, params[:follow_ups] || [], :qa),
         else: {:ok, []}
 
     n = length(filed)
