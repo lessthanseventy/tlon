@@ -40,6 +40,10 @@ defmodule Server.Office.WriterTest do
     assert Writer.tone() =~ "FERAL"
   end
 
+  test "the wilder the office, the more often it talks" do
+    assert Enum.map(0..3, &Writer.every(120, &1)) == [120, 120, 60, 30]
+  end
+
   test "a stand-in CLI pins every call to it" do
     dir = Path.join(System.tmp_dir!(), "writer-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)

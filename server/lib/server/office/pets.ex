@@ -8,9 +8,11 @@ defmodule Server.Office.Pets do
   woken, a coworker starting a test, a treat…), about this office as it is now (`Banter.scene/1`), and
   the office picks from the batch as things happen; a line about a coworker carries `{name}` for the
   office to fill in. Lazy like banter: batches are only written while an office asks (`voices/1`), at
-  most one round (each pet's and the pair's) per workspace every `@every_s`. On and off with banter
+  most one round (each pet's and the pair's) per workspace every `@every_s`, sooner the wilder the
+  dial (`Server.Office.Writer.every/2`), and at once when the dial turns. On and off with banter
   (`Server.Office.Banter`). A reply that does not parse is dropped; a good one joins the last few
-  batches (up to `@keep` lines an occasion), so lines from different writers and moods mix.
+  batches at its level (up to `@keep` lines an occasion), so lines from different writers and moods
+  mix, or replaces them when the level changed.
 
   The scene is more than who sits where (`context/1`): what landed today, the last of the lobby's
   talk (releases, restarts, shift changes and what people said), the shift, the weather and the time
@@ -279,19 +281,26 @@ defmodule Server.Office.Pets do
   @impl true
   def handle_call({:voices, ws, cat}, _from, state) do
     now = System.system_time(:second)
-    %{voices: voices, at: at} = Map.get(state, ws, %{voices: %{}, at: 0})
+    level = Server.Office.Writer.level()
+    entry = Map.merge(%{voices: %{}, at: 0, asked: nil, tones: %{}}, Map.get(state, ws, %{}))
+    # a turned dial is heard at once, not at the next round
+    due? = now - entry.at >= Server.Office.Writer.every(@every_s, level) or entry.asked != level
 
-    if now - at >= @every_s, do: ask(ws, cat)
+    if due?, do: ask(ws, cat, level)
 
-    {:reply, voices, Map.put(state, ws, %{voices: voices, at: if(now - at >= @every_s, do: now, else: at)})}
+    {:reply, entry.voices, Map.put(state, ws, if(due?, do: %{entry | at: now, asked: level}, else: entry))}
   end
 
   @impl true
-  def handle_cast({:wrote, _ws, _pet, nil}, state), do: {:noreply, state}
+  def handle_cast({:wrote, _ws, _pet, nil, _level}, state), do: {:noreply, state}
 
-  def handle_cast({:wrote, ws, pet, lines}, state) do
-    entry = Map.get(state, ws, %{voices: %{}, at: 0})
-    {:noreply, Map.put(state, ws, put_in(entry.voices[pet], merged(entry.voices[pet], lines)))}
+  # a batch at a new level replaces the pet's lines, so the new tone isn't diluted by the old
+  def handle_cast({:wrote, ws, pet, lines, level}, state) do
+    entry = Map.merge(%{voices: %{}, at: 0, asked: nil, tones: %{}}, Map.get(state, ws, %{}))
+    kept = if entry.tones[pet] == level, do: merged(entry.voices[pet], lines), else: lines
+
+    {:noreply,
+     Map.put(state, ws, %{entry | voices: Map.put(entry.voices, pet, kept), tones: Map.put(entry.tones, pet, level)})}
   end
 
   # a new batch joins the last ones instead of replacing them, so lines from different writers and
@@ -301,19 +310,19 @@ defmodule Server.Office.Pets do
   defp merged(old, lines),
     do: Map.merge(old, lines, fn _occasion, was, new -> Enum.take(Enum.uniq(new ++ was), @keep) end)
 
-  defp ask(ws, cat) do
+  defp ask(ws, cat, level) do
     me = self()
 
     Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-      write_round(me, ws, Map.put(context(ws), :cat, temperament(cat)))
+      write_round(me, ws, Map.put(context(ws), :cat, temperament(cat)), level)
     end)
   end
 
-  defp write_round(me, ws, ctx) do
+  defp write_round(me, ws, ctx, level) do
     for pet <- ["duo" | Map.keys(@pets)],
         do:
           Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-            GenServer.cast(me, {:wrote, ws, pet, write(ws, ctx, pet)})
+            GenServer.cast(me, {:wrote, ws, pet, write(ws, ctx, pet), level})
           end)
   end
 
