@@ -23,12 +23,18 @@ if ! { exec 9>>"$lock"; } 2>/dev/null; then
   exec "$@"
 fi
 
+me="$* (pid $$) in $PWD since $(date +%H:%M:%S)"
+
+# the office's rack reads the holder and the waiters (Server.Office.Room.checks/0)
 if ! flock -n 9; then
   echo "checks queue: waiting — $(cat "$holder" 2>/dev/null || echo 'another check is running')" >&2
+  mkdir -p "$dir/tlon-checks.wait" 2>/dev/null && echo "$me" >"$dir/tlon-checks.wait/$$" 2>/dev/null
+  trap 'rm -f "$dir/tlon-checks.wait/$$"' EXIT
   flock 9
+  rm -f "$dir/tlon-checks.wait/$$"
 fi
 
-printf '%s (pid %s) in %s since %s\n' "$*" "$$" "$PWD" "$(date +%H:%M:%S)" >"$holder" 2>/dev/null || true
+echo "$* (pid $$) in $PWD since $(date +%H:%M:%S)" >"$holder" 2>/dev/null || true
 "$@"
 status=$?
 : >"$holder" 2>/dev/null || true

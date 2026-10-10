@@ -153,7 +153,11 @@ export type Activity = { kind: string; at: string; thread_id: number | null; who
 export type Capped<T> = { shown: T[]; more: number }
 export type Stuck = { thread_id: number; title: string; text: string }
 export type Triage = { blockers: Capped<Stuck>; failed_checks: Capped<Stuck>; unled: Capped<Stuck>; count: number }
-export type Health = { state: "ok" | "warn"; problems: string[]; version: string; up_s: number; db: boolean; jobs: boolean; failed_jobs: number; tmux: boolean; disk_pct: number | null; mem_pct: number | null; load: number | null }
+export type Health = { state: "ok" | "warn"; problems: string[]; version: string; up_s: number; db: boolean; jobs: boolean; failed_jobs: number; tmux: boolean; disk_pct: number | null; mem_pct: number | null; load: number | null
+  /** one full check at a time (scripts/checks-queue.sh): who has it, who waits */
+  checks?: { running: string | null; waiting: string[] }
+  /** approved worklines landing one at a time: the one being gated first */
+  merge_queue?: { thread_id: number; title: string; state: "landing" | "queued" }[] }
 export type Memory = { pinned: { id: number; text: string }[]; habits: { id: number; text: string; rationale: string | null; by: string | null }[]; coverage: { facts: number; embedded: number; pinned_count: number; pinned_tokens: number; budget: number } }
 export type BoardTicket = { id: number; title: string; body: string | null; status: "backlog" | "todo" | "doing" | "done"; priority: string; project_id: number | null; blocked_by: number[] }
 export type WorkspaceCard = { id: number; name: string; type: string; scope: string; icon: string | null; repos: { id: number; path: string; remote: string | null }[] }
