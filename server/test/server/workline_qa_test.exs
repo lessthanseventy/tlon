@@ -241,4 +241,21 @@ defmodule Server.WorklineQATest do
     built = Thread |> Repo.get!(thread.id) |> Map.put(:stage, "build")
     assert {:error, {:not_in_review, "build"}} = Workline.qa_verdict(built, "fail", "nolan", "x", opts)
   end
+
+  test "a repeated approval of the same commit is the one approval: one verdict, one grade, one QA notice" do
+    {thread, opts} = at_review("twice", ["office/kit/plane.ts"])
+    {:ok, _} = Workline.review_verdict(thread, "approve", "teodelina", opts)
+    # a grade that hits a script limit is done before the client's retry arrives
+    Repo.update_all(from(j in Oban.Job, where: j.worker == "Server.Jobs.Grade"), set: [state: "completed"])
+    # the client retries the call after its first connection dropped, the thread now led by QA
+    {:ok, _} = Workline.review_verdict(Repo.get!(Thread, thread.id), "approve", "teodelina", opts)
+
+    assert [_] = Repo.all(from j in Oban.Job, where: j.worker == "Server.Jobs.Grade")
+    assert [_] = Enum.filter(bodies(thread), &(&1 =~ "🎭 QA"))
+
+    assert [_] =
+             Repo.all(
+               from e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == "workline:twice:review"
+             )
+  end
 end
