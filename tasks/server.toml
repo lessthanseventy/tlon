@@ -192,8 +192,8 @@ description = "Everything green, one at a time on this machine: waits its turn i
 run = "scripts/checks-queue.sh mise run check:all"
 
 ["check:all"]
-description = "Everything green: the names gate + the server + adapters (pi + consult + lsp + lspd + reload + footer) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check (unqueued — `check` queues it)"
-depends = ["check:names", "server:check", "adapters:pi:check", "adapters:consult:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check", "office:check", "manual:check"]
+description = "Everything green: the names gate + the server + adapters (pi + consult + lsp + lspd + reload + footer + claude-code) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check (unqueued — `check` queues it)"
+depends = ["check:names", "server:check", "adapters:pi:check", "adapters:consult:check", "adapters:lsp:check", "adapters:lspd:check", "adapters:reload:check", "adapters:footer:check", "adapters:claude-code:check", "office:check", "manual:check"]
 
 # The task manual (docs/manual/tasks.md) comes from `mise tasks ls`, never by hand. `--check` diffs.
 ["manual:gen"]

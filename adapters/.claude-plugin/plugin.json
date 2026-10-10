@@ -1,0 +1,6 @@
+{
+  "name": "tlon-citizen",
+  "version": "0.1.0",
+  "description": "Makes a Claude Code session a citizen of its tlon thread: presence on the roster, from inside the session",
+  "author": { "name": "Andrew Moore" }
+}

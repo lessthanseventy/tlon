@@ -1,0 +1,4 @@
+{
+  "description": "The claude-code adapter's mod",
+  "modules": ["../claude-code/mod.ts"]
+}
