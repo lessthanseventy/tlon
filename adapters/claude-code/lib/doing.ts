@@ -1,6 +1,6 @@
 // What a tool call looks like from across the office (`presence_doing`): the server's closed set
-// of kinds, read off a tool's name — pi's built-ins, Claude Code's, and MCP tools by their own
-// name — so both adapters show the same animation for the same work. Unknown is plain thinking.
+// of kinds, read off a tool's name — Claude Code's own, and MCP tools by their own name. Unknown is
+// plain thinking.
 export type Doing = "read" | "edit" | "bash" | "search" | "web" | "test" | "delegate";
 
 const SHELL = /^(bash|shell|powershell|exec)$/;

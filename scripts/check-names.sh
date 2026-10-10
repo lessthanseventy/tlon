@@ -11,9 +11,6 @@
 #   (c) `mise run <task>` in any AGENTS.md / README.md, mise.toml, scripts
 #       →  a task `mise tasks ls` knows (`<prefix>:*` is a glob: some task must match)
 #
-# The ~/.pi/agent files the adapters read are the machine's to write; ficciones' own names gate
-# checks that contract against its flake.
-#
 # grep/awk only, offline, a few hundred ms. One line per miss; exit 1 if any. docs/ is not an
 # input: prose there may name a retired module on purpose.
 set -uo pipefail
