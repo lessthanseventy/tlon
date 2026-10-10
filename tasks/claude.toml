@@ -22,3 +22,9 @@ run = "TLON_PROVIDER=ollama-cloud adapters/claude-code/launch.sh --model deepsee
 ["claude:local"]
 description = "Claude Code on qwen3-coder on the local ollama daemon — free, offline, no cloud budget"
 run = "TLON_PROVIDER=ollama adapters/claude-code/launch.sh --model qwen3-coder"
+
+# Your own session with the mod in operator mode: what waits on you, the release and your streak in
+# the band, and each coworker's ask put to you as a question. No thread, no citizen identity.
+["claude:operator"]
+description = "Claude Code as the operator: the tlon-citizen mod's operator band and the coworkers' asks, on the Claude plan"
+run = "TLON_OPERATOR=1 claude --plugin-dir adapters"

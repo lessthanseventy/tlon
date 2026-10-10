@@ -1,100 +1,95 @@
-# adapters · claude-code adapter
+# adapters · claude-code
 
-The hands for **Claude Code** — what makes a `claude` session a server citizen, the peer of
-the [pi adapter](../pi). Same **two-doors-one-identity** shape as pi, adapted to Claude
-Code's own mechanisms.
+What makes a `claude` session a citizen of a tlon thread — on any model — and, for the operator,
+their own window onto the office.
 
 ## The identity
 
-A session's identity is `(thread, agent="claude-code")`, carried in the environment
-(`TLON_THREAD`, `TLON_AUTHOR`) exactly like a pi pane. You get it by launching through
-the loop, never by hand:
+A citizen's identity is `(thread, agent)`, carried in the environment (`TLON_MCP_URL`,
+`TLON_THREAD`, `TLON_AUTHOR`). You get it by launching through the loop, never by hand:
 
 ```
-mise run server:claude              # opens a fresh thread, launches claude on it
-mise run server:claude -- 42        # JOINS thread 42 (resume a task across a /clear)
+mise run server:claude              # on the Claude plan; opens a fresh thread
+mise run claude:balanced -- 42      # on an ollama model (also deep / code / fast / local); JOINS thread 42
+mise run claude:operator            # your own session, in operator mode: no thread
 ```
 
-The launcher `eval`s the export block from `server:spawn` and `exec`s `claude`.
+`launch.sh` evals the identity from `server:spawn` (or keeps one the server's window exported), then
+execs Claude Code through `gateway.sh` with:
 
-## The two doors
+- `--mcp-config`: `tlon` (HTTP, `headersHelper` = `scripts/tlon-cli.sh token`, which mints a fresh
+  token per connect, so auth survives a server restart; no token is ever on disk) and `lsp` (the
+  LSP tools, `../lsp/src/mcp.ts`).
+- `--settings`: the profile's deny rules (`TLON_PERMISSIONS_DENY`: the write fence, the bash and
+  secret-path floor, the cut MCP tools), its read-only repos (`TLON_READ_DIRS`), the operator's
+  statusLine off (the band replaces it), and — for a seat with `TLON_SANDBOX_FILE` — a strict bash
+  sandbox with an allow list, in `dontAsk` mode: nothing waits on a prompt nobody watches.
+- `--plugin-dir ..`: the tlon-citizen mod (the plugin root is `adapters/`).
+- the citizen protocol and the role's persona (`TLON_ROLE_PROMPT_FILE`) as the appended system prompt.
 
-Both doors follow `TLON_MCP_URL` — whichever node spawned the session (the always-up service on
-:4040, or the `server:dev` scratch node on :4041) — so a claude spawned by either node is briefed
-from, and posts to, that node's world.
+`gateway.sh PROVIDER CMD…` turns `TLON_PROVIDER` (`ollama-cloud`, `ollama`, or none for the Claude
+plan) into Claude Code's gateway settings — `ANTHROPIC_BASE_URL`, the ollama key from the env or
+agenix, the model aliases pointed at ollama models — so a session on an ollama model never draws on
+the Claude plan. The server's aside, role bench and one-shots run through it too.
 
-- **Door 1 — the MCP tools.** Claude Code's `mcpServers.tlon` entry is `type: http`
-  pointing at the channel, with a **`headersHelper`** (`scripts/tlon-cli.sh token`) instead
-  of a static bearer. Claude Code runs the helper on every connect and reconnect; it mints a
-  **fresh** server token for `(TLON_THREAD, TLON_AUTHOR)` each time, so auth survives a server
-  restart and a 401 auto-refreshes. No token is ever written to disk. pi's adapters adapter
-  does the same (mints per connect against `/mint`), so both doors are frozen-token-free —
-  Claude Code's `headersHelper` and pi's in-adapter mint are the same idea in two shapes.
-- **Presence — the mod.** [`mod.ts`](mod.ts) is a Claude Code
-  [mod](https://code.claude.com/docs/en/plugins/mods/overview): hooks Claude Code runs in its own
-  process, loaded by `--plugin-dir` (the plugin root is `adapters/`, whose `.claude-plugin/` and
-  `hooks/hooks.json` name it). Each declare goes over the session's own `tlon` connection
-  (`$.mcp.call`), fire-and-forget, so a tool or a turn never waits on the server:
-  - at `session.start`, `register` with the session's tmux pane — what pi's extension does at its
-    session_start, and what puts the session on the roster (without it the worker has no session
-    row, so warmth, thinking and the switchboard's wake checks cannot see it) — and a status line
-    under the prompt naming the thread;
-  - at `turn.start`, `presence_thinking`;
-  - at each `tool.call`, `presence_doing`: the kind of work (`doingOf`, from `pi/src/doing.ts`) so
-    the office animates it, and the call in one line (`summaryOf`: "Bash · mise run check", the
-    tool and its target — never contents — redacted) for the thread card's activity timeline. A
-    `$.mcp.call` raises `tool.call` too, so the mod skips the calls it made itself;
-  - at the session's own `turn.complete` (not a subagent's) and at `session.end`, `presence_idle`.
+## The mod (`mod.ts`)
 
-  `mise run adapters:claude-code:check` validates it (`claude plugin validate --strict`) and runs
-  `mod.test.ts`. Open: the test kit cannot raise a tool call under the mod's own origin, so the
-  self-skip is proved live (a citizen's thread feed carries no `register`/`presence_*` entries),
-  not by a test.
-- **Door 2 — the brief.** [`brief-hook.sh`](brief-hook.sh) is a `SessionStart` hook. Claude
-  Code adds its plain stdout to the session context, so on start / resume / clear it renders
-  the thread's dossier — the `get_dossier` tool itself, called over MCP at `TLON_MCP_URL` by
-  `scripts/tlon-cli.sh dossier` (mint → initialize → tools/call, as pi's `mcp.ts` does),
-  printed as JSON — and Claude re-orients from server. No identity, a down channel, or a
-  missing thread → a silent no-op; it never blocks the session.
+A Claude Code [mod](https://code.claude.com/docs/en/plugins/mods/overview): hooks Claude Code runs in
+its own process. Every server call goes over the session's own `tlon` connection (`$.mcp.call`); its
+pure parts are `lib/` (bun-tested).
 
-## The capture reflex (one-ledger Cut 1)
+**Being a citizen**
+- `session.start` registers the pane (`register`), and the session is on the roster.
+- `turn.start` / `tool.call` / `turn.complete` declare thinking, what it is doing (`doing.ts`: the
+  kind of work and a one-line, redacted summary for the activity feed) and idle — a subagent's turn
+  ending is not the session's. The mod's own `$.mcp.call`s raise `tool.call` too and are skipped.
+- **Wakes**: the server queues a teammate's message or an opening assignment (`Server.Wake`) instead
+  of typing it into the pane; the mod drains `take_wakes` every few seconds and submits each as a
+  turn, which Claude Code holds until the session is idle. Taking a wake is not activity, so an idle
+  session stays cold and an unheard wake reads unheard.
+- **The brief** rides each prompt as context (`prompt.submit`) when the dossier changed, and again
+  after a `/clear`. It says `You are <model> (Claude Code).` — the model that signs the commits.
+- **Capture**: at turn end, above a 2k-char floor, the new transcript (brief cut out, secrets
+  redacted) goes to the cheap ollama extractor and comes back as `derived` facts and questions;
+  a compaction flushes whatever is there. A correction in a prompt is proposed as a habit, once.
 
-[`capture-hook.sh`](capture-hook.sh) is a `Stop` hook — it runs every turn. It execs
-[`cc-capture.ts`](../pi/src/cc-capture.ts) (bun), which reuses pi's `capture.ts` pure core
-(delta-slicing, secret redaction, the extraction prompt, tolerant parse) and `mcp.ts`'s
-`TlonClient` verbatim — the same reflex pi's `extension.ts` runs on a cadence, adapted to
-Claude Code's stateless-per-turn hook model: a per-session watermark is persisted to
-`${XDG_STATE_HOME:-~/.local/state}/tlon-cc-capture/<session_id>` instead of living in a
-long-lived closure. Extracted facts are banked `derived`, with `intent`, unbidden. Same
-failure discipline as everything else here: no identity, a down channel, a bad completion,
-or an unparseable transcript is a silent no-op — a Stop hook must never be why a session
-looks broken.
+**What the session shows**
+- **The band** above the prompt: the thread and goal, the workline stage and its gate, the last
+  check, todos, blockers, what is red (`office_glance`), and context / 5h / week use.
+- **`/thread`**: a pane with the coworker's own figure (`office/cli.ts figure`), its voice, the
+  workline with **advance** / **finish** buttons that fill the prompt (never call), the branch's
+  commits, cited threads, the crew and what each is doing, and the thread's conversation.
+- **Toasts**: a new @mention of this seat, something newly red, the day's landings at start, a
+  landing the seat led (with a chime), and a line from the office's pool at most hourly.
+- The spinner speaks in the seat's catchphrase; a finished turn gets a Borgesian verb.
+- `#` and `@` complete from the threads and crew the session knows.
 
-**Cadence floor + tail-loss follow-up.** The Stop hook batches: a delta under `MIN_DELTA_CHARS`
-(~2k) accumulates without advancing the watermark rather than paying for a per-turn ollama
-call, so nothing is dropped mid-session (the next Stop re-includes it). The one gap is the
-*final* sub-floor tail: if a session ends with an un-extracted delta below the floor, it's
-never banked. Claude Code exposes a `SessionEnd` hook (fires on session termination) and a
-`PreCompact` hook (fires before compaction) — both receive the same `session_id` +
-`transcript_path` on stdin as `Stop`, so either could later run `cc-capture.ts` with a
-zero-floor "flush" mode to capture that tail. `SessionEnd` is the cleaner fit (it fires after
-all turns complete). Deferred — not wired yet; the per-turn Stop reflex covers the common case.
+**What the session does differently**
+- `tool.check` holds a `git push` (call `push_branch`), a branch switch in the live checkout, and a
+  production write (`bin/server rpc`, `tlon-cli code`, `release:cut`: asked, never allowed).
+- `attribution.text` signs a commit as the running model, on its provider's address.
+- An Edit or Write carries the language server's diagnostics for the file.
+- On the Claude plan with the five-hour window hot, Explore subagents run on Haiku and, near the
+  cap, requests run at low effort.
+- `tool.describe` points Elixir edits at `edit_clause` / `rename_identifier`.
 
-## Install
+**Tools and commands** (from the mod, beside the server's)
+- `consult` (a tool) and `/consult`, `/fresh` (commands): a one-shot Claude Code on another ollama
+  model, with or without the session's transcript, read-only tools.
+- Auto-vision: an image Read on a text-only ollama model is described by a vision model instead.
+- `web_search`: on the ollama gateway, where Claude Code's own WebSearch cannot reach.
 
-There is nothing to install: nothing is merged into `~/.claude`. Wiring is **per session** —
-[`launch.sh`](launch.sh) (`mise run server:claude`) passes the `mcpServers.tlon` entry via
-`--mcp-config` and the hooks via `--settings`, so a plain `claude` stays untouched. Opening a
-fresh thread needs a built release (`mise run server:release`): `tlon-cli.sh spawn` goes
-through `bin/server rpc`. Once the identity is in the env, `token` (the `headersHelper`) and
-`dossier` (the brief hook) work purely over HTTP at `TLON_MCP_URL` — no release needed. The
-hook bodies run under `bun` (mise-pinned), which must be on `PATH`.
+**Operator mode** (`claude:operator`: `TLON_OPERATOR`, no thread): the band shows what waits on you
+(`/api/office/needs`), the live release and what is unreleased, and your streak; each coworker's ask
+is put to you as a question and answered by its key.
 
-## Why not a static token / a SessionStart env-mint
+## Not here
 
-A server token is ephemeral (in-memory registry, dies on service restart) and bound to a
-`(thread, agent)`. Claude Code expands `${VAR}` in `.mcp.json` only **once at startup** from
-the launch environment, and a `SessionStart` hook fires **before** MCP servers connect and
-can't set env for them — so neither can carry a refreshing token. `headersHelper` is the only
-mechanism that re-mints per connection, which is why the adapter is built on it. (Requires
-Claude Code ≥ 2.1.195.)
+- Jev-style decision models (`/v1/systemone` on a local ollama) for correction detection and capture
+  triage: their endpoint is unverified here, and they need a local model pulled first.
+
+## Verify
+
+`mise run adapters:claude-code:check` (the helpers) and `mise run adapters:claude-code:mod` (the mod,
+in Claude Code's own test kit). Live: launch a citizen against a node running this code, take a turn,
+read the thread's activity feed — and `mise run server:roster`.
