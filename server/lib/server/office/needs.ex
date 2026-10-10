@@ -11,7 +11,8 @@ defmodule Server.Office.Needs do
       answered by key), `verify_failed` (a workline whose last gate run was red —
       only where the workspace has no sheriff, who owns red there: `Server.Sheriff`);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
-      with no reply from them since), `rollout` (what a
+      with no reply from them since, from the last 12 hours: one older than that is history, still on
+      its thread), `rollout` (what a
       merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
       work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
       is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded),
@@ -32,7 +33,7 @@ defmodule Server.Office.Needs do
   alias Server.Repo
   alias Server.Thread
 
-  @mention_days 7
+  @mention_hours 12
   @landing_grace_s 3600
 
   @doc "Every item waiting on the operator, across the workspaces."
@@ -202,7 +203,7 @@ defmodule Server.Office.Needs do
   # an @operator nobody has answered: the newest such message per open thread, with no operator
   # message after it
   defp mentions(open, operator) do
-    since = DateTime.add(DateTime.utc_now(), -@mention_days * 86_400, :second)
+    since = DateTime.add(DateTime.utc_now(), -@mention_hours * 3600, :second)
     ids = Enum.map(open, & &1.id)
     by_id = Map.new(open, &{&1.id, &1})
     like = "%@#{operator}%"

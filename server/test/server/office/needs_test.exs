@@ -3,6 +3,8 @@ defmodule Server.Office.NeedsTest do
   # blocking first, then what to decide when convenient.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.Channel
   alias Server.Office.Needs
 
@@ -61,6 +63,15 @@ defmodule Server.Office.NeedsTest do
 
     assert [{"mention", "decide"}] = kinds(ws)
     {:ok, _} = Channel.post(%{thread_id: t.id, author: "andrew", body: "yes please"})
+    assert kinds(ws) == []
+  end
+
+  test "an @mention older than 12 hours has left the list — it stays on its thread", %{ws: ws} do
+    {:ok, t} = Channel.open_thread(%{title: "old", workspace_id: ws.id})
+    {:ok, m} = Channel.post(%{thread_id: t.id, author: "sonny", body: "Good morning @andrew! a pumpkin"})
+    at = DateTime.add(DateTime.utc_now(), -13 * 3600, :second)
+    Server.Repo.update_all(from(x in Server.Message, where: x.id == ^m.id), set: [created_at: at])
+
     assert kinds(ws) == []
   end
 

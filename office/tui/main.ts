@@ -495,8 +495,8 @@ function needActions(n: data.Need): Action[] {
 /** what waits on you: one at a time when anything does — the whole list is a key away */
 function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
 /** a need's one-line name: what kind, and where */
-const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed" }
-const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm }
+const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work" }
+const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev
