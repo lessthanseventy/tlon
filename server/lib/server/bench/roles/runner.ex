@@ -5,7 +5,8 @@ defmodule Server.Bench.Roles.Runner do
   model routed by its grade or `--model`), each of the suite's tasks in a throwaway workdir under
   the system tmp dir — a builder's fixture repo copied in and committed — through that harness
   headless, graded, and the run appended to `bench/roles/results/<date>.json` with the README
-  regenerated. It reads no database and writes nothing outside the workdirs and `bench/roles/`.
+  regenerated. Each task runs against a `tlon_bench_*` test database of its own (`task_env/1`),
+  dropped after it; nothing else is written outside the workdirs and `bench/roles/`.
   """
 
   alias Server.Bench.Roles
