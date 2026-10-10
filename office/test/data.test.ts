@@ -8,6 +8,8 @@ const server = Bun.serve({
     const path = new URL(req.url).pathname
     if (path.endsWith("/office")) return Response.json({ roster: [], threads: [], revs: { office: "abc123" }, flags: { build_mode: true }, life: { "7": { level: 2, xp: 650, due: [] } } })
     if (req.method === "GET" && path.endsWith("/life/7")) return Response.json(lifeBody)
+    if (req.method === "GET" && path.endsWith("/office/margin/1")) return Response.json([{ id: 1, author: "uqbar", body: "cut 650fa4a", at: 5 }])
+    if (req.method === "GET" && path.endsWith("/office/margin/2")) return new Response("boom", { status: 500 })
     if (req.method === "POST" && path.endsWith("/life/routines/1/done")) return Response.json({ run: {}, level_up: true })
     return new Response("no", { status: 404 })
   },
@@ -41,4 +43,13 @@ test("a fake source answers every call; a write says it's a toy", async () => {
     expect(await data.needs()).toEqual([])
     expect(await data.ticketFile(1, "x")).toContain("toy")
   } finally { data.useFake(null) }
+})
+
+test("margin reads Uqbar's notes; a 500 and a dead server are an empty margin", async () => {
+  process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
+  const data = await import("../tui/data")
+  expect(await data.margin(1)).toEqual([{ id: 1, author: "uqbar", body: "cut 650fa4a", at: 5 }])
+  expect(await data.margin(2)).toEqual([])
+  process.env.TLON_URL = "http://127.0.0.1:1/api"
+  expect(await data.margin(1)).toEqual([])
 })
