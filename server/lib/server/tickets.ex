@@ -279,7 +279,8 @@ defmodule Server.Tickets do
   end
 
   @doc "Whether a ticket is claimed by hand (`claim/2`): worked outside any thread, so nothing sweeps it."
-  def claimed?(%Ticket{labels: labels}), do: is_list(labels) and "claimed" in labels
+  def claimed?(%Ticket{status: status, labels: labels}),
+    do: status == "doing" and is_list(labels) and "claimed" in labels
 
   @doc """
   A workline that closed unmerged was reopened: each ticket started into it comes back to it only if

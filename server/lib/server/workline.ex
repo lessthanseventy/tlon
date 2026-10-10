@@ -27,6 +27,8 @@ defmodule Server.Workline do
   alias Server.Workline.Grade
   alias Server.Workline.Scribe
 
+  require Logger
+
   @stages ~w(intent spec plan build verify review merged)
   @owed %{
     "intent" => {:file, "intent.md"},
@@ -792,8 +794,11 @@ defmodule Server.Workline do
     for t <- tied_follow_ups(thread.id),
         "held" in t.labels,
         label in t.labels or (door == :review and not Enum.any?(t.labels, &String.starts_with?(&1, "from-"))),
-        not MapSet.member?(titles, t.title),
-        do: {:ok, _} = Server.Tickets.remove(t)
+        not MapSet.member?(titles, t.title) do
+      # a delete that fails leaves one stale follow-up; it must not cost the review its verdict
+      with {:error, why} <- Server.Tickets.remove(t),
+           do: Logger.warning("follow-up ##{t.id} not replaced: #{inspect(why)}")
+    end
 
     filed = thread.id |> tied_follow_ups() |> MapSet.new(& &1.title)
 
