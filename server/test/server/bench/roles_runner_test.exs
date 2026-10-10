@@ -65,4 +65,27 @@ defmodule Server.Bench.Roles.RunnerTest do
     {_reply, u} = Roles.parse_output(:claude_code, Enum.join(lines, "\n"))
     assert %{input: 12, output: 8, cache_read: 150, cache_write: 7, turns: 2} = u
   end
+
+  test "streamed usage counts a message once, though stream-json repeats it per content block" do
+    a = ~s({"type":"assistant","message":{"id":"m1","usage":{"input_tokens":10,"output_tokens":5}}})
+    b = ~s({"type":"assistant","message":{"id":"m2","usage":{"input_tokens":2,"output_tokens":3}}})
+
+    {_reply, u} = Roles.parse_output(:claude_code, Enum.join([a, a, b], "\n"))
+    assert %{input: 12, output: 8, turns: 2} = u
+  end
+
+  test "with no result event the reply is the last assistant text, not the raw event stream" do
+    text = fn id, t, extra ->
+      JSON.encode!(%{
+        type: "assistant",
+        message: %{id: id, content: [%{type: "text", text: t} | extra], usage: %{}}
+      })
+    end
+
+    tool_use = %{type: "tool_use", input: %{"answer" => "from-tool-input"}}
+
+    out = Enum.join([text.("m1", "thinking", []), text.("m2", "the answer", [tool_use])], "\n")
+
+    assert {"the answer", _} = Roles.parse_output(:claude_code, out)
+  end
 end

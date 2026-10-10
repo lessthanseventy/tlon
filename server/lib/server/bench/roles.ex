@@ -230,7 +230,8 @@ defmodule Server.Bench.Roles do
     |> Enum.find_value(&decode_result/1)
     |> case do
       nil ->
-        {out, streamed_usage(out)}
+        events = stream_events(out)
+        {last_assistant_text(events) || out, streamed_usage(events)}
 
       r ->
         u = r["usage"] || %{}
@@ -271,11 +272,32 @@ defmodule Server.Bench.Roles do
      })}
   end
 
-  defp streamed_usage(out) do
+  defp stream_events(out) do
+    for line <- String.split(out, "\n", trim: true),
+        {:ok, %{"type" => "assistant", "message" => %{} = m}} <- [JSON.decode(line)],
+        do: m
+  end
+
+  # `out` itself when the stream held no assistant text: whatever the harness printed is the reply
+  defp last_assistant_text(events) do
+    events
+    |> Enum.map(fn m -> for(%{"type" => "text", "text" => t} <- List.wrap(m["content"]), do: t) end)
+    |> Enum.reject(&(&1 == []))
+    |> List.last()
+    |> case do
+      nil -> nil
+      texts -> Enum.join(texts)
+    end
+  end
+
+  # stream-json emits one assistant event per content block, each repeating its message's id and
+  # usage: count each id once (events without an id each count)
+  defp streamed_usage(events) do
     msgs =
-      for line <- String.split(out, "\n", trim: true),
-          {:ok, %{"type" => "assistant", "message" => %{"usage" => u}}} <- [JSON.decode(line)],
-          do: u
+      events
+      |> Enum.filter(&is_map(&1["usage"]))
+      |> Enum.uniq_by(&(&1["id"] || make_ref()))
+      |> Enum.map(& &1["usage"])
 
     sum = fn key -> msgs |> Enum.map(&(&1[key] || 0)) |> Enum.sum() end
 
