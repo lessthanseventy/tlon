@@ -368,6 +368,23 @@ defmodule Server.MCP.ServerTest do
     assert call(token, session, 6, "close_thread", %{"thread_id" => 999_999})["isError"]
   end
 
+  test "post_message with thread_id posts on a thread the caller leads, from its lobby window", %{token: token} do
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    {:ok, line} = Server.Workline.open(%{title: "led elsewhere", slug: "led-elsewhere", stage: "build"})
+
+    r = call(token, session, 4, "post_message", %{"body" => "on it", "thread_id" => line.id})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "only its lead"
+    {:ok, _} = Channel.assign_lead(line.id, "Carl")
+
+    r = call(token, session, 5, "post_message", %{"body" => "on it", "thread_id" => line.id})
+    refute r["isError"]
+
+    assert [%{author: "Carl", body: "on it"}] =
+             Repo.all(from m in Message, where: m.thread_id == ^line.id and m.author == "Carl")
+  end
+
   test "close_thread on a workline that hasn't merged wants a why: superseded_by or abandoned", %{token: token} do
     session = handshake(token)
     call(token, session, 3, "register", %{})

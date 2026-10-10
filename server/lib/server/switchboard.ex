@@ -500,15 +500,18 @@ defmodule Server.Switchboard do
 
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
 
-  defp prompt(%Message{author: author, body: body, thread_id: thread_id}) do
-    "New message on thread #{thread_id} from #{author}: #{body}"
+  # the message id lets the session check the wake against the record (get_messages, search_history)
+  defp prompt(%Message{id: id, author: author, body: body, thread_id: thread_id}) do
+    "New message on thread #{thread_id} from #{author} (message ##{id}): #{body}"
   end
 
   # The wake for a session on `thread_id`: a message from another thread says how to answer it there
   defp prompt_for(%Message{thread_id: thread_id} = message, thread_id), do: prompt(message)
 
-  defp prompt_for(%Message{author: author} = message, _elsewhere),
-    do: prompt(message) <> " (It's from a thread you're not on: to answer #{author}, use consult_peer.)"
+  defp prompt_for(%Message{author: author, thread_id: other} = message, _elsewhere),
+    do:
+      prompt(message) <>
+        " (It's from thread #{other}, not this window's: if you lead it, answer there with post_message thread_id: #{other}; otherwise ask #{author} with consult_peer.)"
 
   defp drain_now do
     undelivered =
