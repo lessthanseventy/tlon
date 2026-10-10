@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_MODEL, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, visionPrompt } from "./consult.ts";
+import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, visionPrompt } from "./consult.ts";
 
 describe("parseArgs — [model] <prompt>", () => {
   test("an explicit known model id is peeled off the front", () => {
@@ -88,4 +88,9 @@ describe("images", () => {
   test("a bare paste gets the generic description", () => {
     expect(visionPrompt([{ role: "user", text: "/tmp/shot.png" }])).toContain("Describe this screenshot precisely");
   });
+});
+
+test("delegateSettings carries the seat's deny rules to the delegate", () => {
+  expect(JSON.parse(delegateSettings("Read(~/.ssh/*), Read(**/*.env),Write"))).toEqual({ permissions: { deny: ["Read(~/.ssh/*)", "Read(**/*.env)", "Write"] } });
+  expect(JSON.parse(delegateSettings(undefined))).toEqual({ permissions: { deny: [] } });
 });

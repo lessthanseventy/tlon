@@ -22,7 +22,7 @@ import {
   serializeDelta,
   type Entry,
 } from "./lib/capture.ts";
-import { DEFAULT_MODEL, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
+import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
 import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, turnWord, type Glance } from "./lib/citizen.ts";
 import { CHIME_WAV } from "./lib/chime.ts";
 
@@ -218,13 +218,15 @@ async function webSearch($, query: string, max: number): Promise<string> {
 }
 
 // A consult is a one-shot Claude Code on the ollama gateway: no session saved, no tlon identity,
-// and read-only tools — a bash of its own would run outside the asking session's sandbox.
+// read-only tools — a bash of its own would run outside the asking session's sandbox — and the
+// seat's own deny rules, so it reads nothing the seat may not.
 async function delegate($, model: string, task: string): Promise<string> {
   const key = await ollamaKey($);
   if (!key) throw new Error("no OLLAMA_API_KEY for the delegate");
   const tools = "Read,Grep,Glob";
+  const settings = delegateSettings(await $.env.get("TLON_PERMISSIONS_DENY"));
   const r = await $.process.run(
-    ["claude", "-p", task, "--model", model, "--tools", tools, "--allowedTools", tools, "--permission-mode", "dontAsk", "--no-session-persistence"],
+    ["claude", "-p", task, "--model", model, "--tools", tools, "--allowedTools", tools, "--permission-mode", "dontAsk", "--no-session-persistence", "--settings", settings],
     {
       timeoutMs: 600_000,
       env: { ANTHROPIC_BASE_URL: "https://ollama.com", ANTHROPIC_AUTH_TOKEN: key, ANTHROPIC_API_KEY: "", ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4.1-flash", TLON_THREAD: "", TLON_AUTHOR: "" },

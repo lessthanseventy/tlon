@@ -64,6 +64,13 @@ export function serializeTranscript(turns: Turn[]): string {
   );
 }
 
+// The asking seat's deny rules (launch.sh's TLON_PERMISSIONS_DENY, comma-separated) as the
+// delegate's --settings, so a consult reads no file the seat itself may not.
+export function delegateSettings(deny: string | undefined): string {
+  const rules = (deny ?? "").split(",").map((r) => r.trim()).filter(Boolean);
+  return JSON.stringify({ permissions: { deny: rules } });
+}
+
 export function isImagePath(path: string): boolean {
   return /\.(png|jpe?g|gif|webp|bmp)$/i.test(path);
 }
