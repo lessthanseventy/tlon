@@ -64,12 +64,9 @@ jobs:
           cache: true
           install_args: bun
       - run: mise run office:check
-      - run: mise run adapters:pi:check
-      - run: mise run adapters:consult:check
+      - run: mise run adapters:claude-code:check
       - run: mise run adapters:lsp:check
       - run: mise run adapters:lspd:check
-      - run: mise run adapters:reload:check
-      - run: mise run adapters:footer:check
 
   names:
     runs-on: ubuntu-24.04

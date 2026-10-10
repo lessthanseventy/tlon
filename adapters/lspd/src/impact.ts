@@ -1,6 +1,6 @@
 // Pure helpers for the `impact` (change blast-radius) tool — the diff→ranges parse and the
 // range-overlap test, kept out of client.ts so they're unit-pinned without a live LSP server.
-// The daemon (client.ts) uses rangesOverlap to pick touched symbols; the pi shim (extension.ts)
+// The daemon (client.ts) uses rangesOverlap to pick touched symbols; the lsp MCP server (lsp/src/mcp.ts)
 // uses parseDiff to turn `git diff` into the per-file ranges it sends the daemon.
 
 // A 1-based, inclusive line range (editor convention) — the shape the codec carries.

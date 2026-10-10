@@ -1,7 +1,7 @@
 // adapters-lspd — the supervised LSP sidecar. Owns the warm LspClient pool (one per
-// (adapter, root)) behind a Unix socket, so a pi restart leaves Expert warm and the flaky
-// startup crash is paid once per daemon life, not per pi life. Runs under `bun --watch`
-// (systemd --user) so editing daemon code restarts the daemon, not pi.
+// (adapter, root)) behind a Unix socket, so a session restart leaves Expert warm and the flaky
+// startup crash is paid once per daemon life, not per session life. Runs under `bun --watch`
+// (systemd --user) so editing daemon code restarts the daemon, not the session.
 //
 // Protocol: length-prefixed JSON (codec.ts). Request {id, method, params}; response
 // {id, ok, text} | {id, ok:false, error}. No auth, no multiplexing beyond id correlation —
@@ -15,7 +15,7 @@ import { LspClient, LspError, type LspPosition } from "./client.ts";
 import { adapterForFile } from "./adapters.ts";
 import { Decoder, encode, type LspdRequest, type LspdResponse } from "./codec.ts";
 
-// The socket path both the daemon and the pi shim agree on. $XDG_RUNTIME_DIR is the
+// The socket path both the daemon and the lsp MCP server agree on. $XDG_RUNTIME_DIR is the
 // per-user runtime dir (cleaned at logout); the temp dir on a box without one.
 export function socketPath(): string {
   const dir = process.env.XDG_RUNTIME_DIR ?? os.tmpdir();

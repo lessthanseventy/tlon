@@ -11,8 +11,8 @@ his life in perfect detail; each reconstruction took a full day. He found it har
 could not stop perceiving. He was not, in any useful sense, able to think.
 
 This module is named after him as a warning to itself. It is Tlön's spine — the memory and coordination
-layer between the office (`../office`), the agents that reach it over MCP (`../adapters`: Claude Code,
-[pi](https://github.com/earendil-works/pi-coding-agent)), and the work — and its entire specification is
+layer between the office (`../office`), the agents that reach it over MCP (`../adapters`: Claude Code, on any
+model), and the work — and its entire specification is
 an argument against being Funes. It remembers
 carefully rather than completely: the always-loaded set is 32 rows, not 297; a surface that is *complete*
 is not one that *answers a question*; rank and cut everything. A system that could not forget would be

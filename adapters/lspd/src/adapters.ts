@@ -77,6 +77,30 @@ export const ADAPTERS: LanguageAdapter[] = [
     rootFor: (f) => path.dirname(f),
     serverPackage: "vscode-json-language-server",
   },
+  {
+    name: "markdown",
+    command: "marksman",
+    args: ["server"],
+    extensions: ["md", "markdown"],
+    rootFor: (f) => findRootWith(f, ".git") ?? path.dirname(f),
+    serverPackage: "marksman (the Markdown LSP: links, headings, references across docs)",
+  },
+  {
+    name: "toml",
+    command: "taplo",
+    args: ["lsp", "stdio"],
+    extensions: ["toml"],
+    rootFor: (f) => path.dirname(f),
+    serverPackage: "taplo (the TOML toolkit's LSP — mise tasks, Cargo, pyproject)",
+  },
+  {
+    name: "yaml",
+    command: "yaml-language-server",
+    args: ["--stdio"],
+    extensions: ["yaml", "yml"],
+    rootFor: (f) => path.dirname(f),
+    serverPackage: "yaml-language-server (with the schema store: CI workflows, compose files)",
+  },
 ];
 
 // Route a file to its adapter by extension. Pure — pinned by tests.

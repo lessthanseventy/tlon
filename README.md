@@ -29,7 +29,7 @@ Some moods, from the [sandbox](#try-it-without-a-server):
 (tertius) who triages tickets and staffs them, **builders** (the first is the tech lead, who owns the
 work's coherence), **planners**, **reviewers**, **QA**, a **sheriff** who owns anything red, a **PM**
 who decides what ships, a **librarian** who keeps the office's memory honest, a **researcher** and an
-**assistant**. They run in real harnesses (Claude Code or [pi](https://github.com/badlogic/pi-mono)),
+**assistant**. They run in Claude Code, on Claude or on ollama models,
 each in its own terminal, and join the office as citizens over MCP: a coworker wakes already knowing
 its thread, its brief and what the office knows.
 
@@ -126,7 +126,7 @@ All environment, read at start:
 tlon/
   server/     # the spine — its own spec (server/docs/spec.md), its own boundary
   office/     # the pixel-art room: a shared kit, its rooms, the TUI
-  adapters/   # the hands: pi extensions, the Claude Code launcher + hooks, skills
+  adapters/   # the hands: the Claude Code launcher and mod, the LSP tools, skills
   tasks/      # the mise tasks (mise.toml includes them) — `mise tasks` lists every verb
   scripts/    # the shell side of the loop (cap, watch, the reaper, the tlon CLI)
 ```

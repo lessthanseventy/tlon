@@ -1,7 +1,7 @@
-// The pi shim's client side of the adapters-lspd Unix socket. Each tool call forwards a
+// The lsp MCP server's client side of the adapters-lspd Unix socket. Each tool call forwards a
 // {id, method, params} request to the long-lived daemon and awaits the {id, ok, text}
 // reply. A per-request timeout (longer than the daemon's own 15s LSP timeout, so the
-// daemon answers first) means a hung daemon errors rather than hanging pi.
+// daemon answers first) means a hung daemon errors rather than hanging the session.
 //
 // Error taxonomy drives the shim's self-heal:
 //   - LspdConnectionError — the daemon isn't reachable (connect refused, socket closed).

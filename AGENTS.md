@@ -1,7 +1,7 @@
 # tlon — boundaries for a session at the repo root
 
 Tlön, the dev product: `server/` (the always-up brain — threads, facts, worklines, staffing; its node
-is `funes@`), `adapters/` (what makes pi and Claude Code citizens of the server) and `office/`
+is `funes@`), `adapters/` (what makes a Claude Code session a citizen of the server) and `office/`
 (the pixel-art room over it: a shared kit, its rooms, and the standalone TUI that is the operator's
 surface). It runs on any box with Postgres and mise; the home machine wires it in from
 ficciones (`~/projects/ficciones`), which is where the Nix, the desktop and the secrets live. The
@@ -31,44 +31,44 @@ On the home machine, installing and updating the service is ficciones' job (its 
 `machine:update`); here you build and restart the release. mise owns the dev runtimes. **If a command belongs in the loop, it becomes
 a task in `tasks/<group>.toml` (mise.toml includes them)** — never a prose instruction that drifts out of sync with what actually runs.
 
-### Picking a pi model — the routing, as tasks ("litellm but not")
+### Picking a model — the routing, as tasks ("litellm but not")
 
 Two subscriptions, two buckets. The **$100 Claude plan** is the scarce, high-value bucket (5-hour +
 weekly caps); the **ollama.com Pro plan** is the all-night workhorse. ollama.com now meters plans in
 monthly usage credits spent at per-model per-token rates; accounts still on a legacy plan (this one, as of
 2026-10) get a short session window and a weekly cap instead. Either way "cost" means *which capped bucket
 am I draining*, so the rule is: **push work down to the cheapest bucket that can still do it well.**
-pi (the harness) rides the ollama bucket; Claude Code is the Claude bucket — kept as two tools so a switch never drains the wrong one.
+Every agent runs in **Claude Code**; an ollama model through Claude Code's gateway setting
+(`adapters/claude-code/gateway.sh` points `ANTHROPIC_BASE_URL` at ollama.com or the local daemon), so a
+session on an ollama model sends nothing — its subagents and background requests included — to the
+Claude plan.
 
-Inside the ollama bucket the routing is not a proxy — it's five mise tasks, each a named model profile
-(the loop *is* the aliasing layer). Bare `pi` already starts on `ollama-cloud/deepseek-v4.1-flash` — the
- efficient-MoE default that drains the plan far slower than a reasoning model
- (run `mise run ollama:usage` to see credits used of included and the reset date, or the legacy session/weekly
- meters, plus daily request counts); these pin an
-alternate, and in-session `Ctrl+P` cycles the same ring. Pass a one-shot with `-- -p "…"`.
+The routing is not a proxy — it's five mise tasks, each a named model profile (the loop *is* the
+aliasing layer). Run `mise run ollama:usage` to see credits used of included and the reset date (or the
+legacy session/weekly meters), plus daily request counts. Inside a session `/model <name>` switches to
+another model on the same provider.
 
 | Task | Model | Reach for it when |
 |---|---|---|
-| `mise run pi:balanced` | glm-5.2 | The strong default — Claude/GPT-alike, 976K ctx. Reach for it when the cheap default can't do the job, before escalating to pi:deep. |
-| `mise run pi:deep`     | deepseek-v4-pro `thinking:high` | Hard reasoning/logic — the escalate-before-you'd-miss-Claude tier. |
-| `mise run pi:code`     | kimi-k2.7-code | Coding-heavy work; code-specialized, fewer thinking tokens. |
-| `mise run pi:fast`     | deepseek-v4.1-flash `thinking:low` | The same model as the bare default but `thinking:low` — quick/cheap throwaway, fast tier. |
-| `mise run pi:local`    | qwen3-coder (local daemon) | Free/offline grunt, tight iteration loops — zero cloud budget. |
+| `mise run claude:balanced` | glm-5.2 | The strong default — Claude/GPT-alike, 976K ctx. Reach for it when the cheap one can't do the job, before escalating to claude:deep. |
+| `mise run claude:deep`     | deepseek-v4-pro, effort high | Hard reasoning/logic — the escalate-before-you'd-miss-Claude tier. |
+| `mise run claude:code`     | kimi-k2.7-code | Coding-heavy work; code-specialized, fewer thinking tokens. |
+| `mise run claude:fast`     | deepseek-v4.1-flash, effort low | Quick/cheap throwaway, fast tier — the efficient-MoE model that drains the plan slowest. |
+| `mise run claude:local`    | qwen3-coder (local daemon) | Free/offline grunt, tight iteration loops — zero cloud budget. |
+| `mise run server:claude`   | the Claude plan's default | When it has to be Claude. |
 
-Every launcher also makes the harness a **server citizen**: it opens a fresh server thread (or JOINs one
-with a trailing id — `mise run pi:code -- 42`) and hands the session its identity, so the model shows up
-in `server:roster` and briefs from the thread. `mise run server:claude [thread-id]` does the same for
-Claude Code (its own MCP adapter, `headersHelper`-authed). If the server channel is down, the harness
-still launches — just not as a citizen.
+Every launcher also makes the session a **server citizen**: it opens a fresh server thread (or JOINs one
+with a trailing id — `mise run claude:code -- 42`) and hands the session its identity, so it shows up in
+`server:roster` and briefs from the thread. If the server channel is down, Claude Code still launches —
+just not as a citizen.
 
-The bare default is `deepseek-v4.1-flash`, not glm-5.2, precisely because glm-5.2 is a reasoning model
-whose thinking tokens drain the plan fast: on credits every thinking token is billed output, on a legacy
-plan they trip the session window. `mise run ollama:usage` shows the meter move; ollama.com does not
-break usage down by model yet. Two things that bite: **glm-5.2 is a reasoning model** (separate
+Claude Code's own prompt is ~20k tokens a request, so on credits every turn costs more than a bare
+completion; the server's one-shots (banter, the judge, titles) run `--bare` with no tools for that reason
+(`Server.ModelCli`, 79 tokens in). Two things that bite: **glm-5.2 is a reasoning model** (separate
 `reasoning` + `content` fields) — give it token headroom or `content` comes back empty while thinking
-eats the budget; and **`kimi-k3` is
-deliberately absent** — ollama.com serves it as *extra* usage (HTTP 402), billed per-token on top of the
-$20 plan, so it's out of both ficciones' `flake.nix` and the live Ctrl+P ring. Every model above is plan-covered.
+eats the budget; and **`kimi-k3` is deliberately absent** — ollama.com serves it as *extra* usage (HTTP
+402), billed per-token on top of the plan, so it's out of the model ring (`Server.Profiles`). Every model
+above is plan-covered.
 
 ### Run once, read the log — never re-run to see more
 
@@ -101,12 +101,12 @@ cap:clean` sweeps the logs (they self-cap at 40 anyway).
 
 When you're iterating on a change, **register a watcher instead of re-running tests yourself**:
 
-- `mise run server:watch` / `mise run adapters:pi:watch` — re-run that module's suite on every change.
+- `mise run server:watch` / `mise run adapters:claude-code:watch` — re-run that module's suite on every change.
 - `scripts/watch.sh <cmd>` (or `mise run watch -- <cmd>`) — watch-and-run anything, any scope
   (one test file, a folder, the whole suite). New test files under a watched dir are picked up.
 
 Run it **in the background** (this harness: `Bash` with `run_in_background` — you're re-invoked
-with the result when the suite settles; pi: a pane). Then just edit: you're pinged **red/green
+with the result when the suite settles). Then just edit: you're pinged **red/green
 automatically**, and you only spend a turn when something actually breaks. Kill the watcher when
 the change is done. This is the intended inner loop here — not "edit, then manually run tests,
 then read 1800 lines," every time.
@@ -149,7 +149,7 @@ Still missing a verb: a `@spec` above a clause whose signature `rewrite` changes
 Every agent on this machine, in any repo, works by the four rules in ficciones' `modules/agents/how-to-work.md`:
 think before coding (state assumptions, ask when readings diverge), the simplest thing that works,
 surgical changes, and goal-driven execution against a check you can run. ficciones' flake installs that file
-as `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`, so it is already in your context; this section
+as `~/.claude/CLAUDE.md`, so it is already in your context; this section
 exists so a reader of the repo knows where the law comes from and edits the one source.
 
 ## The rules most likely to be broken by accident
@@ -187,9 +187,9 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   except a coworker's own thread branch: the server pushes `work/<slug>` for it, force-with-lease
   (the `push_branch` tool), and a coworker pane's own `git push` is refused (`scripts/git-hooks/pre-push`).
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
-  that wrote it — YOUR model, read from the brief's `You are … (pi)` line (or `$PI_MODEL`), never a
-  name copied from an example or another model's commit. Format: `Co-Authored-By: <your model> (pi)
-  <noreply@ollama.com>` (pi) or `Co-Authored-By: <your model> <noreply@anthropic.com>` (Claude Code).
+  that wrote it — YOUR model, read from the brief's `You are … (Claude Code)` line, never a name copied
+  from an example or another model's commit. Format: `Co-Authored-By: <your model> <noreply@anthropic.com>`
+  on the Claude plan, `Co-Authored-By: <your model> <noreply@ollama.com>` on an ollama model.
   `git log` is part of the machine's memory; a commit that hides its author — or names the wrong one —
   lies to it. (The first dogfood branch shipped 7 unattributed machine commits — that's the incident
   this rule comes from.)
@@ -197,12 +197,9 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   actually launched on, and `scripts/git-hooks/prepare-commit-msg` stamps it as `Tlon-Model:` on every
   commit (a review's commit too). It is the model as launched (a mid-session switch is not seen), so
   the record holds even when a model is wrong about itself.
-- **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Both
-  harnesses are affected: pi via the `pi-sandbox` extension (`~/.pi/agent/sandbox.json`, seeded at
-  ficciones' `flake.nix` (`piSandboxSeed`)) and Claude Code via its own. pi-sandbox delegates to
-  `@carderne/sandbox-runtime`, a fork of Anthropic's, so **the `CLAUDE_CODE_*` and proxy env vars
-  inside a pi bash call come from the fork — they are not evidence you're in Claude Code.** Two
-  symptoms follow, and neither is a bug to chase:
+- **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Claude
+  Code's bash sandbox (an ollama coworker's runs strict, from its profile's `sandbox.json`) has two
+  symptoms, and neither is a bug to chase:
   - *Phantom untracked dotfiles.* The wrapper bind-mounts over shell-rc / `.gitconfig` / editor paths,
     so `git status` **run inside a bash call** reports `.bashrc`, `.zshrc`, `.gitconfig`, `.env`,
     `.mcp.json`, `.idea`, `.vscode`, … as untracked at the repo root. The tell: `ls -la` shows them
@@ -210,14 +207,10 @@ exists so a reader of the repo knows where the law comes from and edits the one 
     Never `git add`/`rm` them or try to "clean them up".
   - *`127.0.0.1` is not the host's loopback.* bash runs under `bwrap --unshare-net` in a private netns,
     so `curl 127.0.0.1:4041`, `ss -tlnp`, and `systemctl --user` can never see the server channel —
-    **regardless of whether it is up.** `allowLocalBinding` only permits binding *within* that netns.
-    External traffic escapes via a socat→unix-socket proxy, but that proxy refuses loopback targets
-    with a `403`, so there is no route. Do not conclude "server is down" from a bash probe; a bash
-    probe cannot answer the question. **server MCP tools still work** — pi makes those calls from its
-    own process, outside bubblewrap — so use them, or ask the human to check from the host.
+    **regardless of whether it is up.** Do not conclude "server is down" from a bash probe; a bash
+    probe cannot answer the question. **server MCP tools still work** — Claude Code makes those calls
+    from its own process, outside the sandbox — so use them, or ask the human to check from the host.
 
-  To get true git state or real host network, disable the sandbox: `Alt+S`, `/sandbox-disable`, or
-  relaunch `pi --no-sandbox`.
 - **Comments earn their place — load-bearing only.** A comment survives only if it states a non-obvious
   *why* or a real gotcha the code can't. Narrative, lore, dated incident references, decorative
   `# --- section ---` dividers, and restatements of what the next line plainly does are noise — don't
