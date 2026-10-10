@@ -135,7 +135,7 @@ describe("adapters-lspd — the daemon serves LSP requests over a Unix socket", 
     const sockPath = tempSocket();
     const server = await listening(start(sockPath));
     try {
-      const res = await request(sockPath, { id: 2, method: "symbols", params: { path: "/x/README.md" } });
+      const res = await request(sockPath, { id: 2, method: "symbols", params: { path: "/x/notes.txt" } });
       expect(res.ok).toBe(false);
       if (!res.ok) expect(res.error).toContain("no LSP adapter");
     } finally {
