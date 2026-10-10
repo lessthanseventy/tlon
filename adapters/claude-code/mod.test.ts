@@ -18,6 +18,7 @@ type World = {
   submitted?: string[];
   ownClock?: boolean;
   serverDown?: boolean;
+  submitFails?: boolean;
 };
 
 const IDENTITY = { TLON_THREAD: "42", TLON_AUTHOR: "claude-code", TMUX_PANE: "%7", OLLAMA_API_KEY: "k" };
@@ -36,6 +37,7 @@ function engine(on, world: World = {}): Declare[] {
   on("turn.start", ($, e) => ({ turnId: e.turnId }));
   on("turn.complete", ($, e) => ({ text: e.answer }));
   on("prompt.submit", ($, e) => {
+    if (world.submitFails) throw new Error("session closing");
     world.submitted?.push(e.text);
     return { text: e.text, context: e.context };
   });
@@ -299,6 +301,18 @@ test("a wake the server queued is taken on the next poll and submitted as a turn
   await settle();
 
   expect(world.submitted).toEqual(["New message on thread 42 from lonnrot: look at the band"]);
+});
+
+test("a wake whose submit fails is put back on the server, not lost", async ($, on) => {
+  const world: World = { ownClock: true, wakes: [["wake one", "wake two"]], submitFails: true };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+
+  await clock.advance(3_000);
+  await settle();
+
+  expect(sent.filter((d) => d.tool === "put_back_wakes")).toEqual([{ tool: "put_back_wakes", args: { prompts: ["wake one", "wake two"] } }]);
 });
 
 test("a push is held for the server's push_branch; a status runs", async ($, on) => {

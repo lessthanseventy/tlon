@@ -142,13 +142,23 @@ async function loadFigure($, archetype: string | null) {
 }
 
 // A wake (a teammate's message, an opening assignment) arrives as if typed: Claude Code holds it
-// until the session is idle, so it never lands on a booting input or a half-written prompt.
+// until the session is idle, so it never lands on a booting input or a half-written prompt. Taking
+// deletes the server's row, so a wake whose submit fails is put back for the next poll.
 async function drainWakes($) {
   if (draining) return;
   draining = true;
   try {
     const wakes = await call($, "take_wakes");
-    if (Array.isArray(wakes)) for (const text of wakes) void $.prompt.submit({ text: String(text), asUser: true });
+    const failed: string[] = [];
+    if (Array.isArray(wakes))
+      for (const text of wakes.map(String)) {
+        try {
+          await $.prompt.submit({ text, asUser: true });
+        } catch {
+          failed.push(text);
+        }
+      }
+    if (failed.length) await call($, "put_back_wakes", { prompts: failed });
   } catch {
     // a missed poll is taken by the next one; a wake left too long is the server's to report
   } finally {

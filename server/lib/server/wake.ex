@@ -36,6 +36,17 @@ defmodule Server.Wake do
   end
 
   @doc """
+  Queue `prompts` again for `agent` on `thread_id`: wakes it took but could not submit, put back
+  in order so the next take hands them over again. `{:ok, count}`.
+  """
+  def put_back(thread_id, agent, prompts) do
+    at = now()
+    rows = Enum.map(prompts, &%{thread_id: thread_id, agent: agent, prompt: &1, inserted_at: at})
+    {n, _} = Repo.insert_all(__MODULE__, rows)
+    {:ok, n}
+  end
+
+  @doc """
   Report each wake left untaken past `@overdue_s` to its workspace's sheriff, and let it go: its
   pane's session is not draining (no tlon-citizen mod, a session that never registered), which is a
   fault to fix, never a pane to type into. The message it was for is still a row, and

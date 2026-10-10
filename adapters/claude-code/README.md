@@ -45,8 +45,9 @@ pure parts are `lib/` (bun-tested).
   ending is not the session's. The mod's own `$.mcp.call`s raise `tool.call` too and are skipped.
 - **Wakes**: the server queues a teammate's message or an opening assignment (`Server.Wake`) instead
   of typing it into the pane; the mod drains `take_wakes` every few seconds and submits each as a
-  turn, which Claude Code holds until the session is idle. Taking a wake is not activity, so an idle
-  session stays cold and an unheard wake reads unheard.
+  turn, which Claude Code holds until the session is idle; a wake whose submit fails is put back
+  (`put_back_wakes`) for the next poll. Taking a wake is not activity, so an idle session stays cold
+  and an unheard wake reads unheard.
 - **The brief** rides each prompt as context (`prompt.submit`) when the dossier changed, and again
   after a `/clear`. It says `You are <model> (Claude Code).` — the model that signs the commits.
 - **Capture**: at turn end, above a 2k-char floor, the new transcript (brief cut out, secrets
