@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from "bun:test"
+import { rmSync } from "node:fs"
 import { rows, TerminalView, unescape } from "../tui/terminal"
 
 const enc = new TextEncoder(), dec = new TextDecoder()
@@ -11,7 +12,12 @@ test("control mode's octal escapes come back as the bytes they stand for", () =>
 // a private tmux server, so nothing live is touched
 const socket = `tlon-office-test-${process.pid}`
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
-afterAll(() => tmux("kill-server"))
+// tmux leaves its socket file behind when its server dies
+const killServer = (sock: string) => {
+  Bun.spawnSync(["tmux", "-L", sock, "kill-server"])
+  rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${sock}`, { force: true })
+}
+afterAll(() => killServer(socket))
 
 test("a window's screen arrives, keys typed into it come back", async () => {
   tmux("new-session", "-d", "-s", "w9", "-n", "lead", "-x", "60", "-y", "10", "sh -c 'printf \"hello from the pane\\n\"; exec cat'")
@@ -52,6 +58,6 @@ test("the placeholder window's own output never reaches the view — only the co
     expect(text()).not.toContain("from the placeholder")
     view.close()
   } finally {
-    t("kill-server")
+    killServer(sock)
   }
 }, 30_000)
