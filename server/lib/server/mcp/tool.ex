@@ -10,6 +10,9 @@ defmodule Server.MCP.Tool do
   alias Anubis.Server.Frame
   alias Anubis.Server.Response
 
+  # the adapter's own verbs: a seat's cut list hides them from its model, while the mod calls them
+  @adapter_verbs ~w(register)
+
   defmacro __using__(_opts) do
     quote do
       use Anubis.Server.Component, type: :tool
@@ -17,6 +20,44 @@ defmodule Server.MCP.Tool do
       import Server.MCP.Tool, only: [ok: 2, fail: 2, reply: 3, own: 4, acting_thread: 2]
 
       alias Server.MCP.Identity, warn: false
+
+      @before_compile Server.MCP.Tool
+    end
+  end
+
+  # Every tool's execute/2 first asks whether the caller's seat has it: a profile's cut tools
+  # (`excludeTools`) are refused here as well as hidden from its model, so a token held outside the
+  # model — a script, a curl — reaches no more than the seat does.
+  defmacro __before_compile__(_env) do
+    quote do
+      defoverridable execute: 2
+
+      def execute(params, frame) do
+        case Server.MCP.Tool.refusal(__MODULE__, frame) do
+          nil -> super(params, frame)
+          message -> Server.MCP.Tool.fail(frame, message)
+        end
+      end
+    end
+  end
+
+  @doc """
+  Why the caller's seat may not run `module`'s tool, or nil. A caller with no seat on its thread's
+  workspace (a hand-run session, the operator) has no cut list.
+  """
+  @spec refusal(module(), Frame.t()) :: String.t() | nil
+  def refusal(module, frame) do
+    name = tool_name(module)
+    identity = Server.MCP.Identity.from_frame(frame, touch: false)
+
+    with false <- name in @adapter_verbs,
+         %Server.Thread{workspace_id: ws} when is_integer(ws) <- Server.Repo.get(Server.Thread, identity.thread_id),
+         %Server.Profile{mcp: %{"tlon" => %{"excludeTools" => cut}}} <-
+           Server.Profiles.seat_profile(identity.agent, Server.Workspaces.bench_all(ws), ws),
+         true <- name in cut do
+      "#{identity.agent}'s seat does not have #{name}"
+    else
+      _ -> nil
     end
   end
 
@@ -96,5 +137,9 @@ defmodule Server.MCP.Tool do
     changeset
     |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
     |> Enum.map_join("; ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
+  end
+
+  defp tool_name(module) do
+    Enum.find_value(Server.MCP.Endpoint.__components__(:tool), &(&1.handler == module && &1.name))
   end
 end

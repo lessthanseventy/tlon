@@ -97,6 +97,7 @@ defmodule Server.MCP.ServerTest do
                "presence_doing",
                "presence_idle",
                "take_wakes",
+               "office_glance",
                "propose_habit",
                "get_brief",
                "get_dossier",
@@ -565,6 +566,46 @@ defmodule Server.MCP.ServerTest do
     assert decode_tool_json(call(token, session, 4, "take_wakes", %{})) == []
   end
 
+  test "office_glance: who else is on, what is red on my thread, my own voice — and reading it is not activity",
+       %{thread: thread, agent: agent, token: token} do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Glanced"})
+    Repo.update_all(from(t in Thread, where: t.id == ^thread.id), set: [workspace_id: ws.id])
+    {:ok, peer} = Staff.register_agent(%{name: "lonnrot", mandate: "review", engine: "claude"})
+    {:ok, peer_thread} = Channel.open_thread(%{title: "case notes", workspace_id: ws.id})
+    {:ok, _} = Staff.start_session(%{thread_id: peer_thread.id, agent_id: peer.id, pane_ref: "%1"})
+    {:ok, _} = Server.Dossier.raise_issue(%{thread_id: thread.id, summary: "the band overflows", raised_by: agent.name})
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    db_session = Staff.session_for_thread(thread)
+    cold = DateTime.utc_now() |> DateTime.shift(hour: -2) |> DateTime.truncate(:second)
+    Repo.update_all(from(s in Session, where: s.id == ^db_session.id), set: [last_active_at: cold])
+
+    glance = decode_tool_json(call(token, session, 4, "office_glance", %{}))
+
+    assert %{"agent" => "lonnrot", "thread_id" => peer_id} = Enum.find(glance["crew"], &(&1["agent"] == "lonnrot"))
+    assert peer_id == peer_thread.id
+    assert [%{"text" => "the band overflows"}] = glance["red"]
+    assert Map.has_key?(glance, "persona") and Map.has_key?(glance, "landed")
+    assert Repo.get!(Session, db_session.id).last_active_at == cold
+  end
+
+  test "a seat's cut tools are refused by the server too, not only hidden from its model — but it may still register",
+       %{token: _token} do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Fenced"})
+    {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+    {:ok, thread} = Channel.open_thread(%{title: "build it", workspace_id: ws.id})
+    agent = Repo.get!(Server.Agent, seat.agent_id)
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    refute call(token, session, 3, "register", %{})["isError"]
+    r = call(token, session, 4, "propose_release", %{})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "hronir's seat does not have propose_release"
+    refute call(token, session, 5, "get_dossier", %{})["isError"]
+  end
+
   test "taking wakes is not activity — a session idle past its window stays cold, so its wake reads unheard",
        %{thread: thread, token: token} do
     session = handshake(token)
@@ -850,7 +891,7 @@ defmodule Server.MCP.ServerTest do
 
     r = call(token, session, 4, "staff_child", ask)
     assert r["isError"]
-    assert get_in(r, ["content", Access.at(0), "text"]) =~ "tertius"
+    assert get_in(r, ["content", Access.at(0), "text"]) =~ "seat does not have staff_child"
     assert Repo.aggregate(Thread, :count) == before
 
     tertius = Staff.agent_by_name("tertius")
@@ -1251,7 +1292,7 @@ defmodule Server.MCP.ServerTest do
     emma_token = MCP.Tokens.mint(lobby, emma)
     refused = call(emma_token, handshake(emma_token), 2, "submit_qa", args)
     assert refused["isError"]
-    assert hd(refused["content"])["text"] =~ "qa seat"
+    assert hd(refused["content"])["text"] =~ "seat does not have submit_qa"
     assert %Thread{stage: "review"} = Repo.get!(Thread, workline.id)
 
     nolan = Staff.agent_by_name("nolan")
