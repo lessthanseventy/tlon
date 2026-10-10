@@ -17,7 +17,12 @@ defmodule Server.Workline.Review do
   """
   def submit(%Thread{stage: "review", slug: slug} = thread, body, author) when is_binary(body) do
     model = Server.Profiles.model_label(thread.workspace_id, author)
-    trailers = Enum.join(["Tlon-Author: #{author}" | if(model, do: ["Tlon-Model: #{model}"], else: [])], "\n")
+
+    trailers =
+      Enum.join(
+        ["Tlon-Thread: #{thread.id}", "Tlon-Author: #{author}" | if(model, do: ["Tlon-Model: #{model}"], else: [])],
+        "\n"
+      )
 
     Scribe.commit(
       thread,
