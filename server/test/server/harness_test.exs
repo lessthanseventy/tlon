@@ -161,6 +161,44 @@ defmodule Server.HarnessTest do
       assert settings["permissions"]["deny"] == ["mcp__tlon__close_thread", "Edit(//p/b/**)", "Edit(//p/c/**)"]
     end
 
+    test "launch.sh: concurrent boots each pre-accept their folder's trust, none lost to another's write" do
+      launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
+      home = Path.join(System.tmp_dir!(), "tlon-trust-#{System.unique_integer([:positive])}")
+      bin = Path.join(home, "bin")
+      File.mkdir_p!(bin)
+      File.write!(Path.join(bin, "claude"), "#!/bin/sh\nexit 0\n")
+      File.chmod!(Path.join(bin, "claude"), 0o755)
+      on_exit(fn -> File.rm_rf!(home) end)
+
+      dirs =
+        for n <- 1..16 do
+          dir = Path.join(home, "repo#{n}")
+          File.mkdir_p!(dir)
+          dir
+        end
+
+      env = [
+        {"HOME", home},
+        {"PATH", "#{bin}:#{System.get_env("PATH")}"},
+        {"TLON_MCP_URL", "http://127.0.0.1:1/mcp"},
+        {"TLON_THREAD", "7"},
+        {"TLON_AUTHOR", "hronir"},
+        {"TLON_PROVIDER", "anthropic"}
+      ]
+
+      dirs
+      |> Task.async_stream(fn dir -> System.cmd("bash", [launcher], env: env, cd: dir) end, max_concurrency: 16)
+      |> Enum.each(fn {:ok, {_, status}} -> assert status == 0 end)
+
+      projects = home |> Path.join(".claude.json") |> File.read!() |> JSON.decode!() |> Map.fetch!("projects")
+      assert Enum.sort(Map.keys(projects)) == Enum.sort(dirs)
+      assert Enum.all?(Map.values(projects), & &1["hasTrustDialogAccepted"])
+
+      assert Path.wildcard(Path.join(home, ".claude.json.*"), match_dot: true) == [
+               Path.join(home, ".claude.json.tlon-lock")
+             ]
+    end
+
     test "launch.sh: only a seat on the Claude plan loads the plan's budget mod, the one that wraps the model's stream" do
       launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
 
