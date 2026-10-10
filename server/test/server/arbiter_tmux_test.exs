@@ -98,6 +98,31 @@ defmodule Server.Arbiter.TmuxTest do
     assert cmd =~ "claude-code/launch.sh"
   end
 
+  test "spawn: an off-shift seat's duty (a nightly schedule, the sheriff's beat) still runs as that seat, not the engine fallback" do
+    {:ok, ws} =
+      Server.Workspaces.register(%{
+        name: "nights",
+        type: "code",
+        scope: "project",
+        repos: [],
+        roster: [%{archetype: "builder", name: "hronir"}]
+      })
+
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder", crew: "night"})
+    {:ok, _} = Server.Shifts.switch(ws.id, "night")
+    # hronir is the day crew (the engine on its agent row is `local`); it is night now
+    {:ok, thread} = Channel.open_thread(%{title: "nightly gate", workspace_id: ws.id})
+    {:ok, thread} = Staff.assign(thread, Staff.agent_by_name("hronir"))
+
+    exports = ~s(export TLON_THREAD="#{thread.id}"\nexport TLON_AUTHOR="hronir")
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {"", 1}}))
+
+    assert {:ok, _} = Arbiter.Tmux.spawn(exports)
+    assert_received {:tmux, ["-L", _, "new-session", "-d", "-s", _, "-n", _, cmd]}
+    assert cmd =~ "claude-code/launch.sh"
+    refute cmd =~ "qwen3-coder"
+  end
+
   test "spawn: no session yet → new-session -d with the leaf as window 0, tagged; the claude engine gets the claude launcher",
        %{ws: ws, thread: t, exports: exports} do
     Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {"", 1}}))
