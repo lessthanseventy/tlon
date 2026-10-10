@@ -31,19 +31,104 @@ export function bandParts(thread: string, d: Dossier | null, red = 0): string[] 
 
 export type Gate = { decision: "deny" | "ask"; reason: string };
 
+// Each simple command in a shell line, as words: split at ; & | ( ) ` $( and newlines, single
+// quotes kept as one word, double quotes dropped (a $( inside them still runs).
+function commands(line: string): string[][] {
+  const out: string[][] = [[]];
+  let word: string | null = null;
+  const end = () => {
+    if (word !== null) out[out.length - 1]!.push(word);
+    word = null;
+  };
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]!;
+    if (c === "'") {
+      const close = line.indexOf("'", i + 1);
+      const quoted = close < 0 ? line.slice(i + 1) : line.slice(i + 1, close);
+      word = (word ?? "") + quoted;
+      i = close < 0 ? line.length : close;
+    } else if (c === "\\") {
+      if (line[i + 1] !== "\n") word = (word ?? "") + (line[i + 1] ?? "");
+      i++;
+    } else if (c === '"') {
+      word ??= "";
+    } else if (/\s/.test(c) && c !== "\n") {
+      end();
+    } else if (";&|()`\n".includes(c) || (c === "$" && line[i + 1] === "(")) {
+      end();
+      out.push([]);
+      if (c === "$") i++;
+    } else {
+      word = (word ?? "") + c;
+    }
+  }
+  end();
+  return out.filter((words) => words.length);
+}
+
+// Words that run the command after them: `env A=1 git push`, `command git push`, `{ git push; }`.
+const PREFIXES = new Set(["env", "command", "exec", "nohup", "time", "sudo", "{", "!", "then", "do", "else"]);
+// git's global options that take the next word as their value.
+const GIT_VALUE_OPTS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"]);
+
+function resolvePath(base: string, path: string, home: string): string {
+  const p = path === "~" || path.startsWith("~/") ? (home ? home + path.slice(1) : path) : path;
+  const parts: string[] = [];
+  for (const seg of (p.startsWith("/") ? p : `${base}/${p}`).split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") parts.pop();
+    else parts.push(seg);
+  }
+  return `/${parts.join("/")}`;
+}
+
+/** A git invocation in `words` — its subcommand, the rest, and where it runs — or null. */
+function gitOf(words: string[], cwd: string, home: string): { sub: string; args: string[]; dir: string; gitDir: string | null } | null {
+  let i = 0;
+  let afterEnv = false;
+  while (i < words.length) {
+    const w = words[i]!;
+    if (afterEnv && ["-u", "-C", "-S", "--unset", "--chdir", "--split-string"].includes(w)) i += 2;
+    else if (PREFIXES.has(w) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(w) || (afterEnv && w.startsWith("-"))) i++;
+    else break;
+    afterEnv ||= w === "env";
+  }
+  const bin = words[i];
+  if (bin !== "git" && !bin?.endsWith("/git")) return null;
+  i++;
+  let dir = cwd;
+  let gitDir: string | null = null;
+  while (i < words.length && words[i]!.startsWith("-")) {
+    const opt = words[i]!;
+    const [name, inline] = opt.startsWith("--") && opt.includes("=") ? [opt.slice(0, opt.indexOf("=")), opt.slice(opt.indexOf("=") + 1)] : [opt, null];
+    const value = inline ?? (GIT_VALUE_OPTS.has(name) ? words[++i] ?? "" : null);
+    if (name === "-C" && value !== null) dir = resolvePath(dir, value, home);
+    if (name === "--git-dir" && value !== null) gitDir = resolvePath(dir, value, home);
+    if (name === "--work-tree" && value !== null) dir = resolvePath(dir, value, home);
+    i++;
+  }
+  return { sub: words[i] ?? "", args: words.slice(i + 1), dir, gitDir };
+}
+
 /**
  * A shell command held before it runs, or null. A push goes through the server (it pushes the
  * thread's branch, force-with-lease, and the repo's pre-push hook refuses a pane's own); a branch
  * switch in the main checkout moves what the live service reads; a production write is the
  * operator's to press (`bin/server rpc`, `tlon-cli code`, a release cut) — asked, never allowed.
+ * git is found after `env`, an assignment, `(`, `;`, `&&`, `|` or `$(`, past its global options
+ * (`-C <dir>` sets where it runs). A best effort: the pre-push hook is the push's real fence.
  */
-export function gateOf(command: string, cwd: string, mainCheckout: string): Gate | null {
+export function gateOf(command: string, cwd: string, mainCheckout: string, home = ""): Gate | null {
   const cmd = command.trim();
-  if (/(^|[;&|]\s*)git\s+push\b/.test(cmd))
-    return { decision: "deny", reason: "Push through the server: call push_branch (it pushes this thread's branch). A pane's own git push is refused by the repo's pre-push hook." };
-  const inMain = cwd === mainCheckout || cwd.startsWith(`${mainCheckout}/`) && !cwd.includes("/.worktrees/");
-  if (inMain && /(^|[;&|]\s*)git\s+(checkout|switch)\b/.test(cmd) && !/git\s+checkout\s+--\s/.test(cmd))
-    return { decision: "deny", reason: `${mainCheckout} is the live service's checkout: switch branches in a worktree, never here.` };
+  const inMain = (p: string) => (p === mainCheckout || p.startsWith(`${mainCheckout}/`)) && !p.includes("/.worktrees/") && !p.includes("/.git/worktrees/");
+  for (const words of commands(cmd)) {
+    const git = gitOf(words, cwd, home);
+    if (!git) continue;
+    if (git.sub === "push")
+      return { decision: "deny", reason: "Push through the server: call push_branch (it pushes this thread's branch). A pane's own git push is refused by the repo's pre-push hook." };
+    if ((git.sub === "checkout" || git.sub === "switch") && git.args[0] !== "--" && (inMain(git.dir) || (git.gitDir !== null && inMain(git.gitDir))))
+      return { decision: "deny", reason: `${mainCheckout} is the live service's checkout: switch branches in a worktree, never here.` };
+  }
   if (/\bbin\/server\s+rpc\b|\btlon-cli(\.sh)?\s+code\b|\brelease:cut\b/.test(cmd))
     return { decision: "ask", reason: "A production write: the operator presses Enter on it." };
   return null;
