@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { FOLD, TEAR, UNFOLD, caughtNth, freshPosts, launch, stepPlane, type Plane } from "../kit/plane"
+import { FOLD, FRAMES, TEAR, UNFOLD, caughtNth, drawPlane, freshPosts, launch, stepPlane, type Plane } from "../kit/plane"
+import { Scene } from "../kit/draw"
 
 const run = (p: Plane | null, max = 500) => {
   const seen: Plane[] = []
@@ -48,5 +49,28 @@ describe("freshPosts", () => {
   })
   test("a post with no thread has nowhere to fly", () => {
     expect(freshPosts([row("9", "uqbar", "message", null)], new Set(), false)).toEqual([])
+  })
+})
+
+describe("drawing the plane", () => {
+  test("every frame is rectangular, 6-8 wide, two-colour paint only", () => {
+    expect(Object.keys(FRAMES).sort()).toEqual(["folded", "plane", "planeUp", "sheet", "unfold"])
+    for (const [name, rows] of Object.entries(FRAMES)) {
+      expect(rows.length, name).toBeLessThanOrEqual(8)
+      for (const r of rows) {
+        expect(r.length, name).toBe(rows[0]!.length)
+        expect(r.length, name).toBeGreaterThanOrEqual(6)
+        expect(r.length, name).toBeLessThanOrEqual(8)
+        expect(r, name).toMatch(/^[.pk]+$/)
+      }
+    }
+  })
+  test("drawPlane queues one overhead draw per plane in every phase", () => {
+    for (const phase of ["tear", "fold", "glide", "unfold"] as const) {
+      const sc = new Scene(64, 48, 0)
+      const before = sc.overhead.length
+      drawPlane(sc, { phase, t: 2, at: { x: 5, y: 5 }, legs: [], hold: 0 })
+      expect(sc.overhead.length - before, phase).toBe(1)
+    }
   })
 })
