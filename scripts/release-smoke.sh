@@ -18,7 +18,7 @@ port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
 hold="${TLON_SMOKE_HOLD:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
-fail() { echo "smoke FAILED: $* (the log: $log)"; exit 1; }
+fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exit 1; }
 
 # A schedule runs this from inside the service: its TLON_* (port, database), its RELEASE_* (which
 # release a bin/server runs, its tmp, its node) and its systemd INVOCATION_ID (a restart from the
@@ -35,7 +35,8 @@ cleanup() {
     rm -rf "$dir"
     psql -h "${PGHOST:-/run/postgresql}" -d postgres -qc "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >>"$log" 2>&1
   fi
-  [ -z "$ok" ] || rm -f "$log"
+  # a failure's log is kept for reading, unless there is nothing in it
+  if [ -n "$ok" ] || [ ! -s "$log" ]; then rm -f "$log"; fi
 }
 trap cleanup EXIT
 trap 'exit 143' TERM INT
@@ -56,9 +57,10 @@ if [ -z "$url" ]; then
     stale="${stale%/}"; [ -d "$stale/server" ] || continue
     # in use: named in a command line (the node, the drive) or the working directory of one (mix)
     pgrep -f "$stale/" >/dev/null && continue
-    find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" 2>/dev/null | grep -q . && continue
+    [ -n "$(find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" -print -quit 2>/dev/null)" ] && continue
     git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1; rm -rf "$stale"
   done
+  git -C "$root" worktree prune
   dir="$(mktemp -d -t tlon-smoke-XXXXXX)"
   git -C "$root" worktree add -q --detach "$dir" "$sha" || fail "can't check out ${sha:0:7}"
   office="$dir"
