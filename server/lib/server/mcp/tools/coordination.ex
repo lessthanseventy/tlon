@@ -25,10 +25,11 @@ defmodule Server.MCP.Tool.StaffChild do
   Slice 4D). Composes the cross-thread primitives: open a thread titled `title` parented at the
   CALLER's thread (so its close reports up) and inheriting the caller's project, assign the registered
   agent `lead`, and post `brief` (authored by the caller's bound identity) as its opening message.
-  Staffing, not spawning: no terminal starts here — the staffing pass (`Server.Staffing`) sees a worker-led
-  thread without a window and stands one up (human-named, `@funes_thread`-tagged, cap-accounted, its
-  harness server-bound). An agent never launches a harness by hand — a bare spawn is not a server
-  citizen and is invisible to the board; it staffs the thread and lets the board actuate.
+  Staffing a child seats its lead on it: `Server.MCP.Spawn` builds the pane's exports, so the lead comes
+  up bound to the CHILD — able to push_branch / advance_stage / record_check / submit_review / submit_qa
+  on the thread they lead. The seat cannot wait on delivery: the switchboard spawns whoever a message
+  ADDRESSES, and a brief that @mentions another coworker addresses only them, leaving the lead running
+  on whatever they already had (the lobby, #1) with no way to act on the thread they lead.
 
   The lead resolves BEFORE the thread opens, so a bad handle refuses cleanly instead of leaving an
   orphan lead-less thread — the machine-chat silence bug's tool-side twin.
@@ -83,6 +84,7 @@ defmodule Server.MCP.Tool.StaffChild do
          {:ok, thread} <- graded(thread, params[:grade]),
          {:ok, lead} <- staff(thread, params[:lead]),
          {:ok, _} <- Channel.post(%{thread_id: thread.id, author: identity.agent, body: params[:brief]}),
+         :ok <- seat(thread, lead),
          :ok <- promote_ticket(params[:ticket_id], thread.id) do
       ok(frame, %{"thread_id" => thread.id, "lead" => lead})
     else
@@ -158,7 +160,20 @@ defmodule Server.MCP.Tool.StaffChild do
     end
   end
 
+  # The lead's seat is on the child, and it does not wait on delivery: the switchboard spawns who a
+  # message ADDRESSES (`Server.Switchboard.target_names/1`), so a brief that mentions another coworker
+  # would leave the lead unseated — running on the lobby (#1), unable to push_branch or advance_stage
+  # on the thread they lead. Best-effort: an arbiter at the leaf cap refuses it and says so on the
+  # thread; the lead is then seated by the next message on the child that addresses them.
+  defp seat(thread, lead) do
+    with {:ok, %{exports: exports}} <- Server.MCP.Spawn.join(thread.id, lead, assign: false),
+         {:ok, _handle} <- Server.Arbiter.spawn(exports),
+         do: :ok,
+         else: (_ -> :ok)
+  end
+
   defp child_attrs(title, nil), do: %{title: title}
+
   defp child_attrs(title, parent), do: %{title: title, parent_thread_id: parent.id, project_id: parent.project_id}
 
   # a plain thread, or a workline at `stage` in the parent's workspace (its brief the stage's own)
