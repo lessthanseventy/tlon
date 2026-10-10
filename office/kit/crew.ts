@@ -108,13 +108,17 @@ export const COLS = ["TICKETS", "DOING", "SPEC", "PLAN", "BUILD", "REVIEW"]
 /** one note on the whiteboard: what a click on it does, and what its sticky and its list row say */
 export type BoardItem = { act: Act; title: string; who: string | null; stage: string; asks: boolean; archetype: string | null; high: boolean; routed?: boolean; state?: CardState | null }
 /** where a workline stands, from the server's `seat`: its lead at a desk (▶), parked for a seat under the leaf cap (⏸), nobody at a desk (○), or waiting on you (⚑) */
-export type CardState = { kind: "running" | "parked" | "idle" | "needs"; why: string; atCap?: boolean }
+export type CardState = { kind: "running" | "parked" | "idle" | "needs" | "checking" | "merging"; why: string; atCap?: boolean }
 /** what a board knows beyond the snapshot: the leaf cap (`max_leaves` from the settings) and the threads on the needs list */
-export type BoardCtx = { maxLeaves?: number | null; needs?: number[] }
-export const STATE_GLYPH: Record<CardState["kind"], string> = { running: "▶", parked: "⏸", idle: "○", needs: "⚑" }
+export type BoardCtx = { maxLeaves?: number | null; needs?: number[]; checking?: number | null; merging?: { thread_id: number; state: "landing" | "queued" }[] }
+export const STATE_GLYPH: Record<CardState["kind"], string> = { running: "▶", parked: "⏸", idle: "○", needs: "⚑", checking: "✓", merging: "⤵" }
 
 /** a thread's card state, or null when nobody leads it */
 export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState | null {
+  // the machine's queues first: its full check running on this workline, or the merge queue landing it
+  const merge = ctx.merging?.find((m) => m.thread_id === th.id)
+  if (merge) return { kind: "merging", why: merge.state === "landing" ? "landing now: gated on main" : "in the merge queue" }
+  if (ctx.checking === th.id) return { kind: "checking", why: "its full check is running" }
   if (needsYou(th) || ctx.needs?.includes(th.id)) return { kind: "needs", why: th.prompt ? `asks: ${th.prompt.summary}` : th.awaiting ? `awaits ${th.awaiting}` : "waiting on you" }
   if (!th.lead) return null
   if (th.seat === "desk") return { kind: "running", why: th.thinking?.includes(th.lead) ? `${th.lead} is on it` : `${th.lead} is at a desk` }

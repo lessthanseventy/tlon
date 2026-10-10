@@ -173,10 +173,24 @@ const shiftHeader = () =>
   (all.shifts ?? []).some((x) => x.workspace_id === ws && x.crew !== "all")
     ? all.workspaces.find((w) => w.id === ws)?.shift === "night" ? "☾ night shift" : "☼ day shift"
     : null
+/** the workline the machine's full check runs on now ("#235 verify …"), or null for a session's own check */
+const checkingId = (): number | null => { const m = /^#(\d+) (?:verify|landing)/.exec(all.health?.checks?.running ?? ""); return m ? Number(m[1]) : null }
+/** the header's queues: what is checked and what is merged right now */
+function queuesHeader(): string | null {
+  const c = all.health?.checks, mq = all.health?.merge_queue ?? []
+  const landing = mq.find((m) => m.state === "landing"), queued = mq.filter((m) => m.state === "queued").length
+  const parts = [
+    c?.running ? (checkingId() ? `✓ checking #${checkingId()}` : "✓ a full check runs") : null,
+    c?.waiting.length ? `+${c.waiting.length} waiting` : null,
+    landing ? `⤵ landing #${landing.thread_id}` : null,
+    queued ? `${queued} queued to land` : null,
+  ].filter(Boolean)
+  return parts.length ? parts.join(" · ") : null
+}
 /** what the board reads beyond the snapshot: the leaf cap, and which threads are on the needs list */
 const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
-  return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])) }
+  return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])), checking: checkingId(), merging: all.health?.merge_queue ?? [] }
 }
 const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow) } return r }
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
@@ -1391,6 +1405,7 @@ function draw() {
     ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
     ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),
     ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: toggleShift }] : []),
+    ...(queuesHeader() ? [{ s: `  ${queuesHeader()}`, fg: ROLE.live, go: () => open({ kind: "health" }) }] : []),
     ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
     ...(updated() ? [{ s: "  office updated · R reloads", fg: ROLE.live, bold: true }] : []),
     ...(all.health?.state === "warn" ? [{ s: `  ⚠ ${all.health.problems[0]}`, fg: ROLE.alarm, go: () => open({ kind: "health" }) }] : []),

@@ -33,6 +33,9 @@ for v in $(compgen -e | grep '^TLON_'); do clean+=(-u "$v"); done
 role=verify; [ -n "${WORKLINE_GATE:-}" ] && role=land
 db="tlon_${role}_$(printf '%s' "$slug" | tr -c 'a-zA-Z0-9' '_' | tr 'A-Z' 'a-z')"
 clean+=(TLON_TEST_DATABASE="${db:0:63}")
+# how the machine's checks queue names this run: the office's room and rack read "#<id> verify|landing"
+label=verify; [ -n "${WORKLINE_GATE:-}" ] && label=landing
+clean+=(CHECKS_LABEL="#$tid $label $slug")
 if [ ! -d "$tree" ]; then
   note "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
   echo "workline-verify: no checkout of work/$slug at $tree" >&2

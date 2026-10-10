@@ -55,7 +55,7 @@ defmodule Server.Office do
       awaiting: awaiting(prompts),
       triage: Map.new(ws_ids, &{&1, Room.triage(&1).count}),
       life: Map.new(home_ws_ids(wss), &{&1, &1 |> Server.Life.status() |> Map.take([:level, :xp, :due])}),
-      health: Map.take(Room.health(), [:state, :problems]),
+      health: Map.take(Room.health(), [:state, :problems, :checks, :merge_queue]),
       weather: Server.Office.Weather.now(),
       # a TUI started on an older office revision offers a reload (Server.Rollout)
       revs: Server.Rollout.revs(),

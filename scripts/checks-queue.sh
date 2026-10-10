@@ -23,7 +23,9 @@ if ! { exec 9>>"$lock"; } 2>/dev/null; then
   exec "$@"
 fi
 
-me="$* (pid $$) in $PWD since $(date +%H:%M:%S)"
+# CHECKS_LABEL names the run for the rack and the room (a workline's: "#<id> verify|landing <slug>")
+label="${CHECKS_LABEL:-$*}"
+me="$label (pid $$) in $PWD since $(date +%H:%M:%S)"
 
 # the office's rack reads the holder and the waiters (Server.Office.Room.checks/0)
 if ! flock -n 9; then
@@ -34,7 +36,7 @@ if ! flock -n 9; then
   rm -f "$dir/tlon-checks.wait/$$"
 fi
 
-echo "$* (pid $$) in $PWD since $(date +%H:%M:%S)" >"$holder" 2>/dev/null || true
+echo "$label (pid $$) in $PWD since $(date +%H:%M:%S)" >"$holder" 2>/dev/null || true
 # a killed check must not leave its line behind as if it still ran
 trap ': >"$holder" 2>/dev/null' EXIT
 # 9>&-: what the check leaves running (a watcher, a dev server) must not keep holding the lock.

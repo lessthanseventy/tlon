@@ -114,7 +114,7 @@ type Antic = { kind: "sneak" | "bap" | "chase" | "scuffle" | "chat"; until: numb
 const HOWLS = ["AWOOOOOOO! {name} SHIPPED!", "AWOOOO! Sing, O Muse, of {name}'s landing!", "AWOOOOOOOOO! A HOMECOMING!", "Awoo? AWOOOOOO! {name}!!"]
 
 /** a whiteboard line's mark, by where its workline stands: a play arrow, a pause, an empty ring, a flag */
-const STATE_ICON: Record<CardState["kind"], string[]> = { running: ["k..", "kk.", "k.."], parked: ["k.k", "k.k", "k.k"], idle: ["kkk", "k.k", "kkk"], needs: ["kkk", "kk.", "k.."] }
+const STATE_ICON: Record<CardState["kind"], string[]> = { running: ["k..", "kk.", "k.."], parked: ["k.k", "k.k", "k.k"], idle: ["kkk", "k.k", "kkk"], needs: ["kkk", "kk.", "k.."], checking: ["..k", "k.k", ".k."], merging: [".k.", "kkk", ".k."] }
 
 export class WideRoom extends Sim<Layout> {
   private readonly z: Zones
