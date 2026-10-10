@@ -35,7 +35,12 @@ if ! flock -n 9; then
 fi
 
 echo "$* (pid $$) in $PWD since $(date +%H:%M:%S)" >"$holder" 2>/dev/null || true
-"$@"
-status=$?
-: >"$holder" 2>/dev/null || true
-exit "$status"
+# a killed check must not leave its line behind as if it still ran
+trap ': >"$holder" 2>/dev/null' EXIT
+# 9>&-: what the check leaves running (a watcher, a dev server) must not keep holding the lock.
+# In the background and waited on, so a TERM stops the check and clears the line at once.
+"$@" 9>&- &
+child=$!
+trap 'kill "$child" 2>/dev/null; exit 143' TERM INT
+wait "$child"
+

@@ -156,9 +156,13 @@ defmodule Server.Office.Room do
   HH:MM:SS"`. A waiter whose process is gone is not counted. `%{running: line | nil, waiting: [line]}`.
   """
   def checks(dir \\ System.get_env("XDG_RUNTIME_DIR") || "/tmp") do
+    # a holder whose process is gone (killed outright) left its line: no check runs
     running =
-      case File.read(Path.join(dir, "tlon-checks.holder")) do
-        {:ok, line} -> if String.trim(line) != "", do: String.trim(line)
+      with {:ok, line} <- File.read(Path.join(dir, "tlon-checks.holder")),
+           [_, pid] <- Regex.run(~r/\(pid (\d+)\)/, line),
+           true <- File.exists?("/proc/#{pid}") do
+        String.trim(line)
+      else
         _ -> nil
       end
 

@@ -14,6 +14,9 @@ defmodule Server.Office.RoomChecksTest do
 
     assert Room.checks(dir) == %{running: nil, waiting: []}
 
+    File.write!(Path.join(dir, "tlon-checks.holder"), "mise run check:all (pid 999999998) in /gone since 21:00:00\n")
+    assert Room.checks(dir).running == nil
+
     File.write!(Path.join(dir, "tlon-checks.holder"), "mise run check:all (pid 1) in /w since 21:49:17\n")
     me = System.pid()
     File.write!(Path.join([dir, "tlon-checks.wait", me]), "mise run check:all (pid #{me}) in /v since 21:50:00\n")
