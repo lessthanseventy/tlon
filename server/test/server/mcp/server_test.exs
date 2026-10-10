@@ -345,6 +345,11 @@ defmodule Server.MCP.ServerTest do
     call(token, session, 3, "register", %{})
     {:ok, line} = Server.Workline.open(%{title: "built twice", slug: "built-twice", stage: "build"})
 
+    r = call(token, session, 3, "close_thread", %{"thread_id" => line.id, "abandoned" => "not mine to drop"})
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "only its lead"
+    {:ok, _} = Channel.assign_lead(line.id, "Carl")
+
     r = call(token, session, 4, "close_thread", %{"thread_id" => line.id})
     assert r["isError"]
     assert hd(r["content"])["text"] =~ "superseded_by"

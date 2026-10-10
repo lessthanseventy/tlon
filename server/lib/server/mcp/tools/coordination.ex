@@ -229,15 +229,37 @@ defmodule Server.MCP.Tool.CloseThread do
         fail(frame, "no such thread: #{params[:thread_id]}")
 
       thread ->
-        if Channel.standing?(thread) do
-          fail(
-            frame,
-            "thread #{thread.id} is the workspace's standing thread — every coworker's window lives on it; it is never closed"
-          )
-        else
-          close(frame, thread, params)
+        cond do
+          Channel.standing?(thread) ->
+            fail(
+              frame,
+              "thread #{thread.id} is the workspace's standing thread — every coworker's window lives on it; it is never closed"
+            )
+
+          not may_close?(thread, Identity.from_frame(frame)) ->
+            fail(
+              frame,
+              "thread #{thread.id} is a workline at #{thread.stage}: only its lead, the lead above it or the manager closes it — ask them, or the operator"
+            )
+
+          true ->
+            close(frame, thread, params)
         end
     end
+  end
+
+  # a plain thread is anyone's to close (the coordination this verb exists for); a workline in flight
+  # is its lead's, the lead above it's or the manager's
+  defp may_close?(%Server.Thread{stage: stage}, _identity) when stage in [nil, "merged"], do: true
+
+  defp may_close?(thread, identity) do
+    manager = thread.workspace_id && Server.Workspaces.manager(thread.workspace_id)
+
+    identity.agent in [
+      Channel.thread_lead(thread.id),
+      thread.parent_thread_id && Channel.thread_lead(thread.parent_thread_id)
+    ] or
+      match?(%Server.Coworker{name: name} when name == identity.agent, manager)
   end
 
   defp close(frame, thread, params) do
