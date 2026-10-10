@@ -4,6 +4,7 @@
 // the lead's desks, the crew board, two tables of four), a glass meeting room, the lounge with its
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
+import { drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, stepBook, type Book, type Pt as Perch } from "../kit/uqbar"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
@@ -134,6 +135,8 @@ export class WideRoom extends Sim<Layout> {
   private book: Book
   private readonly cards = new Map<number, Perch>()
   private boardEdge: Perch = { x: 0, y: 1 }
+  /** uqbar's posts in the air (kit/plane.ts) */
+  private planes: Plane[] = []
   private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -154,6 +157,17 @@ export class WideRoom extends Sim<Layout> {
   private stepVolume(a: Agents): boolean {
     this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.boardEdge, spineHome(corner(this.z).shelf)))
     return this.book.flying
+  }
+  /** a uqbar post to thread `tid`: a page tears out of the book and flies to its lead's desk, else its card */
+  fly(tid: number, a: Agents) {
+    const lead = a.threads.find((t) => t.id === tid)?.lead
+    const who = lead ? [...this.actors.values()].find((x) => x.seat.agent === lead) : undefined
+    const to = who ? { x: who.x, y: who.y - 10 } : this.cards.get(tid) ?? this.boardEdge
+    this.planes.push(launch({ x: this.book.x, y: this.book.y }, [], to))
+  }
+  private stepPlanes(): boolean {
+    this.planes = this.planes.map(stepPlane).filter((p): p is Plane => p !== null)
+    return this.planes.length > 0
   }
   /** Argos says something (after `delay`, when he is answering) */
   private dogSay(text: string, delay = 0) { const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
@@ -240,7 +254,7 @@ export class WideRoom extends Sim<Layout> {
    * remote now and then (about once a minute and a quarter each) and flips the channel.
    */
   override step(a: Agents): boolean {
-    const moved = [this.stepDog(), this.stepTalk(), this.stepAntics(), this.stepVolume(a), super.step(a)].some(Boolean)
+    const moved = [this.stepDog(), this.stepTalk(), this.stepAntics(), this.stepVolume(a), this.stepPlanes(), super.step(a)].some(Boolean)
     // after dark the pets turn in, once whatever they were up to is done
     if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog
@@ -341,6 +355,7 @@ export class WideRoom extends Sim<Layout> {
     const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
     drawShelf(sc, shelf, mode === "shelved", !!a.uqbar)
     drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null)
+    for (const p of this.planes) drawPlane(sc, p)
 
     // ── people, Nina ──
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")

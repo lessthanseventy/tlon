@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { crewOf, peopleOf, viewOf } from "../kit/crew"
-import { focus, measure, office, seeded } from "./golden"
+import { readFileSync } from "node:fs"
+import { focus, frameHashes, GOLDEN, measure, office, seeded } from "./golden"
 
 const withUqbar = (thinking = false) => {
   const a = office(3)
@@ -108,5 +109,48 @@ describe("uqbar in the wide room", () => {
       const fr = room.render(down, focus, measure, NOW)
       expect(px(fr, spot().x, spot().y + 3)).toBe(OX())
     })
+  })
+})
+
+describe("torn pages", () => {
+  type Inner = { planes: { phase: string; at: { x: number; y: number } }[]; actors: Map<string, { x: number; y: number; seat: { agent: string } }>; cards: Map<number, { x: number; y: number }>; fly(tid: number, a: unknown): void }
+  /** fly a plane to `tid`, run it out, and return where it was when it finished gliding */
+  const flight = (a: ReturnType<typeof office>, tid: number) => seeded(3, () => {
+    const room = new WideRoom(WIDTH), v = viewOf(a, 1), r = room as unknown as Inner
+    room.render(v, focus, measure, NOW)
+    for (let i = 0; i < 300; i++) room.step(v)
+    r.fly(tid, v)
+    expect(r.planes.length).toBe(1)
+    let last = r.planes[0]!.at
+    for (let i = 0; i < 400 && r.planes.length; i++) {
+      room.step(v)
+      const p = r.planes.find((x) => x.phase === "glide")
+      if (p) last = p.at
+    }
+    expect(r.planes.length).toBe(0)
+    return { last, r }
+  })
+  test("a post to a led thread flies to the lead's desk", () => {
+    const { last, r } = flight(office(3), 102)
+    const lead = r.actors.get("w0")!
+    expect(last).toEqual({ x: lead.x, y: lead.y - 10 })
+  })
+  const unled = (tid: number) => {
+    const a = office(3)
+    a.threads = a.threads.map((t) => (t.id === tid ? { ...t, lead: null } : t))
+    return a
+  }
+  test("a thread with no lead is delivered to its whiteboard card", () => {
+    const { last, r } = flight(unled(101), 101)
+    expect(r.cards.get(101)).toBeDefined()
+    expect(last).toEqual(r.cards.get(101)!)
+  })
+  test("no lead and no card: the board's edge", () => {
+    const { last, r } = flight(unled(102), 102)
+    expect(r.cards.has(102)).toBe(false)
+    expect(last).toEqual((r as unknown as { boardEdge: { x: number; y: number } }).boardEdge)
+  })
+  test("no plane in flight: the golden frames do not move", () => {
+    expect(frameHashes()).toEqual(JSON.parse(readFileSync(GOLDEN, "utf8")))
   })
 })
