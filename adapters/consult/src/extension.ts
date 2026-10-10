@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Type } from "./pi.ts";
-import { extractText } from "../../shared/text.ts";
+import { extractText } from "../../claude-code/lib/text.ts";
 export { extractText };
 import type {
   CommandOptions,

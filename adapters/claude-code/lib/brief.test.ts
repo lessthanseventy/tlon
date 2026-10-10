@@ -34,7 +34,7 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
 
   test("the brief names the model that signs this session's commits (self-report)", () => {
     const out = renderBrief(dossier(), NOW, "deepseek-v4-flash");
-    expect(out).toContain("You are deepseek-v4-flash (pi)");
+    expect(out).toContain("You are deepseek-v4-flash (Claude Code)");
     // An unannounced model adds no line — the brief doesn't invent an identity.
     expect(renderBrief(dossier(), NOW)).not.toContain("You are");
   });

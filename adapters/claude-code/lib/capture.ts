@@ -10,7 +10,7 @@
 // This module is the PURE core — delta-slicing, prompt-building, tolerant parse — unit-pinned
 // without a live session or model.
 
-import { extractText } from "../../shared/text.ts";
+import { extractText } from "./text.ts";
 export { extractText };
 
 export interface Entry {
