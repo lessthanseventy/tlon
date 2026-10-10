@@ -278,7 +278,10 @@ defmodule Server.Arbiter.Tmux do
           look_again(ws, index, text, n)
         end)
 
-      if result == :pending,
+      # the last look pressed Enter too: one more look, after a beat, before saying it didn't take
+      2_000 |> min(List.last(delays) || 0) |> Process.sleep()
+
+      if result == :pending and still_pending?(ws, index, text),
         do: Logger.warning("wake: window #{index} on workspace #{ws} still holds its message unsent after every Enter")
     end)
   end
@@ -297,6 +300,13 @@ defmodule Server.Arbiter.Tmux do
         180_000,
         180_000
       ])
+
+  defp still_pending?(ws, index, text) do
+    case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, index)]) do
+      {pane, 0} when is_binary(pane) -> pending?(pane, text)
+      _ -> false
+    end
+  end
 
   # one look at the pane: our text still waiting is another Enter and another look; anything else, done
   defp look_again(ws, index, text, n) do
