@@ -200,6 +200,16 @@ defmodule Server.ShiftsTest do
     assert Server.Attention.open_asks() == []
   end
 
+  test "answering \"stay on nights\" leaves the night crew on", %{ws: ws} do
+    {:ok, _lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    {:ok, _} = Shifts.switch(ws.id, "night")
+    :ok = Shifts.offer_day(ws.id, "5pm")
+    assert [ask] = Server.Attention.open_asks()
+    assert {:ok, _} = Server.Attention.answer_ask(ask.id, "andrew", "2")
+    assert Shifts.current(ws.id) == "night"
+    assert Server.Attention.open_asks() == []
+  end
+
   test "an open offer is withdrawn when the day crew comes back another way", %{ws: ws} do
     {:ok, _lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
     {:ok, _} = Shifts.switch(ws.id, "night")
