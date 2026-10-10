@@ -205,7 +205,7 @@ defmodule Server.MCP.GatewayTest do
         body: "⚑ waiting on you — bash: env",
         kind: "prompt",
         payload: %{
-          "harness" => "pi",
+          "harness" => "claude",
           "summary" => "bash: env",
           "window" => "t#{t.id}",
           "workspace_id" => 1,
@@ -217,7 +217,7 @@ defmodule Server.MCP.GatewayTest do
 
     {201, answer} = post_json("/api/threads/#{t.id}/messages", %{body: "y"})
     assert answer["reply_to"] == prompt.id
-    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", _, "yy"]}
+    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", _, "y"]}
     assert Server.Repo.get!(Server.Message, prompt.id).resolution == "answered: y"
 
     {:ok, _} = Channel.close_thread(Server.Repo.get!(Server.Thread, t.id))
