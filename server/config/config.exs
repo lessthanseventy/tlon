@@ -30,8 +30,9 @@ config :server, Oban,
   queues: [default: 5, maintain: 1, staff: 1, verify: 1, landing: 1, schedules: 2],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
-    # a job left `executing` by a stopped node is rescued — after longer than any gate runs, its wait
-    # in the machine's checks queue (scripts/checks-queue.sh) included: a few ~10 min checks ahead
+    # a job left `executing` by a restart is requeued at boot (Server.Jobs.Orphans); this rescues one
+    # stuck any other way, after longer than any gate runs, its wait in the machine's checks queue
+    # (scripts/checks-queue.sh) included: a few ~10 min checks ahead
     {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 120)},
     {Oban.Plugins.Cron,
      crontab: [
