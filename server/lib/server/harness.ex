@@ -144,7 +144,11 @@ defmodule Server.Harness.ClaudeCode do
   defp path_rule(glob), do: "**/" <> glob
 
   defp mcp_denies(%Profile{mcp: mcp}) when is_map(mcp) do
-    for {server, %{"excludeTools" => tools}} <- mcp, tool <- tools, do: "mcp__#{server}__#{tool}"
+    # a deny would block the mod's own call too: an adapter verb is hidden by the cut alone
+    for {server, %{"excludeTools" => tools}} <- mcp,
+        tool <- tools,
+        tool not in Server.MCP.Tool.adapter_verbs(),
+        do: "mcp__#{server}__#{tool}"
   end
 
   defp mcp_denies(_p), do: []

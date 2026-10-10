@@ -134,6 +134,13 @@ defmodule Server.HarnessTest do
       refute "mcp__tlon__open_thread" in tertius, "the orchestrator keeps the verbs it routes with"
     end
 
+    test "an adapter verb is cut from the model but never denied: the mod registers through the same connection" do
+      for {name, archetype} <- [{"vera", :reviewer}, {"hronir", :builder}, {"tertius", :surveyor}] do
+        cmd = Harness.driver(:claude_code).launch_command(Profiles.instantiate(%{archetype: archetype, name: name}))
+        refute "mcp__tlon__register" in denies(cmd), "#{name}'s pane could never register its session"
+      end
+    end
+
     test "the launch command runs: its env reaches launch.sh, quotes and all" do
       cmd = Harness.driver(:claude_code).launch_command(Profiles.instantiate(%{archetype: :builder, name: "hronir"}))
       launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
