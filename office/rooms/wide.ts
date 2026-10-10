@@ -162,8 +162,8 @@ export class WideRoom extends Sim<Layout> {
   /** a uqbar post to thread `tid`: a page tears out of the book and flies to its lead's desk, else its card */
   fly(tid: number, a: Agents, passing: string | null = null) {
     const lead = a.threads.find((t) => t.id === tid)?.lead
-    const who = lead ? [...this.actors.values()].find((x) => x.seat.agent === lead) : undefined
-    const to = who ? { x: who.x, y: who.y - 10 } : this.cards.get(tid) ?? this.boardEdge
+    const desk = lead ? this.plan.home(this.plan.layout(a), lead) : null
+    const to = desk ? { x: desk.x, y: desk.y - 10 } : this.cards.get(tid) ?? this.boardEdge
     const old = passing ? this.actors.get(passing) : undefined, from = { x: this.book.x, y: this.book.y }
     const via: Plane["legs"] = old ? [{ x: old.x, y: old.y - 10 }] : []
     // every 4th plane Argos jumps for: he runs under its midpoint and it hangs there a moment
