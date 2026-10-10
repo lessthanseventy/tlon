@@ -20,6 +20,13 @@ defmodule Server.ProfilesTest do
       assert p.sandbox["network"]["allowAllUnixSockets"] == true
     end
 
+    # each denyWrite match under a write root is a bwrap mount, and bwrap takes at most 9000 arguments
+    test "its write roots are narrow enough for bwrap" do
+      writes = Profiles.fetch("tertius").sandbox["filesystem"]["allowWrite"]
+      refute "~/.local" in writes, "~/.local holds container and game stores: thousands of *.pem/*.key"
+      assert "~/.local/share/mise" in writes
+    end
+
     test "carries the ORCHESTRATOR toolset (Slice 4D): staffing + cross-thread verbs, minus register/consult" do
       tlon = Profiles.fetch("tertius").mcp["tlon"]
       # register (session-claim) + consult_peer (model-to-model) are still cut; the orchestrator does
