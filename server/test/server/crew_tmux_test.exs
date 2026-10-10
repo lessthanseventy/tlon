@@ -99,32 +99,22 @@ defmodule Server.Crew.TmuxTest do
     assert {:error, {:tmux_failed, "dup window"}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
   end
 
-  test "the opening turn is polled for readiness, typed, then submitted as its own burst", %{thread: t} do
+  test "the opening turn is queued for the reviewer's session to take — nothing typed into the booting pane",
+       %{thread: t} do
     test_pid = self()
-    polls = :counters.new(1, [])
 
-    Application.put_env(:server, :tmux_cmd, fn
-      "tmux", ["-L", _, "capture-pane" | _] = argv, _opts ->
-        send(test_pid, {:tmux, argv})
-        :counters.add(polls, 1, 1)
-        if :counters.get(polls, 1) >= 2, do: {"tlon: registered — reviewer on 1", 0}, else: {"booting…", 0}
-
-      "tmux", argv, _opts ->
-        send(test_pid, {:tmux, argv})
-        {"", 0}
+    Application.put_env(:server, :tmux_cmd, fn "tmux", argv, _opts ->
+      send(test_pid, {:tmux, argv})
+      {"", 0}
     end)
 
-    assert {:ok, window} = Crew.Tmux.spawn("reviewer", t.id, "review HEAD~1")
-    target = "w#{t.workspace_id}:#{window}"
+    assert {:ok, _window} = Crew.Tmux.spawn("reviewer", t.id, "review HEAD~1")
 
-    assert_receive {:tmux, ["-L", _, "capture-pane", "-p", "-t", ^target]}
-    assert_receive {:tmux, ["-L", _, "capture-pane", "-p", "-t", ^target]}
-    assert_receive {:tmux, ["-L", _, "send-keys", "-l", "-t", ^target, text]}
+    refute_received {:tmux, ["-L", _, "send-keys" | _]}
+    assert [text] = Server.Wake.take(t.id, "reviewer")
     assert text =~ "thread ##{t.id}"
     assert text =~ "claude"
     assert text =~ "review HEAD~1"
-    assert_receive {:tmux, ["-L", _, "send-keys", "-t", ^target, "Enter"]}
-    assert :counters.get(polls, 1) == 2
   end
 
   test "kill drops the role's window; a missing thread is a quiet :ok", %{thread: t} do

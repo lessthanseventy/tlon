@@ -212,20 +212,6 @@ defmodule Server.OperatorConfig do
   end
 
   @doc """
-  Where the machine is — the harness-binding signal (per-thread-agents Slice D): `"home"`
-  (personal Anthropic subscription; anthropic-model coworkers must ride the official
-  `claude_code` harness — the ToS rule) or `"work"` (API-billed; pi may drive any provider).
-  Precedence: `TLON_ENV` env var > the config file's `"environment"` key > `"home"`.
-  """
-  @spec environment(String.t()) :: String.t()
-  def environment(path \\ path()) do
-    System.get_env("TLON_ENV") || environment_key(read(path)) || "home"
-  end
-
-  defp environment_key(%{"environment" => env}) when is_binary(env) and env != "", do: env
-  defp environment_key(_map), do: nil
-
-  @doc """
   The maximum number of CONCURRENT leaf sessions on work threads the staffing pass will spawn (the
   runaway-fleet circuit breaker — every leaf is a live harness, most of them on the Claude
   subscription at home); a standing duty's leaf takes no seat (`Server.Staffing.seated_leaves/1`).

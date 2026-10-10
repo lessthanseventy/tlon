@@ -11,6 +11,7 @@ defmodule Server.Jobs.Drain do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
+    _ = Server.Wake.report_overdue()
     _ = Server.Switchboard.redeliver_unheard()
     _ = Server.Switchboard.drain()
     :ok

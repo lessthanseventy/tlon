@@ -1,4 +1,4 @@
-import { expect, test } from "claude-code/testing";
+import { expect, mock, test } from "claude-code/testing";
 
 type Declare = { tool: string; args: Record<string, unknown> };
 type Fetch = (e: { url: string; init: { body: string } }) => { status: number; ok: boolean; headers: Record<string, string>; text: string };
@@ -9,6 +9,9 @@ type World = {
   fetch?: Fetch;
   run?: (argv: string[], init?: { env?: Record<string, string> }) => { exitCode: number; stdout: string; stderr: string };
   model?: string;
+  wakes?: string[][];
+  submitted?: string[];
+  ownClock?: boolean;
   serverDown?: boolean;
 };
 
@@ -26,10 +29,13 @@ function engine(on, world: World = {}): Declare[] {
   on("session.end", ($, e) => ({ sessionId: e.sessionId }));
   on("turn.start", ($, e) => ({ turnId: e.turnId }));
   on("turn.complete", ($, e) => ({ text: e.answer }));
-  on("prompt.submit", ($, e) => ({ text: e.text, context: e.context }));
+  on("prompt.submit", ($, e) => {
+    world.submitted?.push(e.text);
+    return { text: e.text, context: e.context };
+  });
   on("tool.call", () => ({ result: "ok" }));
   on("env.get", ($, e) => ({ value: env[e.name] }));
-  on("clock.every", () => ({ value: undefined }));
+  if (!world.ownClock) on("clock.every", () => ({ value: undefined }));
   on("command.register", () => ({ value: undefined }));
   on("tool.register", () => ({ value: undefined }));
   on("fs.read", () => {
@@ -46,13 +52,18 @@ function engine(on, world: World = {}): Declare[] {
   on("mcp.call", ($, e) => {
     if (world.serverDown) throw new Error("connection refused");
     sent.push({ tool: e.tool, args: e.args ?? {} });
-    const text = e.tool === "get_dossier" ? JSON.stringify(world.dossier ?? DOSSIER) : "ok";
+    const text =
+      e.tool === "get_dossier"
+        ? JSON.stringify(world.dossier ?? DOSSIER)
+        : e.tool === "take_wakes"
+          ? JSON.stringify(world.wakes?.shift() ?? [])
+          : "ok";
     return { value: { content: [{ type: "text", text }], isError: false } };
   });
   return sent;
 }
 
-const declares = (sent: Declare[]) => sent.filter((d) => d.tool !== "get_dossier");
+const declares = (sent: Declare[]) => sent.filter((d) => d.tool !== "get_dossier" && d.tool !== "take_wakes");
 
 // Fire-and-forget calls land a few ticks after the hook returns.
 async function settle() {
@@ -254,4 +265,16 @@ test("on the ollama gateway, web_search goes through ollama's search", async ($,
 
   expect(url).toBe("https://ollama.com/api/web_search");
   expect(r.result).toContain("## Mods\nhttps://code.claude.com/x\na mod is a plugin");
+});
+
+test("a wake the server queued is taken on the next poll and submitted as a turn — nothing typed", async ($, on) => {
+  const world: World = { ownClock: true, wakes: [["New message on thread 42 from lonnrot: look at the band"]], submitted: [] };
+  engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+
+  await clock.advance(3_000);
+  await settle();
+
+  expect(world.submitted).toEqual(["New message on thread 42 from lonnrot: look at the band"]);
 });

@@ -22,18 +22,7 @@ defmodule Server.Crew.Tmux do
   alias Server.Thread
   alias Server.Tmux
 
-  # Readiness gate for the opening inject: a fresh-profile harness boots for several seconds — far
-  # longer than a fixed settle — so the pane is POLLED for the registered footer before Enter, or a
-  # booting TUI swallows it and the turn sits unsubmitted. A poll timeout still injects.
-  @ready_marker "registered"
-  @ready_poll_ms 500
-  @ready_timeout_ms 20_000
-  @opening_settle_ms 1_500
-
   defp joiner, do: Application.get_env(:server, :crew_join, &Spawn.join/3)
-  defp ready_poll_ms, do: Application.get_env(:server, :crew_poll_ms, @ready_poll_ms)
-  defp ready_timeout_ms, do: Application.get_env(:server, :crew_ready_timeout_ms, @ready_timeout_ms)
-  defp opening_settle_ms, do: Application.get_env(:server, :crew_settle_ms, @opening_settle_ms)
 
   @impl Crew
   def spawn_role(role_key, thread_id, task), do: spawn(role_key, thread_id, task, [])
@@ -42,9 +31,9 @@ defmodule Server.Crew.Tmux do
   def kill_role(role_key, thread_id), do: kill(role_key, thread_id)
 
   @doc """
-  Spawn `role_key` onto task `thread_id` as a server citizen, then inject the leader's `task` as its
-  opening turn. `{:ok, window}` or a typed error. `opts[:inject]` (default true) can be set false
-  in tests to skip the timed send-keys.
+  Spawn `role_key` onto task `thread_id` as a server citizen, the leader's `task` queued as its
+  opening turn (`Server.Wake`: its session takes it once it is up, nothing typed into a booting
+  pane). `{:ok, window}` or a typed error. `opts[:inject]` (default true) false queues nothing.
   """
   @spec spawn(String.t(), integer() | String.t(), String.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def spawn(role_key, thread_id, task, opts \\ []) do
@@ -59,7 +48,7 @@ defmodule Server.Crew.Tmux do
          window = Crew.crew_window(role_key, thread_id),
          script = Tmux.boot_script(exports, Harness.driver(profile.harness).launch_command(profile)),
          :ok <- open_window(ws, window, script) do
-      if Keyword.get(opts, :inject, true), do: inject_opening(ws, window, opening_turn(thread_id, task))
+      if Keyword.get(opts, :inject, true), do: Server.Wake.queue(thread_id, handle, opening_turn(thread_id, task))
       {:ok, window}
     else
       {:error, _} = err -> err
@@ -112,33 +101,5 @@ defmodule Server.Crew.Tmux do
   defp opening_turn(thread_id, task) do
     "You are reviewing on server thread ##{thread_id}. Leader handle: claude. " <>
       "Task: #{task}. Read the diff (git diff/show), post findings, and escalate any fix per your protocol."
-  end
-
-  # Two-phase send-keys, but only once the harness is input-ready: await the registered footer,
-  # type the literal text, settle, then Enter as a SEPARATE burst.
-  defp inject_opening(ws, window, text) do
-    _ = await_ready(ws, window)
-    Tmux.send_text(ws, window, text)
-    Process.sleep(opening_settle_ms())
-    Tmux.submit(ws, window)
-  end
-
-  defp await_ready(ws, window), do: poll_ready(ws, window, div(ready_timeout_ms(), max(ready_poll_ms(), 1)))
-
-  defp poll_ready(_ws, _window, remaining) when remaining <= 0, do: false
-
-  defp poll_ready(ws, window, remaining) do
-    case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, window)]) do
-      {out, 0} when is_binary(out) ->
-        if String.contains?(out, @ready_marker) do
-          true
-        else
-          Process.sleep(ready_poll_ms())
-          poll_ready(ws, window, remaining - 1)
-        end
-
-      _ ->
-        false
-    end
   end
 end

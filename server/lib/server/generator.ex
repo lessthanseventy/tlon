@@ -9,7 +9,7 @@ defmodule Server.Generator do
   alias Server.Repo
 
   @cap 50
-  @default {"pi", "ollama-cloud/deepseek-v4.1-flash"}
+  @default {"claude", "ollama-cloud/deepseek-v4.1-flash"}
 
   @spec run(String.t()) :: {:ok, String.t()} | {:error, :off | :capped | term()}
   def run(prompt) do

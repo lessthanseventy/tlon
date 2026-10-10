@@ -96,6 +96,7 @@ defmodule Server.MCP.ServerTest do
                "presence_thinking",
                "presence_doing",
                "presence_idle",
+               "take_wakes",
                "propose_habit",
                "get_brief",
                "get_dossier",
@@ -548,6 +549,33 @@ defmodule Server.MCP.ServerTest do
 
     reloaded = Repo.get!(Session, db_session.id)
     assert Presence.warm?(reloaded.last_active_at)
+  end
+
+  test "take_wakes hands the session the wakes queued for it, once, oldest first", %{
+    thread: thread,
+    agent: agent,
+    token: token
+  } do
+    session = handshake(token)
+    {:ok, _} = Server.Wake.queue(thread.id, agent.name, "first")
+    {:ok, _} = Server.Wake.queue(thread.id, agent.name, "second")
+    {:ok, _} = Server.Wake.queue(thread.id, "someone-else", "not yours")
+
+    assert decode_tool_json(call(token, session, 3, "take_wakes", %{})) == ["first", "second"]
+    assert decode_tool_json(call(token, session, 4, "take_wakes", %{})) == []
+  end
+
+  test "taking wakes is not activity — a session idle past its window stays cold, so its wake reads unheard",
+       %{thread: thread, token: token} do
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+    db_session = Staff.session_for_thread(thread)
+    cold = DateTime.utc_now() |> DateTime.shift(hour: -2) |> DateTime.truncate(:second)
+    Repo.update_all(from(s in Session, where: s.id == ^db_session.id), set: [last_active_at: cold])
+
+    call(token, session, 4, "take_wakes", %{})
+
+    assert Repo.get!(Session, db_session.id).last_active_at == cold
   end
 
   test "get_facts returns the full corpus past the brief's cap", %{thread: thread, token: token} do

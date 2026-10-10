@@ -65,16 +65,10 @@ defmodule Server.Bench.Roles do
     system = Enum.join(Enum.reject([p.system_prompt, @bench_note], &is_nil/1), "\n\n")
     base = Server.Harness.driver(p.harness).aside_argv(p, system, prompt)
 
-    case p.harness do
-      :claude_code ->
-        tools = if write?, do: ["--allowedTools", "Edit,Write,Bash"], else: []
+    tools = if write?, do: ["--allowedTools", "Edit,Write,Bash"], else: []
 
-        swap_tools(base, write?, "Read,Grep,Glob,Edit,Write,Bash") ++
-          tools ++ ["--output-format", "stream-json", "--verbose"]
-
-      :pi ->
-        swap_tools(base, write?, "read,grep,find,ls,edit,write,bash") ++ ["--mode", "json"]
-    end
+    swap_tools(base, write?, "Read,Grep,Glob,Edit,Write,Bash") ++
+      tools ++ ["--output-format", "stream-json", "--verbose"]
   end
 
   defp swap_tools(argv, false, _tools), do: argv
@@ -219,9 +213,8 @@ defmodule Server.Bench.Roles do
   @doc """
   A harness's machine-readable stdout → `{reply, usage}`. `:claude_code` prints an event per line
   (`--output-format stream-json`) ending in a result; a run killed by the timeout has none, so its
-  usage is summed from the assistant events it did stream. `:pi` prints an event per line (`--mode json`), whose assistant
-  `message_end`s carry the usage. Usage is `%{input, output, cache_read, cache_write, cost_usd,
-  turns}`; `cost_usd` is nil when the harness reports none.
+  usage is summed from the assistant events it did stream. Usage is `%{input, output, cache_read,
+  cache_write, cost_usd, turns}`; `cost_usd` is nil when the harness reports none.
   """
   def parse_output(:claude_code, out) do
     out
@@ -246,30 +239,6 @@ defmodule Server.Bench.Roles do
            turns: r["num_turns"]
          })}
     end
-  end
-
-  def parse_output(:pi, out) do
-    msgs =
-      for line <- String.split(out, "\n", trim: true),
-          {:ok, %{"type" => "message_end", "message" => %{"role" => "assistant"} = m}} <- [JSON.decode(line)],
-          do: m
-
-    reply =
-      case List.last(msgs) do
-        nil -> ""
-        m -> Enum.join(for(%{"type" => "text", "text" => t} <- List.wrap(m["content"]), do: t))
-      end
-
-    sum = fn key -> msgs |> Enum.map(&(get_in(&1, ["usage", key]) || 0)) |> Enum.sum() end
-
-    {reply,
-     usage(%{
-       input: sum.("input"),
-       output: sum.("output"),
-       cache_read: sum.("cacheRead"),
-       cache_write: sum.("cacheWrite"),
-       turns: length(msgs)
-     })}
   end
 
   defp stream_events(out) do

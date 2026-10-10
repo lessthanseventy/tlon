@@ -14,7 +14,6 @@ defmodule Server.AttentionTest do
   alias Server.Switchboard
   alias Server.Workspaces
 
-  @pi File.read!("test/fixtures/panes/pi_permission_prompt.txt")
   @claude File.read!("test/fixtures/panes/claude_permission_prompt.txt")
   @claude_idle File.read!("test/fixtures/panes/claude_idle.txt")
 
@@ -98,12 +97,6 @@ defmodule Server.AttentionTest do
   end
 
   describe "detect/1 — a harness's own dialog, read off the pane" do
-    test "pi-permission-system: the cursor-marked options and the command it asks about" do
-      assert %{harness: "pi", summary: "bash: env", options: options} = Attention.detect(@pi)
-      assert Enum.map(options, & &1.key) == ~w(y s n r)
-      assert %{key: "s", label: ~s(Yes, allow bash "env" for this session)} in options
-    end
-
     test "Claude Code: the numbered list under its question (the dialog's shape, not a live capture)" do
       assert %{harness: "claude", summary: "Do you want to proceed?", options: options} = Attention.detect(@claude)
       assert Enum.map(options, & &1.key) == ~w(1 2 3)
@@ -120,17 +113,17 @@ defmodule Server.AttentionTest do
   describe "tick/1 — the reconcile" do
     test "a waiting pane opens ONE delivered prompt; the pane moving on resolves it", %{ws: ws, thread: t} do
       tmux(leaf(t.id))
-      Process.put(:screen, @pi)
+      Process.put(:screen, @claude)
 
       :ok = Attention.tick(ws.id)
       :ok = Attention.tick(ws.id)
 
       assert [%Message{author: "tlon", kind: "prompt", resolved_at: nil, delivered_at: %DateTime{}} = p] = prompts(t.id)
-      assert p.payload["summary"] == "bash: env"
+      assert p.payload["summary"] == "Do you want to proceed?"
       assert p.payload["window"] == "t#{t.id}"
-      assert p.body =~ "⚑ waiting on you — bash: env"
+      assert p.body =~ "⚑ waiting on you — Do you want to proceed?"
       assert Attention.waiting?(t.id)
-      assert %{summary: "bash: env"} = Attention.open_prompts_by_thread()[t.id]
+      assert %{summary: "Do you want to proceed?"} = Attention.open_prompts_by_thread()[t.id]
 
       Process.put(:screen, @claude_idle)
       :ok = Attention.tick(ws.id)
@@ -141,14 +134,14 @@ defmodule Server.AttentionTest do
 
     test "a new dialog on the same window supersedes; a window that is gone closes its prompt", %{ws: ws, thread: t} do
       tmux(leaf(t.id))
-      Process.put(:screen, @pi)
-      :ok = Attention.tick(ws.id)
-
       Process.put(:screen, @claude)
       :ok = Attention.tick(ws.id)
 
+      Process.put(:screen, @claude_ask)
+      :ok = Attention.tick(ws.id)
+
       assert [%Message{resolution: "superseded"}, %Message{resolved_at: nil} = open] = prompts(t.id)
-      assert open.payload["summary"] == "Do you want to proceed?"
+      assert open.payload["summary"] == "Should I proceed with the check?"
 
       tmux("")
       :ok = Attention.tick(ws.id)
@@ -157,11 +150,11 @@ defmodule Server.AttentionTest do
 
     test "the sidebar row carries the open prompt", %{ws: ws, thread: t} do
       tmux(leaf(t.id))
-      Process.put(:screen, @pi)
+      Process.put(:screen, @claude)
       :ok = Attention.tick(ws.id)
 
       row = Board.sidebar() |> Enum.flat_map(& &1.threads) |> Enum.find(&(&1.id == t.id))
-      assert %{summary: "bash: env", options: [%{"key" => "y"} | _]} = row.prompt
+      assert %{summary: "Do you want to proceed?", options: [%{"key" => "1"} | _]} = row.prompt
     end
   end
 
@@ -197,30 +190,29 @@ defmodule Server.AttentionTest do
   describe "respond/3 — the operator's one door" do
     setup %{ws: ws, thread: t} do
       tmux(leaf(t.id))
-      Process.put(:screen, @pi)
+      Process.put(:screen, @claude)
       :ok = Attention.tick(ws.id)
       [prompt] = prompts(t.id)
       %{prompt: prompt, target: "w#{ws.id}:=t#{t.id}"}
     end
 
-    test "an option key answers: pi's letter pressed twice, a delivered reply, the prompt resolved",
+    test "an option key answers: its number pressed, a delivered reply, the prompt resolved",
          %{thread: t, prompt: prompt, target: target} do
-      assert {:ok, reply} = Attention.respond(t.id, "andrew", "y")
+      assert {:ok, reply} = Attention.respond(t.id, "andrew", "1")
 
-      assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "yy"]}
+      assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "1"]}
       refute_receive {:tmux, [_, _, "send-keys", "-t", ^target, "Enter"]}
       assert %Message{kind: "chat", reply_to: reply_to, delivered_at: %DateTime{}} = reply
       assert reply_to == prompt.id
-      assert [%Message{resolution: "answered: y"}] = prompts(t.id)
+      assert [%Message{resolution: "answered: 1"}] = prompts(t.id)
       refute Attention.waiting?(t.id)
     end
 
     test "the label answers too, and text after the key follows as its own burst, then Enter",
          %{ws: ws, thread: t, target: target} do
-      assert {:ok, _} = Attention.respond(t.id, "andrew", "No, provide reason")
-      assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "rr"]}
+      assert {:ok, _} = Attention.respond(t.id, "andrew", "Yes")
+      assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "1"]}
 
-      # Claude Code takes the number outright.
       Process.put(:screen, @claude)
       :ok = Attention.tick(ws.id)
       assert {:ok, _} = Attention.respond(t.id, "andrew", "3 use mise, not a bare mix")

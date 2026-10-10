@@ -25,7 +25,9 @@ import { DEFAULT_MODEL, isImagePath, mimeOf, parseArgs, parseToolArgs, serialize
 // an extraction call; a compaction flushes whatever is there.
 const MIN_DELTA_CHARS = 2_000;
 const THREAD_PANE = "tlon-thread";
-const REFRESH_MS = 30_000;
+// How often the session looks for wakes the server queued for it (Server.Wake). Taking them is
+// not activity on the server's side, so polling never keeps an idle session warm.
+const WAKE_POLL_MS = 3_000;
 
 type Message = { author: string; body: string; at?: string };
 
@@ -38,6 +40,7 @@ let lastCorrection = "";
 let captured = 0;
 let capturing = false;
 let messages: Message[] = [];
+let draining = false;
 
 function declare($, tool: string, args: Record<string, unknown> = {}) {
   $.mcp.call("tlon", tool, args).catch(() => {});
@@ -61,6 +64,21 @@ async function refresh($) {
     return;
   }
   $.ui.invalidate("ui.render");
+}
+
+// A wake (a teammate's message, an opening assignment) arrives as if typed: Claude Code holds it
+// until the session is idle, so it never lands on a booting input or a half-written prompt.
+async function drainWakes($) {
+  if (draining) return;
+  draining = true;
+  try {
+    const wakes = await call($, "take_wakes");
+    if (Array.isArray(wakes)) for (const text of wakes) void $.prompt.submit({ text: String(text), asUser: true });
+  } catch {
+    // a missed poll is taken by the next one; a wake left too long is the server's to report
+  } finally {
+    draining = false;
+  }
 }
 
 async function loadMessages($) {
@@ -198,7 +216,7 @@ export function register(on) {
     cwd = e.cwd;
     const pane = await $.env.get("TMUX_PANE");
     declare($, "register", pane ? { pane_ref: pane } : {});
-    $.clock.every(REFRESH_MS, () => refresh($));
+    $.clock.every(WAKE_POLL_MS, () => drainWakes($));
     void refresh($);
     try {
       await $.tool.register({
@@ -297,7 +315,7 @@ export function register(on) {
     if (thread && !e.agentId) {
       declare($, "presence_idle");
       void capture($, MIN_DELTA_CHARS);
-      $.ui.invalidate("ui.render");
+      void refresh($);
     }
     return next(e);
   });

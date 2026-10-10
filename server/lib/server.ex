@@ -58,7 +58,6 @@ defmodule Server do
       Profiles,
       Harness,
       Harness.Driver,
-      Harness.Pi,
       Harness.ClaudeCode,
       LeafWindow,
       Tmux,

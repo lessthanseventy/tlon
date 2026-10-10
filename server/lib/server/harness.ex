@@ -1,8 +1,8 @@
 defmodule Server.Harness.Driver do
   @moduledoc """
   The uniform per-harness contract (per-thread-agents Slice D). The lifecycle's tmux transport
-  (spawn a window, inject a turn via send-keys, kill a window) is harness-AGNOSTIC and lives in
-  `Server.Tmux` and its callers; what differs per harness is captured here:
+  (spawn a window, kill a window) is harness-AGNOSTIC and lives in `Server.Tmux` and its callers;
+  what differs per harness is captured here:
 
     * `launch_command/1` — the exec string a spawned window runs for a profile (the `spawn` half
       of the design contract; `Server.Tmux.boot_script/2` wraps it in identity exports).
@@ -14,27 +14,14 @@ end
 
 defmodule Server.Harness do
   @moduledoc """
-  Environment-resolved harness binding (per-thread-agents Slice D). A coworker is
-  archetype × harness-binding × model; the archetype no longer hardcodes *how* it runs — the
-  binding is resolved from the model + where the server is running (`Server.OperatorConfig.environment/0`):
-
-    * **home** (personal Anthropic subscription): an anthropic-provider model binds to
-      `:claude_code` — the official harness. Driving a personal Claude subscription through a
-      third-party harness risks the account (the ToS rule); do not.
-    * anything else (work / API-billed, or a non-anthropic model anywhere): `:pi`.
-
-  A template/roster `harness:` key stays an explicit pin over this resolution (the escape hatch).
-  Codex/gemini drivers slot in as new `Server.Harness.Driver` impls + registry entries when first
-  needed.
+  How a coworker runs. A coworker is archetype × harness × model; every model runs in Claude Code
+  (`Server.Harness.ClaudeCode`), a non-Anthropic one through Claude Code's gateway setting
+  (`adapters/claude-code/gateway.sh`), so the provider is configuration and the harness one.
+  A profile's `harness` names the driver; Codex/gemini drivers slot in as new
+  `Server.Harness.Driver` impls + registry entries when first needed.
   """
 
-  @drivers %{claude_code: Server.Harness.ClaudeCode, pi: Server.Harness.Pi}
-
-  @doc "The harness a model binds to in `environment` — see the moduledoc for the rule."
-  @spec resolve(map() | nil, String.t()) :: :claude_code | :pi
-  def resolve(model, environment)
-  def resolve(%{provider: "anthropic"}, "home"), do: :claude_code
-  def resolve(_model, _environment), do: :pi
+  @drivers %{claude_code: Server.Harness.ClaudeCode}
 
   @doc "The driver module for a harness atom (raises on an unknown harness)."
   @spec driver(atom()) :: module()
@@ -62,59 +49,79 @@ end
 
 defmodule Server.Harness.ClaudeCode do
   @moduledoc """
-  The Claude Code driver: launches through `adapters/claude-code/launch.sh` (funes MCP +
-  brief/capture hooks + the citizen protocol prompt). A profile's persona rides as
-  `TLON_ROLE_PROMPT_FILE` (the launcher appends it to its citizen prompt — a second
-  `--append-system-prompt` flag would *replace* the citizen protocol, not add to it); an
-  anthropic model as `--model`.
+  The Claude Code driver: launches through `adapters/claude-code/launch.sh` (funes MCP, the
+  tlon-citizen mod, the citizen protocol prompt), every one-shot through
+  `adapters/claude-code/gateway.sh`, which points Claude Code at the model's provider.
+
+  A profile's persona rides as `TLON_ROLE_PROMPT_FILE` (the launcher appends it to its citizen
+  prompt — a second `--append-system-prompt` flag would *replace* the citizen protocol, not add to
+  it); the model as `--model` and its thinking as `--effort`; the provider as `TLON_PROVIDER`. Its
+  permission floor (`Server.Profiles`) lands as deny rules (`TLON_PERMISSIONS_DENY`), which hold in
+  every permission mode. A non-Anthropic seat whose workspace allows without asking runs in its
+  sandbox (`TLON_SANDBOX_FILE`) with no prompts; one set to ask keeps auto mode.
   """
   @behaviour Server.Harness.Driver
 
   alias Server.Profile
   alias Server.Profiles
 
+  @efforts ~w(low medium high xhigh max)
+
   @impl true
   def launch_command(%Profile{} = p) do
     launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
-
-    envs = role_env(p) <> deny_env(p)
-
-    model =
-      case p.model do
-        %{provider: "anthropic", model: m, thinking: t} when is_binary(t) -> " --model #{m} --effort #{t}"
-        %{provider: "anthropic", model: m} -> " --model #{m}"
-        _ -> ""
-      end
-
-    if envs == "", do: launcher <> model, else: "env " <> envs <> launcher <> model
+    envs = role_env(p) <> deny_env(p) <> provider_env(p) <> sandbox_env(p)
+    command = Enum.join([launcher | model_args(p.model)], " ")
+    if envs == "", do: command, else: "env " <> envs <> command
   end
 
   @impl true
   def aside_argv(%Profile{} = p, system, question) do
-    model =
-      case p.model do
-        %{provider: "anthropic", model: m, thinking: t} when is_binary(t) -> ["--model", m, "--effort", t]
-        %{provider: "anthropic", model: m} -> ["--model", m]
-        _ -> []
-      end
-
-    ["claude", "-p", question, "--tools", "Read,Grep,Glob", "--permission-mode", "dontAsk", "--no-session-persistence"] ++
-      model ++ ["--append-system-prompt", system]
+    [gateway(), provider(p.model), "claude", "-p", question, "--tools", "Read,Grep,Glob"] ++
+      ["--permission-mode", "dontAsk", "--no-session-persistence"] ++
+      model_args(p.model) ++ ["--append-system-prompt", system]
   end
+
+  @doc "The script every Claude Code invocation runs through: `gateway.sh PROVIDER CMD…`."
+  @spec gateway() :: String.t()
+  def gateway, do: Path.join(Profiles.tlon_root(), "adapters/claude-code/gateway.sh")
+
+  @doc "The provider a model is reached through, `anthropic` when the profile names none."
+  @spec provider(map() | nil) :: String.t()
+  def provider(%{provider: p}) when is_binary(p), do: p
+  def provider(_model), do: "anthropic"
+
+  defp model_args(%{model: m, thinking: t}) when t in @efforts, do: ["--model", m, "--effort", t]
+  defp model_args(%{model: m}), do: ["--model", m]
+  defp model_args(_model), do: []
 
   defp role_env(%Profile{system_prompt: nil}), do: ""
 
   defp role_env(%Profile{} = profile),
     do: "TLON_ROLE_PROMPT_FILE=#{Path.join(Profiles.config_dir(profile), "system_prompt.md")} "
 
-  # The FENCE under the claude harness: pi-permission-system config and the pi MCP adapter's
-  # `excludeTools` are invisible to Claude Code, so a profile's write-deny (the reviewer) and its
-  # cut MCP tools must be structural deny rules here, or they are persona-only ("please don't").
-  # launch.sh merges the list into its --settings as permissions.deny.
+  defp provider_env(%Profile{model: model}) do
+    case provider(model) do
+      "anthropic" -> ""
+      p -> "TLON_PROVIDER=#{p} "
+    end
+  end
+
+  defp sandbox_env(%Profile{sandbox: sandbox, permissions: perms, model: model} = p) when is_map(sandbox) do
+    if provider(model) != "anthropic" and (perms || %{})["yoloMode"] != false,
+      do: "TLON_SANDBOX_FILE=#{Path.join(Profiles.config_dir(p), "sandbox.json")} ",
+      else: ""
+  end
+
+  defp sandbox_env(_p), do: ""
+
+  # A profile's fence as Claude Code deny rules: its write-deny (the reviewer), the bash and path
+  # floor (`@tlon_permissions`), and its cut MCP tools. launch.sh merges the list into its
+  # --settings as permissions.deny; a deny holds in dontAsk and auto mode alike.
   defp deny_env(%Profile{} = p) do
-    case write_denies(p) ++ mcp_denies(p) do
+    case write_denies(p) ++ floor_denies(p) ++ mcp_denies(p) do
       [] -> ""
-      tools -> "TLON_PERMISSIONS_DENY=#{Enum.join(tools, ",")} "
+      rules -> "TLON_PERMISSIONS_DENY=#{Server.Tmux.sh_single_quote(Enum.join(rules, ","))} "
     end
   end
 
@@ -124,55 +131,21 @@ defmodule Server.Harness.ClaudeCode do
 
   defp write_denies(_p), do: []
 
+  defp floor_denies(%Profile{permissions: %{"permission" => perm}}) when is_map(perm) do
+    bash = for {pattern, "deny"} <- perm["bash"] || %{}, do: "Bash(#{pattern})"
+    paths = for {glob, "deny"} <- perm["path"] || %{}, tool <- ~w(Read Edit), do: "#{tool}(#{path_rule(glob)})"
+    bash ++ paths
+  end
+
+  defp floor_denies(_p), do: []
+
+  # A bare glob matches at any depth, as the floor meant it; a ~ path stays home-rooted.
+  defp path_rule("~/" <> _ = glob), do: glob
+  defp path_rule(glob), do: "**/" <> glob
+
   defp mcp_denies(%Profile{mcp: mcp}) when is_map(mcp) do
     for {server, %{"excludeTools" => tools}} <- mcp, tool <- tools, do: "mcp__#{server}__#{tool}"
   end
 
   defp mcp_denies(_p), do: []
-end
-
-defmodule Server.Harness.Pi do
-  @moduledoc """
-  The pi driver: the bare `pi` invocation for a profile — config dir as `PI_CODING_AGENT_DIR`,
-  persona as `--append-system-prompt`, driver as `--model`.
-  """
-  @behaviour Server.Harness.Driver
-
-  alias Server.Profile
-  alias Server.Profiles
-
-  # The model MUST ride as a --model flag: pi resolves settings.json defaultModel BEFORE
-  # pi-multi-account registers `anthropic`, so a claude-* default falls back to glm; the CLI flag
-  # applies after extensions load, so it sticks (verified 2026-08-17).
-  @impl true
-  def launch_command(%Profile{} = profile) do
-    base = Application.get_env(:server, :spawn_launcher_pi, "pi")
-    dir = Profiles.config_dir(profile)
-    prompt = if profile.system_prompt, do: " --append-system-prompt #{Path.join(dir, "system_prompt.md")}", else: ""
-
-    model =
-      case profile.model do
-        %{provider: prov, model: m, thinking: think} -> " --model #{prov}/#{m} --thinking #{think}"
-        _ -> ""
-      end
-
-    pi = "env PI_CODING_AGENT_DIR=#{dir} #{base}#{prompt}#{model}"
-    # adapters/reload respawns the pane with this, resuming the session; it carries the variable
-    # into the respawned pane itself (`respawn-pane -e`)
-    "env ADAPTERS_RELOAD_CMD=#{Server.Tmux.sh_single_quote(pi <> " --continue")} " <> String.trim_leading(pi, "env ")
-  end
-
-  @impl true
-  def aside_argv(%Profile{} = profile, system, question) do
-    base = Application.get_env(:server, :spawn_launcher_pi, "pi")
-
-    model =
-      case profile.model do
-        %{provider: prov, model: m, thinking: think} -> ["--model", "#{prov}/#{m}", "--thinking", think]
-        _ -> []
-      end
-
-    [base, "-p", question, "--no-extensions", "--no-session", "--tools", "read,grep,find,ls"] ++
-      model ++ ["--append-system-prompt", system]
-  end
 end

@@ -18,8 +18,12 @@ defmodule Server.MCP.Identity do
           token: String.t()
         }
 
-  @spec from_frame(Frame.t()) :: t()
-  def from_frame(frame) do
+  @doc """
+  The identity bound to this connection. A tool call is activity and bumps the session's warmth;
+  `touch: false` reads it without, for a call a session makes on a timer rather than in a turn.
+  """
+  @spec from_frame(Frame.t(), keyword()) :: t()
+  def from_frame(frame, opts \\ []) do
     raw = Frame.authorization(frame).raw_claims
 
     identity = %{
@@ -30,7 +34,7 @@ defmodule Server.MCP.Identity do
       token: raw["token"]
     }
 
-    touch(identity)
+    if Keyword.get(opts, :touch, true), do: touch(identity)
     identity
   end
 

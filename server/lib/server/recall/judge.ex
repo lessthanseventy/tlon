@@ -140,7 +140,7 @@ defmodule Server.Recall.Judge do
           prompt,
           :supersede_judge_cmd,
           :supersede_judge_model,
-          {"pi", "ollama-cloud/deepseek-v4.1-flash"},
+          {"claude", "ollama-cloud/deepseek-v4.1-flash"},
           timeout_s: @timeout_s
         )
       end

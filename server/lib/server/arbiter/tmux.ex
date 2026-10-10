@@ -19,23 +19,19 @@ defmodule Server.Arbiter.Tmux do
 
   require Logger
 
+  # A wake is queued for the coworker's own session to take (`Server.Wake`, drained by the
+  # tlon-citizen mod and submitted when the session is idle), never typed: a pane mid-boot swallows
+  # an Enter, and a pane mid-draft would take our text as its own. The window is still looked up — a
+  # pane that has closed is `:no_window`, which ends its session and spawns a fresh one, and the
+  # fresh one takes what its predecessor never did.
   @impl true
   def wake(%{thread_id: thread_id} = session, prompt) do
     with %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
          ws when not is_nil(ws) <- workspace_id(thread),
-         %{index: index} <- window_for(ws, thread, agent_name(session)) || {:error, :no_window} do
-      _ = Tmux.send_text(ws, index, sanitize(prompt))
-      # a second burst: a TUI that takes the text swallows an Enter in the same write
-      Process.sleep(Application.get_env(:server, :tmux_submit_delay_ms, 300))
-
-      case Tmux.submit(ws, index) do
-        {_, 0} ->
-          confirm(ws, index, sanitize(prompt))
-          :ok
-
-        {out, _} ->
-          {:error, {:tmux, out}}
-      end
+         agent = agent_name(session),
+         %{index: _} <- window_for(ws, thread, agent) || {:error, :no_window},
+         {:ok, _wake} <- Server.Wake.queue(thread_id, agent, sanitize(prompt)) do
+      :ok
     else
       {:error, _} = e -> e
       nil -> {:error, :no_workspace}
@@ -202,121 +198,24 @@ defmodule Server.Arbiter.Tmux do
       launcher_by_engine(author)
   end
 
-  # A hand-registered agent with no seat on the bench: the engine (or name) carrying "claude" gets
-  # Claude Code's launcher, everyone else bare `pi`. Both overridable — vendor is never design.
-  defp launcher_by_engine(author) do
-    engine =
-      case Repo.get_by(Agent, name: author) do
-        %Agent{engine: e} when is_binary(e) -> String.downcase(e <> " " <> author)
-        _ -> String.downcase(author)
-      end
-
-    if String.contains?(engine, "claude"),
-      do: Application.get_env(:server, :spawn_launcher_claude, Path.join(adapters_dir(), "claude-code/launch.sh")),
-      else: Application.get_env(:server, :spawn_launcher_pi, "pi")
-  end
+  # A hand-registered agent with no seat on the bench runs Claude Code's launcher on its own default
+  # model. Overridable — vendor is never design.
+  defp launcher_by_engine(_author),
+    do: Application.get_env(:server, :spawn_launcher_claude, Path.join(adapters_dir(), "claude-code/launch.sh"))
 
   @doc """
-  Whether `text` we typed is still waiting in the harness's input — the draft from the last `❯` line
-  down to the input box's border, every line of it — rather than taken (an empty input) or someone
-  else's draft (text that isn't ours). A boot that ate the start of it leaves the rest, which is
-  still ours; a poke typed under an earlier one that never went sits on a later line of the draft.
-  """
-  def pending?(pane, text) do
-    lines = String.split(pane, "\n")
-
-    lines
-    |> Enum.with_index()
-    |> Enum.filter(fn {l, _} -> prompt?(l) end)
-    |> List.last()
-    |> case do
-      nil ->
-        false
-
-      {_, at} ->
-        lines
-        |> Enum.drop(at)
-        |> Enum.take_while(&(not border?(&1)))
-        |> Enum.map(&(&1 |> String.trim_leading() |> String.trim_leading("❯") |> String.trim()))
-        |> Enum.any?(&(&1 != "" and String.contains?(text, String.slice(&1, 0, 24))))
-    end
-  end
-
-  defp prompt?(line), do: line |> String.trim_leading() |> String.starts_with?("❯")
-  defp border?(line), do: line |> String.trim_leading() |> String.starts_with?(["─", "╭", "│", "╰"])
-
-  @doc """
-  The pane shows an input line — pi's `tlon: registered` footer or a harness prompt `❯` — so the first
-  prompt typed into it lands in an input, not in a booting TUI that swallows it.
+  The pane shows its harness's input line `❯`: the coworker is up, so the opening turn queued for it
+  is taken by a session that is there to take it.
   """
   @impl true
   def ready?(%{session: "w" <> id, window: window}) do
     ws = String.to_integer(id)
 
     case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, window)]) do
-      {out, 0} when is_binary(out) -> String.contains?(out, "registered") or String.contains?(out, "❯")
+      {out, 0} when is_binary(out) -> String.contains?(out, "❯")
       _ -> false
     end
   end
 
   def ready?(_handle), do: true
-
-  # A harness still booting (its SessionStart hooks, its MCP servers) draws its input line before it
-  # takes an Enter: the text lands, the Enter is swallowed, and the coworker never starts. So after
-  # the Enter, look again a few times; while our text still sits in the input, press Enter again.
-  defp confirm(ws, index, text) do
-    # out to about ten minutes: a Claude Code pane still loading its hooks and MCP servers swallowed
-    # Enters for longer than the two minutes this once allowed, and the message sat typed and unsent
-    delays = confirm_delays()
-
-    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
-      result =
-        delays
-        |> Enum.with_index(1)
-        |> Enum.reduce_while(:pending, fn {ms, n}, _ ->
-          Process.sleep(ms)
-          look_again(ws, index, text, n)
-        end)
-
-      # the last look pressed Enter too: one more look, after a beat, before saying it didn't take
-      2_000 |> min(List.last(delays) || 0) |> Process.sleep()
-
-      if result == :pending and still_pending?(ws, index, text),
-        do: Logger.warning("wake: window #{index} on workspace #{ws} still holds its message unsent after every Enter")
-    end)
-  end
-
-  @doc "The waits between looks at a woken pane (`config :server, :tmux_confirm_ms` overrides), in ms."
-  def confirm_delays,
-    do:
-      Application.get_env(:server, :tmux_confirm_ms, [
-        2_000,
-        4_000,
-        8_000,
-        15_000,
-        30_000,
-        60_000,
-        120_000,
-        180_000,
-        180_000
-      ])
-
-  defp still_pending?(ws, index, text) do
-    case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, index)]) do
-      {pane, 0} when is_binary(pane) -> pending?(pane, text)
-      _ -> false
-    end
-  end
-
-  # one look at the pane: our text still waiting is another Enter and another look; anything else, done
-  defp look_again(ws, index, text, n) do
-    with {pane, 0} when is_binary(pane) <- Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, index)]),
-         true <- pending?(pane, text) do
-      Logger.info("wake: window #{index} on workspace #{ws} still holds its message; Enter again (#{n})")
-      Tmux.submit(ws, index)
-      {:cont, :pending}
-    else
-      _ -> {:halt, :sent}
-    end
-  end
 end
