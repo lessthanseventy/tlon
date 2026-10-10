@@ -34,6 +34,13 @@ describe("a workline card's state", () => {
     const t = thread(7, { seat: "desk" })
     expect(cardState(snap([t]), t, { needs: [7] })?.kind).toBe("needs")
   })
+  test("the machine's queues show first: its full check running, or the merge queue landing it", () => {
+    const t = thread(7, { seat: "desk" })
+    expect(cardState(snap([t]), t, { checking: 7 })).toEqual({ kind: "checking", why: "its full check is running" })
+    expect(cardState(snap([t]), t, { merging: [{ thread_id: 7, state: "landing" }] })?.why).toBe("landing now: gated on main")
+    expect(cardState(snap([t]), t, { merging: [{ thread_id: 7, state: "queued" }] })?.kind).toBe("merging")
+    expect(cardState(snap([t]), t, { checking: 8 })?.kind).toBe("running")
+  })
   test("nobody leads it: no state to claim", () => {
     expect(cardState(snap([]), thread(7, { lead: null }))).toBeNull()
   })

@@ -56,7 +56,13 @@ export type Agents = {
   /** each workspace's count of stuck things (blockers, failed checks, unled threads), by id */
   triage: Record<string, number>
   /** the service's health: `warn` with the problems named */
-  health: { state: "ok" | "warn"; problems: string[] } | null
+  health: {
+    state: "ok" | "warn"; problems: string[]
+    /** the machine's checks queue: the check running now (a workline's reads "#<id> verify|landing …") and who waits */
+    checks?: { running: string | null; waiting: string[] }
+    /** approved worklines landing one at a time, the one being gated first */
+    merge_queue?: { thread_id: number; title: string; state: "landing" | "queued" }[]
+  } | null
   /** the days this month each workspace has something scheduled, by id (the wall calendar) */
   calendar: Record<string, number[]>
   /** the weather outside, as the room draws it (`Server.Office.Weather`); null when unknown */
