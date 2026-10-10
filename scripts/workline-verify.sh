@@ -53,7 +53,7 @@ repo="$(cd "$(git -C "$tree" rev-parse --path-format=absolute --git-common-dir)/
 # The gates run on the branch as it would land — rebased onto the current origin/main, in a throwaway
 # checkout: a fix that reached main after the branch was cut reaches its verify too, and the lead's
 # own worktree is never touched.
-git -C "$repo" fetch -q origin main || { note "$tid" "verify can't run: fetching origin/main failed in $repo" || true; exit 1; }
+"$(dirname "$0")/git-fetch-origin.sh" "$repo" main || { note "$tid" "verify can't run: fetching origin/main failed in $repo" || true; exit 1; }
 fresh="$(mktemp -d -t "tlon-verify-XXXXXX")"
 trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"' EXIT
 git -C "$repo" worktree add -q --detach "$fresh" "work/$slug" || exit 1

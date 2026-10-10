@@ -46,7 +46,7 @@ if [ -z "$url" ]; then
   url="http://127.0.0.1:$port"
   curl -s -m 2 -o /dev/null "$url" && fail "something already answers on $port"
 
-  git -C "$root" fetch -q origin || fail "can't fetch origin"
+  "$(dirname "$0")/git-fetch-origin.sh" "$root" || fail "can't fetch origin"
   sha="$(git -C "$root" rev-parse -q --verify "${1:-origin/main}^{commit}")" || fail "no commit ${1:-origin/main}"
   echo "smoke: ${sha:0:7} on :$port, database $db"
 

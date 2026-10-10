@@ -3,7 +3,7 @@
 # on main, never on whatever this checkout has checked out. The nightly schedule runs it.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-git -C "$root" fetch -q origin main || { echo "check-main: fetch failed"; exit 1; }
+"$root/scripts/git-fetch-origin.sh" "$root" main || { echo "check-main: fetch failed"; exit 1; }
 dir="$(mktemp -d -t tlon-main-XXXXXX)"
 trap 'git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir"' EXIT
 git -C "$root" worktree add -q --detach "$dir" origin/main || exit 1
