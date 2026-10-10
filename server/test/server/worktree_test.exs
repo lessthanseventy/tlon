@@ -192,6 +192,23 @@ defmodule Server.WorktreeTest do
       assert String.trim(out) != ""
     end
 
+    test "retire/2 takes a checkout down, unmerged commits and uncommitted changes and all, and keeps its branch", %{
+      repo: repo,
+      git: git
+    } do
+      {:ok, wt} = Worktree.ensure(repo, "dropped")
+      File.write!(Path.join(wt, "work.txt"), "unmerged\n")
+      {_, 0} = System.cmd("git", ["-C", wt, "add", "work.txt"])
+      {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"])
+      File.write!(Path.join(wt, "half.txt"), "uncommitted\n")
+
+      assert {:removed, ^wt} = Worktree.retire(repo, "dropped")
+      refute File.exists?(wt)
+      {out, 0} = git.(["branch", "--list", "work/dropped"])
+      assert String.trim(out) != ""
+      assert :none = Worktree.retire(repo, "dropped")
+    end
+
     test "remove/2 drops a merged workline's worktree even with its docs folder on main", %{repo: repo, git: git} do
       # a workline's docs live at work/<slug>/ on main — the same spelling as its branch
       {:ok, _wt} = Worktree.ensure(repo, "docs")
