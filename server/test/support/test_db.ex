@@ -21,6 +21,7 @@ defmodule Server.TestDB do
     "fun_with_flags_toggles",
     "generator_call",
     "toy_pool",
+    "need_dismissal",
     # ticket.promoted_thread_id → thread, .project_id → project, .workspace_id → workspace, so
     # tickets clear before all of them; note has no FK.
     Server.Ticket,

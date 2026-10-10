@@ -18,6 +18,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/focus            Office.Focus.latest (the newest "show thread N" request)
       POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks the office TUI to open a thread
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
+      POST   /api/office/needs/dismiss    Office.Needs.dismiss {"key"} (put an item away; a blocking one is refused, 409)
+      POST   /api/office/needs/retire     Office.Needs.retire_stranded {"key"} (a stranded checkout taken down, its branch kept)
       GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky, info — seated, landed, live — each with its actions)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
       POST   /api/office/asks/:id         Attention.answer_ask {"key"} (one ask answered by its option key)
@@ -149,6 +151,20 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp route(conn, "GET", "office", ["needs"]), do: json(conn, 200, Server.Office.Needs.list())
+
+  defp route(conn, "POST", "office", ["needs", verb]) when verb in ["dismiss", "retire"] do
+    case body(conn) do
+      {%{"key" => key}, conn} when is_binary(key) ->
+        result =
+          if verb == "dismiss", do: Server.Office.Needs.dismiss(key), else: Server.Office.Needs.retire_stranded(key)
+
+        reply(conn, with(:ok <- result, do: {:ok, key}), &%{key: &1})
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"key": "..."})})
+    end
+  end
+
   defp route(conn, "GET", "office", ["focus"]), do: json(conn, 200, Server.Office.Focus.latest())
 
   defp route(conn, "POST", "office", ["focus"]) do
@@ -885,6 +901,10 @@ defmodule Server.MCP.OperatorAPI do
           "a workline that hasn't merged closes with a why: superseded_by (the PR or commit that shipped it) or abandoned (why it is dropped)"
       })
 
+  defp refused(conn, :blocking),
+    do: json(conn, 409, %{error: "work waits on this one: approve it, answer it or fix it — it is not put away"})
+
+  defp refused(conn, :not_stranded), do: json(conn, 409, %{error: "that checkout is no longer stranded"})
   defp refused(conn, why) when is_binary(why), do: json(conn, 409, %{error: why})
   defp refused(conn, why), do: json(conn, 409, %{error: inspect(why)})
 

@@ -123,6 +123,48 @@ defmodule Server.Office.NeedsTest do
     assert kinds(ws) == []
   end
 
+  describe "putting an item away" do
+    test "a mention put away stays away until a newer one comes", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "m", workspace_id: ws.id})
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "sonny", body: "@andrew a pumpkin"})
+      [%{key: key}] = Needs.list()
+
+      assert :ok = Needs.dismiss(key)
+      assert Needs.list() == []
+
+      Process.sleep(1100)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "sonny", body: "@andrew a real question"})
+      assert [%{kind: "mention", text: "sonny: @andrew a real question"}] = Needs.list()
+    end
+
+    test "an ask put away is withdrawn, and its asker is told", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+      {:ok, a} = Server.Attention.ask(t.id, "tertius", "hold new work?", ["hold", "carry on"])
+
+      assert :ok = Needs.dismiss("ask:#{a.id}")
+      assert Needs.list() == []
+      assert %{resolved_at: %DateTime{}} = Server.Repo.get!(Server.Message, a.id)
+      assert List.last(Channel.thread_messages(t)).body =~ "@tertius andrew put your ask away"
+    end
+
+    test "work waits on a question: it is never put away", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "q", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(t.id, "daneri", "A or B?")
+      [%{key: key}] = Needs.list()
+      assert {:error, :blocking} = Needs.dismiss(key)
+      assert [_] = Needs.list()
+    end
+
+    test "an open issue on an open thread is to decide; resolved, it goes", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "i", workspace_id: ws.id})
+      {:ok, issue} = Server.Dossier.raise_issue(%{thread_id: t.id, summary: "the fixture is flaky", found_by: "cruz"})
+      assert [%{kind: "issue", level: "decide", ref: ref, text: "cruz: the fixture is flaky"}] = Needs.list()
+      assert ref == issue.id
+      {:ok, _} = Server.Dossier.resolve_issue(issue, "fixed in #12")
+      assert Needs.list() == []
+    end
+  end
+
   describe "asks, seats and failed jobs — each with its answers" do
     test "every ask is its own blocking item, answered by its own id", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
