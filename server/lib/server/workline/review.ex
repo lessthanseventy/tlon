@@ -16,7 +16,15 @@ defmodule Server.Workline.Review do
   `{:ok, _}` — the artifact is already committed, which is the point.
   """
   def submit(%Thread{stage: "review", slug: slug} = thread, body, author) when is_binary(body) do
-    Scribe.commit(thread, "review.md", body, "workline #{slug}: review verdict (submit_review by #{author})")
+    model = Server.Profiles.model_label(thread.workspace_id, author)
+    trailers = Enum.join(["Tlon-Author: #{author}" | if(model, do: ["Tlon-Model: #{model}"], else: [])], "\n")
+
+    Scribe.commit(
+      thread,
+      "review.md",
+      body,
+      "workline #{slug}: review verdict (submit_review by #{author})\n\n#{trailers}"
+    )
   end
 
   def submit(%Thread{stage: stage}, _body, _author), do: {:error, {:not_in_review, stage}}

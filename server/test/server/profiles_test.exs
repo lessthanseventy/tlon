@@ -502,6 +502,17 @@ defmodule Server.ProfilesTest do
       assert p.harness == :pi
     end
 
+    test "model_label names the model a seat is launched on, from its policy; no seat, no label" do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "Labels"})
+      {:ok, c} = Server.Workspaces.seat(ws.id, %{name: "otalora", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.retarget(ws.id, c.agent_id, %{model: "ollama-cloud/kimi-k2.7-code"})
+
+      assert Profiles.model_label(ws.id, "otalora") == "ollama-cloud/kimi-k2.7-code (pi)"
+      assert Profiles.model_label(ws.id, "nobody") == nil
+      assert Profiles.model_label(nil, "otalora") == nil
+    end
+
     test "builder and surveyor both instantiate on the claude_code harness" do
       assert Profiles.instantiate(%{archetype: :builder, name: "hronir"}).harness == :claude_code
       assert Profiles.instantiate(%{archetype: :surveyor, name: "tertius"}).harness == :claude_code

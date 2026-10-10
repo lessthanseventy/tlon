@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Stamp a coworker's commit with the thread it was made for.
+# Stamp a coworker's commit with the thread it was made for, who made it, and on which model.
 #
-# A pane the server spawned carries TLON_THREAD / TLON_AUTHOR in its env (Server.MCP.Spawn). The
-# trailer joins the commit to the conversation that produced it — Server.Commits reads it back
-# with `git log --grep`, so the dossier lists a thread's commits and a sha leads to its thread.
+# A pane the server spawned carries TLON_THREAD / TLON_AUTHOR / TLON_MODEL in its env
+# (Server.MCP.Spawn). The thread trailer joins the commit to the conversation that produced it —
+# Server.Commits reads it back with `git log --grep`, so the dossier lists a thread's commits and a
+# sha leads to its thread. TLON_MODEL is the model the pane was launched on (its seat's profile,
+# Server.Profiles.model_label/2), not what the model believes it is, so `Tlon-Model:` is the truth
+# about who wrote the change even when a Co-Authored-By line is wrong or missing.
 # A trailer rides the message through rebase, amend and cherry-pick, which is why it is a
 # trailer and not a database keyed on patch-id.
 #
@@ -18,5 +21,6 @@ msg="$1"
 
 args=(--in-place --if-exists doNothing --trailer "Tlon-Thread: $TLON_THREAD")
 [ -n "${TLON_AUTHOR:-}" ] && args+=(--trailer "Tlon-Author: $TLON_AUTHOR")
+[ -n "${TLON_MODEL:-}" ] && args+=(--trailer "Tlon-Model: $TLON_MODEL")
 git interpret-trailers "${args[@]}" "$msg" 2>/dev/null || true
 exit 0

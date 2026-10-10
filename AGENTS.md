@@ -190,6 +190,9 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   `git log` is part of the machine's memory; a commit that hides its author — or names the wrong one —
   lies to it. (The first dogfood branch shipped 7 unattributed machine commits — that's the incident
   this rule comes from.)
+  The server backs it mechanically: a pane it spawns carries `TLON_MODEL`, the model its seat was
+  actually launched on, and `scripts/git-hooks/prepare-commit-msg` stamps it as `Tlon-Model:` on every
+  commit (a review's commit too), so the record holds even when a model is wrong about itself.
 - **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Both
   harnesses are affected: pi via the `pi-sandbox` extension (`~/.pi/agent/sandbox.json`, seeded at
   ficciones' `flake.nix` (`piSandboxSeed`)) and Claude Code via its own. pi-sandbox delegates to

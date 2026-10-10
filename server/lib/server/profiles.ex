@@ -993,6 +993,21 @@ defmodule Server.Profiles do
     end
   end
 
+  @doc """
+  The model a seat actually runs, as one label for a commit trailer or a log — the launched profile's,
+  never what a model says it is: `"ollama-cloud/kimi-k2.7-code (pi)"`, `"anthropic/claude-sonnet-5-5
+  (claude_code)"`. nil for a name with no seat on the workspace.
+  """
+  @spec model_label(integer() | nil, String.t()) :: String.t() | nil
+  def model_label(nil, _name), do: nil
+
+  def model_label(workspace_id, name) do
+    case seat_profile(name, Server.Workspaces.bench_all(workspace_id), workspace_id) do
+      nil -> nil
+      %Profile{model: model, harness: harness} -> "#{model_name(model)} (#{harness})"
+    end
+  end
+
   defp normalize_archetype(a) when is_atom(a), do: a
 
   # NOT `String.to_existing_atom/1`: that only succeeds once something has already loaded this
@@ -1177,4 +1192,8 @@ defmodule Server.Profiles do
   end
 
   defp write_json!(path, map), do: File.write!(path, Jason.encode!(map, pretty: true) <> "\n")
+
+  defp model_name(%{provider: provider, model: model}), do: "#{provider}/#{model}"
+  defp model_name(model) when is_binary(model), do: model
+  defp model_name(model), do: inspect(model)
 end
