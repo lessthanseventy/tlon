@@ -11,6 +11,8 @@ import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { personaLines } from "../kit/persona"
 import { FLOOR, Looks, marginInk, type Note } from "../kit/margin"
+import { seatLine } from "../kit/seat-voices"
+import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickForRedThreads, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
 import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
@@ -160,6 +162,10 @@ let archived: data.Archive | null = null, feed: data.Activity = [], stuck: data.
 let cork: CorkNote[] = []
 /** everything waiting on you (`Server.Office.Needs`), blocking first */
 let needs: data.Need[] = []
+/** Scharlach's demerit ledger: ticks when a coworker's build goes red (the sheriff's workspace's triage) */
+let ledger: Ledger = newLedger()
+/** the last banter line each seat said, so the canned fallback doesn't repeat itself */
+const recentBanter = new Map<string, string[]>()
 /** the office revision this TUI started on: when main's moves past it, R reloads */
 let officeRev: string | null | undefined
 /** the suggestion box: corkboard ideas the banter wrote in a coworker's voice (never a request), for you to file or throw out */
@@ -314,7 +320,20 @@ async function refresh() {
   const tid = openThread()
   await Promise.all([tid !== null ? loadThread(tid) : null, reader ? reader.reload() : null, loadCard(), loadFeed(), loadMargin()])
   await chatter()
+  void tickLedger()
   draw()
+}
+/**
+ * Scharlach's demerit ledger ticks when a coworker's build goes red. The sheriff's workspace's triage
+ * carries each failed check's thread (whoever led it); a red first seen ticks, the same red held does
+ * not, and one that clears then re-reds ticks again. Presentation only — it never touches the work.
+ */
+async function tickLedger() {
+  if (!all.ok) return
+  const sws = all.bench.find((c) => c.archetype === "sheriff")?.workspace_id
+  if (sws == null || (all.triage[String(sws)] ?? 0) <= 0) return
+  const t = await data.triage(sws)
+  if (t) ledger = tickForRedThreads(ledger, t.failed_checks.shown.map((s) => s.thread_id), all.threads)
 }
 /** what changed since the last look that you'd want to hear about even with the office in the back */
 function tellNews(before: Agents, beforeNeeds: data.Need[]) {
@@ -351,8 +370,17 @@ async function chatter() {
   if (ws === null) return
   room().hear(await data.pets(ws, room().petProfile()))
   const here = ws
-  // two together in the room: the server writes what they say now, said turn by turn
-  room().onTogether = (situation, a, b) => void data.talk(here, situation, a, b).then((turns) => { room().converse(turns); heard(turns); changed() })
+  // two together in the room: the server writes what they say now, said turn by turn; in --sandbox
+  // (or wherever the server wrote nothing) each says a canned line in their own voice
+  room().onTogether = (situation, a, b) => void data.talk(here, situation, a, b).then((turns) => {
+    const said = turns.length ? turns : [a, b].map((who) => {
+      const recent = recentBanter.get(who) ?? []
+      const line = seatLine(who, recent)
+      recentBanter.set(who, [line, ...recent].slice(0, 8))
+      return { who, line }
+    })
+    room().converse(said); heard(said); changed()
+  })
   cork = await data.corkboard(ws)
   room().pinboard(cork)
   ideas = await data.suggestions(ws)
@@ -925,6 +953,11 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
       const rows: Row[] = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
       for (const l of personaLines(b?.persona, Math.max(20, cols() - 40))) rows.push({ segs: [dim(l)] })
+      // Scharlach's desk dressing: the nameplate (tertius never agreed to the second part), the mug
+      // he bought himself, and the demerit ledger he keeps on the rest of the office
+      if (name === SHERIFF) {
+        rows.push({ segs: [dim("nameplate: "), plain(NAMEPLATE)] }, { segs: [dim("mug: "), plain(MUG)] }, ...ledgerLines(ledger, a.bench).map((l) => ({ segs: [dim(l)] })))
+      }
       return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, ...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {
