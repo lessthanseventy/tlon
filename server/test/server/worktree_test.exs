@@ -218,8 +218,9 @@ defmodule Server.WorktreeTest do
       {_, 0} = System.cmd("git", ["-C", wt, "add", "loose.txt"])
       {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "loose"])
 
+      {sha, 0} = System.cmd("git", ["-C", wt, "rev-parse", "--short", "HEAD"])
       assert {:removed, _} = Worktree.retire(repo, "loose")
-      assert {_, 0} = git.(["cat-file", "-e", "rescued/loose:loose.txt"])
+      assert {_, 0} = git.(["cat-file", "-e", "rescued/loose-#{String.trim(sha)}:loose.txt"])
     end
 
     test "remove/2 drops a merged workline's worktree even with its docs folder on main", %{repo: repo, git: git} do
