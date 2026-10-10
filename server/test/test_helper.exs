@@ -17,4 +17,8 @@ config = Server.Repo.config()
 {:ok, _} = Server.Repo.start_link()
 Ecto.Migrator.run(Server.Repo, :up, all: true)
 
+# gateway.sh refuses an ollama-cloud model without a key; the suite's stand-in CLIs never reach
+# ollama.com, so a box without one (CI) gets a placeholder
+if System.get_env("OLLAMA_API_KEY") in [nil, ""], do: System.put_env("OLLAMA_API_KEY", "test-placeholder")
+
 ExUnit.start()
