@@ -7,6 +7,9 @@ defmodule Server.Staffing do
     * a window whose coworker has gone COLD (no live session warm within the cache window, none
       mid-turn) and is past its boot grace is closed: the lounge is no window at all, and the next
       message spawns a fresh, brief-seeded session;
+    * a window kept warm so long it never goes cold (the lobby's manager, pinged every few minutes)
+      is closed the same way once it is older than `max_session_hours`, at an idle moment — no turn
+      running, nothing said in the last minute: one cache miss buys a short context again;
     * an orphan leaf (its thread closed or unstaffed while nobody looked) is swept;
     * a stale coworker (a live process minting under a handle the bench no longer has) is torn down;
     * at the leaf cap with a thread parked, the leaf idle the longest gives its seat up (only a
@@ -67,6 +70,7 @@ defmodule Server.Staffing do
           |> reap_stale(bench, Tmux.list_windows(workspace_id))
           |> sweep_orphans(workspace_id, standing)
           |> sweep_cold(workspace_id, standing, bench)
+          |> sweep_long(workspace_id, standing, bench)
           |> yield_seat(workspace_id, standing, bench)
 
         resume_interrupted(workspace_id, tabs, standing)
@@ -480,5 +484,53 @@ defmodule Server.Staffing do
          |> Enum.map(&elem(&1, 0))
          |> Enum.reject(&is_nil/1)
          |> Enum.min(DateTime, fn -> ~U[1970-01-01 00:00:00Z] end)}
+  end
+
+  defp sweep_long(tabs, workspace_id, standing, bench) do
+    case OperatorConfig.setting("max_session_hours") do
+      nil ->
+        tabs
+
+      hours ->
+        seats = MapSet.new(bench, & &1.name)
+        oldest = System.os_time(:second) - hours * 3600
+
+        {long, kept} = Enum.split_with(tabs, &long_and_idle?(&1, oldest, standing, seats))
+
+        for tab <- long do
+          {thread, agent} = owner(tab, standing, seats)
+          Tmux.kill_window(workspace_id, tab.index)
+          Enum.each(idle_sessions(thread, agent) || [], &Staff.end_session/1)
+        end
+
+        kept
+    end
+  end
+
+  defp long_and_idle?(tab, oldest, standing, seats) do
+    with {thread, agent} when is_integer(thread) and is_binary(agent) <- owner(tab, standing, seats),
+         true <- (tab.born || oldest) < oldest do
+      idle_sessions(thread, agent) != nil
+    else
+      _ -> false
+    end
+  end
+
+  # the live sessions of `agent` on `thread_id` when every one is idle — no turn running, nothing in
+  # the last minute — else nil; none at all is nil too (a window without a session is the cold sweep's)
+  defp idle_sessions(thread_id, agent) do
+    quiet = DateTime.add(DateTime.utc_now(), -60, :second)
+
+    sessions =
+      Repo.all(
+        from s in Session,
+          join: a in Agent,
+          on: a.id == s.agent_id,
+          where: s.thread_id == ^thread_id and a.name == ^agent and is_nil(s.ended_at)
+      )
+
+    if sessions != [] and
+         Enum.all?(sessions, &(is_nil(&1.thinking_since) and DateTime.before?(&1.last_active_at || quiet, quiet))),
+       do: sessions
   end
 end
