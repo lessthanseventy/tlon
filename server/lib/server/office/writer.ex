@@ -36,6 +36,7 @@ defmodule Server.Office.Writer do
     "sports commentary: the work narrated like a close match"
   ]
 
+  @pace %{2 => 2, 3 => 4}
   @tones %{
     1 => "business casual: personality, lightly — wry and warm, about today",
     2 => "office party: loud and silly — bits, running gags, inside jokes; nobody is entirely sensible",
@@ -46,7 +47,13 @@ defmodule Server.Office.Writer do
   }
 
   @doc "How wild the office's voices are: the `wackiness` knob's tone line, or nil at 0 (business)."
-  def tone, do: @tones[Server.OperatorConfig.setting("wackiness")]
+  def tone, do: @tones[level()]
+
+  @doc "The wackiness dial, 0 (business) to 3 (feral)."
+  def level, do: Server.OperatorConfig.setting("wackiness")
+
+  @doc "`seconds` at the office's pace: the wilder it is, the more often it talks (÷2 at 2, ÷4 at 3)."
+  def every(seconds, level \\ level()), do: div(seconds, Map.get(@pace, level, 1))
 
   @doc "The models the workspace's shift draws from, `[{cmd, model}]`, a likelier one listed more often."
   def pool(workspace_id), do: Map.get(@pools, Server.Shifts.current(workspace_id), @pools["night"])

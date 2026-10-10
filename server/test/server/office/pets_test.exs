@@ -57,6 +57,17 @@ defmodule Server.Office.PetsTest do
     end
   end
 
+  test "a batch at a new wackiness replaces the pet's lines; one at the same level joins them" do
+    old = %{1 => %{voices: %{"Nina" => %{"pet" => ["old"]}}, at: 0, asked: 1, tones: %{"Nina" => 1}}}
+
+    {:noreply, same} = Pets.handle_cast({:wrote, 1, "Nina", %{"pet" => ["new"]}, 1}, old)
+    assert same[1].voices["Nina"]["pet"] == ["new", "old"]
+
+    {:noreply, wilder} = Pets.handle_cast({:wrote, 1, "Nina", %{"pet" => ["FERAL"]}, 3}, old)
+    assert wilder[1].voices["Nina"] == %{"pet" => ["FERAL"]}
+    assert wilder[1].tones["Nina"] == 3
+  end
+
   test "each pet is asked in its own personality, about this office" do
     ctx = %{crew: [%{name: "hronir", archetype: "builder", lead: true, thread: nil}], tickets: []}
     nina = Pets.prompt("Nina", ctx)

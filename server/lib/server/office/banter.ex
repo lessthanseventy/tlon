@@ -9,7 +9,8 @@ defmodule Server.Office.Banter do
   finished) is never drawn. The server picks the speaker and the kind; the model only writes it.
 
   Lazy on purpose: a line is only written while an office asks (`lines/1` from its poll), at most
-  one per workspace every `@every_s`, so a room nobody watches costs nothing. On by default: a node
+  one per workspace every `@every_s` (sooner the wilder the dial: `Server.Office.Writer.every/2`), so
+  a room nobody watches costs nothing. On by default: a node
   runs it unless `TLON_BANTER=0` (`:start_banter`), and the operator's settings file switches it off
   live (`"banter": false`, `Server.OperatorConfig.banter?/0`, flipped from the office's settings).
   A reply that does not parse is dropped.
@@ -168,16 +169,17 @@ defmodule Server.Office.Banter do
     now = System.system_time(:second)
     %{talked: last, pairs: pairs} = Map.get(state, {:talk, ws}, %{talked: 0, pairs: %{}})
 
-    if now - last < @talk_every_s or now - Map.get(pairs, pair, 0) < @pair_every_s,
-      do: {:reply, {:error, :busy}, state},
-      else: {:reply, :ok, Map.put(state, {:talk, ws}, %{talked: now, pairs: Map.put(pairs, pair, now)})}
+    if now - last < Server.Office.Writer.every(@talk_every_s) or
+         now - Map.get(pairs, pair, 0) < Server.Office.Writer.every(@pair_every_s),
+       do: {:reply, {:error, :busy}, state},
+       else: {:reply, :ok, Map.put(state, {:talk, ws}, %{talked: now, pairs: Map.put(pairs, pair, now)})}
   end
 
   def handle_call({:lines, ws}, _from, state) do
     now = System.system_time(:second)
     %{lines: lines, at: at, busy: busy} = Map.get(state, ws, %{lines: [], at: 0, busy: false})
     lines = Enum.filter(lines, &(now - &1.at < @keep_s))
-    ask? = not busy and now - at >= @every_s
+    ask? = not busy and now - at >= Server.Office.Writer.every(@every_s)
     if ask?, do: start_line(ws)
     {:reply, lines, Map.put(state, ws, %{lines: lines, at: if(ask?, do: now, else: at), busy: busy or ask?})}
   end
