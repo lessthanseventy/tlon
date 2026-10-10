@@ -140,6 +140,7 @@ defmodule Server.Office.Banter do
   """
   def talk(ws, situation, a, b) do
     with true <- Map.has_key?(@situations, situation) and a != b,
+         true <- Server.Office.Writer.tone() != nil or Application.get_env(:server, :banter_cmd) != nil,
          ctx = context(ws),
          [%{} = pa, %{} = pb] <- Enum.map([a, b], fn n -> Enum.find(ctx.crew, &(&1.name == n)) end),
          :ok <- reserve(ws, a, b) do
@@ -151,7 +152,10 @@ defmodule Server.Office.Banter do
            [_, _ | _] = turns <- parse_chat(out, MapSet.new([a, b])) do
         {:ok, turns}
       else
-        _ -> {:error, :unwritten}
+        # a write that failed spent nothing: the pair may talk again at the next sighting
+        _ ->
+          release(ws, a, b)
+          {:error, :unwritten}
       end
     else
       {:error, :busy} -> {:error, :busy}
@@ -179,6 +183,11 @@ defmodule Server.Office.Banter do
   end
 
   @impl true
+  def handle_cast({:release, ws, pair}, state) do
+    entry = Map.get(state, {:talk, ws}, %{talked: 0, pairs: %{}})
+    {:noreply, Map.put(state, {:talk, ws}, %{talked: 0, pairs: Map.delete(entry.pairs, pair)})}
+  end
+
   def handle_cast({:said, ws, said}, state) do
     entry = Map.get(state, ws, %{lines: [], at: 0, busy: false})
     now = System.system_time(:second)
@@ -371,6 +380,9 @@ defmodule Server.Office.Banter do
   defp said(kind, out, speaker, _ctx) do
     with line when is_binary(line) <- parse(out), do: [%{agent: speaker.name, line: line, kind: kind, delay: 0}]
   end
+
+  defp release(ws, a, b),
+    do: if(GenServer.whereis(__MODULE__), do: GenServer.cast(__MODULE__, {:release, ws, Enum.sort([a, b])}))
 
   defp reserve(ws, a, b),
     do: if(GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:reserve, ws, Enum.sort([a, b])}), else: :ok)

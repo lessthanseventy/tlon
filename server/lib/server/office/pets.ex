@@ -80,7 +80,7 @@ defmodule Server.Office.Pets do
       axis(cat["energy"], ["lazy", "sleepy", nil, "playful", "bouncing off the walls"])
     ]
 
-    "IN THIS OFFICE: the cat slot is #{cat["name"] || "Nina"}, a #{cat["species"] || "cat"}" <>
+    "IN THIS OFFICE: the cat slot is #{word(cat["name"], "Nina")}, a #{word(cat["species"], "cat")}" <>
       case Enum.reject(words, &is_nil/1) do
         [] -> "."
         ws -> "; temperament: #{Enum.join(ws, ", ")}. Let it colour every line."
@@ -350,4 +350,18 @@ defmodule Server.Office.Pets do
 
   defp axis(n, words) when is_integer(n) and n in -2..2, do: Enum.at(words, n + 2)
   defp axis(_, _), do: nil
+
+  # a name from the office's poll, for a prompt: one short line, never a paragraph someone pasted
+  defp word(s, fallback) when is_binary(s) do
+    s
+    |> String.replace(~r/[[:cntrl:]]/, " ")
+    |> String.trim()
+    |> String.slice(0, 32)
+    |> case do
+      "" -> fallback
+      w -> w
+    end
+  end
+
+  defp word(_, fallback), do: fallback
 end
