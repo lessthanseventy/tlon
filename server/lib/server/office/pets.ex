@@ -7,9 +7,9 @@ defmodule Server.Office.Pets do
   line at a time: it writes a batch per pet, a few lines for each OCCASION (`occasions/1`: patted,
   woken, a coworker starting a test, a treat…), about this office as it is now (`Banter.scene/1`), and
   the office picks from the batch as things happen; a line about a coworker carries `{name}` for the
-  office to fill in. Lazy like banter: a batch is only written while an office asks (`voices/1`), at
-  most one per pet per workspace every `@every_s`. On and off with banter (`Server.Office.Banter`). A
-  reply that does not parse is dropped, and the last good batch stands.
+  office to fill in. Lazy like banter: batches are only written while an office asks (`voices/1`), at
+  most one round (each pet's and the pair's) per workspace every `@every_s`. On and off with banter
+  (`Server.Office.Banter`). A reply that does not parse is dropped, and the last good batch stands.
 
   The scene is more than who sits where (`context/1`): what landed today, the last of the lobby's
   talk (releases, restarts, shift changes and what people said), the shift, the weather and the time
@@ -117,8 +117,10 @@ defmodule Server.Office.Pets do
 
   @doc """
   The office as the pets see it: `Banter.context/1` plus what has been happening — `landed` (titles
-  that merged in the last 12 hours), `lobby` (the last of the workspace's standing thread, by
-  author), `shift`, `weather` and `clock` (the part of the day, local time).
+  that merged in the last 12 hours), `lobby` (the server's own last announcements on the workspace's
+  standing thread — releases, restarts, landings, shift changes — never what a person or a coworker
+  wrote there, which can hold paths, pasted output or the operator's asks and would go to an outside
+  model), `shift`, `weather` and `clock` (the part of the day, local time).
   """
   def context(ws) do
     root = Server.Channel.machine_thread(ws)
@@ -129,10 +131,13 @@ defmodule Server.Office.Pets do
       lobby:
         if(root,
           do:
-            for(
-              m <- Server.Channel.recent_messages(root, 12),
-              m.kind != "suggestion",
-              do: "#{m.author}: #{clip(m.body)}"
+            Enum.take(
+              for(
+                m <- Server.Channel.recent_messages(root, 40),
+                m.author == "tlon",
+                do: m.body |> String.split("\n", parts: 2) |> hd() |> clip()
+              ),
+              -8
             ),
           else: []
         ),
@@ -159,9 +164,9 @@ defmodule Server.Office.Pets do
       Enum.filter(
         [
           ctx[:clock] && "It is #{ctx.clock}#{if ctx[:shift] == "night", do: ", and the night crew is on"}.",
-          is_map(ctx[:weather]) && "Outside: #{ctx.weather[:desc] || ctx.weather["desc"]}.",
-          ctx[:landed] not in [nil, []] && "Shipped today: #{Enum.join(ctx.landed, "; ")}.",
-          ctx[:lobby] not in [nil, []] && "Lately in the lobby:\n" <> Enum.map_join(ctx.lobby, "\n", &"- #{&1}")
+          outside(ctx[:weather]),
+          listed("Shipped today: ", ctx[:landed], "; ", "."),
+          listed("Lately in the lobby:\n- ", ctx[:lobby], "\n- ", "")
         ],
         &is_binary/1
       )
@@ -242,7 +247,7 @@ defmodule Server.Office.Pets do
     end)
   end
 
-  defp clean(lines), do: for(l <- lines, is_binary(l), l = String.trim(l), l != "", do: String.slice(l, 0, 120))
+  defp clean(lines), do: for(l <- lines, is_binary(l), l = String.trim(l), l != "", do: String.slice(l, 0, 100))
 
   @impl true
   def init(state), do: {:ok, state}
@@ -268,13 +273,18 @@ defmodule Server.Office.Pets do
   defp ask(ws) do
     me = self()
 
-    for pet <- ["duo" | Map.keys(@pets)] do
-      Task.Supervisor.start_child(Server.TaskSupervisor, fn -> GenServer.cast(me, {:wrote, ws, pet, write(ws, pet)}) end)
-    end
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn -> write_round(me, ws, context(ws)) end)
   end
 
-  defp write(ws, pet) do
-    ctx = context(ws)
+  defp write_round(me, ws, ctx) do
+    for pet <- ["duo" | Map.keys(@pets)],
+        do:
+          Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+            GenServer.cast(me, {:wrote, ws, pet, write(ctx, pet)})
+          end)
+  end
+
+  defp write(ctx, pet) do
     {ask, parse} = if pet == "duo", do: {prompt_duo(ctx), &parse_duo/1}, else: {prompt(pet, ctx), &parse(&1, pet)}
 
     with {:ok, out} <-
@@ -292,9 +302,17 @@ defmodule Server.Office.Pets do
   defp exchanges(list) do
     for turns <- list,
         is_list(turns),
-        turns = clean(turns),
+        turns = Enum.map(clean(turns), &String.slice(&1, 0, 107)),
         length(turns) >= 2,
         Enum.all?(turns, &String.match?(&1, ~r/\A(Nina|Argos):\s*\S/)),
         do: turns
   end
+
+  defp outside(%{} = weather),
+    do: with(desc when is_binary(desc) <- weather[:desc] || weather["desc"], do: "Outside: #{desc}.")
+
+  defp outside(_), do: nil
+
+  defp listed(_head, items, _sep, _tail) when items in [nil, []], do: nil
+  defp listed(head, items, sep, tail), do: head <> Enum.join(items, sep) <> tail
 end

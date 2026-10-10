@@ -377,12 +377,6 @@ export class WideRoom extends Sim<Layout> {
     })
   }
 
-  /**
-   * Nina and Argos, when both are on the floor of the same room (your office, or the lounge) and
-   * neither is on the way somewhere: now and then he sneaks up on her, she bats him awake, they
-   * chase round the room, or it all ends in a scuffle. The cat keeps to straight runs inside the
-   * room's open floor; the dog walks the people's routes or follows her trail.
-   */
   /** the next due turn of an exchange, said */
   private stepTalk(): boolean {
     const due = this.turns.filter((t) => t.at <= this.tick)
@@ -398,6 +392,12 @@ export class WideRoom extends Sim<Layout> {
     ex.forEach((turn, i) => this.turns.push({ who: turn.startsWith("Nina:") ? "cat" : "dog", text: turn.replace(/^(Nina|Argos):\s*/, ""), at: this.tick + i * 42 }))
     return true
   }
+  /**
+   * Nina and Argos, when both are on the floor of the same room (your office, or the lounge) and
+   * neither is on the way somewhere: now and then he sneaks up on her, she bats him awake, they
+   * chase round the room, or it all ends in a scuffle. The cat keeps to straight runs inside the
+   * room's open floor; the dog walks the people's routes or follows her trail.
+   */
   private stepAntics(): boolean {
     const c = this.cat, d = this.dog, now = this.tick
     // a pair of lines is an exchange: the second waits for the first, or their balloons collide
@@ -433,7 +433,8 @@ export class WideRoom extends Sim<Layout> {
       }
       return true
     }
-    if (now % 20 || Math.random() > 0.08) return false
+    // one exchange at a time: a new antic waits until the last one's turns are all said
+    if (now % 20 || Math.random() > 0.08 || this.turns.length) return false
     const room = this.petRoom(c), alsoHere = this.petRoom(d)
     if (!room || room !== alsoHere || c.path.length || d.path.length || this.plan.cat.via(c)) return false
     const near = Math.abs(c.x - d.x) + Math.abs(c.y - d.y) < 60, r = Math.random()
