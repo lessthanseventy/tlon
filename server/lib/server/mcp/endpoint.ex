@@ -15,6 +15,8 @@ defmodule Server.MCP.Endpoint do
     name: "tlon",
     version: "0.1.0",
     capabilities: [:tools, :resources],
+    # anubis serves only the handshake era unless told; 2026-07-28 is the stateless one
+    protocol_versions: ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"],
     authorization: [
       authorization_servers: ["http://127.0.0.1"],
       resource: "http://127.0.0.1/tlon",
