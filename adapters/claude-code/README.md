@@ -79,7 +79,8 @@ pure parts are `lib/` (bun-tested).
 
 **Tools and commands** (from the mod, beside the server's)
 - `consult` (a tool) and `/consult`, `/fresh` (commands): a one-shot Claude Code on another ollama
-  model, with or without the session's transcript, read-only tools.
+  model, with or without the session's transcript, read-only tools, held to the seat's own deny
+  rules (`TLON_PERMISSIONS_DENY`, passed as its `--settings`).
 - Auto-vision: an image Read on a text-only ollama model is described by a vision model instead.
 - `web_search`: on the ollama gateway, where Claude Code's own WebSearch cannot reach.
 

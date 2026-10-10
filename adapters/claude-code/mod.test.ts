@@ -228,6 +228,23 @@ test("/fresh asks the named model on the ollama gateway and prints its answer fo
   expect(r.text).toBe("[/fresh glm-5.2] how should this hold state?\n\nuse a GenServer");
 });
 
+test("a consult's delegate is held to the seat's own deny rules", async ($, on) => {
+  let argv: string[] = [];
+  engine(on, {
+    env: { ...IDENTITY, TLON_PERMISSIONS_DENY: "Read(~/.ssh/*),Read(**/*.env)" },
+    run: (a) => {
+      argv = a;
+      return { exitCode: 0, stdout: "ok", stderr: "" };
+    },
+  });
+  await $.session.start(START);
+
+  await $.command.run({ command: "fresh", args: "what is in the keys?" });
+
+  const settings = argv[argv.indexOf("--settings") + 1]!;
+  expect(JSON.parse(settings)).toEqual({ permissions: { deny: ["Read(~/.ssh/*)", "Read(**/*.env)"] } });
+});
+
 test("the consult tool answers in place, with the transcript as context", async ($, on) => {
   let task = "";
   engine(on, {
