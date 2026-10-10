@@ -616,7 +616,7 @@ defmodule Server.Workline do
 
   def review_verdict(%Thread{stage: "review"} = thread, verdict, author, opts)
       when verdict in ~w(approve request_changes) do
-    sha = branch_head(thread)
+    sha = Keyword.get_lazy(opts, :branch_head, fn -> branch_head(thread) end)
 
     if verdict == "approve" and approved_at?(thread, sha),
       do: {:ok, thread},
