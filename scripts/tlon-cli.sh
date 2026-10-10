@@ -299,6 +299,14 @@ case "$cmd" in
     exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.start_thread(t, $agent) do {:ok, th} -> IO.puts(\"started ticket #$tk as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
+  ticket-claim)
+    # Claim a ticket you are working by hand (Server.Tickets.claim/2): doing, you its assignee, so
+    # intake and the manager leave it alone. Finish with: ticket-set <id> status done.
+    tk="${1:-}"; who="${2:-uqbar}"
+    int "$tk" || { echo 'usage: tlon-cli.sh ticket-claim <ticket-id> [who]' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.claim(t, \"$(esc "$who")\") do {:ok, _} -> IO.puts(\"ticket #$tk claimed by $(esc "$who")\"); {:error, why} -> IO.puts(\"refused: #{if is_binary(why), do: why, else: inspect(why)}\"); raise(\"refused\") end end"
+    ;;
+
   hire)
     # Seat a new coworker on a workspace's bench, and its policy when given:
     # hire <workspace-id> <name> <archetype> [<provider/model>|- [<effort>|- [ask|allow|-]]]

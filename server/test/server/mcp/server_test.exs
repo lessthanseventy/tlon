@@ -685,6 +685,29 @@ defmodule Server.MCP.ServerTest do
     assert first.body =~ "slice by slice"
   end
 
+  test "staff_child refuses a ticket already worked, and opens nothing", %{token: token} do
+    {:ok, _} = Staff.register_agent(%{name: "hronir-dup", mandate: "build", engine: "fresh"})
+    {:ok, ws} = Server.Workspaces.register(%{name: "Claims"})
+    {:ok, t} = Server.Tickets.file(%{workspace_id: ws.id, title: "built by hand"})
+    {:ok, _} = Server.Tickets.claim(t, "uqbar")
+    before = Repo.aggregate(Thread, :count)
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r =
+      call(token, session, 4, "staff_child", %{
+        "title" => "built by hand",
+        "lead" => "hronir-dup",
+        "brief" => "Build it.",
+        "ticket_id" => t.id
+      })
+
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "claimed by uqbar"
+    assert Repo.aggregate(Thread, :count) == before
+  end
+
   test "staff_child with no lead takes the server's pick by grade: the greybeard for greybeard work" do
     {:ok, ws} = Server.Workspaces.register(%{name: "Picking"})
     {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder", grade: "junior"})
