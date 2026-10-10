@@ -77,6 +77,16 @@ defmodule Server.SwitchboardTest do
       refute_received {:woke, _, _}
     end
 
+    test "a margin note wakes nobody — Uqbar's line in the room's margin is drawn, not delivered" do
+      %{thread: thread} = staffed_thread()
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "uqbar", body: "#1 back to build", kind: "margin"})
+
+      Switchboard.deliver(m)
+
+      refute_received {:woke, _, _}
+    end
+
     test "while a restart waits for quiet, nobody new is woken; a cancelled restart lets the message through" do
       %{thread: thread} = staffed_thread()
       on_exit(fn -> Server.Rollout.cancel_restart() end)

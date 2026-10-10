@@ -123,6 +123,12 @@ defmodule Server.Office.NeedsTest do
     assert kinds(ws) == []
   end
 
+  test "a margin note that names the operator is not a mention", %{ws: ws} do
+    {:ok, t} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, _} = Channel.post(%{thread_id: t.id, author: "uqbar", body: "@andrew #1 back to build", kind: "margin"})
+    assert kinds(ws) == []
+  end
+
   describe "putting an item away" do
     test "a mention put away stays away until a newer one comes", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "m", workspace_id: ws.id})
