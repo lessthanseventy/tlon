@@ -14,7 +14,8 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 sock="office-drive-$$"
 state="$(mktemp -d)"
 t() { tmux -L "$sock" "$@"; }
-trap 't kill-server 2>/dev/null; rm -rf "$state"' EXIT
+# tmux leaves its socket file behind when its server dies
+trap 't kill-server 2>/dev/null; rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$sock"; rm -rf "$state"' EXIT
 
 t new-session -d -x "${OFFICE_COLS:-150}" -y "${OFFICE_ROWS:-60}" \
   "cd '$root/office' && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' bun tui/main.ts 2>'$state/err'"

@@ -281,7 +281,13 @@ defmodule Server.Arbiter.TmuxTest do
     Application.put_env(:server, :tmux_cmd, runner)
     # `cat` echoes what it is sent — the cheapest thing that shows nothing was typed
     Application.put_env(:server, :spawn_launcher_claude, "cat")
-    on_exit(fn -> System.cmd("tmux", ["-L", sock, "kill-server"], stderr_to_stdout: true) end)
+
+    on_exit(fn ->
+      System.cmd("tmux", ["-L", sock, "kill-server"], stderr_to_stdout: true)
+      # tmux leaves its socket file behind when its server dies
+      {uid, 0} = System.cmd("id", ["-u"])
+      File.rm(Path.join([System.get_env("TMUX_TMPDIR", "/tmp"), "tmux-#{String.trim(uid)}", sock]))
+    end)
 
     assert {:ok, %{window: window}} = Arbiter.Tmux.spawn(exports)
     Process.sleep(300)
