@@ -172,6 +172,26 @@ defmodule Server.TicketsTest do
       assert Tickets.threads_of(b.id) == []
     end
 
+    test "a reopened workline takes back only the tickets nothing else took meanwhile" do
+      {:ok, ws} = Workspaces.create(%{name: "Reopen"})
+      {:ok, taken} = Tickets.file(%{workspace_id: ws.id, title: "taken since"})
+      {:ok, left} = Tickets.file(%{workspace_id: ws.id, title: "left alone"})
+      {:ok, first} = Tickets.start_thread(taken)
+      {:ok, other} = Tickets.start_thread(left)
+      {:ok, _} = Channel.close_as(first, {:abandoned, "redo it"})
+      {:ok, _} = Channel.close_as(other, {:abandoned, "later"})
+      {:ok, second} = Tickets.start_thread(Tickets.get(taken.id))
+
+      {:reopened, _} = Channel.reopen_if_closed(first.id)
+      {:reopened, _} = Channel.reopen_if_closed(other.id)
+
+      assert {"relates", first.id} in Tickets.threads_of(taken.id)
+      assert {"promoted", second.id} in Tickets.threads_of(taken.id)
+      refute {"promoted", first.id} in Tickets.threads_of(taken.id)
+      assert List.last(Channel.thread_messages(first)).body =~ "moved on"
+      assert %{status: "doing"} = Tickets.get(left.id)
+    end
+
     test "a plain thread or a merged workline closes by hand without a why" do
       {:ok, plain} = Channel.open_thread(%{title: "a question"})
       assert {:ok, %{state: "closed"}} = Channel.close_as(plain, nil)

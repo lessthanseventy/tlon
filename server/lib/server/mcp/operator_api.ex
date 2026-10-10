@@ -885,6 +885,7 @@ defmodule Server.MCP.OperatorAPI do
           "a workline that hasn't merged closes with a why: superseded_by (the PR or commit that shipped it) or abandoned (why it is dropped)"
       })
 
+  defp refused(conn, why) when is_binary(why), do: json(conn, 409, %{error: why})
   defp refused(conn, why), do: json(conn, 409, %{error: inspect(why)})
 
   defp settings, do: %{knobs: Server.OperatorConfig.knobs(), restart_pending: Server.Rollout.restart_pending?()}

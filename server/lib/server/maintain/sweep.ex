@@ -93,9 +93,10 @@ defmodule Server.Maintain.Sweep do
     working = MapSet.new(open_tied.(~w(promoted relates)))
     started = open_tied.(~w(promoted))
 
-    # a doing ticket with an assignee is claimed by hand (`Server.Tickets.claim/2`): no thread works it
-    for ticket <- Repo.all(from t in Server.Ticket, where: t.status == "doing" and is_nil(t.assignee)),
-        not MapSet.member?(working, ticket.id) do
+    # a claimed ticket is worked by hand (`Server.Tickets.claim/2`): no thread works it
+    for ticket <- Repo.all(from t in Server.Ticket, where: t.status == "doing"),
+        not MapSet.member?(working, ticket.id),
+        not Server.Tickets.claimed?(ticket) do
       note = "Back to the backlog #{Date.utc_today()}: no open thread was working on it."
       Server.Tickets.update(ticket, %{status: "backlog", body: String.trim("#{ticket.body}\n\n#{note}")})
     end

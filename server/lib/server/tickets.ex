@@ -256,19 +256,49 @@ defmodule Server.Tickets do
           match?(%Server.Thread{state: "open"}, Repo.get(Server.Thread, id)),
           do: " in thread ##{id}"
 
-    by = if ticket.assignee, do: " — claimed by #{ticket.assignee}", else: ""
+    by = if claimed?(ticket), do: " — claimed by #{ticket.assignee}", else: ""
     {:error, "ticket ##{ticket.id} is already #{ticket.status}#{Enum.join(places)}#{by}"}
   end
 
   @doc """
   Claim a ticket for someone working it by hand, outside a thread (the operator, Uqbar): `doing`, with
-  them as its assignee, so intake and the manager leave it alone and the Maintain sweep doesn't return
-  it to the backlog. Refused as `startable/1` refuses; an epic is never work. Finish it with its status.
+  them as its assignee and the `claimed` label, so intake and the manager leave it alone and the
+  Maintain sweep doesn't return it to the backlog. Refused as `startable/1` refuses; an epic is never
+  work. Finish it with its status.
   """
   def claim(%Ticket{kind: "epic"}, _who), do: {:error, :epic}
 
   def claim(%Ticket{} = ticket, who) do
-    with :ok <- startable(ticket), do: __MODULE__.update(ticket, %{status: "doing", assignee: who})
+    with :ok <- startable(ticket),
+         do:
+           __MODULE__.update(ticket, %{
+             status: "doing",
+             assignee: who,
+             labels: Enum.uniq((ticket.labels || []) ++ ["claimed"])
+           })
+  end
+
+  @doc "Whether a ticket is claimed by hand (`claim/2`): worked outside any thread, so nothing sweeps it."
+  def claimed?(%Ticket{labels: labels}), do: is_list(labels) and "claimed" in labels
+
+  @doc """
+  A workline that closed unmerged was reopened: each ticket started into it comes back to it only if
+  nothing else took it meanwhile. One that is done, claimed or started in another open thread stays
+  where it is, its tie to this thread now `relates`; the rest are `doing` here again. The tickets that
+  moved on, so the thread can say so.
+  """
+  def reopened_for(thread_id) do
+    for ticket <- promoted(thread_id, fn _ -> true end), reduce: [] do
+      moved ->
+        if ticket.status == "done" or claimed?(ticket) or elsewhere?(ticket.id, thread_id) do
+          :ok = untie(ticket.id, thread_id, "promoted")
+          {:ok, _} = tie(ticket.id, thread_id, "relates")
+          [ticket | moved]
+        else
+          {:ok, _} = __MODULE__.update(ticket, %{status: "doing"})
+          moved
+        end
+    end
   end
 
   @doc """
@@ -455,5 +485,11 @@ defmodule Server.Tickets do
 
   defp next_sort(workspace_id) do
     (Repo.one(from t in Ticket, where: t.workspace_id == ^workspace_id, select: max(t.sort)) || 0) + 1
+  end
+
+  defp elsewhere?(ticket_id, thread_id) do
+    for {"promoted", id} <- threads_of(ticket_id), id != thread_id, reduce: false do
+      acc -> acc or match?(%Server.Thread{state: "open"}, Repo.get(Server.Thread, id))
+    end
   end
 end
