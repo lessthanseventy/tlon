@@ -607,42 +607,20 @@ defmodule Server.Workline do
   told to read review.md: a review asking for changes never reaches the operator's gate. An approval
   is what a standing approval (`auto_land_risk` in the settings file) needs to land without them,
   and asks for the risk grade it is decided on (`Server.Jobs.Grade`); a change that owes QA is
-  handed to the qa seat. `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
+  handed to the qa seat. An approval of a commit already approved this round is that same
+  approval, `{:ok, thread}` and nothing recorded: a client retries a call whose connection
+  dropped, and the approval's QA handoff closes the reviewer's window under it.
+  `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
   """
   def review_verdict(thread, verdict, author, opts \\ [])
 
   def review_verdict(%Thread{stage: "review"} = thread, verdict, author, opts)
       when verdict in ~w(approve request_changes) do
-    {:ok, _} =
-      Dossier.record_check(%{
-        thread_id: thread.id,
-        cmd: "review verdict by #{author}",
-        exit: if(verdict == "approve", do: 0, else: 1),
-        tail: verdict,
-        correlation: "workline:#{thread.slug}:review",
-        sha: branch_head(thread)
-      })
+    sha = branch_head(thread)
 
-    if verdict == "request_changes" do
-      bounced =
-        bounce(
-          thread,
-          "the review requested changes",
-          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
-        )
-
-      if changes_requested(thread) >= 2,
-        do: escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
-
-      bounced
-    else
-      Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
-
-      case qa_owed(thread, opts) do
-        nil -> {:ok, thread}
-        {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
-      end
-    end
+    if verdict == "approve" and approved_at?(thread, sha),
+      do: {:ok, thread},
+      else: record_verdict(thread, verdict, author, sha, opts)
   end
 
   def review_verdict(%Thread{stage: "review"}, verdict, _author, _opts), do: {:error, {:bad_verdict, verdict}}
@@ -1744,5 +1722,45 @@ defmodule Server.Workline do
       do: Server.Jobs.enqueue(Server.Jobs.Verify.new(%{thread_id: flipped.id, slug: flipped.slug}))
 
     {:ok, flipped}
+  end
+
+  defp approved_at?(thread, sha) do
+    case since_review(thread, "workline:#{thread.slug}:review") do
+      %{kind: "check_passed", detail: detail} -> detail["sha"] == sha
+      _ -> false
+    end
+  end
+
+  defp record_verdict(thread, verdict, author, sha, opts) do
+    {:ok, _} =
+      Dossier.record_check(%{
+        thread_id: thread.id,
+        cmd: "review verdict by #{author}",
+        exit: if(verdict == "approve", do: 0, else: 1),
+        tail: verdict,
+        correlation: "workline:#{thread.slug}:review",
+        sha: sha
+      })
+
+    if verdict == "request_changes" do
+      bounced =
+        bounce(
+          thread,
+          "the review requested changes",
+          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
+        )
+
+      if changes_requested(thread) >= 2,
+        do: escalate(Repo.get!(Thread, thread.id), "the review asked for changes twice")
+
+      bounced
+    else
+      Server.Jobs.enqueue(Server.Jobs.Grade.new(%{thread_id: thread.id}))
+
+      case qa_owed(thread, opts) do
+        nil -> {:ok, thread}
+        {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
+      end
+    end
   end
 end
