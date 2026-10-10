@@ -89,6 +89,18 @@ defmodule Server.Office.PetsTest do
     assert Pets.clock({{2026, 10, 9}, {2, 0, 0}}) == "the small hours of the night"
   end
 
+  test "the lobby the pets hear is the server's own announcements, never what a person wrote there" do
+    Server.TestDB.clean!()
+    {:ok, ws} = Server.Workspaces.register(%{name: "Lobby"})
+    {:ok, root} = Server.Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+    {:ok, _} = Server.Channel.post(%{thread_id: root.id, author: "andrew", body: "token is sk-secret, paste it"})
+
+    {:ok, _} =
+      Server.Channel.post(%{thread_id: root.id, author: "tlon", body: "release abc1234 is live — 3 changes\nmore"})
+
+    assert Pets.context(ws.id).lobby == ["release abc1234 is live — 3 changes"]
+  end
+
   test "the pair's exchanges keep two or more turns, each said by Nina or Argos" do
     out = ~s({"exchanges": {"chat": [["Argos: Troy shipped!", "Nina: It was Souls, darling."], ["Argos: alone"],
              ["Nina: hm", "Gary: intruder"]], "nope": [["Nina: a", "Argos: b"]]}})
