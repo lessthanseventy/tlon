@@ -1,5 +1,7 @@
 // A uqbar post as a paper aeroplane (docs/plans/2026-10-08-uqbar-design.md §3): a page tears out of
 // the book, folds, glides leg by leg to its recipient, unfolds. Pure: the room owns where legs are.
+import type { Scene } from "./draw"
+import { ROLE } from "./palette"
 import type { Pt } from "./uqbar"
 
 export type Phase = "tear" | "fold" | "glide" | "unfold"
@@ -41,4 +43,24 @@ export function freshPosts(feed: FeedRow[], seen: Set<string>, first: boolean): 
     if (!first && x.kind === "message" && x.who === "uqbar" && x.thread_id !== null) out.push(x)
   }
   return out.reverse()
+}
+
+/** one char per pixel: p page, k ink. Two colours, at least 6 px wide: legible at a glance */
+export const FRAMES = {
+  sheet: ["pppppp", "pkkkkp", "pppppp", "pkkkkp", "pppppp", "pkkkpp"],
+  folded: ["..pppp..", ".pkkkkp.", "pppppppp", ".pkkkkp.", "..pppp.."],
+  plane: ["pp......", "pppp....", "kkpppppp", "pppppppp", "pp......", ".p......"],
+  planeUp: ["........", "pp......", "pppp....", "kkpppppp", "pppppppp", "pp......"],
+  unfold: ["pp....pp", ".pp..pp.", "..pppp..", "..pkkp..", ".pppppp.", "pp....pp"],
+} as const
+
+/** the page in flight: sheet while tearing, folding squeezes it, two glide frames, then it opens flat */
+export function drawPlane(sc: Scene, p: Plane) {
+  const frame =
+    p.phase === "tear" ? FRAMES.sheet
+    : p.phase === "fold" ? (p.t < FOLD / 2 ? FRAMES.sheet : FRAMES.folded)
+    : p.phase === "glide" ? ((sc.tick >> 1) % 2 ? FRAMES.planeUp : FRAMES.plane)
+    : FRAMES.unfold
+  const x = Math.round(p.at.x), y = Math.round(p.at.y)
+  sc.overhead.push(() => sc.blit([...frame], x, y, { p: ROLE.prose, k: ROLE.fieldInk }))
 }
