@@ -2,6 +2,7 @@
 // always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
 // beside it: a compiled TUI runs anywhere the server answers.
 import { EMPTY, type Agents, type CorkNote, type LifeStatus, type ThreadView } from "../kit/types"
+import type { Note } from "../kit/margin"
 import type { Target } from "./terminal"
 import type { Toy } from "./sandbox"
 
@@ -91,6 +92,10 @@ export const dismissNeed = (key: string) => write("putting it away", "/office/ne
 /** a stranded checkout taken down, its branch kept */
 export const retireStranded = (key: string) => write("taking the checkout down", "/office/needs/retire", { key }, () => "checkout removed; branch kept")
 export const resolveIssue = (id: number) => write("resolving the issue", `/issues/${id}/resolve`, {}, () => "resolved")
+/** Uqbar's margin notes in a workspace, newest first (empty when there are none or the server is down) */
+export async function margin(ws: number): Promise<Note[]> {
+  try { const r = await call("GET", `/office/margin/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
+}
 /** the suggestion box: the crew's suggestions not yet filed or thrown out */
 export async function suggestions(ws: number): Promise<CorkNote[]> {
   try { const r = await call("GET", `/office/suggestions/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
