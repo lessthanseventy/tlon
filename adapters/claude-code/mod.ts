@@ -473,7 +473,7 @@ export function register(on) {
   // production write (the operator's to press).
   on("tool.check", { tool: "Bash" }, async ($, e, next) => {
     const command = (e.input as { command?: unknown })?.command;
-    const gate = typeof command === "string" ? gateOf(command, cwd || (await $.session.cwd()), mainCheckout) : null;
+    const gate = typeof command === "string" ? gateOf(command, cwd || (await $.session.cwd()), mainCheckout, (await $.env.get("HOME")) ?? "") : null;
     return gate ?? next(e);
   });
 

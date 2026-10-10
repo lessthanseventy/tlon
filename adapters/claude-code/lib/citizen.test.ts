@@ -40,6 +40,49 @@ describe("gateOf — what is held before it runs", () => {
     expect(gateOf("git checkout -- lib/x.ex", main, main)).toBeNull();
   });
 
+  test("a push is found past git's global options and behind env, a subshell or a substitution", () => {
+    for (const cmd of [
+      "git -C /tmp/w push",
+      "git -c push.default=current push",
+      "git --git-dir=/tmp/w/.git push origin HEAD",
+      "git --no-pager -c 'user.name=a b' push",
+      "env git push",
+      "env -u FOO GIT_TRACE=1 git push",
+      "FOO=1 git push",
+      "(git push)",
+      "cd /tmp/w; git push",
+      "make || git push",
+      "echo hi | git push",
+      "echo $(git push)",
+      'echo "$(git push)"',
+      "echo `git push`",
+      "/usr/bin/git push",
+      "command git push",
+      "git \\\n  push",
+    ])
+      expect(gateOf(cmd, "/tmp/w", main)?.decision, cmd).toBe("deny");
+  });
+
+  test("a word that only mentions git push runs", () => {
+    expect(gateOf("echo 'git push'", "/tmp/w", main)).toBeNull();
+    expect(gateOf("git log --grep push", "/tmp/w", main)).toBeNull();
+  });
+
+  test("a branch switch aimed at the live checkout by -C, --git-dir or ~ is refused", () => {
+    const home = "/home/a";
+    expect(gateOf("git -C ~/projects/tlon checkout x", "/tmp/w", main, home)?.decision).toBe("deny");
+    expect(gateOf(`git -C ${main} switch x`, "/tmp/w", main)?.decision).toBe("deny");
+    expect(gateOf("git -C ../../projects/tlon/server checkout x", "/home/a/.cache/w", main)?.decision).toBe("deny");
+    expect(gateOf(`git --git-dir=${main}/.git checkout x`, "/tmp/w", main)?.decision).toBe("deny");
+    expect(gateOf(`env git -C ${main} checkout x`, "/tmp/w", main)?.decision).toBe("deny");
+    expect(gateOf(`(cd /tmp && git -C ${main} checkout x)`, "/tmp/w", main)?.decision).toBe("deny");
+  });
+
+  test("-C into a worktree lets a branch switch run, even from the live checkout", () => {
+    expect(gateOf("git -C /home/a/.cache/tlon-scratch/w checkout x", main, main)).toBeNull();
+    expect(gateOf(`git -C ${main} checkout -- lib/x.ex`, "/tmp/w", main)).toBeNull();
+  });
+
   test("a production write is asked, never allowed", () => {
     expect(gateOf("server/_build/prod/rel/server/bin/server rpc 'IO.puts(1)'", "/tmp", main)?.decision).toBe("ask");
     expect(gateOf("mise run release:cut", "/tmp", main)?.decision).toBe("ask");
