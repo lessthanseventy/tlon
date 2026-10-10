@@ -50,7 +50,7 @@ fi
 
 # The MCP server key is `tlon` on every harness (flake.nix's mcpServers.tlon for pi), so the
 # tools read as mcp__tlon__post_message etc. Nothing reads the key back; it is a label.
-mcp_json="{\"mcpServers\":{\"tlon\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\",\"headersHelper\":\"$cli token\"}}}"
+mcp_json="{\"mcpServers\":{\"tlon\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\",\"headersHelper\":\"$cli token\"},\"lsp\":{\"type\":\"stdio\",\"command\":\"bun\",\"args\":[\"run\",\"$plugin/lsp/src/mcp.ts\"]}}}"
 
 # A write-fenced role (`Server.Harness` sets TLON_PERMISSIONS_DENY, e.g.
 # "Write,Edit,NotebookEdit" for the reviewer) lands as a real permissions.deny in --settings —
@@ -78,15 +78,51 @@ perms=""
 perms_json=""
 [ -n "$perms" ] && perms_json=",\"permissions\":{$perms}"
 
-# Presence is the mod (`mod.ts`, loaded by --plugin-dir below), not a settings hook: it runs
-# inside the session, so registering, thinking, each tool and idle reach the server in order.
-settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"}]}]}$perms_json}"
+# Everything a citizen does with the server — presence, the brief, capture, the band — is the mod
+# (`mod.ts`, loaded by --plugin-dir below). The band carries the status, so the operator's own
+# statusLine stays out of a citizen's window.
+settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"}$perms_json}"
+
+# A sandboxed role (`Server.Harness` sets TLON_SANDBOX_FILE, the profile's sandbox settings) never
+# waits on a prompt: its bash runs fenced (strict, so it can neither reach a host off the allowlist
+# nor retry outside the sandbox, nor start without one), the tools it works with are allowed, and
+# dontAsk refuses anything else instead of asking a pane nobody watches.
+mode=auto
+if [ -n "${TLON_SANDBOX_FILE:-}" ] && [ -f "$TLON_SANDBOX_FILE" ]; then
+  sandbox="$(jq -c '. * {enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false, failIfUnavailable: true, network: {strictAllowlist: true}}' "$TLON_SANDBOX_FILE")"
+  settings_json="$(jq -c --argjson sb "$sandbox" '. + {sandbox: $sb} | .permissions.allow = ["Read", "Glob", "Grep", "Edit", "Write", "NotebookEdit", "Bash", "WebFetch", "Agent", "TodoWrite", "Skill", "mcp__tlon", "mcp__lsp", "mcp__tlon-citizen"]' <<<"$settings_json")"
+  mode=dontAsk
+fi
+
+# An ollama model is reached through Claude Code's gateway setting (ollama.com and the local daemon
+# speak the Anthropic API), so every request the session makes — the model's, its subagents', the
+# background ones — goes to ollama, and none draws on the Claude plan. The model aliases point at
+# ollama models too, or a subagent asking for "haiku" would name a model ollama doesn't serve.
+model=""
+args=("$@")
+for i in "${!args[@]}"; do
+  [ "${args[$i]}" = "--model" ] && model="${args[$((i + 1))]:-}"
+done
+case "${TLON_PROVIDER:-anthropic}" in
+  ollama-cloud)
+    key="${OLLAMA_API_KEY:-$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/agenix/ollama-api-key" 2>/dev/null || true)}"
+    [ -n "$key" ] || { echo "tlon: no OLLAMA_API_KEY (env or agenix) for an ollama-cloud model" >&2; exit 1; }
+    export ANTHROPIC_BASE_URL=https://ollama.com ANTHROPIC_AUTH_TOKEN="$key" ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4.1-flash
+    ;;
+  ollama)
+    export ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
+    ;;
+esac
+if [ -n "${ANTHROPIC_BASE_URL:-}" ]; then
+  unset ANTHROPIC_API_KEY
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="$model" ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
+fi
 
 # The citizen protocol, as a system prompt. Without it Claude Code treats a teammate's message
 # (typed into its input by the server's switchboard) like the
 # human talking and answers in its own window — which no one else can see, so the reply is lost and
 # the peer is never woken. Spell out that a reply is a post_message tool call that @-mentions the sender.
-sys_prompt="You are a citizen of tlon thread #$TLON_THREAD posting as \"$TLON_AUTHOR\", working alongside other agents. Messages arrive in your input as \"New message on thread N from <author>: …\" — when the author is another agent rather than the human operator, your terminal output is invisible to them. To reply so the sender actually receives it and takes their turn, call the tlon post_message tool and @-mention the sender by handle (for example @pi-machine); answering only in your own window reaches no one."
+sys_prompt="You are a citizen of tlon thread #$TLON_THREAD posting as \"$TLON_AUTHOR\", working alongside other agents. Messages arrive in your input as \"New message on thread N from <author>: …\" — when the author is another agent rather than the human operator, your terminal output is invisible to them. To reply so the sender actually receives it and takes their turn, call the tlon post_message tool and @-mention the sender by handle (for example @dahlmann); answering only in your own window reaches no one."
 
 # A coworker ROLE (archetype persona) rides in as a file via TLON_ROLE_PROMPT_FILE (`Server.Harness`
 # sets it) and is APPENDED to the citizen protocol — a second
@@ -102,7 +138,8 @@ if [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ]; then
   printf 'mcp-config: %s\n' "$mcp_json"
   printf 'settings:   %s\n' "$settings_json"
   printf 'system:     %s\n' "$sys_prompt"
-  printf 'exec: claude --permission-mode auto --append-system-prompt <…> --mcp-config <…> --settings <…> --plugin-dir %s %s\n' "$plugin" "$*"
+  printf 'gateway:    %s\n' "${ANTHROPIC_BASE_URL:-anthropic}"
+  printf 'exec: claude --permission-mode %s --append-system-prompt <…> --mcp-config <…> --settings <…> --plugin-dir %s %s\n' "$mode" "$plugin" "$*"
   exit 0
 fi
 
@@ -115,4 +152,4 @@ if command -v jq >/dev/null 2>&1; then
   jq --arg d "$PWD" '.projects[$d] = ((.projects[$d] // {}) + {hasTrustDialogAccepted: true})' "$cj" > "$cj.tmp" && mv "$cj.tmp" "$cj"
 fi
 
-exec claude --permission-mode auto --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" --plugin-dir "$plugin" "$@"
+exec claude --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" --plugin-dir "$plugin" "$@"
