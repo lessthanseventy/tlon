@@ -40,7 +40,10 @@ describe("adapterForFile — route a file to its language server", () => {
     ["/x/flake.nix", "nix"],
     ["/x/scripts/tlon-cli.sh", "bash"],
     ["/x/package.json", "json"],
-    ["/x/README.md", null], // markdown — no adapter (yet)
+    ["/x/README.md", "markdown"],
+    ["/x/mise.toml", "toml"],
+    ["/x/.github/workflows/ci.yml", "yaml"],
+    ["/x/notes.txt", null],
     ["/x/no-extension", null],
   ];
   for (const [file, name] of cases) {
