@@ -4,7 +4,7 @@
 // the lead's desks, the crew board, two tables of four), a glass meeting room, the lounge with its
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
-import { drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
+import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, stepBook, type Book, type Pt as Perch } from "../kit/uqbar"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
@@ -137,6 +137,7 @@ export class WideRoom extends Sim<Layout> {
   private boardEdge: Perch = { x: 0, y: 1 }
   /** uqbar's posts in the air (kit/plane.ts) */
   private planes: Plane[] = []
+  private flights = 0
   private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -163,8 +164,16 @@ export class WideRoom extends Sim<Layout> {
     const lead = a.threads.find((t) => t.id === tid)?.lead
     const who = lead ? [...this.actors.values()].find((x) => x.seat.agent === lead) : undefined
     const to = who ? { x: who.x, y: who.y - 10 } : this.cards.get(tid) ?? this.boardEdge
-    const old = passing ? this.actors.get(passing) : undefined
-    this.planes.push(launch({ x: this.book.x, y: this.book.y }, old ? [{ x: old.x, y: old.y - 10 }] : [], to))
+    const old = passing ? this.actors.get(passing) : undefined, from = { x: this.book.x, y: this.book.y }
+    const via: Plane["legs"] = old ? [{ x: old.x, y: old.y - 10 }] : []
+    // every 4th plane Argos jumps for: he runs under its midpoint and it hangs there a moment
+    if (caughtNth(this.flights++)) {
+      const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }, d = this.dog
+      via.push({ ...mid, hold: 24 })
+      d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: mid.x, y: d.aisle, aisle: d.aisle, pose: "stand", face: "left", kind: "roam" })]
+      d.mode = "walk"
+    }
+    this.planes.push(launch(from, via, to))
   }
   private stepPlanes(): boolean {
     this.planes = this.planes.map(stepPlane).filter((p): p is Plane => p !== null)
