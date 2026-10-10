@@ -27,6 +27,7 @@ export type Act =
   | { kind: "archive" }
   | { kind: "dog" }
   | { kind: "tray" }
+  | { kind: "needs" }
   | { kind: "beacon" }
   | { kind: "rack" }
 
