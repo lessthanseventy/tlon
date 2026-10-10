@@ -27,6 +27,7 @@ defmodule Server.MCP.Endpoint do
 
   component(Server.MCP.Tool.Register, name: "register")
   component(Server.MCP.Tool.PostMessage, name: "post_message")
+  component(Server.MCP.Tool.MarginNote, name: "margin_note")
   component(Server.MCP.Tool.BankFact, name: "bank_fact")
   component(Server.MCP.Tool.RaiseIssue, name: "raise_issue")
   component(Server.MCP.Tool.RecordDone, name: "record_done")
