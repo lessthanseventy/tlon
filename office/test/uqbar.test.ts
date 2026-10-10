@@ -135,6 +135,25 @@ describe("torn pages", () => {
     const lead = r.actors.get("w0")!
     expect(last).toEqual({ x: lead.x, y: lead.y - 10 })
   })
+  test("the desk, not wherever the lead is walking when it launches", () => {
+    seeded(3, () => {
+      const a = office(3), room = new WideRoom(WIDTH), v = viewOf(a, 1)
+      type P = { home(l: unknown, agent: string): { x: number; y: number } | null; layout(a: unknown): unknown }
+      const r = room as unknown as Inner & { plan: P }
+      room.render(v, focus, measure, NOW)
+      for (let i = 0; i < 300; i++) room.step(v)
+      const lead = r.actors.get("w0")!, desk = r.plan.home(r.plan.layout(v), "w0")!
+      lead.x = desk.x + 90; lead.y = desk.y + 60
+      r.fly(102, v)
+      let last = r.planes[0]!.at
+      for (let i = 0; i < 400 && r.planes.length; i++) {
+        room.step(v)
+        const p = r.planes.find((x) => x.phase === "glide")
+        if (p) last = p.at
+      }
+      expect(last).toEqual({ x: desk.x, y: desk.y - 10 })
+    })
+  })
   const unled = (tid: number) => {
     const a = office(3)
     a.threads = a.threads.map((t) => (t.id === tid ? { ...t, lead: null } : t))
