@@ -45,11 +45,12 @@ defmodule Server.Tickets do
   end
 
   @doc """
-  Tickets in a workspace in BOARD order: `sort` descending, newest first as the tie-break. Higher
-  `sort` sits nearer the top of its column — that is what `reorder/2` moves and what persists.
+  Tickets in a workspace in BOARD order: `sort` ascending, oldest first as the tie-break. Lower
+  `sort` sits nearer the top of its column, and the top is what intake takes next — that is what
+  `reorder/2` moves and what persists.
   """
   def in_workspace(workspace_id),
-    do: Repo.all(from t in Ticket, where: t.workspace_id == ^workspace_id, order_by: [desc: t.sort, desc: t.id])
+    do: Repo.all(from t in Ticket, where: t.workspace_id == ^workspace_id, order_by: [asc: t.sort, asc: t.id])
 
   @doc "Open (not-done) tickets in a workspace — the capture net minus the archive."
   def open_in_workspace(workspace_id) do
@@ -438,18 +439,18 @@ defmodule Server.Tickets do
     end
   end
 
-  # The ticket immediately above (`:up` — the next HIGHER sort) or below in the same column.
+  # The ticket immediately above (`:up` — the next LOWER sort) or below in the same column.
   defp neighbour(%Ticket{} = t, direction) do
     base = from(o in Ticket, where: o.workspace_id == ^t.workspace_id and o.status == ^t.status and o.id != ^t.id)
 
     case direction do
-      :up -> base |> where([o], o.sort > ^t.sort) |> order_by([o], asc: o.sort) |> limit(1) |> Repo.one()
-      :down -> base |> where([o], o.sort < ^t.sort) |> order_by([o], desc: o.sort) |> limit(1) |> Repo.one()
+      :up -> base |> where([o], o.sort < ^t.sort) |> order_by([o], desc: o.sort) |> limit(1) |> Repo.one()
+      :down -> base |> where([o], o.sort > ^t.sort) |> order_by([o], asc: o.sort) |> limit(1) |> Repo.one()
     end
   end
 
-  # A new ticket lands at the TOP of its column — a 2-second capture you cannot see is a capture
-  # that did not happen.
+  # A new ticket joins the BOTTOM of its column: the column is a queue, and the work filed first
+  # (a series' step 1 before its step 2) is taken first. Move one up to bring it sooner.
   defp next_sort(nil), do: 0
 
   defp next_sort(workspace_id) do

@@ -36,12 +36,12 @@ defmodule Server.TicketsTest do
   end
 
   describe "reads" do
-    test "in_workspace newest-first; open_in_workspace hides done", %{workspace: ws} do
+    test "in_workspace oldest-first; open_in_workspace hides done", %{workspace: ws} do
       {:ok, a} = Tickets.file(%{workspace_id: ws.id, title: "a"})
       {:ok, b} = Tickets.file(%{workspace_id: ws.id, title: "b"})
       {:ok, _} = Tickets.update(b, %{status: "done"})
 
-      assert Enum.map(Tickets.in_workspace(ws.id), & &1.id) == [b.id, a.id]
+      assert Enum.map(Tickets.in_workspace(ws.id), & &1.id) == [a.id, b.id]
       assert Enum.map(Tickets.open_in_workspace(ws.id), & &1.id) == [a.id]
     end
   end
@@ -311,16 +311,16 @@ defmodule Server.TicketsTest do
   end
 
   describe "board order (UX slice 4)" do
-    test "a new ticket lands at the TOP of its column", %{workspace: ws} do
+    test "a new ticket joins the BOTTOM of its column: filed first, taken first", %{workspace: ws} do
       {:ok, _first} = Tickets.file(%{workspace_id: ws.id, title: "first"})
       {:ok, _second} = Tickets.file(%{workspace_id: ws.id, title: "second"})
 
-      assert ["second", "first"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
+      assert ["first", "second"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
     end
 
     test "reorder swaps a ticket with its neighbour, and it persists", %{workspace: ws} do
-      {:ok, _bottom} = Tickets.file(%{workspace_id: ws.id, title: "bottom"})
       {:ok, top} = Tickets.file(%{workspace_id: ws.id, title: "top"})
+      {:ok, _bottom} = Tickets.file(%{workspace_id: ws.id, title: "bottom"})
 
       assert ["top", "bottom"] = ws.id |> Tickets.in_workspace() |> Enum.map(& &1.title)
 
