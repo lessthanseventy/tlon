@@ -41,8 +41,10 @@ echo "$label (pid $$) in $PWD since $(date +%H:%M:%S)" >"$holder" 2>/dev/null ||
 trap ': >"$holder" 2>/dev/null' EXIT
 # 9>&-: what the check leaves running (a watcher, a dev server) must not keep holding the lock.
 # In the background and waited on, so a TERM stops the check and clears the line at once.
-"$@" 9>&- &
+# In its own process group, so stopping it stops its test runs too, not just the top process.
+setsid "$@" 9>&- &
 child=$!
-trap 'kill "$child" 2>/dev/null; exit 143' TERM INT
+trap 'kill -TERM -- "-$child" 2>/dev/null; exit 143' TERM
+trap 'kill -TERM -- "-$child" 2>/dev/null; exit 130' INT
 wait "$child"
 
