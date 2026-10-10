@@ -5,8 +5,18 @@ defmodule Server.ReleaseScriptTest do
 
   @script Path.expand("../../../scripts/release.sh", __DIR__)
 
+  # a suite killed mid-test (a gate cut off) never ran its on_exit: its dirs, named after its OS pid,
+  # go once that pid is gone
+  setup_all do
+    for d <- Path.wildcard(Path.join(System.tmp_dir!(), "release-test-*-*")),
+        [_, pid] <- [Regex.run(~r/release-test-(\d+)-\d+$/, d)],
+        elem(System.cmd("kill", ["-0", pid], stderr_to_stdout: true), 1) != 0,
+        do: File.rm_rf(d)
+
+    :ok
+  end
+
   setup do
-    # the OS pid too: unique_integer is only unique in this VM, and a killed run leaves its dir behind
     dir = Path.join(System.tmp_dir!(), "release-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     on_exit(fn -> File.rm_rf!(dir) end)
     repo = Path.join(dir, "tlon")
