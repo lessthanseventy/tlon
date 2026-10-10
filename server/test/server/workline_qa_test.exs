@@ -244,6 +244,8 @@ defmodule Server.WorklineQATest do
 
   test "a repeated approval of the same commit is the one approval: one verdict, one grade, one QA notice" do
     {thread, opts} = at_review("twice", ["office/kit/plane.ts"])
+    # a real head: with none on either side the match would be nil == nil
+    opts = Keyword.put(opts, :branch_head, "08be9df")
     {:ok, _} = Workline.review_verdict(thread, "approve", "teodelina", opts)
     # a grade that hits a script limit is done before the client's retry arrives
     Repo.update_all(from(j in Oban.Job, where: j.worker == "Server.Jobs.Grade"), set: [state: "completed"])
@@ -256,6 +258,24 @@ defmodule Server.WorklineQATest do
     assert [_] =
              Repo.all(
                from e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == "workline:twice:review"
+             )
+  end
+
+  test "an approval of a new commit is a new approval" do
+    {thread, opts} = at_review("anew", ["office/kit/plane.ts"])
+    {:ok, _} = Workline.review_verdict(thread, "approve", "teodelina", Keyword.put(opts, :branch_head, "aaa111"))
+
+    {:ok, _} =
+      Workline.review_verdict(
+        Repo.get!(Thread, thread.id),
+        "approve",
+        "teodelina",
+        Keyword.put(opts, :branch_head, "bbb222")
+      )
+
+    assert [_, _] =
+             Repo.all(
+               from e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == "workline:anew:review"
              )
   end
 end
