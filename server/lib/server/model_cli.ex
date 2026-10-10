@@ -40,24 +40,43 @@ defmodule Server.ModelCli do
   provider's endpoint; a bare one (`haiku`) on the operator's own Claude login.
   """
   def run(prompt, cmd, model, opts \\ []) do
+    err = Path.join(System.tmp_dir!(), "model-cli-#{System.unique_integer([:positive])}.err")
+
+    try do
+      call(prompt, cmd, model, opts, err)
+    after
+      File.rm(err)
+    end
+  end
+
+  defp call(prompt, cmd, model, opts, err) do
     timeout = opts[:timeout_s] || Application.get_env(:server, :model_cli_timeout_s, 120)
 
     {provider, model, flags} = parse_model(model)
 
     # System.cmd leaves stdin an open pipe, and a CLI may read it as the rest of the prompt — it
     # waits forever. The CLI gets /dev/null, and `timeout` bounds a call that hangs regardless.
+    # stderr goes to its own file: a CLI warns there (an unknown model's catalog notice) even when
+    # it answers, and the answer is stdout alone; a failure is told by what it wrote there.
     args =
-      ["-c", ~s(exec timeout "$0" "$@" </dev/null), to_string(timeout), Server.Harness.ClaudeCode.gateway(), provider] ++
-        [cmd, "-p", prompt, "--model", model] ++ flags
+      ["-c", ~s(exec timeout "$0" "$@" </dev/null 2>"$MODEL_CLI_ERR"), to_string(timeout)] ++
+        [Server.Harness.ClaudeCode.gateway(), provider, cmd, "-p", prompt, "--model", model] ++ flags
 
-    case System.cmd("sh", args, stderr_to_stdout: true, env: keys()) do
+    case System.cmd("sh", args, env: [{"MODEL_CLI_ERR", err} | keys()]) do
       {out, 0} -> {:ok, out}
       {_out, 124} -> {:error, {:model_cli_timeout, timeout}}
-      {out, code} when code in [126, 127] -> {:error, {:model_cli_missing, String.slice(out, 0, 200)}}
-      {out, code} -> {:error, {:model_cli_exit, code, String.slice(out, 0, 200)}}
+      {out, code} when code in [126, 127] -> {:error, {:model_cli_missing, why(err, out)}}
+      {out, code} -> {:error, {:model_cli_exit, code, why(err, out)}}
     end
   rescue
     e in ErlangError -> {:error, {:model_cli_missing, Exception.message(e)}}
+  end
+
+  defp why(err, out) do
+    case File.read(err) do
+      {:ok, text} when text != "" -> String.slice(text, 0, 200)
+      _ -> String.slice(out, 0, 200)
+    end
   end
 
   defp parse_model(model) do

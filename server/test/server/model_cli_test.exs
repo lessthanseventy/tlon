@@ -91,6 +91,16 @@ defmodule Server.ModelCliTest do
     assert {:error, {:model_cli_timeout, 1}} = ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, "sleep 5"), "m"})
   end
 
+  test "a warning on stderr is not part of the answer, so a reply still parses", %{dir: dir} do
+    warn = ~s(echo '"m" isn'"'"'t described by this version'"'"'s model catalog' >&2; echo ok)
+    assert {:ok, "ok\n"} = ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, warn), "m"})
+  end
+
+  test "a failing CLI's stderr is what its error says", %{dir: dir} do
+    assert {:error, {:model_cli_exit, 2, "nope\n"}} =
+             ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, "echo nope >&2; exit 2"), "m"})
+  end
+
   test "a missing CLI and a failing one are told apart", %{dir: dir} do
     assert {:error, {:model_cli_missing, _}} = ModelCli.prompt("hi", :test_cmd, :test_model, {"/nonexistent/cli", "m"})
 
