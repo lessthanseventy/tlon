@@ -979,16 +979,17 @@ defmodule Server.Profiles do
 
   @doc """
   The instantiated `%Profile{}` behind any seat on `roster`, meta included — what a window opened
-  for that coworker is launched with. nil for a handle with no registry-known seat.
+  for that coworker is launched with — on `workspace_id`'s bench, so the seat's own policy (its model,
+  harness and grade) applies, not the archetype's default. nil for a handle with no registry-known seat.
   """
-  @spec seat_profile(String.t(), [map()]) :: Profile.t() | nil
-  def seat_profile(handle, roster) do
+  @spec seat_profile(String.t(), [map()], integer()) :: Profile.t() | nil
+  def seat_profile(handle, roster, workspace_id) do
     roster
     |> Enum.map(&roster_entry/1)
     |> Enum.find(fn %{archetype: a, name: n} -> a != nil and n == handle end)
     |> case do
       nil -> nil
-      entry -> instantiate(entry)
+      entry -> instantiate(entry, workspace_id)
     end
   end
 
