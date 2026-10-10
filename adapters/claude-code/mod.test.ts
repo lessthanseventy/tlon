@@ -10,6 +10,11 @@ type World = {
   run?: (argv: string[], init?: { env?: Record<string, string> }) => { exitCode: number; stdout: string; stderr: string };
   model?: string;
   wakes?: string[][];
+  glance?: unknown;
+  toasts?: string[];
+  diagnostics?: string;
+  http?: (e: { url: string; init?: { method?: string; body?: string } }) => { status: number; ok: boolean; headers: Record<string, string>; text: string };
+  answer?: string;
   submitted?: string[];
   ownClock?: boolean;
   serverDown?: boolean;
@@ -18,6 +23,7 @@ type World = {
 const IDENTITY = { TLON_THREAD: "42", TLON_AUTHOR: "claude-code", TMUX_PANE: "%7", OLLAMA_API_KEY: "k" };
 const NONE = { shown: [], more: 0 };
 const DOSSIER = { thread_id: 42, goal: "ship the mod", lead: "claude-code", todos: NONE, next: null, learnings: NONE, unknowns: NONE, done: NONE, blockers: NONE, checks: NONE, recent: [] };
+const GLANCE = { archetype: "builder", crew: [], red: [], persona: { voice: "plain-spoken", catchphrase: "Right then." }, line: null, landed: [] };
 const TURN_END = { answer: "", durationMs: 1, isAborted: false, turnId: "t1", reason: "answer" };
 const START = { cwd: "/repo", surface: null, isInteractive: false };
 
@@ -33,9 +39,17 @@ function engine(on, world: World = {}): Declare[] {
     world.submitted?.push(e.text);
     return { text: e.text, context: e.context };
   });
-  on("tool.call", () => ({ result: "ok" }));
+  // $.ui.ask is an AskUserQuestion tool call underneath, answered by question
+  on("tool.call", ($, e) =>
+    e.tool === "AskUserQuestion"
+      ? { result: { questions: e.questions, answers: Object.fromEntries(e.questions.map((q) => [q.question, world.answer ?? ""])) } }
+      : { result: "ok" },
+  );
   on("env.get", ($, e) => ({ value: env[e.name] }));
-  if (!world.ownClock) on("clock.every", () => ({ value: undefined }));
+  if (!world.ownClock) {
+    on("clock.every", () => ({ value: undefined }));
+    on("clock.now", () => ({ value: 0 }));
+  }
   on("command.register", () => ({ value: undefined }));
   on("tool.register", () => ({ value: undefined }));
   on("fs.read", () => {
@@ -45,11 +59,16 @@ function engine(on, world: World = {}): Declare[] {
     value: { isStdoutTruncated: false, isStderrTruncated: false, ...(world.run ?? (() => ({ exitCode: 1, stdout: "", stderr: "no run" })))(e.argv, e.init) },
   }));
   on("ui.invalidate", () => ({ value: undefined }));
-  on("ui.toast", () => ({ value: undefined }));
+  on("ui.toast", ($, e) => {
+    world.toasts?.push(e.text);
+    return { value: undefined };
+  });
+  on("session.cwd", () => ({ value: "/repo" }));
   on("session.model", () => ({ value: world.model ?? "glm-5.2" }));
   on("session.messages", () => ({ value: (world.transcript ?? []).map((m) => ({ ...m, toolUses: [] })) }));
-  on("http.fetch", ($, e) => ({ value: (world.fetch ?? (() => ({ status: 500, ok: false, headers: {}, text: "" })))(e) }));
+  on("http.fetch", ($, e) => ({ value: (world.http ?? world.fetch ?? (() => ({ status: 500, ok: false, headers: {}, text: "" })))(e) }));
   on("mcp.call", ($, e) => {
+    if (e.server === "lsp") return { value: { content: [{ type: "text", text: world.diagnostics ?? "no diagnostics" }], isError: false } };
     if (world.serverDown) throw new Error("connection refused");
     sent.push({ tool: e.tool, args: e.args ?? {} });
     const text =
@@ -57,13 +76,16 @@ function engine(on, world: World = {}): Declare[] {
         ? JSON.stringify(world.dossier ?? DOSSIER)
         : e.tool === "take_wakes"
           ? JSON.stringify(world.wakes?.shift() ?? [])
-          : "ok";
+          : e.tool === "office_glance"
+            ? JSON.stringify(world.glance ?? GLANCE)
+            : "ok";
     return { value: { content: [{ type: "text", text }], isError: false } };
   });
   return sent;
 }
 
-const declares = (sent: Declare[]) => sent.filter((d) => d.tool !== "get_dossier" && d.tool !== "take_wakes");
+const READS = ["get_dossier", "take_wakes", "office_glance"];
+const declares = (sent: Declare[]) => sent.filter((d) => !READS.includes(d.tool));
 
 // Fire-and-forget calls land a few ticks after the hook returns.
 async function settle() {
@@ -277,4 +299,86 @@ test("a wake the server queued is taken on the next poll and submitted as a turn
   await settle();
 
   expect(world.submitted).toEqual(["New message on thread 42 from lonnrot: look at the band"]);
+});
+
+test("a push is held for the server's push_branch; a status runs", async ($, on) => {
+  engine(on);
+  on("tool.check", () => ({ decision: "allow" }));
+  await $.session.start(START);
+
+  const push = await $.tool.check({ tool: "Bash", input: { command: "git push origin HEAD" } });
+  const status = await $.tool.check({ tool: "Bash", input: { command: "git status" } });
+
+  expect(push.decision).toBe("deny");
+  expect(push.reason).toContain("push_branch");
+  expect(status.decision).toBe("allow");
+});
+
+test("a commit is signed by the model that is running, on its provider's address", async ($, on) => {
+  engine(on, { env: ON_OLLAMA, model: "kimi-k2.7-code" });
+  on("attribution.text", ($, e) => ({ text: e.text }));
+  await $.session.start(START);
+
+  const r = await $.attribution.text({ kind: "commit", text: "Co-Authored-By: Claude <noreply@anthropic.com>\nClaude-Session: x" });
+
+  expect(r.text).toBe("Co-Authored-By: kimi-k2.7-code <noreply@ollama.com>\nClaude-Session: x");
+});
+
+test("an edit's result carries what the language server says about the file", async ($, on) => {
+  engine(on, { diagnostics: "lib/x.ex:3:1 error: undefined variable foo" });
+  await $.session.start(START);
+
+  const r = await $.tool.call({ tool: "Edit", file_path: "/repo/lib/x.ex", old_string: "a", new_string: "b" });
+
+  expect(r.context?.[0]).toContain("undefined variable foo");
+});
+
+test("a clean edit carries nothing extra", async ($, on) => {
+  engine(on);
+  await $.session.start(START);
+
+  const r = await $.tool.call({ tool: "Edit", file_path: "/repo/lib/x.ex", old_string: "a", new_string: "b" });
+
+  expect(r.context).toBeUndefined();
+});
+
+test("a new message that @mentions this seat is a toast; the ones before it never are", async ($, on) => {
+  const world: World = { toasts: [], dossier: { ...DOSSIER, recent: [{ id: 1, author: "yu", body: "@claude-code old", reply_to: null, at: null }] } };
+  engine(on, world);
+  await $.session.start(START);
+  await $.prompt.submit({ text: "go", wait: false });
+
+  world.dossier = { ...DOSSIER, recent: [{ id: 2, author: "lonnrot", body: "@claude-code look at this", reply_to: null, at: null }] };
+  await $.prompt.submit({ text: "and", wait: false });
+
+  expect(world.toasts).toEqual(["lonnrot: @claude-code look at this"]);
+});
+
+test("@ completes from the crew the office says is on", async ($, on) => {
+  engine(on, { glance: { ...GLANCE, crew: [{ agent: "lonnrot", thread_id: 7, warm: true, thinking: false, doing: null }] } });
+  on("prompt.autocomplete", () => ({ suggestions: [] }));
+  await $.session.start(START);
+  await settle();
+
+  const r = await $.prompt.autocomplete({ text: "@lo", cursor: 3, token: "@lo", start: 0 });
+
+  expect(r.suggestions).toEqual([{ text: "@lonnrot", description: "#7" }]);
+});
+
+test("the operator's session puts a coworker's ask to them and answers it by its key", async ($, on) => {
+  let answered = "";
+  const ask = { key: "ask:9", kind: "ask", level: "blocking", ref: 9, title: "keep the last one?", options: [{ key: "1", label: "keep" }, { key: "2", label: "drop" }] };
+  engine(on, {
+    env: { TLON_OPERATOR: "1" },
+    answer: "drop",
+    http: (e) => {
+      if (e.url.endsWith("/office/needs")) return { status: 200, ok: true, headers: {}, text: JSON.stringify([ask]) };
+      if (e.url.endsWith("/office/asks/9")) answered = e.init?.body ?? "";
+      return { status: 200, ok: true, headers: {}, text: "{}" };
+    },
+  });
+  await $.session.start(START);
+  await settle();
+
+  expect(answered).toBe(JSON.stringify({ key: "2" }));
 });

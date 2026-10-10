@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { nearestChar } from "./kit/snap"
-import { lookOf, paints, shirtOf, type Look } from "./kit/sprites"
+import { figure, lookOf, paints, shirtOf, type Look } from "./kit/sprites"
 
 const VIEWS = ["front", "side", "back", "side"] as const // the 48x22 sheet's four columns; the 4th (back-right) is unused today
 
@@ -33,9 +33,23 @@ function sheetToViews(rows: string[], w: number): Partial<Record<"front" | "side
   return out
 }
 
+/** a coworker's standing figure, front view, as the office draws it: its rows and the paint for each letter */
+export function figureOf(name: string, archetype: string | null): { rows: string[]; paint: Record<string, string> } {
+  const look = lookOf(name)
+  return { rows: figure(look, archetype, false, false, "down", "stand", 0, false), paint: paints(shirtOf(archetype), look) }
+}
+
+if (import.meta.main && process.argv[2] === "figure") {
+  // the tlon-citizen mod draws its coworker from this, so the office's art has one source
+  const [, , , name, archetype] = process.argv
+  if (!name) { console.error("usage: figure <agent-name> [archetype]"); process.exit(1) }
+  console.log(JSON.stringify(figureOf(name, archetype ?? null)))
+  process.exit(0)
+}
+
 if (import.meta.main) {
   const [cmd, path, name] = process.argv.slice(2)
-  if (cmd !== "import-sprite" || !path || !name) { console.error("usage: import-sprite <path.png> <agent-name>"); process.exit(1) }
+  if (cmd !== "import-sprite" || !path || !name) { console.error("usage: import-sprite <path.png> <agent-name> | figure <agent-name> [archetype]"); process.exit(1) }
   const buf = readFileSync(path), { width, height } = PNG.sync.read(buf)
   const current: Look = lookOf(name)
   const paint = paints(shirtOf(null), current)
