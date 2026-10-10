@@ -19,6 +19,7 @@ import {
   serializeDelta,
   type Entry,
 } from "./lib/capture.ts";
+import { DEFAULT_MODEL, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
 
 // Below this much new transcript a turn's capture waits for the next turn instead of paying for
 // an extraction call; a compaction flushes whatever is there.
@@ -72,18 +73,93 @@ async function loadMessages($) {
   $.ui.invalidate("ui.render");
 }
 
-// The ollama bucket, never the session's own model: extraction is a cheap side job.
-async function complete($, prompt: string): Promise<string> {
+async function ollamaKey($): Promise<string> {
   const key = await $.env.get("OLLAMA_API_KEY");
-  if (!key) return "";
+  if (key) return key;
+  const runtime = (await $.env.get("XDG_RUNTIME_DIR")) ?? "";
+  try {
+    return runtime ? (await $.fs.read(`${runtime}/agenix/ollama-api-key`)).trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+// Side jobs (extraction, image descriptions) run on the ollama bucket, never the session's own model.
+async function complete($, model: string, content: unknown): Promise<string> {
+  const key = await ollamaKey($);
+  if (!key) throw new Error("no OLLAMA_API_KEY");
   const res = await $.http.fetch("https://ollama.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: DEFAULT_CAPTURE_MODEL, max_tokens: 1024, messages: [{ role: "user", content: prompt }] }),
+    body: JSON.stringify({ model, max_tokens: 1024, messages: [{ role: "user", content }] }),
   });
-  if (!res.ok) throw new Error(`capture HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`${model} HTTP ${res.status}`);
   const msg = JSON.parse(res.text).choices?.[0]?.message;
   return msg?.content?.trim() || msg?.reasoning?.trim() || "";
+}
+
+// Claude Code's own WebSearch runs on Anthropic's side, so a session on the ollama gateway searches
+// through ollama's.
+async function webSearch($, query: string, max: number): Promise<string> {
+  const key = await ollamaKey($);
+  if (!key) return "web_search: no OLLAMA_API_KEY";
+  const res = await $.http.fetch("https://ollama.com/api/web_search", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ query, max_results: max }),
+  });
+  if (!res.ok) return `web_search: HTTP ${res.status}`;
+  const results: { title?: string; url?: string; content?: string }[] = JSON.parse(res.text).results ?? [];
+  if (!results.length) return `no results for ${JSON.stringify(query)}`;
+  return results.map((r) => `## ${r.title ?? r.url}\n${r.url}\n${(r.content ?? "").slice(0, 1_500)}`).join("\n\n");
+}
+
+// A consult is a one-shot Claude Code on the ollama gateway: no session saved, no tlon identity,
+// and read-only tools — a bash of its own would run outside the asking session's sandbox.
+async function delegate($, model: string, task: string): Promise<string> {
+  const key = await ollamaKey($);
+  if (!key) throw new Error("no OLLAMA_API_KEY for the delegate");
+  const tools = "Read,Grep,Glob";
+  const r = await $.process.run(
+    ["claude", "-p", task, "--model", model, "--tools", tools, "--allowedTools", tools, "--permission-mode", "dontAsk", "--no-session-persistence"],
+    {
+      timeoutMs: 600_000,
+      env: { ANTHROPIC_BASE_URL: "https://ollama.com", ANTHROPIC_AUTH_TOKEN: key, ANTHROPIC_API_KEY: "", ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4.1-flash", TLON_THREAD: "", TLON_AUTHOR: "" },
+    },
+  );
+  if (r.exitCode !== 0) throw new Error(r.stderr.trim().slice(0, 300) || `${model} exited ${r.exitCode}`);
+  return r.stdout.trim();
+}
+
+async function consultTask($, prompt: string, withTranscript: boolean): Promise<string> {
+  if (!withTranscript) return prompt;
+  const context = serializeTranscript(await $.session.messages());
+  return context ? `${context}\n\n---\n\n${prompt}` : prompt;
+}
+
+async function runConsult($, verb: "consult" | "fresh", args: string) {
+  const { model, prompt } = parseArgs(args);
+  if (!prompt) return { text: `usage: /${verb} [model] <prompt>  (default model: ${DEFAULT_MODEL})` };
+  $.ui.toast(`asking ${model}…`, { timeoutMs: 8_000 });
+  try {
+    const answer = await delegate($, model, await consultTask($, prompt, verb === "consult"));
+    return { text: `[/${verb} ${model}] ${prompt}\n\n${answer}` };
+  } catch (err) {
+    return { text: `${model} could not answer: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+// A model that cannot see images gets its image reads described by one that can.
+async function describeImage($, path: string): Promise<string | null> {
+  if (!(await $.env.get("ANTHROPIC_BASE_URL")) || VISION_MODELS.includes(await $.session.model())) return null;
+  const b64 = await $.process.run(["base64", "-w0", path]);
+  if (b64.exitCode !== 0) return null;
+  const prompt = visionPrompt(await $.session.messages());
+  const description = await complete($, DEFAULT_MODEL, [
+    { type: "text", text: prompt },
+    { type: "image_url", image_url: { url: `data:${mimeOf(path)};base64,${b64.stdout.trim()}` } },
+  ]);
+  return `Read image file ${path} — this model can't see images, so ${DEFAULT_MODEL} described it:\n\n${description}`;
 }
 
 // Bank what the conversation learned since the last capture, as `derived` facts. The brief rides
@@ -98,7 +174,7 @@ async function capture($, floor: number) {
     const { slice, nextWatermark } = deltaSince(all, captured);
     const delta = redactSecrets(serializeDelta(slice));
     if (delta.length < floor) return;
-    const { facts, questions } = parseExtraction(await complete($, buildExtractionPrompt(delta)));
+    const { facts, questions } = parseExtraction(await complete($, DEFAULT_CAPTURE_MODEL, buildExtractionPrompt(delta)));
     captured = nextWatermark;
     for (const f of facts) declare($, "bank_fact", f.intent ? { text: f.text, kind: f.kind, intent: f.intent } : { text: f.text, kind: f.kind });
     for (const q of questions) declare($, "raise_question", { text: q });
@@ -125,9 +201,34 @@ export function register(on) {
     $.clock.every(REFRESH_MS, () => refresh($));
     void refresh($);
     try {
+      await $.tool.register({
+        name: "consult",
+        description:
+          "Ask a different (or stronger) ollama model for a second opinion and get its answer back as this tool's result. " +
+          "`context: transcript` (default) shows it your recent session; `context: none` is a clean one-shot. The peer can read files, not run them.",
+        inputSchema: {
+          type: "object",
+          properties: { prompt: { type: "string" }, model: { type: "string" }, context: { type: "string", enum: ["transcript", "none"] } },
+          required: ["prompt"],
+        },
+      });
+      if (await $.env.get("ANTHROPIC_BASE_URL")) {
+        await $.tool.register({
+          name: "web_search",
+          description: "Search the web (through ollama's search; this session's own WebSearch is unavailable). Returns each result's title, URL and an excerpt.",
+          inputSchema: {
+            type: "object",
+            properties: { query: { type: "string" }, max_results: { type: "number", description: "1-10, default 5" } },
+            required: ["query"],
+          },
+          isDeferred: false,
+        });
+      }
       await $.command.register({ name: "thread", description: "Open this tlon thread's conversation beside the session", immediate: true });
+      await $.command.register({ name: "consult", description: "Ask another model, with this session as context", argumentHint: "[model] <prompt>" });
+      await $.command.register({ name: "fresh", description: "Ask another model, with no session context", argumentHint: "[model] <prompt>" });
     } catch {
-      // a name already taken leaves the session without /thread, nothing worse
+      // a name already taken leaves the session without that command, nothing worse
     }
     return next(e);
   });
@@ -162,9 +263,31 @@ export function register(on) {
 
   // `$.mcp.call` raises tool.call too: the mod's own calls are not the session's work.
   on("tool.call", async ($, e, next) => {
-    if (thread && next.origin.plugin !== $.plugin.name) {
+    if (next.origin.plugin === $.plugin.name) return next(e);
+    if (thread) {
       const what = doingOf(e.tool, e);
       declare($, "presence_doing", { ...(what ? { what } : {}), summary: summaryOf(e.tool, e, cwd) });
+    }
+    if (e.tool === `mcp__${$.plugin.name}__consult`) {
+      const args = parseToolArgs(e);
+      if (!args.ok) return { result: args.error };
+      try {
+        return { result: await delegate($, args.model, await consultTask($, args.prompt, args.context === "transcript")) };
+      } catch (err) {
+        return { result: `${args.model} could not answer: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    }
+    if (e.tool === `mcp__${$.plugin.name}__web_search`) {
+      const max = Math.min(10, Math.max(1, Number(e.max_results) || 5));
+      return { result: await webSearch($, String(e.query ?? ""), max) };
+    }
+    if (e.tool === "Read" && isImagePath(e.file_path ?? "")) {
+      try {
+        const described = await describeImage($, e.file_path);
+        if (described) return { result: described };
+      } catch {
+        // an undescribed image is read as the model would have read it
+      }
     }
     return next(e);
   });
@@ -183,6 +306,9 @@ export function register(on) {
     if (thread) await capture($, 1);
     return next(e);
   });
+
+  on("command.run", { command: "consult" }, async ($, e) => runConsult($, "consult", e.args));
+  on("command.run", { command: "fresh" }, async ($, e) => runConsult($, "fresh", e.args));
 
   on("command.run", { command: "thread" }, async ($) => {
     await loadMessages($);

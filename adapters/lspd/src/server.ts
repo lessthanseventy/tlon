@@ -16,9 +16,9 @@ import { adapterForFile } from "./adapters.ts";
 import { Decoder, encode, type LspdRequest, type LspdResponse } from "./codec.ts";
 
 // The socket path both the daemon and the pi shim agree on. $XDG_RUNTIME_DIR is the
-// per-user runtime dir (cleaned at logout); fall back to ~/.pi for a box without it.
+// per-user runtime dir (cleaned at logout); the temp dir on a box without one.
 export function socketPath(): string {
-  const dir = process.env.XDG_RUNTIME_DIR ?? path.join(os.homedir(), ".pi");
+  const dir = process.env.XDG_RUNTIME_DIR ?? os.tmpdir();
   return path.join(dir, "adapters-lspd.sock");
 }
 

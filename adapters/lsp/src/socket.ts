@@ -25,7 +25,7 @@ export class LspdTimeoutError extends Error {}
 export function socketPath(): string {
   const override = process.env.ADAPTERS_LSPD_SOCK;
   if (override) return override;
-  const dir = process.env.XDG_RUNTIME_DIR ?? path.join(os.homedir(), ".pi");
+  const dir = process.env.XDG_RUNTIME_DIR ?? os.tmpdir();
   return path.join(dir, "adapters-lspd.sock");
 }
 

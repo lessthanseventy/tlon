@@ -7,6 +7,8 @@ type World = {
   dossier?: unknown;
   transcript?: { role: string; text: string }[];
   fetch?: Fetch;
+  run?: (argv: string[], init?: { env?: Record<string, string> }) => { exitCode: number; stdout: string; stderr: string };
+  model?: string;
   serverDown?: boolean;
 };
 
@@ -29,9 +31,16 @@ function engine(on, world: World = {}): Declare[] {
   on("env.get", ($, e) => ({ value: env[e.name] }));
   on("clock.every", () => ({ value: undefined }));
   on("command.register", () => ({ value: undefined }));
+  on("tool.register", () => ({ value: undefined }));
+  on("fs.read", () => {
+    throw new Error("no such file");
+  });
+  on("process.run", ($, e) => ({
+    value: { isStdoutTruncated: false, isStderrTruncated: false, ...(world.run ?? (() => ({ exitCode: 1, stdout: "", stderr: "no run" })))(e.argv, e.init) },
+  }));
   on("ui.invalidate", () => ({ value: undefined }));
   on("ui.toast", () => ({ value: undefined }));
-  on("session.model", () => ({ value: "glm-5.2" }));
+  on("session.model", () => ({ value: world.model ?? "glm-5.2" }));
   on("session.messages", () => ({ value: (world.transcript ?? []).map((m) => ({ ...m, toolUses: [] })) }));
   on("http.fetch", ($, e) => ({ value: (world.fetch ?? (() => ({ status: 500, ok: false, headers: {}, text: "" })))(e) }));
   on("mcp.call", ($, e) => {
@@ -160,4 +169,89 @@ test("a short turn waits for more before paying for an extraction", async ($, on
   await settle();
 
   expect(calls).toBe(0);
+});
+
+const ON_OLLAMA = { ...IDENTITY, ANTHROPIC_BASE_URL: "https://ollama.com" };
+
+test("/fresh asks the named model on the ollama gateway and prints its answer for the session", async ($, on) => {
+  let ran: { argv: string[]; env?: Record<string, string> } | null = null;
+  const world: World = {
+    run: (argv, init) => {
+      ran = { argv, env: init?.env };
+      return { exitCode: 0, stdout: "use a GenServer\n", stderr: "" };
+    },
+  };
+  engine(on, world);
+  await $.session.start(START);
+
+  const r = await $.command.run({ command: "fresh", args: "glm-5.2 how should this hold state?" });
+  await settle();
+
+  expect(ran!.argv.slice(0, 5)).toEqual(["claude", "-p", "how should this hold state?", "--model", "glm-5.2"]);
+  expect(ran!.argv).toContain("Read,Grep,Glob");
+  expect(ran!.env).toMatchObject({ ANTHROPIC_BASE_URL: "https://ollama.com", ANTHROPIC_AUTH_TOKEN: "k", TLON_THREAD: "" });
+  expect(r.text).toBe("[/fresh glm-5.2] how should this hold state?\n\nuse a GenServer");
+});
+
+test("the consult tool answers in place, with the transcript as context", async ($, on) => {
+  let task = "";
+  engine(on, {
+    transcript: [{ role: "user", text: "we are adding the band" }],
+    run: (argv) => {
+      task = argv[2]!;
+      return { exitCode: 0, stdout: "looks right", stderr: "" };
+    },
+  });
+  await $.session.start(START);
+
+  const r = await $.tool.call({ tool: "mcp__tlon-citizen__consult", prompt: "is this right?" });
+
+  expect(r.result).toBe("looks right");
+  expect(task).toContain("### user\nwe are adding the band");
+  expect(task).toEndWith("is this right?");
+});
+
+test("an image read on a text-only ollama model is described by a vision model", async ($, on) => {
+  let asked = "";
+  engine(on, {
+    env: ON_OLLAMA,
+    model: "glm-5.2",
+    run: () => ({ exitCode: 0, stdout: "aW1n", stderr: "" }),
+    fetch: (e) => {
+      asked = JSON.parse(e.init.body).model;
+      return { status: 200, ok: true, headers: {}, text: JSON.stringify({ choices: [{ message: { content: "a red build badge" } }] }) };
+    },
+  });
+  await $.session.start(START);
+
+  const r = await $.tool.call({ tool: "Read", file_path: "/tmp/shot.png" });
+
+  expect(asked).toBe("minimax-m3");
+  expect(r.result).toContain("a red build badge");
+});
+
+test("a model that sees images, or one on the Claude plan, reads the image itself", async ($, on) => {
+  engine(on, { model: "glm-5.2" });
+  await $.session.start(START);
+
+  const r = await $.tool.call({ tool: "Read", file_path: "/tmp/shot.png" });
+
+  expect(r.result).toBe("ok");
+});
+
+test("on the ollama gateway, web_search goes through ollama's search", async ($, on) => {
+  let url = "";
+  engine(on, {
+    env: ON_OLLAMA,
+    fetch: (e) => {
+      url = e.url;
+      return { status: 200, ok: true, headers: {}, text: JSON.stringify({ results: [{ title: "Mods", url: "https://code.claude.com/x", content: "a mod is a plugin" }] }) };
+    },
+  });
+  await $.session.start(START);
+
+  const r = await $.tool.call({ tool: "mcp__tlon-citizen__web_search", query: "claude code mods" });
+
+  expect(url).toBe("https://ollama.com/api/web_search");
+  expect(r.result).toContain("## Mods\nhttps://code.claude.com/x\na mod is a plugin");
 });
