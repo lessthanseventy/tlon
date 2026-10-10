@@ -51,6 +51,7 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.PresenceDoing, name: "presence_doing")
   component(Server.MCP.Tool.PresenceIdle, name: "presence_idle")
   component(Server.MCP.Tool.TakeWakes, name: "take_wakes")
+  component(Server.MCP.Tool.PutBackWakes, name: "put_back_wakes")
   component(Server.MCP.Tool.OfficeGlance, name: "office_glance")
   component(Server.MCP.Tool.ProposeHabit, name: "propose_habit")
   # `get_dossier` is the canonical name (the pi adapter, the flake's directTools and the CLI call

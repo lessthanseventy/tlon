@@ -97,6 +97,7 @@ defmodule Server.MCP.ServerTest do
                "presence_doing",
                "presence_idle",
                "take_wakes",
+               "put_back_wakes",
                "office_glance",
                "propose_habit",
                "get_brief",
@@ -564,6 +565,17 @@ defmodule Server.MCP.ServerTest do
 
     assert decode_tool_json(call(token, session, 3, "take_wakes", %{})) == ["first", "second"]
     assert decode_tool_json(call(token, session, 4, "take_wakes", %{})) == []
+  end
+
+  test "put_back_wakes queues a taken wake again for the same seat, so the next take hands it over",
+       %{thread: thread, agent: agent, token: token} do
+    session = handshake(token)
+    {:ok, _} = Server.Wake.queue(thread.id, agent.name, "lost")
+    ["lost"] = decode_tool_json(call(token, session, 3, "take_wakes", %{}))
+
+    assert decode_tool_json(call(token, session, 4, "put_back_wakes", %{"prompts" => ["lost"]})) == %{"put_back" => 1}
+    assert Server.Wake.take(thread.id, "someone-else") == []
+    assert decode_tool_json(call(token, session, 5, "take_wakes", %{})) == ["lost"]
   end
 
   test "office_glance: who else is on, what is red on my thread, my own voice — and reading it is not activity",
