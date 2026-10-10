@@ -18,6 +18,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/focus            Office.Focus.latest (the newest "show thread N" request)
       POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks the office TUI to open a thread
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
+      POST   /api/office/talk/:ws         Office.Banter.talk {"situation", "a", "b"} (two coworkers together in the room: what they say, written now; 429 when they talked a moment ago)
       POST   /api/office/needs/dismiss    Office.Needs.dismiss {"key"} (put an item away; a blocking one is refused, 409)
       POST   /api/office/needs/retire     Office.Needs.retire_stranded {"key"} (a stranded checkout taken down, its branch kept)
       GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky, info — seated, landed, live — each with its actions)
@@ -150,6 +151,21 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
+  defp route(conn, "POST", "office", ["talk", ws]) do
+    with {id, ""} <- Integer.parse(ws),
+         {%{"situation" => s, "a" => a, "b" => b}, conn} when is_binary(s) and is_binary(a) and is_binary(b) <-
+           body(conn) do
+      case Server.Office.Banter.talk(id, s, a, b) do
+        {:ok, turns} -> json(conn, 200, %{turns: turns})
+        {:error, :busy} -> json(conn, 429, %{error: "they talked a moment ago"})
+        {:error, why} -> json(conn, 422, %{error: inspect(why)})
+      end
+    else
+      {_, %Plug.Conn{} = conn} -> json(conn, 400, %{error: ~s(expected {"situation", "a", "b"})})
+      _ -> json(conn, 404, %{error: "no workspace #{ws}"})
+    end
+  end
+
   defp route(conn, "GET", "office", ["needs"]), do: json(conn, 200, Server.Office.Needs.list())
 
   defp route(conn, "POST", "office", ["needs", verb]) when verb in ["dismiss", "retire"] do
@@ -250,7 +266,7 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "GET", "office", ["pets", ws]) do
     case Integer.parse(ws) do
-      {id, ""} -> json(conn, 200, Server.Office.Pets.voices(id))
+      {id, ""} -> json(conn, 200, Server.Office.Pets.voices(id, pet_profile(fetch_query_params(conn).query_params)))
       _ -> json(conn, 404, %{error: "no workspace #{ws}"})
     end
   end
@@ -467,6 +483,14 @@ defmodule Server.MCP.OperatorAPI do
   defp on_workspaces(conn, _, _), do: no_route(conn)
 
   defp no_route(conn), do: json(conn, 404, %{error: "no such route"})
+
+  # the cat slot as the office has it (`?cat=&species=&warmth=&wits=&energy=`), or nil
+  defp pet_profile(%{"cat" => name} = q) do
+    axes = for k <- ~w(warmth wits energy), {n, ""} <- [Integer.parse(q[k] || "")], into: %{}, do: {k, n}
+    Map.merge(%{"name" => name, "species" => q["species"]}, axes)
+  end
+
+  defp pet_profile(_), do: nil
 
   defp messages(conn, thread) do
     limit =

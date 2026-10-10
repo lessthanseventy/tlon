@@ -101,6 +101,15 @@ defmodule Server.Office.PetsTest do
     assert Pets.context(ws.id).lobby == ["release abc1234 is live — 3 changes"]
   end
 
+  test "the cat slot's temperament, as the office configured it, is in words for the prompt" do
+    assert Pets.temperament(%{"name" => "Nina", "species" => "cat", "warmth" => -2, "wits" => 1, "energy" => 0}) ==
+             "IN THIS OFFICE: the cat slot is Nina, a cat; temperament: icy, a menace, sharp. Let it colour every line."
+
+    assert Pets.temperament(nil) == ""
+    assert Pets.prompt("Nina", %{crew: [], tickets: [], cat: "IN THIS OFFICE: x"}) =~ "IN THIS OFFICE: x"
+    refute Pets.prompt("Argos", %{crew: [], tickets: [], cat: "IN THIS OFFICE: x"}) =~ "IN THIS OFFICE: x"
+  end
+
   test "the pair's exchanges keep two or more turns, each said by Nina or Argos" do
     out = ~s({"exchanges": {"chat": [["Argos: Troy shipped!", "Nina: It was Souls, darling."], ["Argos: alone"],
              ["Nina: hm", "Gary: intruder"]], "nope": [["Nina: a", "Argos: b"]]}})

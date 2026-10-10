@@ -16,6 +16,8 @@ defmodule Server.Office.Banter do
   """
   use GenServer
 
+  import Ecto.Query
+
   @every_s 120
   @keep_s 300
   @voice """
@@ -25,10 +27,35 @@ defmodule Server.Office.Banter do
   {"line": "<what they say>"}
   """
 
+  @chat_voice """
+  You write a SHORT conversation between two coworkers in a pixel-art office of AI coworkers, said
+  out loud in speech balloons as they pass each other. 2 to 4 turns, alternating, each under 80
+  characters. Dry, warm, a little absurd; each in character for their role; a coworker is "they",
+  never "he" or "she"; no emoji, never cruel. Respond with ONLY a JSON object:
+  {"turns": [{"who": "<their name>", "line": "<what they say>"}, ...]}
+  """
+  @turn_s 5
+  # a conversation the room asks for (`talk/4`): one per workspace this often, the same pair less often
+  @talk_every_s 45
+  @pair_every_s 300
+  @situations %{
+    "pingpong" => "are playing ping-pong against each other",
+    "foosball" => "are playing foosball against each other",
+    "pool" => "are playing a game of pool",
+    "arcade" => "are taking turns at the arcade machine",
+    "couch" => "are on the lounge couch watching the TV (a cellular automaton, or whatever is on)",
+    "coffee" => "are waiting at the coffee machine",
+    "cooler" => "have run into each other at the water cooler",
+    "vending" => "are at the snack machine",
+    "hall" => "pass each other in the hall, one on the way somewhere",
+    "chat" => "stopped by each other's spot for a word"
+  }
+
   def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
   @doc """
-  The workspace's recent lines, oldest first, as `%{agent, line, kind, at}` (`at` in unix seconds) —
+  The workspace's recent lines, oldest first, as `%{agent, line, kind, at, delay}` (`at` in unix
+  seconds; a chat's turns share an `at`, each to be said `delay` seconds after the first) —
   and, when the last one is stale, a new one is asked for in the background. `[]` where banter is off.
   """
   @spec lines(integer()) :: [map()]
@@ -75,6 +102,7 @@ defmodule Server.Office.Banter do
        fn ctx, s ->
          "#{s.name} remarks on the boss (#{ctx.operator}) — their style, their requests, how they write#{if ctx.awaiting > 0, do: ", or the #{ctx.awaiting} thread(s) waiting on them", else: ""}. Affectionate.\nThe boss's latest messages:\n#{Enum.join(ctx.boss, "\n")}"
        end},
+      {:chat, fn ctx, s -> if Enum.any?(ctx.crew, &(&1.name != s.name)), do: 22, else: 0 end, &chat_ask/2},
       {:shipped, fn ctx, _s -> if ctx.finished == [], do: 0, else: 5 end,
        fn ctx, s ->
          "#{s.name} celebrates or grumbles about something just finished: \"#{Enum.random(ctx.finished)}\""
@@ -99,7 +127,48 @@ defmodule Server.Office.Banter do
   @impl true
   def init(state), do: {:ok, state}
 
+  @doc "The situations the room may ask two coworkers to talk in, by key."
+  def situations, do: Map.keys(@situations)
+
+  @doc """
+  Two coworkers, `a` and `b`, are together in the room — at ping-pong, on the couch, passing in the
+  hall (`situations/0`) — and the room asks what they say: one fresh conversation, written now by
+  `Server.Office.Writer` from who they are, what each is working on and what the office has been up
+  to. `{:ok, [%{"who", "line"}]}` with 2 to 4 turns; `{:error, :busy}` when this workspace had a
+  conversation in the last `@talk_every_s` or this pair in the last `@pair_every_s` (the room just
+  lets them be quiet); `{:error, :unknown}` for a situation or a person it does not know.
+  """
+  def talk(ws, situation, a, b) do
+    with true <- Map.has_key?(@situations, situation) and a != b,
+         ctx = context(ws),
+         [%{} = pa, %{} = pb] <- Enum.map([a, b], fn n -> Enum.find(ctx.crew, &(&1.name == n)) end),
+         :ok <- reserve(ws, a, b) do
+      ask =
+        "#{who(pa)} and #{who(pb)} #{@situations[situation]}. They talk about what they are doing right " <>
+          "now, their work, each other, or the office's day."
+
+      with {:ok, out} <- Server.Office.Writer.write(@chat_voice <> "\n" <> scene(ctx) <> "\n\nNOW: " <> ask, ws),
+           [_, _ | _] = turns <- parse_chat(out, MapSet.new([a, b])) do
+        {:ok, turns}
+      else
+        _ -> {:error, :unwritten}
+      end
+    else
+      {:error, :busy} -> {:error, :busy}
+      _ -> {:error, :unknown}
+    end
+  end
+
   @impl true
+  def handle_call({:reserve, ws, pair}, _from, state) do
+    now = System.system_time(:second)
+    %{talked: last, pairs: pairs} = Map.get(state, {:talk, ws}, %{talked: 0, pairs: %{}})
+
+    if now - last < @talk_every_s or now - Map.get(pairs, pair, 0) < @pair_every_s,
+      do: {:reply, {:error, :busy}, state},
+      else: {:reply, :ok, Map.put(state, {:talk, ws}, %{talked: now, pairs: Map.put(pairs, pair, now)})}
+  end
+
   def handle_call({:lines, ws}, _from, state) do
     now = System.system_time(:second)
     %{lines: lines, at: at, busy: busy} = Map.get(state, ws, %{lines: [], at: 0, busy: false})
@@ -112,7 +181,8 @@ defmodule Server.Office.Banter do
   @impl true
   def handle_cast({:said, ws, said}, state) do
     entry = Map.get(state, ws, %{lines: [], at: 0, busy: false})
-    lines = if said, do: entry.lines ++ [Map.put(said, :at, System.system_time(:second))], else: entry.lines
+    now = System.system_time(:second)
+    lines = entry.lines ++ for(s <- List.wrap(said), do: Map.put(s, :at, now))
     {:noreply, Map.put(state, ws, %{entry | lines: lines, busy: false})}
   end
 
@@ -123,11 +193,65 @@ defmodule Server.Office.Banter do
     with [_ | _] <- ctx.crew,
          speaker = Enum.random(ctx.crew),
          {kind, ask} <- pick(ctx, speaker),
-         {:ok, out} <- Server.Office.Writer.write(@voice <> "\n" <> scene(ctx) <> "\n\nNOW: " <> ask, ws),
-         line when is_binary(line) <- parse(out) do
-      %{agent: speaker.name, line: line, kind: kind}
+         voice = if(kind == :chat, do: @chat_voice, else: @voice),
+         {:ok, out} <- Server.Office.Writer.write(voice <> "\n" <> scene(ctx) <> "\n\nNOW: " <> ask, ws) do
+      said(kind, out, speaker, ctx)
     else
       _ -> nil
+    end
+  end
+
+  @doc false
+  def parse_chat(out, names) do
+    Server.JsonBlob.first_valid(out, fn
+      %{"turns" => turns} when is_list(turns) ->
+        for %{"who" => who, "line" => line} <- turns,
+            is_binary(who) and is_binary(line),
+            MapSet.member?(names, who),
+            line = String.trim(line),
+            line != "",
+            do: %{"who" => who, "line" => String.slice(line, 0, 90)}
+
+      _ ->
+        nil
+    end)
+  end
+
+  # two of the crew talk: preferably two who work together (`partners/2`), about that work
+  defp chat_ask(ctx, s) do
+    {partner, together} =
+      case partners(ctx, s) do
+        [] -> {Enum.random(Enum.reject(ctx.crew, &(&1.name == s.name))), false}
+        ps -> {Enum.random(ps), true}
+      end
+
+    about =
+      if together,
+        do:
+          "They are working together — one staffed the other, or one's thread sits under the other's: talk about that shared work, how it is going, what one needs from the other.",
+        else: "Talk about what each is doing, or anything at all: office life, the boss, a running joke."
+
+    "#{s.name} (#{s.archetype}, #{if s.thread, do: thread_line(s.thread), else: "idle"}) and #{partner.name} (#{partner.archetype}, #{if partner.thread, do: thread_line(partner.thread), else: "idle"}) have a quick conversation. #{about}"
+  end
+
+  @doc """
+  Whom `s` is working with, among the crew here: the lead of the thread above theirs and the leads
+  of the open threads under it — the one who staffed them, the ones they staffed. `[]` when none.
+  """
+  def partners(ctx, s) do
+    with %{id: id} <- s.thread, %Server.Thread{} = t <- Server.Channel.thread(id) do
+      under =
+        Server.Repo.all(from c in Server.Thread, where: c.parent_thread_id == ^id and c.state == "open", select: c.id)
+
+      names =
+        [t.parent_thread_id | under]
+        |> Enum.reject(&is_nil/1)
+        |> MapSet.new(&Server.Channel.thread_lead/1)
+        |> MapSet.delete(s.name)
+
+      Enum.filter(ctx.crew, &MapSet.member?(names, &1.name))
+    else
+      _ -> []
     end
   end
 
@@ -147,7 +271,13 @@ defmodule Server.Office.Banter do
 
     crew =
       for b <- status.bench, b.workspace_id == ws do
-        %{name: b.name, archetype: b.archetype || "coworker", lead: b.lead, thread: threads[b.name]}
+        %{
+          name: b.name,
+          archetype: b.archetype || "coworker",
+          lead: b.lead,
+          thread: threads[b.name],
+          persona: persona_line(Server.Persona.get(ws, b.name))
+        }
       end
 
     boss =
@@ -171,13 +301,30 @@ defmodule Server.Office.Banter do
   def scene(ctx) do
     people =
       Enum.map_join(ctx.crew, "\n", fn c ->
-        "- #{c.name}, #{c.archetype}#{if c.lead, do: " (tech lead)"}: #{if c.thread, do: thread_line(c.thread), else: "on the bench, idle"}"
+        "- #{c.name}, #{c.archetype}#{if c.lead, do: " (tech lead)"}: #{if c.thread, do: thread_line(c.thread), else: "on the bench, idle"}" <>
+          if(c[:persona], do: "\n  who they are: #{c.persona}", else: "")
       end)
 
     "THE OFFICE:\n#{people}\nTickets waiting: #{ctx.tickets |> Enum.take(5) |> Enum.join("; ")}"
   end
 
   defp others(ctx, s), do: Enum.filter(ctx.crew, &(&1.name != s.name and &1.thread))
+
+  # a seat's persona (`Server.Persona`) as one line for a prompt: how they talk and what they're like
+  defp persona_line(%{"voice" => voice} = p) do
+    q = p["quirks"] || %{}
+
+    [
+      voice,
+      q["catchphrase"] && ~s(says "#{q["catchphrase"]}"),
+      q["pet_peeve"] && "can't stand #{q["pet_peeve"]}",
+      q["hobby"] && "into #{q["hobby"]}"
+    ]
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.join("; ")
+  end
+
+  defp persona_line(_), do: nil
 
   defp thread_line(t),
     do: "##{t.id} \"#{t.title}\"#{if t.stage, do: " (#{t.stage})"}#{if t.awaiting, do: ", waiting on the boss"}"
@@ -208,4 +355,29 @@ defmodule Server.Office.Banter do
 
   # the kind whose stretch of the weighted line holds `point`
   defp at([{_, w, _} = k | rest], point), do: if(point < w or rest == [], do: k, else: at(rest, point - w))
+
+  # a remark is one line from its speaker; a chat is its turns, each `delay` seconds after the first
+  defp said(:chat, out, _speaker, ctx) do
+    case parse_chat(out, MapSet.new(ctx.crew, & &1.name)) do
+      [_, _ | _] = turns ->
+        for {%{"who" => who, "line" => line}, i} <- Enum.with_index(turns),
+            do: %{agent: who, line: line, kind: :chat, delay: i * @turn_s}
+
+      _ ->
+        nil
+    end
+  end
+
+  defp said(kind, out, speaker, _ctx) do
+    with line when is_binary(line) <- parse(out), do: [%{agent: speaker.name, line: line, kind: kind, delay: 0}]
+  end
+
+  defp reserve(ws, a, b),
+    do: if(GenServer.whereis(__MODULE__), do: GenServer.call(__MODULE__, {:reserve, ws, Enum.sort([a, b])}), else: :ok)
+
+  # who someone is, for a conversation: their role, what they are on and its latest words
+  defp who(c) do
+    on = if c.thread, do: "on #{thread_line(c.thread)}, where lately:\n#{recent(c.thread)}\n", else: "idle"
+    "#{c.name} (#{c.archetype}, #{on})"
+  end
 end
