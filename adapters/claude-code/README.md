@@ -70,7 +70,10 @@ pure parts are `lib/` (bun-tested).
 - `attribution.text` signs a commit as the running model, on its provider's address.
 - An Edit or Write carries the language server's diagnostics for the file.
 - On the Claude plan with the five-hour window hot, Explore subagents run on Haiku and, near the
-  cap, requests run at low effort.
+  cap, requests run at low effort. That last is its own mod, `plan/`, which `launch.sh` loads only
+  for a Claude-plan seat: a `turn.step` hook re-yields the model's stream, and a stream that passes
+  through a hook is held to Claude's tool-call id shape, which other models' ids fail (kimi's
+  `functions.Bash:0`), so a gateway seat's stream never passes through one.
 - `tool.describe` points Elixir edits at `edit_clause` / `rename_identifier`.
 
 **Tools and commands** (from the mod, beside the server's)

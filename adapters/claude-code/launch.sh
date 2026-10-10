@@ -112,13 +112,17 @@ if [ -n "${TLON_ROLE_PROMPT_FILE:-}" ] && [ -f "$TLON_ROLE_PROMPT_FILE" ]; then
 $(cat "$TLON_ROLE_PROMPT_FILE")"
 fi
 
+# The plan's budget mod wraps the model's stream, so only a seat on the Claude plan loads it.
+plugins=(--plugin-dir "$plugin")
+case "${TLON_PROVIDER:-anthropic}" in anthropic | "") plugins+=(--plugin-dir "$adapter/plan") ;; esac
+
 if [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ]; then
   printf 'identity: TLON_THREAD=%s TLON_AUTHOR=%s\n' "$TLON_THREAD" "$TLON_AUTHOR"
   printf 'mcp-config: %s\n' "$mcp_json"
   printf 'settings:   %s\n' "$settings_json"
   printf 'system:     %s\n' "$sys_prompt"
   printf 'provider:   %s\n' "${TLON_PROVIDER:-anthropic}"
-  printf 'exec: claude --permission-mode %s --append-system-prompt <…> --mcp-config <…> --settings <…> --plugin-dir %s %s\n' "$mode" "$plugin" "$*"
+  printf 'exec: claude --permission-mode %s --append-system-prompt <…> --mcp-config <…> --settings <…> %s %s\n' "$mode" "${plugins[*]}" "$*"
   exit 0
 fi
 
@@ -132,4 +136,4 @@ if command -v jq >/dev/null 2>&1; then
 fi
 
 # The provider's endpoint (gateway.sh): an ollama model never draws on the Claude plan.
-exec "$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" --plugin-dir "$plugin" "$@"
+exec "$adapter/gateway.sh" "${TLON_PROVIDER:-anthropic}" claude --permission-mode "$mode" --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "${plugins[@]}" "$@"

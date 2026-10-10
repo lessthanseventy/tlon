@@ -37,10 +37,9 @@ const WAKE_POLL_MS = 3_000;
 const GLANCE_MS = 120_000;
 // A line from the office's pool, at most this often.
 const LINE_EVERY_MS = 3_600_000;
-// On the Claude plan, past this much of the five-hour window: Explore subagents run on Haiku, and
-// past the second, every request at low effort.
+// On the Claude plan, past this much of the five-hour window: Explore subagents run on Haiku (and
+// every request at low effort, past plan/'s mark).
 const HOT_5H = 75;
-const SCORCHED_5H = 90;
 const OPERATOR_API = "http://127.0.0.1:4040/api";
 
 type Message = { author: string; body: string; at?: string };
@@ -451,12 +450,6 @@ export function register(on) {
   on("turn.start", async ($, e, next) => {
     if (thread) declare($, "presence_thinking");
     return next(e);
-  });
-
-  // When the Claude plan's five-hour window runs hot, spend less of it: lower effort near the cap.
-  on("turn.step", async function* ($, e, next) {
-    if (!onOllama && !e.agentId && (await fiveHourUsed($)) >= SCORCHED_5H) return yield* next({ ...e, effort: "low" });
-    return yield* next(e);
   });
 
   on("agent.spawn", async ($, e, next) => {
