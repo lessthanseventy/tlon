@@ -50,7 +50,7 @@ if [ -z "${TLON_MCP_URL:-}" ] || [ -z "${TLON_THREAD:-}" ] || [ -z "${TLON_AUTHO
   eval "$block" # exports TLON_MCP_URL / TLON_THREAD / TLON_AUTHOR (no TLON_TOKEN — minted per connect)
 fi
 
-# The MCP server key is `tlon` on every harness (flake.nix's mcpServers.tlon for pi), so the
+# The MCP server key is `tlon`, so the
 # tools read as mcp__tlon__post_message etc. Nothing reads the key back; it is a label.
 mcp_json="{\"mcpServers\":{\"tlon\":{\"type\":\"http\",\"url\":\"$TLON_MCP_URL\",\"headersHelper\":\"$cli token\"},\"lsp\":{\"type\":\"stdio\",\"command\":\"bun\",\"args\":[\"run\",\"$plugin/lsp/src/mcp.ts\"]}}}"
 

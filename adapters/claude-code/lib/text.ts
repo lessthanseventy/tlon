@@ -1,7 +1,7 @@
 // Shared across adapter packages by relative import (the way lsp imports lspd's codec) — no
 // package of its own, so every consumer typechecks it under its own tsconfig.
 
-// Pull the text out of a pi message's content: a string as-is, or the `{type:"text",text}`
+// Pull the text out of a message's content: a string as-is, or the `{type:"text",text}`
 // blocks of a content array joined with newlines (trimmed); anything else is "".
 export function extractText(content: unknown): string {
   if (typeof content === "string") return content;

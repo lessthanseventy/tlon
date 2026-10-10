@@ -4,8 +4,8 @@ defmodule Server.Policy do
   default, and the driver model. Keyed workspace × agent — the same coworker is trusted
   differently in a scratch workspace than in the one that deploys.
 
-  Every field is nullable and nil means INHERIT: the nix-owned capability (the pi-sandbox
-  allowlist, the permission-system deny floor) decides, and a value here is the operator being
+  Every field is nullable and nil means INHERIT: the compiled capability (the sandbox
+  allowlist, the deny floor in `Server.Profiles`) decides, and a value here is the operator being
   more specific. Capabilities are nix, compositions are data, disjoint — so a row of nils is
   indistinguishable from no row.
 

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "adapters-lspd — the supervised LSP sidecar daemon: owns the warm LspClient pool (Expert/tsserver/nil/bash-ls/json-ls) behind a Unix socket, so a pi restart leaves servers warm.",
+  "description": "adapters-lspd — the supervised LSP sidecar daemon: owns the warm LspClient pool (Expert/tsserver/nil/bash-ls/json-ls) behind a Unix socket, so a session restart leaves servers warm.",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",

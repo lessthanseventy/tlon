@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # server CLI — operate/script the LIVE channel from the shell: the human + Claude Code
 # peer to the agents' MCP tools, and the identity handoff the launchers (server:claude,
-# pi:*) use.
+# claude:*) use.
 #
 # Most subcommands run through `bin/server rpc` INTO the running service node — a token
 # minted anywhere else dies with its node and 401s, and roster/presence is in-memory
 # there, so a fresh `eval` node would see neither. The service must be up. EXCEPTIONS:
-# `token`/`bearer` POST to the /mint HTTP endpoint at TLON_MCP_URL's origin, so they mint
+# `token` POSTs to the /mint HTTP endpoint at TLON_MCP_URL's origin, so they mint
 # in the RIGHT world for any node (server:dev's 4041 or the service's 4040) — bin/server rpc
 # would only reach the service node and split a server:dev-handed pane into the wrong world.
 # `dossier` follows the same rule: with TLON_MCP_URL set it calls the `get_dossier` MCP
@@ -69,13 +69,13 @@ SERVER="$root/.release/server/_build/prod/rel/server/bin/server"
 # cost ~2 s CPU for a 0.3 s call (the shell's 30 s agents poll: 7% of a core). One scheduler,
 # no spin: ~0.25 s CPU. Only these client nodes see it; the service node is started elsewhere.
 export ERL_FLAGS="${ERL_FLAGS:-} +S 1:1 +SDcpu 1:1 +SDio 1 +A 1 +sbwt none +sbwtdcpu none +sbwtdio none"
-# Every rpc subcommand shells into `bin/server rpc` and needs the release. `token`/`bearer`
+# Every rpc subcommand shells into `bin/server rpc` and needs the release. `token`
 # do NOT — they mint purely over HTTP (/mint at TLON_MCP_URL's origin), so they must work
 # without a local release (that's the whole point of per-connect minting: any node, any
 # world). Gating them on the release strands every MCP headersHelper when no release is built.
 # `dossier` needs no release either when TLON_MCP_URL points it at a node over HTTP.
 case "${1:-}" in
-  token | bearer) ;;
+  token) ;;
   dossier) [ -n "${TLON_MCP_URL:-}" ] || [ -x "$SERVER" ] || { echo "no release at $SERVER and no TLON_MCP_URL — run 'mise run server:release' or launch via a server launcher" >&2; exit 1; } ;;
   *) [ -x "$SERVER" ] || { echo "no release at $SERVER — run 'mise run server:release' first" >&2; exit 1; } ;;
 esac
@@ -104,12 +104,12 @@ esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/#{/\\#{/g'; }
 int() { case "$1" in ('' | *[!0-9]*) return 1 ;; (*) return 0 ;; esac; }
 
 # Mint a fresh token against TLON_MCP_URL's origin /mint (Server.MCP.Gateway) — the same
-# per-connect mint adapters/pi's mcp.ts does: POST {"thread_id", "agent"} → {"token"}. The token
+# per-connect mint: POST {"thread_id", "agent"} → {"token"}. The token
 # is signed with THAT node's world secret, so it verifies at /mcp on the same node (server:dev's
 # 4041 or the service's 4040); minting via `bin/server rpc` instead would only reach the service
 # node and strand a server:dev-handed pane in the wrong world. No token is frozen — a fresh one per
 # connect survives restart/model/secret changes. Any failure returns non-zero so the caller
-# (CC's `token` headersHelper / pi's `bearer` !command) marks the server bad rather than 401ing.
+# (Claude Code's `token` headersHelper) marks the server bad rather than 401ing.
 mint_token() {
   : "${TLON_MCP_URL:?mint: TLON_MCP_URL not set (launch via a server launcher)}"
   : "${TLON_THREAD:?mint: TLON_THREAD not set}"
@@ -124,7 +124,7 @@ mint_token() {
   printf '%s' "$token"
 }
 
-# One JSON-RPC POST to TLON_MCP_URL, mirroring adapters/pi's mcp.ts: bearer + `Accept:
+# One JSON-RPC POST to TLON_MCP_URL: bearer + `Accept:
 # application/json, text/event-stream`, the `Mcp-Session-Id` the initialize reply handed back on
 # every later call, and a StreamableHTTP reply that is either plain JSON or a one-shot SSE stream
 # (unwrapped to its first `data:` line). Leaves the decoded JSON in MCP_REPLY (empty for a
@@ -183,7 +183,7 @@ case "$cmd" in
   spawn)
     # Open or join a thread, staff the agent (register if new), and print the identity-only
     # export TLON_* block (TLON_MCP_URL / TLON_THREAD / TLON_AUTHOR — NO TLON_TOKEN).
-    # The adapter mints a fresh token per connect against the URL's /mint (`token`/`bearer`
+    # The adapter mints a fresh token per connect against the URL's /mint (`token`
     # below), so no frozen token strands a pane across a restart or secret regeneration.
     if [ "${1:-}" = "--join" ]; then
       shift; id="${1:-}"; agent="${2:-}"
@@ -205,13 +205,6 @@ case "$cmd" in
     # reports the server bad.
     tok=$(mint_token) || exit 1
     printf '{"Authorization":"Bearer %s"}
-' "$tok"
-    ;;
-  bearer)
-    # pi-mcp-adapter's `!command` header value (runs at connect): same per-connect /mint
-    # as `token`, but outputs the BARE `Bearer <token>` value, not the headersHelper JSON.
-    tok=$(mint_token) || exit 1
-    printf 'Bearer %s
 ' "$tok"
     ;;
 
