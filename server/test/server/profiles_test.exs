@@ -491,6 +491,17 @@ defmodule Server.ProfilesTest do
       assert p.mcp == Profiles.archetype(:builder).mcp
     end
 
+    test "seat_profile reads the seat's own policy on its workspace: an ollama model spawns on pi, not Sonnet" do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "Night"})
+      {:ok, c} = Server.Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.retarget(ws.id, c.agent_id, %{model: "ollama-cloud/kimi-k2.7-code"})
+
+      p = Profiles.seat_profile("dahlmann", Server.Workspaces.bench_all(ws.id), ws.id)
+      assert %{provider: "ollama-cloud", model: "kimi-k2.7-code"} = p.model
+      assert p.harness == :pi
+    end
+
     test "builder and surveyor both instantiate on the claude_code harness" do
       assert Profiles.instantiate(%{archetype: :builder, name: "hronir"}).harness == :claude_code
       assert Profiles.instantiate(%{archetype: :surveyor, name: "tertius"}).harness == :claude_code

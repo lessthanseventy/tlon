@@ -183,7 +183,7 @@ defmodule Server.Arbiter.Tmux do
   defp launcher(ws, author) do
     bench = Workspaces.bench(ws)
 
-    case Profiles.seat_profile(author, bench) do
+    case Profiles.seat_profile(author, bench, ws) do
       %Profile{} = profile ->
         _ = Profiles.materialise!(profile)
         Harness.driver(profile.harness).launch_command(profile)
