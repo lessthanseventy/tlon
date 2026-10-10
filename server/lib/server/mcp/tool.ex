@@ -42,6 +42,10 @@ defmodule Server.MCP.Tool do
     end
   end
 
+  @doc "The adapter's own verbs: cut from a seat's model, never from the mod that calls them."
+  @spec adapter_verbs() :: [String.t()]
+  def adapter_verbs, do: @adapter_verbs
+
   @doc """
   Why the caller's seat may not run `module`'s tool, or nil. A caller with no seat on its thread's
   workspace (a hand-run session, the operator) has no cut list.
