@@ -17,6 +17,10 @@ defmodule Server.Switchboard do
   the message it answers. Never the whole room — the lead stays informed because
   coworkers report back to the thread. See `recipients/1`.
 
+  Only the crew on shift is woken. A message for a thread's off-shift lead goes to whoever
+  does that job on shift (the same archetype, else the manager), in their own window; one
+  for anyone else off shift waits, undelivered, for their crew.
+
   ## Two guard-rails against burning a five-hour window
 
   Waking pokes a *real, paid* agent session, so the wake is deliberately restrained:
@@ -180,7 +184,40 @@ defmodule Server.Switchboard do
     author = String.downcase(message.author)
 
     match?(%Thread{state: "closed"}, Repo.get(Thread, message.thread_id)) or
-      message |> target_names() |> Enum.all?(&(String.downcase(&1) == author))
+      message |> addressed() |> Enum.all?(&(String.downcase(&1) == author))
+  end
+
+  # An off-shift seat is never woken. A message for its thread's off-shift lead goes to whoever does
+  # that job on shift (the same archetype, else the manager); one for anyone else off shift waits.
+  defp on_shift(names, thread_id) do
+    case Repo.get(Thread, thread_id) do
+      %Thread{workspace_id: ws, agent_id: lead_id} when is_integer(ws) ->
+        on = Server.Workspaces.bench(ws)
+        on_ids = MapSet.new(on, & &1.agent_id)
+        off = ws |> Server.Workspaces.bench_all() |> Enum.reject(&MapSet.member?(on_ids, &1.agent_id))
+
+        names
+        |> Enum.flat_map(
+          &(off
+            |> Enum.find(fn seat -> String.downcase(seat.name) == String.downcase(&1) end)
+            |> for_shift(&1, lead_id, on, ws))
+        )
+        |> Enum.uniq()
+
+      _ ->
+        names
+    end
+  end
+
+  defp for_shift(nil, name, _lead_id, _on, _ws), do: [name]
+  defp for_shift(%{agent_id: lead_id} = seat, _name, lead_id, on, ws), do: stand_in(seat, on, ws)
+  defp for_shift(_off_seat, _name, _lead_id, _on, _ws), do: []
+
+  defp stand_in(seat, on, ws) do
+    case Enum.find(on, &(&1.archetype == seat.archetype)) || Server.Workspaces.manager(ws) do
+      nil -> []
+      coworker -> [coworker.name]
+    end
   end
 
   # Atomically flip delivered_at to now for the still-undelivered messages among
@@ -206,6 +243,7 @@ defmodule Server.Switchboard do
   #     lead) in their own window on the workspace's standing thread, told how to answer
   #   * neither (a plain top-level post) -> the thread's LEAD (its assigned agent)
   #   * a `notice` -> nobody: it is read on the next turn; a corkboard `suggestion`, nobody ever
+  #   * anyone off shift -> never: a lead's stand-in on shift instead, anyone else waits (`on_shift/2`)
   # minus the message's own author — you are never woken by your own words. The
   # lead stays informed without being cc'd because coworkers report back to the
   # thread (their top-level posts wake the lead).
@@ -386,7 +424,11 @@ defmodule Server.Switchboard do
 
   # Who is addressed, the author never among them — so a post whose only mention is its own author
   # ("report back to @me") is addressed to nobody else, and wakes the lead like any plain post.
-  defp target_names(%Message{} = message) do
+  defp target_names(%Message{} = message), do: message |> addressed() |> on_shift(message.thread_id)
+
+  # Who a message names, shift aside: what `reaches_nobody?/1` judges, so a message for someone off
+  # shift is held for their crew rather than settled.
+  defp addressed(%Message{} = message) do
     author = String.downcase(message.author)
 
     case Enum.reject(reply_author(message) ++ mentioned_agents(message), &(String.downcase(&1) == author)) do

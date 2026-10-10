@@ -386,6 +386,47 @@ defmodule Server.SwitchboardTest do
       refute_received {:spawned, _}
     end
 
+    # night shift: tertius (day manager) leads the sweep, cartaphilus manages nights, hronir builds days
+    defp night_shift do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Shifts"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius", archetype: "surveyor", crew: "day"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "cartaphilus", archetype: "surveyor", crew: "night"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "day"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "otalora", archetype: "builder", crew: "night"})
+      {:ok, sweep} = Channel.open_thread(%{title: "inbox sweep", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(sweep.id, "tertius")
+      {:ok, _} = Server.Shifts.switch(ws.id, "night")
+      %{lobby: lobby, sweep: sweep}
+    end
+
+    test "an off-shift lead's message goes to whoever does that job on shift, in their own window" do
+      %{lobby: lobby, sweep: sweep} = night_shift()
+
+      {:ok, m} = Channel.post(%{thread_id: sweep.id, author: "andrew", body: "@tertius file it → go"})
+      assert {:pending, _} = Switchboard.deliver(m)
+
+      assert_receive {:spawned, exports}, 1_000
+      assert exports =~ ~s(TLON_AUTHOR="cartaphilus")
+      assert exports =~ ~s(TLON_THREAD="#{lobby.id}")
+      refute_received {:spawned, _}
+      assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+    end
+
+    test "a mention of anyone else off shift waits for their crew: nobody spawned, the message held" do
+      %{lobby: lobby} = night_shift()
+
+      {:ok, m} = Channel.post(%{thread_id: lobby.id, author: "andrew", body: "@hronir a look in the morning?"})
+      assert {:pending, _} = Switchboard.deliver(m)
+      assert :ok = Switchboard.drain()
+
+      spawned = Stream.repeatedly(fn -> receive(do: ({:spawned, e} -> e), after: (0 -> nil)) end)
+      refute spawned |> Enum.take_while(& &1) |> Enum.any?(&(&1 =~ ~s(TLON_AUTHOR="hronir")))
+      assert is_nil(Repo.get!(Message, m.id).delivered_at)
+      # the setup's "tertius leads" post went to cartaphilus: its opening turn, waited for here
+      assert_receive {:woke, nil, _}, 1_000
+    end
+
     test "a lead whose ONLY session is cold is ROTATED — a fresh pane is spawned, not left stranded" do
       # 2026-09-01 (Andrew): a cold session is too stale to cheaply resume, so posting to it rotates
       # in a fresh, dossier-seeded session rather than reviving a huge context (or stranding, the old
