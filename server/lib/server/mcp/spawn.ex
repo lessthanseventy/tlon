@@ -156,7 +156,7 @@ defmodule Server.MCP.Spawn do
   defp model_export(thread, agent) do
     case Server.Profiles.model_label(thread.workspace_id, agent.name) do
       nil -> ""
-      label -> "\nexport TLON_MODEL=\"#{label}\""
+      label -> "\nexport TLON_MODEL='#{String.replace(label, ~r/['"$`\\]/, "")}'"
     end
   end
 

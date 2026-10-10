@@ -37,6 +37,9 @@ defmodule Server.WorklineReviewTest do
     assert File.read!(Path.join(root, "work/fence-test/review.md")) =~ "Verdict: approve"
     {out, 0} = System.cmd("git", ["-C", root, "log", "--oneline", "-1"], stderr_to_stdout: true)
     assert out =~ "fence-test"
+    # the commit names its thread and its reviewer, so Server.Commits lists it against the thread
+    {body, 0} = System.cmd("git", ["-C", root, "log", "-1", "--format=%B"], stderr_to_stdout: true)
+    assert body =~ "Tlon-Thread: 7\n" and body =~ "Tlon-Author: menard-machine\n"
 
     assert {:ok, _} = Artifacts.Git.check(thread(), {:file, "review.md"})
   end
