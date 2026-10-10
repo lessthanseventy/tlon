@@ -73,3 +73,19 @@ for d in pi consult lsp lspd reload footer; do
   ( cd "adapters/$d" && bun run typecheck )
 done
 """
+
+# `claude plugin test` runs every *.test.ts under the plugin root, and the root is adapters/ (a mod
+# imports only from inside its own folder, and it shares pi/src/doing.ts), so the bun suites would
+# load as mod tests: the mod's tests run on a copy without them.
+["adapters:claude-code:check"]
+description = "adapters/claude-code: the mod's precommit gate — validate (strict), then its tests"
+dir = "adapters"
+run = """
+set -e
+claude plugin validate --strict .
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+git ls-files --cached --others --exclude-standard | grep -v '\\.test\\.tsx\\?$' | cpio -pdm --quiet "$stage"
+cp claude-code/*.test.ts "$stage/claude-code/"
+claude plugin test "$stage"
+"""

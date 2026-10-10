@@ -26,12 +26,13 @@ adapters/
                        identityFromEnv(), the one parse of the TLON_* identity
     src/capture.ts     delta-slicing, secret redaction, the extraction prompt (pure)
     src/recall.ts      correction detection → a proposed habit (pure)
-    src/cc-*.ts        the claude-code hook bodies (capture, presence),
+    src/cc-*.ts        the claude-code capture hook's body,
     src/hook.ts        one bun process per fire, run under hook.ts's ceiling
     src/pi.ts          the slice of pi's ExtensionAPI adapters depends on
     launch.sh          the `pi:*` model launcher — spawns/joins a thread, exports TLON_*
-  claude-code/         the Claude Code adapter: launch.sh (`server:claude`) + the
-                       SessionStart / UserPromptSubmit / PreToolUse / Stop hook shells
+  claude-code/         the Claude Code adapter: launch.sh (`server:claude`), the
+                       SessionStart / Stop hook shells (brief, capture), and mod.ts —
+                       presence, as a Claude Code mod (plugin root: adapters/)
   footer/              a dense 2-line pi statusline — generic, NOT a server adapter
   consult/             /consult and /fresh — delegate a prompt to a different model
   menard/             (in ~/projects/menard) the guard + format-on-save for Elixir —

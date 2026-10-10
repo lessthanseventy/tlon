@@ -30,15 +30,26 @@ from, and posts to, that node's world.
   restart and a 401 auto-refreshes. No token is ever written to disk. pi's adapters adapter
   does the same (mints per connect against `/mint`), so both doors are frozen-token-free —
   Claude Code's `headersHelper` and pi's in-adapter mint are the same idea in two shapes.
-- **Registering.** A `SessionStart` hook ahead of the brief, `thinking-hook.sh start`, calls the
-  `register` tool with the session's tmux pane — what pi's extension does at its session_start. It
-  is what puts the session on the roster: without it the worker has no session row, so warmth,
-  thinking and the switchboard's wake checks cannot see it.
-- **What it is doing.** A `PreToolUse` hook, `thinking-hook.sh doing`, tells the server which kind
-  of tool is about to run (`presence_doing`, mapped by `pi/src/doing.ts`), so the office animates
-  it, and the call in one line (`summaryOf`: "Bash · mise run check", the tool and its target —
-  never contents — redacted) for the thread card's activity timeline. It runs detached — a tool never waits on it — and the label holds until the next tool or
-  the turn's end, since a detached `PostToolUse` could overtake it.
+- **Presence — the mod.** [`mod.ts`](mod.ts) is a Claude Code
+  [mod](https://code.claude.com/docs/en/plugins/mods/overview): hooks Claude Code runs in its own
+  process, loaded by `--plugin-dir` (the plugin root is `adapters/`, whose `.claude-plugin/` and
+  `hooks/hooks.json` name it). Each declare goes over the session's own `tlon` connection
+  (`$.mcp.call`), fire-and-forget, so a tool or a turn never waits on the server:
+  - at `session.start`, `register` with the session's tmux pane — what pi's extension does at its
+    session_start, and what puts the session on the roster (without it the worker has no session
+    row, so warmth, thinking and the switchboard's wake checks cannot see it) — and a status line
+    under the prompt naming the thread;
+  - at `turn.start`, `presence_thinking`;
+  - at each `tool.call`, `presence_doing`: the kind of work (`doingOf`, from `pi/src/doing.ts`) so
+    the office animates it, and the call in one line (`summaryOf`: "Bash · mise run check", the
+    tool and its target — never contents — redacted) for the thread card's activity timeline. A
+    `$.mcp.call` raises `tool.call` too, so the mod skips the calls it made itself;
+  - at the session's own `turn.complete` (not a subagent's) and at `session.end`, `presence_idle`.
+
+  `mise run adapters:claude-code:check` validates it (`claude plugin validate --strict`) and runs
+  `mod.test.ts`. Open: the test kit cannot raise a tool call under the mod's own origin, so the
+  self-skip is proved live (a citizen's thread feed carries no `register`/`presence_*` entries),
+  not by a test.
 - **Door 2 — the brief.** [`brief-hook.sh`](brief-hook.sh) is a `SessionStart` hook. Claude
   Code adds its plain stdout to the session context, so on start / resume / clear it renders
   the thread's dossier — the `get_dossier` tool itself, called over MCP at `TLON_MCP_URL` by

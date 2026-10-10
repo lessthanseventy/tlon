@@ -8,6 +8,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
+| `adapters:claude-code:check` | adapters/claude-code: the mod's precommit gate — validate (strict), then its tests |
 | `adapters:consult:check` | adapters/consult: the precommit gate — install (frozen), typecheck, tests |
 | `adapters:consult:test` | adapters/consult: the delegation unit suite (bun test) — the TDD loop |
 | `adapters:consult:watch` | adapters/consult: re-run the suite on every change (cap signal) |

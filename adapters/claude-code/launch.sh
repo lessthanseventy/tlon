@@ -16,6 +16,7 @@ set -euo pipefail
 adapter="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$adapter/../.." && pwd)"
 cli="$repo/scripts/tlon-cli.sh"
+plugin="$(cd "$adapter/.." && pwd)"
 
 # If the environment already carries a server identity (e.g. `Server.Tmux`'s window
 # boot script exported it before exec'ing this launcher), keep it as-is — per-connect minting targets TLON_MCP_URL's
@@ -77,11 +78,9 @@ perms=""
 perms_json=""
 [ -n "$perms" ] && perms_json=",\"permissions\":{$perms}"
 
-# Presence (thinking counts as working): UserPromptSubmit declares thinking, PreToolUse says
-# which tool is running (detached, never slowing it), Stop clears it
-# (parallel to the capture reflex, so a slow extraction never delays the idle), SessionEnd is
-# the exit/crash safety net.
-settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh start\"},{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh doing\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"},{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}],\"SessionEnd\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/thinking-hook.sh idle\"}]}]}$perms_json}"
+# Presence is the mod (`mod.ts`, loaded by --plugin-dir below), not a settings hook: it runs
+# inside the session, so registering, thinking, each tool and idle reach the server in order.
+settings_json="{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/brief-hook.sh\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$adapter/capture-hook.sh\"}]}]}$perms_json}"
 
 # The citizen protocol, as a system prompt. Without it Claude Code treats a teammate's message
 # (typed into its input by the server's switchboard) like the
@@ -103,7 +102,7 @@ if [ "${TLON_LAUNCH_DRYRUN:-}" = "1" ]; then
   printf 'mcp-config: %s\n' "$mcp_json"
   printf 'settings:   %s\n' "$settings_json"
   printf 'system:     %s\n' "$sys_prompt"
-  printf 'exec: claude --permission-mode auto --append-system-prompt <…> --mcp-config <…> --settings <…> %s\n' "$*"
+  printf 'exec: claude --permission-mode auto --append-system-prompt <…> --mcp-config <…> --settings <…> --plugin-dir %s %s\n' "$plugin" "$*"
   exit 0
 fi
 
@@ -116,4 +115,4 @@ if command -v jq >/dev/null 2>&1; then
   jq --arg d "$PWD" '.projects[$d] = ((.projects[$d] // {}) + {hasTrustDialogAccepted: true})' "$cj" > "$cj.tmp" && mv "$cj.tmp" "$cj"
 fi
 
-exec claude --permission-mode auto --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" "$@"
+exec claude --permission-mode auto --append-system-prompt "$sys_prompt" --mcp-config "$mcp_json" --settings "$settings_json" --plugin-dir "$plugin" "$@"
