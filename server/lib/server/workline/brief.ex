@@ -96,7 +96,8 @@ defmodule Server.Workline.Brief do
       "You are the reviewer, not the builder: findings against spec compliance, bugs, security — verdict at the top. " <>
         "Land it with submit_review — verdict approve or request_changes, and the whole review.md, verdict " <>
         "first: the server commits it for you, since you never write files. request_changes sends it back to " <>
-        "the builder; after approve, call advance_stage to hand it to the merge gate."
+        "the builder; after approve, call advance_stage to hand it to the merge gate. Its follow_ups replace any an " <>
+        "earlier review of this workline filed (get_brief shows them): list every non-blocking finding still open."
 
   defp playbook(%{stage: "intent"}), do: "Capture the originator's words near-verbatim plus a one-line restatement."
 

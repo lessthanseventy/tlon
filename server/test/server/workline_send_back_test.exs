@@ -189,9 +189,23 @@ defmodule Server.WorklineSendBackTest do
 
     test "a follow-up already filed on the workline isn't filed again" do
       thread = at_review("repeat")
-      {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nfirst review"])
-      assert {:ok, []} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nsecond review"])
+      {:ok, [first]} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nfirst review"])
+      assert {:ok, []} = Workline.follow_ups(thread, "nolan", ["same nit\n\nsecond review"])
+      assert Repo.get(Server.Ticket, first.id)
       assert {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["twice\n\na", "twice\n\nb"])
+    end
+
+    test "a later review's list replaces the earlier one's: a finding fixed since goes, QA's stay" do
+      thread = at_review("rounds")
+      {:ok, [fixed, kept]} = Workline.follow_ups(thread, "lonnrot", ["fixed since", "still open"])
+      {:ok, [qa]} = Workline.follow_ups(thread, "cruz", ["the button is grey"], :qa)
+
+      assert {:ok, [new]} = Workline.follow_ups(thread, "nolan", ["still open", "found now"])
+
+      refute Repo.get(Server.Ticket, fixed.id)
+      assert Repo.get(Server.Ticket, kept.id)
+      assert Repo.get(Server.Ticket, qa.id)
+      assert new.title == "found now" and "from-review" in new.labels
     end
 
     test "a blank follow-up files nothing" do

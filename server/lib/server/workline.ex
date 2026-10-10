@@ -778,9 +778,23 @@ defmodule Server.Workline do
   File a reviewer's or QA's non-blocking findings as follow-up tickets: each text's first line is
   its title, the rest its body. Tied to the workline and labelled `follow-up` and `held`, so intake
   leaves them until its thread closes (`release_follow_ups/1`, run by the close); then they reach the
-  manager like any ticket. Blank ones, and a title already filed on the workline, are skipped. `{:ok, tickets}`.
+  manager like any ticket. Blank ones, and a title already filed on the workline, are skipped.
+
+  Each round of a `door` (`:review` or `:qa`) replaces the held follow-ups its earlier rounds filed:
+  the latest review knows what is still owed, so a finding fixed since is not filed, and one raised
+  again is not filed twice. `{:ok, tickets}`.
   """
-  def follow_ups(%Thread{} = thread, author, items) do
+  def follow_ups(%Thread{} = thread, author, items, door \\ :review) do
+    label = "from-#{door}"
+    titles = MapSet.new(items, &(&1 |> String.trim() |> String.split("\n", parts: 2) |> hd() |> String.trim()))
+
+    # one still raised keeps its ticket; one this door no longer raises was fixed since
+    for t <- tied_follow_ups(thread.id),
+        "held" in t.labels,
+        label in t.labels or (door == :review and not Enum.any?(t.labels, &String.starts_with?(&1, "from-"))),
+        not MapSet.member?(titles, t.title),
+        do: {:ok, _} = Server.Tickets.remove(t)
+
     filed = thread.id |> tied_follow_ups() |> MapSet.new(& &1.title)
 
     tickets =
@@ -796,7 +810,7 @@ defmodule Server.Workline do
             project_id: thread.project_id,
             title: String.trim(title),
             body: Enum.join(Enum.reject([String.trim(Enum.join(rest)), origin], &(&1 == "")), "\n\n"),
-            labels: ["follow-up", "held"]
+            labels: ["follow-up", "held", label]
           })
 
         {:ok, _} = Server.Tickets.tie(ticket, thread.id, "relates")
