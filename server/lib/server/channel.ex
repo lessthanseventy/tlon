@@ -366,6 +366,7 @@ defmodule Server.Channel do
     |> Ecto.Changeset.put_change(:agent_id, thread.agent_id || designated_lead(thread.workspace_id))
     |> Repo.update()
     |> Server.Bus.announce(:thread_opened)
+    |> tap(&reclaim_tickets/1)
   end
 
   @doc """
@@ -581,4 +582,23 @@ defmodule Server.Channel do
       _ -> ""
     end
   end
+
+  # an unmerged workline back from closed takes back only the tickets nothing else took meanwhile
+  defp reclaim_tickets({:ok, %Thread{stage: stage} = t}) when stage not in [nil, "merged"] do
+    case Server.Tickets.reopened_for(t.id) do
+      [] ->
+        :ok
+
+      moved ->
+        list = Enum.map_join(moved, ", ", &"##{&1.id} #{&1.title} (#{Server.Tickets.get(&1.id).status})")
+
+        post(%{
+          thread_id: t.id,
+          author: "tlon",
+          body: "↺ reopened, but its tickets moved on while it was closed: #{list}"
+        })
+    end
+  end
+
+  defp reclaim_tickets(_), do: :ok
 end
