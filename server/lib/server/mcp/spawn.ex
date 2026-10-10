@@ -148,7 +148,16 @@ defmodule Server.MCP.Spawn do
     export TLON_MCP_URL="http://127.0.0.1:#{port}/mcp"
     export TLON_THREAD="#{thread.id}"
     export TLON_AUTHOR="#{agent.name}"\
-    """ <> cwd_export(thread) <> read_dirs_export(thread)
+    """ <> model_export(thread, agent) <> cwd_export(thread) <> read_dirs_export(thread)
+  end
+
+  # the model this pane launches on, from its seat's profile — what the commit hook stamps as
+  # `Tlon-Model:`, so a commit names the model that wrote it whatever the model believes it is
+  defp model_export(thread, agent) do
+    case Server.Profiles.model_label(thread.workspace_id, agent.name) do
+      nil -> ""
+      label -> "\nexport TLON_MODEL=\"#{label}\""
+    end
   end
 
   # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in

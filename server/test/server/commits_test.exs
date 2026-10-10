@@ -19,7 +19,7 @@ defmodule Server.CommitsTest do
     # them, so that identity can never leak into a commit the test didn't ask for.
     isolate_env = fn env ->
       given = Enum.into(env, %{})
-      %{"TLON_THREAD" => nil, "TLON_AUTHOR" => nil} |> Map.merge(given) |> Map.to_list()
+      %{"TLON_THREAD" => nil, "TLON_AUTHOR" => nil, "TLON_MODEL" => nil} |> Map.merge(given) |> Map.to_list()
     end
 
     git = fn args, env ->
@@ -47,10 +47,16 @@ defmodule Server.CommitsTest do
 
   test "the hook stamps Tlon-Thread/Tlon-Author from the pane's env; a plain terminal gets none",
        %{repo: repo, git: git, commit: commit} do
-    commit.("a", "thread work", [{"TLON_THREAD", "42"}, {"TLON_AUTHOR", "hronir"}])
+    commit.("a", "thread work", [
+      {"TLON_THREAD", "42"},
+      {"TLON_AUTHOR", "hronir"},
+      {"TLON_MODEL", "ollama-cloud/kimi-k2.7-code (pi)"}
+    ])
+
     {body, 0} = git.(["log", "-1", "--format=%B"], [])
     assert body =~ "Tlon-Thread: 42\n"
     assert body =~ "Tlon-Author: hronir\n"
+    assert body =~ "Tlon-Model: ollama-cloud/kimi-k2.7-code (pi)\n"
 
     commit.("b", "human work", [])
     {body, 0} = git.(["log", "-1", "--format=%B"], [])
