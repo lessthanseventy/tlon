@@ -124,7 +124,7 @@ defmodule Server.Bench.Roles.Runner do
     %{passed: code == 0, score: nil, detail: detail}
   end
 
-  @doc "Seconds a task's role gets: half an hour for a sourced (senior) task."
+  @doc "Seconds a task's role gets, keyed on the task's `set`: builder 900, senior 1800, else 300."
   def timeout_s(task), do: Map.get(@timeout_s, task.set, @default_timeout_s)
 
   @doc """
