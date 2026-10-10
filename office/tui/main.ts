@@ -10,6 +10,7 @@ import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { personaLines } from "../kit/persona"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
+import { entryOf } from "../kit/entry"
 import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
@@ -49,7 +50,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" }
   | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
@@ -413,6 +414,7 @@ function act(x: Act) {
     case "archive": return open({ kind: "archive" })
     case "tray": return open({ kind: "tray" })
     case "beacon": return open({ kind: "triage" })
+    case "needs": return inbox()
     case "rack": return open({ kind: "health" })
     case "dog": { const r = room(); if (r instanceof WideRoom) r.patDog(); changed(); return open({ kind: "pet", who: "dog" }) }
     case "tv": { const r = room(); if (r instanceof WideRoom) { r.channel(); changed(); draw() } return }
@@ -553,6 +555,7 @@ const VERBS: [string, () => void][] = [
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
   ["the arcade", () => open({ kind: "arcade" })], ["the suggestion box", () => open({ kind: "ideas" })],
+  ["Uqbar's entry — the office as a page", () => open({ kind: "entry" })],
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
@@ -1217,6 +1220,27 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       rows: mode.page.map((l): Row => ({ segs: [/[a-z]{4,} [a-z]{3,}/.test(l.trim()) && !l.includes(",") ? { s: l, fg: ROLE.attention } : dim(l)] })),
       actions: [{ key: "n", label: "another page", run: openBabel }, back1],
     }
+    case "entry": {
+      const e = entryOf(a, boardCtx(), needs, feed, new Date())
+      const row = (text: string, x: Act | null): Row => ({ segs: [plain(text)], open: x ? () => act(x) : undefined })
+      const rows: Row[] = []
+      for (const s of e.prose.split(". ").filter(Boolean)) rows.push({ segs: [plain(s.endsWith(".") ? s : s + ".")] })
+      if (e.pivot.rows.length) {
+        rows.push({ segs: [{ s: "stage × coworker", fg: ROLE.attention }] })
+        rows.push({ segs: [dim(`coworker  ${e.pivot.stages.map((s) => s.toLowerCase()).join("  ")}`)] })
+        for (const r of e.pivot.rows) {
+          const cells = r.cells.map((c, i) => c.count ? `${e.pivot.stages[i]!.toLowerCase()} ${c.count}${c.wait ? ` ${c.wait}` : ""}` : "·").join("  ")
+          rows.push({ segs: [{ s: r.cow, fg: ROLE.key }, plain(`  ${cells}  (${r.total})`)] })
+        }
+      }
+      for (const s of e.sections) {
+        rows.push({ segs: [{ s: s.label, fg: ROLE.attention }] })
+        for (const l of s.lines) rows.push(row(l.text, l.act))
+      }
+      if (e.diary.length) { rows.push({ segs: [{ s: "WHAT UQBAR DID TODAY", fg: ROLE.attention }] }); for (const d of e.diary) rows.push(row(d.text, d.act)) }
+      if (e.footnotes.length) { rows.push({ segs: [{ s: "FOOTNOTES", fg: ROLE.attention }] }); for (const f of e.footnotes) rows.push(row(`${f.mark} ${f.text}`, f.act)) }
+      return { title: e.title, tint: ROLE.inactive, rows, actions: [back1] }
+    }
     case "decide": {
       // one waiting item at a time, everything to decide it on the card; acting moves to the next
       const order = [...needs.filter((x) => x.level === "blocking"), ...needs.filter((x) => x.level === "decide")]
@@ -1715,6 +1739,7 @@ function onKey(k: string) {
     case "b": return open({ kind: "memory" })
     case "L": if (all.life?.[String(ws)]) open({ kind: "life" }); return
     case "B": if (flagOn(all, "build_mode")) open({ kind: "build" }); return
+    case "U": return open({ kind: "entry" })
     case "W": return open({ kind: "boss" })
     case "p": room().pet(); changed(); return draw()
   }
