@@ -157,6 +157,7 @@ defmodule Server.Bench.RolesTest do
       assert {"d", %{input: 20, output: 47, cache_read: 10, cache_write: 2, turns: 2}} =
                Roles.parse_output(:claude_code, out)
     end
+
     test "output that isn't the harness's JSON is the reply, with zero usage" do
       assert {"boom", %{input: 0, output: 0}} = Roles.parse_output(:claude_code, "boom")
     end
