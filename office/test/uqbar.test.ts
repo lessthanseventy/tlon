@@ -162,6 +162,25 @@ describe("torn pages", () => {
     })
     expect(seen).toBe(true)
   })
+  test("Argos catches every 4th plane: he runs under it, it is held, the post still lands", () => {
+    seeded(3, () => {
+      const room = new WideRoom(WIDTH), v = viewOf(office(3), 1)
+      type R = { planes: { legs: { hold?: number }[] }[]; dog: { path: unknown[] }; fly(t: number, a: unknown): void }
+      const r = room as unknown as R
+      room.render(v, focus, measure, NOW)
+      for (let i = 0; i < 300; i++) room.step(v)
+      const held: boolean[] = []
+      for (let n = 0; n < 4; n++) {
+        r.dog.path = []
+        r.fly(102, v)
+        held.push(r.planes.at(-1)!.legs.some((l) => l.hold))
+        if (n === 3) expect(r.dog.path.length).toBeGreaterThan(0)
+      }
+      expect(held).toEqual([false, false, false, true])
+      for (let i = 0; i < 1500 && r.planes.length; i++) room.step(v)
+      expect(r.planes.length).toBe(0)
+    })
+  })
   test("no plane in flight: the golden frames do not move", () => {
     expect(frameHashes()).toEqual(JSON.parse(readFileSync(GOLDEN, "utf8")))
   })
