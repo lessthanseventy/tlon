@@ -190,7 +190,8 @@ defmodule Server.MCP.Tool.CloseThread do
   close (messages are untouched); a closed thread just leaves the open list. It takes a
   thread id BY DESIGN — closing a peer's finished thread is the coordination act this verb
   exists for, the sanctioned exception to "no tool takes a thread parameter". A missing id
-  is refused.
+  is refused, and so is a workline that hasn't merged closed without a why
+  (`Server.Channel.close_as/2`): `superseded_by` or `abandoned`.
   """
   use Server.MCP.Tool
 
@@ -198,6 +199,13 @@ defmodule Server.MCP.Tool.CloseThread do
 
   schema do
     field :thread_id, :integer, required: true, description: "The thread to close"
+
+    field :superseded_by, :string,
+      description:
+        "For a workline that hasn't merged: the PR or commit that already shipped its work (e.g. \"PR #234\") — its ticket is done"
+
+    field :abandoned, :string,
+      description: "For a workline that hasn't merged and is dropped: why — its ticket goes back to the backlog"
   end
 
   @impl true
@@ -213,13 +221,20 @@ defmodule Server.MCP.Tool.CloseThread do
             "thread #{thread.id} is the workspace's standing thread — every coworker's window lives on it; it is never closed"
           )
         else
-          close(frame, thread)
+          close(frame, thread, params)
         end
     end
   end
 
-  defp close(frame, thread) do
-    case Channel.close_thread(thread) do
+  defp close(frame, thread, params) do
+    why =
+      cond do
+        params[:superseded_by] -> {:superseded, params[:superseded_by]}
+        params[:abandoned] -> {:abandoned, params[:abandoned]}
+        true -> nil
+      end
+
+    case Channel.close_as(thread, why) do
       {:ok, closed} ->
         ok(frame, %{"closed" => closed.id, "state" => closed.state})
 
@@ -229,6 +244,12 @@ defmodule Server.MCP.Tool.CloseThread do
           "tracked" => tracked.slug,
           "why" => "unmerged commits — tracked as a workline instead of closed"
         })
+
+      {:error, :why_closed} ->
+        fail(
+          frame,
+          "thread #{thread.id} is a workline at #{thread.stage} that hasn't merged: say why it closes — superseded_by: the PR or commit that already shipped its work (its ticket is done), or abandoned: why it is dropped (its ticket goes back to the backlog)"
+        )
 
       {:error, why} ->
         fail(frame, "thread #{thread.id} was not closed: #{inspect(why)}")

@@ -351,7 +351,16 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["messages"], t), do: post(conn, t)
 
   defp on_thread(conn, "POST", ["close"], t) do
-    case Channel.close_thread(t) do
+    {b, conn} = body(conn)
+
+    why =
+      cond do
+        is_binary(b["superseded_by"]) -> {:superseded, b["superseded_by"]}
+        is_binary(b["abandoned"]) -> {:abandoned, b["abandoned"]}
+        true -> nil
+      end
+
+    case Channel.close_as(t, why) do
       {:tracked, tracked} -> reply(conn, {:ok, tracked}, &thread_row/1)
       result -> reply(conn, result, &thread_row/1)
     end
@@ -842,6 +851,14 @@ defmodule Server.MCP.OperatorAPI do
   defp refused(conn, %Ecto.Changeset{} = cs), do: json(conn, 422, %{error: inspect(cs.errors)})
   defp refused(conn, :unknown_model), do: json(conn, 422, %{error: "no such model"})
   defp refused(conn, :not_found), do: json(conn, 404, %{error: "not found"})
+
+  defp refused(conn, :why_closed),
+    do:
+      json(conn, 422, %{
+        error:
+          "a workline that hasn't merged closes with a why: superseded_by (the PR or commit that shipped it) or abandoned (why it is dropped)"
+      })
+
   defp refused(conn, why), do: json(conn, 409, %{error: inspect(why)})
 
   defp settings, do: %{knobs: Server.OperatorConfig.knobs(), restart_pending: Server.Rollout.restart_pending?()}
