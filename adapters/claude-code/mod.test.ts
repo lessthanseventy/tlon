@@ -413,3 +413,19 @@ test("the operator's session puts a coworker's ask to them and answers it by its
 
   expect(answered).toBe(JSON.stringify({ key: "2" }));
 });
+
+test("the operator's band reads the server the session points at, a scratch release's port too", async ($, on) => {
+  const urls: string[] = [];
+  engine(on, {
+    env: { TLON_OPERATOR: "1", TLON_MCP_URL: "http://127.0.0.1:4141/mcp" },
+    http: (e) => {
+      urls.push(e.url);
+      return { status: 200, ok: true, headers: {}, text: "[]" };
+    },
+  });
+  await $.session.start(START);
+  await settle();
+
+  expect(urls).toContain("http://127.0.0.1:4141/api/office/needs");
+  expect(urls.every((u) => u.startsWith("http://127.0.0.1:4141/api/"))).toBe(true);
+});

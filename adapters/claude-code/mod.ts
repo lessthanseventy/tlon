@@ -23,7 +23,7 @@ import {
   type Entry,
 } from "./lib/capture.ts";
 import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
-import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, turnWord, type Glance } from "./lib/citizen.ts";
+import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord, type Glance } from "./lib/citizen.ts";
 import { CHIME_WAV } from "./lib/chime.ts";
 
 // Below this much new transcript a turn's capture waits for the next turn instead of paying for
@@ -40,7 +40,6 @@ const LINE_EVERY_MS = 3_600_000;
 // On the Claude plan, past this much of the five-hour window: Explore subagents run on Haiku (and
 // every request at low effort, past plan/'s mark).
 const HOT_5H = 75;
-const OPERATOR_API = "http://127.0.0.1:4040/api";
 
 type Message = { author: string; body: string; at?: string };
 type Figure = { columns: number; rows: number; cells: string };
@@ -70,6 +69,7 @@ let asked = new Set<string>();
 let asking = false;
 let release = "";
 let life = "";
+let api = operatorApi(undefined);
 
 function declare($, tool: string, args: Record<string, unknown> = {}) {
   $.mcp.call("tlon", tool, args).catch(() => {});
@@ -306,9 +306,9 @@ async function capture($, floor: number) {
 // The operator's band: what waits on them, the release pointer, their streak.
 async function refreshOperator($) {
   try {
-    const res = await $.http.fetch(`${OPERATOR_API}/office/needs`);
+    const res = await $.http.fetch(`${api}/office/needs`);
     if (res.ok) needs = JSON.parse(res.text) as Need[];
-    const office = await $.http.fetch(`${OPERATOR_API}/office`);
+    const office = await $.http.fetch(`${api}/office`);
     if (office.ok) {
       const lives = Object.values(JSON.parse(office.text).life ?? {}) as { level?: number; xp?: number; streaks?: { days?: number }[] }[];
       const l = lives[0];
@@ -345,7 +345,7 @@ async function askNext($) {
     const label = await $.ui.ask(`${ask.title}${ask.text ? `\n${ask.text}` : ""}`, ask.options!.map((o) => o.label));
     const option = ask.options!.find((o) => o.label === label);
     if (option)
-      await $.http.fetch(`${OPERATOR_API}/office/asks/${ask.ref}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: option.key }) });
+      await $.http.fetch(`${api}/office/asks/${ask.ref}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: option.key }) });
   } catch {
     asked.delete(ask.key);
   } finally {
@@ -371,6 +371,7 @@ export function register(on) {
     if (!thread || !author) {
       operator = !!(await $.env.get("TLON_OPERATOR"));
       if (operator) {
+        api = operatorApi(await $.env.get("TLON_MCP_URL"));
         $.clock.every(GLANCE_MS, () => refreshOperator($));
         $.clock.every(GLANCE_MS * 5, () => refreshRelease($));
         void refreshOperator($);

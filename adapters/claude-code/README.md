@@ -85,7 +85,7 @@ pure parts are `lib/` (bun-tested).
 - `web_search`: on the ollama gateway, where Claude Code's own WebSearch cannot reach.
 
 **Operator mode** (`claude:operator`: `TLON_OPERATOR`, no thread): the band shows what waits on you
-(`/api/office/needs`), the live release and what is unreleased, and your streak; each coworker's ask
+(`/api/office/needs`, at `TLON_MCP_URL`'s origin, else `127.0.0.1:4040`), the live release and what is unreleased, and your streak; each coworker's ask
 is put to you as a question and answered by its key.
 
 ## Not here

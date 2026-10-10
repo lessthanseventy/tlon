@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, turnWord } from "./citizen.ts";
+import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord } from "./citizen.ts";
 import type { Dossier } from "./brief.ts";
 
 const NONE = { shown: [], more: 0 };
@@ -91,6 +91,12 @@ describe("gateOf — what is held before it runs", () => {
   test("everything else runs", () => {
     expect(gateOf("git status && mise run check", main, main)).toBeNull();
   });
+});
+
+test("the operator API sits at the server's origin, the default release's without one", () => {
+  expect(operatorApi("http://127.0.0.1:4141/mcp")).toBe("http://127.0.0.1:4141/api");
+  expect(operatorApi(undefined)).toBe("http://127.0.0.1:4040/api");
+  expect(operatorApi("not a url")).toBe("http://127.0.0.1:4040/api");
 });
 
 test("attribution names the running model on its provider's address", () => {
