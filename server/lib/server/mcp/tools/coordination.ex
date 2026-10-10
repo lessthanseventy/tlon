@@ -255,10 +255,11 @@ defmodule Server.MCP.Tool.CloseThread do
   defp may_close?(thread, identity) do
     manager = thread.workspace_id && Server.Workspaces.manager(thread.workspace_id)
 
-    identity.agent in [
-      Channel.thread_lead(thread.id),
-      thread.parent_thread_id && Channel.thread_lead(thread.parent_thread_id)
-    ] or
+    (is_binary(identity.agent) and
+       identity.agent in [
+         Channel.thread_lead(thread.id),
+         thread.parent_thread_id && Channel.thread_lead(thread.parent_thread_id)
+       ]) or
       match?(%Server.Coworker{name: name} when name == identity.agent, manager)
   end
 
