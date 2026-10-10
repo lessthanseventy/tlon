@@ -129,6 +129,7 @@ defmodule Server.MCP.ServerTest do
                "get_brief",
                "get_dossier",
                "get_facts",
+               "get_message",
                "get_messages",
                "search_history",
                "search_facts",
@@ -294,6 +295,32 @@ defmodule Server.MCP.ServerTest do
     # DONE is the merged view — the record_done outcome rides in as a source:"event" entry.
     assert Enum.any?(brief["done"]["shown"], &(&1["source"] == "event" and &1["summary"] == "review shipped"))
     assert Enum.any?(brief["recent"], &(&1["body"] == "starting the review"))
+  end
+
+  test "get_message reads one message by id, cross-thread", %{token: token} do
+    session = handshake(token)
+
+    # posted on ANOTHER thread; the caller's token is bound to the setup `thread`
+    {:ok, elsewhere} = Channel.open_thread(%{title: "other thread"})
+
+    {:ok, msg} = Channel.post(%{thread_id: elsewhere.id, author: "andrew", body: "verify me"})
+
+    result = call(token, session, 1, "get_message", %{"id" => msg.id})
+    refute result["isError"]
+
+    rendered = decode_tool_json(result)
+    assert rendered["id"] == msg.id
+    assert rendered["author"] == "andrew"
+    assert rendered["body"] == "verify me"
+    assert rendered["thread_id"] == elsewhere.id
+  end
+
+  test "get_message with an unknown id returns a tool error, not a crash", %{token: token} do
+    session = handshake(token)
+
+    result = call(token, session, 1, "get_message", %{"id" => 999_999})
+
+    assert result["isError"]
   end
 
   test "an unchecked derived fact reads back as an opinion — the §4a query", %{token: token} do

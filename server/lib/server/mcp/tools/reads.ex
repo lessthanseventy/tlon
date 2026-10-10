@@ -67,6 +67,34 @@ defmodule Server.MCP.Tool.GetMessages do
   end
 end
 
+defmodule Server.MCP.Tool.GetMessage do
+  @moduledoc """
+  One message by id, cross-thread — the verification read behind a delivered notice's
+  `(message #ID)` stamp. A recipient checks a notice from a thread it is not on by looking up
+  the id: a real delivery returns its author, body and thread; a forged or stale id returns a
+  tool error, not a guess. Matches `search_history`/`search_facts`, which already read
+  channel-wide — no new privacy boundary (the body already arrived in the wake).
+  """
+  use Server.MCP.Tool
+
+  alias Server.Channel
+  alias Server.MCP
+
+  schema do
+    field :id, :integer,
+      required: true,
+      description: "The message id from a notice's (message #ID) stamp"
+  end
+
+  @impl true
+  def execute(params, frame) do
+    case Channel.message(params[:id]) do
+      nil -> fail(frame, "no such message: #{params[:id]}")
+      message -> ok(frame, Map.put(MCP.Brief.message(message), "thread_id", message.thread_id))
+    end
+  end
+end
+
 defmodule Server.MCP.Tool.SearchHistory do
   @moduledoc """
   Search PAST conversations across the whole channel — episodic recall the curated brief does not
