@@ -277,6 +277,17 @@ defmodule Server.MCP.GatewayTest do
     assert {404, _} = get_json("/api/office/archive/nope")
   end
 
+  test "GET /api/office/margin/:ws is Uqbar's margin notes, newest first" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "margined", type: "code", scope: "project", repos: [], roster: []})
+    {:ok, root} = Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
+    {:ok, _} = Channel.post(%{thread_id: root.id, author: "uqbar", body: "cut 650fa4a", kind: "margin"})
+
+    assert {200, [%{"author" => "uqbar", "body" => "cut 650fa4a", "at" => _}]} =
+             get_json("/api/office/margin/#{ws.id}")
+
+    assert {404, _} = get_json("/api/office/margin/nope")
+  end
+
   test "GET /api/office/board/:ws is the backlog grouped by epic, with progress" do
     {:ok, ws} = Server.Workspaces.register(%{name: "boarded", type: "code", scope: "project", repos: [], roster: []})
     {:ok, epic} = Server.Tickets.file(%{workspace_id: ws.id, title: "Toy", kind: "epic"})
