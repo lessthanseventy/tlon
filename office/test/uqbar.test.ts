@@ -209,3 +209,38 @@ describe("torn pages", () => {
     expect(frameHashes()).toEqual(JSON.parse(readFileSync(GOLDEN, "utf8")))
   })
 })
+
+import { STRAIGHTEN } from "../kit/uqbar"
+
+describe("the small joys", () => {
+  type J = { actors: Map<string, { emote: string | null }>; peopleAt(kind: string): unknown[] }
+  const flat = (fr: Parameters<typeof px>[0]) => { const s = corner(zones(WIDTH)).shelf; return px(fr, s.x + 14, s.y + 6) === ROLE.live.toUpperCase() }
+  /** a room with uqbar live (or not), run `ticks`; `reader` seats w0 in the nook (settled) for the run */
+  const day = (a: ReturnType<typeof withUqbar>, ticks: number, reader = false) => seeded(3, () => {
+    const room = new WideRoom(WIDTH), v = viewOf(a, 1), r = room as unknown as J
+    room.render(v, focus, measure, NOW)
+    room.step(v) // seats the crew
+    const w0 = r.actors.get("w0")!
+    if (reader) r.peopleAt = (k) => (k === "read" ? [w0] : [])
+    for (let i = 1; i < ticks; i++) room.step(v)
+    return { fr: room.render(v, focus, measure, NOW), w0, room, v, r }
+  })
+  test("the knocked book lies flat while a session is live and nobody reads", () => {
+    expect(flat(day(withUqbar(), 600).fr)).toBe(true)
+  })
+  test("someone settled in the reading nook straightens it, and it stays up", () => {
+    expect(flat(day(withUqbar(), STRAIGHTEN + 5, true).fr)).toBe(false)
+    expect(flat(day(withUqbar(), STRAIGHTEN + 600, true).fr)).toBe(false)
+  })
+  test("not before they have been there a while", () => {
+    expect(flat(day(withUqbar(), STRAIGHTEN - 5, true).fr)).toBe(true)
+  })
+  test("the next session knocks it over again", () => {
+    const { room, v, r } = day(withUqbar(), STRAIGHTEN + 5, true)
+    const down = viewOf(office(3), 1)
+    for (let i = 0; i < 5; i++) room.step(down)
+    for (let i = 0; i < 5; i++) room.step(v)
+    r.peopleAt = () => []
+    expect(flat(room.render(v, focus, measure, NOW))).toBe(true)
+  })
+})
