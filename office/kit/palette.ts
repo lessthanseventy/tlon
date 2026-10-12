@@ -40,10 +40,12 @@ export function rgb(c: string): number[] {
   return v
 }
 
+/** sRGB channel byte → linear, tabled once: the per-pixel half of `luminance`, for scans over raw bitmaps */
+export const LINEAR = Float64Array.from({ length: 256 }, (_, v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 })
 /** WCAG relative luminance of an #rrggbb colour */
 export function luminance(c: string): number {
-  const [r, g, b] = rgb(c).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 })
-  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+  const [r, g, b] = rgb(c)
+  return 0.2126 * LINEAR[r!]! + 0.7152 * LINEAR[g!]! + 0.0722 * LINEAR[b!]!
 }
 /** WCAG contrast ratio between two colours (1 to 21); text needs 4.5 (AA), large text 3 */
 export function contrast(a: string, b: string): number {

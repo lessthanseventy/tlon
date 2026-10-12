@@ -5,7 +5,7 @@
 import { balloonLines, type Frame, type Hit, type Ink, type Measure } from "../kit/canvas"
 import { placeBox, type Box } from "../kit/balloon"
 import { BODY, SMALL, type Cut } from "../kit/font"
-import { contrast, rgb, ROLE } from "../kit/palette"
+import { contrast, LINEAR, luminance, rgb, ROLE } from "../kit/palette"
 import { png } from "./png"
 import { ESC, line, type Seg } from "./term"
 import type { Viewport } from "./viewport"
@@ -77,13 +77,15 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
   // the art's colour under a box that `c` reads worst against, as #rrggbb: the box is judged by its
   // hardest pixel, so a strip at its edge cannot hide in the average
   const behind = (x: number, y: number, bw: number, bh: number, c: string) => {
-    let worst: string | null = null, low = Infinity
+    const L = luminance(c)
+    let worst = -1, low = Infinity
     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + bh)); j++)
       for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + bw)); i++) {
-        const o = (j * w + i) * 4, px = "#" + [big[o]!, big[o + 1]!, big[o + 2]!].map((v) => v.toString(16).padStart(2, "0")).join(""), r = contrast(c, px)
-        if (r < low) { low = r; worst = px }
+        const o = (j * w + i) * 4, l = 0.2126 * LINEAR[big[o]!]! + 0.7152 * LINEAR[big[o + 1]!]! + 0.0722 * LINEAR[big[o + 2]!]!
+        const r = l > L ? (l + 0.05) / (L + 0.05) : (L + 0.05) / (l + 0.05)
+        if (r < low) { low = r; worst = o }
       }
-    return worst ?? ROLE.ground
+    return worst < 0 ? ROLE.ground : "#" + [big[worst]!, big[worst + 1]!, big[worst + 2]!].map((v) => v.toString(16).padStart(2, "0")).join("")
   }
   for (const i of ink) {
     if (i.t === "text") {
