@@ -1,6 +1,7 @@
 // Argos, the wide room's dog: his data and his day, lifted out of `rooms/wide.ts` so the room's
 // own code shrinks to tile composition and chrome. A room still owns his geometry (his bed, his
 // bowl, the ping-pong table he watches) — these functions take it as plain data, never `Zones`.
+import { DOOR } from "./bathroom"
 import { balloonLines } from "./canvas"
 import { dancing, drawFuss, type Scene } from "./draw"
 import { ROLE, tint } from "./palette"
@@ -160,8 +161,9 @@ export function stepDog(d: Dog, ctx: {
   // a wet trail: he finds the first print and creeps along it to the last
   const trail = ctx.prints()
   if (trail.length >= 2 && d.mode !== "sleep" && !d.fuss && Math.random() < 0.01) {
-    const first = trail[0]!, to: Spot = { x: first.x, y: first.y, aisle: first.y, pose: "stand", face: "left", kind: "roam" }
-    d.path = [{ x: d.x, y: d.aisle }, ...ctx.route(d.x, d.aisle, to), ...trail.slice(1).map((p) => ({ x: p.x, y: p.y }))]
+    // in by the door, as she went: a route straight to the first print cuts through the bathroom's wall
+    const first = trail[0]!, door: Spot = { x: DOOR.x, y: DOOR.y - 3, aisle: DOOR.y + 5, pose: "stand", face: "up", kind: "roam" }
+    d.path = [{ x: d.x, y: d.aisle }, ...ctx.route(d.x, d.aisle, door), { x: first.x, y: first.y }, ...trail.slice(1).map((p) => ({ x: p.x, y: p.y }))]
     d.aisle = trail[trail.length - 1]!.y; d.mode = "walk"; d.host = null; d.creep = true
     return true
   }
