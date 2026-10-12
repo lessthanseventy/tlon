@@ -66,7 +66,7 @@ export const LINE_H = 9, SIZE = 9
  * The margin as ink + hits in room pixels, pinned to the viewport's bottom-left so a pan can't lose
  * it. `text` is baseline-anchored; a note that names a thread gets a hit that opens it, from the
  * viewport edge so the cell holding the first glyph is on it. A hit samples a cell's centre, so it
- * reaches half a cell row below the baseline: the row holding the baseline is on it wherever in the cell
+ * reaches half a terminal cell row (`measure.rowHeight`) below the baseline: the row holding the baseline is on it wherever in the cell
  * the baseline falls.
  */
 export function marginInk(
@@ -74,7 +74,7 @@ export function marginInk(
   measure: Measure = (s) => s.length * 4,
 ): { ink: Ink[]; hits: Hit[] } {
   const ls = linesOf(notes, looks, over), ink: Ink[] = [], hits: Hit[] = []
-  const below = Math.max(2, (measure.lineHeight?.(SIZE) ?? 0) / 2 + 0.01)
+  const below = Math.max(2, (measure.rowHeight ?? 0) / 2 + 0.01)
   const y0 = vp.y + vp.h - 4 - (ls.length - 1) * LINE_H
   ls.forEach((l, i) => {
     const x = vp.x + 2, y = y0 + i * LINE_H

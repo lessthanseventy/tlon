@@ -48,6 +48,7 @@ export function measureFor(g: Geometry): Measure {
   const zoom = textScale(g)
   const m: Measure = (s, size) => { const { font, sc } = typeFor(size, zoom); return (g.kitty ? s.length * font.w * sc : s.length * g.cw) / g.k }
   m.lineHeight = (size) => { const { font, sc } = typeFor(size, zoom); return (g.kitty ? font.h * sc + 2 : g.ch) / g.k }
+  m.rowHeight = g.ch / g.k
   return m
 }
 
