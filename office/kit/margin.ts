@@ -64,7 +64,8 @@ export function linesOf(notes: Note[], looks: Looks, over: number | null): Line[
 export const LINE_H = 9, SIZE = 9
 /**
  * The margin as ink + hits in room pixels, pinned to the viewport's bottom-left so a pan can't lose
- * it. `text` is baseline-anchored; a note that names a thread gets a hit that opens it.
+ * it. `text` is baseline-anchored; a note that names a thread gets a hit that opens it, from the
+ * viewport edge so the cell holding the first glyph is on it.
  */
 export function marginInk(
   notes: Note[], looks: Looks, over: number | null, vp: { x: number; y: number; w: number; h: number },
@@ -75,7 +76,7 @@ export function marginInk(
   ls.forEach((l, i) => {
     const x = vp.x + 2, y = y0 + i * LINE_H
     ink.push({ t: "text", s: l.text, x, y, color: l.color, size: SIZE, align: "left" })
-    if (l.tid !== null) hits.push({ x, y: y - LINE_H + 2, w: Math.min(vp.w - 4, measure(l.text, SIZE)), h: LINE_H, tip: `${l.text} — enter opens #${l.tid}`, act: { kind: "thread", tid: l.tid }, note: l.tid })
+    if (l.tid !== null) hits.push({ x: vp.x, y: y - LINE_H + 2, w: Math.min(vp.w - 2, measure(l.text, SIZE) + 2), h: LINE_H, tip: `${l.text} — enter opens #${l.tid}`, act: { kind: "thread", tid: l.tid }, note: l.tid })
   })
   return { ink, hits }
 }
