@@ -4,13 +4,14 @@ import { BATH, DOOR, FALL_LIFE, LIFE, RIM } from "../kit/bathroom"
 import { WideRoom } from "../rooms/wide"
 import { office, seeded } from "./golden"
 
-type Inside = { cat: { x: number; y: number; mode: string; wet: number; fell: boolean; path: unknown[] }; tick: number; prints: { x: number; y: number; at: number; until: number }[] }
+type Inside = { hour: () => number; cat: { x: number; y: number; mode: string; wet: number; fell: boolean; path: unknown[] }; tick: number; prints: { x: number; y: number; at: number; until: number }[] }
 const inside = (r: WideRoom) => r as unknown as Inside
 
 /** a trip from the start (the room's own catDo, no waiting on chance): the cat's tile at every change, and every print laid */
 function trip(seed: number, fall: boolean) {
   return seeded(seed, () => {
     const room = new WideRoom(696), a = viewOf(office(2), 1), r = inside(room)
+    r.hour = () => 16 // her day follows the clock; the gate runs the suite at 03:00 and 15:00
     for (let i = 0; i < 20; i++) room.step(a)
     const real = Math.random
     expect(room.catDo("drink")).toBe(true)
@@ -50,29 +51,25 @@ describe("Nina's drinking trip", () => {
     expect(t.prints.length).toBeGreaterThan(0)
     for (const p of t.prints) expect(p.until - p.at).toBe(LIFE)
     expect(t.prints.map((p) => [p.x, p.y, p.at, p.until])).toEqual(
-      [[38,172,332,932],
-      [42,178,344,944],
-      [48,180,356,956],
-      [54,180,368,968],
-      [60,180,380,980],
-      [66,180,392,992],
-      [68,184,404,1004],
-      [70,188,416,1016],
-      [76,188,428,1028],
-      [82,188,440,1040],
-      [88,188,452,1052],
-      [94,188,464,1064],
-      [94,182,476,1076],
-      [94,176,488,1088],
-      [94,170,500,1100],
-      [94,164,512,1112],
-      [92,158,524,1124],
-      [86,152,536,1136],
-      [80,146,548,1148],
-      [74,140,560,1160],
-      [68,134,572,1172],
-      [62,128,584,1184],
-      [56,128,596,1196]],
+      [[38,172,380,980],
+      [42,178,392,992],
+      [48,180,404,1004],
+      [54,180,416,1016],
+      [60,180,428,1028],
+      [66,180,440,1040],
+      [68,184,452,1052],
+      [70,188,464,1064],
+      [76,188,476,1076],
+      [82,188,488,1088],
+      [88,188,500,1100],
+      [94,188,512,1112],
+      [94,182,524,1124],
+      [94,176,536,1136],
+      [94,170,548,1148],
+      [94,164,560,1160],
+      [92,158,572,1172],
+      [86,152,584,1184],
+      [80,146,596,1196]],
     )
   })
 
@@ -85,6 +82,7 @@ describe("Nina's drinking trip", () => {
 
   test("the prints are gone a LIFE after the last was laid", () => seeded(7, () => {
     const room = new WideRoom(696), a = viewOf(office(2), 1), r = inside(room)
+    r.hour = () => 16
     for (let i = 0; i < 20; i++) room.step(a)
     room.catDo("drink")
     for (let i = 0; i < 2_000 && !(r.cat.wet > 0 && r.tick > r.cat.wet); i++) room.step(a)
