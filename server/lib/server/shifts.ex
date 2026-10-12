@@ -63,11 +63,13 @@ defmodule Server.Shifts do
   @doc """
   An offer taken (`Server.Attention`, an answer naming crew `crew`): that crew goes on, and an offer
   made for a limit (`"back"`, the crew it took off) schedules the offer to come back at the reset.
+  `:ok` | `switch/2`'s error (the crew has lost its last seat since the offer, say).
   """
   def take(%{"workspace" => workspace_id} = offer, crew) do
-    {:ok, _} = switch(workspace_id, crew)
-    if offer["back"], do: remind(workspace_id, offer)
-    :ok
+    with {:ok, _} <- switch(workspace_id, crew) do
+      if offer["back"], do: remind(workspace_id, offer)
+      :ok
+    end
   end
 
   @doc """
