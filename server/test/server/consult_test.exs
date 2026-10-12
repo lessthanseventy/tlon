@@ -1,9 +1,10 @@
 defmodule Server.ConsultTest do
   # The agent-to-agent consult (docs/plans/2026-08-17-agent-peer-consult-design.md):
   # a correlated ask/answer pair between two agents on different threads. The design
-  # review pinned three invariants this suite proves: the caller never names a thread
-  # (only a peer agent name), the target resolves agent-filtered with a defined tie-break,
-  # and the mirror is a bidirectional bridge keyed on consult_id with an echo guard.
+  # review pinned three invariants this suite proves: the caller names a peer agent (and at
+  # most one of that peer's own threads, never anyone else's), the target resolves
+  # agent-filtered with a defined tie-break, and the mirror is a bidirectional bridge keyed
+  # on consult_id with an echo guard.
   use ExUnit.Case, async: false
 
   import Ecto.Query
@@ -100,6 +101,40 @@ defmodule Server.ConsultTest do
 
       # The tie-break is warmth (last_active_at), not thread-id order.
       assert peer_thread_id == machine.id
+    end
+
+    test "a thread the caller names, one the peer is on, wins over the tie-break" do
+      {:ok, caller_thread} = Channel.open_thread(%{title: "sheriff's beat"})
+      {:ok, warm} = Channel.open_thread(%{title: "#239 the other workline"})
+      {:ok, about} = Channel.open_thread(%{title: "#242 the one the verdict is about"})
+      {:ok, me} = Staff.register_agent(%{name: "scharlach", mandate: "ask", engine: "fresh"})
+      {:ok, peer} = Staff.register_agent(%{name: "teodelina", mandate: "answer", engine: "fresh"})
+      {:ok, _} = Staff.assign(warm, peer)
+      {:ok, _} = Staff.assign(about, peer)
+      {:ok, _} = Staff.start_session(%{agent_id: peer.id, thread_id: warm.id, pane_ref: "wW"})
+
+      {:ok, %{peer_thread_id: peer_thread_id}} =
+        Consult.consult_peer(caller(caller_thread, me), "teodelina", "QA verdict for #242", about.id)
+
+      assert peer_thread_id == about.id
+      assert [%Message{body: "QA verdict for #242"}] = Channel.thread_messages(about)
+      assert Channel.thread_messages(warm) == []
+    end
+
+    test "a named thread the peer isn't on is refused — never delivered elsewhere" do
+      {:ok, caller_thread} = Channel.open_thread(%{title: "caller's work"})
+      {:ok, theirs} = Channel.open_thread(%{title: "theirs"})
+      {:ok, other} = Channel.open_thread(%{title: "someone else's"})
+      {:ok, me} = Staff.register_agent(%{name: "pi", mandate: "ask", engine: "fresh"})
+      {:ok, claude} = Staff.register_agent(%{name: "claude", mandate: "answer", engine: "fresh"})
+      {:ok, _} = Staff.assign(theirs, claude)
+
+      assert {:error, {:not_on_thread, id}} =
+               Consult.consult_peer(caller(caller_thread, me), "claude", "hello?", other.id)
+
+      assert id == other.id
+      assert Channel.thread_messages(theirs) == []
+      assert Channel.thread_messages(other) == []
     end
 
     test "a stray cross-agent session on the peer's thread does not misroute the target" do

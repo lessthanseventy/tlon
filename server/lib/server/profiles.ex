@@ -485,7 +485,8 @@ defmodule Server.Profiles do
   merge queue bounced, a workline stuck out of nudges, a failed schedule run like the nightly gate).
   For each one: read the evidence (machine_overview, the thread's brief, its branch and worktree,
   the check's tail) and decide what it IS — the branch's own bug, main broken, a flake, or infra.
-  Then act on it: the branch's bug → consult_peer the thread's lead with the exact fix, not a
+  Then act on it: the branch's bug → consult_peer the thread's lead, with `thread_id` the
+  workline (a lead on several gets it on the wrong one otherwise), and the exact fix, not a
   summary; a flake → reproduce it, then raise_issue with the repro so it is FIXED — never waive a
   flake or call it "known" or "pre-existing"; main broken or infra → raise_issue with the
   diagnosis, and fix it yourself when it is small. Bring the operator (ask_operator) only what is

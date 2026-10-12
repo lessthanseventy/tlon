@@ -374,11 +374,12 @@ end
 defmodule Server.MCP.Tool.ConsultPeer do
   @moduledoc """
   Ask a peer agent a question — the third DELIBERATE cross-thread verb (after
-  open_thread/close_thread). The caller names a peer AGENT, never a thread id; server
-  resolves the peer's target thread (agent-filtered, with a defined tie-break) and
-  delivers the ask there. The peer's answer is mirrored back to the caller's own thread
-  (see `Server.Consult`), so the caller reads it in its own dossier. A missing or
-  ambiguous peer is refused.
+  open_thread/close_thread). The caller names a peer AGENT, and, when the ask is about one of
+  the peer's threads, that `thread_id`: a peer on several worklines gets it there (one the peer
+  isn't on is refused). Without one, server resolves the peer's target thread (agent-filtered,
+  with a defined tie-break) and delivers the ask there. The peer's answer is mirrored back to
+  the caller's own thread (see `Server.Consult`), so the caller reads it in its own dossier. A
+  missing or ambiguous peer is refused.
   """
   use Server.MCP.Tool
 
@@ -387,13 +388,17 @@ defmodule Server.MCP.Tool.ConsultPeer do
   schema do
     field :peer, :string, required: true, description: "The peer agent's name to ask"
     field :prompt, :string, required: true, description: "The question to ask the peer"
+
+    field :thread_id, :integer,
+      description:
+        "The peer's thread this is about (a workline id) — pass it whenever the ask concerns a specific thread: a peer on several gets it on the wrong one otherwise"
   end
 
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    case Consult.consult_peer(identity, params[:peer], params[:prompt]) do
+    case Consult.consult_peer(identity, params[:peer], params[:prompt], params[:thread_id]) do
       {:ok, %{consult_id: consult_id, peer_thread_id: peer_thread_id}} ->
         ok(frame, %{"consult_id" => consult_id, "peer_thread_id" => peer_thread_id})
 

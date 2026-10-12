@@ -27,9 +27,10 @@ judgment you keep in your own context dies with you.
   its answer back as the tool's result, mid-turn: `context: transcript` (the default) shows it
   your recent session, `context: none` is a clean one-shot. The operator has the same as
   `/consult [model]` and `/fresh [model]`.
-- **Ask a coworker directly with `consult_peer(peer, prompt)`.** It delivers an ask to the
-  peer's thread; the peer's answer is mirrored back to your own thread, so you read it in
-  your dossier. Address the peer by agent name, never a thread id.
+- **Ask a coworker directly with `consult_peer(peer, prompt, thread_id?)`.** It delivers an ask
+  to the peer's thread; the peer's answer is mirrored back to your own thread, so you read it
+  in your dossier. Address the peer by agent name, and when the ask is about one of its
+  threads pass that `thread_id`: a peer on several worklines gets it on the wrong one otherwise.
 - **When a coworker consults YOU, answer with a `reply_to`.** Your brief renders a consult
   ask as "<caller> is consulting you — reply to answer". Answer it by posting on your thread
   with `post_message(body, reply_to: <the ask's message id>)` — the `reply_to` is what the

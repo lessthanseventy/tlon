@@ -1,12 +1,13 @@
 defmodule Server.Consult do
   @moduledoc """
   The agent-to-agent consult (docs/plans/2026-08-17-agent-peer-consult-design.md): a
-  correlated ask/answer pair between two agents on different threads. `consult_peer/3`
+  correlated ask/answer pair between two agents on different threads. `consult_peer/4`
   delivers an ask to a peer's thread; `maybe_mirror/1` carries replies between the two
   sides for the life of the consult.
 
-  The invariants the design review pinned: the caller never names a thread — only a peer
-  agent name, resolved by server; server mediates every write through `Server.Channel.post`
+  The invariants the design review pinned: the caller names a peer agent, resolved by
+  server, and at most one of that peer's own threads (one it isn't on is refused, so a named
+  thread narrows the target, never redirects it); server mediates every write through `Server.Channel.post`
   (the single writer); authors are always real identities; and the mirror is a
   bidirectional bridge keyed on `consult_id` with an echo guard (`mirrored`), so a
   mirrored copy is never re-mirrored.
@@ -21,13 +22,16 @@ defmodule Server.Consult do
 
   @doc """
   Ask a peer a question. `caller` is the MCP identity (`%{thread_id, agent_id, agent,
-  session_id}`); `peer` is an agent NAME, never a thread id. Resolves the peer's target
-  thread (agent-filtered, with a defined tie-break), creates the ask on that thread, and
-  returns `{:ok, %{consult_id, peer_thread_id}}` or `{:error, reason}`.
+  session_id}`); `peer` is an agent NAME. `about`, when given, is the peer's thread the ask is
+  about: it must be one the peer leads or has a live session on (`{:error, {:not_on_thread,
+  id}}` otherwise — never delivered elsewhere), and it wins. Without it the peer's target thread
+  resolves agent-filtered, with a defined tie-break, which picks one of several worklines a peer
+  is on by warmth, not by what the ask is about. Creates the ask on that thread and returns
+  `{:ok, %{consult_id, peer_thread_id}}` or `{:error, reason}`.
   """
-  def consult_peer(caller, peer, prompt) do
+  def consult_peer(caller, peer, prompt, about \\ nil) do
     with {:ok, agent} <- resolve_peer(peer),
-         {:ok, thread} <- resolve_target(agent),
+         {:ok, thread} <- if(about, do: named_target(agent, about), else: resolve_target(agent)),
          {:ok, ask} <- create_ask(caller, thread, prompt) do
       {:ok, %{consult_id: ask.consult_id, peer_thread_id: thread.id}}
     end
@@ -89,6 +93,18 @@ defmodule Server.Consult do
     case Staff.agent_by_name(peer) do
       %Agent{} = agent -> {:ok, agent}
       nil -> {:error, :unknown_peer}
+    end
+  end
+
+  defp named_target(%Agent{} = peer, thread_id) do
+    case Enum.find(Staff.threads_for(peer), &(&1.id == thread_id)) do
+      nil ->
+        if Staff.live_session(thread_id, peer.id),
+          do: {:ok, Repo.get!(Server.Thread, thread_id)},
+          else: {:error, {:not_on_thread, thread_id}}
+
+      thread ->
+        {:ok, thread}
     end
   end
 
