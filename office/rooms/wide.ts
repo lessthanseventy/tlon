@@ -20,6 +20,7 @@ import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { meetingTile } from "../kit/tiles/meeting"
 import { loungeTile } from "../kit/tiles/lounge"
+import { bathroomTile } from "../kit/tiles/bathroom"
 import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR } from "../kit/tiles/cat-corner"
 import { officeTile } from "../kit/tiles/office"
 import { floorPlan } from "../kit/floor"
@@ -124,6 +125,7 @@ export class WideRoom extends Sim<Layout> {
   private readonly dog: Dog
   private readonly games: ReturnType<typeof gamesTile>
   private readonly kitchen: ReturnType<typeof kitchenTile>
+  private readonly bathroom: ReturnType<typeof bathroomTile>
   private readonly meeting: ReturnType<typeof meetingTile>
   private readonly lounge: ReturnType<typeof loungeTile>
   private readonly catCorner: ReturnType<typeof catCornerTile>
@@ -146,6 +148,7 @@ export class WideRoom extends Sim<Layout> {
     this.z = zones(width)
     this.games = gamesTile(this.z)
     this.kitchen = kitchenTile(this.z, width)
+    this.bathroom = bathroomTile()
     this.meeting = meetingTile(this.z)
     this.lounge = loungeTile(this.z)
     this.catCorner = catCornerTile(this.z)
@@ -353,6 +356,7 @@ export class WideRoom extends Sim<Layout> {
     for (let i = 0; i < 7; i++) for (const [dx, dy, w] of [[1, 0, 1], [0, 1, 3], [1, 2, 1]] as const) px(20 + i * 9 + dx, 124 + dy, w, 1, ROLE.assistant)
     this.catCorner.draw(sc, a, l, measure, this.live(), focus)
     this.office.draw(sc, a, l, measure, this.live(), focus)
+    this.bathroom.draw(sc, a, l, measure, this.live(), focus)
     drawCloset(sc, closet(), this.fire)
     if (this.fire) drawFire(sc, closet())
 

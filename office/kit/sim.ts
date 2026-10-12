@@ -14,7 +14,7 @@ import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temp
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
-export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read"
+export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read" | "bathroom"
 export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note"
 /** the spots where two people settled together get talking (`Sim.together`) */
 const TOGETHER = new Set<string>(["pingpong", "foosball", "pool", "arcade", "couch", "coffee", "cooler", "vending", "chat"])
@@ -95,9 +95,9 @@ export const STRETCH = 20
 export const FIRE_GRACE = 100
 /** the server's warmth window (`Server.Presence`, an hour by default) in ticks: a warm session's glow fades over it */
 export const WARM_TICKS = 36_000
-const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read"])
+const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read", "bathroom"])
 /** what someone at a pastime says now and then (over their head): a nap on the couch is a "z" */
-const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], pool: ["!", "?"], read: ["…", "?", "♥"] }
+const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], pool: ["!", "?"], read: ["…", "?", "♥"], bathroom: ["~", "♪"] }
 /** how the hour pulls at a pastime: coffee in the morning, the machine at lunch, the windows and the couch at night */
 export function moment(kind: string, hour: number, weather?: string, party = false) {
   // a birthday: the crowd gathers at the kitchen counter, cake and a drink

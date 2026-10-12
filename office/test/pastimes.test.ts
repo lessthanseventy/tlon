@@ -242,3 +242,29 @@ describe("the toy's one-key happenings", () => {
     expect((room as unknown as { hour: () => number }).hour()).toBe(23)
   })
 })
+
+describe("the bathroom", () => {
+  test("it is a pastime: the floor plan has a spot at the sink and it is in the lounge list", () => {
+    const p = widePlan(696), s = p.lounge.filter((x) => x.kind === "bathroom")
+    expect(s).toHaveLength(1)
+    expect(s[0]).toMatchObject({ x: 68, y: 172, aisle: 191 })
+  })
+  test("no wall or fixture is walked through: every route to the sink stays out of the blocks", () => {
+    const p = widePlan(696), l = p.layout(viewOf(office(["yu"]), 1) as never), spot = p.lounge.find((x) => x.kind === "bathroom")!
+    const blocks = p.blocks(l)
+    const hit = (x: number, y: number) => blocks.find((b) => x > b.x && x < b.x + b.w - 1 && y > b.y && y < b.y + b.h - 1)
+    for (const from of [{ x: 150, y: 100 }, { x: 94, y: 160 }, { x: 450, y: 176 }]) {
+      const pts = [from, ...p.route(from.x, from.y, spot)]
+      for (let i = 1; i < pts.length; i++) for (let t = 0; t <= 1; t += 0.05) {
+        const x = pts[i - 1]!.x + (pts[i]!.x - pts[i - 1]!.x) * t, y = pts[i - 1]!.y + (pts[i]!.y - pts[i - 1]!.y) * t
+        expect(hit(x, y)).toBeUndefined()
+      }
+    }
+  })
+  test("someone idle goes in and settles at the sink", () => chance(0.999, () => {
+    const room = new WideRoom(696), a = viewOf(office(["yu"]), 1), r = inside(room)
+    let seen = false
+    for (let i = 0; i < 6000 && !seen; i++) { room.step(a); seen = [...r.actors.values()].some((x) => x.spot.kind === "bathroom" && !x.moving && !x.path.length) }
+    expect(seen).toBe(true)
+  }))
+})

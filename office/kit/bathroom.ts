@@ -3,8 +3,8 @@
 import type { Pt } from "./sim"
 
 export const BATH = { x: 22, y: 152, w: 58, h: 31 }
-/** the gap in the bottom wall: where the room meets the hall runner */
-export const DOOR = { x: 50, y: BATH.y + BATH.h }
+/** the gap in the bottom wall, in line with the sink's spot: where the room meets the hall runner */
+export const DOOR = { x: 68, y: BATH.y + BATH.h }
 /** the tub's rim, where she sits to drink, and the floor in front of it she hops up from */
 export const RIM = { x: 38, y: 166 }
 export const RIM_FLOOR = { x: 38, y: 174 }
