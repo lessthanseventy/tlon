@@ -34,20 +34,25 @@ afterAll(() => {
   server.stop(true)
 })
 
-const until = async (ok: () => boolean) => { for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50) }
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
+// a step that never lands says which one, how long the test had run, and what the pane showed
+const t0 = Date.now()
+const until = async (what: string, ok: () => boolean) => {
+  for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50)
+  if (!ok()) throw new Error(`never saw ${what} after ${Date.now() - t0}ms (first inbox read given up: ${firstInboxGivenUp}); pane:\n${screen()}`)
+}
 
 test("the finder lists the snapshot's threads while the inbox read is still out", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' bun tui/main.ts`)
   // the snapshot is in: its workspace names the header
-  await until(() => screen().includes("Toy"))
+  await until("the workspace in the header", () => screen().includes("Toy"))
   expect(screen()).toContain("Toy")
   tmux("send-keys", "-t", "0", "/")
-  await until(() => screen().includes("FIND"))
+  await until("FIND after /", () => screen().includes("FIND"))
   tmux("send-keys", "-t", "0", "-l", "slow inbox")
-  await until(() => screen().includes("#42 the slow inbox"))
+  await until("#42 in the finder", () => screen().includes("#42 the slow inbox"))
   expect(screen()).toContain("#42 the slow inbox")
   // listed while that read was still out, not after the TUI gave up on it
   expect(firstInboxGivenUp).toBe(false)
