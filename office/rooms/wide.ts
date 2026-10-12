@@ -6,7 +6,7 @@
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawDoor, drawVisitor } from "../kit/door"
-import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, type Book, type Pt as Perch } from "../kit/uqbar"
+import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, swatted, FLINCH, type Book, type Pt as Perch } from "../kit/uqbar"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
@@ -145,6 +145,9 @@ export class WideRoom extends Sim<Layout> {
   /** the neighbouring spine Uqbar knocked flat on waking; a reader in the nook sets it right, until the next waking */
   private fallen = true
   private reading = 0
+  /** the book is snapped shut until this tick; Nina may swat again after `swatQuiet` */
+  private flinch = 0
+  private swatQuiet = 0
   private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -165,6 +168,12 @@ export class WideRoom extends Sim<Layout> {
   /** Uqbar's volume one tick toward where it wants to be; true while it is in the air */
   private stepVolume(a: Agents): boolean {
     this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.boardEdge, spineHome(corner(this.z).shelf)))
+    const c = this.cat
+    if (c.mode !== "sleep" && this.tick >= this.swatQuiet && swatted(this.book, this.book.flying, c)) {
+      c.mode = "play"; c.path = []; c.until = this.tick + 60
+      this.catSay(this.line("Nina", "swat", NINA.swat))
+      this.flinch = this.tick + FLINCH; this.swatQuiet = this.tick + 200
+    }
     if (!a.uqbar) { this.fallen = true; this.reading = 0 }
     else if (this.fallen) {
       const reader = this.peopleAt("read")[0]
@@ -398,7 +407,7 @@ export class WideRoom extends Sim<Layout> {
     }
     const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
     drawShelf(sc, shelf, mode === "shelved", !!a.uqbar && this.fallen, this.shelfNudge())
-    drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null)
+    drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null, this.tick < this.flinch)
     for (const p of this.planes) drawPlane(sc, p)
     const caller = this.visitor()
     if (caller) drawVisitor(sc, caller.x, caller.y, caller.kind)

@@ -244,3 +244,54 @@ describe("the small joys", () => {
     expect(flat(room.render(v, focus, measure, NOW))).toBe(true)
   })
 })
+
+import { FLINCH, swatted } from "../kit/uqbar"
+import { NINA } from "../kit/voices"
+
+describe("Nina's swat", () => {
+  test("in reach only while the book is in the air and low over her", () => {
+    const c = { x: 100, y: 100 }
+    expect(swatted({ x: 94, y: 92 }, true, c)).toBe(true)
+    expect(swatted({ x: 94, y: 92 }, false, c)).toBe(false)
+    expect(swatted({ x: 94, y: 40 }, true, c)).toBe(false)
+    expect(swatted({ x: 300, y: 92 }, true, c)).toBe(false)
+  })
+  type S = { book: { x: number; y: number; flying: boolean; riffle: number }; cat: { x: number; y: number; mode: string; until: number; path: unknown[]; said: string | null }; flinch: number; tick: number }
+  /** `flying` and `near` place the book over her in the air, or far off; not flying: asleep on its shelf with her beside it */
+  const swatRoom = (flying: boolean, near: boolean) => seeded(3, () => {
+    const room = new WideRoom(WIDTH), v = viewOf(flying ? withUqbar() : office(3), 1), r = room as unknown as S
+    room.render(v, focus, measure, NOW)
+    for (let i = 0; i < 50; i++) room.step(v)
+    const h = spot()
+    r.cat.mode = "sit"; r.cat.path = []; r.cat.said = null; r.cat.until = r.tick + 5000
+    if (flying) { r.cat.x = 200; r.cat.y = 120; r.book = { x: near ? 196 : 400, y: 112, flying: true, riffle: 0 } }
+    else { r.cat.x = h.x + 4; r.cat.y = h.y + 8; r.book = { ...h, flying: false, riffle: 0 } }
+    room.step(v)
+    return r
+  })
+  test("she bats at it, says so, and the book snaps shut", () => {
+    const r = swatRoom(true, true)
+    expect(r.cat.mode).toBe("play")
+    expect(NINA.swat).toContain(r.cat.said!)
+    expect(r.flinch).toBeGreaterThan(r.tick)
+    expect(r.flinch - r.tick).toBeLessThanOrEqual(FLINCH)
+  })
+  test("not when it is perched or far away", () => {
+    expect(swatRoom(false, true).cat.mode).toBe("sit")
+    expect(swatRoom(true, false).cat.mode).toBe("sit")
+  })
+  test("once per pass: she does not swat again at once", () => {
+    seeded(3, () => {
+      const room = new WideRoom(WIDTH), v = viewOf(withUqbar(), 1), r = room as unknown as S
+      room.render(v, focus, measure, NOW)
+      for (let i = 0; i < 50; i++) room.step(v)
+      r.cat.x = 200; r.cat.y = 120
+      r.book = { x: 196, y: 112, flying: true, riffle: 0 }
+      room.step(v)
+      const first = r.flinch
+      r.book = { x: 196, y: 112, flying: true, riffle: 0 }
+      room.step(v)
+      expect(r.flinch).toBe(first)
+    })
+  })
+})
