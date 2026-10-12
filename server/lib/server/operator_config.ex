@@ -250,38 +250,13 @@ defmodule Server.OperatorConfig do
 
   @doc """
   Oban's compiled config with the boot knobs applied: the intake and maintain crons' intervals and
-  Lifeline's rescue window. A config without those plugins (the test env's) passes through as is.
+  Lifeline's rescue window, and under lights out (`Server.Pause`) the verify and landing queues
+  started paused. A config without those plugins (the test env's) passes through as is.
   """
   @spec boot_oban(keyword(), String.t()) :: keyword()
   def boot_oban(oban, path \\ path()) do
-    case oban[:plugins] do
-      nil ->
-        oban
-
-      plugins ->
-        every = fn key -> "*/#{setting(key, path)} * * * *" end
-
-        cron = %{
-          Server.Jobs.Intake => every.("intake_every_minutes"),
-          Server.Jobs.Maintain => every.("maintain_every_minutes")
-        }
-
-        plugins =
-          Enum.map(plugins, fn
-            {Oban.Plugins.Lifeline, o} ->
-              {Oban.Plugins.Lifeline,
-               Keyword.put(o, :rescue_after, to_timeout(minute: setting("lifeline_rescue_minutes", path)))}
-
-            {Oban.Plugins.Cron, o} ->
-              {Oban.Plugins.Cron,
-               Keyword.update(o, :crontab, [], fn tab -> for {expr, w} <- tab, do: {Map.get(cron, w, expr), w} end)}
-
-            other ->
-              other
-          end)
-
-        Keyword.put(oban, :plugins, plugins)
-    end
+    oban = if read(path)["pause"] == "lights_out", do: paused_gates(oban), else: oban
+    boot_plugins(oban, path)
   end
 
   @doc "One knob's current value, the default where the file is silent or holds something invalid."
@@ -341,4 +316,42 @@ defmodule Server.OperatorConfig do
 
   defp expects(%{type: "bool"}), do: "true or false"
   defp expects(%{type: "string"}), do: "text"
+
+  defp paused_gates(oban), do: Keyword.update(oban, :queues, [], &Enum.map(&1, fn q -> paused_gate(q) end))
+
+  defp paused_gate({q, limit}) when q in [:verify, :landing] and is_integer(limit),
+    do: {q, [limit: limit, paused: true]}
+
+  defp paused_gate(queue), do: queue
+
+  defp boot_plugins(oban, path) do
+    case oban[:plugins] do
+      nil ->
+        oban
+
+      plugins ->
+        every = fn key -> "*/#{setting(key, path)} * * * *" end
+
+        cron = %{
+          Server.Jobs.Intake => every.("intake_every_minutes"),
+          Server.Jobs.Maintain => every.("maintain_every_minutes")
+        }
+
+        plugins =
+          Enum.map(plugins, fn
+            {Oban.Plugins.Lifeline, o} ->
+              {Oban.Plugins.Lifeline,
+               Keyword.put(o, :rescue_after, to_timeout(minute: setting("lifeline_rescue_minutes", path)))}
+
+            {Oban.Plugins.Cron, o} ->
+              {Oban.Plugins.Cron,
+               Keyword.update(o, :crontab, [], fn tab -> for {expr, w} <- tab, do: {Map.get(cron, w, expr), w} end)}
+
+            other ->
+              other
+          end)
+
+        Keyword.put(oban, :plugins, plugins)
+    end
+  end
 end

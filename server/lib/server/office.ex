@@ -49,6 +49,7 @@ defmodule Server.Office do
       visits: visits(),
       workspaces: Enum.map(wss, &%{id: &1.id, name: &1.name, shift: &1.shift}),
       shifts: shifts(ws_ids),
+      pause: Server.Pause.state(),
       archetypes: archetypes(),
       models: models(),
       counts: Map.new(Repo.all(from(t in Server.Thread, group_by: t.state, select: {t.state, count(t.id)}))),

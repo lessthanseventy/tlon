@@ -134,6 +134,7 @@ defmodule Server.Tmux do
   @doc "Type literal `text` without submitting, then `submit/3` sends Enter — two bursts, or a booting TUI swallows the Enter."
   def send_text(id, window, text, opts \\ []), do: run(id, ["send-keys", "-l", "-t", target(id, window), text], opts)
   def submit(id, window, opts \\ []), do: run(id, ["send-keys", "-t", target(id, window), "Enter"], opts)
+  def interrupt(id, window, opts \\ []), do: run(id, ["send-keys", "-t", target(id, window), "Escape"], opts)
 
   def set_window_option(id, window, name, value, opts \\ []),
     do: run(id, ["set-option", "-w", "-t", target(id, window), name, value], opts)

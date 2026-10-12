@@ -465,6 +465,12 @@ case "$cmd" in
     exec "$SERVER" rpc "case Server.Flags.set(\"$name\", $on) do {:ok, f} -> IO.puts(\"#{f.name} is now $state\"); {:error, why} -> IO.puts(why) end"
     ;;
 
+  pause)
+    mode="${1:-}"
+    [[ "$mode" =~ ^(pencils_down|lights_out|back_to_work)$ ]] || { echo 'usage: tlon-cli.sh pause pencils_down|lights_out|back_to_work' >&2; exit 2; }
+    exec "$SERVER" rpc "{:ok, state} = Server.Pause.$mode(); IO.puts(\"the office: #{state}\")"
+    ;;
+
   quiet)
     # Prints only: the expression runs inside the live node, where a halt would stop the service.
     exec "$SERVER" rpc 'case Server.Rollout.busy() do [] -> IO.puts("quiet"); b -> IO.puts("busy"); Enum.each(b, &IO.puts/1) end'
@@ -551,7 +557,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
