@@ -296,26 +296,30 @@ defmodule Server.Attention do
   end
 
   @doc """
-  Withdraw every open ask about `thread_id` (`ask/5`'s `about`): that thread closed, so nothing is
-  left to decide. Each asker is told on the thread it asked from, so it stops chasing the decision.
+  Withdraw every open ask on `thread_id` or about it (`ask/5`'s `about`): that thread closed, so
+  nothing is left to decide. An asker who asked from another thread is told there, so it stops
+  chasing the decision.
   """
   def withdraw_asks_about(thread_id) do
     from(m in Message,
       where:
         m.kind == "prompt" and is_nil(m.resolved_at) and
-          fragment("? ->> 'about'", m.payload) == ^to_string(thread_id)
+          (fragment("? ->> 'about'", m.payload) == ^to_string(thread_id) or
+             (m.thread_id == ^thread_id and fragment("? \\? 'ask'", m.payload)))
     )
     |> Repo.all()
     |> Enum.each(fn ask ->
       resolve(ask, "withdrawn: ##{thread_id} closed")
 
-      Channel.post(%{
-        thread_id: ask.thread_id,
-        author: "tlon",
-        reply_to: ask.id,
-        body:
-          "@#{ask.payload["ask"]} your ask is withdrawn: ##{thread_id} closed, so there is nothing left to decide — “#{ask.payload["summary"]}”"
-      })
+      if ask.thread_id != thread_id,
+        do:
+          Channel.post(%{
+            thread_id: ask.thread_id,
+            author: "tlon",
+            reply_to: ask.id,
+            body:
+              "@#{ask.payload["ask"]} your ask is withdrawn: ##{thread_id} closed, so there is nothing left to decide — “#{ask.payload["summary"]}”"
+          })
     end)
   end
 
@@ -324,7 +328,7 @@ defmodule Server.Attention do
     case Repo.get(Message, id) do
       %Message{kind: "prompt", payload: %{"ask" => _}, resolved_at: nil} = prompt ->
         case pick(prompt, body) do
-          {key, rest} -> answer(prompt, author, body, key, rest)
+          {key, rest} -> prompt |> answer(author, body, key, rest) |> settling(prompt.thread_id)
           nil -> {:error, :no_such_option}
         end
 
@@ -333,6 +337,25 @@ defmodule Server.Attention do
 
       _ ->
         {:error, :not_found}
+    end
+  end
+
+  defp settling({:ok, _} = posted, thread_id) do
+    answered(thread_id)
+    posted
+  end
+
+  defp settling(error, _thread_id), do: error
+
+  # an asker the shift took off the bench can't act on the answer: it goes to whoever leads the thread now
+  defp addressee(thread_id, asker) do
+    with %Thread{workspace_id: ws} when not is_nil(ws) <- Repo.get(Thread, thread_id),
+         true <- Enum.any?(Server.Workspaces.bench_all(ws), &(&1.name == asker)),
+         false <- Enum.any?(Server.Workspaces.bench(ws), &(&1.name == asker)),
+         lead when is_binary(lead) and lead != asker <- Channel.thread_lead(thread_id) do
+      "@#{lead} (#{asker} asked, now off shift)"
+    else
+      _ -> "@#{asker}"
     end
   end
 
@@ -393,7 +416,7 @@ defmodule Server.Attention do
          rest
        ) do
     label = Enum.find_value(opts, &(&1["key"] == key && &1["label"]))
-    text = "@#{asker} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
+    text = "#{addressee(prompt.thread_id, asker)} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
 
     # the night shift's offer (Server.Shifts): its first answer puts the day crew back, before the
     # ask is resolved, so a switch that fails leaves it open to answer again

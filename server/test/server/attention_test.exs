@@ -288,5 +288,35 @@ defmodule Server.AttentionTest do
       assert body =~ "@scharlach"
       assert body =~ "##{about.id} closed"
     end
+
+    test "an ask on a thread is withdrawn when that thread closes, with no note on the closed thread" do
+      {:ok, built} = Channel.open_thread(%{title: "#131 streamed usage"})
+      {:ok, a} = Attention.ask(built.id, "hladik", "close as no-change?", ["close", "tweak anyway"])
+
+      {:ok, _} = Channel.close_thread(built)
+
+      assert Repo.get!(Message, a.id).resolution == "withdrawn: ##{built.id} closed"
+      assert Attention.open_asks() == []
+      refute Enum.any?(Channel.thread_messages(built), &(&1.author == "tlon" and &1.body =~ "withdrawn"))
+    end
+
+    test "answering by id settles the thread's question, as a reply on it does", %{thread: t} do
+      {:ok, _} = t |> Ecto.Changeset.change(awaiting: "andrew") |> Repo.update()
+      {:ok, a} = Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
+
+      assert {:ok, _} = Attention.answer_ask(a.id, "andrew", "1")
+      assert Repo.get!(Server.Thread, t.id).awaiting == nil
+    end
+
+    test "an asker gone off shift: the answer goes to the lead on shift, and names who asked", %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "otalora", archetype: "builder", crew: "night"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "emma", archetype: "builder", crew: "day"})
+      {:ok, built} = Server.Workline.open(%{title: "the small joys", slug: "joys", stage: "build", workspace_id: ws.id})
+      {:ok, a} = Attention.ask(built.id, "otalora", "resume the build?", ["resume", "hold"])
+      {:ok, _} = Channel.assign_lead(built.id, "emma")
+
+      assert {:ok, %Message{body: body}} = Attention.answer_ask(a.id, "andrew", "1")
+      assert body == "@emma (otalora asked, now off shift) resume the build? → resume"
+    end
   end
 end
