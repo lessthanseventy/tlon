@@ -6,6 +6,7 @@ import { ROLE, tint } from "../palette"
 import type { Rect, Tile } from "../tiles"
 import type { CatPlan, Pt } from "../sim"
 import type { Agents } from "../types"
+import { BATH, DOOR, RIM, RIM_FLOOR } from "../bathroom"
 import { fishWatch, HALL, OFF_LANE, OFF_W, corner, type Layout, type Zones } from "../../rooms/wide"
 
 const TOWER_X = 78, PERCH_TOP = { x: 83, y: 52 }, PERCH_MID = { x: 83, y: 69 }
@@ -26,6 +27,7 @@ export function catCornerTile(z: Zones): Tile<Layout> & { cat(): CatPlan } {
     spots: () => ({}),
     cat: (): CatPlan => ({
       nap: CAT_NAP, desk: CAT_DESK, play: PLAY, litter: LITTER, perches: [PERCH_TOP, PERCH_MID], warm: CAT_WARM,
+      bath: { rim: RIM, floor: RIM_FLOOR },
       // the zoomies: your office (your desk, her tower) and the lounge (the couch back, the top of
       // the TV, the kitchen counter), each first the floor spot she lands on after
       leaps: [
@@ -36,18 +38,20 @@ export function catCornerTile(z: Zones): Tile<Layout> & { cat(): CatPlan } {
       lounge: [{ x: L0 + 52, y: 104 }, { x: w - 40, y: 126 }, { x: shelf.x + 8, y: 82 }],
       spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }, fishWatch(z)],
       via: (p: Pt) =>
-        p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 100 }
+        p.x === RIM.x && p.y === RIM.y ? RIM_FLOOR
+          : p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 100 }
           : p.x === PERCH_TOP.x && p.y <= PERCH_MID.y ? { x: PERCH_TOP.x, y: 94 }
             : p.x === LITTER.x && p.y === LITTER.y ? { x: LITTER.x, y: 106 }
               : p.x === CAT_WARM.x && p.y === CAT_WARM.y ? { x: CAT_WARM.x, y: 136 } : null,
       // out of one room and into another along the hallway: your office by its door, the lounge by
       // its lane, the open floor by the column she watches the fish from
       door: (from, to) => {
-        const roomOf = (p: Pt) => (inOffice(p.x) ? "office" : p.x >= L0 ? "lounge" : "floor")
+        const inBath = (p: Pt) => p.x >= BATH.x && p.x < BATH.x + BATH.w && p.y >= BATH.y && p.y <= BATH.y + BATH.h
+        const roomOf = (p: Pt) => (inBath(p) ? "bath" : inOffice(p.x) ? "office" : p.x >= L0 ? "lounge" : "floor")
         const a = roomOf(from), b = roomOf(to), fx = fishWatch(z).x
         if (a === b) return []
-        const out = { office: [{ x: OFF_LANE, y: 160 }, { x: OFF_LANE, y: HALL - 3 }], lounge: [{ x: L0 + 6, y: HALL - 3 }], floor: [{ x: fx, y: HALL - 3 }] }
-        const into = { office: [{ x: OFF_LANE, y: HALL - 3 }, { x: OFF_LANE, y: 160 }], lounge: [{ x: L0 + 6, y: HALL - 3 }, { x: L0 + 6, y: to.y }], floor: [{ x: fx, y: HALL - 3 }] }
+        const out = { bath: [{ x: DOOR.x, y: DOOR.y - 3 }, { x: DOOR.x, y: HALL - 3 }], office: [{ x: OFF_LANE, y: 160 }, { x: OFF_LANE, y: HALL - 3 }], lounge: [{ x: L0 + 6, y: HALL - 3 }], floor: [{ x: fx, y: HALL - 3 }] }
+        const into = { bath: [{ x: DOOR.x, y: HALL - 3 }, { x: DOOR.x, y: DOOR.y - 3 }], office: [{ x: OFF_LANE, y: HALL - 3 }, { x: OFF_LANE, y: 160 }], lounge: [{ x: L0 + 6, y: HALL - 3 }, { x: L0 + 6, y: to.y }], floor: [{ x: fx, y: HALL - 3 }] }
         return [...out[a], ...into[b]]
       },
     }),
