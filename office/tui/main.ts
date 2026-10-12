@@ -103,9 +103,10 @@ let tip = "", status = ""
 let headHits: { from: number; to: number; go: () => void }[] = []
 // how the list cards are ordered (`s` sort, `g` group): kept across visits
 const CREW_GROUP_MODES = [null, ...CREW_GROUPS]
-const CREW_TABS = ["day", "night", "all"] as const
-const TAB_LABEL = { day: "☼ day", night: "☾ night", all: "everyone" } as const
-let crewTab: (typeof CREW_TABS)[number] = "all"
+/** the workspace's crews by name, as its seats are on them; `all` is every crew, no crew of its own */
+const crewsOf = (w: number | null) => [...new Set((all.shifts ?? []).filter((x) => x.workspace_id === w && x.crew !== "all").map((x) => x.crew))].sort()
+const tabLabel = (t: string) => (t === "all" ? "everyone" : t)
+let crewTab = "all"
 let crewSort = CREW_SORTS[0]!, crewGroup: (typeof CREW_GROUP_MODES)[number] = null
 type Item = ReturnType<typeof boardColumns>[number]["items"][number]
 const COL_SORTS: Sort<Item>[] = [{ name: "board", cmp: () => 0 }, { name: "title", cmp: (a, b) => a.title.localeCompare(b.title) }, { name: "who", cmp: (a, b) => (a.who ?? "~").localeCompare(b.who ?? "~") }]
@@ -165,16 +166,16 @@ let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 
 const view = () => viewOf(all, ws)
-/** a click on the header's shift: the other shift starts */
+const crewOn = () => all.workspaces.find((w) => w.id === ws)?.shift ?? ""
+/** the crew after the one on, in name order; null with fewer than two crews */
+const nextCrew = () => { const cs = crewsOf(ws); return cs.length > 1 ? next(cs, crewOn()) : null }
+/** a click on the header's crew: the next crew goes on */
 const toggleShift = () => {
-  if (ws === null) return
-  void did(data.shiftSwitch(ws, all.workspaces.find((w) => w.id === ws)?.shift === "night" ? "day" : "night"))
+  const to = nextCrew()
+  if (ws !== null && to) void did(data.shiftSwitch(ws, to))
 }
-/** the shift on, once anyone is on a shift of their own; nothing for a workspace with no shifts set */
-const shiftHeader = () =>
-  (all.shifts ?? []).some((x) => x.workspace_id === ws && x.crew !== "all")
-    ? all.workspaces.find((w) => w.id === ws)?.shift === "night" ? "☾ night shift" : "☼ day shift"
-    : null
+/** the crew on, once the workspace has crews; nothing for one with none */
+const shiftHeader = () => (crewsOf(ws).length ? `⇄ ${crewOn()} crew` : null)
 /** the workline the machine's full check runs on now ("#235 verify …"), or null for a session's own check */
 const checkingId = (): number | null => { const m = /^#(\d+) (?:verify|landing)/.exec(all.health?.checks?.running ?? ""); return m ? Number(m[1]) : null }
 /** the header's queues: what is checked and what is merged right now */
@@ -828,15 +829,16 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `WAITING ON YOU · ${waiting.length}`, rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => openReader(t.id, false) })), actions }
     }
     case "crew": {
-      // tabs: the day crew, the night crew, everyone; the crew on shift has the live status
+      // tabs: each crew, then everyone; the crew on has the live status
       const seats = (all.shifts ?? []).filter((x) => x.workspace_id === ws)
-      const on = all.workspaces.find((w) => w.id === ws)?.shift ?? "day", other = on === "day" ? "night" : "day"
+      const crews = crewsOf(ws), tabsOf = [...crews, "all"], on = crewOn(), other = nextCrew()
+      if (!tabsOf.includes(crewTab)) crewTab = "all"
       const live = crewOf(a)
       const inTab = (name: string) => crewTab === "all" || seats.find((x) => x.name === name)?.crew === crewTab
       const crew = [...live, ...seats.filter((x) => !live.some((c) => c.name === x.name)).map((x) => ({ name: x.name, archetype: x.archetype, status: "off", thread: null, title: "", manager: false, lead: false }))].filter((c) => inTab(c.name))
       const shiftOf = (name: string) => seats.find((x) => x.name === name)?.crew
-      const tabs: Seg[] = (["day", "night", "all"] as const).flatMap((t) => [t === crewTab ? { s: ` ${TAB_LABEL[t]} `, fg: ROLE.ground, bg: ROLE.key, bold: true } : dim(` ${TAB_LABEL[t]} `), plain(" ")])
-      const rows: Row[] = [{ segs: [...tabs, dim(`   the ${on} shift is on`)] }]
+      const tabs: Seg[] = tabsOf.flatMap((t) => [t === crewTab ? { s: ` ${tabLabel(t)} `, fg: ROLE.ground, bg: ROLE.key, bold: true } : dim(` ${tabLabel(t)} `), plain(" ")])
+      const rows: Row[] = [{ segs: [...tabs, dim(crews.length ? `   the ${on} crew is on` : "   no crews yet: c puts a seat on one")] }]
       for (const g of arrange(crew as any, crewSort.cmp, crewGroup)) {
         if (g.label !== null) rows.push({ segs: [key(`${g.label} · ${g.items.length}`)] })
         for (const c of g.items as any[]) {
@@ -845,21 +847,22 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           const off = c.status === "off", shift = shiftOf(c.name)
           rows.push({
             segs: [{ s: off ? "◌ " : c.status === "working" ? "● " : c.status === "waiting" ? "! " : "○ ", fg: off ? ROLE.inactive : c.status === "working" ? ROLE.live : c.status === "waiting" ? ROLE.attention : ROLE.inactive },
-              { s: c.name.padEnd(10), fg: off ? ROLE.inactive : shirtOf(c.archetype) }, dim(`${c.manager ? "manager" : c.archetype ?? "?"}${c.lead ? " · lead" : ""}`.padEnd(18)), key(model.padEnd(16)),
-              dim((shift === "night" ? "☾ nights" : shift === "day" ? "☼ days" : "both").padEnd(10)),
+              { s: c.name.padEnd(10), fg: off ? ROLE.inactive : shirtOf(c.archetype) }, dim(`${c.manager ? "manager" : c.archetype ?? "?"}${c.lead ? " · lead" : ""}`.padEnd(18)), key(model.padEnd(16)), plain(" "),
+              dim((shift === "all" || !shift ? "every crew" : shift).padEnd(12)),
               dim(off ? "off shift" : c.thread !== null ? `#${c.thread} ${c.title}` : "on the bench")],
             open: () => open({ kind: "person", name: c.name }), ref: c.name,
           })
         }
       }
       const chosen = a.bench.find((x) => x.name === rows[sel]?.ref), seat = seats.find((x) => x.name === rows[sel]?.ref)
-      const put = (k: string, crewTo: "day" | "night" | "all"): Action => ({ key: k, label: crewTo === "all" ? "on both" : `on ${crewTo === "day" ? "days" : "nights"}`, run: () => { if (seat) void did(data.seatShift(seat.seat_id, seat.name, crewTo)) } })
+      const seatTo = seat ? next(tabsOf, seat.crew) : "all"
+      const newCrew = () => { if (seat) ask(`put ${seat.name} on a new crew — its name (lowercase, - and _)`, (s) => { if (s.trim()) void did(data.seatShift(seat.seat_id, seat.name, s.trim())) }) }
       return {
-        title: `CREW · ${crew.length} · ${TAB_LABEL[crewTab]} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
+        title: `CREW · ${crew.length} · ${tabLabel(crewTab)} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
         rows,
-        actions: [{ key: "v", label: `tab: ${TAB_LABEL[next(CREW_TABS, crewTab)]}`, run: () => { crewTab = next(CREW_TABS, crewTab); sel = 0; draw() } },
-          put("d", "day"), put("n", "night"), put("b", "all"),
-          { key: "S", label: `start the ${other} shift`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } },
+        actions: [{ key: "v", label: `tab: ${tabLabel(next(tabsOf, crewTab))}`, run: () => { crewTab = next(tabsOf, crewTab); sel = 0; draw() } },
+          ...(seat ? [{ key: "c", label: `${seat.name} on ${seatTo === "all" ? "every crew" : seatTo}`, run: () => void did(data.seatShift(seat.seat_id, seat.name, seatTo)) }, { key: "n", label: "a new crew…", run: newCrew }] : []),
+          ...(other ? [{ key: "S", label: `put the ${other} crew on`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } }] : []),
           { key: "+", label: "hire", run: hire },
           { key: "s", label: `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`, run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
           { key: "g", label: `group: ${crewGroup?.name ?? "none"} → ${next(CREW_GROUP_MODES, crewGroup)?.name ?? "none"}`, run: () => resort(() => { crewGroup = next(CREW_GROUP_MODES, crewGroup) }) },

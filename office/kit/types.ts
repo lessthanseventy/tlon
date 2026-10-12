@@ -46,9 +46,9 @@ export type Agents = {
   projects: { id: number; workspace_id: number; name: string }[]
   tickets: Ticket[]
   /** `shift` is the crew on now (`Server.Shifts`); absent from an older server */
-  workspaces: { id: number; name: string; shift?: "day" | "night" }[]
-  /** the shift board: every seat, both crews, each on `day`, `night` or `all` (both) */
-  shifts?: { workspace_id: number; seat_id: number; name: string; archetype: string | null; crew: "all" | "day" | "night" }[]
+  workspaces: { id: number; name: string; shift?: string }[]
+  /** the crew board: every seat, each on a crew of the operator's naming or `all` (every crew) */
+  shifts?: { workspace_id: number; seat_id: number; name: string; archetype: string | null; crew: string }[]
   archetypes: Archetype[]
   models: ModelChoice[]
   notes: Note[]
