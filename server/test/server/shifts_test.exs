@@ -173,6 +173,19 @@ defmodule Server.ShiftsTest do
     assert {:error, :unknown_shift} = Shifts.switch(ws.id, "all")
   end
 
+  test "an offer answered for a crew that has since lost its last seat is refused, and stays open to answer",
+       %{ws: ws, dahlmann: dahlmann} do
+    {:ok, _} = lobby(ws)
+    {:offered, ["night"]} = Shifts.quota_check(ws.id, "hronir", "1/w1", @limit)
+    [ask] = Server.Attention.open_asks()
+    {:ok, _} = Shifts.assign(dahlmann.id, "day")
+
+    assert {:error, :unknown_shift} = Server.Attention.answer_ask(ask.id, "andrew", "1")
+    assert Shifts.current(ws.id) == "day"
+    assert [%{id: id}] = Server.Attention.open_asks()
+    assert id == ask.id
+  end
+
   test "an open offer is withdrawn when crews switch another way, and its reminder with it", %{ws: ws} do
     {:ok, _} = lobby(ws)
     {:offered, _} = Shifts.quota_check(ws.id, "hronir", "1/w1", @limit)

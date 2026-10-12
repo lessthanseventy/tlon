@@ -347,6 +347,18 @@ defmodule Server.Attention do
 
   defp settling(error, _thread_id), do: error
 
+  # an offer to switch crews (Server.Shifts): an answer naming a crew puts it on before the ask is
+  # resolved, so a switch refused (its crew gone since) leaves it open to answer again; the last
+  # answer stays
+  defp take_offer(%{"switch" => offer}, key) do
+    case Enum.at(offer["crews"], String.to_integer(key) - 1) do
+      nil -> :ok
+      crew -> Server.Shifts.take(offer, crew)
+    end
+  end
+
+  defp take_offer(_payload, _key), do: :ok
+
   # an asker the shift took off the bench can't act on the answer: it goes to whoever leads the thread now
   defp addressee(thread_id, asker) do
     with %Thread{workspace_id: ws} when not is_nil(ws) <- Repo.get(Thread, thread_id),
@@ -418,13 +430,8 @@ defmodule Server.Attention do
     label = Enum.find_value(opts, &(&1["key"] == key && &1["label"]))
     text = "#{addressee(prompt.thread_id, asker)} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
 
-    # an offer to switch crews (Server.Shifts): an answer naming a crew puts it on, before the ask is
-    # resolved, so a switch that fails leaves it open to answer again; the last answer stays
-    with %{"switch" => offer} <- prompt.payload,
-         crew when is_binary(crew) <- Enum.at(offer["crews"], String.to_integer(key) - 1),
-         do: :ok = Server.Shifts.take(offer, crew)
-
-    with {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: prompt.id}) do
+    with :ok <- take_offer(prompt.payload, key),
+         {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: prompt.id}) do
       resolve(Repo.get!(Message, prompt.id), "answered: " <> label)
       {:ok, reply}
     end
