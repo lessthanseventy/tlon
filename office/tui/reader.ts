@@ -13,6 +13,8 @@ export type ReaderDeps = {
   /** post as you; resolves to the status line */
   send: (body: string) => Promise<string>
   operator: string
+  /** a post whose aeroplane Argos caught: its header carries a paw */
+  dogeared?: (m: { at: string; author: string }) => boolean
   /** an older page arrived on its own (scrolled into): draw again */
   redraw: () => void
 }
@@ -101,7 +103,7 @@ export class Reader {
     for (const m of this.msgs) {
       const you = m.author === this.deps.operator, sys = m.author === "tlon"
       rows.push([])
-      rows.push([{ s: ` ${m.author}`, fg: you ? ROLE.attention : sys ? ROLE.inactive : ROLE.key, bold: true }, { s: `  ${stamp(m.at)}`, fg: ROLE.inactive }])
+      rows.push([{ s: ` ${m.author}`, fg: you ? ROLE.attention : sys ? ROLE.inactive : ROLE.key, bold: true }, { s: `  ${stamp(m.at)}`, fg: ROLE.inactive }, ...(this.deps.dogeared?.(m) ? [{ s: "  🐾", fg: ROLE.inactive }] : [])])
       for (const l of wrap(m.body, width - 3)) rows.push([{ s: `   ${l}`, fg: sys ? ROLE.inactive : ROLE.prose }])
     }
     if (!this.msgs.length && !this.peek) rows.push([{ s: "  no messages yet", fg: ROLE.inactive }])
