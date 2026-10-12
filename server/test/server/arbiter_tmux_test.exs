@@ -305,16 +305,19 @@ defmodule Server.Arbiter.TmuxTest do
     # the socket is the workspace's, so the test workspace id must be one no live workspace uses;
     # a fresh test DB numbers from 1 — guard the operator's real server by renaming the socket
     sock = "tlon-test-#{System.unique_integer([:positive])}"
-    runner = fn "tmux", ["-L", _ | rest], opts -> System.cmd("tmux", ["-L", sock | rest], opts) end
+    # its own socket dir, never the operator's /tmp/tmux-<uid> (and /tmp is read-only in a sandbox)
+    dir = Path.join(System.tmp_dir!(), sock)
+    File.mkdir_p!(dir)
+    env = [{"TMUX_TMPDIR", dir}]
+    tmux = fn args, opts -> System.cmd("tmux", ["-L", sock | args], Keyword.update(opts, :env, env, &(&1 ++ env))) end
+    runner = fn "tmux", ["-L", _ | rest], opts -> tmux.(rest, opts) end
     Application.put_env(:server, :tmux_cmd, runner)
     # `cat` echoes what it is sent — the cheapest thing that shows nothing was typed
     Application.put_env(:server, :spawn_launcher_claude, "cat")
 
     on_exit(fn ->
-      System.cmd("tmux", ["-L", sock, "kill-server"], stderr_to_stdout: true)
-      # tmux leaves its socket file behind when its server dies
-      {uid, 0} = System.cmd("id", ["-u"])
-      File.rm(Path.join([System.get_env("TMUX_TMPDIR", "/tmp"), "tmux-#{String.trim(uid)}", sock]))
+      tmux.(["kill-server"], stderr_to_stdout: true)
+      File.rm_rf(dir)
     end)
 
     assert {:ok, %{window: window}} = Arbiter.Tmux.spawn(exports)
@@ -327,7 +330,7 @@ defmodule Server.Arbiter.TmuxTest do
     Process.sleep(300)
 
     {pane, 0} =
-      System.cmd("tmux", ["-L", sock, "capture-pane", "-p", "-t", Tmux.target(ws.id, window)], stderr_to_stdout: true)
+      tmux.(["capture-pane", "-p", "-t", Tmux.target(ws.id, window)], stderr_to_stdout: true)
 
     refute pane =~ "ping from the server"
     assert Server.Wake.take(t.id, "claude-code") == ["ping from the server"]
