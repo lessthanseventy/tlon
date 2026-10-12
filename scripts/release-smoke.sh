@@ -32,7 +32,7 @@ cleanup() {
   if [ -n "$dir" ]; then
     # the 2 GB build goes before the slow drop, so a SIGKILL mid-cleanup leaves less in RAM-backed /tmp
     git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1
-    rm -rf "$dir"
+    rm -rf "$dir" "$dir.lock"
     psql -h "${PGHOST:-/run/postgresql}" -d postgres -qc "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >>"$log" 2>&1
   fi
   # a failure's log is kept for reading, unless there is nothing in it
@@ -51,17 +51,14 @@ if [ -z "$url" ]; then
   sha="$(git -C "$root" rev-parse -q --verify "${1:-origin/main}^{commit}")" || fail "no commit ${1:-origin/main}"
   echo "smoke: ${sha:0:7} on :$port, database $db"
 
-  # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep any build
-  # no process is using before making another
-  for stale in "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
-    stale="${stale%/}"; [ -d "$stale/server" ] || continue
-    # in use: named in a command line (the node, the drive) or the working directory of one (mix)
-    pgrep -f "$stale/" >/dev/null && continue
-    [ -n "$(find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" -print -quit 2>/dev/null)" ] && continue
-    git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1; rm -rf "$stale"
-  done
-  git -C "$root" worktree prune
+  # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep the builds no
+  # run holds before making another
+  "$(dirname "$0")/smoke-sweep.sh" "$root"
   dir="$(mktemp -d -t tlon-smoke-XXXXXX)"
+  # held until this run and everything it started exits: the sweep's sign that the build is live.
+  # Taken before the checkout, as the sweep skips a dir with no server/ in it yet
+  exec 9>"$dir.lock"
+  flock -n 9 || fail "can't lock $dir"
   git -C "$root" worktree add -q --detach "$dir" "$sha" || fail "can't check out ${sha:0:7}"
   office="$dir"
   mise trust -q "$dir" >/dev/null 2>&1
