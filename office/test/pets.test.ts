@@ -5,7 +5,8 @@ import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, speciesBa
 import { NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, SPECIES_ART } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
-import { WideRoom } from "../rooms/wide"
+import { WideRoom, widePlan } from "../rooms/wide"
+import { DOOR, RIM_FLOOR } from "../kit/bathroom"
 
 const focus = { picked: null, armed: null, person: null }
 const measure = (s: string) => s.length * 2
@@ -233,6 +234,25 @@ describe("Argos and the trail", () => {
     for (let i = 0; i < 40 && !r.dog.creep; i++) room.step(a)
     expect(r.dog.creep).toBe(true)
     expect(r.dog.path.slice(-3).map((p) => [p.x, p.y])).toEqual([[300, 188], [312, 188], [324, 188]])
+  }))
+
+  test("a trail from the tub takes him in by the door, never through the bathroom's wall", () => chance(0, () => {
+    const room = new WideRoom(696), a = viewOf(office({ thinking: false }), 1), r = room as unknown as Trail
+    const plan = widePlan(696), blocks = plan.blocks(plan.layout(a))
+    for (let i = 0; i < 10; i++) room.step(a)
+    r.prints = [RIM_FLOOR, { x: RIM_FLOOR.x + 12, y: RIM_FLOOR.y + 2 }, { x: DOOR.x, y: DOOR.y - 2 }].map((p, i) => ({ ...p, at: i * 12, until: 9999 }))
+    Object.assign(r.dog, { until: 0, mode: "sit", fuss: null, path: [] })
+    for (let i = 0; i < 40 && !r.dog.creep; i++) room.step(a)
+    expect(r.dog.creep).toBe(true)
+    const path = [{ x: r.dog.x, y: r.dog.y }, ...r.dog.path]
+    for (let i = 1; i < path.length; i++) {
+      const [p, q] = [path[i - 1]!, path[i]!]
+      for (let x = p.x, y = p.y; x !== q.x || y !== q.y; x += Math.sign(q.x - x), y += Math.sign(q.y - y)) {
+        // inclusive: the bathroom's walls are two pixels wide, and an interior-only check never sees them
+        const hit = blocks.find((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)
+        expect({ at: [x, y], hit }).toEqual({ at: [x, y], hit: undefined })
+      }
+    }
   }))
 
   test("one print is not a trail, and no prints leave his day as it was", () => chance(0, () => {
