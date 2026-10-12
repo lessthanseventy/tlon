@@ -74,18 +74,22 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
       for (let col = 0; col < font.w; col++) if ((bits >> (font.w - 1 - col)) & 1) fill(x + (n * font.w + col) * sc, baseline - (font.ascent - row) * sc, sc, sc, c)
     }))
   }
-  // the art's average colour under a box, as #rrggbb
-  const behind = (x: number, y: number, bw: number, bh: number) => {
-    let r = 0, g = 0, b = 0, n = 0
+  // the art's colour under a box that `c` reads worst against, as #rrggbb: the box is judged by its
+  // hardest pixel, so a strip at its edge cannot hide in the average
+  const behind = (x: number, y: number, bw: number, bh: number, c: string) => {
+    let worst: string | null = null, low = Infinity
     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + bh)); j++)
-      for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + bw)); i++) { const o = (j * w + i) * 4; r += big[o]!; g += big[o + 1]!; b += big[o + 2]!; n++ }
-    return n ? "#" + [r, g, b].map((v) => Math.round(v / n).toString(16).padStart(2, "0")).join("") : ROLE.ground
+      for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + bw)); i++) {
+        const o = (j * w + i) * 4, px = "#" + [big[o]!, big[o + 1]!, big[o + 2]!].map((v) => v.toString(16).padStart(2, "0")).join(""), r = contrast(c, px)
+        if (r < low) { low = r; worst = px }
+      }
+    return worst ?? ROLE.ground
   }
   for (const i of ink) {
     if (i.t === "text") {
       const { font, sc } = typeFor(i.size, zoom), tw = i.s.length * font.w * sc, th = font.h * sc
       const x = Math.round(i.align === "center" ? i.x * k - tw / 2 : i.x * k), base = Math.round(i.y * k - sc)
-      let bg = behind(x, base - font.ascent * sc, tw, th)
+      let bg = behind(x, base - font.ascent * sc, tw, th, i.color)
       if (contrast(i.color, bg) < MIN_CONTRAST) { bg = backingFor(i.color); fill(x - sc, base - font.ascent * sc - sc, tw + 2 * sc, th + 2 * sc, bg) }
       backed?.push({ text: i.color, behind: bg })
       write(i.s, x, base, i.color, font, sc)
