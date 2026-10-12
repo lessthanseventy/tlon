@@ -37,6 +37,7 @@ describe("geometry", () => {
 })
 
 import { inkInto } from "../tui/paint"
+import { contrast } from "../kit/palette"
 import { balloonLines } from "../kit/canvas"
 
 describe("inkInto balloons (kitty)", () => {
@@ -93,5 +94,24 @@ describe("textLayer balloons (blocks)", () => {
     expect(a).toBeGreaterThanOrEqual(0)
     expect(b).toBeGreaterThanOrEqual(0)
     expect(a).not.toBe(b)
+  })
+})
+
+describe("inkInto text backing (kitty)", () => {
+  // a label whose box-average clears 4.5:1 but whose left edge sits over a strip it fails against:
+  // judged by the worst pixel under it, it is backed; by the average, it is not.
+  test("a label is backed when any pixel behind it fails, not only the average", () => {
+    const W = 400, H = 60, k = 2, color = "#a67200"
+    const big = new Uint8Array(W * H * 4)
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const o = (y * W + x) * 4, strip = x >= 18 && x < 28
+      big[o] = strip ? 0x5a : 0x0a; big[o + 1] = strip ? 0x5a : 0x0a; big[o + 2] = strip ? 0x5a : 0x0a; big[o + 3] = 255
+    }
+    const backed: { text: string; behind: string }[] = []
+    inkInto(big, W, H, [{ t: "text", s: "a faded margin note over a strip", x: 10, y: 20, color, size: 9, align: "left" }], k, 1, backed)
+    expect(contrast(backed[0]!.text, backed[0]!.behind)).toBeGreaterThanOrEqual(4.5)
+    expect(backed[0]!.behind).not.toBe("#5a5a5a")
+    const o = (34 * W + 22) * 4 // the strip, inside the label's box
+    expect([big[o], big[o + 1], big[o + 2]]).not.toEqual([0x5a, 0x5a, 0x5a])
   })
 })
