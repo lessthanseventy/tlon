@@ -50,6 +50,17 @@ export async function worktree(id: number): Promise<string | null> {
 export async function focus(): Promise<{ thread_id: number; at: number } | null> {
   try { const r = await call("GET", "/office/focus"); return r.status === 200 ? r.json : null } catch { return null }
 }
+/** a workline branch's change, for the operator's review: files, hunks, numbered lines */
+export type ReviewLine = { kind: "+" | "-" | " "; old: number | null; new: number | null; text: string }
+export type Review = { head: string | null; files: { path: string; status: string; added: number; deleted: number; binary: boolean; hunks: { header: string; lines: ReviewLine[] }[] }[] }
+/** a note on a line (`line` and its `side`) or on a whole file */
+export type ReviewNote = { path: string; line?: number; side?: "+" | "-" | " "; text: string }
+export async function review(id: number): Promise<Review | null> {
+  try { const r = await call("GET", `/threads/${id}/review`); return r.status === 200 ? r.json : null } catch { return null }
+}
+export const reviewSubmit = (id: number, verdict: string, summary: string, notes: ReviewNote[]) =>
+  write(`reviewing #${id}`, `/threads/${id}/review`, { verdict, summary, notes }, (j) => `#${id} reviewed (${verdict}) · at ${j.stage ?? "?"}`)
+
 /** a workline's docs (work/<slug>/*.md), by name */
 export async function docs(id: number): Promise<string[]> {
   try { const r = await call("GET", `/threads/${id}/docs`); return r.status === 200 ? r.json : [] } catch { return [] }

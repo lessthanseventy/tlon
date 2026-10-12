@@ -56,6 +56,10 @@ and every layer the spine design's re-laid §9 asked for
   `thread_id`, which only a `qa` seat on its bench may name — its session may be bound elsewhere); a fail bounces it to
   build with the finding, and nothing lands past an owed QA (`Server.Workline.qa_verdict/5`) but the
   operator's `approve <id> --skip-qa <why>` (API `{"skip_qa"}`), recorded as its QA verdict.
+  The operator reviews a branch from the office (`Server.Workline.OperatorReview`): its diff as
+  files, hunks and numbered lines, and notes on lines or files submitted with a verdict — comment,
+  request changes (`send_back/4` to build, the notes its why) or approve — reaching the lead as one
+  post in revdiff's shape (`## path:line (+) note`).
   A workline moves backwards on its own thread and branch, the build kept to improve, never redone
   (`Server.Workline.send_back/4`, the `send_back` tool, `tlon-cli send-back`): back to build by its
   lead, back to plan or spec only by the tech lead (a coherence call) or the operator; an open one
