@@ -822,6 +822,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ...(all.life?.[String(w)] ? [{ key: "L", label: "life", run: () => open({ kind: "life" }) }] : []),
         ...(flagOn(all, "build_mode") ? [{ key: "B", label: "build mode", run: () => open({ kind: "build" }) }] : []),
         { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
+        { key: "S", label: "settings (the running system)", run: () => open({ kind: "settings" }) },
         { key: "q", label: "quit", run: quit },
       ]
       if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone — or Nina, or Argos — a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], actions }
@@ -1741,6 +1742,7 @@ function onKey(k: string) {
     case "B": if (flagOn(all, "build_mode")) open({ kind: "build" }); return
     case "U": return open({ kind: "entry" })
     case "W": return open({ kind: "boss" })
+    case "S": return open({ kind: "settings" })
     case "p": room().pet(); changed(); return draw()
   }
 }
