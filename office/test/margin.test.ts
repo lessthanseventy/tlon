@@ -85,4 +85,12 @@ describe("marginInk", () => {
     expect(hits[0]!.y).toBeLessThanOrEqual(texts[0]!.y)
     expect(hits[0]!.y + hits[0]!.h).toBeGreaterThan(texts[0]!.y)
   })
+
+  test("the hit starts at the viewport's left edge: the first terminal column of a note counts as on it", () => {
+    const vp = { x: 50, y: 10, w: 300, h: 100 }
+    const { ink, hits } = marginInk([note(1, 10, "see #5")], new Looks(0), null, vp, () => 40)
+    const text = ink.flatMap((i) => (i.t === "text" ? [i] : []))[0]!
+    expect(hits[0]!.x).toBe(vp.x)
+    expect(hits[0]!.x + hits[0]!.w).toBeGreaterThanOrEqual(text.x + 40)
+  })
 })
