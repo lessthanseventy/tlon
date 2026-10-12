@@ -279,11 +279,16 @@ function goWs(id: number) { choose(id); back(true); frame = null; void refresh()
 // ── staying current ───────────────────────────────────────────────────────────────────────────
 async function refresh() {
   const before = all, beforeNeeds = needs
-  let knobs: data.Settings | null
-  ;[all, needs, knobs] = await Promise.all([data.status(), data.needs(), data.settings()])
-  settings = knobs ?? settings
+  // the snapshot lands, and shows, as soon as it comes: the inbox read beside it takes seconds (a git
+  // check per stray worktree), and a finder opened meanwhile would list nothing
+  const rest = Promise.all([data.needs(), data.settings()])
+  all = await data.status()
   if (officeRev === undefined && all.ok) officeRev = all.revs?.office ?? null
   settleWorkspace()
+  draw()
+  let knobs: data.Settings | null
+  ;[needs, knobs] = await rest
+  settings = knobs ?? settings
   if (all.ok && before.ok) tellNews(before, beforeNeeds)
   const tid = openThread()
   await Promise.all([tid !== null ? loadThread(tid) : null, reader ? reader.reload() : null, loadCard(), loadFeed()])

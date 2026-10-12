@@ -22,4 +22,6 @@ TLON_URL=http://127.0.0.1:4041 mise run office:drive -- "/" "'108'" "Enter" "r" 
   it too. For the pixels, render a frame to PNG (`WideRoom.render` + `inkInto` + `tui/png.ts`)
   and look at it.
 - `OFFICE_TAIL=60` prints the whole screen; `OFFICE_WAIT` lengthens the settle for slow reads.
+- `"wait:TEXT"` sends no keys: it waits (30 s at most) until the screen shows TEXT. Open the finder
+  only after `"wait:‹ Machine ›"`: until the TUI's first snapshot lands it lists nothing.
 - Never type into a coworker's live terminal (`enter` on a person zooms into theirs).
