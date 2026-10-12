@@ -6,7 +6,7 @@
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawDoor, drawVisitor } from "../kit/door"
-import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, stepBook, type Book, type Pt as Perch } from "../kit/uqbar"
+import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, type Book, type Pt as Perch } from "../kit/uqbar"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
@@ -142,6 +142,9 @@ export class WideRoom extends Sim<Layout> {
   /** uqbar's posts in the air (kit/plane.ts) */
   private planes: Plane[] = []
   private flights = 0
+  /** the neighbouring spine Uqbar knocked flat on waking; a reader in the nook sets it right, until the next waking */
+  private fallen = true
+  private reading = 0
   private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -162,6 +165,12 @@ export class WideRoom extends Sim<Layout> {
   /** Uqbar's volume one tick toward where it wants to be; true while it is in the air */
   private stepVolume(a: Agents): boolean {
     this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.boardEdge, spineHome(corner(this.z).shelf)))
+    if (!a.uqbar) { this.fallen = true; this.reading = 0 }
+    else if (this.fallen) {
+      const reader = this.peopleAt("read")[0]
+      this.reading = reader ? this.reading + 1 : 0
+      if (reader && this.reading >= STRAIGHTEN) { this.fallen = false; reader.emote = "♪"; reader.emoteUntil = this.tick + 30; return true }
+    }
     return this.book.flying
   }
   /** a uqbar post to thread `tid`: a page tears out of the book and flies to its lead's desk, else its card */
@@ -388,7 +397,7 @@ export class WideRoom extends Sim<Layout> {
       px(p.x - 1, p.y, 2, 2, ink); px(p.x - 2, p.y - 2, 1, 1, ink); px(p.x, p.y - 3, 1, 1, ink); px(p.x + 1, p.y - 2, 1, 1, ink)
     }
     const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
-    drawShelf(sc, shelf, mode === "shelved", !!a.uqbar, this.shelfNudge())
+    drawShelf(sc, shelf, mode === "shelved", !!a.uqbar && this.fallen, this.shelfNudge())
     drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null)
     for (const p of this.planes) drawPlane(sc, p)
     const caller = this.visitor()

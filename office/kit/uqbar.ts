@@ -53,11 +53,11 @@ export const spineHome = (shelf: { x: number; y: number }): Pt => ({ x: shelf.x 
 
 /**
  * The shelf with its one spine too many (faintly glowing, wiggling now and then) while the book is
- * shelved; the neighbouring spine lying flat while a session is live. Drawn just in front of the shelf.
+ * shelved; the neighbouring spine lying flat while `fallen` (a session is live and nobody has put it right). Drawn just in front of the shelf.
  */
-export function drawShelf(sc: Scene, shelf: { x: number; y: number; w: number; h: number }, shelved: boolean, live: boolean, nudge = false) {
+export function drawShelf(sc: Scene, shelf: { x: number; y: number; w: number; h: number }, shelved: boolean, fallen: boolean, nudge = false) {
   sc.item(shelf.y + shelf.h + 0.1, () => {
-    if (live) {
+    if (fallen) {
       sc.px(shelf.x + 18, shelf.y + 2, 1, 5, ROLE.structure)
       sc.px(shelf.x + 14, shelf.y + 6, 5, 1, ROLE.live)
     }
@@ -80,3 +80,6 @@ export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number
     if (tid !== null) sc.hits.push({ x, y, w: w + 1, h: 8, tip: `Uqbar · Vol. XLVI\n${mood} · #${tid}`, act: { kind: "thread", tid } })
   })
 }
+
+/** ticks someone must sit in the reading nook, with the book lying on the shelf, before they put it right */
+export const STRAIGHTEN = 30
