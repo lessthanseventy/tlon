@@ -4,6 +4,7 @@
 import type { Actor, Kind, Pastime, Plan, Spot } from "./sim"
 import type { Home, Rect, Tile, TileKind } from "./tiles"
 import { EMPTY } from "./types"
+import { bathroomTile } from "./tiles/bathroom"
 import { catCornerTile } from "./tiles/cat-corner"
 import { gamesTile } from "./tiles/games"
 import { kitchenTile } from "./tiles/kitchen"
@@ -14,12 +15,12 @@ import { BAND, HALL, laneOf, layoutFor, SEAT_GAP, zones, type Layout, type Zones
 
 const FACTORIES: Record<TileKind, (z: Zones, w: number) => Tile<Layout>> = {
   office: officeTile, "cat-corner": catCornerTile, meeting: meetingTile,
-  lounge: loungeTile, kitchen: kitchenTile, games: gamesTile,
+  lounge: loungeTile, kitchen: kitchenTile, games: gamesTile, bathroom: bathroomTile,
 }
 
 /** every spot kind that belongs in the Plan's flat `lounge` array — a worker idling, not queued */
 const LOUNGE_KINDS: (Kind | Pastime)[] = [
-  "couch", "cooler", "coffee", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read",
+  "couch", "cooler", "coffee", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read", "bathroom",
 ]
 
 export function floorPlan(home: Home, w: number): Plan<Layout> & { blocks: (l: Layout) => Rect[] } {

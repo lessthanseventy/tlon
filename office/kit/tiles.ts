@@ -6,7 +6,7 @@ import type { Focus, Scene } from "./draw"
 import type { Actor, Cat, CatPlan, Kind, Pastime, Pt, Spot } from "./sim"
 import type { Agents } from "./types"
 
-export type TileKind = "office" | "cat-corner" | "meeting" | "lounge" | "kitchen" | "games"
+export type TileKind = "office" | "cat-corner" | "meeting" | "lounge" | "kitchen" | "games" | "bathroom"
 export type Rect = { x: number; y: number; w: number; h: number }
 
 /** the live sim state a tile's draw reads at paint time, beyond the snapshot and its own layout */
@@ -42,6 +42,7 @@ export const DEFAULT_OFFICE: Home = {
   tiles: [
     { kind: "lounge", at: [0, 0] }, { kind: "office", at: [0, 0] }, { kind: "cat-corner", at: [0, 0] },
     { kind: "meeting", at: [0, 0] }, { kind: "kitchen", at: [0, 0] }, { kind: "games", at: [0, 0] },
+    { kind: "bathroom", at: [0, 0] },
   ],
 }
 

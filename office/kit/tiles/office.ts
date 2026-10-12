@@ -11,7 +11,7 @@ import type { Spot } from "../sim"
 import { shirtOf, BIG_PLANT } from "../sprites"
 import type { Agents } from "../types"
 import {
-  BAND, CREW_W, EXEC_Y, OFF_DOOR, OFF_W, SEAT_GAP, SEATS, TABLE_YS, TRAY,
+  BAND, CREW_W, EXEC_Y, HALL, OFF_DOOR, OFF_W, SEAT_GAP, SEATS, TABLE_YS, TRAY,
   seatX, type Chair, type Layout, type Zones,
 } from "../../rooms/wide"
 
@@ -76,7 +76,7 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
         at(88, 164, 164, "up", "queue"),
       ],
       // the office-side plant by your desk (the lounge's own plant is lounge's, at L0 + 22)
-      plant: [at(18, 168, 168, "left", "plant")],
+      plant: [at(18, 168, HALL, "left", "plant")],
     }),
     home(l: Layout, agent: string): Spot | null {
       const m = l.desks.find((d) => (d.kind === "manager" || d.kind === "lead") && d.seat?.agent === agent)
