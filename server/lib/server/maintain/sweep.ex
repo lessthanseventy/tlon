@@ -167,11 +167,15 @@ defmodule Server.Maintain.Sweep do
     for thread <- parked_gates(),
         stale?(thread, opts[:gate_stale_ms]),
         not nagged_recently?(thread, opts[:renag_ms]) do
-      post(thread, "⏸ workline #{thread.slug} still parked at #{thread.stage} — approve #{thread.id}")
+      post(thread, "⏸ workline #{thread.slug} still parked at #{thread.stage} — #{what_it_waits_on(thread)}")
     end
 
     :ok
   end
+
+  # off its gate the park is a worker's question, which a reply settles; approve would refuse it
+  defp what_it_waits_on(thread),
+    do: if(Workline.at_gate?(thread), do: "approve #{thread.id}", else: "it waits on your reply on the thread")
 
   defp nagged_recently?(thread, renag_ms) do
     last =

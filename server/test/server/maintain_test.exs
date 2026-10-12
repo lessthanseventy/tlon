@@ -99,6 +99,19 @@ defmodule Server.MaintainTest do
     refute Enum.any?(Repo.all(Message), &(&1.thread_id == plain.id and &1.body =~ "still parked"))
   end
 
+  test "a workline parked off its gate is waiting on a reply: the reminder says so, not approve" do
+    {:ok, built} = Workline.open(%{title: "on hold", slug: "on-hold", stage: "build"})
+    {:ok, _} = built |> Ecto.Changeset.change(awaiting: "andrew") |> Repo.update()
+
+    assert :ok = sweep()
+
+    assert [%Message{body: body}] =
+             Message |> Repo.all() |> Enum.filter(&(&1.thread_id == built.id and &1.body =~ "still parked"))
+
+    assert body =~ "waits on your reply"
+    refute body =~ "approve"
+  end
+
   test "a stalled workline is flagged as a machine-born intent, once per slug" do
     {:ok, stalled} = Workline.open(%{title: "going nowhere", slug: "stuck"})
 
