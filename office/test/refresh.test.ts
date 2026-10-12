@@ -44,8 +44,9 @@ const until = async (what: string, ok: () => boolean) => {
 
 test("the finder lists the snapshot's threads while the inbox read is still out", async () => {
   const office = join(import.meta.dir, "..")
+  // the running bun by path: a `bun` on PATH is a mise shim, which stops at its trust prompt in a checkout the service's env hasn't trusted
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' bun tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
   // the snapshot is in: its workspace names the header
   await until("the workspace in the header", () => screen().includes("Toy"))
   expect(screen()).toContain("Toy")
