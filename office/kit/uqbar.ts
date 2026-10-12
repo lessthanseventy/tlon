@@ -69,9 +69,9 @@ export function drawShelf(sc: Scene, shelf: { x: number; y: number; w: number; h
 }
 
 /** the book off the shelf: flying (riffle, then two flap frames) or perched (open at work, else closed), with its label and tip */
-export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number | null) {
+export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number | null, shut = false) {
   if (mode === "shelved") return
-  const frame = mode === "perched" ? (mood === "working" ? FRAMES.open : FRAMES.closed) : b.riffle > 0 ? FRAMES.riffle : (sc.tick >> 1) % 2 ? FRAMES.flapUp : FRAMES.flapDown
+  const frame = mode === "perched" || shut ? (mood === "working" ? FRAMES.open : FRAMES.closed) : b.riffle > 0 ? FRAMES.riffle : (sc.tick >> 1) % 2 ? FRAMES.flapUp : FRAMES.flapDown
   const w = frame[0]!.length, x = Math.round(b.x), y = Math.round(b.y)
   sc.overhead.push(() => {
     sc.blit([...frame], x, y, paint(mood))
@@ -83,3 +83,10 @@ export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number
 
 /** ticks someone must sit in the reading nook, with the book lying on the shelf, before they put it right */
 export const STRAIGHTEN = 30
+
+/** how far (px) the book may be from Nina, each way, for her to reach it */
+export const SWAT_REACH = 14
+/** ticks the book stays snapped shut after a swat */
+export const FLINCH = 8
+export const swatted = (b: Pt, flying: boolean, cat: Pt): boolean =>
+  flying && Math.abs(b.x + 6 - cat.x) <= SWAT_REACH && Math.abs(b.y + 8 - cat.y) <= SWAT_REACH
