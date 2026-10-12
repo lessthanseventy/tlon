@@ -182,21 +182,23 @@ export class WideRoom extends Sim<Layout> {
     }
     return this.book.flying
   }
-  /** a uqbar post to thread `tid`: a page tears out of the book and flies to its lead's desk, else its card */
-  fly(tid: number, a: Agents, passing: string | null = null) {
+  /** a uqbar post to thread `tid`: a page tears out of the book and flies to its lead's desk, else its card; true when Argos jumps for it */
+  fly(tid: number, a: Agents, passing: string | null = null): boolean {
     const lead = a.threads.find((t) => t.id === tid)?.lead
     const desk = lead ? this.plan.home(this.plan.layout(a), lead) : null
     const to = desk ? { x: desk.x, y: desk.y - 10 } : this.cards.get(tid) ?? this.boardEdge
     const old = passing ? this.actors.get(passing) : undefined, from = { x: this.book.x, y: this.book.y }
     const via: Plane["legs"] = old ? [{ x: old.x, y: old.y - 10 }] : []
     // every 4th plane Argos jumps for: he runs under its midpoint and it hangs there a moment
-    if (caughtNth(this.flights++)) {
+    const caught = caughtNth(this.flights++)
+    if (caught) {
       const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }, d = this.dog
       via.push({ ...mid, hold: 24 })
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, { x: mid.x, y: d.aisle, aisle: d.aisle, pose: "stand", face: "left", kind: "roam" })]
       d.mode = "walk"
     }
     this.planes.push(launch(from, via, to))
+    return caught
   }
   private stepPlanes(): boolean {
     this.planes = this.planes.map(stepPlane).filter((p): p is Plane => p !== null)

@@ -32,6 +32,9 @@ export function stepPlane(p: Plane): Plane | null {
 /** Argos catches every 4th plane of the room's life: no dice, so a seeded test sees the same dog */
 export const caughtNth = (n: number) => n % 4 === 3
 
+/** a post's identity across the feed and a thread's messages: the thread, its moment, its author */
+export const earmarkOf = (tid: number, at: string, who: string | null) => `${tid}|${at}|${who ?? ""}`
+
 export type FeedRow = { kind: string; at: string; thread_id: number | null; who: string | null; text: string }
 /** the feed's uqbar posts not seen yet, oldest first; marks every row seen. `first`: history, not news */
 export function freshPosts(feed: FeedRow[], seen: Set<string>, first: boolean): FeedRow[] {

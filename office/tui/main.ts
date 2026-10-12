@@ -46,7 +46,7 @@ import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input,
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
-import { freshPosts, handoffFrom } from "../kit/plane"
+import { earmarkOf, freshPosts, handoffFrom } from "../kit/plane"
 import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
 type Mode =
@@ -356,12 +356,16 @@ function notify(title: string, body: string) {
 /** the feed rows already flown as aeroplanes; `seen` below is rebuilt each call */
 const flown = new Set<string>()
 async function loadMargin() { notes = ws === null ? [] : await data.margin(ws) }
+/** the posts whose aeroplane Argos caught, by `earmarkOf`: the thread shows them dog-eared */
+const earmarked = new Set<string>()
 async function loadFeed() {
   if (ws === null) return
   const seen = new Set(feed.map((x) => `${x.at}${x.kind}${x.text}`)), first = !feed.length
   feed = (await data.activity(ws)) ?? feed
   const v = view(), r = room()
-  for (const x of freshPosts(feed, flown, first)) if (r instanceof WideRoom) r.fly(x.thread_id!, v, handoffFrom(v.visits, v, x.thread_id!, Date.now()))
+  for (const x of freshPosts(feed, flown, first)) {
+    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(v.visits, v, x.thread_id!, Date.now()))) earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
+  }
   // a first run starts with the tray read, not with everything that ever happened in it
   if (!trayRead && feed[0]) { trayRead = feed[0].at; writeState(TRAY, trayRead) }
   if (!first) for (const x of feed) if ((x.kind === "issue" || x.kind === "question") && !seen.has(`${x.at}${x.kind}${x.text}`)) notify(`${x.kind} raised${x.who ? ` by ${x.who}` : ""}`, x.text)
@@ -630,7 +634,7 @@ const VERBS: [string, () => void][] = [
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
 function openReader(tid: number, compose: boolean) {
   picked = tid
-  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw() }, compose)
+  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)) }, compose)
   const v = threads.get(tid)
   if (v) reader.take(v)
   void reader.reload().then(draw)
