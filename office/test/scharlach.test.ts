@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { MUG, NAMEPLATE, SHERIFF, newLedger, tickRed, demerits, tickForRedThreads, ledgerLines } from "../kit/scharlach"
+import { MUG, NAMEPLATE, SHERIFF, newLedger, tickRed, demerits, tickForRedThreads, tickFromTriage, ledgerLines } from "../kit/scharlach"
 
 describe("Scharlach's desk dressing", () => {
   test("the nameplate and the mug say what the design says", () => {
@@ -52,6 +52,13 @@ describe("the demerit ledger", () => {
     l = tickForRedThreads(l, [], threads)
     // red again → ticks once more
     l = tickForRedThreads(l, [1], threads)
+    expect(demerits(l, "yu")).toBe(2)
+  })
+  test("a fully green board (triage count 0) clears the ticked memory, so a re-red ticks", () => {
+    const threads = [{ id: 1, lead: "yu" }]
+    let l = tickFromTriage(newLedger(), 1, [1], threads)
+    l = tickFromTriage(l, 0, [], threads)
+    l = tickFromTriage(l, 1, [1], threads)
     expect(demerits(l, "yu")).toBe(2)
   })
 })

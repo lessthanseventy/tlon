@@ -12,7 +12,7 @@ import type { Frame } from "../kit/canvas"
 import { personaLines } from "../kit/persona"
 import { FLOOR, Looks, marginInk, type Note } from "../kit/margin"
 import { seatLine } from "../kit/seat-voices"
-import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickForRedThreads, type Ledger } from "../kit/scharlach"
+import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
 import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
@@ -331,9 +331,11 @@ async function refresh() {
 async function tickLedger() {
   if (!all.ok) return
   const sws = all.bench.find((c) => c.archetype === "sheriff")?.workspace_id
-  if (sws == null || (all.triage[String(sws)] ?? 0) <= 0) return
-  const t = await data.triage(sws)
-  if (t) ledger = tickForRedThreads(ledger, t.failed_checks.shown.map((s) => s.thread_id), all.threads)
+  if (sws == null) return
+  const count = all.triage[String(sws)] ?? 0
+  const t = count > 0 ? await data.triage(sws) : null
+  if (count > 0 && !t) return
+  ledger = tickFromTriage(ledger, count, t?.failed_checks.shown.map((s) => s.thread_id) ?? [], all.threads)
 }
 /** what changed since the last look that you'd want to hear about even with the office in the back */
 function tellNews(before: Agents, beforeNeeds: data.Need[]) {
