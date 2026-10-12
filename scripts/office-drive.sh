@@ -4,6 +4,7 @@
 # harness may reap a tmux server between calls. Half blocks under tmux, so the frame is text.
 #
 #   office-drive.sh STEP...      each STEP is tmux send-keys arguments: "/" "'108'" "Enter" "M-Enter"
+#                                or wait:TEXT — no keys; waits until the screen shows TEXT (30 s at most)
 #
 # TLON_URL picks the server (default the service's 127.0.0.1:4040; `server:dev` is :4041).
 # OFFICE_COLS/OFFICE_ROWS size the window (150x60), OFFICE_WAIT the settle per step (1.5 s),
@@ -21,8 +22,10 @@ t new-session -d -x "${OFFICE_COLS:-150}" -y "${OFFICE_ROWS:-60}" \
   "cd '$root/office' && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' bun tui/main.ts 2>'$state/err'"
 sleep 3
 for step in "$@"; do
-  eval "t send-keys -t 0 $step"
-  sleep "${OFFICE_WAIT:-1.5}"
+  case "$step" in
+    wait:*) for _ in $(seq 150); do t capture-pane -p -t 0 | grep -qF -- "${step#wait:}" && break; sleep 0.2; done ;;
+    *) eval "t send-keys -t 0 $step"; sleep "${OFFICE_WAIT:-1.5}" ;;
+  esac
   echo "=== after: $step"
   t capture-pane -p -t 0 | tail -n "${OFFICE_TAIL:-20}"
 done
