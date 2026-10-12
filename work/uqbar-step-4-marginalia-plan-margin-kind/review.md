@@ -1,62 +1,28 @@
-# Review: uqbar-step-4-marginalia-plan-margin-kind @ dd5ba82
+# Review: uqbar-step-4-marginalia-plan-margin-kind @ 8645079
 
-**Verdict: request_changes** — the fix is right, its cost is not.
+**Verdict: approve** — the blocking perf finding from 94758da is fixed; the backing decision is unchanged.
 
-Since 44461f9 one commit, dd5ba82: `inkInto`'s `behind` judges a label's box by its worst pixel instead of the box average. Correct for nolan's finding (a strip at the box edge hid in the average), and the red-first test in `office/test/paint.test.ts` pins it.
+Since 94758da one commit, 8645079 (emma): the diff I escalated, applied verbatim. `LINEAR` is a 256-entry sRGB→linear table in `office/kit/palette.ts`; `luminance()` reads it (same formula as before, no behaviour change); `inkInto`'s `behind` computes each pixel's luminance from the bytes, compares the WCAG ratio numerically against the label colour's luminance, and builds the `#rrggbb` string once for the winning offset. `ROLE.ground` still answers an empty box (`worst < 0`). Same pixel wins as in dd5ba82, so which labels get backed is identical.
 
-## Blocking: the worst-pixel scan is 10–40× the painter's old cost, on the animation loop
+## Verified at the tip
 
-`behind` now builds a `#rrggbb` string and calls `contrast()` (two `rgb()` parses, six `**2.4`, a sort) for every pixel under every label. Measured on a wide-room frame (`office()` fixture, 35 labels, kitty), `inkInto` alone:
+Re-timed `inkInto` on the wide-room frame (`office()` fixture, 300 steps, 35 labels, kitty), six warm runs each, against my table from the last round:
 
-| scale | before (44461f9) | after (dd5ba82) | png encode of the same frame |
+| scale | dd5ba82 (last round) | 8645079 (now) | png encode of the same frame |
 |---|---|---|---|
-| k=3, 1680×600 | ~2 ms | 55–85 ms | 20–45 ms |
-| k=5, 2800×1000 | ~3 ms | 15–40 ms | 15–70 ms |
+| k=2, 1392×400 | — | 0.7–4.0 ms | 3–19 ms |
+| k=3, 2088×600 | 55–85 ms | 0.5–9 ms (median ~2.3) | 6–26 ms |
 
-`kittyImage` runs on every fresh frame, and `main.ts:1981` steps the room every 100 ms and draws when it moved, so while anyone walks the frame budget at k=3 is now ~100 ms of painter + encode: visible stutter, and keys queue behind it. The WCAG sweeps (hundreds of viewports × `inkInto`) pay it too.
+The painter is back under the encode, where it was at 44461f9 (~2 ms). The animation loop's per-frame cost is the PNG again, not the contrast scan.
 
-The fix keeps the worst-pixel rule and drops the per-pixel strings and pows: a 256-entry sRGB→linear table, luminance from the bytes, the ratio compared numerically, and the hex string built once for the winner. Same answer on a 300k-pixel scan (`#8c7b6a`, 1.03), 723 ms → 15 ms.
-
-```diff
---- a/office/kit/palette.ts
-+++ b/office/kit/palette.ts
-@@
--/** WCAG relative luminance of an #rrggbb colour */
--export function luminance(c: string): number {
--  const [r, g, b] = rgb(c).map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 })
--  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
--}
-+/** sRGB channel byte → linear, tabled once: the per-pixel half of `luminance`, for scans over raw bitmaps */
-+export const LINEAR = Float64Array.from({ length: 256 }, (_, v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 })
-+/** WCAG relative luminance of an #rrggbb colour */
-+export function luminance(c: string): number {
-+  const [r, g, b] = rgb(c)
-+  return 0.2126 * LINEAR[r!]! + 0.7152 * LINEAR[g!]! + 0.0722 * LINEAR[b!]!
-+}
---- a/office/tui/paint.ts
-+++ b/office/tui/paint.ts
-@@
--import { contrast, rgb, ROLE } from "../kit/palette"
-+import { contrast, LINEAR, luminance, rgb, ROLE } from "../kit/palette"
-@@
-   const behind = (x: number, y: number, bw: number, bh: number, c: string) => {
--    let worst: string | null = null, low = Infinity
-+    const L = luminance(c)
-+    let worst = -1, low = Infinity
-     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + bh)); j++)
-       for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + bw)); i++) {
--        const o = (j * w + i) * 4, px = "#" + [big[o]!, big[o + 1]!, big[o + 2]!].map((v) => v.toString(16).padStart(2, "0")).join(""), r = contrast(c, px)
--        if (r < low) { low = r; worst = px }
-+        const o = (j * w + i) * 4, l = 0.2126 * LINEAR[big[o]!]! + 0.7152 * LINEAR[big[o + 1]!]! + 0.0722 * LINEAR[big[o + 2]!]!
-+        const r = l > L ? (l + 0.05) / (L + 0.05) : (L + 0.05) / (l + 0.05)
-+        if (r < low) { low = r; worst = o }
-       }
--    return worst ?? ROLE.ground
-+    return worst < 0 ? ROLE.ground : "#" + [big[worst]!, big[worst + 1]!, big[worst + 2]!].map((v) => v.toString(16).padStart(2, "0")).join("")
-   }
-```
-
-Check: `office:check` green (paint, wcag sweeps), and `inkInto` on the wide-room frame back near single-digit ms (a one-off timing like the table above is enough; it need not land as a test).
+- `bun test test/paint.test.ts test/wcag.test.ts` through cap: 16 pass / 0 fail (the worst-pixel red-first test, the balloon tests, and the wide/dark/rail WCAG sweeps).
+- Server verify on this tip: `mise run check` passed (21:29:43Z, recorded on the workline).
+- Tree clean; the only files touched are the two the finding named.
 
 ## Not re-verified
-nolan's PNG samples on the new tip (emma flagged the same). The patch does not change which pixel wins, so the backing decision is identical to dd5ba82's.
+nolan's single-pixel contrast samples and the PNG render of the wide room on this tip (fact #1379). The patch does not change which pixel wins, so the backing is byte-identical to dd5ba82's; QA's margin-path pass is on head 44461f9 and is theirs to extend if they want it on the final sha. Not blocking code review.
+
+## Follow-up (re-filed, from 44461f9)
+k=1 / k=2 shared-row residue: when a cell row is taller than the 9 px line pitch (kitty k=1, or k=2 with cells ≥ 20 px) two margin baselines share one terminal row, so one note has no row of its own and stays unreachable by hover. A layout question (space margin lines by the cell pitch under kitty), not a hit-box one.
+
+Advancing to the merge gate.
