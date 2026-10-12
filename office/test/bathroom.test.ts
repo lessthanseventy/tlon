@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { BATH, DOOR, FALL_LIFE, LIFE, doorOpen, fadeStage, layPrint, prune } from "../kit/bathroom"
+import { createHash } from "node:crypto"
+import { viewOf } from "../kit/crew"
+import { BATH, DOOR, FALL_LIFE, LIFE, doorOpen, fadeStage, layPrint, prune, type Print } from "../kit/bathroom"
+import { WideRoom } from "../rooms/wide"
+import { focus, measure, office } from "./golden"
 
 describe("prints", () => {
   test("a print lives LIFE ticks (a minute at 100 ms), longer when she fell in", () => {
@@ -32,5 +36,22 @@ describe("the room", () => {
     expect(doorOpen([far], 50, -1000)).toBe(false)
     expect(doorOpen([far], 50, 45)).toBe(true)
     expect(doorOpen([far], 80, 45)).toBe(false)
+  })
+})
+
+describe("the prints on the floor", () => {
+  test("a fresh print is drawn, a faded one is fainter, a gone one is not drawn", () => {
+    const room = new WideRoom(696), a = viewOf(office(2), 1), r = room as unknown as { prints: Print[]; tick: number }
+    const frame = () => createHash("sha256").update(Buffer.from(room.render(a, focus, measure, new Date(2026, 9, 5, 21, 0)).rgba)).digest("hex")
+    for (let i = 0; i < 5; i++) room.step(a)
+    const base = frame()
+    r.prints = [{ x: 200, y: 188, at: r.tick, until: r.tick + LIFE }]
+    const fresh = frame()
+    r.prints = [{ x: 200, y: 188, at: r.tick - LIFE + 1, until: r.tick + 1 }]
+    const faded = frame()
+    r.prints = []
+    expect(fresh).not.toBe(base)
+    expect(faded).not.toBe(fresh)
+    expect(frame()).toBe(base)
   })
 })

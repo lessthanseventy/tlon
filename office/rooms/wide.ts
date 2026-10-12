@@ -20,6 +20,7 @@ import { gamesTile } from "../kit/tiles/games"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { meetingTile } from "../kit/tiles/meeting"
 import { loungeTile } from "../kit/tiles/lounge"
+import { fadeStage } from "../kit/bathroom"
 import { bathroomTile } from "../kit/tiles/bathroom"
 import { CAT_DESK, CAT_WARM, catCornerTile, PERCH_TOP, RADIATOR } from "../kit/tiles/cat-corner"
 import { officeTile } from "../kit/tiles/office"
@@ -367,6 +368,13 @@ export class WideRoom extends Sim<Layout> {
     // ── the lounge: rug, couch (its back toward you), lamp, beanbag; the kitchen along the wall ──
     this.lounge.draw(sc, a, l, measure, this.live(), focus)
     this.pastimes(sc, a, l, measure, focus)
+    // Nina's wet pawprints lie on the floor, under everyone: a pad and three toes, fainter each third of their life
+    for (const p of this.prints) {
+      const s = fadeStage(p, this.tick)
+      if (s === 3) continue
+      const ink = tint(ROLE.inactive, ROLE.ground, [0.9, 0.6, 0.35][s]!)
+      px(p.x - 1, p.y, 2, 2, ink); px(p.x - 2, p.y - 2, 1, 1, ink); px(p.x, p.y - 3, 1, 1, ink); px(p.x + 1, p.y - 2, 1, 1, ink)
+    }
     const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
     drawShelf(sc, shelf, mode === "shelved", !!a.uqbar)
     drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null)
