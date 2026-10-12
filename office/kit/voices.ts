@@ -48,6 +48,9 @@ export const NINA = {
   play: ["The yarn has disrespected me for the LAST time.", "Fear me, string.", "I am a fearsome hunter. Of wool."],
   come: ["I'm coming because I WANT to. Not because you asked.", "Fine. Clear the desk. I'm lying on the important papers.", "I was going that way anyway."],
   zoomies: ["PRINCESS ZOOMIES! Clear the runway!"],
+  // the tub: a drink from the tap, and the rare fall in
+  drink: ["Tap water. The only honest water.", "Running water is for royalty. I am royalty.", "The tub is a fountain. Mine."],
+  splash: ["I MEANT to do that.", "Nobody saw that. NOBODY.", "The tub was rude. I will not be discussing it."],
   // she sits on someone's keyboard
   keyboard: ["This is my desk now.", "I fixed your code, {name}. You're welcome.", "Warm. Mine. Go away.", "I'm helping.", "Your keyboard is my cushion now, {name}."],
   // you send her over to someone: she tells them so, in her way

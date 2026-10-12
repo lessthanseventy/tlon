@@ -4,6 +4,7 @@
 // consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { asksYou } from "./crew"
+import { DRINK, FALL_ODDS, FALL_WET, layPrint, prune, STRIDE, WET, type Print } from "./bathroom"
 import { homeLevel } from "./life"
 import { looksGen, overrideFor } from "./looks"
 import type { Pets } from "./pets"
@@ -40,9 +41,10 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
 /**
  * `zoom`: the tick her zoomies end; `leaps`: the room's leaps she is tearing between; `said` what she
  * is saying, from `saidFrom` until `saidUntil`; `stretch`: the tick her wake-up stretch ends; `fuss`: a worker making
- * a fuss of her, from where they are
+ * a fuss of her, from where they are; `wet`: the tick her paws dry (until then each stride leaves a print),
+ * `fell` whether the drink that wet them ended in the tub, `travelled` the pixels walked wet
  */
-export type Cat = { name: string; species: "cat" | "rabbit" | "bird"; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" } | null }
+export type Cat = { name: string; species: "cat" | "rabbit" | "bird"; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" | "drink" } | null; wet: number; fell: boolean; travelled: number }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
@@ -51,6 +53,8 @@ export const FUSS = 36
 /** Nina's places in a room: her nap, your desk, her yarn, her litter, her tower's two perches, the lounge */
 export type CatPlan = {
   nap: Pt; desk: Pt; play: Pt; litter: Pt; perches: [Pt, Pt]; lounge: Pt[]; spots: Pt[]
+  /** the tub she drinks from, if the room has one: the rim she sits on, and the floor she hops up from */
+  bath?: { rim: Pt; floor: Pt }
   /** somewhere warm she makes for when it's cold out (a radiator), if the room has one */
   warm?: Pt
   /** the floor below a spot up off it (a desk, a perch, the litter box), or null */
@@ -130,6 +134,9 @@ export class Sim<L extends { people: Seat[] }> {
   onTogether: ((situation: string, a: string, b: string) => void) | null = null
   private askedTogether = -Infinity
   protected actors = new Map<string, Actor>()
+  /** Nina's wet pawprints, each fading by the tick (`kit/bathroom.ts`) */
+  protected prints: Print[] = []
+  pawprints(): readonly Print[] { return this.prints }
   protected tick = 0
   private seeded = false
   private downSince = -1
@@ -170,7 +177,7 @@ export class Sim<L extends { people: Seat[] }> {
   protected warmTicks = WARM_TICKS
 
   constructor(protected plan: Plan<L>) {
-    this.cat = { name: CAT_NAME, species: "cat", ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null }
+    this.cat = { name: CAT_NAME, species: "cat", ...plan.cat.nap, path: [], mode: "sleep", until: 300, face: 1, purr: 0, byYou: false, yarn: 0, zoom: 0, leaps: [], said: null, saidFrom: 0, saidUntil: 0, stretch: 0, fuss: null, wet: 0, fell: false, travelled: 0 }
   }
 
   /** a click on Nina: she purrs for a few seconds, and wakes (with a stretch) if she was asleep */
@@ -279,9 +286,17 @@ export class Sim<L extends { people: Seat[] }> {
       const to = c.path[0]!
       c.x += Math.sign(to.x - c.x); c.y += Math.sign(to.y - c.y)
       if (to.x !== c.x) c.face = Math.sign(to.x - c.x)
+      if (this.tick < c.wet && ++c.travelled % STRIDE === 0) this.prints.push(layPrint(c.x, c.y, this.tick, c.fell))
       if (c.x === to.x && c.y === to.y) c.path.shift()
       if (!c.path.length && c.errand) {
         const { name, kind } = c.errand, host = this.actors.get(name)
+        if (kind === "drink") {
+          c.errand = null; c.mode = "sit"; c.until = this.tick + DRINK
+          c.fell = Math.random() < FALL_ODDS
+          c.wet = this.tick + DRINK + (c.fell ? FALL_WET : WET)
+          this.catSay(this.line("Nina", c.fell ? "splash" : "drink", c.fell ? NINA.splash : NINA.drink), 70)
+          return true
+        }
         c.errand = null; c.mode = "sit"; c.until = this.tick + (kind === "keys" ? 400 : 200)
         if (host && kind === "cheer") { host.emote = "♥"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "cheer", NINA.cheer, name), 70) }
         if (host && kind === "letter") { host.emote = "✉"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "letter", NINA.letter, name), 70) }
@@ -323,6 +338,7 @@ export class Sim<L extends { people: Seat[] }> {
     // the small hours give her ideas
     const leaps = r < (nightOwl(this.hour()) ? 0.15 : 0.05) * lean(this.temperament.energy) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
     if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(Math.random() * 60); return true }
+    if (p.bath && r > 0.95 && r <= 0.97 && c.mode !== "sleep" && this.catDrink()) return true
     const cold = (this.weather?.temp_c ?? 20) < 10
     const to = cold && p.warm && r < 0.35 ? p.warm
       : company && r < 0.3 ? pick(p.lounge)
@@ -337,8 +353,9 @@ export class Sim<L extends { people: Seat[] }> {
    * rug, play with the yarn, come to your desk, or the zoomies where she is (or, with no leaps
    * near, round your office). False when there is nothing to do it with.
    */
-  catDo(what: "nap" | "play" | "come" | "zoomies"): boolean {
+  catDo(what: "nap" | "play" | "come" | "zoomies" | "drink"): boolean {
     const c = this.cat, p = this.plan.cat
+    if (what === "drink") return this.catDrink()
     if (what === "zoomies") {
       const leaps = this.leapsHere() ?? p.leaps[0]
       if (!leaps?.length) return false
@@ -349,6 +366,16 @@ export class Sim<L extends { people: Seat[] }> {
       c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]; c.mode = "walk"
     }
     c.until = this.tick + 150; this.catSay(this.line("Nina", what, NINA[what]))
+    return true
+  }
+
+  /** Nina goes to the tub for a drink, through the door and up on the rim; false when the room has no bathroom */
+  private catDrink(): boolean {
+    const c = this.cat, p = this.plan.cat
+    if (!p.bath) return false
+    const to = p.bath.rim, down = c.mode === "zoom" ? null : p.via(c), up = p.via(to)
+    c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]
+    c.mode = "walk"; c.until = this.tick + 150; c.errand = { name: "", kind: "drink" }
     return true
   }
 
@@ -466,6 +493,7 @@ export class Sim<L extends { people: Seat[] }> {
     this.together()
     const asleep = this.cat.mode === "sleep"
     if (this.stepCat()) changed = true
+    if (this.prints.length) { const n = this.prints.length; this.prints = prune(this.prints, this.tick); if (this.prints.length !== n) changed = true }
     // the night owls: in the small hours, someone at their desk yawns now and then
     if (nightOwl(this.hour())) for (const x of this.actors.values()) {
       if (x.spot.kind === "desk" && !x.moving && this.tick >= x.emoteUntil && Math.random() < 1 / 900) { x.emote = "z"; x.emoteUntil = this.tick + 45; changed = true }
