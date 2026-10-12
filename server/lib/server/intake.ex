@@ -19,21 +19,9 @@ defmodule Server.Intake do
   alias Server.Thread
   alias Server.Ticket
 
-  @doc "One pass over every workspace with a backlog. `cap` and `route` override for a test."
+  @doc "One pass over every workspace with a backlog, none while the office is paused (`Server.Pause`). `cap` and `route` override for a test."
   def run(opts \\ []) do
-    cap = opts[:cap] || Server.OperatorConfig.setting("max_worklines")
-    max_open = opts[:max_open] || Server.OperatorConfig.setting("max_open_worklines")
-    route = opts[:route] || (&Server.Tickets.route/1)
-
-    start_stalled(opts)
-
-    for ws <- Repo.all(from t in Ticket, where: t.status == "backlog", distinct: true, select: t.workspace_id),
-        {working, open} = in_flight(ws),
-        working < cap and open < max_open,
-        ticket = next(ws),
-        do: route.(ticket)
-
-    :ok
+    if Server.Pause.state() == :working, do: pass(opts), else: :ok
   end
 
   # {being worked, open in all}: a workline waiting on the operator is open but not being worked
@@ -149,4 +137,20 @@ defmodule Server.Intake do
 
   @doc "Whether a ticket is parked by the `held` label — intake never starts it."
   def held?(%Ticket{labels: labels}), do: is_list(labels) and "held" in labels
+
+  defp pass(opts) do
+    cap = opts[:cap] || Server.OperatorConfig.setting("max_worklines")
+    max_open = opts[:max_open] || Server.OperatorConfig.setting("max_open_worklines")
+    route = opts[:route] || (&Server.Tickets.route/1)
+
+    start_stalled(opts)
+
+    for ws <- Repo.all(from t in Ticket, where: t.status == "backlog", distinct: true, select: t.workspace_id),
+        {working, open} = in_flight(ws),
+        working < cap and open < max_open,
+        ticket = next(ws),
+        do: route.(ticket)
+
+    :ok
+  end
 end

@@ -353,6 +353,26 @@ defmodule Server.MCP.GatewayTest do
       assert {409, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "build", why: "forward"})
     end
 
+    test "the stop controls: the snapshot says whether the office is paused; pencils down, lights out, back to work" do
+      path = Path.join(System.tmp_dir!(), "pause-api-#{System.unique_integer([:positive])}.json")
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        File.rm(path)
+
+        if prior,
+          do: Application.put_env(:server, :operator_config_path, prior),
+          else: Application.delete_env(:server, :operator_config_path)
+      end)
+
+      assert {200, %{"pause" => "working"}} = get_json("/api/office")
+      assert {200, %{"pause" => "pencils_down"}} = post_json("/api/office/pause", %{mode: "pencils_down"})
+      assert {200, %{"pause" => "pencils_down"}} = get_json("/api/office")
+      assert {400, _} = post_json("/api/office/pause", %{mode: "nap"})
+      assert {200, %{"pause" => "working"}} = post_json("/api/office/pause", %{mode: "back_to_work"})
+    end
+
     test "the shift board: the snapshot carries each shift and every seat's; seats are put on one, the shift switched" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Board"})
       {:ok, day} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "day"})

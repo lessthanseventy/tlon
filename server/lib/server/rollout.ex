@@ -299,9 +299,12 @@ defmodule Server.Rollout do
   defp force_args(true), do: ["--", "--force"]
   defp force_args(false), do: []
 
-  # no new verify or landing starts while a restart waits for the ones running to finish; a boot
-  # starts its queues unpaused. Best-effort: a node without those queues running (a test) is a no-op.
-  defp pause_gates(verb) do
+  @doc """
+  Pause (`:pause_queue`) or resume (`:resume_queue`) the verify and landing queues: no new one
+  starts, the ones running finish — while a restart waits, and under lights out (`Server.Pause`).
+  Best-effort: a node without those queues running (a test) is a no-op.
+  """
+  def pause_gates(verb) do
     for q <- [:verify, :landing], do: apply(Oban, verb, [[queue: q]])
   rescue
     _ -> :ok

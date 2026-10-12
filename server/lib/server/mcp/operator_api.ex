@@ -103,6 +103,7 @@ defmodule Server.MCP.OperatorAPI do
       DELETE /api/seats/:id               Workspaces.unseat (the agent itself survives)
       PATCH  /api/seats/:id               {"crew": <crew> | "all"} → Shifts.assign: the seat's crew, a new one too (422 otherwise)
       POST   /api/office/shift            {"workspace_id", "shift"} → Shifts.switch: the crew on; its worklines restaffed
+      POST   /api/office/pause            {"mode": "pencils_down" | "lights_out" | "back_to_work"} → Server.Pause: {pause}
       DELETE /api/facts/:id               Dossier.forget_fact (a tombstone: out of recall, row kept)
       POST   /api/issues/:id/resolve      {"resolution"?} → Dossier.resolve_issue
       POST   /api/habits/:id/approve      Server.approve_habit (…/reject: Server.reject_habit)
@@ -193,6 +194,23 @@ defmodule Server.MCP.OperatorAPI do
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"thread_id": n})})
+    end
+  end
+
+  defp route(conn, "POST", "office", ["pause"]) do
+    modes = %{
+      "pencils_down" => &Server.Pause.pencils_down/0,
+      "lights_out" => &Server.Pause.lights_out/0,
+      "back_to_work" => &Server.Pause.back_to_work/0
+    }
+
+    case body(conn) do
+      {%{"mode" => mode}, conn} when is_map_key(modes, mode) ->
+        {:ok, state} = modes[mode].()
+        json(conn, 200, %{pause: state})
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"mode": "pencils_down" | "lights_out" | "back_to_work"})})
     end
   end
 
