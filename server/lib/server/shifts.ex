@@ -1,11 +1,16 @@
 defmodule Server.Shifts do
   @moduledoc """
-  Day and night shifts on one bench. A seat is on the `day` shift, the `night` shift, or both
-  (`all`, every seat until it is put on one, so a workspace with no shifts set works as it always
-  has). The workspace is on one shift at a time, and `Server.Workspaces.bench/1` is the crew on
-  shift, so staffing, intake and every restaff pick only from it. A shift change restaffs each open
-  workline led by someone going off, the workline's own way (`Server.Workline.restaff_now/1`); a
-  plain thread waits for its lead's shift.
+  Crews on one bench, as many as the operator names — an account, a provider, a time of day. A
+  seat is on one crew, or on every one (`all`, every seat until it is put on one, so a workspace
+  with no crews works as it always has). A crew exists while a seat is on it. The workspace has one
+  crew on at a time, and `Server.Workspaces.bench/1` is that crew plus the `all` seats, so
+  staffing, intake and every restaff pick only from it. A switch restaffs each open workline led
+  by someone going off, the workline's own way (`Server.Workline.restaff_now/1`); a plain thread
+  waits for its lead's crew.
+
+  Nothing switches crews by itself: a switch is the operator's, by hand or by answering an offer.
+  Claude's usage limit on a pane offers the other crews in the lobby; taking one schedules the
+  offer to come back at the reset (`Server.Jobs.ShiftBack`).
   """
   import Ecto.Query
 
@@ -18,30 +23,52 @@ defmodule Server.Shifts do
 
   require Logger
 
-  @shifts ~w(day night)
+  @crew ~r/^[a-z0-9][a-z0-9_-]{0,31}$/
 
   # Claude Code's own usage-limit line, anchored to how it prints it, so a pane that only talks
   # about limits never reads as out of quota
   @quota_out ~r/^\s*(⎿\s*)?(Claude usage limit reached|(5-hour|weekly|session) limit reached\b|You've hit your (usage )?limit\b)/miu
 
-  @doc "The workspace's shift, `day` or `night`."
+  @doc "The crew on in the workspace."
   def current(workspace_id), do: Repo.one(from w in Workspace, where: w.id == ^workspace_id, select: w.shift) || "day"
 
+  @doc "The workspace's crews, by name: every crew a seat is on (`all` is no crew of its own)."
+  def crews(workspace_id),
+    do:
+      workspace_id
+      |> Workspaces.bench_all()
+      |> Enum.map(& &1.crew)
+      |> Enum.reject(&(&1 == "all"))
+      |> Enum.uniq()
+      |> Enum.sort()
+
+  @doc "Whether `name` can name a crew: lowercase letters, digits, `-` and `_`, 32 at most."
+  def crew_name?(name), do: is_binary(name) and Regex.match?(@crew, name)
+
   @doc """
-  Put the workspace on shift `to`. Each open workline led by someone going off is restaffed from the
-  crew coming on (`restaffed`); a plain thread they lead waits for them (`waiting`). Switching to the
-  shift already on changes nothing. `{:ok, %{restaffed, waiting}}` |
-  `{:error, :unknown_shift | :not_found}`.
+  Put crew `to` on. Each open workline led by someone going off is restaffed from the crew coming
+  on (`restaffed`); a plain thread they lead waits for them (`waiting`). An open offer to switch is
+  withdrawn, and a pending reminder cancelled: the operator has chosen. Switching to the crew
+  already on changes nothing. `{:ok, %{restaffed, waiting}}` | `{:error, :unknown_shift | :not_found}`.
   """
-  def switch(workspace_id, to) when to in @shifts do
+  def switch(workspace_id, to) do
     cond do
       is_nil(Repo.get(Workspace, workspace_id)) -> {:error, :not_found}
       current(workspace_id) == to -> {:ok, %{restaffed: [], waiting: []}}
+      to not in crews(workspace_id) -> {:error, :unknown_shift}
       true -> switch_to(workspace_id, to)
     end
   end
 
-  def switch(_workspace_id, _to), do: {:error, :unknown_shift}
+  @doc """
+  An offer taken (`Server.Attention`, an answer naming crew `crew`): that crew goes on, and an offer
+  made for a limit (`"back"`, the crew it took off) schedules the offer to come back at the reset.
+  """
+  def take(%{"workspace" => workspace_id} = offer, crew) do
+    {:ok, _} = switch(workspace_id, crew)
+    if offer["back"], do: remind(workspace_id, offer)
+    :ok
+  end
 
   @doc """
   The crew a seat hired now joins: the shift on, once the workspace has crews; with none set, both,
@@ -56,11 +83,11 @@ defmodule Server.Shifts do
 
   @doc """
   Coworker `agent`'s pane text, read by the attention sweep: on a Claude Code pane, Claude's usage
-  limit reached on the day shift, with a night crew to come on, puts the night shift on and tells
-  the lobby why (the crew screen's `S` puts the day crew back after the reset). A limit line acts
-  once: it stays on screen until the pane scrolls, so each pane's line (`pane`, the tab's thread and
-  window) is remembered by fingerprint, in the workspace across restarts, until that pane no longer
-  shows one. A window with no coworker tagged on it is never read. `{:switched, "night"}` | `:ok`.
+  limit reached, with another crew to put on, offers the lobby each other crew — it switches
+  nothing. A limit line acts once: it stays on screen until the pane scrolls, so each pane's line
+  (`pane`, the tab's thread and window) is remembered by fingerprint, in the workspace across
+  restarts, until that pane no longer shows one; a new line's offer replaces an open one. A window
+  with no coworker tagged on it is never read. `{:offered, crews}` | `:ok`.
   """
   def quota_check(workspace_id, agent, pane, text) do
     if Server.Presence.provider_of(agent, workspace_id) == "anthropic" do
@@ -75,7 +102,7 @@ defmodule Server.Shifts do
     end
   end
 
-  @doc "Put a seat on a shift: `day`, `night` or `all` (both). `{:ok, seat}` | `{:error, changeset | :not_found}`."
+  @doc "Put a seat on crew `crew` (any crew name, a new one too) or `all`. `{:ok, seat}` | `{:error, changeset | :not_found}`."
   def assign(seat_id, crew) do
     with %WorkspaceAgent{} = seat <- Repo.get(WorkspaceAgent, seat_id) || {:error, :not_found},
          {:ok, seat} <- seat |> WorkspaceAgent.edit_changeset(%{crew: crew}) |> Repo.update() do
@@ -87,11 +114,8 @@ defmodule Server.Shifts do
   defp switch_to(workspace_id, to) do
     {1, _} = Repo.update_all(from(w in Workspace, where: w.id == ^workspace_id), set: [shift: to])
     announce(workspace_id)
-
-    if to == "day" do
-      withdraw_offers(workspace_id)
-      cancel_reminders(workspace_id)
-    end
+    withdraw_offers(workspace_id, "withdrawn: the #{to} crew is on")
+    cancel_reminders(workspace_id)
 
     going = workspace_id |> Workspaces.bench_all() |> Enum.filter(&(&1.crew not in ["all", to]))
     {:ok, workspace_id |> led_by(going) |> Enum.reduce(%{restaffed: [], waiting: []}, &change_over(&1, &2, to))}
@@ -120,18 +144,15 @@ defmodule Server.Shifts do
     if Channel.thread_lead(thread.id) == before do
       %{acc | waiting: acc.waiting ++ [thread.id]}
     else
-      note(thread, "#{mark(to)} the #{to} shift is on: the crew on shift picks this workline up at #{stage}.")
+      note(thread, "⇄ the #{to} crew is on: it picks this workline up at #{stage}.")
       %{acc | restaffed: acc.restaffed ++ [thread.id]}
     end
   end
 
   defp change_over(thread, acc, to) do
-    note(thread, "#{mark(to)} the #{to} shift is on: this waits for its lead's shift.")
+    note(thread, "⇄ the #{to} crew is on: this waits for its lead's crew.")
     %{acc | waiting: acc.waiting ++ [thread.id]}
   end
-
-  defp mark("night"), do: "☾"
-  defp mark("day"), do: "☼"
 
   defp note(thread, body), do: {:ok, _} = Channel.post(%{thread_id: thread.id, author: "tlon", body: body})
 
@@ -161,47 +182,66 @@ defmodule Server.Shifts do
     :ok
   end
 
-  # remembered once acted on (switched, or nothing to switch to): a switch that raises is retried
+  # remembered once acted on (offered, or nothing to offer): an offer that raises is retried
   defp on_limit(workspace_id, key, line, after_line) do
     mark = fingerprint(line)
 
     if seen(workspace_id)[key] == mark do
       :ok
     else
-      night_crew? = Enum.any?(Workspaces.bench_all(workspace_id), &(&1.crew == "night"))
-
-      result =
-        if current(workspace_id) == "day" and night_crew?, do: nights_for(workspace_id, line, after_line), else: :ok
-
+      on = current(workspace_id)
+      others = workspace_id |> crews() |> List.delete(on)
+      result = if others == [], do: :ok, else: offer(workspace_id, on, others, line <> "\n" <> after_line)
       remember(workspace_id, key, mark)
       result
     end
   end
 
-  # nights now; the offer to put the day crew back waits for the reset (Server.Jobs.ShiftBack)
-  defp nights_for(workspace_id, line, after_line) do
-    {:ok, _} = switch(workspace_id, "night")
-    {local, how} = reset_at(line <> "\n" <> after_line, NaiveDateTime.from_erl!(:calendar.local_time()))
+  defp offer(workspace_id, on, others, text) do
+    {local, how} = reset_at(text, NaiveDateTime.from_erl!(:calendar.local_time()))
     label = Calendar.strftime(local, "%a %-I:%M%P") <> if(how == :estimated, do: ", estimated", else: "")
-    cancel_reminders(workspace_id)
+    withdraw_offers(workspace_id, "withdrawn: a newer limit's offer replaces it")
 
-    later =
-      case Server.Jobs.enqueue(
-             Server.Jobs.ShiftBack.new(%{workspace_id: workspace_id, reset: label, estimated: how == :estimated},
-               scheduled_at: to_utc(local)
-             )
-           ) do
-        {:ok, _} ->
-          "At the reset (#{label}) you'll be asked whether to put the day crew back."
+    with %Thread{id: lobby} <- Channel.machine_thread(workspace_id) do
+      {:ok, _} =
+        Server.Attention.ask(
+          lobby,
+          "tlon",
+          "Claude's usage limit is reached on the #{on} crew (it resets #{label}). Put another crew on?",
+          Enum.map(others, &"#{&1} crew on") ++ ["stay on #{on}"],
+          nil,
+          %{
+            "switch" => %{
+              "workspace" => workspace_id,
+              "crews" => others,
+              "back" => on,
+              "reset" => label,
+              "estimated" => how == :estimated,
+              "at" => DateTime.to_iso8601(to_utc(local))
+            }
+          }
+        )
+    end
 
-        {:error, _} ->
-          "It resets #{label}; S on the crew screen puts the day crew back (the reminder couldn't be scheduled)."
-      end
+    {:offered, others}
+  end
 
-    with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
-         do: note(%Thread{id: lobby}, "☾ Claude's usage limit is reached, so the night shift is on. #{later}")
+  defp remind(workspace_id, %{"back" => back, "reset" => label, "at" => at} = offer) do
+    {:ok, at, _} = DateTime.from_iso8601(at)
+    args = %{workspace_id: workspace_id, back: back, reset: label, estimated: offer["estimated"] == true}
 
-    {:switched, "night"}
+    case Server.Jobs.enqueue(Server.Jobs.ShiftBack.new(args, scheduled_at: at)) do
+      {:ok, _} ->
+        :ok
+
+      {:error, _} ->
+        with %Thread{id: lobby} <- Channel.machine_thread(workspace_id),
+             do:
+               note(
+                 %Thread{id: lobby},
+                 "Claude resets #{label}; the reminder to put the #{back} crew back couldn't be scheduled."
+               )
+    end
   end
 
   @doc """
@@ -226,20 +266,22 @@ defmodule Server.Shifts do
   end
 
   @doc """
-  The reset has come (`Server.Jobs.ShiftBack`): still on the night shift, the lobby gets an ask with
-  its answers attached — `day shift back` puts the day crew back. Already on days, nothing. `:ok`.
+  The reset has come (`Server.Jobs.ShiftBack`): with another crew on than `back`, the one the limit
+  took off, the lobby is offered `back` again. Already back, or `back` no crew any more: nothing. `:ok`.
   """
-  def offer_day(workspace_id, reset, estimated \\ false) do
-    with "night" <- current(workspace_id),
+  def offer_back(workspace_id, back, reset, estimated \\ false) do
+    on = current(workspace_id)
+
+    with true <- on != back and back in crews(workspace_id),
          %Thread{id: lobby} <- Channel.machine_thread(workspace_id) do
       {:ok, _} =
         Server.Attention.ask(
           lobby,
           "tlon",
-          "Claude's limit #{if estimated, do: "should have reset", else: "has reset"} (#{reset}). Put the day crew back?",
-          ["day shift back", "stay on nights"],
+          "Claude's limit #{if estimated, do: "should have reset", else: "has reset"} (#{reset}). Put the #{back} crew back on?",
+          ["#{back} crew on", "stay on #{on}"],
           nil,
-          %{"shift_back" => workspace_id}
+          %{"switch" => %{"workspace" => workspace_id, "crews" => [back]}}
         )
     end
 
@@ -262,11 +304,10 @@ defmodule Server.Shifts do
   # the line's fingerprint, not its text: knobs reach every coworker's brief, and pane text is untrusted
   defp fingerprint(line), do: :sha256 |> :crypto.hash(line) |> Base.encode16(case: :lower) |> binary_part(0, 16)
 
-  # the day crew is back however it came: an open offer to bring it back has nothing left to ask
-  defp withdraw_offers(workspace_id) do
+  defp withdraw_offers(workspace_id, why) do
     for ask <- Server.Attention.open_asks(),
-        ask.payload["shift_back"] == workspace_id,
-        do: Server.Attention.resolve(ask, "withdrawn: the day shift is on")
+        ask.payload["switch"]["workspace"] == workspace_id,
+        do: Server.Attention.resolve(ask, why)
   end
 
   defp next_at(now, day, h, m, ap) do
@@ -293,7 +334,7 @@ defmodule Server.Shifts do
     end
   end
 
-  # a reminder still queued from an earlier limit belongs to a shift that is over
+  # a reminder still queued from an earlier limit belongs to a choice the operator has since made
   defp cancel_reminders(workspace_id) do
     Oban.cancel_all_jobs(
       from j in Oban.Job,

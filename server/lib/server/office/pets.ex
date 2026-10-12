@@ -165,7 +165,7 @@ defmodule Server.Office.Pets do
             ),
           else: []
         ),
-      shift: Server.Shifts.current(ws),
+      shift: if(Server.Shifts.crews(ws) != [], do: Server.Shifts.current(ws)),
       weather: Server.Office.Weather.now(),
       clock: clock(:calendar.local_time())
     })
@@ -187,7 +187,7 @@ defmodule Server.Office.Pets do
     news =
       Enum.filter(
         [
-          ctx[:clock] && "It is #{ctx.clock}#{if ctx[:shift] == "night", do: ", and the night crew is on"}.",
+          ctx[:clock] && "It is #{ctx.clock}#{if ctx[:shift], do: ", and the #{ctx.shift} crew is on"}.",
           outside(ctx[:weather]),
           listed("Shipped today: ", ctx[:landed], "; ", "."),
           listed("Lately in the lobby:\n- ", ctx[:lobby], "\n- ", "")

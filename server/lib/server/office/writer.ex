@@ -4,10 +4,10 @@ defmodule Server.Office.Writer do
   crew's small talk (`Server.Office.Banter`) and their corkboard notes (`Server.Office.Corkboard`) —
   and in what mood.
 
-  The model follows the workspace's shift (`Server.Shifts`), so the flavour text drains the bucket
-  that is already draining: on the day shift (the Claude crew) mostly Haiku, now and then deepseek;
-  on the night shift (the pi crew, which a Claude usage limit switches on) only the ollama models,
-  deepseek and kimi. A Haiku call that fails falls back to deepseek. Each call also draws a
+  The model follows the crew on (`Server.Shifts`), so the flavour text drains the bucket that is
+  already draining: with a Claude coworker on, mostly Haiku, now and then deepseek; with none (the
+  crew on runs elsewhere), only the ollama models, deepseek and kimi. A Haiku call that fails falls
+  back to deepseek. Each call also draws a
   FLAVOUR, one line on the prompt, so one batch differs from the next in kind, not only in wording.
 
   How wild all of it is follows the operator's `wackiness` knob — the voice half of the toy design's
@@ -19,10 +19,8 @@ defmodule Server.Office.Writer do
   """
 
   @deepseek {"claude", "ollama-cloud/deepseek-v4.1-flash"}
-  @pools %{
-    "day" => [{"claude", "haiku"}, {"claude", "haiku"}, @deepseek],
-    "night" => [@deepseek, @deepseek, {"claude", "ollama-cloud/kimi-k2.7-code"}]
-  }
+  @claude_pool [{"claude", "haiku"}, {"claude", "haiku"}, @deepseek]
+  @ollama_pool [@deepseek, @deepseek, {"claude", "ollama-cloud/kimi-k2.7-code"}]
   @flavours [
     "deadpan and dry: understatement, a straight face",
     "absurd: one surreal tangent that follows its own logic",
@@ -55,14 +53,21 @@ defmodule Server.Office.Writer do
   @doc "`seconds` at the office's pace: the wilder it is, the more often it talks (÷2 at 2, ÷4 at 3)."
   def every(seconds, level \\ level()), do: div(seconds, Map.get(@pace, level, 1))
 
-  @doc "The models the workspace's shift draws from, `[{cmd, model}]`, a likelier one listed more often."
-  def pool(workspace_id), do: Map.get(@pools, Server.Shifts.current(workspace_id), @pools["night"])
+  @doc "The models the crew on draws from, `[{cmd, model}]`, a likelier one listed more often."
+  def pool(workspace_id) do
+    claude_on? =
+      workspace_id
+      |> Server.Workspaces.bench()
+      |> Enum.any?(&(Server.Presence.provider_of(&1.name, workspace_id) == "anthropic"))
+
+    if claude_on?, do: @claude_pool, else: @ollama_pool
+  end
 
   @doc "The flavours a call may draw."
   def flavours, do: @flavours
 
   @doc """
-  Write `prompt` for workspace `workspace_id`: a model from its shift's pool, a flavour on the
+  Write `prompt` for workspace `workspace_id`: a model from its crew's pool, a flavour on the
   prompt. `{:ok, stdout}` or `Server.ModelCli`'s `{:error, _}`.
   """
   def write(prompt, workspace_id) do

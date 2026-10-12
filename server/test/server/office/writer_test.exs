@@ -1,5 +1,6 @@
 defmodule Server.Office.WriterTest do
-  # The office's flavour text follows the shift: Claude's bucket by day, ollama's by night.
+  # The office's flavour text drains the bucket the crew on is draining: Claude's while a Claude
+  # coworker is on, ollama's otherwise — whatever the crews are called.
   use ExUnit.Case, async: false
 
   alias Server.Office.Writer
@@ -10,12 +11,18 @@ defmodule Server.Office.WriterTest do
     %{ws: ws}
   end
 
-  test "by day it is mostly Haiku with some deepseek; by night only the ollama models", %{ws: ws} do
-    day = Writer.pool(ws.id)
-    assert {"claude", "haiku"} in day and Enum.count(day, &(&1 == {"claude", "haiku"})) > 1
-    assert Enum.any?(day, &match?({"claude", "ollama-cloud/" <> _}, &1))
+  test "with a Claude coworker on it is mostly Haiku with some deepseek; with none, only the ollama models",
+       %{ws: ws} do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder", crew: "claude"})
+    {:ok, pi} = Server.Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder", crew: "pi"})
+    {:ok, _} = Server.Workspaces.retarget(ws.id, pi.agent_id, %{model: "ollama-cloud/glm-5.2"})
+    {:ok, _} = Server.Shifts.switch(ws.id, "claude")
 
-    {:ok, _} = Server.Shifts.switch(ws.id, "night")
+    claude = Writer.pool(ws.id)
+    assert {"claude", "haiku"} in claude and Enum.count(claude, &(&1 == {"claude", "haiku"})) > 1
+    assert Enum.any?(claude, &match?({"claude", "ollama-cloud/" <> _}, &1))
+
+    {:ok, _} = Server.Shifts.switch(ws.id, "pi")
     assert Enum.all?(Writer.pool(ws.id), &match?({"claude", "ollama-cloud/" <> _}, &1))
   end
 

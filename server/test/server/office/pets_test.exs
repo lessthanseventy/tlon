@@ -41,7 +41,8 @@ defmodule Server.Office.PetsTest do
         Enum.find_value(1..50, fn _ ->
           Process.sleep(50)
           v = Pets.voices(ws.id)
-          map_size(v) == 2 && v
+          # the pair's batch leaves no voice to see, so its call is waited on by the log
+          map_size(v) == 2 && File.read!(calls) == "x\nx\nx\n" && v
         end)
 
       assert voices["Nina"] == %{"pet" => ["Adore me, peasant."], "muse" => ["Sparkle check."]}
@@ -91,6 +92,7 @@ defmodule Server.Office.PetsTest do
 
     for ask <- [Pets.prompt("Nina", ctx), Pets.prompt_duo(ctx)] do
       assert ask =~ "It is evening, and the night crew is on."
+      refute Pets.prompt("Nina", %{ctx | shift: nil}) =~ "crew is on"
       assert ask =~ "Outside: Light rain."
       assert ask =~ "Shipped today: Souls step 1"
       assert ask =~ "- uqbar: the toggle is in the sidebar now"
