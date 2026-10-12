@@ -49,6 +49,8 @@ export type Agents = {
   workspaces: { id: number; name: string; shift?: string }[]
   /** the crew board: every seat, each on a crew of the operator's naming or `all` (every crew) */
   shifts?: { workspace_id: number; seat_id: number; name: string; archetype: string | null; crew: string }[]
+  /** the office's stop controls (`Server.Pause`); absent from an older server */
+  pause?: "working" | "pencils_down" | "lights_out"
   archetypes: Archetype[]
   models: ModelChoice[]
   notes: Note[]

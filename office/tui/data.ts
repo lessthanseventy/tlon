@@ -213,6 +213,7 @@ export const ticketUnblock = (id: number, by: number) => send("DELETE", `unblock
 export const hire = (ws: number, name: string, archetype: string) => write(`hiring ${name}`, `/workspaces/${ws}/coworkers`, { name, archetype }, () => `hired ${name}, a ${archetype}`)
 /** a coworker's model or ask policy; "inherit" puts it back to the archetype's */
 export const seatShift = (seat: number, name: string, crew: string) => send("PATCH", `putting ${name} on ${crew === "all" ? "every crew" : `the ${crew} crew`}`, `/seats/${seat}`, () => `${name} is on ${crew === "all" ? "every crew" : `the ${crew} crew`}`, { crew })
+export const pause = (mode: "pencils_down" | "lights_out" | "back_to_work") => write(mode.replace(/_/g, " "), "/office/pause", { mode }, (j) => `the office: ${String(j.pause).replace(/_/g, " ")}`)
 export const shiftSwitch = (ws: number, shift: string) => write(`putting the ${shift} crew on`, "/office/shift", { workspace_id: ws, shift }, (j) => `the ${shift} crew is on · ${j.restaffed?.length ?? 0} worklines restaffed, ${j.waiting?.length ?? 0} threads waiting`)
 export const retarget = (ws: number, agent: number, knobs: { model?: string; ask?: string }) => send("PATCH", "changing a coworker", `/workspaces/${ws}/coworkers/${agent}`, (j) => `now ${j.model ? `${j.model.provider}/${j.model.model}` : "the archetype's model"} · ${j.ask ?? "the archetype's ask"}`, knobs)
 /** a seat's persona: made if none, or `reroll` for a new seed */
