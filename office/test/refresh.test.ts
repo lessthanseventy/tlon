@@ -34,12 +34,18 @@ afterAll(() => {
   server.stop(true)
 })
 
-const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-// a step that never lands says which one, how long the test had run, and what the pane showed
-const t0 = Date.now()
+const capture = () => tmux("capture-pane", "-p", "-t", "0")
+const screen = () => dec.decode(capture().stdout)
+// one budget for the whole test, under bun's own timeout, so a step that never lands throws its
+// own message (which step, how long, the pane and tmux's complaint) instead of a bare timeout
+const t0 = Date.now(), deadline = t0 + 25_000
 const until = async (what: string, ok: () => boolean) => {
-  for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what} after ${Date.now() - t0}ms (first inbox read given up: ${firstInboxGivenUp}); pane:\n${screen()}`)
+  while (!ok() && Date.now() < deadline) await Bun.sleep(50)
+  if (!ok()) {
+    const r = capture()
+    throw new Error(`never saw ${what} after ${Date.now() - t0}ms (first inbox read given up: ${firstInboxGivenUp}); capture-pane exit ${r.exitCode}, stderr: ${dec.decode(r.stderr).trim() || "(none)"}; pane:
+${dec.decode(r.stdout)}`)
+  }
 }
 
 test("the finder lists the snapshot's threads while the inbox read is still out", async () => {
