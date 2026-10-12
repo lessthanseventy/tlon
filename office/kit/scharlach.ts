@@ -48,3 +48,10 @@ export function tickForRedThreads(l: Ledger, redIds: readonly number[], threads:
   }
   return { demerits: next.demerits, ticked }
 }
+/**
+ * Tick from a triage read: a count of 0 is a fully green board, which clears the ticked memory (the
+ * caller need not fetch the failed checks then) so a later re-red ticks again.
+ */
+export function tickFromTriage(l: Ledger, redCount: number, redIds: readonly number[], threads: { id: number; lead?: string | null }[]): Ledger {
+  return tickForRedThreads(l, redCount > 0 ? redIds : [], threads)
+}
