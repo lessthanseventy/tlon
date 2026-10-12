@@ -34,7 +34,7 @@ defmodule Server.WorkspaceAgent do
     |> cast(attrs, [:workspace_id, :agent_id | @mutable])
     |> validate_required([:workspace_id, :agent_id])
     |> validate_inclusion(:grade, @grades)
-    |> validate_inclusion(:crew, ~w(all day night))
+    |> validate_crew()
     |> validate_archetype()
     |> unique_constraint([:workspace_id, :agent_id])
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
@@ -47,8 +47,17 @@ defmodule Server.WorkspaceAgent do
       |> cast(attrs, @mutable)
       |> validate_required([:crew])
       |> validate_inclusion(:grade, @grades)
-      |> validate_inclusion(:crew, ~w(all day night))
+      |> validate_crew()
       |> validate_archetype()
+
+  # `all` is on every crew; any other crew is named by the operator (`Server.Shifts`)
+  defp validate_crew(cs) do
+    validate_change(cs, :crew, fn :crew, c ->
+      if c == "all" or Server.Shifts.crew_name?(c),
+        do: [],
+        else: [crew: "a crew is lowercase letters, digits, - and _ (32 at most), or all"]
+    end)
+  end
 
   # one the role registry can't resolve would crash every read that instantiates the seat's profile
   defp validate_archetype(cs) do

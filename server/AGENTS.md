@@ -21,10 +21,12 @@ and every layer the spine design's re-laid §9 asked for
   born with a lead (`designated_lead/1`, the workspace's manager) — the lead invariant. The manager
   never leads a workline: `assign_lead/2` refuses it, and promoting a manager-led thread restaffs it
   (a free builder, else a hire) or, with no builder on the bench, leaves it unled.
-- **shifts** (`Server.Shifts`) — day and night crews on one bench: a seat is on `day`, `night` or
-  both (`all`, the default, so a bench with no shifts set is unchanged); `Workspaces.bench/1` is the
-  crew on shift (`bench_all/1` everyone), so staffing picks only from it. A shift change restaffs the
-  going crew's worklines the workline's own way; their plain threads wait for them.
+- **shifts** (`Server.Shifts`) — crews on one bench, as many as the operator names (an account, a
+  provider, a time of day): a seat is on one crew or on `all` (the default, so a bench with no
+  crews is unchanged); `Workspaces.bench/1` is the crew on plus `all` (`bench_all/1` everyone), so
+  staffing picks only from it. A switch restaffs the going crew's worklines the workline's own way;
+  their plain threads wait for them. Nothing switches by itself: Claude's usage limit on a pane
+  offers the other crews in the lobby, and a taken offer offers the way back at the reset.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
   instance; warmth is measured from `last_active_at`, never a heartbeat.
 - **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;

@@ -341,7 +341,7 @@ defmodule Server.MCP.GatewayTest do
       {:ok, night} = Server.Workspaces.seat(ws.id, %{name: "dahlmann", archetype: "builder"})
 
       assert {200, %{"crew" => "night"}} = request_json(:patch, "/api/seats/#{night.id}", %{crew: "night"})
-      assert {422, _} = request_json(:patch, "/api/seats/#{night.id}", %{crew: "dusk"})
+      assert {422, _} = request_json(:patch, "/api/seats/#{night.id}", %{crew: "Not a crew!"})
       assert {422, _} = request_json(:patch, "/api/seats/#{night.id}", %{})
       assert {404, _} = post_json("/api/office/shift", %{workspace_id: 999_999, shift: "night"})
 
