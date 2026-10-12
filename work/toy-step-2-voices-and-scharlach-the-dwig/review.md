@@ -1,16 +1,17 @@
-REQUEST CHANGES — one real bug, rest is sound.
+APPROVE — the blocking bug from the prior review (runeberg, 883de44) is fixed; nothing new blocks.
 
-Verified: `bun test test/scharlach.test.ts test/seat-voices.test.ts` → 13 pass; `tsc --noEmit` reported nothing. Did not drive the TUI.
+Reviewer model: claude-fable-5-1, a different model than the builder's (claude-sonnet-5-5 on a1fe73f).
 
-## Blocking
+Verified: `bun test test/scharlach.test.ts test/seat-voices.test.ts` → 14 pass, 0 fail; `bunx tsc --noEmit -p office` clean. Did not drive the TUI. Traced `tickLedger` (`office/tui/main.ts`) by hand: on a green board (`all.triage[sws]` 0) it now falls through to `tickFromTriage(ledger, 0, [], threads)` → `ticked` becomes an empty Set, demerits kept, so a re-red ticks again. The new unit test covers exactly that seam.
 
-**A red never "clears" in the TUI, so a re-red won't re-tick** (`office/tui/main.ts`, `tickLedger`).
-`tickLedger` returns early when `all.triage[sws] <= 0` (or `data.triage` is null). `tickForRedThreads` only forgets a thread's `ticked` entry when it is absent from the next `redIds` — but that call is skipped exactly when the board goes fully green. So: thread 7 red → ticked; build goes green (early return, `ledger.ticked` still holds 7); thread 7 red again → "already ticked", no demerit. The doc comment and the unit test "a red that clears then re-reds ticks again" promise the opposite; the test passes only because it calls the kit fn with an empty list, which the TUI never does on the green path.
-Fix: on the green/empty path, reset instead of returning — `ledger = tickForRedThreads(ledger, [], all.threads)` (or `{ ...ledger, ticked: new Set() }`). Add a test at that seam if feasible.
+## Changed since 883de44
+- `tickFromTriage` added in `kit/scharlach.ts`; `tickLedger` only returns early when the fetch of a non-green triage fails (correct: an unknown board should not clear memory).
+- Test "a fully green board (triage count 0) clears the ticked memory" added.
 
 ## Non-blocking (follow_ups)
-
+- Double tick in one pass: `failed_checks` is uniq by {thread, cmd}, so a thread with two distinct failed check cmds appears twice in `shown`; `tickForRedThreads` checks the OLD ledger's `ticked`, so both tick in the same refresh. Dedupe `redIds` or check the in-progress `ticked`.
+- `failed_checks.shown` is capped at 5 (`Server.Office.Room` `@cap`). With more than 5 reds, threads outside the cap aren't in `redIds`, get dropped from `ticked`, and re-tick if they rotate back in. Presentation only.
 - Scharlach's canned "The build is red. I have recorded the demerit." fires at a game/couch regardless of build state.
 - `seatLine`'s `{name}` → "you" replacement is dead (no line uses it).
 - Fallback fires whenever `data.talk` returns `[]`, including server-side throttling, not only `--sandbox`; the comment overstates.
-- Missing trailing newline in scharlach.ts and seat-voices.ts.
+- Missing trailing newline in `kit/scharlach.ts` and `kit/seat-voices.ts`.
