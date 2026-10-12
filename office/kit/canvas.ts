@@ -18,9 +18,10 @@ export type Ink =
 export type Frame = { rgba: Uint8Array; width: number; height: number; ink: Ink[]; hits: Hit[] }
 /**
  * How wide `s` is at font `size`, in logical pixels — each surface measures its own text. A surface
- * that knows its text's height says so in `lineHeight`, and a room spaces its lines by it.
+ * that knows its text's height says so in `lineHeight`, and a room spaces its lines by it; one that
+ * hit-tests by terminal cell says how tall a cell row is in `rowHeight`, in room px.
  */
-export type Measure = ((s: string, size: number) => number) & { lineHeight?: (size: number) => number }
+export type Measure = ((s: string, size: number) => number) & { lineHeight?: (size: number) => number; rowHeight?: number }
 
 /** a 1x RGBA buffer and the two ways a room paints into it */
 export class Canvas {

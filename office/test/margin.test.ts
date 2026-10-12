@@ -95,9 +95,13 @@ describe("marginInk", () => {
     expect(hits[0]!.x + hits[0]!.w).toBeGreaterThanOrEqual(text.x + 40)
   })
 
-  test("half blocks: every cell of a note's row hits it, wherever the baseline falls in the cell", () => {
-    for (const [W, H, cols, rows] of [[400, 300, 150, 60], [320, 240, 150, 60], [400, 300, 120, 50], [288, 200, 100, 40]] as const) {
-      const g = geometry(W, H, cols, rows, 4, null, false)
+  test("every terminal cell of a note's row hits it, wherever the baseline falls in the cell — half blocks and kitty alike", () => {
+    const cell = (w: number, h: number) => ({ w, h })
+    for (const [W, H, cols, rows, px] of [
+      [400, 300, 150, 60, null], [320, 240, 150, 60, null], [400, 300, 120, 50, null], [288, 200, 100, 40, null],
+      [400, 300, 150, 60, cell(10, 20)], [400, 280, 100, 40, cell(12, 24)], [300, 200, 150, 60, cell(8, 16)],
+    ] as const) {
+      const g = geometry(W, H, cols, rows, 4, px, px !== null)
       for (let h = 80; h < 120; h++) {
         const vp = { x: 0, y: 0, w: W, h }
         const { ink, hits } = marginInk([note(1, 10, "see #5"), note(2, 20, "and #6")], new Looks(0), null, vp, measureFor(g))
