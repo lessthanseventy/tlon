@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing } from "../kit/draw"
-import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, speciesBase, SPECIES_VOICE, TEMPERAMENTS } from "../kit/pets"
+import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
 import { NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, SPECIES_ART } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
@@ -219,4 +219,34 @@ describe("the cat slot's species", () => {
       expect(v.sassy[occ]!.length).toBeGreaterThan(0); expect(v.sweet[occ]!.length).toBeGreaterThan(0)
     }
   })
+})
+
+describe("Argos and the trail", () => {
+  type Trail = { dog: { x: number; y: number; path: { x: number; y: number }[]; mode: string; creep: boolean; until: number; fuss: unknown }; prints: { x: number; y: number; at: number; until: number }[]; tick: number }
+  const trail = [300, 312, 324].map((x, i) => ({ x, y: 188, at: i * 12, until: 9999 }))
+
+  test("he follows the prints in the order she laid them, creeping", () => chance(0, () => {
+    const room = new WideRoom(696), a = viewOf(office({ thinking: false }), 1), r = room as unknown as Trail
+    for (let i = 0; i < 10; i++) room.step(a)
+    r.prints = trail.map((p) => ({ ...p }))
+    Object.assign(r.dog, { until: 0, mode: "sit", fuss: null, path: [] })
+    for (let i = 0; i < 40 && !r.dog.creep; i++) room.step(a)
+    expect(r.dog.creep).toBe(true)
+    expect(r.dog.path.slice(-3).map((p) => [p.x, p.y])).toEqual([[300, 188], [312, 188], [324, 188]])
+  }))
+
+  test("one print is not a trail, and no prints leave his day as it was", () => chance(0, () => {
+    const dog = { x: 200, y: 176, aisle: 176, path: [], mode: "sit" as const, until: 0, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
+    const ctx = (prints: { x: number; y: number }[]) => ({
+      tick: 100, antic: null, quiet: () => true, actors: new Map(), at: () => [], bed: () => ({ x: 400, y: 112, aisle: 112, pose: "stand" as const, face: "left" as const, kind: "roam" as const }),
+      bowl: () => ({ x: 500, y: 162, aisle: 162, pose: "stand" as const, face: "right" as const, kind: "roam" as const }),
+      visit: () => { throw new Error("no host") }, roam: () => ({ x: 150, y: 176, aisle: 176, pose: "stand" as const, face: "left" as const, kind: "roam" as const }),
+      route: (x: number, _from: number, goal: { x: number; y: number }) => [{ x, y: goal.y }, { x: goal.x, y: goal.y }],
+      table: () => ({ x: 0, y: 0, w: 1, h: 1 }), mc: 300, say: () => {}, argos: () => "", fussDog: () => {}, prints: () => prints,
+    })
+    expect(stepDog({ ...dog, path: [] }, ctx([]) as never)).toBe(true)
+    const one = { ...dog, path: [] as { x: number; y: number }[] }
+    stepDog(one, ctx([trail[0]!]) as never)
+    expect(one.creep).toBe(false)
+  }))
 })

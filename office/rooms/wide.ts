@@ -244,6 +244,7 @@ export class WideRoom extends Sim<Layout> {
       visit: (host) => this.plan.visit(host),
       roam: () => this.plan.roam(this.plan.layout(EMPTY)),
       route: (x, from, goal) => this.plan.route(x, from, goal),
+      prints: () => this.prints,
       table: () => corner(this.z).table,
       mc: this.z.Mc,
       say: (text) => this.dogSay(text),

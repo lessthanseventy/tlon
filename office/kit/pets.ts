@@ -120,6 +120,8 @@ export function stepDog(d: Dog, ctx: {
   visit(host: Actor): Spot
   roam(): Spot
   route(x: number, from: number, goal: Spot): Pt[]
+  /** Nina's wet pawprints, in the order she laid them */
+  prints(): readonly Pt[]
   table(): { x: number; y: number; w: number; h: number }
   mc: number
   say(text: string): void
@@ -135,6 +137,7 @@ export function stepDog(d: Dog, ctx: {
     if (to.x !== d.x) d.face = Math.sign(to.x - d.x)
     if (d.x === to.x && d.y === to.y) d.path.shift()
     if (!d.path.length) {
+      d.creep = false
       const bed = ctx.bed(), asleep = d.x === bed.x && d.y === bed.y
       d.mode = asleep ? "sleep" : "sit"
       d.until = ctx.tick + (asleep ? 900 : 200) + Math.floor(Math.random() * 400)
@@ -154,6 +157,14 @@ export function stepDog(d: Dog, ctx: {
     if (near) { ctx.fussDog(near); return true }
   }
   if (ctx.tick < d.until) return d.mode === "sit" && ctx.tick % 3 === 0
+  // a wet trail: he finds the first print and creeps along it to the last
+  const trail = ctx.prints()
+  if (trail.length >= 2 && d.mode !== "sleep" && !d.fuss && Math.random() < 0.01) {
+    const first = trail[0]!, to: Spot = { x: first.x, y: first.y, aisle: first.y, pose: "stand", face: "left", kind: "roam" }
+    d.path = [{ x: d.x, y: d.aisle }, ...ctx.route(d.x, d.aisle, to), ...trail.slice(1).map((p) => ({ x: p.x, y: p.y }))]
+    d.aisle = trail[trail.length - 1]!.y; d.mode = "walk"; d.host = null; d.creep = true
+    return true
+  }
   const r = Math.random(), working = [...ctx.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && !a.path.length)
   const host = working.length && r < 0.35 ? pick(working) : null
   const spot = (x: number, y: number, aisle = y): Spot => ({ x, y, aisle, pose: "stand", face: "left", kind: "roam" })
