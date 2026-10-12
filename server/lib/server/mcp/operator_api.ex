@@ -59,6 +59,9 @@ defmodule Server.MCP.OperatorAPI do
                                           (a reason) lands a review past an owed QA pass, recorded
       POST   /api/threads/:id/send_back   {"stage", "why"} → Workline.send_back as the operator: back to
                                           spec/plan/build on its own branch (400 without a why, 409 refused)
+      GET    /api/threads/:id/review      Workline.OperatorReview.diff: the branch's change as files, hunks, numbered lines
+      POST   /api/threads/:id/review      {"verdict": comment|changes|approve, "summary"?, "notes"?: [{"path", "line"?, "side"?, "text"}]}
+                                          → OperatorReview.submit as the operator: the notes to the lead; changes sends it back to build
       GET    /api/threads/:id/docs        Workline.Docs.list (the workline's docs: work/<slug>/*.md)
       GET    /api/threads/:id/docs/:name  Workline.Docs.read (one doc's text; "current" is the stage's)
       POST   /api/threads/:id/verify      run a workline's verify again (Jobs.Verify), as entering verify does; 409 off verify
@@ -374,6 +377,25 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "GET", ["terminal"], t), do: terminal(conn, t)
   defp on_thread(conn, "GET", ["worktree"], t), do: worktree(conn, t)
   defp on_thread(conn, "GET", ["docs"], t), do: json(conn, 200, Server.Workline.Docs.list(t))
+
+  defp on_thread(conn, "GET", ["review"], t), do: json(conn, 200, Server.Workline.OperatorReview.diff(t))
+
+  defp on_thread(conn, "POST", ["review"], t) do
+    {b, conn} = body(conn)
+    notes = Map.get(b, "notes", [])
+
+    if is_binary(b["verdict"]) and is_list(notes),
+      do:
+        reply(
+          conn,
+          Server.Workline.OperatorReview.submit(t, operator(), b["verdict"], b["summary"] || "", notes),
+          &thread_row/1
+        ),
+      else:
+        json(conn, 400, %{
+          error: ~s(expected {"verdict": "comment" | "changes" | "approve", "summary"?, "notes"?: [...]})
+        })
+  end
 
   defp on_thread(conn, "GET", ["docs", name], t) do
     case Server.Workline.Docs.read(t, name) do

@@ -51,7 +51,7 @@ type Mode =
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
-  | { kind: "build" } | { kind: "settings" }
+  | { kind: "build" } | { kind: "settings" } | { kind: "review"; tid: number }
   | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
@@ -161,6 +161,9 @@ let officeRev: string | null | undefined
 /** the suggestion box: corkboard ideas the banter wrote in a coworker's voice (never a request), for you to file or throw out */
 let ideas: CorkNote[] = []
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
+/** the branch under review, and the notes not yet sent, kept per thread so leaving the screen loses none */
+let review: data.Review | null = null
+const reviewNotes = new Map<number, data.ReviewNote[]>()
 let lifeCard: LifeStatus | null = null
 let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
@@ -365,6 +368,7 @@ async function loadCard() {
     case "ticket": case "epic": case "column": tickets = (await data.board(w)) ?? tickets; break
     case "card": card = await data.workspaceCard(w); break
     case "settings": settings = await data.settings(); break
+    case "review": review = await data.review(mode.tid); break
     case "calendar": cal = await data.schedules(w); break
     case "life": lifeCard = (await data.life(w)) ?? lifeCard; break
     case "runs": case "run": board = (await data.runs(mode.id)) ?? board; cal ??= await data.schedules(w); break
@@ -591,7 +595,7 @@ function threadActions(tid: number, inReader = false): Action[] {
     ...(th && cardState(view(), th, boardCtx())?.atCap ? [{ key: "S", label: "raise the cap (settings)", run: () => { if (reader) closeReader(); open({ kind: "settings" }) } }] : []),
     { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) },
     { key: "g", label: "git (lazygit)", run: () => void zoomGit(tid) },
-    ...(th?.stage ? [{ key: "d", label: "read its docs (spec, plan…)", run: () => void pickDoc(tid) }] : []),
+    ...(th?.stage ? [{ key: "d", label: "read its docs (spec, plan…)", run: () => void pickDoc(tid) }, { key: "R", label: "review its branch", run: () => { if (reader) closeReader(); open({ kind: "review", tid }) } }] : []),
     {
       key: "h", label: "hand off to…", run: () => {
         const bench = view().bench
@@ -1161,6 +1165,56 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           { key: "I", label: "icon", run: () => ask("icon", (s) => void did(data.workspaceEdit(w, { icon: s.trim() })).then(reload), { text: c.icon ?? "" }) },
           { key: "+", label: "add a repo", run: () => ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(reload) }) },
           ...(repo ? [{ key: "-", label: `remove ${repo.path.split("/").pop()}`, run: () => ask2(`remove ${repo.path} from ${c.name}`, () => void did(data.repoRemove(repo.id)).then(reload)) }] : []),
+          back1,
+        ],
+      }
+    }
+    case "review": {
+      const tid = mode.tid, notes = reviewNotes.get(tid) ?? []
+      if (!review) return { title: `REVIEW · #${tid}`, rows: [{ segs: [dim("reading the branch…")] }], actions: [back1] }
+      type At = { path: string; line?: number; side?: "+" | "-" | " "; hunk?: boolean }
+      const same = (n: data.ReviewNote, at: At) => n.path === at.path && n.line === at.line && n.side === at.side
+      const rows: Row[] = []
+      const noteRows = (at: At) => { for (const n of notes) if (same(n, at)) rows.push({ segs: [dim("        "), { s: `✎ ${n.text}`, fg: ROLE.attention }], ref: at }) }
+      const noteOn = (at: At) => ask(at.line ? `note on ${at.path}:${at.line}` : `note on ${at.path}`, (s) => {
+        if (!s.trim()) return
+        reviewNotes.set(tid, [...(reviewNotes.get(tid) ?? []).filter((n) => !same(n, at)), { path: at.path, line: at.line, side: at.side, text: s.trim() }]); draw()
+      }, { text: notes.find((n) => same(n, at))?.text ?? "" })
+      for (const f of review.files) {
+        const at: At = { path: f.path }
+        rows.push({ segs: [key(f.path), dim(`  ${f.status}  `), { s: `+${f.added}`, fg: ROLE.live }, plain(" "), { s: `-${f.deleted}`, fg: ROLE.attention }, ...(f.binary ? [dim("  binary")] : [])], open: () => noteOn(at), ref: at })
+        noteRows(at)
+        for (const h of f.hunks) {
+          rows.push({ segs: [dim(h.header)], ref: { path: f.path, hunk: true } })
+          for (const l of h.lines) {
+            const lineAt: At = { path: f.path, line: l.new ?? l.old ?? undefined, side: l.kind }
+            const num = (n: number | null) => (n === null ? "    " : String(n).padStart(4))
+            rows.push({ segs: [dim(`${num(l.old)} ${num(l.new)} `), { s: `${l.kind}${l.text}`, fg: l.kind === "+" ? ROLE.live : l.kind === "-" ? ROLE.attention : ROLE.prose }], open: () => noteOn(lineAt), ref: lineAt })
+            noteRows(lineAt)
+          }
+        }
+      }
+      if (!review.files.length) rows.push({ segs: [dim("the branch changes nothing yet")] })
+      const here = rows[sel]?.ref as At | undefined
+      const jump = (dir: 1 | -1, want: (a: At, i: number) => boolean) => {
+        for (let i = sel + dir; i >= 0 && i < rows.length; i += dir) if (rows[i]?.ref && want(rows[i]!.ref as At, i)) { sel = i; return draw() }
+      }
+      const isFile = (a: At) => !a.line && !a.hunk
+      const submit = () => ask(`review #${tid}: a summary (optional) · tab: the verdict`, (s, [verdict]) => {
+        const sent = data.reviewSubmit(tid, verdict as string, s, reviewNotes.get(tid) ?? [])
+        // the notes are kept until the server takes them: a refused submit loses nothing
+        void did(sent.then((msg) => { if (!msg.includes(" failed: ")) { reviewNotes.delete(tid); back() } return msg }))
+      }, { cycles: [{ name: "verdict", values: [{ label: "comment", value: "comment" }, { label: "request changes", value: "changes" }, { label: "approve", value: "approve" }], i: 0 }] })
+      return {
+        title: `REVIEW · #${tid}${review.head ? ` @ ${review.head.slice(0, 7)}` : ""} · ${review.files.length} files · ${notes.length} notes · ⏎ notes the selected line`,
+        rows,
+        actions: [
+          { key: "a", label: "note this line", run: () => { if (here && !here.hunk) noteOn(here) } },
+          { key: "A", label: "note the whole file", run: () => { if (here) noteOn({ path: here.path }) } },
+          ...(here && notes.some((n) => same(n, here)) ? [{ key: "x", label: "drop its note", run: () => { reviewNotes.set(tid, notes.filter((n) => !same(n, here))); draw() } }] : []),
+          { key: "n", label: "next hunk", run: () => jump(1, (a) => !!a.hunk) }, { key: "p", label: "previous hunk", run: () => jump(-1, (a) => !!a.hunk) },
+          { key: "N", label: "next file", run: () => jump(1, isFile) }, { key: "P", label: "previous file", run: () => jump(-1, isFile) },
+          { key: "s", label: `submit${notes.length ? ` ${notes.length} notes` : ""}…`, run: submit },
           back1,
         ],
       }

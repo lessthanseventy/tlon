@@ -419,7 +419,8 @@ defmodule Server.Workline do
 
   defp same_code?(thread, sha, head), do: compare_code(thread, sha, head) == :same
 
-  defp branch_head(thread) do
+  @doc "The commit `work/<slug>` is at in the thread's repo, or nil without one."
+  def branch_head(thread) do
     case System.cmd("git", ["-C", Git.root(thread), "rev-parse", "--verify", "--quiet", "work/#{thread.slug}^{commit}"],
            stderr_to_stdout: true
          ) do

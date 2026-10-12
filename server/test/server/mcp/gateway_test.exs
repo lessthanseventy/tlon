@@ -325,6 +325,24 @@ defmodule Server.MCP.GatewayTest do
       assert {400, _} = post_json("/api/office/asks/#{a.id}", %{nope: 1})
     end
 
+    test "the operator's review: GET the branch's diff, POST notes with a verdict" do
+      {:ok, wl} = Server.Workline.open(%{title: "review me", slug: "review-me", stage: "review"})
+
+      assert {200, %{"files" => files}} = get_json("/api/threads/#{wl.id}/review")
+      assert is_list(files)
+
+      note = %{path: "lib/a.ex", line: 3, side: "+", text: "rename this"}
+      assert {400, _} = post_json("/api/threads/#{wl.id}/review", %{notes: [note]})
+      assert {409, _} = post_json("/api/threads/#{wl.id}/review", %{verdict: "lgtm", notes: [note]})
+      assert {409, _} = post_json("/api/threads/#{wl.id}/review", %{verdict: "comment"})
+      assert {400, _} = post_json("/api/threads/#{wl.id}/review", %{verdict: "comment", notes: "nope"})
+
+      assert {200, %{"stage" => "build"}} =
+               post_json("/api/threads/#{wl.id}/review", %{verdict: "changes", summary: "not yet", notes: [note]})
+
+      assert wl |> Server.Channel.thread_messages() |> Enum.any?(&(&1.body =~ "## lib/a.ex:3 (+) rename this"))
+    end
+
     test "POST /api/threads/:id/send_back moves a workline back as the operator, saying why" do
       {:ok, wl} = Server.Workline.open(%{title: "send me back", slug: "send-me-back", stage: "review"})
       assert {400, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "plan"})
