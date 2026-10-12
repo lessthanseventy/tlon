@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { contrast, ROLE } from "../kit/palette"
 import { FADE_S, FLOOR, HOLD_S, Looks, inkAlpha, linesOf, marginInk, refsOf, tintInk, type Note } from "../kit/margin"
-import { MIN_CONTRAST } from "../tui/paint"
+import type { Frame } from "../kit/canvas"
+import { geometry, hitAt, MIN_CONTRAST, measureFor } from "../tui/paint"
 
 const note = (id: number, at: number, body = `n${id}`): Note => ({ id, author: "uqbar", body, at })
 
@@ -92,5 +93,21 @@ describe("marginInk", () => {
     const text = ink.flatMap((i) => (i.t === "text" ? [i] : []))[0]!
     expect(hits[0]!.x).toBe(vp.x)
     expect(hits[0]!.x + hits[0]!.w).toBeGreaterThanOrEqual(text.x + 40)
+  })
+
+  test("half blocks: every cell of a note's row hits it, wherever the baseline falls in the cell", () => {
+    for (const [W, H, cols, rows] of [[400, 300, 150, 60], [320, 240, 150, 60], [400, 300, 120, 50], [288, 200, 100, 40]] as const) {
+      const g = geometry(W, H, cols, rows, 4, null, false)
+      for (let h = 80; h < 120; h++) {
+        const vp = { x: 0, y: 0, w: W, h }
+        const { ink, hits } = marginInk([note(1, 10, "see #5"), note(2, 20, "and #6")], new Looks(0), null, vp, measureFor(g))
+        const fr: Frame = { rgba: new Uint8Array(W * H * 4), width: W, height: H, ink, hits }
+        for (const i of ink) {
+          if (i.t !== "text") continue
+          const r = Math.floor((i.y * g.k - 0.01) / g.ch), c = Math.floor((i.x * g.k) / g.cw)
+          expect(hitAt(fr, g, g.col + c + 1, g.row + r + 1, vp)?.act).toEqual({ kind: "thread", tid: i.s.endsWith("#5") ? 5 : 6 })
+        }
+      }
+    }
   })
 })
