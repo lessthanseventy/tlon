@@ -16,7 +16,7 @@ export function speech(to: string | null, text: string): string | null {
 export async function say(threads: Thread[], ws: number | null, to: string | null, text: string): Promise<string> {
   const body = speech(to, text), lobby = lobbyOf(threads, ws)
   if (!body) return "nothing said"
-  if (lobby === null) return "no lobby in this workspace to say it on"
+  if (lobby === null) return "no front desk in this workspace to say it on"
   const r = await data.post(lobby, body)
   return r.startsWith("sent") ? (to ? `said to ${to}` : "said to the office") : r
 }
