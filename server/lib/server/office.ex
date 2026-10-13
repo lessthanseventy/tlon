@@ -25,7 +25,8 @@ defmodule Server.Office do
   threads await the operator, each workspace's triage count (the beacon), the service's health
   (the rack), the days this month each workspace has something scheduled (the wall calendar),
   today's birthdays and anniversaries (`celebrations`, from the .ics feeds) and the feature flags
-  (`Server.Flags.office/0`).
+  (`Server.Flags.office/0`), and the release the service runs (`release`: `{sha, cut_at}` from
+  `Server.Release.PM.live_release/0`, nil before the first).
   A surface shows one workspace and filters by `workspace_id`.
   """
   @spec status() :: map()
@@ -61,6 +62,7 @@ defmodule Server.Office do
       # a TUI started on an older office revision offers a reload (Server.Rollout)
       revs: Server.Rollout.revs(),
       flags: Server.Flags.office(),
+      release: Server.Release.PM.live_release(),
       calendar: Room.calendar(ws_ids),
       celebrations: Server.Calendar.celebrations(Date.from_erl!(elem(:calendar.local_time(), 0)))
     }
