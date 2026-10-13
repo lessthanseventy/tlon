@@ -92,4 +92,36 @@ defmodule Server.WorklineVerifyScriptTest do
     assert length(names) == 10
     assert Enum.all?(names, &(String.length(&1) <= 160))
   end
+
+  # the script's seed_hex_home(), lifted out: `seed_hex_home <src> <dest>`
+  @seed ~S"""
+  eval "$(sed -n '/^seed_hex_home() {/,/^}/p' "$0")"
+  seed_hex_home "$1" "$2"
+  """
+
+  defp seed_hex_home(src, dest), do: System.cmd("bash", ["-c", @seed, @script, src, dest], stderr_to_stdout: true)
+
+  describe "seed_hex_home: the gate's own Hex home" do
+    @tag :tmp_dir
+    test "carries the user's config (repo keys, tokens) and registry cache, not the package tarballs", %{tmp_dir: tmp} do
+      src = Path.join(tmp, "src")
+      File.mkdir_p!(Path.join(src, "packages/hexpm"))
+      File.write!(Path.join(src, "hex.config"), "{unsafe_https,<<\"true\">>}.\n")
+      File.write!(Path.join(src, "cache.ets"), "ets")
+      File.write!(Path.join(src, "packages/hexpm/jason-1.4.4.tar"), "tar")
+      dest = Path.join(tmp, "dest")
+
+      assert {_, 0} = seed_hex_home(src, dest)
+      assert File.read!(Path.join(dest, "hex.config")) == "{unsafe_https,<<\"true\">>}.\n"
+      assert File.read!(Path.join(dest, "cache.ets")) == "ets"
+      refute File.exists?(Path.join(dest, "packages"))
+    end
+
+    @tag :tmp_dir
+    test "a machine with no Hex home yet still gets an empty one of its own", %{tmp_dir: tmp} do
+      dest = Path.join(tmp, "dest")
+      assert {_, 0} = seed_hex_home(Path.join(tmp, "nowhere"), dest)
+      assert File.ls!(dest) == []
+    end
+  end
 end
