@@ -148,6 +148,19 @@ defmodule Server.Jobs.KeepUpTest do
       assert [] = Repo.all(from m in Message, where: like(m.body, "🚨%"))
     end
 
+    test "a gh that can't be read is logged and nothing is closed or relanded", %{thread: t} do
+      run = fn cmd, args, _opts ->
+        send(self(), {:ran, [cmd | args]})
+        {"gh: HTTP 502", 1}
+      end
+
+      log = ExUnit.CaptureLog.capture_log(fn -> KeepUp.red_checks("/repo", run) end)
+
+      assert log =~ "red PRs unread" and log =~ "HTTP 502"
+      refute_received {:ran, ["gh", "pr", "close" | _]}
+      assert %Server.Thread{stage: "merged"} = Repo.get!(Server.Thread, t.id)
+    end
+
     test "a PR whose workline has not landed is left alone", %{thread: t} do
       Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "review"])
       KeepUp.red_checks("/repo", gh(@red))

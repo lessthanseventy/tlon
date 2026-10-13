@@ -42,6 +42,8 @@ defmodule Server.Staffing do
   alias Server.Tmux
   alias Server.Workspaces
 
+  require Logger
+
   # a window this young is still booting — its coworker may not have registered a session yet
   @boot_grace_s 600
   # a mid-turn mark older than this is a turn nothing will end (a restart cut the connection
@@ -58,25 +60,34 @@ defmodule Server.Staffing do
   def pass(workspace_id) do
     # housekeeping over everyone hired: a pane whose coworker went off shift finishes its turn and is
     # swept cold like any other, never reaped as a stranger mid-turn
-    case Workspaces.bench_all(workspace_id) do
+    with [_ | _] = bench <- Workspaces.bench_all(workspace_id),
+         tabs when is_list(tabs) <- Tmux.list_windows(workspace_id) do
+      pass(workspace_id, bench, tabs)
+    else
       [] ->
         :ok
 
-      bench ->
-        standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
-
-        tabs =
-          workspace_id
-          |> reap_stale(bench, Tmux.list_windows(workspace_id))
-          |> sweep_orphans(workspace_id, standing)
-          |> sweep_cold(workspace_id, standing, bench)
-          |> sweep_long(workspace_id, standing, bench)
-          |> yield_seat(workspace_id, standing, bench)
-
-        resume_interrupted(workspace_id, tabs, standing)
-        end_windowless(workspace_id, tabs, standing, bench)
+      # every step reads an absent window as gone: a tmux that can't be asked skips the pass
+      {:error, why} ->
+        Logger.warning("staffing pass #{workspace_id} skipped: tmux #{why}")
         :ok
     end
+  end
+
+  defp pass(workspace_id, bench, tabs) do
+    standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
+
+    tabs =
+      workspace_id
+      |> reap_stale(bench, tabs)
+      |> sweep_orphans(workspace_id, standing)
+      |> sweep_cold(workspace_id, standing, bench)
+      |> sweep_long(workspace_id, standing, bench)
+      |> yield_seat(workspace_id, standing, bench)
+
+    resume_interrupted(workspace_id, tabs, standing)
+    end_windowless(workspace_id, tabs, standing, bench)
+    :ok
   end
 
   # A session whose window is gone (swept cold, a stop or restart killed it) is over, but only its
@@ -318,7 +329,9 @@ defmodule Server.Staffing do
     seats = MapSet.new([agent])
     standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
 
-    for tab <- Tmux.list_windows(workspace_id),
+    tabs = with {:error, _} <- Tmux.list_windows(workspace_id), do: []
+
+    for tab <- tabs,
         match?({_, ^agent}, owner(tab, standing, seats)),
         do: Tmux.kill_window(workspace_id, tab.index)
 

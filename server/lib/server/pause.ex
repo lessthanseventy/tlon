@@ -72,7 +72,9 @@ defmodule Server.Pause do
     Server.Rollout.pause_gates(:pause_queue)
 
     for %{id: ws} <- Server.Workspaces.all(),
-        %{agent: agent, index: window} <- Tmux.list_windows(ws),
+        tabs = Tmux.list_windows(ws),
+        is_list(tabs),
+        %{agent: agent, index: window} <- tabs,
         agent != nil,
         do: Tmux.interrupt(ws, window)
   end

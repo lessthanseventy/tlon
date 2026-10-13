@@ -24,7 +24,7 @@ defmodule Server.Jobs.KeepUp do
 
   # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others
   defp keep_up(repo) do
-    Server.Workline.Publish.refresh_behind(repo)
+    read(repo, "behind PRs", Server.Workline.Publish.refresh_behind(repo))
     reland(repo)
     red_checks(repo)
     drifted(repo, Server.Workline.Publish.follow_main(repo))
@@ -33,7 +33,7 @@ defmodule Server.Jobs.KeepUp do
   end
 
   defp reland(repo) do
-    for %{number: n, slug: slug} <- Server.Workline.Publish.conflicting(repo),
+    for %{number: n, slug: slug} <- read(repo, "conflicting PRs", Server.Workline.Publish.conflicting(repo)),
         %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
       why = "its PR ##{n} conflicts with main"
 
@@ -41,6 +41,14 @@ defmodule Server.Jobs.KeepUp do
            do: Server.Workline.reland(t, why)
     end
   end
+
+  # a gh read that failed is said, and acted on as nothing: never a PR set read as empty in silence
+  defp read(repo, what, {:error, why}) do
+    require(Logger) && Logger.warning("keep_up #{repo}: #{what} unread — #{why}")
+    []
+  end
+
+  defp read(_repo, _what, prs), do: prs
 
   # approved worklines whose Land job Lifeline rescued or discarded wait at review with nothing queued
   defp requeue_stranded do
@@ -51,7 +59,7 @@ defmodule Server.Jobs.KeepUp do
 
   @doc false
   def red_checks(repo, run \\ &System.cmd/3) do
-    for %{number: n, slug: slug} <- Server.Workline.Publish.failing(repo, run),
+    for %{number: n, slug: slug} <- read(repo, "red PRs", Server.Workline.Publish.failing(repo, run)),
         %Server.Thread{stage: "merged"} = t <- [Server.Repo.get_by(Server.Thread, slug: slug)] do
       why = "its PR ##{n}'s checks went red"
 
