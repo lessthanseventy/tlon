@@ -48,6 +48,7 @@ config :server, import_title_cmd: "/nonexistent/tlon-test-title-cli"
 # never leak into test assertions; tests that want one pass an explicit path.
 config :server, machine_seed_path: "/nonexistent/tlon-test-seed.exs"
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
+config :server, souls_dir: Path.join(System.tmp_dir!(), "tlon-test-souls-unset")
 # The PM's release desk acts on the tlon checkout (Server.Release.PM): a test hands it a throwaway
 # repo, so one that forgets can never cut a release of the real one.
 config :server, release_root: "/nonexistent/tlon-test-release"
