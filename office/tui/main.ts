@@ -713,7 +713,7 @@ function threadActions(tid: number, inReader = false): Action[] {
     ...answers,
     ...(inReader ? [] : [{ key: "v", label: "read it all", run: () => openReader(tid, false) }]),
     { key: "r", label: "reply", run: () => reply(tid) },
-    ...(studyOf(all.threads) !== null && studyOf(all.threads) !== tid ? [{ key: "u", label: "hand to Uqbar", run: () => void did(handToUqbar(all.threads, tid)) }] : []),
+    ...(studyOf(all.threads, ws) !== null && studyOf(all.threads, ws) !== tid ? [{ key: "u", label: "hand to Uqbar", run: () => void did(handToUqbar(all.threads, ws, tid)) }] : []),
     ...(th?.awaiting && th.stage ? [{ key: "A", label: `approve: ${th.awaiting}`, run: () => void did(data.approve(tid)) }] : []),
     ...(th?.stage ? [{ key: ">", label: "advance the workline", run: () => void did(data.advance(tid)) }] : []),
     ...(th && cardState(view(), th, boardCtx())?.atCap ? [{ key: "S", label: "raise the cap (settings)", run: () => { if (reader) closeReader(); open({ kind: "settings" }) } }] : []),
@@ -1414,7 +1414,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const e = entryOf(a, boardCtx(), needs, feed, new Date())
       const row = (text: string, x: Act | null): Row => ({ segs: [plain(text)], open: x ? () => act(x) : undefined })
       // Uqbar lives on its study: where it is now, and the verbs that reach it there
-      const study = studyOf(all.threads), me = all.roster.find((r) => r.agent === "uqbar")
+      const study = studyOf(all.threads, ws), me = all.roster.find((r) => r.agent === "uqbar")
       const where = !me ? "not in the office yet: its pane opens on the next word to it" : me.thinking ? `working${me.doing ? `: ${me.doing}` : ""}` : me.warm ? "at the shelf, between check-ins" : "asleep: the next word to it wakes a fresh one"
       const rows: Row[] = [{ segs: [{ s: "UQBAR ", fg: ROLE.attention }, plain(where)] }]
       for (const s of e.prose.split(". ").filter(Boolean)) rows.push({ segs: [plain(s.endsWith(".") ? s : s + ".")] })

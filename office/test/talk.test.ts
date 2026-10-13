@@ -30,7 +30,7 @@ describe("talk", () => {
     const got: { path: string; body: unknown }[] = []
     const srv = Bun.serve({ port: 0, async fetch(r) { got.push({ path: new URL(r.url).pathname, body: await r.json() }); return Response.json({}) } })
     process.env.TLON_URL = `http://127.0.0.1:${srv.port}`
-    const study = { ...th(9, 1, false), title: "Uqbar's study", lead: "uqbar" }
+    const study = { ...th(9, 1, false), title: "Uqbar's study", lead: "uqbar", study: true }
     expect(await say([th(2, 1, true), study], 1, "uqbar", "how's the release?")).toBe("said to uqbar")
     srv.stop()
     expect(got).toEqual([{ path: "/api/threads/9/messages", body: { body: "how's the release?" } }])
@@ -40,9 +40,9 @@ describe("talk", () => {
     const got: { path: string; body: unknown }[] = []
     const srv = Bun.serve({ port: 0, async fetch(r) { got.push({ path: new URL(r.url).pathname, body: await r.json() }); return Response.json({}) } })
     process.env.TLON_URL = `http://127.0.0.1:${srv.port}`
-    const study = { ...th(9, 1, false), title: "Uqbar's study", lead: "uqbar" }, work = { ...th(42, 1, false), title: "the merge queue stalls" }
-    expect(await handToUqbar([study, work], 42)).toBe("handed #42 to uqbar")
-    expect(await handToUqbar([work], 42)).toMatch(/no study/)
+    const study = { ...th(9, 1, false), title: "Uqbar's study", lead: "uqbar", study: true }, work = { ...th(42, 1, false), title: "the merge queue stalls" }
+    expect(await handToUqbar([study, work], 1, 42)).toBe("handed #42 to uqbar")
+    expect(await handToUqbar([work], 1, 42)).toMatch(/no study/)
     srv.stop()
     expect(got).toEqual([{ path: "/api/threads/9/messages", body: { body: "Over to you: #42 the merge queue stalls. See it through, and say here what you did." } }])
   })

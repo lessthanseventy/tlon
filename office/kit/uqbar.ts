@@ -27,8 +27,10 @@ const oxblood = () => tint(ROLE.alarm, ROLE.ground, 0.6)
 const paint = (mood: Mood) => ({ r: oxblood(), g: ROLE.body, p: ROLE.prose, k: ROLE.fieldInk, w: RIBBON[mood]() })
 
 const SPEED = 2, RIFFLE_TICKS = 6
-/** uqbar's study, the open thread it leads (`Server.Outside.study/1`), where the operator talks to it; null before there is one */
-export const studyOf = (threads: Thread[]): number | null => threads.find((t) => t.lead === "uqbar")?.id ?? null
+/** uqbar's study (`Server.Outside.study/1`, flagged by the server), where the operator talks to it: this
+ * workspace's, else any; null before there is one. A thread uqbar was handed is not it. */
+export const studyOf = (threads: Thread[], ws: number | null): number | null =>
+  (threads.find((t) => t.study && t.workspace_id === ws) ?? threads.find((t) => t.study))?.id ?? null
 
 export const moodOf = (s: Seat): Mood => (s.thinking ? "working" : "idle")
 

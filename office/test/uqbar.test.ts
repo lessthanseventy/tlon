@@ -316,8 +316,10 @@ describe("Nina's swat", () => {
   })
 })
 
-test("uqbar's study is the open thread it leads; none until the server opens one", () => {
-  const t = (id: number, lead: string | null, title: string) => ({ id, title, stage: null, awaiting: null, workspace_id: 1, lead })
-  expect(studyOf([t(3, "tertius", "lobby"), t(9, "uqbar", "Uqbar's study")])).toBe(9)
-  expect(studyOf([t(3, "tertius", "lobby")])).toBeNull()
+test("uqbar's study is the thread the server flags as its study, this workspace's first; not any thread uqbar leads", () => {
+  const t = (id: number, ws: number, lead: string | null, study = false) => ({ id, title: `t${id}`, stage: null, awaiting: null, workspace_id: ws, lead, study })
+  const handed = t(4, 1, "uqbar"), here = t(9, 1, "uqbar", true), there = t(12, 2, "uqbar", true)
+  expect(studyOf([handed, there, here], 1)).toBe(9)
+  expect(studyOf([handed, there], 1)).toBe(12)
+  expect(studyOf([handed, t(3, 1, "tertius")], 1)).toBeNull()
 })

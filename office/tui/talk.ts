@@ -15,7 +15,7 @@ export function speech(to: string | null, text: string): string | null {
 
 /** say it on the workspace's lobby (to uqbar, on its study, which wakes it); the status line's text */
 export async function say(threads: Thread[], ws: number | null, to: string | null, text: string): Promise<string> {
-  const study = to === "uqbar" ? studyOf(threads) : null
+  const study = to === "uqbar" ? studyOf(threads, ws) : null
   if (study !== null) {
     if (!text.trim()) return "nothing said"
     const r = await data.post(study, text.trim())
@@ -29,8 +29,8 @@ export async function say(threads: Thread[], ws: number | null, to: string | nul
 }
 
 /** hand thread `tid` to uqbar: a line on its study naming it, which wakes it; the status line's text */
-export async function handToUqbar(threads: Thread[], tid: number): Promise<string> {
-  const study = studyOf(threads), t = threads.find((x) => x.id === tid)
+export async function handToUqbar(threads: Thread[], ws: number | null, tid: number): Promise<string> {
+  const study = studyOf(threads, ws), t = threads.find((x) => x.id === tid)
   if (study === null) return "uqbar has no study yet: the server opens it at boot"
   const r = await data.post(study, `Over to you: #${tid}${t ? ` ${t.title}` : ""}. See it through, and say here what you did.`)
   return r.startsWith("sent") ? `handed #${tid} to uqbar` : r

@@ -34,6 +34,9 @@ defmodule Server.Outside do
 
   @study "Uqbar's study"
 
+  @doc "Whether a thread, by its title and the name of its lead, is a citizen's study."
+  def study?(title, lead, citizens \\ names()), do: title == @study and lead in citizens
+
   @doc "The outside citizens' names: agents registered as `outside` and seated on no bench."
   def names do
     Repo.all(

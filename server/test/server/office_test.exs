@@ -163,6 +163,15 @@ defmodule Server.OfficeTest do
       assert {duty.(beat), duty.(work)} == {true, false}
     end
 
+    test "a thread says whether it is uqbar's study, so a surface never matches it by title", %{ws: ws} do
+      {:ok, uqbar} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, other} = Channel.open_thread(%{title: "a thread uqbar was handed", workspace_id: ws.id, agent_id: uqbar.id})
+      {:ok, study} = Server.Outside.study(ws.id)
+
+      study? = fn t -> Enum.find(Office.status().threads, &(&1.id == t.id)).study end
+      assert {study?.(study), study?.(other)} == {true, false}
+    end
+
     test "carries each workspace's triage count and the service's health", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "stuck", workspace_id: ws.id})
       {:ok, _} = Server.Dossier.raise_issue(%{thread_id: t.id, summary: "blocked"})
