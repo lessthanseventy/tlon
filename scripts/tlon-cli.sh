@@ -37,8 +37,11 @@
 #   hand-off <thread-id> <agent-name>           give a running thread to another coworker
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
 #                                  (JSON, the world that spawned the pane), else via rpc
+#   read <id> [n]                  a thread's last n messages (20), oldest first, as plain text
+#   message <id>                   one message in full: kind, reply-to, delivery, resolution, payload
 #   post <id> <text…>              post as the operator
 #   post --as <citizen> <id> <text…>  post as an outside citizen (uqbar), never as the operator
+#   post --notice --as <citizen> <id> <text…>  …as a notice: an FYI that wakes nobody
 #   close-thread <id>              close a thread (its ticket is done; a child reports up)
 #   reopen <id>                    reopen a closed thread; a queued workline re-joins the merge queue if its approval stands
 #   reap                           the worktree sweep now: strays removed, the ones holding work kept with why
@@ -424,15 +427,30 @@ case "$cmd" in
     { int "$tid" && [ -n "$body" ]; } || { echo 'usage: tlon-cli note <thread-id> <message text…>' >&2; exit 2; }
     exec "$SERVER" rpc "{:ok, m} = Server.Channel.post(%{thread_id: $tid, author: \"tlon\", body: \"$(esc "$body")\"}); IO.puts(\"posted ##{m.id} to thread #$tid as tlon\")"
     ;;
+  read)
+    tid="${1:-}"; n="${2:-20}"
+    { int "$tid" && int "$n"; } || { echo 'usage: tlon-cli.sh read <thread-id> [n]' >&2; exit 2; }
+    exec "$SERVER" rpc "IO.puts(Server.Readout.thread($tid, $n))"
+    ;;
+
+  message)
+    mid="${1:-}"
+    int "$mid" || { echo 'usage: tlon-cli.sh message <message-id>' >&2; exit 2; }
+    exec "$SERVER" rpc "IO.puts(Server.Readout.message($mid))"
+    ;;
+
   post)
+    notice=false
+    if [ "${1:-}" = "--notice" ]; then notice=true; shift; fi
     if [ "${1:-}" = "--as" ]; then
       # an outside citizen (uqbar, the operator's Claude Code session) posts signed as itself, never as
       # the operator; Server.Outside refuses a seated coworker's name
       as="${2:-}"; shift 2 || true; tid="${1:-}"; shift || true; body="$*"
       { [ -n "$as" ] && int "$tid" && [ -n "$body" ]; } ||
-        { echo 'usage: tlon-cli.sh post --as <citizen> <thread-id> <message text…>' >&2; exit 2; }
-      exec "$SERVER" rpc "case Server.Outside.post($tid, \"$(esc "$as")\", \"$(esc "$body")\") do {:ok, m} -> IO.puts(\"posted ##{m.id} to thread #$tid as $(esc "$as")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end"
+        { echo 'usage: tlon-cli.sh post [--notice] --as <citizen> <thread-id> <message text…>' >&2; exit 2; }
+      exec "$SERVER" rpc "case Server.Outside.post($tid, \"$(esc "$as")\", \"$(esc "$body")\", notice: $notice) do {:ok, m} -> IO.puts(\"posted ##{m.id} to thread #$tid as $(esc "$as")\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end"
     fi
+    [ "$notice" = false ] || { echo 'post --notice is for an outside citizen: post --notice --as <citizen> <thread-id> <text…>' >&2; exit 2; }
     tid="${1:-}"; shift || true
     body="$*"
     { int "$tid" && [ -n "$body" ]; } ||
@@ -557,7 +575,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|read|message|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac

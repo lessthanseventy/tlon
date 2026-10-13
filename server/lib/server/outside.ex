@@ -10,8 +10,14 @@ defmodule Server.Outside do
   alias Server.Channel
   alias Server.Repo
 
-  @doc "Post `body` to `thread_id` as outside citizen `name`. `{:ok, message}` | `{:error, :no_such_citizen | :seated | changeset}`."
-  def post(thread_id, name, body) do
+  @doc """
+  Post `body` to `thread_id` as outside citizen `name`. `notice: true` posts it as a `notice`, an FYI
+  the switchboard delivers to nobody, so it costs no coworker a turn. `{:ok, message}` |
+  `{:error, :no_such_citizen | :seated | changeset}`.
+  """
+  def post(thread_id, name, body, opts \\ []) do
+    kind = if opts[:notice], do: "notice", else: "chat"
+
     case Server.Staff.agent_by_name(name) do
       nil ->
         {:error, :no_such_citizen}
@@ -19,7 +25,7 @@ defmodule Server.Outside do
       agent ->
         if Repo.exists?(from w in Server.WorkspaceAgent, where: w.agent_id == ^agent.id),
           do: {:error, :seated},
-          else: Channel.post(%{thread_id: thread_id, author: name, body: body})
+          else: Channel.post(%{thread_id: thread_id, author: name, body: body, kind: kind})
     end
   end
 end
