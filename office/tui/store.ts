@@ -10,6 +10,11 @@ import type { Seg } from "./term"
 
 export type StoreViewRow = { segs: Seg[]; lock: StoreRow | null }
 export const STORE_VIEW_ROWS = 8
+/** names a new pet must not take: the bench's and the other slot's pet (the occupant it replaces leaves) */
+export function storeNamesTaken(bench: readonly string[], pets: { cat: { name: string }; dog: { name: string } }, species: string): string[] {
+  const other = (slotOf(species) ?? "cat") === "cat" ? "dog" : "cat"
+  return [...bench, pets[other].name]
+}
 export const stepStoreRow = (i: number, d: number) => (i + d + STORE_VIEW_ROWS) % STORE_VIEW_ROWS
 
 /** halfBlocks folds two pixel rows to a cell; an odd-height frame gets an empty row under it */
@@ -27,7 +32,9 @@ export function storeRows(c: Candidate, locks: readonly StoreRow[], occupant: st
   const lockable = (r: StoreRow, l: string, v: string): StoreViewRow => ({ segs: label(l, v, locks.includes(r)), lock: r })
   const body: StoreViewRow[] = [
     { segs: label("species", labelOf(c.species), false), lock: null },
-    { segs: label("slot", `the ${slotOf(c.species)} slot — ${occupant} leaves by the door`, false), lock: null },
+    { segs: label("slot", slotOf(c.species) === "dog"
+      ? `the dog slot — pets.json only for now, the room still draws ${occupant}`
+      : `the ${slotOf(c.species)} slot — ${occupant} leaves by the door`, false), lock: null },
     lockable("name", "name", c.name),
     ...(["warmth", "wits", "energy"] as const).map((a) => lockable(a, a, dots(c.temperament[a]))),
     lockable("shade", "shade", `${c.shade + 1} of ${SHADES}`),

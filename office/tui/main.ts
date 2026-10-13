@@ -29,7 +29,7 @@ import { nextPart, SLOTS } from "../kit/parts"
 import { bringBack, candidateOf, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, toggleLock as storeToggle, type Store } from "../kit/store"
-import { stepStoreRow, storeRows } from "./store"
+import { stepStoreRow, storeRows, storeNamesTaken } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
@@ -180,8 +180,7 @@ function hallHire() {
   draw()
 }
 let store: Store = loadStore(STORE), storeSeen = hallSignature(STORE)
-/** names a new pet must not take: the bench's and the dog's */
-const storeTaken = () => [...all.bench.map((b) => b.name), (petsNow ?? resolvePets(loadPets())).dog.name]
+const storeTaken = () => storeNamesTaken(all.bench.map((b) => b.name), petsNow ?? resolvePets(loadPets()), store.species)
 function storeSet(s: Store) { store = s; saveStore(STORE, s); storeSeen = hallSignature(STORE) }
 /** a hand edit of store.json shows up on the next poll; true when it did */
 function followStore(): boolean {
@@ -196,7 +195,7 @@ function storeAdopt() {
   const file = slot ? adopt(c, slot) : null
   if (!slot || !file) { status = `${c.name} can't be adopted here`; return draw() }
   const old = (petsNow ?? resolvePets(loadPets()))[slot].name
-  ask2(`${old} leaves by the door. adopt ${c.name}?`, () => {
+  ask2(slot === "dog" ? `adopt ${c.name} into the dog slot? (the room still draws ${old})` : `${old} leaves by the door. adopt ${c.name}?`, () => {
     savePets(file)
     petsSeen = ""; followPets(); roomChanged = true
     storeSet(storePass(store, [...taken, c.name]))

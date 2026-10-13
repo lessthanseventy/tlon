@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { candidateOf, emptyStore } from "../kit/store"
-import { STORE_VIEW_ROWS, storeRows, stepStoreRow } from "../tui/store"
+import { STORE_VIEW_ROWS, storeRows, stepStoreRow, storeNamesTaken } from "../tui/store"
 
 const text = (r: { segs: { s: string }[] }) => r.segs.map((s) => s.s).join("")
 const card = (sp: "hamster" | "rock" | "baoaqu" | "cat" = "hamster") => candidateOf({ ...emptyStore(), species: sp }, [])
@@ -29,4 +29,14 @@ test("a dog candidate draws its own art and names the dog slot", () => {
   const c = candidateOf({ ...emptyStore(), species: "dog" }, [])
   const text = storeRows(c, [], "Argos", "woof").map((r) => r.segs.map((g) => g.s).join("")).join("\n")
   expect(text).toContain("the dog slot")
+})
+test("the dog's slot says pets.json only, not that he leaves — the room still draws him", () => {
+  const c = candidateOf({ ...emptyStore(), species: "dog" }, [])
+  const t = storeRows(c, [], "Argos", "woof").map(text).join("\n")
+  expect(t).not.toContain("leaves by the door")
+  expect(t).toContain("the room still draws Argos")
+})
+test("storeNamesTaken: the bench plus the OTHER slot's pet, never the occupant being replaced", () => {
+  expect(storeNamesTaken(["Ann"], { cat: { name: "Nina" }, dog: { name: "Argos" } }, "dog")).toEqual(["Ann", "Nina"])
+  expect(storeNamesTaken(["Ann"], { cat: { name: "Nina" }, dog: { name: "Argos" } }, "hamster")).toEqual(["Ann", "Argos"])
 })
