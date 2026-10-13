@@ -54,6 +54,19 @@ defmodule Server.Office.RandomTest do
     refute Enum.any?(Server.Office.Room.triage(ws.id).unled.shown, &(&1.thread_id == thread.id))
   end
 
+  test "callers racing to open #random all get the one thread" do
+    for _ <- 1..5 do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Race#{System.unique_integer([:positive])}"})
+
+      ids =
+        1..8
+        |> Task.async_stream(fn _ -> Random.thread(ws.id).id end, max_concurrency: 8)
+        |> Enum.map(fn {:ok, id} -> id end)
+
+      assert [_] = Enum.uniq(ids)
+    end
+  end
+
   test "a #random post wakes nobody, not even a coworker it names who leads the thread and is live on it", %{ws: ws} do
     Application.put_env(:server, :arbiter, Server.Arbiter.Test)
     Application.put_env(:server, :test_pid, self())

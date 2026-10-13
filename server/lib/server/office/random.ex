@@ -45,13 +45,14 @@ defmodule Server.Office.Random do
   def thread(workspace_id) do
     channel = channel(workspace_id)
 
-    Repo.one(
-      from t in Thread,
-        where:
-          t.workspace_id == ^workspace_id and t.channel_id == ^channel.id and t.title == @name and t.state == "open",
-        order_by: [asc: t.id],
-        limit: 1
-    ) || open(workspace_id, channel)
+    # find-or-open under a lock: a nudge and an office's read racing would each open one
+    find(workspace_id, channel) ||
+      fn ->
+        Repo.query!("SELECT pg_advisory_xact_lock($1, $2)", [:erlang.phash2(__MODULE__), workspace_id])
+        find(workspace_id, channel) || open(workspace_id, channel)
+      end
+      |> Repo.transaction()
+      |> elem(1)
   end
 
   defp channel(workspace_id) do
@@ -133,5 +134,15 @@ defmodule Server.Office.Random do
     else
       other -> Logger.debug("random: nothing posted in workspace #{ws}: #{inspect(other)}")
     end
+  end
+
+  defp find(workspace_id, channel) do
+    Repo.one(
+      from t in Thread,
+        where:
+          t.workspace_id == ^workspace_id and t.channel_id == ^channel.id and t.title == @name and t.state == "open",
+        order_by: [asc: t.id],
+        limit: 1
+    )
   end
 end
