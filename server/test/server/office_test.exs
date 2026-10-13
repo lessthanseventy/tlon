@@ -36,6 +36,34 @@ defmodule Server.OfficeTest do
       refute Enum.any?(Office.status().bench, &(&1.name == "uqbar"))
     end
 
+    test "the release the service runs rides the snapshot", %{ws: ws} do
+      assert Office.status().release == nil
+      {:ok, %{id: tid}} = Channel.open_thread(%{title: "root", workspace_id: ws.id, scope: "machine"})
+
+      {:ok, _} =
+        Channel.post(%{
+          thread_id: tid,
+          author: "tlon",
+          kind: "notice",
+          body: "release abc1234 is live",
+          payload: %{"live" => "abc1234def"}
+        })
+
+      assert %{sha: "abc1234def", cut_at: %DateTime{}} = Office.status().release
+    end
+
+    test "the newest live notice wins, and a rollback is just a newer sha", %{ws: ws} do
+      assert Office.status().release == nil
+      {:ok, %{id: tid}} = Channel.open_thread(%{title: "root", workspace_id: ws.id, scope: "machine"})
+
+      for sha <- ["abc1234def", "0f00bar"] do
+        {:ok, _} =
+          Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: "live", payload: %{"live" => sha}})
+      end
+
+      assert Office.status().release.sha == "0f00bar"
+    end
+
     test "carries the workspaces, their benches, open threads and unstarted tickets", %{ws: ws} do
       {:ok, seat} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
       {:ok, t} = Channel.open_thread(%{title: "wire the office", workspace_id: ws.id})

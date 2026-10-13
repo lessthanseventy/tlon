@@ -252,6 +252,20 @@ defmodule Server.Release.PM do
   defp changes(1), do: "1 change"
   defp changes(n), do: "#{n} changes"
 
+  @doc "The release the service runs and when it was said live (the newest `note_live/1` notice); nil before the first."
+  @spec live_release() :: %{sha: String.t(), cut_at: DateTime.t()} | nil
+  def live_release do
+    case Repo.one(
+           from m in Message,
+             where: m.kind == "notice" and fragment("? \\? 'live'", m.payload),
+             order_by: [desc: m.id],
+             limit: 1
+         ) do
+      %Message{payload: %{"live" => sha}, created_at: at} -> %{sha: sha, cut_at: at}
+      nil -> nil
+    end
+  end
+
   @doc "The live-release notices (`note_live/1`) posted at or after `since`, newest first."
   def live_since(%DateTime{} = since) do
     Repo.all(
