@@ -366,6 +366,25 @@ defmodule Server.Office.NeedsTest do
       assert [{"stalled", "blocking"}] = kinds(ws)
     end
 
+    test "a turn older than the stale-turn clock that reported activity within it is on duty", %{ws: ws} do
+      on_exit(fn -> Application.delete_env(:server, :stale_turn_seconds) end)
+      Application.put_env(:server, :stale_turn_seconds, 600)
+      t = workline(ws, "build", 4)
+
+      {:ok, a} =
+        Server.Staff.register_agent(%{name: "lt-#{System.unique_integer([:positive])}", mandate: "m", engine: "e"})
+
+      {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
+      on_exit(fn -> Server.Presence.Thinking.idle(t.id, a.name) end)
+      Server.Presence.Thinking.thinking(t.id, a.name)
+      long_ago = DateTime.utc_now() |> DateTime.add(-1_200, :second) |> DateTime.truncate(:second)
+      :ok = Server.Staff.mark_thinking(t.id, a.name, long_ago)
+      assert [{"stalled", "blocking"}] = kinds(ws)
+
+      Server.Presence.Thinking.doing(t.id, a.name, "bash")
+      assert kinds(ws) == []
+    end
+
     test "the quiet window is the operator's quiet_workline_minutes knob", %{ws: ws} do
       _ = workline(ws, "build", 2)
       path = Path.join(System.tmp_dir!(), "needs-quiet-#{System.unique_integer([:positive])}.json")
