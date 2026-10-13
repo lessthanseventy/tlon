@@ -17,19 +17,23 @@ defmodule Server.Office.CorkboardTest do
   ]
 
   describe "pick/3" do
-    test "a reply needs someone else's note to answer; a tease, someone to tease; a suggestion, someone else's work" do
+    test "a reply needs someone else's note to answer; a tease, someone to tease" do
       alone = %{crew: [hd(@crew)], tickets: []}
       kinds = for i <- 0..99, do: elem(Corkboard.pick(alone, [], hd(@crew), i / 100), 0)
       refute :reply in kinds
       refute :tease in kinds
-      refute :suggestion in kinds
 
       board = [%{id: 1, author: "hronir", kind: "joke", body: "a joke", re: nil}]
       yu = Enum.at(@crew, 1)
       picks = for i <- 0..99, do: Corkboard.pick(%{crew: @crew, tickets: []}, board, yu, i / 100)
-      assert Enum.all?([:reply, :tease, :suggestion], &(&1 in Enum.map(picks, fn p -> elem(p, 0) end)))
-      assert {:suggestion, ask, _} = List.keyfind(picks, :suggestion, 0)
-      assert ask =~ "yu pins a suggestion about hronir's work"
+      assert Enum.all?([:reply, :tease], &(&1 in Enum.map(picks, fn p -> elem(p, 0) end)))
+    end
+
+    test "the banter never writes a bug report: no suggestion is drawn, and the voice forbids claims about the work" do
+      board = [%{id: 1, author: "hronir", kind: "joke", body: "a joke", re: nil}]
+      kinds = for i <- 0..99, do: elem(Corkboard.pick(%{crew: @crew, tickets: []}, board, Enum.at(@crew, 1), i / 100), 0)
+      refute :suggestion in kinds
+      assert Corkboard.voice() =~ "never a ticket or thread number"
     end
 
     test "a reply quotes the note it answers, and says who wrote it" do
