@@ -131,4 +131,18 @@ export const SPECIES_VOICE = {
       done: ["You did it! I did a lap of the wheel.", "Hooray! Seeds for everyone."],
     },
   },
+  rock: {
+    sassy: {
+      pet: ["...", "Stone. Silent. Still here."],
+      muse: ["...", "I have been a rock for four billion years."],
+      wake: ["...", "(the rock does not wake. it was never asleep.)"],
+      done: ["...", "(a rock is proud of you, in a way you cannot measure)"],
+    },
+    sweet: {
+      pet: ["...", "(warmer than before. only slightly.)"],
+      muse: ["(a good rock sits.)"],
+      wake: ["(still a rock)"],
+      done: ["(it has chosen to stay near you)"],
+    },
+  },
 } satisfies Record<string, { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> }>
