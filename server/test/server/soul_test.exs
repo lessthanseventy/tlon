@@ -19,6 +19,17 @@ defmodule Server.SoulTest do
     %{ws: ws, dir: dir}
   end
 
+  # a stand-in model CLI: prints `reply`, and logs its prompt (`$2`) to `<cli>.prompt`
+  defp stub_model(%{dir: dir}, reply) do
+    File.mkdir_p!(dir)
+    cli = Path.join(dir, "model")
+    File.write!(cli, "#!/bin/sh\nprintf '%s' \"$2\" > #{cli}.prompt\ncat <<'EOF'\n#{reply}\nEOF\n")
+    File.chmod!(cli, 0o755)
+    Application.put_env(:server, :generator_cmd, cli)
+    on_exit(fn -> Application.put_env(:server, :generator_cmd, "/nonexistent/tlon-test-generator") end)
+    cli
+  end
+
   test "a seat with no soul gets a file with every section heading and an empty Diary", %{ws: ws, dir: dir} do
     assert {:ok, :written} = Soul.draft(ws.id, "lonnrot")
     body = File.read!(Path.join(dir, "lonnrot.md"))
@@ -49,5 +60,27 @@ defmodule Server.SoulTest do
     assert s =~ "Assistant to the Manager" and s =~ "WORLD'S BEST SHERIFF" and s =~ "per procedure"
     assert File.read!(Path.join(dir, "daneri.md")) =~ "The Earth"
     assert File.read!(Path.join(dir, "sonny.md")) =~ "daisy"
+  end
+
+  test "a seat outside the samples is drafted by the model from its story and voice", ctx do
+    cli =
+      stub_model(
+        ctx,
+        "## Where they're from\nFrom the story.\n\n## Wants\nw\n\n## Fears\nf\n\n## Quirks\nq\n\n## People\np\n\n## The side project\ns\n\n## Diary\nINVENTED ENTRY\n"
+      )
+
+    assert {:ok, :written} = Soul.draft(ctx.ws.id, "lonnrot")
+    body = File.read!(Path.join(ctx.dir, "lonnrot.md"))
+    assert body =~ "From the story."
+    refute body =~ "INVENTED ENTRY"
+    assert String.ends_with?(body, "## Diary\n")
+    prompt = File.read!(cli <> ".prompt")
+    assert prompt =~ "Death and the Compass" and prompt =~ "a detective"
+  end
+
+  test "a malformed model reply falls back to the template", ctx do
+    stub_model(ctx, "sorry, no")
+    assert {:ok, :written} = Soul.draft(ctx.ws.id, "lonnrot")
+    assert File.read!(Path.join(ctx.dir, "lonnrot.md")) =~ "## Fears\n"
   end
 end
