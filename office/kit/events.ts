@@ -11,7 +11,14 @@ export type Script = { ticks: number; beats: Beat[] }
 
 export const EVENTS: Record<EventKind, Script> = {
   drill: { ticks: 600, beats: [{ at: 0, who: "sheriff", say: "Fire drill! Everyone out!" }] },
-  zoo: { ticks: 1200, beats: [] },
+  zoo: {
+    ticks: 1200,
+    beats: [
+      { at: 0, who: "idle", emote: "!" },
+      { at: 300, who: "sheriff", say: "Order! ORDER!" },
+      { at: 600, who: "first", say: "Who let them in?" },
+    ],
+  },
   meteor: {
     ticks: 700,
     beats: [{ at: 60, who: "idle", emote: "!" }, { at: 150, who: "first", say: "…was that the deploy?" }],
@@ -59,6 +66,23 @@ export function propsAt(kind: EventKind, t: number, g: Geo): Prop[] {
       if (t < 140 || t >= EVENTS.meteor.ticks - 60) return []
       return [{ kind: t < 160 ? "puff" : "crater", x: g.doorX - 60, y: g.hallY }]
     }
+    case "zoo": {
+      const out: Prop[] = []
+      const vanX = g.doorX + 14
+      out.push({ kind: "van", x: t < 60 ? lerp(g.doorX + 80, vanX, t / 60) : t < 1100 ? vanX : lerp(vanX, g.doorX + 80, (t - 1100) / 100), y: g.hallY })
+      if (t >= 60 && t < 1100) {
+        const px = t < 600 ? lerp(g.doorX, g.leftX + 40, (t - 60) / 540) : lerp(g.leftX + 40, g.doorX, (t - 600) / 500)
+        out.push({ kind: "penguin", x: px, y: g.hallY, flip: t >= 600, step: Math.floor(t / 8) % 2 })
+      }
+      if (t >= 60 && t < 1000) out.push({ kind: "monkey", x: g.leftX - ((Math.floor(t / 10) * 17) % 300), y: g.ceilY, step: Math.floor(t / 10) % 2 })
+      if (t >= 60 && t < 1100 && g.cork) {
+        const up = g.hallY - (g.cork.y + 22)
+        const x = t < 300 ? lerp(g.doorX, g.cork.x, (t - 60) / 240) : t < 800 ? g.cork.x : lerp(g.cork.x, g.doorX, (t - 800) / 300)
+        const y = t < 300 ? g.hallY : t < 400 ? g.hallY - lerp(0, up, (t - 300) / 100) : t < 700 ? g.hallY - up : t < 800 ? g.hallY - lerp(up, 0, (t - 700) / 100) : g.hallY
+        out.push({ kind: "goat", x, y, flip: t >= 800, step: t >= 400 && t < 700 ? Math.floor(t / 6) % 2 : Math.floor(t / 8) % 2 })
+      }
+      return out
+    }
     default:
       return []
   }
@@ -71,3 +95,6 @@ export const blackoutAt = (kind: EventKind, t: number): boolean =>
 /** the meteor's flicker: null when it isn't one; else alternately lit / unlit every 8 ticks between 60 and 140 */
 export const flickerAt = (kind: EventKind, t: number): boolean | null =>
   kind === "meteor" && t >= 60 && t < 140 ? Math.floor((t - 60) / 8) % 2 === 0 : null
+
+/** the goat has the corkboard's first note between 450 and 700, then spits it back out */
+export const noteEatenAt = (kind: EventKind, t: number): boolean => kind === "zoo" && t >= 450 && t < 700

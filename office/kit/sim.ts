@@ -13,7 +13,7 @@ import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
 import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type VisitorKind } from "./door"
-import { EVENTS, blackoutAt, flickerAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
+import { EVENTS, blackoutAt, flickerAt, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
 import { SHERIFF } from "./scharlach"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
@@ -504,6 +504,8 @@ export class Sim<L extends { people: Seat[] }> {
     if (!r || !g) return []
     const props = propsAt(r.kind, this.tick - r.since, g), host = r.idle[0] ? this.actors.get(r.idle[0]) : undefined
     if (host && this.blackout()) props.push({ kind: "candle", x: host.x + 4, y: host.y, step: Math.floor(this.tick / 4) % 2 })
+    const sheriff = r.sheriff ? this.actors.get(r.sheriff) : undefined
+    if (sheriff && this.chasing(r, this.tick - r.since)) props.push({ kind: "net", x: sheriff.x - 8, y: sheriff.y })
     return props
   }
   blackout(): boolean { const r = this.running; return !!r && blackoutAt(r.kind, this.tick - r.since) }
@@ -511,10 +513,15 @@ export class Sim<L extends { people: Seat[] }> {
 
   /** where the running scene wants this idle coworker, or null to let them idle as usual */
   private eventGoal(agent: string): Spot | null {
-    const r = this.running
-    const i = r ? r.idle.indexOf(agent) : -1
-    if (!r || i < 0) return null
+    const r = this.running, g = this.eventGeo()
+    if (!r || !g) return null
     const t = this.tick - r.since
+    if (r.sheriff === agent && this.chasing(r, t)) {
+      const pen = propsAt(r.kind, t, g).find((p) => p.kind === "penguin")
+      return pen ? { ...this.plan.exit, x: Math.round(pen.x / 8) * 8, pose: "stand", face: "left", kind: "roam" } : null
+    }
+    const i = r.idle.indexOf(agent)
+    if (i < 0) return null
     if (r.kind === "meteor" && t >= 80 && t < EVENTS.meteor.ticks - 100) {
       const w = this.plan.lounge.filter((s) => s.kind === "window")
       const s = w[i % w.length]
@@ -522,6 +529,10 @@ export class Sim<L extends { people: Seat[] }> {
     }
     return null
   }
+
+  private chasing(r: { kind: EventKind; sheriff: string | null }, t: number) { return r.kind === "zoo" && !!r.sheriff && t >= 250 && t < 900 }
+  /** the goat has the corkboard's first note */
+  noteHidden(): boolean { const r = this.running; return !!r && noteEatenAt(r.kind, this.tick - r.since) }
 
   private beats(t: number) {
     const r = this.running!

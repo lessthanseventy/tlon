@@ -13,6 +13,20 @@ const SPRITES: Partial<Record<PropKind, Sprite[]>> = {
     { rows: ["..y", "..o", ".kkk"], map: { y: ROLE.body, o: ROLE.alarm, k: ROLE.prose } },
     { rows: [".y.", "..o", ".kkk"], map: { y: ROLE.body, o: ROLE.alarm, k: ROLE.prose } },
   ],
+  van: [{ rows: ["..wwwwwwwwww..", ".wwwwwwwwwwww.", "wwwwwwwwwwwwww", "wzzzwzzzwzzzww", "wwwwwwwwwwwwww", ".kk........kk."], map: { w: ROLE.prose, z: ROLE.alarm, k: ROLE.edge } }],
+  monkey: [
+    { rows: ["..b..", ".bbb.", "bbbbb", ".b.b.", "b...b"], map: { b: ROLE.structure } },
+    { rows: ["..b..", ".bbb.", "bbbbb", ".b.b.", ".b.b."], map: { b: ROLE.structure } },
+  ],
+  penguin: [
+    { rows: ["..k..", ".kkk.", ".kwk.", ".kwk.", ".kkk.", ".o.o."], map: { k: ROLE.edge, w: ROLE.prose, o: ROLE.body } },
+    { rows: ["..k..", ".kkk.", ".kwk.", ".kwk.", ".kkk.", "o...o"], map: { k: ROLE.edge, w: ROLE.prose, o: ROLE.body } },
+  ],
+  goat: [
+    { rows: ["g.g....", "ggg....", ".gggggg", ".gggggg", ".g.g.g.", ".g.g.g."], map: { g: ROLE.prose } },
+    { rows: ["g.g....", "ggg....", ".gggggg", ".gggggg", "..g.g.g", ".g.g.g."], map: { g: ROLE.prose } },
+  ],
+  net: [{ rows: ["nnn", "n.n", "nnn", ".n.", ".n."], map: { n: ROLE.key } }],
   streak: [{ rows: ["..o", "..o", ".oo", "oo."], map: { o: ROLE.body } }],
   puff: [{ rows: ["..p..", ".ppp.", "ppppp"], map: { p: ROLE.prose } }],
   crater: [{ rows: [".....", ".kkk.", "kkkkk"], map: { k: ROLE.structure } }],

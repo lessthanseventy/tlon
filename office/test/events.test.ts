@@ -178,3 +178,28 @@ describe("the power cut", () => {
     expect([...r.actors.values()].some((x: any) => x.emote === "♪")).toBe(true)
   }))
 })
+
+describe("zoo's open day", () => {
+  test("a van, three animals, the note eaten and back, the sheriff gives chase, all gone at the end", () => seeded(10, () => {
+    const o = JSON.parse(JSON.stringify(office(4)).replaceAll('"w3"', '"scharlach"')) as ReturnType<typeof office>
+    o.roster = o.roster.map((x) => (["w0", "scharlach"].includes(x.agent) ? { ...x, thinking: false, warm: false } : x))
+    const a = viewOf(o, 1), r = new WideRoom(696) as any, kinds = new Set<string>()
+    let eaten = false
+    run(r, a, 300); r.event("zoo")
+    for (let i = 0; i < EVENTS.zoo.ticks - 1; i++) {
+      r.step(a)
+      for (const p of r.props()) {
+        kinds.add(p.kind)
+        if (p.kind === "van") continue // slides in from off-screen
+        expect(p.x).toBeGreaterThan(0)
+        expect(p.x).toBeLessThan(696)
+      }
+      if (r.noteHidden()) eaten = true
+    }
+    for (const k of ["van", "monkey", "penguin", "goat", "net"]) expect(kinds.has(k)).toBe(true)
+    expect(eaten).toBe(true)
+    run(r, a, 5)
+    expect(r.props()).toEqual([])
+    expect(r.noteHidden()).toBe(false)
+  }))
+})
