@@ -13,7 +13,8 @@ defmodule Server.Alerts do
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
       minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
       (`Server.Staffing.note_seated/2`); `landed`, a workline reached `merged`
-      (`Server.Workline.landed_since/1`, its `stage_advanced` event); `live`, the service booted
+      (`Server.Workline.landed_since/1`, its `stage_advanced` event); `fixing`, an issue a ticket
+      took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
       on a new release (`Server.Release.PM.note_live/1`).
 
   Each alert is `%{key, level, kind, title, body, at, thread_id, link, actions}`; an action is a
@@ -39,13 +40,15 @@ defmodule Server.Alerts do
       alarm_minutes: minutes,
       seated: Server.Staffing.seated_since(since),
       landed: Server.Workline.landed_since(since),
+      fixing: Server.Dossier.fixing_since(since),
       live: Server.Release.PM.live_since(since)
     )
   end
 
   @doc """
   The alerts for these needs and meetings at `now` — `list/0` without the reads. Raised as info:
-  `seated:` the seating notices, `landed:` the landings, `live:` the live-release notices.
+  `seated:` the seating notices, `landed:` the landings, `fixing:` the issues a ticket took,
+  `live:` the live-release notices.
   """
   def build(needs, meetings, now, opts \\ []) do
     lead = Keyword.get(opts, :alarm_minutes, @alarm_minutes) * 60
@@ -63,6 +66,7 @@ defmodule Server.Alerts do
       Enum.filter(from_needs, &(&1.level == "sticky")) ++
       Enum.map(Keyword.get(opts, :seated, []), &info("seated", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, "##{&1.thread_id} landed — #{&1.title}")) ++
+      Enum.map(Keyword.get(opts, :fixing, []), &info("fixing", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :live, []), &info("live", &1, &1.body))
   end
 
@@ -144,7 +148,10 @@ defmodule Server.Alerts do
 
   # asks why: a resolution naming a PR banks a beat incident's postmortem (`Server.Sheriff.postmortem/1`)
   defp actions(%{kind: "issue", ref: id}),
-    do: [%{label: "Resolve…", method: "POST", path: "/api/issues/#{id}/resolve", body: %{}, input: "resolution"}]
+    do: [
+      %{label: "Get it fixed", method: "POST", path: "/api/issues/#{id}/fix", body: %{}},
+      %{label: "Resolve…", method: "POST", path: "/api/issues/#{id}/resolve", body: %{}, input: "resolution"}
+    ]
 
   defp actions(%{kind: "stranded", key: key}),
     do: [%{label: "Take the checkout down", method: "POST", path: "/api/office/needs/retire", body: %{key: key}}]

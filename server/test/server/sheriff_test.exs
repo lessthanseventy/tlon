@@ -105,4 +105,84 @@ defmodule Server.SheriffTest do
       assert facts(elsewhere.id) == []
     end
   end
+
+  describe "getting an issue fixed — a ticket owns it, its landing resolves it" do
+    setup %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius-f", archetype: "surveyor"})
+      {:ok, _} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, red} = Channel.open_thread(%{title: "argos", workspace_id: ws.id})
+      :ok = Sheriff.report(red, "landing bounced: untracked server/tmp would be overwritten")
+      [beat] = beats(ws)
+
+      {:ok, issue} =
+        Server.Dossier.raise_issue(%{
+          thread_id: beat.id,
+          summary: "landing rebase fails on test scratch",
+          evidence: "82588e3 tracked server/tmp",
+          found_by: "scharlach"
+        })
+
+      %{beat: beat, issue: issue}
+    end
+
+    test "the operator's 'get it fixed' files a ticket from the issue, routes it, and says who has it", %{
+      ws: ws,
+      beat: beat,
+      issue: issue
+    } do
+      assert [%{kind: "issue"}] = Server.Office.Needs.list()
+
+      assert {:ok, %{ticket: ticket, owner: "routed to tertius-f"}} = Server.Dossier.fix_issue(issue)
+      assert ticket.workspace_id == ws.id and ticket.title == "landing rebase fails on test scratch"
+      assert ticket.body =~ "82588e3 tracked server/tmp" and ticket.body =~ "issue ##{issue.id}"
+      assert %{status: "todo"} = Server.Tickets.get(ticket.id)
+      assert %{ticket_id: tid} = Repo.get!(Server.Issue, issue.id)
+      assert tid == ticket.id
+
+      assert Server.Office.Needs.list() == []
+
+      assert [%{thread_id: thread_id, body: body}] = Server.Dossier.fixing_since(DateTime.add(DateTime.utc_now(), -60))
+      assert thread_id == beat.id
+      assert body =~ "issue ##{issue.id}" and body =~ "ticket ##{ticket.id}" and body =~ "routed to tertius-f"
+    end
+
+    test "an issue already owned or closed is not filed twice", %{issue: issue} do
+      {:ok, _} = Server.Dossier.fix_issue(issue)
+      assert {:error, :owned} = Server.Dossier.fix_issue(Repo.get!(Server.Issue, issue.id))
+
+      {:ok, closed} = Server.Dossier.raise_issue(%{summary: "gone"})
+      {:ok, closed} = Server.Dossier.resolve_issue(closed, "went away")
+      assert {:error, :closed} = Server.Dossier.fix_issue(closed)
+    end
+
+    test "a coworker's ticket for the issue owns it too, named as theirs", %{ws: ws, issue: issue} do
+      {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "clean server/tmp before the rebase"})
+      {:ok, _} = Server.Dossier.own_issue(issue, ticket, "filed by scharlach")
+
+      assert Server.Office.Needs.list() == []
+      assert [%{body: body}] = Server.Dossier.fixing_since(DateTime.add(DateTime.utc_now(), -60))
+      assert body =~ "filed by scharlach"
+    end
+
+    test "its workline landing resolves the issue naming the PR, which banks the postmortem", %{
+      ws: ws,
+      beat: beat,
+      issue: issue
+    } do
+      {:ok, %{ticket: ticket}} = Server.Dossier.fix_issue(issue)
+      {:ok, work} = Channel.open_thread(%{title: "landing clears server/tmp", workspace_id: ws.id})
+      {:ok, _} = Server.Tickets.promote(Server.Tickets.get(ticket.id), work.id)
+
+      assert [_] = Server.Dossier.resolve_fixed(work, "https://github.com/o/r/pull/330")
+
+      assert %{state: "closed", resolution: "fixed by https://github.com/o/r/pull/330"} =
+               Repo.get!(Server.Issue, issue.id)
+
+      assert [%{text: "postmortem: landing rebase fails on test scratch — fixed by https://github.com/o/r/pull/330"}] =
+               Repo.all(from f in Server.Fact, where: f.thread_id == ^beat.id)
+
+      assert Server.Dossier.resolve_fixed(work, "https://github.com/o/r/pull/330") == []
+    end
+  end
 end

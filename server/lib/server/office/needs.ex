@@ -392,11 +392,12 @@ defmodule Server.Office.Needs do
     end
   end
 
-  # an open blocker on an open thread
+  # an open blocker on an open thread that no ticket owns yet (`Server.Dossier.fix_issue/1`)
   defp issues(open) do
     by_id = Map.new(open, &{&1.id, &1})
 
-    for i <- Repo.all(from i in Server.Issue, where: i.state == "open" and not is_nil(i.thread_id)),
+    for i <-
+          Repo.all(from i in Server.Issue, where: i.state == "open" and not is_nil(i.thread_id) and is_nil(i.ticket_id)),
         t = by_id[i.thread_id] do
       item("issue", "decide", t, "#{i.found_by || "someone"}: #{i.summary}", i.created_at, %{
         key: "issue:#{i.id}",

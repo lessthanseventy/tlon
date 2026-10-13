@@ -623,6 +623,7 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
     ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
     ...(n.kind === "stranded" ? [{ key: "X", label: "take the checkout down (branch kept)", run: () => void did(data.retireStranded(n.key)).then(after) }] : []),
+    ...(n.kind === "issue" && n.ref ? [{ key: "g", label: "get it fixed (a ticket, routed)", run: () => void did(data.fixIssue(n.ref!)).then(after) }] : []),
     ...(n.kind === "issue" && n.ref ? [{ key: "x", label: "resolve…", run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (s) => { if (s.trim()) void did(data.resolveIssue(n.ref!, s.trim())).then(after) }) }] : []),
     ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ key: "d", label: "put away", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
     ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),

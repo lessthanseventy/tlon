@@ -154,6 +154,85 @@ defmodule Server.Dossier do
   end
 
   @doc """
+  Get an issue fixed — the operator's "Get it fixed": a ticket filed from it in its thread's workspace,
+  the issue given to it and the ticket routed (`Server.Tickets.route/1`). The ticket's workline landing
+  resolves the issue (`resolve_fixed/2`). `{:ok, %{ticket, owner}}`, `owner` saying who has it, or
+  `{:error, :closed | :owned | :no_workspace}`.
+  """
+  def fix_issue(%Issue{state: "closed"}), do: {:error, :closed}
+  def fix_issue(%Issue{ticket_id: id}) when not is_nil(id), do: {:error, :owned}
+
+  def fix_issue(%Issue{} = issue) do
+    body =
+      Enum.join(
+        Enum.reject([issue.evidence, "Fixes issue ##{issue.id}; its landing resolves it."], &(&1 in [nil, ""])),
+        "\n\n"
+      )
+
+    with %Thread{workspace_id: ws} when not is_nil(ws) <- issue.thread_id && Repo.get(Thread, issue.thread_id),
+         {:ok, ticket} <- Server.Tickets.file(%{workspace_id: ws, title: issue.summary, body: body}),
+         {:ok, routed} <- Server.Tickets.route(ticket),
+         owner = owner(routed),
+         {:ok, _} <- own_issue(issue, ticket, owner) do
+      {:ok, %{ticket: ticket, owner: owner}}
+    else
+      {:error, _} = error -> error
+      _ -> {:error, :no_workspace}
+    end
+  end
+
+  defp owner(%{routed_to: name}), do: "routed to #{name}"
+  defp owner(%{started: thread}), do: "started as ##{thread.id}"
+
+  @doc """
+  Give an issue to the ticket that fixes it, and say so on the issue's thread: a `notice` (it wakes
+  nobody) with payload `fixing`, which `Server.Alerts` raises as info. An owned issue leaves the
+  operator's list (`Server.Office.Needs`). `owner` is who has it, in words. `{:ok, issue}`.
+  """
+  def own_issue(%Issue{} = issue, %{id: ticket_id}, owner) do
+    with {:ok, owned} <- issue |> Issue.own_changeset(ticket_id) |> Repo.update() do
+      if issue.thread_id,
+        do:
+          Channel.post(%{
+            thread_id: issue.thread_id,
+            author: "tlon",
+            kind: "notice",
+            body: "issue ##{issue.id} is ticket ##{ticket_id} now (#{owner}) — #{issue.summary}",
+            payload: %{"fixing" => issue.id, "ticket" => ticket_id}
+          })
+
+      {:ok, owned}
+    end
+  end
+
+  @doc "The issues taken (`own_issue/3`) at or after `since`, as their notices, newest first."
+  def fixing_since(%DateTime{} = since) do
+    Repo.all(
+      from m in Message,
+        where: m.kind == "notice" and m.created_at >= ^since and fragment("? \\? 'fixing'", m.payload),
+        order_by: [desc: m.id]
+    )
+  end
+
+  @doc """
+  A workline landed: the open issues its tickets own are resolved, `how` (the PR) named, so a beat
+  incident's postmortem banks. The issues resolved.
+  """
+  def resolve_fixed(%Thread{id: thread_id}, how) do
+    from(i in Issue,
+      join: tt in Server.TicketThread,
+      on: tt.ticket_id == i.ticket_id,
+      where: tt.thread_id == ^thread_id and i.state == "open",
+      distinct: true
+    )
+    |> Repo.all()
+    |> Enum.map(fn issue ->
+      {:ok, closed} = resolve_issue(issue, "fixed by #{how}")
+      closed
+    end)
+  end
+
+  @doc """
   A thread's open issues, ranked and cut (§5): `%{shown: [issue], more: n}` where
   `shown` is at most five (newest first) and `more` counts the open issues beyond
   them. This is the BLOCKERS read `orient` calls at session start — the acceptance

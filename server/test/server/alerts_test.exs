@@ -113,8 +113,11 @@ defmodule Server.AlertsTest do
 
     assert %{path: "/api/office/needs/dismiss", body: %{key: "mention:3"}} = List.last(mention.actions)
 
-    assert [%{label: "Resolve…", path: "/api/issues/5/resolve", input: "resolution"}, %{label: "Put away"}] =
-             issue.actions
+    assert [
+             %{label: "Get it fixed", path: "/api/issues/5/fix"},
+             %{label: "Resolve…", path: "/api/issues/5/resolve", input: "resolution"},
+             %{label: "Put away"}
+           ] = issue.actions
 
     assert [%{path: "/api/office/needs/retire", body: %{key: "stranded:/r:w"}}, %{label: "Put away"}] = stranded.actions
   end
@@ -163,6 +166,19 @@ defmodule Server.AlertsTest do
 
     assert %{key: "seated:90", level: "info", kind: "seated", title: "emma sat down on #7 — the finder"} = info
     assert info.thread_id == 7 and info.at == @now and info.actions == []
+  end
+
+  test "an issue someone took is info: who has it, nothing to do" do
+    fixing = %{
+      id: 91,
+      thread_id: 144,
+      body: "issue #32 is ticket #400 now (routed to tertius) — landing fails",
+      created_at: @now
+    }
+
+    assert [info] = Alerts.build([], [], @now, fixing: [fixing])
+    assert %{key: "fixing:91", level: "info", kind: "fixing", title: "issue #32 is ticket #400 now" <> _} = info
+    assert info.thread_id == 144 and info.actions == []
   end
 
   test "a workline landing is info: one toast per landing, naming the thread, nothing to do" do
