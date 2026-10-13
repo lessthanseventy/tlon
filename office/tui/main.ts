@@ -3,6 +3,7 @@
 // a ticket, the notes, the in-tray, the beacon, the rack, the bookshelf, the workspaces. A thread
 // opens full-screen to read and answer; `/` finds anything. Runs on Linux and macOS: kitty
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
+import { arrivals } from "../kit/door"
 import { babelPage, isKonami, KONAMI } from "../kit/eggs"
 import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
@@ -322,6 +323,7 @@ function tellNews(before: Agents, beforeNeeds: data.Need[]) {
   if (fresh.length === 1) notify(needTitle(fresh[0]!), fresh[0]!.text)
   else if (fresh.length > 1) notify(`${fresh.length} things wait on you`, fresh.map(needTitle).join(" · "))
   if (before.health?.state === "ok" && all.health?.state === "warn") notify("tlon needs a look", all.health.problems.join("; "))
+  for (const kind of arrivals(before, all, beforeNeeds, needs)) room().ring(kind)
 }
 /** a desktop notification (OSC 777, as ghostty, kitty, WezTerm and foot take it) */
 function notify(title: string, body: string) {
