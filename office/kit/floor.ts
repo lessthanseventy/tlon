@@ -41,7 +41,7 @@ export function floorPlan(home: Home, w: number): Plan<Layout> & { blocks: (l: L
     muster: Array.from({ length: 16 }, (_, i) => ({
       x: w - 8 - (i % 4) * 9, y: HALL - 2 - Math.floor(i / 4) * 5, aisle: HALL, pose: "stand" as const, face: "down" as const, kind: "exit" as const,
     })),
-    // the front door: whoever answers stands just inside it, clear of the muster grid (x >= w-8 downward in steps of 9)
+    // the front door: whoever answers stands just inside it, one pixel from the muster grid's last column (w-17); a fire drill outranks the door in the goal chain
     door: { x: w - 18, y: HALL, aisle: HALL, pose: "stand", face: "right", kind: "answer" },
     pen: { x: z.F1 - 30, y: 51, aisle: 51, pose: "stand", face: "up", kind: "note" },
     // under the suggestion box on the wall between the notes board and the windows
