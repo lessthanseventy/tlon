@@ -270,7 +270,7 @@ const PREVIEW_MODE: Record<Dest, "sleep" | "sit" | "play" | "walk"> = { nap: "sl
 export function previewOf(s: PetSetting, tick: number): { mode: "sleep" | "sit" | "play" | "walk"; line: string } {
   const slot = Math.floor(tick / 10), r = mulberry32(slot * 7919 + 13)
   const mode = PREVIEW_MODE[pickDest(s.temperament, r())]
-  const bucket = bucketFor(slot % 2 ? "pet" : "muse", s.temperament, r)
+  const bucket = bucketFor(slot % 2 ? "pet" : "muse", s.temperament, r, s.species)
   return { mode, line: bucket[Math.floor(r() * bucket.length)]!.replaceAll("{name}", "you") }
 }
 
