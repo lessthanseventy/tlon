@@ -21,8 +21,8 @@ defmodule Server.Office.Needs do
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
       merge could not roll out itself), `stranded` (a worktree no thread is working in that holds
-      work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
-      is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded),
+      work: merge it or delete it — `Server.Maintain.Strays`; a landed workline's thread stays open
+      while its PR waits on GitHub's checks, and one in the merge queue is landing — neither is stranded),
       `seats` (threads parked on the leaf cap, per workspace: `ref` the bigger cap it offers),
       `job_failed` (a background job discarded in the last day, its runs failing the same way one
       item: retry or dismiss, `ref` the newest run),
@@ -459,7 +459,7 @@ defmodule Server.Office.Needs do
     |> Enum.filter(&(&1.kind == "check_failed"))
   end
 
-  # merged here, closed, and never reached GitHub's main: nothing wakes for a closed thread
+  # merged here and never reached GitHub: with no PR, nothing polls its landing or wakes for it
   defp unpublished do
     for e <- newest_failed("workline:%:publish"),
         %Thread{stage: "merged"} = t <- [Repo.get(Thread, e.thread_id)] do

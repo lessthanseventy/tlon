@@ -347,7 +347,7 @@ defmodule Server.MCP.Tool.Finish do
   posted as your last word on the thread, then the thread closes: a child reports up to its
   manager, and the ticket it came from is marked done. Only your own thread — closing another is
   the manager's call. If you were wrong, the operator's next reply reopens it. A workline that
-  hasn't merged stays open (the summary is still posted): the merge queue closes it when it lands.
+  GitHub hasn't merged stays open (the summary is still posted): it closes itself when GitHub merges its PR.
   """
   use Server.MCP.Tool
 
@@ -375,11 +375,11 @@ defmodule Server.MCP.Tool.Finish do
           "why" => "unmerged commits — tracked as a workline instead of closed"
         })
 
-      # a workline closes when it lands; closed early, its landing looks like stranded work
+      # a workline closes when GitHub merges it; closed early, its ticket is done before its work is
       :workline ->
         ok(frame, %{
           "stays_open" => true,
-          "why" => "a workline closes itself when it merges — the merge queue does that, not finish"
+          "why" => "a workline closes itself when GitHub merges its PR — not finish"
         })
 
       # the lobby holds every coworker's window: the summary is posted, the thread stays open
@@ -395,6 +395,7 @@ defmodule Server.MCP.Tool.Finish do
   end
 
   defp unmerged_workline?(%Server.Thread{stage: stage}) when stage not in [nil, "merged"], do: :workline
+  defp unmerged_workline?(%Server.Thread{stage: "merged", state: "open"}), do: :workline
   defp unmerged_workline?(_thread), do: false
 end
 

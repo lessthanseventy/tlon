@@ -12,8 +12,8 @@ defmodule Server.Alerts do
     * **info** — something the operator set going took effect where they can't see it: a toast
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
       minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
-      (`Server.Staffing.note_seated/2`); `landed`, a workline reached `merged`
-      (`Server.Workline.landed_since/1`, its `stage_advanced` event); `fixing`, an issue a ticket
+      (`Server.Staffing.note_seated/2`); `landed`, GitHub merged a workline's PR
+      (`Server.Workline.landed_since/1`); `fixing`, an issue a ticket
       took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
       on a new release (`Server.Release.PM.note_live/1`).
 

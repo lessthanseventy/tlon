@@ -50,6 +50,23 @@ defmodule Server.Workline.Publish do
     end
   end
 
+  @doc """
+  PR `url` as GitHub has it now: `{:ok, %{"state" => "OPEN" | "MERGED" | "CLOSED", "mergeStateStatus" => …}}`,
+  or `{:error, why}` when gh can't be read.
+  """
+  def view(repo, url, run \\ &System.cmd/3) do
+    case run.("gh", ["pr", "view", url, "--json", "state,mergeStateStatus"], cd: repo, stderr_to_stdout: true) do
+      {out, 0} ->
+        case Jason.decode(out) do
+          {:ok, %{} = pr} -> {:ok, pr}
+          _ -> {:error, "gh pr view: not a JSON object: #{String.slice(out, 0, 200)}"}
+        end
+
+      {out, code} ->
+        {:error, "gh pr view exited #{code}: #{String.slice(String.trim(out), 0, 200)}"}
+    end
+  end
+
   # the repo's open PRs as `gh` lists them: `{:ok, prs}`, or `{:error, why}` when gh can't be read
   defp open_prs(repo, fields, run) do
     case run.("gh", ["pr", "list", "--state", "open", "--json", fields], cd: repo, stderr_to_stdout: true) do

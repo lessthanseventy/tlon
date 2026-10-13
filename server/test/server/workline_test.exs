@@ -283,10 +283,15 @@ defmodule Server.WorklineTest do
     end
   end
 
-  test "approving the review gate merges the branch, then the workline is merged and its thread closed" do
+  # a repo with no origin: nothing to publish, so the landing is the merge and the thread closes at the
+  # gate (a published one waits open on GitHub: workline_landing_test.exs)
+  @no_github &__MODULE__.no_origin/3
+  def no_origin(_cmd, _args, _opts), do: {"error: No such remote 'origin'", 2}
+
+  test "approving the review gate merges the branch; with no GitHub to wait on, the thread closes" do
     thread = open!(%{slug: "landing", stage: "review"})
     {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
-    assert {:ok, merged} = Workline.approve(parked, artifacts: AllPresent, merge: Merges)
+    assert {:ok, merged} = Workline.approve(parked, artifacts: AllPresent, merge: Merges, run: @no_github)
     assert merged.stage == "merged"
     assert %Server.Thread{state: "closed"} = Server.Repo.get(Server.Thread, thread.id)
   end
@@ -305,13 +310,13 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "merge queue"))
     end
 
-    test "its turn, green on main: merged, closed" do
+    test "its turn, green on main, no GitHub to wait on: merged, closed" do
       thread = open!(%{slug: "lands", stage: "review"})
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
       {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
 
       assert {:ok, %{stage: "merged"}} =
-               Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end)
+               Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end, run: @no_github)
 
       assert %Server.Thread{state: "closed"} = Repo.get(Server.Thread, thread.id)
     end
@@ -335,7 +340,7 @@ defmodule Server.WorklineTest do
       thread = open!(%{slug: "stranded", stage: "review"})
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
       {:ok, queued} = parked |> Server.Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
-      {:ok, merged} = Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end)
+      {:ok, merged} = Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end, run: @no_github)
       assert %Server.Thread{state: "closed"} = Repo.get(Server.Thread, merged.id)
 
       why = "its PR #73 conflicts with main"
@@ -915,23 +920,24 @@ defmodule Server.WorklineTest do
     end
   end
 
-  test "landed_since: each landing (a stage_advanced to merged) since then, newest first, with its thread's title" do
+  test "landed_since: each workline GitHub merged (its landing's work_landed) since then, newest first, with its title" do
     t = open!(%{title: "Mailbox: letters", slug: "mailbox"})
     now = DateTime.utc_now()
 
-    stage! = fn to, at ->
+    event! = fn kind, correlation, at ->
       Repo.insert!(%Event{
         thread_id: t.id,
-        kind: "stage_advanced",
-        correlation: "workline:mailbox",
-        detail: %{"from" => "review", "to" => to},
+        kind: kind,
+        correlation: correlation,
+        detail: %{"summary" => "merged"},
         created_at: DateTime.truncate(at, :second)
       })
     end
 
-    _old = stage!.("merged", DateTime.add(now, -3600))
-    _bounce = stage!.("build", DateTime.add(now, -60))
-    landed = stage!.("merged", now)
+    _old = event!.("work_landed", "workline:mailbox:landing", DateTime.add(now, -3600))
+    _gate = event!.("stage_advanced", "workline:mailbox", now)
+    _record_done = event!.("work_landed", nil, now)
+    landed = event!.("work_landed", "workline:mailbox:landing", now)
 
     assert [%{id: id, thread_id: tid, title: "Mailbox: letters"}] = Workline.landed_since(DateTime.add(now, -600))
     assert id == landed.id and tid == t.id

@@ -5,7 +5,9 @@ defmodule Server.Jobs.KeepUp do
   are closed and their worklines sent back to build (`Server.Workline.reland/2`) rather than left
   stranded with their threads closed, and those whose checks went red (so auto-merge never fires)
   are closed, reported to the workspace's sheriff and sent back the same way, and its main
-  checkout is brought level with origin/main, fast-forward only (`follow_main/2`).
+  checkout is brought level with origin/main, fast-forward only (`follow_main/2`). A landing waiting
+  on GitHub (`Server.Workline.waiting_on_github/0`) is done only when GitHub reads its PR as
+  `MERGED`: then its thread closes, its ticket is done and its issues resolved (`Server.Workline.merged/2`).
 
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
   from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
@@ -20,7 +22,7 @@ defmodule Server.Jobs.KeepUp do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    faults = Enum.flat_map(repos(), &keep_up/1) ++ requeue_stranded()
+    faults = Enum.flat_map(repos(), &keep_up/1) ++ landings() ++ requeue_stranded()
 
     if faults == [], do: :ok, else: {:error, Enum.join(faults, "; ")}
   end
@@ -59,6 +61,22 @@ defmodule Server.Jobs.KeepUp do
   end
 
   defp read(_repo, _what, prs), do: prs
+
+  @doc false
+  # a landing is done when GitHub says its PR is MERGED, never at the local gate
+  def landings(run \\ &System.cmd/3) do
+    for %{thread: t, url: url} <- Server.Workline.waiting_on_github() do
+      case Server.Workline.Publish.view(Server.Workline.Artifacts.Git.root(t), url, run) do
+        {:ok, %{"state" => "MERGED"}} -> Server.Workline.merged(t, url)
+        {:ok, _pr} -> :ok
+        {:error, why} -> require(Logger) && Logger.warning("keep_up #{t.slug}: #{url} unread — #{why}")
+      end
+    end
+
+    []
+  rescue
+    e -> fault("keep_up landings: #{Exception.message(e)}")
+  end
 
   # approved worklines whose Land job Lifeline rescued or discarded wait at review with nothing queued
   defp requeue_stranded do

@@ -114,9 +114,9 @@ defmodule Server.WorklineBriefTest do
     assert Enum.any?(bodies.(), &(&1 =~ "PLAN"))
   end
 
-  test "reaching merged posts a completion note, not a brief" do
+  test "reaching merged posts a landing note — it waits on GitHub — not a brief" do
     note = Brief.stage_message(thread("merged"))
-    assert note =~ "merged"
+    assert note =~ "landed" and note =~ "GitHub"
     refute note =~ "advance_stage"
   end
 end
