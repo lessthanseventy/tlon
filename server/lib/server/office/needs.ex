@@ -20,7 +20,13 @@ defmodule Server.Office.Needs do
       the thread), `pr_blocked` (a landed workline whose PR GitHub isn't merging:
       auto-merge refused, closed unmerged, `BLOCKED` with no check running, or no merge an hour after it
       was published or rebased — `Server.Workline.waiting_on_github/0`; `url` the PR; answered by
-      rebase, close and reland, or a look at the PR);
+      rebase, close and reland, or a look at the PR), `no_seat` (an open
+      workline at a stage whose kind — `Server.Workline.staff_kind/1` — the bench lacks, and nobody
+      on the bench leads it: hire one, or hand it to someone; `archetype` the kind), `quota` (per
+      workspace: Claude's usage limit with no other crew to put on, until its reset —
+      `Server.Shifts.out_of_quota/1` — or a provider's plan spent with a seat on it —
+      `Server.Presence.Engine.spent/0`: `options` the other crews to put on; put away, it waits for
+      the reset);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -77,7 +83,7 @@ defmodule Server.Office.Needs do
         withdraw_ask(id)
         remember(key)
 
-      %{kind: "stalled"} ->
+      %{kind: kind} when kind in ~w(stalled quota) ->
         remember(key)
 
       %{level: "blocking"} ->
@@ -407,7 +413,7 @@ defmodule Server.Office.Needs do
   # put away stays away until something newer comes under the key; a stranded checkout or a seats
   # count has no "newer", so it stays away until it is gone (and its put-away with it, `prune/2`)
   defp put_away?(_item, nil), do: false
-  defp put_away?(%{kind: kind}, _at) when kind in ~w(stranded seats), do: true
+  defp put_away?(%{kind: kind}, _at) when kind in ~w(stranded seats quota), do: true
   defp put_away?(item, at), do: DateTime.compare(item.at, at) != :gt
 
   defp remember(key) do
@@ -459,12 +465,84 @@ defmodule Server.Office.Needs do
 
     blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open) ++ unpublished() ++ pr_blocked()
     blocking = blocking ++ stalled(open, MapSet.new(blocking, & &1.thread_id))
+    blocking = blocking ++ no_seat(open, MapSet.new(blocking, & &1.thread_id)) ++ quota()
 
     decide =
       mentions(open, operator) ++
         rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open) ++ failed_cuts()
 
     Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
+  end
+
+  # an open workline at a stage whose kind the bench lacks, and nobody on the bench leads it:
+  # staffing keeps the lead it has, and with none (or one off the bench) nothing moves it
+  defp no_seat(open, listed) do
+    for %Thread{stage: stage, workspace_id: ws} = t <- open,
+        kind = Server.Workline.staff_kind(stage),
+        kind && ws && is_nil(t.awaiting) && not MapSet.member?(listed, t.id),
+        bench = Server.Workspaces.bench(ws),
+        not Enum.any?(bench, &(&1.archetype == kind)),
+        lead <- [Server.Channel.thread_lead(t.id)],
+        is_nil(lead) or not Enum.any?(bench, &(&1.name == lead)) do
+      who = if lead, do: "#{lead}, its lead, is off the bench", else: "nobody leads it"
+      text = "#{t.slug} at #{stage} needs a #{kind} and the bench has none — #{who}"
+      item("no_seat", "blocking", t, text, t.created_at, %{archetype: kind})
+    end
+  end
+
+  # a workspace whose engine can't take a turn: Claude's limit with no other crew to put on
+  # (`Server.Shifts.out_of_quota/1`), or a provider's plan spent (`Server.Presence.Engine.spent/0`,
+  # every wake to its seats held); each offers the other crews, if any
+  defp quota do
+    claude =
+      for {ws, [q | _]} <- Enum.group_by(Server.Shifts.out_of_quota(), & &1.workspace_id) do
+        text =
+          "Claude's usage limit is reached on the #{q.crew} crew and no other crew can take over: " <>
+            "it resets #{q.reset}, and every wake to it waits until then"
+
+        quota_item(ws, "anthropic", "Claude's usage limit", text, q.at)
+      end
+
+    spent =
+      for %{provider: provider, until: until} <- Server.Presence.Engine.spent(),
+          %Server.Workspace{id: ws} <- Repo.all(Server.Workspace),
+          names =
+            for(s <- Server.Workspaces.bench_all(ws), Server.Presence.provider_of(s.name, ws) == provider, do: s.name),
+          names != [] do
+        reset = if until, do: " until " <> local(until), else: ""
+        text = "the #{provider} plan is spent#{reset}: every wake to #{Enum.join(names, ", ")} is held"
+
+        quota_item(ws, provider, "#{provider} is spent", text, DateTime.truncate(DateTime.utc_now(), :second))
+      end
+
+    claude ++ spent
+  end
+
+  defp quota_item(ws, provider, title, text, at) do
+    on = Server.Shifts.current(ws)
+
+    %{
+      key: "quota:#{ws}:#{provider}",
+      kind: "quota",
+      level: "blocking",
+      thread_id: nil,
+      workspace_id: ws,
+      title: title,
+      text: text,
+      at: at,
+      options: for(c <- List.delete(Server.Shifts.crews(ws), on), do: %{"key" => c, "label" => "#{c} crew on"}),
+      ref: nil
+    }
+  end
+
+  # the server's clock is the local one (`Server.Shifts.reset_at/2`)
+  defp local(%DateTime{} = utc) do
+    utc
+    |> DateTime.to_naive()
+    |> NaiveDateTime.to_erl()
+    |> :calendar.universal_time_to_local_time()
+    |> NaiveDateTime.from_erl!()
+    |> Calendar.strftime("%a %-I:%M%P")
   end
 
   # each thread's newest check under `correlation` (a LIKE pattern), when it is the failed one

@@ -306,7 +306,66 @@ defmodule Server.Office.NeedsTest do
     end
   end
 
+  describe "quota and no seat — each a Need with its answers" do
+    defmodule Spent do
+      @moduledoc false
+      def clocked_out?(_agent), do: true
+      def spent, do: [%{provider: "ollama-cloud", until: ~U[2030-01-01 09:00:00Z]}]
+    end
+
+    test "a spent plan is a quota Need in each workspace seating a coworker on it, with the other crews" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Ollama crew"})
+      {:ok, seat} = Server.Workspaces.seat(ws.id, %{name: "glmer", archetype: "builder", crew: "day"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "claudia", archetype: "builder", crew: "night"})
+      glm = %{"provider" => "ollama-cloud", "model" => "glm-5.2", "thinking" => "medium"}
+      {:ok, _} = Server.Workspaces.set_policy(ws.id, seat.agent_id, %{model: glm})
+      Application.put_env(:server, :engine_presence, Spent)
+      on_exit(fn -> Application.delete_env(:server, :engine_presence) end)
+
+      assert [need] = Enum.filter(Needs.list(), &(&1.kind == "quota"))
+      assert need.workspace_id == ws.id and need.level == "blocking"
+      assert need.text =~ "ollama-cloud"
+      assert need.options == [%{"key" => "night", "label" => "night crew on"}]
+
+      assert [%{actions: [%{label: "night crew on", path: "/api/office/shift", body: body} | _]}] =
+               Server.Alerts.build([need], [], DateTime.utc_now())
+
+      assert body == %{workspace_id: ws.id, shift: "night"}
+    end
+
+    test "a workline at a stage whose kind the bench lacks, and nobody leads, is no_seat: hire one or hand it on",
+         %{ws: ws} do
+      {:ok, t} =
+        Server.Workline.open(%{
+          title: "p",
+          slug: "noseat-#{System.unique_integer([:positive])}",
+          stage: "plan",
+          workspace_id: ws.id
+        })
+
+      assert [need] = Enum.filter(Needs.list(), &(&1.kind == "no_seat"))
+      assert need.thread_id == t.id and need.level == "blocking" and need.archetype == "planner"
+
+      assert [%{actions: [hire, hand | _]}] = Server.Alerts.build([need], [], DateTime.utc_now())
+      assert %{label: "Hire a planner…", body: %{archetype: "planner"}, input: "name"} = hire
+      assert hire.path == "/api/workspaces/#{ws.id}/coworkers"
+      assert %{label: "Hand it to…", input: "agent"} = hand
+      assert hand.path == "/api/threads/#{t.id}/hand-off"
+
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "planck", archetype: "planner"})
+      refute Enum.any?(Needs.list(), &(&1.kind == "no_seat"))
+    end
+  end
+
   describe "a stop with no kind of its own is a stalled Need until the workline moves" do
+    # a seat of every stage's kind, so no workline here is short of one (`no_seat`)
+    setup %{ws: ws} do
+      for {name, kind} <- [{"planck", "planner"}, {"bauer", "builder"}, {"revel", "reviewer"}],
+          do: {:ok, _} = Server.Workspaces.seat(ws.id, %{name: name, archetype: kind})
+
+      :ok
+    end
+
     defp workline(ws, stage, hours_ago) do
       {:ok, t} =
         Server.Workline.open(%{

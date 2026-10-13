@@ -635,6 +635,13 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "issue" && n.ref ? [{ key: "g", label: "get it fixed (a ticket, routed)", run: () => void did(data.fixIssue(n.ref!)).then(after) }] : []),
     ...(n.kind === "issue" && n.ref ? [{ key: "x", label: "resolve…", run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (s) => { if (s.trim()) void did(data.resolveIssue(n.ref!, s.trim())).then(after) }) }] : []),
     ...(n.kind === "publish_failed" && tid ? [{ key: "d", label: "opened by hand (the command is above): its PR's url…", run: () => ask("its PR's url — waited on until GitHub merges it", (s) => { if (s.trim()) void did(data.publishedByHand(tid, s.trim())).then(after) }) }] : []),
+    ...(n.kind === "no_seat" && n.archetype && n.workspace_id != null ? [{ key: "h", label: `hire a ${n.archetype}`, run: () => ask(`hire a ${n.archetype} — their name`, (s) => { if (s.trim()) void did(data.hire(n.workspace_id!, s.trim(), n.archetype!)).then(after) }) }] : []),
+    ...(n.kind === "no_seat" && tid ? [{ key: "o", label: "hand it to…", run: () => ask(`hand #${tid} to — a coworker's name`, (s) => { if (s.trim()) void did(data.handOff(tid, s.trim())).then(after) }) }] : []),
+    ...(n.kind === "quota" && n.workspace_id != null ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: o.label, run: () => void did(data.shiftSwitch(n.workspace_id!, o.key)).then(after) })) : []),
+    ...(n.kind === "quota" ? [
+      { key: "P", label: "pencils down", run: () => void did(data.pause("pencils_down")).then(after) },
+      { key: "d", label: "wait for the reset (put away until it clears)", run: () => void did(data.dismissNeed(n.key)).then(after) },
+    ] : []),
     ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ key: "d", label: "put away", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
     ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
   ]
@@ -644,8 +651,8 @@ function needActions(n: data.Need): Action[] {
 /** what waits on you: one at a time when anything does — the whole list is a key away */
 function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
 /** a need's one-line name: what kind, and where */
-const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work", issue: "issue", publish_failed: "not on GitHub", release_failed: "cut failed", pr_blocked: "PR not merging" }
-const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, publish_failed: ROLE.alarm, release_failed: ROLE.alarm, pr_blocked: ROLE.alarm }
+const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work", issue: "issue", publish_failed: "not on GitHub", release_failed: "cut failed", pr_blocked: "PR not merging", quota: "out of quota", no_seat: "no seat" }
+const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, publish_failed: ROLE.alarm, release_failed: ROLE.alarm, pr_blocked: ROLE.alarm, quota: ROLE.attention, no_seat: ROLE.attention }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev

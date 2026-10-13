@@ -123,6 +123,26 @@ defmodule Server.ShiftsTest do
     assert :ok = Shifts.quota_check(plain.id, "solo", "1/w1", @limit)
   end
 
+  test "out of quota with no other crew: a quota Need until the pane clears — wait for the reset, or pencils down" do
+    {:ok, plain} = Workspaces.register(%{name: "One crew out"})
+    {:ok, _} = Workspaces.seat(plain.id, %{name: "solo", archetype: "builder"})
+    {:ok, _} = lobby(plain)
+    quota = fn -> Enum.filter(Server.Office.Needs.list(), &(&1.kind == "quota" and &1.workspace_id == plain.id)) end
+
+    assert :ok = Shifts.quota_check(plain.id, "solo", "1/w1", @limit)
+    assert [need] = quota.()
+    assert need.level == "blocking" and need.text =~ "5:00pm"
+    assert [%{actions: actions}] = Server.Alerts.build([need], [], DateTime.utc_now())
+
+    assert %{label: "Pencils down", body: %{mode: "pencils_down"}} =
+             Enum.find(actions, &(&1[:path] == "/api/office/pause"))
+
+    assert %{label: "Wait for the reset"} = List.last(actions)
+
+    assert :ok = Shifts.quota_check(plain.id, "solo", "1/w1", "back at work")
+    assert quota.() == []
+  end
+
   test "taking the offer puts that crew on, and the offer to come back waits for the reset", %{ws: ws} do
     {:ok, _} = lobby(ws)
     {:offered, _} = Shifts.quota_check(ws.id, "hronir", "1/w1", @limit)
