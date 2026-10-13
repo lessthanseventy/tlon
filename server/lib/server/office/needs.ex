@@ -392,12 +392,18 @@ defmodule Server.Office.Needs do
     end
   end
 
-  # an open blocker on an open thread that no ticket owns yet (`Server.Dossier.fix_issue/1`)
+  # an open blocker on an open thread that no ticket is fixing: unowned, or owned by a ticket that
+  # ended without landing (`Server.Dossier.resolve_fixed/2` closes the ones that land)
   defp issues(open) do
     by_id = Map.new(open, &{&1.id, &1})
 
     for i <-
-          Repo.all(from i in Server.Issue, where: i.state == "open" and not is_nil(i.thread_id) and is_nil(i.ticket_id)),
+          Repo.all(
+            from i in Server.Issue,
+              left_join: t in Server.Ticket,
+              on: t.id == i.ticket_id,
+              where: i.state == "open" and not is_nil(i.thread_id) and (is_nil(i.ticket_id) or t.status == "done")
+          ),
         t = by_id[i.thread_id] do
       item("issue", "decide", t, "#{i.found_by || "someone"}: #{i.summary}", i.created_at, %{
         key: "issue:#{i.id}",

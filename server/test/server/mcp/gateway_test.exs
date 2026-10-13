@@ -505,6 +505,22 @@ defmodule Server.MCP.GatewayTest do
       assert {404, _} = request_json(:delete, "/api/facts/999999", %{})
       assert {404, _} = post_json("/api/issues/999999/resolve", %{})
     end
+
+    test "getting an issue fixed twice, or a closed one, is refused in words" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Fixing"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius-g", archetype: "surveyor"})
+      {:ok, _} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, beat} = Channel.open_thread(%{title: "beat", workspace_id: ws.id})
+      {:ok, issue} = Server.Dossier.raise_issue(%{thread_id: beat.id, summary: "flaky"})
+      {200, %{"ticket_id" => _}} = post_json("/api/issues/#{issue.id}/fix", %{})
+      assert {409, %{"error" => "issue #" <> _ = owned}} = post_json("/api/issues/#{issue.id}/fix", %{})
+      assert owned =~ "already has a ticket"
+
+      {:ok, closed} = Server.Dossier.raise_issue(%{thread_id: beat.id, summary: "gone"})
+      {:ok, _} = Server.Dossier.resolve_issue(closed, "went away")
+      assert {409, %{"error" => "issue #" <> _ = shut}} = post_json("/api/issues/#{closed.id}/fix", %{})
+      assert shut =~ "is closed"
+    end
   end
 
   describe "/api — the office TUI's threads, room reads, settings and schedules" do

@@ -173,7 +173,7 @@ defmodule Server.MCP.Tool.FileTicket do
     {issue_id, params} = Map.pop(params, :issue_id)
 
     with workspace_id when not is_nil(workspace_id) <- Tool.workspace_of(identity),
-         {:ok, issue} <- ownable(issue_id),
+         {:ok, issue} <- ownable(issue_id, workspace_id),
          {:ok, ticket} <- Tickets.file(Map.put(params, :workspace_id, workspace_id)) do
       if issue, do: {:ok, _} = Server.Dossier.own_issue(issue, ticket, "filed by #{identity.agent}")
       reply(frame, {:ok, ticket}, &MCP.Brief.ticket/1)
@@ -183,14 +183,19 @@ defmodule Server.MCP.Tool.FileTicket do
     end
   end
 
-  defp ownable(nil), do: {:ok, nil}
+  defp ownable(nil, _workspace_id), do: {:ok, nil}
 
-  defp ownable(id) do
-    case Server.Repo.get(Server.Issue, id) do
-      %Server.Issue{state: "open", ticket_id: nil} = issue -> {:ok, issue}
-      %Server.Issue{state: "open", ticket_id: t} -> {:error, "issue ##{id} is already ticket ##{t}"}
-      %Server.Issue{} -> {:error, "issue ##{id} is closed"}
-      nil -> {:error, "no issue ##{id}"}
+  # only an issue raised on a thread of the caller's own workspace
+  defp ownable(id, workspace_id) do
+    issue = Server.Repo.get(Server.Issue, id)
+    thread = issue && issue.thread_id && Server.Repo.get(Server.Thread, issue.thread_id)
+
+    cond do
+      is_nil(issue) -> {:error, "no issue ##{id}"}
+      is_nil(thread) or thread.workspace_id != workspace_id -> {:error, "issue ##{id} is not on this workspace"}
+      issue.state != "open" -> {:error, "issue ##{id} is closed"}
+      issue.ticket_id -> {:error, "issue ##{id} is already ticket ##{issue.ticket_id}"}
+      true -> {:ok, issue}
     end
   end
 end

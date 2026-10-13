@@ -1326,6 +1326,12 @@ defmodule Server.MCP.ServerTest do
 
     assert call(token, session, 3, "file_ticket", %{"title" => "again", "issue_id" => issue.id})["isError"]
     refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "again"))
+
+    {:ok, other_ws} = Server.Workspaces.register(%{name: "OtherWS"})
+    {:ok, other} = Channel.open_thread(%{title: "elsewhere", workspace_id: other_ws.id})
+    {:ok, theirs} = Server.Dossier.raise_issue(%{thread_id: other.id, summary: "not ours"})
+    assert call(token, session, 4, "file_ticket", %{"title" => "reach", "issue_id" => theirs.id})["isError"]
+    assert Server.Repo.get!(Server.Issue, theirs.id).ticket_id == nil
   end
 
   test "suggest pins a coworker's idea in the operator's suggestion box, naming who and where, waking nobody" do

@@ -106,6 +106,15 @@ defmodule Server.SheriffTest do
     end
   end
 
+  test "an issue that can't be routed leaves no ticket behind to be filed twice", %{ws: ws} do
+    {:ok, beat} = Channel.open_thread(%{title: "beat", workspace_id: ws.id})
+    {:ok, issue} = Server.Dossier.raise_issue(%{thread_id: beat.id, summary: "nowhere to send this"})
+
+    assert {:error, _} = Server.Dossier.fix_issue(issue)
+    assert Server.Tickets.in_workspace(ws.id) == []
+    assert %{ticket_id: nil} = Repo.get!(Server.Issue, issue.id)
+  end
+
   describe "getting an issue fixed — a ticket owns it, its landing resolves it" do
     setup %{ws: ws} do
       {:ok, _} = Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
@@ -163,6 +172,20 @@ defmodule Server.SheriffTest do
       assert Server.Office.Needs.list() == []
       assert [%{body: body}] = Server.Dossier.fixing_since(DateTime.add(DateTime.utc_now(), -60))
       assert body =~ "filed by scharlach"
+    end
+
+    test "a ticket that ends without landing gives the issue back to the operator's list", %{ws: ws, issue: issue} do
+      {:ok, %{ticket: ticket}} = Server.Dossier.fix_issue(issue)
+      {:ok, work} = Channel.open_thread(%{title: "landing clears server/tmp", workspace_id: ws.id})
+      {:ok, _} = Server.Tickets.promote(Server.Tickets.get(ticket.id), work.id)
+      assert Server.Office.Needs.list() == []
+
+      {:ok, _} = Channel.close_thread(work)
+
+      assert %{status: "done"} = Server.Tickets.get(ticket.id)
+      assert %{state: "open"} = Repo.get!(Server.Issue, issue.id)
+      assert [%{kind: "issue", ref: ref}] = Server.Office.Needs.list()
+      assert ref == issue.id
     end
 
     test "its workline landing resolves the issue naming the PR, which banks the postmortem", %{
