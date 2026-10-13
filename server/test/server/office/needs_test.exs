@@ -321,6 +321,34 @@ defmodule Server.Office.NeedsTest do
       assert kinds(ws) == []
     end
 
+    test "a prompt the machine closed is not an answer; a mid-turn mark gone stale is not on duty", %{ws: ws} do
+      t = workline(ws, "build", 4)
+
+      Server.Repo.insert!(%Server.Message{
+        thread_id: t.id,
+        author: "tlon",
+        kind: "prompt",
+        body: "a pane dialog",
+        created_at: DateTime.truncate(DateTime.utc_now(), :second),
+        resolved_at: DateTime.truncate(DateTime.utc_now(), :second),
+        resolution: "window closed"
+      })
+
+      {:ok, a} =
+        Server.Staff.register_agent(%{name: "yu-#{System.unique_integer([:positive])}", mandate: "m", engine: "e"})
+
+      {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
+
+      old =
+        DateTime.utc_now()
+        |> DateTime.add(-(Server.Staffing.stale_turn_s() + 60), :second)
+        |> DateTime.truncate(:second)
+
+      :ok = Server.Staff.mark_thinking(t.id, a.name, old)
+
+      assert [{"stalled", "blocking"}] = kinds(ws)
+    end
+
     test "under pencils down nothing is stalled: the operator stopped it", %{ws: ws} do
       _ = workline(ws, "build", 4)
       path = Path.join(System.tmp_dir!(), "needs-pause-#{System.unique_integer([:positive])}.json")

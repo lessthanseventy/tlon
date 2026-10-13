@@ -438,8 +438,8 @@ defmodule Server.Office.Needs do
 
   defp quiet_window_s, do: Application.get_env(:server, :quiet_window_s, 3600)
 
-  # a coworker's chatter is not movement — "still blocked" posts are how #242 sat for a night; an
-  # operator answer starts the clock again, so the lead gets the window to act on it
+  # a coworker's chatter is not movement, nor a prompt the machine closed ("window closed"); an
+  # operator's answer starts the clock again, so the lead gets the window to act on it
   defp last_moved(t) do
     operator = Application.get_env(:server, :operator, "andrew")
 
@@ -453,7 +453,9 @@ defmodule Server.Office.Needs do
     answer =
       Repo.one(
         from m in Message,
-          where: m.thread_id == ^t.id and (m.author == ^operator or not is_nil(m.resolved_at)),
+          where:
+            m.thread_id == ^t.id and
+              (m.author == ^operator or like(m.resolution, "answered%") or like(m.resolution, "dismissed by%")),
           select: max(fragment("greatest(?, ?)", m.created_at, m.resolved_at))
       )
 
@@ -481,8 +483,11 @@ defmodule Server.Office.Needs do
 
   defp commit_at(_), do: nil
 
-  # someone is on it: the merge queue, a verify run queued or running, a coworker mid-turn here
+  # someone is on it: the merge queue, a verify run queued or running, a coworker mid-turn here (a
+  # mark older than staffing's stale turn is a turn nothing will end, not someone on it)
   defp on_duty?(t) do
+    live = DateTime.add(DateTime.utc_now(), -Server.Staffing.stale_turn_s(), :second)
+
     landing?(t) or
       Repo.exists?(
         from j in Oban.Job,
@@ -492,7 +497,7 @@ defmodule Server.Office.Needs do
       ) or
       Repo.exists?(
         from s in Server.Session,
-          where: s.thread_id == ^t.id and is_nil(s.ended_at) and not is_nil(s.thinking_since)
+          where: s.thread_id == ^t.id and is_nil(s.ended_at) and s.thinking_since > ^live
       )
   end
 

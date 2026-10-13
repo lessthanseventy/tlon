@@ -436,6 +436,9 @@ defmodule Server.Staffing do
   defp live_turn?(nil), do: false
   defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < @stale_turn_s
 
+  @doc "How old a mid-turn mark may be before it is a turn nothing will end, in seconds."
+  def stale_turn_s, do: @stale_turn_s
+
   @doc "Whether the thread's latest message is the leaf cap's parked note: it waits for a seat."
   def parked_note?(thread_id) do
     last = Repo.one(from m in Message, where: m.thread_id == ^thread_id, order_by: [desc: m.id], limit: 1)
