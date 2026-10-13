@@ -1,8 +1,9 @@
 defmodule Server.Office.Corkboard do
   @moduledoc """
   The office corkboard: notes the coworkers pin up for each other — encouragement, a tease, a joke,
-  a comment on what's going on, a suggestion (a bug they suspect, a fix they'd try), or a reply to
-  an earlier note, which is how a feud or a running joke starts. Written like the banter
+  a comment on what's going on, or a reply to an earlier note, which is how a feud or a running joke
+  starts. Never a bug report: the writer sees only titles, so a bug it named would be invented; a
+  coworker who hits a real one files it (`file_ticket`). Written like the banter
   (`Server.Office.Writer`, over `Server.Office.Banter`'s scene of the office); the server picks the
   author and the kind (`pick/4`), the model only writes it.
 
@@ -36,8 +37,13 @@ defmodule Server.Office.Corkboard do
   You write ONE sticky note a coworker pins on the corkboard of a pixel-art office of AI coworkers,
   for the others to read. Under 120 characters; in character for their role; dry, warm, a little
   absurd; teasing is affectionate, a feud is petty and funny, never cruel; no emoji, no hashtags.
+  Office life only: never a ticket or thread number, and never a claim that some code, test or tool
+  is broken or how to fix it. You see only titles, so any such claim would be made up.
   Respond with ONLY a JSON object: {"note": "<the note>"}
   """
+
+  @doc false
+  def voice, do: @voice
 
   def start_link(_), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
@@ -91,13 +97,12 @@ defmodule Server.Office.Corkboard do
 
   @doc """
   Draw a kind of note for `author` by weight: `{kind, ask, re}` (`re` the note a reply answers),
-  or nil when nothing fits. A reply needs someone else's note; a tease, someone to tease; a
-  suggestion, someone else's work in hand. `roll` in [0, 1) picks the point on the weighted line.
+  or nil when nothing fits. A reply needs someone else's note; a tease, someone to tease. `roll` in
+  [0, 1) picks the point on the weighted line.
   """
   def pick(ctx, board, author, roll \\ :rand.uniform()) do
     others = Enum.filter(ctx.crew, &(&1.name != author.name))
     theirs = Enum.filter(board, &(&1.author != author.name))
-    working = Enum.filter(others, & &1.thread)
 
     kinds =
       [
@@ -108,7 +113,6 @@ defmodule Server.Office.Corkboard do
          fn -> "#{author.name} comments on something going on in the office right now (see THE OFFICE)." end}
       ] ++
         if(others == [], do: [], else: [{:tease, 15, fn -> tease(Enum.random(others), author) end}]) ++
-        if(working == [], do: [], else: [{:suggestion, 10, fn -> suggestion(Enum.random(working), author) end}]) ++
         if(theirs == [], do: [], else: [{:reply, 25, fn -> theirs |> Enum.take(4) |> Enum.random() end}])
 
     total = kinds |> Enum.map(&elem(&1, 1)) |> Enum.sum()
@@ -133,10 +137,6 @@ defmodule Server.Office.Corkboard do
   defp tease(other, author),
     do:
       "#{author.name} pins an affectionate tease of #{other.name} (#{other.archetype}) — their habits, their work, their quirks."
-
-  defp suggestion(worker, author),
-    do:
-      "#{author.name} pins a suggestion about #{worker.name}'s work on ##{worker.thread.id} \"#{worker.thread.title}\" — a bug they suspect or a fix they'd try. Concrete, one line."
 
   defp at([{_, w, _} = k | rest], point), do: if(point < w or rest == [], do: k, else: at(rest, point - w))
 
