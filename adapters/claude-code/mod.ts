@@ -173,13 +173,16 @@ async function loadFigure($, archetype: string | null) {
   }
 }
 
+let sessionId: number | null = null;
+let superseded = false;
 let registering: Promise<void> | null = null;
 function registerNow($): Promise<void> {
   return (registering ??= (async () => {
     const args = registration;
     if (!args) return;
     try {
-      await call($, "register", args);
+      const claimed = await call($, "register", args);
+      sessionId = (claimed as { session_id?: number } | null)?.session_id ?? null;
       registration = null;
     } catch (e) {
       if (!registerFailed) void note($, `register: ${e instanceof Error ? e.message : String(e)} — trying again every poll`);
@@ -197,7 +200,14 @@ async function drainWakes($) {
   if (draining) return;
   draining = true;
   try {
-    const wakes = await call($, "take_wakes");
+    const wakes = await call($, "take_wakes", sessionId === null ? {} : { session_id: sessionId });
+    // a newer session holds this seat: say so once, then stop taking and registering
+    if (wakes && typeof wakes === "object" && (wakes as { superseded?: boolean }).superseded) {
+      superseded = true;
+      registration = null;
+      await $.prompt.submit({ text: String((wakes as { text?: string }).text ?? ""), asUser: true });
+      return;
+    }
     const failed: string[] = [];
     if (Array.isArray(wakes))
       for (const text of wakes.map(String)) {
@@ -432,8 +442,10 @@ export function register(on) {
     const pane = await $.env.get("TMUX_PANE");
     registration = pane ? { pane_ref: pane } : {};
     registerFailed = false;
+    superseded = false;
     void registerNow($);
     $.clock.every(WAKE_POLL_MS, async () => {
+      if (superseded) return;
       if (registration) await registerNow($);
       await drainWakes($);
     });

@@ -10,7 +10,7 @@ type World = {
   compactSkips?: boolean;
   run?: (argv: string[], init?: { env?: Record<string, string> }) => { exitCode: number; stdout: string; stderr: string };
   model?: string;
-  wakes?: string[][];
+  wakes?: unknown[];
   glance?: unknown;
   toasts?: string[];
   diagnostics?: string;
@@ -93,6 +93,8 @@ function engine(on, world: World = {}): Declare[] {
         ? JSON.stringify(world.dossier ?? DOSSIER)
         : e.tool === "take_wakes"
           ? JSON.stringify(world.wakes?.shift() ?? [])
+          : e.tool === "register"
+            ? JSON.stringify({ session_id: 5, agent: "lonnrot", thread_id: 42 })
           : e.tool === "office_glance"
             ? JSON.stringify(world.glance ?? GLANCE)
             : "ok";
@@ -419,6 +421,22 @@ test("a register refused while the MCP server is still connecting is tried again
   await clock.advance(3_000);
   await settle();
   expect(sent.filter((d) => d.tool === "register").length).toBe(1);
+});
+
+test("a session the server says was superseded is told to stop, and takes no more wakes", async ($, on) => {
+  const text = "This session was superseded: a newer session now holds lonnrot's seat on thread #42. Stop.";
+  const world: World = { ownClock: true, wakes: [{ superseded: true, by: 9, text }], submitted: [] };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+
+  for (let i = 0; i < 3; i++) {
+    await clock.advance(3_000);
+    await settle();
+  }
+
+  expect(sent.filter((d) => d.tool === "take_wakes")).toEqual([{ tool: "take_wakes", args: { session_id: 5 } }]);
+  expect(world.submitted).toEqual([text]);
 });
 
 test("a wake whose submit fails is put back on the server, not lost", async ($, on) => {

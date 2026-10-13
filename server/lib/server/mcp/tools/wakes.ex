@@ -4,16 +4,34 @@ defmodule Server.MCP.Tool.TakeWakes do
   mod drains them on a short timer and submits each as a turn once the session is idle. Taking is
   not activity — the identity is read without touching warmth — so a session that only drains
   stays as cold as it is, and only the turn a wake starts counts as having heard it.
+
+  A session that names the `session_id` `register` gave it, when a newer one has since claimed the
+  seat (a resumed twin beside a respawn), takes nothing: the wakes stay for the live session and it
+  is answered `{"superseded": true, "by": id, "text": …}` — the one pane told to stop.
   """
   use Server.MCP.Tool
 
   schema do
+    field :session_id, :integer, description: "The session_id `register` returned to this session"
   end
 
   @impl true
-  def execute(_params, frame) do
+  def execute(params, frame) do
     identity = Identity.from_frame(frame, touch: false)
-    ok(frame, Server.Wake.take(identity.thread_id, identity.agent))
+
+    case params[:session_id] do
+      claimed when is_integer(claimed) and claimed != identity.session_id ->
+        ok(frame, %{
+          "superseded" => true,
+          "by" => identity.session_id,
+          "text" =>
+            "This session was superseded: a newer session now holds #{identity.agent}'s seat on " <>
+              "thread ##{identity.thread_id}. Do not act or post from here; end your turn and stop."
+        })
+
+      _ ->
+        ok(frame, Server.Wake.take(identity.thread_id, identity.agent))
+    end
   end
 end
 
