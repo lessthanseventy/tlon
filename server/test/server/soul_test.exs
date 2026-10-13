@@ -83,4 +83,12 @@ defmodule Server.SoulTest do
     assert {:ok, :written} = Soul.draft(ctx.ws.id, "lonnrot")
     assert File.read!(Path.join(ctx.dir, "lonnrot.md")) =~ "## Fears\n"
   end
+
+  test "draft_all drafts every seat that has none and reports each", %{ws: ws, dir: dir} do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "planner"})
+    File.mkdir_p!(dir)
+    File.write!(Path.join(dir, "yu.md"), "mine")
+    assert %{"lonnrot" => {:ok, :written}, "yu" => {:ok, :exists}} = Soul.draft_all(ws.id)
+    assert File.read!(Path.join(dir, "yu.md")) == "mine"
+  end
 end
