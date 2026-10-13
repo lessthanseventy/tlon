@@ -587,14 +587,66 @@ defmodule Server.Workline do
 
   @doc """
   The landed worklines waiting on GitHub to merge their PR: open, `merged`, and the newest event of
-  their landing its published PR, not its merge. `[%{thread, url}]`.
+  their landing about its PR, not its merge. `[%{thread, url, event}]`, `event` that newest one: a
+  `check_failed` when GitHub won't merge it as it stands (`landing_blocked/2`).
   """
   def waiting_on_github do
     for t <- Repo.all(from t in Thread, where: t.state == "open" and t.stage == "merged"),
-        %Server.Event{kind: kind, detail: %{"url" => url}} <- [last_landing(t)],
-        kind != "work_landed",
-        do: %{thread: t, url: url}
+        waiting = pending_landing(t),
+        do: waiting
   end
+
+  @doc """
+  GitHub won't merge a waiting landing as it stands (`why`): recorded on its landing, once until
+  something moves it, which makes it a `pr_blocked` Need (`Server.Office.Needs`). `:ok`.
+  """
+  def landing_blocked(%Thread{} = thread, why) do
+    with %{url: url, event: %{kind: kind}} when kind != "check_failed" <- pending_landing(thread),
+         do: record_landing(thread, "check_failed", landing_check(url, 1, why))
+
+    :ok
+  end
+
+  @doc """
+  The operator's "rebase" for a landing GitHub isn't merging: GitHub rebases its PR onto main and
+  auto-merge is armed again (`Publish.rebase/3`), which starts its clock again. `{:ok, thread}`,
+  `{:error, :not_landing}` for a thread with no PR waiting on GitHub, or `{:error, why}`.
+  """
+  def rebase_landing(thread, run \\ &System.cmd/3) do
+    with %{url: url} <- pending_landing(thread) || {:error, :not_landing},
+         :ok <- Server.Workline.Publish.rebase(Git.root(thread), url, run) do
+      record_landing(thread, "check_passed", landing_check(url, 0, "rebased onto main, auto-merge armed"))
+      {:ok, thread}
+    end
+  end
+
+  @doc """
+  The operator's "close and reland": its PR closed and the workline back at build on its branch
+  (`reland/3`), to come back through verify, review and the merge queue. `reland/3`'s result,
+  `{:error, :not_landing}`, or `{:error, why}` when the PR won't close.
+  """
+  def reland_landing(thread, run \\ &System.cmd/3) do
+    with %{url: url} <- pending_landing(thread) || {:error, :not_landing},
+         why = "the operator closed its PR #{url} to reland it",
+         :ok <- Server.Workline.Publish.close(Git.root(thread), url, "#{why}; the workline is back at build", run) do
+      reland(thread, why, "#{why}. Rebase work/#{thread.slug} onto origin/main, test")
+    end
+  end
+
+  defp pending_landing(%Thread{stage: "merged", state: "open"} = thread) do
+    case last_landing(thread) do
+      %Server.Event{kind: kind, detail: %{"url" => url}} = e when kind != "work_landed" ->
+        %{thread: thread, url: url, event: e}
+
+      _ ->
+        nil
+    end
+  end
+
+  defp pending_landing(_thread), do: nil
+
+  defp landing_check(url, exit, tail),
+    do: %{"cmd" => "GitHub merge of #{url}", "exit" => exit, "url" => url, "tail" => tail}
 
   defp last_landing(thread) do
     Repo.one(
@@ -1344,7 +1396,8 @@ defmodule Server.Workline do
 
   @doc """
   Publish a landed workline whose publish failed (`Server.Office.Needs`' `publish_failed`) again: the
-  same push and PR its landing tried. `{:ok, pr_url}` | `:none` (no origin) | `{:error, why}` — a
+  same push and PR its landing tried. `{:ok, pr_url}` | `{:auto_refused, pr_url, why}` | `:none` (no
+  origin) | `{:error, why}` — a
   failure is recorded again; a workline whose last publish did not fail is refused.
   """
   def republish(thread, run \\ &System.cmd/3)
@@ -1394,7 +1447,7 @@ defmodule Server.Workline do
     case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run) do
       {:ok, url} = ok ->
         record_publish(thread, 0, url)
-        record_landing(thread, "check_passed", %{"cmd" => "GitHub merge of #{url}", "exit" => 0, "url" => url})
+        record_landing(thread, "check_passed", landing_check(url, 0, "published"))
 
         post_brief(
           thread,
@@ -1402,6 +1455,12 @@ defmodule Server.Workline do
         )
 
         ok
+
+      {:auto_refused, url, why} = refused ->
+        record_publish(thread, 0, url)
+        record_landing(thread, "check_failed", landing_check(url, 1, "auto-merge refused: #{why}"))
+        post_brief(thread, "#{landed}; published as #{url}, but GitHub refused to auto-merge it: #{why}")
+        refused
 
       :none ->
         record_publish(thread, 0, "no origin to publish to")
@@ -1911,7 +1970,7 @@ defmodule Server.Workline do
 
   defp by_hand(thread, url) do
     record_publish(thread, 0, url)
-    record_landing(thread, "check_passed", %{"cmd" => "GitHub merge of #{url}", "exit" => 0, "url" => url})
+    record_landing(thread, "check_passed", landing_check(url, 0, "opened by hand"))
     post_brief(thread, "its PR opened by hand: #{url} — the thread closes when GitHub merges it")
     {:ok, thread}
   end

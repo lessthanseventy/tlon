@@ -99,7 +99,7 @@ defmodule Server.Alerts do
   end
 
   defp from_need(n) do
-    level = if n.kind in ~w(gate dialog question ask), do: "decision", else: "sticky"
+    level = if n.kind in ~w(gate dialog question ask pr_blocked), do: "decision", else: "sticky"
 
     %{
       key: n.key,
@@ -137,6 +137,9 @@ defmodule Server.Alerts do
     do: ["Reply…" |> call("/messages", t) |> Map.put(:input, "body")]
 
   defp actions(%{kind: "verify_failed", thread_id: t}), do: [call("Run verify again", "/verify", t)]
+
+  defp actions(%{kind: "pr_blocked", thread_id: t, url: url}),
+    do: [call("Rebase", "/rebase", t), call("Close and reland", "/reland", t), %{label: "Show me", open: url}]
 
   defp actions(%{kind: "rollout", ref: id}),
     do: [%{label: "Done", method: "DELETE", path: "/api/office/rollout/#{id}", body: nil}]

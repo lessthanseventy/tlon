@@ -8,6 +8,8 @@ defmodule Server.Jobs.KeepUp do
   checkout is brought level with origin/main, fast-forward only (`follow_main/2`). A landing waiting
   on GitHub (`Server.Workline.waiting_on_github/0`) is done only when GitHub reads its PR as
   `MERGED`: then its thread closes, its ticket is done and its issues resolved (`Server.Workline.merged/2`).
+  One GitHub closed unmerged, or holds `BLOCKED` with no check still running, is recorded as blocked
+  (`Server.Workline.landing_blocked/2`), a `pr_blocked` Need.
 
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
   from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
@@ -68,6 +70,8 @@ defmodule Server.Jobs.KeepUp do
     for %{thread: t, url: url} <- Server.Workline.waiting_on_github() do
       case Server.Workline.Publish.view(Server.Workline.Artifacts.Git.root(t), url, run) do
         {:ok, %{"state" => "MERGED"}} -> Server.Workline.merged(t, url)
+        {:ok, %{"state" => "CLOSED"}} -> Server.Workline.landing_blocked(t, "its PR was closed on GitHub, unmerged")
+        {:ok, %{"mergeStateStatus" => "BLOCKED"} = pr} -> blocked(t, pr)
         {:ok, _pr} -> :ok
         {:error, why} -> require(Logger) && Logger.warning("keep_up #{t.slug}: #{url} unread — #{why}")
       end
@@ -76,6 +80,12 @@ defmodule Server.Jobs.KeepUp do
     []
   rescue
     e -> fault("keep_up landings: #{Exception.message(e)}")
+  end
+
+  # BLOCKED while its checks run is GitHub waiting on them; with none running, a rule holds it
+  defp blocked(t, pr) do
+    if !Server.Workline.Publish.checks_running?(pr),
+      do: Server.Workline.landing_blocked(t, "GitHub reports it BLOCKED with no check running: a rule holds it")
   end
 
   # approved worklines whose Land job Lifeline rescued or discarded wait at review with nothing queued

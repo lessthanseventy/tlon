@@ -74,6 +74,8 @@ defmodule Server.MCP.OperatorAPI do
                                           opened again: {"published": url | null}; 409 when there is no failed publish
       POST   /api/threads/:id/published   {"url"} → Workline.published_by_hand: a failed publish's PR opened by hand,
                                           waited on until GitHub merges it; 409 when there is no failed publish
+      POST   /api/threads/:id/rebase      Workline.rebase_landing: GitHub rebases its waiting PR, auto-merge armed (409 if none waits)
+      POST   /api/threads/:id/reland      Workline.reland_landing: its waiting PR closed, back to build (409 if none waits)
       POST   /api/threads/:id/track       Workline.promote: make a plain thread a workline
       POST   /api/threads/:id/checks      {"slug", "exit", "cmd", "tail"?} → Dossier.record_check (the verify stage's evidence)
       POST   /api/threads/:id/move        {"project_id"} → Projects.move_thread (within its workspace)
@@ -515,6 +517,7 @@ defmodule Server.MCP.OperatorAPI do
   defp on_thread(conn, "POST", ["republish"], t) do
     case Workline.republish(t) do
       {:ok, url} -> json(conn, 200, %{published: url})
+      {:auto_refused, url, _why} -> json(conn, 200, %{published: url})
       :none -> json(conn, 200, %{published: nil})
       {:error, why} -> refused(conn, why)
     end
@@ -526,10 +529,20 @@ defmodule Server.MCP.OperatorAPI do
     reply(conn, Workline.published_by_hand(t, url), fn _ -> %{published: url} end)
   end
 
+  defp on_thread(conn, "POST", ["rebase"], t), do: landing(conn, t, Server.Workline.rebase_landing(t))
+  defp on_thread(conn, "POST", ["reland"], t), do: landing(conn, t, Server.Workline.reland_landing(t))
   defp on_thread(conn, "POST", ["checks"], t), do: record_check(conn, t)
   defp on_thread(conn, "POST", ["move"], t), do: move(conn, t)
   defp on_thread(conn, "DELETE", [], t), do: delete_thread(conn, t)
   defp on_thread(conn, _, _, _), do: no_route(conn)
+
+  defp landing(conn, t, {:ok, _}), do: json(conn, 202, %{rebased: t.id})
+  defp landing(conn, t, {:error, {:bounced, _}}), do: json(conn, 202, %{relanded: t.id})
+
+  defp landing(conn, t, {:error, :not_landing}),
+    do: json(conn, 409, %{error: "thread #{t.id} has no PR waiting on GitHub"})
+
+  defp landing(conn, _t, {:error, why}), do: json(conn, 502, %{error: inspect(why)})
 
   defp on_tickets(conn, "POST", []), do: file_ticket(conn)
   defp on_tickets(conn, "PATCH", [id]), do: with_ticket(conn, id, &update_ticket(conn, &1))

@@ -91,9 +91,11 @@ export async function corkboard(ws: number): Promise<CorkNote[]> {
 }
 /** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
 export type Need = {
-  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "stranded" | "issue" | "publish_failed" | "release_failed"
+  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "stranded" | "issue" | "publish_failed" | "release_failed" | "pr_blocked"
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
+  /** a pr_blocked item's PR */
+  url?: string
 }
 let lastNeeds: Need[] = []
 /** everything waiting on the operator, blocking first; a server that can't answer keeps the last list, so the flag never vanishes mid-outage */
@@ -104,6 +106,10 @@ export async function needs(): Promise<Need[]> {
     return lastNeeds
   } catch { return lastNeeds }
 }
+/** a landing GitHub isn't merging: GitHub rebases its PR onto main, auto-merge armed again */
+export const rebaseLanding = (tid: number) => write(`rebasing #${tid}'s PR`, `/threads/${tid}/rebase`, {}, () => `#${tid}'s PR rebased; auto-merge armed`)
+/** a landing GitHub isn't merging: its PR closed, the workline back to build on its branch */
+export const relandLanding = (tid: number) => write(`relanding #${tid}`, `/threads/${tid}/reland`, {}, () => `#${tid}'s PR closed; back to build`)
 export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `/threads/${tid}/verify`, {}, () => `verify on #${tid} queued`)
 /** answer one prompt — a pane's dialog, an ask, the release gate — by its id, so a key can't land in another prompt on its thread */
 export const answer = (id: number, key: string) => write("answering", `/office/prompts/${id}`, { key }, () => "answered")
