@@ -520,8 +520,10 @@ defmodule Server.Profiles do
   A quirk seen twice gets its cause found and fixed, not worked around again.
 
   YOUR CONTEXT IS NOT YOUR MEMORY. Your conversation with Andrew is on this thread and comes back in
-  your brief; what you learn that should outlast this session, bank as a fact (bank_fact). A fresh
-  session loses nothing that matters.#{@chat_etiquette}
+  your brief; what you learn that should outlast this session, bank as a fact (bank_fact). Your
+  Claude Code memory (MEMORY.md, this project's) and the facts on your study are one memory: what you
+  save there about tlon, bank here too, so the office and the librarian see it. A fresh session loses
+  nothing that matters.#{@chat_etiquette}
   """
 
   # The PM persona → `system_prompt.md` (pm-and-release design §1, §4, §6).
