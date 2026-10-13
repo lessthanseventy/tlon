@@ -729,6 +729,24 @@ defmodule Server.Workline do
   end
 
   @doc """
+  A red verify goes back to build on the same branch, its builder told what broke: the build is
+  kept and fixed with its original context, never redone. Only from verify — a workline already
+  moved on is left where it is. `{:ok, thread}` | `{:error, {:not_at, stage}}`.
+  """
+  def red_verify(%Thread{} = thread, finding) do
+    move_back(
+      thread,
+      "build",
+      "verify is red",
+      "↩ back to build — verify is red: #{finding}\n\nFix it test-first on the same branch, then advance_stage; it comes back through verify and review.",
+      fn
+        %Thread{stage: "verify"} -> :ok
+        %Thread{stage: stage} -> {:error, {:not_at, stage}}
+      end
+    )
+  end
+
+  @doc """
   Staff `thread`'s current stage again from the bench as it is now — after a shift change, so a
   workline led by someone gone off shift is picked up by the crew on, the way any stage is staffed.
   `{:ok, thread}`.

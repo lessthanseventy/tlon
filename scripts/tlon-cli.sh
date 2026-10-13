@@ -515,6 +515,14 @@ case "$cmd" in
     exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); %{stage: s} when \"$from\" != \"\" and s != \"$from\" -> IO.puts(\"not advanced — thread #$tid is at #{s} now, not $from\"); t -> case Server.Workline.advance(t) do {:ok, a} -> IO.puts(\"advanced — thread #$tid now at #{a.stage}\"); {:awaiting, a} -> IO.puts(\"gated at #{a.stage} — awaiting #{a.awaiting}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\") end end"
     ;;
 
+  red-verify)
+    # A red verify back to build on the same branch with its finding (Server.Workline.red_verify);
+    # a workline no longer at verify is left where it is.
+    tid="${1:-}"; shift || true
+    { int "$tid" && [ -n "$*" ]; } || { echo 'usage: tlon-cli.sh red-verify <thread-id> <finding…>' >&2; exit 2; }
+    exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> raise(\"no thread #$tid\"); t -> case Server.Workline.red_verify(t, \"$(esc "$*")\") do {:ok, b} -> IO.puts(\"back to build — thread #$tid, led by #{Server.Channel.thread_lead(b.id)}\"); {:error, why} -> IO.puts(\"left as is: #{inspect(why)}\") end end"
+    ;;
+
   send-back)
     tid="${1:-}"; to="${2:-}"; shift 2 2>/dev/null || true
     { int "$tid" && [[ "$to" =~ ^(spec|plan|build)$ ]] && [ -n "$*" ]; } ||
@@ -575,7 +583,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|read|message|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|read|message|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|red-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac

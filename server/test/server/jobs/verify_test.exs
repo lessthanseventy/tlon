@@ -4,6 +4,8 @@ defmodule Server.Jobs.VerifyTest do
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 
+  import Ecto.Query
+
   alias Server.Workline
 
   defmodule AllPresent do
@@ -55,6 +57,23 @@ defmodule Server.Jobs.VerifyTest do
         check!(t, exit)
         assert :ok = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", exit}, %{attempt: 1, max_attempts: 3})
       end
+    end
+
+    test "red goes back to build on the same branch, its builder told what broke; green stays", %{t: t} do
+      since = check!(t, 0).id
+      check!(t, 0)
+      assert :ok = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 0}, %{attempt: 1, max_attempts: 3})
+      assert %{stage: "verify"} = Server.Repo.get!(Server.Thread, t.id)
+
+      since = check!(t, 0).id
+      check!(t, 1)
+      assert :ok = Server.Jobs.Verify.finish(t.id, t.slug, since, {"", 1}, %{attempt: 1, max_attempts: 3})
+      assert %{stage: "build"} = Server.Repo.get!(Server.Thread, t.id)
+
+      assert Enum.any?(
+               Server.Repo.all(from m in Server.Message, where: m.thread_id == ^t.id, select: m.body),
+               &(&1 =~ "back to build — verify is red: mise run check (exit 1)")
+             )
     end
 
     test "nothing recorded — the run was killed (a restart, a signal) — is an error, so Oban runs it again", %{t: t} do

@@ -78,9 +78,12 @@ and every layer the spine design's re-laid §9 asked for
   An approving review is risk-graded by a model that didn't write it (`Server.Workline.Grade`, run by
   `Server.Jobs.Grade`): script limits first, then five axes; under the operator's `auto_land_risk` it
   lands without them.
-  Red — a red verify, a bounce, a stuck workline, a failed schedule run — goes to the workspace's
-  sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat thread, not the operator's list;
-  a beat incident resolved naming its PR is banked as a `postmortem:` fact.
+  Red anywhere after build — verify, the merge gate, review, QA — goes back to build on the same
+  branch with the finding (`Workline.red_verify/2` for verify): the build kept, never redone. Red
+  also goes to the workspace's sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat
+  thread as a copy, never instead of the operator's list (`Server.Office.Needs`, where a workline
+  nothing has moved past the quiet window is `stalled`); a beat incident resolved naming its PR is
+  banked as a `postmortem:` fact.
 - **the toy's generators** (`Server.Generator`, `Server.Persona`, `Server.ToyPool`) — cheap model
   calls (`:generator_cmd`/`:generator_model`, default Claude Code, bare, on the flat ollama flash model), never on a
   render path: `Generator.run/1` is the one door (banter on, `:generator_daily_cap` per day counted in

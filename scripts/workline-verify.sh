@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The deterministic verifier (worklines slice 4): run the module gates AND the machine gate
 # for a workline, on work/<slug> rebased onto origin/main, record each result as CHECKS evidence (correlation workline:<slug>:verify),
-# and advance the stage when everything is green. Run by the service on verify entry (Server.Jobs.Verify) —
+# and advance the stage when everything is green, or send it back to build with the finding when red. Run by the service on verify entry (Server.Jobs.Verify) —
 # independent of the builder by construction (the builder never runs or reports this).
 # A model only enters when a failure needs interpreting; the gates themselves are script.
 #
@@ -130,7 +130,11 @@ elif [ "$fail" -eq 0 ]; then
   note "$tid" "$msg" || true
   exit 1
 else
-  note "$tid" "verify FAILED for workline $slug — ${fails:+failing:
+  # red goes back to build on the same branch, the finding with it; the note only if that can't
+  "$cli" red-verify "$tid" "mise run check failed — ${fails:+failing:
 $fails
-}see the check_failed evidence (workline:$slug:verify); fix it on work/$slug, push it (push_branch), then call advance_stage: the server runs verify again"
+}see the check_failed evidence (workline:$slug:verify)" ||
+    note "$tid" "verify FAILED for workline $slug — ${fails:+failing:
+$fails
+}see the check_failed evidence (workline:$slug:verify); fix it on work/$slug, then call advance_stage: the server runs verify again"
 fi
