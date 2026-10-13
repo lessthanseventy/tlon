@@ -96,3 +96,29 @@ describe("Sim.event", () => {
     expect(r.eventNow()).toBeNull()
   })
 })
+
+describe("the cast", () => {
+  test("a thinking seat never leaves its desk in any event", () => {
+    for (const kind of EVENT_KINDS.filter((k) => k !== "drill")) seeded(9, () => {
+      const r = new WideRoom(696), a = view(["w0", "w1"])
+      run(r, a, 300)
+      const pos = (n: string) => { const x = (r as any).actors.get(n); return `${x.x}:${x.y}` }
+      const at = { w2: pos("w2"), hronir: pos("hronir") }
+      r.event(kind)
+      for (let i = 0; i < EVENTS[kind].ticks; i++) {
+        r.step(a)
+        expect(pos("w2")).toBe(at.w2)
+        expect(pos("hronir")).toBe(at.hronir)
+      }
+    })
+  })
+  test("the same seed runs the same twice", () => {
+    const trace = () => seeded(4, () => {
+      const r = new WideRoom(696), a = view(["w0", "w1"]), out: string[] = []
+      run(r, a, 300); r.event("meteor")
+      for (let i = 0; i < 700; i++) { r.step(a); out.push(JSON.stringify([...(r as any).actors.values()].map((x: any) => [x.x, x.y]))) }
+      return out
+    })
+    expect(trace()).toEqual(trace())
+  })
+})
