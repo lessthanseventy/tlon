@@ -322,7 +322,8 @@ export class WideRoom extends Sim<Layout> {
     const sc = new Scene(W, this.height, this.tick)
     sc.dark = dark(now.getHours() + now.getMinutes() / 60)
     const { L0, M0, MW, F0, F1 } = this.z
-    const l = this.plan.layout(a)
+    // the furniture as it last stood: a desk placed for someone doesn't vanish while the channel is down
+    const l = this.plan.layout(this.held(a))
     const px = sc.px.bind(sc), text = sc.text.bind(sc)
 
     // ── floors ──

@@ -569,11 +569,14 @@ export class Sim<L extends { people: Seat[] }> {
    * looks different — someone moved, or the 400 ms animation frame turned — so the surface redraws
    * only then.
    */
+  /** the snapshot to draw the room from: `a`, or with the channel down the last good one, marked down */
+  protected held(a: Agents): Agents { return a.ok || !this.lastGood ? a : { ...this.lastGood, ok: false, note: a.note } }
+
   step(a: Agents): boolean {
     const ok = a.ok
     // the channel down (a server restart) is a pause: the room carries on from the last good look
     if (a.ok) this.lastGood = a
-    else if (this.lastGood) a = { ...this.lastGood, ok: false, note: a.note }
+    a = this.held(a)
     this.tick++
     if (ok) {
       if (this.fire) this.changed = true
