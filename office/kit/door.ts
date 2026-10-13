@@ -1,6 +1,8 @@
 // The front door (toy design §5): who comes by, when, and what a snapshot says arrived. Pure — sim.ts runs
 // the visit, rooms/wide.ts draws the door, tui/main.ts feeds it snapshots.
+import type { Scene } from "./draw"
 import { mailbox } from "./mailbox"
+import { ROLE } from "./palette"
 import type { Agents } from "./types"
 
 export type VisitorKind = "carrier" | "pizza" | "cookies" | "tourist" | "trick" | "carol"
@@ -46,4 +48,31 @@ export function arrivals(before: Agents, after: Agents, beforeNeeds: { level: "b
   if (after.release && before.release?.sha !== after.release.sha) out.push("pizza")
   if (mailbox(needs).total > mailbox(beforeNeeds).total) out.push("carrier")
   return out
+}
+
+/** the door at the hall's right end, its foot on row `hall`: shut it is a slab with a bell; open it is a dark gap with the leaf swung back. State is shape, never colour alone. */
+export function drawDoor(sc: Scene, x: number, hall: number, open: boolean, ringing: boolean) {
+  const px = sc.px.bind(sc), top = hall - 24
+  px(x - 1, top - 1, 12, 26, ROLE.structure)
+  if (open) { px(x, top, 10, 25, ROLE.ground); px(x, top, 2, 25, ROLE.key) }
+  else { px(x, top, 10, 25, ROLE.edge); px(x + 7, hall - 12, 2, 2, ROLE.prose) }
+  px(x - 5, hall - 14, 3, 3, ringing && sc.f % 2 ? ROLE.attention : ROLE.inactive)
+  if (ringing) { px(x - 7, hall - 15, 1, 5, ROLE.attention); px(x - 8, hall - 16, 1, 7, ROLE.attention) }
+  sc.text("EXIT", x + 5, top - 4, ROLE.live, 11)
+}
+
+const BASE = ["..hhh..", ".hhhhh.", ".sssss.", ".sssss.", "..bbb..", ".bbbbb.", ".bbbbb.", ".bbbbb.", "..lll..", "..l.l.."]
+/** what each visitor changes about the figure: rows replaced, so the silhouettes differ */
+const KIT: Record<VisitorKind, { rows: Record<number, string>; body: string }> = {
+  carrier: { rows: { 0: ".hhhhh.", 6: "pbbbbb.", 7: "ppbbb.." }, body: ROLE.key },
+  pizza: { rows: { 4: "ppppppp", 5: "ppppppp" }, body: ROLE.alarm },
+  cookies: { rows: { 0: "h.hhh.h", 6: "bbbbbpp", 7: "bbbbbpp" }, body: ROLE.attention },
+  tourist: { rows: { 0: "hhhhhhh", 5: "ppbbbbb", 6: "ppbbbb." }, body: ROLE.live },
+  trick: { rows: { 0: "..h.h..", 1: ".hhhhh.", 6: "bbbbbbp", 7: ".bbbbpp" }, body: ROLE.assistant },
+  carol: { rows: { 0: ".hhhhh.", 1: "hhhhhhh", 6: "bbbbbp.", 7: "bbbbbp." }, body: ROLE.prose },
+}
+/** a visitor standing with their feet at (x, y) */
+export function drawVisitor(sc: Scene, x: number, y: number, kind: VisitorKind) {
+  const k = KIT[kind], rows = BASE.map((r, i) => k.rows[i] ?? r)
+  sc.item(y + 0.5, () => sc.blit(rows, x - 3, y - 10, { h: ROLE.structure, s: ROLE.body, b: k.body, l: ROLE.inactive, p: ROLE.prose }))
 }

@@ -5,6 +5,7 @@
 // kitchen. A hallway runs along the bottom; every zone has one lane down to it, and every walk goes
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
+import { drawDoor, drawVisitor } from "../kit/door"
 import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, stepBook, type Book, type Pt as Perch } from "../kit/uqbar"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
@@ -337,7 +338,7 @@ export class WideRoom extends Sim<Layout> {
     for (let y = BAND + 3; y < H; y += 4) { px(L0, y, W - L0, 1, seam); px(L0 + 6 + ((y >> 2) % 3) * 19, y - 3, 1, 3, seam) }
     // the hallway's runner along the bottom, under every zone
     px(0, HALL - 6, W, 9, tint(ROLE.structure, ROLE.ground, 0.3)); px(0, HALL - 6, W, 1, tint(ROLE.body, ROLE.ground, 0.4))
-    text("EXIT", W - 14, HALL - 8, ROLE.live, 11)
+    drawDoor(sc, W - 12, HALL, this.visitor() !== null, this.bellRinging())
 
     // ── the back wall ──
     px(0, 0, W, BAND - 1, ROLE.edge); px(0, BAND - 1, W, 1, ROLE.structure)
@@ -379,6 +380,8 @@ export class WideRoom extends Sim<Layout> {
     drawShelf(sc, shelf, mode === "shelved", !!a.uqbar)
     drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null)
     for (const p of this.planes) drawPlane(sc, p)
+    const caller = this.visitor()
+    if (caller) drawVisitor(sc, caller.x, caller.y, caller.kind)
 
     // ── people, Nina ──
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")
