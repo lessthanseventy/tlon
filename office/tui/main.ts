@@ -1507,6 +1507,9 @@ function layoutScreen() {
       const w = Math.floor((colsN * cell.w) / k)
       if (w >= WIDE_MIN_W) next = w
     }
+  } else if (process.env.OFFICE_WIDE) {
+    // half blocks have no cell size to ask for, so a drive opts in: the wide room at whatever scale fits the window
+    next = Math.max(WIDE_MIN_W, Math.floor(colsN / Math.max(0.25, ((rowsN - DETAIL - 3) * 2) / WIDE_H)))
   }
   if (next !== wide) { wide = next; rooms.clear() }
   g = { ...(wide ? geometry(wide, (r0 => (r0 instanceof WideRoom ? r0.height : WIDE_H))(room()), colsN, rowsN, DETAIL + 3, cell, kitty, WIDE_H) : geometry(W, H, colsN, rowsN, DETAIL + 3, cell, kitty)), row: 1 }

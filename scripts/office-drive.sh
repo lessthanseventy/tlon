@@ -9,6 +9,10 @@
 # TLON_URL picks the server (default the service's 127.0.0.1:4040; `server:dev` is :4041).
 # OFFICE_COLS/OFFICE_ROWS size the window (150x60), OFFICE_WAIT the settle per step (1.5 s),
 # OFFICE_TAIL how many bottom rows to print (20; the detail pane and foot live there).
+# OFFICE_WIDE=1 draws the wide room (the door, the bathroom, Argos — it is otherwise only there under kitty
+# graphics, which tmux swallows) in half blocks at the scale the window allows, and sizes the window 280x75
+# unless OFFICE_COLS/OFFICE_ROWS say otherwise. OFFICE_TEXT=1 prints every row of the screen with the
+# pixels dropped, so a room's labels and balloons ("Ding dong!", "Pizza! …") read as lines.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,8 +22,10 @@ t() { tmux -L "$sock" "$@"; }
 # tmux leaves its socket file behind when its server dies
 trap 't kill-server 2>/dev/null; rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$sock"; rm -rf "$state"' EXIT
 
-t new-session -d -x "${OFFICE_COLS:-150}" -y "${OFFICE_ROWS:-60}" \
-  "cd '$root/office' && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' bun tui/main.ts 2>'$state/err'"
+wide="${OFFICE_WIDE:-}"
+if [ -n "$wide" ]; then dcols=280 drows=75; else dcols=150 drows=60; fi
+t new-session -d -x "${OFFICE_COLS:-$dcols}" -y "${OFFICE_ROWS:-$drows}" \
+  "cd '$root/office' && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' bun tui/main.ts 2>'$state/err'"
 sleep 3
 for step in "$@"; do
   case "$step" in
@@ -27,7 +33,8 @@ for step in "$@"; do
     *) eval "t send-keys -t 0 $step"; sleep "${OFFICE_WAIT:-1.5}" ;;
   esac
   echo "=== after: $step"
-  t capture-pane -p -t 0 | tail -n "${OFFICE_TAIL:-20}"
+  if [ -n "${OFFICE_TEXT:-}" ]; then t capture-pane -p -t 0 | sed -E 's/[▀▄█ ]+/ /g' | grep -E '[[:alnum:]]'
+  else t capture-pane -p -t 0 | tail -n "${OFFICE_TAIL:-20}"; fi
 done
 [ -s "$state/err" ] && { echo "=== stderr"; cat "$state/err"; }
 exit 0

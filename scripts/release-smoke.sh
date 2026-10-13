@@ -124,6 +124,15 @@ expect "R" "HOME"
 case "$(after "R")" in *"R reloads"*) fail "the office offers a reload against its own server" ;; esac
 echo "smoke: the office drove ✓"
 
+# the wide room (the door, the bathroom, Argos) is reachable headless: its labels are on screen. A candidate whose
+# drive predates OFFICE_WIDE only has the rail room.
+if grep -q OFFICE_WIDE "$office/scripts/office-drive.sh"; then
+  wide_screen="$(TLON_URL="$url" OFFICE_WIDE=1 OFFICE_TEXT=1 "$office/scripts/office-drive.sh" "wait:NOTES " 2>&1)"
+  printf '%s\n' "$wide_screen" >>"$log"
+  case "$(printf '%s\n' "$wide_screen" | grep -v '^===')" in *"NOTES "*) ;; *) fail "the wide room didn't draw under OFFICE_WIDE: no NOTES label on its wall" ;; esac
+  echo "smoke: the wide room drove ✓"
+fi
+
 ok=1
 echo "smoke passed${sha:+ on ${sha:0:7}}"
 [ -n "$sha" ] && echo "ran-on: smoke $sha"
