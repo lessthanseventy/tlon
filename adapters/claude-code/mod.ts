@@ -65,6 +65,10 @@ let captured = 0;
 let capturing = false;
 let messages: Message[] = [];
 let draining = false;
+// what register still has to send: at boot the tlon MCP server may not be connected yet, and a
+// seat whose register was lost runs its whole life off the roster
+let registration: Record<string, unknown> | null = null;
+let registerFailed = false;
 let seenMessage = -1;
 let seenLanding = -1;
 let seenRed = -1;
@@ -167,6 +171,23 @@ async function loadFigure($, archetype: string | null) {
   } catch {
     return;
   }
+}
+
+let registering: Promise<void> | null = null;
+function registerNow($): Promise<void> {
+  return (registering ??= (async () => {
+    const args = registration;
+    if (!args) return;
+    try {
+      await call($, "register", args);
+      registration = null;
+    } catch (e) {
+      if (!registerFailed) void note($, `register: ${e instanceof Error ? e.message : String(e)} — trying again every poll`);
+      registerFailed = true;
+    }
+  })().finally(() => {
+    registering = null;
+  }));
 }
 
 // A wake (a teammate's message, an opening assignment) arrives as if typed: Claude Code holds it
@@ -409,8 +430,13 @@ export function register(on) {
     }
     cwd = e.cwd;
     const pane = await $.env.get("TMUX_PANE");
-    declare($, "register", pane ? { pane_ref: pane } : {});
-    $.clock.every(WAKE_POLL_MS, () => drainWakes($));
+    registration = pane ? { pane_ref: pane } : {};
+    registerFailed = false;
+    void registerNow($);
+    $.clock.every(WAKE_POLL_MS, async () => {
+      if (registration) await registerNow($);
+      await drainWakes($);
+    });
     $.clock.every(GLANCE_MS, () => refreshGlance($));
     void refresh($);
     void refreshGlance($).then(() => {
