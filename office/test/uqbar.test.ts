@@ -106,6 +106,16 @@ describe("uqbar in the wide room", () => {
     expect(book.x).toBeGreaterThanOrEqual(card.x); expect(book.x).toBeLessThanOrEqual(card.x + card.w)
     expect(book.tip).toContain("working")
   })
+  test("a session on a thread with no card (its study): the book perches over your desk, in the room", () => {
+    const a = office(3)
+    const study = { ...a, roster: [...a.roster, { agent: "uqbar", thread_id: 999, title: "Uqbar's study", warm: false, thinking: false, workspace_id: 1 }] }
+    const fr = shot(study as never, 600)
+    const book = fr.hits.find((x) => x.tip?.startsWith("Uqbar"))!
+    const you = fr.hits.find((x) => x.tip?.startsWith("you:"))!
+    expect(book).toBeDefined(); expect(you).toBeDefined()
+    expect(book.x).toBeGreaterThanOrEqual(you.x); expect(book.x + book.w).toBeLessThanOrEqual(you.x + you.w)
+    expect(book.y + book.h).toBeLessThanOrEqual(you.y + 4); expect(book.y).toBeGreaterThan(you.y - 20)
+  })
   test("the session ends: it flies home and the spine is back", () => {
     seeded(3, () => {
       const room = new WideRoom(WIDTH), up = viewOf(withUqbar(), 1), down = viewOf(office(3), 1)
