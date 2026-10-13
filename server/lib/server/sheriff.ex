@@ -7,8 +7,9 @@ defmodule Server.Sheriff do
   sheriff to triage it: hand the lead the fix, raise a flake as an issue to fix (never waive it),
   fix small infra, and bring the operator only what is theirs to decide.
 
-  A workspace with no sheriff on its bench gets nothing here; its red verifies stay on the
-  operator's list (`Server.Office.Needs`) instead.
+  The sheriff gets a copy, never the item: a red verify is on the operator's list
+  (`Server.Office.Needs`) whether or not a sheriff exists, and a workspace with no sheriff gets
+  nothing here.
 
   An incident raised on the beat and resolved naming the PR that fixed it is banked as a
   `postmortem:` fact on the beat, so a repeat shows up in recall as a pattern.

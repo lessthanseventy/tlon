@@ -256,4 +256,122 @@ defmodule Server.Office.NeedsTest do
       assert Server.Office.Room.health().failed_jobs == 0
     end
   end
+
+  describe "a stop with no kind of its own is a stalled Need until the workline moves" do
+    defp workline(ws, stage, hours_ago) do
+      {:ok, t} =
+        Server.Workline.open(%{
+          title: "w-#{stage}",
+          slug: "stall-#{System.unique_integer([:positive])}",
+          stage: stage,
+          workspace_id: ws.id
+        })
+
+      age(t, hours_ago)
+    end
+
+    defp age(t, hours_ago) do
+      at = DateTime.utc_now() |> DateTime.add(-hours_ago * 3600, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [created_at: at])
+      Server.Repo.update_all(from(e in Server.Event, where: e.thread_id == ^t.id), set: [created_at: at])
+      Server.Repo.update_all(from(m in Server.Message, where: m.thread_id == ^t.id), set: [created_at: at])
+      Server.Repo.get!(Server.Thread, t.id)
+    end
+
+    test "a workline nothing has moved for past the quiet window is blocking, with its last word", %{ws: ws} do
+      t = workline(ws, "review", 4)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "treviranus", body: "QA is blocked: release:smoke was denied"})
+      age(t, 4)
+
+      assert [%{kind: "stalled", level: "blocking", thread_id: tid, text: text}] = Needs.list()
+      assert tid == t.id
+      assert text =~ "nothing has moved"
+      assert text =~ "treviranus: QA is blocked"
+    end
+
+    test "a fresh workline is not stalled", %{ws: ws} do
+      _ = workline(ws, "build", 0)
+      assert kinds(ws) == []
+    end
+
+    test "an answer gives the lead the quiet window, then the workline is a Need again", %{ws: ws} do
+      t = workline(ws, "review", 4)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "andrew", body: "allow it"})
+      assert kinds(ws) == []
+
+      age(t, 2)
+      assert [%{kind: "stalled", text: text}] = Needs.list()
+      assert text =~ "andrew: allow it"
+    end
+
+    test "a landing, a queued verify or a coworker mid-turn is on duty, not stalled", %{ws: ws} do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      landing = workline(ws, "review", 4)
+      {:ok, _} = %{thread_id: landing.id} |> Server.Jobs.Land.new() |> Oban.insert()
+      verifying = workline(ws, "verify", 4)
+      {:ok, _} = %{thread_id: verifying.id, slug: verifying.slug} |> Server.Jobs.Verify.new() |> Oban.insert()
+      building = workline(ws, "build", 4)
+
+      {:ok, a} =
+        Server.Staff.register_agent(%{name: "emma-#{System.unique_integer([:positive])}", mandate: "m", engine: "e"})
+
+      {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: building.id})
+      :ok = Server.Staff.mark_thinking(building.id, a.name, DateTime.truncate(DateTime.utc_now(), :second))
+
+      assert kinds(ws) == []
+    end
+
+    test "under pencils down nothing is stalled: the operator stopped it", %{ws: ws} do
+      _ = workline(ws, "build", 4)
+      path = Path.join(System.tmp_dir!(), "needs-pause-#{System.unique_integer([:positive])}.json")
+      File.write!(path, ~s({"pause": "pencils_down"}))
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+      on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)
+      assert kinds(ws) == []
+    end
+
+    test "put away, it stays away until the workline moves and stalls again", %{ws: ws} do
+      t = workline(ws, "build", 4)
+      assert [%{key: key}] = Needs.list()
+      :ok = Needs.dismiss(key)
+      assert Needs.list() == []
+
+      {:ok, _} = Server.Dossier.record_check(%{thread_id: t.id, cmd: "mise run check", exit: 0, tail: "ok"})
+      assert Needs.list() == []
+      age(t, 4)
+      assert [%{kind: "stalled"}] = Needs.list()
+    end
+
+    test "red at verify shows whether or not the workspace has a sheriff — the sheriff takes a copy", %{ws: ws} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      t = workline(ws, "verify", 0)
+
+      {:ok, _} =
+        Server.Dossier.record_check(%{
+          thread_id: t.id,
+          cmd: "mise run check",
+          exit: 1,
+          tail: "boom",
+          correlation: "workline:#{t.slug}:verify"
+        })
+
+      assert [{"verify_failed", "blocking"}] = kinds(ws)
+    end
+
+    # the invariant: any open thread holding work with no movement past the quiet window is a Need
+    # (or someone is on duty for it) — the inbox can never read empty over a stopped workline
+    test "every open workline left alone past the quiet window is on the list", %{ws: ws} do
+      for stage <- ~w(intent spec plan build verify review), do: workline(ws, stage, 5)
+
+      idle =
+        Server.Repo.all(
+          from t in Server.Thread, where: t.state == "open" and not is_nil(t.stage) and t.stage != "merged"
+        )
+
+      listed = MapSet.new(Needs.list(), & &1.thread_id)
+      assert idle != []
+      for t <- idle, do: assert(MapSet.member?(listed, t.id), "##{t.id} at #{t.stage} is idle and not a Need")
+    end
+  end
 end

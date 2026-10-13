@@ -8,8 +8,12 @@ defmodule Server.Office.Needs do
       `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
       sits on a prompt, or the PM's release gate waits: pick an option), `ask` (one decision a
       coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id,
-      answered by key), `verify_failed` (a workline whose last gate run was red —
-      only where the workspace has no sheriff, who owns red there: `Server.Sheriff`);
+      answered by key), `verify_failed` (a workline whose last gate run was red — the sheriff, where
+      there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline nothing has moved for past
+      the quiet window — no stage advance, check, commit or operator answer — and nobody on duty for
+      it: whatever stopped it has no kind of its own yet; its text carries the thread's last word.
+      Put away, it stays away until the workline moves; under pencils down or lights out nothing
+      stalls, the operator stopped it);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -60,6 +64,9 @@ defmodule Server.Office.Needs do
 
       %{kind: "ask", ref: id} ->
         withdraw_ask(id)
+        remember(key)
+
+      %{kind: "stalled"} ->
         remember(key)
 
       %{level: "blocking"} ->
@@ -222,10 +229,9 @@ defmodule Server.Office.Needs do
   @doc "Run a failed job again. `:ok`."
   def retry_job(id), do: Oban.retry_job(id)
 
-  # a workline sitting at verify whose newest verify run was red — where no sheriff owns red
+  # a workline sitting at verify whose newest verify run was red
   defp red_verifies(open) do
     for %Thread{stage: "verify", slug: slug} = t <- open,
-        Server.Sheriff.of(t.workspace_id) == nil,
         %{kind: "check_failed"} = e <- [last_verify(slug)],
         do:
           item(
@@ -406,8 +412,102 @@ defmodule Server.Office.Needs do
     prompts = Server.Attention.open_prompts_by_thread()
 
     blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open)
+    blocking = blocking ++ stalled(open, MapSet.new(blocking, & &1.thread_id))
     decide = mentions(open, operator) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open)
     Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
+  end
+
+  # nothing moved it past the quiet window and nobody is on it: the stop that has no kind of its own
+  defp stalled(open, listed) do
+    if Server.Pause.state() == :working do
+      cutoff = DateTime.add(DateTime.utc_now(), -quiet_window_s(), :second)
+
+      for %Thread{stage: stage} = t <- open,
+          stage not in [nil, "merged"],
+          is_nil(t.awaiting),
+          not MapSet.member?(listed, t.id),
+          moved = last_moved(t),
+          DateTime.before?(moved, cutoff),
+          not on_duty?(t) do
+        item("stalled", "blocking", t, stalled_text(t, moved), moved)
+      end
+    else
+      []
+    end
+  end
+
+  defp quiet_window_s, do: Application.get_env(:server, :quiet_window_s, 3600)
+
+  # a coworker's chatter is not movement — "still blocked" posts are how #242 sat for a night; an
+  # operator answer starts the clock again, so the lead gets the window to act on it
+  defp last_moved(t) do
+    operator = Application.get_env(:server, :operator, "andrew")
+
+    event =
+      Repo.one(
+        from e in Event,
+          where: e.thread_id == ^t.id and e.kind in ["stage_advanced", "check_passed", "check_failed", "work_landed"],
+          select: max(e.created_at)
+      )
+
+    answer =
+      Repo.one(
+        from m in Message,
+          where: m.thread_id == ^t.id and (m.author == ^operator or not is_nil(m.resolved_at)),
+          select: max(fragment("greatest(?, ?)", m.created_at, m.resolved_at))
+      )
+
+    [t.created_at, event, answer && DateTime.from_naive!(answer, "Etc/UTC"), commit_at(t)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max(DateTime)
+  end
+
+  defp commit_at(%Thread{slug: slug} = t) when is_binary(slug) do
+    case System.cmd(
+           "git",
+           ["-C", Server.Workline.Artifacts.Git.root(t), "log", "-1", "--format=%cI", "work/#{slug}", "--"],
+           stderr_to_stdout: true
+         ) do
+      {iso, 0} ->
+        case DateTime.from_iso8601(String.trim(iso)) do
+          {:ok, at, _} -> at
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp commit_at(_), do: nil
+
+  # someone is on it: the merge queue, a verify run queued or running, a coworker mid-turn here
+  defp on_duty?(t) do
+    landing?(t) or
+      Repo.exists?(
+        from j in Oban.Job,
+          where:
+            j.worker == "Server.Jobs.Verify" and j.state in ["available", "scheduled", "executing", "retryable"] and
+              fragment("(? ->> 'thread_id')::int = ?", j.args, ^t.id)
+      ) or
+      Repo.exists?(
+        from s in Server.Session,
+          where: s.thread_id == ^t.id and is_nil(s.ended_at) and not is_nil(s.thinking_since)
+      )
+  end
+
+  defp stalled_text(t, moved) do
+    last =
+      Repo.one(
+        from m in Message,
+          where: m.thread_id == ^t.id and m.kind not in ["notice", "suggestion", "margin"],
+          order_by: [desc: m.id],
+          limit: 1
+      )
+
+    hours = DateTime.utc_now() |> DateTime.diff(moved, :minute) |> div(60)
+    head = "#{t.slug} at #{t.stage}: nothing has moved for #{if hours > 0, do: "#{hours}h", else: "an hour"}"
+    if last, do: "#{head} — #{last.author}: #{String.slice(last.body, 0, 200)}", else: head
   end
 
   # a put-away whose item is gone has nothing left to hide: a later item under the same key is new

@@ -48,31 +48,6 @@ defmodule Server.SheriffTest do
     assert two.body =~ "##{b.id} stereo" and two.body =~ "bounced"
   end
 
-  test "where a sheriff owns red, a red verify is not on the operator's list", %{ws: ws} do
-    {:ok, red} =
-      Server.Workline.open(%{
-        title: "r",
-        slug: "red-#{System.unique_integer([:positive])}",
-        stage: "verify",
-        workspace_id: ws.id
-      })
-
-    {:ok, _} =
-      Server.Dossier.record_check(%{
-        thread_id: red.id,
-        cmd: "mise run check",
-        exit: 1,
-        tail: "boom",
-        correlation: "workline:#{red.slug}:verify"
-      })
-
-    kinds = fn -> Server.Office.Needs.list() |> Enum.filter(&(&1.workspace_id == ws.id)) |> Enum.map(& &1.kind) end
-    assert "verify_failed" in kinds.()
-
-    {:ok, _} = Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
-    refute "verify_failed" in kinds.()
-  end
-
   test "a landing the merge queue bounces is reported to the sheriff", %{ws: ws} do
     {:ok, _} = Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
     {:ok, t} = Server.Workline.open(%{title: "w", slug: "conflicted", stage: "review", workspace_id: ws.id})
