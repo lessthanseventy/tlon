@@ -35,3 +35,15 @@ test("the help line's play keys are the keys toyKey() handles", async () => {
   const body = src.slice(src.indexOf("function toyKey("), src.indexOf("function onKey("))
   for (const { key } of PLAY) expect(body).toContain(`case "${key}"`)
 })
+
+test("hire puts a new person on the bench, on shift for everyone, and they are not hired twice", () => {
+  const t = toy(), before = t.snapshot().bench.length
+  t.hire({ name: "hall-ireneo", archetype: "builder" })
+  t.hire({ name: "hall-ireneo", archetype: "builder" })
+  const a = t.snapshot()
+  expect(a.bench).toHaveLength(before + 1)
+  const b = a.bench.find((c) => c.name === "hall-ireneo")!
+  expect(b.archetype).toBe("builder")
+  expect(new Set(a.bench.map((c) => c.seat_id)).size).toBe(a.bench.length)
+  expect(a.shifts!.find((s) => s.seat_id === b.seat_id)!.crew).toBe("all")
+})

@@ -6,7 +6,7 @@
 import { arrivals } from "../kit/door"
 import { babelPage, isKonami, KONAMI } from "../kit/eggs"
 import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { personaLines } from "../kit/persona"
@@ -25,6 +25,8 @@ import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "..
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
 import { nextPart, SLOTS } from "../kit/parts"
+import { bringBack, candidateOf, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
+import { hallRows, stepRow } from "./hall"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
@@ -59,6 +61,7 @@ type Mode =
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "review"; tid: number }
   | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
+  | { kind: "hall" } | { kind: "hall-pile" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -77,11 +80,18 @@ const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
 // map). A link here that the machine repoints on a theme switch is followed within a second.
 const PALETTE = process.env.TLON_PALETTE ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/palette.json")
+// `--sandbox`: the TUI on a made-up world (tui/sandbox.ts) instead of the server
+const SANDBOX = process.argv.includes("--sandbox") || process.env.OFFICE_SANDBOX === "1"
+// the toy keeps its looks, souls and hall in a dir of its own, so a pretend hire never reaches the machine's files
+const CONFIG = SANDBOX ? join(tmpdir(), "tlon-sandbox") : join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon")
 // per-agent look overrides, same poll shape as PALETTE above
-const LOOKS = process.env.TLON_LOOKS ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/looks.json")
+const LOOKS = process.env.TLON_LOOKS ?? join(CONFIG, "looks.json")
 
 // per-coworker SOUL.md files, one `<name>.md` each, polled like LOOKS
-const SOULS = process.env.TLON_SOULS ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/souls")
+const SOULS = process.env.TLON_SOULS ?? join(CONFIG, "souls")
+
+// the hiring hall: current seed + locks + edits and the maybe pile, polled like LOOKS
+const HALL = process.env.TLON_HALL ?? join(CONFIG, "hall.json")
 
 const readState = (p: string) => { try { return readFileSync(p, "utf8").trim() } catch { return "" } }
 const writeState = (p: string, s: string) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, s) } catch { /* a read-only home: it just won't remember */ } }
@@ -95,8 +105,7 @@ function saveLook(name: string, draft: LookOverride) {
   looksSeen = "" // our own write: make the next poll re-read it instead of treating it as already seen
 }
 
-// `--sandbox`: the TUI on a made-up world (tui/sandbox.ts) instead of the server
-const world = process.argv.includes("--sandbox") || process.env.OFFICE_SANDBOX === "1" ? toy() : null
+const world = SANDBOX ? toy() : null
 if (world) data.useFake(world)
 
 let all: Agents = { ...EMPTY, note: "…" }
@@ -136,6 +145,33 @@ let confirm: { label: string; run: () => void } | null = null
 // the look card/editor's draft, not yet saved to looks.json; set on open, cleared on close/save
 let lookDraft: LookOverride | null = null
 let rolls = 0
+let hall: Hall = loadHall(HALL), hallSeen = hallSignature(HALL)
+const GRADES = ["junior", "senior", "greybeard"], SPECIALTIES = ["office", "server"]
+const hallVocab = (): Vocab => {
+  const names = all.archetypes.filter((a) => !a.meta).map((a) => a.name)
+  return { archetypes: names.length ? names : ["builder"], grades: GRADES, specialties: SPECIALTIES }
+}
+const hallCtx = () => ({ taken: takenNames(hall, all.bench.map((b) => b.name), hallVocab()), vocab: hallVocab() })
+function hallSet(h: Hall) { hall = h; saveHall(HALL, h); hallSeen = hallSignature(HALL) }
+/** a hand edit of hall.json shows up on the next poll; true when it did */
+function followHall(): boolean {
+  const seen = hallSignature(HALL)
+  if (seen === hallSeen) return false
+  hallSeen = seen; hall = loadHall(HALL)
+  return true
+}
+function hallHire() {
+  const c = candidateOf(hall, hallCtx())
+  if (!world) { status = "hiring in the office needs the server's hire call — not built yet"; return draw() }
+  world.hire(c)
+  saveLook(c.name, c.look)
+  try { mkdirSync(SOULS, { recursive: true }); writeFileSync(join(SOULS, `${c.name}.md`), c.soul, { flag: "wx" }) } catch { /* theirs already: never overwritten */ }
+  soulsSeen = ""
+  hallSet(pass(hall, hallCtx()))
+  status = `hired ${c.name}`
+  void refresh()
+  draw()
+}
 // the pet card's draft (Nina's temperament, not yet saved to pets.json) and the preview row's clock
 let petDraft: PetSetting | null = null, previewTick = 0
 let editBuf: Record<"front" | "side" | "back", string[]> | null = null
@@ -913,6 +949,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ...(flagOn(all, "build_mode") ? [{ key: "B", label: "build mode", run: () => open({ kind: "build" }) }] : []),
         { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
         { key: "S", label: "settings (the running system)", run: () => open({ kind: "settings" }) },
+        { key: "h", label: "the hiring hall", run: () => open({ kind: "hall" }) },
         { key: "q", label: "quit", run: quit },
       ]
       if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone — or Nina, or Argos — a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], actions }
@@ -1527,6 +1564,38 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ],
       }
     }
+    case "hall": {
+      const c = candidateOf(hall, hallCtx())
+      const rows: Row[] = hallRows(c, hall.locks).map((r) => ({
+        segs: r.segs,
+        open: r.lock ? () => { hallSet({ ...hall, locks: toggleLock(hall.locks, r.lock!.kind, r.lock!.key) }); draw() } : undefined,
+      }))
+      return {
+        title: `HIRING HALL · ${hall.seed} · ${hall.pile.length} maybe`, rows,
+        actions: [
+          { key: "left", label: "pass", run: () => { hallSet(pass(hall, hallCtx())); draw() } },
+          { key: "up", label: "maybe", run: () => { hallSet(maybe(hall, hallCtx())); draw() } },
+          { key: "right", label: "hire", run: hallHire },
+          { key: "space", label: "lock / unlock the row", run: () => rows[sel]?.open?.() },
+          { key: "m", label: "the maybe pile", run: () => open({ kind: "hall-pile" }) },
+          back1,
+        ],
+      }
+    }
+    case "hall-pile": {
+      const rows: Row[] = hall.pile.map((e, i) => {
+        const c = candidateOf({ ...hall, seed: e.seed, overrides: e.overrides, locks: {} }, hallCtx())
+        return { segs: [plain(c.name.padEnd(14)), dim(`${c.grade} ${c.archetype} · ${c.specialty} · ${e.seed}`)], ref: i, open: () => { hallSet(bringBack(hall, i)); open({ kind: "hall" }) } }
+      })
+      return {
+        title: `MAYBE PILE · ${hall.pile.length}`,
+        rows: rows.length ? rows : [{ segs: [dim("nobody yet — ↑ in the hall keeps a candidate here")] }],
+        actions: [
+          { key: "x", label: "drop", run: () => { const i = rows[sel]?.ref; if (typeof i === "number") { hallSet({ ...hall, pile: hall.pile.filter((_, j) => j !== i) }); sel = Math.max(0, sel - 1); draw() } } },
+          { key: "esc", label: "back to the hall", run: () => open({ kind: "hall" }) },
+        ],
+      }
+    }
     case "look-editor": {
       const { name, view } = mode
       if (!editBuf) { editBuf = { front: blankBuf(), side: blankBuf(), back: blankBuf() } }
@@ -1831,6 +1900,7 @@ function onKey(k: string) {
   if (input) return inputKey(k)
   if (confirm) { const c = confirm; confirm = null; if (k === "y") c.run(); return draw() }
   if (mode.kind === "look-editor") return editorKey(k)
+  if (mode.kind === "hall" && (k === "tab" || k === "backtab")) { snapSel = false; sel = stepRow(sel, k === "tab" ? 1 : -1); return draw() }
   if (reader) {
     const r = reader.key(k, Math.max(1, (process.stdout.rows ?? 24) - 6))
     if (r === "leave") return closeReader()
@@ -2112,7 +2182,7 @@ async function main() {
   let sec = 0
   every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (!reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
   every(() => { if (mode.kind === "pet" && petDraft) { previewTick += 10; draw() } }, 1000)
-  every(() => { if (followPalette() || followLooks() || followSouls() || followPets()) { frame = null; draw() } }, 1000)
+  every(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0
