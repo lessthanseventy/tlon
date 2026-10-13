@@ -203,3 +203,21 @@ describe("zoo's open day", () => {
     expect(r.noteHidden()).toBe(false)
   }))
 })
+
+describe("the drill is one of the five", () => {
+  test("Sim.event('drill') raises the alarm, with the sheriff calling it", () => seeded(12, () => {
+    const o = JSON.parse(JSON.stringify(office(4)).replaceAll('"w3"', '"scharlach"')) as ReturnType<typeof office>
+    o.roster = o.roster.map((x) => (["w0", "scharlach"].includes(x.agent) ? { ...x, thinking: false, warm: false } : x))
+    const a = viewOf(o, 1), r = new WideRoom(696) as any, said: string[] = []
+    const say = r.say.bind(r)
+    r.say = (w: string, t: string | null) => { said.push(`${w}:${t}`); say(w, t) }
+    run(r, a, 300)
+    expect(r.event("drill")).toBe(true)
+    expect(r.alarmed).toBe(true)
+    expect(said).toContain("scharlach:Fire drill! Everyone out!")
+    expect(r.event("duck")).toBe(false)
+    run(r, a, DRILL + 5)
+    expect(r.alarmed).toBe(false)
+    expect(r.eventNow()).toBeNull()
+  }))
+})
