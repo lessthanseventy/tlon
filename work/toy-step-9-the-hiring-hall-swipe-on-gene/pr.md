@@ -13,6 +13,12 @@ moved there so a pretend hire never reaches the machine's files).
 hire endpoint + confirm modal) and 7 (model soul/pitch on demand). In the office `→` says so and seats
 nobody. #66/#68 seams kept (`Candidate` is kind-agnostic); nothing built for them.
 
+**Also not built.** `e` (spec §2: edit the look from the hall) is in neither plan task 5 nor this
+build, so `Overrides.parts` has no UI producer yet (only locks write it). Grades/specialties in
+main.ts are constants, not the roster vocabulary (spec §3). A hired name is checked against the
+bench (a locked, already-taken name is not hired twice and not carried to the next card); a
+hand-edited `hall.json` name is not yet checked against `Server.Soul`'s name regex.
+
 **Closes** part of #65; the ticket stays open for the server half.
 
 **Checked.** `bun test` in office: 514 pass in-sandbox; the 5 tmux-socket tests that the bash sandbox

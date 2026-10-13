@@ -161,13 +161,14 @@ function followHall(): boolean {
   return true
 }
 function hallHire() {
-  const c = candidateOf(hall, hallCtx())
+  const ctx = hallCtx(), c = candidateOf(hall, ctx)
   if (!world) { status = "hiring in the office needs the server's hire call — not built yet"; return draw() }
+  if (ctx.taken.includes(c.name)) { status = `${c.name} is already on the bench — pass, or unlock the name`; return draw() }
   world.hire(c)
   saveLook(c.name, c.look)
   try { mkdirSync(SOULS, { recursive: true }); writeFileSync(join(SOULS, `${c.name}.md`), c.soul, { flag: "wx" }) } catch { /* theirs already: never overwritten */ }
   soulsSeen = ""
-  hallSet(pass(hall, hallCtx()))
+  hallSet(pass(hall, { ...ctx, taken: [...ctx.taken, c.name] }))
   status = `hired ${c.name}`
   void refresh()
   draw()

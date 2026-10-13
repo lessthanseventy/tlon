@@ -147,6 +147,16 @@ describe("the hall's turn-by-turn state", () => {
     expect(candidateOf(JSON.parse(JSON.stringify(next)), o)).toEqual(b)
     expect(next.locks).toEqual(h.locks)
   })
+  test("a pass past a hire: the locked name is used up, so it is not baked into the next card", () => {
+    const h = hall({ seed: "hall:1", locks: { fields: ["name" as const] }, overrides: { name: "uqbar" } })
+    const cur = candidateOf(h, o)
+    expect(cur.name).toBe("uqbar")
+    const taken = [...o.taken, cur.name]
+    const next = pass(h, { ...o, taken })
+    expect(next.overrides.name).toBeUndefined()
+    expect(candidateOf(next, { ...o, taken }).name).not.toBe(cur.name)
+    expect(next.locks).toEqual(h.locks)
+  })
   test("a pass with no locks drops the previous overrides", () => {
     expect(pass(hall({ overrides: { name: "zed" } }), o).overrides).toEqual({})
   })
