@@ -12,11 +12,12 @@ import { CAT_NAME, lookOf, type Dir, type Fav, type Look, type Pose } from "./sp
 import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
+import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type VisitorKind } from "./door"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
 export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read" | "bathroom"
-export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note"
+export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "answer"
 /** the spots where two people settled together get talking (`Sim.together`) */
 const TOGETHER = new Set<string>(["pingpong", "foosball", "pool", "arcade", "couch", "coffee", "cooler", "vending", "chat"])
 /**
@@ -77,6 +78,8 @@ export type Plan<L extends { people: Seat[] }> = {
   exit: Spot
   /** where the crew stands during a fire drill; a room without it uses `exit` */
   muster?: Spot[]
+  /** where whoever answers the front door stands, for a room with one */
+  door?: Spot
   pen: Spot
   /** beside whoever is visited */
   visit(host: Actor): Spot
@@ -139,6 +142,13 @@ export class Sim<L extends { people: Seat[] }> {
   pawprints(): readonly Print[] { return this.prints }
   protected tick = 0
   private seeded = false
+  /** the front door (`kit/door.ts`): visitors waiting, the one at it, and when the schedule rings next */
+  private callers: VisitorKind[] = []
+  protected caller: { kind: VisitorKind; who: string; bell: number; here: number } | null = null
+  protected nextRing = RING_FIRST
+  private pizzaUntil = 0
+  private nudgeUntil = 0
+  private date: () => Date = () => new Date()
   private downSince = -1
   protected fire = false
   /** the channel has been down long enough that the server closet burns */
@@ -410,7 +420,8 @@ export class Sim<L extends { people: Seat[] }> {
 
   /** the toy's one-key happenings; steps 3–5 of the toy design give each a scene — this is the stand-in */
   play(kind: "doorbell" | "event" | "drill") {
-    const line = { doorbell: "Ding dong!", event: "Did anyone else hear that?", drill: "Fire drill! Everybody out!" }[kind]
+    if (kind === "doorbell") { this.ring(); return }
+    const line = { event: "Did anyone else hear that?", drill: "Fire drill! Everybody out!" }[kind]
     for (const x of this.actors.values()) { x.emote = "!"; x.emoteUntil = this.tick + 60 }
     const first = this.actors.keys().next().value
     if (first) this.say(first, line)
@@ -426,7 +437,80 @@ export class Sim<L extends { people: Seat[] }> {
   }
 
   /** the clock the room runs on (the sandbox's `n`) */
-  setClock(now: () => Date) { this.hour = () => now().getHours() }
+  setClock(now: () => Date) { this.hour = () => now().getHours(); this.date = now }
+
+  /** the bell: everyone startles, one says so; with a door and someone to answer it, a visitor is on their way. False when nobody comes. */
+  ring(kind?: VisitorKind): boolean {
+    for (const x of this.actors.values()) { x.emote = "!"; x.emoteUntil = this.tick + 60 }
+    const first = this.actors.keys().next().value
+    if (first) this.say(first, "Ding dong!")
+    this.changed = true
+    if (!this.plan.door || !this.actors.size || this.callers.length >= QUEUE_MAX) return false
+    this.callers.push(kind ?? pickVisitor(Math.random(), this.date()))
+    return true
+  }
+  /** the visitor in the doorway, if one is there (not while they wait for someone to come) */
+  visitor(): { kind: VisitorKind; x: number; y: number } | null {
+    const c = this.caller, d = this.plan.door
+    return c && c.here >= 0 && d ? { kind: c.kind, x: d.x + 12, y: d.y } : null
+  }
+  doorSpot(): Spot | undefined { return this.plan.door }
+  /** the bell is still rattling (the last BELL ticks of a ring that has a visitor coming) */
+  bellRinging(): boolean { return !!this.caller && this.tick < this.caller.bell }
+  /** pizza is on: the kitchen pulls like a birthday */
+  pizzaOn(): boolean { return this.tick < this.pizzaUntil }
+  /** the tourist asked after Uqbar: the shelf's spine wiggles now (kit/uqbar.ts) */
+  shelfNudge(): boolean { return this.tick < this.nudgeUntil }
+
+  private stepDoor(): boolean {
+    const door = this.plan.door
+    if (!door || !this.seeded) return false
+    // the schedule draws only when it makes a ring, never per tick: a seeded run before the first is untouched
+    if (this.tick >= this.nextRing) {
+      this.nextRing = this.tick + RING_MIN + Math.floor(Math.random() * RING_SPAN)
+      const h = this.hour()
+      if (h >= OPEN_FROM && h < OPEN_TO && !this.caller && !this.callers.length) this.ring()
+    }
+    let c = this.caller
+    if (!c) {
+      const kind = this.callers[0]
+      if (!kind) return false
+      const who = this.answerer(door)
+      this.callers.shift()
+      if (!who) return false
+      this.caller = c = { kind, who, bell: this.tick + BELL, here: -1 }
+      return true
+    }
+    const x = this.actors.get(c.who)
+    if (!x || x.leaving) { this.caller = null; return true }
+    if (c.here < 0) {
+      const still = !x.moving && !x.path.length
+      if (!still || x.spotKey !== spotKey(door)) {
+        // nobody is coming: the answerer is idle somewhere else once the visitor has waited out WAIT
+        if (still && this.tick > c.bell + WAIT) { this.caller = null; return true }
+        return false
+      }
+      c.here = this.tick
+      this.say(c.who, LINE[c.kind])
+      x.emote = { carrier: "✉", pizza: "♥", cookies: "♥", tourist: "?", trick: "*", carol: "♪" }[c.kind]; x.emoteUntil = this.tick + 60
+      if (c.kind === "carrier") this.catLetter(c.who)
+      if (c.kind === "pizza") this.pizzaUntil = this.tick + PIZZA_TICKS
+      if (c.kind === "tourist") this.nudgeUntil = this.tick + 40
+      return true
+    }
+    if (this.tick >= c.here + STAY) { this.caller = null; return true }
+    return false
+  }
+  /** the nearest coworker who is not mid-turn (the nearest of anyone, if all are), ties by name: no draw, so the same under any seed */
+  private answerer(door: Spot): string | null {
+    let best: string | null = null, bestD = Infinity
+    for (const [k, x] of [...this.actors].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      if (x.leaving) continue
+      const d = Math.abs(x.x - door.x) + Math.abs(x.y - door.y) + (x.seat.thinking ? 1000 : 0)
+      if (d < bestD) { best = k; bestD = d }
+    }
+    return best
+  }
 
   /** the home level on the last snapshot; null until one has one, so a start-up is only a baseline */
   private levelSeen: number | null = null
@@ -491,6 +575,7 @@ export class Sim<L extends { people: Seat[] }> {
     this.changed = false
     for (const [k, v] of this.talk) if (this.tick > v.until) { this.talk.delete(k); changed = true }
     this.together()
+    if (this.stepDoor()) changed = true
     const asleep = this.cat.mode === "sleep"
     if (this.stepCat()) changed = true
     if (this.prints.length) { const n = this.prints.length; this.prints = prune(this.prints, this.tick); if (this.prints.length !== n) changed = true }
@@ -552,6 +637,7 @@ export class Sim<L extends { people: Seat[] }> {
         if (actor.mug < this.tick + 100) actor.mug = this.tick + 3000
       }
       else if (actor.leaving) goal = plan.exit
+      else if (this.caller?.who === k && plan.door) goal = plan.door
       else if (slot >= 0) goal = plan.queue[Math.min(slot, plan.queue.length - 1)]!
       else if (visiting.has(actor.seat.agent) && (host = this.find(visiting.get(actor.seat.agent)!))) goal = plan.visit(host)
       else if (writing.has(actor.seat.agent) || this.pins.has(actor.seat.agent)) goal = this.pins.get(actor.seat.agent)?.box && plan.box ? plan.box : plan.pen
@@ -646,7 +732,7 @@ export class Sim<L extends { people: Seat[] }> {
     const waiting = free.filter((s) => s.with && held.has(spotKey({ ...s, ...s.with })))
     if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
     // their favourite pulls three times as hard, and the hour has its say
-    const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind, this.celebrating)
+    const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind, this.celebrating || this.pizzaOn())
     let roll = Math.random() * free.reduce((n, s) => n + weight(s), 0)
     return free.find((s) => (roll -= weight(s)) < 0) ?? this.plan.roam(l)
   }
