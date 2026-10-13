@@ -34,6 +34,45 @@ defmodule Server.ReleaseSmokeScriptTest do
     assert out =~ "/api/office"
   end
 
+  describe "the fetch of origin" do
+    # a repo whose origin can't be fetched (a local path that isn't there): a smoke of a local ref
+    # needs no fetch, so it must get past the fetch; a smoke of origin/main still needs it
+    setup do
+      tmp = Path.join(System.tmp_dir!(), "smoke-fetch-#{System.unique_integer([:positive])}")
+      root = Path.join(tmp, "repo")
+      File.mkdir_p!(Path.join(root, "scripts"))
+
+      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh) do
+        File.cp!(Path.expand("../../../scripts/#{f}", __DIR__), Path.join([root, "scripts", f]))
+      end
+
+      git = fn args -> {_, 0} = System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
+      git.(["init", "-q", "-b", "main"])
+      git.(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"])
+      git.(["branch", "work/feature"])
+      git.(["remote", "add", "origin", Path.join(tmp, "no-such-origin")])
+      on_exit(fn -> File.rm_rf!(tmp) end)
+      %{tmp: tmp, root: root}
+    end
+
+    defp run_smoke(tmp, root, args) do
+      env = [{"TMPDIR", tmp}, {"TLON_SMOKE_PORT", "4599"}, {"TLON_SMOKE_DATABASE", "tlon_smoke_fetch_test"}]
+      System.cmd("bash", [Path.join([root, "scripts", "release-smoke.sh"]) | args], env: env, stderr_to_stdout: true)
+    end
+
+    test "a smoke of a local work/<slug> ref goes on past a failed fetch", %{tmp: tmp, root: root} do
+      {out, _} = run_smoke(tmp, root, ["work/feature"])
+
+      refute out =~ "smoke FAILED: can't fetch origin"
+      assert out =~ ~r/smoke: [0-9a-f]{7} on :4599/
+    end
+
+    test "a smoke of origin/main still fails when origin can't be fetched", %{tmp: tmp, root: root} do
+      assert {out, 1} = run_smoke(tmp, root, [])
+      assert out =~ "smoke FAILED: can't fetch origin"
+    end
+  end
+
   describe "smoke-sweep.sh: what a SIGKILLed smoke left behind" do
     @sweep Path.expand("../../../scripts/smoke-sweep.sh", __DIR__)
 

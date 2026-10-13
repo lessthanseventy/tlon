@@ -47,7 +47,11 @@ if [ -z "$url" ]; then
   url="http://127.0.0.1:$port"
   curl -s -m 2 -o /dev/null "$url" && fail "something already answers on $port"
 
-  "$(dirname "$0")/git-fetch-origin.sh" "$root" || fail "can't fetch origin"
+  # a local ref (work/<slug>) is already in the shared .git: only origin/* needs the fetch
+  if ! "$(dirname "$0")/git-fetch-origin.sh" "$root"; then
+    git -C "$root" show-ref -q --verify "refs/heads/${1:-}" || fail "can't fetch origin"
+    echo "smoke: warning: can't fetch origin; smoking the local ${1}"
+  fi
   sha="$(git -C "$root" rev-parse -q --verify "${1:-origin/main}^{commit}")" || fail "no commit ${1:-origin/main}"
   echo "smoke: ${sha:0:7} on :$port, database $db"
 
