@@ -88,6 +88,7 @@ defmodule Server.MCP.Endpoint do
   # Container tier: projects, the lightweight ticket tracker, and notes.
   component(Server.MCP.Tool.RegisterProject, name: "register_project")
   component(Server.MCP.Tool.FileTicket, name: "file_ticket")
+  component(Server.MCP.Tool.Suggest, name: "suggest")
   component(Server.MCP.Tool.ListTickets, name: "list_tickets")
   component(Server.MCP.Tool.UpdateTicket, name: "update_ticket")
   component(Server.MCP.Tool.StartTicket, name: "start_ticket")

@@ -1354,13 +1354,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "ideas": {
-      // the banter model wrote these in a coworker's voice: say so, or one reads as their request
-      const who = (name: string) => ({ s: `${name}'s voice: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
-      const rows: Row[] = ideas.map((n) => ({ segs: [dim("banter, in "), who(n.author), plain(n.body)], ref: n }))
+      const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
+      const rows: Row[] = ideas.map((n) => ({ segs: [who(n.author), plain(n.body)], ref: n }))
       const picked = rows[sel]?.ref as CorkNote | undefined, w = ws
       const gone = (id: number) => { ideas = ideas.filter((x) => x.id !== id); room().suggestionBox(ideas) }
       return {
-        title: `CORKBOARD IDEAS · ${ideas.length} · written by the office's banter, nobody asked`, rows: rows.length ? rows : [{ segs: [dim("the box is empty. the office's banter drops ideas in it as the crew works.")] }],
+        title: `SUGGESTION BOX · ${ideas.length} · the crew's ideas, yours to file or throw out`, rows: rows.length ? rows : [{ segs: [dim("the box is empty. a coworker drops an idea in it when they see one while working.")] }],
         actions: [
           ...(picked && w !== null ? [
             { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, picked.body)).then(() => data.dropSuggestion(w, picked.id)).then(() => { gone(picked.id); draw() }) },

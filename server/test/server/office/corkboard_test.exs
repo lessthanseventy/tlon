@@ -31,7 +31,10 @@ defmodule Server.Office.CorkboardTest do
 
     test "the banter never writes a bug report: no suggestion is drawn, and the voice forbids claims about the work" do
       board = [%{id: 1, author: "hronir", kind: "joke", body: "a joke", re: nil}]
-      kinds = for i <- 0..99, do: elem(Corkboard.pick(%{crew: @crew, tickets: []}, board, Enum.at(@crew, 1), i / 100), 0)
+
+      kinds =
+        for i <- 0..99, do: elem(Corkboard.pick(%{crew: @crew, tickets: []}, board, Enum.at(@crew, 1), i / 100), 0)
+
       refute :suggestion in kinds
       assert Corkboard.voice() =~ "never a ticket or thread number"
     end
@@ -88,38 +91,33 @@ defmodule Server.Office.CorkboardTest do
         end)
 
       assert [%{id: 1, author: "hronir", body: "Whoever keeps renaming things: I see you.", kind: kind, at: at}] = notes
-      assert kind in ~w(encourage joke comment suggestion) and is_integer(at)
+      assert kind in ~w(encourage joke comment) and is_integer(at)
     end
   end
 
-  test "a suggestion goes in the box on the standing thread, apart from the chatter, survives a restart, and leaves when dropped" do
+  test "a coworker's suggestion goes in the box on the standing thread, apart from the chatter, survives a restart, and leaves when dropped" do
     Server.TestDB.clean!()
     {:ok, ws} = Server.Workspaces.register(%{name: "Boxed"})
     {:ok, root} = Server.Channel.open_thread(%{title: "standing", scope: "machine", workspace_id: ws.id})
-    {:ok, _} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, work} = Server.Channel.open_thread(%{title: "work", workspace_id: ws.id})
     start_supervised!(Corkboard)
 
-    GenServer.cast(
-      Corkboard,
-      {:pinned, ws.id, %{author: "ashe", kind: "suggestion", body: "log first-failure times", re: nil}}
-    )
-
+    assert {:ok, _} = Corkboard.suggest(ws.id, "ashe", "log first-failure times", work.id)
+    assert {:error, _} = Corkboard.suggest(ws.id, "ashe", "  ", work.id)
     GenServer.cast(Corkboard, {:pinned, ws.id, %{author: "yu", kind: "joke", body: "a joke", re: nil}})
     refute Enum.any?(:sys.get_state(Corkboard)[ws.id].notes, &(&1.kind == "suggestion"))
 
     stop_supervised!(Corkboard)
     start_supervised!(Corkboard)
 
-    assert [%{id: id, author: "ashe", kind: "suggestion", body: "log first-failure times", re: nil, at: at}] =
-             Corkboard.suggestions(ws.id)
-
+    assert [%{id: id, author: "ashe", kind: "suggestion", body: note, re: nil, at: at}] = Corkboard.suggestions(ws.id)
+    assert note == "log first-failure times (seen on ##{work.id})"
     assert is_integer(at)
 
     assert %Server.Message{thread_id: thread_id, kind: "suggestion", delivered_at: %DateTime{}, body: body} =
              Server.Repo.get(Server.Message, id)
 
-    assert thread_id == root.id and body =~ "corkboard idea" and body =~ "banter" and body =~ "nobody asked"
-    assert body =~ "log first-failure times"
+    assert thread_id == root.id and body =~ "suggestion from ashe, while on ##{work.id}"
 
     assert :ok = Corkboard.drop(ws.id, id)
     assert Corkboard.suggestions(ws.id) == []
