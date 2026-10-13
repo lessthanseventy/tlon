@@ -195,7 +195,7 @@ defmodule Server.Arbiter.TmuxTest do
     thread: t,
     exports: exports
   } do
-    proc = Path.join(System.tmp_dir!(), "spawn-orphans-#{System.unique_integer([:positive])}")
+    proc = Path.join(System.tmp_dir!(), "spawn-orphans-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(proc, "4242"))
     File.write!(Path.join(proc, "4242/environ"), "TLON_THREAD=#{t.id}\0TLON_AUTHOR=claude-code\0")
     test = self()

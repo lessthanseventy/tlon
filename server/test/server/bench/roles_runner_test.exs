@@ -31,7 +31,7 @@ defmodule Server.Bench.Roles.RunnerTest do
   end
 
   test "the seeded build never carries the app's own beams, which would look newer than the snapshot" do
-    tmp = Path.join(System.tmp_dir!(), "bench-build-test-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "bench-build-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     root = Path.join(tmp, "root")
     work = Path.join(tmp, "work")
     File.mkdir_p!(Path.join(root, "server/_build/test/lib/server/ebin"))

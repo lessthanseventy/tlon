@@ -274,7 +274,7 @@ defmodule Server.StaffingTest do
 
   describe "the leaf cap — finish before start, and an idle leaf gives its seat up" do
     setup %{ws: ws} do
-      path = Path.join(System.tmp_dir!(), "tlon-cap-#{System.unique_integer([:positive])}.json")
+      path = Path.join(System.tmp_dir!(), "tlon-cap-#{System.pid()}-#{System.unique_integer([:positive])}.json")
       File.write!(path, ~s({"max_leaves": 1}))
       previous = Application.get_env(:server, :operator_config_path)
       Application.put_env(:server, :operator_config_path, path)

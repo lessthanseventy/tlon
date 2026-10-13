@@ -12,7 +12,7 @@ defmodule Server.Maintain.SweepRecheckTest do
 
   setup do
     Server.TestDB.clean!()
-    repo = Path.join(System.tmp_dir!(), "sweep-recheck-#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "sweep-recheck-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(repo, "server/lib"))
     File.write!(Path.join(repo, "server/lib/a.ex"), "defmodule Server.A do\nend\n")
     git = fn args -> {_, 0} = System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end

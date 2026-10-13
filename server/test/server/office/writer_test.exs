@@ -27,7 +27,7 @@ defmodule Server.Office.WriterTest do
   end
 
   test "the wackiness dial's tone: business writes nothing, each level up is wilder" do
-    path = Path.join(System.tmp_dir!(), "wack-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "wack-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
 
@@ -52,7 +52,7 @@ defmodule Server.Office.WriterTest do
   end
 
   test "a stand-in CLI pins every call to it" do
-    dir = Path.join(System.tmp_dir!(), "writer-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "writer-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     cli = Path.join(dir, "model")
     File.write!(cli, "#!/bin/sh\necho stand-in\n")

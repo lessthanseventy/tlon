@@ -4,7 +4,7 @@ defmodule Server.Bench.RolesTest do
   alias Server.Bench.Roles
 
   defp tmp! do
-    dir = Path.join(System.tmp_dir!(), "bench-roles-test-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "bench-roles-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
     dir

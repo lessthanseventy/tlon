@@ -345,7 +345,7 @@ defmodule Server.ProfilesTest do
     end
 
     test "a soul appends one delimited tone block to the system prompt, and only that" do
-      dir = Path.join(System.tmp_dir!(), "profiles-souls-#{System.unique_integer([:positive])}")
+      dir = Path.join(System.tmp_dir!(), "profiles-souls-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
       Application.put_env(:server, :souls_dir, dir)
 

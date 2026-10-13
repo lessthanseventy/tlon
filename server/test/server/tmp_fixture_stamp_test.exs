@@ -7,7 +7,9 @@ defmodule Server.TmpFixtureStampTest do
     self_path = Path.expand(__ENV__.file)
 
     offenders =
-      Path.wildcard(Path.expand("../**/*_test.exs", __DIR__))
+      "../**/*_test.exs"
+      |> Path.expand(__DIR__)
+      |> Path.wildcard()
       |> Enum.reject(&(&1 == self_path))
       |> Enum.flat_map(fn file ->
         file

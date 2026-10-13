@@ -170,7 +170,7 @@ defmodule Server.HarnessTest do
 
     test "launch.sh: concurrent boots each pre-accept their folder's trust, none lost to another's write" do
       launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
-      home = Path.join(System.tmp_dir!(), "tlon-trust-#{System.unique_integer([:positive])}")
+      home = Path.join(System.tmp_dir!(), "tlon-trust-#{System.pid()}-#{System.unique_integer([:positive])}")
       bin = Path.join(home, "bin")
       File.mkdir_p!(bin)
       File.write!(Path.join(bin, "claude"), "#!/bin/sh\nexit 0\n")

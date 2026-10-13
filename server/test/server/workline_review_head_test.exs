@@ -36,7 +36,7 @@ defmodule Server.WorklineReviewHeadTest do
 
   setup do
     Server.TestDB.clean!()
-    root = Path.join(System.tmp_dir!(), "review-head-#{System.unique_integer([:positive])}")
+    root = Path.join(System.tmp_dir!(), "review-head-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(root)
     git(root, ["init", "-q", "-b", "main"])
     git(root, ["config", "user.email", "t@t"])

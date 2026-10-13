@@ -8,7 +8,7 @@ defmodule Server.SoulTest do
     Server.TestDB.clean!()
     {:ok, ws} = Server.Workspaces.register(%{name: "Machine"})
     {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "lonnrot", archetype: "reviewer"})
-    dir = Path.join(System.tmp_dir!(), "souls-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "souls-#{System.pid()}-#{System.unique_integer([:positive])}")
     Application.put_env(:server, :souls_dir, dir)
 
     on_exit(fn ->

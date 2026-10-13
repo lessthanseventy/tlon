@@ -13,7 +13,7 @@ defmodule Server.Office.RandomTest do
 
   setup do
     Server.TestDB.clean!()
-    path = Path.join(System.tmp_dir!(), "random-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "random-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
 
@@ -33,7 +33,7 @@ defmodule Server.Office.RandomTest do
   defp posts(thread_id), do: Repo.all(from m in Message, where: m.thread_id == ^thread_id)
 
   defp model(reply) do
-    dir = Path.join(System.tmp_dir!(), "random-model-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "random-model-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     cli = Path.join(dir, "model")
     File.write!(cli, "#!/bin/sh\necho '#{reply}'\n")

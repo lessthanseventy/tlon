@@ -8,7 +8,7 @@ defmodule Server.Bench.Roles.RunnerSeedTest do
   defp git!(dir, args), do: {_, 0} = System.cmd("git", @git ++ args, cd: dir, stderr_to_stdout: true)
 
   setup do
-    tmp = Path.join(System.tmp_dir!(), "bench-seed-test-#{System.unique_integer([:positive])}")
+    tmp = Path.join(System.tmp_dir!(), "bench-seed-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     root = Path.join(tmp, "root")
     File.mkdir_p!(Path.join(root, "server"))
     File.write!(Path.join(root, "server/a.txt"), "a")

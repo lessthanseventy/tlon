@@ -4,7 +4,7 @@ defmodule Server.Recall.ProbeTest do
   alias Server.Recall.Probe
 
   setup do
-    repo = Path.join(System.tmp_dir!(), "probe-#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "probe-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(repo, "server/lib"))
     File.mkdir_p!(Path.join(repo, "tasks"))
 

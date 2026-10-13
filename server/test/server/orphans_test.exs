@@ -7,7 +7,7 @@ defmodule Server.OrphansTest do
   alias Server.Orphans
 
   setup do
-    proc = Path.join(System.tmp_dir!(), "orphans-#{System.unique_integer([:positive])}")
+    proc = Path.join(System.tmp_dir!(), "orphans-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(proc)
     on_exit(fn -> File.rm_rf!(proc) end)
     %{proc: proc}
