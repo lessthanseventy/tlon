@@ -142,8 +142,9 @@ defmodule Server.Alerts do
   defp actions(%{kind: "rollout", ref: id}),
     do: [%{label: "Done", method: "DELETE", path: "/api/office/rollout/#{id}", body: nil}]
 
+  # asks why: a resolution naming a PR banks a beat incident's postmortem (`Server.Sheriff.postmortem/1`)
   defp actions(%{kind: "issue", ref: id}),
-    do: [%{label: "Resolve", method: "POST", path: "/api/issues/#{id}/resolve", body: %{}}]
+    do: [%{label: "Resolve…", method: "POST", path: "/api/issues/#{id}/resolve", body: %{}, input: "resolution"}]
 
   defp actions(%{kind: "stranded", key: key}),
     do: [%{label: "Take the checkout down", method: "POST", path: "/api/office/needs/retire", body: %{key: key}}]
