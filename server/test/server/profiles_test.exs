@@ -344,6 +344,27 @@ defmodule Server.ProfilesTest do
       assert p.mcp == Profiles.archetype(:builder).mcp
     end
 
+    test "a soul appends one delimited tone block to the system prompt, and only that" do
+      dir = Path.join(System.tmp_dir!(), "profiles-souls-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      Application.put_env(:server, :souls_dir, dir)
+
+      on_exit(fn ->
+        Application.put_env(:server, :souls_dir, Path.join(System.tmp_dir!(), "tlon-test-souls-unset"))
+        File.rm_rf!(dir)
+      end)
+
+      base = Profiles.instantiate(%{archetype: :builder, name: "atlas"}).system_prompt
+      refute base =~ "soul-tone"
+
+      File.write!(Path.join(dir, "atlas.md"), "## Quirks\nHums.\n\n## Wants\nWANTSTEXT\n")
+      with_soul = Profiles.instantiate(%{archetype: :builder, name: "atlas"}).system_prompt
+
+      assert String.starts_with?(with_soul, base)
+      assert String.ends_with?(with_soul, "</soul-tone>\n")
+      assert with_soul =~ "Hums." and not (with_soul =~ "WANTSTEXT")
+    end
+
     test "seat_profile reads the seat's own policy on its workspace: an ollama model spawns on it, through Claude Code's gateway, not Sonnet" do
       Server.TestDB.clean!()
       {:ok, ws} = Server.Workspaces.register(%{name: "Night"})
