@@ -4,6 +4,8 @@
 // consult, up to the board to leave a note — and Nina's day. A room supplies its geometry as a
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { asksYou } from "./crew"
+import { relation } from "./company"
+import { soulFor } from "./souls"
 import { DRINK, FALL_ODDS, FALL_WET, layPrint, prune, STRIDE, WET, type Print } from "./bathroom"
 import { homeLevel } from "./life"
 import { looksGen, overrideFor } from "./looks"
@@ -878,13 +880,25 @@ export class Sim<L extends { people: Seat[] }> {
     return all.find((x) => x.spot.kind === "desk") ?? all[0]
   }
 
+  /** who is on the bench and what their souls say, for `relation` */
+  private companyOf() {
+    const bench = [...this.actors.values()].map((x) => x.seat.agent)
+    return { bench, souls: Object.fromEntries(bench.map((n) => [n, soulFor(n)])) }
+  }
+
   private idleGoal(actor: Actor, held: Set<string>, l: L): Spot {
     const cur = actor.spot
     const idle = cur.kind === "board" || LOUNGING.has(cur.kind)
     if (idle && this.tick < actor.until) return cur
-    const free = this.plan.lounge.filter((s) => !held.has(spotKey(s)) && spotKey(s) !== actor.spotKey)
+    const { bench, souls } = this.companyOf()
+    const partner = (s: Spot) => s.with ? [...this.actors.values()].find((x) => x !== actor && x.spotKey === spotKey({ ...s, ...s.with! })) : undefined
+    const rel = (s: Spot) => relation(actor.seat.agent, partner(s)?.seat.agent ?? "", souls, bench)
+    // a rival at the far end of the table is not a pair worth making
+    const free = this.plan.lounge.filter((s) => !held.has(spotKey(s)) && spotKey(s) !== actor.spotKey && !(s.with && rel(s) === "rival"))
     // someone waiting at the far end of the table, or half a chat: go and make it a pair
     const waiting = free.filter((s) => s.with && held.has(spotKey({ ...s, ...s.with })))
+    const friends = waiting.filter((s) => rel(s) === "friend")
+    if (friends.length && Math.random() < 0.9) return friends[Math.floor(Math.random() * friends.length)]!
     if (waiting.length && Math.random() < 0.7) return waiting[Math.floor(Math.random() * waiting.length)]!
     // their favourite pulls three times as hard, and the hour has its say
     const hour = this.hour(), weight = (s: Spot) => (s.kind === actor.look.fav ? 3 : 1) * moment(s.kind, hour, this.weather?.kind, this.celebrating || this.pizzaOn())

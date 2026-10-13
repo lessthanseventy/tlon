@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
+import { mulberry32 } from "../kit/rng"
+import { parseSoul, useSouls } from "../kit/souls"
 import { screenOf, steamOf } from "../kit/draw"
 import { MEET_BOTTOM, WideRoom, widePlan, zones } from "../rooms/wide"
 import { office } from "./wcag.test"
@@ -141,5 +143,59 @@ describe("the fire-drill muster", () => {
       expect(s.kind).toBe("exit")
       expect(blocks.some((b) => s.x >= b.x && s.x < b.x + b.w && s.y >= b.y && s.y < b.y + b.h)).toBe(false)
     }
+  })
+})
+
+describe("company: the soul steers who pairs up", () => {
+  type A = { seat: { agent: string }; spot: { kind: string; x: number; y: number }; spotKey: string; until: number; x: number; y: number }
+  type R = { actors: Map<string, A>; plan: { lounge: { kind: string; x: number; y: number; with?: { x: number; y: number } }[] }; idleGoal(a: A, held: Set<string>, l: unknown): { kind: string; x: number; y: number } }
+  const inner = (room: WideRoom) => room as unknown as R
+  const parse = (people: string) => parseSoul("## People\n" + people)
+  const realRandom = Math.random
+  afterEach(() => { Math.random = realRandom; useSouls({}) })
+
+  /** `waiter` stands at one end of a pair spot; how many of `n` idle choices by `who` take the other end */
+  function pairChoices(who: string, waiter: string, n: number, seed = 7): number {
+    const room = new WideRoom(560)
+    room.step(viewOf(office(), 1))
+    const r = inner(room), pair = r.plan.lounge.find((s) => s.with)!
+    const w = r.actors.get(waiter)!, a = r.actors.get(who)!
+    const end = { ...pair, ...pair.with! }
+    Object.assign(w, { spot: end, spotKey: `${pair.kind}:${pair.with!.x}:${pair.with!.y}` })
+    const held = new Set([...r.actors.values()].map((x) => x.spotKey))
+    Math.random = mulberry32(seed)
+    let took = 0
+    for (let i = 0; i < n; i++) {
+      Object.assign(a, { until: 0, spot: { ...a.spot, kind: "desk" }, spotKey: "desk" })
+      const g = r.idleGoal(a, held, {})
+      if (g.kind === pair.kind && g.x === pair.x && g.y === pair.y) took++
+    }
+    return took
+  }
+
+  test("rivals never take the pair spot beside each other", () => {
+    useSouls({ ashe: parse("needles lonnrot"), lonnrot: parse("") })
+    expect(pairChoices("lonnrot", "ashe", 200)).toBe(0)
+  })
+
+  test("friends take it more often than strangers do", () => {
+    useSouls({ ashe: parse("admires yu"), yu: parse("") })
+    const friend = pairChoices("yu", "ashe", 200)
+    useSouls({})
+    expect(friend).toBeGreaterThan(pairChoices("yu", "ashe", 200))
+  })
+
+  test("a seat with no People section picks exactly as with no souls", () => {
+    const trace = () => {
+      Math.random = mulberry32(11)
+      const room = new WideRoom(560), r = inner(room)
+      room.step(viewOf(office(), 1))
+      const a = r.actors.get("yu")!, held = new Set([...r.actors.values()].map((x) => x.spotKey))
+      return Array.from({ length: 100 }, () => { Object.assign(a, { until: 0, spot: { ...a.spot, kind: "desk" }, spotKey: "desk" }); const g = r.idleGoal(a, held, {}); return `${g.kind}:${g.x}:${g.y}` })
+    }
+    useSouls({})
+    const bare = trace()
+    useSouls({ ashe: parse(""), yu: parse("gets along with everyone") })
+    expect(trace()).toEqual(bare)
   })
 })
