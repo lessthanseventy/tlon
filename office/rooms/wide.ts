@@ -6,6 +6,7 @@
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawDoor, drawVisitor } from "../kit/door"
+import { drawProp } from "../kit/zoo"
 import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, swatted, FLINCH, type Book, type Pt as Perch } from "../kit/uqbar"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
@@ -429,6 +430,7 @@ export class WideRoom extends Sim<Layout> {
     for (const p of this.planes) drawPlane(sc, p)
     const caller = this.visitor()
     if (caller) drawVisitor(sc, caller.x, caller.y, caller.kind)
+    for (const p of this.props()) drawProp(sc, p)
 
     // ── people, Nina ──
     const queued = [...this.actors.values()].filter((x) => x.spot.kind === "queue")

@@ -4,7 +4,7 @@ import { viewOf } from "../kit/crew"
 import { DRILL } from "../kit/sim"
 import { RailRoom } from "../rooms/rail"
 import { WideRoom } from "../rooms/wide"
-import { office, seeded } from "./golden"
+import { focus, measure, office, seeded } from "./golden"
 
 const geo: Geo = { doorX: 600, hallY: 190, ceilY: 12, leftX: 60, windowX: 200, cork: { x: 400, y: 40 } }
 
@@ -121,4 +121,22 @@ describe("the cast", () => {
     })
     expect(trace()).toEqual(trace())
   })
+})
+
+describe("the stage", () => {
+  const frame = (r: any, a: ReturnType<typeof view>, props = true) => {
+    const real = r.props
+    if (!props) r.props = () => []
+    try { return new Bun.CryptoHasher("sha1").update(r.render(a, focus, measure, new Date(2026, 9, 9, 15)).rgba).digest("hex") } finally { r.props = real }
+  }
+  test("the duck is drawn on the hall mid-scene and is not there after", () => seeded(2, () => {
+    const r = new WideRoom(696), a = view(["w0"])
+    run(r, a, 300)
+    r.event("duck"); run(r, a, 200)
+    expect(r.props().map((p) => p.kind)).toEqual(["duck"])
+    expect(frame(r, a)).not.toBe(frame(r, a, false))
+    run(r, a, 400)
+    expect(r.props()).toEqual([])
+    expect(frame(r, a)).toBe(frame(r, a, false))
+  }))
 })
