@@ -140,8 +140,11 @@ export function pass(h: Hall, o: Ctx): Hall {
   return { ...h, seed: nextSeed(h.seed), overrides }
 }
 
-/** put the current card on the pile, then pass */
-export const maybe = (h: Hall, o: Ctx): Hall => pass({ ...h, pile: pushPile(h.pile, { seed: h.seed, overrides: h.overrides }) }, o)
+/** put the current card on the pile, then pass; the shown name is baked in so the entry re-renders as it was seen */
+export const maybe = (h: Hall, o: Ctx): Hall => {
+  const name = candidateOf(h, o).name
+  return pass({ ...h, pile: pushPile(h.pile, { seed: h.seed, overrides: { ...h.overrides, name } }) }, o)
+}
 
 export function bringBack(h: Hall, i: number): Hall {
   const e = h.pile[i]
