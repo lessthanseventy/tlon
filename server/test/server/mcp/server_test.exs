@@ -639,6 +639,23 @@ defmodule Server.MCP.ServerTest do
     assert decode_tool_json(call(token, session, 4, "take_wakes", %{})) == []
   end
 
+  test "a superseded session's take_wakes is fenced: it is told to stop and the wake stays for the live one",
+       %{thread: thread, agent: agent, token: token} do
+    twin = handshake(token)
+    %{"session_id" => old_id} = decode_tool_json(call(token, twin, 3, "register", %{}))
+
+    respawn = handshake(token)
+    %{"session_id" => live_id} = decode_tool_json(call(token, respawn, 3, "register", %{}))
+    {:ok, _} = Server.Wake.queue(thread.id, agent.name, "for the live one")
+
+    fenced = decode_tool_json(call(token, twin, 4, "take_wakes", %{"session_id" => old_id}))
+    assert %{"superseded" => true, "by" => ^live_id, "text" => text} = fenced
+    assert text =~ "superseded"
+
+    assert decode_tool_json(call(token, respawn, 4, "take_wakes", %{"session_id" => live_id})) ==
+             ["for the live one"]
+  end
+
   test "put_back_wakes queues a taken wake again for the same seat, so the next take hands it over",
        %{thread: thread, agent: agent, token: token} do
     session = handshake(token)
