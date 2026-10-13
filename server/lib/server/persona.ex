@@ -171,7 +171,8 @@ defmodule Server.Persona do
     end)
   end
 
-  defp voice(name, archetype), do: Map.get(@voices, name) || Map.get(@archetype_voices, archetype) || @generic_voice
+  @doc false
+  def voice(name, archetype), do: Map.get(@voices, name) || Map.get(@archetype_voices, archetype) || @generic_voice
 
   # the seed alone picks: each slot reads its own position, so one seed always draws the same set
   defp pick(list, seed, slot), do: Enum.at(list, rem(seed + slot * 7919, length(list)))
