@@ -276,6 +276,34 @@ defmodule Server.Office.NeedsTest do
       assert Needs.list() == []
       assert Server.Office.Room.health().failed_jobs == 0
     end
+
+    test "a job failing the same way run after run is one item, dismissed as one" do
+      failed = fn worker, error, ago ->
+        {:ok, job} = %{} |> Oban.Job.new(worker: worker, queue: "default") |> Server.Repo.insert()
+
+        job
+        |> Ecto.Changeset.change(
+          state: "discarded",
+          attempted_at: DateTime.add(DateTime.utc_now(), -ago),
+          errors: [%{"error" => error}]
+        )
+        |> Server.Repo.update!()
+      end
+
+      for ago <- [600, 300], do: failed.("Server.Jobs.KeepUp", "keep_up /r: gh not found", ago)
+      newest = failed.("Server.Jobs.KeepUp", "keep_up /r: gh not found", 0)
+      other = failed.("Server.Jobs.KeepUp", "keep_up /r: git won't run", 0)
+
+      items = Needs.list()
+      assert [repeated] = Enum.filter(items, &(&1.text == "keep_up /r: gh not found"))
+      assert repeated.ref == newest.id
+      assert repeated.title == "Server.Jobs.KeepUp failed 3 times"
+      assert [%{ref: other_ref}] = Enum.filter(items, &(&1.text == "keep_up /r: git won't run"))
+      assert other_ref == other.id
+
+      :ok = Needs.dismiss_job(newest.id)
+      assert [%{ref: ^other_ref}] = Needs.list()
+    end
   end
 
   describe "a stop with no kind of its own is a stalled Need until the workline moves" do
