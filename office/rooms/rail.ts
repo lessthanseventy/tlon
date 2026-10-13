@@ -323,6 +323,7 @@ export class RailRoom extends Sim<Layout> {
       // up on the desk or the tower she is drawn over it, as she is climbing up or down
       drawCat(sc, c, (c.x === CAT_DESK.x || c.x === PERCH_TOP.x) && c.y < 76 ? 80 : null, null)
     }
+    if (!a.ok) sc.cv.glow(0, 0, W, H, ROLE.ground, 0.45)
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), MANAGER_X + EXEC_W / 2, FLOOR + 20, a.ok ? ROLE.inactive : ROLE.alarm)
     return sc.finish()
   }

@@ -437,6 +437,8 @@ export class WideRoom extends Sim<Layout> {
     // a disco: confetti over everyone
     if (this.tick < this.discoUntil) for (const x of this.actors.values()) drawParty(sc, x.x, x.y, (this.discoUntil - this.tick) % 60)
 
+    // the channel down: the held room, dimmed under the note; the header carries the age and the verb
+    if (!a.ok) sc.cv.glow(0, BAND, W, H - BAND, ROLE.ground, 0.45)
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
     if (this.alarmed) text("FIRE DRILL", (F0 + F1) / 2, 132, ROLE.alarm)
     this.nightfall(sc, now)

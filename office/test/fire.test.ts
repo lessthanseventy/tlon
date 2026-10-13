@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { ARGOS } from "../kit/pets"
-import { FIRE_GRACE } from "../kit/sim"
+import { PANIC } from "../kit/sim"
 import { createHash } from "node:crypto"
 import { closet, corner, WideRoom, widePlan, zones } from "../rooms/wide"
 import { focus, measure, seeded } from "./golden"
@@ -10,36 +10,30 @@ import { office } from "./wcag.test"
 const up = () => viewOf(office(), 1)
 const down = () => viewOf({ ...office(), ok: false, note: "channel down" }, 1)
 const run = (r: WideRoom, f: () => ReturnType<typeof up>, n: number) => { for (let i = 0; i < n; i++) r.step(f()) }
+/** a drill held open until `stop`: the long burn a keyed drill only begins */
+const burn = (r: any) => { r.play("drill"); r.drillUntil = r.tick + 1e6 }
+const stop = (r: any) => { r.drillUntil = r.tick }
 
-describe("fire drill", () => {
-  test("a short blip is not a fire; a held outage is; recovery puts it out", () => {
+describe("an outage", () => {
+  test("is never a fire: a long one holds the room, nobody panics", () => {
     const r = new WideRoom(696)
-    run(r, up, 20)
-    run(r, down, FIRE_GRACE - 5)
-    expect(r.onFire).toBe(false)
-    run(r, up, 1); run(r, down, FIRE_GRACE - 5)
-    expect(r.onFire).toBe(false)
-    run(r, down, 10)
-    expect(r.onFire).toBe(true)
-    run(r, up, 1)
-    expect(r.onFire).toBe(false)
-  })
-  test("a room that never saw the channel up does not burn", () => {
-    const r = new WideRoom(696)
-    run(r, down, FIRE_GRACE * 2)
-    expect(r.onFire).toBe(false)
+    run(r, up, 300)
+    run(r, down, 3000)
+    expect(r.alarmed).toBe(false)
   })
 })
 
 describe("the drill", () => {
-  test("on fire, everyone ends at a muster spot holding a mug; all distinct; they return after", () => {
+  test("at the muster, everyone ends at a spot holding a mug; all distinct; they return after", () => {
     const r = new WideRoom(696) as any
     run(r, up, 300)
-    run(r, down, FIRE_GRACE + 1200)
+    burn(r)
+    run(r, up, 1300)
     const actors = [...r.actors.values()] as any[]
     expect(actors.length).toBeGreaterThan(0)
     for (const a of actors) { expect(a.spot.kind).toBe("exit"); expect(a.moving).toBe(false); expect(a.mug).toBeGreaterThan(r.tick) }
     expect(new Set(actors.map((a) => `${a.x}:${a.y}`)).size).toBe(actors.length)
+    stop(r)
     run(r, up, 1500)
     for (const a of r.actors.values()) expect(a.spot.kind).not.toBe("exit")
   })
@@ -49,8 +43,9 @@ describe("Argos in the smoke", () => {
   test("he leaves for the muster and barks smoke lines while it burns", () => {
     const r = new WideRoom(696) as any
     run(r, up, 300)
+    burn(r)
     const said = new Set<string>()
-    for (let i = 0; i < FIRE_GRACE + 900; i++) { r.step(down()); if (r.dog.said) said.add(r.dog.said) }
+    for (let i = 0; i < 1000; i++) { r.step(up()); if (r.dog.said) said.add(r.dog.said) }
     expect(r.dog.mode).not.toBe("sleep")
     expect(r.dog.y).toBeGreaterThan(160)
     expect([...said].some((s) => ARGOS.smoke.includes(s))).toBe(true)
@@ -63,7 +58,7 @@ describe("Argos holds at the muster", () => {
     for (const hour of [3, 8, 13]) for (let seed = 1; seed <= 20; seed++) seeded(seed, () => {
       const r = new WideRoom(696) as any
       r.hour = () => hour
-      run(r, up, 300); run(r, down, FIRE_GRACE + 900)
+      run(r, up, 300); burn(r); run(r, up, 1000)
       expect(r.dog.y, `hour ${hour} seed ${seed}`).toBeGreaterThan(160)
     })
   }, 60_000)
@@ -77,14 +72,14 @@ describe("the server closet", () => {
   })
   test("a burning room draws flames and smoke at the closet; a calm one does not", () => {
     const calm = new WideRoom(696), hot = new WideRoom(696), c = closet()
-    run(calm, up, 300); run(hot, up, 300); run(hot, down, FIRE_GRACE + 5)
+    run(calm, up, 300); run(hot, up, 300); hot.play("drill"); run(hot, up, PANIC + 5)
     const at = new Date(2026, 9, 9, 15)
     const patch = (r: WideRoom, f: typeof up) => {
       const fr = r.render(f(), focus, measure, at), out: number[] = []
       for (let y = c.y - 24; y < c.y + c.h; y++) for (let x = c.x - 4; x < c.x + c.w + 4; x++) out.push(...fr.rgba.slice((y * fr.width + x) * 4, (y * fr.width + x) * 4 + 4))
       return createHash("sha256").update(Buffer.from(out)).digest("hex")
     }
-    expect(hot.onFire).toBe(true)
-    expect(patch(hot, down)).not.toBe(patch(calm, up))
+    expect(hot.alarmed).toBe(true)
+    expect(patch(hot, up)).not.toBe(patch(calm, up))
   })
 })
