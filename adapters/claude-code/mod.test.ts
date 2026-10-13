@@ -209,6 +209,20 @@ test("a get_dossier that never answers holds the prompt only so long: the last b
   expect(r.context?.[0]).toContain("the server didn't answer in time: this brief is as of");
 });
 
+test("a get_dossier that fails fast still dates the brief it falls back on, with why", async ($, on) => {
+  const world: World = {};
+  engine(on, world);
+  await $.session.start(START);
+  await $.prompt.submit({ text: "start", wait: false });
+  await $.session.end({ reason: "clear", sessionId: "s1" });
+
+  world.dossierFails = "session not registered";
+  const r = await $.prompt.submit({ text: "fresh", wait: false });
+
+  expect(r.context?.[0]).toContain("# Brief: ship the mod");
+  expect(r.context?.[0]).toContain("the server didn't answer (session not registered): this brief is as of");
+});
+
 test("with no brief yet and a server that can't answer, the prompt says so in one line, and the failure is logged", async ($, on) => {
   const world: World = { dossierFails: "session not registered", writes: [], env: { ...IDENTITY, XDG_STATE_HOME: "/state" } };
   engine(on, world);
