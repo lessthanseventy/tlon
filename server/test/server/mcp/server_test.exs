@@ -1307,6 +1307,27 @@ defmodule Server.MCP.ServerTest do
     refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "bad"))
   end
 
+  test "file_ticket with issue_id owns that open issue, filed by the caller; owned or closed is refused" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "IssueWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "sheriff's beat", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "IssueFiler", mandate: "triage", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    {:ok, issue} = Server.Dossier.raise_issue(%{thread_id: thread.id, summary: "landing trips on scratch"})
+
+    filed =
+      token
+      |> call(session, 2, "file_ticket", %{"title" => "clean before rebase", "issue_id" => issue.id})
+      |> decode_tool_json()
+
+    assert Server.Repo.get!(Server.Issue, issue.id).ticket_id == filed["id"]
+    assert [%{body: body}] = Server.Dossier.fixing_since(DateTime.add(DateTime.utc_now(), -60))
+    assert body =~ "filed by IssueFiler"
+
+    assert call(token, session, 3, "file_ticket", %{"title" => "again", "issue_id" => issue.id})["isError"]
+    refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "again"))
+  end
+
   test "suggest pins a coworker's idea in the operator's suggestion box, naming who and where, waking nobody" do
     {:ok, ws} = Server.Workspaces.register(%{name: "IdeaWS"})
     {:ok, _lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})

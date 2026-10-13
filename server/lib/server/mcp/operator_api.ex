@@ -107,6 +107,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/office/pause            {"mode": "pencils_down" | "lights_out" | "back_to_work"} → Server.Pause: {pause}
       DELETE /api/facts/:id               Dossier.forget_fact (a tombstone: out of recall, row kept)
       POST   /api/issues/:id/resolve      {"resolution"?} → Dossier.resolve_issue
+      POST   /api/issues/:id/fix          a ticket filed from it, owning it, routed → Dossier.fix_issue
       POST   /api/habits/:id/approve      Server.approve_habit (…/reject: Server.reject_habit)
 
       POST   /api/schedules               {"workspace_id", "kind": "agent"|"workline"|"script", "body",
@@ -387,6 +388,15 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "DELETE", "facts", [id]), do: with_row(conn, Server.Fact, id, &forget(conn, &1))
   defp route(conn, "POST", "issues", [id, "resolve"]), do: with_row(conn, Server.Issue, id, &resolve(conn, &1))
+
+  defp route(conn, "POST", "issues", [id, "fix"]),
+    do:
+      with_row(
+        conn,
+        Server.Issue,
+        id,
+        &reply(conn, Dossier.fix_issue(&1), fn %{ticket: t, owner: o} -> %{ticket_id: t.id, owner: o} end)
+      )
 
   defp route(conn, "GET", "life", [ws]), do: with_workspace(conn, ws, &json(conn, 200, Server.Life.status(&1.id)))
 

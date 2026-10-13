@@ -1287,16 +1287,24 @@ defmodule Server.Workline do
 
   defp land(_thread, _checker, _opts), do: {:ok, nil}
 
-  # merged: the thread's work is done (closing it marks its ticket done), and what changed rolls out
+  # merged: the thread's work is done (closing it marks its ticket done, resolving the issues its
+  # tickets own), and what changed rolls out
   defp finish(thread, %{repo: repo, from: from, to: to}) do
     {:ok, _} = Server.Channel.close_thread(thread)
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
     landed = "⤵ landed as #{String.slice(to, 0, 7)}"
 
     case Server.Workline.Publish.publish(repo, thread.slug, thread.title) do
-      {:ok, url} -> post_brief(thread, "#{landed}; published as #{url} (GitHub merges it once its checks pass)")
-      :none -> post_brief(thread, landed)
-      {:error, why} -> unpublished(thread, "#{landed}, but not published to GitHub: #{why}")
+      {:ok, url} ->
+        post_brief(thread, "#{landed}; published as #{url} (GitHub merges it once its checks pass)")
+        Server.Dossier.resolve_fixed(thread, url)
+
+      :none ->
+        post_brief(thread, landed)
+        Server.Dossier.resolve_fixed(thread, String.slice(to, 0, 7))
+
+      {:error, why} ->
+        unpublished(thread, "#{landed}, but not published to GitHub: #{why}")
     end
   rescue
     e ->

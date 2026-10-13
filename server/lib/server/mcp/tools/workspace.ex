@@ -147,7 +147,9 @@ defmodule Server.MCP.Tool.FileTicket do
   @moduledoc """
   File a TICKET into the current workspace's lightweight tracker — the 2-second capture ("this
   is fucked, file it") that does NOT spin up a thread. Workspace-scoped (resolved from the bound
-  thread). Lands at `backlog`; promote it into a thread later when work starts.
+  thread). Lands at `backlog`; promote it into a thread later when work starts. With `issue_id` the
+  ticket owns that open issue: it leaves the operator's list, and the ticket's workline landing
+  resolves it naming its PR.
   """
   use Server.MCP.Tool
 
@@ -162,13 +164,33 @@ defmodule Server.MCP.Tool.FileTicket do
     field :labels, {:list, :string}, default: [], description: "Freeform labels"
     field :assignee, :string, description: "Who it's for (an agent handle or the operator), optional"
     field :epic_id, :integer, description: "File the ticket as a child of this epic (a ticket of kind epic), optional"
+    field :issue_id, :integer, description: "The open issue this ticket fixes, optional: the ticket owns it"
   end
 
   @impl true
   def execute(params, frame) do
-    case Tool.workspace_of(Identity.from_frame(frame)) do
+    identity = Identity.from_frame(frame)
+    {issue_id, params} = Map.pop(params, :issue_id)
+
+    with workspace_id when not is_nil(workspace_id) <- Tool.workspace_of(identity),
+         {:ok, issue} <- ownable(issue_id),
+         {:ok, ticket} <- Tickets.file(Map.put(params, :workspace_id, workspace_id)) do
+      if issue, do: {:ok, _} = Server.Dossier.own_issue(issue, ticket, "filed by #{identity.agent}")
+      reply(frame, {:ok, ticket}, &MCP.Brief.ticket/1)
+    else
       nil -> fail(frame, "no workspace bound to this session")
-      workspace_id -> reply(frame, Tickets.file(Map.put(params, :workspace_id, workspace_id)), &MCP.Brief.ticket/1)
+      error -> reply(frame, error, &MCP.Brief.ticket/1)
+    end
+  end
+
+  defp ownable(nil), do: {:ok, nil}
+
+  defp ownable(id) do
+    case Server.Repo.get(Server.Issue, id) do
+      %Server.Issue{state: "open", ticket_id: nil} = issue -> {:ok, issue}
+      %Server.Issue{state: "open", ticket_id: t} -> {:error, "issue ##{id} is already ticket ##{t}"}
+      %Server.Issue{} -> {:error, "issue ##{id} is closed"}
+      nil -> {:error, "no issue ##{id}"}
     end
   end
 end

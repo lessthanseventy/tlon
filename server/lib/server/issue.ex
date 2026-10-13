@@ -17,6 +17,7 @@ defmodule Server.Issue do
     field :state, :string, default: "open"
     field :created_at, :utc_datetime
     belongs_to :thread, Server.Thread
+    belongs_to :ticket, Server.Ticket
   end
 
   @doc """
@@ -39,4 +40,7 @@ defmodule Server.Issue do
   @doc "Close an issue, recording `resolution` when given (nil leaves the field as it was)."
   def resolve_changeset(issue, nil), do: state_changeset(issue, "closed")
   def resolve_changeset(issue, resolution), do: change(issue, state: "closed", resolution: resolution)
+
+  @doc "Give an issue to the ticket that fixes it."
+  def own_changeset(issue, ticket_id), do: change(issue, ticket_id: ticket_id)
 end

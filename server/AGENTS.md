@@ -83,7 +83,9 @@ and every layer the spine design's re-laid §9 asked for
   also goes to the workspace's sheriff (`Server.Sheriff`, bench archetype `sheriff`) on its beat
   thread as a copy, never instead of the operator's list (`Server.Office.Needs`, where a workline
   nothing has moved past the quiet window is `stalled`); a beat incident resolved naming its PR is
-  banked as a `postmortem:` fact.
+  banked as a `postmortem:` fact. An issue a ticket owns (`Dossier.fix_issue/1`, the operator's "Get it
+  fixed", or `file_ticket` with `issue_id`) leaves the operator's list, says who has it as info, and is
+  resolved naming the PR when the ticket's workline lands (`Dossier.resolve_fixed/2`).
 - **the toy's generators** (`Server.Generator`, `Server.Persona`, `Server.ToyPool`) — cheap model
   calls (`:generator_cmd`/`:generator_model`, default Claude Code, bare, on the flat ollama flash model), never on a
   render path: `Generator.run/1` is the one door (banter on, `:generator_daily_cap` per day counted in

@@ -12,6 +12,7 @@ const server = Bun.serve({
     if (req.method === "GET" && path.endsWith("/office/margin/1")) return Response.json([{ id: 1, author: "uqbar", body: "cut 650fa4a", at: 5 }])
     if (req.method === "GET" && path.endsWith("/office/margin/2")) return new Response("boom", { status: 500 })
     if (req.method === "POST" && path.endsWith("/life/routines/1/done")) return Response.json({ run: {}, level_up: true })
+    if (req.method === "POST" && path.endsWith("/issues/32/fix")) return Response.json({ ticket_id: 400, owner: "routed to tertius" })
     if (req.method === "POST" && path.endsWith("/issues/31/resolve")) return req.json().then((b) => { resolved = b; return Response.json({ resolved: 31 }) })
     return new Response("no", { status: 404 })
   },
@@ -70,4 +71,10 @@ test("resolving an issue sends why, so a resolution naming a PR banks the sherif
   const data = await import("../tui/data")
   await data.resolveIssue(31, "server/tmp/ gitignored in #327")
   expect(resolved).toEqual({ resolution: "server/tmp/ gitignored in #327" })
+})
+
+test("getting an issue fixed says which ticket owns it now and who has it", async () => {
+  process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
+  const data = await import("../tui/data")
+  expect(await data.fixIssue(32)).toBe("issue #32 is ticket #400 now, routed to tertius")
 })
