@@ -101,6 +101,36 @@ defmodule Server.Soul do
       Path.join(System.get_env("XDG_CONFIG_HOME") || Path.expand("~/.config"), "tlon/souls")
   end
 
+  @doc """
+  The seat's soul as `%{heading => text}`, or `nil` when it has no readable file. Forgiving like
+  `office/kit/souls.ts` `parseSoul`: unknown headings are kept, text before the first heading is
+  dropped, and nothing here raises — a bad soul is no soul. Read fresh on every call.
+  """
+  @spec read(String.t()) :: %{String.t() => String.t()} | nil
+  def read(name) do
+    with :ok <- check_name(name),
+         {:ok, raw} <- File.read(Path.join(dir(), name <> ".md")) do
+      sections(raw)
+    else
+      _ -> nil
+    end
+  end
+
+  defp sections(raw) do
+    {_head, acc} =
+      raw
+      |> String.split("\n")
+      |> Enum.reduce({nil, %{}}, fn line, {head, acc} ->
+        case Regex.run(~r/^##\s+(.+?)\s*$/, line) do
+          [_, h] -> {h, Map.put_new(acc, h, [])}
+          nil when is_binary(head) -> {head, Map.update!(acc, head, &[line | &1])}
+          nil -> {head, acc}
+        end
+      end)
+
+    Map.new(acc, fn {h, lines} -> {h, lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()} end)
+  end
+
   @doc "Write the seat's soul if it has none; an existing file is left alone, edited or not."
   @spec draft(integer(), String.t()) :: {:ok, :written | :exists} | {:error, :no_seat | :bad_name}
   def draft(workspace_id, name) do
