@@ -501,7 +501,10 @@ export class Sim<L extends { people: Seat[] }> {
   /** this tick's props: the scene's, plus what rides on an actor */
   props(): Prop[] {
     const r = this.running, g = this.eventGeo()
-    return r && g ? propsAt(r.kind, this.tick - r.since, g) : []
+    if (!r || !g) return []
+    const props = propsAt(r.kind, this.tick - r.since, g), host = r.idle[0] ? this.actors.get(r.idle[0]) : undefined
+    if (host && this.blackout()) props.push({ kind: "candle", x: host.x + 4, y: host.y, step: Math.floor(this.tick / 4) % 2 })
+    return props
   }
   blackout(): boolean { const r = this.running; return !!r && blackoutAt(r.kind, this.tick - r.since) }
   lampFlicker(): boolean | null { const r = this.running; return r ? flickerAt(r.kind, this.tick - r.since) : null }

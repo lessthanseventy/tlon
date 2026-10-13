@@ -16,7 +16,10 @@ export const EVENTS: Record<EventKind, Script> = {
     ticks: 700,
     beats: [{ at: 60, who: "idle", emote: "!" }, { at: 150, who: "first", say: "…was that the deploy?" }],
   },
-  power: { ticks: 700, beats: [] },
+  power: {
+    ticks: 700,
+    beats: [{ at: 100, who: "first", say: "Was that the breaker?" }, { at: 640, who: "idle", emote: "♪" }],
+  },
   duck: { ticks: 500, beats: [{ at: 200, who: "idle", emote: "?" }] },
 }
 

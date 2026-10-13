@@ -466,9 +466,10 @@ export class WideRoom extends Sim<Layout> {
   }
   private nightfall(sc: Scene, now: Date) {
     const h = now.getHours() + now.getMinutes() / 60, d = darkness(h), flick = this.lampFlicker()
-    if (d === 0 && flick === null) return
+    if (d === 0 && flick === null && !this.blackout()) return
     if (d > 0) sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.4 * d)
-    const lit = flick === null ? lampsLit(h, sc.lamps.length) : flick ? sc.lamps.length : 0
+    if (this.blackout()) sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.5)
+    const lit = this.blackout() ? 0 : flick === null ? lampsLit(h, sc.lamps.length) : flick ? sc.lamps.length : 0
     sc.lamps.slice(0, lit).forEach(([x, y]) => {
       sc.cv.glow(x - 14, y - 4, 28, 9, ROLE.body, 0.3); sc.cv.glow(x - 8, y - 6, 16, 13, ROLE.body, 0.3)
     })
