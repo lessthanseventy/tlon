@@ -115,6 +115,29 @@ defmodule Server.Workline.MergeTest do
     assert File.read!(Path.join(wt, "c.txt")) == "meanwhile\n"
   end
 
+  test "ignored scratch under server/tmp doesn't stop the replay of a commit that once tracked it", %{
+    repo: repo,
+    git: git,
+    other: other
+  } do
+    wt = repo <> "-wt"
+    {_, 0} = git.(["worktree", "add", "-q", wt, "work/finder"])
+    wgit = fn args -> System.cmd("git", ["-C", wt | args], stderr_to_stdout: true) end
+    File.mkdir_p!(Path.join(wt, "server/tmp"))
+    File.write!(Path.join(wt, "server/tmp/x"), "scratch\n")
+    {_, 0} = wgit.(["add", "-f", "server/tmp/x"])
+    {_, 0} = wgit.(["commit", "-qm", "stray"])
+    {_, 0} = wgit.(["rm", "-q", "--cached", "server/tmp/x"])
+    File.write!(Path.join(wt, ".gitignore"), "server/tmp/\n")
+    {_, 0} = wgit.(["add", ".gitignore"])
+    {_, 0} = wgit.(["commit", "-qm", "untrack it"])
+    assert File.exists?(Path.join(wt, "server/tmp/x"))
+    _ = land_upstream(other, "c.txt", "meanwhile\n", "meanwhile")
+
+    assert {:ok, _} = Merge.merge(repo, "finder")
+    assert {"", 0} = wgit.(["diff", "origin/main", "--stat", "--", "server/tmp"])
+  end
+
   test "the live checkout's own state is not its business: dirty, or on another branch, it lands and nothing there moves",
        %{repo: repo, git: git} do
     {_, 0} = git.(["checkout", "-qb", "elsewhere"])

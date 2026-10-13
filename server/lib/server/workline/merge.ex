@@ -58,6 +58,10 @@ defmodule Server.Workline.Merge do
   # rebase drops the commits whose patch origin already has: this machine's copies of what GitHub
   # merged under new ids
   defp rebase_in(tree, branch, rehash) do
+    # ExUnit's tmp_dir leaves ignored files here; git refuses to replay a commit that once tracked
+    # one of them over its ignored copy
+    _ = git(tree, ["clean", "-fdxq", "--", "server/tmp"])
+
     case past_golden(tree, git(tree, ["rebase", "--quiet", "origin/main"])) do
       {:ok, _} ->
         rehash_golden(tree, rehash)
