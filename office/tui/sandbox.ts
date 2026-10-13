@@ -13,13 +13,21 @@ const WEATHER = [
 
 export function toy() {
   let w = 0, night = false, visits: Visit[] = [], who = 0
+  const hired = new Set<string>()
   const threads = TITLES.map((title, i) => ({ id: 101 + i, title, stage: i % 2 ? "build" : "plan", awaiting: null, workspace_id: 1, lead: NAMES[1 + i]!, live: true, seat: "desk" as const }))
-  const bench = NAMES.map((name, i) => ({ workspace_id: 1, seat_id: i + 1, agent_id: i + 1, name, archetype: name === "scharlach" ? "sheriff" : "builder", lead: i === 1, model: null, ask: null }))
+  const bench: Agents["bench"] = NAMES.map((name, i) => ({ workspace_id: 1, seat_id: i + 1, agent_id: i + 1, name, archetype: name === "scharlach" ? "sheriff" : "builder", lead: i === 1, model: null, ask: null }))
   const roster = threads.map((t) => ({ agent: t.lead, thread_id: t.id, title: t.title, warm: true, thinking: t.id % 2 === 0, workspace_id: 1 }))
   return {
     snapshot(): Agents {
-      const shifts = bench.map((b, i) => ({ workspace_id: 1, seat_id: b.seat_id, name: b.name, archetype: b.archetype, crew: (i < 6 ? "day" : "night") as "day" | "night" | "all" }))
+      const shifts = bench.map((b, i) => ({ workspace_id: 1, seat_id: b.seat_id, name: b.name, archetype: b.archetype, crew: (hired.has(b.name) ? "all" : i < 6 ? "day" : "night") as "day" | "night" | "all" }))
       return { ...EMPTY, ok: true, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "" }, { name: "sheriff", meta: false, read_only: true, model: "" }], bench, threads, roster, weather: { ...WEATHER[w]! }, visits }
+    },
+    /** the hall's hire: a pretend seat on the bench, on shift for everyone */
+    hire(c: { name: string; archetype: string }) {
+      if (bench.some((b) => b.name === c.name)) return
+      const id = Math.max(...bench.map((b) => b.seat_id)) + 1
+      hired.add(c.name)
+      bench.push({ workspace_id: 1, seat_id: id, agent_id: id, name: c.name, archetype: c.archetype, lead: false, model: null, ask: null })
     },
     nextWeather() { w = (w + 1) % WEATHER.length },
     /** someone else walks over to `to` (the sim reads a visit younger than a minute) */
