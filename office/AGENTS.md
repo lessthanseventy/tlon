@@ -52,11 +52,16 @@ linked window at a time, Ctrl-] back to the room).
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
   `mise run office:sandbox` (`--sandbox`, or `OFFICE_SANDBOX=1`) runs it on a made-up world, no server: `tui/sandbox.ts` is the
   world and the play-key table, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only.
-  The sandbox keeps its looks, souls and hall in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire never reaches the machine's files.
+  The sandbox keeps its looks, souls, hall, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
   The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, locks, taken)` is seeded, no model, no I/O —
   `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `m` browses it), → hire, space locks a row so a pass keeps it. `hall.json`
   (`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card. → hires in the sandbox only; the
   office's hire call (server `Server.Soul.create`, souls-step-2) is not built yet.
+  The pet store (`P` from home; `kit/store.ts` the pure candidate — `roll(species, seed, taken)`, seeded, no model, no I/O —
+  `tui/store.ts` its card rows): ←/→ the shelf (the cat slot's species: cat, rabbit, bird, hamster, pet rock, A Bao A Qu), ↑ pass,
+  ↓ back, space locks a row, `e` renames, ⏎ adopts into the species' slot — the occupant leaves by the door (one pet per slot, no
+  history). `store.json` (`TLON_STORE`) holds species + seed + locks + edits. A new species is data: frames in `SPECIES_ART`, a
+  `SPECIES_VOICE` pack, a `SPECIES_BASE` row and a `SLOT_SPECIES` entry (`fillArt` lets it ship `sit` alone).
   `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `S` to save) and the finder (`/`); `talk.ts` what `m` (to a person) and `'` (to the office) post, on the workspace lobby; `reader.ts` a thread
   full-screen with its composer; `editor.ts` the text editing every input shares; `fuzzy.ts` the
   finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). `R` on a workline thread reviews its branch: the diff with a line cursor, `⏎`/`a` a note on the line, `A` on the file, `n`/`p` hunks, `N`/`P` files, `s` submits the notes with a verdict (comment, request changes, approve); unsent notes are kept per thread. The crew screen has tabs (`v`): each crew the operator has named, then everyone, the crews not on dimmed; `c` moves the selected coworker to the next crew (or every crew), `n` puts them on a new one by name, and `S` puts the next crew on (also `shifts` in the finder); a click on the header's crew (shown once a workspace has crews) does the same. The finder's `pencils down`, `lights out` (confirmed) and `back to work` are the office's stop controls (`Server.Pause`); while one is on, the header carries its mark (`✎ pencils down` / `◼ lights out`), and a click on it offers back to work. The arcade's
