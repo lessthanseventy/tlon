@@ -169,6 +169,49 @@ defmodule Server.WorktreeTest do
       {_, 0} = System.cmd("git", ["-C", wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "work"])
       assert Worktree.stranded(repo, "busy") =~ "unmerged"
     end
+
+    # GitHub's rebase-merge gives every commit a new SHA and can fold a commit's files into a
+    # neighbour's diff, so git cherry's patch-id check misses it. The change is on origin/main as
+    # the same file contents, so it is not stranded.
+    test "nil when a branch's commits were rebase-merged to origin/main — same files, new patch", %{
+      repo: repo,
+      git: git
+    } do
+      {_, 0} = git.(["checkout", "-qb", "work/landed"])
+      File.write!(Path.join(repo, "work.txt"), "change\n")
+      {_, 0} = git.(["add", "work.txt"])
+      {_, 0} = git.(["commit", "-qm", "the change"])
+      {_, 0} = git.(["checkout", "-q", "-"])
+
+      # main lands the same file contents in a commit with a different diff (a neighbouring file too)
+      File.write!(Path.join(repo, "work.txt"), "change\n")
+      File.write!(Path.join(repo, "other.txt"), "extra\n")
+      {_, 0} = git.(["add", "work.txt", "other.txt"])
+      {_, 0} = git.(["commit", "-qm", "rebase-merged"])
+      {_, 0} = git.(["update-ref", "refs/remotes/origin/main", "HEAD"])
+
+      {:ok, _} = Worktree.ensure(repo, "landed")
+      assert Worktree.stranded(repo, "landed") == nil
+    end
+
+    test "still names a branch whose change is NOT on origin/main, even if other files match", %{
+      repo: repo,
+      git: git
+    } do
+      {_, 0} = git.(["checkout", "-qb", "work/diverged"])
+      File.write!(Path.join(repo, "work.txt"), "mine\n")
+      {_, 0} = git.(["add", "work.txt"])
+      {_, 0} = git.(["commit", "-qm", "my change"])
+      {_, 0} = git.(["checkout", "-q", "-"])
+
+      File.write!(Path.join(repo, "work.txt"), "theirs\n")
+      {_, 0} = git.(["add", "work.txt"])
+      {_, 0} = git.(["commit", "-qm", "main's different change"])
+      {_, 0} = git.(["update-ref", "refs/remotes/origin/main", "HEAD"])
+
+      {:ok, _} = Worktree.ensure(repo, "diverged")
+      assert Worktree.stranded(repo, "diverged") =~ "unmerged"
+    end
   end
 
   describe "remove/2 and rename/3 — the cleanup and promotion paths" do

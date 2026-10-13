@@ -204,8 +204,29 @@ defmodule Server.Worktree do
     base = if branch_exists?(repo_path, "refs/remotes/origin/main"), do: "origin/main", else: "HEAD"
 
     case git(repo_path, ["cherry", base, branch]) do
-      {out, 0} -> out |> String.split("\n", trim: true) |> Enum.any?(&String.starts_with?(&1, "+"))
-      _ -> true
+      {out, 0} ->
+        out
+        |> String.split("\n", trim: true)
+        |> Enum.filter(&String.starts_with?(&1, "+"))
+        |> Enum.any?(fn "+ " <> sha -> not landed?(repo_path, base, String.trim(sha)) end)
+
+      _ ->
+        true
+    end
+  end
+
+  # A rebase merge can fold a commit's files into a neighbouring commit, so its patch-id differs from
+  # the one on main while its files are identical there: the change is merged all the same.
+  defp landed?(repo_path, base, sha) do
+    case git(repo_path, ["diff-tree", "--no-commit-id", "--name-only", "-r", sha]) do
+      {out, 0} ->
+        case String.split(out, "\n", trim: true) do
+          [] -> false
+          files -> match?({_, 0}, git(repo_path, ["diff", "--quiet", sha, base, "--" | files]))
+        end
+
+      _ ->
+        false
     end
   end
 
