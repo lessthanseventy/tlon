@@ -18,6 +18,8 @@ type World = {
   submitted?: string[];
   ownClock?: boolean;
   serverDown?: boolean;
+  dossierHangs?: boolean;
+  dossierFails?: string;
   submitFails?: boolean;
   writes?: { path: string; text: string }[];
 };
@@ -77,6 +79,8 @@ function engine(on, world: World = {}): Declare[] {
   on("mcp.call", ($, e) => {
     if (e.server === "lsp") return { value: { content: [{ type: "text", text: world.diagnostics ?? "no diagnostics" }], isError: false } };
     if (world.serverDown) throw new Error("connection refused");
+    if (e.tool === "get_dossier" && world.dossierHangs) return new Promise(() => {});
+    if (e.tool === "get_dossier" && world.dossierFails) return { value: { content: [{ type: "text", text: world.dossierFails }], isError: true } };
     sent.push({ tool: e.tool, args: e.args ?? {} });
     const text =
       e.tool === "get_dossier"
@@ -169,6 +173,38 @@ test("a get_dossier reply that isn't a dossier is logged where the seat's state 
   const last = world.writes!.at(-1);
   expect(last?.path).toBe("/state/tlon/citizen-claude-code.log");
   expect(last?.text).toContain('get_dossier: not a dossier: "session not registered on this server"');
+});
+
+test("a get_dossier that never answers holds the prompt only so long: the last brief goes, as of when it came", async ($, on) => {
+  const world: World = { ownClock: true };
+  engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+  await $.prompt.submit({ text: "start", wait: false });
+  await $.session.end({ reason: "clear", sessionId: "s1" });
+
+  world.dossierHangs = true;
+  let done = false;
+  const slow = $.prompt.submit({ text: "fresh", wait: false }).then((r) => ((done = true), r));
+  await settle();
+  expect(done).toBe(false);
+  await clock.advance(3_000);
+  const r = await slow;
+
+  expect(r.context?.[0]).toContain("# Brief: ship the mod");
+  expect(r.context?.[0]).toContain("the server didn't answer in time: this brief is as of");
+});
+
+test("with no brief yet and a server that can't answer, the prompt says so in one line, and the failure is logged", async ($, on) => {
+  const world: World = { dossierFails: "session not registered", writes: [], env: { ...IDENTITY, XDG_STATE_HOME: "/state" } };
+  engine(on, world);
+  await $.session.start(START);
+
+  const r = await $.prompt.submit({ text: "go", wait: false });
+  await settle();
+
+  expect(r.context).toEqual(["<tlon-brief>\nNo brief: the tlon server didn't answer get_dossier (session not registered). get_messages reads the thread when it is back.\n</tlon-brief>"]);
+  expect(world.writes!.some((w) => w.text.includes("get_dossier: session not registered"))).toBe(true);
 });
 
 test("a correction is proposed as a habit, once", async ($, on) => {

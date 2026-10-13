@@ -299,7 +299,7 @@ function newestAt(d: Dossier): Date | null {
 
 // A stamp, never a clock (§4). Minutes up to 90, then hours, then days — enough for a
 // reader to feel how stale the brief is without inventing precision.
-function ago(then: Date, now: Date): string {
+export function ago(then: Date, now: Date): string {
   const mins = Math.max(0, Math.round((now.getTime() - then.getTime()) / 60_000));
   if (mins < 90) return `${mins}m ago`;
   const hours = Math.round(mins / 60);

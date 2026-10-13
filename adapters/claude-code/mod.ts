@@ -11,7 +11,7 @@
 // waits on them, the release and their streak, and the coworkers' asks put to them as questions.
 
 import { doingOf, summaryOf } from "./lib/doing.ts";
-import { asDossier, renderBrief, type ChatterMessage, type Dossier } from "./lib/brief.ts";
+import { ago, asDossier, renderBrief, type ChatterMessage, type Dossier } from "./lib/brief.ts";
 import { detectCorrection } from "./lib/recall.ts";
 import {
   buildExtractionPrompt,
@@ -40,6 +40,10 @@ const LINE_EVERY_MS = 3_600_000;
 // On the Claude plan, past this much of the five-hour window: Explore subagents run on Haiku (and
 // every request at low effort, past plan/'s mark).
 const HOT_5H = 75;
+// How long a prompt waits on get_dossier before going on with the last brief (a hook's own
+// budget is 10s, and a $.clock wait counts against it).
+const DOSSIER_WAIT_MS = 3_000;
+const NO_BRIEF = "(no brief)";
 
 type Message = { author: string; body: string; at?: string };
 type Figure = { columns: number; rows: number; cells: string };
@@ -51,6 +55,8 @@ let cwd = "";
 let mainCheckout = "";
 let onOllama = false;
 let dossier: Dossier | null = null;
+let dossierAt = 0;
+let dossierError = "";
 let glance: Glance | null = null;
 let figure: Figure | null = null;
 let briefed = "";
@@ -105,13 +111,16 @@ async function refresh($) {
   let got: unknown;
   try {
     got = await call($, "get_dossier");
-  } catch {
-    return;
+  } catch (err) {
+    dossierError = err instanceof Error ? err.message : String(err);
+    return void note($, `get_dossier: ${dossierError}`);
   }
   // a reply that isn't one (a server mid-restart, a scratch release taken down) keeps the last good dossier
   const d = asDossier(got);
   if (!d) return void note($, `get_dossier: not a dossier: ${JSON.stringify(got).slice(0, 300)}`);
   dossier = d;
+  dossierAt = await $.clock.now();
+  dossierError = "";
   const recent: ChatterMessage[] = dossier.recent ?? [];
   const newest = Math.max(-1, ...recent.map((m) => m.id));
   if (seenMessage >= 0) for (const m of mentionsOf(recent, seenMessage, author)) $.ui.toast(`${m.author}: ${m.body.slice(0, 140)}`, { timeoutMs: 10_000 });
@@ -457,12 +466,25 @@ export function register(on) {
       lastCorrection = habit;
       declare($, "propose_habit", { text: habit, rationale: "auto-detected from a correction you made" });
     }
-    await refresh($);
-    const key = dossier ? JSON.stringify(dossier) : "";
-    if (!dossier || key === briefed) return next(e);
+    // a server that never answers holds the prompt DOSSIER_WAIT_MS at most; a sleep the host
+    // refuses never times out rather than racing ahead of the answer
+    const late = await Promise.race([
+      refresh($).then(() => false),
+      $.clock.sleep(DOSSIER_WAIT_MS).then(() => true, () => new Promise<boolean>(() => {})),
+    ]);
+    const brief = (text: string) => next({ ...e, context: [...(e.context ?? []), `<tlon-brief>\n${text}\n</tlon-brief>`] });
+    if (!dossier) {
+      if (briefed === NO_BRIEF) return next(e);
+      briefed = NO_BRIEF;
+      const why = late ? `took over ${DOSSIER_WAIT_MS / 1000}s` : dossierError || "no reply";
+      return brief(`No brief: the tlon server didn't answer get_dossier (${why}). get_messages reads the thread when it is back.`);
+    }
+    const key = JSON.stringify(dossier);
+    if (key === briefed) return next(e);
     briefed = key;
-    const brief = renderBrief(dossier, new Date(), await $.session.model());
-    return next({ ...e, context: [...(e.context ?? []), `<tlon-brief>\n${brief}\n</tlon-brief>`] });
+    const now = await $.clock.now();
+    const asOf = late ? `\n_the server didn't answer in time: this brief is as of ${ago(new Date(dossierAt), new Date(now))}, the last it gave._` : "";
+    return brief(renderBrief(dossier, new Date(), await $.session.model()) + asOf);
   });
 
   // #42 and @seat: the threads and the crew this session knows of.
