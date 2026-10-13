@@ -41,8 +41,9 @@ export function goalOf(session: Seat | null | undefined, cards: Map<number, Pt>,
   return session ? cards.get(session.thread_id) ?? edge : home
 }
 
-/** 1 px nudge for 12 ticks every 180 s of room time (ticks are 100 ms) */
-export function wiggle(tick: number): 0 | 1 {
+/** 1 px nudge for 12 ticks every 180 s of room time (ticks are 100 ms); `nudge` (a lost visitor asked after it) wiggles it now */
+export function wiggle(tick: number, nudge = false): 0 | 1 {
+  if (nudge) return tick % 4 >= 2 ? 1 : 0
   const t = tick % 1800
   return t < 12 && t % 4 >= 2 ? 1 : 0
 }
@@ -54,14 +55,14 @@ export const spineHome = (shelf: { x: number; y: number }): Pt => ({ x: shelf.x 
  * The shelf with its one spine too many (faintly glowing, wiggling now and then) while the book is
  * shelved; the neighbouring spine lying flat while a session is live. Drawn just in front of the shelf.
  */
-export function drawShelf(sc: Scene, shelf: { x: number; y: number; w: number; h: number }, shelved: boolean, live: boolean) {
+export function drawShelf(sc: Scene, shelf: { x: number; y: number; w: number; h: number }, shelved: boolean, live: boolean, nudge = false) {
   sc.item(shelf.y + shelf.h + 0.1, () => {
     if (live) {
       sc.px(shelf.x + 18, shelf.y + 2, 1, 5, ROLE.structure)
       sc.px(shelf.x + 14, shelf.y + 6, 5, 1, ROLE.live)
     }
     if (!shelved) return
-    const h = spineHome(shelf), x = h.x + wiggle(sc.tick), glow = tint(ROLE.assistant, ROLE.structure, sc.f % 2 ? 0.35 : 0.22)
+    const h = spineHome(shelf), x = h.x + wiggle(sc.tick, nudge), glow = tint(ROLE.assistant, ROLE.structure, sc.f % 2 ? 0.35 : 0.22)
     sc.px(x - 1, h.y, 1, 6, glow); sc.px(x + 1, h.y, 1, 6, glow); sc.px(x, h.y - 1, 1, 1, glow)
     sc.px(x, h.y, 1, 6, oxblood()); sc.px(x, h.y + 2, 1, 1, ROLE.body)
   })

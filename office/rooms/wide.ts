@@ -377,7 +377,7 @@ export class WideRoom extends Sim<Layout> {
       px(p.x - 1, p.y, 2, 2, ink); px(p.x - 2, p.y - 2, 1, 1, ink); px(p.x, p.y - 3, 1, 1, ink); px(p.x + 1, p.y - 2, 1, 1, ink)
     }
     const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
-    drawShelf(sc, shelf, mode === "shelved", !!a.uqbar)
+    drawShelf(sc, shelf, mode === "shelved", !!a.uqbar, this.shelfNudge())
     drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null)
     for (const p of this.planes) drawPlane(sc, p)
     const caller = this.visitor()
