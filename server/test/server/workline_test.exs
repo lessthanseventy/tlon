@@ -872,6 +872,39 @@ defmodule Server.WorklineTest do
       refute Server.Office.Needs.landing?(Repo.get!(Server.Thread, queued.id))
     end
 
+    test "requeue_stranded: the discard cap is per approval — a fixed branch approved again is requeued, and caps again",
+         %{repo: repo} do
+      queued = queued_lamp!()
+
+      for _ <- 1..3 do
+        Repo.update_all(Oban.Job, set: [state: "discarded"])
+        Workline.requeue_stranded()
+      end
+
+      assert [] = Workline.requeue_stranded()
+
+      # the earlier approval's discards happened a while ago; the fix is a new commit, approved again
+      hour_ago = DateTime.add(DateTime.utc_now(), -3600)
+      Repo.update_all(Oban.Job, set: [state: "discarded", inserted_at: hour_ago])
+      File.write!(Path.join(repo, "lamp.ex"), "fixed\n")
+      git!(repo, ["add", "lamp.ex"])
+      git!(repo, ["commit", "-q", "-m", "fix"])
+      git!(repo, ["branch", "-f", "work/lamp", "HEAD"])
+      {:awaiting, parked} = Workline.advance(Repo.get!(Server.Thread, queued.id), artifacts: AllPresent)
+      {:ok, reapproved} = Workline.approve(parked, artifacts: AllPresent, land: :queue)
+      assert %{"sha" => sha} = Workline.approval(reapproved)
+      assert sha == head(repo)
+
+      for _ <- 1..2 do
+        Repo.update_all(Oban.Job, set: [state: "discarded"])
+        assert [%{id: id}] = Workline.requeue_stranded()
+        assert id == queued.id
+      end
+
+      Repo.update_all(Oban.Job, set: [state: "discarded"])
+      assert [] = Workline.requeue_stranded()
+    end
+
     test "a thread that isn't a workline just reopens" do
       {:ok, t} = Channel.open_thread(%{title: "chat"})
       {:ok, closed} = Channel.close_thread(t)
