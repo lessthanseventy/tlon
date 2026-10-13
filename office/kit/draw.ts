@@ -133,6 +133,12 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
       if ((sc.tick >> 2) % 3) sc.px(mx + ((sc.tick >> 3) % 2), my - 2, 1, 1, tint(ROLE.prose, ROLE.ground, 0.6))
     })
     if (actor.snack > sc.tick && !sitting) sc.item(actor.y + 0.6, () => sc.px(left + 10, top + 12 - ((sc.tick >> 3) % 4 === 0 ? 2 : 0), 2, 2, ROLE.alarm)) // a snack, a bite now and then
+    // a fire drill's panic: both arms up, waving
+    if (sc.tick < (actor.flail ?? 0) && !sitting) sc.item(actor.y + 0.6, () => {
+      const w = sc.tick % 4 < 2 ? 0 : 1
+      sc.px(left - 1, top + 1 - w, 1, 7, ROLE.prose); sc.px(left - 2, top - 1 - w, 3, 2, ROLE.prose)
+      sc.px(left + 12, top + w, 1, 7, ROLE.prose); sc.px(left + 11, top - 2 + w, 3, 2, ROLE.prose)
+    })
     if (sc.tick < actor.five) sc.item(actor.y + 0.6, () => { sc.px(left + 11, top + 1, 1, 10, ROLE.prose); sc.px(left + 10, top, 3, 2, ROLE.prose) }) // a hand up for the high-five
     const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null
     sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : heightOf(actor.look), tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : lounging ? "between turns at their desk, still warm" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
@@ -258,15 +264,25 @@ export function drawCloset(sc: Scene, r: { x: number; y: number; w: number; h: n
   }
 }
 
-/** flames licking up the closet's front and smoke curling off its top, both moving with the tick */
+/** the rack on fire: tongues of flame up its front and over its top, an amber core, embers and a smoke plume, all moving with the tick */
 export function drawFire(sc: Scene, r: { x: number; y: number; w: number; h: number }) {
-  const beat = Math.floor(sc.tick / 3)
-  for (let i = 0; i < 3; i++) {
-    const h = 6 + ((beat + i * 2) % 3) * 3, x = r.x + 1 + i * 4, y = r.y + r.h - h
-    sc.px(x, y, 3, h, ROLE.alarm); sc.px(x + 1, y + Math.floor(h / 3), 1, h - Math.floor(h / 3), ROLE.attention)
-  }
+  const beat = Math.floor(sc.tick / 2)
   for (let i = 0; i < 4; i++) {
-    const age = (sc.tick + i * 9) % 36, y = r.y - 2 - Math.floor(age / 2)
-    sc.px(r.x + 2 + ((i * 5 + (age >> 3)) % 8), y, 2, 2, tint(ROLE.prose, ROLE.ground, 0.6 * (1 - age / 36)))
+    const x = r.x + i * 3, h = 12 + ((beat * 7 + i * 5) % 9) + (i === 1 || i === 2 ? 6 : 0), y = r.y + r.h - h
+    sc.px(x, y + 2, 3, h - 2, ROLE.alarm); sc.px(x + 1, y, 1, 2, ROLE.alarm)
+    sc.px(x + 1, y + Math.floor(h / 3), 1, h - Math.floor(h / 3), ROLE.body)
+    if ((beat + i) % 3 === 0) sc.px(x + 1, y + Math.floor(h / 3), 1, 1, ROLE.prose)
+  }
+  // licking over the top, flickering side to side
+  const sway = (beat % 4) - 1
+  sc.px(r.x + 3 + sway, r.y - 4, 6, 5, ROLE.alarm); sc.px(r.x + 5 + sway, r.y - 7, 2, 3, ROLE.alarm)
+  sc.px(r.x + 4 + sway, r.y - 2, 4, 3, ROLE.body); sc.px(r.x + 5 + sway, r.y - 4, 2, 2, ROLE.body)
+  for (let i = 0; i < 5; i++) {
+    const age = (sc.tick + i * 11) % 40
+    sc.px(r.x + 1 + ((i * 7 + age) % r.w), r.y - 6 - Math.floor(age / 3), 1, 1, age < 20 ? ROLE.body : ROLE.alarm)
+  }
+  for (let i = 0; i < 6; i++) {
+    const age = (sc.tick + i * 10) % 60, y = r.y - 8 - Math.floor(age / 2), s = 2 + (age > 30 ? 1 : 0)
+    sc.px(r.x + 2 + ((i * 5 + (age >> 3)) % 10), y, s, s, tint(ROLE.prose, ROLE.ground, 0.7 * (1 - age / 60)))
   }
 }
