@@ -389,7 +389,7 @@ defmodule Server.AttentionTest do
       {:ok, a} = Attention.ask(built.id, "pierre", "replace the old pet?", ["replace", "keep"])
       {:ok, _} = Channel.assign_lead(built.id, "emma")
 
-      assert {:ok, %Message{body: body}} = Attention.answer_ask(a.id, "andrew", "1")
+      assert {:ok, %Message{body: body}} = Attention.answer_prompt(a.id, "andrew", "1")
       assert body == "@emma (pierre asked, no longer leads it) replace the old pet? → replace"
     end
 
@@ -399,7 +399,7 @@ defmodule Server.AttentionTest do
       {:ok, _} = Channel.assign_lead(t.id, "tertius")
       {:ok, a} = Attention.ask(t.id, "pierre", "which slot?", ["cat", "dog"])
 
-      assert {:ok, %Message{body: "@pierre which slot? → cat"}} = Attention.answer_ask(a.id, "andrew", "1")
+      assert {:ok, %Message{body: "@pierre which slot? → cat"}} = Attention.answer_prompt(a.id, "andrew", "1")
     end
   end
 end
