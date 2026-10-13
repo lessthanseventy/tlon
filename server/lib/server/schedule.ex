@@ -59,11 +59,33 @@ defmodule Server.Schedule do
         cs
 
       {c, nil} ->
-        case Oban.Cron.Expression.parse(c) do
-          {:ok, %{reboot?: true}} -> add_error(cs, :cron, "needs a next time: @reboot has none")
-          {:ok, _} -> cs
-          _ -> add_error(cs, :cron, "not a cron: #{c}")
-        end
+        validate_cron(cs, c)
     end
   end
+
+  defp validate_cron(cs, "@every " <> _ = c),
+    do: if(interval(c), do: cs, else: add_error(cs, :cron, "not an interval: #{c} (@every 50m, @every 2h)"))
+
+  defp validate_cron(cs, c) do
+    case Oban.Cron.Expression.parse(c) do
+      {:ok, %{reboot?: true}} -> add_error(cs, :cron, "needs a next time: @reboot has none")
+      {:ok, _} -> cs
+      _ -> add_error(cs, :cron, "not a cron: #{c}")
+    end
+  end
+
+  @doc """
+  An `@every 50m` / `@every 2h` cron's interval in seconds: a fixed gap after the last firing, which no
+  cron can say (`*/50` fires at :00 and :50). nil for anything else.
+  """
+  @spec interval(String.t() | nil) :: pos_integer() | nil
+  def interval("@every " <> rest) do
+    case Integer.parse(rest) do
+      {n, "m"} when n > 0 -> n * 60
+      {n, "h"} when n > 0 -> n * 3600
+      _ -> nil
+    end
+  end
+
+  def interval(_cron), do: nil
 end

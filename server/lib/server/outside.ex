@@ -64,4 +64,32 @@ defmodule Server.Outside do
       end
     end
   end
+
+  @checkin "uqbar's check-in"
+  @checkin_body """
+  Your check-in. Releases, the inbox, health, fixes: THE CHECK-IN in your role. Then post one line \
+  here saying what you did, or that nothing needed you.\
+  """
+
+  @doc """
+  Uqbar's standing check-in on `workspace_id`: an agent schedule every 50 minutes whose firing posts
+  on its study, inside the warmth window, so its pane stays warm between them and runs the delegate
+  loop. Created once; found as it is after (the operator may have retimed or disabled it).
+  `{:ok, schedule}` or `{:error, :no_such_citizen | changeset}`.
+  """
+  def ensure_checkin(workspace_id) do
+    with {:ok, study} <- study(workspace_id) do
+      case Enum.find(Server.Schedules.in_workspace(workspace_id), &(&1.title == @checkin)) do
+        %Server.Schedule{} = s -> {:ok, s}
+        nil -> create_checkin(workspace_id, study)
+      end
+    end
+  end
+
+  defp create_checkin(workspace_id, study) do
+    attrs = %{workspace_id: workspace_id, kind: "agent", agent: "uqbar", standing: true, title: @checkin}
+
+    with {:ok, s} <- Server.Schedules.create(Map.merge(attrs, %{cron: "@every 50m", body: @checkin_body})),
+         do: s |> Ecto.Changeset.change(thread_id: study.id) |> Repo.update()
+  end
 end

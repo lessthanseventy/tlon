@@ -60,6 +60,9 @@ let dossierError = "";
 let glance: Glance | null = null;
 let figure: Figure | null = null;
 let briefed = "";
+// percent of the context window past which a turn starts by compacting (TLON_COMPACT_AT, the profile's
+// `compact_at`); 0 leaves compaction to Claude Code
+let compactAt = 0;
 let lastCorrection = "";
 let captured = 0;
 let capturing = false;
@@ -418,6 +421,7 @@ export function register(on) {
     onOllama = !!(await $.env.get("ANTHROPIC_BASE_URL"));
     mainCheckout = $.plugin.root.replace(/\/adapters\/?$/, "");
     api = operatorApi(await $.env.get("TLON_MCP_URL"));
+    compactAt = Number(await $.env.get("TLON_COMPACT_AT")) || 0;
     if (!thread || !author) {
       operator = !!(await $.env.get("TLON_OPERATOR"));
       if (operator) {
@@ -607,7 +611,14 @@ export function register(on) {
       void capture($, MIN_DELTA_CHARS);
       void refresh($);
     }
-    return next(e);
+    const done = await next(e);
+    // past its compaction point, a seat compacts while idle between turns (never under one: the host
+    // refuses that), so the next prompt carries the whole brief
+    if (thread && !e.agentId && compactAt && ((await $.session.usage()).context.percent ?? 0) >= compactAt)
+      void $.session
+        .compact({ instructions: "Keep what is in flight: the task at hand, what was decided and why, what is still open. The brief comes back whole after this." })
+        .catch((err) => note($, `compaction at ${compactAt}% refused: ${err}`));
+    return done;
   });
 
   on("session.compact", async ($, e, next) => {

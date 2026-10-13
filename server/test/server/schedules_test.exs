@@ -87,6 +87,52 @@ defmodule Server.SchedulesTest do
     assert Schedules.days(once, 2026, 11) == []
   end
 
+  test "@every fires a fixed interval after its last firing, which no cron can (50 minutes is not */50)", %{ws: ws} do
+    base = %{workspace_id: ws.id, kind: "script", title: "t", body: "true"}
+    assert {:ok, _} = Schedules.create(Map.put(base, :cron, "@every 2h"))
+
+    for bad <- ["@every 0m", "@every 50", "@every fifty minutes", "@every 50s"],
+        do: assert({:error, %{errors: [cron: _]}} = Schedules.create(Map.put(base, :cron, bad)))
+
+    s = schedule!(ws, %{cron: "@every 50m"})
+    fired = DateTime.add(s.created_at, 50 * 60)
+    assert Schedules.next_at(s, s.created_at) == fired
+    refute Schedules.due?(s, DateTime.add(fired, -1))
+    assert [_run] = Schedules.dispatch(fired)
+
+    s = Repo.get!(Server.Schedule, s.id)
+    assert Schedules.next_at(s, fired) == DateTime.add(fired, 50 * 60)
+    assert Schedules.dispatch(DateTime.add(fired, 49 * 60)) == []
+    assert Schedules.next_occurrence("@every 50m", fired) == DateTime.add(fired, 50 * 60)
+    assert length(Schedules.days(s, 2026, 2)) == 28
+  end
+
+  test "while the office is paused, a schedule that wakes a coworker or opens work waits; a check still runs", %{ws: ws} do
+    path = Path.join(System.tmp_dir!(), "tlon-sched-pause-#{System.unique_integer([:positive])}.json")
+    prior = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+
+    on_exit(fn ->
+      File.rm(path)
+
+      if prior,
+        do: Application.put_env(:server, :operator_config_path, prior),
+        else: Application.delete_env(:server, :operator_config_path)
+    end)
+
+    File.write!(path, JSON.encode!(%{"pause" => "pencils_down"}))
+    agent = schedule!(ws, %{cron: "* * * * *", kind: "agent", agent: "quain"})
+    workline = schedule!(ws, %{cron: "* * * * *", kind: "workline", title: "nightly tidy"})
+    check = schedule!(ws, %{cron: "* * * * *"})
+    now = later(2)
+
+    assert [run] = Schedules.dispatch(now)
+    assert run.schedule_id == check.id
+
+    File.write!(path, JSON.encode!(%{"pause" => "working"}))
+    assert MapSet.new(Schedules.dispatch(now), & &1.schedule_id) == MapSet.new([agent.id, workline.id])
+  end
+
   test "a script runs in its dir: exit and output on the run, failed when non-zero", %{ws: ws} do
     ok = schedule!(ws, %{cron: "@daily", body: "pwd; echo hello", dir: System.tmp_dir!()})
     {:ok, run} = Schedules.run_now(ok)

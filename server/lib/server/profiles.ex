@@ -28,7 +28,8 @@ defmodule Server.Profile do
             model: nil,
             system_prompt: nil,
             sandbox: nil,
-            permissions: nil
+            permissions: nil,
+            compact_at: nil
 
   @type t :: %__MODULE__{
           name: String.t(),
@@ -39,7 +40,8 @@ defmodule Server.Profile do
           model: %{provider: String.t(), model: String.t(), thinking: String.t()} | nil,
           system_prompt: String.t() | nil,
           sandbox: map() | nil,
-          permissions: map() | nil
+          permissions: map() | nil,
+          compact_at: pos_integer() | nil
         }
 end
 
@@ -949,8 +951,9 @@ defmodule Server.Profiles do
   end
 
   # The outside citizens a window is launched for (`Server.Outside`): on the Claude plan, unsandboxed,
-  # as the operator's own sessions run.
-  @citizens %{"uqbar" => %{model: @opus, mcp: @tlon_mcp, system_prompt: @uqbar_role}}
+  # as the operator's own sessions run. A long-lived delegate compacts before a turn at half full
+  # (`compact_at`, percent of its context window), so it never runs deep into it.
+  @citizens %{"uqbar" => %{model: @opus, mcp: @tlon_mcp, system_prompt: @uqbar_role, compact_at: 50}}
 
   @doc """
   The `%Profile{}` an outside citizen's window is launched with on `workspace_id`; nil for a name that
@@ -969,7 +972,8 @@ defmodule Server.Profiles do
           harness: :claude_code,
           mcp: t.mcp,
           model: t.model,
-          system_prompt: t.system_prompt
+          system_prompt: t.system_prompt,
+          compact_at: t.compact_at
         }
     end
   end
