@@ -281,6 +281,13 @@ describe("every species is data", () => {
   })
 })
 
+describe("the preview speaks in the species' voice", () => {
+  test("a hamster's preview lines are the hamster's, never Nina's", () => {
+    const v = SPECIES_VOICE.hamster, own = [...v.sassy.pet, ...v.sassy.muse, ...v.sweet.pet, ...v.sweet.muse]
+    for (let t = 0; t < 400; t += 10) expect(own).toContain(previewOf({ name: "Biscuit", species: "hamster", temperament: { warmth: 2, wits: 0, energy: 0 } }, t).line)
+  })
+})
+
 describe("a pet's shade", () => {
   test("a shade lightens the fur and never leaves 0..3", () => {
     expect(furOf(0)).toBe(ROLE.fieldInk)
