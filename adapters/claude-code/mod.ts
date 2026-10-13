@@ -23,7 +23,7 @@ import {
   type Entry,
 } from "./lib/capture.ts";
 import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
-import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord, type Glance } from "./lib/citizen.ts";
+import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
 import { CHIME_WAV } from "./lib/chime.ts";
 
 // Below this much new transcript a turn's capture waits for the next turn instead of paying for
@@ -417,10 +417,10 @@ export function register(on) {
     author = (await $.env.get("TLON_AUTHOR")) ?? "";
     onOllama = !!(await $.env.get("ANTHROPIC_BASE_URL"));
     mainCheckout = $.plugin.root.replace(/\/adapters\/?$/, "");
+    api = operatorApi(await $.env.get("TLON_MCP_URL"));
     if (!thread || !author) {
       operator = !!(await $.env.get("TLON_OPERATOR"));
       if (operator) {
-        api = operatorApi(await $.env.get("TLON_MCP_URL"));
         $.clock.every(GLANCE_MS, () => refreshOperator($));
         $.clock.every(GLANCE_MS * 5, () => refreshRelease($));
         void refreshOperator($);
@@ -632,6 +632,13 @@ export function register(on) {
     const phrase = glance?.persona?.catchphrase;
     if (!thread || !phrase) return next(e);
     return next({ ...e, props: { ...e.props, suffix: ` · ${phrase}` } });
+  });
+
+  // the plan's windows, for the office's meter: pushed when one moves a whole point, never polled
+  on("session.measure", async ($, e, next) => {
+    const report = e.changed.includes("rateLimits") ? usageReport(e.rateLimits) : null;
+    if (report) void $.http.fetch(`${api}/usage/claude`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(report) }).catch(() => {});
+    return next(e);
   });
 
   on("ui.render", { component: "TurnDuration" }, async ($, e, next) => {

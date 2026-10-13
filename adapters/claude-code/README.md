@@ -81,6 +81,8 @@ pure parts are `lib/` (bun-tested).
   through a hook is held to Claude's tool-call id shape, which other models' ids fail (kimi's
   `functions.Bash:0`), so a gateway seat's stream never passes through one.
 - `tool.describe` points Elixir edits at `edit_clause` / `rename_identifier`.
+- On the Claude plan, `session.measure` posts the five-hour and weekly windows to the office's meter
+  (`POST /api/usage/claude`, `Server.Usage`) whenever one moves a whole point.
 
 **Tools and commands** (from the mod, beside the server's)
 - `consult` (a tool) and `/consult`, `/fresh` (commands): a one-shot Claude Code on another ollama

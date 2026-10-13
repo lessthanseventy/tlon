@@ -140,6 +140,19 @@ export function operatorApi(mcpUrl: string | undefined): string {
   return `${origin ?? "http://127.0.0.1:4040"}/api`;
 }
 
+type Window = { percent: number; resets_at: string | null };
+
+/** The Claude plan's windows as the server takes them (`POST /api/usage/claude`); null off a subscription. */
+export function usageReport(limits: { kind: string; percentUsed: number; resetsAt?: string }[]): { five_hour?: Window; seven_day?: Window } | null {
+  const pick = (kind: string): Window | undefined => {
+    const l = limits.find((r) => r.kind === kind);
+    return l ? { percent: l.percentUsed, resets_at: l.resetsAt ?? null } : undefined;
+  };
+  const five_hour = pick("five_hour"), seven_day = pick("seven_day");
+  if (!five_hour && !seven_day) return null;
+  return { ...(five_hour && { five_hour }), ...(seven_day && { seven_day }) };
+}
+
 /** The commit trailer for the model that is actually running, on the address of its provider. */
 export function attribution(model: string, onOllama: boolean): string {
   return `Co-Authored-By: ${model} <noreply@${onOllama ? "ollama.com" : "anthropic.com"}>`;
