@@ -49,7 +49,7 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
  * a fuss of her, from where they are; `wet`: the tick her paws dry (until then each stride leaves a print),
  * `fell` whether the drink that wet them ended in the tub, `travelled` the pixels walked wet
  */
-export type Cat = { name: string; species: CatSpecies; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" | "drink" | "tub" } | null; wet: number; fell: boolean; travelled: number }
+export type Cat = { name: string; species: CatSpecies; shade?: number; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" | "drink" | "tub" } | null; wet: number; fell: boolean; travelled: number }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
@@ -137,7 +137,7 @@ export class Sim<L extends { people: Seat[] }> {
   protected temperament: Temperament = { warmth: 0, wits: 0, energy: 0 }
   setTemperament(t: Temperament) { this.temperament = t }
   /** pets.json, resolved: the cat slot's name and temperament */
-  setPets(p: Pets) { this.cat.name = p.cat.name; this.cat.species = p.cat.species as Cat["species"]; this.setTemperament(p.cat.temperament) }
+  setPets(p: Pets) { this.cat.name = p.cat.name; this.cat.species = p.cat.species as Cat["species"]; this.cat.shade = p.cat.shade ?? 0; this.setTemperament(p.cat.temperament) }
   /** the cat slot as configured, for the server to write her lines in her temperament */
   petProfile() { return { name: this.cat.name, species: this.cat.species, ...this.temperament } }
   /**

@@ -218,7 +218,9 @@ export type CatSpecies = (typeof SLOT_SPECIES.cat)[number]
 export const slotOf = (sp: string): "cat" | "dog" | undefined => (["cat", "dog"] as const).find((s) => (SLOT_SPECIES[s] as readonly string[]).includes(sp))
 /** grows with the roster, never ahead of it */
 export type Species = (typeof SPECIES)[number]
-export type PetSetting = { name: string; species: Species; temperament: Temperament }
+export const SHADES = 4
+/** `shade` 0..SHADES-1: a lighter fur within the species, never a different sprite */
+export type PetSetting = { name: string; species: Species; temperament: Temperament; shade?: number }
 type SlotFile = Partial<Omit<PetSetting, "temperament">> & { temperament?: string | Partial<Temperament> }
 export type PetsFile = { preset?: string; cat?: SlotFile; dog?: SlotFile }
 export type Pets = { cat: PetSetting; dog: PetSetting }
@@ -233,13 +235,13 @@ export const TEMPERAMENTS: Record<string, Temperament> = {
   zen: { warmth: 1, wits: 1, energy: -1 },
 }
 export const DEFAULT_PETS: Pets = {
-  cat: { name: CAT_NAME, species: "cat", temperament: TEMPERAMENTS.classic! },
-  dog: { name: DOG_NAME, species: "dog", temperament: { warmth: 2, wits: -1, energy: 1 } },
+  cat: { name: CAT_NAME, species: "cat", temperament: TEMPERAMENTS.classic!, shade: 0 },
+  dog: { name: DOG_NAME, species: "dog", temperament: { warmth: 2, wits: -1, energy: 1 }, shade: 0 },
 }
 export const PRESETS: Record<string, Pets> = { "nina-and-argos": DEFAULT_PETS }
 
 function resolveSlot(slot: keyof typeof SLOT_SPECIES, base: PetSetting, f: SlotFile | undefined): PetSetting {
-  if (!f || typeof f !== "object") return base
+  if (!f || typeof f !== "object") f = {}
   const t = f.temperament
   const temperament = typeof t === "string" ? (TEMPERAMENTS[t] ?? base.temperament)
     : t && typeof t === "object" ? Object.fromEntries((["warmth", "wits", "energy"] as const).map((k) => [k, clampAxis(Number(t[k] ?? base.temperament[k]) || 0)])) as Temperament
@@ -248,6 +250,7 @@ function resolveSlot(slot: keyof typeof SLOT_SPECIES, base: PetSetting, f: SlotF
     name: typeof f.name === "string" && f.name.trim() ? f.name.trim() : base.name,
     species: (SLOT_SPECIES[slot] as readonly string[]).includes(f.species as string) ? f.species! : base.species,
     temperament,
+    shade: Number.isInteger(f.shade) && f.shade! >= 0 && f.shade! < SHADES ? f.shade! : (base.shade ?? 0),
   }
 }
 

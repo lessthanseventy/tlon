@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
-import { dancing } from "../kit/draw"
+import { dancing, furOf } from "../kit/draw"
 import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
 import { bucketFor, NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, fillArt, SPECIES_ART } from "../kit/sprites"
+import { ROLE } from "../kit/palette"
 import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom, widePlan } from "../rooms/wide"
 import { DOOR, RIM_FLOOR } from "../kit/bathroom"
@@ -277,6 +278,17 @@ describe("every species is data", () => {
       room.setPets(resolvePets({ cat: { species: "baoaqu" } }))
       for (let i = 0; i < 120; i++) { room.step(a); room.render(a, focus, measure) }
     })
+  })
+})
+
+describe("a pet's shade", () => {
+  test("a shade lightens the fur and never leaves 0..3", () => {
+    expect(furOf(0)).toBe(ROLE.fieldInk)
+    expect(new Set([0, 1, 2, 3].map(furOf)).size).toBe(4)
+    expect(resolvePets({ cat: { shade: 2 } }).cat.shade).toBe(2)
+    expect(resolvePets({ cat: { shade: 9 } }).cat.shade).toBe(0)
+    expect(resolvePets({ cat: { shade: 1.5 } } as never).cat.shade).toBe(0)
+    expect(resolvePets(undefined).dog.shade).toBe(0)
   })
 })
 

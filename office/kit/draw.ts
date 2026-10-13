@@ -183,8 +183,10 @@ export function dancing(mode: string, fuss: Fussing | null, bpm: number | null):
 }
 
 /** Nina, with a light rim so a black cat reads on any floor; `over` is the depth to draw her at when she is up on furniture */
+export const furOf = (shade: number) => (shade > 0 ? tint(ROLE.prose, ROLE.fieldInk, [0, 0.15, 0.3, 0.45][shade]!) : ROLE.fieldInk)
+
 export function drawCat(sc: Scene, c: Cat, over: number | null, bpm: number | null) {
-  const f = sc.f, CAT = SPECIES_ART[c.species]
+  const f = sc.f, CAT = SPECIES_ART[c.species], fur = furOf(c.shade ?? 0)
   const grooming = c.mode === "sit" && (f + c.until) % 30 < 6
   const dance = dancing(c.mode, c.fuss, bpm)
   const phase = dance ? Math.floor((sc.tick * bpm!) / 300) % 2 : 0
@@ -205,7 +207,7 @@ export function drawCat(sc: Scene, c: Cat, over: number | null, bpm: number | nu
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, rim)
     // the collar's gems trade colours as they catch the light
     const [g, j] = f % 2 ? [ROLE.key, ROLE.body] : [ROLE.body, ROLE.key]
-    sc.blit(rows, x, y, { k: ROLE.fieldInk, t: ROLE.fieldInk, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge, p: ROLE.attention, g, j })
+    sc.blit(rows, x, y, { k: fur, t: fur, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge, p: ROLE.attention, g, j })
     const gem = rows.findIndex((row) => row.includes("g"))
     if (gem >= 0 && f % 9 === 0) {
       // a twinkle off the collar
