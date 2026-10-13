@@ -113,7 +113,8 @@ linked window at a time, Ctrl-] back to the room).
 - **A zoomed terminal resizes only the window it shows** (a throwaway session links just that one
   window); attaching a grouped session would resize every coworker's window to ours.
 - **tmux swallows kitty graphics**; under `$TMUX` the TUI uses half blocks unless
-  `OFFICE_GRAPHICS=kitty`.
+  `OFFICE_GRAPHICS=kitty`. The wide room is kitty-only by default; `OFFICE_WIDE=1` draws it in half
+  blocks too (`layoutScreen`), which is how `office:drive` and `release:smoke` reach the door.
 
 ## Dev loop
 
