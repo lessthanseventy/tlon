@@ -2,7 +2,7 @@
 // the crew board, the manager's and the lead's desks, two tables of four, the filing cabinet, the
 // server rack, and your queue.
 import { fit, type Measure } from "../canvas"
-import { glowOf, type Focus, type Scene } from "../draw"
+import { glowOf, screenOf, type Focus, type Scene } from "../draw"
 import { needsYou, tipOf } from "../crew"
 import { bossDesk, crewBoard, decor, execDesk } from "../furniture"
 import { ROLE, tint } from "../palette"
@@ -34,9 +34,10 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
         if (asks) sc.px(mx + 1, my + 1, 8, 5, f % 2 ? ROLE.attention : ROLE.raised)
         else {
           sc.px(mx + 1, my + 1, 8, 5, ROLE.ground)
-          // the lines scroll mid-turn and hold still between turns, their glow fading as the session cools
-          const glow = owner?.warmth ?? 0
-          if (seated && glow > 0) for (let ll = 0; ll < 3; ll++) sc.px(mx + 2, my + 1 + ll * 2, owner!.seat.thinking ? 1 + ((f + ll * 3 + c.x) % 6) : 6 - ll * 2, 1, glowOf(glow))
+          const screen = screenOf(seated, !!owner?.seat.thinking, owner?.warmth ?? 0)
+          if (screen === "code") for (let ll = 0; ll < 3; ll++) sc.px(mx + 2, my + 1 + ll * 2, 1 + ((f + ll * 3 + c.x) % 6), 1, glowOf(1))
+          // a screensaver: one dim dot wandering the dark screen
+          else if (screen === "saver") sc.px(mx + 1 + (((f >> 1) + c.x) % 8), my + 1 + (((f >> 2) + c.x) % 5), 1, 1, glowOf(0.6))
         }
         if (owner) decor(sc, owner.look, c.x + 11, ty + 12)
       }
