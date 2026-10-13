@@ -68,3 +68,4 @@ server/rel/burrito/office.xz
 # Claude Code writes these beside the claude-code mod each time it loads it.
 adapters/.claude-plugin/types/
 adapters/tsconfig.json
+server/tmp/
