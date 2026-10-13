@@ -157,6 +157,30 @@ defmodule Server.SwitchboardTest do
       refute_received {:woke, "wSandra", _}
     end
 
+    test "an answer to an ask the thread's old lead filed wakes the lead now, not the asker" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Handed"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "pierre", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder"})
+      {:ok, store} = Channel.open_thread(%{title: "pet store", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(store.id, "pierre")
+      {:ok, ask} = Server.Attention.ask(store.id, "pierre", "replace the old pet?", ["replace", "keep"])
+      {:ok, _} = Channel.assign_lead(store.id, "emma")
+
+      for {name, thread, pane} <- [{"emma", store, "wEmma"}, {"pierre", lobby, "wPierre"}] do
+        {:ok, _} =
+          Staff.start_session(%{agent_id: Staff.agent_by_name(name).id, thread_id: thread.id, pane_ref: pane})
+      end
+
+      flush()
+      {:ok, answer} = Server.Attention.answer_prompt(ask.id, "andrew", "1")
+      Switchboard.deliver(answer)
+
+      assert_received {:woke, "wEmma", _}
+      refute_received {:woke, "wPierre", _}
+      refute_received {:spawned, _}
+    end
+
     test "a wrong-case @mention still reaches the coworker, not the lead" do
       %{thread: thread} = staffed_thread()
 

@@ -459,12 +459,13 @@ defmodule Server.Attention do
        ) do
     label = Enum.find_value(opts, &(&1["key"] == key && &1["label"]))
 
-    text =
-      "#{addressee(prompt.thread_id, asker, prompt.payload["led"])} #{q} → #{label}" <>
-        if(rest == "", do: "", else: " — #{rest}")
+    to = addressee(prompt.thread_id, asker, prompt.payload["led"])
+    text = "#{to} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
+    # a reply wakes the prompt's author: answered to someone else, the @mention alone delivers it
+    reply_to = if to == "@#{asker}", do: prompt.id
 
     with :ok <- take_offer(prompt.payload, key),
-         {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: prompt.id}) do
+         {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: reply_to}) do
       resolve(Repo.get!(Message, prompt.id), "answered: " <> label)
       {:ok, reply}
     end
