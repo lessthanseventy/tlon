@@ -41,20 +41,20 @@ defmodule Server.Jobs.Verify do
   end
 
   @doc """
-  How a run ends: one that recorded a result since `since` — green or red — is done, red going to
-  the sheriff. One that recorded nothing was cut off (a service restart, a signal) or could not
+  How a run ends: one that recorded a result since `since` — green or red — is done; red goes back
+  to build on the same branch with the finding (`Server.Workline.red_verify/2`) and a copy to the
+  sheriff. One that recorded nothing was cut off (a service restart, a signal) or could not
   start, and is an error so Oban runs it again (`max_attempts` 3); only the last attempt tells the
   sheriff it could not run. A thread closed meanwhile is nobody's work: the job is cancelled, not retried.
   """
   def finish(tid, slug, since, {out, _code}, %{attempt: attempt, max_attempts: max}) do
     case {last_verify(slug), Channel.thread(tid)} do
       {%{id: id} = e, t} when id > since ->
-        if e.kind == "check_failed" and t,
-          do:
-            Server.Sheriff.report(
-              t,
-              "verify is red: #{e.detail["cmd"]} (exit #{e.detail["exit"]}) — #{tail(e.detail["tail"])}"
-            )
+        if e.kind == "check_failed" and t do
+          finding = "#{e.detail["cmd"]} (exit #{e.detail["exit"]}) — #{tail(e.detail["tail"])}"
+          Server.Sheriff.report(t, "verify is red: #{finding}")
+          Server.Workline.red_verify(t, finding)
+        end
 
         :ok
 
