@@ -1,8 +1,9 @@
 # office — the pixel-art room over the server
 
-The office is the server's state as a room: coworkers at desks when they work — and still there,
-leaning back with a steaming mug, while their session stays warm (the steam and their screen's
-glow fade over the warmth window, from the turn's end as the sim saw it) — in the lounge when
+The office is the server's state as a room: coworkers at desks when they work — and still there
+while their session stays warm, chair turned to the room, leaning back with a steaming mug (the
+steam fades over the warmth window, from the turn's end as the sim saw it; their screen is code
+mid-turn, a screensaver dot while warm, dark once cold: `screenOf`) — in the lounge when
 cold, queued at your door when a thread waits on you; the whiteboard holds the worklines, each
 marked where it stands (`cardState` in `kit/crew.ts`, read from the server's `seat` on each
 thread: ▶ its lead is at a desk, ⏸ parked for a seat under the leaf cap, ○ idle — nobody at a desk —
