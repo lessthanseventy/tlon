@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord } from "./citizen.ts";
+import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord, usageReport } from "./citizen.ts";
 import type { Dossier } from "./brief.ts";
 
 const NONE = { shown: [], more: 0 };
@@ -143,4 +143,24 @@ test("a figure packs two pixel rows to a cell: ▀ over its background, a lone l
   expect(Array.from(n.slice(3, 6))).toEqual([0x2584, 0x00ff00, 0x01000000]);
   expect(Array.from(n.slice(6, 9))).toEqual([0x2580, 0xff0000, 0x01000000]);
   expect(Array.from(n.slice(9, 12))).toEqual([32, 0x01000000, 0x01000000]);
+});
+
+describe("usageReport", () => {
+  test("the plan's two windows, as the server takes them", () => {
+    const limits = [
+      { kind: "five_hour", percentUsed: 34, resetsAt: "2026-10-13T19:00:00Z" },
+      { kind: "seven_day", percentUsed: 44.5, resetsAt: "2026-10-19T12:00:00Z" },
+      { kind: "spend_limit", percentUsed: 3 },
+    ];
+    expect(usageReport(limits)).toEqual({
+      five_hour: { percent: 34, resets_at: "2026-10-13T19:00:00Z" },
+      seven_day: { percent: 44.5, resets_at: "2026-10-19T12:00:00Z" },
+    });
+  });
+
+  test("one window alone is reported alone; off a subscription there is nothing to report", () => {
+    expect(usageReport([{ kind: "seven_day", percentUsed: 9 }])).toEqual({ seven_day: { percent: 9, resets_at: null } });
+    expect(usageReport([])).toBeNull();
+    expect(usageReport([{ kind: "spend_limit", percentUsed: 3 }])).toBeNull();
+  });
 });

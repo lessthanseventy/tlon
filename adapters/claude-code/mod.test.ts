@@ -72,6 +72,7 @@ function engine(on, world: World = {}): Declare[] {
   }));
   on("ui.invalidate", () => ({ value: undefined }));
   on("session.compact", ($, e) => (world.compactSkips ? { skip: "nothing to compact" } : { messages: [{ role: "user", text: "a summary", toolUses: [] }] }));
+  on("session.measure", ($, e) => ({ changed: e.changed }));
   on("ui.toast", ($, e) => {
     world.toasts?.push(e.text);
     return { value: undefined };
@@ -528,4 +529,20 @@ test("the operator's band reads the server the session points at, a scratch rele
 
   expect(urls).toContain("http://127.0.0.1:4141/api/office/needs");
   expect(urls.every((u) => u.startsWith("http://127.0.0.1:4141/api/"))).toBe(true);
+});
+
+test("a rate-limit window that moves is posted to the office's usage meter; a context move alone is not", async ($, on) => {
+  const posts: { url: string; body?: string }[] = [];
+  engine(on, { fetch: (e) => (e.init?.method === "POST" && posts.push({ url: e.url, body: e.init.body }), { status: 200, ok: true, headers: {}, text: "{}" }) });
+  await $.session.start(START);
+
+  const context = { window: 200_000 };
+  await $.session.measure({ context, rateLimits: [{ kind: "five_hour", percentUsed: 34, resetsAt: "2026-10-13T19:00:00Z" }], changed: ["context"] });
+  await settle();
+  expect(posts).toEqual([]);
+
+  await $.session.measure({ context, rateLimits: [{ kind: "five_hour", percentUsed: 35, resetsAt: "2026-10-13T19:00:00Z" }, { kind: "seven_day", percentUsed: 44 }], changed: ["rateLimits"] });
+  await settle();
+  expect(posts.map((p) => p.url)).toEqual(["http://127.0.0.1:4040/api/usage/claude"]);
+  expect(JSON.parse(posts[0]!.body!)).toEqual({ five_hour: { percent: 35, resets_at: "2026-10-13T19:00:00Z" }, seven_day: { percent: 44, resets_at: null } });
 });

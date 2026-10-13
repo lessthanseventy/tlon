@@ -135,6 +135,27 @@ defmodule Server.MCP.GatewayTest do
     {status, JSON.decode!(body)}
   end
 
+  test "POST /api/usage/claude keeps the plan's limits for the office snapshot; a bad report is a 422" do
+    Server.Usage.clear()
+    assert {200, %{"usage" => %{"claude" => nil}}} = get_json("/api/office")
+
+    assert {200, %{"ok" => true}} =
+             post_json("/api/usage/claude", %{
+               five_hour: %{percent: 34, resets_at: "2026-10-13T19:00:00Z"},
+               seven_day: %{percent: 44, resets_at: nil}
+             })
+
+    assert {200, %{"usage" => %{"claude" => claude}}} = get_json("/api/office")
+
+    assert %{
+             "five_hour" => %{"percent" => 34, "resets_at" => "2026-10-13T19:00:00Z"},
+             "seven_day" => %{"percent" => 44},
+             "at" => _
+           } = claude
+
+    assert {422, %{"error" => _}} = post_json("/api/usage/claude", %{five_hour: %{percent: "lots"}})
+  end
+
   test "PATCH /api/flags/:name flips a flag; the office snapshot shows it; an unknown name is a 404" do
     assert {200, %{"flags" => %{"build_mode" => false}}} = get_json("/api/office")
 

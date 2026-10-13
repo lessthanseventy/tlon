@@ -77,6 +77,8 @@ export type Agents = {
   flags?: Record<string, boolean>
   /** the release the service runs (`Server.Release.PM.live_release`): a change of `sha` between refreshes is a cut; null before the first, absent from an older server */
   release?: { sha: string; cut_at: string } | null
+  /** the Claude plan's windows as the last session on it reported them (`Server.Usage`); claude is null before any */
+  usage?: { claude: { five_hour?: UsageWindow; seven_day?: UsageWindow; at: string } | null }
   /** the life side per `home` workspace id (`Server.Office.status`); absent for every other workspace */
   life?: Record<string, LifeSummary>
   note?: string
@@ -91,3 +93,5 @@ export type Activity = { thread_id: number; agent: string; at: string; kind: str
 export type ThreadView = { messages: { id: number; author: string; body: string; at: string; kind: string; reply_to?: number | null }[]; more?: boolean; peek: string | null; window: string | null; activity?: Activity[] }
 
 export const EMPTY: Agents = { ok: false, roster: [], threads: [], counts: {}, awaiting: 0, bench: [], projects: [], tickets: [], workspaces: [], archetypes: [], models: [], notes: [], visits: [], triage: {}, health: null, calendar: {} }
+
+export type UsageWindow = { percent: number; resets_at: string | null }

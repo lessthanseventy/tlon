@@ -63,6 +63,7 @@ defmodule Server.Office do
       revs: Server.Rollout.revs(),
       flags: Server.Flags.office(),
       release: Server.Release.PM.live_release(),
+      usage: %{claude: Server.Usage.claude()},
       calendar: Room.calendar(ws_ids),
       celebrations: Server.Calendar.celebrations(Date.from_erl!(elem(:calendar.local_time(), 0)))
     }

@@ -22,6 +22,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/office/needs/dismiss    Office.Needs.dismiss {"key"} (put an item away; a blocking one is refused, 409)
       POST   /api/office/needs/retire     Office.Needs.retire_stranded {"key"} (a stranded checkout taken down, its branch kept)
       GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky, info — seated, landed, live — each with its actions)
+      POST   /api/usage/claude            {"five_hour"?, "seven_day"?: {"percent", "resets_at"}} → Usage.report (the office's meter; the mod posts it)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
       POST   /api/office/asks/:id         Attention.answer_ask {"key"} (one ask answered by its option key)
       POST   /api/office/jobs/:id/retry   Office.Needs.retry_job (a failed job, run again)
@@ -149,6 +150,15 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "GET", "sidebar", []), do: json(conn, 200, Board.sidebar())
   defp route(conn, "GET", "roster", []), do: json(conn, 200, Enum.map(Staff.roster(), &roster_row/1))
   defp route(conn, "GET", "office", []), do: json(conn, 200, Office.status())
+
+  defp route(conn, "POST", "usage", ["claude"]) do
+    {b, conn} = body(conn)
+
+    case Server.Usage.report(b) do
+      :ok -> json(conn, 200, %{ok: true})
+      {:error, why} -> json(conn, 422, %{error: why})
+    end
+  end
 
   defp route(conn, "GET", "office", ["banter", ws]) do
     case Integer.parse(ws) do
