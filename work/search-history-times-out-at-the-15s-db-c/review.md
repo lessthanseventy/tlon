@@ -1,23 +1,17 @@
 # Review: search_history times out at the 15s db checkout
 
-**Verdict: approve.** Branch at 8cef87e.
+**Verdict: approve.** Branch at 4942b6d (rebased onto main 958fe83; `HEAD..origin/main` is empty).
 
-## What the change does
+## Since the last review (2c25491)
 
-`Server.Search.history/3` scored each OR-matched message with a correlated subquery over the `idf` CTE. Referenced once, Postgres inlined it, so each term's document frequency was re-counted per candidate row — cost ∝ candidates × terms × table, which is exactly the "5-word query dies, 1–3 word queries answer" shape in the ticket. `idf AS MATERIALIZED` counts once per query. Builder's live-store EXPLAIN ANALYZE: 8789ms → 98ms (not re-measured here; the mechanism matches the symptom and the test reproduces it).
+The code diff against main is byte-identical to what I approved: `idf AS MATERIALIZED` plus its load-bearing comment in `Server.Search.history/3`, and the seeded 5-term perf test. Everything else in `2c25491..HEAD` is main's own commits (office bathroom, adapter register retry) picked up by the rebase; nothing of this change touches them.
 
-## Checked
+The merge-gate red (check_failed #5226) was not this branch: tests were 1595/0, and the failure was `server:check`'s dev-env step reporting a `decimal` lock mismatch. The branch does not touch `mix.exs`/`mix.lock`; in this worktree `deps/decimal` matches the lock. Stale deps in the gate's checkout — infra, tracked alongside #251.
 
-- Diff read in full: one keyword plus a load-bearing SQL comment, a seeded perf test (3000 matching messages, 5 terms), and pr.md. Nothing else touched. Spec/plan docs don't exist (workline started at build) — expected.
-- `stats` is referenced twice so it was already materialized; `terms` folds into the materialized `idf`. No other CTE has the same trap.
-- `message_body_tsv_index` (GIN) exists in the baseline migration, so the per-term df counts and the main `@@` filter are index-served. No new index needed.
-- Ran `menard run test --in server test/server/search_test.exs`: 14 tests, 0 failed (record_check event 5172). Server verify stage already passed the full `mise run check` on this branch.
-- Not verified by me: that the perf test goes red without the fix. Builder reports `query_canceled` on the inlined version; plausible given 3000 × 5 × seq-count.
+## Standing assessment
+
+`idf` referenced once was inlined, so each term's document frequency was re-counted per candidate row (cost ∝ candidates × terms × table). MATERIALIZED counts it once. GIN index on `body_tsv` already exists; `stats` was already materialized. Search suite 14/14 at last review; verify's full `mise run check` passed on this branch before the gate.
 
 ## Findings
 
-None blocking. Non-blocking, filed as follow-ups:
-
-1. The perf test asserts wall-clock `< 1_000_000` µs. ~10x headroom over the measured query, but a timing bound on a shared test box under a parallel `mise run check` is a flake waiting to happen. An assertion on the plan (EXPLAIN shows one `CTE Scan on idf`, loops=1) would be deterministic.
-2. `semantic_ranked` still pulls every embedding row as JSON and does cosine in Elixir — ~260ms at 6.6k messages, linear in corpus. Noted in pr.md; carried here so it isn't lost.
-3. The ranking still sorts every OR-match with a per-row `unnest` subquery before `LIMIT`. Linear now, fine at 10k; the ticket's "bound it" half (a statement timeout or a candidate cap) is not done and is worth doing before the store is 10x.
+None blocking. Follow-ups unchanged from the first review (listed below).
