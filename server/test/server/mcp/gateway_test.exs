@@ -154,6 +154,7 @@ defmodule Server.MCP.GatewayTest do
            } = claude
 
     assert {422, %{"error" => _}} = post_json("/api/usage/claude", %{five_hour: %{percent: "lots"}})
+    assert {422, %{"error" => _}} = post_json("/api/usage/claude", [1, 2])
   end
 
   test "PATCH /api/flags/:name flips a flag; the office snapshot shows it; an unknown name is a 404" do
