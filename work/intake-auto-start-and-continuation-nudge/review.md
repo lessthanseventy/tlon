@@ -1,21 +1,22 @@
 # Review: intake-auto-start-and-continuation-nudge
 
-**Verdict: request_changes**
+**Verdict: approve**
 
-Branch 391b280 vs origin/main: tests only, 40 lines (server/test/server/pause_test.exs, server/test/server/maintain_test.exs). No code change: main already gates `Intake.run` (intake.ex:24) and `Workline.Continuation.run` (continuation.ex:39) on `Pause.state() == :working` since 2bdf1d3 (#172). This PR pins the two paths pause_test did not cover: the 30-minute `start_stalled` fallback and the Maintain quiet-band sweep, each with its resume half. Server verify passed `mise run check` on the branch.
+Round 2, at 932fc27. Branch vs origin/main: tests only (server/test/server/pause_test.exs +19, server/test/server/maintain_test.exs +25) plus work/intake-auto-start-and-continuation-nudge/pr.md. No production code changes: main already gates `Intake.run` (intake.ex:24) and `Workline.Continuation.run` (continuation.ex:39) on `Pause.state() == :working` since 2bdf1d3 (#172). This PR pins the two paths pause_test did not cover: the 30-minute `start_stalled` fallback and the Maintain quiet-band sweep, each with its resume half.
 
-## Blocking
+## Round 1 findings, checked
 
-1. **maintain_test.exs:171-178 leaks the operator's real settings file into the rest of the suite.** The test sets a tmp `operator_config_path`, then `on_exit` calls `Application.delete_env` instead of restoring the value config/test.exs set (`/nonexistent/tlon-test-config.json`). Once deleted, `OperatorConfig.path/0` (operator_config.ex:153) falls back to `~/.config/tlon/config.json`. Every test that runs after it in the same VM (the module is `async: false`; module order is random) reads the operator's real pause state and `*_minutes` settings, and any later `Pause.pencils_down()` would write his real config. With pencils down set for real on this box, later `Intake.run` / `Continuation.run` tests go red. Fix: restore `prior` exactly as pause_test.exs:17-33 does.
+1. **Fixed.** maintain_test.exs:173-182 now saves `prior = Application.get_env(:server, :operator_config_path)` before the `put_env` and restores it in `on_exit` (`delete_env` only when there was no prior). Identical to the pause_test.exs pattern. The suite no longer falls back to the operator's real `~/.config/tlon/config.json` after this test.
+2. **Fixed.** pr.md committed: tests only, fix is 2bdf1d3 (#172), closes #179, names #262 as the gap not covered. Publish has a body.
 
-2. **`work/intake-auto-start-and-continuation-nudge/pr.md` is not committed.** The build brief asked for it, and `Server.Workline.Publish` (publish.ex:171) uses it as the PR body, falling back to a plan/spec heading; this workline has neither, so the PR would publish with an empty description. A few lines: pinning tests only, fix already on main as 2bdf1d3 (#172), closes #179.
+Diff since 1cdbf25 outside work/: the 6-line on_exit change only.
 
-## Verified
+## Evidence
 
-- pause_test: a `todo` ticket 31 minutes stale, one seated builder; under pencils down `Intake.run` starts nothing and the ticket stays `todo`; after back_to_work it is promoted. Exercises `start_stalled` through the real gate.
-- maintain_test: a `plan`-stage workline, `quiet_ms: 0`; no `↻ continue` while paused, one after resume. Exercises `sweep_quiet` → `Continuation.run(quiet: true)` through the real gate.
-- Commit carries the model trailer (claude-sonnet-5-5) and the Tlon stamps.
+- Server verify on the branch: `mise run check` exit 0 (recorded 2026-10-13T11:09:08Z, server:check 9 passed / 0 failed).
+- Builder reports the full server suite on 932fc27: 1602 tests, 0 failures (ireneo, msg #6947). Not re-run by me.
+- Commit carries the model trailer (claude-sonnet-5-5) and Tlon stamps.
 
-## Not in scope
+## Not in scope, already tracked
 
-`staff_child`, `/api/tickets/:id/start` and `ticket-start` do not check Pause (fact #1639). A manager or operator start under pencils down is a different path from intake; filed as a follow-up, not folded in. If the live service predates 2bdf1d3, the #248/#250 starts under pencils down are explained by that alone and `server:restart` is the fix.
+`staff_child`, `/api/tickets/:id/start` and `ticket-start` do not check Pause (fact #1639). Tracked as ticket #262; my round-1 follow-up #267 is a duplicate of it, so no follow-up is re-filed here. If the live service predates 2bdf1d3, the #248/#250 starts under pencils down are explained by that alone and `server:restart` is the fix.
