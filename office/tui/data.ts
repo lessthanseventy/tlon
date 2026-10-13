@@ -105,7 +105,8 @@ export async function needs(): Promise<Need[]> {
   } catch { return lastNeeds }
 }
 export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `/threads/${tid}/verify`, {}, () => `verify on #${tid} queued`)
-export const answerAsk = (id: number, key: string) => write("answering", `/office/asks/${id}`, { key }, () => "answered")
+/** answer one prompt — a pane's dialog, an ask, the release gate — by its id, so a key can't land in another prompt on its thread */
+export const answer = (id: number, key: string) => write("answering", `/office/prompts/${id}`, { key }, () => "answered")
 export const retryJob = (id: number) => write("retrying the job", `/office/jobs/${id}/retry`, {}, () => "running it again")
 export const dismissJob = (id: number) => send("DELETE", "clearing the job", `/office/jobs/${id}`, () => "dismissed")
 export const dismissRollout = (id: number) => send("DELETE", "clearing the note", `/office/rollout/${id}`, () => "done")
@@ -149,7 +150,7 @@ async function send(method: "POST" | "PATCH" | "DELETE", what: string, path: str
     return `${what} failed: ${(e as Error).message}`
   }
 }
-/** post to a thread as the operator; a body naming an open prompt's option answers it */
+/** post to a thread as the operator: a plain post, never an answer to a prompt (that is `answer`) */
 export const post = (id: number, body: string) => write(`reply to #${id}`, `/threads/${id}/messages`, { body }, () => `sent to #${id}`)
 export const ticketFile = (ws: number, title: string) => write("filing a ticket", "/tickets", { workspace_id: ws, title }, (j) => `filed ticket #${j.id}`)
 /** send a ticket to the workspace's manager to staff (no manager: its lead starts it) */

@@ -273,7 +273,7 @@ defmodule Server.Release.PMTest do
     end
   end
 
-  describe "answering the gate (Attention.respond/3, the Needs answer path)" do
+  describe "answering the gate by its id (Attention.answer_prompt/3, the Needs answer path)" do
     setup ctx do
       checks_pass!(ctx, ctx.main)
       grader!(ctx, %{@low | "blast" => 4})
@@ -283,7 +283,7 @@ defmodule Server.Release.PMTest do
     end
 
     test "approve: the gate resolves and the cut is queued", ctx do
-      assert {:ok, reply} = Attention.respond(root(ctx.ws).id, "andrew", "a")
+      assert {:ok, reply} = Attention.answer_prompt(ctx.gate.id, "andrew", "a")
       assert reply.reply_to == ctx.gate.id
       assert Repo.get(Server.Message, ctx.gate.id).resolution == "answered: a"
 
@@ -294,7 +294,7 @@ defmodule Server.Release.PMTest do
     end
 
     test "not yet: the gate resolves and nothing is queued", ctx do
-      assert {:ok, _} = Attention.respond(root(ctx.ws).id, "andrew", "not yet")
+      assert {:ok, _} = Attention.answer_prompt(ctx.gate.id, "andrew", "not yet")
       assert Repo.get(Server.Message, ctx.gate.id).resolution == "answered: not yet"
       refute_enqueued(worker: Server.Jobs.Release)
     end

@@ -127,16 +127,11 @@ defmodule Server.Alerts do
 
   defp actions(%{kind: "gate", thread_id: t}), do: [read_doc(t), call("Approve", "/approve", t), other(t)]
 
-  defp actions(%{kind: "dialog", thread_id: t, options: options}),
-    do: Enum.map(options || [], &call(&1["label"], "/messages", t, %{body: &1["key"]})) ++ [other(t)]
+  # by the prompt's own id, so a key meant for one prompt on a thread never lands in another
+  defp actions(%{kind: "dialog", thread_id: t, ref: id, options: options}),
+    do: answers("/api/office/prompts/#{id}", options) ++ [other(t)]
 
-  # by the ask's own id, so two asks on one thread never cross
-  defp actions(%{kind: "ask", ref: id, options: options}),
-    do:
-      for(
-        o <- options || [],
-        do: %{label: o["label"], method: "POST", path: "/api/office/asks/#{id}", body: %{key: o["key"]}}
-      )
+  defp actions(%{kind: "ask", ref: id, options: options}), do: answers("/api/office/asks/#{id}", options)
 
   defp actions(%{kind: k, thread_id: t}) when k in ~w(question mention stalled),
     do: ["Reply…" |> call("/messages", t) |> Map.put(:input, "body")]
@@ -157,6 +152,9 @@ defmodule Server.Alerts do
     do: [%{label: "Take the checkout down", method: "POST", path: "/api/office/needs/retire", body: %{key: key}}]
 
   defp actions(_need), do: []
+
+  defp answers(path, options),
+    do: for(o <- options || [], do: %{label: o["label"], method: "POST", path: path, body: %{key: o["key"]}})
 
   defp call(label, sub, t, body \\ nil),
     do: %{label: label, method: "POST", path: "/api/threads/#{t}#{sub}", body: body}

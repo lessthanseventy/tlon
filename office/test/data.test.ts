@@ -3,6 +3,7 @@ import { afterAll, expect, test } from "bun:test"
 // a stand-in server: GET /office answers the snapshot, `revs` and `flags` included
 const lifeBody = { xp: 650, level: 2, next_level_at: 900, streaks: { "1": 3 }, due: [{ routine_id: 1, title: "teeth", due_at: "2026-10-08T07:00:00Z", window_remaining: 600 }], quests: [{ id: 5, title: "book dentist", due_at: null, xp: 20 }], today: [] }
 let resolved: unknown = null
+let answered: unknown = null
 const server = Bun.serve({
   port: 0,
   fetch: (req) => {
@@ -13,6 +14,7 @@ const server = Bun.serve({
     if (req.method === "GET" && path.endsWith("/office/margin/2")) return new Response("boom", { status: 500 })
     if (req.method === "POST" && path.endsWith("/life/routines/1/done")) return Response.json({ run: {}, level_up: true })
     if (req.method === "POST" && path.endsWith("/issues/32/fix")) return Response.json({ ticket_id: 400, owner: "routed to tertius" })
+    if (req.method === "POST" && path.endsWith("/office/prompts/9")) return req.json().then((b) => { answered = b; return Response.json({ ok: true, message_id: 10 }) })
     if (req.method === "POST" && path.endsWith("/issues/31/resolve")) return req.json().then((b) => { resolved = b; return Response.json({ resolved: 31 }) })
     return new Response("no", { status: 404 })
   },
@@ -77,4 +79,11 @@ test("getting an issue fixed says which ticket owns it now and who has it", asyn
   process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
   const data = await import("../tui/data")
   expect(await data.fixIssue(32)).toBe("issue #32 is ticket #400 now, routed to tertius")
+})
+
+test("a prompt is answered by its own id, never by a post on its thread", async () => {
+  process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
+  const data = await import("../tui/data")
+  expect(await data.answer(9, "1")).toBe("answered")
+  expect(answered).toEqual({ key: "1" })
 })

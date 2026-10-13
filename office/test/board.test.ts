@@ -30,7 +30,7 @@ describe("a workline card's state", () => {
   })
   test("needs you: it awaits the operator, asks something, or is on the needs list — before anything else", () => {
     expect(cardState(snap([]), thread(7, { awaiting: "spec approval" }))).toEqual({ kind: "needs", why: "awaits spec approval" })
-    expect(cardState(snap([]), thread(7, { prompt: { summary: "which one?" } }))?.why).toBe("asks: which one?")
+    expect(cardState(snap([]), thread(7, { prompt: { id: 1, summary: "which one?" } }))?.why).toBe("asks: which one?")
     const t = thread(7, { seat: "desk" })
     expect(cardState(snap([t]), t, { needs: [7] })?.kind).toBe("needs")
   })

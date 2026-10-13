@@ -23,7 +23,7 @@ function world(): Agents {
       th(11, "nolan", "build"),
       th(12, "nolan", "build"),
       th(13, "nolan", "review", { awaiting: "qa" }),
-      th(14, "paula", "review", { prompt: { summary: "pick a flavour", options: null } }),
+      th(14, "paula", "review", { prompt: { id: 1, summary: "pick a flavour", options: null } }),
       th(15, "paula", "review"),
       th(16, "paula", null), // DOING: a plain thread someone is at a desk on
     ],
