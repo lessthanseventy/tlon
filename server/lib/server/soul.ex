@@ -120,6 +120,11 @@ defmodule Server.Soul do
     end
   end
 
+  @doc "`draft/2` for every seat on the bench, as `%{name => result}`."
+  @spec draft_all(integer()) :: %{String.t() => {:ok, :written | :exists} | {:error, atom()}}
+  def draft_all(workspace_id),
+    do: Map.new(Workspaces.bench_all(workspace_id), &{&1.name, draft(workspace_id, &1.name)})
+
   defp check_name(name), do: if(name =~ ~r/\A[a-z0-9][a-z0-9_-]*\z/, do: :ok, else: {:error, :bad_name})
 
   defp body(name, archetype) do

@@ -28,6 +28,7 @@
 #   ticket-route <ticket>                       send a ticket to the workspace's manager to staff
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
 #   persona <ws> <name> [--reroll]               a seat's persona as JSON (made once at hire); --reroll draws a new seed
+#   soul <ws> [name]                             draft SOUL.md for a seat (or the whole bench); never over an existing file
 #   coworker-set <ws> <agent-id> <model> <effort> <ask>  retarget one (from its next session)
 #   workspace-new <name> [repo-path]            a new workspace, with a repo when given
 #   aside <ws> <agent-id> <question…>           ask a coworker one thing, outside any thread
@@ -310,7 +311,7 @@ case "$cmd" in
     ws="${1:-}"; name="${2:-}"; arch="${3:-}"; model="${4:--}"; effort="${5:--}"; ask="${6:--}"
     { int "$ws" && [ -n "$name" ] && [ -n "$arch" ] && knobs "$model" "$effort" "$ask"; } ||
       { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype> [<provider/model>|- [low|medium|high|xhigh|max|- [ask|allow|-]]]' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:ok, _} = Server.Persona.ensure($ws, c.name); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
+    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:ok, _} = Server.Persona.ensure($ws, c.name); {:ok, _} = Server.Soul.draft($ws, c.name); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
     ;;
 
   persona)
@@ -320,6 +321,17 @@ case "$cmd" in
       { echo 'usage: tlon-cli.sh persona <workspace-id> <name> [--reroll]' >&2; exit 2; }
     fn=ensure; [ "$flag" = "--reroll" ] && fn=reroll
     exec "$SERVER" rpc "case Server.Persona.$fn($ws, \"$(esc "$name")\") do {:ok, p} -> IO.puts(JSON.encode!(p)); {:error, e} -> IO.puts(\"refused: #{inspect(e)}\"); raise(\"refused\") end"
+    ;;
+  soul)
+    # soul <workspace-id> [name]: draft a seat's SOUL.md, or every seat's on the bench; an existing soul is left alone
+    ws="${1:-}"; name="${2:-}"
+    int "$ws" || { echo 'usage: tlon-cli.sh soul <workspace-id> [name]' >&2; exit 2; }
+    if [ -n "$name" ]; then
+      call="%{\"$(esc "$name")\" => Server.Soul.draft($ws, \"$(esc "$name")\")}"
+    else
+      call="Server.Soul.draft_all($ws)"
+    fi
+    exec "$SERVER" rpc "res = $call; for {n, r} <- Enum.sort(res), do: IO.puts(\"#{n}: #{inspect(r)}\"); if Enum.any?(res, fn {_, r} -> not match?({:ok, _}, r) end), do: raise(\"refused\")"
     ;;
   coworker-set)
     # Retarget a coworker in a workspace (from its next session): model, effort, ask/allow.
@@ -583,7 +595,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|read|message|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|red-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|read|message|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|soul|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|red-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
     exit 2
     ;;
 esac
