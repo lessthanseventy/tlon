@@ -14,3 +14,5 @@ Claude-Session trailers; it could not be observed from the sandbox. Not covered:
 
 **Checked.** `menard run test --in server`: 1624 tests, 0 failures (new: `orphans_test.exs`, a spawn
 test in `arbiter_tmux_test.exs`).
+
+Resolves issue #33 (ticket #286).
