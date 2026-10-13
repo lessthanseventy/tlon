@@ -6,7 +6,7 @@ import { ROLE, tint } from "../palette"
 import type { Rect, Tile } from "../tiles"
 import type { CatPlan, Pt } from "../sim"
 import type { Agents } from "../types"
-import { BATH, DOOR, RIM, RIM_FLOOR } from "../bathroom"
+import { BATH, DOOR, RIM, RIM_FLOOR, TUB_IN } from "../bathroom"
 import { fishWatch, HALL, OFF_LANE, OFF_W, corner, type Layout, type Zones } from "../../rooms/wide"
 
 const TOWER_X = 78, PERCH_TOP = { x: 83, y: 52 }, PERCH_MID = { x: 83, y: 69 }
@@ -27,7 +27,7 @@ export function catCornerTile(z: Zones): Tile<Layout> & { cat(): CatPlan } {
     spots: () => ({}),
     cat: (): CatPlan => ({
       nap: CAT_NAP, desk: CAT_DESK, play: PLAY, litter: LITTER, perches: [PERCH_TOP, PERCH_MID], warm: CAT_WARM,
-      bath: { rim: RIM, floor: RIM_FLOOR },
+      bath: { rim: RIM, floor: RIM_FLOOR, tub: TUB_IN },
       // the zoomies: your office (your desk, her tower) and the lounge (the couch back, the top of
       // the TV, the kitchen counter), each first the floor spot she lands on after
       leaps: [
@@ -36,9 +36,10 @@ export function catCornerTile(z: Zones): Tile<Layout> & { cat(): CatPlan } {
       ],
       // the armchair too, when it's empty: a princess takes the good seat
       lounge: [{ x: L0 + 52, y: 104 }, { x: w - 40, y: 126 }, { x: shelf.x + 8, y: 82 }],
-      spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }, fishWatch(z)],
+      // the tub too: now and then she wanders off and curls up in it
+      spots: [CAT_NAP, { x: 24, y: 140 }, { x: 40, y: 104 }, CAT_DESK, PERCH_TOP, PERCH_MID, PLAY, { x: L0 + 52, y: 104 }, TUB_IN, fishWatch(z)],
       via: (p: Pt) =>
-        p.x === RIM.x && p.y === RIM.y ? RIM_FLOOR
+        (p.x === RIM.x && p.y === RIM.y) || (p.x === TUB_IN.x && p.y === TUB_IN.y) ? RIM_FLOOR
           : p.x === CAT_DESK.x && p.y === CAT_DESK.y ? { x: CAT_DESK.x, y: 100 }
           : p.x === PERCH_TOP.x && p.y <= PERCH_MID.y ? { x: PERCH_TOP.x, y: 94 }
             : p.x === LITTER.x && p.y === LITTER.y ? { x: LITTER.x, y: 106 }
