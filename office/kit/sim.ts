@@ -480,6 +480,9 @@ export class Sim<L extends { people: Seat[] }> {
     return d ? { doorX: d.x + 12, hallY: d.y, ceilY: d.y - 100, leftX: Math.min(...this.plan.lounge.map((s) => s.x)), windowX: 0 } : null
   }
 
+  /** whether this room can stage a scene at all; the TUI says so when `e` finds it cannot */
+  eventsHere(): boolean { return this.eventGeo() !== null }
+
   /** start a scripted scene — one at a time, only where there is a door; false when refused */
   event(kind?: EventKind): boolean {
     if (this.running || this.alarmed || !this.eventGeo() || !this.actors.size) return false

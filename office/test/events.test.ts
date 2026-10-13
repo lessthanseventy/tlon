@@ -95,6 +95,10 @@ describe("Sim.event", () => {
     expect(r.event("duck")).toBe(false)
     expect(r.eventNow()).toBeNull()
   })
+  test("eventsHere says whether this room can stage one, so a refusal can be explained", () => {
+    expect(new RailRoom().eventsHere()).toBe(false)
+    expect(new WideRoom(696).eventsHere()).toBe(true)
+  })
 })
 
 describe("the cast", () => {
