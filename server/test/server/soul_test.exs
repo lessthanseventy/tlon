@@ -91,4 +91,32 @@ defmodule Server.SoulTest do
     assert %{"lonnrot" => {:ok, :written}, "yu" => {:ok, :exists}} = Soul.draft_all(ws.id)
     assert File.read!(Path.join(dir, "yu.md")) == "mine"
   end
+
+  describe "read/1" do
+    test "splits a soul file into its sections, trimmed", %{dir: dir} do
+      File.mkdir_p!(dir)
+
+      File.write!(
+        Path.join(dir, "atlas.md"),
+        "## Quirks\nA chipped mug.\n\n## Wants\nA quiet desk.\nA window.\n\n## Diary\n"
+      )
+
+      assert %{"Quirks" => "A chipped mug.", "Wants" => "A quiet desk.\nA window.", "Diary" => ""} =
+               Soul.read("atlas")
+    end
+
+    test "no file, an unreadable name, or text with no headings is no sections, never a raise", %{dir: dir} do
+      assert Soul.read("atlas") == nil
+      assert Soul.read("../etc/passwd") == nil
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "atlas.md"), "just some text\n")
+      assert Soul.read("atlas") == %{}
+    end
+
+    test "an unknown heading is kept", %{dir: dir} do
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "atlas.md"), "## Hobbies\nknots\n")
+      assert %{"Hobbies" => "knots"} = Soul.read("atlas")
+    end
+  end
 end
