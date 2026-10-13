@@ -49,4 +49,29 @@ defmodule Server.OutsideTest do
     assert {:error, :no_such_citizen} = Outside.post(thread.id, "nobody", "hello")
     assert Channel.thread_messages(thread) == []
   end
+
+  describe "uqbar in the app: a citizen with a window of its own" do
+    test "names/0 lists the outside citizens: registered as outside, seated nowhere" do
+      {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, ws} = Server.Workspaces.register(%{name: "Bench"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, _} = Server.Staff.register_agent(%{name: "by-hand", mandate: "m", engine: "claude-code"})
+
+      assert Outside.names() == ["uqbar"]
+    end
+
+    test "study/1 is uqbar's own thread on a workspace, led by it: one, opened once, reopened fresh if closed" do
+      {:ok, uqbar} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
+
+      assert {:ok, %{agent_id: lead, workspace_id: wsid, state: "open"} = study} = Outside.study(ws.id)
+      assert lead == uqbar.id and wsid == ws.id
+      assert {:ok, %{id: same}} = Outside.study(ws.id)
+      assert same == study.id
+
+      {:ok, _} = Channel.close_thread(study)
+      assert {:ok, %{id: fresh, state: "open"}} = Outside.study(ws.id)
+      assert fresh != study.id
+    end
+  end
 end

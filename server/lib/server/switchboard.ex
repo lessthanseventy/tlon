@@ -329,7 +329,8 @@ defmodule Server.Switchboard do
       author = String.downcase(message.author)
       standing? = match?(%Thread{id: ^thread_id}, Server.Channel.machine_thread(thread.workspace_id))
 
-      # only the lead or a bench seat is ours to staff: an outside citizen (`Server.Outside`) runs its own session
+      # only the lead or a bench seat is ours to staff: an outside citizen (`Server.Outside`) only on
+      # the thread it leads, its study
       benched =
         if thread.workspace_id,
           do: MapSet.new(Server.Workspaces.bench(thread.workspace_id), & &1.agent_id),

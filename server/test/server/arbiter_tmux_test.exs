@@ -149,6 +149,22 @@ defmodule Server.Arbiter.TmuxTest do
     refute cmd =~ "qwen3-coder"
   end
 
+  test "spawn: uqbar on its study gets its citizen profile — its role and the Claude plan — not the bare engine launcher",
+       %{ws: ws} do
+    {:ok, _} = Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+    {:ok, study} = Server.Outside.study(ws.id)
+    exports = ~s(export TLON_THREAD="#{study.id}"\nexport TLON_AUTHOR="uqbar")
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {@not_up, 1}}))
+    Application.put_env(:server, :spawn_launcher_claude, "/opt/claude/launch.sh")
+
+    assert {:ok, _} = Arbiter.Tmux.spawn(exports)
+    assert_received {:tmux, ["-L", _, "new-session", "-d", "-s", _, "-n", _, cmd]}
+    assert cmd =~ "TLON_ROLE_PROMPT_FILE="
+    assert cmd =~ "claude-code/launch.sh --model claude-opus-5-5"
+    refute cmd =~ "/opt/claude/launch.sh"
+    assert_received {:tmux, ["-L", _, "set-option", "-w", "-t", _, "@funes_agent", "uqbar"]}
+  end
+
   test "spawn: no session yet → new-session -d with the leaf as window 0, tagged; the claude engine gets the claude launcher",
        %{ws: ws, thread: t, exports: exports} do
     Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {@not_up, 1}}))

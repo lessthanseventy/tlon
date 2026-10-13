@@ -180,13 +180,14 @@ defmodule Server.Arbiter.Tmux do
   # Which harness: the coworker's PROFILE decides (Claude Code first, 2026-09-25) — the same
   # `Harness.driver(profile.harness).launch_command/1` the staffing pass spawns its leaves with, so a
   # spawn-on-post and a staffing spawn can never disagree about a seat. Only an author with no seat
-  # on the workspace's bench falls back to `launcher_by_engine/1`.
+  # on the workspace's bench and no citizen profile (`Profiles.citizen_profile/2`) falls back to
+  # `launcher_by_engine/1`.
   defp launcher(ws, author) do
     # everyone hired, not only the crew on shift: an off-shift seat's duty (the sheriff's beat, a
     # nightly schedule) still runs as that seat, never as the engine fallback
     bench = Workspaces.bench_all(ws)
 
-    case Profiles.seat_profile(author, bench, ws) do
+    case Profiles.seat_profile(author, bench, ws) || Profiles.citizen_profile(author, ws) do
       %Profile{} = profile ->
         _ = Profiles.materialise!(profile)
         Harness.driver(profile.harness).launch_command(profile)

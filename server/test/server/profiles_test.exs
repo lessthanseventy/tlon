@@ -369,6 +369,26 @@ defmodule Server.ProfilesTest do
       assert Profiles.model_label(nil, "otalora") == nil
     end
 
+    test "a citizen's profile: uqbar on the Claude plan with its own role, no sandbox; anyone else has none" do
+      p = Profiles.citizen_profile("uqbar", 7)
+      assert %Server.Profile{name: "uqbar", workspace_id: 7, harness: :claude_code, sandbox: nil} = p
+      assert %{provider: "anthropic", model: "claude-opus-5-5"} = p.model
+      assert p.system_prompt =~ "Uqbar"
+      assert Profiles.citizen_profile("nobody", 7) == nil
+
+      launch = Server.Harness.ClaudeCode.launch_command(p)
+      assert launch =~ "TLON_ROLE_PROMPT_FILE="
+      assert launch =~ "--model claude-opus-5-5"
+      refute launch =~ "TLON_PROVIDER="
+      refute launch =~ "TLON_SANDBOX_FILE="
+    end
+
+    test "model_label names a citizen's model too, so its commits are stamped" do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "Citizens"})
+      assert Profiles.model_label(ws.id, "uqbar") == "anthropic/claude-opus-5-5 (claude_code)"
+    end
+
     test "builder and surveyor both instantiate on the claude_code harness" do
       assert Profiles.instantiate(%{archetype: :builder, name: "hronir"}).harness == :claude_code
       assert Profiles.instantiate(%{archetype: :surveyor, name: "tertius"}).harness == :claude_code

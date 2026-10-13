@@ -384,6 +384,20 @@ defmodule Server.SwitchboardTest do
       assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
 
+    test "the operator's message on uqbar's study spawns uqbar's pane there, as itself" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
+      {:ok, _} = Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, study} = Server.Outside.study(ws.id)
+
+      {:ok, m} = Channel.post(%{thread_id: study.id, author: "andrew", body: "how's the release?"})
+      assert {:pending, _} = Switchboard.deliver(m)
+
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="uqbar")
+      assert exports =~ ~s(TLON_THREAD="#{study.id}")
+      assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+    end
+
     test "a clocked-out lead is NOT spawned — a fresh session it can't run is worse than waiting" do
       Application.put_env(:server, :engine_presence, Manual)
       on_exit(fn -> Application.delete_env(:server, :engine_presence) end)

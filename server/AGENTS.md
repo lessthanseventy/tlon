@@ -34,6 +34,10 @@ and every layer the spine design's re-laid §9 asked for
   back to work. `POST /api/office/pause`, `tlon-cli pause`, the office's finder.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
   instance; warmth is measured from `last_active_at`, never a heartbeat.
+- **outside citizens** (`Server.Outside`) — agents seated on no bench, like `uqbar`, the operator's
+  delegate: they post as themselves. Uqbar leads one thread of its own, its study (`Outside.study/1`),
+  where a post spawns its pane on its citizen profile (`Profiles.citizen_profile/2`: the Claude plan,
+  unsandboxed, started in the repo's main checkout); the study is a duty, so it takes no coworker's seat.
 - **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;
   `check_cmd` as a separate reproducibility axis; `supersedes`; `forgotten_at` tombstones), append-only
   `event` with a closed `kind`, `issue`, `todo`, `question`, `habit`. Read capped-and-counted.
