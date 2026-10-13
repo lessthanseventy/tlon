@@ -68,6 +68,11 @@ describe("the volume", () => {
     expect(on).toBeGreaterThan(0); expect(on).toBeLessThan(20)
     expect(wiggle(5)).toBe(wiggle(5 + 1800))
   })
+  test("a nudge wiggles the shelved spine off the 3-minute beat", () => {
+    expect(wiggle(1002)).toBe(0)
+    expect(wiggle(1002, true)).toBe(1)
+    expect(wiggle(1000, true)).toBe(0)
+  })
 })
 
 const WIDTH = 696, NOW = new Date(2026, 9, 5, 21, 0)
