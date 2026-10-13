@@ -35,7 +35,7 @@ one. adapters holds what makes a Claude Code session a citizen of its thread:
 - **An adapter holds no state.** No retry queue, no spill file. The mod's variables are per-session
   bookkeeping (what was last briefed, how far capture has read), lost on a reload; when the server
   is unreachable it does nothing else. Its one file is a log nothing reads back:
-  `$XDG_STATE_HOME/tlon/citizen-<author>.log`, a line for each reply a hook met and couldn't use.
+  `$XDG_STATE_HOME/tlon/citizen-<author>.log`, a line for each reply a hook met and couldn't use, and each `get_dossier` that failed.
 - **Identity rides the connection, never a call.** The token minted for a (thread, agent) is the
   whole identity: `mcpServers.tlon`'s `headersHelper` (`scripts/tlon-cli.sh token`) mints a fresh one
   per connect, so auth survives a server restart, and the env carries identity only (`TLON_MCP_URL`,
