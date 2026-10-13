@@ -221,7 +221,7 @@ defmodule Server.Office.Banter do
             MapSet.member?(names, who),
             line = String.trim(line),
             line != "",
-            do: %{"who" => who, "line" => String.slice(line, 0, 90)}
+            do: %{"who" => who, "line" => clip(line)}
 
       _ ->
         nil
@@ -269,7 +269,7 @@ defmodule Server.Office.Banter do
   @doc false
   def parse(out) do
     Server.JsonBlob.first_valid(out, fn
-      %{"line" => l} when is_binary(l) -> if String.trim(l) != "", do: String.slice(String.trim(l), 0, 90)
+      %{"line" => l} when is_binary(l) -> if String.trim(l) != "", do: clip(String.trim(l))
       _ -> nil
     end)
   end
@@ -381,6 +381,13 @@ defmodule Server.Office.Banter do
 
   defp said(kind, out, speaker, _ctx) do
     with line when is_binary(line) <- parse(out), do: [%{agent: speaker.name, line: line, kind: kind, delay: 0}]
+  end
+
+  # a balloon holds ~136 characters; the model is asked for 80 and runs over: a cut mid-word reads as a typo
+  defp clip(line) do
+    if String.length(line) <= 120,
+      do: line,
+      else: (line |> String.slice(0, 121) |> String.replace(~r/\s+\S*$/u, "")) <> "…"
   end
 
   defp release(ws, a, b),

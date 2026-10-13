@@ -162,4 +162,18 @@ defmodule Server.Office.BanterTest do
     assert Banter.parse(~s({"line": "  "})) == nil
     assert Banter.parse(~s(ok {"line": " hi "})) == "hi"
   end
+
+  test "a line too long for a balloon is cut at a word, and says so; one that fits is whole" do
+    long = String.duplicate("sourdough starter ", 10)
+    cut = Banter.parse(Jason.encode!(%{line: long}))
+    assert String.ends_with?(cut, "starter…") or String.ends_with?(cut, "sourdough…")
+    assert String.length(cut) <= 121
+
+    fits = "Those clouds over the lobby look like the ones we had at the old place, before the roof leaked."
+    assert Banter.parse(Jason.encode!(%{line: fits})) == fits
+
+    turns = Jason.encode!(%{turns: [%{who: "ada", line: long}, %{who: "bo", line: fits}]})
+    assert [%{"line" => a}, %{"line" => ^fits}] = Banter.parse_chat(turns, MapSet.new(["ada", "bo"]))
+    assert String.ends_with?(a, "…")
+  end
 end
