@@ -180,7 +180,9 @@ defmodule Server.Release.PM do
   @doc """
   Cut `sha`: refused unless it is still ahead of live and releasable; else the release script moves
   the pointer and builds, the changelog is recorded and posted, and the restart asked for.
-  `{:ok, changelog}` | `{:error, why}`, either way said on the root thread.
+  `{:ok, changelog}` | `{:error, why}`, either way said on the root thread; a cut that fails is
+  recorded as `check_failed` under `release:<sha>`, the operator's `release_failed`
+  (`Server.Office.Needs`) until a cut succeeds.
   """
   def cut(workspace_id, sha, notes, opts \\ []) do
     root = root(opts)
@@ -206,8 +208,30 @@ defmodule Server.Release.PM do
       {:ok, changelog}
     else
       {:error, why} = error ->
+        {:ok, _} =
+          Server.Dossier.record_event(%{
+            thread_id: root_thread_id(workspace_id),
+            kind: "check_failed",
+            correlation: "release:#{sha}",
+            detail: %{"cmd" => "release cut", "exit" => 1, "to" => sha, "tail" => why, "notes" => notes}
+          })
+
         notice(workspace_id, "release #{short(sha)} not cut: #{why}")
         error
+    end
+  end
+
+  @doc """
+  Cut again the release a failed cut (`event_id`, its `check_failed` event) was for, with its notes:
+  queued like an approved gate's cut, checked again when it runs. `{:ok, sha}` | `{:error, why}`.
+  """
+  def retry(event_id) do
+    case Repo.get(Event, event_id) do
+      %Event{kind: "check_failed", correlation: "release:" <> sha, thread_id: tid, detail: detail} ->
+        with {:ok, _job} <- queue("cut", Repo.get!(Thread, tid).workspace_id, sha, detail["notes"]), do: {:ok, sha}
+
+      _ ->
+        {:error, "no failed release cut #{event_id}"}
     end
   end
 

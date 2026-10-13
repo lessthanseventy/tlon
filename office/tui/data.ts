@@ -91,7 +91,7 @@ export async function corkboard(ws: number): Promise<CorkNote[]> {
 }
 /** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
 export type Need = {
-  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "stranded" | "issue"
+  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "stranded" | "issue" | "publish_failed" | "release_failed"
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
 }
@@ -108,6 +108,10 @@ export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `
 export const answerAsk = (id: number, key: string) => write("answering", `/office/asks/${id}`, { key }, () => "answered")
 export const retryJob = (id: number) => write("retrying the job", `/office/jobs/${id}/retry`, {}, () => "running it again")
 export const dismissJob = (id: number) => send("DELETE", "clearing the job", `/office/jobs/${id}`, () => "dismissed")
+/** a landed workline whose publish failed, pushed and its PR opened again */
+export const republish = (tid: number) => write(`republishing #${tid}`, `/threads/${tid}/republish`, {}, (j) => (j.published ? `published as ${j.published}` : "nothing to publish to"))
+/** a failed release cut, by its event, queued to cut again */
+export const retryRelease = (id: number) => write("retrying the cut", `/release/retry/${id}`, {}, (j) => `cut of ${String(j.queued).slice(0, 7)} queued`)
 export const dismissRollout = (id: number) => send("DELETE", "clearing the note", `/office/rollout/${id}`, () => "done")
 /** put an inbox item away without acting on it; one that work waits on is refused */
 export const dismissNeed = (key: string) => write("putting it away", "/office/needs/dismiss", { key }, () => "put away")

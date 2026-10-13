@@ -26,6 +26,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/office/asks/:id         Attention.answer_ask {"key"} (one ask answered by its option key)
       POST   /api/office/jobs/:id/retry   Office.Needs.retry_job (a failed job, run again)
       DELETE /api/office/jobs/:id         Office.Needs.dismiss_job (a failed job the operator has seen)
+      POST   /api/release/retry/:id       Release.PM.retry (a failed cut, by its check_failed event: its cut queued again)
       GET    /api/office/suggestions/:ws  Office.Corkboard.suggestions (the suggestion box)
       DELETE /api/office/suggestions/:ws/:id  Office.Corkboard.drop (filed as a ticket, or thrown out)
       GET    /api/office/margin/:ws  Office.Margin.notes (Uqbar's margin notes)
@@ -66,6 +67,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/threads/:id/docs        Workline.Docs.list (the workline's docs: work/<slug>/*.md)
       GET    /api/threads/:id/docs/:name  Workline.Docs.read (one doc's text; "current" is the stage's)
       POST   /api/threads/:id/verify      run a workline's verify again (Jobs.Verify), as entering verify does; 409 off verify
+      POST   /api/threads/:id/republish   Workline.republish: a landed workline whose publish failed, pushed and its PR
+                                          opened again: {"published": url | null}; 409 when there is no failed publish
       POST   /api/threads/:id/track       Workline.promote: make a plain thread a workline
       POST   /api/threads/:id/checks      {"slug", "exit", "cmd", "tail"?} → Dossier.record_check (the verify stage's evidence)
       POST   /api/threads/:id/move        {"project_id"} → Projects.move_thread (within its workspace)
@@ -254,6 +257,13 @@ defmodule Server.MCP.OperatorAPI do
     case Integer.parse(id) do
       {n, ""} -> json(conn, 200, %{ok: Server.Office.Needs.dismiss_job(n) == :ok})
       _ -> json(conn, 404, %{error: "no job #{id}"})
+    end
+  end
+
+  defp route(conn, "POST", "release", ["retry", id]) do
+    case Integer.parse(id) do
+      {n, ""} -> reply(conn, Server.Release.PM.retry(n), &%{queued: &1}, 202)
+      _ -> json(conn, 404, %{error: "no failed cut #{id}"})
     end
   end
 
@@ -487,6 +497,15 @@ defmodule Server.MCP.OperatorAPI do
   end
 
   defp on_thread(conn, "POST", ["verify"], t), do: json(conn, 409, %{error: "thread #{t.id} is not at verify"})
+
+  defp on_thread(conn, "POST", ["republish"], t) do
+    case Workline.republish(t) do
+      {:ok, url} -> json(conn, 200, %{published: url})
+      :none -> json(conn, 200, %{published: nil})
+      {:error, why} -> refused(conn, why)
+    end
+  end
+
   defp on_thread(conn, "POST", ["checks"], t), do: record_check(conn, t)
   defp on_thread(conn, "POST", ["move"], t), do: move(conn, t)
   defp on_thread(conn, "DELETE", [], t), do: delete_thread(conn, t)

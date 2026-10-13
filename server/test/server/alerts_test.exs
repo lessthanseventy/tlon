@@ -122,6 +122,26 @@ defmodule Server.AlertsTest do
     assert [%{path: "/api/office/needs/retire", body: %{key: "stranded:/r:w"}}, %{label: "Put away"}] = stranded.actions
   end
 
+  test "a landing GitHub never got republishes, or is put away once its PR is opened by hand" do
+    [a] = Alerts.build([need("publish_failed", %{key: "publish_failed:7", ref: 7})], [], @now)
+    assert a.level == "sticky"
+
+    assert [
+             %{label: "Republish", method: "POST", path: "/api/threads/7/republish"},
+             %{label: "Put away", body: %{key: "publish_failed:7"}}
+           ] = a.actions
+  end
+
+  test "a failed release cut is retried by its event, or put away to stay on what runs" do
+    [a] = Alerts.build([need("release_failed", %{level: "decide", key: "release_failed:7", ref: 41})], [], @now)
+    assert a.level == "sticky"
+
+    assert [
+             %{label: "Retry the cut", method: "POST", path: "/api/release/retry/41"},
+             %{label: "Put away", body: %{key: "release_failed:7"}}
+           ] = a.actions
+  end
+
   test "what to decide when convenient is sticky, never an interruption" do
     alerts =
       Alerts.build(

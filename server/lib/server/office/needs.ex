@@ -13,7 +13,9 @@ defmodule Server.Office.Needs do
       the quiet window — no stage advance, check, commit or operator answer — and nobody on duty for
       it: whatever stopped it has no kind of its own yet; its text carries the thread's last word.
       Put away, it stays away until the workline moves; under pencils down or lights out nothing
-      stalls, the operator stopped it);
+      stalls, the operator stopped it), `publish_failed` (a workline merged here whose newest publish
+      to GitHub — recorded under `Server.Workline.publish_correlation/1` — failed: republish it, or open its PR by
+      hand with the command its text names and put it away; `ref` the thread);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -22,7 +24,10 @@ defmodule Server.Office.Needs do
       is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded),
       `seats` (threads parked on the leaf cap, per workspace: `ref` the bigger cap it offers),
       `job_failed` (a background job discarded in the last day: retry or dismiss, `ref` the job),
-      `issue` (a blocker raised on an open thread and not resolved: resolve it, `ref` the issue).
+      `issue` (a blocker raised on an open thread and not resolved: resolve it, `ref` the issue),
+      `release_failed` (a workspace's newest release cut failed and live is not at its commit:
+      retry it, `ref` its `check_failed` event — `Server.Release.PM.retry/1` — or put it away and
+      stay on what runs; a failed cut never moves the pointer, so there is nothing to roll back).
 
   Blocking first, then to decide; oldest first within each. An item leaves the list when the thing
   behind it is resolved — approved, answered, filed — or when the operator puts it away (`dismiss/1`):
@@ -66,7 +71,7 @@ defmodule Server.Office.Needs do
         withdraw_ask(id)
         remember(key)
 
-      %{kind: "stalled"} ->
+      %{kind: kind} when kind in ~w(stalled publish_failed) ->
         remember(key)
 
       %{level: "blocking"} ->
@@ -418,10 +423,62 @@ defmodule Server.Office.Needs do
     open = Repo.all(from t in Thread, where: t.state == "open")
     prompts = Server.Attention.open_prompts_by_thread()
 
-    blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open)
+    blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open) ++ unpublished()
     blocking = blocking ++ stalled(open, MapSet.new(blocking, & &1.thread_id))
-    decide = mentions(open, operator) ++ rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open)
+
+    decide =
+      mentions(open, operator) ++
+        rollout() ++ stranded() ++ seats(open) ++ failed_jobs() ++ issues(open) ++ failed_cuts()
+
     Enum.sort_by(blocking, & &1.at, DateTime) ++ Enum.sort_by(decide, & &1.at, DateTime)
+  end
+
+  # each thread's newest check under `correlation` (a LIKE pattern), when it is the failed one
+  defp newest_failed(pattern) do
+    from(e in Event,
+      where: like(e.correlation, ^pattern) and e.kind in ["check_passed", "check_failed"],
+      distinct: e.thread_id,
+      order_by: [desc: e.id]
+    )
+    |> Repo.all()
+    |> Enum.filter(&(&1.kind == "check_failed"))
+  end
+
+  # merged here, closed, and never reached GitHub's main: nothing wakes for a closed thread
+  defp unpublished do
+    for e <- newest_failed("workline:%:publish"),
+        %Thread{stage: "merged"} = t <- [Repo.get(Thread, e.thread_id)] do
+      repo = Server.Workline.Artifacts.Git.root(t)
+      branch = "work/#{t.slug}"
+
+      item(
+        "publish_failed",
+        "blocking",
+        t,
+        "#{branch} merged here but never reached GitHub: #{e.detail["tail"]} — by hand: " <>
+          "git -C #{repo} push origin #{branch} && gh pr create --head #{branch} --base main --fill",
+        e.created_at,
+        %{ref: t.id}
+      )
+    end
+  end
+
+  # a workspace's newest cut failed, and live is not at its commit by another way
+  defp failed_cuts do
+    live = Server.Release.PM.live_release()
+
+    for %Event{correlation: "release:" <> sha} = e <- newest_failed("release:%"),
+        live == nil or live.sha != sha,
+        t = Repo.get(Thread, e.thread_id) do
+      item(
+        "release_failed",
+        "decide",
+        t,
+        "release #{String.slice(sha, 0, 7)} not cut: #{e.detail["tail"]}",
+        e.created_at,
+        %{ref: e.id}
+      )
+    end
   end
 
   # nothing moved it past the quiet window and nobody is on it: the stop that has no kind of its own
