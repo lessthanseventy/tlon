@@ -30,6 +30,49 @@ defmodule Server.WorklinePublishTest do
                      ["gh", "pr", "merge", "https://github.com/o/r/pull/9", "--rebase", "--auto", "--delete-branch"]}
   end
 
+  describe "the PR's body — what a reader of the PR needs, from the branch itself" do
+    defp git_show(name, text), do: {&match?(["git", _, _, "show", "work/tiles:work/tiles/" <> ^name], &1), {text, 0}}
+    defp git_log(text), do: {&match?(["git", _, _, "log" | _], &1), {text, 0}}
+    defp git_stat(text), do: {&match?(["git", _, _, "diff", "--shortstat" | _], &1), {text, 0}}
+
+    defp body_of(replies) do
+      pr = {&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}
+      {:ok, _} = Publish.publish("/repo", "tiles", "Floor step 1", runner([pr | replies]))
+      assert_received {:ran, ["gh", "pr", "create" | args]}
+      args |> Enum.drop_while(&(&1 != "--body")) |> Enum.at(1)
+    end
+
+    test "the lead's pr.md, the commits, the size and the review's verdict" do
+      body =
+        body_of([
+          git_show("pr.md", "Floors get tiles (ticket #54): the office drew bare boards.\nChecked: bun test.\n"),
+          git_show(
+            "review.md",
+            "# Review — floors\n\n*Reviewed by tzinacan; the verdict is below*\n\n**Verdict: approve.**\n\nfindings…\n"
+          ),
+          git_log("- office: tiles (pure)\n- office: draw the tiles\n"),
+          git_stat(" 3 files changed, 120 insertions(+), 4 deletions(-)\n")
+        ])
+
+      assert body =~ "Floors get tiles (ticket #54): the office drew bare boards.\nChecked: bun test."
+      assert body =~ "- office: tiles (pure)\n- office: draw the tiles"
+      assert body =~ "3 files changed, 120 insertions(+), 4 deletions(-)"
+      assert body =~ "**Verdict: approve.**"
+      refute body =~ "findings"
+      assert body =~ "work/tiles/"
+    end
+
+    test "with no pr.md it says what the plan is for, never just the slug" do
+      body = body_of([git_show("plan.md", "# Plan — floor tiles (ticket #54)\n\nSpec: …\n")])
+      assert body =~ "Plan — floor tiles (ticket #54)"
+      refute body =~ "Spec: …"
+    end
+
+    test "a workline that started at build has no plan: the spec's title, else the intent's" do
+      assert body_of([git_show("intent.md", "# Floors want tiles\n")]) =~ "Floors want tiles"
+    end
+  end
+
   test "a repo with no remote has nothing to publish to" do
     run = runner([{&match?(["git", _, _, "remote" | _], &1), {"error: No such remote", 2}}])
     assert Publish.publish("/repo", "tiles", "t", run) == :none

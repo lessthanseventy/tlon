@@ -67,6 +67,10 @@ defmodule Server.WorklineBriefTest do
     assert build =~ "spec.md" and build =~ "plan.md"
   end
 
+  test "the build brief has the builder write the PR's description" do
+    assert Brief.stage_message(thread("build")) =~ "work/composer-wrap/pr.md"
+  end
+
   test "the verify brief says the server verifies the branch — nothing for a coworker to run or record" do
     verify = Brief.stage_message(thread("verify"))
     assert verify =~ "the server" and verify =~ "work/composer-wrap"
