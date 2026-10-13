@@ -19,6 +19,7 @@ type World = {
   ownClock?: boolean;
   serverDown?: boolean;
   submitFails?: boolean;
+  writes?: { path: string; text: string }[];
 };
 
 const IDENTITY = { TLON_THREAD: "42", TLON_AUTHOR: "claude-code", TMUX_PANE: "%7", OLLAMA_API_KEY: "k" };
@@ -56,6 +57,10 @@ function engine(on, world: World = {}): Declare[] {
   on("tool.register", () => ({ value: undefined }));
   on("fs.read", () => {
     throw new Error("no such file");
+  });
+  on("fs.write", ($, e) => {
+    world.writes?.push({ path: e.path, text: e.text });
+    return { value: undefined };
   });
   on("process.run", ($, e) => ({
     value: { isStdoutTruncated: false, isStderrTruncated: false, ...(world.run ?? (() => ({ exitCode: 1, stdout: "", stderr: "no run" })))(e.argv, e.init) },
@@ -151,6 +156,19 @@ test("the brief rides a prompt when the dossier changed, and again after a /clea
   expect(same.context).toBeUndefined();
   expect(changed.context?.[0]).toContain("# Brief: ship the mod, then the band");
   expect(cleared.context?.[0]).toContain("# Brief: ship the mod, then the band");
+});
+
+test("a get_dossier reply that isn't a dossier is logged where the seat's state lives", async ($, on) => {
+  const world: World = { writes: [], env: { ...IDENTITY, XDG_STATE_HOME: "/state" } };
+  engine(on, world);
+  await $.session.start(START);
+  world.dossier = "session not registered on this server";
+  await $.prompt.submit({ text: "go on", wait: false });
+  await settle();
+
+  const last = world.writes!.at(-1);
+  expect(last?.path).toBe("/state/tlon/citizen-claude-code.log");
+  expect(last?.text).toContain('get_dossier: not a dossier: "session not registered on this server"');
 });
 
 test("a correction is proposed as a habit, once", async ($, on) => {

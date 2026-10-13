@@ -34,7 +34,8 @@ one. adapters holds what makes a Claude Code session a citizen of its thread:
   Bus-announce discipline (spec §4/§10) — the drift the whole stack is built against.
 - **An adapter holds no state.** No retry queue, no spill file. The mod's variables are per-session
   bookkeeping (what was last briefed, how far capture has read), lost on a reload; when the server
-  is unreachable it does nothing else.
+  is unreachable it does nothing else. Its one file is a log nothing reads back:
+  `$XDG_STATE_HOME/tlon/citizen-<author>.log`, a line for each reply a hook met and couldn't use.
 - **Identity rides the connection, never a call.** The token minted for a (thread, agent) is the
   whole identity: `mcpServers.tlon`'s `headersHelper` (`scripts/tlon-cli.sh token`) mints a fresh one
   per connect, so auth survives a server restart, and the env carries identity only (`TLON_MCP_URL`,
@@ -57,6 +58,8 @@ one. adapters holds what makes a Claude Code session a citizen of its thread:
 - `mise run adapters:claude-code:watch` — the helpers' suite on every change.
 - `mise run adapters:lsp:check`, `mise run adapters:lspd:check` — the LSP server and its daemon.
 - `claude --plugin-dir adapters` hot-reloads the mod on save, so a session sees an edit at once.
+- A pane's transcript says only that a hook was skipped; what it met is in that seat's
+  `citizen-<author>.log`.
 - `mise run check` — the whole-repo gate.
 
 ## Verify
