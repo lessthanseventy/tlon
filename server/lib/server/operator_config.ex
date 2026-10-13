@@ -76,7 +76,7 @@ defmodule Server.OperatorConfig do
       min: 10,
       max: 1440,
       default: 60,
-      doc: "a workline quiet this long gets a nudge"
+      doc: "a workline quiet this long gets a nudge, and shows on your list as stalled"
     },
     %{
       key: "max_session_hours",

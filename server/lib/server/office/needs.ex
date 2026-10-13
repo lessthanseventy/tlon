@@ -10,8 +10,9 @@ defmodule Server.Office.Needs do
       coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id,
       answered by key), `verify_failed` (a workline whose last gate run was red — the sheriff, where
       there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline nothing has moved for past
-      the quiet window — no stage advance, check, commit or operator answer — and nobody on duty for
-      it: whatever stopped it has no kind of its own yet; its text carries the thread's last word.
+      the quiet window (the operator's `quiet_workline_minutes` knob, the one Maintain nudges at) — no
+      stage advance, check, commit or operator answer — and nobody on duty for it (a mid-turn mark
+      counts until `Server.Presence.Thinking.stale_turn_seconds/0`): whatever stopped it has no kind of its own yet; its text carries the thread's last word.
       Put away, it stays away until the workline moves; under pencils down or lights out nothing
       stalls, the operator stopped it);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
@@ -427,7 +428,7 @@ defmodule Server.Office.Needs do
   # nothing moved it past the quiet window and nobody is on it: the stop that has no kind of its own
   defp stalled(open, listed) do
     if Server.Pause.state() == :working do
-      cutoff = DateTime.add(DateTime.utc_now(), -quiet_window_s(), :second)
+      cutoff = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("quiet_workline_minutes") * 60, :second)
 
       for %Thread{stage: stage} = t <- open,
           stage not in [nil, "merged"],
@@ -442,8 +443,6 @@ defmodule Server.Office.Needs do
       []
     end
   end
-
-  defp quiet_window_s, do: Application.get_env(:server, :quiet_window_s, 3600)
 
   # a coworker's chatter is not movement, nor a prompt the machine closed ("window closed"); an
   # operator's answer starts the clock again, so the lead gets the window to act on it
@@ -491,9 +490,9 @@ defmodule Server.Office.Needs do
   defp commit_at(_), do: nil
 
   # someone is on it: the merge queue, a verify run queued or running, a coworker mid-turn here (a
-  # mark older than staffing's stale turn is a turn nothing will end, not someone on it)
+  # mark past the stale-turn clock is a turn nothing will end, not someone on it)
   defp on_duty?(t) do
-    live = DateTime.add(DateTime.utc_now(), -Server.Staffing.stale_turn_s(), :second)
+    live = DateTime.add(DateTime.utc_now(), -Server.Presence.Thinking.stale_turn_seconds(), :second)
 
     landing?(t) or
       Repo.exists?(

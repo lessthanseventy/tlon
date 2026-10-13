@@ -34,6 +34,13 @@ and every layer the spine design's re-laid §9 asked for
   back to work. `POST /api/office/pause`, `tlon-cli pause`, the office's finder.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
   instance; warmth is measured from `last_active_at`, never a heartbeat.
+- **the two "gone quiet" clocks** — they mean different things; never read a third number for either.
+  The *stale turn* (`Server.Presence.Thinking.stale_turn_seconds/0`, `config :server,
+  :stale_turn_seconds`, 600 s): a mid-turn mark older than this is a turn nothing will end; the
+  thinking sweep clears it, and staffing and Needs stop counting it as someone at work. The *quiet
+  workline* (the settings knob `quiet_workline_minutes`, 60): a workline that has not moved this long
+  gets a Maintain nudge and is a `stalled` Need. Other bands are not "stale": staffing's boot grace (a
+  window still booting) and Maintain's gate/stall bands (`Server.Maintain.Sweep`).
 - **outside citizens** (`Server.Outside`) — agents seated on no bench, like `uqbar`, the operator's
   delegate: they post as themselves. Uqbar leads one thread of its own, its study (`Outside.study/1`),
   where a post spawns its pane on its citizen profile (`Profiles.citizen_profile/2`: the Claude plan,
