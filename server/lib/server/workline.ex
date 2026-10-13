@@ -1357,6 +1357,24 @@ defmodule Server.Workline do
 
   def republish(%Thread{} = thread, _run), do: {:error, "##{thread.id} has not landed"}
 
+  @doc """
+  The operator opened a failed publish's PR by hand (`Server.Office.Needs`' `publish_failed`): `url`
+  is recorded as its publish and its landing, so it waits on GitHub (`waiting_on_github/0`) and closes
+  when GitHub merges it. `{:ok, thread}` | `{:error, why}` — a workline whose last publish did not fail
+  is refused.
+  """
+  def published_by_hand(%Thread{stage: "merged", state: "open"} = thread, url) when is_binary(url) do
+    url = String.trim(url)
+
+    cond do
+      url == "" -> {:error, "the PR's url, to wait on GitHub for"}
+      not publish_failed?(thread) -> {:error, "#{thread.slug} has no failed publish to put away"}
+      true -> by_hand(thread, url)
+    end
+  end
+
+  def published_by_hand(%Thread{} = thread, _url), do: {:error, "##{thread.id} has no landing waiting on its PR"}
+
   @doc "The correlation a workline's publish is recorded under, as `check_passed` or `check_failed`."
   def publish_correlation(%Thread{slug: slug}), do: "workline:#{slug}:publish"
 
@@ -1889,5 +1907,12 @@ defmodule Server.Workline do
         {seat, paths} -> {:ok, to_qa(thread, seat, paths)}
       end
     end
+  end
+
+  defp by_hand(thread, url) do
+    record_publish(thread, 0, url)
+    record_landing(thread, "check_passed", %{"cmd" => "GitHub merge of #{url}", "exit" => 0, "url" => url})
+    post_brief(thread, "its PR opened by hand: #{url} — the thread closes when GitHub merges it")
+    {:ok, thread}
   end
 end

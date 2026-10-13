@@ -128,13 +128,13 @@ defmodule Server.AlertsTest do
     assert [%{path: "/api/office/needs/retire", body: %{key: "stranded:/r:w"}}, %{label: "Put away"}] = stranded.actions
   end
 
-  test "a landing GitHub never got republishes, or is put away once its PR is opened by hand" do
+  test "a landing GitHub never got republishes, or takes the url of the PR opened by hand" do
     [a] = Alerts.build([need("publish_failed", %{key: "publish_failed:7", ref: 7})], [], @now)
     assert a.level == "sticky"
 
     assert [
              %{label: "Republish", method: "POST", path: "/api/threads/7/republish"},
-             %{label: "Put away", body: %{key: "publish_failed:7"}}
+             %{label: "Opened by hand…", path: "/api/threads/7/published", input: "url"}
            ] = a.actions
   end
 

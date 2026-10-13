@@ -111,6 +111,8 @@ export const retryJob = (id: number) => write("retrying the job", `/office/jobs/
 export const dismissJob = (id: number) => send("DELETE", "clearing the job", `/office/jobs/${id}`, () => "dismissed")
 /** a landed workline whose publish failed, pushed and its PR opened again */
 export const republish = (tid: number) => write(`republishing #${tid}`, `/threads/${tid}/republish`, {}, (j) => (j.published ? `published as ${j.published}` : "nothing to publish to"))
+/** a failed publish whose PR the operator opened by hand: its url, waited on until GitHub merges it */
+export const publishedByHand = (tid: number, url: string) => write(`waiting on ${url}`, `/threads/${tid}/published`, { url }, () => "waiting on GitHub")
 /** a failed release cut, by its event, queued to cut again */
 export const retryRelease = (id: number) => write("retrying the cut", `/release/retry/${id}`, {}, (j) => `cut of ${String(j.queued).slice(0, 7)} queued`)
 export const dismissRollout = (id: number) => send("DELETE", "clearing the note", `/office/rollout/${id}`, () => "done")
