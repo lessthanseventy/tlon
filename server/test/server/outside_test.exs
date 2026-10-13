@@ -60,7 +60,7 @@ defmodule Server.OutsideTest do
       assert Outside.names() == ["uqbar"]
     end
 
-    test "study/1 is uqbar's own thread on a workspace, led by it: one, opened once, reopened fresh if closed" do
+    test "study/1 is uqbar's own thread on a workspace, led by it: one, opened once, the same one reopened if closed" do
       {:ok, uqbar} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
       {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
 
@@ -70,8 +70,8 @@ defmodule Server.OutsideTest do
       assert same == study.id
 
       {:ok, _} = Channel.close_thread(study)
-      assert {:ok, %{id: fresh, state: "open"}} = Outside.study(ws.id)
-      assert fresh != study.id
+      assert {:ok, %{id: again, state: "open"}} = Outside.study(ws.id)
+      assert again == study.id
     end
 
     test "ensure_checkin/1: one standing check-in every 50 minutes on uqbar's study, created once, left alone after" do

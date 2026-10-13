@@ -626,7 +626,14 @@ export function register(on) {
     const done = await next(e);
     // past its compaction point, a seat compacts while idle between turns (never under one: the host
     // refuses that), so the next prompt carries the whole brief
-    if (thread && !e.agentId && compactAt && ((await $.session.usage()).context.percent ?? 0) >= compactAt)
+    const filled =
+      thread && !e.agentId && compactAt
+        ? await $.session.usage().then(
+            (u) => u.context.percent ?? 0,
+            (err) => (void note($, `usage unread for compaction: ${err}`), 0),
+          )
+        : 0;
+    if (compactAt && filled >= compactAt)
       void $.session
         .compact({ instructions: "Keep what is in flight: the task at hand, what was decided and why, what is still open. The brief comes back whole after this." })
         .catch((err) => note($, `compaction at ${compactAt}% refused: ${err}`));
