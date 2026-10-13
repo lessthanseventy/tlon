@@ -656,6 +656,17 @@ defmodule Server.MCP.ServerTest do
              ["for the live one"]
   end
 
+  test "a session whose seat was ended with no successor is not fenced: its wakes are still taken",
+       %{thread: thread, agent: agent, token: token} do
+    session = handshake(token)
+    %{"session_id" => id} = decode_tool_json(call(token, session, 3, "register", %{}))
+    Server.Staff.end_thread_sessions(thread.id)
+    {:ok, _} = Server.Wake.queue(thread.id, agent.name, "after the close")
+
+    assert decode_tool_json(call(token, session, 4, "take_wakes", %{"session_id" => id})) ==
+             ["after the close"]
+  end
+
   test "put_back_wakes queues a taken wake again for the same seat, so the next take hands it over",
        %{thread: thread, agent: agent, token: token} do
     session = handshake(token)

@@ -20,7 +20,7 @@ defmodule Server.MCP.Tool.TakeWakes do
     identity = Identity.from_frame(frame, touch: false)
 
     case params[:session_id] do
-      claimed when is_integer(claimed) and claimed != identity.session_id ->
+      claimed when is_integer(claimed) and is_integer(identity.session_id) and claimed != identity.session_id ->
         ok(frame, %{
           "superseded" => true,
           "by" => identity.session_id,
