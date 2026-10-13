@@ -35,5 +35,6 @@ export function pickDest(t: Temperament, r: number, base?: Record<Dest, number>)
 export const SPECIES_BASE = {
   rabbit: { nap: 0.3, play: 0.2, spot: 0.25, desk: 0.1, litter: 0.1, perch: 0.05 },
   bird: { perch: 0.5, nap: 0.15, spot: 0.15, play: 0.1, desk: 0.05, litter: 0.05 },
+  hamster: { play: 0.3, nap: 0.25, spot: 0.25, litter: 0.1, desk: 0.05, perch: 0.05 },
 } satisfies Record<string, Record<Dest, number>>
 export const speciesBase = (sp: string): Record<Dest, number> => (SPECIES_BASE as Record<string, Record<Dest, number> | undefined>)[sp] ?? CAT_BASE
