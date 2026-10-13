@@ -6,4 +6,6 @@ Verified: scripts/release-smoke.sh change + new tests; ran `menard run test --in
 - A warning line is printed so a stale local ref is not silent.
 - Tests cover both directions (local ref proceeds past the fetch; origin/main still fails).
 
-Nit (non-blocking): the tests hardcode port 4599; overlapping suite runs would collide.
+Non-blocking:
+- Tests hardcode port 4599; overlapping suite runs would collide.
+- The tech lead's note (each Bash call is its own netns, so HOLD-then-drive must be one call in a sandbox) is not in the diff; the QA brief wording is still owed.
