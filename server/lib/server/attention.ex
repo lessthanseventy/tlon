@@ -265,7 +265,9 @@ defmodule Server.Attention do
   `prompt` per decision (payload `ask: author`), keyed `1`, `2`, …; the thread does not park, and
   a thread holds as many asks as it has decisions. Answered by id (`answer_prompt/3`); a reply on
   the thread is a reply, not an answer. `about` is the thread the decision is about when it isn't
-  `thread_id`: when that thread closes the ask is withdrawn (`withdraw_asks_about/1`). `{:ok, prompt}`.
+  `thread_id`: when that thread closes the ask is withdrawn (`withdraw_asks_about/1`). An ask by the
+  thread's lead is marked `led`, so an answer after the thread changed hands goes to its lead now.
+  `{:ok, prompt}`.
   """
   def ask(thread_id, author, question, [_ | _] = options, about \\ nil, extra \\ %{}) do
     options = options |> Enum.with_index(1) |> Enum.map(fn {label, i} -> %{"key" => "#{i}", "label" => label} end)
@@ -278,7 +280,15 @@ defmodule Server.Attention do
       kind: "prompt",
       payload:
         Map.merge(
-          Map.merge(%{"ask" => author, "summary" => question, "options" => options}, extra),
+          Map.merge(
+            %{
+              "ask" => author,
+              "summary" => question,
+              "options" => options,
+              "led" => Channel.thread_lead(thread_id) == author
+            },
+            extra
+          ),
           if(about, do: %{"about" => about}, else: %{})
         )
     }
@@ -377,12 +387,15 @@ defmodule Server.Attention do
   defp take_offer(_payload, _key), do: :ok
 
   # an asker the shift took off the bench can't act on the answer: it goes to whoever leads the thread now
-  defp addressee(thread_id, asker) do
+  defp addressee(thread_id, asker, led) do
     with %Thread{workspace_id: ws} when not is_nil(ws) <- Repo.get(Thread, thread_id),
          true <- Enum.any?(Server.Workspaces.bench_all(ws), &(&1.name == asker)),
-         false <- Enum.any?(Server.Workspaces.bench(ws), &(&1.name == asker)),
          lead when is_binary(lead) and lead != asker <- Channel.thread_lead(thread_id) do
-      "@#{lead} (#{asker} asked, now off shift)"
+      cond do
+        not Enum.any?(Server.Workspaces.bench(ws), &(&1.name == asker)) -> "@#{lead} (#{asker} asked, now off shift)"
+        led -> "@#{lead} (#{asker} asked, no longer leads it)"
+        true -> "@#{asker}"
+      end
     else
       _ -> "@#{asker}"
     end
@@ -445,7 +458,10 @@ defmodule Server.Attention do
          rest
        ) do
     label = Enum.find_value(opts, &(&1["key"] == key && &1["label"]))
-    text = "#{addressee(prompt.thread_id, asker)} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
+
+    text =
+      "#{addressee(prompt.thread_id, asker, prompt.payload["led"])} #{q} → #{label}" <>
+        if(rest == "", do: "", else: " — #{rest}")
 
     with :ok <- take_offer(prompt.payload, key),
          {:ok, reply} <- Channel.post(%{thread_id: prompt.thread_id, author: author, body: text, reply_to: prompt.id}) do
