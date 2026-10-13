@@ -41,7 +41,7 @@ its own process. Every server call goes over the session's own `tlon` connection
 pure parts are `lib/` (bun-tested).
 
 **Being a citizen**
-- `session.start` registers the pane (`register`), and the session is on the roster.
+- `session.start` registers the pane (`register`), and the session is on the roster; a register refused while the tlon MCP server is still connecting (panes booting together) is tried again on every wake poll until it lands, one in flight.
 - `turn.start` / `tool.call` / `turn.complete` declare thinking, what it is doing (`doing.ts`: the
   kind of work and a one-line, redacted summary for the activity feed) and idle — a subagent's turn
   ending is not the session's. The mod's own `$.mcp.call`s raise `tool.call` too and are skipped.

@@ -21,6 +21,8 @@ type World = {
   dossierHangs?: boolean;
   dossierFails?: string;
   submitFails?: boolean;
+  /** registers refused until this many have been tried: the MCP server still connecting at boot */
+  notConnectedFor?: number;
   writes?: { path: string; text: string }[];
 };
 
@@ -79,6 +81,7 @@ function engine(on, world: World = {}): Declare[] {
   on("mcp.call", ($, e) => {
     if (e.server === "lsp") return { value: { content: [{ type: "text", text: world.diagnostics ?? "no diagnostics" }], isError: false } };
     if (world.serverDown) throw new Error("connection refused");
+    if (e.tool === "register" && world.notConnectedFor && world.notConnectedFor-- > 0) throw new Error('no connected MCP tool "register" on a server named "tlon"');
     if (e.tool === "get_dossier" && world.dossierHangs) return new Promise(() => {});
     if (e.tool === "get_dossier" && world.dossierFails) return { value: { content: [{ type: "text", text: world.dossierFails }], isError: true } };
     sent.push({ tool: e.tool, args: e.args ?? {} });
@@ -372,6 +375,25 @@ test("a wake the server queued is taken on the next poll and submitted as a turn
   await settle();
 
   expect(world.submitted).toEqual(["New message on thread 42 from lonnrot: look at the band"]);
+});
+
+test("a register refused while the MCP server is still connecting is tried again until it lands", async ($, on) => {
+  const world: World = { ownClock: true, notConnectedFor: 3 };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+  await settle();
+  expect(sent.filter((d) => d.tool === "register")).toEqual([]);
+
+  for (let i = 0; i < 3; i++) {
+    await clock.advance(3_000);
+    await settle();
+  }
+  expect(sent.filter((d) => d.tool === "register")).toEqual([{ tool: "register", args: { pane_ref: "%7" } }]);
+
+  await clock.advance(3_000);
+  await settle();
+  expect(sent.filter((d) => d.tool === "register").length).toBe(1);
 });
 
 test("a wake whose submit fails is put back on the server, not lost", async ($, on) => {
