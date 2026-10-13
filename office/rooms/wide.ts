@@ -462,7 +462,7 @@ export class WideRoom extends Sim<Layout> {
    */
   protected eventGeo() {
     const g = super.eventGeo()
-    return g && { ...g, windowX: this.z.M0 + 4 }
+    return g && { ...g, windowX: this.z.M0 + 4, ceilY: BAND + 6, leftX: this.z.L0, cork: { x: this.z.F1 - 32, y: 40 } }
   }
   private nightfall(sc: Scene, now: Date) {
     const h = now.getHours() + now.getMinutes() / 60, d = darkness(h), flick = this.lampFlicker()
@@ -683,6 +683,7 @@ export class WideRoom extends Sim<Layout> {
       sc.px(x, y, 9, 7, tones[n.kind] ?? ROLE.prose); sc.px(x + 1, y + 2, 7, 1, ROLE.fieldInk); sc.px(x + 1, y + 4, 5, 1, ROLE.fieldInk); sc.px(x + 4, y - 1, 1, 2, ROLE.alarm)
       sc.hits.push({ x, y, w: 9, h: 7, tip: `${n.author} (${n.kind}): ${n.body}`, act: { kind: "notes" } })
     })
+    if (this.noteHidden()) sc.px(x0 + 3, 16, 11, 8, tint(ROLE.borderInactive, ROLE.body, 0.25))
     sc.hits.push({ x: x0, y: 5, w: 52, h: 34, tip: `${a.notes.length} note(s), ${this.cork.length} on the corkboard: open as a list`, act: { kind: "notes" } })
   }
 
