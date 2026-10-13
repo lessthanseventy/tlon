@@ -176,4 +176,41 @@ defmodule Server.Office.BanterTest do
     assert [%{"line" => a}, %{"line" => ^fits}] = Banter.parse_chat(turns, MapSet.new(["ada", "bo"]))
     assert String.ends_with?(a, "…")
   end
+
+  describe "a soul in the scene" do
+    setup do
+      Server.TestDB.clean!()
+      {:ok, ws} = Server.Workspaces.register(%{name: "Souls"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "atlas", archetype: "builder"})
+      dir = Path.join(System.tmp_dir!(), "banter-souls-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(dir)
+      Application.put_env(:server, :souls_dir, dir)
+
+      on_exit(fn ->
+        Application.put_env(:server, :souls_dir, Path.join(System.tmp_dir!(), "tlon-test-souls-unset"))
+        File.rm_rf!(dir)
+      end)
+
+      %{ws: ws, dir: dir}
+    end
+
+    test "the scene changes when the soul does, on the very next read", %{ws: ws, dir: dir} do
+      scene = fn -> ws.id |> Banter.context() |> Banter.scene() end
+      base = scene.()
+      refute base =~ "how they talk"
+
+      File.write!(Path.join(dir, "atlas.md"), "## Quirks\nSays \"per procedure\".\n")
+      a = scene.()
+      assert a =~ "how they talk and who they're around: quirks: Says \"per procedure\"."
+
+      File.write!(Path.join(dir, "atlas.md"), "## Quirks\nHums sea shanties.\n")
+      b = scene.()
+      assert b =~ "Hums sea shanties" and a != b
+    end
+
+    test "Fears and Diary never reach the scene", %{ws: ws, dir: dir} do
+      File.write!(Path.join(dir, "atlas.md"), "## Fears\nFEARSTEXT\n\n## Diary\nDIARYTEXT\n")
+      refute ws.id |> Banter.context() |> Banter.scene() =~ ~r/FEARSTEXT|DIARYTEXT/
+    end
+  end
 end

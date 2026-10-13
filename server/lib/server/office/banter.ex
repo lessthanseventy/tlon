@@ -14,6 +14,9 @@ defmodule Server.Office.Banter do
   runs it unless `TLON_BANTER=0` (`:start_banter`), and the operator's settings file switches it off
   live (`"banter": false`, `Server.OperatorConfig.banter?/0`, flipped from the office's settings).
   A reply that does not parse is dropped.
+
+  A seat's soul (`Server.Soul.voice/1`) is read afresh with every `context/1`, so an edit shows in
+  the next line written.
   """
   use GenServer
 
@@ -287,7 +290,8 @@ defmodule Server.Office.Banter do
           archetype: b.archetype || "coworker",
           lead: b.lead,
           thread: threads[b.name],
-          persona: persona_line(Server.Persona.get(ws, b.name))
+          persona: persona_line(Server.Persona.get(ws, b.name)),
+          soul: Server.Soul.voice(b.name)
         }
       end
 
@@ -313,7 +317,8 @@ defmodule Server.Office.Banter do
     people =
       Enum.map_join(ctx.crew, "\n", fn c ->
         "- #{c.name}, #{c.archetype}#{if c.lead, do: " (tech lead)"}: #{if c.thread, do: thread_line(c.thread), else: "on the bench, idle"}" <>
-          if(c[:persona], do: "\n  who they are: #{c.persona}", else: "")
+          if(c[:persona], do: "\n  who they are: #{c.persona}", else: "") <>
+          if(c[:soul], do: "\n  how they talk and who they're around: #{c.soul}", else: "")
       end)
 
     "THE OFFICE:\n#{people}\nTickets waiting: #{ctx.tickets |> Enum.take(5) |> Enum.join("; ")}"
