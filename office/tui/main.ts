@@ -394,14 +394,14 @@ function notify(title: string, body: string) {
   const clean = (s: string) => s.replace(/[;\x07\x1b]/g, " ").slice(0, 200)
   out(`${ESC}]777;notify;${clean(title)};${clean(body)}${ESC}\\`)
 }
-/** the feed rows already flown as aeroplanes; `seen` below is rebuilt each call */
+/** the feed rows already flown as aeroplanes */
 const flown = new Set<string>()
 async function loadMargin() { notes = ws === null ? [] : await data.margin(ws) }
 /** the posts whose aeroplane Argos caught, by `earmarkOf`: the thread shows them dog-eared */
 const earmarked = new Set<string>()
 async function loadFeed() {
   if (ws === null) return
-  const seen = new Set(feed.map((x) => `${x.at}${x.kind}${x.text}`)), first = !feed.length
+  const first = !feed.length
   feed = (await data.activity(ws)) ?? feed
   const v = view(), r = room()
   for (const x of freshPosts(feed, flown, first)) {
@@ -409,7 +409,6 @@ async function loadFeed() {
   }
   // a first run starts with the tray read, not with everything that ever happened in it
   if (!trayRead && feed[0]) { trayRead = feed[0].at; writeState(TRAY, trayRead) }
-  if (!first) for (const x of feed) if ((x.kind === "issue" || x.kind === "question") && !seen.has(`${x.at}${x.kind}${x.text}`)) notify(`${x.kind} raised${x.who ? ` by ${x.who}` : ""}`, x.text)
 }
 // the office's small talk: each line the server's banter wrote, once, as a balloon over its speaker
 const seenLines = new Set<string>()
