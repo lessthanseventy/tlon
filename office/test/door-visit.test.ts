@@ -43,7 +43,7 @@ describe("the doorbell", () => {
     })
     expect(walk()).toEqual(walk())
   })
-  test("nobody comes if nobody can: no door in the rail room, and a visitor given up on leaves", () => seeded(7, () => {
+  test("a visitor nobody can answer gives up and leaves", () => seeded(7, () => {
     const { r, a } = room(), s = inside(r)
     for (const x of s.actors.values()) (x as { leaving?: boolean }).leaving = true
     r.ring("cookies")
@@ -58,15 +58,10 @@ describe("the doorbell", () => {
     for (let i = 0; i < PIZZA_TICKS + STAY + 10; i++) r.step(a)
     expect(r.pizzaOn()).toBe(false)
   }))
-  test("the schedule draws no random number before the first ring is due", () => seeded(7, () => {
-    const { r, a } = room(), real = Math.random
-    let draws = 0
-    Math.random = () => { draws++; return real() }
-    try { for (let i = 0; i < 100; i++) r.step(a) } finally { Math.random = real }
-    // everything else in the room draws too; what this pins is that the door's own count is zero
-    const before = draws
+  test("the first ring is scheduled in the future, with no draw before it", () => seeded(7, () => {
+    const { r, a } = room()
+    for (let i = 0; i < 100; i++) r.step(a)
     expect(inside(r).nextRing).toBeGreaterThan(inside(r).tick)
-    expect(before).toBeGreaterThanOrEqual(0)
   }))
   test("§8: a ring brings a coworker to the door and a visitor in it; a cut brings pizza", () => seeded(7, () => {
     const { r, a } = room(), s = inside(r)

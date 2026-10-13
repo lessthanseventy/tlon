@@ -286,8 +286,9 @@ function stepWs(d: 1 | -1) {
 function goWs(id: number) { choose(id); back(true); frame = null; void refresh() }
 
 // ── staying current ───────────────────────────────────────────────────────────────────────────
+// the last poll that answered: a restart's gap polls (ok:false) must not hide what changed across it
+let lastOk: Agents = EMPTY, lastOkNeeds: data.Need[] = []
 async function refresh() {
-  const before = all, beforeNeeds = needs
   // the snapshot lands, and shows, as soon as it comes: the inbox read beside it takes seconds (a git
   // check per stray worktree), and a finder opened meanwhile would list nothing
   const rest = Promise.all([data.needs(), data.settings()])
@@ -298,7 +299,8 @@ async function refresh() {
   let knobs: data.Settings | null
   ;[needs, knobs] = await rest
   settings = knobs ?? settings
-  if (all.ok && before.ok) tellNews(before, beforeNeeds)
+  if (all.ok && lastOk.ok) tellNews(lastOk, lastOkNeeds)
+  if (all.ok) { lastOk = all; lastOkNeeds = needs }
   const tid = openThread()
   await Promise.all([tid !== null ? loadThread(tid) : null, reader ? reader.reload() : null, loadCard(), loadFeed(), loadMargin()])
   await chatter()
