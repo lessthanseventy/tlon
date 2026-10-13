@@ -97,6 +97,22 @@ defmodule Server.Jobs.KeepUpTest do
     end
   end
 
+  test "a repo whose pass raises (gh not on PATH) fails the job: a failed job the operator sees, not only a log line" do
+    {:ok, ws} = Workspaces.create(%{name: "Broken"})
+
+    {:ok, _} =
+      Server.Projects.register(%{workspace_id: ws.id, name: "b", repos: [%{"name" => "b", "path" => "/r/nowhere"}]})
+
+    path = System.get_env("PATH")
+    System.put_env("PATH", "")
+    {result, log} = ExUnit.CaptureLog.with_log(fn -> KeepUp.perform(%Oban.Job{}) end)
+    System.put_env("PATH", path)
+
+    assert {:error, why} = result
+    assert why =~ "/r/nowhere"
+    assert log =~ "keep_up /r/nowhere"
+  end
+
   describe "a landed workline whose PR's checks went red" do
     setup do
       {:ok, ws} = Workspaces.register(%{name: "Watched"})

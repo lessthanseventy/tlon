@@ -7,6 +7,10 @@ defmodule Server.Jobs.KeepUp do
   are closed, reported to the workspace's sheriff and sent back the same way, and its main
   checkout is brought level with origin/main, fast-forward only (`follow_main/2`).
 
+  A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
+  from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
+  such fault, so it reaches the operator as a failed job (`Server.Office.Needs`), not only a log line.
+
   A main that has drifted is never merged: it is one ticket (and one lobby post) in the workspace
   whose project owns the repo, or one keyed note for the operator when none does, updated in place
   and cleared only when main is level again. Whether the operator should also hear when the crew
@@ -16,20 +20,26 @@ defmodule Server.Jobs.KeepUp do
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    for repo <- repos(), do: keep_up(repo)
-    requeue_stranded()
+    faults = Enum.flat_map(repos(), &keep_up/1) ++ requeue_stranded()
 
-    :ok
+    if faults == [], do: :ok, else: {:error, Enum.join(faults, "; ")}
   end
 
-  # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others
+  # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others; the faults
+  # fail the job after every repo had its pass, so they reach the operator as a failed job
   defp keep_up(repo) do
     read(repo, "behind PRs", Server.Workline.Publish.refresh_behind(repo))
     reland(repo)
     red_checks(repo)
     drifted(repo, Server.Workline.Publish.follow_main(repo))
+    []
   rescue
-    e -> require(Logger) && Logger.error("keep_up #{repo}: #{Exception.message(e)}")
+    e -> fault("keep_up #{repo}: #{Exception.message(e)}")
+  end
+
+  defp fault(why) do
+    require(Logger) && Logger.error(why)
+    [why]
   end
 
   defp reland(repo) do
@@ -53,8 +63,9 @@ defmodule Server.Jobs.KeepUp do
   # approved worklines whose Land job Lifeline rescued or discarded wait at review with nothing queued
   defp requeue_stranded do
     Server.Workline.requeue_stranded()
+    []
   rescue
-    e -> require(Logger) && Logger.error("keep_up requeue_stranded: #{Exception.message(e)}")
+    e -> fault("keep_up requeue_stranded: #{Exception.message(e)}")
   end
 
   @doc false
