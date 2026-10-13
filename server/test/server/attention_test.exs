@@ -380,5 +380,26 @@ defmodule Server.AttentionTest do
       assert {:ok, %Message{body: body}} = Attention.answer_prompt(a.id, "andrew", "1")
       assert body == "@emma (otalora asked, now off shift) resume the build? → resume"
     end
+
+    test "a lead's ask answered after the thread was handed on goes to the lead it went to", %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "pierre", archetype: "builder"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "emma", archetype: "builder"})
+      {:ok, built} = Server.Workline.open(%{title: "pet store", slug: "pets", stage: "spec", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(built.id, "pierre")
+      {:ok, a} = Attention.ask(built.id, "pierre", "replace the old pet?", ["replace", "keep"])
+      {:ok, _} = Channel.assign_lead(built.id, "emma")
+
+      assert {:ok, %Message{body: body}} = Attention.answer_ask(a.id, "andrew", "1")
+      assert body == "@emma (pierre asked, no longer leads it) replace the old pet? → replace"
+    end
+
+    test "an ask from a thread its asker doesn't lead is answered to the asker", %{ws: ws, thread: t} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "pierre", archetype: "builder"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius", archetype: "builder"})
+      {:ok, _} = Channel.assign_lead(t.id, "tertius")
+      {:ok, a} = Attention.ask(t.id, "pierre", "which slot?", ["cat", "dog"])
+
+      assert {:ok, %Message{body: "@pierre which slot? → cat"}} = Attention.answer_ask(a.id, "andrew", "1")
+    end
   end
 end
