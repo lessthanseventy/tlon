@@ -460,11 +460,16 @@ export class WideRoom extends Sim<Layout> {
    * and the lamps — one per tile, in the order of `lamps` — come on one by one, each a pool of warm
    * light on top of the dim.
    */
+  protected eventGeo() {
+    const g = super.eventGeo()
+    return g && { ...g, windowX: this.z.M0 + 4 }
+  }
   private nightfall(sc: Scene, now: Date) {
-    const h = now.getHours() + now.getMinutes() / 60, d = darkness(h)
-    if (d === 0) return
-    sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.4 * d)
-    sc.lamps.slice(0, lampsLit(h, sc.lamps.length)).forEach(([x, y]) => {
+    const h = now.getHours() + now.getMinutes() / 60, d = darkness(h), flick = this.lampFlicker()
+    if (d === 0 && flick === null) return
+    if (d > 0) sc.cv.glow(0, BAND, this.width, WIDE_H - BAND, ROLE.ground, 0.4 * d)
+    const lit = flick === null ? lampsLit(h, sc.lamps.length) : flick ? sc.lamps.length : 0
+    sc.lamps.slice(0, lit).forEach(([x, y]) => {
       sc.cv.glow(x - 14, y - 4, 28, 9, ROLE.body, 0.3); sc.cv.glow(x - 8, y - 6, 16, 13, ROLE.body, 0.3)
     })
   }

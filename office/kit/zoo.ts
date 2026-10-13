@@ -9,6 +9,9 @@ const SPRITES: Partial<Record<PropKind, Sprite[]>> = {
     { rows: ["..yy....", ".yyyy.o.", "yyyyyooo", ".yyyyy..", "..oo.oo."], map: { y: ROLE.body, o: ROLE.alarm } },
     { rows: ["..yy....", ".yyyy.o.", "yyyyyooo", ".yyyyy..", "...oo.o."], map: { y: ROLE.body, o: ROLE.alarm } },
   ],
+  streak: [{ rows: ["..o", "..o", ".oo", "oo."], map: { o: ROLE.body } }],
+  puff: [{ rows: ["..p..", ".ppp.", "ppppp"], map: { p: ROLE.prose } }],
+  crater: [{ rows: [".....", ".kkk.", "kkkkk"], map: { k: ROLE.structure } }],
 }
 
 /** a prop with its feet at (x, y); `flip` mirrors it to face left */

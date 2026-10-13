@@ -140,3 +140,25 @@ describe("the stage", () => {
     expect(frame(r, a)).toBe(frame(r, a, false))
   }))
 })
+
+describe("the meteor", () => {
+  test("a streak, a crater that goes with it, idle coworkers at the window, one blames the deploy", () => seeded(6, () => {
+    const r = new WideRoom(696) as any, a = view(["w0", "w1"]), said: string[] = []
+    const say = r.say.bind(r)
+    r.say = (w: string, t: string | null) => { said.push(`${w}:${t}`); say(w, t) }
+    run(r, a, 300); r.event("meteor")
+    run(r, a, 120)
+    expect(r.props().map((p: any) => p.kind)).toContain("streak")
+    run(r, a, 200)
+    expect(r.props().map((p: any) => p.kind)).toContain("crater")
+    expect(["w0", "w1"].some((n) => r.actors.get(n).spot.kind === "window")).toBe(true)
+    expect(said.some((s) => s.endsWith("…was that the deploy?"))).toBe(true)
+    run(r, a, 400)
+    expect(r.props()).toEqual([])
+  }))
+  test("the flicker lights and unlights the lamps in turn", () => {
+    const seen = new Set<boolean | null>()
+    for (let t = 60; t < 140; t++) seen.add(flickerAt("meteor", t))
+    expect(seen.has(true) && seen.has(false)).toBe(true)
+  })
+})

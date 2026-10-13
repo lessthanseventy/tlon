@@ -12,7 +12,10 @@ export type Script = { ticks: number; beats: Beat[] }
 export const EVENTS: Record<EventKind, Script> = {
   drill: { ticks: 600, beats: [{ at: 0, who: "sheriff", say: "Fire drill! Everyone out!" }] },
   zoo: { ticks: 1200, beats: [] },
-  meteor: { ticks: 700, beats: [] },
+  meteor: {
+    ticks: 700,
+    beats: [{ at: 60, who: "idle", emote: "!" }, { at: 150, who: "first", say: "…was that the deploy?" }],
+  },
   power: { ticks: 700, beats: [] },
   duck: { ticks: 500, beats: [{ at: 200, who: "idle", emote: "?" }] },
 }
@@ -47,6 +50,11 @@ export function propsAt(kind: EventKind, t: number, g: Geo): Prop[] {
               : lerp(g.leftX + 80, g.doorX, (t - 380) / 120)
       const flip = t >= 380 || (t >= 300 && Math.floor((t - 300) / 20) % 2 === 1)
       return [{ kind: "duck", x, y: g.hallY, flip, step: Math.floor(t / 6) % 2 }]
+    }
+    case "meteor": {
+      if (t >= 60 && t < 140) return [{ kind: "streak", x: lerp(g.windowX + 28, g.windowX + 4, (t - 60) / 80), y: lerp(8, 34, (t - 60) / 80) }]
+      if (t < 140 || t >= EVENTS.meteor.ticks - 60) return []
+      return [{ kind: t < 160 ? "puff" : "crater", x: g.doorX - 60, y: g.hallY }]
     }
     default:
       return []
