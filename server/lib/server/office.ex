@@ -293,6 +293,7 @@ defmodule Server.Office do
       )
 
     duties = open |> Enum.map(& &1.id) |> Server.Staffing.duty_threads()
+    citizens = Server.Outside.names()
 
     Enum.map(open, fn t ->
       ws_tabs = Map.get(tabs, t.workspace_id, [])
@@ -313,7 +314,8 @@ defmodule Server.Office do
         standing: std,
         thinking: on_it,
         seat: seat(t.id, lead, desk?),
-        duty: MapSet.member?(duties, t.id)
+        duty: MapSet.member?(duties, t.id),
+        study: Server.Outside.study?(t.title, lead, citizens)
       })
     end)
   end
