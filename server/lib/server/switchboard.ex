@@ -548,7 +548,9 @@ defmodule Server.Switchboard do
   end
 
   # The wake for a session on `thread_id`: a message from another thread says how to answer it there
-  defp prompt_for(%Message{thread_id: thread_id} = message, thread_id), do: prompt(message)
+  # a reply left as the turn's final text reaches nobody: the operator and the crew read only threads
+  defp prompt_for(%Message{thread_id: thread_id} = message, thread_id),
+    do: prompt(message) <> " (Answer on the thread with post_message: they read the thread, never this terminal.)"
 
   defp prompt_for(%Message{author: author, thread_id: other} = message, _elsewhere),
     do:

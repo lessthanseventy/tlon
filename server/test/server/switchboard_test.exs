@@ -350,7 +350,11 @@ defmodule Server.SwitchboardTest do
       assert {:pending, _} = Switchboard.deliver(m)
 
       assert_receive {:spawned, _exports}, 1_000
-      expected = "New message on thread #{thread.id} from stakeholder (message ##{m.id}): anyone?"
+
+      expected =
+        "New message on thread #{thread.id} from stakeholder (message ##{m.id}): anyone?" <>
+          " (Answer on the thread with post_message: they read the thread, never this terminal.)"
+
       assert_receive {:woke, nil, ^expected}, 1_000
       assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
