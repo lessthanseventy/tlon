@@ -464,8 +464,8 @@ defmodule Server.Office.Needs do
     prompts = Server.Attention.open_prompts_by_thread()
 
     blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open) ++ unpublished() ++ pr_blocked()
-    blocking = blocking ++ stalled(open, MapSet.new(blocking, & &1.thread_id))
     blocking = blocking ++ no_seat(open, MapSet.new(blocking, & &1.thread_id)) ++ quota()
+    blocking = blocking ++ stalled(open, MapSet.new(blocking, & &1.thread_id))
 
     decide =
       mentions(open, operator) ++

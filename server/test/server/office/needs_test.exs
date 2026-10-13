@@ -355,6 +355,20 @@ defmodule Server.Office.NeedsTest do
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "planck", archetype: "planner"})
       refute Enum.any?(Needs.list(), &(&1.kind == "no_seat"))
     end
+
+    test "a workline nobody can lead, quiet past the window, is no_seat, not stalled", %{ws: ws} do
+      {:ok, t} =
+        Server.Workline.open(%{
+          title: "p",
+          slug: "noseat-quiet-#{System.unique_integer([:positive])}",
+          stage: "plan",
+          workspace_id: ws.id
+        })
+
+      age(t, 5)
+
+      assert [%{kind: "no_seat"}] = Enum.filter(Needs.list(), &(&1.thread_id == t.id))
+    end
   end
 
   describe "a stop with no kind of its own is a stalled Need until the workline moves" do
