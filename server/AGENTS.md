@@ -30,7 +30,7 @@ and every layer the spine design's re-laid §9 asked for
 - **pause** (`Server.Pause`) — the office's stop controls, in the settings file's `"pause"` key so a
   restart keeps them: pencils down (intake and continuation nudges off, every live thread told to
   finish its turn, commit and stop, as a notice; the calendar's agent and workline schedules wait,
-  firing once back at work), lights out (that, plus the verify and landing
+  firing once back at work, but for the operator's delegate's, `Server.Outside`), lights out (that, plus the verify and landing
   queues paused — a boot under it starts them paused — and an Escape into every coworker pane),
   back to work. `POST /api/office/pause`, `tlon-cli pause`, the office's finder.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
@@ -39,6 +39,8 @@ and every layer the spine design's re-laid §9 asked for
   delegate: they post as themselves. Uqbar leads one thread of its own, its study (`Outside.study/1`),
   where a post spawns its pane on its citizen profile (`Profiles.citizen_profile/2`: the Claude plan,
   unsandboxed, started in the repo's main checkout); the study is a duty, so it takes no coworker's seat.
+  Every boot ensures its check-in (`Outside.ensure_checkin/1`), so the study exists from the first boot
+  with uqbar registered, before anyone has talked to it; a closed study is reopened, never replaced.
 - **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;
   `check_cmd` as a separate reproducibility axis; `supersedes`; `forgotten_at` tombstones), append-only
   `event` with a closed `kind`, `issue`, `todo`, `question`, `habit`. Read capped-and-counted.

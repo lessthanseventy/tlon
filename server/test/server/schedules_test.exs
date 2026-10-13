@@ -3,6 +3,8 @@ defmodule Server.SchedulesTest do
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 
+  import Ecto.Query
+
   alias Server.Channel
   alias Server.Repo
   alias Server.Schedules
@@ -131,6 +133,40 @@ defmodule Server.SchedulesTest do
 
     File.write!(path, JSON.encode!(%{"pause" => "working"}))
     assert MapSet.new(Schedules.dispatch(now), & &1.schedule_id) == MapSet.new([agent.id, workline.id])
+
+    # the operator's delegate works through pencils down (that is when it does the releases); lights out stops it too
+    {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+    delegate = schedule!(ws, %{cron: "* * * * *", kind: "agent", agent: "uqbar", title: "check-in"})
+    File.write!(path, JSON.encode!(%{"pause" => "pencils_down"}))
+
+    assert MapSet.new(Schedules.dispatch(DateTime.add(now, 120)), & &1.schedule_id) ==
+             MapSet.new([check.id, delegate.id])
+
+    File.write!(path, JSON.encode!(%{"pause" => "lights_out"}))
+    assert MapSet.new(Schedules.dispatch(DateTime.add(now, 240)), & &1.schedule_id) == MapSet.new([check.id])
+  end
+
+  test "uqbar's check-in and its study agree on a closed study: one study, reopened, where the check-in posts", %{
+    ws: ws
+  } do
+    {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+    {:ok, s} = Server.Outside.ensure_checkin(ws.id)
+    {:ok, study} = Server.Outside.study(ws.id)
+    {:ok, _} = Channel.close_thread(study)
+
+    assert [run] = Schedules.dispatch(DateTime.add(s.created_at, 51 * 60))
+    assert %{status: "ok", thread_id: posted} = Schedules.perform(run.id)
+    assert posted == study.id
+
+    {:ok, %{id: now}} = Server.Outside.study(ws.id)
+    assert now == study.id
+
+    open_studies =
+      Repo.all(
+        from t in Server.Thread, where: t.workspace_id == ^ws.id and t.title == "Uqbar's study" and t.state == "open"
+      )
+
+    assert length(open_studies) == 1
   end
 
   test "a script runs in its dir: exit and output on the run, failed when non-zero", %{ws: ws} do

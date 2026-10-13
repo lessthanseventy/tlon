@@ -47,21 +47,31 @@ defmodule Server.Outside do
   end
 
   @doc """
-  Uqbar's study on `workspace_id`: the open thread it leads there, opened when there is none (a closed
-  one is history, so the next is fresh). A post there wakes it, spawning its pane. `{:ok, thread}` or
+  Uqbar's study on `workspace_id`: the thread it leads there, opened the first time and reopened if
+  closed, as a standing schedule's thread is (its check-in posts there), so there is one study with
+  one history. A post there wakes it, spawning its pane. `{:ok, thread}` or
   `{:error, :no_such_citizen | changeset}`.
   """
   def study(workspace_id) do
     with %Server.Agent{id: id} <- Server.Staff.agent_by_name("uqbar") || {:error, :no_such_citizen} do
       case Repo.one(
              from t in Server.Thread,
-               where: t.workspace_id == ^workspace_id and t.agent_id == ^id and t.title == @study and t.state == "open",
+               where: t.workspace_id == ^workspace_id and t.agent_id == ^id and t.title == @study,
                order_by: [desc: t.id],
                limit: 1
            ) do
-        %Server.Thread{} = t -> {:ok, t}
         nil -> Channel.open_thread(%{title: @study, workspace_id: workspace_id, scope: "machine", agent_id: id})
+        %Server.Thread{} = t -> reopened(t)
       end
+    end
+  end
+
+  defp reopened(%Server.Thread{id: id} = t) do
+    case Channel.reopen_if_closed(id) do
+      {:reopened, open} -> {:ok, open}
+      :open -> {:ok, t}
+      :no_thread -> {:error, :no_thread}
+      {:error, _} = error -> error
     end
   end
 
