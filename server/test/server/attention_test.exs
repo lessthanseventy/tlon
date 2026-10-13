@@ -431,4 +431,45 @@ defmodule Server.AttentionTest do
       assert reply_to == a.id
     end
   end
+
+  describe "hand_to_uqbar/2 — the operator's delegate takes an ask" do
+    test "posts one message on uqbar's study as the operator, carrying the whole ask, and resolves it", %{ws: ws} do
+      {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius", archetype: "builder"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+
+      {:ok, a} =
+        Attention.ask(lobby.id, "tertius", "daneri's gate denies the reroll — allow it?", ["allow", "deny"], nil, %{
+          "for" => "daneri"
+        })
+
+      assert {:ok, %Message{} = m} = Attention.hand_to_uqbar(a.id, "andrew")
+      {:ok, study} = Server.Outside.study(ws.id)
+
+      assert [^m] = Repo.all(from x in Message, where: x.thread_id == ^study.id)
+      assert m.author == "andrew"
+      assert m.body =~ ~r/^@uqbar /
+      assert m.body =~ "tertius asked"
+      assert m.body =~ "##{lobby.id} lobby"
+      assert m.body =~ "for daneri"
+      assert m.body =~ "daneri's gate denies the reroll — allow it?"
+      assert m.body =~ "(1) allow · (2) deny"
+      assert m.body =~ "tlon-cli post --as uqbar #{lobby.id}"
+
+      assert Repo.get!(Message, a.id).resolution == "handed to uqbar"
+      assert Repo.all(from x in Message, where: x.thread_id == ^lobby.id and x.kind != "prompt") == []
+      assert {:error, :answered} = Attention.hand_to_uqbar(a.id, "andrew")
+    end
+
+    test "no ask, or no study to hand it to", %{thread: t} do
+      assert {:error, :not_found} = Attention.hand_to_uqbar(-1, "andrew")
+      {:ok, nowhere} = Channel.open_thread(%{title: "no workspace"})
+      {:ok, a} = Attention.ask(nowhere.id, "tertius", "go?", ["go", "hold"])
+      assert {:error, :no_study} = Attention.hand_to_uqbar(a.id, "andrew")
+      {:ok, b} = Attention.ask(t.id, "tertius", "go?", ["go", "hold"])
+      assert {:error, :no_study} = Attention.hand_to_uqbar(b.id, "andrew")
+      assert Repo.get!(Message, b.id).resolved_at == nil
+    end
+  end
 end

@@ -27,6 +27,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/office/prompts/:id      Attention.answer_prompt {"key"} (one prompt — a pane's dialog, an ask, the
                                           release gate — answered by its id; a dialog the pane no longer shows, 409)
       POST   /api/office/asks/:id         the same door, by the path the asks were first answered on
+      POST   /api/office/prompts/:id/uqbar  Attention.hand_to_uqbar (an ask handed to Uqbar on its study, to decide and act as
+                                          the operator; answered or no study, 409)
       POST   /api/office/jobs/:id/retry   Office.Needs.retry_job (a failed job, run again)
       DELETE /api/office/jobs/:id         Office.Needs.dismiss_job (a failed job the operator has seen)
       POST   /api/release/retry/:id       Release.PM.retry (a failed cut, by its check_failed event: its cut queued again)
@@ -259,6 +261,17 @@ defmodule Server.MCP.OperatorAPI do
     else
       {_, %Plug.Conn{} = conn} -> json(conn, 400, %{error: ~s(expected {"key": "1"})})
       _ -> json(conn, 404, %{error: "no prompt #{id}"})
+    end
+  end
+
+  defp route(conn, "POST", "office", ["prompts", id, "uqbar"]) do
+    with {n, ""} <- Integer.parse(id),
+         {:ok, _} <- Server.Attention.hand_to_uqbar(n, operator()) do
+      json(conn, 200, %{handed: n})
+    else
+      {:error, :not_found} -> json(conn, 404, %{error: "no ask #{id}"})
+      {:error, why} -> json(conn, 409, %{error: "ask #{id}: #{why}"})
+      _ -> json(conn, 404, %{error: "no ask #{id}"})
     end
   end
 
