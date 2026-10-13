@@ -389,14 +389,7 @@ defmodule Server.MCP.OperatorAPI do
   defp route(conn, "DELETE", "facts", [id]), do: with_row(conn, Server.Fact, id, &forget(conn, &1))
   defp route(conn, "POST", "issues", [id, "resolve"]), do: with_row(conn, Server.Issue, id, &resolve(conn, &1))
 
-  defp route(conn, "POST", "issues", [id, "fix"]),
-    do:
-      with_row(
-        conn,
-        Server.Issue,
-        id,
-        &reply(conn, Dossier.fix_issue(&1), fn %{ticket: t, owner: o} -> %{ticket_id: t.id, owner: o} end)
-      )
+  defp route(conn, "POST", "issues", [id, "fix"]), do: with_row(conn, Server.Issue, id, &fix(conn, &1))
 
   defp route(conn, "GET", "life", [ws]), do: with_workspace(conn, ws, &json(conn, 200, Server.Life.status(&1.id)))
 
@@ -953,6 +946,18 @@ defmodule Server.MCP.OperatorAPI do
 
   defp fire(conn, seat_id), do: reply(conn, Workspaces.unseat(seat_id), fn _ -> %{unseated: seat_id} end)
   defp forget(conn, fact), do: reply(conn, Dossier.forget_fact(fact), fn _ -> %{forgot: fact.id} end)
+
+  defp fix(conn, issue) do
+    result =
+      case Dossier.fix_issue(issue) do
+        {:error, :owned} -> {:error, "issue ##{issue.id} already has a ticket (##{issue.ticket_id})"}
+        {:error, :closed} -> {:error, "issue ##{issue.id} is closed"}
+        {:error, :no_workspace} -> {:error, "issue ##{issue.id} is on no workspace's thread: nowhere to file it"}
+        other -> other
+      end
+
+    reply(conn, result, fn %{ticket: t, owner: o} -> %{ticket_id: t.id, owner: o} end)
+  end
 
   defp resolve(conn, issue) do
     {b, conn} = body(conn)

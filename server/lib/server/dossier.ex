@@ -171,13 +171,21 @@ defmodule Server.Dossier do
 
     with %Thread{workspace_id: ws} when not is_nil(ws) <- issue.thread_id && Repo.get(Thread, issue.thread_id),
          {:ok, ticket} <- Server.Tickets.file(%{workspace_id: ws, title: issue.summary, body: body}),
-         {:ok, routed} <- Server.Tickets.route(ticket),
+         {:ok, routed} <- route_or_drop(ticket),
          owner = owner(routed),
          {:ok, _} <- own_issue(issue, ticket, owner) do
       {:ok, %{ticket: ticket, owner: owner}}
     else
       {:error, _} = error -> error
       _ -> {:error, :no_workspace}
+    end
+  end
+
+  # a ticket that can't be routed is taken back, so the next "Get it fixed" files no twin of it
+  defp route_or_drop(ticket) do
+    with {:error, _} = error <- Server.Tickets.route(ticket) do
+      _ = Server.Tickets.remove(ticket)
+      error
     end
   end
 
@@ -215,8 +223,9 @@ defmodule Server.Dossier do
   end
 
   @doc """
-  A workline landed: the open issues its tickets own are resolved, `how` (the PR) named, so a beat
-  incident's postmortem banks. The issues resolved.
+  A workline landed: the open issues its tickets own are resolved, `how` named — the PR, so a beat
+  incident's postmortem banks; a landing with no PR (no GitHub) names its commit and banks none. The
+  issues resolved; one that won't resolve is logged and left open, never raised into the landing.
   """
   def resolve_fixed(%Thread{id: thread_id}, how) do
     from(i in Issue,
@@ -226,9 +235,17 @@ defmodule Server.Dossier do
       distinct: true
     )
     |> Repo.all()
-    |> Enum.map(fn issue ->
-      {:ok, closed} = resolve_issue(issue, "fixed by #{how}")
-      closed
+    |> Enum.flat_map(fn issue ->
+      case resolve_issue(issue, "fixed by #{how}") do
+        {:ok, closed} ->
+          [closed]
+
+        {:error, why} ->
+          require Logger
+
+          Logger.warning("issue ##{issue.id} stays open after its fix landed: #{inspect(why)}")
+          []
+      end
     end)
   end
 
