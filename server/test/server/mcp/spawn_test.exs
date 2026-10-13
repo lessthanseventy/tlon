@@ -106,6 +106,17 @@ defmodule Server.MCP.SpawnTest do
       assert File.exists?(Path.join(wt, ".git"))
     end
 
+    test "an outside citizen's pane starts in the repo's main checkout: no worktree of its own to strand" do
+      %{repo: repo, ws: ws} = Server.TestRepoDir.with_project()
+      {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, study} = Server.Outside.study(ws.id)
+
+      assert {:ok, %{exports: ex}} = Spawn.join(study.id, "uqbar", assign: false)
+      assert ex =~ ~s(TLON_CWD="#{repo}")
+      refute File.exists?(Server.Worktree.path(repo, "t#{study.id}"))
+      assert ex =~ "TLON_MODEL='anthropic/claude-opus-5-5 (claude_code)'"
+    end
+
     test "no repo anywhere → no TLON_CWD line, and the spawn still succeeds" do
       {:ok, thread} = Channel.open_thread(%{title: "no repo"})
       assert {:ok, %{exports: ex}} = Spawn.join(thread.id, "codex")

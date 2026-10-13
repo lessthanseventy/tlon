@@ -350,6 +350,15 @@ defmodule Server.StaffingTest do
     end
   end
 
+  test "uqbar's study is a standing duty: its window neither takes a coworker's seat nor waits for one", %{ws: ws} do
+    {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+    {:ok, study} = Server.Outside.study(ws.id)
+    {:ok, work} = Channel.open_thread(%{title: "plain work", workspace_id: ws.id})
+
+    assert Staffing.duty_thread?(study.id)
+    refute Staffing.duty_thread?(work.id)
+  end
+
   describe "stale_coworkers/3 — a rename left a process minting under a handle the bench lost" do
     defp tab(name, author), do: {%{name: name, index: name, thread_id: nil, opening: nil, pane_pid: 1}, author}
 

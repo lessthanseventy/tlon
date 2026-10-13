@@ -499,6 +499,29 @@ defmodule Server.Profiles do
   PR. Resolving with the PR banks the postmortem as a fact, so a repeat shows up as a pattern.#{@chat_etiquette}
   """
 
+  # Uqbar, the operator's delegate (a citizen, not a seat: `Server.Outside`) → `system_prompt.md`.
+  @uqbar_role """
+  You are Uqbar, the operator's delegate: the extra volume on the lounge shelf, the one who writes the
+  office from outside. Andrew talks to you on your study (this thread); answer him there with
+  post_message, as `uqbar`. You stand in for him where he has handed you the call, and you are no
+  coworker's lead and take no intake.
+
+  THE CHECK-IN. A post from the schedule wakes you about every fifty minutes. Each time: releases
+  (main's gate and smoke passed on its tip, then release:cut, which restarts only when quiet), the
+  inbox (answer as Andrew where it is his call and he has delegated it; approve a gate only after
+  reading the diff and the review; settle stale items), health (the service, /tmp, stray worktrees),
+  and fixes as PRs. Post one line on your study saying what you did, or that nothing needed you.
+
+  NEVER: publish outside tlon, rewrite pushed history, delete data, decide scope Andrew has not
+  delegated, merge without a reviewer's verdict, push to a PR with auto-merge armed, or @mention a
+  coworker on a thread they don't lead. Post as `uqbar`; as `andrew` only when answering for him.
+  A quirk seen twice gets its cause found and fixed, not worked around again.
+
+  YOUR CONTEXT IS NOT YOUR MEMORY. Your conversation with Andrew is on this thread and comes back in
+  your brief; what you learn that should outlast this session, bank as a fact (bank_fact). A fresh
+  session loses nothing that matters.#{@chat_etiquette}
+  """
+
   # The PM persona → `system_prompt.md` (pm-and-release design §1, §4, §6).
   @pm_role """
   You are {{handle}}, the PM — you own what ships and in what order: the backlog's urgency, what is
@@ -612,9 +635,11 @@ defmodule Server.Profiles do
   # instance via the settings file (`Server.OperatorConfig`), a workspace policy or a roster entry.
   @sonnet %{provider: "anthropic", model: "claude-sonnet-5-5", thinking: "medium"}
 
+  @opus %{provider: "anthropic", model: "claude-opus-5-5", thinking: "medium"}
+
   # The Claude models a coworker may be set to (`model_choices/0`), beside the ollama ring.
   @claude_choices [
-    %{provider: "anthropic", model: "claude-opus-5-5", thinking: "medium"},
+    @opus,
     @sonnet,
     %{provider: "anthropic", model: "claude-haiku-5-5", thinking: "medium"},
     %{provider: "anthropic", model: "claude-fable-5-1", thinking: "medium"}
@@ -923,6 +948,32 @@ defmodule Server.Profiles do
     end
   end
 
+  # The outside citizens a window is launched for (`Server.Outside`): on the Claude plan, unsandboxed,
+  # as the operator's own sessions run.
+  @citizens %{"uqbar" => %{model: @opus, mcp: @tlon_mcp, system_prompt: @uqbar_role}}
+
+  @doc """
+  The `%Profile{}` an outside citizen's window is launched with on `workspace_id`; nil for a name that
+  is no citizen with a window.
+  """
+  @spec citizen_profile(String.t(), integer() | nil) :: Profile.t() | nil
+  def citizen_profile(name, workspace_id) do
+    case @citizens[name] do
+      nil ->
+        nil
+
+      t ->
+        %Profile{
+          name: name,
+          workspace_id: workspace_id,
+          harness: :claude_code,
+          mcp: t.mcp,
+          model: t.model,
+          system_prompt: t.system_prompt
+        }
+    end
+  end
+
   @doc """
   The model a seat actually runs, as one label for a commit trailer or a log — the launched profile's,
   never what a model says it is: `"ollama-cloud/kimi-k2.7-code (claude_code)"`, `"anthropic/claude-sonnet-5-5
@@ -932,7 +983,8 @@ defmodule Server.Profiles do
   def model_label(nil, _name), do: nil
 
   def model_label(workspace_id, name) do
-    case seat_profile(name, Server.Workspaces.bench_all(workspace_id), workspace_id) do
+    case seat_profile(name, Server.Workspaces.bench_all(workspace_id), workspace_id) ||
+           citizen_profile(name, workspace_id) do
       nil -> nil
       %Profile{model: model, harness: harness} -> "#{model_name(model)} (#{harness})"
     end

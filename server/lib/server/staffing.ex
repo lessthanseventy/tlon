@@ -142,7 +142,7 @@ defmodule Server.Staffing do
 
   @doc """
   Whether a thread is a standing duty, not work: a schedule's (its standing thread, or an agent
-  run's firing) or the sheriff's beat.
+  run's firing), the sheriff's beat, or an outside citizen's own thread (`Server.Outside.study/1`).
   """
   def duty_thread?(thread_id), do: MapSet.member?(duty_threads([thread_id]), thread_id)
 
@@ -161,7 +161,16 @@ defmodule Server.Staffing do
       )
 
     beats = from(t in Thread, where: t.id in ^ids and t.title == ^Server.Sheriff.beat_title(), select: t.id)
-    MapSet.new(Repo.all(standing) ++ Repo.all(runs) ++ Repo.all(beats))
+
+    studies =
+      from(t in Thread,
+        join: a in Agent,
+        on: a.id == t.agent_id,
+        where: t.id in ^ids and a.name in ^Server.Outside.names(),
+        select: t.id
+      )
+
+    MapSet.new(Repo.all(standing) ++ Repo.all(runs) ++ Repo.all(beats) ++ Repo.all(studies))
   end
 
   defp leaf_thread(%{thread_id: tid}) when is_integer(tid), do: tid
@@ -193,10 +202,10 @@ defmodule Server.Staffing do
     not Enum.any?(parked(ws, tabs), &(&1.id != thread.id and priority(&1) < mine))
   end
 
-  # Tear down a coworker whose identity no longer matches the bench; the next message to whoever
-  # holds that seat now spawns them.
+  # Tear down a coworker whose identity no longer matches the bench (an outside citizen's window is
+  # its own: `Server.Outside`); the next message to whoever holds that seat now spawns them.
   defp reap_stale(workspace_id, bench, tabs) do
-    stale = stale_coworkers(tabs, Enum.map(bench, & &1.name))
+    stale = stale_coworkers(tabs, Enum.map(bench, & &1.name) ++ Server.Outside.names())
     for tab <- stale, do: Tmux.kill_window(workspace_id, tab.index)
     tabs -- stale
   end

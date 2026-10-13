@@ -148,7 +148,7 @@ defmodule Server.MCP.Spawn do
     export TLON_MCP_URL="http://127.0.0.1:#{port}/mcp"
     export TLON_THREAD="#{thread.id}"
     export TLON_AUTHOR="#{agent.name}"\
-    """ <> model_export(thread, agent) <> cwd_export(thread) <> read_dirs_export(thread)
+    """ <> model_export(thread, agent) <> cwd_export(thread, agent) <> read_dirs_export(thread)
   end
 
   # the model this pane launches on, from its seat's profile — what the commit hook stamps as
@@ -161,9 +161,15 @@ defmodule Server.MCP.Spawn do
   end
 
   # The thread's worktree, ensured now, for the boot script to cd into — a coworker never writes in
-  # the main tree (2026-09-08). A workspace with no repo exports nothing; the pane starts wherever.
-  defp cwd_export(thread) do
-    case Server.worktree_for_thread(thread) do
+  # the main tree (2026-09-08). An outside citizen starts in the repo itself, as the operator's own
+  # sessions do, and makes its own scratch worktrees. No repo exports nothing; the pane starts wherever.
+  defp cwd_export(thread, agent) do
+    dir =
+      if agent.name in Server.Outside.names(),
+        do: Server.repo_for_thread(thread),
+        else: Server.worktree_for_thread(thread)
+
+    case dir do
       {:ok, path} -> "\nexport TLON_CWD=\"#{path}\""
       {:error, _} -> ""
     end
