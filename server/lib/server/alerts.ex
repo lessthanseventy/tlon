@@ -112,7 +112,7 @@ defmodule Server.Alerts do
 
   # what nothing waits on can be put away on the server (`Office.Needs.dismiss/1`), so it leaves the
   # office's inbox too, not only this surface
-  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind == "ask",
+  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled),
     do: [%{label: "Put away", method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
 
   defp put_away(_need), do: []
@@ -134,7 +134,7 @@ defmodule Server.Alerts do
         do: %{label: o["label"], method: "POST", path: "/api/office/asks/#{id}", body: %{key: o["key"]}}
       )
 
-  defp actions(%{kind: k, thread_id: t}) when k in ~w(question mention),
+  defp actions(%{kind: k, thread_id: t}) when k in ~w(question mention stalled),
     do: ["Reply…" |> call("/messages", t) |> Map.put(:input, "body")]
 
   defp actions(%{kind: "verify_failed", thread_id: t}), do: [call("Run verify again", "/verify", t)]
