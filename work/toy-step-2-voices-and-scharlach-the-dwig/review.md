@@ -1,17 +1,19 @@
-APPROVE — the blocking bug from the prior review (runeberg, 883de44) is fixed; nothing new blocks.
+APPROVE — the rebase onto main is clean; nothing new since my 196d41a approval.
 
-Reviewer model: claude-fable-5-1, a different model than the builder's (claude-sonnet-5-5 on a1fe73f).
+Reviewer model: claude-fable-5-1, a different model than the builder's (claude-sonnet-5-5).
 
-Verified: `bun test test/scharlach.test.ts test/seat-voices.test.ts` → 14 pass, 0 fail; `bunx tsc --noEmit -p office` clean. Did not drive the TUI. Traced `tickLedger` (`office/tui/main.ts`) by hand: on a green board (`all.triage[sws]` 0) it now falls through to `tickFromTriage(ledger, 0, [], threads)` → `ticked` becomes an empty Set, demerits kept, so a re-red ticks again. The new unit test covers exactly that seam.
+## What changed since 196d41a
+The branch was rebased onto origin/main after the merge queue hit a conflict in `office/tui/main.ts`. Verified:
+- `kit/scharlach.ts`, `kit/seat-voices.ts` and both test files are byte-identical to the previously approved tip (`git diff 196d41a HEAD -- <those files>` is empty).
+- The `main.ts` delta before vs after the rebase differs in exactly one line: the `onTogether` fallback now hands `said` to main's new `room().converse(said); heard(said); changed()` instead of the old per-turn `setTimeout` loop. `converse` takes `{who, line}[]` and `heard` dedupes into the said log, so the canned fallback turns flow through the same path as server-written ones. Correct resolution; main's OFFICE_WIDE/step/held changes are kept.
+- `office/AGENTS.md` line still describes the shipped behaviour.
 
-## Changed since 883de44
-- `tickFromTriage` added in `kit/scharlach.ts`; `tickLedger` only returns early when the fetch of a non-green triage fails (correct: an unknown board should not clear memory).
-- Test "a fully green board (triage count 0) clears the ticked memory" added.
+Checks: `bun test test/scharlach.test.ts test/seat-voices.test.ts test/banter.test.ts` → 17 pass, 0 fail; `bunx tsc --noEmit -p office` clean. The server's verify stage ran `mise run check` green on this branch (06:22Z). Did not drive the TUI.
 
-## Non-blocking (follow_ups)
-- Double tick in one pass: `failed_checks` is uniq by {thread, cmd}, so a thread with two distinct failed check cmds appears twice in `shown`; `tickForRedThreads` checks the OLD ledger's `ticked`, so both tick in the same refresh. Dedupe `redIds` or check the in-progress `ticked`.
-- `failed_checks.shown` is capped at 5 (`Server.Office.Room` `@cap`). With more than 5 reds, threads outside the cap aren't in `redIds`, get dropped from `ticked`, and re-tick if they rotate back in. Presentation only.
-- Scharlach's canned "The build is red. I have recorded the demerit." fires at a game/couch regardless of build state.
-- `seatLine`'s `{name}` → "you" replacement is dead (no line uses it).
-- Fallback fires whenever `data.talk` returns `[]`, including server-side throttling, not only `--sandbox`; the comment overstates.
+## Non-blocking (follow_ups, unchanged from last round)
+- Double tick in one pass when a thread has two distinct failed check cmds (`failed_checks` uniq by {thread, cmd}; `tickForRedThreads` reads the old `ticked`).
+- `failed_checks.shown` cap of 5: reds outside the cap drop from `ticked` and re-tick when they rotate back in.
+- Scharlach's "The build is red. I have recorded the demerit." canned line fires at a game/couch regardless of build state.
+- `seatLine`'s `{name}` replacement is dead.
+- Fallback fires whenever `data.talk` returns `[]`, including server-side throttling; the comment says `--sandbox`.
 - Missing trailing newline in `kit/scharlach.ts` and `kit/seat-voices.ts`.
