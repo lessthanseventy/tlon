@@ -4,7 +4,7 @@
 // Sprites are one char per pixel: r cover, g gilt, p page, k ink, w ribbon.
 import type { Scene } from "./draw"
 import { ROLE, tint } from "./palette"
-import type { Seat } from "./types"
+import type { Seat, Thread } from "./types"
 
 export type Mood = "idle" | "working" | "shipped" | "failing"
 export type Pt = { x: number; y: number }
@@ -27,6 +27,9 @@ const oxblood = () => tint(ROLE.alarm, ROLE.ground, 0.6)
 const paint = (mood: Mood) => ({ r: oxblood(), g: ROLE.body, p: ROLE.prose, k: ROLE.fieldInk, w: RIBBON[mood]() })
 
 const SPEED = 2, RIFFLE_TICKS = 6
+/** uqbar's study, the open thread it leads (`Server.Outside.study/1`), where the operator talks to it; null before there is one */
+export const studyOf = (threads: Thread[]): number | null => threads.find((t) => t.lead === "uqbar")?.id ?? null
+
 export const moodOf = (s: Seat): Mood => (s.thinking ? "working" : "idle")
 
 /** one tick toward `goal`: straight line, `SPEED` px; the first ticks after takeoff riffle */

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { lobbyOf, speech, say, replies, conversation } from "../tui/talk"
+import { lobbyOf, speech, say, handToUqbar, replies, conversation } from "../tui/talk"
 
 const th = (id: number, ws: number, standing: boolean) => ({ id, title: "lobby", stage: null, awaiting: null, workspace_id: ws, standing })
 
@@ -26,6 +26,27 @@ describe("talk", () => {
       { path: "/api/threads/2/messages", body: { body: "we need a thing" } },
     ])
   })
+  test("talking to uqbar goes to its study, where it lives and is woken, not to the lobby", async () => {
+    const got: { path: string; body: unknown }[] = []
+    const srv = Bun.serve({ port: 0, async fetch(r) { got.push({ path: new URL(r.url).pathname, body: await r.json() }); return Response.json({}) } })
+    process.env.TLON_URL = `http://127.0.0.1:${srv.port}`
+    const study = { ...th(9, 1, false), title: "Uqbar's study", lead: "uqbar" }
+    expect(await say([th(2, 1, true), study], 1, "uqbar", "how's the release?")).toBe("said to uqbar")
+    srv.stop()
+    expect(got).toEqual([{ path: "/api/threads/9/messages", body: { body: "how's the release?" } }])
+  })
+
+  test("handing uqbar a thread is a line on its study naming it; no study, nothing posted", async () => {
+    const got: { path: string; body: unknown }[] = []
+    const srv = Bun.serve({ port: 0, async fetch(r) { got.push({ path: new URL(r.url).pathname, body: await r.json() }); return Response.json({}) } })
+    process.env.TLON_URL = `http://127.0.0.1:${srv.port}`
+    const study = { ...th(9, 1, false), title: "Uqbar's study", lead: "uqbar" }, work = { ...th(42, 1, false), title: "the merge queue stalls" }
+    expect(await handToUqbar([study, work], 42)).toBe("handed #42 to uqbar")
+    expect(await handToUqbar([work], 42)).toMatch(/no study/)
+    srv.stop()
+    expect(got).toEqual([{ path: "/api/threads/9/messages", body: { body: "Over to you: #42 the merge queue stalls. See it through, and say here what you did." } }])
+  })
+
   test("no lobby, no post", async () => { expect(await say([], 1, null, "x")).toMatch(/no front desk/) })
 })
 

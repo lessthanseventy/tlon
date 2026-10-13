@@ -33,7 +33,8 @@ import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
-import { say, lobbyOf, replies, conversation, speech } from "./talk"
+import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk"
+import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
 import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
@@ -564,7 +565,8 @@ function newNote() {
 function talk(to: string | null) {
   if (ws === null) return
   const w = ws
-  ask(to ? `say to ${to}` : "say to the office", (s) => { void did(say(view().threads, w, to, s)) }, { multiline: true })
+  // every thread, not the workspace's view: uqbar's study may live on another workspace
+  ask(to ? `say to ${to}` : "say to the office", (s) => { void did(say(all.threads, w, to, s)) }, { multiline: true })
 }
 function reply(tid: number) { openReader(tid, true) }
 function hire() {
@@ -711,6 +713,7 @@ function threadActions(tid: number, inReader = false): Action[] {
     ...answers,
     ...(inReader ? [] : [{ key: "v", label: "read it all", run: () => openReader(tid, false) }]),
     { key: "r", label: "reply", run: () => reply(tid) },
+    ...(studyOf(all.threads) !== null && studyOf(all.threads) !== tid ? [{ key: "u", label: "hand to Uqbar", run: () => void did(handToUqbar(all.threads, tid)) }] : []),
     ...(th?.awaiting && th.stage ? [{ key: "A", label: `approve: ${th.awaiting}`, run: () => void did(data.approve(tid)) }] : []),
     ...(th?.stage ? [{ key: ">", label: "advance the workline", run: () => void did(data.advance(tid)) }] : []),
     ...(th && cardState(view(), th, boardCtx())?.atCap ? [{ key: "S", label: "raise the cap (settings)", run: () => { if (reader) closeReader(); open({ kind: "settings" }) } }] : []),
@@ -1410,7 +1413,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     case "entry": {
       const e = entryOf(a, boardCtx(), needs, feed, new Date())
       const row = (text: string, x: Act | null): Row => ({ segs: [plain(text)], open: x ? () => act(x) : undefined })
-      const rows: Row[] = []
+      // Uqbar lives on its study: where it is now, and the verbs that reach it there
+      const study = studyOf(all.threads), me = all.roster.find((r) => r.agent === "uqbar")
+      const where = !me ? "not in the office yet: its pane opens on the next word to it" : me.thinking ? `working${me.doing ? `: ${me.doing}` : ""}` : me.warm ? "at the shelf, between check-ins" : "asleep: the next word to it wakes a fresh one"
+      const rows: Row[] = [{ segs: [{ s: "UQBAR ", fg: ROLE.attention }, plain(where)] }]
       for (const s of e.prose.split(". ").filter(Boolean)) rows.push({ segs: [plain(s.endsWith(".") ? s : s + ".")] })
       if (e.pivot.rows.length) {
         rows.push({ segs: [{ s: "stage × coworker", fg: ROLE.attention }] })
@@ -1426,7 +1432,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
       if (e.diary.length) { rows.push({ segs: [{ s: "WHAT UQBAR DID TODAY", fg: ROLE.attention }] }); for (const d of e.diary) rows.push(row(d.text, d.act)) }
       if (e.footnotes.length) { rows.push({ segs: [{ s: "FOOTNOTES", fg: ROLE.attention }] }); for (const f of e.footnotes) rows.push(row(`${f.mark} ${f.text}`, f.act)) }
-      return { title: e.title, tint: ROLE.inactive, rows, actions: [back1] }
+      const verbs: Action[] = study === null ? [] : [
+        { key: "m", label: "ask Uqbar…", run: () => talk("uqbar") },
+        { key: "t", label: "look over Uqbar's shoulder", run: () => void zoomInto(study) },
+        { key: "v", label: "read the study", run: () => openReader(study, false) },
+      ]
+      return { title: e.title, tint: ROLE.inactive, rows, actions: [...verbs, back1] }
     }
     case "decide": {
       // one waiting item at a time, everything to decide it on the card; acting moves to the next
