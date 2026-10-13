@@ -41,7 +41,7 @@ import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
 import { applyBuild, loadHome } from "./home"
-import { loadPets, PETS_PATH, savePets } from "./pets"
+import { inSandbox, loadPets, PETS_PATH, savePets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
 import { Reader, type ReaderDeps } from "./reader"
 import { timelineRows } from "./timeline"
@@ -83,7 +83,7 @@ const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // map). A link here that the machine repoints on a theme switch is followed within a second.
 const PALETTE = process.env.TLON_PALETTE ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/palette.json")
 // `--sandbox`: the TUI on a made-up world (tui/sandbox.ts) instead of the server
-const SANDBOX = process.argv.includes("--sandbox") || process.env.OFFICE_SANDBOX === "1"
+const SANDBOX = inSandbox()
 // the toy keeps its looks, souls and hall in a dir of its own, so a pretend hire never reaches the machine's files
 const CONFIG = SANDBOX ? join(tmpdir(), "tlon-sandbox") : join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon")
 // per-agent look overrides, same poll shape as PALETTE above

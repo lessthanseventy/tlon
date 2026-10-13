@@ -1,12 +1,18 @@
-// pets.json: yours, like looks.json. `TLON_PETS` to point elsewhere.
+// pets.json: yours, like looks.json. `TLON_PETS` to point elsewhere; the sandbox keeps its own under $TMPDIR/tlon-sandbox.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
+import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { PetsFile } from "../kit/pets"
 
-export const PETS_PATH = process.env.TLON_PETS
-  ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/pets.json")
+export const inSandbox = (argv: readonly string[] = process.argv, env: Record<string, string | undefined> = process.env) =>
+  argv.includes("--sandbox") || env.OFFICE_SANDBOX === "1"
 
+export function petsPath(sandbox: boolean, env: Record<string, string | undefined> = process.env, home = homedir(), tmp = tmpdir()): string {
+  if (env.TLON_PETS) return env.TLON_PETS
+  return sandbox ? join(tmp, "tlon-sandbox/pets.json") : join(env.XDG_CONFIG_HOME ?? join(home, ".config"), "tlon/pets.json")
+}
+
+export const PETS_PATH = petsPath(inSandbox())
 export function loadPets(path: string = PETS_PATH): PetsFile | undefined {
   try {
     const j = JSON.parse(readFileSync(path, "utf8"))

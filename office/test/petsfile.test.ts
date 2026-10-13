@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { loadPets, savePets } from "../tui/pets"
+import { inSandbox, loadPets, petsPath, savePets } from "../tui/pets"
 
 const dir = mkdtempSync(join(tmpdir(), "pets-"))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
@@ -24,5 +24,19 @@ describe("pets.json", () => {
     writeFileSync(bad, "{nope")
     expect(loadPets(join(dir, "none.json"))).toBeUndefined()
     expect(loadPets(bad)).toBeUndefined()
+  })
+})
+
+describe("which pets.json", () => {
+  test("the sandbox gets a file of its own, TLON_PETS still wins", () => {
+    expect(petsPath(true, {}, "/home/u", "/tmp/x")).toBe("/tmp/x/tlon-sandbox/pets.json")
+    expect(petsPath(false, {}, "/home/u", "/tmp/x")).toBe("/home/u/.config/tlon/pets.json")
+    expect(petsPath(false, { XDG_CONFIG_HOME: "/xdg" }, "/home/u")).toBe("/xdg/tlon/pets.json")
+    expect(petsPath(true, { TLON_PETS: "/p.json" })).toBe("/p.json")
+  })
+  test("--sandbox or OFFICE_SANDBOX=1", () => {
+    expect(inSandbox(["bun", "main.ts", "--sandbox"], {})).toBe(true)
+    expect(inSandbox([], { OFFICE_SANDBOX: "1" })).toBe(true)
+    expect(inSandbox([], {})).toBe(false)
   })
 })
