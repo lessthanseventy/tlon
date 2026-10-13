@@ -8,7 +8,7 @@ export type VisitorKind = "carrier" | "pizza" | "cookies" | "tourist" | "trick" 
 export const RING_FIRST = 6_000, RING_MIN = 9_000, RING_SPAN = 18_000
 /** the hours a scheduled ring may come (a bell asked for by a cut or a key rings whenever) */
 export const OPEN_FROM = 8, OPEN_TO = 18
-/** ticks: how long the bell rattles, how long a visitor waits for someone to come, how long they stay, how long pizza pulls the crew to the kitchen */
+/** ticks: how long the bell rattles, how long a visitor waits for someone to start coming (not while the answerer is on the way), how long they stay, how long pizza pulls the crew to the kitchen */
 export const BELL = 15, WAIT = 150, STAY = 70, PIZZA_TICKS = 600
 /** visitors queued behind the one at the door */
 export const QUEUE_MAX = 3
