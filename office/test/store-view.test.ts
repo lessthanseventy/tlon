@@ -24,3 +24,9 @@ test("stepStoreRow wraps both ways", () => {
   expect(stepStoreRow(0, -1)).toBe(STORE_VIEW_ROWS - 1)
   expect(stepStoreRow(STORE_VIEW_ROWS - 1, 1)).toBe(0)
 })
+
+test("a dog candidate draws its own art and names the dog slot", () => {
+  const c = candidateOf({ ...emptyStore(), species: "dog" }, [])
+  const text = storeRows(c, [], "Argos", "woof").map((r) => r.segs.map((g) => g.s).join("")).join("\n")
+  expect(text).toContain("the dog slot")
+})

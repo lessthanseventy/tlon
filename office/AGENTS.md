@@ -58,7 +58,7 @@ linked window at a time, Ctrl-] back to the room).
   (`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card. → hires in the sandbox only; the
   office's hire call (server `Server.Soul.create`, souls-step-2) is not built yet.
   The pet store (`P` from home; `kit/store.ts` the pure candidate — `roll(species, seed, taken)`, seeded, no model, no I/O —
-  `tui/store.ts` its card rows): ←/→ the shelf (the cat slot's species: cat, rabbit, bird, hamster, pet rock, A Bao A Qu), ↑ pass,
+  `tui/store.ts` its card rows): ←/→ the shelf (every species, each into the slot its family belongs to: cat, dog, rabbit, bird, hamster, pet rock, A Bao A Qu), ↑ pass,
   ↓ back, space locks a row, `e` renames, ⏎ adopts into the species' slot — the occupant leaves by the door (one pet per slot, no
   history). `store.json` (`TLON_STORE`) holds species + seed + locks + edits. A new species is data: frames in `SPECIES_ART`, a
   `SPECIES_VOICE` pack, a `SPECIES_BASE` row and a `SLOT_SPECIES` entry (`fillArt` lets it ship `sit` alone).
