@@ -14,7 +14,7 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/office/archive/:ws      Office.archive (a workspace's done tickets + closed threads)
       GET    /api/office/banter/:ws       Office.Banter.lines (recent small talk; asking may write the next line)
       GET    /api/office/pets/:ws         Office.Pets.voices (the pets' lines by occasion; asking may write a batch)
-      GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next)
+      GET    /api/office/corkboard/:ws    Office.Corkboard.notes (the coworkers' notes to each other; asking may pin the next, and may post to #random: Office.Random)
       GET    /api/office/focus            Office.Focus.latest (the newest "show thread N" request)
       POST   /api/office/focus            Office.Focus.request {"thread_id"} — the desktop asks the office TUI to open a thread
       GET    /api/office/needs            Office.Needs.list (everything waiting on the operator: blocking first, then to decide)
@@ -288,8 +288,12 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "GET", "office", ["corkboard", ws]) do
     case Integer.parse(ws) do
-      {id, ""} -> json(conn, 200, Server.Office.Corkboard.notes(id))
-      _ -> json(conn, 404, %{error: "no workspace #{ws}"})
+      {id, ""} ->
+        Server.Office.Random.nudge(id)
+        json(conn, 200, Server.Office.Corkboard.notes(id))
+
+      _ ->
+        json(conn, 404, %{error: "no workspace #{ws}"})
     end
   end
 
