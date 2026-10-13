@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
-import { BELL, PIZZA_TICKS, STAY, WAIT } from "../kit/door"
+import { arrivals, BELL, PIZZA_TICKS, STAY, WAIT } from "../kit/door"
+import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom } from "../rooms/wide"
 import { office, seeded } from "./golden"
 
@@ -66,5 +67,14 @@ describe("the doorbell", () => {
     const before = draws
     expect(inside(r).nextRing).toBeGreaterThan(inside(r).tick)
     expect(before).toBeGreaterThanOrEqual(0)
+  }))
+  test("§8: a ring brings a coworker to the door and a visitor in it; a cut brings pizza", () => seeded(7, () => {
+    const { r, a } = room(), s = inside(r)
+    const before: Agents = { ...EMPTY, ok: true, release: { sha: "a", cut_at: "2026-10-12T00:00:00Z" } }
+    const after: Agents = { ...before, release: { sha: "b", cut_at: "2026-10-12T01:00:00Z" } }
+    for (const k of arrivals(before, after, [], [])) r.ring(k)
+    expect(until(r, a, () => r.visitor()?.kind === "pizza")).toBe(true)
+    expect(s.actors.get(s.caller!.who)).toBeDefined()
+    expect(r.pizzaOn()).toBe(true)
   }))
 })
