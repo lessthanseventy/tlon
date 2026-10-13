@@ -44,5 +44,10 @@ stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 git ls-files --cached --others --exclude-standard | grep -v '\\.test\\.tsx\\?$' | cpio -pdm --quiet "$stage"
 cp claude-code/*.test.ts "$stage/claude-code/"
-claude plugin test "$stage"
+# mise stops this task by signalling the shell alone (a sibling gate failed): the runner must be gone
+# before the EXIT trap removes its stage, or it fails every test left with "no such plugin folder"
+claude plugin test "$stage" &
+runner=$!
+trap 'kill "$runner" 2>/dev/null; wait "$runner"; exit 143' TERM INT
+wait "$runner"
 """
