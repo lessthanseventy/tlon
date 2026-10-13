@@ -263,8 +263,12 @@ export const fillArt = (a: { sit: Frames } & Partial<Poses>): Poses => ({
   sleep: a.sleep ?? a.sit, stretch: a.stretch ?? a.sit, play: a.play ?? a.sit,
 })
 
+// a pet rock: k stone, e eyes, c eyes shut. It ships `sit` and a blink; every other pose is its sit (fillArt).
+const ROCK_SIT = ["...kkkkk..", "..kkkkkkk.", ".kkekkekk.", ".kkkkkkkkk", "kkkkkkkkkk"]
+export const ROCK = fillArt({ sit: [ROCK_SIT], blink: [shut(ROCK_SIT)] })
+
 /** the art the cat slot's species draws with */
-export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD, hamster: HAMSTER }
+export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD, hamster: HAMSTER, rock: ROCK }
 
 // Argos, the office dog (Borges' "The Immortal"), facing right: coat (k), ears (e), eye (i), nose
 // (n), tongue (p), tail (t), an eye shut (c)

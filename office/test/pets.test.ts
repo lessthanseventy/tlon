@@ -251,6 +251,19 @@ describe("every species is data", () => {
       for (let i = 0; i < 120; i++) { room.step(a); room.render(a, focus, measure) }
     })
   })
+  test("the pet rock ships: a single pose, every other pose is its sit, it barely moves", () => {
+    expect(SPECIES).toContain("rock")
+    expect(slotOf("rock")).toBe("cat")
+    expect(resolvePets({ cat: { species: "rock" } }).cat.species).toBe("rock")
+    expect(SPECIES_ART.rock.walk).toBe(SPECIES_ART.rock.sit)
+    expect(bucketFor("pet", { warmth: 0, wits: 0, energy: 0 }, () => 0, "rock")).toBe(SPECIES_VOICE.rock.sassy.pet!)
+    expect(speciesBase("rock").nap).toBeGreaterThanOrEqual(0.8)
+    chance(0.999, () => {
+      const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1)
+      room.setPets(resolvePets({ cat: { species: "rock" } }))
+      for (let i = 0; i < 120; i++) { room.step(a); room.render(a, focus, measure) }
+    })
+  })
 })
 
 describe("Argos and the trail", () => {

@@ -210,9 +210,9 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
   if (d.said && sc.tick >= d.saidFrom && sc.tick < d.saidUntil) sc.balloons.push({ t: "balloon", lines: balloonLines(d.said), cx: d.x, top: y })
 }
 
-export const SPECIES = ["cat", "dog", "rabbit", "bird", "hamster"] as const
+export const SPECIES = ["cat", "dog", "rabbit", "bird", "hamster", "rock"] as const
 /** what each slot may hold: the cat slot is the room's cat-family pet */
-export const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird", "hamster"], dog: ["dog"] } as const
+export const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird", "hamster", "rock"], dog: ["dog"] } as const
 export type CatSpecies = (typeof SLOT_SPECIES.cat)[number]
 /** the slot a species lives in, or undefined for a name no slot holds */
 export const slotOf = (sp: string): "cat" | "dog" | undefined => (["cat", "dog"] as const).find((s) => (SLOT_SPECIES[s] as readonly string[]).includes(sp))
