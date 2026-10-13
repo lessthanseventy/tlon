@@ -342,7 +342,7 @@ defmodule Server.Arbiter.TmuxTest do
   } do
     # the socket is the workspace's, so the test workspace id must be one no live workspace uses;
     # a fresh test DB numbers from 1 — guard the operator's real server by renaming the socket
-    sock = "tlon-test-#{System.unique_integer([:positive])}"
+    sock = "tlon-test-#{System.pid()}-#{System.unique_integer([:positive])}"
     # its own socket dir, never the operator's /tmp/tmux-<uid> (and /tmp is read-only in a sandbox)
     dir = Path.join(System.tmp_dir!(), sock)
     File.mkdir_p!(dir)
