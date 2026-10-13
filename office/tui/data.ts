@@ -11,7 +11,8 @@ const base = () => (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/
 
 let fake: Toy | null = null
 /** the sandbox's world instead of the server (`office --sandbox`) */
-export const useFake = (t: Toy | null) => { fake = t }
+/** a new source: what was held belongs to the old one */
+export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds = [] }
 
 async function call(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
   if (fake) {
