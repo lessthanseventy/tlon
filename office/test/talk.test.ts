@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { lobbyOf, speech, say, replies } from "../tui/talk"
+import { lobbyOf, speech, say, replies, conversation } from "../tui/talk"
 
 const th = (id: number, ws: number, standing: boolean) => ({ id, title: "lobby", stage: null, awaiting: null, workspace_id: ws, standing })
 
@@ -41,5 +41,23 @@ describe("replies", () => {
   })
   test("nothing the operator said, nothing answered", () => {
     expect(replies([m(1, "ada", "hi"), m(2, "andrew", "@ada x"), m(3, "andrew", "y")], "andrew")).toEqual([])
+  })
+})
+
+describe("conversation", () => {
+  const m = (id: number, author: string, body: string, reply_to: number | null = null) => ({ id, author, body, at: "", kind: "chat", reply_to })
+  test("keeps X's posts and the operator's posts mentioning or replying to X, nothing else", () => {
+    const msgs = [
+      m(1, "andrew", "@ada how goes it"),
+      m(2, "ada", "fine"),
+      m(3, "bo", "unrelated"),
+      m(4, "andrew", "@bo you there"),
+      m(5, "andrew", "thanks", 2),
+      m(6, "andrew", "ok", 3),
+      m(7, "tlon", "ada was staffed", 2),
+      m(8, "andrew", "@adam hi"),
+      m(9, "andrew", "we need a thing"),
+    ]
+    expect(conversation(msgs, "ada", "andrew").map((x) => x.id)).toEqual([1, 2, 5])
   })
 })
