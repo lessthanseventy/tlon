@@ -10,10 +10,10 @@ defmodule Server.Attention do
   all read the same "this thread has an unresolved prompt".
 
   `tick/0` reconciles every workspace's coworker windows (the poller calls it every few seconds);
-  `answer/3` sends the operator's reply into the pane as keys; `respond/3` is the one door every
-  operator post takes — an answer when it names an option of an open prompt, a plain post
-  otherwise. A prompt with no `window` is no pane's: the PM's release gate (`Server.Release.PM`),
-  whose answer goes to the PM instead of a pane, and which no reconcile closes.
+  `answer_prompt/3` answers one prompt by its id — the only way any surface answers one — and
+  sends a pane's answer in as keys after re-reading the pane; `respond/3` is an operator's plain
+  post on a thread, never an answer. A prompt with no `window` is no pane's: the PM's release gate
+  (`Server.Release.PM`), whose answer goes to the PM instead of a pane, and which no reconcile closes.
 
   Detection fails closed: a pane reads as waiting only on a positive match of a harness's own
   dialog — Claude Code's cursor-marked `❯ 1. Yes` list under a `…?` question. A model's own
@@ -230,27 +230,16 @@ defmodule Server.Attention do
   # ---- answering ----------------------------------------------------------------------------
 
   @doc """
-  The one door for an operator post. A closed thread reopens. When the thread has an open prompt
-  and `body` starts with one of its options (the key, or the label — `y`, `n`, `2`, `yes`), it is
-  an answer: keys into the pane, a delivered reply on the thread, the prompt resolved. Anything
-  else is a plain post, which the switchboard holds until the prompt is resolved.
+  The door for an operator post on a thread: a closed thread reopens, the post is a plain post
+  (the switchboard holds it while a pane on the thread sits on a dialog), and a worker's question
+  is settled. It never answers a prompt — an answer names its prompt (`answer_prompt/3`), so a key
+  meant for one prompt can't land in another on the same thread.
   """
   def respond(thread_id, author, body) when is_binary(body) do
     # a reply to a closed thread (one opened from history) reopens it first, so its lead is staffed
     _ = Channel.reopen_if_closed(thread_id)
 
-    posted =
-      case open_prompt(thread_id) do
-        %Message{} = prompt ->
-          case pick(prompt, body) do
-            nil -> Channel.post(%{thread_id: thread_id, author: author, body: body})
-            {key, rest} -> answer(prompt, author, body, key, rest)
-          end
-
-        nil ->
-          Channel.post(%{thread_id: thread_id, author: author, body: body})
-      end
-
+    posted = Channel.post(%{thread_id: thread_id, author: author, body: body})
     with {:ok, _} <- posted, do: answered(thread_id)
     posted
   end
@@ -274,8 +263,8 @@ defmodule Server.Attention do
   @doc """
   A decision with its answers attached — `ask_operator(question, options)`'s door. One pane-less
   `prompt` per decision (payload `ask: author`), keyed `1`, `2`, …; the thread does not park, and
-  a thread holds as many asks as it has decisions. Answered by id (`answer_ask/3`) or by a reply
-  on the thread that names an option. `about` is the thread the decision is about when it isn't
+  a thread holds as many asks as it has decisions. Answered by id (`answer_prompt/3`); a reply on
+  the thread is a reply, not an answer. `about` is the thread the decision is about when it isn't
   `thread_id`: when that thread closes the ask is withdrawn (`withdraw_asks_about/1`). `{:ok, prompt}`.
   """
   def ask(thread_id, author, question, [_ | _] = options, about \\ nil, extra \\ %{}) do
@@ -330,22 +319,43 @@ defmodule Server.Attention do
     end)
   end
 
-  @doc "Answer the ask `id` with one of its option keys (text after the key rides along)."
-  def answer_ask(id, author, body) when is_binary(body) do
-    case Repo.get(Message, id) do
-      %Message{kind: "prompt", payload: %{"ask" => _}, resolved_at: nil} = prompt ->
-        case pick(prompt, body) do
-          {key, rest} -> prompt |> answer(author, body, key, rest) |> settling(prompt.thread_id)
-          nil -> {:error, :no_such_option}
-        end
-
-      %Message{kind: "prompt", payload: %{"ask" => _}} ->
-        {:error, :answered}
-
-      _ ->
-        {:error, :not_found}
+  @doc """
+  Answer the open prompt `id` — a pane's dialog, an ask, the release gate — with one of its
+  options (the key or the label; text after it rides along). A pane's dialog is typed into only
+  while the pane still shows it: the screen is read again first, and a dialog gone from it is
+  `{:error, :not_showing}` (the next tick settles the row). `{:ok, reply}`, or `{:error,
+  :not_found | :answered | :no_such_option | :not_showing}`.
+  """
+  def answer_prompt(id, author, body) when is_binary(body) do
+    with %Message{kind: "prompt", resolved_at: nil} = prompt <- Repo.get(Message, id),
+         {:ok, key, rest} <- option(prompt, body),
+         :ok <- still_showing(prompt) do
+      prompt |> answer(author, body, key, rest) |> settling(prompt.thread_id)
+    else
+      %Message{kind: "prompt"} -> {:error, :answered}
+      {:error, _} = error -> error
+      _ -> {:error, :not_found}
     end
   end
+
+  defp option(prompt, body) do
+    case pick(prompt, body) do
+      {key, rest} -> {:ok, key, rest}
+      nil -> {:error, :no_such_option}
+    end
+  end
+
+  defp still_showing(%Message{payload: %{"window" => window, "workspace_id" => ws, "summary" => summary}}) do
+    case Tmux.run(ws, ["capture-pane", "-p", "-t", Tmux.target(ws, "=" <> window)]) do
+      {out, 0} when is_binary(out) ->
+        if match?(%{summary: ^summary}, detect(out)), do: :ok, else: {:error, :not_showing}
+
+      _ ->
+        {:error, :not_showing}
+    end
+  end
+
+  defp still_showing(_paneless), do: :ok
 
   defp settling({:ok, _} = posted, thread_id) do
     answered(thread_id)

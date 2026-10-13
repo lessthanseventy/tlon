@@ -40,7 +40,8 @@
 #                                  (JSON, the world that spawned the pane), else via rpc
 #   read <id> [n]                  a thread's last n messages (20), oldest first, as plain text
 #   message <id>                   one message in full: kind, reply-to, delivery, resolution, payload
-#   post <id> <text…>              post as the operator
+#   post <id> <text…>              post as the operator (a plain post: it answers no prompt)
+#   answer <prompt-id> <key> [text…]  answer one prompt (a pane's dialog, an ask, the release gate) by its id
 #   post --as <citizen> <id> <text…>  post as an outside citizen (uqbar), never as the operator
 #   post --notice --as <citizen> <id> <text…>  …as a notice: an FYI that wakes nobody
 #   close-thread <id>              close a thread (its ticket is done; a child reports up)
@@ -467,10 +468,17 @@ case "$cmd" in
     body="$*"
     { int "$tid" && [ -n "$body" ]; } ||
       { echo 'usage: mise run server:post -- <thread-id> <message text…>' >&2; exit 2; }
-    # Post as the operator (default andrew) — parity with the agents' post_message. Through
-    # Server.Attention.respond: a body naming an option of an open prompt (`y`, `n`, `2`) answers
-    # the coworker's dialog instead of queueing behind it.
+    # Post as the operator (default andrew) — parity with the agents' post_message. A plain post:
+    # a prompt is answered by its id (`answer`), so a key can't land in the wrong prompt.
     exec "$SERVER" rpc "op = Application.get_env(:server, :operator, \"andrew\"); {:ok, m} = Server.Attention.respond($tid, op, \"$(esc "$body")\"); IO.puts(\"posted ##{m.id} to thread #$tid as #{op}\")"
+    ;;
+
+  answer)
+    pid="${1:-}"; shift || true
+    body="$*"
+    { int "$pid" && [ -n "$body" ]; } ||
+      { echo 'usage: tlon-cli.sh answer <prompt-id> <key> [text…]' >&2; exit 2; }
+    exec "$SERVER" rpc "op = Application.get_env(:server, :operator, \"andrew\"); case Server.Attention.answer_prompt($pid, op, \"$(esc "$body")\") do {:ok, m} -> IO.puts(\"answered prompt #$pid as #{op} (##{m.id})\"); {:error, why} -> IO.puts(\"refused: #{why}\"); raise(\"refused\") end"
     ;;
 
   workline)

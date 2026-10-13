@@ -27,6 +27,27 @@ defmodule Server.Office.NeedsTest do
     assert Needs.list() == []
   end
 
+  test "a pane dialog or the release gate is a dialog, carrying its prompt's id to answer by", %{ws: ws} do
+    {:ok, t} = Channel.open_thread(%{title: "root", workspace_id: ws.id})
+
+    gate =
+      Server.Repo.insert!(%Server.Message{
+        thread_id: t.id,
+        author: "tlon",
+        kind: "prompt",
+        body: "⚑ release abc1234",
+        payload: %{
+          "release" => "abc1234",
+          "summary" => "release abc1234",
+          "options" => [%{"key" => "a", "label" => "approve"}]
+        },
+        created_at: DateTime.truncate(DateTime.utc_now(), :second)
+      })
+
+    assert [%{kind: "dialog", ref: ref}] = Needs.list()
+    assert ref == gate.id
+  end
+
   test "a workline at its gate is a gate; one red at verify is a failed verify", %{ws: ws} do
     # a machine-born intent parks at its gate before any artifact, by design
     {:ok, _} =
@@ -200,7 +221,7 @@ defmodule Server.Office.NeedsTest do
              ] = Needs.list()
 
       assert {ra, rb} == {a.id, b.id}
-      {:ok, _} = Server.Attention.answer_ask(a.id, "andrew", "1")
+      {:ok, _} = Server.Attention.answer_prompt(a.id, "andrew", "1")
       assert [%{kind: "ask", ref: ^rb}] = Needs.list()
     end
 

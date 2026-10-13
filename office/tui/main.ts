@@ -613,8 +613,8 @@ function needActions(n: data.Need): Action[] {
   const after = () => void refresh()
   const acts: Action[] = [
     ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
-    ...(n.kind === "dialog" && tid ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.post(tid, o.key)).then(after) })) : []),
-    ...(n.kind === "ask" && n.ref ? (n.options ?? []).slice(0, 9).map((o): Action => ({ key: o.key, label: o.label, run: () => void did(data.answerAsk(n.ref!, o.key)).then(after) })) : []),
+    ...(n.kind === "dialog" && n.ref ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
+    ...(n.kind === "ask" && n.ref ? (n.options ?? []).slice(0, 9).map((o): Action => ({ key: o.key, label: o.label, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
     ...(n.kind === "seats" && n.ref ? [{ key: "1", label: `raise the cap to ${n.ref}`, run: () => void did(data.settingsEdit("max_leaves", n.ref)).then(after) }] : []),
     ...(n.kind === "job_failed" && n.ref ? [
       { key: "R", label: "run it again", run: () => void did(data.retryJob(n.ref!)).then(after) },
@@ -711,7 +711,8 @@ const ask2 = (label: string, run: () => void) => { confirm = { label, run }; dra
 /** the verbs on a thread, wherever it is open (its card, a person's, the reader) */
 function threadActions(tid: number, inReader = false): Action[] {
   const th = threadOf(tid)
-  const answers = (th?.prompt?.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.post(tid, o.key)) }))
+  const prompt = th?.prompt
+  const answers = (prompt?.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(prompt!.id, o.key)) }))
   return [
     ...answers,
     ...(inReader ? [] : [{ key: "v", label: "read it all", run: () => openReader(tid, false) }]),
@@ -844,7 +845,8 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   if (th && st) { const n = nextStep(th, st); out.push({ segs: [stateSeg(st), { s: st.why, fg: st.kind === "needs" ? ROLE.attention : ROLE.prose }, dim("  → "), key(`${n.key} `), plain(n.label)] }) }
   if (th?.prompt) {
     out.push({ segs: [pink("asks: "), plain(th.prompt.summary)] })
-    th.prompt.options?.forEach((o, i) => out.push({ segs: [key(` ${i + 1} `), plain(o.label)], open: () => did(data.post(tid, o.key)) }))
+    const pid = th.prompt.id
+    th.prompt.options?.forEach((o, i) => out.push({ segs: [key(` ${i + 1} `), plain(o.label)], open: () => did(data.answer(pid, o.key)) }))
   } else if (th?.awaiting && !st) out.push({ segs: [pink(`awaits ${th.awaiting}${th.stage ? " — A approves" : ""}`)] })
   // a running thread's activity, every event the server keeps: the pane opens on the newest and
   // scrolls back (pgup/pgdn, the wheel) — unless you flipped to the conversation

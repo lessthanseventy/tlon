@@ -197,7 +197,7 @@ defmodule Server.AttentionTest do
     assert Map.keys(Repo.get!(Server.Workspace, ws.id).knobs["limits_seen"]) == ["hronir/#{t.id}/t#{t.id}"]
   end
 
-  describe "respond/3 — the operator's one door" do
+  describe "answer_prompt/3 — every answer names its prompt" do
     setup %{ws: ws, thread: t} do
       tmux(leaf(t.id))
       Process.put(:screen, @claude)
@@ -207,38 +207,90 @@ defmodule Server.AttentionTest do
     end
 
     test "an option key answers: its number pressed, a delivered reply, the prompt resolved",
-         %{thread: t, prompt: prompt, target: target} do
-      assert {:ok, reply} = Attention.respond(t.id, "andrew", "1")
+         %{prompt: prompt, target: target} do
+      assert {:ok, reply} = Attention.answer_prompt(prompt.id, "andrew", "1")
 
       assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "1"]}
       refute_receive {:tmux, [_, _, "send-keys", "-t", ^target, "Enter"]}
       assert %Message{kind: "chat", reply_to: reply_to, delivered_at: %DateTime{}} = reply
       assert reply_to == prompt.id
-      assert [%Message{resolution: "answered: 1"}] = prompts(t.id)
-      refute Attention.waiting?(t.id)
+      assert [%Message{resolution: "answered: 1"}] = prompts(prompt.thread_id)
+      refute Attention.waiting?(prompt.thread_id)
     end
 
     test "the label answers too, and text after the key follows as its own burst, then Enter",
-         %{ws: ws, thread: t, target: target} do
-      assert {:ok, _} = Attention.respond(t.id, "andrew", "Yes")
+         %{ws: ws, thread: t, prompt: prompt, target: target} do
+      assert {:ok, _} = Attention.answer_prompt(prompt.id, "andrew", "Yes")
       assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "1"]}
 
-      Process.put(:screen, @claude)
       :ok = Attention.tick(ws.id)
-      assert {:ok, _} = Attention.respond(t.id, "andrew", "3 use mise, not a bare mix")
+      [_, again] = prompts(t.id)
+      assert {:ok, _} = Attention.answer_prompt(again.id, "andrew", "3 use mise, not a bare mix")
       assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "3"]}
       assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "use mise, not a bare mix"]}
       assert_receive {:tmux, [_, _, "send-keys", "-t", ^target, "Enter"]}
     end
 
-    test "anything else is a plain post, and the switchboard holds it while the prompt is open", %{thread: t} do
-      assert {:ok, %Message{kind: "chat", delivered_at: nil} = m} =
-               Attention.respond(t.id, "andrew", "carry on when done")
+    test "a pane dialog is typed into only while the pane still shows it",
+         %{prompt: prompt, target: target} do
+      Process.put(:screen, @claude_idle)
 
+      assert {:error, :not_showing} = Attention.answer_prompt(prompt.id, "andrew", "1")
+      refute_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, _]}
+      assert Repo.get!(Message, prompt.id).resolved_at == nil
+    end
+
+    test "two open prompts on one thread: answering one by id leaves the other open and untouched",
+         %{ws: ws, thread: t, prompt: dialog, target: target} do
+      gate = release_gate!(ws, t)
+
+      assert {:ok, reply} = Attention.answer_prompt(gate.id, "andrew", "n")
+      assert reply.reply_to == gate.id
+      assert Repo.get!(Message, gate.id).resolution == "answered: n"
+      refute_receive {:tmux, [_, _, "send-keys" | _]}
+      assert %Message{resolved_at: nil} = Repo.get!(Message, dialog.id)
+
+      gate = release_gate!(ws, t)
+      assert {:ok, _} = Attention.answer_prompt(dialog.id, "andrew", "1")
+      assert_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, "1"]}
+      assert %Message{resolved_at: nil} = Repo.get!(Message, gate.id)
+    end
+
+    test "a plain post on the thread is a plain post: no prompt is answered, no key typed, and the switchboard holds it",
+         %{thread: t, prompt: prompt, target: target} do
+      assert {:ok, %Message{kind: "chat", delivered_at: nil, reply_to: nil} = m} =
+               Attention.respond(t.id, "andrew", "1")
+
+      refute_receive {:tmux, [_, _, "send-keys", "-l", "-t", ^target, _]}
+      assert Repo.get!(Message, prompt.id).resolved_at == nil
       assert {:pending, _} = Switchboard.deliver(m)
-      assert Repo.get!(Message, m.id).delivered_at == nil
       assert Attention.waiting?(t.id)
     end
+
+    test "an unknown or answered prompt, or a key it doesn't offer, is refused", %{prompt: prompt} do
+      assert {:error, :not_found} = Attention.answer_prompt(-1, "andrew", "1")
+      assert {:error, :no_such_option} = Attention.answer_prompt(prompt.id, "andrew", "9")
+      assert {:ok, _} = Attention.answer_prompt(prompt.id, "andrew", "1")
+      assert {:error, :answered} = Attention.answer_prompt(prompt.id, "andrew", "1")
+    end
+  end
+
+  # the PM's release gate as `Server.Release.PM` leaves it: a prompt no pane holds
+  defp release_gate!(ws, t) do
+    %{
+      thread_id: t.id,
+      author: "tlon",
+      body: "⚑ release abc1234",
+      kind: "prompt",
+      payload: %{
+        "release" => "abc1234",
+        "workspace_id" => ws.id,
+        "summary" => "release abc1234",
+        "options" => [%{"key" => "a", "label" => "approve"}, %{"key" => "n", "label" => "not yet"}]
+      }
+    }
+    |> Message.post_changeset()
+    |> Repo.insert!()
   end
 
   describe "ask/4 — a decision with its answers attached" do
@@ -259,21 +311,21 @@ defmodule Server.AttentionTest do
       {:ok, a} = Attention.ask(t.id, "tertius", "ireneo's weather: start now?", ["go", "hold"])
       {:ok, b} = Attention.ask(t.id, "tertius", "lonnrot's north wall?", ["go", "fold into #172"])
 
-      assert {:ok, reply} = Attention.answer_ask(a.id, "andrew", "2")
+      assert {:ok, reply} = Attention.answer_prompt(a.id, "andrew", "2")
       assert %Message{author: "andrew", reply_to: reply_to, delivered_at: nil, body: body} = reply
       assert reply_to == a.id
       assert body == "@tertius ireneo's weather: start now? → hold"
       assert Repo.get!(Message, a.id).resolution == "answered: hold"
       assert Repo.get!(Message, b.id).resolved_at == nil
-      assert {:error, :answered} = Attention.answer_ask(a.id, "andrew", "1")
-      assert {:error, :no_such_option} = Attention.answer_ask(b.id, "andrew", "7")
+      assert {:error, :answered} = Attention.answer_prompt(a.id, "andrew", "1")
+      assert {:error, :no_such_option} = Attention.answer_prompt(b.id, "andrew", "7")
     end
 
-    test "a reply on the thread that names an option answers the newest ask", %{thread: t} do
+    test "an answer may lead with the label and say more", %{thread: t} do
       {:ok, a} = Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
 
       assert {:ok, %Message{body: "@tertius start now? → go — after the cut"}} =
-               Attention.respond(t.id, "andrew", "go after the cut")
+               Attention.answer_prompt(a.id, "andrew", "go after the cut")
 
       assert Repo.get!(Message, a.id).resolution == "answered: go"
     end
@@ -314,7 +366,7 @@ defmodule Server.AttentionTest do
       {:ok, _} = t |> Ecto.Changeset.change(awaiting: "andrew") |> Repo.update()
       {:ok, a} = Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
 
-      assert {:ok, _} = Attention.answer_ask(a.id, "andrew", "1")
+      assert {:ok, _} = Attention.answer_prompt(a.id, "andrew", "1")
       assert Repo.get!(Server.Thread, t.id).awaiting == nil
     end
 
@@ -325,7 +377,7 @@ defmodule Server.AttentionTest do
       {:ok, a} = Attention.ask(built.id, "otalora", "resume the build?", ["resume", "hold"])
       {:ok, _} = Channel.assign_lead(built.id, "emma")
 
-      assert {:ok, %Message{body: body}} = Attention.answer_ask(a.id, "andrew", "1")
+      assert {:ok, %Message{body: body}} = Attention.answer_prompt(a.id, "andrew", "1")
       assert body == "@emma (otalora asked, now off shift) resume the build? → resume"
     end
   end

@@ -12,8 +12,8 @@ defmodule Server.Release.PM do
   dependency, the gate, the law, a deleted test, a commit too big to grade) always holds it.
 
   Fits: the PM cuts it and says so. Doesn't: ONE gate on the workspace's root thread — a `prompt`
-  no pane holds (`payload["release"]`), on the operator's list as a dialog and answered like one
-  (`Server.Attention.respond/3`): approve queues the cut, not yet leaves it. Nothing is cut unless
+  no pane holds (`payload["release"]`), on the operator's list as a dialog and answered like one, by
+  its id (`Server.Attention.answer_prompt/3`): approve queues the cut, not yet leaves it. Nothing is cut unless
   `Server.Release.Candidate.releasable?/2` holds at that moment.
 
   A cut runs `scripts/release.sh cut <sha> --no-restart` in the tlon checkout, records the changelog
@@ -300,7 +300,7 @@ defmodule Server.Release.PM do
   end
 
   @doc """
-  The operator answered a release gate (`Server.Attention.respond/3` has resolved it): `"a"`
+  The operator answered a release gate (`Server.Attention.answer_prompt/3` has resolved it): `"a"`
   queues the cut, `"n"` holds it.
   """
   def answered(%Message{payload: %{"release" => sha} = p}, key) do

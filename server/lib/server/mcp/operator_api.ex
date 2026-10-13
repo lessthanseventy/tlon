@@ -24,7 +24,9 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/alerts                  Alerts.list (what the desktop raises: alarm, decision, sticky, info — seated, landed, live — each with its actions)
       POST   /api/usage/claude            {"five_hour"?, "seven_day"?: {"percent", "resets_at"}} → Usage.report (the office's meter; the mod posts it)
       DELETE /api/office/rollout/:id      Rollout.dismiss (a rollout note the operator has done)
-      POST   /api/office/asks/:id         Attention.answer_ask {"key"} (one ask answered by its option key)
+      POST   /api/office/prompts/:id      Attention.answer_prompt {"key"} (one prompt — a pane's dialog, an ask, the
+                                          release gate — answered by its id; a dialog the pane no longer shows, 409)
+      POST   /api/office/asks/:id         the same door, by the path the asks were first answered on
       POST   /api/office/jobs/:id/retry   Office.Needs.retry_job (a failed job, run again)
       DELETE /api/office/jobs/:id         Office.Needs.dismiss_job (a failed job the operator has seen)
       POST   /api/release/retry/:id       Release.PM.retry (a failed cut, by its check_failed event: its cut queued again)
@@ -52,8 +54,8 @@ defmodule Server.MCP.OperatorAPI do
       GET    /api/threads/:id/messages    Channel.recent_messages (?limit=, default 50)
       GET    /api/threads/:id/terminal    where its coworker runs: {socket, session, window}, 404 if none
       GET    /api/threads/:id/worktree    its coworker's working dir: {path} (the per-thread git worktree, ensured), 404 if no repo
-      POST   /api/threads/:id/messages    {"body"} → Attention.respond as the operator: answers an open
-                                          prompt, reopens a closed thread, else posts; 201 + the message
+      POST   /api/threads/:id/messages    {"body"} → Attention.respond as the operator: a plain post (never an
+                                          answer to a prompt), reopens a closed thread; 201 + the message
       POST   /api/threads/:id/close       Channel.close_thread: its sessions end, its ticket is done
                                           (a plain thread with unmerged work is tracked at build instead, left open)
       POST   /api/threads/:id/hand-off    {"agent"} → Staffing.hand_off (staffed now where Oban runs)
@@ -243,16 +245,16 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  defp route(conn, "POST", "office", ["asks", id]) do
+  defp route(conn, "POST", "office", [kind, id]) when kind in ["prompts", "asks"] do
     with {n, ""} <- Integer.parse(id),
          {%{"key" => key}, conn} when is_binary(key) <- body(conn) do
-      case Server.Attention.answer_ask(n, operator(), key) do
+      case Server.Attention.answer_prompt(n, operator(), key) do
         {:ok, reply} -> json(conn, 200, %{ok: true, message_id: reply.id})
-        {:error, why} -> json(conn, 409, %{error: "ask #{id}: #{why}"})
+        {:error, why} -> json(conn, 409, %{error: "prompt #{id}: #{why}"})
       end
     else
       {_, %Plug.Conn{} = conn} -> json(conn, 400, %{error: ~s(expected {"key": "1"})})
-      _ -> json(conn, 404, %{error: "no ask #{id}"})
+      _ -> json(conn, 404, %{error: "no prompt #{id}"})
     end
   end
 
@@ -604,11 +606,10 @@ defmodule Server.MCP.OperatorAPI do
     end
   end
 
-  # Post as the operator through the one door (`Server.Attention.respond/3`, the same call
-  # `server:post` makes): a body naming an option of an open prompt answers
-  # the coworker's dialog in its pane (the 201 carries `reply_to` = the prompt), a closed thread
-  # reopens, anything else posts and the Bus wakes the thread's lead. `author` is not a
-  # parameter: this door IS the operator.
+  # Post as the operator (`Server.Attention.respond/3`, the same call `server:post` makes): a plain
+  # post, never an answer — a prompt is answered by its id (`/api/office/prompts/:id`). A closed
+  # thread reopens and the Bus wakes the thread's lead. `author` is not a parameter: this door IS
+  # the operator.
   defp post(conn, thread) do
     case body(conn) do
       {%{"body" => body}, conn} when is_binary(body) and body != "" ->

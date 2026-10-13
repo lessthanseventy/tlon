@@ -6,7 +6,7 @@ defmodule Server.Office.Needs do
 
     * **blocking** — work has stopped until the operator acts:
       `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
-      sits on a prompt, or the PM's release gate waits: pick an option), `ask` (one decision a
+      sits on a prompt, or the PM's release gate waits: pick an option, answered by `ref`, the prompt's id), `ask` (one decision a
       coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id,
       answered by key), `verify_failed` (a workline whose last gate run was red — the sheriff, where
       there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline nothing has moved for past
@@ -113,7 +113,7 @@ defmodule Server.Office.Needs do
   end
 
   defp wait(t, %{} = prompt),
-    do: item("dialog", "blocking", t, prompt.summary, prompt_at(prompt.id), %{options: prompt.options})
+    do: item("dialog", "blocking", t, prompt.summary, prompt_at(prompt.id), %{options: prompt.options, ref: prompt.id})
 
   defp wait(%Thread{awaiting: nil}, nil), do: nil
 

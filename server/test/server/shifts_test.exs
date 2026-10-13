@@ -128,7 +128,7 @@ defmodule Server.ShiftsTest do
     {:offered, _} = Shifts.quota_check(ws.id, "hronir", "1/w1", @limit)
     [ask] = Server.Attention.open_asks()
 
-    assert {:ok, _} = Server.Attention.answer_ask(ask.id, "andrew", "1")
+    assert {:ok, _} = Server.Attention.answer_prompt(ask.id, "andrew", "1")
     assert Shifts.current(ws.id) == "night"
     assert Server.Attention.open_asks() == []
     assert_enqueued(worker: Server.Jobs.ShiftBack, args: %{workspace_id: ws.id, back: "day"})
@@ -137,7 +137,7 @@ defmodule Server.ShiftsTest do
     :ok = Shifts.offer_back(ws.id, "day", "5pm")
     assert [back] = Server.Attention.open_asks()
     assert labels(back) == ["day crew on", "stay on night"]
-    assert {:ok, _} = Server.Attention.answer_ask(back.id, "andrew", "1")
+    assert {:ok, _} = Server.Attention.answer_prompt(back.id, "andrew", "1")
     assert Shifts.current(ws.id) == "day"
 
     # already back: nothing to offer
@@ -150,7 +150,7 @@ defmodule Server.ShiftsTest do
     {:offered, _} = Shifts.quota_check(ws.id, "hronir", "1/w1", @limit)
     [ask] = Server.Attention.open_asks()
 
-    assert {:ok, _} = Server.Attention.answer_ask(ask.id, "andrew", "2")
+    assert {:ok, _} = Server.Attention.answer_prompt(ask.id, "andrew", "2")
     assert Shifts.current(ws.id) == "day"
     assert all_enqueued(worker: Server.Jobs.ShiftBack) == []
   end
@@ -164,7 +164,7 @@ defmodule Server.ShiftsTest do
     assert {:offered, ["codex", "night"]} = Shifts.quota_check(ws.id, "hronir", "1/w1", @limit)
     [ask] = Server.Attention.open_asks()
     assert labels(ask) == ["codex crew on", "night crew on", "stay on day"]
-    assert {:ok, _} = Server.Attention.answer_ask(ask.id, "andrew", "1")
+    assert {:ok, _} = Server.Attention.answer_prompt(ask.id, "andrew", "1")
     assert Shifts.current(ws.id) == "codex"
     assert names(ws) == ["tertius", "quain", "codex-1"]
 
@@ -180,7 +180,7 @@ defmodule Server.ShiftsTest do
     [ask] = Server.Attention.open_asks()
     {:ok, _} = Shifts.assign(dahlmann.id, "day")
 
-    assert {:error, :unknown_shift} = Server.Attention.answer_ask(ask.id, "andrew", "1")
+    assert {:error, :unknown_shift} = Server.Attention.answer_prompt(ask.id, "andrew", "1")
     assert Shifts.current(ws.id) == "day"
     assert [%{id: id}] = Server.Attention.open_asks()
     assert id == ask.id
@@ -200,7 +200,7 @@ defmodule Server.ShiftsTest do
     {:ok, _} = Shifts.switch(ws.id, "day")
     {:offered, _} = Shifts.quota_check(ws.id, "hronir", "1/w1", @limit)
     [again] = Server.Attention.open_asks()
-    {:ok, _} = Server.Attention.answer_ask(again.id, "andrew", "1")
+    {:ok, _} = Server.Attention.answer_prompt(again.id, "andrew", "1")
     assert [_reminder] = all_enqueued(worker: Server.Jobs.ShiftBack)
     {:ok, _} = Shifts.switch(ws.id, "day")
     assert all_enqueued(worker: Server.Jobs.ShiftBack) == []

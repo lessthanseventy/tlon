@@ -207,14 +207,17 @@ defmodule Server.MCP.GatewayTest do
     assert {422, _} = request_json(:patch, "/api/settings", %{"max_leaves" => 999})
   end
 
-  test "POST /api/threads/:id/messages is the operator's one door: `y` answers an open prompt, a closed thread reopens",
+  test "POST /api/threads/:id/messages is a plain post that never answers a prompt; a closed thread reopens; " <>
+         "POST /api/office/prompts/:id answers the dialog the pane still shows",
        %{thread: t} do
-    # the prompt row as Server.Attention opens it; the pane is a recording fake
+    # the prompt row as Server.Attention opens it; the pane is a recording fake showing the dialog
     test_pid = self()
+    screen = File.read!("test/fixtures/panes/claude_permission_prompt.txt")
+    %{summary: summary, options: options} = Server.Attention.detect(screen)
 
     Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
       send(test_pid, {:tmux, args})
-      {"", 0}
+      if "capture-pane" in args, do: {screen, 0}, else: {"", 0}
     end)
 
     Application.put_env(:server, :attention_settle_ms, 0)
@@ -224,23 +227,28 @@ defmodule Server.MCP.GatewayTest do
       %{
         thread_id: t.id,
         author: "tlon",
-        body: "⚑ waiting on you — bash: env",
+        body: "⚑ waiting on you — #{summary}",
         kind: "prompt",
         payload: %{
           "harness" => "claude",
-          "summary" => "bash: env",
+          "summary" => summary,
           "window" => "t#{t.id}",
           "workspace_id" => 1,
-          "options" => [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]
+          "options" => Enum.map(options, &%{"key" => &1.key, "label" => &1.label})
         }
       }
       |> Server.Message.post_changeset()
       |> Server.Repo.insert()
 
-    {201, answer} = post_json("/api/threads/#{t.id}/messages", %{body: "y"})
-    assert answer["reply_to"] == prompt.id
-    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", _, "y"]}
-    assert Server.Repo.get!(Server.Message, prompt.id).resolution == "answered: y"
+    {201, posted} = post_json("/api/threads/#{t.id}/messages", %{body: "1"})
+    assert posted["reply_to"] == nil
+    refute_received {:tmux, ["-L", _, "send-keys" | _]}
+    assert Server.Repo.get!(Server.Message, prompt.id).resolved_at == nil
+
+    {200, %{"ok" => true, "message_id" => id}} = post_json("/api/office/prompts/#{prompt.id}", %{key: "1"})
+    assert Server.Repo.get!(Server.Message, id).reply_to == prompt.id
+    assert_received {:tmux, ["-L", _, "send-keys", "-l", "-t", _, "1"]}
+    assert Server.Repo.get!(Server.Message, prompt.id).resolution == "answered: 1"
 
     {:ok, _} = Channel.close_thread(Server.Repo.get!(Server.Thread, t.id))
     {201, _} = post_json("/api/threads/#{t.id}/messages", %{body: "back to this"})
@@ -356,6 +364,15 @@ defmodule Server.MCP.GatewayTest do
       assert Server.Repo.get!(Server.Message, a.id).resolution == "answered: hold"
       assert {409, _} = post_json("/api/office/asks/#{a.id}", %{key: "1"})
       assert {400, _} = post_json("/api/office/asks/#{a.id}", %{nope: 1})
+    end
+
+    test "POST /api/office/prompts/:id answers that prompt, whatever else is open on its thread", %{thread: t} do
+      {:ok, a} = Server.Attention.ask(t.id, "tertius", "start now?", ["go", "hold"])
+      {:ok, b} = Server.Attention.ask(t.id, "tertius", "and the wall?", ["go", "hold"])
+      assert {200, %{"ok" => true}} = post_json("/api/office/prompts/#{a.id}", %{key: "1"})
+      assert Server.Repo.get!(Server.Message, a.id).resolution == "answered: go"
+      assert Server.Repo.get!(Server.Message, b.id).resolved_at == nil
+      assert {404, _} = post_json("/api/office/prompts/nope", %{key: "1"})
     end
 
     test "the operator's review: GET the branch's diff, POST notes with a verdict" do

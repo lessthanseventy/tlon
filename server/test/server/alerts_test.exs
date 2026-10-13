@@ -63,11 +63,11 @@ defmodule Server.AlertsTest do
            ] = a.actions
   end
 
-  test "a dialog is a decision with its own options; a question takes a reply" do
+  test "a dialog is a decision, each option answering that prompt by its id; a question takes a reply" do
     [d, q] =
       Alerts.build(
         [
-          need("dialog", %{options: [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]}),
+          need("dialog", %{ref: 42, options: [%{"key" => "y", "label" => "Yes"}, %{"key" => "n", "label" => "No"}]}),
           need("question", %{key: "question:8", thread_id: 8})
         ],
         [],
@@ -75,7 +75,13 @@ defmodule Server.AlertsTest do
       )
 
     assert d.level == "decision"
-    assert [%{label: "Yes", body: %{body: "y"}}, %{label: "No", body: %{body: "n"}}, %{label: "Other…"}] = d.actions
+
+    assert [
+             %{label: "Yes", method: "POST", path: "/api/office/prompts/42", body: %{key: "y"}},
+             %{label: "No", method: "POST", path: "/api/office/prompts/42", body: %{key: "n"}},
+             %{label: "Other…"}
+           ] = d.actions
+
     assert q.level == "decision"
     assert [%{label: "Reply…", input: "body", path: "/api/threads/8/messages"}] = q.actions
   end

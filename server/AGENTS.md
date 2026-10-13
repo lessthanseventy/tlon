@@ -117,8 +117,9 @@ and every layer the spine design's re-laid §9 asked for
   by nothing else (`soul_callers_test.exs`): a soul shapes talk and tone, never a work decision.
 - **the PM** (`Server.Release.PM`, bench archetype `pm`) — what ships: `release_status`,
   `propose_release` (graded commit by commit with `Grade.assess/2`, the max per axis; under
-  `auto_land_risk` it cuts, else one gate on the root thread — a window-less `prompt` answered through
-  `Attention.respond/3`), the changelog posted and recorded as event `release:<sha>`, and
+  `auto_land_risk` it cuts, else one gate on the root thread — a window-less `prompt` answered by its
+  id through `Attention.answer_prompt/3`, as every prompt is: a plain post on its thread answers
+  nothing), the changelog posted and recorded as event `release:<sha>`, and
   `set_urgency` on the backlog. Work runs in `Server.Jobs.Release`; tests hand it a repo (`:release_root`).
   The service's boot says `release <sha> is live` once per new pointer (`note_live/1`), which the
   desktop toasts.
@@ -254,7 +255,8 @@ The **shell parity pack** — operate the live channel from the shell, our peer 
   token, print the `export TLON_*` block for a hand-run pane.
 - `mise run server:roster` — who's on the clock (live sessions, warm/cold).
 - `mise run server:dossier -- <thread-id>` — render a thread's brief (parity with get_dossier).
-- `mise run server:post -- <thread-id> <text…>` — post as the operator (parity with post_message).
+- `mise run server:post -- <thread-id> <text…>` — post as the operator (parity with post_message); a
+  plain post, never an answer: `mise run server:cli -- answer <prompt-id> <key>` answers a prompt.
 - `mise run server:cli -- <subcommand>` — everything else the CLI knows (worklines, approve, …).
 
 The `home:switch` that installs the service is the human's (system-mutating); build + verify the
