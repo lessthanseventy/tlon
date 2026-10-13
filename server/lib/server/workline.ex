@@ -360,9 +360,8 @@ defmodule Server.Workline do
 
   defp queue(thread, why, by) do
     with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
+         :ok <- if(approval(queued), do: :ok, else: record_approval(queued, by)),
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
-      record_approval(queued, by)
-
       post_brief(
         queued,
         "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, one landing at a time"
@@ -382,21 +381,26 @@ defmodule Server.Workline do
     end
   end
 
-  # what was approved is the branch at that commit: a later push needs approving again
+  # what was approved is the branch at that commit: a later push needs approving again. Recorded
+  # before its Land job, so the job's time is never before the approval's (second-truncated) one.
   defp record_approval(thread, by) do
-    Dossier.record_event(%{
-      thread_id: thread.id,
-      kind: "check_passed",
-      correlation: "workline:#{thread.slug}:approval",
-      detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => branch_head(thread)}
-    })
+    {:ok, _} =
+      Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: "check_passed",
+        correlation: "workline:#{thread.slug}:approval",
+        detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => branch_head(thread)}
+      })
+
+    :ok
   end
 
   @doc """
-  The approval that still stands on a workline: the newest one recorded (`%{"by", "sha"}`, who
-  approved it into the merge queue and the commit `work/<slug>` was at), while the branch's code is
-  what it was then (its own docs, `work/<slug>/`, may have moved); nil once the code has changed,
-  or when none was recorded.
+  The approval that still stands on a workline: the newest one recorded (`%{"by", "sha", "at"}`,
+  who approved it into the merge queue, the commit `work/<slug>` was at, and when), while the
+  branch's code is what it was then (its own docs, `work/<slug>/`, may have moved); nil once the
+  code has changed, or when none was recorded. A requeue or reopen under it keeps it rather than
+  recording another.
   """
   def approval(%Thread{} = thread) do
     correlation = "workline:#{thread.slug}:approval"
@@ -407,13 +411,13 @@ defmodule Server.Workline do
           where: e.thread_id == ^thread.id and e.correlation == ^correlation,
           order_by: [desc: e.id],
           limit: 1,
-          select: e.detail
+          select: {e.detail, e.created_at}
       )
 
-    with %{"sha" => sha} = detail when is_binary(sha) <- newest,
+    with {%{"sha" => sha} = detail, at} when is_binary(sha) <- newest,
          head when is_binary(head) <- branch_head(thread),
          true <- same_code?(thread, sha, head),
-         do: Map.take(detail, ["by", "sha"]),
+         do: detail |> Map.take(["by", "sha"]) |> Map.put("at", at),
          else: (_ -> nil)
   end
 
@@ -460,8 +464,8 @@ defmodule Server.Workline do
   Landings that went missing: open worklines at review, waiting on no one, whose approval still
   stands but with no landing queued or running (a `Server.Jobs.Land` Lifeline rescued past its
   attempts or Oban discarded). Each is queued again; returns those threads. One whose landing has
-  been discarded #{@discarded_cap} times is left at review, already reported to the sheriff each time, rather
-  than crashing in a loop.
+  been discarded #{@discarded_cap} times under its standing approval is left at review, already reported
+  to the sheriff each time, rather than crashing in a loop; a fixed branch approved again starts over.
   """
   def requeue_stranded do
     stranded =
@@ -469,8 +473,8 @@ defmodule Server.Workline do
 
     for thread <- stranded,
         not Server.Office.Needs.landing?(thread),
-        discarded_landings(thread) < @discarded_cap,
-        %{"by" => by, "sha" => sha} <- [approval(thread)],
+        %{"by" => by, "sha" => sha, "at" => at} <- [approval(thread)],
+        discarded_landings(thread, at) < @discarded_cap,
         {:ok, queued} <- [
           queue(
             thread,
@@ -482,11 +486,11 @@ defmodule Server.Workline do
     end
   end
 
-  defp discarded_landings(%Thread{id: id}) do
+  defp discarded_landings(%Thread{id: id}, since) do
     Repo.aggregate(
       from(j in Oban.Job,
         where:
-          j.worker == "Server.Jobs.Land" and j.state == "discarded" and
+          j.worker == "Server.Jobs.Land" and j.state == "discarded" and j.inserted_at >= ^since and
             fragment("(? ->> 'thread_id')::int = ?", j.args, ^id)
       ),
       :count
