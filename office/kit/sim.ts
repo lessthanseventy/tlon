@@ -17,7 +17,7 @@ import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./
 
 /** something to do with your idle time, where a room has the thing to do it with */
 export type Pastime = "arcade" | "pingpong" | "aquarium" | "window" | "plant" | "chat" | "pet" | "vending" | "foosball" | "pool" | "read" | "bathroom"
-export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "answer"
+export type Kind = Fav | Pastime | "desk" | "queue" | "roam" | "exit" | "visit" | "note" | "answer" | "panic"
 /** the spots where two people settled together get talking (`Sim.together`) */
 const TOGETHER = new Set<string>(["pingpong", "foosball", "pool", "arcade", "couch", "coffee", "cooler", "vending", "chat"])
 /**
@@ -37,6 +37,8 @@ export type Actor = {
   snack: number; finished: number; five: number; mug: number
   /** the tick their last turn ended (or they were first seen between turns), and how warm their session is now: 1 mid-turn or just after, 0 cold */
   cooled: number; warmth: number
+  /** arms up, running about, until this tick: a fire drill's panic */
+  flail?: number
 }
 export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
 /**
@@ -100,6 +102,13 @@ const VISIT_MS = 60_000, NOTE_MS = 45_000
 export const STRETCH = 20
 /** ticks the channel stays down before the closet catches fire (a restart blip stays quiet) */
 export const FIRE_GRACE = 100
+/** ticks an alarm (a fire, a keyed drill) has the crew running about the room before they file out to the muster */
+export const PANIC = 300
+/** a keyed drill's length in ticks: the panic, then the muster, then back to work */
+export const DRILL = 600
+/** ticks between screams while they panic: one person at a time, so a handful of balloons, not a wall */
+const SCREAM_EVERY = 45
+const SCREAMS = ["AAAA!", "Not the build!", "Save the snacks!", "Is this a drill?!", "My uncommitted work!", "{name}, grab the cat!", "Stop, drop and rebase!", "Everybody stay calm!!", "Who left the rack on?!", "I KNEW the cache was hot", "Not before standup!", "{name}! The fire exit!"]
 /** the server's warmth window (`Server.Presence`, an hour by default) in ticks: a warm session's glow fades over it */
 export const WARM_TICKS = 36_000
 const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read", "bathroom"])
@@ -156,6 +165,12 @@ export class Sim<L extends { people: Seat[] }> {
   protected fire = false
   /** the channel has been down long enough that the server closet burns */
   get onFire() { return this.fire }
+  private drillUntil = -1
+  private alarmSince = -1
+  /** a fire or a keyed drill: the rack burns and the crew panics, then musters */
+  get alarmed() { return this.fire || this.tick < this.drillUntil }
+  /** the first `PANIC` ticks of an alarm, while they run about screaming */
+  protected get panicking() { return this.alarmSince >= 0 && this.tick - this.alarmSince < PANIC }
   private lastGood: Agents | null = null
   /** an actor's current spot on the floor, by agent name — null if they aren't seated here */
   at(agent: string): Spot | null { return this.actors.get(agent)?.spot ?? null }
@@ -441,7 +456,23 @@ export class Sim<L extends { people: Seat[] }> {
     for (const x of this.actors.values()) { x.emote = "!"; x.emoteUntil = this.tick + 60 }
     const first = this.actors.keys().next().value
     if (first) this.say(first, line)
+    if (kind === "drill") this.drillUntil = this.tick + DRILL
     this.changed = true
+  }
+
+  /** somewhere to run to, anywhere a person can stand: zig-zagging between them is the panic */
+  private panicSpot(): Spot {
+    const s = pick([...this.plan.lounge, ...(this.plan.muster ?? []), this.plan.exit])
+    return { ...s, pose: "stand", face: "down", kind: "panic" }
+  }
+
+  /** one of them screams, naming another now and then */
+  private scream() {
+    const crew = [...this.actors.values()].filter((x) => !x.leaving)
+    const free = crew.filter((x) => !this.talk.has(x.seat.agent))
+    if (!free.length) return
+    const who = pick(free), other = pick(crew.filter((x) => x !== who).concat(who)).seat.agent
+    this.say(who.seat.agent, pick(SCREAMS).replace("{name}", other))
   }
 
   /** a pat for whoever (their name); false when they aren't in the room */
@@ -585,6 +616,13 @@ export class Sim<L extends { people: Seat[] }> {
       if (this.downSince < 0) this.downSince = this.tick
       if (this.seeded && !this.fire && this.tick - this.downSince >= FIRE_GRACE) { this.fire = true; this.changed = true }
     }
+    const alarmed = this.alarmed
+    if (!alarmed) this.alarmSince = -1
+    else if (this.alarmSince < 0) { this.alarmSince = this.tick; this.catDo("zoomies") }
+    const panicking = this.panicking
+    // Nina tears about for the whole panic, not one burst of zoomies and back to her nap
+    if (panicking && this.cat.mode !== "zoom" && this.tick % 20 === 0) this.catDo("zoomies")
+    if (panicking && (this.tick - this.alarmSince) % SCREAM_EVERY === SCREAM_EVERY - 1) this.scream()
     const level = homeLevel(a)
     if (level !== null && this.levelSeen !== null && level > this.levelSeen) this.levelUp(level)
     this.levelSeen = level
@@ -651,7 +689,11 @@ export class Sim<L extends { people: Seat[] }> {
       const home = plan.home(l, actor.seat.agent)
       actor.warmth = actor.seat.thinking ? 1 : actor.seat.warmth ?? (actor.seat.warm ? Math.max(0, 1 - (this.tick - actor.cooled) / this.warmTicks) : 0)
       let goal: Spot
-      if (this.fire && !actor.leaving) {
+      if (panicking && !actor.leaving) {
+        goal = actor.spot.kind === "panic" && (actor.moving || actor.path.length) ? actor.spot : this.panicSpot()
+        actor.flail = this.tick + 2
+      }
+      else if (alarmed && !actor.leaving) {
         const muster = plan.muster ?? [plan.exit]
         goal = muster[[...this.actors.keys()].indexOf(k) % muster.length]!
         if (actor.mug < this.tick + 100) actor.mug = this.tick + 3000
@@ -672,13 +714,13 @@ export class Sim<L extends { people: Seat[] }> {
         actor.path = plan.route(actor.x, from, goal)
         actor.spot = goal; actor.spotKey = gk; actor.pose = "stand"
         if (goal.kind === "queue") this.noticed(actor, "queue")
-        if (this.fire) { actor.emote = "!"; actor.emoteUntil = this.tick + 30 }
+        if (alarmed) { actor.emote = "!"; actor.emoteUntil = this.tick + 30 }
         // a pastime holds them a minute or two before the next
         actor.until = this.tick + 400 + Math.floor(Math.random() * 800)
       }
       // someone you are talking to stops where they are and faces you until they have answered
       if (this.talk.get(actor.seat.agent)?.text === null) { actor.moving = false; if (actor.pose === "stand") actor.face = "down" }
-      else this.walk(actor, goal.kind === "desk" || goal.kind === "queue" || !actor.look.slow ? 2 : 1)
+      else this.walk(actor, goal.kind === "desk" || goal.kind === "queue" || goal.kind === "panic" || !actor.look.slow ? 2 : 1)
       if (actor.moving) changed = true
       else if (goal.kind === "visit" || goal.kind === "note") {
         // arrived: the two of them talk, or the pen moves
