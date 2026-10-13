@@ -156,14 +156,16 @@ describe("company: the soul steers who pairs up", () => {
 
   /** `waiter` stands at one end of a pair spot; how many of `n` idle choices by `who` take the other end */
   function pairChoices(who: string, waiter: string, n: number, seed = 7): number {
+    Math.random = mulberry32(seed)
     const room = new WideRoom(560)
     room.step(viewOf(office(), 1))
     const r = inner(room), pair = r.plan.lounge.find((s) => s.with)!
     const w = r.actors.get(waiter)!, a = r.actors.get(who)!
     const end = { ...pair, ...pair.with! }
-    Object.assign(w, { spot: end, spotKey: `${pair.kind}:${pair.with!.x}:${pair.with!.y}` })
-    const held = new Set([...r.actors.values()].map((x) => x.spotKey))
-    Math.random = mulberry32(seed)
+    // only the waiter holds a spot: the step may have parked anyone else on the pair itself
+    const waiterKey = `${pair.kind}:${pair.with!.x}:${pair.with!.y}`
+    Object.assign(w, { spot: end, spotKey: waiterKey })
+    const held = new Set([waiterKey])
     let took = 0
     for (let i = 0; i < n; i++) {
       Object.assign(a, { until: 0, spot: { ...a.spot, kind: "desk" }, spotKey: "desk" })
@@ -182,7 +184,9 @@ describe("company: the soul steers who pairs up", () => {
     useSouls({ ashe: parse("admires yu"), yu: parse("") })
     const friend = pairChoices("yu", "ashe", 200)
     useSouls({})
-    expect(friend).toBeGreaterThan(pairChoices("yu", "ashe", 200))
+    const stranger = pairChoices("yu", "ashe", 200)
+    expect(stranger).toBeGreaterThan(0)
+    expect(friend).toBeGreaterThan(stranger)
   })
 
   test("a seat with no People section picks exactly as with no souls", () => {
