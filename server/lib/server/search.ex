@@ -43,13 +43,14 @@ defmodule Server.Search do
         %{rows: keyword} =
           Repo.query!(
             """
+            -- idf is MATERIALIZED: inlined, Postgres re-counts every term's document frequency per candidate row
             WITH terms AS (
               SELECT DISTINCT lex FROM unnest(tsvector_to_array(to_tsvector('english', $1))) AS lex
             ),
             stats AS (
               SELECT count(*)::float8 AS n, coalesce(avg(length(body_tsv)), 1)::float8 AS avgdl FROM message
             ),
-            idf AS (
+            idf AS MATERIALIZED (
               SELECT t.lex, ln(1 + (s.n - df.c + 0.5) / (df.c + 0.5)) AS w
               FROM terms t CROSS JOIN stats s,
               LATERAL (SELECT count(*)::float8 AS c FROM message

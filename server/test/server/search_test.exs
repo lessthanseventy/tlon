@@ -121,6 +121,24 @@ defmodule Server.SearchTest do
       assert %{shown: _} = Search.history(~s("weird -query* AND OR))
     end
 
+    test "a many-term query over a busy channel stays fast: document frequencies are counted once, not per row",
+         %{thread: thread} do
+      Repo.query!(
+        """
+        INSERT INTO message (thread_id, author, body, created_at)
+        SELECT $1, 'a', 'thread ' || g || ' review of lonnrot verify pass and some filler words', now()
+        FROM generate_series(1, 3000) g
+        """,
+        [thread.id]
+      )
+
+      {micros, %{shown: shown}} =
+        :timer.tc(fn -> Search.history("thread 242 review lonnrot verify", 10, query_embedding: [1.0, 0.0]) end)
+
+      assert length(shown) == 10
+      assert micros < 1_000_000
+    end
+
     test "an empty/whitespace query returns nothing, not an error" do
       assert %{shown: [], more: 0} = Search.history("   ")
     end
