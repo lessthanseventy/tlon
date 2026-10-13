@@ -168,6 +168,27 @@ defmodule Server.MaintainTest do
     t
   end
 
+  test "a workline gone quiet is not nudged while the office is paused, and is once it is back to work" do
+    path = Path.join(System.tmp_dir!(), "maintain-pause-#{System.unique_integer([:positive])}.json")
+    Application.put_env(:server, :operator_config_path, path)
+
+    on_exit(fn ->
+      File.rm(path)
+      Application.delete_env(:server, :operator_config_path)
+    end)
+
+    {:ok, w} = Workline.open(%{title: "quiet", slug: "quiet-#{System.unique_integer([:positive])}", stage: "plan"})
+    nudged? = fn -> Enum.any?(Repo.all(Message), &(&1.thread_id == w.id and &1.body =~ "↻ continue")) end
+
+    {:ok, _} = Server.Pause.pencils_down()
+    sweep(%{quiet_ms: 0})
+    refute nudged?.()
+
+    {:ok, :working} = Server.Pause.back_to_work()
+    sweep(%{quiet_ms: 0})
+    assert nudged?.()
+  end
+
   test "a workline gone quiet gets a nudge — a lead whose window died never goes idle to get one" do
     {:ok, w} = Workline.open(%{title: "quiet", slug: "quiet-#{System.unique_integer([:positive])}", stage: "plan"})
     sweep(%{quiet_ms: 0})

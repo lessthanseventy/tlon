@@ -5,6 +5,8 @@ defmodule Server.PauseTest do
   # settings file, so a restart keeps it.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.Channel
   alias Server.Message
   alias Server.Pause
@@ -75,6 +77,23 @@ defmodule Server.PauseTest do
     {:ok, :working} = Pause.back_to_work()
     assert :ok = Server.Intake.run(route: fn t -> send(self(), {:routed, t.id}) end)
     assert_received {:routed, _}
+  end
+
+  test "while paused intake's 30-minute fallback starts nothing; back to work starts it", %{ws: ws} do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir-i", archetype: "builder"})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ws.id, title: "stalled"})
+    {:ok, ticket} = Server.Tickets.update(ticket, %{status: "todo"})
+    at = DateTime.utc_now() |> DateTime.add(-31 * 60, :second) |> DateTime.truncate(:second)
+    Server.Repo.update_all(from(x in Server.Ticket, where: x.id == ^ticket.id), set: [updated_at: at])
+
+    {:ok, _} = Pause.pencils_down()
+    assert :ok = Server.Intake.run(route: fn _ -> {:ok, %{}} end)
+    assert Server.Tickets.threads_of(ticket.id) == []
+    assert %{status: "todo"} = Server.Tickets.get(ticket.id)
+
+    {:ok, :working} = Pause.back_to_work()
+    assert :ok = Server.Intake.run(route: fn _ -> {:ok, %{}} end)
+    assert [{"promoted", _}] = Server.Tickets.threads_of(ticket.id)
   end
 
   test "lights out interrupts every coworker pane with Escape, typing nothing", %{ws: ws} do
