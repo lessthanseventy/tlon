@@ -19,6 +19,53 @@ defmodule Server.BoardTest do
 
   defp cold(session), do: set_active(session, 7200)
 
+  # A listener standing in for ollama that hangs up at once and reports each connection to the
+  # test: the number of embeds a read made is the number of connections it opened.
+  defp count_embeds(fun) do
+    {:ok, lsock} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(lsock)
+    test = self()
+
+    acceptor =
+      spawn_link(fn ->
+        loop = fn loop ->
+          case :gen_tcp.accept(lsock) do
+            {:ok, sock} ->
+              send(test, :embed_connection)
+              :gen_tcp.close(sock)
+              loop.(loop)
+
+            _ ->
+              :ok
+          end
+        end
+
+        loop.(loop)
+      end)
+
+    previous = Application.get_env(:server, :embedding)
+    Application.put_env(:server, :embedding, endpoint: "http://127.0.0.1:#{port}/api/embed", timeout: 200)
+
+    try do
+      result = fun.()
+      Process.sleep(50)
+      {result, count_messages(0)}
+    after
+      Application.put_env(:server, :embedding, previous)
+      Process.unlink(acceptor)
+      Process.exit(acceptor, :kill)
+      :gen_tcp.close(lsock)
+    end
+  end
+
+  defp count_messages(n) do
+    receive do
+      :embed_connection -> count_messages(n + 1)
+    after
+      0 -> n
+    end
+  end
+
   defp set_active(session, seconds_ago) do
     at = DateTime.utc_now() |> DateTime.shift(second: -seconds_ago) |> DateTime.truncate(:second)
     {:ok, s} = session |> Ecto.Changeset.change(last_active_at: at) |> Repo.update()
@@ -331,6 +378,16 @@ defmodule Server.BoardTest do
       assert leaf_row.next == "wire the reaper"
       assert "port 4041 held" in leaf_row.blockers
       assert Enum.any?(leaf_row.recent, &(&1.body == "on it"))
+    end
+
+    test "never embeds — recall is not on the overview's path (it starved the MCP session)" do
+      {:ok, leaf} = Channel.open_thread(%{title: "reaper fix", scope: "machine"})
+      {:ok, _} = Dossier.bank_fact(%{thread_id: leaf.id, kind: "learned", provenance: "derived", text: "the reaper wants a real fact"})
+
+      {overview, embeds} = count_embeds(fn -> Board.machine_overview() end)
+
+      assert Enum.any?(overview, &(&1.title == "reaper fix"))
+      assert embeds == 0
     end
 
     test "root-first ordering — the founding thread (oldest id) leads the overview" do
