@@ -169,7 +169,7 @@ export class WideRoom extends Sim<Layout> {
   private stepVolume(a: Agents): boolean {
     this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.boardEdge, spineHome(corner(this.z).shelf)))
     const c = this.cat
-    if (c.mode !== "sleep" && this.tick >= this.swatQuiet && swatted(this.book, this.book.flying, c)) {
+    if (c.mode !== "sleep" && c.mode !== "zoom" && !c.errand && this.tick >= this.swatQuiet && swatted(this.book, this.book.flying, c)) {
       c.mode = "play"; c.path = []; c.until = this.tick + 60
       this.catSay(this.line("Nina", "swat", NINA.swat))
       this.flinch = this.tick + FLINCH; this.swatQuiet = this.tick + 200

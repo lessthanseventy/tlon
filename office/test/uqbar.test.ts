@@ -280,6 +280,25 @@ describe("Nina's swat", () => {
     expect(swatRoom(false, true).cat.mode).toBe("sit")
     expect(swatRoom(true, false).cat.mode).toBe("sit")
   })
+  test("not while she is on an errand or in the zoomies: the swat would strand the errand", () => {
+    for (const mode of ["walk", "zoom"]) {
+      seeded(3, () => {
+        const room = new WideRoom(WIDTH), v = viewOf(withUqbar(), 1)
+        const r = room as unknown as S & { cat: { errand: unknown } }
+        room.render(v, focus, measure, NOW)
+        for (let i = 0; i < 50; i++) room.step(v)
+        const errand = mode === "walk" ? { name: "Ana", kind: "letter" } : null
+        r.cat.mode = mode; r.cat.errand = errand; r.cat.path = [{ x: 260, y: 120 }]; r.cat.said = null; r.cat.until = r.tick + 5000
+        r.cat.x = 200; r.cat.y = 120
+        r.book = { x: 196, y: 112, flying: true, riffle: 0 }
+        r.flinch = 0
+        room.step(v)
+        expect(r.cat.mode).toBe(mode)
+        expect(r.cat.errand).toBe(errand)
+        expect(r.flinch).toBe(0)
+      })
+    }
+  })
   test("once per pass: she does not swat again at once", () => {
     seeded(3, () => {
       const room = new WideRoom(WIDTH), v = viewOf(withUqbar(), 1), r = room as unknown as S
