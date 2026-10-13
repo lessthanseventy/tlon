@@ -4,7 +4,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { hash, lookOf, rollLook, type Look } from "./sprites"
-import { SLOTS, type Slot } from "./parts"
+import { SLOTS, type PartSpec, type Slot } from "./parts"
 import { SOUL_SECTIONS } from "./souls"
 
 export type Vocab = { archetypes: string[]; grades: string[]; specialties: string[] }
@@ -60,7 +60,10 @@ export function roll(seed: string, o: { taken: readonly string[]; locks: Locks; 
 }
 
 /** what a hand or a pass stores about a candidate: the seed plus edits, never the rendered result */
-export type Overrides = Partial<Pick<Candidate, "name" | "archetype" | "grade" | "specialty" | "soul" | "pitch" | "drawn">>
+export type Overrides = Partial<Pick<Candidate, "name" | "archetype" | "grade" | "specialty" | "soul" | "pitch" | "drawn">> & {
+  /** a slot's edited part; null clears the slot */
+  parts?: Partial<Record<Slot, PartSpec | null>>
+}
 export type PileEntry = { seed: string; overrides: Overrides }
 export type Hall = { seed: string; locks: Locks; overrides: Overrides; pile: PileEntry[] }
 
@@ -69,12 +72,21 @@ const EDITABLE = ["name", "archetype", "grade", "specialty", "soul", "pitch", "d
 
 export const emptyHall = (): Hall => ({ seed: "hall:1", locks: {}, overrides: {}, pile: [] })
 
+const FIELDS: readonly Field[] = ["name", "archetype", "grade", "specialty"]
+
+function cleanLocks(raw: unknown): Locks {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>
+  const keep = <T extends string>(xs: unknown, legal: readonly T[]) => (Array.isArray(xs) ? legal.filter(l => xs.includes(l)) : [])
+  const slots = keep(r.slots, SLOTS), fields = keep(r.fields, FIELDS)
+  return { ...(slots.length ? { slots } : {}), ...(fields.length ? { fields } : {}) }
+}
+
 export function loadHall(path: string): Hall {
   try {
     const j = JSON.parse(readFileSync(path, "utf8"))
     return {
       seed: typeof j.seed === "string" ? j.seed : "hall:1",
-      locks: j.locks && typeof j.locks === "object" ? j.locks : {},
+      locks: cleanLocks(j.locks),
       overrides: j.overrides && typeof j.overrides === "object" ? j.overrides : {},
       pile: Array.isArray(j.pile) ? j.pile.filter((e: PileEntry) => e && typeof e.seed === "string").map((e: PileEntry) => ({ seed: e.seed, overrides: e.overrides ?? {} })) : [],
     }
@@ -94,8 +106,17 @@ export function hallSignature(path: string): string {
 export function applyOverrides(c: Candidate, ov: Overrides): Candidate {
   const out: Candidate = { ...c }
   for (const k of EDITABLE) if (ov[k] !== undefined) (out as Record<string, unknown>)[k] = ov[k]
+  if (ov.parts) {
+    const parts = { ...c.look.parts }
+    for (const s of SLOTS) {
+      const p = ov.parts[s]
+      if (p === null) delete parts[s]
+      else if (p) parts[s] = p
+    }
+    out.look = { ...c.look, parts }
+  }
   return out
 }
 
-export const pushPile = (pile: PileEntry[], e: PileEntry): PileEntry[] => [...pile, e].slice(-PILE_MAX)
+export const pushPile = (pile: PileEntry[], e: PileEntry): PileEntry[] => [...pile.filter(p => p.seed !== e.seed), e].slice(-PILE_MAX)
 export const dropPile = (pile: PileEntry[], i: number): PileEntry[] => pile.filter((_, j) => j !== i)

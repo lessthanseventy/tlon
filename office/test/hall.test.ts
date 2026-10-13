@@ -105,4 +105,27 @@ describe("hall.json", () => {
     expect(big.length).toBe(PILE_MAX)
     expect(big.at(-1)!.seed).toBe(`hall:${PILE_MAX + 5 + 9}`)
   })
+  test("a part override replaces a slot, null clears it; the seed's other slots stay", () => {
+    const c = roll("hall:2", { taken: [], locks: {}, vocab: VOCAB })
+    const spec = { id: "x-part", dials: {} }
+    const o = applyOverrides(c, { parts: { head: spec as never, hand: null } })
+    expect(o.look.parts?.head).toEqual(spec as never)
+    expect(o.look.parts?.hand).toBeUndefined()
+    expect(o.look.parts?.eyes).toEqual(c.look.parts?.eyes)
+    expect(c.look.parts?.head).not.toEqual(spec as never)
+  })
+  test("a hand-edited hall.json with junk locks loads as legal locks only", () => {
+    const p = tmp()
+    writeFileSync(p, JSON.stringify({ seed: "hall:3", locks: { slots: "head", fields: ["grade", "bogus", 3] }, overrides: {}, pile: [] }))
+    expect(loadHall(p).locks).toEqual({ fields: ["grade"] })
+    writeFileSync(p, JSON.stringify({ seed: "hall:3", locks: { slots: ["eyes", "nope"], fields: 3 }, overrides: {}, pile: [] }))
+    expect(loadHall(p).locks).toEqual({ slots: ["eyes"] })
+  })
+  test("pushing a seed already in the pile replaces it, not duplicates it", () => {
+    let pile = pushPile([], { seed: "hall:1", overrides: {} })
+    pile = pushPile(pile, { seed: "hall:2", overrides: {} })
+    pile = pushPile(pile, { seed: "hall:1", overrides: { name: "edited" } })
+    expect(pile.map(e => e.seed)).toEqual(["hall:2", "hall:1"])
+    expect(pile.at(-1)!.overrides.name).toBe("edited")
+  })
 })
