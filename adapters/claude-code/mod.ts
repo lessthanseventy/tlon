@@ -612,7 +612,10 @@ export function register(on) {
 
   on("session.compact", async ($, e, next) => {
     if (thread) await capture($, 1);
-    return next(e);
+    const r = await next(e);
+    // the summary stands where the brief was: the next prompt carries it whole again (a precompute installs nothing)
+    if (!r.skip && e.trigger !== "precompute" && !e.agentId) briefed = "";
+    return r;
   });
 
   on("command.run", { command: "consult" }, async ($, e) => runConsult($, "consult", e.args));

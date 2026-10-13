@@ -7,6 +7,7 @@ type World = {
   dossier?: unknown;
   transcript?: { role: string; text: string }[];
   fetch?: Fetch;
+  compactSkips?: boolean;
   run?: (argv: string[], init?: { env?: Record<string, string> }) => { exitCode: number; stdout: string; stderr: string };
   model?: string;
   wakes?: string[][];
@@ -70,6 +71,7 @@ function engine(on, world: World = {}): Declare[] {
     value: { isStdoutTruncated: false, isStderrTruncated: false, ...(world.run ?? (() => ({ exitCode: 1, stdout: "", stderr: "no run" })))(e.argv, e.init) },
   }));
   on("ui.invalidate", () => ({ value: undefined }));
+  on("session.compact", ($, e) => (world.compactSkips ? { skip: "nothing to compact" } : { messages: [{ role: "user", text: "a summary", toolUses: [] }] }));
   on("ui.toast", ($, e) => {
     world.toasts?.push(e.text);
     return { value: undefined };
@@ -208,6 +210,28 @@ test("with no brief yet and a server that can't answer, the prompt says so in on
 
   expect(r.context).toEqual(["<tlon-brief>\nNo brief: the tlon server didn't answer get_dossier (session not registered). get_messages reads the thread when it is back.\n</tlon-brief>"]);
   expect(world.writes!.some((w) => w.text.includes("get_dossier: session not registered"))).toBe(true);
+});
+
+const SO_FAR = [{ role: "user", text: "start", toolUses: [] }];
+
+test("a compaction that replaced the conversation brings the whole brief back on the next prompt; a skipped or precomputed one doesn't", async ($, on) => {
+  const world: World = {};
+  engine(on, world);
+  await $.session.start(START);
+
+  await $.prompt.submit({ text: "start", wait: false });
+  await $.session.compact({ trigger: "precompute", messages: SO_FAR });
+  const afterPrecompute = await $.prompt.submit({ text: "go on", wait: false });
+  world.compactSkips = true;
+  await $.session.compact({ trigger: "auto", messages: SO_FAR });
+  const afterSkip = await $.prompt.submit({ text: "and on", wait: false });
+  world.compactSkips = false;
+  await $.session.compact({ trigger: "auto", messages: SO_FAR });
+  const afterCompact = await $.prompt.submit({ text: "where was I", wait: false });
+
+  expect(afterPrecompute.context).toBeUndefined();
+  expect(afterSkip.context).toBeUndefined();
+  expect(afterCompact.context?.[0]).toContain("# Brief: ship the mod");
 });
 
 test("a correction is proposed as a habit, once", async ($, on) => {

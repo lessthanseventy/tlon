@@ -51,7 +51,8 @@ pure parts are `lib/` (bun-tested).
   (`put_back_wakes`) for the next poll. Taking a wake is not activity, so an idle session stays cold
   and an unheard wake reads unheard.
 - **The brief** rides each prompt as context (`prompt.submit`) when the dossier changed, and again
-  after a `/clear`. It says `You are <model> (Claude Code).` — the model that signs the commits.
+  after a `/clear` or a compaction that replaced the conversation (its summary stands where the brief
+  was). It says `You are <model> (Claude Code).` — the model that signs the commits.
   A prompt waits 3s at most for `get_dossier`: past that it goes with the last brief, saying how
   old it is; with no brief yet it carries one line saying the server didn't answer, and why.
 - **Capture**: at turn end, above a 2k-char floor, the new transcript (brief cut out, secrets
