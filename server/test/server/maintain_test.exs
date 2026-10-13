@@ -170,11 +170,15 @@ defmodule Server.MaintainTest do
 
   test "a workline gone quiet is not nudged while the office is paused, and is once it is back to work" do
     path = Path.join(System.tmp_dir!(), "maintain-pause-#{System.unique_integer([:positive])}.json")
+    prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
 
     on_exit(fn ->
       File.rm(path)
-      Application.delete_env(:server, :operator_config_path)
+
+      if prior,
+        do: Application.put_env(:server, :operator_config_path, prior),
+        else: Application.delete_env(:server, :operator_config_path)
     end)
 
     {:ok, w} = Workline.open(%{title: "quiet", slug: "quiet-#{System.unique_integer([:positive])}", stage: "plan"})
