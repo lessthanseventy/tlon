@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX } from "../kit/hall"
+import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall } from "../kit/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer", "planner"], grades: ["junior", "senior", "greybeard"], specialties: ["office", "server"] }
 const LEGAL = /^[a-z0-9][a-z0-9_-]*$/
@@ -127,5 +127,55 @@ describe("hall.json", () => {
     pile = pushPile(pile, { seed: "hall:1", overrides: { name: "edited" } })
     expect(pile.map(e => e.seed)).toEqual(["hall:2", "hall:1"])
     expect(pile.at(-1)!.overrides.name).toBe("edited")
+  })
+})
+
+describe("the hall's turn-by-turn state", () => {
+  const o = { taken: [] as string[], vocab: VOCAB }
+  const hall = (over = {}) => ({ ...emptyHall(), ...over })
+  test("candidateOf is roll + overrides, so a stored hall re-renders identically", () => {
+    const h = hall({ seed: "hall:4", overrides: { grade: "senior" } })
+    expect(candidateOf(h, o)).toEqual(applyOverrides(roll("hall:4", { ...o, locks: {} }), { grade: "senior" }))
+  })
+  test("a pass moves to the next seed and bakes locked values into the overrides", () => {
+    const h = hall({ seed: "hall:1", locks: { slots: ["head" as const], fields: ["grade" as const] } })
+    const a = candidateOf(h, o), next = pass(h, o)
+    expect(next.seed).toBe("hall:2")
+    const b = candidateOf(next, o)
+    expect(b.grade).toBe(a.grade)
+    expect(b.look.parts?.head).toEqual(a.look.parts?.head)
+    expect(candidateOf(JSON.parse(JSON.stringify(next)), o)).toEqual(b)
+    expect(next.locks).toEqual(h.locks)
+  })
+  test("a pass with no locks drops the previous overrides", () => {
+    expect(pass(hall({ overrides: { name: "zed" } }), o).overrides).toEqual({})
+  })
+  test("maybe puts the current card on the pile, then passes", () => {
+    const h = hall({ seed: "hall:1", overrides: { grade: "senior" } })
+    const m = maybe(h, o)
+    expect(m.pile).toEqual([{ seed: "hall:1", overrides: { grade: "senior" } }])
+    expect(m.seed).toBe("hall:2")
+  })
+  test("bringBack makes a pile entry the current card and takes it off the pile", () => {
+    const h = hall({ seed: "hall:9", pile: [{ seed: "hall:1", overrides: { name: "zed" } }, { seed: "hall:2", overrides: {} }] })
+    const b = bringBack(h, 0)
+    expect(b.seed).toBe("hall:1")
+    expect(b.overrides).toEqual({ name: "zed" })
+    expect(b.pile.map(e => e.seed)).toEqual(["hall:2"])
+    expect(bringBack(h, 7)).toEqual(h)
+  })
+  test("takenNames is the bench and the pile's names", () => {
+    const h = hall({ pile: [{ seed: "hall:1", overrides: { name: "zed" } }, { seed: "hall:2", overrides: {} }] })
+    const names = takenNames(h, ["funes"], VOCAB)
+    expect(names).toContain("funes")
+    expect(names).toContain("zed")
+    expect(names).toContain(roll("hall:2", { taken: ["funes"], locks: {}, vocab: VOCAB }).name)
+  })
+  test("toggleLock flips a slot or field and drops empty lists", () => {
+    let l = toggleLock({}, "slots", "head")
+    expect(l).toEqual({ slots: ["head"] })
+    l = toggleLock(l, "fields", "grade")
+    expect(l).toEqual({ slots: ["head"], fields: ["grade"] })
+    expect(toggleLock(toggleLock(l, "slots", "head"), "fields", "grade")).toEqual({})
   })
 })

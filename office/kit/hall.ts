@@ -120,3 +120,42 @@ export function applyOverrides(c: Candidate, ov: Overrides): Candidate {
 
 export const pushPile = (pile: PileEntry[], e: PileEntry): PileEntry[] => [...pile.filter(p => p.seed !== e.seed), e].slice(-PILE_MAX)
 export const dropPile = (pile: PileEntry[], i: number): PileEntry[] => pile.filter((_, j) => j !== i)
+
+type Ctx = { taken: readonly string[]; vocab: Vocab }
+
+/** the card the hall shows: the seed rolled, then the edits laid over it */
+export const candidateOf = (h: Hall, o: Ctx): Candidate => applyOverrides(roll(h.seed, { ...o, locks: h.locks }), h.overrides)
+
+/**
+ * Draw the next seed. What a lock keeps is written into the new overrides, so the stored hall (seed +
+ * overrides) re-renders the same card after a restart without remembering the previous one.
+ */
+export function pass(h: Hall, o: Ctx): Hall {
+  const cur = candidateOf(h, o), overrides: Overrides = {}
+  const o2 = overrides as Record<string, unknown>
+  for (const f of h.locks.fields ?? []) o2[f] = cur[f]
+  const slots = h.locks.slots ?? []
+  if (slots.length) overrides.parts = Object.fromEntries(slots.map(s => [s, cur.look.parts?.[s] ?? null]))
+  return { ...h, seed: nextSeed(h.seed), overrides }
+}
+
+/** put the current card on the pile, then pass */
+export const maybe = (h: Hall, o: Ctx): Hall => pass({ ...h, pile: pushPile(h.pile, { seed: h.seed, overrides: h.overrides }) }, o)
+
+export function bringBack(h: Hall, i: number): Hall {
+  const e = h.pile[i]
+  return e ? { ...h, seed: e.seed, overrides: e.overrides, pile: dropPile(h.pile, i) } : h
+}
+
+/** names a new candidate must not take: the bench's and everyone on the pile */
+export const takenNames = (h: Hall, bench: readonly string[], vocab: Vocab): string[] => [
+  ...bench,
+  ...h.pile.map(e => e.overrides.name ?? roll(e.seed, { taken: bench, locks: {}, vocab }).name),
+]
+
+export function toggleLock(l: Locks, kind: "slots" | "fields", key: Slot | Field): Locks {
+  const cur = (l[kind] ?? []) as string[]
+  const next = cur.includes(key) ? cur.filter(k => k !== key) : [...cur, key]
+  const { [kind]: _, ...rest } = l
+  return next.length ? { ...rest, [kind]: next } : rest
+}
