@@ -343,7 +343,7 @@ defmodule Server.Workline do
     with {:ok, landed} <- land(thread, checker, opts),
          {:ok, cleared} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
          {:ok, flipped} <- flip(cleared) do
-      if landed, do: finish(flipped, landed)
+      if landed, do: finish(flipped, landed, Keyword.get(opts, :run, &System.cmd/3))
       {:ok, flipped}
     end
   end
@@ -515,7 +515,7 @@ defmodule Server.Workline do
     with :ok <- reviewed_current(thread) do
       case merger.merge(repo, thread.slug, gate: gate) do
         {:ok, moved} ->
-          landed(thread, Map.put(moved, :repo, repo))
+          landed(thread, Map.put(moved, :repo, repo), Keyword.get(opts, :run, &System.cmd/3))
 
         {:error, {:interrupted, why}} when not last? ->
           {:error, {:interrupted, why}}
@@ -570,18 +570,61 @@ defmodule Server.Workline do
   def reland(thread, _why, _todo), do: {:ok, thread}
 
   @doc """
-  The landings (a `stage_advanced` to `merged`) recorded at or after `since`, newest first:
-  `[%{id, thread_id, title, created_at}]`, `id` the event's. A landing `reland/2` bounced and that
-  landed again is two.
+  GitHub merged a landed workline (`Server.Jobs.KeepUp` read its PR as `MERGED`; with no GitHub to
+  publish to, its landing is the merge): recorded as its landing's `work_landed` (`landed_since/1`),
+  its thread closed (its ticket done), and the issues its tickets own resolved naming `ref`, the PR.
+  Only an open `merged` workline; anything else is left as it is.
+  """
+  def merged(%Thread{stage: "merged", state: "open"} = thread, ref) do
+    record_landing(thread, "work_landed", %{"summary" => "merged: #{ref}", "evidence" => ref})
+    {:ok, closed} = Server.Channel.close_thread(thread)
+    post_brief(closed, "✓ merged: #{ref}")
+    Server.Dossier.resolve_fixed(thread, ref)
+    {:ok, closed}
+  end
+
+  def merged(thread, _ref), do: {:ok, thread}
+
+  @doc """
+  The landed worklines waiting on GitHub to merge their PR: open, `merged`, and the newest event of
+  their landing its published PR, not its merge. `[%{thread, url}]`.
+  """
+  def waiting_on_github do
+    for t <- Repo.all(from t in Thread, where: t.state == "open" and t.stage == "merged"),
+        %Server.Event{kind: kind, detail: %{"url" => url}} <- [last_landing(t)],
+        kind != "work_landed",
+        do: %{thread: t, url: url}
+  end
+
+  defp last_landing(thread) do
+    Repo.one(
+      from e in Server.Event,
+        where: e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:landing",
+        order_by: [desc: e.id],
+        limit: 1
+    )
+  end
+
+  defp record_landing(thread, kind, detail) do
+    {:ok, _} =
+      Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: kind,
+        correlation: "workline:#{thread.slug}:landing",
+        detail: detail
+      })
+  end
+
+  @doc """
+  The worklines GitHub merged (`merged/2`, their landing's `work_landed`) at or after `since`, newest
+  first: `[%{id, thread_id, title, created_at}]`, `id` the event's.
   """
   def landed_since(%DateTime{} = since) do
     Repo.all(
       from e in Server.Event,
         join: t in Thread,
         on: t.id == e.thread_id,
-        where:
-          e.kind == "stage_advanced" and fragment("(?::jsonb ->> 'to') = 'merged'", e.detail) and
-            e.created_at >= ^since,
+        where: e.kind == "work_landed" and like(e.correlation, "workline:%:landing") and e.created_at >= ^since,
         order_by: [desc: e.id],
         select: %{id: e.id, thread_id: t.id, title: t.title, created_at: e.created_at}
     )
@@ -1287,12 +1330,11 @@ defmodule Server.Workline do
 
   defp land(_thread, _checker, _opts), do: {:ok, nil}
 
-  # merged: the thread's work is done (closing it marks its ticket done, resolving the issues its
-  # tickets own), and what changed rolls out
-  defp finish(thread, %{repo: repo, from: from, to: to}) do
-    {:ok, _} = Server.Channel.close_thread(thread)
+  # landed: what changed rolls out and the branch goes to GitHub, where it is not merged yet — the
+  # thread stays open until GitHub merges the PR (`merged/2`). With no GitHub, the landing is the merge.
+  defp finish(thread, %{repo: repo, from: from, to: to}, run) do
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
-    publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), &System.cmd/3)
+    publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), run)
   rescue
     e ->
       why = "merged, but its close-out failed (not published to GitHub): #{Exception.message(e)}"
@@ -1334,14 +1376,19 @@ defmodule Server.Workline do
     case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run) do
       {:ok, url} = ok ->
         record_publish(thread, 0, url)
-        post_brief(thread, "#{landed}; published as #{url} (GitHub merges it once its checks pass)")
-        Server.Dossier.resolve_fixed(thread, url)
+        record_landing(thread, "check_passed", %{"cmd" => "GitHub merge of #{url}", "exit" => 0, "url" => url})
+
+        post_brief(
+          thread,
+          "#{landed}; published as #{url} — waiting on GitHub's checks: the thread closes when GitHub merges it"
+        )
+
         ok
 
       :none ->
         record_publish(thread, 0, "no origin to publish to")
         post_brief(thread, landed)
-        Server.Dossier.resolve_fixed(thread, ref)
+        merged(thread, ref)
         :none
 
       {:error, why} = error ->
@@ -1350,8 +1397,8 @@ defmodule Server.Workline do
     end
   end
 
-  # the thread is closed by now and wakes no one: the failure is recorded for the operator's list
-  # (`Server.Office.Needs`' `publish_failed`), and the sheriff is told too
+  # the failure is recorded for the operator's list (`Server.Office.Needs`' `publish_failed`), and the
+  # sheriff is told too, so the work reaches main
   defp unpublished(thread, why) do
     record_publish(thread, 1, why)
     post_brief(thread, why)
@@ -1768,10 +1815,10 @@ defmodule Server.Workline do
   end
 
   # the gate passed: flip it to merged unless it moved off review while the gate ran
-  defp landed(thread, moved) do
+  defp landed(thread, moved, run) do
     case flip(thread) do
       {:ok, flipped} ->
-        finish(flipped, moved)
+        finish(flipped, moved, run)
         {:ok, flipped}
 
       {:error, {:moved, now}} ->

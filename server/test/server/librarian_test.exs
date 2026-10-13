@@ -186,8 +186,9 @@ defmodule Server.LibrarianTest do
       {:ok, _} =
         Dossier.record_event(%{
           thread_id: landed.id,
-          kind: "stage_advanced",
-          detail: %{"from" => "review", "to" => "merged"}
+          kind: "work_landed",
+          correlation: "workline:office-r:landing",
+          detail: %{"summary" => "merged: https://github.com/o/r/pull/1"}
         })
 
       since = DateTime.add(DateTime.utc_now(), -3600)

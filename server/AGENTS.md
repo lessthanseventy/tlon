@@ -72,7 +72,8 @@ and every layer the spine design's re-laid §9 asked for
 - **worklines** (`Server.Workline`) — a thread as a stage machine with git as the artifact chain
   (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
   entering verify queues the verifier on the service (`Server.Jobs.Verify`); approving review queues
-  the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; GitHub merges it).
+  the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; GitHub merges it, and only then,
+  read by `Server.Jobs.KeepUp`, does its thread close and its ticket count as done: `Workline.merged/2`).
   An approved review of a change Andrew sees (`office/`, the operator API) goes to the bench's `qa`
   seat first: it drives the branch on a scratch release and files `submit_qa` (with the workline's
   `thread_id`, which only a `qa` seat on its bench may name — its session may be bound elsewhere); a fail bounces it to

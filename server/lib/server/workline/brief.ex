@@ -18,7 +18,7 @@ defmodule Server.Workline.Brief do
   def stage_message(thread, opts \\ [])
 
   def stage_message(%Thread{stage: "merged"} = t, _opts) do
-    "✅ workline #{t.slug} is merged — the chain is complete. History: work/#{t.slug}/ + this thread."
+    "⤵ workline #{t.slug} landed — its PR waits on GitHub's checks, and the thread closes when GitHub merges it. Nothing to do. History: work/#{t.slug}/ + this thread."
   end
 
   def stage_message(%Thread{} = t, opts) do
