@@ -30,7 +30,7 @@ import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
-import { say, lobbyOf, replies } from "./talk"
+import { say, lobbyOf, replies, conversation, speech } from "./talk"
 import * as data from "./data"
 import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
@@ -39,7 +39,7 @@ import { ticketPicks } from "./finder"
 import { applyBuild, loadHome } from "./home"
 import { loadPets, PETS_PATH, savePets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
-import { Reader } from "./reader"
+import { Reader, type ReaderDeps } from "./reader"
 import { timelineRows } from "./timeline"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
 import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
@@ -637,14 +637,24 @@ const VERBS: [string, () => void][] = [
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
-function openReader(tid: number, compose: boolean) {
+function openReader(tid: number, compose: boolean, extra: Partial<ReaderDeps> = {}) {
   picked = tid
-  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)) }, compose)
+  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, compose)
   const v = threads.get(tid)
   if (v) reader.take(v)
   void reader.reload().then(draw)
   out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[2J`)
   draw()
+}
+/** the conversation with `name`: the lobby filtered to them and the operator's words to them; a reply goes to them */
+function openConversation(name: string) {
+  const lobby = lobbyOf(view().threads, ws)
+  if (lobby === null) { status = "no front desk in this workspace"; return draw() }
+  openReader(lobby, false, {
+    keep: (ms) => conversation(ms, name, OPERATOR),
+    heading: `conversation with ${name}`,
+    send: (body) => data.post(lobby, speech(name, body) ?? body),
+  })
 }
 function closeReader() {
   reader = null
@@ -969,7 +979,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (name === SHERIFF) {
         rows.push({ segs: [dim("nameplate: "), plain(NAMEPLATE)] }, { segs: [dim("mug: "), plain(MUG)] }, ...ledgerLines(ledger, a.bench).map((l) => ({ segs: [dim(l)] })))
       }
-      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, ...(c.thread === null ? [] : [...liveActions(c.thread), ...threadActions(c.thread)]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
+      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, { key: "v", label: "the conversation", run: () => openConversation(name) }, ...(c.thread === null ? [] : [{ key: "w", label: `read #${c.thread}`, run: () => openReader(c.thread!, false) }, ...liveActions(c.thread), ...threadActions(c.thread).filter((x) => x.key !== "v")]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {
       const tid = mode.tid
