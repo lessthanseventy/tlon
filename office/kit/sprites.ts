@@ -267,8 +267,22 @@ export const fillArt = (a: { sit: Frames } & Partial<Poses>): Poses => ({
 const ROCK_SIT = ["...kkkkk..", "..kkkkkkk.", ".kkekkekk.", ".kkkkkkkkk", "kkkkkkkkkk"]
 export const ROCK = fillArt({ sit: [ROCK_SIT], blink: [shut(ROCK_SIT)] })
 
+// A Bao A Qu (Borges, "The Book of Imaginary Beings"): a cloth-like creature that wakes on the stairs. k body, w the light in it,
+// e eye, p mouth, t the fringe it trails.
+const BAO_SIT = ["....kkk....", "...kkekp...", "...kkkkk...", "..kwwwwwk..", ".kkwwwwwkk.", ".kkkkkkkkk.", "kkkkkkkkkkk", "tt.t.t.t.tt"]
+const baoSit = [BAO_SIT, swapLast(BAO_SIT, ".tt.t.t.tt."), BAO_SIT]
+export const BAOAQU = {
+  sit: baoSit,
+  blink: [shut(BAO_SIT)],
+  groom: [shut(BAO_SIT), shut(baoSit[1]!)],
+  walk: [BAO_SIT, swapLast(BAO_SIT, ".tt.t.t.tt."), BAO_SIT, swapLast(BAO_SIT, ".tt.t.t.tt.")],
+  sleep: [["...........", "...........", "....kkkkk..", "..kkkckkkp.", ".kwwwwwwwk.", "tkkkkkkkkkt"], ["...........", "...........", "...kkkkkk..", "..kkkckkkp.", ".kwwwwwwwk.", "tkkkkkkkkkt"]],
+  play: [hop(BAO_SIT), BAO_SIT],
+  stretch: [hop(BAO_SIT)],
+}
+
 /** the art the cat slot's species draws with */
-export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD, hamster: HAMSTER, rock: ROCK }
+export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD, hamster: HAMSTER, rock: ROCK, baoaqu: BAOAQU }
 
 // Argos, the office dog (Borges' "The Immortal"), facing right: coat (k), ears (e), eye (i), nose
 // (n), tongue (p), tail (t), an eye shut (c)

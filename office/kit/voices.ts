@@ -145,4 +145,18 @@ export const SPECIES_VOICE = {
       done: ["(it has chosen to stay near you)"],
     },
   },
+  baoaqu: {
+    sassy: {
+      pet: ["Climb me and I will glow. Barely.", "I only come alive on the stairs."],
+      muse: ["The Tower of Victory is the only honest place.", "I am the colour of whoever climbs me. Today, grey."],
+      wake: ["Someone is on the stairs. Oh. No.", "I was waiting. Slowly."],
+      done: ["Done. I felt that one in the fringe.", "Finished. Now carry me upstairs."],
+    },
+    sweet: {
+      pet: ["*glows, a little*", "Oh. You're climbing. Do keep going."],
+      muse: ["I turn the colour of kind people.", "Some days the stairs are short and I am glad."],
+      wake: ["Good morning. I am nearly blue.", "Oh, you came up. Hello."],
+      done: ["You did it. I am nearly gold.", "Well climbed."],
+    },
+  },
 } satisfies Record<string, { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> }>
