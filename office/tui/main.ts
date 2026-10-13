@@ -51,7 +51,7 @@ type Mode =
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
-  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
+  | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "review"; tid: number }
   | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
@@ -66,6 +66,7 @@ const DETAIL = 14 // the detail pane's rows, title included: fixed, so nothing b
 const STATE_DIR = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/state"), "tlon")
 const STATE = join(STATE_DIR, "office-workspace")
 const TRAY = join(STATE_DIR, "office-tray") // when you last read the in-tray
+const SAID = join(STATE_DIR, "office-banter") // the room's last lines said, for the banter log
 const LOOKED = join(STATE_DIR, "margin-looked") // the last focused moment, epoch seconds: older margin notes start already seen
 const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
@@ -162,6 +163,15 @@ let needs: data.Need[] = []
 let officeRev: string | null | undefined
 /** the suggestion box: corkboard ideas the banter wrote in a coworker's voice (never a request), for you to file or throw out */
 let ideas: CorkNote[] = []
+/** the banter log: the last lines said in the room, oldest first, kept across restarts */
+type Said = { at: number; who: string; line: string }
+let said: Said[] = (() => { try { return JSON.parse(readState(SAID) ?? "[]") as Said[] } catch { return [] } })()
+function heard(turns: { who: string; line: string }[]) {
+  // a restart re-reads the server's recent lines: the log already has them
+  const fresh = turns.filter((t) => !said.some((x) => x.who === t.who && x.line === t.line))
+  said = [...said, ...fresh.map((t) => ({ at: Date.now(), ...t }))].slice(-50)
+  writeState(SAID, JSON.stringify(said))
+}
 let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: data.WorkspaceCard | null = null, settings: data.Settings | null = null
 /** the branch under review, and the notes not yet sent, kept per thread so leaving the screen loses none */
 let review: data.Review | null = null
@@ -332,24 +342,26 @@ async function loadFeed() {
   if (!first) for (const x of feed) if ((x.kind === "issue" || x.kind === "question") && !seen.has(`${x.at}${x.kind}${x.text}`)) notify(`${x.kind} raised${x.who ? ` by ${x.who}` : ""}`, x.text)
 }
 // the office's small talk: each line the server's banter wrote, once, as a balloon over its speaker
-const heard = new Set<string>()
+const seenLines = new Set<string>()
 async function chatter() {
   if (ws === null) return
   room().hear(await data.pets(ws, room().petProfile()))
   const here = ws
   // two together in the room: the server writes what they say now, said turn by turn
-  room().onTogether = (situation, a, b) => void data.talk(here, situation, a, b).then((turns) => turns.forEach((t, i) => setTimeout(() => { room().say(t.who, t.line); changed() }, i * 5000)))
+  room().onTogether = (situation, a, b) => void data.talk(here, situation, a, b).then((turns) => { room().converse(turns); heard(turns); changed() })
   cork = await data.corkboard(ws)
   room().pinboard(cork)
   ideas = await data.suggestions(ws)
   room().suggestionBox(ideas)
+  // a conversation the server wrote arrives as lines sharing one `at`: said as one, turn by turn
+  const convos = new Map<number, { who: string; line: string }[]>()
   for (const b of await data.banter(ws)) {
-    const k = `${b.at} ${b.agent}`
-    if (heard.has(k)) continue
-    heard.add(k)
-    room().say(b.agent, b.line)
-    changed()
+    const k = `${b.at} ${b.agent} ${b.line}`
+    if (seenLines.has(k)) continue
+    seenLines.add(k)
+    convos.set(b.at, [...(convos.get(b.at) ?? []), { who: b.agent, line: b.line }])
   }
+  for (const turns of convos.values()) { room().converse(turns); heard(turns); changed() }
   await answers(ws)
 }
 /** the operator's answers: a lobby post answering you is a balloon over its author, and a notification when a card covers the room */
@@ -577,6 +589,7 @@ const VERBS: [string, () => void][] = [
   ["back to work", () => void did(data.pause("back_to_work"))],
   ["Nina, the cat", () => open({ kind: "pet", who: "cat" })], ["Argos, the dog", () => open({ kind: "pet", who: "dog" })],
   ["the arcade", () => open({ kind: "arcade" })], ["the suggestion box", () => open({ kind: "ideas" })],
+  ["the banter log: what the crew said lately", () => open({ kind: "banter" })],
   ["Uqbar's entry — the office as a page", () => open({ kind: "entry" })],
 ]
 
@@ -1351,6 +1364,16 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           ] : []),
           back1,
         ],
+      }
+    }
+    case "banter": {
+      const who = (name: string) => ({ s: `${name}: `, fg: shirtOf(a.bench.find((b) => b.name === name)?.archetype) })
+      const at = (ms: number) => dim(`${new Date(ms).toTimeString().slice(0, 5)}  `)
+      const rows: Row[] = [...said].reverse().flatMap((x) => wrap(x.line, paneW() - 14 - x.who.length).map((l, n): Row => ({ segs: n ? [dim(" ".repeat(9 + x.who.length)), plain(l)] : [at(x.at), who(x.who), plain(l)] })))
+      return {
+        title: `BANTER · the last ${said.length} lines said in the room, newest first`,
+        rows: rows.length ? rows : [{ segs: [dim("nobody has said anything yet. the crew talks when two of them meet.")] }],
+        actions: [back1],
       }
     }
     case "arcade": {
