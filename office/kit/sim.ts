@@ -13,6 +13,8 @@ import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
 import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type VisitorKind } from "./door"
+import { EVENTS, blackoutAt, flickerAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
+import { SHERIFF } from "./scharlach"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
@@ -459,12 +461,69 @@ export class Sim<L extends { people: Seat[] }> {
   /** the toy's one-key happenings; steps 3–5 of the toy design give each a scene — this is the stand-in */
   play(kind: "doorbell" | "event" | "drill") {
     if (kind === "doorbell") { this.ring(); return }
+    if (kind === "event" && this.event()) return
     const line = { event: "Did anyone else hear that?", drill: "Fire drill! Everybody out!" }[kind]
     for (const x of this.actors.values()) { x.emote = "!"; x.emoteUntil = this.tick + 60 }
     const first = this.actors.keys().next().value
     if (first) this.say(first, line)
     if (kind === "drill") this.drillUntil = this.tick + DRILL
     this.changed = true
+  }
+
+  /** fired at an event's start (`beat` null) and at each beat — step 7's cast reacts here; default none */
+  onEvent: ((kind: EventKind, beat: Beat | null) => void) | null = null
+  private running: { kind: EventKind; since: number; idle: string[]; sheriff: string | null } | null = null
+  private lastEvent: EventKind | null = null
+  /** where the scenes are staged; a room with no front door has none and starts no event */
+  protected eventGeo(): Geo | null {
+    const d = this.plan.door
+    return d ? { doorX: d.x + 12, hallY: d.y, ceilY: d.y - 100, leftX: Math.min(...this.plan.lounge.map((s) => s.x)), windowX: 0 } : null
+  }
+
+  /** start a scripted scene — one at a time, only where there is a door; false when refused */
+  event(kind?: EventKind): boolean {
+    if (this.running || this.alarmed || !this.eventGeo() || !this.actors.size) return false
+    const k = kind ?? pickEvent(Math.random(), this.lastEvent)
+    const crew = [...this.actors.values()].filter((x) => !x.leaving && !x.seat.thinking).map((x) => x.seat.agent).sort()
+    const sheriff = crew.includes(SHERIFF) ? SHERIFF : null
+    this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff }
+    this.lastEvent = k
+    this.onEvent?.(k, null)
+    this.beats(0)
+    if (k === "drill") this.drillUntil = this.tick + DRILL
+    this.changed = true
+    return true
+  }
+  eventNow(): { kind: EventKind; since: number; t: number } | null {
+    const r = this.running
+    return r ? { kind: r.kind, since: r.since, t: this.tick - r.since } : null
+  }
+  /** this tick's props: the scene's, plus what rides on an actor */
+  props(): Prop[] {
+    const r = this.running, g = this.eventGeo()
+    return r && g ? propsAt(r.kind, this.tick - r.since, g) : []
+  }
+  blackout(): boolean { const r = this.running; return !!r && blackoutAt(r.kind, this.tick - r.since) }
+  lampFlicker(): boolean | null { const r = this.running; return r ? flickerAt(r.kind, this.tick - r.since) : null }
+
+  private beats(t: number) {
+    const r = this.running!
+    for (const b of EVENTS[r.kind].beats) {
+      if (b.at !== t) continue
+      const who = b.who === "sheriff" ? (r.sheriff ? [r.sheriff] : []) : b.who === "first" ? r.idle.slice(0, 1) : r.idle
+      for (const n of who) {
+        if (b.say) this.say(n, b.say)
+        if (b.emote) { const x = this.actors.get(n); if (x) { x.emote = b.emote; x.emoteUntil = this.tick + 60 } }
+      }
+      this.onEvent?.(r.kind, b)
+    }
+  }
+  private stepEvent() {
+    const r = this.running
+    if (!r) return
+    const t = this.tick - r.since
+    if (t >= EVENTS[r.kind].ticks) { this.running = null; this.changed = true; return }
+    this.beats(t)
   }
 
   /** somewhere to run to, anywhere a person can stand: zig-zagging between them is the panic */
@@ -615,6 +674,7 @@ export class Sim<L extends { people: Seat[] }> {
     if (a.ok) this.lastGood = a
     a = this.held(a)
     this.tick++
+    this.stepEvent()
     const alarmed = this.alarmed
     if (!alarmed) this.alarmSince = -1
     else if (this.alarmSince < 0) { this.alarmSince = this.tick; this.catDo("zoomies") }
