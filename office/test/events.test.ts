@@ -162,3 +162,19 @@ describe("the meteor", () => {
     expect(seen.has(true) && seen.has(false)).toBe(true)
   })
 })
+
+describe("the power cut", () => {
+  test("dark for the middle, a candle by one idle coworker, applause when the lamps return", () => seeded(8, () => {
+    const r = new WideRoom(696) as any, a = view(["w0", "w1"]), at = new Date(2026, 9, 9, 15)
+    run(r, a, 300); r.event("power")
+    run(r, a, 200)
+    expect(r.blackout()).toBe(true)
+    expect(r.props().some((p: any) => p.kind === "candle")).toBe(true)
+    const lit = () => (r.render(a, focus, measure, at).rgba as Uint8Array).reduce((n, v) => n + v, 0)
+    const dim = lit()
+    run(r, a, EVENTS.power.ticks - 200 - 30)
+    expect(r.blackout()).toBe(false)
+    expect(lit()).toBeGreaterThan(dim)
+    expect([...r.actors.values()].some((x: any) => x.emote === "♪")).toBe(true)
+  }))
+})
