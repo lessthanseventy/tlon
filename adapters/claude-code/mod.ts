@@ -121,7 +121,10 @@ async function refresh($) {
   }
   // a reply that isn't one (a server mid-restart, a scratch release taken down) keeps the last good dossier
   const d = asDossier(got);
-  if (!d) return void note($, `get_dossier: not a dossier: ${JSON.stringify(got).slice(0, 300)}`);
+  if (!d) {
+    dossierError = "not a dossier";
+    return void note($, `get_dossier: not a dossier: ${JSON.stringify(got).slice(0, 300)}`);
+  }
   dossier = d;
   dossierAt = await $.clock.now();
   dossierError = "";
@@ -509,7 +512,8 @@ export function register(on) {
     if (key === briefed) return next(e);
     briefed = key;
     const now = await $.clock.now();
-    const asOf = late ? `\n_the server didn't answer in time: this brief is as of ${ago(new Date(dossierAt), new Date(now))}, the last it gave._` : "";
+    const why = late ? " in time" : dossierError ? ` (${dossierError})` : "";
+    const asOf = why ? `\n_the server didn't answer${why}: this brief is as of ${ago(new Date(dossierAt), new Date(now))}, the last it gave._` : "";
     return brief(renderBrief(dossier, new Date(), await $.session.model()) + asOf);
   });
 

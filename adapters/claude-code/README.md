@@ -53,8 +53,9 @@ pure parts are `lib/` (bun-tested).
 - **The brief** rides each prompt as context (`prompt.submit`) when the dossier changed, and again
   after a `/clear` or a compaction that replaced the conversation (its summary stands where the brief
   was). It says `You are <model> (Claude Code).` — the model that signs the commits.
-  A prompt waits 3s at most for `get_dossier`: past that it goes with the last brief, saying how
-  old it is; with no brief yet it carries one line saying the server didn't answer, and why.
+  A prompt waits 3s at most for `get_dossier`: past that, or when it fails, it goes with the last
+  brief, saying how old it is and why; with no brief yet it carries one line saying the server
+  didn't answer, and why.
 - **Capture**: at turn end, above a 2k-char floor, the new transcript (brief cut out, secrets
   redacted) goes to the cheap ollama extractor and comes back as `derived` facts and questions;
   a compaction flushes whatever is there. A correction in a prompt is proposed as a habit, once.
