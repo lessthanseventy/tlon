@@ -28,6 +28,8 @@ defmodule Server.Office.Random do
   require Logger
 
   @name "random"
+  # pg_advisory_xact_lock's first key, the second being the workspace: any constant no other lock uses
+  @lock 7_310_001
   @every_s 4 * 3600
   @max 400
   @voice """
@@ -45,13 +47,22 @@ defmodule Server.Office.Random do
   def thread(workspace_id) do
     channel = channel(workspace_id)
 
-    Repo.one(
-      from t in Thread,
-        where:
-          t.workspace_id == ^workspace_id and t.channel_id == ^channel.id and t.title == @name and t.state == "open",
-        order_by: [asc: t.id],
-        limit: 1
-    ) || open(workspace_id, channel)
+    # the office's nudge and a reader can both ask first: without the lock each opens a thread
+    {:ok, thread} =
+      Repo.transaction(fn ->
+        Repo.query!("SELECT pg_advisory_xact_lock($1, $2)", [@lock, workspace_id])
+
+        Repo.one(
+          from t in Thread,
+            where:
+              t.workspace_id == ^workspace_id and t.channel_id == ^channel.id and t.title == @name and
+                t.state == "open",
+            order_by: [asc: t.id],
+            limit: 1
+        ) || open(workspace_id, channel)
+      end)
+
+    thread
   end
 
   defp channel(workspace_id) do

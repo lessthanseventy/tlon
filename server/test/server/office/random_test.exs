@@ -54,6 +54,14 @@ defmodule Server.Office.RandomTest do
     refute Enum.any?(Server.Office.Room.triage(ws.id).unled.shown, &(&1.thread_id == thread.id))
   end
 
+  test "first asks at the same moment open one #random thread, not one each", %{ws: ws} do
+    ids = 1..20 |> Enum.map(fn _ -> Task.async(fn -> Random.thread(ws.id).id end) end) |> Task.await_many()
+    assert [_one] = Enum.uniq(ids)
+
+    assert Repo.aggregate(from(t in Server.Thread, where: t.workspace_id == ^ws.id and t.title == "random"), :count) ==
+             1
+  end
+
   test "a #random post wakes nobody, not even a coworker it names who leads the thread and is live on it", %{ws: ws} do
     Application.put_env(:server, :arbiter, Server.Arbiter.Test)
     Application.put_env(:server, :test_pid, self())
