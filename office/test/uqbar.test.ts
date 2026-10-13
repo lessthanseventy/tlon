@@ -180,10 +180,11 @@ describe("torn pages", () => {
     expect(r.cards.get(101)).toBeDefined()
     expect(last).toEqual(r.cards.get(101)!)
   })
-  test("no lead and no card: the board's edge", () => {
+  test("no lead and no card (its study): over your desk, not off the top of the board", () => {
     const { last, r } = flight(unled(102), 102)
     expect(r.cards.has(102)).toBe(false)
-    expect(last).toEqual((r as unknown as { boardEdge: { x: number; y: number } }).boardEdge)
+    expect(last).toEqual((r as unknown as { yourDesk(a: unknown): { x: number; y: number } }).yourDesk(viewOf(unled(102), 1)))
+    expect(last.y).toBeGreaterThan(20)
   })
   test("a hand-off flight passes over the old lead's desk first", () => {
     const seen = seeded(3, () => {
