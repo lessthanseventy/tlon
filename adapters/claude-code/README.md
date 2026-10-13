@@ -83,6 +83,9 @@ pure parts are `lib/` (bun-tested).
 - `tool.describe` points Elixir edits at `edit_clause` / `rename_identifier`.
 - On the Claude plan, `session.measure` posts the five-hour and weekly windows to the office's meter
   (`POST /api/usage/claude`, `Server.Usage`) whenever one moves a whole point.
+- A seat launched with `TLON_COMPACT_AT` (a profile's `compact_at`: Uqbar's, 50) compacts between
+  turns once its context is past that percent, so a long-lived session never runs deep into its
+  window; the next turn carries the brief whole.
 
 **Tools and commands** (from the mod, beside the server's)
 - `consult` (a tool) and `/consult`, `/fresh` (commands): a one-shot Claude Code on another ollama

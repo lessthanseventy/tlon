@@ -63,14 +63,19 @@ defmodule Server.Schedules do
     end
   end
 
-  @doc "The next local occurrence of `cron` (or `@daily`/`@weekly`/…) strictly after `after_at`."
+  @doc "The next local occurrence of `cron` (or `@daily`/`@weekly`/…, or `@every 50m` after it) strictly after `after_at`."
   @spec next_occurrence(String.t(), DateTime.t()) :: DateTime.t()
-  def next_occurrence(cron, after_at), do: cron |> Expression.parse!() |> after_local(after_at)
+  def next_occurrence(cron, after_at) do
+    case Schedule.interval(cron) do
+      nil -> cron |> Expression.parse!() |> after_local(after_at)
+      secs -> DateTime.add(after_at, secs)
+    end
+  end
 
   # the slot it is owed: a one-off's time (until it ran), or the cron's next after its last firing
   defp slot(%Schedule{cron: nil, at: at, last_run_at: nil}), do: at
   defp slot(%Schedule{cron: nil}), do: nil
-  defp slot(%Schedule{cron: cron} = s), do: after_local(Expression.parse!(cron), s.last_run_at || s.created_at)
+  defp slot(%Schedule{cron: cron} = s), do: next_occurrence(cron, s.last_run_at || s.created_at)
 
   @doc "Whether it is owed a firing at `now`."
   def due?(%Schedule{enabled: true} = s, now) do
@@ -89,6 +94,9 @@ defmodule Server.Schedules do
     if {local.year, local.month} == {year, month}, do: [local.day], else: []
   end
 
+  def days(%Schedule{cron: "@every " <> _}, year, month),
+    do: Enum.to_list(1..Date.days_in_month(Date.new!(year, month, 1)))
+
   def days(%Schedule{cron: cron}, year, month) do
     expr = Expression.parse!(cron)
     start = year |> Date.new!(month, 1) |> DateTime.new!(~T[00:00:00]) |> DateTime.add(-60)
@@ -105,13 +113,20 @@ defmodule Server.Schedules do
 
   @doc """
   Fire everything due at `now`: claim it (its `last_run_at` moves to `now`, only if no one else
-  moved it first), write its run, and queue the work where Oban runs. The runs it started.
+  moved it first), write its run, and queue the work where Oban runs. While the office is paused
+  (`Server.Pause`), an agent or workline schedule is not fired: it stays due and fires once back at
+  work; a script (a check) runs. The runs it started.
   """
   @spec dispatch(DateTime.t()) :: [ScheduleRun.t()]
   def dispatch(now \\ DateTime.utc_now()) do
     now = DateTime.truncate(now, :second)
 
-    for s <- Repo.all(from s in Schedule, where: s.enabled), due?(s, now), {:ok, run} <- [claim(s, now)] do
+    # paused, what wakes a coworker or opens work waits, still due, and fires once on back to work
+    held = if Server.Pause.state() == :working, do: [], else: ~w(agent workline)
+
+    for s <- Repo.all(from s in Schedule, where: s.enabled and s.kind not in ^held),
+        due?(s, now),
+        {:ok, run} <- [claim(s, now)] do
       _ = Server.Jobs.enqueue(Server.Jobs.RunSchedule.new(%{run_id: run.id}))
       run
     end

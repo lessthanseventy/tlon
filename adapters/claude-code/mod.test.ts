@@ -8,6 +8,8 @@ type World = {
   transcript?: { role: string; text: string }[];
   fetch?: Fetch;
   compactSkips?: boolean;
+  contextPercent?: number;
+  compactions?: { trigger: string; instructions?: string }[];
   run?: (argv: string[], init?: { env?: Record<string, string> }) => { exitCode: number; stdout: string; stderr: string };
   model?: string;
   wakes?: unknown[];
@@ -71,8 +73,12 @@ function engine(on, world: World = {}): Declare[] {
     value: { isStdoutTruncated: false, isStderrTruncated: false, ...(world.run ?? (() => ({ exitCode: 1, stdout: "", stderr: "no run" })))(e.argv, e.init) },
   }));
   on("ui.invalidate", () => ({ value: undefined }));
-  on("session.compact", ($, e) => (world.compactSkips ? { skip: "nothing to compact" } : { messages: [{ role: "user", text: "a summary", toolUses: [] }] }));
+  on("session.compact", ($, e) => {
+    world.compactions?.push({ trigger: e.trigger, instructions: e.instructions });
+    return world.compactSkips ? { skip: "nothing to compact" } : { messages: [{ role: "user", text: "a summary", toolUses: [] }] };
+  });
   on("session.measure", ($, e) => ({ changed: e.changed }));
+  on("session.usage", () => ({ value: { context: { window: 200_000, percent: world.contextPercent }, rateLimits: [] } }));
   on("ui.toast", ($, e) => {
     world.toasts?.push(e.text);
     return { value: undefined };
@@ -235,6 +241,39 @@ test("a compaction that replaced the conversation brings the whole brief back on
   expect(afterPrecompute.context).toBeUndefined();
   expect(afterSkip.context).toBeUndefined();
   expect(afterCompact.context?.[0]).toContain("# Brief: ship the mod");
+});
+
+test("a seat set to compact at half full asks to compact between main-thread turns once past it, never under 50% or after a subagent's", async ($, on) => {
+  const world: World = { env: { ...IDENTITY, TLON_COMPACT_AT: "50" }, compactions: [], contextPercent: 30 };
+  engine(on, world);
+  await $.session.start(START);
+
+  // the kit has no core to fill a plugin compaction's transcript, so this holds the request: when and
+  // what it asks to keep; that an applied compaction re-briefs is "a compaction that replaced the conversation…"
+  await $.prompt.submit({ text: "start", wait: false });
+  await $.turn.complete(TURN_END);
+  await settle();
+  expect(world.compactions).toEqual([]);
+
+  world.contextPercent = 70;
+  await $.turn.complete({ ...TURN_END, agentId: "sub-1" });
+  await settle();
+  expect(world.compactions).toEqual([]);
+
+  await $.turn.complete(TURN_END);
+  await settle();
+  expect(world.compactions).toHaveLength(1);
+  expect(world.compactions![0]!.instructions).toContain("Keep what is in flight");
+});
+
+test("a seat with no compaction point leaves compaction to Claude Code", async ($, on) => {
+  const world: World = { compactions: [], contextPercent: 90 };
+  engine(on, world);
+  await $.session.start(START);
+  await $.prompt.submit({ text: "start", wait: false });
+  await $.turn.complete(TURN_END);
+  await settle();
+  expect(world.compactions).toEqual([]);
 });
 
 test("a correction is proposed as a habit, once", async ($, on) => {

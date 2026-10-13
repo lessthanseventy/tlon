@@ -29,7 +29,8 @@ and every layer the spine design's re-laid §9 asked for
   offers the other crews in the lobby, and a taken offer offers the way back at the reset.
 - **pause** (`Server.Pause`) — the office's stop controls, in the settings file's `"pause"` key so a
   restart keeps them: pencils down (intake and continuation nudges off, every live thread told to
-  finish its turn, commit and stop, as a notice), lights out (that, plus the verify and landing
+  finish its turn, commit and stop, as a notice; the calendar's agent and workline schedules wait,
+  firing once back at work), lights out (that, plus the verify and landing
   queues paused — a boot under it starts them paused — and an Escape into every coworker pane),
   back to work. `POST /api/office/pause`, `tlon-cli pause`, the office's finder.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral

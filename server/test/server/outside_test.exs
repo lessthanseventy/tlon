@@ -73,5 +73,26 @@ defmodule Server.OutsideTest do
       assert {:ok, %{id: fresh, state: "open"}} = Outside.study(ws.id)
       assert fresh != study.id
     end
+
+    test "ensure_checkin/1: one standing check-in every 50 minutes on uqbar's study, created once, left alone after" do
+      {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
+
+      assert {:ok, s} = Outside.ensure_checkin(ws.id)
+      {:ok, study} = Outside.study(ws.id)
+      assert %{kind: "agent", agent: "uqbar", standing: true, cron: "@every 50m", enabled: true} = s
+      assert s.thread_id == study.id
+
+      {:ok, _} = Server.Schedules.update(s, %{enabled: false})
+      assert {:ok, again} = Outside.ensure_checkin(ws.id)
+      assert again.id == s.id and again.enabled == false
+      assert length(Server.Schedules.in_workspace(ws.id)) == 1
+    end
+
+    test "no uqbar registered, no check-in" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Bare"})
+      assert {:error, :no_such_citizen} = Outside.ensure_checkin(ws.id)
+      assert Server.Schedules.in_workspace(ws.id) == []
+    end
   end
 end

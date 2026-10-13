@@ -381,6 +381,11 @@ defmodule Server.ProfilesTest do
       assert launch =~ "--model claude-opus-5-5"
       refute launch =~ "TLON_PROVIDER="
       refute launch =~ "TLON_SANDBOX_FILE="
+      # a long-lived delegate compacts at half full, before a turn, so it never runs deep into its window
+      assert launch =~ "TLON_COMPACT_AT=50 "
+
+      refute Server.Harness.ClaudeCode.launch_command(Profiles.instantiate(%{archetype: :builder, name: "hronir"})) =~
+               "TLON_COMPACT_AT"
     end
 
     test "model_label names a citizen's model too, so its commits are stamped" do

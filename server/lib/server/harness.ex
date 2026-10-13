@@ -70,7 +70,7 @@ defmodule Server.Harness.ClaudeCode do
   @impl true
   def launch_command(%Profile{} = p) do
     launcher = Path.join(Profiles.tlon_root(), "adapters/claude-code/launch.sh")
-    envs = role_env(p) <> deny_env(p) <> provider_env(p) <> sandbox_env(p)
+    envs = role_env(p) <> deny_env(p) <> provider_env(p) <> sandbox_env(p) <> compact_env(p)
     command = Enum.join([launcher | model_args(p.model)], " ")
     if envs == "", do: command, else: "env " <> envs <> command
   end
@@ -94,6 +94,9 @@ defmodule Server.Harness.ClaudeCode do
   defp model_args(%{model: m, thinking: t}) when t in @efforts, do: ["--model", m, "--effort", t]
   defp model_args(%{model: m}), do: ["--model", m]
   defp model_args(_model), do: []
+
+  defp compact_env(%Profile{compact_at: n}) when is_integer(n), do: "TLON_COMPACT_AT=#{n} "
+  defp compact_env(_p), do: ""
 
   defp role_env(%Profile{system_prompt: nil}), do: ""
 
