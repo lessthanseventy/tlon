@@ -183,6 +183,7 @@ defmodule Server.Board do
     thread = Repo.get!(Thread, thread.id)
     todos = Dossier.open_todos_for_thread(thread)
     recent = Channel.recent_messages(thread, @cap)
+    recall_opts = recall_opts(thread)
 
     # WORKLINE — stage, gate, and whether the stage's owed artifact is committed: what the coworker
     # reads before it ends a turn, and what the editor flags.
@@ -206,10 +207,10 @@ defmodule Server.Board do
       # LEARNINGS is the forgetting engine's token-budgeted working set (relevance × strength,
       # design: `docs/plans/2026-08-19-funes-forgetting-design.md`) — not a recency window; `more`
       # counts what fell out of budget (still on disk, `get_facts` returns the total).
-      learnings: Recall.thread_learnings(thread, query: recall_query(thread)),
+      learnings: Recall.thread_learnings(thread, recall_opts),
       # KNOWLEDGE — what the operator pinned and the project learned on OTHER threads, ranked the
       # same way, so a new lead starts from what the office already knows (`Recall.thread_knowledge/2`).
-      knowledge: Recall.thread_knowledge(thread, query: recall_query(thread)),
+      knowledge: Recall.thread_knowledge(thread, recall_opts),
       # UNKNOWNS beside FACTS — knowing what you don't know is first-class (§4a).
       unknowns: Dossier.open_questions_for_thread(thread),
       blockers: Dossier.open_issues_for_thread(thread),
@@ -222,6 +223,12 @@ defmodule Server.Board do
       cited: References.cited(recent, thread.id),
       recent: recent
     }
+  end
+
+  # Both recalls rank on the same query: embed it once.
+  defp recall_opts(%Thread{} = thread) do
+    query = recall_query(thread)
+    [query: query, query_embedding: Recall.embed_query(query)]
   end
 
   # What the thread is about, as recall's relevance hint: its title plus the operator's latest

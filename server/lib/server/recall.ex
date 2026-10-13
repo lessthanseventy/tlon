@@ -176,17 +176,24 @@ defmodule Server.Recall do
   # `:query` string via ollama, else nil (a session-start recall with no query → uniform relevance).
   defp query_vector(opts) do
     cond do
-      vec = opts[:query_embedding] ->
-        vec
+      Keyword.has_key?(opts, :query_embedding) -> opts[:query_embedding]
+      q = opts[:query] -> embed_query(q)
+      true -> nil
+    end
+  end
 
-      q = opts[:query] ->
-        case Embedding.embed(q, model: embedding_model(), timeout: @query_embed_timeout_ms) do
-          {:ok, vec} -> vec
-          {:error, _} -> nil
-        end
+  @doc """
+  Embeds a recall query once, for a caller that runs several recalls on it and passes the result as
+  `:query_embedding` (nil when the embedder is down or the query blank — and nil is honoured, so a
+  down embedder costs one timeout, not one per recall).
+  """
+  @spec embed_query(String.t() | nil) :: [float()] | nil
+  def embed_query(nil), do: nil
 
-      true ->
-        nil
+  def embed_query(q) do
+    case Embedding.embed(q, model: embedding_model(), timeout: @query_embed_timeout_ms) do
+      {:ok, vec} -> vec
+      {:error, _} -> nil
     end
   end
 

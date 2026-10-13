@@ -281,6 +281,17 @@ defmodule Server.BoardTest do
     end
   end
 
+  describe "Board.brief/1 — one query embedding" do
+    test "learnings and knowledge share a single embed of the recall query" do
+      {:ok, thread} = Channel.open_thread(%{title: "embed once"})
+      {:ok, _} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", provenance: "derived", text: "something worth recalling"})
+
+      {_brief, embeds} = count_embeds(fn -> Board.brief(thread) end)
+
+      assert embeds == 1
+    end
+  end
+
   describe "Board.brief/1 LEARNINGS — the forgetting engine's working set" do
     test "LEARNINGS ranks by strength, not recency" do
       {:ok, thread} = Channel.open_thread(%{title: "t"})
