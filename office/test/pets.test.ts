@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import { dancing } from "../kit/draw"
-import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
-import { NINA, SWEET } from "../kit/voices"
-import { CAT, DOG, SPECIES_ART } from "../kit/sprites"
+import { ARGOS, cycleAxis, DEFAULT_PETS, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES, speciesBase, SPECIES_VOICE, stepDog, TEMPERAMENTS } from "../kit/pets"
+import { bucketFor, NINA, SWEET } from "../kit/voices"
+import { CAT, DOG, fillArt, SPECIES_ART } from "../kit/sprites"
 import { EMPTY, type Agents } from "../kit/types"
 import { WideRoom, widePlan } from "../rooms/wide"
 import { DOOR, RIM_FLOOR } from "../kit/bathroom"
@@ -197,7 +197,8 @@ describe("the cat slot's species", () => {
   test("every species has the frames drawCat reads, and no collar gems", () => {
     for (const [sp, art] of Object.entries(SPECIES_ART)) for (const [pose, n] of Object.entries(POSES)) {
       const frames = (art as Record<string, string[][]>)[pose]!
-      expect({ sp, pose, n: frames.length }).toEqual({ sp, pose, n })
+      if (["cat", "rabbit", "bird", "hamster", "baoaqu"].includes(sp)) expect({ sp, pose, n: frames.length }).toEqual({ sp, pose, n })
+      else expect({ sp, pose, ok: frames.length > 0 }).toEqual({ sp, pose, ok: true })
       if (sp !== "cat") for (const rows of frames) expect(rows.join("")).not.toMatch(/[gj]/)
     }
   })
@@ -215,10 +216,29 @@ describe("the cat slot's species", () => {
     expect(resolvePets({ dog: { species: "bird" } } as never).dog.species).toBe("dog")
   })
   test("rabbit and bird talk in their own voices", () => {
-    for (const sp of ["rabbit", "bird"] as const) for (const occ of ["pet", "muse", "wake", "done"]) {
+    for (const sp of ["rabbit", "bird"] as const) for (const occ of ["pet", "muse", "wake", "done"] as const) {
       const v = SPECIES_VOICE[sp]
       expect(v.sassy[occ]!.length).toBeGreaterThan(0); expect(v.sweet[occ]!.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe("every species is data", () => {
+  test("art, exactly one slot, a destination table, a voice that falls back to Nina", () => {
+    for (const sp of SPECIES) {
+      const slot = slotOf(sp)
+      expect({ sp, slots: ["cat", "dog"].filter((s) => (SLOT_SPECIES as Record<string, readonly string[]>)[s]!.includes(sp)).length }).toEqual({ sp, slots: 1 })
+      if (slot !== "cat") continue
+      const art = (SPECIES_ART as Record<string, Record<string, string[][]>>)[sp]!
+      for (const pose of ["sit", "blink", "groom", "walk", "sleep", "stretch", "play"]) expect({ sp, pose, ok: art[pose]!.length > 0 }).toEqual({ sp, pose, ok: true })
+      expect(Object.values(speciesBase(sp)).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 10)
+      const neutral = { warmth: 0, wits: 0, energy: 0 }
+      expect(bucketFor("read", neutral, () => 0, sp)).toBe(bucketFor("read", neutral, () => 0, "cat"))
+    }
+  })
+  test("a pose a species does not draw falls back to its sit, at any index", () => {
+    const art = fillArt({ sit: [["kk"]] })
+    expect(art.walk).toBe(art.sit)
   })
 })
 

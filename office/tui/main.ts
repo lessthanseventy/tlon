@@ -15,7 +15,7 @@ import { seatLine } from "../kit/seat-voices"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
-import { cycleAxis, dots, previewOf, resolvePets, TEMPERAMENTS, type PetSetting, type Pets } from "../kit/pets"
+import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
@@ -1531,7 +1531,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         const rows: Row[] = [
           { segs: [plain("your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.")] },
           { segs: [dim("name".padEnd(12)), plain(draft.name)] },
-          row("species", draft.species, () => { draft.species = cycleVal(["cat", "rabbit", "bird"] as const, draft.species as "cat") }),
+          row("species", draft.species, () => { draft.species = cycleVal(SLOT_SPECIES.cat, draft.species as CatSpecies) }),
           row("temperament", named ?? "custom", () => { const names = Object.keys(TEMPERAMENTS); draft.temperament = { ...TEMPERAMENTS[names[(names.indexOf(named ?? "") + 1) % names.length]!]! } }),
           ...AXES.map((a) => row(a, dots(draft.temperament[a]), () => { draft.temperament[a] = cycleAxis(draft.temperament[a]) })),
           { segs: [dim("preview".padEnd(12)), plain(`${{ sleep: "z", sit: "·", play: "o", walk: ">" }[beat.mode]} ${beat.line}`)] },

@@ -212,7 +212,10 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
 
 export const SPECIES = ["cat", "dog", "rabbit", "bird"] as const
 /** what each slot may hold: the cat slot is the room's cat-family pet */
-const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird"], dog: ["dog"] } as const
+export const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird"], dog: ["dog"] } as const
+export type CatSpecies = (typeof SLOT_SPECIES.cat)[number]
+/** the slot a species lives in, or undefined for a name no slot holds */
+export const slotOf = (sp: string): "cat" | "dog" | undefined => (["cat", "dog"] as const).find((s) => (SLOT_SPECIES[s] as readonly string[]).includes(sp))
 /** grows with the roster, never ahead of it */
 export type Species = (typeof SPECIES)[number]
 export type PetSetting = { name: string; species: Species; temperament: Temperament }

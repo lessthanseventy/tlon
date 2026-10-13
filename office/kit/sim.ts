@@ -7,7 +7,7 @@ import { asksYou } from "./crew"
 import { DRINK, FALL_ODDS, FALL_WET, layPrint, prune, STRIDE, WET, type Print } from "./bathroom"
 import { homeLevel } from "./life"
 import { looksGen, overrideFor } from "./looks"
-import type { Pets } from "./pets"
+import type { CatSpecies, Pets } from "./pets"
 import { CAT_NAME, lookOf, type Dir, type Fav, type Look, type Pose } from "./sprites"
 import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
@@ -49,7 +49,7 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
  * a fuss of her, from where they are; `wet`: the tick her paws dry (until then each stride leaves a print),
  * `fell` whether the drink that wet them ended in the tub, `travelled` the pixels walked wet
  */
-export type Cat = { name: string; species: "cat" | "rabbit" | "bird"; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" | "drink" | "tub" } | null; wet: number; fell: boolean; travelled: number }
+export type Cat = { name: string; species: CatSpecies; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" | "drink" | "tub" } | null; wet: number; fell: boolean; travelled: number }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
