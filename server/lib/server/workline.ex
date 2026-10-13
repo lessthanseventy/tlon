@@ -1292,20 +1292,7 @@ defmodule Server.Workline do
   defp finish(thread, %{repo: repo, from: from, to: to}) do
     {:ok, _} = Server.Channel.close_thread(thread)
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
-    landed = "⤵ landed as #{String.slice(to, 0, 7)}"
-
-    case Server.Workline.Publish.publish(repo, thread.slug, thread.title) do
-      {:ok, url} ->
-        post_brief(thread, "#{landed}; published as #{url} (GitHub merges it once its checks pass)")
-        Server.Dossier.resolve_fixed(thread, url)
-
-      :none ->
-        post_brief(thread, landed)
-        Server.Dossier.resolve_fixed(thread, String.slice(to, 0, 7))
-
-      {:error, why} ->
-        unpublished(thread, "#{landed}, but not published to GitHub: #{why}")
-    end
+    publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), &System.cmd/3)
   rescue
     e ->
       why = "merged, but its close-out failed (not published to GitHub): #{Exception.message(e)}"
@@ -1313,10 +1300,72 @@ defmodule Server.Workline do
       unpublished(thread, "⚠ #{why}")
   end
 
-  # the thread is closed by now and wakes no one: the sheriff is told too, so the work reaches main
+  @doc """
+  Publish a landed workline whose publish failed (`Server.Office.Needs`' `publish_failed`) again: the
+  same push and PR its landing tried. `{:ok, pr_url}` | `:none` (no origin) | `{:error, why}` — a
+  failure is recorded again; a workline whose last publish did not fail is refused.
+  """
+  def republish(thread, run \\ &System.cmd/3)
+
+  def republish(%Thread{stage: "merged"} = thread, run) do
+    if publish_failed?(thread),
+      do: publish(thread, Git.root(thread), "⤴ republished", "work/#{thread.slug}", run),
+      else: {:error, "#{thread.slug} has no failed publish to retry"}
+  end
+
+  def republish(%Thread{} = thread, _run), do: {:error, "##{thread.id} has not landed"}
+
+  @doc "The correlation a workline's publish is recorded under, as `check_passed` or `check_failed`."
+  def publish_correlation(%Thread{slug: slug}), do: "workline:#{slug}:publish"
+
+  defp publish_failed?(thread) do
+    Repo.one(
+      from e in Server.Event,
+        where:
+          e.thread_id == ^thread.id and e.correlation == ^publish_correlation(thread) and
+            e.kind in ["check_passed", "check_failed"],
+        order_by: [desc: e.id],
+        limit: 1,
+        select: e.kind
+    ) == "check_failed"
+  end
+
+  defp publish(thread, repo, landed, ref, run) do
+    case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run) do
+      {:ok, url} = ok ->
+        record_publish(thread, 0, url)
+        post_brief(thread, "#{landed}; published as #{url} (GitHub merges it once its checks pass)")
+        Server.Dossier.resolve_fixed(thread, url)
+        ok
+
+      :none ->
+        record_publish(thread, 0, "no origin to publish to")
+        post_brief(thread, landed)
+        Server.Dossier.resolve_fixed(thread, ref)
+        :none
+
+      {:error, why} = error ->
+        unpublished(thread, "#{landed}, but not published to GitHub: #{why}")
+        error
+    end
+  end
+
+  # the thread is closed by now and wakes no one: the failure is recorded for the operator's list
+  # (`Server.Office.Needs`' `publish_failed`), and the sheriff is told too
   defp unpublished(thread, why) do
+    record_publish(thread, 1, why)
     post_brief(thread, why)
     Server.Sheriff.report(thread, "work/#{thread.slug} — #{why}")
+  end
+
+  defp record_publish(thread, exit, tail) do
+    {:ok, _} =
+      Server.Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: if(exit == 0, do: "check_passed", else: "check_failed"),
+        correlation: publish_correlation(thread),
+        detail: %{"cmd" => "publish work/#{thread.slug}", "exit" => exit, "tail" => tail}
+      })
   end
 
   # what the stage's lead should be: the grade and area the ask names; for a review, also not the

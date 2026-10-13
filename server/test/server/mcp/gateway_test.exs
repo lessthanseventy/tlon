@@ -386,6 +386,13 @@ defmodule Server.MCP.GatewayTest do
       assert {409, _} = post_json("/api/threads/#{wl.id}/send_back", %{stage: "build", why: "forward"})
     end
 
+    test "a republish or a cut retried with nothing failed behind it is refused, not run" do
+      {:ok, wl} = Server.Workline.open(%{title: "not landed", slug: "not-landed", stage: "review"})
+      assert {409, %{"error" => why}} = post_json("/api/threads/#{wl.id}/republish", %{})
+      assert why =~ "has not landed"
+      assert {409, %{"error" => "no failed release cut 999999"}} = post_json("/api/release/retry/999999", %{})
+    end
+
     test "the stop controls: the snapshot says whether the office is paused; pencils down, lights out, back to work" do
       path = Path.join(System.tmp_dir!(), "pause-api-#{System.unique_integer([:positive])}.json")
       prior = Application.get_env(:server, :operator_config_path)

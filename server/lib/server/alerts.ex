@@ -116,7 +116,7 @@ defmodule Server.Alerts do
 
   # what nothing waits on can be put away on the server (`Office.Needs.dismiss/1`), so it leaves the
   # office's inbox too, not only this surface
-  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled),
+  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled publish_failed),
     do: [%{label: "Put away", method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
 
   defp put_away(_need), do: []
@@ -152,6 +152,12 @@ defmodule Server.Alerts do
       %{label: "Get it fixed", method: "POST", path: "/api/issues/#{id}/fix", body: %{}},
       %{label: "Resolve…", method: "POST", path: "/api/issues/#{id}/resolve", body: %{}, input: "resolution"}
     ]
+
+  # opened by hand instead (the command is in its body), it is put away
+  defp actions(%{kind: "publish_failed", thread_id: t}), do: [call("Republish", "/republish", t)]
+
+  defp actions(%{kind: "release_failed", ref: id}),
+    do: [%{label: "Retry the cut", method: "POST", path: "/api/release/retry/#{id}", body: %{}}]
 
   defp actions(%{kind: "stranded", key: key}),
     do: [%{label: "Take the checkout down", method: "POST", path: "/api/office/needs/retire", body: %{key: key}}]

@@ -623,10 +623,13 @@ function needActions(n: data.Need): Action[] {
     ...((n.kind === "question" || n.kind === "mention") && tid ? [{ key: "r", label: "reply", run: () => reply(tid) }] : []),
     ...(n.kind === "stalled" && tid ? [{ key: "r", label: "tell the lead what to do (wakes them)", run: () => reply(tid) }] : []),
     ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
+    ...(n.kind === "publish_failed" && tid ? [{ key: "R", label: "republish (push, open its PR)", run: () => void did(data.republish(tid)).then(after) }] : []),
+    ...(n.kind === "release_failed" && n.ref ? [{ key: "R", label: "retry the cut", run: () => void did(data.retryRelease(n.ref!)).then(after) }] : []),
     ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
     ...(n.kind === "stranded" ? [{ key: "X", label: "take the checkout down (branch kept)", run: () => void did(data.retireStranded(n.key)).then(after) }] : []),
     ...(n.kind === "issue" && n.ref ? [{ key: "g", label: "get it fixed (a ticket, routed)", run: () => void did(data.fixIssue(n.ref!)).then(after) }] : []),
     ...(n.kind === "issue" && n.ref ? [{ key: "x", label: "resolve…", run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (s) => { if (s.trim()) void did(data.resolveIssue(n.ref!, s.trim())).then(after) }) }] : []),
+    ...(n.kind === "publish_failed" ? [{ key: "d", label: "put away (its PR opened by hand: the command is above)", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
     ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ key: "d", label: "put away", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
     ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
   ]
@@ -636,8 +639,8 @@ function needActions(n: data.Need): Action[] {
 /** what waits on you: one at a time when anything does — the whole list is a key away */
 function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
 /** a need's one-line name: what kind, and where */
-const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work", issue: "issue" }
-const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm }
+const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work", issue: "issue", publish_failed: "not on GitHub", release_failed: "cut failed" }
+const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, publish_failed: ROLE.alarm, release_failed: ROLE.alarm }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev

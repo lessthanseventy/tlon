@@ -318,6 +318,36 @@ defmodule Server.WorklineReviewHeadTest do
     assert report =~ "unpublished"
   end
 
+  test "a landing GitHub never got is a publish_failed Need, with its answers, until it is republished",
+       %{root: root} do
+    git(root, ["remote", "add", "origin", Path.join(root, "no-such-remote.git")])
+
+    {:ok, ws} =
+      Server.Workspaces.register(%{name: "Unpublished need", roster: [%{"archetype" => "builder", "name" => "emma"}]})
+
+    git(root, ["checkout", "-q", "-b", "work/stuck-local"])
+    commit(root, "lib/stuck_local.ex", "v1")
+    git(root, ["checkout", "-q", "main"])
+    {:ok, t} = Workline.open(%{title: "t stuck", slug: "stuck-local", stage: "review", workspace_id: ws.id})
+    {:awaiting, gate} = Workline.advance(t, artifacts: AllPresent)
+    {:ok, %{stage: "merged"}} = Workline.approve(gate, artifacts: AllPresent, merge: Merges)
+
+    assert [need] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "publish_failed"))
+    assert need.thread_id == t.id and need.level == "blocking"
+    assert need.text =~ "gh pr create --head work/stuck-local"
+    assert [%{actions: [%{label: "Republish", path: path} | _]}] = Server.Alerts.build([need], [], DateTime.utc_now())
+    assert path == "/api/threads/#{t.id}/republish"
+
+    gh = fn
+      "gh", ["pr", "create" | _], _ -> {"https://github.com/o/r/pull/9\n", 0}
+      _, _, _ -> {"", 0}
+    end
+
+    assert {:ok, "https://github.com/o/r/pull/9"} = Workline.republish(Repo.get!(Thread, t.id), gh)
+    refute Enum.any?(Server.Office.Needs.list(), &(&1.kind == "publish_failed"))
+    assert {:error, _} = Workline.republish(Repo.get!(Thread, t.id), gh)
+  end
+
   test "a closed workline doesn't advance", %{root: root} do
     thread = at_review(root, "closed-early")
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)

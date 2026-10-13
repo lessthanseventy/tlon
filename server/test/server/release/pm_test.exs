@@ -323,14 +323,38 @@ defmodule Server.Release.PMTest do
       assert List.last(bodies(ctx.ws)) =~ "not cut"
     end
 
-    test "a script that fails is said on the root thread, and nothing is recorded or restarted", ctx do
+    test "a script that fails is said on the root thread, recorded as a failed cut, and nothing restarted", ctx do
       checks_pass!(ctx, ctx.main)
       File.write!(ctx.opts[:script], "#!/bin/sh\necho 'release: the build failed'\nexit 1\n")
 
       assert {:error, _} = PM.cut(ctx.ws.id, ctx.main, nil, ctx.opts)
       assert List.last(bodies(ctx.ws)) =~ "the build failed"
       refute_received {:restart, _}
-      refute Repo.exists?(from e in Server.Event, where: like(e.correlation, "release:%"))
+      refute Repo.exists?(from e in Server.Event, where: like(e.correlation, "release:%") and e.kind == "check_passed")
+    end
+
+    test "a failed cut is a release_failed Need until a cut succeeds; retrying it queues the cut again", ctx do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      checks_pass!(ctx, ctx.main)
+      script = File.read!(ctx.opts[:script])
+      File.write!(ctx.opts[:script], "#!/bin/sh\necho 'release: the build failed'\nexit 1\n")
+      assert {:error, _} = PM.cut(ctx.ws.id, ctx.main, "the lamp talks", ctx.opts)
+
+      assert [need] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "release_failed"))
+      assert need.thread_id == root(ctx.ws).id and need.text =~ "the build failed"
+
+      assert [%{actions: [%{label: "Retry the cut", path: path} | _]}] =
+               Server.Alerts.build([need], [], DateTime.utc_now())
+
+      assert path == "/api/release/retry/#{need.ref}"
+
+      assert {:ok, sha} = PM.retry(need.ref)
+      assert sha == ctx.main
+      assert_enqueued(worker: Server.Jobs.Release, args: %{action: "cut", sha: sha, notes: "the lamp talks"})
+
+      File.write!(ctx.opts[:script], script)
+      assert {:ok, _} = PM.cut(ctx.ws.id, ctx.main, "the lamp talks", ctx.opts)
+      refute Enum.any?(Server.Office.Needs.list(), &(&1.kind == "release_failed"))
     end
   end
 
