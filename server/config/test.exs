@@ -33,6 +33,8 @@ config :server, Server.Web.Endpoint,
   # degrades to keyword relevance instantly instead of reaching a real ollama.
   server: false
 
+# a test spawn must never signal a live coworker whose thread id happens to match a test row's
+config :server, :orphans, proc_dir: "/nonexistent"
 config :server, bootstrap: false
 config :server, embedding: [endpoint: "http://127.0.0.1:1/api/embed", timeout: 200]
 config :server, generator_cmd: "/nonexistent/tlon-test-generator"
@@ -50,11 +52,10 @@ config :server, machine_seed_path: "/nonexistent/tlon-test-seed.exs"
 config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
 # The PM's release desk acts on the tlon checkout (Server.Release.PM): a test hands it a throwaway
 # repo, so one that forgets can never cut a release of the real one.
-config :server, release_root: "/nonexistent/tlon-test-release"
-config :server, souls_dir: Path.join(System.tmp_dir!(), "tlon-test-souls-unset")
-
 # The consult mirror is off in tests: the pure maybe_mirror tests call it directly, and the
 # round-trip test starts it explicitly. An always-on subscriber would double-mirror.
+config :server, release_root: "/nonexistent/tlon-test-release"
+config :server, souls_dir: Path.join(System.tmp_dir!(), "tlon-test-souls-unset")
 config :server, start_consult_mirror: false
 
 # In test the harness manages the repo lifecycle (fresh, migrated DB per run),
@@ -76,6 +77,3 @@ config :server, tmux_scope: false
 # repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
 config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b"
 config :server, workline_root: "/nonexistent/tlon-test-workline"
-
-# a test spawn must never signal a live coworker whose thread id happens to match a test row's
-config :server, :orphans, proc_dir: "/nonexistent"

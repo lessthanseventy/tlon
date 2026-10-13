@@ -40,7 +40,7 @@ defmodule Server.OrphansTest do
   end
 
   test "never signals the caller's own process", %{proc: proc} do
-    process(proc, :os.getpid() |> List.to_integer(), ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
+    process(proc, List.to_integer(:os.getpid()), ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
 
     assert Orphans.retire(257, "emma", proc_dir: proc, kill: fn _ -> flunk("signalled self") end) == 0
   end
