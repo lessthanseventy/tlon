@@ -41,7 +41,7 @@ export function stepBook(b: Book, goal: Pt): Book {
   return { x: b.x + (dx / d) * SPEED, y: b.y + (dy / d) * SPEED, flying: true, riffle: b.flying ? Math.max(0, b.riffle - 1) : RIFFLE_TICKS }
 }
 export const modeOf = (b: Book, home: Pt): Mode => (b.flying ? "flying" : b.x === home.x && b.y === home.y ? "shelved" : "perched")
-/** home asleep; else the focus card, else the whiteboard's edge (focus off the board or in another workspace) */
+/** home asleep; else the focus card, else `edge` (focus off the board, like its study, or in another workspace: the wide room passes your desk) */
 export function goalOf(session: Seat | null | undefined, cards: Map<number, Pt>, edge: Pt, home: Pt): Pt {
   return session ? cards.get(session.thread_id) ?? edge : home
 }
