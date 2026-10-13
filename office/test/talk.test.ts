@@ -26,7 +26,7 @@ describe("talk", () => {
       { path: "/api/threads/2/messages", body: { body: "we need a thing" } },
     ])
   })
-  test("no lobby, no post", async () => { expect(await say([], 1, null, "x")).toMatch(/no lobby/) })
+  test("no lobby, no post", async () => { expect(await say([], 1, null, "x")).toMatch(/no front desk/) })
 })
 
 describe("replies", () => {

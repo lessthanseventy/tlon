@@ -1,7 +1,7 @@
 // The TUI's line to the server: the operator API over loopback HTTP (Server.MCP.OperatorAPI) — the
 // always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
 // beside it: a compiled TUI runs anywhere the server answers.
-import { EMPTY, type Agents, type CorkNote, type LifeStatus, type ThreadView } from "../kit/types"
+import { EMPTY, type Agents, type CorkNote, type LifeStatus, type Thread, type ThreadView } from "../kit/types"
 import type { Note } from "../kit/margin"
 import type { Target } from "./terminal"
 import type { Toy } from "./sandbox"
@@ -35,7 +35,7 @@ export async function status(): Promise<Agents> {
     const { status, json: j } = await call("GET", "/office")
     if (status !== 200 || !j) throw new Error(`office ${status}`)
     const a: Agents = {
-      ok: true, roster: j.roster ?? [], threads: j.threads ?? [], counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
+      ok: true, roster: j.roster ?? [], threads: (j.threads ?? []).map((t: Thread) => (t.standing && t.title === "lobby" ? { ...t, title: "the front desk" } : t)), counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
       bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], shifts: j.shifts ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, release: j.release, flags: j.flags ?? {}, life: j.life ?? {},
     }
     lastGood = { a, at: Date.now() }
