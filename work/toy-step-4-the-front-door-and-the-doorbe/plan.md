@@ -128,10 +128,7 @@ Code, `office/kit/door.ts`:
 ```ts
 // The front door (toy design §5): who comes by, when, and what a snapshot says arrived. Pure — sim.ts runs
 // the visit, rooms/wide.ts draws the door, tui/main.ts feeds it snapshots.
-import type { Canvas } from "./canvas"
-import type { Scene } from "./draw"
 import { mailbox } from "./mailbox"
-import { ROLE } from "./palette"
 import type { Agents } from "./types"
 
 export type VisitorKind = "carrier" | "pizza" | "cookies" | "tourist" | "trick" | "carol"
@@ -180,8 +177,7 @@ export function arrivals(before: Agents, after: Agents, beforeNeeds: { level: "b
 }
 ```
 
-`drawDoor` / `drawVisitor` are added in Task 4 (they need `Scene`; keep this commit pure — drop the two
-`import type` lines for `Canvas`/`Scene`/`ROLE` here and add them in Task 4).
+`drawDoor` / `drawVisitor` are added in Task 4 (they need `Scene` and `ROLE`; this commit stays pure).
 
 Done: `cd office && bun test test/door.test.ts` green; `mise run office:check` green (run unsandboxed, once with
 `OFFICE_TEST_HOUR=3`, once with `=15`). Commit: `office: the door's pure side — visitors, seasons, what a snapshot says arrived`.
