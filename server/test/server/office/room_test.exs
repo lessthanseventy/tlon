@@ -8,7 +8,7 @@ defmodule Server.Office.RoomChecksTest do
   alias Server.Office.Room
 
   test "the checks queue: who holds the lock and who waits, a waiter whose process is gone not counted" do
-    dir = Path.join(System.tmp_dir!(), "checks-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "checks-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(dir, "tlon-checks.wait"))
     on_exit(fn -> File.rm_rf!(dir) end)
 

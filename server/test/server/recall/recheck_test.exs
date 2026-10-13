@@ -12,7 +12,7 @@ defmodule Server.Recall.RecheckTest do
 
   setup do
     Server.TestDB.clean!()
-    repo = Path.join(System.tmp_dir!(), "recheck-#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "recheck-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(repo, "server/lib"))
     File.write!(Path.join(repo, "server/lib/a.ex"), "defmodule Server.A do\nend\n")
     git = fn args -> {_, 0} = System.cmd("git", ["-C", repo | args], stderr_to_stdout: true) end
@@ -72,7 +72,7 @@ defmodule Server.Recall.RecheckTest do
 
   test "a repo with no origin/main is skipped, not failed", %{thread: t} do
     {:ok, ws} = Server.Workspaces.register(%{name: "W2"})
-    bare = Path.join(System.tmp_dir!(), "recheck-bare-#{System.unique_integer([:positive])}")
+    bare = Path.join(System.tmp_dir!(), "recheck-bare-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(bare)
     {_, 0} = System.cmd("git", ["-C", bare, "init", "-q"], stderr_to_stdout: true)
     on_exit(fn -> File.rm_rf!(bare) end)

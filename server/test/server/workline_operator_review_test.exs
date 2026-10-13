@@ -23,7 +23,7 @@ defmodule Server.Workline.OperatorReviewTest do
 
   setup do
     Server.TestDB.clean!()
-    root = Path.join(System.tmp_dir!(), "operator-review-#{System.unique_integer([:positive])}")
+    root = Path.join(System.tmp_dir!(), "operator-review-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(root)
     git(root, ["init", "-q", "-b", "main"])
     git(root, ["config", "user.email", "t@t"])

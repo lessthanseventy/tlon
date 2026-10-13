@@ -434,7 +434,7 @@ defmodule Server.MCP.GatewayTest do
     end
 
     test "the stop controls: the snapshot says whether the office is paused; pencils down, lights out, back to work" do
-      path = Path.join(System.tmp_dir!(), "pause-api-#{System.unique_integer([:positive])}.json")
+      path = Path.join(System.tmp_dir!(), "pause-api-#{System.pid()}-#{System.unique_integer([:positive])}.json")
       prior = Application.get_env(:server, :operator_config_path)
       Application.put_env(:server, :operator_config_path, path)
 

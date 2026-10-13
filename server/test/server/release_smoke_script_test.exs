@@ -38,7 +38,7 @@ defmodule Server.ReleaseSmokeScriptTest do
     # a repo whose origin can't be fetched (a local path that isn't there): a smoke of a local ref
     # needs no fetch, so it must get past the fetch; a smoke of origin/main still needs it
     setup do
-      tmp = Path.join(System.tmp_dir!(), "smoke-fetch-#{System.unique_integer([:positive])}")
+      tmp = Path.join(System.tmp_dir!(), "smoke-fetch-#{System.pid()}-#{System.unique_integer([:positive])}")
       root = Path.join(tmp, "repo")
       File.mkdir_p!(Path.join(root, "scripts"))
 
@@ -77,7 +77,7 @@ defmodule Server.ReleaseSmokeScriptTest do
     @sweep Path.expand("../../../scripts/smoke-sweep.sh", __DIR__)
 
     setup do
-      tmp = Path.join(System.tmp_dir!(), "smoke-sweep-#{System.unique_integer([:positive])}")
+      tmp = Path.join(System.tmp_dir!(), "smoke-sweep-#{System.pid()}-#{System.unique_integer([:positive])}")
       root = Path.join(tmp, "repo")
       File.mkdir_p!(root)
       {_, 0} = System.cmd("git", ["-C", root, "init", "-q"])

@@ -19,7 +19,7 @@ defmodule Server.Release.PMTest do
     Server.TestDB.clean!()
     {:ok, ws} = Server.Workspaces.create(%{name: "Machine"})
 
-    dir = Path.join(System.tmp_dir!(), "pm-test-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "pm-test-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(dir)
     on_exit(fn -> File.rm_rf!(dir) end)
 

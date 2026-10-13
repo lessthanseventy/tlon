@@ -48,7 +48,7 @@ defmodule Server.Office.BanterTest do
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "reviewer"})
 
-      dir = Path.join(System.tmp_dir!(), "talk-#{System.unique_integer([:positive])}")
+      dir = Path.join(System.tmp_dir!(), "talk-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
       cli = Path.join(dir, "model")
       prompt = Path.join(dir, "prompt")
@@ -182,7 +182,7 @@ defmodule Server.Office.BanterTest do
       Server.TestDB.clean!()
       {:ok, ws} = Server.Workspaces.register(%{name: "Souls"})
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "atlas", archetype: "builder"})
-      dir = Path.join(System.tmp_dir!(), "banter-souls-#{System.unique_integer([:positive])}")
+      dir = Path.join(System.tmp_dir!(), "banter-souls-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(dir)
       Application.put_env(:server, :souls_dir, dir)
 

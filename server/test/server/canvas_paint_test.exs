@@ -10,7 +10,7 @@ defmodule Server.Canvas.PaintTest do
 
   setup do
     Server.TestDB.clean!()
-    dir = Path.join(System.tmp_dir!(), "canvas-#{System.unique_integer([:positive])}")
+    dir = Path.join(System.tmp_dir!(), "canvas-#{System.pid()}-#{System.unique_integer([:positive])}")
     remote = Path.join(dir, "canvas.git")
     File.mkdir_p!(remote)
     {_, 0} = System.cmd("git", ["init", "-q", "--bare", "-b", "main", remote])

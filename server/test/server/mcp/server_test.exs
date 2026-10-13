@@ -1190,7 +1190,7 @@ defmodule Server.MCP.ServerTest do
   end
 
   test "close_thread on a plain thread holding unmerged commits tracks it and says stays_open" do
-    repo = Path.join(System.tmp_dir!(), "close-tool-#{System.unique_integer([:positive])}")
+    repo = Path.join(System.tmp_dir!(), "close-tool-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(repo)
     on_exit(fn -> File.rm_rf!(repo) end)
 
@@ -1471,7 +1471,7 @@ defmodule Server.MCP.ServerTest do
       {:ok, agent} = Staff.register_agent(%{name: "beatriz", mandate: "pm", engine: "fresh"})
       token = MCP.Tokens.mint(thread, agent)
 
-      repo = Path.join(System.tmp_dir!(), "pm-tools-#{System.unique_integer([:positive])}")
+      repo = Path.join(System.tmp_dir!(), "pm-tools-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(repo)
       on_exit(fn -> File.rm_rf!(repo) end)
 

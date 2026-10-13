@@ -753,7 +753,7 @@ defmodule Server.WorklineTest do
   describe "the approval record, and reopen/1" do
     setup do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
-      repo = Path.join(System.tmp_dir!(), "approval-#{System.unique_integer([:positive])}")
+      repo = Path.join(System.tmp_dir!(), "approval-#{System.pid()}-#{System.unique_integer([:positive])}")
       File.mkdir_p!(repo)
       git!(repo, ["init", "-q", "-b", "main"])
       git!(repo, ["commit", "-q", "--allow-empty", "-m", "seed"])

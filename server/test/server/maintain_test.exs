@@ -171,7 +171,7 @@ defmodule Server.MaintainTest do
   end
 
   test "a workline gone quiet is not nudged while the office is paused, and is once it is back to work" do
-    path = Path.join(System.tmp_dir!(), "maintain-pause-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "maintain-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
 
@@ -202,7 +202,7 @@ defmodule Server.MaintainTest do
   end
 
   test "the quiet band is the operator's quiet_workline_minutes knob" do
-    path = Path.join(System.tmp_dir!(), "maintain-quiet-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "maintain-quiet-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
     on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)

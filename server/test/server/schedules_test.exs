@@ -110,7 +110,7 @@ defmodule Server.SchedulesTest do
   end
 
   test "while the office is paused, a schedule that wakes a coworker or opens work waits; a check still runs", %{ws: ws} do
-    path = Path.join(System.tmp_dir!(), "tlon-sched-pause-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "tlon-sched-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     prior = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
 

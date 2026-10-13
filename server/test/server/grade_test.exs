@@ -10,7 +10,7 @@ defmodule Server.GradeTest do
 
   setup do
     Server.TestDB.clean!()
-    path = Path.join(System.tmp_dir!(), "tlon-grade-#{System.unique_integer([:positive])}.json")
+    path = Path.join(System.tmp_dir!(), "tlon-grade-#{System.pid()}-#{System.unique_integer([:positive])}.json")
     previous = Application.get_env(:server, :operator_config_path)
     Application.put_env(:server, :operator_config_path, path)
 
