@@ -11,7 +11,7 @@ import type { Spot } from "../sim"
 import { shirtOf, BIG_PLANT } from "../sprites"
 import type { Agents } from "../types"
 import {
-  BAND, CREW_W, EXEC_Y, HALL, OFF_DOOR, OFF_W, SEAT_GAP, SEATS, TABLE_YS, TRAY,
+  BAND, CREW_W, EXEC_Y, HALL, OFF_DOOR, OFF_W, OFFICE_PLANT, OFFICE_WATERER, SEAT_GAP, SEATS, TABLE_YS, TRAY,
   seatX, type Chair, type Layout, type Zones,
 } from "../../rooms/wide"
 
@@ -75,8 +75,8 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
         ...[48, 60, 72, 84].map((x, i) => at(x, 148, 148, i === 0 ? "up" : "left", "queue")),
         at(88, 164, 164, "up", "queue"),
       ],
-      // the office-side plant by your desk (the lounge's own plant is lounge's, at L0 + 22)
-      plant: [at(18, 168, HALL, "left", "plant")],
+      // your office's plant, down by the closet (the lounge's own plant is lounge's, at L0 + 22)
+      plant: [at(OFFICE_WATERER.x, OFFICE_WATERER.y, HALL, "left", "plant")],
     }),
     home(l: Layout, agent: string): Spot | null {
       const m = l.desks.find((d) => (d.kind === "manager" || d.kind === "lead") && d.seat?.agent === agent)
@@ -90,7 +90,7 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
       for (const d of desks) if (d.kind === "boss") bossDesk(sc, a, d)
       inTray(sc, focus.tray ?? 0)
       beacon(sc, Object.values(a.triage).reduce((n, x) => n + x, 0))
-      sc.item(170, () => blit(BIG_PLANT, 2, 159, { l: ROLE.live, o: ROLE.structure }))
+      sc.item(OFFICE_PLANT.y + 11, () => blit(BIG_PLANT, OFFICE_PLANT.x, OFFICE_PLANT.y, { l: ROLE.live, o: ROLE.structure }))
 
       crewBoard(sc, a, measure, F0 + 8, EXEC_Y, CREW_W, 32, 9)
       for (const d of desks) {

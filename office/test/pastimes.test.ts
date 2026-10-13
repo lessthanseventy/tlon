@@ -247,7 +247,7 @@ describe("the bathroom", () => {
   test("it is a pastime: the floor plan has a spot at the sink and it is in the lounge list", () => {
     const p = widePlan(696), s = p.lounge.filter((x) => x.kind === "bathroom")
     expect(s).toHaveLength(1)
-    expect(s[0]).toMatchObject({ x: 68, y: 172, aisle: 191 })
+    expect(s[0]).toMatchObject({ x: 34, y: 176, aisle: 191 })
   })
   test("no wall or fixture is walked through: every route to the sink stays out of the blocks", () => {
     const p = widePlan(696), l = p.layout(viewOf(office(["yu"]), 1) as never), spot = p.lounge.find((x) => x.kind === "bathroom")!

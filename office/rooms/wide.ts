@@ -79,8 +79,10 @@ export function corner(z: Zones) {
   }
 }
 
-/** the server closet: a rack by the office's door, clear of every lane — what burns when the channel is down */
-export const closet = (): Rect => ({ x: 2, y: 158, w: 12, h: 26 })
+/** the server closet: a rack by the office's door, between the bathroom and your lane — what burns in a fire drill */
+export const closet = (): Rect => ({ x: 63, y: 158, w: 12, h: 26 })
+/** your office's plant, by the closet, and where its waterer stands (the lounge's own plant is at L0 + 22) */
+export const OFFICE_PLANT = { x: 77, y: 173 }, OFFICE_WATERER = { x: 90, y: 180 }
 
 /** where Nina sits to watch the fish: on the floor in front of the aquarium */
 export function fishWatch(z: Zones): Pt { const t = corner(z).tank; return { x: t.x + 15, y: t.y + t.h + 8 } }
@@ -581,8 +583,8 @@ export class WideRoom extends Sim<Layout> {
   private pastimes(sc: Scene, a: Agents, l: Layout, measure: Measure, focus: Focus) {
     this.games.draw(sc, a, l, measure, this.live(), focus)
     this.kitchen.draw(sc, a, l, measure, this.live(), focus)
-    // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's (at 18)
-    for (const [wx, plant] of [[this.z.L0 + 22, { x: this.z.L0 + 4, y: 175 }], [18, { x: 2, y: 159 }]] as const) {
+    // a plant watered enough flowers: the lounge's (its waterer stands at L0 + 22), your office's
+    for (const [wx, plant] of [[this.z.L0 + 22, { x: this.z.L0 + 4, y: 175 }], [OFFICE_WATERER.x, OFFICE_PLANT]] as const) {
       const n = Math.min(3, Math.floor((this.watered.get(wx) ?? 0) / 300))
       if (n) sc.item(plant.y + 12, () => { for (let k = 0; k < n; k++) sc.blit([".p.", "pyp", ".p."], plant.x + [1, 6, 3][k]!, plant.y - 1 + [0, 1, 3][k]!, { p: ROLE.attention, y: ROLE.body }) })
     }
@@ -689,7 +691,7 @@ export class WideRoom extends Sim<Layout> {
   private season(sc: Scene, now: Date) {
     const { L0, M0 } = this.z, f = sc.f, px = sc.px.bind(sc), h = now.getHours(), night = darkness(h) > 0.5
     if (now.getMonth() === 9) {
-      for (const [x, y] of [[L0 + 42, 146], [OFF_LANE - 10, 182]] as const) sc.item(y, () => sc.blit(["..g..", ".ooo.", "oyoyo", "ooyoo", ".ooo."], x, y - 5, { g: ROLE.live, o: ROLE.structure, y: f % 3 ? ROLE.body : tint(ROLE.body, ROLE.structure, 0.5) }))
+      for (const [x, y] of [[L0 + 42, 146], [closet().x + 3, closet().y]] as const) sc.item(y, () => sc.blit(["..g..", ".ooo.", "oyoyo", "ooyoo", ".ooo."], x, y - 5, { g: ROLE.live, o: ROLE.structure, y: f % 3 ? ROLE.body : tint(ROLE.body, ROLE.structure, 0.5) }))
       sc.item(BAND, () => { for (let k = 0; k < 6; k++) { px(this.width - 1 - k, BAND + k, 1, 1, tint(ROLE.prose, ROLE.ground, 0.5)); px(this.width - 1 - k * 2, BAND, 1, 1, tint(ROLE.prose, ROLE.ground, 0.4)); px(this.width - 1, BAND + k * 2, 1, 1, tint(ROLE.prose, ROLE.ground, 0.4)) } })
       if (night) sc.overhead.push(() => {
         for (let k = 0; k < 3; k++) {

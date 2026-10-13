@@ -50,6 +50,8 @@ export const NINA = {
   zoomies: ["PRINCESS ZOOMIES! Clear the runway!"],
   // the tub: a drink from the tap, and the rare fall in
   drink: ["Tap water. The only honest water.", "Running water is for royalty. I am royalty.", "The tub is a fountain. Mine."],
+  // she curls up in the dry tub
+  tub: ["A dry bath. The only correct kind.", "This tub is mine now. Do not touch the tap.", "Porcelain. Cool. Correct. Goodnight."],
   splash: ["I MEANT to do that.", "Nobody saw that. NOBODY.", "The tub was rude. I will not be discussing it."],
   // she sits on someone's keyboard
   keyboard: ["This is my desk now.", "I fixed your code, {name}. You're welcome.", "Warm. Mine. Go away.", "I'm helping.", "Your keyboard is my cushion now, {name}."],

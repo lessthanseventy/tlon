@@ -47,7 +47,7 @@ export type CatMode = "walk" | "sit" | "sleep" | "play" | "zoom"
  * a fuss of her, from where they are; `wet`: the tick her paws dry (until then each stride leaves a print),
  * `fell` whether the drink that wet them ended in the tub, `travelled` the pixels walked wet
  */
-export type Cat = { name: string; species: "cat" | "rabbit" | "bird"; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" | "drink" } | null; wet: number; fell: boolean; travelled: number }
+export type Cat = { name: string; species: "cat" | "rabbit" | "bird"; x: number; y: number; path: Pt[]; mode: CatMode; until: number; face: number; purr: number; byYou: boolean; yarn: number; zoom: number; leaps: Pt[]; said: string | null; saidFrom: number; saidUntil: number; stretch: number; fuss: Fussing | null; errand?: { name: string; kind: "cheer" | "keys" | "letter" | "drink" | "tub" } | null; wet: number; fell: boolean; travelled: number }
 /** someone at `from` making a fuss of a pet until `until` */
 export type Fussing = { kind: Fuss; from: Pt; until: number }
 /** how long a fuss lasts, in ticks; a treat spends the first third in the air */
@@ -56,8 +56,8 @@ export const FUSS = 36
 /** Nina's places in a room: her nap, your desk, her yarn, her litter, her tower's two perches, the lounge */
 export type CatPlan = {
   nap: Pt; desk: Pt; play: Pt; litter: Pt; perches: [Pt, Pt]; lounge: Pt[]; spots: Pt[]
-  /** the tub she drinks from, if the room has one: the rim she sits on, and the floor she hops up from */
-  bath?: { rim: Pt; floor: Pt }
+  /** the tub, if the room has one: the rim she drinks from, the floor she hops up from, and inside it where she curls up */
+  bath?: { rim: Pt; floor: Pt; tub: Pt }
   /** somewhere warm she makes for when it's cold out (a radiator), if the room has one */
   warm?: Pt
   /** the floor below a spot up off it (a desk, a perch, the litter box), or null */
@@ -332,6 +332,7 @@ export class Sim<L extends { people: Seat[] }> {
           this.catSay(this.line("Nina", c.fell ? "splash" : "drink", c.fell ? NINA.splash : NINA.drink), 70)
           return true
         }
+        if (kind === "tub") { c.errand = null; c.mode = "sleep"; c.until = this.tick + 600 + Math.floor(Math.random() * 300); return true }
         c.errand = null; c.mode = "sit"; c.until = this.tick + (kind === "keys" ? 400 : 200)
         if (host && kind === "cheer") { host.emote = "♥"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "cheer", NINA.cheer, name), 70) }
         if (host && kind === "letter") { host.emote = "✉"; host.emoteUntil = this.tick + 60; this.catSay(this.line("Nina", "letter", NINA.letter, name), 70) }
@@ -340,7 +341,7 @@ export class Sim<L extends { people: Seat[] }> {
         return true
       }
       if (!c.path.length) {
-        const nap = at(p.nap) || (at(p.perches[0]) && Math.random() < 0.7)
+        const nap = at(p.nap) || (!!p.bath && at(p.bath.tub)) || (at(p.perches[0]) && Math.random() < 0.7)
         c.mode = nap ? "sleep" : at(p.play) ? "play" : "sit"
         if (at(p.play)) c.face = 1
         c.until = this.tick + (at(p.litter) ? 60 : nap ? 600 : 150) + Math.floor(Math.random() * (at(p.litter) ? 40 : 300))
@@ -388,9 +389,10 @@ export class Sim<L extends { people: Seat[] }> {
    * rug, play with the yarn, come to your desk, or the zoomies where she is (or, with no leaps
    * near, round your office). False when there is nothing to do it with.
    */
-  catDo(what: "nap" | "play" | "come" | "zoomies" | "drink"): boolean {
+  catDo(what: "nap" | "play" | "come" | "zoomies" | "drink" | "tub"): boolean {
     const c = this.cat, p = this.plan.cat
     if (what === "drink") return this.catDrink()
+    if (what === "tub") return this.catTub()
     if (what === "zoomies") {
       const leaps = this.leapsHere() ?? p.leaps[0]
       if (!leaps?.length) return false
@@ -411,6 +413,17 @@ export class Sim<L extends { people: Seat[] }> {
     const to = p.bath.rim, down = c.mode === "zoom" ? null : p.via(c), up = p.via(to)
     c.path = [...(down ? [down] : []), ...p.door(down ?? c, up ?? to), ...(up ? [up] : []), { ...to }]
     c.mode = "walk"; c.until = this.tick + 150; c.errand = { name: "", kind: "drink" }
+    return true
+  }
+
+  /** Nina goes and curls up in the (dry) tub, through the door and in over its front; false when the room has no bathroom */
+  private catTub(): boolean {
+    const c = this.cat, p = this.plan.cat
+    if (!p.bath) return false
+    const to = p.bath.tub, down = c.mode === "zoom" ? null : p.via(c)
+    c.path = [...(down ? [down] : []), ...p.door(down ?? c, p.bath.floor), { ...p.bath.floor }, { ...to }]
+    c.mode = "walk"; c.until = this.tick + 150; c.errand = { name: "", kind: "tub" }
+    this.catSay(this.line("Nina", "tub", NINA.tub))
     return true
   }
 
