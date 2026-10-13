@@ -42,7 +42,9 @@ defmodule Server.Arbiter.Tmux do
   # on any other thread the thread's one leaf, `t<id>`, under the leaf cap — a duty neither takes
   # a seat nor waits for one (a thread past it is told so once, and its message waits for the
   # drain). Tagged with its coworker and its birth (a leaf with its thread too), which is how the
-  # staffing pass knows whose it is and when it goes cold.
+  # staffing pass knows whose it is and when it goes cold. A seat with no window has no live
+  # session: a process still holding its identity is an earlier one, retired before the next starts
+  # (`Server.Orphans`).
   @impl true
   def spawn(exports) do
     with {:ok, thread_id, author} <- identity(exports),
@@ -51,6 +53,7 @@ defmodule Server.Arbiter.Tmux do
          standing? = standing?(ws, thread),
          tabs when is_list(tabs) <- tmux_windows(ws),
          :absent <- running(tabs, thread, author, standing?),
+         _ = Server.Orphans.retire(thread_id, author, Application.get_env(:server, :orphans, [])),
          parked? = Server.Staffing.parked_note?(thread_id),
          :ok <- under_cap(tabs, thread, standing?) do
       leaf_thread = if(!standing?, do: thread_id)

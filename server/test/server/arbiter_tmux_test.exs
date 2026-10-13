@@ -191,6 +191,28 @@ defmodule Server.Arbiter.TmuxTest do
     assert {:error, :already_running} = Arbiter.Tmux.spawn(exports)
   end
 
+  test "spawn: a process still holding the seat's identity is retired before the new window opens", %{
+    thread: t,
+    exports: exports
+  } do
+    proc = Path.join(System.tmp_dir!(), "spawn-orphans-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(Path.join(proc, "4242"))
+    File.write!(Path.join(proc, "4242/environ"), "TLON_THREAD=#{t.id}\0TLON_AUTHOR=claude-code\0")
+    test = self()
+
+    was = Application.get_env(:server, :orphans)
+    Application.put_env(:server, :orphans, proc_dir: proc, kill: fn pid -> send(test, {:retired, pid}) end)
+
+    on_exit(fn ->
+      Application.put_env(:server, :orphans, was)
+      File.rm_rf!(proc)
+    end)
+
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {@not_up, 1}}))
+    assert {:ok, _} = Arbiter.Tmux.spawn(exports)
+    assert_received {:retired, 4242}
+  end
+
   test "spawn: on the standing thread a window per coworker, named for them, tagged with them and its birth — no thread tag",
        %{ws: ws} do
     {:ok, _} = Staff.register_agent(%{name: "hronir", mandate: "m", engine: "pi"})
