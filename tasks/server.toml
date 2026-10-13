@@ -132,6 +132,14 @@ run = "adapters/claude-code/launch.sh"
 description = "Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md)"
 run = "scripts/cap.sh"
 
+["scratch:new"]
+description = "a detached worktree at ~/.cache/tlon-scratch/<name> from origin/main (or a ref), deps installed for the gates and menard — `scratch:new -- <name> [<ref>]`; prints its path"
+run = "scripts/scratch.sh new"
+
+["scratch:prune"]
+description = "remove the scratch worktrees whose work is done (clean, every commit on origin/main by patch); lists what stays and why — `-- --dry-run` to only look"
+run = "scripts/scratch.sh prune"
+
 ["cap:clean"]
 description = "Sweep all captured run logs (.logs/) — they self-cap at CAP_KEEP (40), this clears them now"
 run = "rm -rf .logs && echo 'swept .logs/'"
