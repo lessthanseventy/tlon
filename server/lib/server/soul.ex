@@ -12,7 +12,8 @@ defmodule Server.Soul do
   @sections ["Where they're from", "Wants", "Fears", "Quirks", "People", "The side project"]
 
   @stories %{
-    "tertius" => "*Tlön, Uqbar, Orbis Tertius*: found an encyclopedia of a world that does not exist and watched it replace the real one.",
+    "tertius" =>
+      "*Tlön, Uqbar, Orbis Tertius*: found an encyclopedia of a world that does not exist and watched it replace the real one.",
     "hronir" => "Tlön's hrönir: objects that exist because someone expected to find them.",
     "lonnrot" => "Erik Lönnrot, *Death and the Compass*: solved the crime exactly and walked into the trap.",
     "yu" => "Yu Tsun, *The Garden of Forking Paths*: a spy who had to choose one path of many.",
@@ -104,26 +105,25 @@ defmodule Server.Soul do
   @spec draft(integer(), String.t()) :: {:ok, :written | :exists} | {:error, :no_seat | :bad_name}
   def draft(workspace_id, name) do
     with :ok <- check_name(name),
-         %{archetype: archetype} <- Enum.find(Workspaces.bench_all(workspace_id), &(&1.name == name)) || {:error, :no_seat} do
+         %{archetype: archetype} <-
+           Enum.find(Workspaces.bench_all(workspace_id), &(&1.name == name)) || {:error, :no_seat} do
       path = Path.join(dir(), name <> ".md")
+      if File.exists?(path), do: {:ok, :exists}, else: create(path, name, archetype)
+    end
+  end
 
-      if File.exists?(path) do
-        {:ok, :exists}
-      else
-        File.mkdir_p!(dir())
+  defp create(path, name, archetype) do
+    File.mkdir_p!(dir())
 
-        case File.write(path, body(name, archetype), [:exclusive]) do
-          :ok -> {:ok, :written}
-          {:error, :eexist} -> {:ok, :exists}
-        end
-      end
+    case File.write(path, body(name, archetype), [:exclusive]) do
+      :ok -> {:ok, :written}
+      {:error, :eexist} -> {:ok, :exists}
     end
   end
 
   @doc "`draft/2` for every seat on the bench, as `%{name => result}`."
   @spec draft_all(integer()) :: %{String.t() => {:ok, :written | :exists} | {:error, atom()}}
-  def draft_all(workspace_id),
-    do: Map.new(Workspaces.bench_all(workspace_id), &{&1.name, draft(workspace_id, &1.name)})
+  def draft_all(workspace_id), do: Map.new(Workspaces.bench_all(workspace_id), &{&1.name, draft(workspace_id, &1.name)})
 
   defp check_name(name), do: if(name =~ ~r/\A[a-z0-9][a-z0-9_-]*\z/, do: :ok, else: {:error, :bad_name})
 
