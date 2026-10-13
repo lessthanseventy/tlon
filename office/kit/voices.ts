@@ -117,4 +117,18 @@ export const SPECIES_VOICE = {
       done: ["You did it! I'll sing for you.", "Hooray! Tweet tweet!"],
     },
   },
+  hamster: {
+    sassy: {
+      pet: ["The cheeks are not for squeezing.", "Careful. I am storing something in there."],
+      muse: ["The wheel has not moved me. I move the wheel.", "It is 3am. I have been up since 2."],
+      wake: ["Is it night? It is always night.", "I was not asleep. I was in a burrow of the mind."],
+      done: ["Done. Seeds. Now.", "Finished. I am hiding the proof in my cheek."],
+    },
+    sweet: {
+      pet: ["*tiny sneeze* Again, please.", "So warm. I will keep this hand."],
+      muse: ["Everyone is so big and so kind.", "I filled the cheeks with good feelings."],
+      wake: ["Oh! Hello! I made a nest of your sleeve.", "Good morning, giants."],
+      done: ["You did it! I did a lap of the wheel.", "Hooray! Seeds for everyone."],
+    },
+  },
 } satisfies Record<string, { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> }>

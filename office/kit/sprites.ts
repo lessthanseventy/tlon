@@ -241,6 +241,20 @@ export const BIRD = {
   stretch: [["....kkk..", "...kkekp.", "kk.kkkk..", "kkkkkkkk.", ".kkkkkkk.", "tkkkkkkk.", "tt.kkkk..", "...p.p..."]],
 }
 
+// a hamster, facing right: k fur, w cheek and belly, e eye, p nose
+const HAMSTER_SIT = [".......k.k", ".....kkkkk", "....kkkekk", "...kwwkkkp", "..kkwwwkkk", "..kkkkkkk.", "...kkkkkk.", "....k..k.."]
+const swapLast = (rows: string[], last: string) => [...rows.slice(0, -1), last]
+const hamsterSit = [HAMSTER_SIT, [".......kk.", ...HAMSTER_SIT.slice(1)], HAMSTER_SIT]
+export const HAMSTER = {
+  sit: hamsterSit,
+  blink: [shut(HAMSTER_SIT)],
+  groom: [shut(HAMSTER_SIT), shut(hamsterSit[1]!)],
+  walk: [HAMSTER_SIT, swapLast(HAMSTER_SIT, "...k..k..."), HAMSTER_SIT, swapLast(HAMSTER_SIT, "...k..k...")],
+  sleep: [["..........", "...kkkkk..", "..kkkkkkk.", ".kkkckkkkp", ".kkkkkkkkk", "..kkkkkkk."], ["..........", "..........", "..kkkkkkk.", ".kkkckkkkp", ".kkkkkkkkk", "..kkkkkkk."]],
+  play: [hop(HAMSTER_SIT), HAMSTER_SIT],
+  stretch: [hop(HAMSTER_SIT)],
+}
+
 type Frames = string[][]
 type Poses = { sit: Frames; blink: Frames; groom: Frames; walk: Frames; sleep: Frames; stretch: Frames; play: Frames }
 /** a species may ship with `sit` alone: every pose it does not draw is its sit, and drawCat indexes frames modulo their count */
@@ -250,7 +264,7 @@ export const fillArt = (a: { sit: Frames } & Partial<Poses>): Poses => ({
 })
 
 /** the art the cat slot's species draws with */
-export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD }
+export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD, hamster: HAMSTER }
 
 // Argos, the office dog (Borges' "The Immortal"), facing right: coat (k), ears (e), eye (i), nose
 // (n), tongue (p), tail (t), an eye shut (c)

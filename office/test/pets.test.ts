@@ -240,6 +240,17 @@ describe("every species is data", () => {
     const art = fillArt({ sit: [["kk"]] })
     expect(art.walk).toBe(art.sit)
   })
+  test("hamster ships: shelved, cat slot, draws in the room", () => {
+    expect(SPECIES).toContain("hamster")
+    expect(slotOf("hamster")).toBe("cat")
+    expect(resolvePets({ cat: { species: "hamster" } }).cat.species).toBe("hamster")
+    expect(bucketFor("pet", { warmth: 0, wits: 0, energy: 0 }, () => 0, "hamster")).toBe(SPECIES_VOICE.hamster.sassy.pet!)
+    chance(0.999, () => {
+      const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1)
+      room.setPets(resolvePets({ cat: { species: "hamster" } }))
+      for (let i = 0; i < 120; i++) { room.step(a); room.render(a, focus, measure) }
+    })
+  })
 })
 
 describe("Argos and the trail", () => {
