@@ -6,7 +6,7 @@ const server = Bun.serve({
   port: 0,
   fetch: (req) => {
     const path = new URL(req.url).pathname
-    if (path.endsWith("/office")) return Response.json({ roster: [], threads: [], revs: { office: "abc123" }, flags: { build_mode: true }, life: { "7": { level: 2, xp: 650, due: [] } } })
+    if (path.endsWith("/office")) return Response.json({ roster: [], threads: [], revs: { office: "abc123" }, release: { sha: "0f00bar", cut_at: "2026-10-12T20:00:00Z" }, flags: { build_mode: true }, life: { "7": { level: 2, xp: 650, due: [] } } })
     if (req.method === "GET" && path.endsWith("/life/7")) return Response.json(lifeBody)
     if (req.method === "GET" && path.endsWith("/office/margin/1")) return Response.json([{ id: 1, author: "uqbar", body: "cut 650fa4a", at: 5 }])
     if (req.method === "GET" && path.endsWith("/office/margin/2")) return new Response("boom", { status: 500 })
@@ -23,6 +23,7 @@ test("status carries the server's revs — what `R` compares to know the office 
   expect(all.ok).toBe(true)
   expect(all.revs?.office).toBe("abc123")
   expect(all.flags).toEqual({ build_mode: true })
+  expect(all.release).toEqual({ sha: "0f00bar", cut_at: "2026-10-12T20:00:00Z" })
   expect(all.life).toEqual({ "7": { level: 2, xp: 650, due: [] } })
 })
 
