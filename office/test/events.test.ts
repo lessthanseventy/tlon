@@ -87,8 +87,8 @@ describe("Sim.event", () => {
   }))
   test("an event touches nothing the server owns", () => seeded(3, () => {
     const r = new WideRoom(696), a = view(["w0"]), before = structuredClone(a)
-    run(r, a, 300); r.event("meteor"); run(r, a, 800)
-    expect(a).toEqual(before)
+    run(r, a, 300)
+    for (const k of EVENT_KINDS) { r.event(k); run(r, a, 1300); expect(a).toEqual(before) }
   }))
   test("the rail room starts none", () => {
     const r = new RailRoom()
@@ -190,7 +190,7 @@ describe("zoo's open day", () => {
       r.step(a)
       for (const p of r.props()) {
         kinds.add(p.kind)
-        if (p.kind === "van") continue // slides in from off-screen
+        if (p.kind === "van" && (i < 61 || i > 1100)) continue // sliding in or out
         expect(p.x).toBeGreaterThan(0)
         expect(p.x).toBeLessThan(696)
       }
