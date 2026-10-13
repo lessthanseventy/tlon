@@ -56,6 +56,7 @@ defmodule Server.Application do
         maybe(:start_banter, false, Server.Office.Banter) ++
         maybe(:start_banter, false, Server.Office.Pets) ++
         maybe(:start_banter, false, Server.Office.Corkboard) ++
+        maybe(:start_banter, false, Server.Office.Random) ++
         maybe(:start_weather, false, {Server.Office.Weather, []}) ++
         maybe(:start_calendar, false, {Server.Calendar, []}) ++
         maybe(:start_mcp, false, mcp_children()) ++

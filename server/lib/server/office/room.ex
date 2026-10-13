@@ -101,10 +101,13 @@ defmodule Server.Office.Room do
       |> Enum.reject(&String.starts_with?(cmd(&1.detail), "workline artifact"))
       |> Enum.map(&%{thread_id: &1.thread_id, title: &1.title, text: cmd(&1.detail)})
 
+    # #random is led by nobody on purpose (`Server.Office.Random`)
+    random = from(c in Server.ChannelRow, where: c.workspace_id == ^workspace_id and c.name == "random", select: c.id)
+
     unled =
       Repo.all(
         from t in subquery(open),
-          where: is_nil(t.agent_id),
+          where: is_nil(t.agent_id) and (is_nil(t.channel_id) or t.channel_id not in subquery(random)),
           order_by: [desc: t.id],
           select: %{thread_id: t.id, title: t.title, text: "nobody leads it"}
       )
