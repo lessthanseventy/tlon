@@ -195,7 +195,7 @@ export function drawCat(sc: Scene, c: Cat, over: number | null, bpm: number | nu
           : c.mode === "play" ? [CAT.play, c.yarn % 2]
             : grooming ? [CAT.groom, f % 2]
               : f % 13 === 0 ? [CAT.blink, 0] : [CAT.sit, [0, 1, 2, 1][Math.floor(f / 2) % 4]!]
-  const rows0 = frames[i]!
+  const rows0 = frames[i % frames.length]!
   const flipped = dance ? phase === 1 : c.face < 0
   const rows = flipped ? rows0.map((r) => [...r].reverse().join("")) : rows0
   const w = rows[0]!.length, h = rows.length, x = c.x - Math.floor(w / 2), y = c.y - h - (dance ? phase : 0)

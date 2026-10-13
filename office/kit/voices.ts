@@ -81,14 +81,14 @@ export const SWEET: Partial<Record<keyof typeof NINA, readonly string[]>> = {
 
 /** sweet with odds (no roll at all when not warm: a seeded sequence must not shift) that grow with warmth (0 at neutral or cold, 0.9 at +2), else the sassy bucket */
 export function bucketFor(occasion: string, t: Temperament, rand: () => number, species = "cat"): readonly string[] {
-  const own = species === "rabbit" || species === "bird" ? SPECIES_VOICE[species] : null
+  const own = (SPECIES_VOICE as Record<string, { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> } | undefined>)[species]
   const sassy = own?.sassy[occasion] ?? (NINA as Record<string, unknown>)[occasion] as readonly string[]
   const sweet = own ? own.sweet[occasion] : (SWEET as Record<string, readonly string[]>)[occasion]
   return sweet && t.warmth > 0 && rand() < (Math.max(0, t.warmth) / 2) * 0.9 ? sweet : sassy
 }
 
 /** what a rabbit and a bird say, sassy or sweet by warmth; an occasion missing here falls back to Nina's lines */
-export const SPECIES_VOICE: Record<"rabbit" | "bird", { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> }> = {
+export const SPECIES_VOICE = {
   rabbit: {
     sassy: {
       pet: ["Ears are off limits. Ask first.", "Fine. Two strokes. Count them."],
@@ -117,4 +117,4 @@ export const SPECIES_VOICE: Record<"rabbit" | "bird", { sassy: Record<string, re
       done: ["You did it! I'll sing for you.", "Hooray! Tweet tweet!"],
     },
   },
-}
+} satisfies Record<string, { sassy: Record<string, readonly string[]>; sweet: Record<string, readonly string[]> }>

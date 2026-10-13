@@ -241,6 +241,14 @@ export const BIRD = {
   stretch: [["....kkk..", "...kkekp.", "kk.kkkk..", "kkkkkkkk.", ".kkkkkkk.", "tkkkkkkk.", "tt.kkkk..", "...p.p..."]],
 }
 
+type Frames = string[][]
+type Poses = { sit: Frames; blink: Frames; groom: Frames; walk: Frames; sleep: Frames; stretch: Frames; play: Frames }
+/** a species may ship with `sit` alone: every pose it does not draw is its sit, and drawCat indexes frames modulo their count */
+export const fillArt = (a: { sit: Frames } & Partial<Poses>): Poses => ({
+  sit: a.sit, blink: a.blink ?? a.sit, groom: a.groom ?? a.sit, walk: a.walk ?? a.sit,
+  sleep: a.sleep ?? a.sit, stretch: a.stretch ?? a.sit, play: a.play ?? a.sit,
+})
+
 /** the art the cat slot's species draws with */
 export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD }
 
