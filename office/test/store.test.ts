@@ -36,10 +36,10 @@ test("a locked name that is now taken is dropped, not kept", () => {
   const locked = toggleLock(s0, "name"), c = candidateOf(locked, [])
   expect(candidateOf(pass(locked, [c.name]), [c.name]).name).not.toBe(c.name)
 })
-test("shelve walks the cat-slot species and wraps; locks carry", () => {
+test("shelve walks both families and wraps; locks carry", () => {
   expect(SHELF).toContain("hamster")
-  expect(SHELF).not.toContain("dog")
-  expect(SHELF.every((sp) => slotOf(sp) === "cat")).toBe(true)
+  expect(SHELF).toContain("dog")
+  expect(new Set(SHELF.map((sp) => slotOf(sp)))).toEqual(new Set(["cat", "dog"]))
   let s = s0
   for (let i = 0; i < SHELF.length; i++) s = shelve(s, 1, [])
   expect(s.species).toBe("hamster")
@@ -51,6 +51,9 @@ test("adopt writes one slot; a species outside the slot is refused", () => {
   expect(adopt(c, "cat")).toEqual({ cat: { name: "Biscuit", species: "hamster", temperament: c.temperament, shade: c.shade } })
   expect(adopt(c, "dog")).toBeNull()
   expect(adopt({ ...c, name: "  " }, "cat")).toBeNull()
+  const d = candidateOf(rename({ ...s0, species: "dog" }, "Rex"), [])
+  expect(adopt(d, "dog")).toEqual({ dog: { name: "Rex", species: "dog", temperament: d.temperament, shade: d.shade } })
+  expect(adopt(d, "cat")).toBeNull()
 })
 test("an adopt through savePets replaces the cat and leaves the dog", () => {
   const dir = mkdtempSync(join(tmpdir(), "store-")), path = join(dir, "pets.json")
@@ -68,7 +71,9 @@ test("store.json round-trips and a damaged one is the empty store", () => {
     const s = rename(toggleLock(pass(s0, []), "shade"), "Mochi")
     saveStore(path, s)
     expect(loadStore(path)).toEqual(s)
-    saveStore(path, { ...s, species: "dog" } as never)
+    saveStore(path, { ...s, species: "dog" })
+    expect(loadStore(path).species).toBe("dog")
+    saveStore(path, { ...s, species: "unicorn" } as never)
     expect(loadStore(path).species).toBe("cat")
     expect(loadStore(join(dir, "none.json"))).toEqual(emptyStore())
   } finally { rmSync(dir, { recursive: true, force: true }) }

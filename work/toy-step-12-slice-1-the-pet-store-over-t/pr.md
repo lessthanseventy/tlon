@@ -2,7 +2,7 @@
 
 Closes ticket #68 (slice 1 of 4; thread 266).
 
-A `P` from home opens the pet store: browse the cat slot's species (←/→), roll a seeded look and
+A `P` from home opens the pet store: browse every species (←/→; the dog adopts into the dog slot, which is pets.json only — the room still draws Argos), roll a seeded look and
 temperament (↑ pass, ↓ back, space locks a row, `e` renames), and ⏎ adopts it into the species' slot.
 The occupant leaves by the door (operator's decision D-a: replace; one pet per slot, no history).
 `store.json` holds species + seed + locks + edits, never the rendered card; the room follows the adopt

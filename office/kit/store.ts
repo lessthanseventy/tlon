@@ -2,7 +2,7 @@
 // edits, never the rendered card. roll() does no I/O and calls no model. kit/hall.ts is the same shape for people.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
-import { SHADES, SLOT_SPECIES, SPECIES, slotOf, type PetsFile, type Species } from "./pets"
+import { SHADES, SLOT_SPECIES, SPECIES, type PetsFile, type Species } from "./pets"
 import { hash } from "./sprites"
 import { clampAxis, type Temperament } from "./temperament"
 
@@ -13,8 +13,8 @@ export type Candidate = { seed: string; species: Species; name: string; temperam
 export type Overrides = { name?: string; shade?: number; temperament?: Partial<Temperament> }
 export type Store = { species: Species; seed: string; locks: StoreRow[]; overrides: Overrides }
 
-/** what the store offers: the species the room's cat slot draws (the dog slot is Argos', not shelved) */
-export const SHELF: readonly Species[] = SPECIES.filter((s) => slotOf(s) === "cat")
+/** what the store offers: every species, each adopting into the slot its family belongs to (slotOf) */
+export const SHELF: readonly Species[] = SPECIES
 const LABEL: Record<string, string> = { rock: "pet rock", baoaqu: "A Bao A Qu" }
 export const labelOf = (sp: string) => LABEL[sp] ?? sp
 

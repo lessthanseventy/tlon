@@ -3,7 +3,7 @@
 import { furOf } from "../kit/draw"
 import { ROLE } from "../kit/palette"
 import { dots, SHADES, slotOf } from "../kit/pets"
-import { SPECIES_ART } from "../kit/sprites"
+import { DOG, SPECIES_ART } from "../kit/sprites"
 import { labelOf, type Candidate, type StoreRow } from "../kit/store"
 import { halfBlocks } from "./hall"
 import type { Seg } from "./term"
@@ -17,7 +17,7 @@ const even = (rows: string[]) => (rows.length % 2 ? [...rows, ".".repeat(rows[0]
 
 /** `occupant` is who the adopt would replace; `line` one line in the species' voice (previewOf) */
 export function storeRows(c: Candidate, locks: readonly StoreRow[], occupant: string, line: string): StoreViewRow[] {
-  const art = SPECIES_ART[c.species as keyof typeof SPECIES_ART], fur = furOf(c.shade)
+  const art = c.species === "dog" ? DOG : SPECIES_ART[c.species], fur = furOf(c.shade)
   const paint = { k: fur, t: fur, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge, p: ROLE.attention }
   const views = [art.sit[0]!, art.walk[0]!].map((f) => halfBlocks(even(f), paint))
   const left = (i: number): Seg[] => views.flatMap((v, n) => [...(n ? [{ s: "  " }] : []), ...(v[i] ?? [{ s: " ".repeat(v[0]?.length ?? 0) }])])
