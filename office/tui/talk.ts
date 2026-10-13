@@ -41,3 +41,10 @@ export function replies(msgs: Said[], operator: string): { id: number; agent: st
   }
   return out
 }
+
+/** the lobby's posts that are a conversation with `x`: theirs, and the operator's that mention or answer them. A filter, no DM schema. */
+export function conversation<M extends { id: number; author: string; body: string; reply_to?: number | null }>(msgs: M[], x: string, operator: string): M[] {
+  const theirs = new Set(msgs.filter((m) => m.author === x).map((m) => m.id))
+  const named = new RegExp(`@${x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`)
+  return msgs.filter((m) => m.author === x || (m.author === operator && (named.test(m.body) || (m.reply_to != null && theirs.has(m.reply_to)))))
+}
