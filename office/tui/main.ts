@@ -15,7 +15,7 @@ import { seatLine } from "../kit/seat-voices"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
-import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
+import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
@@ -28,6 +28,8 @@ import { usageHeader } from "../kit/usage"
 import { nextPart, SLOTS } from "../kit/parts"
 import { bringBack, candidateOf, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
+import { back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, toggleLock as storeToggle, type Store } from "../kit/store"
+import { stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
@@ -63,7 +65,7 @@ type Mode =
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "review"; tid: number }
   | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
-  | { kind: "hall" } | { kind: "hall-pile" }
+  | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -94,6 +96,8 @@ const SOULS = process.env.TLON_SOULS ?? join(CONFIG, "souls")
 
 // the hiring hall: current seed + locks + edits and the maybe pile, polled like LOOKS
 const HALL = process.env.TLON_HALL ?? join(CONFIG, "hall.json")
+// the pet store: species + seed + locks + edits, polled the same way
+const STORE = process.env.TLON_STORE ?? join(CONFIG, "store.json")
 
 const readState = (p: string) => { try { return readFileSync(p, "utf8").trim() } catch { return "" } }
 const writeState = (p: string, s: string) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, s) } catch { /* a read-only home: it just won't remember */ } }
@@ -174,6 +178,17 @@ function hallHire() {
   status = `hired ${c.name}`
   void refresh()
   draw()
+}
+let store: Store = loadStore(STORE), storeSeen = hallSignature(STORE)
+/** names a new pet must not take: the bench's and the dog's */
+const storeTaken = () => [...all.bench.map((b) => b.name), (petsNow ?? resolvePets(loadPets())).dog.name]
+function storeSet(s: Store) { store = s; saveStore(STORE, s); storeSeen = hallSignature(STORE) }
+/** a hand edit of store.json shows up on the next poll; true when it did */
+function followStore(): boolean {
+  const seen = hallSignature(STORE)
+  if (seen === storeSeen) return false
+  storeSeen = seen; store = loadStore(STORE)
+  return true
 }
 // the pet card's draft (Nina's temperament, not yet saved to pets.json) and the preview row's clock
 let petDraft: PetSetting | null = null, previewTick = 0
@@ -973,6 +988,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
         { key: "S", label: "settings (the running system)", run: () => open({ kind: "settings" }) },
         { key: "h", label: "the hiring hall", run: () => open({ kind: "hall" }) },
+        { key: "P", label: "the pet store", run: () => open({ kind: "store" }) },
         { key: "q", label: "quit", run: quit },
       ]
       if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone — or Nina, or Argos — a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], actions }
@@ -1618,6 +1634,26 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ],
       }
     }
+    case "store": {
+      const taken = storeTaken(), c = storeCandidate(store, taken), slot = slotOf(c.species) ?? "cat"
+      const occupant = (petsNow ?? resolvePets(loadPets()))[slot]
+      const rows: Row[] = storeRows(c, store.locks, occupant.name, previewOf({ name: c.name, species: c.species, temperament: c.temperament }, previewTick).line).map((r) => ({
+        segs: r.segs,
+        open: r.lock ? () => { storeSet(storeToggle(store, r.lock!)); draw() } : undefined,
+      }))
+      return {
+        title: `PET STORE · ${store.seed}`, rows,
+        actions: [
+          { key: "left", label: "previous species", run: () => { storeSet(shelve(store, -1, storeTaken())); draw() } },
+          { key: "right", label: "next species", run: () => { storeSet(shelve(store, 1, storeTaken())); draw() } },
+          { key: "up", label: "pass", run: () => { storeSet(storePass(store, storeTaken())); draw() } },
+          { key: "down", label: "back", run: () => { storeSet(storeBack(store, storeTaken())); draw() } },
+          { key: "space", label: "lock / unlock the row", run: () => rows[sel]?.open?.() },
+          { key: "e", label: "rename", run: () => ask("name", (s) => { if (s.trim()) { storeSet(rename(store, s.trim())); draw() } }, { text: c.name }) },
+          back1,
+        ],
+      }
+    }
     case "hall-pile": {
       const rows: Row[] = hall.pile.map((e, i) => {
         const c = candidateOf({ ...hall, seed: e.seed, overrides: e.overrides, locks: {} }, hallCtx())
@@ -1941,6 +1977,7 @@ function onKey(k: string) {
   if (confirm) { const c = confirm; confirm = null; if (k === "y") c.run(); return draw() }
   if (mode.kind === "look-editor") return editorKey(k)
   if (mode.kind === "hall" && (k === "tab" || k === "backtab")) { snapSel = false; sel = stepRow(sel, k === "tab" ? 1 : -1); return draw() }
+  if (mode.kind === "store" && (k === "tab" || k === "backtab")) { snapSel = false; sel = stepStoreRow(sel, k === "tab" ? 1 : -1); return draw() }
   if (reader) {
     const r = reader.key(k, Math.max(1, (process.stdout.rows ?? 24) - 6))
     if (r === "leave") return closeReader()
@@ -2221,8 +2258,8 @@ async function main() {
   every(pollPlayer, 2000)
   let sec = 0
   every(() => { looks.tick(1); if (focused && ++sec % 5 === 0) stampLooked(); if (!reader && !zoom && notes.some((n) => { const a = looks.alpha(n); return a < 1 && a > FLOOR })) draw() }, 1000)
-  every(() => { if (mode.kind === "pet" && petDraft) { previewTick += 10; draw() } }, 1000)
-  every(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall()) { frame = null; draw() } }, 1000)
+  every(() => { if ((mode.kind === "pet" && petDraft) || mode.kind === "store") { previewTick += 10; draw() } }, 1000)
+  every(() => { if (followPalette() || followLooks() || followSouls() || followPets() || followHall() || followStore()) { frame = null; draw() } }, 1000)
   // another surface (the desktop's alert) asks to show a thread: open it, once per request, ignoring
   // what was asked before this TUI started
   let seenFocus = (await data.focus())?.at ?? 0
