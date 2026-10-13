@@ -14,12 +14,22 @@ defmodule Server.Presence.Engine do
   switchboard's `recipients/1` excludes a session whose engine is clocked out.
   """
   @callback clocked_out?(agent :: Server.Agent.t()) :: boolean()
+  @doc "The providers whose plan is spent now, and until when (nil: not known)."
+  @callback spent() :: [%{provider: String.t(), until: DateTime.t() | nil}]
+  @optional_callbacks spent: 0
 
   @doc "The configured engine-presence backend (defaults to the always-available one)."
   def impl, do: Application.get_env(:server, :engine_presence, Server.Presence.Engine.Available)
 
   @doc "Is this agent's engine clocked out right now, per the configured backend?"
   def clocked_out?(agent), do: impl().clocked_out?(agent)
+
+  @doc "The spent providers the configured backend can name (`[]` for one that names none)."
+  def spent do
+    impl = impl()
+    Code.ensure_loaded(impl)
+    if function_exported?(impl, :spent, 0), do: impl.spent(), else: []
+  end
 end
 
 defmodule Server.Presence.Engine.Available do

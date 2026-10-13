@@ -116,10 +116,15 @@ defmodule Server.Alerts do
 
   # what nothing waits on can be put away on the server (`Office.Needs.dismiss/1`), so it leaves the
   # office's inbox too, not only this surface
-  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled),
-    do: [%{label: "Put away", method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
+  defp put_away(%{kind: kind, level: level, key: key})
+       when level == "decide" or kind in ~w(ask stalled quota),
+       do: [%{label: put_away_label(kind), method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
 
   defp put_away(_need), do: []
+
+  # a quota put away stays away until the reset clears it
+  defp put_away_label("quota"), do: "Wait for the reset"
+  defp put_away_label(_kind), do: "Put away"
 
   # a review gate has a build behind it, so it can also go back: to build for the code, to plan for its shape
   defp actions(%{kind: "gate", thread_id: t, stage: "review"}),
@@ -157,6 +162,26 @@ defmodule Server.Alerts do
 
   defp actions(%{kind: "release_failed", ref: id}),
     do: [%{label: "Retry the cut", method: "POST", path: "/api/release/retry/#{id}", body: %{}}]
+
+  defp actions(%{kind: "no_seat", thread_id: t, workspace_id: ws, archetype: kind}),
+    do: [
+      %{
+        label: "Hire a #{kind}…",
+        method: "POST",
+        path: "/api/workspaces/#{ws}/coworkers",
+        body: %{archetype: kind},
+        input: "name"
+      },
+      "Hand it to…" |> call("/hand-off", t, %{}) |> Map.put(:input, "agent")
+    ]
+
+  # pencils down stops the turns that would hit the limit; a crew put on takes the work
+  defp actions(%{kind: "quota", workspace_id: ws, options: options}),
+    do:
+      for(
+        o <- options || [],
+        do: %{label: o["label"], method: "POST", path: "/api/office/shift", body: %{workspace_id: ws, shift: o["key"]}}
+      ) ++ [%{label: "Pencils down", method: "POST", path: "/api/office/pause", body: %{mode: "pencils_down"}}]
 
   defp actions(%{kind: "stranded", key: key}),
     do: [%{label: "Take the checkout down", method: "POST", path: "/api/office/needs/retire", body: %{key: key}}]

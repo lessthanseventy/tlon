@@ -10,7 +10,8 @@ defmodule Server.Shifts do
 
   Nothing switches crews by itself: a switch is the operator's, by hand or by answering an offer.
   Claude's usage limit on a pane offers the other crews in the lobby; taking one schedules the
-  offer to come back at the reset (`Server.Jobs.ShiftBack`).
+  offer to come back at the reset (`Server.Jobs.ShiftBack`). With no other crew, the limit is a
+  `quota` item on the operator's list (`out_of_quota/1`, `Server.Office.Needs`) until the reset.
   """
   import Ecto.Query
 
@@ -86,7 +87,7 @@ defmodule Server.Shifts do
   @doc """
   Coworker `agent`'s pane text, read by the attention sweep: on a Claude Code pane, Claude's usage
   limit reached, with another crew to put on, offers the lobby each other crew — it switches
-  nothing. A limit line acts once: it stays on screen until the pane scrolls, so each pane's line
+  nothing; with none, it is remembered for the operator's list (`out_of_quota/1`). A limit line acts once: it stays on screen until the pane scrolls, so each pane's line
   (`pane`, the tab's thread and window) is remembered by fingerprint, in the workspace across
   restarts, until that pane no longer shows one; a new line's offer replaces an open one. A window
   with no coworker tagged on it is never read. `{:offered, crews}` | `:ok`.
@@ -166,21 +167,12 @@ defmodule Server.Shifts do
          do: {Enum.at(lines, i), Enum.at(lines, i + 1) || ""}
   end
 
-  # each Claude pane's limit line already acted on (by fingerprint), in the workspace's knobs so a
-  # restart keeps it: the same line still on that pane is the old limit; the pane without one forgets it
-  defp seen(workspace_id), do: (Repo.get!(Workspace, workspace_id).knobs || %{})["limits_seen"] || %{}
-
-  defp remember(workspace_id, agent, line), do: put_seen(workspace_id, Map.put(seen(workspace_id), agent, line))
-
   defp forget(workspace_id, agent) do
-    seen = seen(workspace_id)
-    if Map.has_key?(seen, agent), do: put_seen(workspace_id, Map.delete(seen, agent))
-    :ok
-  end
+    for knob <- ["limits_seen", "quota_out"],
+        seen = seen(workspace_id, knob),
+        Map.has_key?(seen, agent),
+        do: put_seen(workspace_id, Map.delete(seen, agent), knob)
 
-  defp put_seen(workspace_id, seen) do
-    workspace = Repo.get!(Workspace, workspace_id)
-    {:ok, _} = Workspaces.edit(workspace, %{knobs: Map.put(workspace.knobs || %{}, "limits_seen", seen)})
     :ok
   end
 
@@ -193,9 +185,28 @@ defmodule Server.Shifts do
     else
       on = current(workspace_id)
       others = workspace_id |> crews() |> List.delete(on)
-      result = if others == [], do: :ok, else: offer(workspace_id, on, others, line <> "\n" <> after_line)
+      text = line <> "\n" <> after_line
+
+      result =
+        if others == [], do: note_quota(workspace_id, key, on, text), else: offer(workspace_id, on, others, text)
+
       remember(workspace_id, key, mark)
       result
+    end
+  end
+
+  @doc """
+  The panes whose Claude usage limit no other crew could take, per workspace, with the reset still
+  ahead: `[%{workspace_id, crew, reset, until, at}]` (`reset` the local label, `until` and `at` UTC).
+  A pane that no longer shows its limit, or is gone, has left it.
+  """
+  def out_of_quota(now \\ DateTime.utc_now()) do
+    for %Workspace{id: ws, knobs: %{"quota_out" => out}} <- Repo.all(Workspace),
+        {_pane, %{"until" => until, "at" => at} = q} <- out,
+        {:ok, until, _} = DateTime.from_iso8601(until),
+        DateTime.after?(until, now) do
+      {:ok, at, _} = DateTime.from_iso8601(at)
+      %{workspace_id: ws, crew: q["crew"], reset: q["reset"], until: until, at: at}
     end
   end
 
@@ -297,9 +308,12 @@ defmodule Server.Shifts do
   def prune(_workspace_id, %MapSet{map: map}) when map_size(map) == 0, do: :ok
 
   def prune(workspace_id, panes) do
-    seen = seen(workspace_id)
-    kept = Map.filter(seen, fn {key, _} -> MapSet.member?(panes, key) end)
-    if map_size(kept) != map_size(seen), do: put_seen(workspace_id, kept)
+    for knob <- ["limits_seen", "quota_out"] do
+      seen = seen(workspace_id, knob)
+      kept = Map.filter(seen, fn {key, _} -> MapSet.member?(panes, key) end)
+      if map_size(kept) != map_size(seen), do: put_seen(workspace_id, kept, knob)
+    end
+
     :ok
   end
 
@@ -349,5 +363,37 @@ defmodule Server.Shifts do
     e ->
       Logger.warning("shift reminder cancel failed for workspace #{workspace_id}: #{Exception.message(e)}")
       :ok
+  end
+
+  # each Claude pane's limit line already acted on (by fingerprint), in the workspace's knobs so a
+  # restart keeps it: the same line still on that pane is the old limit; the pane without one forgets it
+  defp seen(workspace_id, knob \\ "limits_seen"), do: (Repo.get!(Workspace, workspace_id).knobs || %{})[knob] || %{}
+
+  defp remember(workspace_id, agent, value, knob \\ "limits_seen"),
+    do: put_seen(workspace_id, Map.put(seen(workspace_id, knob), agent, value), knob)
+
+  defp put_seen(workspace_id, seen, knob) do
+    workspace = Repo.get!(Workspace, workspace_id)
+    {:ok, _} = Workspaces.edit(workspace, %{knobs: Map.put(workspace.knobs || %{}, knob, seen)})
+    :ok
+  end
+
+  # no other crew to offer: the operator's list carries it (`out_of_quota/1`) until the reset
+  defp note_quota(workspace_id, key, on, text) do
+    {label, at} = reset_label(text)
+    now = DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()
+
+    remember(
+      workspace_id,
+      key,
+      %{"crew" => on, "reset" => label, "until" => DateTime.to_iso8601(at), "at" => now},
+      "quota_out"
+    )
+  end
+
+  # the reset as a local label and the UTC moment
+  defp reset_label(text) do
+    {local, how} = reset_at(text, NaiveDateTime.from_erl!(:calendar.local_time()))
+    {Calendar.strftime(local, "%a %-I:%M%P") <> if(how == :estimated, do: ", estimated", else: ""), to_utc(local)}
   end
 end

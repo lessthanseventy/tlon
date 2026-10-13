@@ -24,6 +24,17 @@ defmodule Server.Presence.Engine.OllamaWindow do
     end
   end
 
+  @impl true
+  def spent do
+    case cached_until() do
+      %DateTime{} = until ->
+        if DateTime.after?(until, DateTime.utc_now()), do: [%{provider: "ollama-cloud", until: until}], else: []
+
+      nil ->
+        []
+    end
+  end
+
   @doc "When a `/api/balance` body's spent window resets, or nil while the plan has room."
   @spec spent_until(binary(), DateTime.t()) :: DateTime.t() | nil
   def spent_until(body, now) do

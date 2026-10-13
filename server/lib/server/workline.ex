@@ -1137,6 +1137,9 @@ defmodule Server.Workline do
     end
   end
 
+  @doc "The bench archetype that leads a workline at `stage` (planner, builder, reviewer), or nil."
+  def staff_kind(stage), do: @staff_by_stage[stage]
+
   @doc "Whether `thread` owes a QA pass at review and its qa seat is the one leading it. `opts` as `advance/2`'s."
   def qa_leads?(thread, opts \\ []) do
     case qa_owed(thread, opts) do
