@@ -21,3 +21,9 @@ test("no reading yet says so, never a made-up zero; a server too old to send one
   expect(usageHeader(office(null), now)).toEqual({ text: "claude: no reading yet", hot: false })
   expect(usageHeader(office(undefined), now)).toBeNull()
 })
+
+test("a window past its reset is dropped, not shown as its old figure at 0m", () => {
+  const a = office({ five_hour: { percent: 34, resets_at: at(5) }, seven_day: { percent: 44, resets_at: null }, at: at(1) })
+  expect(usageHeader(a, now)).toEqual({ text: "claude wk 44%", hot: false })
+  expect(usageHeader(office({ five_hour: { percent: 95, resets_at: at(1) }, at: at(1) }), now)).toEqual({ text: "claude: no reading yet", hot: false })
+})
