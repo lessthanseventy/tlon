@@ -163,8 +163,17 @@ describe("the hall's turn-by-turn state", () => {
   test("maybe puts the current card on the pile, then passes", () => {
     const h = hall({ seed: "hall:1", overrides: { grade: "senior" } })
     const m = maybe(h, o)
-    expect(m.pile).toEqual([{ seed: "hall:1", overrides: { grade: "senior" } }])
+    expect(m.pile).toEqual([{ seed: "hall:1", overrides: { grade: "senior", name: candidateOf(h, o).name } }])
     expect(m.seed).toBe("hall:2")
+  })
+  test("a pile entry re-renders with the name the card showed", () => {
+    const bench = ["funes"]
+    const h = hall({ seed: "hall:1" })
+    const ctx = { ...o, taken: takenNames(h, bench, VOCAB) }
+    const shown = candidateOf(h, ctx).name
+    const m = maybe(h, ctx)
+    const again = candidateOf({ ...m, seed: m.pile[0].seed, overrides: m.pile[0].overrides }, { ...o, taken: takenNames(m, bench, VOCAB) })
+    expect(again.name).toBe(shown)
   })
   test("bringBack makes a pile entry the current card and takes it off the pile", () => {
     const h = hall({ seed: "hall:9", pile: [{ seed: "hall:1", overrides: { name: "zed" } }, { seed: "hall:2", overrides: {} }] })
