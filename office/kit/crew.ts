@@ -104,7 +104,7 @@ export function crewOf(a: Agents): Crew[] {
 /** a workline's stages, in order */
 export const STAGES = ["intent", "spec", "plan", "build", "verify", "review"]
 // TICKETS (unstarted) and DOING (a plain thread — no workline stage — someone is at a desk on) before the stages
-const STAGE_COL: Record<string, number> = { intent: 2, spec: 2, plan: 3, build: 4, verify: 4, review: 5, merged: 5 }
+const STAGE_COL: Record<string, number> = { intent: 2, spec: 2, plan: 3, build: 4, verify: 4, review: 5 }
 export const COLS = ["TICKETS", "DOING", "SPEC", "PLAN", "BUILD", "REVIEW"]
 /** one note on the whiteboard: what a click on it does, and what its sticky and its list row say */
 export type BoardItem = { act: Act; title: string; who: string | null; stage: string; asks: boolean; archetype: string | null; high: boolean; routed?: boolean; state?: CardState | null }
@@ -122,7 +122,7 @@ export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState 
   if (ctx.checking === th.id) return { kind: "checking", why: "its full check is running" }
   if (needsYou(th) || ctx.needs?.includes(th.id)) return { kind: "needs", why: th.prompt ? `asks: ${th.prompt.summary}` : th.awaiting ? `awaits ${th.awaiting}` : "waiting on you" }
   // landed at the gate, but nothing is merged until GitHub merges its PR
-  if (th.stage === "merged") return { kind: "merging", why: "landing · waiting on GitHub's checks" }
+  if (th.landing) return { kind: "merging", why: "landing · waiting on GitHub's checks" }
   if (!th.lead) return null
   if (th.seat === "desk") return { kind: "running", why: th.thinking?.includes(th.lead) ? `${th.lead} is on it` : `${th.lead} is at a desk` }
   if (th.seat === "parked") {
@@ -150,7 +150,7 @@ export function boardColumns(a: Agents, ctx: BoardCtx = {}): { name: string; ite
   }
   for (const th of a.threads) {
     if (th.duty) continue
-    const c = th.stage ? STAGE_COL[th.stage] : th.lead && !th.standing && th.seat === "desk" ? 1 : undefined
+    const c = th.landing ? 5 : th.stage ? STAGE_COL[th.stage] : th.lead && !th.standing && th.seat === "desk" ? 1 : undefined
     if (c === undefined) continue
     const r = a.roster.find((x) => x.thread_id === th.id)
     cols[c]!.push({ act: { kind: "thread", tid: th.id }, title: th.title, who: r?.agent ?? th.lead ?? null, stage: th.stage ?? "doing", asks: needsYou(th), archetype: r?.archetype ?? null, high: false, state: cardState(a, th, ctx) })
