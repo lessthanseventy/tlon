@@ -1094,6 +1094,45 @@ defmodule Server.MCP.ServerTest do
     assert call(token, session, 6, "assign_lead", %{"thread_id" => target.id, "lead" => "ghost-machine"})["isError"]
   end
 
+  test "assign_lead hands the thread over: the old lead's leaf window closes and the new lead is woken" do
+    # The ticket (#154): the verb reassigned the lead but left the old lead's pane holding the
+    # thread's one window, so the new lead could never be spawned onto it (:already_running).
+    {:ok, ws} =
+      Server.Workspaces.register(%{
+        name: "Handover",
+        roster: [%{"archetype" => "builder", "name" => "borges"}, %{"archetype" => "builder", "name" => "hronir"}]
+      })
+
+    {:ok, manager} = Staff.register_agent(%{name: "tertius", mandate: "route", engine: "fresh"})
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    {:ok, target} = Channel.open_thread(%{title: "the work", workspace_id: ws.id, scope: "machine"})
+    {:ok, _} = Channel.assign_lead(target.id, "borges")
+
+    windows = "0\ttertius\t\t\t1\n1\tt#{target.id}\t#{target.id}\tdone\t2\n"
+
+    test_pid = self()
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _ ->
+      send(test_pid, {:tmux, args})
+      if "list-windows" in args, do: {windows, 0}, else: {"", 0}
+    end)
+
+    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+
+    token = MCP.Tokens.mint(lobby, manager)
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r = call(token, session, 4, "assign_lead", %{"thread_id" => target.id, "lead" => "hronir"})
+
+    refute r["isError"]
+    assert Channel.thread_lead(target.id) == "hronir"
+    assert_receive {:tmux, ["-L", _, "kill-window", "-t", window]}
+    assert window =~ ":1"
+    assert %{body: body} = List.last(Channel.thread_messages(target))
+    assert body =~ "@hronir"
+  end
+
   test "finish posts the summary and closes the caller's own thread", %{token: token, thread: thread} do
     session = handshake(token)
     call(token, session, 3, "register", %{})
