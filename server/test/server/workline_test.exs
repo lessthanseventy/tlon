@@ -753,10 +753,13 @@ defmodule Server.WorklineTest do
       git!(repo, ["init", "-q", "-b", "main"])
       git!(repo, ["commit", "-q", "--allow-empty", "-m", "seed"])
       git!(repo, ["branch", "work/lamp"])
+      previous = Application.get_env(:server, :workline_root)
       Application.put_env(:server, :workline_root, repo)
 
+      # restored, never deleted: unset, the root falls back to the cwd, a checkout whose origin is
+      # GitHub, and a later test's landing publishes there for real
       on_exit(fn ->
-        Application.delete_env(:server, :workline_root)
+        Application.put_env(:server, :workline_root, previous)
         File.rm_rf!(repo)
       end)
 
