@@ -506,6 +506,20 @@ export class Sim<L extends { people: Seat[] }> {
   blackout(): boolean { const r = this.running; return !!r && blackoutAt(r.kind, this.tick - r.since) }
   lampFlicker(): boolean | null { const r = this.running; return r ? flickerAt(r.kind, this.tick - r.since) : null }
 
+  /** where the running scene wants this idle coworker, or null to let them idle as usual */
+  private eventGoal(agent: string): Spot | null {
+    const r = this.running
+    const i = r ? r.idle.indexOf(agent) : -1
+    if (!r || i < 0) return null
+    const t = this.tick - r.since
+    if (r.kind === "meteor" && t >= 80 && t < EVENTS.meteor.ticks - 100) {
+      const w = this.plan.lounge.filter((s) => s.kind === "window")
+      const s = w[i % w.length]
+      return s ? { ...s, x: s.x + 12 * Math.floor(i / w.length) } : null
+    }
+    return null
+  }
+
   private beats(t: number) {
     const r = this.running!
     for (const b of EVENTS[r.kind].beats) {
@@ -747,7 +761,7 @@ export class Sim<L extends { people: Seat[] }> {
       const slot = asks.findIndex((r) => keyOf(r) === k)
       const home = plan.home(l, actor.seat.agent)
       actor.warmth = actor.seat.thinking ? 1 : actor.seat.warmth ?? (actor.seat.warm ? Math.max(0, 1 - (this.tick - actor.cooled) / this.warmTicks) : 0)
-      let goal: Spot
+      let goal: Spot, ev: Spot | null
       if (panicking && !actor.leaving) {
         goal = actor.spot.kind === "panic" && (actor.moving || actor.path.length) ? actor.spot : this.panicSpot()
         actor.flail = this.tick + 2
@@ -764,6 +778,7 @@ export class Sim<L extends { people: Seat[] }> {
       else if (writing.has(actor.seat.agent) || this.pins.has(actor.seat.agent)) goal = this.pins.get(actor.seat.agent)?.box && plan.box ? plan.box : plan.pen
       else if ((actor.seat.thinking || this.tick < actor.stretch) && home) goal = home
       else if (actor.seat.warm && home) goal = home
+      else if ((ev = this.eventGoal(k))) goal = ev
       else goal = this.idleGoal(actor, held, l)
       const gk = spotKey(goal)
       if (gk !== actor.spotKey) {
