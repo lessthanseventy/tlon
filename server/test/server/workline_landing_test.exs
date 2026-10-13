@@ -102,6 +102,59 @@ defmodule Server.WorklineLandingTest do
     refute_received {:ran, _}
   end
 
+  # a workline at review landed by the merge queue whose publish failed: gh would not open its PR
+  defp publish_failed! do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Unlit"})
+    {:ok, thread} = Workline.open(%{title: "wick", slug: "wick", stage: "review", workspace_id: ws.id})
+    {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+    {:ok, queued} = parked |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+
+    refusing = fn
+      "gh", ["pr", "create" | _], _ -> {"no permission", 1}
+      _, _, _ -> {"", 0}
+    end
+
+    {:ok, landed} = Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end, run: refusing)
+    assert [_] = publish_failed(landed)
+    assert Workline.waiting_on_github() == []
+    Repo.get!(Thread, landed.id)
+  end
+
+  defp publish_failed(t),
+    do: Enum.filter(Server.Office.Needs.list(), &(&1.kind == "publish_failed" and &1.thread_id == t.id))
+
+  test "republished after a failed publish: it waits on GitHub, and closes when GitHub says MERGED" do
+    t = publish_failed!()
+
+    assert {:ok, @url} = Workline.republish(t, gh("OPEN"))
+
+    assert publish_failed(t) == []
+    assert [%{thread: %{id: id}, url: @url}] = Workline.waiting_on_github()
+    assert id == t.id
+
+    KeepUp.landings(gh("MERGED"))
+    assert %Thread{stage: "merged", state: "closed"} = Repo.get!(Thread, t.id)
+  end
+
+  test "its PR opened by hand: the url put in is its landing, polled until GitHub says MERGED" do
+    t = publish_failed!()
+    assert [need] = publish_failed(t)
+
+    assert [%{actions: actions}] = Server.Alerts.build([need], [], DateTime.utc_now())
+    by_hand = Enum.find(actions, &(&1[:input] == "url"))
+    assert by_hand.path == "/api/threads/#{t.id}/published"
+
+    assert {:error, _} = Workline.published_by_hand(t, "  ")
+    assert {:ok, _} = Workline.published_by_hand(t, @url)
+
+    assert publish_failed(t) == []
+    assert [%{url: @url}] = Workline.waiting_on_github()
+    assert {:error, _} = Workline.published_by_hand(t, @url)
+
+    KeepUp.landings(gh("MERGED"))
+    assert %Thread{stage: "merged", state: "closed"} = Repo.get!(Thread, t.id)
+  end
+
   describe "one answer to \"is it landing?\": waiting on GitHub, which the office's card reads" do
     defp landing?(t), do: Enum.find(Server.Office.status().threads, &(&1.id == t.id)).landing
 

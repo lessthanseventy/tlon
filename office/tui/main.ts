@@ -629,7 +629,7 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "stranded" ? [{ key: "X", label: "take the checkout down (branch kept)", run: () => void did(data.retireStranded(n.key)).then(after) }] : []),
     ...(n.kind === "issue" && n.ref ? [{ key: "g", label: "get it fixed (a ticket, routed)", run: () => void did(data.fixIssue(n.ref!)).then(after) }] : []),
     ...(n.kind === "issue" && n.ref ? [{ key: "x", label: "resolve…", run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (s) => { if (s.trim()) void did(data.resolveIssue(n.ref!, s.trim())).then(after) }) }] : []),
-    ...(n.kind === "publish_failed" ? [{ key: "d", label: "put away (its PR opened by hand: the command is above)", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
+    ...(n.kind === "publish_failed" && tid ? [{ key: "d", label: "opened by hand (the command is above): its PR's url…", run: () => ask("its PR's url — waited on until GitHub merges it", (s) => { if (s.trim()) void did(data.publishedByHand(tid, s.trim())).then(after) }) }] : []),
     ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ key: "d", label: "put away", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
     ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
   ]

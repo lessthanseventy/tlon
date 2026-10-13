@@ -407,6 +407,7 @@ defmodule Server.MCP.GatewayTest do
       {:ok, wl} = Server.Workline.open(%{title: "not landed", slug: "not-landed", stage: "review"})
       assert {409, %{"error" => why}} = post_json("/api/threads/#{wl.id}/republish", %{})
       assert why =~ "has not landed"
+      assert {409, _} = post_json("/api/threads/#{wl.id}/published", %{url: "https://github.com/o/r/pull/1"})
       assert {409, %{"error" => "no failed release cut 999999"}} = post_json("/api/release/retry/999999", %{})
     end
 

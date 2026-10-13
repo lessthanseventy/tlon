@@ -16,7 +16,7 @@ defmodule Server.Office.Needs do
       Put away, it stays away until the workline moves; under pencils down or lights out nothing
       stalls, the operator stopped it), `publish_failed` (a workline merged here whose newest publish
       to GitHub — recorded under `Server.Workline.publish_correlation/1` — failed: republish it, or open its PR by
-      hand with the command its text names and put it away; `ref` the thread);
+      hand with the command its text names and give its url (`Server.Workline.published_by_hand/2`); `ref` the thread);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -73,7 +73,7 @@ defmodule Server.Office.Needs do
         withdraw_ask(id)
         remember(key)
 
-      %{kind: kind} when kind in ~w(stalled publish_failed) ->
+      %{kind: "stalled"} ->
         remember(key)
 
       %{level: "blocking"} ->

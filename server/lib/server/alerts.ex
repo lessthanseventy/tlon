@@ -116,7 +116,7 @@ defmodule Server.Alerts do
 
   # what nothing waits on can be put away on the server (`Office.Needs.dismiss/1`), so it leaves the
   # office's inbox too, not only this surface
-  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled publish_failed),
+  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled),
     do: [%{label: "Put away", method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
 
   defp put_away(_need), do: []
@@ -148,8 +148,9 @@ defmodule Server.Alerts do
       %{label: "Resolve…", method: "POST", path: "/api/issues/#{id}/resolve", body: %{}, input: "resolution"}
     ]
 
-  # opened by hand instead (the command is in its body), it is put away
-  defp actions(%{kind: "publish_failed", thread_id: t}), do: [call("Republish", "/republish", t)]
+  # opened by hand instead (the command is in its body), its PR's url is what GitHub is polled for
+  defp actions(%{kind: "publish_failed", thread_id: t}),
+    do: [call("Republish", "/republish", t), "Opened by hand…" |> call("/published", t) |> Map.put(:input, "url")]
 
   defp actions(%{kind: "release_failed", ref: id}),
     do: [%{label: "Retry the cut", method: "POST", path: "/api/release/retry/#{id}", body: %{}}]

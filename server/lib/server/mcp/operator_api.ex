@@ -72,6 +72,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/threads/:id/verify      run a workline's verify again (Jobs.Verify), as entering verify does; 409 off verify
       POST   /api/threads/:id/republish   Workline.republish: a landed workline whose publish failed, pushed and its PR
                                           opened again: {"published": url | null}; 409 when there is no failed publish
+      POST   /api/threads/:id/published   {"url"} → Workline.published_by_hand: a failed publish's PR opened by hand,
+                                          waited on until GitHub merges it; 409 when there is no failed publish
       POST   /api/threads/:id/track       Workline.promote: make a plain thread a workline
       POST   /api/threads/:id/checks      {"slug", "exit", "cmd", "tail"?} → Dossier.record_check (the verify stage's evidence)
       POST   /api/threads/:id/move        {"project_id"} → Projects.move_thread (within its workspace)
@@ -516,6 +518,12 @@ defmodule Server.MCP.OperatorAPI do
       :none -> json(conn, 200, %{published: nil})
       {:error, why} -> refused(conn, why)
     end
+  end
+
+  defp on_thread(conn, "POST", ["published"], t) do
+    {b, conn} = body(conn)
+    url = if is_binary(b["url"]), do: String.trim(b["url"]), else: ""
+    reply(conn, Workline.published_by_hand(t, url), fn _ -> %{published: url} end)
   end
 
   defp on_thread(conn, "POST", ["checks"], t), do: record_check(conn, t)
