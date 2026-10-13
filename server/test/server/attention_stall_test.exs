@@ -61,6 +61,20 @@ defmodule Server.Attention.StallTest do
     assert [%Message{resolution: "pane moved", resolved_at: %DateTime{}}] = stalls(t.id)
   end
 
+  test "a tmux that can't list its windows resolves no stall and forgets no pane", %{ws: ws, thread: t} do
+    tmux(leaf(t.id))
+    :ok = Thinking.thinking(t.id, "builder")
+    Process.put(:screen, "running tests…")
+    panes = Stall.tick(%{}, now: at(0))
+    panes = Stall.tick(panes, now: at(6))
+    assert [%Message{resolved_at: nil}] = stalls(t.id)
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"server exited unexpectedly", 1} end)
+    assert Stall.tick(panes, now: at(7)) == panes
+    assert [%Message{resolved_at: nil}] = stalls(t.id)
+    assert Map.has_key?(panes, {ws.id, "t#{t.id}"})
+  end
+
   test "a frozen pane nobody is thinking in is idle, not stalled", %{thread: t} do
     tmux(leaf(t.id))
     Process.put(:screen, "❯ ")

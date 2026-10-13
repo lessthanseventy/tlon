@@ -124,6 +124,24 @@ defmodule Server.StaffingTest do
     refute Server.Repo.get!(Server.Session, kept.id).ended_at
   end
 
+  test "a tmux that can't be asked ends nothing: no idle session ended, no cut-off turn announced", %{ws: ws} do
+    idle = session!("hronir", staffed_thread(ws, "hronir").id, 1_200)
+    thread = staffed_thread(ws, "borges")
+    mid = session!("borges", thread.id, 30, true)
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      send(self(), {:tmux, args})
+      if "list-windows" in args, do: {"server exited unexpectedly", 1}, else: {"", 0}
+    end)
+
+    assert :ok = Staffing.pass(ws.id)
+
+    refute Server.Repo.get!(Server.Session, idle.id).ended_at
+    refute Server.Repo.get!(Server.Session, mid.id).ended_at
+    refute Enum.any?(Channel.thread_messages(thread), &(&1.author == "tlon"))
+    refute_received {:tmux, ["-L", _, "kill-window" | _]}
+  end
+
   test "a mid-turn mark a day old is a turn a lost connection never ended: its window is swept",
        %{ws: ws, session: session} do
     thread = staffed_thread(ws, "borges")

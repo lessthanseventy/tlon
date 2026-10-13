@@ -79,7 +79,14 @@ defmodule Server.Attention do
   `@funes_thread` tag belongs to the workspace's standing machine thread.
   """
   def tick(workspace_id) do
-    tabs = Tmux.list_windows(workspace_id)
+    case Tmux.list_windows(workspace_id) do
+      # a tmux that can't be asked is no window closed: the next tick reads the panes again
+      {:error, _} -> :ok
+      tabs -> tick_tabs(workspace_id, tabs)
+    end
+  end
+
+  defp tick_tabs(workspace_id, tabs) do
     standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
 
     seen =

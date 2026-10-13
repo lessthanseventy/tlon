@@ -72,11 +72,20 @@ defmodule Server.Tmux do
 
   @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}"
 
-  @doc "The session's windows (a session not up is `[]`)."
-  def list_windows(id, opts \\ []) do
+  @not_up ~r/no server running|error connecting to|can't find session|no current session/
+
+  @doc """
+  The session's windows. A session not up (or no workspace) is `[]`; a tmux that can't be asked
+  (a fault, the binary missing) is `{:error, why}` — never `[]`, which every caller would read as
+  "every window closed".
+  """
+  def list_windows(id, opts \\ [])
+  def list_windows(nil, _opts), do: []
+
+  def list_windows(id, opts) do
     case run(id, ["list-windows", "-t", session(id), "-F", @list_format], opts) do
       {out, 0} -> parse_windows(out)
-      _ -> []
+      {out, _} -> if Regex.match?(@not_up, out), do: [], else: {:error, String.trim(out)}
     end
   end
 
@@ -119,10 +128,12 @@ defmodule Server.Tmux do
     end
   end
 
-  @doc "The tab running thread `id`'s leaf: the `@funes_thread`-tagged window, else a legacy `t<id>`."
+  @doc "The tab running thread `id`'s leaf: the `@funes_thread`-tagged window, else a legacy `t<id>`; nil when tmux couldn't be asked."
+  def leaf_tab({:error, _}, _id), do: nil
   def leaf_tab(tabs, id), do: Enum.find(tabs, &(&1.thread_id == id)) || Enum.find(tabs, &(&1.name == "t#{id}"))
 
-  @doc "The tab named `name`, or nil."
+  @doc "The tab named `name`, or nil (nil too when tmux couldn't be asked)."
+  def named({:error, _}, _name), do: nil
   def named(tabs, name), do: Enum.find(tabs, &(&1.name == name))
 
   @doc "Is this tab a LEAF session (a `@funes_thread` tag or a legacy `t<id>` name), vs a standing-thread coworker's or a crew window?"

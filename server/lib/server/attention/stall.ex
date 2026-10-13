@@ -42,10 +42,18 @@ defmodule Server.Attention.Stall do
   end
 
   defp tick_workspace(workspace_id, panes, now, band) do
+    case Tmux.list_windows(workspace_id) do
+      # a tmux that can't be asked is no window closed: keep what was seen, resolve nothing
+      {:error, _} -> Map.filter(panes, fn {{ws, _}, _} -> ws == workspace_id end)
+      tabs -> tick_tabs(workspace_id, tabs, panes, now, band)
+    end
+  end
+
+  defp tick_tabs(workspace_id, tabs, panes, now, band) do
     standing = with %Thread{id: id} <- Channel.machine_thread(workspace_id), do: id
 
     seen =
-      for tab <- Tmux.list_windows(workspace_id),
+      for tab <- tabs,
           tid = tab.thread_id || standing,
           is_integer(tid),
           into: %{},

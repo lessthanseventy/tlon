@@ -37,7 +37,7 @@ defmodule Server.Office do
     projects = for ws <- ws_ids, p <- Server.Projects.in_workspace(ws), do: %{id: p.id, workspace_id: ws, name: p.name}
     prompts = Server.Attention.open_prompts_by_thread()
     thinking = thinking()
-    tabs = Map.new(ws_ids, &{&1, Server.Tmux.list_windows(&1)})
+    tabs = Map.new(ws_ids, &{&1, held_windows(&1)})
     roster = roster(benches, thinking, tabs)
 
     %{
@@ -240,6 +240,20 @@ defmodule Server.Office do
   defp home_ws_ids(wss), do: wss |> Enum.filter(&(&1.type == "home")) |> Enum.map(& &1.id)
 
   # a session is only warm with a window to wake in: the thread's leaf, or the coworker's own on the standing thread
+  # the last windows tmux answered with: a read that faults keeps them, so a hiccup never empties the room
+  defp held_windows(ws) do
+    key = {__MODULE__, :windows, ws}
+
+    case Server.Tmux.list_windows(ws) do
+      {:error, _} ->
+        :persistent_term.get(key, [])
+
+      tabs ->
+        if :persistent_term.get(key, nil) != tabs, do: :persistent_term.put(key, tabs)
+        tabs
+    end
+  end
+
   defp windowed?(tabs, thread_id, agent) do
     Enum.any?(tabs, fn tab ->
       leaf? = (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and tab.agent in [nil, agent]

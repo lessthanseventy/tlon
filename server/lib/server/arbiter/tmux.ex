@@ -49,7 +49,7 @@ defmodule Server.Arbiter.Tmux do
          %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
          ws when not is_nil(ws) <- workspace_id(thread),
          standing? = standing?(ws, thread),
-         tabs = Tmux.list_windows(ws),
+         tabs when is_list(tabs) <- tmux_windows(ws),
          :absent <- running(tabs, thread, author, standing?),
          parked? = Server.Staffing.parked_note?(thread_id),
          :ok <- under_cap(tabs, thread, standing?) do
@@ -83,6 +83,11 @@ defmodule Server.Arbiter.Tmux do
     if leaf_thread, do: set.("@funes_thread", Integer.to_string(leaf_thread))
     set.("@funes_agent", author)
     set.("@funes_born", Integer.to_string(System.os_time(:second)))
+  end
+
+  # windows it can't see could already hold this coworker: a fault spawns nothing
+  defp tmux_windows(ws) do
+    with {:error, why} <- Tmux.list_windows(ws), do: {:error, {:tmux, why}}
   end
 
   defp standing?(ws, %Thread{id: id}), do: match?(%Thread{id: ^id}, Server.Channel.machine_thread(ws))

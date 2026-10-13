@@ -124,9 +124,9 @@ defmodule Server.WorklinePublishTest do
       refute_received {:ran, ["gh", "pr", "update-branch", _ | _]}
     end
 
-    test "a repo gh can't read (no remote, no auth) is nothing to do" do
+    test "a repo gh can't read (no remote, no auth) is an error, never an empty list" do
       run = runner([{&match?(["gh", "pr", "list" | _], &1), {"no git remotes found", 1}}])
-      assert [] = Publish.refresh_behind("/repo", run)
+      assert {:error, "gh pr list exited 1: no git remotes found"} = Publish.refresh_behind("/repo", run)
     end
   end
 
@@ -151,9 +151,9 @@ defmodule Server.WorklinePublishTest do
       assert [%{number: 80, slug: "red"}, %{number: 83, slug: "status"}] = Publish.failing("/repo", run)
     end
 
-    test "a repo gh can't read is nothing to do" do
+    test "a repo gh can't read is an error, never an empty list" do
       run = runner([{&match?(["gh", "pr", "list" | _], &1), {"no git remotes found", 1}}])
-      assert [] = Publish.failing("/repo", run)
+      assert {:error, "gh pr list exited 1: " <> _} = Publish.failing("/repo", run)
     end
   end
 
@@ -169,9 +169,9 @@ defmodule Server.WorklinePublishTest do
       assert [%{number: 73, slug: "tangled"}] = Publish.conflicting("/repo", run)
     end
 
-    test "a repo gh can't read is nothing to do" do
+    test "a repo gh can't read is an error, never an empty list" do
       run = runner([{&match?(["gh", "pr", "list" | _], &1), {"no git remotes found", 1}}])
-      assert [] = Publish.conflicting("/repo", run)
+      assert {:error, "gh pr list exited 1: " <> _} = Publish.conflicting("/repo", run)
     end
 
     test "close/3 closes the PR, saying why, and keeps its branch for the next landing" do

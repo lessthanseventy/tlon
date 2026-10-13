@@ -132,6 +132,16 @@ defmodule Server.AttentionTest do
       refute Attention.waiting?(t.id)
     end
 
+    test "a tmux that can't list its windows closes no prompt", %{ws: ws, thread: t} do
+      tmux(leaf(t.id))
+      Process.put(:screen, @claude)
+      :ok = Attention.tick(ws.id)
+
+      Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"server exited unexpectedly", 1} end)
+      :ok = Attention.tick(ws.id)
+      assert [%Message{resolved_at: nil}] = prompts(t.id)
+    end
+
     test "a new dialog on the same window supersedes; a window that is gone closes its prompt", %{ws: ws, thread: t} do
       tmux(leaf(t.id))
       Process.put(:screen, @claude)

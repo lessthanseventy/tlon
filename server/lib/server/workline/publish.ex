@@ -36,20 +36,31 @@ defmodule Server.Workline.Publish do
   published just before another merge sits `BEHIND` with auto-merge on and never lands. Each such
   PR on a `work/*` branch — the server's own, never a human's — is rebased onto main by GitHub
   (`gh pr update-branch --rebase`), which re-runs its checks and lets auto-merge go. Returns the
-  PR numbers it refreshed; a repo `gh` can't read is `[]`.
+  PR numbers it refreshed; a repo `gh` can't read is `{:error, why}`, never `[]`.
   """
   def refresh_behind(repo, run \\ &System.cmd/3) do
-    opts = [cd: repo, stderr_to_stdout: true]
-    fields = "number,headRefName,mergeStateStatus,autoMergeRequest"
-
-    with {out, 0} <- run.("gh", ["pr", "list", "--state", "open", "--json", fields], opts),
-         {:ok, prs} when is_list(prs) <- Jason.decode(out) do
+    with {:ok, prs} <- open_prs(repo, "number,headRefName,mergeStateStatus,autoMergeRequest", run) do
       for %{"number" => n, "headRefName" => "work/" <> _, "mergeStateStatus" => "BEHIND", "autoMergeRequest" => %{}} <-
             prs,
-          match?({_, 0}, run.("gh", ["pr", "update-branch", to_string(n), "--rebase"], opts)),
+          match?(
+            {_, 0},
+            run.("gh", ["pr", "update-branch", to_string(n), "--rebase"], cd: repo, stderr_to_stdout: true)
+          ),
           do: n
-    else
-      _ -> []
+    end
+  end
+
+  # the repo's open PRs as `gh` lists them: `{:ok, prs}`, or `{:error, why}` when gh can't be read
+  defp open_prs(repo, fields, run) do
+    case run.("gh", ["pr", "list", "--state", "open", "--json", fields], cd: repo, stderr_to_stdout: true) do
+      {out, 0} ->
+        case Jason.decode(out) do
+          {:ok, prs} when is_list(prs) -> {:ok, prs}
+          _ -> {:error, "gh pr list: not a JSON list: #{String.slice(out, 0, 200)}"}
+        end
+
+      {out, code} ->
+        {:error, "gh pr list exited #{code}: #{String.slice(String.trim(out), 0, 200)}"}
     end
   end
 
@@ -72,37 +83,25 @@ defmodule Server.Workline.Publish do
   @doc """
   Its landings GitHub can never merge: main moved under one after it landed and they now conflict
   (`DIRTY`), which no `update-branch` fixes. Each open PR on a `work/*` branch so marked, as
-  `%{number, slug}`; a repo `gh` can't read is `[]`.
+  `%{number, slug}`; a repo `gh` can't read is `{:error, why}`, never `[]`.
   """
   def conflicting(repo, run \\ &System.cmd/3) do
-    opts = [cd: repo, stderr_to_stdout: true]
-
-    with {out, 0} <-
-           run.("gh", ["pr", "list", "--state", "open", "--json", "number,headRefName,mergeStateStatus"], opts),
-         {:ok, prs} when is_list(prs) <- Jason.decode(out) do
+    with {:ok, prs} <- open_prs(repo, "number,headRefName,mergeStateStatus", run) do
       for %{"number" => n, "headRefName" => "work/" <> slug, "mergeStateStatus" => "DIRTY"} <- prs,
           do: %{number: n, slug: slug}
-    else
-      _ -> []
     end
   end
 
   @doc """
   Its landings whose checks went red: auto-merge waits on green, so such a PR stays open for good
   (`BEHIND`/`DIRTY` it is not). Each open PR on a `work/*` branch with a failed check, as
-  `%{number, slug}`; one still pending is not failing. A repo `gh` can't read is `[]`.
+  `%{number, slug}`; one still pending is not failing. A repo `gh` can't read is `{:error, why}`, never `[]`.
   """
   def failing(repo, run \\ &System.cmd/3) do
-    opts = [cd: repo, stderr_to_stdout: true]
-
-    with {out, 0} <-
-           run.("gh", ["pr", "list", "--state", "open", "--json", "number,headRefName,statusCheckRollup"], opts),
-         {:ok, prs} when is_list(prs) <- Jason.decode(out) do
+    with {:ok, prs} <- open_prs(repo, "number,headRefName,statusCheckRollup", run) do
       for %{"number" => n, "headRefName" => "work/" <> slug} = pr <- prs,
           Enum.any?(pr["statusCheckRollup"] || [], &red?/1),
           do: %{number: n, slug: slug}
-    else
-      _ -> []
     end
   end
 

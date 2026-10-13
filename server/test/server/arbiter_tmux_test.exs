@@ -30,6 +30,8 @@ defmodule Server.Arbiter.TmuxTest do
   end
 
   # A runner that records argv and answers from a script keyed on the tmux subcommand.
+  @not_up "no server running on /tmp/tmux-1000/tlon-workspace-1"
+
   defp record(answers) do
     pid = self()
 
@@ -38,6 +40,32 @@ defmodule Server.Arbiter.TmuxTest do
       sub = args |> Enum.drop(2) |> List.first()
       Map.get(answers, sub, {"", 0})
     end
+  end
+
+  test "list_windows: a session not up is no windows; a tmux that can't be asked is an error, never an empty office", %{
+    thread: t
+  } do
+    ws = t.workspace_id
+
+    for out <- [
+          @not_up,
+          "can't find session: w#{ws}",
+          "error connecting to /tmp/tmux-1000/x (No such file or directory)"
+        ] do
+      Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {out, 1}}))
+      assert Tmux.list_windows(ws) == []
+    end
+
+    Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"server exited unexpectedly", 1}}))
+    assert {:error, "server exited unexpectedly"} = Tmux.list_windows(ws)
+    assert Tmux.leaf_tab({:error, "x"}, t.id) == nil
+  end
+
+  test "spawn: a tmux that can't list its windows spawns nothing", %{exports: exports} do
+    Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"server exited unexpectedly", 1}}))
+    assert {:error, {:tmux, "server exited unexpectedly"}} = Arbiter.Tmux.spawn(exports)
+    refute_received {:tmux, [_, _, "new-session" | _]}
+    refute_received {:tmux, [_, _, "new-window" | _]}
   end
 
   test "ready?: the harness's input line on the pane, else not yet" do
@@ -77,7 +105,7 @@ defmodule Server.Arbiter.TmuxTest do
     exports =
       ~s(export TLON_MCP_URL="http://127.0.0.1:4040/mcp"\nexport TLON_THREAD="#{thread.id}"\nexport TLON_AUTHOR="hronir")
 
-    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {"", 1}}))
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {@not_up, 1}}))
 
     assert {:ok, _} = Arbiter.Tmux.spawn(exports)
     assert_received {:tmux, ["-L", _, "new-session", "-d", "-s", _, "-n", _, cmd]}
@@ -113,7 +141,7 @@ defmodule Server.Arbiter.TmuxTest do
     {:ok, thread} = Staff.assign(thread, Staff.agent_by_name("hronir"))
 
     exports = ~s(export TLON_THREAD="#{thread.id}"\nexport TLON_AUTHOR="hronir")
-    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {"", 1}}))
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {@not_up, 1}}))
 
     assert {:ok, _} = Arbiter.Tmux.spawn(exports)
     assert_received {:tmux, ["-L", _, "new-session", "-d", "-s", _, "-n", _, cmd]}
@@ -123,7 +151,7 @@ defmodule Server.Arbiter.TmuxTest do
 
   test "spawn: no session yet → new-session -d with the leaf as window 0, tagged; the claude engine gets the claude launcher",
        %{ws: ws, thread: t, exports: exports} do
-    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {"", 1}}))
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"no", 1}, "list-windows" => {@not_up, 1}}))
     Application.put_env(:server, :spawn_launcher_claude, "/opt/claude/launch.sh")
     assert {:ok, %{socket: socket, session: "w" <> _, window: window}} = Arbiter.Tmux.spawn(exports)
     assert socket == Tmux.socket(ws.id)
@@ -139,7 +167,7 @@ defmodule Server.Arbiter.TmuxTest do
   end
 
   test "spawn: session up → new-window -d; a thread whose leaf already runs is refused", %{thread: t, exports: exports} do
-    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {"", 1}}))
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {@not_up, 1}}))
     assert {:ok, _} = Arbiter.Tmux.spawn(exports)
     assert_received {:tmux, ["-L", _, "new-window", "-d", "-t", _, "-n", _, _]}
 
@@ -187,7 +215,7 @@ defmodule Server.Arbiter.TmuxTest do
     Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {leaves, 0}}))
     assert {:error, :at_cap} = Arbiter.Tmux.spawn(exports)
 
-    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {"", 1}}))
+    Application.put_env(:server, :tmux_cmd, record(%{"has-session" => {"", 0}, "list-windows" => {@not_up, 1}}))
     assert {:ok, _} = Arbiter.Tmux.spawn(exports)
     assert {:ok, _} = Arbiter.Tmux.spawn(exports)
 
@@ -264,7 +292,7 @@ defmodule Server.Arbiter.TmuxTest do
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"3\tt#{t.id}\t\t9\n", 0}}))
     assert %{socket: s, session: "w" <> _, window: w} = Arbiter.Tmux.terminal_target(t)
     assert s == Tmux.socket(ws.id) and w == "t#{t.id}"
-    Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"", 1}}))
+    Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {@not_up, 1}}))
     assert Arbiter.Tmux.terminal_target(t) == nil
   end
 
