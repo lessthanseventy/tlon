@@ -76,3 +76,6 @@ config :server, tmux_scope: false
 # repo (2026-09-18). A test that needs the artifact path makes its own throwaway git repo.
 config :server, token_secret: "test-only-token-secret-not-for-any-real-world-32b"
 config :server, workline_root: "/nonexistent/tlon-test-workline"
+
+# a test spawn must never signal a live coworker whose thread id happens to match a test row's
+config :server, :orphans, proc_dir: "/nonexistent"

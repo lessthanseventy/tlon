@@ -50,6 +50,9 @@ and every layer the spine design's re-laid §9 asked for
   nudge), warmth-gated (a cold session is rotated onto a fresh, brief-seeded one, never poked), and
   `drain/0` re-delivers on restart, so killing the BEAM loses nothing. A wake its addressee never
   acted on (no call to the server since) is offered again for 30 minutes (`redeliver_unheard/1`).
+  One seat, one session: spawning a window first SIGTERMs any process still holding that
+  (thread, handle) identity in its environment (`Server.Orphans`), so a killed window's survivor
+  cannot drain wakes beside the respawn.
 - **the MCP channel** (`Server.MCP.*`) — the sovereign door for any agent, `anubis_mcp` over Bandit,
   loopback-only. Identity rides the CONNECTION: a signed token resolves to (thread, agent, session) on
   every request, so no tool takes a thread parameter and every authenticated call bumps warmth. Tools
