@@ -117,6 +117,9 @@ export function moment(kind: string, hour: number, weather?: string, party = fal
 /** a thread shipped: confetti over whoever led it, until `until` */
 export type Party = { agent: string; until: number }
 
+/** ticks (100 ms) a said line stays up: time to read it at an easy pace, ~10 s at the least */
+export const readTicks = (text: string) => Math.min(400, Math.max(100, 40 + text.length * 2))
+
 export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
   protected temperament: Temperament = { warmth: 0, wits: 0, energy: 0 }
@@ -250,8 +253,21 @@ export class Sim<L extends { people: Seat[] }> {
     const odds = what === "shipped" ? 0.7 : what === "queue" ? 0.4 : what === "done" ? 0.2 : 0.1
     if (Array.isArray(lines) && this.quiet(this.cat.saidUntil) && Math.random() < odds) this.catSay(this.line("Nina", what, lines as string[], actor.seat.agent))
   }
-  /** someone was asked something (`text` null) or has answered; an answer shows for ~12 s */
-  say(agent: string, text: string | null) { this.talk.set(agent, { text, until: text === null ? Infinity : this.tick + 120 }); this.changed = true }
+  /** someone was asked something (`text` null) or has answered; an answer shows for its `readTicks` */
+  say(agent: string, text: string | null) { this.talk.set(agent, { text, until: text === null ? Infinity : this.tick + readTicks(text) }); this.changed = true }
+  private convos: { turns: { who: string; line: string }[]; next: number; up: { who: string; line: string } | null }[] = []
+  /** a conversation said turn by turn: each line up for its reading time, then down before the next goes up */
+  converse(turns: { who: string; line: string }[]) { if (turns.length) this.convos.push({ turns: [...turns], next: this.tick, up: null }) }
+  private conversing() {
+    for (const c of this.convos) {
+      if (this.tick < c.next) continue
+      // only the balloon it put up: an answer to you said over it in the meantime stays
+      if (c.up && this.talk.get(c.up.who)?.text === c.up.line) this.talk.delete(c.up.who)
+      c.up = c.turns.shift() ?? null
+      if (c.up) { this.say(c.up.who, c.up.line); c.next = this.tick + readTicks(c.up.line) }
+    }
+    this.convos = this.convos.filter((c) => c.up)
+  }
   private together() {
     if (!this.onTogether || this.tick % 40 || this.tick - this.askedTogether < 400 || Math.random() > 0.3) return
     const quiet = [...this.actors.values()].filter((x) => !x.leaving && !this.talk.has(x.seat.agent))
@@ -490,6 +506,7 @@ export class Sim<L extends { people: Seat[] }> {
     let changed = this.changed || this.tick % 4 === 0
     this.changed = false
     for (const [k, v] of this.talk) if (this.tick > v.until) { this.talk.delete(k); changed = true }
+    this.conversing()
     this.together()
     const asleep = this.cat.mode === "sleep"
     if (this.stepCat()) changed = true

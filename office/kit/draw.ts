@@ -137,7 +137,8 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
     const agentId = a.bench.find((c) => c.name === seat.agent)?.agent_id ?? null
     sc.people.push({ x: left, y: top, w: 12, h: sitting ? 14 : heightOf(actor.look), tip: tipOf(seat, threadOf(seat.thread_id), actor.spot.kind === "queue" ? "in your queue" : actor.moving ? "walking" : lounging ? "between turns at their desk, still warm" : `at the ${actor.spot.kind}`), act: { kind: "person", agentId, name: seat.agent, tid: seat.thread_id > 0 ? seat.thread_id : null } })
     const said = talk.get(seat.agent)
-    if (said?.text) sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: actor.x, top })
+    // anchored to the figure at rest: the walk's 1 px bob would bounce the text a whole row
+    if (said?.text) sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: actor.x, top: sitting || couch ? top : actor.y - heightOf(actor.look) })
     sc.overhead.push(() => {
       let above = top - 9
       const bob = f % 2

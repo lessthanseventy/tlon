@@ -40,6 +40,9 @@ linked window at a time, Ctrl-] back to the room).
   apart from the notes they work from; their suggestions go in the suggestion box beside it, and
   become tickets only when you file them. Those are banter written in a coworker's voice, not their
   request: the box labels them so, and they never reach the needs queue (`i`).
+  Small talk is said with `Sim.converse`: one balloon per conversation at a time, each up for its
+  `readTicks`, in the order written. The TUI keeps the last 50 lines said in its state dir
+  (`office-banter`) for the banter log (`/` → "the banter log").
   A birthday or anniversary on the calendar feeds (`celebrations` on the snapshot) puts bunting over the
   lounge, a cake on the kitchen counter, and pulls the idle crowd to the cooler and coffee.
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
