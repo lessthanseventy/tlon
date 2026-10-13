@@ -15,7 +15,7 @@ export const HALL_ROWS = 5 + SLOTS.length
 export const stepRow = (i: number, d: number) => (i + d + HALL_ROWS) % HALL_ROWS
 
 /** the figure's pixel rows folded two to a cell: top pixel in the glyph's colour, bottom in its background */
-function halfBlocks(px: string[], paint: Record<string, string>): Seg[][] {
+export function halfBlocks(px: string[], paint: Record<string, string>): Seg[][] {
   const out: Seg[][] = []
   for (let y = 0; y + 1 < px.length; y += 2) {
     const segs: Seg[] = []
