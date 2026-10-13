@@ -15,7 +15,7 @@ defmodule Server.Orphans do
   @doc "Pids whose environment holds `TLON_THREAD=thread_id` and `TLON_AUTHOR=author`, sorted; never this node's own."
   def holders(thread_id, author, opts \\ []) do
     proc = Keyword.get(opts, :proc_dir, "/proc")
-    mine = System.pid() |> String.to_integer()
+    mine = String.to_integer(System.pid())
     want = ["TLON_THREAD=#{thread_id}", "TLON_AUTHOR=#{author}"]
 
     proc
