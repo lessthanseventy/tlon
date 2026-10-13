@@ -980,7 +980,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const crew = [...live, ...seats.filter((x) => !live.some((c) => c.name === x.name)).map((x) => ({ name: x.name, archetype: x.archetype, status: "off", thread: null, title: "", manager: false, lead: false }))].filter((c) => inTab(c.name))
       const shiftOf = (name: string) => seats.find((x) => x.name === name)?.crew
       const tabs: Seg[] = tabsOf.flatMap((t) => [t === crewTab ? { s: ` ${tabLabel(t)} `, fg: ROLE.ground, bg: ROLE.key, bold: true } : dim(` ${tabLabel(t)} `), plain(" ")])
-      const rows: Row[] = [{ segs: [...tabs, dim(crews.length ? `   the ${on} crew is on` : "   no crews yet: c puts a seat on one")] }]
+      const paused = all.pause === "pencils_down" || all.pause === "lights_out"
+      const rows: Row[] = [{ segs: [...tabs, dim(crews.length ? `   the ${on} crew is on` : "   no crews yet: c puts a seat on one"),
+        paused ? { s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true } : dim("   at work")] }]
       for (const g of arrange(crew as any, crewSort.cmp, crewGroup)) {
         if (g.label !== null) rows.push({ segs: [key(`${g.label} · ${g.items.length}`)] })
         for (const c of g.items as any[]) {
@@ -1006,6 +1008,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           ...(seat ? [{ key: "c", label: `${seat.name} on ${seatTo === "all" ? "every crew" : seatTo}`, run: () => void did(data.seatShift(seat.seat_id, seat.name, seatTo)) }, { key: "n", label: "a new crew…", run: newCrew }] : []),
           ...(other ? [{ key: "S", label: `put the ${other} crew on`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } }] : []),
           { key: "+", label: "hire", run: hire },
+          paused ? { key: "P", label: "back to work", run: () => void did(data.pause("back_to_work")) }
+            : { key: "P", label: "pencils down: nothing new, all stop after their turn", run: () => void did(data.pause("pencils_down")) },
+          ...(all.pause !== "lights_out" ? [{ key: "L", label: "lights out…", run: () => ask2("lights out — pause verify and landing, interrupt every pane", () => void did(data.pause("lights_out"))) }] : []),
           { key: "s", label: `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`, run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
           { key: "g", label: `group: ${crewGroup?.name ?? "none"} → ${next(CREW_GROUP_MODES, crewGroup)?.name ?? "none"}`, run: () => resort(() => { crewGroup = next(CREW_GROUP_MODES, crewGroup) }) },
           ...seatActions(chosen), back1],
