@@ -19,6 +19,10 @@ control loop, not two, and no second way to run anything:
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run server:release` / `server:restart` / `server:stop` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to rebuild/stop/inspect/watch it (`server:stop` takes the coworker panes down with it).
 - `mise run release:cut` / `release:status` — what the service runs is the **release pointer** (`refs/heads/live`, built in `.release/`), not main: a merge ships when a cut moves the pointer (fast-forward, merged work only; `-- --rollback` to go back). `scripts/release.sh`. `release:status` also reads whether main is releasable (`Server.Release.Candidate`: `check:main` and `release:smoke` passed on exactly that commit — each run ends `ran-on: <check> <sha>`, which a scheduled run records — and nothing mid-flight). The `pm` coworker proposes cuts (`Server.Release.PM`): under `auto_land_risk` it cuts them itself, else they reach you as one gate on the root thread.
+- `mise run scratch:new -- <name> [<ref>]` / `scratch:prune` — a change built outside the live checkout: a
+  detached worktree under `~/.cache/tlon-scratch/` (never inside the repo, where a `tN` dir reads as stranded
+  work) with the gates' and menard's deps installed; publish with `git push origin HEAD:refs/heads/<branch>`.
+  Prune removes the ones whose work landed (clean, every commit on origin/main by patch) and says why the rest stay.
 - `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against
   server recall on the throwaway `tlon_bench` db, never the live store; `bench/longmemeval/bridge.exs` says what each
   `TLON_BENCH_MODE` measures, and `-- --memory bm25` runs the keyword reference on the same slice.
@@ -198,8 +202,8 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   commit (a review's commit too). It is the model as launched (a mid-session switch is not seen), so
   the record holds even when a model is wrong about itself.
 - **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Claude
-  Code's bash sandbox (an ollama coworker's runs strict, from its profile's `sandbox.json`) has two
-  symptoms, and neither is a bug to chase:
+  Code's bash sandbox (an ollama coworker's runs strict, from its profile's `sandbox.json`) has three
+  symptoms, and none is a bug to chase:
   - *Phantom untracked dotfiles.* The wrapper bind-mounts over shell-rc / `.gitconfig` / editor paths,
     so `git status` **run inside a bash call** reports `.bashrc`, `.zshrc`, `.gitconfig`, `.env`,
     `.mcp.json`, `.idea`, `.vscode`, … as untracked at the repo root. The tell: `ls -la` shows them
@@ -210,6 +214,12 @@ exists so a reader of the repo knows where the law comes from and edits the one 
     **regardless of whether it is up.** Do not conclude "server is down" from a bash probe; a bash
     probe cannot answer the question. **server MCP tools still work** — Claude Code makes those calls
     from its own process, outside the sandbox — so use them, or ask the human to check from the host.
+  - *A `.git/config.lock` that comes and goes.* Each sandboxed command write-protects `.git/config` by
+    binding `/dev/null` over `.git/config.lock`, which creates that 0-byte file for as long as the command
+    runs and deletes it after; every session's sandboxed commands do it at once. While one exists, a git
+    config write (`worktree add -b`, `switch -c`, `push -u`) fails "File exists" — work detached and push
+    `HEAD:refs/heads/<branch>`. A launch that races another's teardown fails "bwrap: Can't find source path
+    …/.git/config.lock": run it again. Never create or `rm` the file.
 
 - **Comments earn their place — load-bearing only.** A comment survives only if it states a non-obvious
   *why* or a real gotcha the code can't. Narrative, lore, dated incident references, decorative
