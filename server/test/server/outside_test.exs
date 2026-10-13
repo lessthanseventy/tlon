@@ -19,6 +19,28 @@ defmodule Server.OutsideTest do
     assert %{author: "uqbar", body: "a margin note"} = List.last(Channel.thread_messages(thread))
   end
 
+  test "a notice is an FYI: it wakes nobody, not even a live lead it names", %{thread: thread} do
+    Application.put_env(:server, :arbiter, Server.Arbiter.Test)
+    Application.put_env(:server, :test_pid, self())
+
+    on_exit(fn ->
+      Application.delete_env(:server, :arbiter)
+      Application.delete_env(:server, :test_pid)
+    end)
+
+    {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+    {:ok, yu} = Server.Staff.register_agent(%{name: "yu", mandate: "lead", engine: "fresh"})
+    {:ok, _} = Server.Staff.assign(thread, yu)
+    {:ok, _} = Server.Staff.start_session(%{agent_id: yu.id, thread_id: thread.id, pane_ref: "wYu"})
+
+    assert {:ok, m} = Outside.post(thread.id, "uqbar", "@yu your smoke is down, nothing to do", notice: true)
+    assert %{kind: "notice", author: "uqbar"} = m
+    Server.Switchboard.deliver(m)
+    Server.Switchboard.drain()
+    refute_received {:woke, _, _}
+    assert %DateTime{} = Server.Repo.get!(Server.Message, m.id).delivered_at
+  end
+
   test "refuses a name that is a seated coworker, or no agent at all", %{thread: thread} do
     {:ok, ws} = Server.Workspaces.create(%{name: "Bench"})
     {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius-o", archetype: "surveyor"})
