@@ -116,9 +116,8 @@ defmodule Server.Alerts do
 
   # what nothing waits on can be put away on the server (`Office.Needs.dismiss/1`), so it leaves the
   # office's inbox too, not only this surface
-  defp put_away(%{kind: kind, level: level, key: key})
-       when level == "decide" or kind in ~w(ask stalled quota),
-       do: [%{label: put_away_label(kind), method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
+  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled quota),
+    do: [%{label: put_away_label(kind), method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
 
   defp put_away(_need), do: []
 
