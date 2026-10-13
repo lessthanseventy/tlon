@@ -207,4 +207,32 @@ defmodule Server.Presence.ThinkingTest do
     Thinking.sweep(store)
     assert Thinking.thinking_for(store, 7) == []
   end
+
+  test "a turn that reports activity within the stale-turn clock stays mid-turn; one silent for the clock is swept" do
+    Server.TestDB.clean!()
+    store = start_store([])
+    on_exit(fn -> Application.delete_env(:server, :stale_turn_seconds) end)
+    Application.put_env(:server, :stale_turn_seconds, 600)
+    {:ok, t} = Server.Channel.open_thread(%{title: "long turn"})
+    {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "m", engine: "pi"})
+    {:ok, s} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
+    mark = fn -> Server.Repo.get!(Server.Session, s.id).thinking_since end
+    long_ago = DateTime.utc_now() |> DateTime.add(-700, :second) |> DateTime.truncate(:second)
+
+    # a turn declared 700 s back, its durable mark as old
+    Thinking.thinking(store, t.id, "hronir")
+    :sys.replace_state(store, fn st -> put_in(st.entries[{t.id, "hronir"}], long_ago) end)
+    :ok = Server.Staff.mark_thinking(t.id, "hronir", long_ago)
+
+    Thinking.doing(store, t.id, "hronir", "bash")
+    Thinking.sweep(store)
+    assert [%{agent: "hronir", started_at: ^long_ago}] = Thinking.thinking_for(store, t.id)
+    assert DateTime.diff(DateTime.utc_now(), mark.()) < 600
+
+    # then nothing heard for the whole clock
+    :sys.replace_state(store, fn st -> %{st | heard: Map.new(st.heard, fn {k, _} -> {k, long_ago} end)} end)
+    Thinking.sweep(store)
+    assert Thinking.thinking_for(store, t.id) == []
+    assert mark.() == nil
+  end
 end

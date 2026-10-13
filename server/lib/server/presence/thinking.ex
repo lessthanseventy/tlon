@@ -6,10 +6,10 @@ defmodule Server.Presence.Thinking do
   inference lag. The store is in memory — presence is liveness, not history; the
   harnesses re-declare on their next turn.
 
-  Entries are `{thread_id, agent} => started_at`. A periodic sweep clears entries
-  older than the stale-turn clock (`stale_turn_seconds/0`) and announces them idle —
-  the stuck-harness guard: a crashed harness that never sent `idle` must not read
-  as thinking forever. Every transition broadcasts on `server:presence` and the
+  Entries are `{thread_id, agent} => started_at`. A periodic sweep clears a turn nothing has been
+  heard from (its declare, or its latest `doing/4` report) for the stale-turn clock
+  (`stale_turn_seconds/0`) and announces it idle: the stuck-harness guard. A crashed harness that
+  never sent `idle` must not read as thinking forever; a long turn still reporting tool calls stays. Every transition broadcasts on `server:presence` and the
   thread topic (`Server.Bus`), and marks the agent's session (`Staff.mark_thinking/3`): the
   durable half, so a turn a machine restart cut off can be picked up (`Server.Staffing`).
 
@@ -55,7 +55,8 @@ defmodule Server.Presence.Thinking do
 
   @doc """
   Tag `agent`'s declared turn on `thread_id` with what it is doing now (`"edit"`, `"bash"`, …;
-  `nil` = back to plain thinking). Leaves `started_at` alone. A no-op with no turn declared: a
+  `nil` = back to plain thinking). Leaves `started_at` alone; refreshes the turn's heard time, in
+  memory and on the session row (`thinking_since`), so the stale-turn clock runs from here. A no-op with no turn declared: a
   harness's fire-and-forget tool hook can land after the turn's idle, and must not reopen it.
   """
   def doing(store \\ __MODULE__, thread_id, agent, what), do: GenServer.call(store, {:doing, thread_id, agent, what})
@@ -83,8 +84,8 @@ defmodule Server.Presence.Thinking do
   @doc """
   The stale-turn clock, in seconds: a mid-turn mark (in memory here, or the session row's
   `thinking_since`) older than this is a turn nothing will end — its harness crashed, or a restart
-  cut it off before its idle arrived. Measured from the turn's last declare, not its last tool
-  call. `config :server, :stale_turn_seconds`, default #{@default_stale_turn_seconds}; read on
+  cut it off before its idle arrived. Measured from the last thing heard from the turn: its
+  declare or its latest `doing/4` report. `config :server, :stale_turn_seconds`, default #{@default_stale_turn_seconds}; read on
   every use. This sweep, `Server.Staffing` and `Server.Office.Needs` all read it here.
   """
   def stale_turn_seconds, do: Application.get_env(:server, :stale_turn_seconds, @default_stale_turn_seconds)
@@ -99,7 +100,17 @@ defmodule Server.Presence.Thinking do
     gap = Keyword.get(opts, :turn_gap_seconds, @default_turn_gap_seconds)
     Process.send_after(self(), :sweep, interval)
 
-    {:ok, %{entries: %{}, doing: %{}, activity: %{}, idled: %{}, max_seconds: max, interval: interval, turn_gap: gap}}
+    {:ok,
+     %{
+       entries: %{},
+       doing: %{},
+       heard: %{},
+       activity: %{},
+       idled: %{},
+       max_seconds: max,
+       interval: interval,
+       turn_gap: gap
+     }}
   end
 
   @impl true
@@ -117,7 +128,7 @@ defmodule Server.Presence.Thinking do
         end
 
     state = if fresh?, do: push(state, thread_id, agent, "thinking", "thinking"), else: state
-    {:reply, :ok, put_in(state.entries[key], started_at)}
+    {:reply, :ok, %{state | entries: Map.put(state.entries, key, started_at), heard: Map.delete(state.heard, key)}}
   end
 
   def handle_call({:record, thread_id, agent, kind, summary}, _from, state),
@@ -134,8 +145,14 @@ defmodule Server.Presence.Thinking do
 
   def handle_call({:doing, thread_id, agent, what}, _from, state) do
     key = {thread_id, agent}
-    next = if Map.has_key?(state.entries, key), do: put_in(state.doing[key], what), else: state
-    {:reply, :ok, next}
+
+    if Map.has_key?(state.entries, key) do
+      at = now()
+      durable(thread_id, agent, at)
+      {:reply, :ok, %{state | doing: Map.put(state.doing, key, what), heard: Map.put(state.heard, key, at)}}
+    else
+      {:reply, :ok, state}
+    end
   end
 
   def handle_call({:thinking_for, thread_id}, _from, state) do
@@ -174,7 +191,7 @@ defmodule Server.Presence.Thinking do
     max = state.max_seconds || stale_turn_seconds()
 
     state.entries
-    |> Enum.filter(fn {_key, started_at} -> DateTime.diff(cutoff, started_at, :second) >= max end)
+    |> Enum.filter(fn {key, started_at} -> DateTime.diff(cutoff, state.heard[key] || started_at, :second) >= max end)
     |> Enum.reduce(state, fn {{thread_id, agent}, _at}, acc -> clear(acc, thread_id, agent) end)
   end
 
@@ -195,6 +212,7 @@ defmodule Server.Presence.Thinking do
           state
           | entries: entries,
             doing: Map.delete(state.doing, {thread_id, agent}),
+            heard: Map.delete(state.heard, {thread_id, agent}),
             idled: Map.put(state.idled, {thread_id, agent}, now())
         }
     end
