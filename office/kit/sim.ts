@@ -857,11 +857,12 @@ export class Sim<L extends { people: Seat[] }> {
   /** someone who just finished a turn high-fives whoever they pass, once each */
   private highFives(): boolean {
     let any = false
-    const all = [...this.actors.values()]
+    const all = [...this.actors.values()], { bench, souls } = this.companyOf()
     for (const a of all) {
       if (this.tick - a.finished > 400) continue
       for (const b of all) {
         if (a === b || Math.abs(a.x - b.x) > 10 || Math.abs(a.y - b.y) > 4 || a.pose !== "stand" || b.pose !== "stand") continue
+        if (relation(a.seat.agent, b.seat.agent, souls, bench) === "rival") continue
         const key = `${a.seat.agent}|${b.seat.agent}|${a.finished}`
         if (this.fived.has(key)) continue
         if (this.fived.size > 200) this.fived.clear()

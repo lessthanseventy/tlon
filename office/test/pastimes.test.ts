@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
 import type { Actor } from "../kit/sim"
+import { parseSoul, useSouls } from "../kit/souls"
 import { EMPTY, type Agents } from "../kit/types"
 import { moment } from "../kit/sim"
 import { kitchenTile } from "../kit/tiles/kitchen"
@@ -267,4 +268,24 @@ describe("the bathroom", () => {
     for (let i = 0; i < 6000 && !seen; i++) { room.step(a); seen = [...r.actors.values()].some((x) => x.spot.kind === "bathroom" && !x.moving && !x.path.length) }
     expect(seen).toBe(true)
   }))
+})
+
+describe("company: rivals pass without a high five", () => {
+  const passing = (people: Record<string, string>) => chance(0.999, () => {
+    useSouls(Object.fromEntries(Object.entries(people).map(([k, v]) => [k, parseSoul("## People\n" + v)])))
+    const room = new WideRoom(560), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room)
+    room.step(a)
+    const [p, q] = [...r.actors.values()]
+    Object.assign(p!, { finished: r.tick, x: 200, y: 176, pose: "stand" }); Object.assign(q!, { x: 205, y: 176, pose: "stand" })
+    room.step(a)
+    useSouls({})
+    return [p!.five > r.tick, q!.five > r.tick]
+  })
+  test("a seat that needles the other gets no high five", () => {
+    expect(passing({ hronir: "needles yu" })).toEqual([false, false])
+  })
+  test("friends and strangers still do", () => {
+    expect(passing({ hronir: "admires yu" })).toEqual([true, true])
+    expect(passing({})).toEqual([true, true])
+  })
 })
