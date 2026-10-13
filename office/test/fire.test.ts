@@ -58,14 +58,15 @@ describe("Argos in the smoke", () => {
 })
 
 describe("Argos holds at the muster", () => {
-  test("whatever the dice, he is still out there once the fire has burned a while", () => {
-    for (let seed = 1; seed <= 20; seed++) seeded(seed, () => {
+  // the panic can send him to the far end of the room; once it ends he heads out, not back there first
+  test("whatever the dice or the hour, he is still out there once the fire has burned a while", () => {
+    for (const hour of [3, 8, 13]) for (let seed = 1; seed <= 20; seed++) seeded(seed, () => {
       const r = new WideRoom(696) as any
-      r.hour = () => 3
+      r.hour = () => hour
       run(r, up, 300); run(r, down, FIRE_GRACE + 900)
-      expect(r.dog.y, `seed ${seed}`).toBeGreaterThan(160)
+      expect(r.dog.y, `hour ${hour} seed ${seed}`).toBeGreaterThan(160)
     })
-  }, 30_000)
+  }, 60_000)
 })
 
 describe("the server closet", () => {

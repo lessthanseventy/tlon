@@ -148,6 +148,8 @@ export class WideRoom extends Sim<Layout> {
   /** the book is snapped shut until this tick; Nina may swat again after `swatQuiet` */
   private flinch = 0
   private swatQuiet = 0
+  /** Argos' path is a panic run: cut at the hallway when the panic ends, so he heads for the muster */
+  private dogPanicRun = false
   private home: Home = { tiles: [] }
   /** how much each plant has been watered, by the x of its waterer's spot: enough and it flowers */
   private watered = new Map<number, number>()
@@ -283,10 +285,17 @@ export class WideRoom extends Sim<Layout> {
       if (!d.path.length) {
         const to = pick([...this.plan.lounge, ...this.plan.muster!])
         d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, to)]
-        d.aisle = to.aisle; d.mode = "walk"; d.fuss = null
+        d.aisle = to.aisle; d.mode = "walk"; d.fuss = null; this.dogPanicRun = true
       }
       if (this.quiet(d.saidUntil) && Math.random() < 1 / 60) this.dogSay(this.argos("smoke"))
       return
+    }
+    // the panic over, he makes for the muster from the hallway: where he is, if he's in it, or as soon
+    // as his run reaches it — never across the furniture between
+    if (this.dogPanicRun) {
+      this.dogPanicRun = false
+      const hall = d.path.findIndex((p) => p.y === HALL)
+      if (d.y === HALL) { d.path = []; d.aisle = HALL } else if (hall >= 0) { d.path = d.path.slice(0, hall + 1); d.aisle = HALL }
     }
     if (!d.path.length && (d.x !== m.x || d.y !== m.y)) {
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, m)]
