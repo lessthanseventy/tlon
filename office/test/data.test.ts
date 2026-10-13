@@ -4,6 +4,7 @@ import { afterAll, expect, test } from "bun:test"
 const lifeBody = { xp: 650, level: 2, next_level_at: 900, streaks: { "1": 3 }, due: [{ routine_id: 1, title: "teeth", due_at: "2026-10-08T07:00:00Z", window_remaining: 600 }], quests: [{ id: 5, title: "book dentist", due_at: null, xp: 20 }], today: [] }
 let resolved: unknown = null
 let answered: unknown = null
+let handed = false
 const server = Bun.serve({
   port: 0,
   fetch: (req) => {
@@ -15,6 +16,7 @@ const server = Bun.serve({
     if (req.method === "POST" && path.endsWith("/life/routines/1/done")) return Response.json({ run: {}, level_up: true })
     if (req.method === "POST" && path.endsWith("/issues/32/fix")) return Response.json({ ticket_id: 400, owner: "routed to tertius" })
     if (req.method === "POST" && path.endsWith("/office/prompts/9")) return req.json().then((b) => { answered = b; return Response.json({ ok: true, message_id: 10 }) })
+    if (req.method === "POST" && path.endsWith("/office/prompts/9/uqbar")) { handed = true; return Response.json({ handed: 9 }) }
     if (req.method === "POST" && path.endsWith("/issues/31/resolve")) return req.json().then((b) => { resolved = b; return Response.json({ resolved: 31 }) })
     if (req.method === "POST" && path.endsWith("/threads/44/rebase")) return Response.json({ rebased: 44 }, { status: 202 })
     if (req.method === "POST" && path.endsWith("/threads/44/reland")) return Response.json({ relanded: 44 }, { status: 202 })
@@ -96,4 +98,11 @@ test("a landing GitHub isn't merging: rebase it, or close and reland it, on its 
   const data = await import("../tui/data")
   expect(await data.rebaseLanding(44)).toContain("#44")
   expect(await data.relandLanding(44)).toContain("back to build")
+})
+
+test("an ask handed to Uqbar goes by its own id to the delegate's route", async () => {
+  process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
+  const data = await import("../tui/data")
+  expect(await data.handToUqbar(9)).toBe("handed to Uqbar")
+  expect(handed).toBe(true)
 })

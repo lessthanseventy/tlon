@@ -305,6 +305,29 @@ defmodule Server.Attention do
   end
 
   @doc """
+  Hand open ask `id` to Uqbar, the operator's delegate: one post as `operator` on its study
+  (`Server.Outside.study/1`) on the ask's workspace, carrying the whole ask and asking it to decide
+  and act, then the ask resolved `handed to uqbar`. A post there reaches Uqbar's pane as the
+  operator's own message, which a coworker's relay of the answer does not. `{:ok, message}`, or
+  `{:error, :not_found | :answered | :no_study}`.
+  """
+  def hand_to_uqbar(id, operator) do
+    with %Message{kind: "prompt", resolved_at: nil, payload: %{"ask" => asker} = p} = ask <- Repo.get(Message, id),
+         %Thread{workspace_id: ws} = thread when not is_nil(ws) <- Repo.get(Thread, ask.thread_id),
+         {:ok, study} <- Server.Outside.study(ws),
+         {:ok, posted} <- Channel.post(%{thread_id: study.id, author: operator, body: handed(asker, thread, p)}) do
+      resolve(ask, "handed to uqbar")
+      {:ok, posted}
+    else
+      %Message{kind: "prompt", payload: %{"ask" => _}, resolved_at: at} when not is_nil(at) -> {:error, :answered}
+      %Thread{} -> {:error, :no_study}
+      {:error, :no_such_citizen} -> {:error, :no_study}
+      {:error, _} = error -> error
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
   Withdraw every open ask on `thread_id` or about it (`ask/5`'s `about`): that thread closed, so
   nothing is left to decide. An asker who asked from another thread is told there, so it stops
   chasing the decision.
@@ -537,4 +560,14 @@ defmodule Server.Attention do
   end
 
   defp actor(extra, _thread_id, _asker), do: extra
+
+  defp handed(asker, thread, p) do
+    for_whom = if p["for"], do: ", for #{p["for"]}", else: ""
+
+    """
+    @uqbar #{asker} asked on ##{thread.id} #{thread.title}#{for_whom}: #{p["summary"]}
+    #{Enum.map_join(p["options"], " · ", &"(#{&1["key"]}) #{&1["label"]}")}
+    Handle this for me: decide as I would, do the step yourself if the coworker can't, and post what you did and its evidence on ##{thread.id} (as yourself, `tlon-cli post --as uqbar #{thread.id} …`).\
+    """
+  end
 end

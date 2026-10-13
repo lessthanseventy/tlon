@@ -383,6 +383,20 @@ defmodule Server.MCP.GatewayTest do
       assert {404, _} = post_json("/api/office/prompts/nope", %{key: "1"})
     end
 
+    test "POST /api/office/prompts/:id/uqbar hands that ask to uqbar's study" do
+      {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, ws} = Server.Workspaces.register(%{name: "Handed"})
+      {:ok, t} = Channel.open_thread(%{title: "reroll", workspace_id: ws.id})
+      {:ok, a} = Server.Attention.ask(t.id, "tertius", "allow it?", ["allow", "deny"])
+
+      assert {200, %{"handed" => id}} = post_json("/api/office/prompts/#{a.id}/uqbar", %{})
+      assert id == a.id
+      assert Server.Repo.get!(Server.Message, a.id).resolution == "handed to uqbar"
+      assert {409, _} = post_json("/api/office/prompts/#{a.id}/uqbar", %{})
+      assert {404, _} = post_json("/api/office/prompts/999999/uqbar", %{})
+      assert {404, _} = post_json("/api/office/prompts/nope/uqbar", %{})
+    end
+
     test "the operator's review: GET the branch's diff, POST notes with a verdict" do
       {:ok, wl} = Server.Workline.open(%{title: "review me", slug: "review-me", stage: "review"})
 

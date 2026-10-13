@@ -115,6 +115,8 @@ export const relandLanding = (tid: number) => write(`relanding #${tid}`, `/threa
 export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `/threads/${tid}/verify`, {}, () => `verify on #${tid} queued`)
 /** answer one prompt — a pane's dialog, an ask, the release gate — by its id, so a key can't land in another prompt on its thread */
 export const answer = (id: number, key: string) => write("answering", `/office/prompts/${id}`, { key }, () => "answered")
+/** an ask handed to Uqbar, the operator's delegate, to decide and act on as the operator */
+export const handToUqbar = (id: number) => write("handing it to Uqbar", `/office/prompts/${id}/uqbar`, {}, () => "handed to Uqbar")
 export const retryJob = (id: number) => write("retrying the job", `/office/jobs/${id}/retry`, {}, () => "running it again")
 export const dismissJob = (id: number) => send("DELETE", "clearing the job", `/office/jobs/${id}`, () => "dismissed")
 /** a landed workline whose publish failed, pushed and its PR opened again */

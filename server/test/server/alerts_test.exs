@@ -86,7 +86,7 @@ defmodule Server.AlertsTest do
     assert [%{label: "Reply…", input: "body", path: "/api/threads/8/messages"}] = q.actions
   end
 
-  test "a coworker's ask is a decision, each of its answers a click that answers it by its id" do
+  test "a coworker's ask is a decision, each of its answers a click that answers it by its id, then Uqbar" do
     ask =
       need("ask", %{
         key: "ask:41",
@@ -101,6 +101,7 @@ defmodule Server.AlertsTest do
     assert [
              %{label: "Ship", method: "POST", path: "/api/office/asks/41", body: %{key: "1"}},
              %{label: "Hold", method: "POST", path: "/api/office/asks/41", body: %{key: "2"}},
+             %{label: "Hand it to Uqbar", method: "POST", path: "/api/office/prompts/41/uqbar", body: %{}},
              %{label: "Put away", method: "POST", path: "/api/office/needs/dismiss", body: %{key: "ask:41"}}
            ] = a.actions
   end
