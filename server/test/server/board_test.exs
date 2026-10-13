@@ -26,22 +26,7 @@ defmodule Server.BoardTest do
     {:ok, port} = :inet.port(lsock)
     test = self()
 
-    acceptor =
-      spawn_link(fn ->
-        loop = fn loop ->
-          case :gen_tcp.accept(lsock) do
-            {:ok, sock} ->
-              send(test, :embed_connection)
-              :gen_tcp.close(sock)
-              loop.(loop)
-
-            _ ->
-              :ok
-          end
-        end
-
-        loop.(loop)
-      end)
+    acceptor = spawn_link(fn -> accept_loop(lsock, test) end)
 
     previous = Application.get_env(:server, :embedding)
     Application.put_env(:server, :embedding, endpoint: "http://127.0.0.1:#{port}/api/embed", timeout: 200)
@@ -55,6 +40,14 @@ defmodule Server.BoardTest do
       Process.unlink(acceptor)
       Process.exit(acceptor, :kill)
       :gen_tcp.close(lsock)
+    end
+  end
+
+  defp accept_loop(lsock, test) do
+    with {:ok, sock} <- :gen_tcp.accept(lsock) do
+      send(test, :embed_connection)
+      :gen_tcp.close(sock)
+      accept_loop(lsock, test)
     end
   end
 
@@ -284,7 +277,14 @@ defmodule Server.BoardTest do
   describe "Board.brief/1 — one query embedding" do
     test "learnings and knowledge share a single embed of the recall query" do
       {:ok, thread} = Channel.open_thread(%{title: "embed once"})
-      {:ok, _} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", provenance: "derived", text: "something worth recalling"})
+
+      {:ok, _} =
+        Dossier.bank_fact(%{
+          thread_id: thread.id,
+          kind: "learned",
+          provenance: "derived",
+          text: "something worth recalling"
+        })
 
       {_brief, embeds} = count_embeds(fn -> Board.brief(thread) end)
 
@@ -393,7 +393,14 @@ defmodule Server.BoardTest do
 
     test "never embeds — recall is not on the overview's path (it starved the MCP session)" do
       {:ok, leaf} = Channel.open_thread(%{title: "reaper fix", scope: "machine"})
-      {:ok, _} = Dossier.bank_fact(%{thread_id: leaf.id, kind: "learned", provenance: "derived", text: "the reaper wants a real fact"})
+
+      {:ok, _} =
+        Dossier.bank_fact(%{
+          thread_id: leaf.id,
+          kind: "learned",
+          provenance: "derived",
+          text: "the reaper wants a real fact"
+        })
 
       {overview, embeds} = count_embeds(fn -> Board.machine_overview() end)
 
