@@ -68,7 +68,7 @@ export function propsAt(kind: EventKind, t: number, g: Geo): Prop[] {
     }
     case "zoo": {
       const out: Prop[] = []
-      const vanX = g.doorX + 14
+      const vanX = g.doorX - 8
       out.push({ kind: "van", x: t < 60 ? lerp(g.doorX + 80, vanX, t / 60) : t < 1100 ? vanX : lerp(vanX, g.doorX + 80, (t - 1100) / 100), y: g.hallY })
       if (t >= 60 && t < 1100) {
         const px = t < 600 ? lerp(g.doorX, g.leftX + 40, (t - 60) / 540) : lerp(g.leftX + 40, g.doorX, (t - 600) / 500)
