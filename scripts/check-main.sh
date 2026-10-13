@@ -15,6 +15,11 @@ sha="$(git rev-parse HEAD)"
 for v in $(compgen -e | grep '^TLON_'); do unset "$v"; done
 export MISE_YES=1 TLON_TEST_DATABASE=tlon_test_main
 mise trust -q "$dir" >/dev/null 2>&1
+# a Hex home of its own, as workline-verify.sh gives its gates: a mix booting while another rewrites
+# the shared ~/.hex/hex.config dies in Hex.start
+mkdir -p "$dir/.hex"
+for f in hex.config cache.ets; do [ -f "${HEX_HOME:-$HOME/.hex}/$f" ] && cp "${HEX_HOME:-$HOME/.hex}/$f" "$dir/.hex/"; done
+export HEX_HOME="$dir/.hex"
 (cd server && mix deps.get >/dev/null) || { echo "check-main: mix deps.get failed"; exit 1; }
 log="$(mktemp -t tlon-main-check-XXXXXX)"
 mise run check >"$log" 2>&1

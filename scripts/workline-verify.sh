@@ -72,6 +72,20 @@ if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
   exit 1
 fi
 mise trust -q "$fresh" >/dev/null 2>&1
+# Hex reads hex.config at every mix boot and rewrites it in place (File.write!: truncate, then write)
+# when a fetch refreshes the hex.pm token, so a gate booting mix while any other mix on the machine
+# rewrites the shared ~/.hex reads an empty or half-written config: it runs without its repos, or
+# dies in Hex.start. The gate boots on a Hex home of its own, seeded with the user's config (repo
+# keys, tokens) and registry cache; the package tarballs stay behind (128M, and /tmp has no
+# reflinks) — a dep the copied deps/ lacks is fetched again.
+seed_hex_home() { # src dest
+  mkdir -p "$2"
+  local f
+  for f in hex.config cache.ets; do [ -f "$1/$f" ] && cp "$1/$f" "$2/$f"; done
+  return 0
+}
+seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$fresh/.hex"
+clean+=(HEX_HOME="$fresh/.hex")
 # each mix project in the tree (tlon's under server/, menard's at its root): the lead's fetched dep
 # sources, copy-on-write, to save the download — never its _build: compiled against the branch's
 # old base, it fails the gate on lock mismatches main has moved past — then what main's lock pins now
