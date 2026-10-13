@@ -169,9 +169,14 @@ export class WideRoom extends Sim<Layout> {
     const bed = this.dogBed()
     this.dog = { x: bed.x, y: bed.y, aisle: bed.aisle, path: [], mode: "sleep", until: 200, face: -1, woof: 0, host: null, creep: false, said: null, saidFrom: 0, saidUntil: 0, belly: 0, fuss: null }
   }
+  /** over your chair: where the book waits when its thread has no whiteboard card (its study is talk with you, not work) */
+  private yourDesk(a: Agents): Pt | null {
+    const d = this.plan.layout(a).desks.find((x) => x.kind === "boss")
+    return d ? { x: d.x + d.w / 2 - 6, y: d.y - 12 } : null
+  }
   /** Uqbar's volume one tick toward where it wants to be; true while it is in the air */
   private stepVolume(a: Agents): boolean {
-    this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.boardEdge, spineHome(corner(this.z).shelf)))
+    this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.yourDesk(a) ?? this.boardEdge, spineHome(corner(this.z).shelf)))
     const c = this.cat
     if (c.mode !== "sleep" && c.mode !== "zoom" && !c.errand && this.tick >= this.swatQuiet && swatted(this.book, this.book.flying, c)) {
       c.mode = "play"; c.path = []; c.until = this.tick + 60
