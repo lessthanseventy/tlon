@@ -3,6 +3,8 @@ defmodule Server.WorklineLandingTest do
   # the PR is MERGED; only then is its thread closed, its ticket done and the issues it fixed resolved.
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   alias Server.Jobs.KeepUp
   alias Server.Repo
   alias Server.Thread
@@ -31,20 +33,22 @@ defmodule Server.WorklineLandingTest do
   end
 
   # gh as GitHub would answer it: the PR opened at @url, and `gh pr view` saying `state`
-  defp gh(state) do
+  defp gh(state, over \\ %{}) do
     fn cmd, args, _opts ->
       send(self(), {:ran, [cmd | args]})
+      pr = Map.merge(%{"state" => state, "mergeStateStatus" => "CLEAN", "statusCheckRollup" => []}, over)
 
       case {cmd, args} do
         {"gh", ["pr", "create" | _]} -> {@url <> "\n", 0}
-        {"gh", ["pr", "view" | _]} -> {Jason.encode!(%{"state" => state, "mergeStateStatus" => "CLEAN"}), 0}
+        {"gh", ["pr", "merge" | _]} -> Map.get(over, :merge, {"", 0})
+        {"gh", ["pr", "view" | _]} -> {Jason.encode!(Map.drop(pr, [:merge])), 0}
         _ -> {"", 0}
       end
     end
   end
 
   # a workline at review with a ticket that owns an open issue, landed by the merge queue and published
-  defp published! do
+  defp published!(run \\ gh("OPEN")) do
     {:ok, ws} = Server.Workspaces.register(%{name: "Lit"})
     {:ok, thread} = Workline.open(%{title: "lamp", slug: "lamp", stage: "review", workspace_id: ws.id})
     {:ok, ticket} = Server.Tickets.file(%{workspace_id: thread.workspace_id, title: "lamp"})
@@ -56,7 +60,7 @@ defmodule Server.WorklineLandingTest do
     {:ok, queued} = parked |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
 
     {:ok, landed} =
-      Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
+      Workline.land_queued(queued, merge: Merges, gate: fn _, _ -> {:ok, :green} end, run: run)
 
     %{thread: landed, ticket: ticket, issue: issue}
   end
@@ -153,6 +157,99 @@ defmodule Server.WorklineLandingTest do
 
     KeepUp.landings(gh("MERGED"))
     assert %Thread{stage: "merged", state: "closed"} = Repo.get!(Thread, t.id)
+  end
+
+  describe "a landing GitHub isn't merging is a pr_blocked Need, with its answers" do
+    defp blocked do
+      Enum.filter(Server.Office.Needs.list(), &(&1.kind == "pr_blocked"))
+    end
+
+    defp answers(need), do: [need] |> Server.Alerts.build([], DateTime.utc_now()) |> hd() |> Map.fetch!(:actions)
+
+    test "published and waiting, inside the hour: not a Need" do
+      published!()
+
+      KeepUp.landings(
+        gh("OPEN", %{"mergeStateStatus" => "BLOCKED", "statusCheckRollup" => [%{"status" => "IN_PROGRESS"}]})
+      )
+
+      assert blocked() == []
+    end
+
+    test "auto-merge refused" do
+      %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed for this repository", 1}}))
+
+      assert [%{thread_id: tid, level: "blocking", text: text, url: @url} = need] = blocked()
+      assert tid == t.id and text =~ "auto-merge is not allowed"
+      assert [_ | _] = answers(need)
+    end
+
+    test "republished with auto-merge refused: published, so pr_blocked and no longer publish_failed" do
+      t = publish_failed!()
+
+      assert {:auto_refused, @url, _} = Workline.republish(t, gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+
+      assert publish_failed(t) == []
+      assert [%{thread_id: tid, url: @url}] = blocked()
+      assert tid == t.id
+    end
+
+    test "GitHub reports it BLOCKED with nothing left running" do
+      %{thread: t} = published!()
+
+      KeepUp.landings(gh("OPEN", %{"mergeStateStatus" => "BLOCKED"}))
+      KeepUp.landings(gh("OPEN", %{"mergeStateStatus" => "BLOCKED"}))
+
+      assert [%{thread_id: tid, text: text} = need] = blocked()
+      assert tid == t.id and text =~ "BLOCKED"
+      assert [_ | _] = answers(need)
+    end
+
+    test "pending past an hour" do
+      %{thread: t} = published!()
+      hour_ago = DateTime.utc_now() |> DateTime.add(-3700) |> DateTime.truncate(:second)
+      Repo.update_all(from(e in Server.Event, where: e.thread_id == ^t.id), set: [created_at: hour_ago])
+
+      assert [%{thread_id: tid, text: text} = need] = blocked()
+      assert tid == t.id and text =~ "hour"
+      assert [_ | _] = answers(need)
+    end
+
+    test "its answers: rebase it, close and reland it, show me the PR" do
+      %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+      [need] = blocked()
+
+      assert [
+               %{label: "Rebase", method: "POST", path: rebase},
+               %{label: "Close and reland", method: "POST", path: reland},
+               %{label: "Show me", open: @url}
+             ] = answers(need)
+
+      assert rebase == "/api/threads/#{t.id}/rebase" and reland == "/api/threads/#{t.id}/reland"
+    end
+
+    test "rebase: GitHub rebases it and auto-merge is armed; the Need goes until the clock or GitHub says otherwise" do
+      %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+
+      assert {:ok, _} = Workline.rebase_landing(Repo.get!(Thread, t.id), gh("OPEN"))
+      assert_received {:ran, ["gh", "pr", "update-branch", @url, "--rebase"]}
+      assert blocked() == []
+    end
+
+    test "close and reland: its PR closed, the workline back at build on its branch" do
+      %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+
+      assert {:error, {:bounced, _}} = Workline.reland_landing(Repo.get!(Thread, t.id), gh("OPEN"))
+      assert_received {:ran, ["gh", "pr", "close", @url | _]}
+      assert %Thread{stage: "build", state: "open"} = Repo.get!(Thread, t.id)
+      assert blocked() == []
+    end
+
+    test "a thread not waiting on GitHub has nothing to rebase or reland" do
+      {:ok, t} = Workline.open(%{title: "x", slug: "x", stage: "build"})
+      assert {:error, :not_landing} = Workline.rebase_landing(t, gh("OPEN"))
+      assert {:error, :not_landing} = Workline.reland_landing(t, gh("OPEN"))
+    end
   end
 
   describe "one answer to \"is it landing?\": waiting on GitHub, which the office's card reads" do

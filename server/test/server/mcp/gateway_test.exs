@@ -255,6 +255,14 @@ defmodule Server.MCP.GatewayTest do
     assert Server.Repo.get!(Server.Thread, t.id).state == "open"
   end
 
+  test "POST /api/threads/:id/rebase and /reland answer a landing waiting on GitHub; any other thread is a 409", %{
+    thread: t
+  } do
+    assert {409, %{"error" => error}} = post_json("/api/threads/#{t.id}/rebase", %{})
+    assert error =~ "no PR waiting on GitHub"
+    assert {409, _} = post_json("/api/threads/#{t.id}/reland", %{})
+  end
+
   test "GET /api/threads/:id/terminal is where the coworker runs, 404 when nothing does" do
     {:ok, ws} = Server.Workspaces.register(%{name: "tmuxed", type: "code", scope: "project", repos: [], roster: []})
     {:ok, t} = Channel.open_thread(%{title: "where am i", workspace_id: ws.id})

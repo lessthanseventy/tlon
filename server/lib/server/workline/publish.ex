@@ -7,7 +7,10 @@ defmodule Server.Workline.Publish do
   its link on the thread). A repo with no `origin` is `:none` — nothing to publish to.
   """
 
-  @doc "Publish `work/<slug>` from `repo`. `{:ok, pr_url}` | `:none` | `{:error, why}`."
+  @doc """
+  Publish `work/<slug>` from `repo`. `{:ok, pr_url}` | `{:auto_refused, pr_url, why}` (the PR is open
+  but GitHub refused to auto-merge it) | `:none` | `{:error, why}`.
+  """
   def publish(repo, slug, title, run \\ &System.cmd/3) do
     branch = "work/#{slug}"
     opts = [cd: repo, stderr_to_stdout: true]
@@ -22,8 +25,11 @@ defmodule Server.Workline.Publish do
               opts
             )} do
       url = out |> String.split("\n", trim: true) |> List.last() |> String.trim()
-      _ = run.("gh", ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"], opts)
-      {:ok, url}
+
+      case run.("gh", ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"], opts) do
+        {_, 0} -> {:ok, url}
+        {out, _} -> {:auto_refused, url, String.slice(String.trim(out), 0, 200)}
+      end
     else
       {:push, {out, _}} -> {:error, "push of #{branch} refused: #{String.slice(out, 0, 200)}"}
       {:pr, {out, _}} -> {:error, "PR for #{branch} not opened: #{String.slice(out, 0, 200)}"}
@@ -51,11 +57,14 @@ defmodule Server.Workline.Publish do
   end
 
   @doc """
-  PR `url` as GitHub has it now: `{:ok, %{"state" => "OPEN" | "MERGED" | "CLOSED", "mergeStateStatus" => …}}`,
-  or `{:error, why}` when gh can't be read.
+  PR `url` as GitHub has it now: `{:ok, %{"state" => "OPEN" | "MERGED" | "CLOSED", "mergeStateStatus",
+  "statusCheckRollup"}}`, or `{:error, why}` when gh can't be read.
   """
   def view(repo, url, run \\ &System.cmd/3) do
-    case run.("gh", ["pr", "view", url, "--json", "state,mergeStateStatus"], cd: repo, stderr_to_stdout: true) do
+    case run.("gh", ["pr", "view", url, "--json", "state,mergeStateStatus,statusCheckRollup"],
+           cd: repo,
+           stderr_to_stdout: true
+         ) do
       {out, 0} ->
         case Jason.decode(out) do
           {:ok, %{} = pr} -> {:ok, pr}
@@ -119,6 +128,29 @@ defmodule Server.Workline.Publish do
       for %{"number" => n, "headRefName" => "work/" <> slug} = pr <- prs,
           Enum.any?(pr["statusCheckRollup"] || [], &red?/1),
           do: %{number: n, slug: slug}
+    end
+  end
+
+  @doc "Whether any of a PR's checks (`statusCheckRollup`, as `view/3` reads it) is still running."
+  def checks_running?(pr), do: Enum.any?(pr["statusCheckRollup"] || [], &running?/1)
+
+  defp running?(%{"status" => s}) when is_binary(s), do: s != "COMPLETED"
+  defp running?(%{"state" => s}), do: s in ["PENDING", "EXPECTED"]
+  defp running?(_), do: false
+
+  @doc """
+  Ask GitHub to rebase PR `url` onto main (`gh pr update-branch --rebase`, which runs its checks
+  again) and arm its auto-merge again. `:ok` | `{:error, why}`.
+  """
+  def rebase(repo, url, run \\ &System.cmd/3) do
+    opts = [cd: repo, stderr_to_stdout: true]
+
+    with {:update, {_, 0}} <- {:update, run.("gh", ["pr", "update-branch", url, "--rebase"], opts)},
+         {:auto, {_, 0}} <- {:auto, run.("gh", ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"], opts)} do
+      :ok
+    else
+      {:update, {out, _}} -> {:error, "rebase refused: " <> String.slice(String.trim(out), 0, 200)}
+      {:auto, {out, _}} -> {:error, "auto-merge refused: " <> String.slice(String.trim(out), 0, 200)}
     end
   end
 

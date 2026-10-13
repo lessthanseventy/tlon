@@ -16,7 +16,11 @@ defmodule Server.Office.Needs do
       Put away, it stays away until the workline moves; under pencils down or lights out nothing
       stalls, the operator stopped it), `publish_failed` (a workline merged here whose newest publish
       to GitHub — recorded under `Server.Workline.publish_correlation/1` — failed: republish it, or open its PR by
-      hand with the command its text names and give its url (`Server.Workline.published_by_hand/2`); `ref` the thread);
+      hand with the command its text names and give its url (`Server.Workline.published_by_hand/2`); `ref`
+      the thread), `pr_blocked` (a landed workline whose PR GitHub isn't merging:
+      auto-merge refused, closed unmerged, `BLOCKED` with no check running, or no merge an hour after it
+      was published or rebased — `Server.Workline.waiting_on_github/0`; `url` the PR; answered by
+      rebase, close and reland, or a look at the PR);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -272,6 +276,21 @@ defmodule Server.Office.Needs do
     )
   end
 
+  # a landing GitHub isn't merging: told so, or an hour gone without a merge
+  defp pr_blocked do
+    cutoff = DateTime.add(DateTime.utc_now(), -@landing_grace_s, :second)
+
+    for %{thread: t, url: url, event: e} <- Server.Workline.waiting_on_github(),
+        e.kind == "check_failed" or DateTime.before?(e.created_at, cutoff) do
+      text =
+        if e.kind == "check_failed",
+          do: "#{e.detail["tail"]} — #{url}",
+          else: "GitHub hasn't merged #{url} in over an hour: its checks still pending, or nothing will merge it"
+
+      item("pr_blocked", "blocking", t, text, e.created_at, %{url: url})
+    end
+  end
+
   # an @operator nobody has answered: the newest such message per open thread, with no operator
   # message after it
   defp mentions(open, operator) do
@@ -438,7 +457,7 @@ defmodule Server.Office.Needs do
     open = Repo.all(from t in Thread, where: t.state == "open")
     prompts = Server.Attention.open_prompts_by_thread()
 
-    blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open) ++ unpublished()
+    blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open) ++ unpublished() ++ pr_blocked()
     blocking = blocking ++ stalled(open, MapSet.new(blocking, & &1.thread_id))
 
     decide =
