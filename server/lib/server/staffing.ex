@@ -33,6 +33,7 @@ defmodule Server.Staffing do
   alias Server.Message
   alias Server.OperatorConfig
   alias Server.Presence
+  alias Server.Presence.Thinking
   alias Server.Repo
   alias Server.Schedule
   alias Server.ScheduleRun
@@ -46,9 +47,6 @@ defmodule Server.Staffing do
 
   # a window this young is still booting — its coworker may not have registered a session yet
   @boot_grace_s 600
-  # a mid-turn mark older than this is a turn nothing will end (a restart cut the connection
-  # before its idle reached the server); turns here run tens of minutes, never hours
-  @stale_turn_s 3 * 3600
 
   @doc "The pass over every workspace."
   def pass do
@@ -443,10 +441,7 @@ defmodule Server.Staffing do
   def pane_author(_tab), do: nil
 
   defp live_turn?(nil), do: false
-  defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < @stale_turn_s
-
-  @doc "How old a mid-turn mark may be before it is a turn nothing will end, in seconds."
-  def stale_turn_s, do: @stale_turn_s
+  defp live_turn?(since), do: DateTime.diff(DateTime.utc_now(), since) < Thinking.stale_turn_seconds()
 
   @doc "Whether the thread's latest message is the leaf cap's parked note: it waits for a seat."
   def parked_note?(thread_id) do
@@ -555,7 +550,10 @@ defmodule Server.Staffing do
       )
 
     if sessions != [] and
-         Enum.all?(sessions, &(is_nil(&1.thinking_since) and DateTime.before?(&1.last_active_at || quiet, quiet))),
+         Enum.all?(
+           sessions,
+           &(not live_turn?(&1.thinking_since) and DateTime.before?(&1.last_active_at || quiet, quiet))
+         ),
        do: sessions
   end
 end

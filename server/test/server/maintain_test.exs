@@ -6,6 +6,8 @@ defmodule Server.MaintainTest do
   use ExUnit.Case, async: false
   use Oban.Testing, repo: Server.Repo
 
+  import Ecto.Query
+
   alias Server.Jobs.Maintain
   alias Server.Message
   alias Server.Repo
@@ -197,6 +199,26 @@ defmodule Server.MaintainTest do
     {:ok, w} = Workline.open(%{title: "quiet", slug: "quiet-#{System.unique_integer([:positive])}", stage: "plan"})
     sweep(%{quiet_ms: 0})
     assert Enum.any?(Repo.all(Message), &(&1.thread_id == w.id and &1.body =~ "↻ continue"))
+  end
+
+  test "the quiet band is the operator's quiet_workline_minutes knob" do
+    path = Path.join(System.tmp_dir!(), "maintain-quiet-#{System.unique_integer([:positive])}.json")
+    prior = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+    on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)
+
+    {:ok, w} = Workline.open(%{title: "quiet", slug: "quiet-#{System.unique_integer([:positive])}", stage: "plan"})
+    two_hours_ago = DateTime.utc_now() |> DateTime.add(-7_200, :second) |> DateTime.truncate(:second)
+    Repo.update_all(from(m in Message, where: m.thread_id == ^w.id), set: [created_at: two_hours_ago])
+    nudged? = fn -> Enum.any?(Repo.all(Message), &(&1.thread_id == w.id and &1.body =~ "↻ continue")) end
+
+    File.write!(path, ~s({"quiet_workline_minutes": 180}))
+    sweep()
+    refute nudged?.()
+
+    File.write!(path, ~s({"quiet_workline_minutes": 60}))
+    sweep()
+    assert nudged?.()
   end
 
   describe "the board says what is true" do

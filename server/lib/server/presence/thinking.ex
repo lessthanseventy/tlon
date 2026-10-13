@@ -7,7 +7,7 @@ defmodule Server.Presence.Thinking do
   harnesses re-declare on their next turn.
 
   Entries are `{thread_id, agent} => started_at`. A periodic sweep clears entries
-  older than `:thinking_max_seconds` (default 600s) and announces them idle —
+  older than the stale-turn clock (`stale_turn_seconds/0`) and announces them idle —
   the stuck-harness guard: a crashed harness that never sent `idle` must not read
   as thinking forever. Every transition broadcasts on `server:presence` and the
   thread topic (`Server.Bus`), and marks the agent's session (`Staff.mark_thinking/3`): the
@@ -27,7 +27,7 @@ defmodule Server.Presence.Thinking do
   alias Server.Memory.TurnPass
   alias Server.Workline.Continuation
 
-  @default_max_seconds 600
+  @default_stale_turn_seconds 600
   @sweep_interval_ms 60_000
   @activity_cap 100
   @default_turn_gap_seconds 30
@@ -80,12 +80,21 @@ defmodule Server.Presence.Thinking do
   @doc "Everyone thinking, keyed by thread id — a surface's reconcile-on-connect read."
   def thinking_all(store \\ __MODULE__), do: GenServer.call(store, :thinking_all)
 
+  @doc """
+  The stale-turn clock, in seconds: a mid-turn mark (in memory here, or the session row's
+  `thinking_since`) older than this is a turn nothing will end — its harness crashed, or a restart
+  cut it off before its idle arrived. Measured from the turn's last declare, not its last tool
+  call. `config :server, :stale_turn_seconds`, default #{@default_stale_turn_seconds}; read on
+  every use. This sweep, `Server.Staffing` and `Server.Office.Needs` all read it here.
+  """
+  def stale_turn_seconds, do: Application.get_env(:server, :stale_turn_seconds, @default_stale_turn_seconds)
+
   @doc "Run the stuck-harness sweep now (the timer calls this on its own interval)."
   def sweep(store \\ __MODULE__), do: GenServer.call(store, :sweep)
 
   @impl true
   def init(opts) do
-    max = Keyword.get(opts, :max_seconds, Application.get_env(:server, :thinking_max_seconds, @default_max_seconds))
+    max = Keyword.get(opts, :max_seconds)
     interval = Keyword.get(opts, :sweep_interval_ms, @sweep_interval_ms)
     gap = Keyword.get(opts, :turn_gap_seconds, @default_turn_gap_seconds)
     Process.send_after(self(), :sweep, interval)
@@ -162,9 +171,10 @@ defmodule Server.Presence.Thinking do
 
   defp do_sweep(state) do
     cutoff = now()
+    max = state.max_seconds || stale_turn_seconds()
 
     state.entries
-    |> Enum.filter(fn {_key, started_at} -> DateTime.diff(cutoff, started_at, :second) >= state.max_seconds end)
+    |> Enum.filter(fn {_key, started_at} -> DateTime.diff(cutoff, started_at, :second) >= max end)
     |> Enum.reduce(state, fn {{thread_id, agent}, _at}, acc -> clear(acc, thread_id, agent) end)
   end
 

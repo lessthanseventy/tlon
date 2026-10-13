@@ -70,6 +70,9 @@ defmodule Server.StaffingTest do
 
   test "a cold coworker's window closes; a warm one, a mid-turn one and one still booting stay",
        %{ws: ws, standing: standing, sock: sock, session: session} do
+    # borges's mark is older than the warm window but inside the stale-turn clock: mid-turn keeps him
+    Application.put_env(:server, :stale_turn_seconds, 3 * 3600)
+    on_exit(fn -> Application.delete_env(:server, :stale_turn_seconds) end)
     thread = staffed_thread(ws, "borges")
     session!("hronir", standing.id, 60)
     session!("borges", thread.id, 7_200, true)
@@ -109,6 +112,44 @@ defmodule Server.StaffingTest do
     assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^refreshed]}
     assert Server.Repo.get!(Server.Session, long.id).ended_at
     for i <- 1..2, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
+  end
+
+  test "a mid-turn mark keeps a cold window only while it is younger than the shared stale-turn setting",
+       %{ws: ws, sock: sock, session: session} do
+    on_exit(fn -> Application.delete_env(:server, :stale_turn_seconds) end)
+    thread = staffed_thread(ws, "borges")
+    # marked mid-turn two hours ago, and not warm since
+    session!("borges", thread.id, 7_200, true)
+    tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t1\tborges\t#{old()}\n")
+    leaf = "#{session}:0"
+
+    Application.put_env(:server, :stale_turn_seconds, 3 * 3600)
+    assert :ok = Staffing.pass(ws.id)
+    refute_received {:tmux, ["-L", _, "kill-window", "-t", ^leaf]}
+
+    Application.put_env(:server, :stale_turn_seconds, 600)
+    assert :ok = Staffing.pass(ws.id)
+    assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^leaf]}
+  end
+
+  test "a mid-turn mark holds off a long window's refresh only while it is younger than the stale-turn setting",
+       %{ws: ws, standing: standing, sock: sock, session: session} do
+    on_exit(fn -> Application.delete_env(:server, :stale_turn_seconds) end)
+    thread = staffed_thread(ws, "borges")
+    session!("rufus", standing.id, 120)
+    # borges: marked mid-turn 20 minutes ago, on a window older than max_session_hours
+    session!("borges", thread.id, 1_200, true)
+    four_hours = System.os_time(:second) - 4 * 3600
+    tmux("0\trufus\t\t\t1\trufus\t#{old()}\n1\tt#{thread.id}\t#{thread.id}\tdone\t2\tborges\t#{four_hours}\n")
+    leaf = "#{session}:1"
+
+    Application.put_env(:server, :stale_turn_seconds, 3600)
+    assert :ok = Staffing.pass(ws.id)
+    refute_received {:tmux, ["-L", _, "kill-window", "-t", ^leaf]}
+
+    Application.put_env(:server, :stale_turn_seconds, 600)
+    assert :ok = Staffing.pass(ws.id)
+    assert_receive {:tmux, ["-L", ^sock, "kill-window", "-t", ^leaf]}
   end
 
   test "an idle session whose window is gone is ended; one whose window still runs stays", %{ws: ws} do

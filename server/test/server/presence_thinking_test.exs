@@ -193,4 +193,18 @@ defmodule Server.Presence.ThinkingTest do
 
     assert [%{agent: "hronir"}] = Thinking.thinking_for(store, 7)
   end
+
+  test "with no max given, the sweep reads the shared stale-turn setting each time it runs" do
+    store = start_store([])
+    on_exit(fn -> Application.delete_env(:server, :stale_turn_seconds) end)
+
+    Application.put_env(:server, :stale_turn_seconds, 3600)
+    Thinking.thinking(store, 7, "hronir")
+    Thinking.sweep(store)
+    assert [%{agent: "hronir"}] = Thinking.thinking_for(store, 7)
+
+    Application.put_env(:server, :stale_turn_seconds, 0)
+    Thinking.sweep(store)
+    assert Thinking.thinking_for(store, 7) == []
+  end
 end
