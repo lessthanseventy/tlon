@@ -242,26 +242,28 @@ defmodule Server.Board do
   The machine META-view: every OPEN machine-scope thread (root + leaves) as a COMPACT brief — the
   cross-thread read the Orbis Tertius meta agent synthesizes from (design:
   `docs/plans/2026-08-19-orbis-tertius-meta-thread-design.md`). Each thread is trimmed to the synthesis
-  essentials — lead, NEXT step, open BLOCKERS, and the message tail — drawn from the SAME `brief/1`
-  aggregate a single thread's dossier reads (one read model, not a second truth). Root-first (oldest
+  essentials — lead, NEXT step, open BLOCKERS, and the message tail — read through the same Dossier and
+  Channel queries `brief/1` uses, but never recall: an embed per thread starved the MCP session's one
+  in-flight call slot. Root-first (oldest
   id). Machine-scope only, by construction: `Channel.open_machine_threads/0` never returns project
   work, so this can't become a cross-scope peephole.
   """
   def machine_overview do
     Enum.map(Channel.open_machine_threads(), fn thread ->
-      s = brief(thread)
+      todos = Dossier.open_todos_for_thread(thread)
+      blockers = Dossier.open_issues_for_thread(thread)
 
       %{
         thread_id: thread.id,
         title: thread.title,
-        lead: s.lead,
+        lead: lead_name(thread),
         # TRACKED leaves are in this set — carry the signal that says so,
         # or the meta agent sees the thread but not that it's staged/parked on a gate.
         stage: thread.stage,
         awaiting: thread.awaiting,
-        next: s.next && s.next.text,
-        blockers: Enum.map(s.blockers.shown, & &1.summary),
-        recent: Enum.map(s.recent, &%{author: &1.author, body: &1.body})
+        next: List.first(todos.shown) && List.first(todos.shown).text,
+        blockers: Enum.map(blockers.shown, & &1.summary),
+        recent: Enum.map(Channel.recent_messages(thread, @cap), &%{author: &1.author, body: &1.body})
       }
     end)
   end
