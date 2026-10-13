@@ -1,17 +1,17 @@
-# Review — souls step 2 (work/souls-step-2-first-drafts-from-their-bor @ fda7b65, rebased onto origin/main)
+# Review — souls step 2 (work/souls-step-2-first-drafts-from-their-bor @ 1e61ebd)
 
 **Verdict: approve.**
 
-## Round 3 — a rebase, no code change
+## Round 4 — a re-run of the pipeline, no code change
 
-The merge queue sent this back because the rebase onto origin/main collided with untracked `server/tmp/` scratch files; emma cleared the dir and replayed. `git range-diff 9b54a6c..9909127 origin/main..HEAD` shows all 11 commits `=` (byte-identical patches), so the code is exactly what round 2 (lonnrot) and tzinacan's round approved and treviranus's QA passed on 9909127. `git diff --stat origin/main...HEAD` outside `work/` is the same 8 files, +299/-5. `git ls-files server/tmp` → 0. Working tree clean.
+This round exists because the merge queue lost the landing (untracked `server/tmp/` collided with the rebase); ireneo advanced build with pr.md already on the branch, the server's verify passed, and it came back to review.
 
-Verified this round:
-- `menard run test --in server test/server/soul_test.exs` → `{"ok":true,"tests":7,"failed":0}` (run unsandboxed; the sandbox refuses the Postgres socket).
-- The server's verify check on the rebased branch: `mise run check` exit 0 (14:27 UTC).
-- Re-read soul.ex in full: exclusive create (`File.exists?` + `[:exclusive]`, `:eexist` → `{:ok, :exists}`), name guard before `Path.join`, Diary stripped from model output, fallback on any missing heading. Unchanged.
+- `git diff 1e61ebd..HEAD -- . ':!work/…'` is empty: not one line of code differs from what round 3 (lonnrot), tzinacan's round and treviranus's QA (9909127) approved.
+- The server's verify on this branch: `mise run check` exit 0 (16:06 UTC, recorded against this workline's verify).
+- `git ls-files server/tmp` → 0; working tree clean.
+- origin/main has moved 26 commits past the branch base (8a6a168 → 883e290), including its own `server/tmp/` gitignore (aed53c8). `git merge-tree --write-tree origin/main HEAD` merges clean: the branch's `.gitignore` hunk is byte-identical to main's, so the landing rebase should not conflict this time.
 
-QA (treviranus, 9909127, scratch node with a repointed souls dir): hall hire seats; `Soul.draft` → `:written`; redraft after an edit → `:exists`, edit intact; hire steps for a second seat → `:written`. That closes my earlier "QA by hand" follow-up.
+Round 3's reading of soul.ex stands (exclusive create, `:eexist` → `{:ok, :exists}`, name guard before `Path.join`, Diary stripped from model output, fallback on a missing heading).
 
 ## Non-blocking (follow-ups, held until merge)
 
