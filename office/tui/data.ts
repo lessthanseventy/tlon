@@ -113,7 +113,7 @@ export const dismissRollout = (id: number) => send("DELETE", "clearing the note"
 export const dismissNeed = (key: string) => write("putting it away", "/office/needs/dismiss", { key }, () => "put away")
 /** a stranded checkout taken down, its branch kept */
 export const retireStranded = (key: string) => write("taking the checkout down", "/office/needs/retire", { key }, () => "checkout removed; branch kept")
-export const resolveIssue = (id: number) => write("resolving the issue", `/issues/${id}/resolve`, {}, () => "resolved")
+export const resolveIssue = (id: number, resolution: string) => write("resolving the issue", `/issues/${id}/resolve`, { resolution }, () => "resolved")
 /** Uqbar's margin notes in a workspace, newest first (empty when there are none or the server is down) */
 export async function margin(ws: number): Promise<Note[]> {
   try { const r = await call("GET", `/office/margin/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }

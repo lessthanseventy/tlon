@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 
 // a stand-in server: GET /office answers the snapshot, `revs` and `flags` included
 const lifeBody = { xp: 650, level: 2, next_level_at: 900, streaks: { "1": 3 }, due: [{ routine_id: 1, title: "teeth", due_at: "2026-10-08T07:00:00Z", window_remaining: 600 }], quests: [{ id: 5, title: "book dentist", due_at: null, xp: 20 }], today: [] }
+let resolved: unknown = null
 const server = Bun.serve({
   port: 0,
   fetch: (req) => {
@@ -11,6 +12,7 @@ const server = Bun.serve({
     if (req.method === "GET" && path.endsWith("/office/margin/1")) return Response.json([{ id: 1, author: "uqbar", body: "cut 650fa4a", at: 5 }])
     if (req.method === "GET" && path.endsWith("/office/margin/2")) return new Response("boom", { status: 500 })
     if (req.method === "POST" && path.endsWith("/life/routines/1/done")) return Response.json({ run: {}, level_up: true })
+    if (req.method === "POST" && path.endsWith("/issues/31/resolve")) return req.json().then((b) => { resolved = b; return Response.json({ resolved: 31 }) })
     return new Response("no", { status: 404 })
   },
 })
@@ -61,4 +63,11 @@ test("margin reads Uqbar's notes; a 500 and a dead server are an empty margin", 
   expect(await data.margin(2)).toEqual([])
   process.env.TLON_URL = "http://127.0.0.1:1/api"
   expect(await data.margin(1)).toEqual([])
+})
+
+test("resolving an issue sends why, so a resolution naming a PR banks the sheriff's postmortem", async () => {
+  process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
+  const data = await import("../tui/data")
+  await data.resolveIssue(31, "server/tmp/ gitignored in #327")
+  expect(resolved).toEqual({ resolution: "server/tmp/ gitignored in #327" })
 })
