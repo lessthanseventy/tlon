@@ -100,9 +100,7 @@ export const spotKey = (s: Spot) => `${s.kind}:${s.x}:${s.y}`
 const VISIT_MS = 60_000, NOTE_MS = 45_000
 /** ticks a finished worker stretches at the desk before leaving it */
 export const STRETCH = 20
-/** ticks the channel stays down before the closet catches fire (a restart blip stays quiet) */
-export const FIRE_GRACE = 100
-/** ticks an alarm (a fire, a keyed drill) has the crew running about the room before they file out to the muster */
+/** ticks a keyed drill has the crew running about the room before they file out to the muster */
 export const PANIC = 300
 /** a keyed drill's length in ticks: the panic, then the muster, then back to work */
 export const DRILL = 600
@@ -161,14 +159,10 @@ export class Sim<L extends { people: Seat[] }> {
   private pizzaUntil = 0
   private nudgeUntil = 0
   private date: () => Date = () => new Date()
-  private downSince = -1
-  protected fire = false
-  /** the channel has been down long enough that the server closet burns */
-  get onFire() { return this.fire }
   private drillUntil = -1
   private alarmSince = -1
-  /** a fire or a keyed drill: the rack burns and the crew panics, then musters */
-  get alarmed() { return this.fire || this.tick < this.drillUntil }
+  /** a keyed drill (the play key, never an outage): the rack burns and the crew panics, then musters */
+  get alarmed() { return this.tick < this.drillUntil }
   /** the first `PANIC` ticks of an alarm, while they run about screaming */
   protected get panicking() { return this.alarmSince >= 0 && this.tick - this.alarmSince < PANIC }
   private lastGood: Agents | null = null
@@ -604,18 +598,10 @@ export class Sim<L extends { people: Seat[] }> {
    * only then.
    */
   step(a: Agents): boolean {
-    const ok = a.ok
     // the channel down (a server restart) is a pause: the room carries on from the last good look
     if (a.ok) this.lastGood = a
     a = this.held(a)
     this.tick++
-    if (ok) {
-      if (this.fire) this.changed = true
-      this.downSince = -1; this.fire = false
-    } else {
-      if (this.downSince < 0) this.downSince = this.tick
-      if (this.seeded && !this.fire && this.tick - this.downSince >= FIRE_GRACE) { this.fire = true; this.changed = true }
-    }
     const alarmed = this.alarmed
     if (!alarmed) this.alarmSince = -1
     else if (this.alarmSince < 0) { this.alarmSince = this.tick; this.catDo("zoomies") }

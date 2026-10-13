@@ -46,6 +46,7 @@ import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input,
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
+import { downHeader } from "./down"
 import { earmarkOf, freshPosts, handoffFrom } from "../kit/plane"
 import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
@@ -304,7 +305,10 @@ function goWs(id: number) { choose(id); back(true); frame = null; void refresh()
 // ── staying current ───────────────────────────────────────────────────────────────────────────
 // the last poll that answered: a restart's gap polls (ok:false) must not hide what changed across it
 let lastOk: Agents = EMPTY, lastOkNeeds: data.Need[] = []
-async function refresh() {
+// one refresh in flight: a slow server answers the one already out, it doesn't stack another behind it
+let refreshing: Promise<void> | null = null
+const refresh = () => (refreshing ??= refreshOnce().finally(() => { refreshing = null }))
+async function refreshOnce() {
   // the snapshot lands, and shows, as soon as it comes: the inbox read beside it takes seconds (a git
   // check per stray worktree), and a finder opened meanwhile would list nothing
   const rest = Promise.all([data.needs(), data.settings()])
@@ -1571,7 +1575,7 @@ function draw() {
   // header: the workspace, and what waits elsewhere
   const blocking = needs.filter((n) => n.level === "blocking").length, deciding = needs.length - blocking
   const head: (Seg & { go?: () => void })[] = [{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
-    ...(all.ok ? [] : [{ s: `  ${all.note ?? "channel down"}`, fg: ROLE.alarm }]),
+    ...(all.ok ? [] : [{ s: `  ${downHeader(all, Date.now())}`, fg: ROLE.alarm }]),
     ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }] : []),
     ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
     ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),

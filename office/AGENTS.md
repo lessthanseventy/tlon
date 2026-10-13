@@ -16,7 +16,7 @@ linked window at a time, Ctrl-] back to the room).
   `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
   whiteboard's columns), sprites and looks (`sprites.ts`), the parts library (`parts.ts`: slots, dials, `rollLook`), the colour roles (`palette.ts`), the
   1x canvas and the **frame** a room hands a surface (`canvas.ts`; its speech balloons are 34×4 with long words hard-broken, placed by `balloon.ts` so none leaves the viewport or overlaps another), tlon's own bitmap font in two cuts (`font.ts`), the
-  office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`; a channel down draws the room from the last good snapshot (`Sim.held`: furniture and people stay, the exec desks' plates go blank); down `FIRE_GRACE` ticks in a room that has seen it up sets `Sim.fire`, and `f` (`play("drill")`) raises a `DRILL`-long one: while `Sim.alarmed`, `closet()` in `rooms/wide.ts` burns, and for the first `PANIC` ticks the crew runs about the room arms up, one scream every few seconds, Nina on the zoomies and Argos with them; then they muster at `plan.muster` with coffee and Argos barks at the smoke),
+  office's life (`sim.ts`: who walks where, Nina's day — a room supplies its geometry as a `Plan`; a channel down draws the room from the last good snapshot (`Sim.held`: furniture and people stay, the exec desks' plates go blank), dimmed — an outage is never the fire drill; `f` (`play("drill")`) raises a `DRILL`-long one: while `Sim.alarmed`, `closet()` in `rooms/wide.ts` burns, and for the first `PANIC` ticks the crew runs about the room arms up, one scream every few seconds, Nina on the zoomies and Argos with them; then they muster at `plan.muster` with coffee and Argos barks at the smoke),
   the floor's light as a function of the clock (`daylight.ts`: darkness, lamps lit, `dark`: the pets' bedtime and your pyjamas; lamps register on the `Scene` as they are drawn),
   a pet's temperament (`temperament.ts`: warmth/wits/energy, -2..2, as policy over the sim's chance tables; `pets.ts` resolves `pets.json` — `TLON_PETS`; the cat slot is a cat, rabbit or bird, polled live like `looks.json`, absent means today's room byte for byte),
   a coworker's soul (`souls.ts`: `~/.config/tlon/souls/<name>.md` — `TLON_SOULS` — parsed by `## ` headings into `sections`, forgiving; polled live by dir signature like `looks.json`; read-only on the person's card, nothing else consumes it yet, and a soul never decides work),
@@ -90,6 +90,10 @@ linked window at a time, Ctrl-] back to the room).
   port, `TLON_URL` to point elsewhere; `tui/data.ts`). Its read models are `Server.Office`, the same
   function `tlon-cli.sh shell-status` serves the desktop — a new read is a context function and a
   route first, never a query in the client. That is what lets a compiled TUI run with no checkout.
+- **A down channel is stale and honest, never empty.** `data.status()` returns the last good snapshot
+  marked `ok: false` with `heldAt`; `data.needs()` keeps the last inbox on an error. Every surface draws
+  the held data and the header says its age and `mise run server:restart` (`tui/down.ts`). One refresh
+  runs at a time, with at most one queued behind it.
 - **Every worn part is data in `kit/parts.ts`** — a new hat is a `PARTS` entry whose test is the data gate, never a branch in `figure()`; `lookOf` must not gain fields (it would restyle everyone).
 
 ## Gotchas

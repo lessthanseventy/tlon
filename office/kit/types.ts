@@ -80,6 +80,8 @@ export type Agents = {
   /** the life side per `home` workspace id (`Server.Office.status`); absent for every other workspace */
   life?: Record<string, LifeSummary>
   note?: string
+  /** with the channel down (`ok` false), when the snapshot held in its place was read, in ms; absent when nothing was ever read */
+  heldAt?: number
 }
 /** a flag from the snapshot, never from anywhere else; one it doesn't name is off */
 export const flagOn = (a: Agents, name: string): boolean => a.flags?.[name] === true

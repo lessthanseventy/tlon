@@ -27,16 +27,21 @@ async function call(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, b
   return { status: r.status, json: await r.json().catch(() => null) }
 }
 
+/** the last snapshot that answered, and when: a down channel returns it marked down, never an empty office */
+let lastGood: { a: Agents; at: number } | null = null
 export async function status(): Promise<Agents> {
   try {
     const { status, json: j } = await call("GET", "/office")
     if (status !== 200 || !j) throw new Error(`office ${status}`)
-    return {
+    const a: Agents = {
       ok: true, roster: j.roster ?? [], threads: j.threads ?? [], counts: j.counts ?? {}, awaiting: j.awaiting ?? 0,
       bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], shifts: j.shifts ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, release: j.release, flags: j.flags ?? {}, life: j.life ?? {},
     }
+    lastGood = { a, at: Date.now() }
+    return a
   } catch {
-    return { ...EMPTY, note: `channel down (${base()})` }
+    const note = `channel down (${base()})`
+    return lastGood ? { ...lastGood.a, ok: false, note, heldAt: lastGood.at } : { ...EMPTY, note }
   }
 }
 /** where a thread's coworker runs (its tmux socket, session, window), or null when it has no window */
@@ -89,9 +94,15 @@ export type Need = {
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
 }
-/** everything waiting on the operator, blocking first */
+let lastNeeds: Need[] = []
+/** everything waiting on the operator, blocking first; a server that can't answer keeps the last list, so the flag never vanishes mid-outage */
 export async function needs(): Promise<Need[]> {
-  try { const r = await call("GET", "/office/needs"); return r.status === 200 ? r.json : [] } catch { return [] }
+  try {
+    const r = await call("GET", "/office/needs")
+    if (r.status >= 500) return lastNeeds
+    lastNeeds = r.status === 200 ? r.json : []
+    return lastNeeds
+  } catch { return lastNeeds }
 }
 export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `/threads/${tid}/verify`, {}, () => `verify on #${tid} queued`)
 export const answerAsk = (id: number, key: string) => write("answering", `/office/asks/${id}`, { key }, () => "answered")
