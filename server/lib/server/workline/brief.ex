@@ -84,7 +84,9 @@ defmodule Server.Workline.Brief do
 
   defp playbook(%{stage: "build"} = t),
     do:
-      "Implement on branch work/#{t.slug}, test-first; every commit stays green. The failing tests are read-only to you."
+      "Implement on branch work/#{t.slug}, test-first; every commit stays green. The failing tests are read-only to you. " <>
+        "Last, commit #{dir(t)}/pr.md, the PR's description: a few lines on what changed and why, the ticket it closes, " <>
+        "and how you checked it (the server adds the commits, size and review verdict)."
 
   defp playbook(%{stage: "verify"}),
     do:

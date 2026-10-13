@@ -18,7 +18,7 @@ defmodule Server.Workline.Publish do
            {:pr,
             run.(
               "gh",
-              ["pr", "create", "--head", branch, "--base", "main", "--title", title, "--body", body(slug)],
+              ["pr", "create", "--head", branch, "--base", "main", "--title", title, "--body", body(repo, slug, run)],
               opts
             )} do
       url = out |> String.split("\n", trim: true) |> List.last() |> String.trim()
@@ -155,5 +155,48 @@ defmodule Server.Workline.Publish do
     end
   end
 
-  defp body(slug), do: "Workline `#{slug}`, approved at its review gate. Spec, plan and review are in `work/#{slug}/`."
+  # The PR is where a reader lands from `git log` or GitHub: the builder's own account (pr.md, or
+  # the plan's, spec's or intent's title when it wrote none), then what the server can state as fact
+  # from the branch.
+  defp body(repo, slug, run) do
+    branch = "work/#{slug}"
+
+    git = fn args ->
+      case run.("git", ["-C", repo | args], stderr_to_stdout: true) do
+        {out, 0} -> String.trim(out)
+        _ -> ""
+      end
+    end
+
+    show = fn name -> git.(["show", "#{branch}:work/#{slug}/#{name}"]) end
+    summary = with "" <- show.("pr.md"), do: Enum.find_value(~w(plan.md spec.md intent.md), "", &heading(show.(&1)))
+
+    [
+      summary,
+      section("Commits", git.(["log", "--reverse", "--format=- %s", "origin/main..#{branch}"])),
+      section("Size", git.(["diff", "--shortstat", "origin/main...#{branch}", "--", ".", ":!work/"])),
+      # every published branch was approved, and reviewers word it every which way: the line saying so
+      section("Review", first_line(show.("review.md"), &(&1 =~ ~r/\bapprove/i))),
+      "Workline `#{slug}`, approved at its review gate. Spec, plan and review are in `work/#{slug}/`."
+    ]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n\n")
+  end
+
+  defp section(_name, ""), do: ""
+  defp section(name, text), do: "**#{name}**\n#{text}"
+
+  defp heading(text) do
+    case first_line(text, & &1) do
+      "" -> nil
+      line -> line
+    end
+  end
+
+  defp first_line(text, pick) do
+    text
+    |> String.split("\n")
+    |> Enum.map(&(&1 |> String.trim_leading("#") |> String.trim()))
+    |> Enum.find("", &(&1 != "" and pick.(&1)))
+  end
 end
