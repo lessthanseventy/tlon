@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { roll, nextSeed, BORGES } from "../kit/hall"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX } from "../kit/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer", "planner"], grades: ["junior", "senior", "greybeard"], specialties: ["office", "server"] }
 const LEGAL = /^[a-z0-9][a-z0-9_-]*$/
@@ -48,5 +51,58 @@ describe("hall roll", () => {
   test("nextSeed counts hall:<n> up", () => {
     expect(nextSeed("hall:41")).toBe("hall:42")
     expect(nextSeed("junk")).toBe("hall:1")
+  })
+})
+
+describe("hall.json", () => {
+  const tmp = () => join(mkdtempSync(join(tmpdir(), "hall-")), "hall.json")
+  test("round trip keeps seed, locks, overrides and the pile", () => {
+    const p = tmp()
+    const s = { seed: "hall:5", locks: { slots: ["eyes" as const] }, overrides: { name: "borges" }, pile: [{ seed: "hall:2", overrides: {} }] }
+    saveHall(p, s)
+    expect(loadHall(p)).toEqual(s)
+  })
+  test("a missing or corrupt file is the empty hall, not a crash", () => {
+    expect(loadHall("/nonexistent/hall.json").pile).toEqual([])
+    const p = tmp()
+    writeFileSync(p, "{not json")
+    expect(loadHall(p).pile).toEqual([])
+    expect(loadHall(p).seed).toBe("hall:1")
+  })
+  test("saveHall creates the directory", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "hall-")), "a", "b", "hall.json")
+    saveHall(p, { seed: "hall:1", locks: {}, overrides: {}, pile: [] })
+    expect(loadHall(p).seed).toBe("hall:1")
+  })
+  test("hallSignature is empty when absent and changes with the file", () => {
+    const p = tmp()
+    expect(hallSignature(p)).toBe("")
+    saveHall(p, { seed: "hall:1", locks: {}, overrides: {}, pile: [] })
+    const a = hallSignature(p)
+    expect(a).not.toBe("")
+    saveHall(p, { seed: "hall:1", locks: {}, overrides: { name: "x" }, pile: [] })
+    writeFileSync(p, JSON.stringify({ seed: "hall:9", locks: {}, overrides: {}, pile: [] }) + "\n", { flag: "w" })
+    expect(hallSignature(p)).not.toBe(a)
+  })
+  test("a pile entry re-renders identically from seed + overrides", () => {
+    const c = roll("hall:2", { taken: [], locks: {}, vocab: VOCAB })
+    expect(applyOverrides(roll("hall:2", { taken: [], locks: {}, vocab: VOCAB }), {})).toEqual(c)
+  })
+  test("overrides replace fields but never the seed", () => {
+    const c = applyOverrides(roll("hall:2", { taken: [], locks: {}, vocab: VOCAB }), { name: "zed", grade: "senior", seed: "evil" } as never)
+    expect(c.name).toBe("zed")
+    expect(c.grade).toBe("senior")
+    expect(c.seed).toBe("hall:2")
+  })
+  test("the pile pushes, drops by index, and caps", () => {
+    let pile = pushPile([], { seed: "hall:1", overrides: {} })
+    pile = pushPile(pile, { seed: "hall:2", overrides: {} })
+    expect(pile.map(e => e.seed)).toEqual(["hall:1", "hall:2"])
+    expect(dropPile(pile, 0).map(e => e.seed)).toEqual(["hall:2"])
+    expect(dropPile(pile, 9)).toEqual(pile)
+    let big = pile
+    for (let i = 0; i < PILE_MAX + 5; i++) big = pushPile(big, { seed: `hall:${i + 10}`, overrides: {} })
+    expect(big.length).toBe(PILE_MAX)
+    expect(big.at(-1)!.seed).toBe(`hall:${PILE_MAX + 5 + 9}`)
   })
 })

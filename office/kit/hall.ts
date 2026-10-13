@@ -1,5 +1,8 @@
 // The hiring hall's candidate: everything on the card is a pure function of (seed, locks, taken, prev).
-// No I/O and no model here — a drawn soul/pitch is stored over the skeleton by the caller.
+// roll() does no I/O and calls no model; hall.json (below) stores only seed + edits, and a drawn soul/pitch
+// is laid over the skeleton by the caller.
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { dirname } from "node:path"
 import { hash, lookOf, rollLook, type Look } from "./sprites"
 import { SLOTS, type Slot } from "./parts"
 import { SOUL_SECTIONS } from "./souls"
@@ -55,3 +58,44 @@ export function roll(seed: string, o: { taken: readonly string[]; locks: Locks; 
   const soul = SOUL_SECTIONS.filter(h => h !== "Diary").map(h => `## ${h}\n`).join("\n")
   return { seed, name, archetype, grade, specialty, look, pitch, soul, drawn: false }
 }
+
+/** what a hand or a pass stores about a candidate: the seed plus edits, never the rendered result */
+export type Overrides = Partial<Pick<Candidate, "name" | "archetype" | "grade" | "specialty" | "soul" | "pitch" | "drawn">>
+export type PileEntry = { seed: string; overrides: Overrides }
+export type Hall = { seed: string; locks: Locks; overrides: Overrides; pile: PileEntry[] }
+
+export const PILE_MAX = 50
+const EDITABLE = ["name", "archetype", "grade", "specialty", "soul", "pitch", "drawn"] as const
+
+export const emptyHall = (): Hall => ({ seed: "hall:1", locks: {}, overrides: {}, pile: [] })
+
+export function loadHall(path: string): Hall {
+  try {
+    const j = JSON.parse(readFileSync(path, "utf8"))
+    return {
+      seed: typeof j.seed === "string" ? j.seed : "hall:1",
+      locks: j.locks && typeof j.locks === "object" ? j.locks : {},
+      overrides: j.overrides && typeof j.overrides === "object" ? j.overrides : {},
+      pile: Array.isArray(j.pile) ? j.pile.filter((e: PileEntry) => e && typeof e.seed === "string").map((e: PileEntry) => ({ seed: e.seed, overrides: e.overrides ?? {} })) : [],
+    }
+  } catch { return emptyHall() }
+}
+
+export function saveHall(path: string, h: Hall): void {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify(h, null, 2) + "\n")
+}
+
+/** mtime and size of the file; "" when absent, so a poll can tell an edit from a quiet file */
+export function hallSignature(path: string): string {
+  try { const s = statSync(path); return `${s.mtimeMs}:${s.size}` } catch { return "" }
+}
+
+export function applyOverrides(c: Candidate, ov: Overrides): Candidate {
+  const out: Candidate = { ...c }
+  for (const k of EDITABLE) if (ov[k] !== undefined) (out as Record<string, unknown>)[k] = ov[k]
+  return out
+}
+
+export const pushPile = (pile: PileEntry[], e: PileEntry): PileEntry[] => [...pile, e].slice(-PILE_MAX)
+export const dropPile = (pile: PileEntry[], i: number): PileEntry[] => pile.filter((_, j) => j !== i)
