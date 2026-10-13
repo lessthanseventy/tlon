@@ -24,7 +24,8 @@ defmodule Server.Office.Needs do
       work: merge it or delete it — `Server.Maintain.Strays`; a workline that landed within the hour
       is its PR waiting on GitHub's checks, and one in the merge queue is landing — neither is stranded),
       `seats` (threads parked on the leaf cap, per workspace: `ref` the bigger cap it offers),
-      `job_failed` (a background job discarded in the last day: retry or dismiss, `ref` the job),
+      `job_failed` (a background job discarded in the last day, its runs failing the same way one
+      item: retry or dismiss, `ref` the newest run),
       `issue` (a blocker raised on an open thread and not resolved: resolve it, `ref` the issue),
       `release_failed` (a workspace's newest release cut failed and live is not at its commit:
       retry it, `ref` its `check_failed` event — `Server.Release.PM.retry/1` — or put it away and
@@ -198,15 +199,19 @@ defmodule Server.Office.Needs do
           fragment("NOT coalesce((? ->> 'dismissed')::boolean, false)", j.meta)
   end
 
+  # a cron job failing the same way every run (KeepUp every 5 minutes) is one item, its newest run
   defp failed_jobs do
-    for j <- Repo.all(failed_jobs_query()) do
+    for {_, runs} <- Enum.group_by(Repo.all(failed_jobs_query()), &failure/1) do
+      j = Enum.max_by(runs, & &1.attempted_at, DateTime)
+      times = if length(runs) > 1, do: " #{length(runs)} times", else: ""
+
       %{
         key: "job:#{j.id}",
         kind: "job_failed",
         level: "decide",
         thread_id: nil,
         workspace_id: nil,
-        title: "#{j.worker} failed",
+        title: "#{j.worker} failed#{times}",
         text: last_error(j.errors),
         at: j.attempted_at,
         options: nil,
@@ -218,12 +223,21 @@ defmodule Server.Office.Needs do
   defp last_error([_ | _] = errors), do: errors |> List.last() |> Map.get("error", "no error recorded")
   defp last_error(_), do: "no error recorded"
 
-  @doc "The operator has seen a failed job: it leaves the list and the rack's count. `:ok`."
+  @doc """
+  The operator has seen a failed job, and every run that failed the same way (one item): they
+  leave the list and the rack's count. `:ok`.
+  """
   def dismiss_job(id) do
+    same =
+      case Repo.get(Oban.Job, id) do
+        nil -> [id]
+        job -> for j <- Repo.all(failed_jobs_query()), failure(j) == failure(job), do: j.id
+      end
+
     {_, _} =
       Repo.update_all(
         from(j in Oban.Job,
-          where: j.id == ^id,
+          where: j.id == ^id or j.id in ^same,
           update: [set: [meta: fragment("coalesce(?, '{}'::jsonb) || '{\"dismissed\": true}'::jsonb", j.meta)]]
         ),
         []
@@ -584,4 +598,6 @@ defmodule Server.Office.Needs do
     gone = for {key, _} <- away, not MapSet.member?(keys, key), do: key
     if gone != [], do: Repo.delete_all(from d in "need_dismissal", where: d.key in ^gone)
   end
+
+  defp failure(j), do: {j.worker, last_error(j.errors)}
 end
