@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderBrief, type Dossier, type Fact } from "./brief.ts";
+import { asDossier, renderBrief, type Dossier, type Fact } from "./brief.ts";
 
 // A fixed "now" so staleness is deterministic. Every `at` below is offset from it.
 const NOW = new Date("2026-08-16T12:00:00Z");
@@ -350,5 +350,18 @@ describe("renderBrief — the live server's dossier", () => {
     const out = renderBrief(live as unknown as Dossier, NOW);
     expect(out).toContain("# Brief: orient: what is excessibility");
     expect(out).toContain("- andrew: Read-only task");
+  });
+});
+
+describe("asDossier", () => {
+  test("a dossier is taken as it is", () => {
+    const d = dossier();
+    expect(asDossier(d)).toBe(d);
+  });
+  test("anything else is null, so a reader never reaches into it", () => {
+    expect(asDossier("session not registered on this server")).toBeNull();
+    expect(asDossier(null)).toBeNull();
+    expect(asDossier({ error: "no thread" })).toBeNull();
+    expect(asDossier({ ...dossier(), checks: undefined })).toBeNull();
   });
 });

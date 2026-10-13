@@ -11,7 +11,7 @@
 // waits on them, the release and their streak, and the coworkers' asks put to them as questions.
 
 import { doingOf, summaryOf } from "./lib/doing.ts";
-import { renderBrief, type ChatterMessage, type Dossier } from "./lib/brief.ts";
+import { asDossier, renderBrief, type ChatterMessage, type Dossier } from "./lib/brief.ts";
 import { detectCorrection } from "./lib/recall.ts";
 import {
   buildExtractionPrompt,
@@ -88,11 +88,16 @@ async function call($, tool: string, args: Record<string, unknown> = {}): Promis
 
 // The thread's dossier, and what in it is news: a mention of this seat, a workline landing.
 async function refresh($) {
+  let got: unknown;
   try {
-    dossier = (await call($, "get_dossier")) as Dossier;
+    got = await call($, "get_dossier");
   } catch {
     return;
   }
+  // a reply that isn't one (a server mid-restart, a scratch release taken down) keeps the last good dossier
+  const d = asDossier(got);
+  if (!d) return;
+  dossier = d;
   const recent: ChatterMessage[] = dossier.recent ?? [];
   const newest = Math.max(-1, ...recent.map((m) => m.id));
   if (seenMessage >= 0) for (const m of mentionsOf(recent, seenMessage, author)) $.ui.toast(`${m.author}: ${m.body.slice(0, 140)}`, { timeoutMs: 10_000 });
@@ -102,7 +107,7 @@ async function refresh($) {
     $.ui.toast("landed ✓");
     $.audio.play({ base64: CHIME_WAV, mime: "audio/wav" }).catch(() => {});
   }
-  seenLanding = Math.max(seenLanding, ...landed, ...(dossier.done.shown.map((e) => e.id) ?? []));
+  seenLanding = Math.max(seenLanding, ...landed, ...dossier.done.shown.map((e) => e.id));
   $.ui.invalidate("ui.render");
 }
 

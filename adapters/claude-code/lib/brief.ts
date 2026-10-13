@@ -111,6 +111,14 @@ export interface Dossier {
   recent: ChatterMessage[];
 }
 
+/** `x` when it has every part a reader reaches into, else null: a tool reply that isn't a dossier (text, an error) */
+export function asDossier(x: unknown): Dossier | null {
+  if (!x || typeof x !== "object") return null;
+  const d = x as Record<string, unknown>;
+  const capped = (k: string) => Array.isArray((d[k] as { shown?: unknown } | undefined)?.shown);
+  return ["todos", "learnings", "unknowns", "done", "blockers", "checks"].every(capped) && Array.isArray(d.recent) ? (x as Dossier) : null;
+}
+
 export interface Commit {
   sha: string;
   subject: string;
