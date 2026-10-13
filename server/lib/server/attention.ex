@@ -267,10 +267,13 @@ defmodule Server.Attention do
   the thread is a reply, not an answer. `about` is the thread the decision is about when it isn't
   `thread_id`: when that thread closes the ask is withdrawn (`withdraw_asks_about/1`). An ask by the
   thread's lead is marked `led`, so an answer after the thread changed hands goes to its lead now.
+  `extra`'s `"for"` names the coworker who has to act on the answer when it isn't the asker; kept
+  only when it names another coworker on the thread's bench, it gets the answer itself.
   `{:ok, prompt}`.
   """
   def ask(thread_id, author, question, [_ | _] = options, about \\ nil, extra \\ %{}) do
     options = options |> Enum.with_index(1) |> Enum.map(fn {label, i} -> %{"key" => "#{i}", "label" => label} end)
+    extra = actor(extra, thread_id, author)
     body = "⚑ #{author} asks — #{question}\n" <> Enum.map_join(options, " · ", &"(#{&1["key"]}) #{&1["label"]}")
 
     %{
@@ -386,8 +389,13 @@ defmodule Server.Attention do
 
   defp take_offer(_payload, _key), do: :ok
 
-  # an asker the shift took off the bench can't act on the answer: it goes to whoever leads the thread now
-  defp addressee(thread_id, asker, led) do
+  # an ask for another coworker goes to them, whoever leads; an asker the shift took off the bench
+  # can't act on the answer: it goes to whoever leads the thread now
+  defp addressee(_thread_id, asker, %{"for" => actor}) when is_binary(actor), do: "@#{actor} (#{asker} asked for you)"
+
+  defp addressee(thread_id, asker, %{} = payload) do
+    led = payload["led"]
+
     with %Thread{workspace_id: ws} when not is_nil(ws) <- Repo.get(Thread, thread_id),
          true <- Enum.any?(Server.Workspaces.bench_all(ws), &(&1.name == asker)),
          lead when is_binary(lead) and lead != asker <- Channel.thread_lead(thread_id) do
@@ -459,7 +467,7 @@ defmodule Server.Attention do
        ) do
     label = Enum.find_value(opts, &(&1["key"] == key && &1["label"]))
 
-    to = addressee(prompt.thread_id, asker, prompt.payload["led"])
+    to = addressee(prompt.thread_id, asker, prompt.payload)
     text = "#{to} #{q} → #{label}" <> if(rest == "", do: "", else: " — #{rest}")
     # a reply wakes the prompt's author: answered to someone else, the @mention alone delivers it
     reply_to = if to == "@#{asker}", do: prompt.id
@@ -517,4 +525,16 @@ defmodule Server.Attention do
       require(Logger) &&
         Logger.error("attention #{workspace_id}: shift switch on a usage limit failed: #{Exception.message(e)}")
   end
+
+  defp actor(%{"for" => name} = extra, thread_id, asker) do
+    with true <- is_binary(name) and name != asker,
+         %Thread{workspace_id: ws} when not is_nil(ws) <- Repo.get(Thread, thread_id),
+         true <- Enum.any?(Workspaces.bench_all(ws), &(&1.name == name)) do
+      extra
+    else
+      _ -> Map.delete(extra, "for")
+    end
+  end
+
+  defp actor(extra, _thread_id, _asker), do: extra
 end

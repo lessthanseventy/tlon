@@ -401,5 +401,34 @@ defmodule Server.AttentionTest do
 
       assert {:ok, %Message{body: "@pierre which slot? → cat"}} = Attention.answer_prompt(a.id, "andrew", "1")
     end
+
+    test "an ask for another coworker is answered to them, not as a reply, in the operator's words", %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius", archetype: "builder"})
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "daneri", archetype: "builder"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+      {:ok, a} = Attention.ask(lobby.id, "tertius", "allow the reroll?", ["allow", "deny"], nil, %{"for" => "daneri"})
+
+      assert a.payload["for"] == "daneri"
+
+      assert {:ok, %Message{author: "andrew", reply_to: nil, body: body}} =
+               Attention.answer_prompt(a.id, "andrew", "1")
+
+      assert body == "@daneri (tertius asked for you) allow the reroll? → allow"
+    end
+
+    test "a `for` naming nobody on the bench (or the asker) is dropped: the answer goes to the asker", %{ws: ws} do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "tertius", archetype: "builder"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+      {:ok, a} = Attention.ask(lobby.id, "tertius", "allow it?", ["allow", "deny"], nil, %{"for" => "nobody"})
+      {:ok, b} = Attention.ask(lobby.id, "tertius", "and this?", ["allow", "deny"], nil, %{"for" => "tertius"})
+
+      refute Map.has_key?(a.payload, "for")
+      refute Map.has_key?(b.payload, "for")
+
+      assert {:ok, %Message{reply_to: reply_to, body: "@tertius allow it? → allow"}} =
+               Attention.answer_prompt(a.id, "andrew", "1")
+
+      assert reply_to == a.id
+    end
   end
 end
