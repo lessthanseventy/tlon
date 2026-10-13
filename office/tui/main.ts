@@ -28,7 +28,7 @@ import { usageHeader } from "../kit/usage"
 import { nextPart, SLOTS } from "../kit/parts"
 import { bringBack, candidateOf, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
-import { back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, toggleLock as storeToggle, type Store } from "../kit/store"
+import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, toggleLock as storeToggle, type Store } from "../kit/store"
 import { stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
 import { parseNowPlaying } from "../kit/stereo"
@@ -189,6 +189,20 @@ function followStore(): boolean {
   if (seen === storeSeen) return false
   storeSeen = seen; store = loadStore(STORE)
   return true
+}
+/** ⏎: adopt the shown candidate into its slot; the occupant leaves by the door, once the operator says y */
+function storeAdopt() {
+  const taken = storeTaken(), c = storeCandidate(store, taken), slot = slotOf(c.species)
+  const file = slot ? adopt(c, slot) : null
+  if (!slot || !file) { status = `${c.name} can't be adopted here`; return draw() }
+  const old = (petsNow ?? resolvePets(loadPets()))[slot].name
+  ask2(`${old} leaves by the door. adopt ${c.name}?`, () => {
+    savePets(file)
+    petsSeen = ""; followPets(); roomChanged = true
+    storeSet(storePass(store, [...taken, c.name]))
+    status = `adopted ${c.name}`
+    draw()
+  })
 }
 // the pet card's draft (Nina's temperament, not yet saved to pets.json) and the preview row's clock
 let petDraft: PetSetting | null = null, previewTick = 0
@@ -1650,6 +1664,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           { key: "down", label: "back", run: () => { storeSet(storeBack(store, storeTaken())); draw() } },
           { key: "space", label: "lock / unlock the row", run: () => rows[sel]?.open?.() },
           { key: "e", label: "rename", run: () => ask("name", (s) => { if (s.trim()) { storeSet(rename(store, s.trim())); draw() } }, { text: c.name }) },
+          { key: "enter", label: "adopt", run: storeAdopt },
           back1,
         ],
       }
