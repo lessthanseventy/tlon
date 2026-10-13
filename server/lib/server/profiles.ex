@@ -834,7 +834,7 @@ defmodule Server.Profiles do
       model: model,
       sandbox: t.sandbox,
       permissions: apply_yolo_override(t.permissions, policy[:yolo]),
-      system_prompt: personalize(t.system_prompt, name) <> lead_duties(workspace_id, name)
+      system_prompt: personalize(t.system_prompt, name) <> lead_duties(workspace_id, name) <> Server.Soul.tone(name)
     }
   end
 
