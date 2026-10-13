@@ -86,6 +86,20 @@ async function call($, tool: string, args: Record<string, unknown> = {}): Promis
   }
 }
 
+// What a hook met and couldn't use, one line each in $XDG_STATE_HOME/tlon/citizen-<author>.log (the
+// last 200): the pane's transcript shows only that a hook was skipped, never what it got.
+async function note($, what: string) {
+  try {
+    const state = (await $.env.get("XDG_STATE_HOME")) || `${(await $.env.get("HOME")) ?? ""}/.local/state`;
+    const path = `${state}/tlon/citizen-${author || "unknown"}.log`;
+    const old = await $.fs.read(path).then((t) => String(t), () => "");
+    const line = `${new Date(await $.clock.now()).toISOString()} ${what.replace(/\n/g, " ")}`;
+    await $.fs.write(path, [...old.split("\n").filter(Boolean), line].slice(-200).join("\n") + "\n");
+  } catch {
+    // a log that can't be written is no reason to fail the hook it serves
+  }
+}
+
 // The thread's dossier, and what in it is news: a mention of this seat, a workline landing.
 async function refresh($) {
   let got: unknown;
@@ -96,7 +110,7 @@ async function refresh($) {
   }
   // a reply that isn't one (a server mid-restart, a scratch release taken down) keeps the last good dossier
   const d = asDossier(got);
-  if (!d) return;
+  if (!d) return void note($, `get_dossier: not a dossier: ${JSON.stringify(got).slice(0, 300)}`);
   dossier = d;
   const recent: ChatterMessage[] = dossier.recent ?? [];
   const newest = Math.max(-1, ...recent.map((m) => m.id));
