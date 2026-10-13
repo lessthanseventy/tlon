@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { crewOf, peopleOf, viewOf } from "../kit/crew"
+import { studyOf } from "../kit/uqbar"
 import { readFileSync } from "node:fs"
 import { focus, frameHashes, GOLDEN, measure, office, seeded } from "./golden"
 
@@ -313,4 +314,10 @@ describe("Nina's swat", () => {
       expect(r.flinch).toBe(first)
     })
   })
+})
+
+test("uqbar's study is the open thread it leads; none until the server opens one", () => {
+  const t = (id: number, lead: string | null, title: string) => ({ id, title, stage: null, awaiting: null, workspace_id: 1, lead })
+  expect(studyOf([t(3, "tertius", "lobby"), t(9, "uqbar", "Uqbar's study")])).toBe(9)
+  expect(studyOf([t(3, "tertius", "lobby")])).toBeNull()
 })

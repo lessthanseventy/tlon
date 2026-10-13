@@ -1,6 +1,7 @@
 // Talking in the office: what `m` (to a person) and `'` (to the office) post, and where.
 import * as data from "./data"
 import type { Thread } from "../kit/types"
+import { studyOf } from "../kit/uqbar"
 
 /** the workspace's lobby — its standing thread, where the manager hears the office and a home window lives */
 export const lobbyOf = (threads: Thread[], ws: number | null): number | null =>
@@ -12,13 +13,27 @@ export function speech(to: string | null, text: string): string | null {
   return s ? (to ? `@${to} ${s}` : s) : null
 }
 
-/** say it on the workspace's lobby; the status line's text */
+/** say it on the workspace's lobby (to uqbar, on its study, which wakes it); the status line's text */
 export async function say(threads: Thread[], ws: number | null, to: string | null, text: string): Promise<string> {
+  const study = to === "uqbar" ? studyOf(threads) : null
+  if (study !== null) {
+    if (!text.trim()) return "nothing said"
+    const r = await data.post(study, text.trim())
+    return r.startsWith("sent") ? "said to uqbar" : r
+  }
   const body = speech(to, text), lobby = lobbyOf(threads, ws)
   if (!body) return "nothing said"
   if (lobby === null) return "no front desk in this workspace to say it on"
   const r = await data.post(lobby, body)
   return r.startsWith("sent") ? (to ? `said to ${to}` : "said to the office") : r
+}
+
+/** hand thread `tid` to uqbar: a line on its study naming it, which wakes it; the status line's text */
+export async function handToUqbar(threads: Thread[], tid: number): Promise<string> {
+  const study = studyOf(threads), t = threads.find((x) => x.id === tid)
+  if (study === null) return "uqbar has no study yet: the server opens it at boot"
+  const r = await data.post(study, `Over to you: #${tid}${t ? ` ${t.title}` : ""}. See it through, and say here what you did.`)
+  return r.startsWith("sent") ? `handed #${tid} to uqbar` : r
 }
 
 type Said = { id: number; author: string; body: string; kind?: string; reply_to?: number | null }
