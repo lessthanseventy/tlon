@@ -133,7 +133,8 @@ export const candidateOf = (h: Hall, o: Ctx): Candidate => applyOverrides(roll(h
 export function pass(h: Hall, o: Ctx): Hall {
   const cur = candidateOf(h, o), overrides: Overrides = {}
   const o2 = overrides as Record<string, unknown>
-  for (const f of h.locks.fields ?? []) o2[f] = cur[f]
+  // a taken name is used up: the lock stays, the next seed rolls a fresh one
+  for (const f of h.locks.fields ?? []) if (!(f === "name" && o.taken.includes(cur.name))) o2[f] = cur[f]
   const slots = h.locks.slots ?? []
   if (slots.length) overrides.parts = Object.fromEntries(slots.map(s => [s, cur.look.parts?.[s] ?? null]))
   return { ...h, seed: nextSeed(h.seed), overrides }
