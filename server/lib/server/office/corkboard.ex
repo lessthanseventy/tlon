@@ -8,14 +8,13 @@ defmodule Server.Office.Corkboard do
   author and the kind (`pick/4`), the model only writes it.
 
   Office chatter, not working memory: kept in memory here, the newest `@keep` per workspace, and
-  never written to `Server.Notes`, which the coworkers read as they work. A suggestion is not
-  chatter: it goes in the suggestion box (`suggestions/1`, the newest `@keep_ideas`), a `suggestion`
-  message on the workspace's standing thread (`Server.Channel.machine_thread/1`) — stored delivered,
-  so it wakes nobody, yet a coworker's history search finds it and a restart keeps it. Its body
-  says it is a banter-written idea nobody asked for, and it never reaches the operator's needs
-  (`Server.Office.Needs`): the model wrote it in a coworker's voice, so read as a request it would
-  get built though no one wanted it. It leaves the box, resolved, when the operator files it as a
-  ticket or throws it out (`drop/2`). Lazy like
+  never written to `Server.Notes`, which the coworkers read as they work. The suggestion box is not
+  chatter: a working coworker's idea for the operator (`suggest/4`, the `suggest` tool), kept as the
+  newest `@keep_ideas` (`suggestions/1`), a `suggestion` message on the workspace's standing thread
+  (`Server.Channel.machine_thread/1`) — stored delivered, so it wakes nobody, yet a coworker's
+  history search finds it and a restart keeps it. It never reaches the operator's needs
+  (`Server.Office.Needs`): an idea, not an ask. It leaves the box, resolved, when the operator files
+  it as a ticket or throws it out (`drop/2`). The notes are lazy like
   banter — a note is only written while an office asks (`notes/1`), at most one per workspace every
   `@every_s` — and on and off with it.
   """
@@ -27,8 +26,6 @@ defmodule Server.Office.Corkboard do
   alias Server.Office.Banter
   alias Server.Repo
   alias Server.Thread
-
-  require Logger
 
   @every_s 480
   @keep 12
@@ -168,11 +165,6 @@ defmodule Server.Office.Corkboard do
   @impl true
   def handle_cast({:pinned, _ws, nil}, state), do: {:noreply, state}
 
-  def handle_cast({:pinned, ws, %{kind: "suggestion"} = note}, state) do
-    file(ws, note)
-    {:noreply, state}
-  end
-
   def handle_cast({:pinned, ws, note}, state) do
     entry = entry(state, ws)
     note = Map.merge(note, %{id: entry.next, at: System.system_time(:second)})
@@ -181,23 +173,29 @@ defmodule Server.Office.Corkboard do
 
   defp entry(state, ws), do: Map.get(state, ws, %{notes: [], at: 0, next: 1})
 
-  defp file(ws, note) do
-    with %Thread{id: thread_id} <- Server.Channel.machine_thread(ws),
+  @doc """
+  A coworker's idea for the operator, pinned in the suggestion box (`suggest` MCP tool): something
+  it saw while working on `from` that is not its task and not plainly broken. Stored delivered on
+  the workspace's standing thread, so it wakes nobody. `{:ok, message}` | `{:error, why}`.
+  """
+  def suggest(ws, author, idea, from) do
+    idea = String.trim(idea || "")
+
+    with true <- idea != "" || {:error, "an empty idea"},
+         %Thread{id: thread_id} <- Server.Channel.machine_thread(ws) || {:error, "no standing thread"},
          {:ok, message} <-
            %{
              thread_id: thread_id,
-             author: note.author,
+             author: author,
              kind: "suggestion",
-             body:
-               "corkboard idea, written by the office's banter in #{note.author}'s voice (nobody asked for it): #{note.body}",
-             payload: %{"note" => note.body}
+             body: "suggestion from #{author}, while on ##{from}: #{idea}",
+             payload: %{"note" => "#{idea} (seen on ##{from})", "from_thread" => from}
            }
            |> Message.post_changeset()
            |> Ecto.Changeset.put_change(:delivered_at, DateTime.truncate(DateTime.utc_now(), :second))
            |> Repo.insert() do
       Server.Recall.embed_on_write(message)
-    else
-      other -> Logger.warning("corkboard: suggestion from #{note.author} not filed: #{inspect(other)}")
+      {:ok, message}
     end
   end
 

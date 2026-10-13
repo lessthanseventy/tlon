@@ -173,6 +173,32 @@ defmodule Server.MCP.Tool.FileTicket do
   end
 end
 
+defmodule Server.MCP.Tool.Suggest do
+  @moduledoc """
+  Pin an IDEA in the operator's suggestion box: something you saw while working that is not your
+  task and not plainly broken — a refactor, a feature, a better way to do a thing. Broken or plainly
+  owed is a ticket (file_ticket). Wakes nobody; the operator files it as a ticket or throws it out.
+  """
+  use Server.MCP.Tool
+
+  alias Server.MCP.Tool
+  alias Server.Office.Corkboard
+
+  schema do
+    field :idea, :string, required: true, description: "The idea and what you saw that prompted it, in a line or two"
+  end
+
+  @impl true
+  def execute(%{idea: idea}, frame) do
+    identity = Identity.from_frame(frame)
+
+    case Tool.workspace_of(identity) do
+      nil -> fail(frame, "no workspace bound to this session")
+      ws -> reply(frame, Corkboard.suggest(ws, identity.agent, idea, identity.thread_id), &%{id: &1.id})
+    end
+  end
+end
+
 defmodule Server.MCP.Tool.ListTickets do
   @moduledoc "Open tickets in the current workspace's tracker (newest-first), the board reads. Workspace-scoped via the bound thread."
   use Server.MCP.Tool

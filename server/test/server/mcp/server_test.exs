@@ -145,6 +145,7 @@ defmodule Server.MCP.ServerTest do
                "remove_workspace",
                "register_project",
                "file_ticket",
+               "suggest",
                "list_tickets",
                "update_ticket",
                "start_ticket",
@@ -1265,6 +1266,29 @@ defmodule Server.MCP.ServerTest do
     refused = call(token, session, 4, "file_ticket", %{"title" => "bad", "epic_id" => plain["id"]})
     assert refused["isError"]
     refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "bad"))
+  end
+
+  test "suggest pins a coworker's idea in the operator's suggestion box, naming who and where, waking nobody" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "IdeaWS"})
+    {:ok, _lobby} = Channel.open_thread(%{title: "lobby", scope: "machine", workspace_id: ws.id})
+    {:ok, thread} = Channel.open_thread(%{title: "the merge queue", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Ideator", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+
+    r =
+      token
+      |> call(session, 2, "suggest", %{"idea" => "landings could batch: three PRs rebased one at a time today"})
+      |> decode_tool_json()
+
+    assert is_integer(r["id"])
+
+    assert [%{author: "Ideator", body: body}] = Server.Office.Corkboard.suggestions(ws.id)
+    assert body =~ "landings could batch"
+    assert body =~ "##{thread.id}"
+    assert %Server.Message{kind: "suggestion", delivered_at: %DateTime{}} = Server.Repo.get(Server.Message, r["id"])
+
+    assert call(token, session, 3, "suggest", %{"idea" => "  "})["isError"]
   end
 
   test "file_ticket lands in the bound thread's workspace; list_tickets reads it back" do

@@ -38,8 +38,8 @@ linked window at a time, Ctrl-] back to the room).
   thread that ships throws its lead a party; a finished turn high-fives whoever it passes. The
   notes board also carries the crew's chatter (`CorkNote`, from `Server.Office.Corkboard`), kept
   apart from the notes they work from; their suggestions go in the suggestion box beside it, and
-  become tickets only when you file them. Those are banter written in a coworker's voice, not their
-  request: the box labels them so, and they never reach the needs queue (`i`).
+  become tickets only when you file them. Each is a working coworker's idea (the `suggest` tool),
+  not a request, so it never reaches the needs queue (`i`).
   Small talk is said with `Sim.converse`: one balloon per conversation at a time, each up for its
   `readTicks`, in the order written. The TUI keeps the last 50 lines said in its state dir
   (`office-banter`) for the banter log (`/` → "the banter log").
