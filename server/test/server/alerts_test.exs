@@ -112,7 +112,10 @@ defmodule Server.AlertsTest do
       )
 
     assert %{path: "/api/office/needs/dismiss", body: %{key: "mention:3"}} = List.last(mention.actions)
-    assert [%{label: "Resolve…", path: "/api/issues/5/resolve", input: "resolution"}, %{label: "Put away"}] = issue.actions
+
+    assert [%{label: "Resolve…", path: "/api/issues/5/resolve", input: "resolution"}, %{label: "Put away"}] =
+             issue.actions
+
     assert [%{path: "/api/office/needs/retire", body: %{key: "stranded:/r:w"}}, %{label: "Put away"}] = stranded.actions
   end
 
