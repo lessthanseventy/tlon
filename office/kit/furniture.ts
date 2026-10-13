@@ -91,6 +91,8 @@ export function execDesk(sc: Scene, a: Agents, measure: Measure, d: DeskAt & { k
     sc.px(d.x + 8, d.y + 25, 4, 1, ROLE.body); sc.px(d.x + d.w - 12, d.y + 25, 4, 1, ROLE.body)
     sc.blit(["sss.", ".s..", ".s..", "ooo."], d.x + d.w - 6, d.y + 15, { s: ROLE.body, o: ROLE.inactive })
     const th = threadOf(d.seat.thread_id)
+    // with the channel down there is nothing to read the plates from: blank, not "inbox clear"
+    if (!a.ok) return
     if (d.kind === "manager") {
       const routed = a.tickets.filter((x) => x.routed).length
       sc.px(d.x + 2, d.y + 18, 7, 1, ROLE.inactive)
