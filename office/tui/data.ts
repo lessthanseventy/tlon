@@ -99,8 +99,7 @@ let lastNeeds: Need[] = []
 export async function needs(): Promise<Need[]> {
   try {
     const r = await call("GET", "/office/needs")
-    if (r.status >= 500) return lastNeeds
-    lastNeeds = r.status === 200 ? r.json : []
+    if (r.status === 200) lastNeeds = r.json
     return lastNeeds
   } catch { return lastNeeds }
 }

@@ -9,11 +9,12 @@ import { office } from "./wcag.test"
 // the channel down is stale and honest: the last good snapshot and inbox held, marked down with
 // their age and the verb that brings it back — never an empty office, and never the fire drill
 const need: Need = { key: "gate:42", kind: "gate", level: "blocking", thread_id: 42, workspace_id: 1, title: "#42 waits on you", text: "approve?", at: "2026-10-13T06:00:00Z", options: null, ref: null }
+let needsStatus = 200
 const server = Bun.serve({
   port: 0,
   fetch: (req) => {
     const path = new URL(req.url).pathname
-    if (path.endsWith("/office/needs")) return Response.json([need])
+    if (path.endsWith("/office/needs")) return needsStatus === 200 ? Response.json([need]) : new Response("gone", { status: needsStatus })
     if (path.endsWith("/office")) return Response.json({ threads: [{ id: 42, title: "the held thread", workspace_id: 1, stage: "review", awaiting: "andrew", lead: null }], workspaces: [{ id: 1, name: "Toy" }] })
     return new Response("no", { status: 404 })
   },
@@ -24,6 +25,10 @@ test("a down channel keeps the last snapshot and the inbox, held and dated", asy
   const data = await import("../tui/data")
   expect((await data.status()).ok).toBe(true)
   expect(await data.needs()).toHaveLength(1)
+  // a restart onto another build can answer 401/404 for a moment: still not "nothing waits on you"
+  needsStatus = 404
+  expect(await data.needs()).toEqual([need])
+  needsStatus = 200
   server.stop(true)
 
   const held = await data.status()

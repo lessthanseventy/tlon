@@ -47,6 +47,7 @@ import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
 import { downHeader } from "./down"
+import { oneInFlight } from "./flight"
 import { earmarkOf, freshPosts, handoffFrom } from "../kit/plane"
 import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
@@ -305,9 +306,8 @@ function goWs(id: number) { choose(id); back(true); frame = null; void refresh()
 // ── staying current ───────────────────────────────────────────────────────────────────────────
 // the last poll that answered: a restart's gap polls (ok:false) must not hide what changed across it
 let lastOk: Agents = EMPTY, lastOkNeeds: data.Need[] = []
-// one refresh in flight: a slow server answers the one already out, it doesn't stack another behind it
-let refreshing: Promise<void> | null = null
-const refresh = () => (refreshing ??= refreshOnce().finally(() => { refreshing = null }))
+// one refresh in flight and at most one queued: a write's follow-up reads what it wrote (tui/flight.ts)
+const refresh = oneInFlight(refreshOnce)
 async function refreshOnce() {
   // the snapshot lands, and shows, as soon as it comes: the inbox read beside it takes seconds (a git
   // check per stray worktree), and a finder opened meanwhile would list nothing
