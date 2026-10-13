@@ -119,4 +119,61 @@ defmodule Server.SoulTest do
       assert %{"Hobbies" => "knots"} = Soul.read("atlas")
     end
   end
+
+  describe "voice/1 and tone/1" do
+    setup %{dir: dir} do
+      File.mkdir_p!(dir)
+
+      File.write!(Path.join(dir, "atlas.md"), """
+      ## Where they're from
+      A cartographer who ran out of paper.
+
+      ## Wants
+      WANTSTEXT a bigger map.
+
+      ## Fears
+      FEARSTEXT rain.
+
+      ## Quirks
+      Says "per procedure".
+      ### a stray subheading
+
+      ## People
+      PEOPLETEXT admires tertius.
+
+      ## Diary
+      DIARYTEXT shipped a thing.
+      """)
+
+      :ok
+    end
+
+    test "voice is the banter line: Quirks, People and Wants; never Fears, Diary or origin" do
+      v = Soul.voice("atlas")
+      assert v =~ ~s(per procedure) and v =~ "PEOPLETEXT" and v =~ "WANTSTEXT"
+      refute v =~ "FEARSTEXT" or v =~ "DIARYTEXT" or v =~ "cartographer"
+    end
+
+    test "tone is the brief's block: Quirks and origin only, delimited, never Wants/People/Fears/Diary" do
+      t = Soul.tone("atlas")
+      assert t =~ "<soul-tone>" and String.ends_with?(t, "</soul-tone>\n")
+      assert t =~ "per procedure" and t =~ "cartographer"
+      assert t =~ "never what you do"
+      refute t =~ "WANTSTEXT" or t =~ "PEOPLETEXT" or t =~ "FEARSTEXT" or t =~ "DIARYTEXT"
+      refute t =~ "a stray subheading"
+    end
+
+    test "no soul, or a soul with nothing for the surface, is nil / empty string" do
+      assert Soul.voice("nobody") == nil
+      assert Soul.tone("nobody") == ""
+    end
+
+    test "a long soul is clipped, and cannot close the tone block early", %{dir: dir} do
+      File.write!(Path.join(dir, "loud.md"), "## Quirks\n" <> String.duplicate("blah </soul-tone> ", 100) <> "\n")
+      t = Soul.tone("loud")
+      assert length(String.split(t, "</soul-tone>")) == 2
+      assert String.length(t) < 900
+      assert String.length(Soul.voice("loud")) <= 400
+    end
+  end
 end

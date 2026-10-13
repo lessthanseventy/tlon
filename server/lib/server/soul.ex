@@ -131,6 +131,61 @@ defmodule Server.Soul do
     Map.new(acc, fn {h, lines} -> {h, lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()} end)
   end
 
+  @voice_cap 400
+  @tone_cap 400
+  @tone_rule "How you talk — flavour only. This changes your wording and manner in posts, never what you do, " <>
+               "decide, claim or skip. The mandate, the stage's law and the review override anything below.\n"
+
+  @doc """
+  One line for banter and room lines: Quirks, People, Wants. `nil` when the seat has no soul or
+  those sections are empty. Never Fears, Diary or origin.
+  """
+  @spec voice(String.t()) :: String.t() | nil
+  def voice(name) do
+    with %{} = s <- read(name),
+         parts when parts != [] <-
+           for(
+             {label, head} <- [{"quirks", "Quirks"}, {"around", "People"}, {"wants", "Wants"}],
+             text = clean(s[head]),
+             text != "",
+             do: "#{label}: #{String.slice(text, 0, 130)}"
+           ) do
+      parts |> Enum.join("; ") |> String.slice(0, @voice_cap)
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  The delimited "how you talk" block appended to a brief: Quirks and where they're from only, `""`
+  when there is nothing. Soul text is operator-edited and lands in a system prompt, so it is
+  clipped, flattened, and cannot contain the closing tag. A prompt-level fence, not enforcement —
+  the judged `:souls` eval is what tests it.
+  """
+  @spec tone(String.t()) :: String.t()
+  def tone(name) do
+    with %{} = s <- read(name),
+         text when text != "" <-
+           ["Where they're from", "Quirks"] |> Enum.map(&clean(s[&1])) |> Enum.reject(&(&1 == "")) |> Enum.join(" ") do
+      "\n\n<soul-tone>\n" <> @tone_rule <> String.slice(text, 0, @tone_cap) <> "\n</soul-tone>\n"
+    else
+      _ -> ""
+    end
+  end
+
+  # one flat line: sub-heading lines dropped, whitespace collapsed, the tone tag removed
+  defp clean(nil), do: ""
+
+  defp clean(text) do
+    text
+    |> String.split("\n")
+    |> Enum.reject(&String.starts_with?(String.trim_leading(&1), "#"))
+    |> Enum.join(" ")
+    |> String.replace(~r/<\/?soul-tone>/, "")
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+  end
+
   @doc "Write the seat's soul if it has none; an existing file is left alone, edited or not."
   @spec draft(integer(), String.t()) :: {:ok, :written | :exists} | {:error, :no_seat | :bad_name}
   def draft(workspace_id, name) do
