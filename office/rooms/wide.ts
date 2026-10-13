@@ -255,9 +255,19 @@ export class WideRoom extends Sim<Layout> {
     })
   }
 
-  /** a fire drill: Argos trots to the last muster place and barks at the smoke */
+  /** a fire drill: Argos runs about with the crew, then trots to the last muster place and barks at the smoke */
   private dogSmoke() {
     const d = this.dog, m = this.plan.muster!.at(-1)!
+    // the panic first: he tears about with them, barking
+    if (this.panicking) {
+      if (!d.path.length) {
+        const to = pick([...this.plan.lounge, ...this.plan.muster!])
+        d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, to)]
+        d.aisle = to.aisle; d.mode = "walk"; d.fuss = null
+      }
+      if (this.quiet(d.saidUntil) && Math.random() < 1 / 60) this.dogSay(this.argos("smoke"))
+      return
+    }
     if (!d.path.length && (d.x !== m.x || d.y !== m.y)) {
       d.path = [{ x: d.x, y: d.aisle }, ...this.plan.route(d.x, d.aisle, m)]
       d.aisle = m.aisle; d.mode = "walk"; d.fuss = null
@@ -275,9 +285,9 @@ export class WideRoom extends Sim<Layout> {
     if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog
       if (c.mode === "sit" && !c.path.length && !c.errand && !c.fuss) this.catDo("nap")
-      if (d.mode === "sit" && !d.path.length && !d.fuss && !this.fire) this.dogDo("bed")
+      if (d.mode === "sit" && !d.path.length && !d.fuss && !this.alarmed) this.dogDo("bed")
     }
-    if (this.fire) this.dogSmoke()
+    if (this.alarmed) this.dogSmoke()
     else if (!this.dog.path.length && !this.antic && !this.dog.fuss && this.dog.mode !== "sleep" && this.quiet(this.dog.saidUntil) && Math.random() < 1 / 2200) {
       this.dogDo("office")
       this.dogSay(this.argos("paper"))
@@ -361,8 +371,8 @@ export class WideRoom extends Sim<Layout> {
     this.catCorner.draw(sc, a, l, measure, this.live(), focus)
     this.office.draw(sc, a, l, measure, this.live(), focus)
     this.bathroom.draw(sc, a, l, measure, this.live(), focus)
-    drawCloset(sc, closet(), this.fire)
-    if (this.fire) drawFire(sc, closet())
+    drawCloset(sc, closet(), this.alarmed)
+    if (this.alarmed) drawFire(sc, closet())
 
     // ── the meeting room: glass, a round table, its chairs ──
     this.meeting.draw(sc, a, l, measure, this.live(), focus)
@@ -399,7 +409,7 @@ export class WideRoom extends Sim<Layout> {
     if (this.tick < this.discoUntil) for (const x of this.actors.values()) drawParty(sc, x.x, x.y, (this.discoUntil - this.tick) % 60)
 
     if (!a.ok || (a.roster.length === 0 && a.bench.length === 0)) text(a.ok ? "nobody on the clock" : (a.note ?? "channel down"), (F0 + F1) / 2, 120, a.ok ? ROLE.inactive : ROLE.alarm)
-    if (this.fire) text("FIRE DRILL", (F0 + F1) / 2, 132, ROLE.alarm)
+    if (this.alarmed) text("FIRE DRILL", (F0 + F1) / 2, 132, ROLE.alarm)
     this.nightfall(sc, now)
     paintAnnex(sc.cv, this.home, WIDE_H)
     return sc.finish()
