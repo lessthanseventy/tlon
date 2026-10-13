@@ -13,6 +13,10 @@ export type ReaderDeps = {
   /** post as you; resolves to the status line */
   send: (body: string) => Promise<string>
   operator: string
+  /** which of the pages read to show (a conversation is a filter over a thread) */
+  keep?: (msgs: Msg[]) => Msg[]
+  /** the head's title, instead of the thread's own */
+  heading?: string
   /** a post whose aeroplane Argos caught: its header carries a paw */
   dogeared?: (m: { at: string; author: string }) => boolean
   /** an older page arrived on its own (scrolled into): draw again */
@@ -97,17 +101,17 @@ export class Reader {
 
   /** the conversation as styled rows `width` wide, oldest first */
   private body(width: number, th: Thread | undefined): Seg[][] {
-    const rows: Seg[][] = []
+    const rows: Seg[][] = [], shown = this.deps.keep ? this.deps.keep(this.msgs) : this.msgs
     if (this.more) rows.push([{ s: this.loading ? "  loading older messages…" : "  ↑ older messages — home or scroll up for them", fg: ROLE.inactive }])
-    else if (this.msgs.length) rows.push([{ s: "  the start of the thread", fg: ROLE.inactive }])
-    for (const m of this.msgs) {
+    else if (shown.length) rows.push([{ s: "  the start of the thread", fg: ROLE.inactive }])
+    for (const m of shown) {
       const you = m.author === this.deps.operator, sys = m.author === "tlon"
       rows.push([])
       rows.push([{ s: ` ${m.author}`, fg: you ? ROLE.attention : sys ? ROLE.inactive : ROLE.key, bold: true }, { s: `  ${stamp(m.at)}`, fg: ROLE.inactive }, ...(this.deps.dogeared?.(m) ? [{ s: "  🐾", fg: ROLE.inactive }] : [])])
       for (const l of wrap(m.body, width - 3)) rows.push([{ s: `   ${l}`, fg: sys ? ROLE.inactive : ROLE.prose }])
     }
-    if (!this.msgs.length && !this.peek) rows.push([{ s: "  no messages yet", fg: ROLE.inactive }])
-    if (!this.msgs.length && this.peek) {
+    if (!shown.length && !this.peek) rows.push([{ s: "  no messages yet", fg: ROLE.inactive }])
+    if (!shown.length && this.peek) {
       rows.push([{ s: "  no messages yet — its terminal shows:", fg: ROLE.inactive }])
       for (const l of this.peek.split("\n").filter((x) => x.trim()).slice(-12)) rows.push([{ s: `   ${l}`, fg: ROLE.inactive }])
     }
@@ -133,7 +137,7 @@ export class Reader {
     // a short conversation sits on the composer, as a chat does, not at the top of an empty screen
     const pad = Math.max(0, bodyH - all.length)
     let o = `${ESC}[?2026h${ESC}[?25l${ESC}[1;1H` + line([
-      { s: ` #${this.tid} `, fg: ROLE.ground, bg: ROLE.key, bold: true }, { s: ` ${th?.title ?? ""}`, fg: ROLE.body, bold: true },
+      { s: ` #${this.tid} `, fg: ROLE.ground, bg: ROLE.key, bold: true }, { s: ` ${this.deps.heading ?? th?.title ?? ""}`, fg: ROLE.body, bold: true },
       { s: `  ${th?.stage ?? "thread"}${th?.lead ? ` · ${th.lead}` : ""}${th?.live ? " · running" : ""}${this.scroll ? `  ↑${this.scroll}` : ""}`, fg: ROLE.inactive },
     ], cols)
     for (let i = 0; i < bodyH; i++) o += `${ESC}[${i + 2};1H` + line((i >= pad ? all[first + i - pad] : null) ?? [], cols)
