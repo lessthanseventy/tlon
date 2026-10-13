@@ -105,8 +105,13 @@ defmodule Server.Jobs.KeepUpTest do
 
     path = System.get_env("PATH")
     System.put_env("PATH", "")
-    {result, log} = ExUnit.CaptureLog.with_log(fn -> KeepUp.perform(%Oban.Job{}) end)
-    System.put_env("PATH", path)
+
+    {result, log} =
+      try do
+        ExUnit.CaptureLog.with_log(fn -> KeepUp.perform(%Oban.Job{}) end)
+      after
+        System.put_env("PATH", path)
+      end
 
     assert {:error, why} = result
     assert why =~ "/r/nowhere"
