@@ -101,4 +101,37 @@ defmodule Server.WorklineLandingTest do
     KeepUp.landings(gh("MERGED"))
     refute_received {:ran, _}
   end
+
+  describe "one answer to \"is it landing?\": waiting on GitHub, which the office's card reads" do
+    defp landing?(t), do: Enum.find(Server.Office.status().threads, &(&1.id == t.id)).landing
+
+    test "published and waiting: the office draws it as landing" do
+      %{thread: t} = published!()
+      assert landing?(t)
+    end
+
+    test "merged, then reopened by an operator reply: not landing, and not merged again" do
+      %{thread: t} = published!()
+      since = DateTime.add(DateTime.utc_now(), -60)
+      KeepUp.landings(gh("MERGED"))
+
+      Server.Attention.respond(t.id, "andrew", "one more thing about this")
+      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+      refute landing?(t)
+
+      flush_ran()
+      KeepUp.landings(gh("MERGED"))
+      refute_received {:ran, _}
+      assert %Thread{state: "open"} = Repo.get!(Thread, t.id)
+      assert [_one] = Workline.landed_since(since)
+    end
+  end
+
+  defp flush_ran do
+    receive do
+      {:ran, _} -> flush_ran()
+    after
+      0 -> :ok
+    end
+  end
 end

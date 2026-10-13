@@ -20,7 +20,8 @@ defmodule Server.Office do
   whether a window runs it, whether it is the workspace's standing thread, any open prompt, who is
   mid-turn on it, `seat`: its lead at a `"desk"` (a window runs it, or a warm session with a window to wake in), `"parked"` for a seat
   under the leaf cap (`Server.Staffing.parked_note?/1`) or `"idle"`, and `duty`: a standing duty,
-  not work (`Server.Staffing.duty_threads/1`)), projects, unstarted tickets, notes, the consults and hand-offs of the last
+  not work (`Server.Staffing.duty_threads/1`), and `landing`: landed, its PR waiting on GitHub
+  (`Server.Workline.waiting_on_github/0`)), projects, unstarted tickets, notes, the consults and hand-offs of the last
   three minutes, the archetypes and model choices, counts, how many
   threads await the operator, each workspace's triage count (the beacon), the service's health
   (the rack), the days this month each workspace has something scheduled (the wall calendar),
@@ -294,6 +295,7 @@ defmodule Server.Office do
 
     duties = open |> Enum.map(& &1.id) |> Server.Staffing.duty_threads()
     citizens = Server.Outside.names()
+    landing = MapSet.new(Server.Workline.waiting_on_github(), & &1.thread.id)
 
     Enum.map(open, fn t ->
       ws_tabs = Map.get(tabs, t.workspace_id, [])
@@ -315,7 +317,8 @@ defmodule Server.Office do
         thinking: on_it,
         seat: seat(t.id, lead, desk?),
         duty: MapSet.member?(duties, t.id),
-        study: Server.Outside.study?(t.title, lead, citizens)
+        study: Server.Outside.study?(t.title, lead, citizens),
+        landing: MapSet.member?(landing, t.id)
       })
     end)
   end
