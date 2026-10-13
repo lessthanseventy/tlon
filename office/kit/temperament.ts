@@ -37,5 +37,6 @@ export const SPECIES_BASE = {
   bird: { perch: 0.5, nap: 0.15, spot: 0.15, play: 0.1, desk: 0.05, litter: 0.05 },
   hamster: { play: 0.3, nap: 0.25, spot: 0.25, litter: 0.1, desk: 0.05, perch: 0.05 },
   rock: { nap: 0.8, spot: 0.06, play: 0.04, desk: 0.04, litter: 0.03, perch: 0.03 },
+  baoaqu: { perch: 0.45, spot: 0.2, nap: 0.15, play: 0.1, desk: 0.05, litter: 0.05 },
 } satisfies Record<string, Record<Dest, number>>
 export const speciesBase = (sp: string): Record<Dest, number> => (SPECIES_BASE as Record<string, Record<Dest, number> | undefined>)[sp] ?? CAT_BASE

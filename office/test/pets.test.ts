@@ -264,6 +264,20 @@ describe("every species is data", () => {
       for (let i = 0; i < 120; i++) { room.step(a); room.render(a, focus, measure) }
     })
   })
+  test("A Bao A Qu ships: Borges' slow climber, cat slot, three sits and four walks", () => {
+    expect(SPECIES).toContain("baoaqu")
+    expect(slotOf("baoaqu")).toBe("cat")
+    expect(resolvePets({ cat: { species: "baoaqu" } }).cat.species).toBe("baoaqu")
+    expect(SPECIES_ART.baoaqu.sit).toHaveLength(3)
+    expect(SPECIES_ART.baoaqu.walk).toHaveLength(4)
+    expect(bucketFor("pet", { warmth: 0, wits: 0, energy: 0 }, () => 0, "baoaqu")).toBe(SPECIES_VOICE.baoaqu.sassy.pet!)
+    expect(speciesBase("baoaqu").perch).toBeGreaterThan(speciesBase("cat").perch)
+    chance(0.999, () => {
+      const room = new WideRoom(560), a = viewOf(office({ thinking: false }), 1)
+      room.setPets(resolvePets({ cat: { species: "baoaqu" } }))
+      for (let i = 0; i < 120; i++) { room.step(a); room.render(a, focus, measure) }
+    })
+  })
 })
 
 describe("Argos and the trail", () => {
