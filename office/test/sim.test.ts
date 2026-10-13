@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { viewOf } from "../kit/crew"
-import { glowOf, steamOf } from "../kit/draw"
-import { ROLE } from "../kit/palette"
+import { screenOf, steamOf } from "../kit/draw"
 import { MEET_BOTTOM, WideRoom, widePlan, zones } from "../rooms/wide"
 import { office } from "./wcag.test"
 
@@ -21,7 +20,6 @@ describe("warmth at the desk", () => {
   /** the office with `names` warm and between turns, everyone else as `office()` has them */
   // no fresh notes: a note's author walks to the board to write it
   const between = (names: string[]) => { const a = office(); return viewOf({ ...a, notes: [], roster: a.roster.map((r) => (names.includes(r.agent) ? { ...r, warm: true, thinking: false } : r)) }, 1) }
-  const dist = (p: string, q: string) => Math.hypot(...[1, 3, 5].map((i) => parseInt(p.slice(i, i + 2), 16) - parseInt(q.slice(i, i + 2), 16)))
 
   test("a coworker who just finished a turn stays at their desk, with a full mug's steam", () => {
     const room = new WideRoom(560)
@@ -42,7 +40,7 @@ describe("warmth at the desk", () => {
     expect(steamOf(actor(room, "ashe").warmth)).toBe(1)
   })
 
-  test("near the end of the warmth window the steam is thin and the monitor's glow is dim", () => {
+  test("near the end of the warmth window the steam is thin", () => {
     const room = new WideRoom(560)
     ;(room as unknown as { warmTicks: number }).warmTicks = 100
     for (let i = 0; i < 300; i++) room.step(viewOf(office(), 1))
@@ -51,7 +49,14 @@ describe("warmth at the desk", () => {
     expect(actor(room, "ashe").spot.kind).toBe("desk")
     expect(w).toBeLessThan(0.1)
     expect(steamOf(w)).toBe(1)
-    expect(dist(glowOf(w), ROLE.ground)).toBeLessThan(dist(ROLE.live, ROLE.ground) * 0.1)
+  })
+
+  test("a desk's screen says which: code scrolling mid-turn, a screensaver warm between turns, dark once cold or empty", () => {
+    expect(screenOf(true, true, 1)).toBe("code")
+    expect(screenOf(true, false, 0.9)).toBe("saver")
+    expect(screenOf(true, false, 0.05)).toBe("saver")
+    expect(screenOf(true, false, 0)).toBe("off")
+    expect(screenOf(false, true, 1)).toBe("off")
   })
 
   test("nobody warm goes to the meeting room; gone cold, they get up from their desks", () => {

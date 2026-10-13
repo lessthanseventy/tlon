@@ -13,8 +13,11 @@ import type { Agents } from "./types"
 export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number; board?: BoardCtx }
 /** a warm session's mug: three wisps of steam just after the turn, thinning to one as it goes cold, none when cold */
 export const steamOf = (warmth: number) => (warmth <= 0 ? 0 : Math.ceil(warmth * 3))
-/** a desk monitor's glow for its owner's warmth: lit mid-turn, dimming toward the dark as the session cools */
+/** a desk monitor's glow at a strength from 0 (dark) to 1 (lit) */
 export const glowOf = (warmth: number) => tint(ROLE.live, ROLE.ground, Math.max(0, Math.min(1, warmth)))
+/** what a desk's screen shows: code scrolling mid-turn, a screensaver while the session is warm between turns, dark once cold */
+export const screenOf = (seated: boolean, thinking: boolean, warmth: number): "code" | "saver" | "off" =>
+  !seated || warmth <= 0 ? "off" : thinking ? "code" : "saver"
 /** a tool running this long (ticks) has its worker sweating */
 const SWEAT = 600
 /** something with a footprint: drawn in order of `base`, its feet's row, so nearer covers farther */
@@ -78,7 +81,8 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
     const stretching = sitting && !seat.thinking && sc.tick < actor.stretch
     // between turns at the desk, the session still warm: leaning back, a mug steaming beside them
     const lounging = sitting && actor.spot.kind === "desk" && !seat.thinking && !talking && !stretching && actor.warmth > 0
-    const seatedFace: Dir = talking || actor.spot.face === "down" ? "down" : actor.spot.face
+    // between turns they turn their chair to the room, so warm-but-idle reads apart from working
+    const seatedFace: Dir = talking || lounging || actor.spot.face === "down" ? "down" : actor.spot.face
     const rows = figure(actor.look, seat.archetype, !!seat.lead, false, sitting ? seatedFace : couch ? "up" : actor.face, sitting || couch ? "sit" : "stand", step, shut)
     const top = sitting || couch ? actor.y - 14 : actor.y - heightOf(actor.look) + (actor.moving && step === 2 ? -1 : 0)
     const left = actor.x - 6
