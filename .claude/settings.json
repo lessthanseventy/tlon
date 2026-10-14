@@ -42,7 +42,6 @@
       "Bash(mise exec *)",
       "Bash(mise ls)",
       "Bash(mix *)",
-      "Bash(sqlite3 *)",
       "Bash(bun *)",
       "Bash(git status)",
       "Bash(git status *)",
