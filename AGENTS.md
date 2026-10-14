@@ -188,9 +188,9 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 - **Commit each piece of work when it is done**: one commit per bug, feature or ticket, before
   you start the next, so `git log` says what changed and why.
 - **History is linear.** GitHub's `main` is protected: rebase-merge only, every change through a PR,
-  and its required check is `tlon/check` — the local gate's commit status, not a CI run. Rebase onto
-  main, never merge it in, never make a merge commit; ship work as a PR branch, or a stack of small ones
-  with `gh stack`. A workline's approval lands its branch the same way — rebased onto origin's main and
+  and its required check is `tlon/check` — the local gate's commit status, not a CI run (CI runs on
+  release tags only). Rebase onto main, never merge it in, never make a merge commit; ship work as a PR
+  branch, or a stack of small ones with `gh stack`. A workline's approval lands its branch the same way — rebased onto origin's main and
   gated (`Server.Workline.Merge`), then published: the branch pushed, a PR opened, `tlon/check` posted on
   the sha the gate passed, auto-merged by GitHub (`Server.Workline.Publish`). The checkout's own main
   is never moved by a landing; it only follows origin. Rewriting pushed history is the human's call —
