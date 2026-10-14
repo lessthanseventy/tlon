@@ -22,10 +22,17 @@ t() { tmux -L "$sock" "$@"; }
 # tmux leaves its socket file behind when its server dies
 trap 't kill-server 2>/dev/null; rm -f "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$sock"; rm -rf "$state"' EXIT
 
+# the TUI's config is a copy of the operator's in the throwaway: the drive looks like their office, and
+# whatever it writes (pets, the store, the hall, looks, souls) lands in the copy, never in their files
+cfg="$state/config"
+mkdir -p "$cfg"
+src="${XDG_CONFIG_HOME:-$HOME/.config}/tlon"
+[ -d "$src" ] && cp -r "$src" "$cfg/tlon"
+
 wide="${OFFICE_WIDE:-}"
 if [ -n "$wide" ]; then dcols=280 drows=75; else dcols=150 drows=60; fi
 t new-session -d -x "${OFFICE_COLS:-$dcols}" -y "${OFFICE_ROWS:-$drows}" \
-  "cd '$root/office' && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' bun tui/main.ts 2>'$state/err'"
+  "cd '$root/office' && unset TLON_HALL TLON_LOOKS TLON_PALETTE TLON_SOULS && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' XDG_CONFIG_HOME='$cfg' bun tui/main.ts 2>'$state/err'"
 sleep 3
 for step in "$@"; do
   case "$step" in
