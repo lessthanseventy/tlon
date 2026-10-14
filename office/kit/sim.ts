@@ -462,6 +462,8 @@ export class Sim<L extends { people: Seat[] }> {
   play(kind: "doorbell" | "event" | "drill") {
     if (kind === "doorbell") { this.ring(); return }
     if (kind === "event" && this.event()) return
+    // a drill over a running scene would stack its own panic on top of it; refuse like event() does
+    if (kind === "drill" && this.running) return
     const line = { event: "Did anyone else hear that?", drill: "Fire drill! Everybody out!" }[kind]
     for (const x of this.actors.values()) { x.emote = "!"; x.emoteUntil = this.tick + 60 }
     const first = this.actors.keys().next().value
