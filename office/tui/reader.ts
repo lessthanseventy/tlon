@@ -7,6 +7,11 @@ import { Editor, wrap } from "./editor"
 import { ESC, line, type Seg } from "./term"
 
 type Msg = ThreadView["messages"][number]
+/** the reader's own keys, for the help card; any other key goes to the thread's actions */
+export const READER_KEYS: { key: string; label: string }[] = [
+  { key: "r i enter", label: "reply" }, { key: "j k", label: "scroll a line" }, { key: "pgup pgdn", label: "scroll a page" },
+  { key: "home end", label: "the oldest / the newest" }, { key: "esc q", label: "back to the room" },
+]
 export type ReaderDeps = {
   /** the newest page, or the one before message `before` */
   load: (before?: number) => Promise<ThreadView | null>
