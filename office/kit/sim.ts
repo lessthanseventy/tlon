@@ -15,7 +15,7 @@ import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
 import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type VisitorKind } from "./door"
-import { EVENTS, EVENT_KINDS, blackoutAt, flickerAt, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
+import { CHAINS, EVENTS, EVENT_KINDS, blackoutAt, flickerAt, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
 import { SHERIFF } from "./scharlach"
 import { DEFAULT, meanGap, resolve, type Dials } from "./whimsy"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
@@ -117,6 +117,7 @@ export const WARM_TICKS = 36_000
 const LOUNGING = new Set<string>(["couch", "cooler", "coffee", "roam", "arcade", "pingpong", "aquarium", "window", "plant", "chat", "pet", "vending", "foosball", "pool", "read", "bathroom"])
 /** what someone at a pastime says now and then (over their head): a nap on the couch is a "z" */
 const MOODS: Record<string, string[]> = { board: ["?"], cooler: ["~"], coffee: ["♥"], couch: ["z", "*"], arcade: ["!", "*"], pingpong: ["!"], aquarium: ["~", "♥"], window: ["*", "~"], plant: ["♪"], chat: ["~", "?", "!"], pet: ["♥"], vending: ["♪", "?"], foosball: ["!", "*"], pool: ["!", "?"], read: ["…", "?", "♥"], bathroom: ["~", "♪"] }
+const SOUR = ["…", "!"]
 /** how the hour pulls at a pastime: coffee in the morning, the machine at lunch, the windows and the couch at night */
 export function moment(kind: string, hour: number, weather?: string, party = false) {
   // a birthday: the crowd gathers at the kitchen counter, cake and a drink
@@ -516,7 +517,7 @@ export class Sim<L extends { people: Seat[] }> {
   props(): Prop[] {
     const r = this.running, g = this.eventGeo()
     if (!r || !g) return []
-    const props = propsAt(r.kind, this.tick - r.since, g), host = r.idle[0] ? this.actors.get(r.idle[0]) : undefined
+    const props = propsAt(r.kind, this.tick - r.since, g, this.dials.severity), host = r.idle[0] ? this.actors.get(r.idle[0]) : undefined
     if (host && this.blackout()) props.push({ kind: "candle", x: host.x + 4, y: host.y, step: Math.floor(this.tick / 4) % 2 })
     const sheriff = r.sheriff ? this.actors.get(r.sheriff) : undefined
     if (sheriff && this.chasing(r, this.tick - r.since)) props.push({ kind: "net", x: sheriff.x - 8, y: sheriff.y })
@@ -562,6 +563,11 @@ export class Sim<L extends { people: Seat[] }> {
   }
   /** a spontaneous event: draws only when it makes one, never per tick, so a seeded run before the first is untouched */
   private nextEvent = -1
+  /** coworkers whose real history soured the day (a red build), until the tick; room-local, never written anywhere */
+  private sour = new Map<string, number>()
+  sourMood(agent: string, ticks = 36_000) {
+    if (this.dials.moods) this.sour.set(agent, this.tick + ticks)
+  }
   private stepEvents() {
     const gap = meanGap(this.dials.frequency)
     if (!Number.isFinite(gap) || !this.seeded || this.running || this.alarmed || !this.eventGeo()) return
@@ -572,11 +578,20 @@ export class Sim<L extends { people: Seat[] }> {
     this.nextEvent = this.tick + Math.round(gap * (0.5 + Math.random()))
     this.event()
   }
+  private chainDepth = 0
   private stepEvent() {
     const r = this.running
     if (!r) return
     const t = this.tick - r.since
-    if (t >= EVENTS[r.kind].ticks) { this.running = null; this.changed = true; return }
+    if (t >= EVENTS[r.kind].ticks) {
+      this.running = null
+      this.changed = true
+      // rimworld: the end of one can be the start of the next, up to three deep; draws only when chain is on
+      const next = this.dials.chain && this.chainDepth < 3 && Math.random() < 0.6 ? CHAINS[r.kind].find((k) => this.dials.events[k]) : undefined
+      if (next && this.event(next)) this.chainDepth++
+      else this.chainDepth = 0
+      return
+    }
     this.beats(t)
   }
 
@@ -856,7 +871,7 @@ export class Sim<L extends { people: Seat[] }> {
       if (!actor.moving && !actor.path.length && actor.spot.kind === "coffee" && actor.mug < this.tick && Math.random() < 0.03) { actor.mug = this.tick + 3000; changed = true }
       if (actor.emote && this.tick > actor.emoteUntil) { actor.emote = null; changed = true }
       if (!actor.emote && !actor.moving && Math.random() < 0.006) {
-        const moods = MOODS[actor.spot.kind]
+        const moods = (this.sour.get(actor.seat.agent) ?? 0) > this.tick ? SOUR : MOODS[actor.spot.kind]
         actor.emote = moods ? moods[Math.floor(Math.random() * moods.length)]! : actor.look.emote
         actor.emoteUntil = this.tick + 25
         changed = true

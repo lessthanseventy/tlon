@@ -30,6 +30,9 @@ export const EVENTS: Record<EventKind, Script> = {
   duck: { ticks: 500, beats: [{ at: 200, who: "idle", emote: "?" }] },
 }
 
+/** what an event can start when it ends under `chain` (rimworld): the zoo starts the drill, which cuts the power, which panics the penguin */
+export const CHAINS: Record<EventKind, EventKind[]> = { zoo: ["drill"], drill: ["power"], power: ["duck"], meteor: ["power"], duck: [] }
+
 /** where the scenes happen, in room pixels; a room that has no door has no geometry and no events */
 export type Geo = { doorX: number; hallY: number; ceilY: number; leftX: number; windowX: number; cork?: Pt }
 
@@ -46,8 +49,18 @@ export function pickEvent(roll: number, last: EventKind | null, from: EventKind[
 const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * Math.max(0, Math.min(1, t)))
 
 /** what is on the stage at tick `t` of `kind` — pure; `[]` outside the event */
-export function propsAt(kind: EventKind, t: number, g: Geo): Prop[] {
+export function propsAt(kind: EventKind, t: number, g: Geo, severity: 1 | 2 | 3 = 1): Prop[] {
   if (t < 0 || t >= EVENTS[kind].ticks) return []
+  // a bigger event is more of it: later copies run 40 ticks behind and 14 px apart (the zoo adds only penguins)
+  return Array.from({ length: severity }, (_, i) =>
+    scene(kind, t - 40 * i, g)
+      .filter((p) => i === 0 || kind !== "zoo" || p.kind === "penguin")
+      .map((p) => (i ? { ...p, x: p.x + 14 * i } : p)),
+  ).flat()
+}
+
+function scene(kind: EventKind, t: number, g: Geo): Prop[] {
+  if (t < 0) return []
   switch (kind) {
     case "duck": {
       // in at the door (0-120), across the whole hall to its left wall (120-300), a look round (300-380), back out (380-500)
