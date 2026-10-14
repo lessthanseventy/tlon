@@ -27,27 +27,33 @@ const server = Bun.serve({
     return new Response("no", { status: 404 })
   },
 })
-const socket = `tlon-office-reply-${process.pid}`
+// a tmux server per test: a socket reused right after kill-server can race its teardown
+const sockets: string[] = []
+let socket = ""
+const fresh = () => { if (socket) Bun.spawnSync(["tmux", "-L", socket, "kill-server"]); socket = `tlon-office-reply-${process.pid}-${sockets.length}`; sockets.push(socket) }
 const state = mkdtempSync(join(tmpdir(), "office-reply-"))
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
 afterAll(() => {
-  tmux("kill-server")
-  rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${socket}`, { force: true })
+  for (const s of sockets) {
+    Bun.spawnSync(["tmux", "-L", s, "kill-server"])
+    rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${s}`, { force: true })
+  }
   rmSync(state, { recursive: true, force: true })
   server.stop(true)
 })
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const t0 = Date.now()
+const t0 = performance.now()
 const until = async (what: string, ok: () => boolean) => {
-  const deadline = Date.now() + 25_000
+  const deadline = performance.now() + 25_000
   let seen = ok()
-  while (!seen && Date.now() < deadline) { await Bun.sleep(50); seen = ok() }
-  if (!seen) throw new Error(`never saw ${what} after ${Date.now() - t0}ms; pane:\n${screen()}`)
+  while (!seen && performance.now() < deadline) { await Bun.sleep(50); seen = ok() }
+  if (!seen) throw new Error(`never saw ${what} after ${Math.round(performance.now() - t0)}ms; pane:\n${screen()}`)
 }
 
 test("a thread card opens with its reply box focused; esc leaves the box, esc again goes back", async () => {
+  fresh()
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
@@ -74,7 +80,7 @@ test("a thread card opens with its reply box focused; esc leaves the box, esc ag
 }, 40_000)
 
 test("a thread with an open prompt opens with the box unfocused: 1 answers at once, as its card and in the reader", async () => {
-  tmux("kill-server")
+  fresh()
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
@@ -103,7 +109,7 @@ test("a thread with an open prompt opens with the box unfocused: 1 answers at on
 }, 40_000)
 
 test("a thread another surface asks to show opens with the box unfocused: it never takes the keys unasked", async () => {
-  tmux("kill-server")
+  fresh()
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)

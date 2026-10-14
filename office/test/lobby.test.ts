@@ -33,12 +33,12 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const t0 = Date.now()
+const t0 = performance.now()
 const until = async (what: string, ok: () => boolean) => {
-  const deadline = Date.now() + 25_000
+  const deadline = performance.now() + 25_000
   let seen = ok()
-  while (!seen && Date.now() < deadline) { await Bun.sleep(50); seen = ok() }
-  if (!seen) throw new Error(`never saw ${what} after ${Date.now() - t0}ms; pane:\n${screen()}`)
+  while (!seen && performance.now() < deadline) { await Bun.sleep(50); seen = ok() }
+  if (!seen) throw new Error(`never saw ${what} after ${Math.round(performance.now() - t0)}ms; pane:\n${screen()}`)
 }
 
 const LOBBY = "nothing waits on you"
