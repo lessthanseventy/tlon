@@ -11,6 +11,10 @@ describe("hall roll", () => {
   test("same (seed, locks, taken) → identical candidate", () => {
     expect(roll("hall:7", { taken: [], locks: {}, vocab: VOCAB })).toEqual(roll("hall:7", { taken: [], locks: {}, vocab: VOCAB }))
   })
+  test("never offers uqbar, the operator's delegate: a seat by that name would take its identity", () => {
+    expect(BORGES as readonly string[]).not.toContain("uqbar")
+    for (let i = 0; i < 300; i++) expect(roll(`hall:${i}`, { taken: [], locks: {}, vocab: VOCAB }).name).not.toBe("uqbar")
+  })
   test("every Borges name is legal", () => {
     expect(BORGES.length).toBeGreaterThanOrEqual(24)
     for (const n of BORGES) expect(n).toMatch(LEGAL)
