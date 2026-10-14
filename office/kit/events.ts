@@ -36,10 +36,11 @@ export type Geo = { doorX: number; hallY: number; ceilY: number; leftX: number; 
 export type PropKind = "van" | "monkey" | "penguin" | "goat" | "duck" | "streak" | "puff" | "crater" | "candle" | "net"
 export type Prop = { kind: PropKind; x: number; y: number; flip?: boolean; step?: number }
 
-/** a roll in [0, 1) → a kind that is not `last` */
-export function pickEvent(roll: number, last: EventKind | null): EventKind {
-  const from = EVENT_KINDS.filter((k) => k !== last)
-  return from[Math.min(from.length - 1, Math.floor(roll * from.length))]!
+/** a roll in [0, 1) → a kind of `from` that is not `last` (the only enabled kind may repeat) */
+export function pickEvent(roll: number, last: EventKind | null, from: EventKind[] = EVENT_KINDS): EventKind {
+  const fresh = from.filter((k) => k !== last)
+  const pool = fresh.length ? fresh : from
+  return pool[Math.min(pool.length - 1, Math.floor(roll * pool.length))]!
 }
 
 const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * Math.max(0, Math.min(1, t)))

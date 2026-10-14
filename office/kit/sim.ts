@@ -15,8 +15,9 @@ import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
 import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type VisitorKind } from "./door"
-import { EVENTS, blackoutAt, flickerAt, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
+import { EVENTS, EVENT_KINDS, blackoutAt, flickerAt, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
 import { SHERIFF } from "./scharlach"
+import { DEFAULT, meanGap, resolve, type Dials } from "./whimsy"
 import { bucketFor, NINA, NINA_RIFF, pick, pickFresh, riff, type Fuss } from "./voices"
 
 /** something to do with your idle time, where a room has the thing to do it with */
@@ -160,6 +161,9 @@ export class Sim<L extends { people: Seat[] }> {
   private callers: VisitorKind[] = []
   protected caller: { kind: VisitorKind; who: string; bell: number; here: number } | null = null
   protected nextRing = RING_FIRST
+  /** the wackiness dials (kit/whimsy.ts): what the room does on its own; keyed plays are the operator's and ignore all but the event toggles */
+  private dials: Dials = resolve(DEFAULT)
+  setWhimsy(d: Dials) { this.dials = d; this.nextEvent = -1; this.changed = true }
   private pizzaUntil = 0
   private nudgeUntil = 0
   private date: () => Date = () => new Date()
@@ -264,7 +268,7 @@ export class Sim<L extends { people: Seat[] }> {
     return l.replaceAll("{name}", name || "you")
   }
   /** Nina says something, over her head for a few seconds — after `delay`, when she is answering someone */
-  protected catSay(text: string, ticks = 45, delay = 0) { const c = this.cat; c.said = text; c.saidFrom = this.tick + delay; c.saidUntil = c.saidFrom + ticks; this.changed = true }
+  protected catSay(text: string, ticks = 45, delay = 0) { if (!this.dials.pets) return; const c = this.cat; c.said = text; c.saidFrom = this.tick + delay; c.saidUntil = c.saidFrom + ticks; this.changed = true }
   /** a pet that spoke lately keeps quiet a while before speaking up unasked */
   protected quiet(saidUntil: number) { return this.tick > saidUntil + 150 }
   /**
@@ -374,13 +378,14 @@ export class Sim<L extends { people: Seat[] }> {
     const r = Math.random()
     // now and then she goes to sit on the keyboard of someone hard at work
     const typing = [...this.actors.values()].filter((a) => a.spot.kind === "desk" && !a.moving && a.seat.thinking)
-    if (typing.length && r > 0.97 && c.mode !== "sleep") return this.catKeyboard(pick(typing).seat.agent)
+    if (this.dials.pets && typing.length && r > 0.97 && c.mode !== "sleep") return this.catKeyboard(pick(typing).seat.agent)
     // the small hours give her ideas
-    const leaps = r < (nightOwl(this.hour()) ? 0.15 : 0.05) * lean(this.temperament.energy) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
+    const leaps = this.dials.pets && r < (nightOwl(this.hour()) ? 0.15 : 0.05) * lean(this.temperament.energy) && c.mode !== "sleep" && !p.via(c) ? this.leapsHere() : null
     if (leaps) { c.mode = "zoom"; c.leaps = leaps; c.zoom = this.tick + 70 + Math.floor(Math.random() * 60); return true }
-    if (p.bath && r > 0.95 && r <= 0.97 && c.mode !== "sleep" && this.catDrink()) return true
+    if (this.dials.pets && p.bath && r > 0.95 && r <= 0.97 && c.mode !== "sleep" && this.catDrink()) return true
     const cold = (this.weather?.temp_c ?? 20) < 10
-    const to = cold && p.warm && r < 0.35 ? p.warm
+    const to = !this.dials.pets ? p.nap
+      : cold && p.warm && r < 0.35 ? p.warm
       : company && r < 0.3 ? pick(p.lounge)
       : this.dest(pickDest(this.temperament, r, speciesBase(c.species)))
     const down = p.via(c), up = p.via(to)
@@ -490,7 +495,9 @@ export class Sim<L extends { people: Seat[] }> {
   /** start a scripted scene — one at a time, only where there is a door; false when refused */
   event(kind?: EventKind): boolean {
     if (this.running || this.alarmed || !this.eventGeo() || !this.actors.size) return false
-    const k = kind ?? pickEvent(Math.random(), this.lastEvent)
+    const on = EVENT_KINDS.filter((x) => this.dials.events[x])
+    if (kind ? !this.dials.events[kind] : !on.length) return false
+    const k = kind ?? pickEvent(Math.random(), this.lastEvent, on)
     const crew = [...this.actors.values()].filter((x) => !x.leaving && !x.seat.thinking).map((x) => x.seat.agent).sort()
     const sheriff = crew.includes(SHERIFF) ? SHERIFF : null
     this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff }
@@ -552,6 +559,18 @@ export class Sim<L extends { people: Seat[] }> {
       }
       this.onEvent?.(r.kind, b)
     }
+  }
+  /** a spontaneous event: draws only when it makes one, never per tick, so a seeded run before the first is untouched */
+  private nextEvent = -1
+  private stepEvents() {
+    const gap = meanGap(this.dials.frequency)
+    if (!Number.isFinite(gap) || !this.seeded || this.running || this.alarmed || !this.eventGeo()) return
+    const h = this.hour()
+    if (h < OPEN_FROM || h >= OPEN_TO) return
+    if (this.nextEvent < 0) this.nextEvent = this.tick + gap
+    if (this.tick < this.nextEvent) return
+    this.nextEvent = this.tick + Math.round(gap * (0.5 + Math.random()))
+    this.event()
   }
   private stepEvent() {
     const r = this.running
@@ -615,9 +634,10 @@ export class Sim<L extends { people: Seat[] }> {
     if (!door || !this.seeded) return false
     // the schedule draws only when it makes a ring, never per tick: a seeded run before the first is untouched
     if (this.tick >= this.nextRing) {
-      this.nextRing = this.tick + RING_MIN + Math.floor(Math.random() * RING_SPAN)
+      const busy = this.dials.doorbell === "busy" ? 2 : 1
+      this.nextRing = this.tick + Math.round((RING_MIN + Math.floor(Math.random() * RING_SPAN)) / busy)
       const h = this.hour()
-      if (h >= OPEN_FROM && h < OPEN_TO && !this.caller && !this.callers.length) this.ring()
+      if (this.dials.doorbell !== "off" && h >= OPEN_FROM && h < OPEN_TO && !this.caller && !this.callers.length) this.ring()
     }
     let c = this.caller
     if (!c) {
@@ -728,6 +748,7 @@ export class Sim<L extends { people: Seat[] }> {
     this.conversing()
     this.together()
     if (this.stepDoor()) changed = true
+    this.stepEvents()
     const asleep = this.cat.mode === "sleep"
     if (this.stepCat()) changed = true
     if (this.prints.length) { const n = this.prints.length; this.prints = prune(this.prints, this.tick); if (this.prints.length !== n) changed = true }
