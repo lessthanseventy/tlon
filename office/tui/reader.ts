@@ -148,7 +148,7 @@ export class Reader {
     for (let i = 0; i < bodyH; i++) o += `${ESC}[${i + 2};1H` + line((i >= pad ? all[first + i - pad] : null) ?? [], cols)
     const top = bodyH + 2
     // the box stays drawn when you step out of it, dimmed, its draft kept
-    o += `${ESC}[${top};1H` + line([{ s: " reply ", fg: ROLE.ground, bg: c ? ROLE.attention : ROLE.inactive }, { s: c ? "  enter send · alt-enter newline · esc leave the box · pgup/pgdn scroll" : "  r or enter to write", fg: ROLE.inactive }], cols)
+    o += `${ESC}[${top};1H` + line([{ s: " reply ", fg: ROLE.ground, bg: c ? ROLE.attention : ROLE.inactive }, { s: c ? "  enter send · alt-enter newline · esc leave the box · pgup/pgdn scroll · ctrl+] lobby" : "  r or enter to write", fg: ROLE.inactive }], cols)
     ed.rows.forEach((r, i) => { o += `${ESC}[${top + 1 + i};1H` + line([{ s: " ▌ ", fg: c ? ROLE.attention : ROLE.inactive }, { s: r, fg: c ? ROLE.prose : ROLE.inactive }], cols) })
     if (c) o += `${ESC}[${top + 1 + ed.cursor.r};${4 + ed.cursor.c}H${ESC}[?25h`
     else o += `${ESC}[${top + 1 + ed.rows.length};1H` + line([this.status ? { s: ` ${this.status}`, fg: ROLE.key } : { s: ` ${keys}`, fg: ROLE.inactive }], cols)
