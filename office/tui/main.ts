@@ -220,8 +220,10 @@ const LEGEND_CHARS = ["h", "f", "k", "s", "p", "b", "y", "c", "g", "e", "w", "r"
 const blankBuf = () => Array.from({ length: 22 }, () => ".".repeat(12))
 let picker: { title: string; q: Editor; items: Pick[]; sel: number } | null = null
 let reader: Reader | null = null
-/** a thread card's reply box: focused, it takes the keys; unfocused, the card's actions do */
+/** a thread card's reply box: focused, it takes the keys; unfocused, the card's actions do. Its draft is the thread's, the reader's too */
 let cardReply: { tid: number; ed: Editor; focused: boolean } | null = null
+/** a thread with an open prompt opens with its box unfocused, so 1–9 answer at once */
+const asks = (tid: number) => !!threadOf(tid)?.prompt
 const cardBox = () => (!reader && mode.kind === "thread" && cardReply?.tid === mode.tid ? cardReply : null)
 let cell: { w: number; h: number } | null = null, kitty = process.env.OFFICE_GRAPHICS === "kitty"
 let g: Geometry, frame: Frame | null = null, sentImage = false, rows: Row[] = []
@@ -530,7 +532,7 @@ function openThread(): number | null {
 }
 function open(m: Mode) {
   mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
-  if (m.kind === "thread") { picked = m.tid; cardReply = cardReply?.tid === m.tid ? { ...cardReply, focused: true } : { tid: m.tid, ed: new Editor(), focused: true } }
+  if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
   if (m.kind === "look") lookDraft = { ...lookOf(m.name), ...overrideFor(m.name) }
@@ -573,8 +575,12 @@ function act(x: Act) {
 }
 
 // ── writing: the inputs ─────────────────────────────────────────────────────────────────────────
+/** what an input held when ctrl+] left it, by its label, there again when it is asked again */
+const banked = new Map<string, string>()
 function ask(label: string, submit: Prompt["submit"], opts: { multiline?: boolean; text?: string; cycles?: Cycle[] } = {}) {
-  input = { label, ed: new Editor(opts.text ?? "", !!opts.multiline), submit, cycles: opts.cycles, focus: 0 }
+  const held = banked.get(label)
+  banked.delete(label)
+  input = { label, ed: new Editor(held ?? opts.text ?? "", !!opts.multiline), submit, cycles: opts.cycles, focus: 0 }
   draw()
 }
 function newThread() {
@@ -748,9 +754,10 @@ const VERBS: [string, () => void][] = [
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
-function openReader(tid: number, extra: Partial<ReaderDeps> = {}) {
+function openReader(tid: number, extra: Partial<ReaderDeps> = {}, focus = !asks(tid)) {
   picked = tid
-  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, true)
+  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, focus, cardReply?.tid === tid ? cardReply.ed.text : "")
+  if (cardReply?.tid === tid) cardReply = null
   const v = threads.get(tid)
   if (v) reader.take(v)
   void reader.reload().then(draw)
@@ -767,7 +774,13 @@ function openConversation(name: string) {
     send: (body) => data.post(lobby, speech(name, body) ?? body),
   })
 }
+/** the reader's draft goes back to the thread's box, so its card or the next reader starts from it */
+function bankReader() {
+  const held = reader?.held()
+  if (reader && held) cardReply = { tid: reader.tid, ed: new Editor(held), focused: true }
+}
 function closeReader() {
+  bankReader()
   reader = null
   out(`${ESC}[?25l`)
   layoutScreen(); draw()
@@ -2301,6 +2314,8 @@ function zoomInput(b: Uint8Array) {
 /** Ctrl-] from anywhere: the lobby, the room with nothing open over it */
 function toLobby(): void {
   if (zoom) return leaveZoom(true)
+  if (input && !input.ed.empty) banked.set(input.label, input.ed.text)
+  bankReader()
   reader = null; input = null; back(true); roomChanged = true
   out(`${ESC}[?25l`); layoutScreen(); draw()
 }
@@ -2360,7 +2375,7 @@ async function main() {
     seenFocus = f.at
     if (zoom) leaveZoom()
     goThread(f.thread_id, threadOf(f.thread_id)?.workspace_id)
-    openReader(f.thread_id)
+    openReader(f.thread_id, {}, false)
   }, 1000)
   // a card showing a running coworker keeps their activity current
   every(() => {
