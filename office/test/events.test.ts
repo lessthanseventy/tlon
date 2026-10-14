@@ -120,6 +120,27 @@ describe("the cast", () => {
       }
     })
   })
+  test("each idle coworker reacts once per event, in their own line, staggered", () => seeded(3, () => {
+    const r = new WideRoom(696), a = view(["w0", "w1"]), asked: string[] = [], said: Record<string, string[]> = {}
+    r.reactLine = (who, kind) => { asked.push(who); return `${who} on ${kind}` }
+    run(r, a, 300); r.event("duck")
+    for (let i = 0; i < EVENTS.duck.ticks; i++) {
+      r.step(a)
+      for (const [n, t] of (r as any).talk as Map<string, { text: string | null }>)
+        if (t.text?.endsWith(" on duck") && !(said[n] ??= []).includes(t.text)) said[n]!.push(t.text)
+    }
+    for (const n of ["w0", "w1"]) expect(said[n]).toEqual([`${n} on duck`])
+    expect(asked.filter((n) => n === "w0").length).toBe(1)
+  }))
+  test("a seat that is thinking is never asked for a reaction", () => seeded(3, () => {
+    const r = new WideRoom(696), a = view(["w0", "w1"]), asked = new Set<string>()
+    r.reactLine = (who) => { asked.add(who); return "hm" }
+    run(r, a, 300)
+    for (const k of EVENT_KINDS.filter((k) => k !== "drill")) { r.event(k); run(r, a, EVENTS[k].ticks + 5) }
+    expect(asked.has("w0")).toBe(true)
+    expect(asked.has("w2")).toBe(false)
+    expect(asked.has("hronir")).toBe(false)
+  }))
   test("the same seed runs the same twice", () => {
     const trace = () => seeded(4, () => {
       const r = new WideRoom(696), a = view(["w0", "w1"]), out: string[] = []

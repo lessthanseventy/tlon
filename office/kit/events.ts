@@ -5,29 +5,30 @@ import type { Pt } from "./sim"
 export type EventKind = "drill" | "zoo" | "meteor" | "power" | "duck"
 export const EVENT_KINDS: EventKind[] = ["drill", "zoo", "meteor", "power", "duck"]
 
-/** a line or a glyph at tick `at` of the event, for `who`: the sheriff, the first idle coworker, or everyone idle */
-export type Beat = { at: number; who: "sheriff" | "first" | "idle"; say?: string; emote?: string }
+/** a line or a glyph at tick `at` of the event, for `who`: the sheriff, the first idle coworker, or everyone idle; `react` asks each seat for its own line, staggered */
+export type Beat = { at: number; who: "sheriff" | "first" | "idle"; say?: string; emote?: string; react?: true }
 export type Script = { ticks: number; beats: Beat[] }
 
 export const EVENTS: Record<EventKind, Script> = {
-  drill: { ticks: 600, beats: [{ at: 0, who: "sheriff", say: "Fire drill! Everyone out!" }] },
+  drill: { ticks: 600, beats: [{ at: 0, who: "sheriff", say: "Fire drill! Everyone out!" }, { at: 60, who: "idle", react: true }] },
   zoo: {
     ticks: 1200,
     beats: [
       { at: 0, who: "idle", emote: "!" },
       { at: 300, who: "sheriff", say: "Order! ORDER!" },
       { at: 600, who: "first", say: "Who let them in?" },
+      { at: 120, who: "idle", react: true },
     ],
   },
   meteor: {
     ticks: 700,
-    beats: [{ at: 60, who: "idle", emote: "!" }, { at: 150, who: "first", say: "…was that the deploy?" }],
+    beats: [{ at: 60, who: "idle", emote: "!" }, { at: 150, who: "first", say: "…was that the deploy?" }, { at: 100, who: "idle", react: true }],
   },
   power: {
     ticks: 700,
-    beats: [{ at: 100, who: "first", say: "Was that the breaker?" }, { at: 640, who: "idle", emote: "♪" }],
+    beats: [{ at: 100, who: "first", say: "Was that the breaker?" }, { at: 640, who: "idle", emote: "♪" }, { at: 120, who: "idle", react: true }],
   },
-  duck: { ticks: 500, beats: [{ at: 200, who: "idle", emote: "?" }] },
+  duck: { ticks: 500, beats: [{ at: 200, who: "idle", emote: "?" }, { at: 60, who: "idle", react: true }] },
 }
 
 /** what an event can start when it ends under `chain` (rimworld): the zoo starts the drill, which cuts the power, which panics the penguin */
