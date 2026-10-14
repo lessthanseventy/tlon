@@ -6,6 +6,7 @@
 // lane → hallway → lane, so nobody needs a path finder and nobody walks through a desk.
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawDoor, drawVisitor } from "../kit/door"
+import type { EventKind } from "../kit/events"
 import { drawProp } from "../kit/zoo"
 import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, swatted, FLINCH, type Book, type Mood, type Pt as Perch } from "../kit/uqbar"
 import { DWELL, doing, lapOf, pickErrand, REST, UQBAR, type Errand, type ErrandKind, type Occasion } from "../kit/volume"
@@ -306,6 +307,10 @@ export class WideRoom extends Sim<Layout> {
     return this.planes.length > 0
   }
   /** Argos says something (after `delay`, when he is answering) */
+  protected override reactPets(k: EventKind) {
+    super.reactPets(k)
+    this.dogSay(this.argos(`event_${k}`), 40)
+  }
   private dogSay(text: string, delay = 0) { if (!this.petsOn) return; const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
   /** Argos' line for an occasion: the model's, else his own */
   private argos(occasion: Parameters<typeof argos>[0], name = "") {

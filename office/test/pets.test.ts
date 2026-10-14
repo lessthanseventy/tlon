@@ -6,6 +6,7 @@ import { bucketFor, NINA, SWEET } from "../kit/voices"
 import { CAT, DOG, fillArt, SPECIES_ART } from "../kit/sprites"
 import { ROLE } from "../kit/palette"
 import { EMPTY, type Agents } from "../kit/types"
+import { EVENT_KINDS } from "../kit/events"
 import { WideRoom, widePlan } from "../rooms/wide"
 import { DOOR, RIM_FLOOR } from "../kit/bathroom"
 
@@ -346,4 +347,28 @@ describe("Argos and the trail", () => {
     stepDog(one, ctx([trail[0]!]) as never)
     expect(one.creep).toBe(false)
   }))
+})
+
+describe("the pets react to events", () => {
+  test("Nina and Argos each say a line of their own for every kind of event", () => chance(0.999, () => {
+    for (const kind of EVENT_KINDS) {
+      const room = new WideRoom(696), a = viewOf(office({ thinking: false }), 1), pets = room as unknown as Pets
+      for (let i = 0; i < 300; i++) room.step(a)
+      expect(room.event(kind)).toBe(true)
+      const cat = new Set<string>(), dog = new Set<string>()
+      for (let i = 0; i < 300; i++) {
+        room.step(a)
+        if (pets.cat.said) cat.add(pets.cat.said)
+        if (pets.dog.said) dog.add(pets.dog.said)
+      }
+      if (kind !== "drill") {
+        const nina = [...NINA[`event_${kind}`], ...(SWEET[`event_${kind}`] ?? [])]
+        expect([kind, nina.some((l) => cat.has(l))]).toEqual([kind, true])
+      }
+      expect([kind, ARGOS[`event_${kind}`].some((l) => dog.has(l))]).toEqual([kind, true])
+    }
+  }))
+  test("Argos is overjoyed at the zoo", () => {
+    expect(ARGOS.event_zoo.some((l) => /ANIMALS/.test(l))).toBe(true)
+  })
 })

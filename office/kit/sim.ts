@@ -513,10 +513,18 @@ export class Sim<L extends { people: Seat[] }> {
     this.running = { kind: k, since: this.tick, idle: crew.filter((n) => n !== sheriff), sheriff }
     this.lastEvent = k
     this.onEvent?.(k, null)
+    this.reactPets(k)
     this.beats(0)
     if (k === "drill") this.drillUntil = this.tick + DRILL
     this.changed = true
     return true
+  }
+  /** the pets' take on a scene: Nina's here, a room with more pets adds theirs */
+  protected reactPets(k: EventKind) {
+    // a drill sets her off zoomies, which speak for her
+    if (k === "drill") return
+    const key = `event_${k}` as const
+    this.catSay(this.line("Nina", key, NINA[key]), 90, 20)
   }
   eventNow(): { kind: EventKind; since: number; t: number } | null {
     const r = this.running

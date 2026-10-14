@@ -40,6 +40,11 @@ export const ARGOS = {
   rally: ["BALL. Ball ball ball. BALL.", "Left! Right! Left! I can't take it!"],
   paper: ["The morning news! I fetch it like a trophy from Troy!", "Dispatches! Sing, O Muse, of the evening edition!", "I bring news. I do not read it. Reading is for the gods."],
   smoke: ["SMOKE! Smoke! SMOKE!", "Is it a squirrel? It smells like a squirrel.", "WOOF! The server closet is on fire!", "I have seen Troy burn. This is worse. Bark."],
+  event_drill: ["A DRILL! I know this one! Everybody RUN!", "Is it a walk? Everyone's leaving. It's a walk."],
+  event_zoo: ["ANIMALS! FRIENDS! ALL OF THEM!", "A GOAT! A PENGUIN! A MONKEY! Best. Day. Ever.", "Sing, O Muse, of the zoo that came to US!"],
+  event_meteor: ["Sky rock! Sky rock! Can I fetch it?", "The heavens threw a ball! Bark!"],
+  event_power: ["Dark! Was that me?", "Who ate the lights? Not me. Probably not me."],
+  event_duck: ["A DUCK. I love him.", "Duck! DUCK! New friend! DUCK!"],
   fuss: {
     pat: ["Yes! The head! The good head!", "Thank you, {name}! Thank you thank you!"],
     scratch: ["Ohh, the ear. The leg's going. Can't stop it.", "There! THERE! O, {name}, there!"],
