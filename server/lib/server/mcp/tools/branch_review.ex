@@ -24,7 +24,8 @@ defmodule Server.MCP.Tool.ReviewBranch do
            verdict: params[:verdict],
            by: identity.agent,
            body: params[:body],
-           thread_id: identity.thread_id
+           thread_id: identity.thread_id,
+           repo: Server.Profiles.tlon_root()
          }) do
       {:ok, _} -> ok(frame, %{"recorded" => params[:verdict], "branch" => params[:branch], "sha" => params[:sha]})
       {:error, why} when is_binary(why) -> fail(frame, why)

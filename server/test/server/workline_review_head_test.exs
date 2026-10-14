@@ -88,6 +88,33 @@ defmodule Server.WorklineReviewHeadTest do
     parked
   end
 
+  test "the agent that built the branch can't review it; a reviewer's own review.md commit doesn't make it a builder",
+       %{root: root} do
+    thread = at_review(root, "selfie")
+    git(root, ["checkout", "-q", "work/selfie"])
+    File.write!(Path.join(root, "lib/selfie.ex"), "v2")
+    git(root, ["commit", "-qam", "selfie v2", "--trailer", "Tlon-Author: emma"])
+    git(root, ["checkout", "-q", "main"])
+
+    assert {:error, {:self_review, why}} = Workline.review_verdict(thread, "approve", "emma", artifacts: AllPresent)
+    assert why =~ "emma"
+
+    assert {:error, {:self_review, _}} =
+             Workline.review_verdict(thread, "request_changes", "Emma", artifacts: AllPresent)
+
+    refute Repo.exists?(
+             from e in Server.Event, where: e.thread_id == ^thread.id and e.correlation == "workline:selfie:review"
+           )
+
+    git(root, ["checkout", "-q", "work/selfie"])
+    File.mkdir_p!(Path.join(root, "work/selfie"))
+    File.write!(Path.join(root, "work/selfie/review.md"), "approve")
+    git(root, ["add", "-A"])
+    git(root, ["commit", "-qm", "review verdict", "--trailer", "Tlon-Author: lonnrot"])
+    git(root, ["checkout", "-q", "main"])
+    assert {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)
+  end
+
   test "a review verdict records the commit it read", %{root: root} do
     thread = at_review(root, "records")
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", artifacts: AllPresent)

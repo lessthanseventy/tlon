@@ -196,14 +196,16 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 - **History is linear.** GitHub's `main` is protected: rebase-merge only, every change through a PR,
   and its required check is `tlon/check` — the local gate's commit status, not a CI run (CI runs on
   release tags only). Rebase onto main, never merge it in, never make a merge commit; ship work as a PR
-  branch, or a stack of small ones with `gh stack`. Review happens on tlon, before GitHub: branch → PR → a
-  reviewer's verdict on its head (`review_branch`) → `mise run land -- <pr>`; GitHub merges only what
-  the merge queue gated, at that head. A workline's approval lands its branch the same way — rebased onto origin's main and
-  gated (`Server.Workline.Merge`), then published: the branch pushed, a PR opened, `tlon/check` posted on
-  the sha the gate passed, auto-merged by GitHub (`Server.Workline.Publish`). The checkout's own main
-  is never moved by a landing; it only follows origin. Rewriting pushed history is the human's call —
-  except a coworker's own thread branch: the server pushes `work/<slug>` for it, force-with-lease
-  (the `push_branch` tool), and a coworker pane's own `git push` is refused (`scripts/git-hooks/pre-push`).
+  branch, or a stack of small ones with `gh stack`. Review happens on tlon, before GitHub: branch → PR →
+  a reviewer's verdict on its head (`review_branch`; never the PR's author or a builder of the branch)
+  → `mise run land -- <pr>`; GitHub merges only what the merge queue gated, at that head. A workline's
+  approval lands its branch the same way — reviewed on its thread (never by its builder), rebased onto
+  origin's main and gated (`Server.Workline.Merge`), then published: the branch pushed, a PR opened,
+  `tlon/check` posted on the sha the gate passed, auto-merged by GitHub (`Server.Workline.Publish`). The
+  checkout's own main is never moved by a landing; it only follows origin. Rewriting pushed history is
+  the human's call — except a coworker's own thread branch: the server pushes `work/<slug>` for it,
+  force-with-lease (the `push_branch` tool), and a coworker pane's own `git push` is refused
+  (`scripts/git-hooks/pre-push`).
 - **Commit as who you are.** An agent's commit ends with a `Co-Authored-By:` trailer naming the model
   that wrote it — YOUR model, read from the brief's `You are … (Claude Code)` line, never a name copied
   from an example or another model's commit. Format: `Co-Authored-By: <your model> <noreply@anthropic.com>`

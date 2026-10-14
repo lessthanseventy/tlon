@@ -15,15 +15,23 @@ defmodule Server.PRLanding do
   alias Server.Workline.Publish
 
   @doc """
-  Queue PR `pr` on `branch` of `repo` for landing: `{:ok, job}`, or `{:error, why}` when it is main
-  or its review doesn't approve its head on origin.
+  Queue PR `pr` on `branch` of `repo` for landing, `pr_author` its GitHub author (who may not be its
+  reviewer): `{:ok, job}`, or `{:error, why}` when it is main or its review doesn't approve its head
+  on origin.
   """
-  def queue(repo, pr, branch) do
+  def queue(repo, pr, branch, pr_author \\ nil) do
     with :ok <- not_main(branch),
          {:ok, head} <- fetch(repo, branch),
-         {:ok, review} <- BranchReview.approves(repo, branch, head),
+         {:ok, review} <- BranchReview.approves(repo, branch, head, pr_author: pr_author),
          {:ok, job} <-
-           Server.Jobs.enqueue(Server.Jobs.Land.new(%{"pr" => pr, "branch" => branch, "on_thread" => review.thread_id})) do
+           Server.Jobs.enqueue(
+             Server.Jobs.Land.new(%{
+               "pr" => pr,
+               "branch" => branch,
+               "pr_author" => pr_author,
+               "on_thread" => review.thread_id
+             })
+           ) do
       post(
         review.thread_id,
         "⧗ PR ##{pr} (#{branch}, approved by #{review.by}) is in the merge queue: it lands once rebased onto main and green there, one landing at a time"
@@ -34,7 +42,7 @@ defmodule Server.PRLanding do
   end
 
   @doc """
-  The merge queue's turn for a PR (`Server.Jobs.Land`'s args `%{"pr", "branch", "on_thread"}`).
+  The merge queue's turn for a PR (`Server.Jobs.Land`'s args `%{"pr", "branch", "pr_author", "on_thread"}`).
   `opts`: `:repo` (default the tlon checkout), `:gate` (`fn repo, ref -> {:ok, _} | {:error, why} end`),
   `:run` (gh), `:last` (the queue's last attempt: a gate cut off is said then, else only retried).
   `{:ok, merged_sha}` | `{:error, why}` | `{:error, {:interrupted, why}}`.
@@ -49,7 +57,7 @@ defmodule Server.PRLanding do
     try do
       with :ok <- not_main(branch),
            {:ok, head} <- fetch(repo, branch),
-           {:ok, review} <- BranchReview.approves(repo, branch, head),
+           {:ok, review} <- BranchReview.approves(repo, branch, head, pr_author: args["pr_author"]),
            {:ok, _} <- git(repo, ["branch", "-f", ref, head]),
            {:ok, %{to: to}} <- Server.Workline.Merge.merge(repo, nil, branch: ref, gate: gate),
            {:ok, _} <- push(repo, ref, branch, head),

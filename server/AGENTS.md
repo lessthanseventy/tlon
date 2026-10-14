@@ -96,6 +96,8 @@ and every layer the spine design's re-laid §9 asked for
   only, never while its verify or landing is queued or running. A reviewer's or QA's non-blocking
   findings are `follow_ups` on `submit_review`/`submit_qa`: tickets tied to the workline, `held`
   until its thread closes, then left to intake (one closed unmerged says so in each ticket).
+  No one reviews their own work: a verdict by the agent that built the branch (the git author or
+  `Tlon-Author:` of a commit on it past main, its review.md aside) is refused (`Workline.self_review/2`).
   A review approves the code it read: its verdict records the branch's commit, and code committed
   after it (its own `work/<slug>/` docs aside) sends the workline back to build at approval or at its
   landing, never landing on the old verdict. Back at review, the reviewer's brief points at the diff
@@ -146,6 +148,8 @@ and every layer the spine design's re-laid §9 asked for
 - **branch reviews** (`Server.BranchReview`) — a review on tlon of a branch that is not a workline: a
   reviewer's `review_branch` (branch, the full sha it read, approve | request_changes, the review) is an
   event correlated `branch:<name>:review`; the newest is the branch's verdict (`tlon-cli branch-review <branch>`).
+  A verdict by a builder of the branch is refused (`BranchReview.builders/3`), and so is an approval by
+  the PR's author at landing.
   A PR lands only on it (`Server.PRLanding`, `mise run land -- <pr>`): queued in the same merge queue as
   worklines (`Server.Jobs.Land`, args `%{pr, branch, on_thread}`) when the verdict approves its head (or a
   pure rebase of it, `BranchReview.approves/4`), checked again at its turn, rebased onto main on a private

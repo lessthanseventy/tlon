@@ -12,7 +12,7 @@ defmodule Server.LandScriptTest do
     stub!(tmp, "gh", ~S"""
     echo "gh $*" >>"$LOG"
     case "$1 $2" in
-      "pr view") echo "${FAKE_PR:-feature main OPEN false}" ;;
+      "pr view") echo "${FAKE_PR:-feature main OPEN false andrew}" ;;
       "api repos/{owner}/{repo}/branches/"*) echo "${FAKE_PROTECTED:-false}" ;;
     esac
     """)
@@ -38,7 +38,7 @@ defmodule Server.LandScriptTest do
 
   test "an open PR onto main from its own branch is handed to the merge queue by its branch", ctx do
     assert {out, 0} = land(ctx)
-    assert calls(ctx) =~ "tlon-cli land-pr 7 feature"
+    assert calls(ctx) =~ "tlon-cli land-pr 7 feature andrew"
     assert out =~ "queued"
   end
 

@@ -70,6 +70,7 @@ defmodule Server.MCP.Tool.SubmitReview do
 
     with %Server.Thread{} = thread <- acting_thread(params, frame),
          :ok <- known_verdict(params[:verdict]),
+         nil <- Server.Workline.self_review(thread, identity.agent),
          {:ok, rel} <- Review.submit(thread, params[:body], identity.agent) do
       {:ok, filed} = Server.Workline.follow_ups(thread, identity.agent, params[:follow_ups] || [])
 
@@ -96,6 +97,7 @@ defmodule Server.MCP.Tool.SubmitReview do
     else
       {:error, {:bad_verdict, v}} -> fail(frame, "verdict must be approve or request_changes, not #{inspect(v)}")
       {:error, {:not_in_review, stage}} -> fail(frame, "not in review — this workline is at #{stage}")
+      why when is_binary(why) -> fail(frame, why)
       {:error, why} when is_binary(why) -> fail(frame, why)
       {:error, reason} -> fail(frame, "submit_review failed: #{inspect(reason)}")
     end
