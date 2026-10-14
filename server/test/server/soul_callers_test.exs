@@ -13,7 +13,9 @@ defmodule Server.SoulCallersTest do
       |> Path.wildcard()
       |> Enum.map(&Path.relative_to(&1, @lib))
       |> Enum.reject(&(&1 in @allowed))
-      |> Enum.filter(fn rel -> File.read!(Path.join(@lib, rel)) =~ ~r/\bSoul\.(read|voice|tone|diary|append_diary)\b/ end)
+      |> Enum.filter(fn rel ->
+        File.read!(Path.join(@lib, rel)) =~ ~r/\bSoul\.(read|voice|tone|diary|append_diary)\b/
+      end)
 
     assert offenders == [],
            "these read or write a soul; a soul must not reach a work decision: #{inspect(offenders)}. " <>

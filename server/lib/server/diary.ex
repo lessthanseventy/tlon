@@ -114,24 +114,24 @@ defmodule Server.Diary do
   end
 
   defp bounced(workspace_id, since) do
-    Repo.all(
-      from e in Event,
-        join: t in Thread,
-        on: t.id == e.thread_id,
-        where: t.workspace_id == ^workspace_id and e.kind == "stage_advanced" and e.created_at >= ^since,
-        select: %{thread_id: t.id, title: t.title, at: e.created_at, detail: e.detail}
+    from(e in Event,
+      join: t in Thread,
+      on: t.id == e.thread_id,
+      where: t.workspace_id == ^workspace_id and e.kind == "stage_advanced" and e.created_at >= ^since,
+      select: %{thread_id: t.id, title: t.title, at: e.created_at, detail: e.detail}
     )
+    |> Repo.all()
     |> Enum.filter(&Map.has_key?(&1.detail || %{}, "bounced"))
     |> Enum.map(&Map.delete(&1, :detail))
   end
 
   defp authors(thread_ids) do
-    Repo.all(
-      from m in Message,
-        where: m.thread_id in ^thread_ids and not is_nil(m.author),
-        distinct: true,
-        select: {m.thread_id, m.author}
+    from(m in Message,
+      where: m.thread_id in ^thread_ids and not is_nil(m.author),
+      distinct: true,
+      select: {m.thread_id, m.author}
     )
+    |> Repo.all()
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 end

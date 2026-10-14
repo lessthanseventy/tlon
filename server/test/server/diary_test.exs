@@ -121,14 +121,19 @@ defmodule Server.DiaryTest do
       assert :ok = Diary.write("daneri", [entry(:shipped, "the stanza"), entry(:bounced, "the lamp")], @today)
 
       assert File.read!(Path.join(dir, "daneri.md")) ==
-               @soul <> "- 2026-10-14: shipped \"the stanza\".\n- 2026-10-14: sent back on \"the lamp\".\n"
+               @soul <> ~s(- 2026-10-14: shipped "the stanza".\n- 2026-10-14: sent back on "the lamp".\n)
     end
 
     test "the model's lines are used, dated, at most three, each capped", ctx do
       stub_model(ctx, "here they are:\n- the stanza sang at last.\n- a second line.\n- third.\n- fourth, dropped.")
 
       assert :ok = Diary.write("daneri", [entry(:shipped, "the stanza")], @today)
-      assert Soul.diary("daneri") == ["- 2026-10-14: the stanza sang at last.", "- 2026-10-14: a second line.", "- 2026-10-14: third."]
+
+      assert Soul.diary("daneri") == [
+               "- 2026-10-14: the stanza sang at last.",
+               "- 2026-10-14: a second line.",
+               "- 2026-10-14: third."
+             ]
     end
 
     test "a model reply with no diary lines falls back to the history", ctx do
