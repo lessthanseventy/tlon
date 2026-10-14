@@ -122,12 +122,13 @@ tid="$(curl -s -m 10 -X POST -H 'content-type: application/json' \
 [ -n "$tid" ] || fail "POST /api/threads opened no thread"
 
 # open · a thread (found by its title) · a card (the crew) · R (no reload: TUI and server agree)
+# a thread opens with its reply box focused: the first Escape leaves the box, the second the card
 # the finder lists only what the TUI's snapshot holds: wait for it (the header names the workspace)
 # before `/`, where the candidate's drive can wait at all
 loaded=()
 [ -n "$home" ] && grep -q 'wait:\*' "$office/scripts/office-drive.sh" && loaded=("wait:‹ $home ›")
 screens="$(TLON_URL="$url" OFFICE_TAIL=60 OFFICE_WAIT=2 "$office/scripts/office-drive.sh" \
-  "." "${loaded[@]}" "/" "'$title'" "Enter" "Escape" "c" "Escape" "R" 2>&1)"
+  "." "${loaded[@]}" "/" "'$title'" "Enter" "Escape" "Escape" "c" "Escape" "R" 2>&1)"
 after() { printf '%s\n' "$screens" | awk -v s="=== after: $1" '$0 == s {on = 1; next} /^=== / {on = 0} on'; }
 printf '%s\n' "$screens" >>"$log"
 expect() { case "$(after "$1")" in *"$2"*) ;; *) fail "the office after '$1' doesn't show '$2'" ;; esac; }
