@@ -30,6 +30,30 @@ defmodule Server.WorklinePublishTest do
                      ["gh", "pr", "merge", "https://github.com/o/r/pull/9", "--rebase", "--auto", "--delete-branch"]}
   end
 
+  test "a landing its gate passed posts tlon/check on the sha it gated, so GitHub's required check is there" do
+    run = runner([{&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}])
+    assert {:ok, _} = Publish.publish("/repo", "tiles", "Floor step 1", run, gated: "abc123")
+
+    assert_received {:ran,
+                     [
+                       "gh",
+                       "api",
+                       "repos/{owner}/{repo}/statuses/abc123",
+                       "-f",
+                       "state=success",
+                       "-f",
+                       "context=tlon/check" | _
+                     ]}
+
+    assert_received {:ran, ["gh", "pr", "merge" | _]}
+  end
+
+  test "a publish no gate passed posts no status" do
+    run = runner([{&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}])
+    assert {:ok, _} = Publish.publish("/repo", "tiles", "Floor step 1", run)
+    refute_received {:ran, ["gh", "api" | _]}
+  end
+
   test "GitHub refusing auto-merge is said, with the PR it opened" do
     run =
       runner([

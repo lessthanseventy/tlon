@@ -515,7 +515,7 @@ defmodule Server.Workline do
     with :ok <- reviewed_current(thread) do
       case merger.merge(repo, thread.slug, gate: gate) do
         {:ok, moved} ->
-          landed(thread, Map.put(moved, :repo, repo), Keyword.get(opts, :run, &System.cmd/3))
+          landed(thread, Map.merge(moved, %{repo: repo, gated: moved.to}), Keyword.get(opts, :run, &System.cmd/3))
 
         {:error, {:interrupted, why}} when not last? ->
           {:error, {:interrupted, why}}
@@ -1387,9 +1387,9 @@ defmodule Server.Workline do
 
   # landed: what changed rolls out and the branch goes to GitHub, where it is not merged yet — the
   # thread stays open until GitHub merges the PR (`merged/2`). With no GitHub, the landing is the merge.
-  defp finish(thread, %{repo: repo, from: from, to: to}, run) do
+  defp finish(thread, %{repo: repo, from: from, to: to} = moved, run) do
     Server.Rollout.after_merge(%{repo: repo, from: from, to: to, thread_id: thread.id})
-    publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), run)
+    publish(thread, repo, "⤵ landed as #{String.slice(to, 0, 7)}", String.slice(to, 0, 7), run, moved[:gated])
   rescue
     e ->
       why = "merged, but its close-out failed (not published to GitHub): #{Exception.message(e)}"
@@ -1446,8 +1446,9 @@ defmodule Server.Workline do
     ) == "check_failed"
   end
 
-  defp publish(thread, repo, landed, ref, run) do
-    case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run) do
+  # `gated`: the sha the merge queue's gate passed on, posted as tlon/check; a republish has none
+  defp publish(thread, repo, landed, ref, run, gated \\ nil) do
+    case Server.Workline.Publish.publish(repo, thread.slug, thread.title, run, gated: gated) do
       {:ok, url} = ok ->
         record_publish(thread, 0, url)
         record_landing(thread, "check_passed", landing_check(url, 0, "published"))
