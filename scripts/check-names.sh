@@ -4,9 +4,9 @@
 # leaves a script calling a module that no longer exists fails silently at 2am — this catches it at
 # commit time.
 #
-#   (a) Server.X.Y referenced in scripts/*.sh, mise.toml, adapters/**/*.{ts,sh}
+#   (a) Server.X.Y referenced in scripts/*.sh, mise.toml, tasks/*.toml, adapters/**/*.{ts,sh}
 #       →  a `defmodule` in server/lib
-#   (b) `mix server.<task>` in mise.toml, scripts
+#   (b) `mix server.<task>` in mise.toml, tasks/*.toml, scripts
 #       →  <app>/lib/mix/tasks/<app>.<task>.ex
 #   (c) `mise run <task>` in any AGENTS.md / README.md, mise.toml, scripts
 #       →  a task `mise tasks ls` knows (`<prefix>:*` is a glob: some task must match)
@@ -36,7 +36,7 @@ while IFS=: read -r file line name; do
   n_mod=$((n_mod + 1))
   grep -qxF "$name" <<<"$defined" ||
     miss "(a) $file:$line references $name — no defmodule in server/lib"
-done < <(grep -noE '\bServer(\.[A-Z][A-Za-z0-9_]*)+' $scripts mise.toml $(adapter_sources) 2>/dev/null | sort -u)
+done < <(grep -noE '\bServer(\.[A-Z][A-Za-z0-9_]*)+' $scripts mise.toml tasks/*.toml $(adapter_sources) 2>/dev/null | sort -u)
 
 # ---- (b) mix tasks ----------------------------------------------------------------------------
 n_mix=0
@@ -47,7 +47,7 @@ while IFS=: read -r file line ref; do
   app="${task%%.*}"           # server
   [ -f "$app/lib/mix/tasks/$task.ex" ] ||
     miss "(b) $file:$line runs \`$ref\` — no $app/lib/mix/tasks/$task.ex"
-done < <(grep -noE '\bmix server\.[a-z_]+' mise.toml $scripts 2>/dev/null | sort -u)
+done < <(grep -noE '\bmix server\.[a-z_]+' mise.toml tasks/*.toml $scripts 2>/dev/null | sort -u)
 
 # ---- (c) mise tasks ---------------------------------------------------------------------------
 # Only tasks THIS repo defines: mise merges every mise.toml up the directory tree, so inside a
