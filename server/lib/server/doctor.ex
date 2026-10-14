@@ -14,15 +14,13 @@ defmodule Server.Doctor do
   end
 
   @doc """
-  `ok`, or the problems PRAGMA integrity_check found. A healthy database returns a
-  single `ok` row; an unhealthy one returns up to 100 problem rows — so we fold them
-  rather than matching one, because the moment this must NOT crash is exactly when
-  the database is broken.
+  `ok` when the store answers and schema `public` holds at least one table (a count of its
+  `pg_class` relations), else `no tables in schema public`. Postgres has no integrity pragma, so
+  this is the honest 2am question: can the store answer, and are its relations there. A store that
+  cannot answer raises, and the caller reports that.
   """
   @spec integrity_check() :: String.t()
   def integrity_check do
-    # Postgres has no PRAGMA integrity_check; the honest equivalent at 2am is "can the store answer
-    # and are its relations all there" — a failed query raises, which the caller reports.
     case Repo.query!("SELECT count(*) FROM pg_class WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace").rows do
       [[n]] when n > 0 -> "ok"
       _ -> "no tables in schema public"
