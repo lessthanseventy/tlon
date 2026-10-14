@@ -49,15 +49,16 @@ export function propsAt(kind: EventKind, t: number, g: Geo): Prop[] {
   if (t < 0 || t >= EVENTS[kind].ticks) return []
   switch (kind) {
     case "duck": {
-      // in at the door (0-120), across the hall (120-300), a look round (300-380), back out (380-500)
+      // in at the door (0-120), across the whole hall to its left wall (120-300), a look round (300-380), back out (380-500)
+      const far = 12
       const x =
         t < 120
           ? lerp(g.doorX, g.doorX - 30, t / 120)
           : t < 300
-            ? lerp(g.doorX - 30, g.leftX + 80, (t - 120) / 180)
+            ? lerp(g.doorX - 30, far, (t - 120) / 180)
             : t < 380
-              ? g.leftX + 80
-              : lerp(g.leftX + 80, g.doorX, (t - 380) / 120)
+              ? far
+              : lerp(far, g.doorX, (t - 380) / 120)
       const flip = t >= 380 || (t >= 300 && Math.floor((t - 300) / 20) % 2 === 1)
       return [{ kind: "duck", x, y: g.hallY, flip, step: Math.floor(t / 6) % 2 }]
     }
