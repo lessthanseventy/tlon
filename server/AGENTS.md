@@ -77,9 +77,9 @@ and every layer the spine design's re-laid §9 asked for
   (`Workline.Scribe`, `Workline.Artifacts.Git`), gates, the ledger, per-thread `Server.Worktree`s;
   entering verify queues the verifier on the service (`Server.Jobs.Verify`), which bounces a diff
   that adds a file at the repo root or touches another workline's `work/<slug>/` before any gate; approving review queues
-  the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; green posts the commit status `tlon/check`, main's required check, on the sha it gated (`Workline.Publish.publish/5`); GitHub auto-merges it, and only then,
+  the landing (`Server.Jobs.Land`, one at a time, rebased onto origin's main and gated there — red bounces to build; green posts the commit status `tlon/check`, main's required check, on the sha it gated (`Workline.Publish.publish/5`) and the PR merged at once at that head (`--match-head-commit`), and only then,
   read by `Server.Jobs.KeepUp`, does its thread close and its ticket count as done: `Workline.merged/2`;
-  one GitHub isn't merging — auto-merge refused, `BLOCKED` with no check running, an hour gone — is a
+  one GitHub isn't merging — the merge refused, `BLOCKED` with no check running, an hour gone — is a
   `pr_blocked` Need, answered by rebase, close and reland, or a look at the PR).
   An approved review of a change Andrew sees (`office/`, the operator API) goes to the bench's `qa`
   seat first: it drives the branch on a scratch release and files `submit_qa` (with the workline's

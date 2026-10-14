@@ -18,7 +18,7 @@ defmodule Server.Office.Needs do
       to GitHub — recorded under `Server.Workline.publish_correlation/1` — failed: republish it, or open its PR by
       hand with the command its text names and give its url (`Server.Workline.published_by_hand/2`); `ref`
       the thread), `pr_blocked` (a landed workline whose PR GitHub isn't merging:
-      auto-merge refused, closed unmerged, `BLOCKED` with no check running, or no merge an hour after it
+      its merge refused, closed unmerged, `BLOCKED` with no check running, or no merge an hour after it
       was published or rebased — `Server.Workline.waiting_on_github/0`; `url` the PR; answered by
       rebase, close and reland, or a look at the PR), `no_seat` (an open
       workline at a stage whose kind — `Server.Workline.staff_kind/1` — the bench lacks, and nobody

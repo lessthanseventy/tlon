@@ -70,6 +70,8 @@ defmodule Server.WorklineLandingTest do
 
     assert_received {:ran, ["gh", "pr", "create" | _]}
     assert_received {:ran, ["gh", "api", "repos/{owner}/{repo}/statuses/b" | _]}
+    assert_received {:ran, ["gh", "pr", "merge", @url, "--rebase", "--match-head-commit", "b", "--delete-branch"]}
+    refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--auto" | _]}
     assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
     refute Server.Tickets.get(ticket.id).status == "done"
     assert %{state: "open"} = Repo.get!(Server.Issue, issue.id)
