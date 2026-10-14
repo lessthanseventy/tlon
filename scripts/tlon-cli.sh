@@ -78,16 +78,17 @@ SERVER="$root/.release/server/_build/prod/rel/server/bin/server"
 # cost ~2 s CPU for a 0.3 s call (the shell's 30 s agents poll: 7% of a core). One scheduler,
 # no spin: ~0.25 s CPU. Only these client nodes see it; the service node is started elsewhere.
 export ERL_FLAGS="${ERL_FLAGS:-} +S 1:1 +SDcpu 1:1 +SDio 1 +A 1 +sbwt none +sbwtdcpu none +sbwtdio none"
-# Every rpc subcommand shells into `bin/server rpc` and needs the release. `token`
-# do NOT — they mint purely over HTTP (/mint at TLON_MCP_URL's origin), so they must work
-# without a local release (that's the whole point of per-connect minting: any node, any
-# world). Gating them on the release strands every MCP headersHelper when no release is built.
-# `dossier` needs no release either when TLON_MCP_URL points it at a node over HTTP.
 # The header's Subcommands block is the one usage text.
 usage() {
   echo "usage: tlon-cli.sh <subcommand> [args]"
   sed -n '/^# Subcommands:$/,/^set -euo pipefail$/{/^# Subcommands:$/d;/^set /d;s/^#//;p}' "$0"
 }
+
+# Every rpc subcommand shells into `bin/server rpc` and needs the release. `token`
+# do NOT — they mint purely over HTTP (/mint at TLON_MCP_URL's origin), so they must work
+# without a local release (that's the whole point of per-connect minting: any node, any
+# world). Gating them on the release strands every MCP headersHelper when no release is built.
+# `dossier` needs no release either when TLON_MCP_URL points it at a node over HTTP.
 case "${1:-}" in
   ''|-h|--help|help) usage >&2; exit 2 ;;
   token) ;;

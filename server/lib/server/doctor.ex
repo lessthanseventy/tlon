@@ -54,9 +54,10 @@ defmodule Server.Doctor do
 
   @doc """
   The `erl_crash.dump` at `root` (the tlon checkout), as one report line: `none`, or its path and
-  age and whether it was written since the service started (`started_at`, from
-  `service_started_at/0`) — a dump from after the start is a crash nothing has surfaced yet. With
-  no known start, the dump and its age alone.
+  age, read against the service's start (`started_at`, from `service_started_at/0`): a dump from
+  before the start means the last restart followed a crash; one written since can't be the running
+  service's, so another node here crashed (a mix run at the root). With no known start, the dump and
+  its age alone.
   """
   @spec crash_dump(Path.t(), DateTime.t() | nil) :: String.t()
   def crash_dump(root \\ Server.Profiles.tlon_root(), started_at \\ service_started_at()) do
@@ -67,9 +68,14 @@ defmodule Server.Doctor do
         age = "#{path}, #{div(System.os_time(:second) - mtime, 3600)}h old"
 
         cond do
-          is_nil(started_at) -> "#{age} — service start unknown"
-          mtime >= DateTime.to_unix(started_at) -> "#{age} — written since the service started at #{started_at}"
-          true -> "#{age} — before the service started at #{started_at}"
+          is_nil(started_at) ->
+            "#{age} — service start unknown"
+
+          mtime >= DateTime.to_unix(started_at) ->
+            "#{age} — written since the service started at #{started_at}: not the service (it's up), another node here crashed"
+
+          true ->
+            "#{age} — before the service started at #{started_at}: the last restart followed a crash"
         end
 
       {:error, _} ->
