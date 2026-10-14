@@ -65,6 +65,8 @@
 #   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
 #   red-verify <id> <finding…>     a red verify back to build on the same branch, with its finding
+#   branch-review <branch>         the newest review verdict on a non-workline branch, as JSON
+#                                  ({verdict, sha, by, body}, or null)
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
 #     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
 set -euo pipefail
@@ -568,6 +570,12 @@ case "$cmd" in
     # The verifier script's evidence path: a measured check correlated workline:<slug>:verify —
     # exactly what the verify stage's owed :checks artifact looks for.
     exec "$SERVER" rpc "{:ok, e} = Server.Dossier.record_check(%{thread_id: $tid, cmd: \"$(esc "$cmd")\", exit: $code, tail: \"$(esc "$tail")\", correlation: \"workline:$(esc "$slug"):verify\"}); IO.puts(\"recorded ##{e.id} #{e.kind}\")"
+    ;;
+
+  branch-review)
+    branch="${1:-}"
+    [ -n "$branch" ] || { echo 'usage: tlon-cli.sh branch-review <branch>' >&2; exit 2; }
+    exec "$SERVER" rpc "IO.puts(Jason.encode!(case Server.BranchReview.latest(\"$(esc "$branch")\") do nil -> nil; r -> Map.delete(r, :at) end))"
     ;;
 
   track)
