@@ -48,6 +48,12 @@ defmodule Server.WorklineVerifyScriptTest do
   printf '%s\n' "$1" | failures
   """
 
+  # the script's strays(), lifted out: `git diff --name-status --no-renames` lines on stdin
+  @strays ~S"""
+  eval "$(sed -n '/^strays() {/,/^}/p' "$0")"
+  printf '%s' "$2" | strays "$1"
+  """
+
   defp failures(output) do
     # the service runs with no LANG: the C locale, where tools count bytes, not characters
     {out, 0} = System.cmd("bash", ["-c", @run, @script, output], env: [{"LC_ALL", "C"}, {"LANG", nil}])
@@ -91,6 +97,29 @@ defmodule Server.WorklineVerifyScriptTest do
     names = failures(many)
     assert length(names) == 10
     assert Enum.all?(names, &(String.length(&1) <= 160))
+  end
+
+  defp strays(slug, name_status) do
+    {out, 0} = System.cmd("bash", ["-c", @strays, @script, slug, name_status])
+    String.split(out, "\n", trim: true)
+  end
+
+  describe "strays: what a workline's diff may not touch" do
+    test "a new file at the repo root is a stray; an existing root file changed is not" do
+      assert strays("demo", "A\tpr.md\nM\tmise.toml\nM\tAGENTS.md\nD\tREADME.md\n") == ["pr.md"]
+    end
+
+    test "another workline's work/<slug>/ is a stray; its own is not" do
+      diff = "A\twork/demo/pr.md\nM\twork/demo/review.md\nA\twork/other/pr.md\nM\twork/demo-two/plan.md\n"
+      assert strays("demo", diff) == ["work/other/pr.md", "work/demo-two/plan.md"]
+    end
+
+    test "code anywhere under a directory is not a stray" do
+      diff =
+        "A\tserver/lib/server/x.ex\nM\toffice/src/a.ts\nA\tscripts/new.sh\nA\tdocs/plans/p.md\nM\ttasks/server.toml\n"
+
+      assert strays("demo", diff) == []
+    end
   end
 
   # the script's seed_hex_home(), lifted out: `seed_hex_home <src> <dest>`
