@@ -2027,23 +2027,10 @@ defmodule Server.Workline do
     gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(thread, &1, &2) end)
     run = Keyword.get(opts, :run, &System.cmd/3)
     repo = Git.root(thread)
-    branch = "work/#{thread.slug}"
 
     case merger.merge(repo, thread.slug, gate: gate) do
       {:ok, %{to: sha}} ->
-        with :ok <- Server.Workline.Publish.push_branch(repo, branch, run),
-             Server.Workline.Publish.post_check(repo, sha, run),
-             how when how in [:merged, :auto] <- Server.Workline.Publish.merge_at(repo, url, sha, branch, run) do
-          said = if how == :merged, do: "merged", else: "auto-merge armed at that head"
-          record_landing(thread, "check_passed", landing_check(url, 0, "gated at #{String.slice(sha, 0, 7)}; #{said}"))
-          post_brief(thread, "⤵ landed again as #{String.slice(sha, 0, 7)}, gated on main; #{url}: #{said}")
-          {:ok, thread}
-        else
-          {:error, why} ->
-            record_landing(thread, "check_failed", landing_check(url, 1, "merge refused: #{why}"))
-            post_brief(thread, "⚠ gated green at #{String.slice(sha, 0, 7)}, but GitHub refused it: #{why}")
-            {:error, why}
-        end
+        merge_again(thread, url, repo, sha, run)
 
       {:error, {:interrupted, why}} = cut ->
         if opts[:last],
@@ -2053,20 +2040,42 @@ defmodule Server.Workline do
         cut
 
       {:error, why} ->
-        Server.Sheriff.report(thread, "the merge queue couldn't land it again: #{why}")
+        refuse_again(thread, url, repo, why, run)
+    end
+  end
 
-        case Server.Workline.Publish.close(repo, url, "the merge queue couldn't land it again; back at build", run) do
-          :ok ->
-            reland(
-              thread,
-              why,
-              "the merge queue couldn't land it again: #{why} Rebase #{branch} onto origin/main, fix it test-first"
-            )
+  defp merge_again(thread, url, repo, sha, run) do
+    branch = "work/#{thread.slug}"
 
-          {:error, out} ->
-            record_landing(thread, "check_failed", landing_check(url, 1, "#{why}; its PR wouldn't close: #{out}"))
-            {:error, why}
-        end
+    with :ok <- Server.Workline.Publish.push_branch(repo, branch, run),
+         Server.Workline.Publish.post_check(repo, sha, run),
+         how when how in [:merged, :auto] <- Server.Workline.Publish.merge_at(repo, url, sha, branch, run) do
+      said = if how == :merged, do: "merged", else: "auto-merge armed at that head"
+      record_landing(thread, "check_passed", landing_check(url, 0, "gated at #{String.slice(sha, 0, 7)}; #{said}"))
+      post_brief(thread, "⤵ landed again as #{String.slice(sha, 0, 7)}, gated on main; #{url}: #{said}")
+      {:ok, thread}
+    else
+      {:error, why} ->
+        record_landing(thread, "check_failed", landing_check(url, 1, "merge refused: #{why}"))
+        post_brief(thread, "⚠ gated green at #{String.slice(sha, 0, 7)}, but GitHub refused it: #{why}")
+        {:error, why}
+    end
+  end
+
+  defp refuse_again(thread, url, repo, why, run) do
+    Server.Sheriff.report(thread, "the merge queue couldn't land it again: #{why}")
+
+    case Server.Workline.Publish.close(repo, url, "the merge queue couldn't land it again; back at build", run) do
+      :ok ->
+        reland(
+          thread,
+          why,
+          "the merge queue couldn't land it again: #{why} Rebase work/#{thread.slug} onto origin/main, fix it test-first"
+        )
+
+      {:error, out} ->
+        record_landing(thread, "check_failed", landing_check(url, 1, "#{why}; its PR wouldn't close: #{out}"))
+        {:error, why}
     end
   end
 end
