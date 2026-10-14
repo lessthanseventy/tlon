@@ -76,7 +76,7 @@ defmodule Server.MCP.OperatorAPI do
                                           opened again: {"published": url | null}; 409 when there is no failed publish
       POST   /api/threads/:id/published   {"url"} → Workline.published_by_hand: a failed publish's PR opened by hand,
                                           waited on until GitHub merges it; 409 when there is no failed publish
-      POST   /api/threads/:id/rebase      Workline.rebase_landing: GitHub rebases its waiting PR, auto-merge armed (409 if none waits)
+      POST   /api/threads/:id/rebase      Workline.rebase_landing: its waiting PR back in the merge queue, rebased, gated, merged at that head (409 if none waits)
       POST   /api/threads/:id/reland      Workline.reland_landing: its waiting PR closed, back to build (409 if none waits)
       POST   /api/threads/:id/track       Workline.promote: make a plain thread a workline
       POST   /api/threads/:id/checks      {"slug", "exit", "cmd", "tail"?} → Dossier.record_check (the verify stage's evidence)

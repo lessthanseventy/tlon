@@ -175,22 +175,6 @@ defmodule Server.Workline.Publish do
   defp running?(%{"state" => s}), do: s in ["PENDING", "EXPECTED"]
   defp running?(_), do: false
 
-  @doc """
-  Ask GitHub to rebase PR `url` onto main (`gh pr update-branch --rebase`, which runs its checks
-  again) and arm its auto-merge again. `:ok` | `{:error, why}`.
-  """
-  def rebase(repo, url, run \\ &System.cmd/3) do
-    opts = [cd: repo, stderr_to_stdout: true]
-
-    with {:update, {_, 0}} <- {:update, run.("gh", ["pr", "update-branch", url, "--rebase"], opts)},
-         {:auto, {_, 0}} <- {:auto, run.("gh", ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"], opts)} do
-      :ok
-    else
-      {:update, {out, _}} -> {:error, "rebase refused: " <> String.slice(String.trim(out), 0, 200)}
-      {:auto, {out, _}} -> {:error, "auto-merge refused: " <> String.slice(String.trim(out), 0, 200)}
-    end
-  end
-
   # a CheckRun carries `conclusion`, a commit status `state`
   defp red?(%{"conclusion" => c}) when c in ["FAILURE", "TIMED_OUT", "STARTUP_FAILURE"], do: true
   defp red?(%{"state" => s}) when s in ["FAILURE", "ERROR"], do: true

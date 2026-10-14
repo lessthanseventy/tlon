@@ -282,12 +282,14 @@ defmodule Server.Office.Needs do
     )
   end
 
-  # a landing GitHub isn't merging: told so, or an hour gone without a merge
+  # a landing GitHub isn't merging: told so, or an hour gone without a merge; one back in the merge
+  # queue waits on that, not on the operator
   defp pr_blocked do
     cutoff = DateTime.add(DateTime.utc_now(), -@landing_grace_s, :second)
 
     for %{thread: t, url: url, event: e} <- Server.Workline.waiting_on_github(),
-        e.kind == "check_failed" or DateTime.before?(e.created_at, cutoff) do
+        e.kind == "check_failed" or DateTime.before?(e.created_at, cutoff),
+        not landing?(t) do
       text =
         if e.kind == "check_failed",
           do: "#{e.detail["tail"]} — #{url}",
