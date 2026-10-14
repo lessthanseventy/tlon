@@ -84,6 +84,13 @@ defmodule Server.PRLandingTest do
       assert posts(ctx) =~ "merge queue"
     end
 
+    test "the PR's author approving it: refused", ctx do
+      approve(ctx, origin(ctx, "feature"))
+      assert {:error, why} = PRLanding.queue(ctx.repo, 7, "feature", "lonnrot")
+      assert why =~ "opened the PR"
+      assert jobs() == []
+    end
+
     test "main is never queued", ctx do
       assert {:error, why} = PRLanding.queue(ctx.repo, 7, "main")
       assert why =~ "main"

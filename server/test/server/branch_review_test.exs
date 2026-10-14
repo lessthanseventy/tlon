@@ -66,16 +66,16 @@ defmodule Server.BranchReviewTest do
     defp approve(thread, sha, verdict \\ "approve"), do: review(thread, %{branch: "lamp", sha: sha, verdict: verdict})
 
     test "no review, or changes requested: refused", %{thread: thread, tmp_dir: tmp, head: head} do
-      assert {:error, why} = BranchReview.approves(tmp, "lamp", head, "main")
+      assert {:error, why} = BranchReview.approves(tmp, "lamp", head, base: "main")
       assert why =~ "no review"
       {:ok, _} = approve(thread, head, "request_changes")
-      assert {:error, why} = BranchReview.approves(tmp, "lamp", head, "main")
+      assert {:error, why} = BranchReview.approves(tmp, "lamp", head, base: "main")
       assert why =~ "requests changes"
     end
 
     test "approved at the head: lands", %{thread: thread, tmp_dir: tmp, head: head} do
       {:ok, _} = approve(thread, head)
-      assert {:ok, %{by: "lonnrot"}} = BranchReview.approves(tmp, "lamp", head, "main")
+      assert {:ok, %{by: "lonnrot"}} = BranchReview.approves(tmp, "lamp", head, base: "main")
     end
 
     test "approved, then only rebased onto main: the same patches, lands", %{
@@ -87,7 +87,28 @@ defmodule Server.BranchReviewTest do
       {:ok, _} = approve(thread, head)
       rebased = git.("git checkout -q lamp && git rebase -q main && git checkout -q main && git rev-parse lamp")
       refute rebased == head
-      assert {:ok, _} = BranchReview.approves(tmp, "lamp", rebased, "main")
+      assert {:ok, _} = BranchReview.approves(tmp, "lamp", rebased, base: "main")
+    end
+
+    test "the agent that built the branch can't review it: a commit's Tlon-Author or git author, or the PR's author",
+         %{thread: thread, tmp_dir: tmp, git: git} do
+      head =
+        git.(
+          "git checkout -q lamp && echo h >h && git add h && git commit -qm h --trailer 'Tlon-Author: emma' && git checkout -q main && git rev-parse lamp"
+        )
+
+      at = fn by -> review(thread, %{branch: "lamp", sha: head, by: by, repo: tmp}) end
+      assert {:error, why} = at.("emma")
+      assert why =~ "emma"
+      assert {:error, _} = at.("t")
+      assert {:error, why} = review(thread, %{branch: "lamp", sha: String.duplicate("d", 40), repo: tmp})
+      assert why =~ "not in"
+      assert BranchReview.latest("lamp") == nil
+
+      {:ok, _} = at.("lonnrot")
+      assert {:ok, _} = BranchReview.approves(tmp, "lamp", head, base: "main")
+      assert {:error, why} = BranchReview.approves(tmp, "lamp", head, base: "main", pr_author: "LONNROT")
+      assert why =~ "opened"
     end
 
     test "approved at an older commit, new commits since: refused", %{
@@ -103,7 +124,7 @@ defmodule Server.BranchReviewTest do
           "git checkout -q lamp && echo g >g && git add g && git commit -qm more && git checkout -q main && git rev-parse lamp"
         )
 
-      assert {:error, why} = BranchReview.approves(tmp, "lamp", newer, "main")
+      assert {:error, why} = BranchReview.approves(tmp, "lamp", newer, base: "main")
       assert why =~ "review it again"
     end
   end

@@ -1603,7 +1603,8 @@ defmodule Server.MCP.ServerTest do
     token: token
   } do
     session = handshake(token)
-    sha = String.duplicate("c", 40)
+    {head, 0} = System.cmd("git", ["-C", Server.Profiles.tlon_root(), "rev-parse", "HEAD"])
+    sha = String.trim(head)
 
     refused =
       call(token, session, 2, "review_branch", %{

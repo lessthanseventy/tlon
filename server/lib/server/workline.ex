@@ -709,7 +709,8 @@ defmodule Server.Workline do
   and asks for the risk grade it is decided on (`Server.Jobs.Grade`); a change that owes QA is
   handed to the qa seat. An approval of a commit already approved this round is that same
   approval, `{:ok, thread}` and nothing recorded: a client retries a call whose connection
-  dropped, and the approval's QA handoff closes the reviewer's window under it.
+  dropped, and the approval's QA handoff closes the reviewer's window under it. A verdict by the
+  agent that built the branch is refused, `{:error, {:self_review, why}}` (`self_review/2`).
   `opts` as `advance/2`'s, and `paths:` the changed paths (tests).
   """
   def review_verdict(thread, verdict, author, opts \\ [])
@@ -718,13 +719,31 @@ defmodule Server.Workline do
       when verdict in ~w(approve request_changes) do
     sha = Keyword.get_lazy(opts, :branch_head, fn -> branch_head(thread) end)
 
-    if verdict == "approve" and approved_at?(thread, sha),
-      do: {:ok, thread},
-      else: record_verdict(thread, verdict, author, sha, opts)
+    cond do
+      why = self_review(thread, author) -> {:error, {:self_review, why}}
+      verdict == "approve" and approved_at?(thread, sha) -> {:ok, thread}
+      true -> record_verdict(thread, verdict, author, sha, opts)
+    end
   end
 
   def review_verdict(%Thread{stage: "review"}, verdict, _author, _opts), do: {:error, {:bad_verdict, verdict}}
+
   def review_verdict(%Thread{stage: stage}, _verdict, _author, _opts), do: {:error, {:not_in_review, stage}}
+
+  @doc """
+  Why `author` may not review `thread`'s branch — it built it: the git author or `Tlon-Author:` of a
+  commit on `work/<slug>` past main, its own review.md aside (`Server.BranchReview.builders/3`) — or
+  nil when it may.
+  """
+  def self_review(%Thread{slug: slug} = thread, author) do
+    root = Git.root(thread)
+
+    builders =
+      Server.BranchReview.builders(root, "#{main_ref(root) || "main"}..work/#{slug}", ["work/#{slug}/review.md"])
+
+    if Server.BranchReview.built?(author, builders),
+      do: "#{author} authored a commit on work/#{slug}: its review is someone else's, never the builder's"
+  end
 
   @doc """
   The qa seat's verdict on a reviewed change it drove (`submit_qa`): `"pass"` or `"fail"`, its report

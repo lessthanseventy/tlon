@@ -67,8 +67,9 @@
 #   red-verify <id> <finding…>     a red verify back to build on the same branch, with its finding
 #   branch-review <branch>         the newest review verdict on a non-workline branch, as JSON
 #                                  ({verdict, sha, by, body}, or null)
-#   land-pr <pr> <branch>          queue a reviewed PR in the merge queue (`mise run land`); refused
-#                                  unless the branch's review on tlon approves its head
+#   land-pr <pr> <branch> [author] queue a reviewed PR in the merge queue (`mise run land`); refused
+#                                  unless the branch's review on tlon, by neither its author nor a
+#                                  builder of it, approves its head
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
 #     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
 set -euo pipefail
@@ -575,9 +576,9 @@ case "$cmd" in
     ;;
 
   land-pr)
-    pr="${1:-}"; branch="${2:-}"
+    pr="${1:-}"; branch="${2:-}"; author="${3:-}"
     { int "$pr" && [ -n "$branch" ]; } || { echo 'usage: tlon-cli.sh land-pr <pr> <branch>' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.PRLanding.queue(Server.Profiles.tlon_root(), $pr, \"$(esc "$branch")\") do {:ok, _} -> IO.puts(\"queued: PR #$pr ($(esc "$branch")) is in the merge queue — its outcome is posted on its review's thread\"); {:error, why} -> raise \"refused: \" <> if(is_binary(why), do: why, else: inspect(why)) end"
+    exec "$SERVER" rpc "case Server.PRLanding.queue(Server.Profiles.tlon_root(), $pr, \"$(esc "$branch")\", \"$(esc "$author")\") do {:ok, _} -> IO.puts(\"queued: PR #$pr ($(esc "$branch")) is in the merge queue — its outcome is posted on its review's thread\"); {:error, why} -> raise \"refused: \" <> if(is_binary(why), do: why, else: inspect(why)) end"
     ;;
 
   branch-review)
