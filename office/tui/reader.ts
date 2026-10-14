@@ -131,8 +131,8 @@ export class Reader {
   /** the whole screen; the cursor parked in the composer while you write */
   draw(cols: number, rowsN: number, th: Thread | undefined, keys: string): string {
     const c = this.composer
-    const ed = c?.view(cols - 4, COMPOSER_MAX)
-    const foot = c ? Math.max(1, ed!.rows.length) + 1 : 1
+    const ed = (c ?? this.draft ?? new Editor()).view(cols - 4, COMPOSER_MAX)
+    const foot = ed.rows.length + (c ? 1 : 2)
     const bodyH = Math.max(1, rowsN - 2 - foot)
     const all = this.body(cols, th)
     const maxScroll = Math.max(0, all.length - bodyH)
@@ -147,13 +147,11 @@ export class Reader {
     ], cols)
     for (let i = 0; i < bodyH; i++) o += `${ESC}[${i + 2};1H` + line((i >= pad ? all[first + i - pad] : null) ?? [], cols)
     const top = bodyH + 2
-    if (c) {
-      o += `${ESC}[${top};1H` + line([{ s: " reply ", fg: ROLE.ground, bg: ROLE.attention }, { s: "  enter send · alt-enter newline · esc stop · pgup/pgdn scroll", fg: ROLE.inactive }], cols)
-      ed!.rows.forEach((r, i) => { o += `${ESC}[${top + 1 + i};1H` + line([{ s: " ▌ ", fg: ROLE.attention }, { s: r, fg: ROLE.prose }], cols) })
-      o += `${ESC}[${top + 1 + ed!.cursor.r};${4 + ed!.cursor.c}H${ESC}[?25h`
-    } else {
-      o += `${ESC}[${top};1H` + line([this.status ? { s: ` ${this.status}`, fg: ROLE.key } : { s: ` ${keys}`, fg: ROLE.inactive }], cols)
-    }
+    // the box stays drawn when you step out of it, dimmed, its draft kept
+    o += `${ESC}[${top};1H` + line([{ s: " reply ", fg: ROLE.ground, bg: c ? ROLE.attention : ROLE.inactive }, { s: c ? "  enter send · alt-enter newline · esc leave the box · pgup/pgdn scroll" : "  r or enter to write", fg: ROLE.inactive }], cols)
+    ed.rows.forEach((r, i) => { o += `${ESC}[${top + 1 + i};1H` + line([{ s: " ▌ ", fg: c ? ROLE.attention : ROLE.inactive }, { s: r, fg: c ? ROLE.prose : ROLE.inactive }], cols) })
+    if (c) o += `${ESC}[${top + 1 + ed.cursor.r};${4 + ed.cursor.c}H${ESC}[?25h`
+    else o += `${ESC}[${top + 1 + ed.rows.length};1H` + line([this.status ? { s: ` ${this.status}`, fg: ROLE.key } : { s: ` ${keys}`, fg: ROLE.inactive }], cols)
     return o + `${ESC}[?2026l`
   }
 }

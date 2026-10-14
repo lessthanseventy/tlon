@@ -14,3 +14,18 @@ test("keep filters what is shown, heading replaces the thread's title", () => {
   expect(s).toContain("conversation with ada")
   expect(s).not.toContain("lobby")
 })
+
+test("the first esc leaves the reply box and keeps it drawn with its draft; the second leaves the reader", () => {
+  const r = new Reader(7, { load: async () => null, send: async () => "", operator: "andrew", redraw() {} }, true)
+  r.take(page)
+  for (const ch of "half done") r.key(ch, 10)
+  expect(r.key("esc", 10)).toBe("done")
+  const s = r.draw(60, 20, { id: 7, title: "t", stage: null, awaiting: null }, "t look over their shoulder")
+  expect(s).toContain("r or enter to write")
+  expect(s).toContain("half done")
+  expect(s).toContain("t look over their shoulder")
+  expect(r.key("enter", 10)).toBe("done")
+  expect(r.composer?.text).toBe("half done")
+  r.key("esc", 10)
+  expect(r.key("esc", 10)).toBe("leave")
+})
