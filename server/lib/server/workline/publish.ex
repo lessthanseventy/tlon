@@ -31,24 +31,46 @@ defmodule Server.Workline.Publish do
             )} do
       url = out |> String.split("\n", trim: true) |> List.last() |> String.trim()
 
-      merge =
+      merged =
         case landing[:gated] do
           nil ->
-            ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"]
+            arm_auto(url, opts, run)
 
           sha ->
             post_check(repo, sha, run)
-            ["pr", "merge", url, "--rebase", "--match-head-commit", sha, "--delete-branch"]
+            merge_at(repo, url, sha, branch, run)
         end
 
-      case run.("gh", merge, opts) do
-        {_, 0} -> {:ok, url}
-        {out, _} -> {:auto_refused, url, String.slice(String.trim(out), 0, 200)}
+      case merged do
+        {:error, why} -> {:auto_refused, url, why}
+        _ -> {:ok, url}
       end
     else
       {:push, {out, _}} -> {:error, "push of #{branch} refused: #{String.slice(out, 0, 200)}"}
       {:pr, {out, _}} -> {:error, "PR for #{branch} not opened: #{String.slice(out, 0, 200)}"}
       {_out, _code} -> :none
+    end
+  end
+
+  @doc """
+  Merge PR `pr` (number or url) of `repo` at exactly `sha`, the head its landing gated
+  (`--match-head-commit`). Merged, the remote `branch` is deleted, best-effort: a failure is logged,
+  never a failed landing; no local branch is touched (gh's `--delete-branch` would delete the local
+  one too, which a worktree may hold, and fail after GitHub merged). GitHub not having evaluated the
+  fresh `tlon/check` yet arms auto-merge at that head instead. `:merged` | `:auto` | `{:error, why}`.
+  """
+  def merge_at(repo, pr, sha, branch, run \\ &System.cmd/3) do
+    opts = [cd: repo, stderr_to_stdout: true]
+
+    case run.("gh", ["pr", "merge", to_string(pr), "--rebase", "--match-head-commit", sha], opts) do
+      {_, 0} ->
+        delete_remote_head(repo, branch, run)
+        :merged
+
+      {out, _} ->
+        if out =~ ~r/Required status check "tlon\/check" is expected/,
+          do: arm_auto(to_string(pr), opts, run, ["--match-head-commit", sha]),
+          else: {:error, out |> String.trim() |> String.slice(0, 300)}
     end
   end
 
@@ -284,5 +306,28 @@ defmodule Server.Workline.Publish do
       cd: repo,
       stderr_to_stdout: true
     )
+  end
+
+  defp delete_remote_head(repo, branch, run) do
+    case run.("gh", ["api", "-X", "DELETE", "repos/{owner}/{repo}/git/refs/heads/#{branch}"],
+           cd: repo,
+           stderr_to_stdout: true
+         ) do
+      {_, 0} ->
+        :ok
+
+      {out, _} ->
+        require Logger
+
+        Logger.warning("merged, but the remote #{branch} wasn't deleted: #{String.slice(String.trim(out), 0, 200)}")
+    end
+  end
+
+  # auto-merge: GitHub merges once its required check is green on the head
+  defp arm_auto(pr, opts, run, how \\ ["--delete-branch"]) do
+    case run.("gh", ["pr", "merge", pr, "--rebase", "--auto" | how], opts) do
+      {_, 0} -> :auto
+      {out, _} -> {:error, out |> String.trim() |> String.slice(0, 300)}
+    end
   end
 end

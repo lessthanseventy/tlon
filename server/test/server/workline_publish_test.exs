@@ -53,11 +53,48 @@ defmodule Server.WorklinePublishTest do
                        "https://github.com/o/r/pull/9",
                        "--rebase",
                        "--match-head-commit",
-                       "abc123",
-                       "--delete-branch"
+                       "abc123"
                      ]}
 
+    assert_received {:ran, ["gh", "api", "-X", "DELETE", "repos/{owner}/{repo}/git/refs/heads/work/tiles"]}
     refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--auto" | _]}
+  end
+
+  test "an immediate merge never touches local branches; the remote head's delete failing is no failed landing" do
+    run =
+      runner([
+        {&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}},
+        {&match?(["gh", "api", "-X", "DELETE" | _], &1), {"Reference does not exist", 1}}
+      ])
+
+    assert {:ok, "https://github.com/o/r/pull/9"} = Publish.publish("/repo", "tiles", "t", run, gated: "abc123")
+    assert_received {:ran, ["gh", "pr", "merge" | merge]}
+    refute "--delete-branch" in merge
+  end
+
+  test "GitHub not having evaluated the fresh tlon/check yet: auto-merge armed at that head, not a refusal" do
+    run =
+      runner([
+        {&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}},
+        {&match?(["gh", "pr", "merge", _, "--rebase", "--match-head-commit" | _], &1),
+         {"X Pull request o/r#9 is not mergeable: Required status check \"tlon/check\" is expected.\n", 1}}
+      ])
+
+    assert {:ok, "https://github.com/o/r/pull/9"} = Publish.publish("/repo", "tiles", "t", run, gated: "abc123")
+
+    assert_received {:ran,
+                     [
+                       "gh",
+                       "pr",
+                       "merge",
+                       "https://github.com/o/r/pull/9",
+                       "--rebase",
+                       "--auto",
+                       "--match-head-commit",
+                       "abc123"
+                     ]}
+
+    refute_received {:ran, ["gh", "api", "-X", "DELETE" | _]}
   end
 
   test "a publish no gate passed posts no status, and merges nothing itself: auto-merge waits for one" do

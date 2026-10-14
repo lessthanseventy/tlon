@@ -13,7 +13,7 @@ defmodule Server.LandScriptTest do
     echo "gh $*" >>"$LOG"
     case "$1 $2" in
       "pr view") echo "${FAKE_PR:-feature main OPEN false andrew}" ;;
-      "api repos/{owner}/{repo}/branches/"*) echo "${FAKE_PROTECTED:-false}" ;;
+      "api repos/{owner}/{repo}/branches/"*) [ "${FAKE_PROTECTED:-false}" = none ] || echo "${FAKE_PROTECTED:-false}" ;;
     esac
     """)
 
@@ -48,7 +48,8 @@ defmodule Server.LandScriptTest do
           {[{"FAKE_PR", "feature next OPEN false"}], "next"},
           {[{"FAKE_PR", "feature main OPEN true"}], "fork"},
           {[{"FAKE_PR", "main main OPEN false"}], "main"},
-          {[{"FAKE_PROTECTED", "true"}], "protected"}
+          {[{"FAKE_PROTECTED", "true"}], "protected"},
+          {[{"FAKE_PROTECTED", "none"}], "protected"}
         ] do
       assert {out, 1} = land(ctx, env)
       assert out =~ said

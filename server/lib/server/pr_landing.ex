@@ -63,8 +63,14 @@ defmodule Server.PRLanding do
            {:ok, _} <- push(repo, ref, branch, head),
            run.("gh", ["pr", "comment", to_string(pr), "--body", record(review)], cd: repo, stderr_to_stdout: true),
            Publish.post_check(repo, to, run),
-           :ok <- merge(repo, pr, to, run) do
-        say.("✓ merged at #{String.slice(to, 0, 12)}, gated on main")
+           {:ok, how} <- merge(repo, pr, to, branch, run) do
+        say.(
+          if how == :auto,
+            do:
+              "⧗ gated green at #{String.slice(to, 0, 12)}; GitHub hadn't read its tlon/check yet, so auto-merge is armed at that head",
+            else: "✓ merged at #{String.slice(to, 0, 12)}, gated on main"
+        )
+
         {:ok, to}
       else
         {:error, {:interrupted, why}} = cut ->
@@ -99,13 +105,10 @@ defmodule Server.PRLanding do
         "#{ref}:refs/heads/#{branch}"
       ])
 
-  defp merge(repo, pr, sha, run) do
-    case run.("gh", ["pr", "merge", to_string(pr), "--rebase", "--match-head-commit", sha, "--delete-branch"],
-           cd: repo,
-           stderr_to_stdout: true
-         ) do
-      {_, 0} -> :ok
-      {out, _} -> {:error, "GitHub refused the merge: #{out |> String.trim() |> String.slice(0, 300)}"}
+  defp merge(repo, pr, sha, branch, run) do
+    case Publish.merge_at(repo, pr, sha, branch, run) do
+      {:error, why} -> {:error, "GitHub refused the merge: #{why}"}
+      how -> {:ok, how}
     end
   end
 

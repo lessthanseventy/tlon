@@ -122,6 +122,70 @@ defmodule Server.WorklineVerifyScriptTest do
     end
   end
 
+  describe "branch mode: a PR's landing gate (LAND_REF, thread `-`)" do
+    @describetag :tmp_dir
+
+    # a repo with a bare origin and a private land/feature ref one commit past main; mise stubbed to
+    # record where the gate ran and under what label, exiting FAKE_GATE
+    setup %{tmp_dir: tmp} do
+      sh = fn cwd, cmd ->
+        {out, 0} = System.cmd("sh", ["-c", cmd], cd: cwd, stderr_to_stdout: true)
+        String.trim(out)
+      end
+
+      sh.(tmp, "git init -q --bare origin.git && git clone -q origin.git tlon && mkdir bin")
+      repo = Path.join(tmp, "tlon")
+      File.mkdir_p!(Path.join(repo, "scripts"))
+
+      for s <- ~w(workline-verify.sh git-fetch-origin.sh),
+          do: File.cp!(Path.join(Path.dirname(@script), s), Path.join(repo, "scripts/#{s}"))
+
+      sh.(repo, """
+      git config user.email t@t && git config user.name t && git add -A && git commit -qm one && git branch -M main &&
+      git push -q origin main && git checkout -qb land/feature && echo f >f && git add f && git commit -qm f &&
+      git checkout -q main
+      """)
+
+      File.write!(Path.join(tmp, "bin/mise"), ~S"""
+      #!/bin/sh
+      [ "$1" = run ] || exit 0
+      echo "$(git rev-parse HEAD) $CHECKS_LABEL ${TLON_TEST_DATABASE:-}" >"$GATE_LOG"
+      exit "${FAKE_GATE:-0}"
+      """)
+
+      File.chmod!(Path.join(tmp, "bin/mise"), 0o755)
+      %{tmp: tmp, repo: repo, ref: sh.(repo, "git rev-parse land/feature")}
+    end
+
+    defp gate(ctx, env \\ []) do
+      env =
+        [
+          {"PATH", "#{ctx.tmp}/bin:#{System.get_env("PATH")}"},
+          {"TMPDIR", ctx.tmp},
+          {"GATE_LOG", Path.join(ctx.tmp, "gate.log")},
+          {"WORKLINE_GATE", "1"},
+          {"LAND_REF", "land/feature"},
+          {"CHECKS_LABEL", "PR #7 landing feature"}
+        ] ++ env
+
+      System.cmd("bash", [Path.join(ctx.repo, "scripts/workline-verify.sh"), "-", "pr-7-feature", ctx.repo],
+        env: env,
+        stderr_to_stdout: true
+      )
+    end
+
+    test "green: the full check runs on the ref, named as the PR on the rack, and nothing is recorded", ctx do
+      assert {out, 0} = gate(ctx)
+      assert File.read!(Path.join(ctx.tmp, "gate.log")) =~ "#{ctx.ref} PR #7 landing feature tlon_land_pr_7_feature"
+      refute out =~ "could not record"
+    end
+
+    test "red: exit 1 and the gate's tail on stdout, still nothing recorded", ctx do
+      assert {out, 1} = gate(ctx, [{"FAKE_GATE", "1"}])
+      refute out =~ "could not record"
+    end
+  end
+
   # the script's seed_hex_home(), lifted out: `seed_hex_home <src> <dest>`
   @seed ~S"""
   eval "$(sed -n '/^seed_hex_home() {/,/^}/p' "$0")"

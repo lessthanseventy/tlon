@@ -21,6 +21,7 @@ read -r head base state cross author <<<"$(gh pr view "$pr" --json headRefName,b
 [ "$base" = main ] || stop "it targets $base, not main"
 [ "$cross" = false ] || stop "its branch is on a fork — the merge queue can't push it"
 [ "$head" != main ] || stop "its branch is main — refused"
-[ "$(gh api "repos/{owner}/{repo}/branches/$head" --template '{{.protected}}' 2>/dev/null)" != true ] ||
-  stop "its branch $head is protected — refused"
+protected="$(gh api "repos/{owner}/{repo}/branches/$head" --template '{{.protected}}' 2>/dev/null)"
+[ "$protected" != true ] || stop "its branch $head is protected — refused"
+[ "$protected" = false ] || stop "can't tell whether its branch $head is protected (gh said: ${protected:-nothing}) — refused"
 exec "$cli" land-pr "$pr" "$head" "${author:-}"
