@@ -17,6 +17,13 @@ describe("uqbar in the view", () => {
     expect(crewOf(v).some((c) => c.name === "uqbar")).toBe(false)
     expect(peopleOf(v).some((p) => p.agent === "uqbar")).toBe(false)
   })
+  test("its study with no session on it raises no person either: the book is on the shelf, nobody in the lounge", () => {
+    const a = office(3)
+    const v = viewOf({ ...a, threads: [...a.threads, { id: 269, title: "Uqbar's study", stage: null, awaiting: null, workspace_id: 1, lead: "uqbar", study: true }] }, 1)
+    expect(v.uqbar).toBeNull()
+    expect(v.roster.some((r) => r.agent === "uqbar")).toBe(false)
+    expect(peopleOf(v).some((p) => p.agent === "uqbar")).toBe(false)
+  })
   test("is seen from any workspace, and absent without a session", () => {
     expect(viewOf(withUqbar(), 2).uqbar).not.toBeNull()
     expect(viewOf(office(3), 1).uqbar).toBeNull()
