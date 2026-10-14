@@ -498,6 +498,9 @@ export class Sim<L extends { people: Seat[] }> {
   onEvent: ((kind: EventKind, beat: Beat | null) => void) | null = null
   private running: { kind: EventKind; since: number; idle: string[]; sheriff: string | null } | null = null
   private lastEvent: EventKind | null = null
+  /** a seat's own line for an event; null (the default) leaves the room to the scripts' generic beats */
+  reactLine: ((who: string, kind: EventKind) => string | null) | null = null
+
   /** where the scenes are staged; a room with no front door has none and starts no event */
   protected eventGeo(): Geo | null {
     const d = this.plan.door
@@ -567,6 +570,16 @@ export class Sim<L extends { people: Seat[] }> {
   private beats(t: number) {
     const r = this.running!
     for (const b of EVENTS[r.kind].beats) {
+      if (b.react) {
+        // the sheriff reacts too, first; each seat a beat later than the one before
+        const cast = r.sheriff ? [r.sheriff, ...r.idle] : r.idle
+        cast.forEach((n, i) => {
+          if (t !== b.at + 20 * i || this.talk.get(n)?.text) return
+          const l = this.reactLine?.(n, r.kind)
+          if (l) this.say(n, l)
+        })
+        continue
+      }
       if (b.at !== t) continue
       const who = b.who === "sheriff" ? (r.sheriff ? [r.sheriff] : []) : b.who === "first" ? r.idle.slice(0, 1) : r.idle
       for (const n of who) {
