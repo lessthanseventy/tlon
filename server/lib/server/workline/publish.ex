@@ -75,30 +75,11 @@ defmodule Server.Workline.Publish do
   end
 
   @doc """
-  Keep its landings mergeable: GitHub's main must be up to date before a PR merges, so a landing
-  published just before another merge sits `BEHIND` with auto-merge on and never lands. Each such
-  PR on a `work/*` branch — the server's own, never a human's — is rebased onto main by GitHub
-  (`gh pr update-branch --rebase`), which re-runs its checks and lets auto-merge go. Returns the
-  PR numbers it refreshed; a repo `gh` can't read is `{:error, why}`, never `[]`.
-  """
-  def refresh_behind(repo, run \\ &System.cmd/3) do
-    with {:ok, prs} <- open_prs(repo, "number,headRefName,mergeStateStatus,autoMergeRequest", run) do
-      for %{"number" => n, "headRefName" => "work/" <> _, "mergeStateStatus" => "BEHIND", "autoMergeRequest" => %{}} <-
-            prs,
-          match?(
-            {_, 0},
-            run.("gh", ["pr", "update-branch", to_string(n), "--rebase"], cd: repo, stderr_to_stdout: true)
-          ),
-          do: n
-    end
-  end
-
-  @doc """
   PR `url` as GitHub has it now: `{:ok, %{"state" => "OPEN" | "MERGED" | "CLOSED", "mergeStateStatus",
-  "statusCheckRollup"}}`, or `{:error, why}` when gh can't be read.
+  "statusCheckRollup", "headRefOid"}}`, or `{:error, why}` when gh can't be read.
   """
   def view(repo, url, run \\ &System.cmd/3) do
-    case run.("gh", ["pr", "view", url, "--json", "state,mergeStateStatus,statusCheckRollup"],
+    case run.("gh", ["pr", "view", url, "--json", "state,mergeStateStatus,statusCheckRollup,headRefOid"],
            cd: repo,
            stderr_to_stdout: true
          ) do

@@ -1,15 +1,16 @@
 defmodule Server.Jobs.KeepUp do
   @moduledoc """
-  Every few minutes, each project repo's landings that GitHub left behind main are rebased so their
-  auto-merge can go (`Server.Workline.Publish.refresh_behind/2`), those that now conflict with main
+  Every few minutes, each project repo's landings that now conflict with main
   are closed and their worklines sent back to build (`Server.Workline.reland/2`) rather than left
   stranded with their threads closed, and those whose checks went red (so auto-merge never fires)
   are closed, reported to the workspace's sheriff and sent back the same way, and its main
   checkout is brought level with origin/main, fast-forward only (`follow_main/2`). A landing waiting
   on GitHub (`Server.Workline.waiting_on_github/0`) is done only when GitHub reads its PR as
   `MERGED`: then its thread closes, its ticket is done and its issues resolved (`Server.Workline.merged/2`).
-  One GitHub closed unmerged, or holds `BLOCKED` with no check still running, is recorded as blocked
-  (`Server.Workline.landing_blocked/2`), a `pr_blocked` Need.
+  One GitHub holds `BEHIND`, or `BLOCKED` with no check still running, goes back into the merge queue
+  on its own, once per PR head (`Server.Workline.requeue_blocked/3`); one closed unmerged, or held
+  again at a head already requeued, is recorded as blocked (`Server.Workline.landing_blocked/2`), a
+  `pr_blocked` Need.
 
   A `gh` read that fails is logged and acted on as nothing. A repo whose pass raises (gh missing
   from PATH, a git that won't run) leaves the other repos their pass, then fails the job with every
@@ -32,7 +33,6 @@ defmodule Server.Jobs.KeepUp do
   # one repo's fault (gh missing from PATH, a git that won't run) doesn't skip the others; the faults
   # fail the job after every repo had its pass, so they reach the operator as a failed job
   defp keep_up(repo) do
-    read(repo, "behind PRs", Server.Workline.Publish.refresh_behind(repo))
     reland(repo)
     red_checks(repo)
     drifted(repo, Server.Workline.Publish.follow_main(repo))
@@ -69,11 +69,23 @@ defmodule Server.Jobs.KeepUp do
   def landings(run \\ &System.cmd/3) do
     for %{thread: t, url: url} <- Server.Workline.waiting_on_github() do
       case Server.Workline.Publish.view(Server.Workline.Artifacts.Git.root(t), url, run) do
-        {:ok, %{"state" => "MERGED"}} -> Server.Workline.merged(t, url)
-        {:ok, %{"state" => "CLOSED"}} -> Server.Workline.landing_blocked(t, "its PR was closed on GitHub, unmerged")
-        {:ok, %{"mergeStateStatus" => "BLOCKED"} = pr} -> blocked(t, pr)
-        {:ok, _pr} -> :ok
-        {:error, why} -> require(Logger) && Logger.warning("keep_up #{t.slug}: #{url} unread — #{why}")
+        {:ok, %{"state" => "MERGED"}} ->
+          Server.Workline.merged(t, url)
+
+        {:ok, %{"state" => "CLOSED"}} ->
+          Server.Workline.landing_blocked(t, "its PR was closed on GitHub, unmerged")
+
+        {:ok, %{"mergeStateStatus" => "BEHIND"} = pr} ->
+          Server.Workline.requeue_blocked(t, "behind main", pr["headRefOid"])
+
+        {:ok, %{"mergeStateStatus" => "BLOCKED"} = pr} ->
+          blocked(t, pr)
+
+        {:ok, _pr} ->
+          :ok
+
+        {:error, why} ->
+          require(Logger) && Logger.warning("keep_up #{t.slug}: #{url} unread — #{why}")
       end
     end
 
@@ -82,10 +94,16 @@ defmodule Server.Jobs.KeepUp do
     e -> fault("keep_up landings: #{Exception.message(e)}")
   end
 
-  # BLOCKED while its checks run is GitHub waiting on them; with none running, a rule holds it
+  # BLOCKED while its checks run is GitHub waiting on them; with none running, a rule holds it,
+  # most often tlon/check missing on its head, which the merge queue's gate posts
   defp blocked(t, pr) do
     if !Server.Workline.Publish.checks_running?(pr),
-      do: Server.Workline.landing_blocked(t, "GitHub reports it BLOCKED with no check running: a rule holds it")
+      do:
+        Server.Workline.requeue_blocked(
+          t,
+          "GitHub reports it BLOCKED with no check running: a rule holds it",
+          pr["headRefOid"]
+        )
   end
 
   # approved worklines whose Land job Lifeline rescued or discarded wait at review with nothing queued

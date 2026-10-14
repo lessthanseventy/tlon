@@ -214,15 +214,49 @@ defmodule Server.WorklineLandingTest do
       assert tid == t.id
     end
 
-    test "GitHub reports it BLOCKED with nothing left running" do
+    test "behind main: back in the merge queue on its own, no Need and no GitHub rebase" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       %{thread: t} = published!()
 
-      KeepUp.landings(gh("OPEN", %{"mergeStateStatus" => "BLOCKED"}))
-      KeepUp.landings(gh("OPEN", %{"mergeStateStatus" => "BLOCKED"}))
+      KeepUp.landings(gh("OPEN", %{"mergeStateStatus" => "BEHIND", "headRefOid" => "h1"}))
+
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: t.id, reland: true, auto: true})
+      refute_received {:ran, ["gh", "pr", "update-branch" | _]}
+      assert blocked() == []
+    end
+
+    test "a conflict after an automatic requeue is the Need, the PR left open for the operator" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      %{thread: t} = published!()
+      KeepUp.landings(gh("OPEN", %{"mergeStateStatus" => "BEHIND", "headRefOid" => "h1"}))
+      flush_ran()
+
+      assert {:error, _} =
+               Workline.reland_queued(Repo.get!(Thread, t.id), merge: Conflicts, run: gh("OPEN"), auto: true)
+
+      ran_out!()
+
+      assert [%{thread_id: tid, text: text}] = blocked()
+      assert tid == t.id and text =~ "conflicts with origin/main"
+      refute_received {:ran, ["gh", "pr", "close" | _]}
+      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+    end
+
+    test "BLOCKED again at a head it was already requeued at: the Need, not a second requeue" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      %{thread: t} = published!()
+      held = gh("OPEN", %{"mergeStateStatus" => "BLOCKED", "headRefOid" => "h1"})
+
+      KeepUp.landings(held)
+      assert blocked() == []
+      ran_out!()
+
+      KeepUp.landings(held)
 
       assert [%{thread_id: tid, text: text} = need] = blocked()
       assert tid == t.id and text =~ "BLOCKED"
       assert [_ | _] = answers(need)
+      assert Repo.aggregate(from(j in Oban.Job, where: j.worker == "Server.Jobs.Land"), :count) == 1
     end
 
     test "pending past an hour" do
@@ -343,6 +377,9 @@ defmodule Server.WorklineLandingTest do
       assert [_one] = Workline.landed_since(since)
     end
   end
+
+  # the queued landing's turn came and went
+  defp ran_out!, do: Repo.update_all(Oban.Job, set: [state: "completed"])
 
   defp flush_ran do
     receive do

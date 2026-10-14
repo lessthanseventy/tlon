@@ -1,7 +1,8 @@
 defmodule Server.Jobs.Land do
   @moduledoc """
   The merge queue: an approved workline's landing, a landed one's GitHub isn't merging put back in
-  it (args `%{"thread_id", "reland" => true}`, `Server.Workline.reland_queued/2`), or a reviewed
+  it (args `%{"thread_id", "reland" => true}`, and `"auto" => true` when the server put it there,
+  `Server.Workline.reland_queued/2`), or a reviewed
   PR's (`Server.PRLanding`, args `%{"pr", "branch", "on_thread"}`), one at a time (queue `landing`,
   concurrency 1).
   `Server.Workline.land_queued/2` rebases `work/<slug>` onto origin's main and gates it there — so
@@ -33,7 +34,7 @@ defmodule Server.Jobs.Land do
       end)
 
     queued = if args["reland"], do: &Server.Workline.reland_queued/2, else: &Server.Workline.land_queued/2
-    if thread, do: land(thread, queued, attempt, max), else: :ok
+    if thread, do: land(thread, queued, args, attempt, max), else: :ok
   end
 
   @doc """
@@ -104,8 +105,8 @@ defmodule Server.Jobs.Land do
 
   # a gate cut off (a restart) leaves the landing queued; this attempt fails so Oban runs it again,
   # and only the last one cut off bounces it
-  defp land(thread, queued, attempt, max) do
-    case reported(thread, attempt, max, fn -> queued.(thread, last: attempt >= max) end) do
+  defp land(thread, queued, args, attempt, max) do
+    case reported(thread, attempt, max, fn -> queued.(thread, last: attempt >= max, auto: args["auto"] == true) end) do
       {:error, {:interrupted, why}} -> {:error, why}
       _ -> :ok
     end
