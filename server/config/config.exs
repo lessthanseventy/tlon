@@ -51,7 +51,9 @@ config :server, Oban,
        # box's tailscale name reconnecting every minute logged "Could not check origin" (2026-09-18)
        {"* * * * *", Server.Jobs.Dispatch},
        # the backlog's intake: the next ready ticket to the manager while worklines are under the cap
-       {"*/15 * * * *", Server.Jobs.Intake}
+       {"*/15 * * * *", Server.Jobs.Intake},
+       # the souls' diaries: Monday 06:00, each builder's week (Server.Jobs.Diary)
+       {"0 6 * * 1", Server.Jobs.Diary}
      ]}
   ]
 
