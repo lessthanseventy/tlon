@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Remove the smoke builds a SIGKILLed release-smoke.sh left behind (it never ran its cleanup), in
-# ${TMPDIR:-/tmp}, as worktrees of <repo-root>:
+# ${TMPDIR:-/tmp}/tlon-smoke/ (and tlon-smoke-* beside it, an older checkout's), as worktrees of
+# <repo-root>:
 #
 #   smoke-sweep.sh <repo-root>
 #
@@ -9,7 +10,7 @@
 set -uo pipefail
 
 root="$1"
-for stale in "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
+for stale in "${TMPDIR:-/tmp}"/tlon-smoke/*/ "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
   stale="${stale%/}"; [ -d "$stale/server" ] || continue
   if [ -e "$stale.lock" ]; then
     flock -n "$stale.lock" true || continue

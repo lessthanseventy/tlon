@@ -63,7 +63,10 @@ if [ -z "$url" ]; then
   # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep the builds no
   # run holds before making another
   "$(dirname "$0")/smoke-sweep.sh" "$root"
-  dir="$(mktemp -d -t tlon-smoke-XXXXXX)"
+  # under tlon-smoke/, out of reach of the sweep in a checkout from before the lock: its
+  # tlon-smoke-*/ takes every build no process names in a command line, live ones too
+  mkdir -p "${TMPDIR:-/tmp}/tlon-smoke"
+  dir="$(mktemp -d "${TMPDIR:-/tmp}/tlon-smoke/XXXXXX")"
   # held until this run and everything it started exits: the sweep's sign that the build is live.
   # Taken before the checkout, as the sweep skips a dir with no server/ in it yet
   exec 9>"$dir.lock"
