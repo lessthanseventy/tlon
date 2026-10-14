@@ -577,7 +577,7 @@ case "$cmd" in
 
   land-pr)
     pr="${1:-}"; branch="${2:-}"; author="${3:-}"
-    { int "$pr" && [ -n "$branch" ]; } || { echo 'usage: tlon-cli.sh land-pr <pr> <branch>' >&2; exit 2; }
+    { int "$pr" && [ -n "$branch" ]; } || { echo 'usage: tlon-cli.sh land-pr <pr> <branch> [author]' >&2; exit 2; }
     exec "$SERVER" rpc "case Server.PRLanding.queue(Server.Profiles.tlon_root(), $pr, \"$(esc "$branch")\", \"$(esc "$author")\") do {:ok, _} -> IO.puts(\"queued: PR #$pr ($(esc "$branch")) is in the merge queue — its outcome is posted on its review's thread\"); {:error, why} -> raise \"refused: \" <> if(is_binary(why), do: why, else: inspect(why)) end"
     ;;
 

@@ -119,7 +119,9 @@ defmodule Server.PRLandingTest do
                          "context=tlon/check" | _
                        ]}
 
-      assert_received {:ran, ["gh", "pr", "merge", "7", "--rebase", "--match-head-commit", ^to, "--delete-branch"]}
+      assert_received {:ran, ["gh", "pr", "merge", "7", "--rebase", "--match-head-commit", ^to]}
+      assert_received {:ran, ["gh", "api", "-X", "DELETE", "repos/{owner}/{repo}/git/refs/heads/feature"]}
+      assert sh!(ctx.repo, "git branch --list feature") =~ "feature", "the local branch is never touched"
       assert posts(ctx) =~ "merged"
       assert sh!(ctx.repo, "git branch --list 'land/*'") == ""
     end
@@ -151,6 +153,24 @@ defmodule Server.PRLandingTest do
       assert origin(ctx, "feature") == before
       refute_received {:ran, ["gh" | _]}
       assert posts(ctx) =~ "review it again"
+    end
+
+    test "GitHub not having evaluated the fresh tlon/check yet: auto-merge armed at that head, and said", ctx do
+      approve(ctx, origin(ctx, "feature"))
+      test = self()
+
+      pending = fn
+        "gh", ["pr", "merge", _, "--rebase", "--match-head-commit" | _], _ ->
+          {"Required status check \"tlon/check\" is expected", 1}
+
+        cmd, args, _ ->
+          send(test, {:ran, [cmd | args]})
+          {"", 0}
+      end
+
+      assert {:ok, to} = land(ctx, run: pending)
+      assert_received {:ran, ["gh", "pr", "merge", "7", "--rebase", "--auto", "--match-head-commit", ^to]}
+      assert posts(ctx) =~ "auto-merge"
     end
 
     test "a red gate: nothing pushed or merged, the finding posted", ctx do
