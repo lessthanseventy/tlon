@@ -207,12 +207,20 @@ async function drainWakes($) {
   draining = true;
   try {
     const wakes = await call($, "take_wakes", sessionId === null ? {} : { session_id: sessionId });
-    // a newer session holds this seat: say so once, then stop taking and registering
+    // a newer session holds this seat: say so once, then take nothing and register nothing — but
+    // keep asking, so a seat whose newer session has since ended is claimed again, not left empty
     if (wakes && typeof wakes === "object" && (wakes as { superseded?: boolean }).superseded) {
+      if (superseded) return;
       superseded = true;
       registration = null;
       await $.prompt.submit({ text: String((wakes as { text?: string }).text ?? ""), asUser: true });
       return;
+    }
+    if (superseded) {
+      superseded = false;
+      const pane = await $.env.get("TMUX_PANE");
+      registration = pane ? { pane_ref: pane } : {};
+      void registerNow($);
     }
     const failed: string[] = [];
     if (Array.isArray(wakes))
@@ -452,7 +460,6 @@ export function register(on) {
     superseded = false;
     void registerNow($);
     $.clock.every(WAKE_POLL_MS, async () => {
-      if (superseded) return;
       if (registration) await registerNow($);
       await drainWakes($);
     });

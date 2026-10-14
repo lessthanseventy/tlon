@@ -476,9 +476,10 @@ test("a register refused while the MCP server is still connecting is tried again
   expect(sent.filter((d) => d.tool === "register").length).toBe(1);
 });
 
-test("a session the server says was superseded is told to stop, and takes no more wakes", async ($, on) => {
+test("a session the server says was superseded is told to stop once, and takes no wakes while the newer one holds the seat", async ($, on) => {
   const text = "This session was superseded: a newer session now holds lonnrot's seat on thread #42. Stop.";
-  const world: World = { ownClock: true, wakes: [{ superseded: true, by: 9, text }], submitted: [] };
+  const gone = { superseded: true, by: 9, text };
+  const world: World = { ownClock: true, wakes: [gone, gone, gone], submitted: [] };
   const sent = engine(on, world);
   const clock = mock.clock(on);
   await $.session.start(START);
@@ -488,8 +489,24 @@ test("a session the server says was superseded is told to stop, and takes no mor
     await settle();
   }
 
-  expect(sent.filter((d) => d.tool === "take_wakes")).toEqual([{ tool: "take_wakes", args: { session_id: 5 } }]);
+  expect(sent.filter((d) => d.tool === "register").length).toBe(1);
   expect(world.submitted).toEqual([text]);
+});
+
+test("a superseded session whose newer one is gone claims the seat again instead of staying stopped", async ($, on) => {
+  const text = "This session was superseded: a newer session now holds lonnrot's seat on thread #42. Stop.";
+  const world: World = { ownClock: true, wakes: [{ superseded: true, by: 9, text }, [], ["a wake the seat missed"]], submitted: [] };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+
+  for (let i = 0; i < 3; i++) {
+    await clock.advance(3_000);
+    await settle();
+  }
+
+  expect(sent.filter((d) => d.tool === "register").length).toBe(2);
+  expect(world.submitted).toEqual([text, "a wake the seat missed"]);
 });
 
 test("a wake whose submit fails is put back on the server, not lost", async ($, on) => {
