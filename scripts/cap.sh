@@ -27,6 +27,13 @@ log="$log_dir/${ts}-${slug}.log"
 # (pure noise). pipefail keeps the WRAPPED command's exit code, not sed's.
 "$@" 2>&1 | sed -E 's/\x1b\[[0-9;?]*[a-zA-Z]//g' >"$log"
 rc=${PIPESTATUS[0]}
+# A red suite never reads green: a command that exits 0 with a non-zero failure count in its own
+# report (bun's " 6 fail", ExUnit's "Failed: 1 test" / "3 failures") is reported as failed.
+red_but_zero=0
+if [ "$rc" -eq 0 ] && grep -qE '(^|[[:space:],])[1-9][0-9]* (fail|failures?)\b|Failed: [1-9]' "$log"; then
+  rc=1; red_but_zero=1
+fi
+printf '\n[cap] exit %s%s\n' "$rc" "$([ "$red_but_zero" = 1 ] && echo ' (the command exited 0, but its report shows failures)')" >>"$log"
 
 lines="$(wc -l <"$log" | tr -d ' ')"
 rel="${log#"$root"/}"
@@ -44,6 +51,7 @@ if [ "$rc" -eq 0 ]; then
   { [ "${CAP_TAIL:-}" = all ] || [ -n "${CAP_TAIL:-}" ]; } || tail_n=3
 else
   printf '  ✗ exit %s\n' "$rc"
+  [ "$red_but_zero" = 1 ] && printf '    the command exited 0, but its report shows failures\n'
   { [ "${CAP_TAIL:-}" = all ] || [ -n "${CAP_TAIL:-}" ]; } || tail_n=5
   failblock=1
 

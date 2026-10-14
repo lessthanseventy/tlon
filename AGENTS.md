@@ -81,7 +81,8 @@ When you run a command whose output you'll inspect — a test suite, a build, a 
 script — run it through **`scripts/cap.sh`** (or `mise run cap -- <cmd>`). It runs the command
 **once**, captures all output to a log under `.logs/`, and prints a lean summary: the exit code,
 a test/build-summary line, failure lines on a non-zero exit, and a short tail — plus the exact
-`tail`/`grep` to read more **from the saved log**.
+`tail`/`grep` to read more **from the saved log**. A red suite never reads green: a command that exits 0 while its own report
+counts failures (`6 fail`, `Failed: 1 test`) is reported as failed, and every log ends `[cap] exit N`.
 
 The rule this enforces: **do not re-run a command with an escalating `grep … | tail -N` to see
 more of its output.** The full output is already on disk — `grep`/`tail` the log. Re-running
