@@ -7,6 +7,6 @@ Closes ticket #56. Design `docs/plans/2026-10-08-office-as-a-toy-design.md` §3,
 - Scenes: duck walks the hall; meteor streaks past the window, lamps flicker, a crater, the idle crowd at the window; power cut blacks out the floor with a candle and applause; zoo's open day with van, monkey, penguin, a goat that eats a corkboard note, and Scharlach chasing with a net. The drill is reused unchanged and now has Scharlach calling it.
 - `e` in the sandbox plays one (falls back to the old stand-in in the rail room).
 
-Not done (plan's open items): Nina/Argos reactions in the zoo and the blackout monitor glow — skipped, no fitting existing pet mode; step 7 owns reactions.
+Not done (plan's open items): Nina/Argos reactions in the zoo, Argos watching the duck (spec §Duck), and the blackout monitor glow — skipped, no fitting existing pet mode; step 7 owns reactions.
 
 Checked: `mise run check` exit 0 (office 505 pass, golden hashes unchanged); `office/test/events.test.ts` 18 tests, written red first.
