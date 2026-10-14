@@ -12,9 +12,9 @@ and every layer the spine design's re-laid §9 asked for
 (`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`) is built and gated:
 
 - **db + doctor** — the schema (`priv/repo/migrations/`), `Server.Doctor` (integrity_check, tables,
-  pending migrations, JSONL export), `mix server.doctor`. The §4 write contract holds on `exqlite`: WAL
-  and foreign keys via PRAGMA, and a bounded busy_timeout proven by a contention test (exqlite sets it
-  through a NIF, not `PRAGMA busy_timeout`, so a held-lock timing test is the only honest probe).
+  pending migrations, JSONL export), `mix server.doctor`. The store is Postgres (`Server.Repo`): foreign
+  keys live in the schema, and `integrity_check` proves the store reachable by counting its relations.
+  `exqlite` is left only for `mix server.import_sqlite`, the one-time import from the old SQLite file.
   **Nothing ships that cannot be repaired at 2am.**
 - **thread + message** (`Server.Channel`) — the atom of work and the channel/§4 capture path.
   `delivered` is a separate column from `read`, and a sender cannot fake delivery (§5b.3). A thread is
