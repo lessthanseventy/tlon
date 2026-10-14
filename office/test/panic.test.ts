@@ -26,6 +26,16 @@ describe("a fire drill is a panic, then a muster", () => {
     for (const a of r.actors.values()) expect(a.spot.kind).not.toBe("exit")
   }))
 
+  test("a drill during a running scene is refused, not stacked on top of it", () => seeded(3, () => {
+    const r = new WideRoom(696) as any
+    run(r, 300)
+    expect(r.event("duck")).toBe(true)
+    run(r, 10)
+    r.play("drill")
+    expect(r.alarmed).toBe(false)
+    expect(r.eventNow()?.kind).toBe("duck")
+  }))
+
   test("they scream, but a handful of lines, not one per person per tick", () => seeded(3, () => {
     const r = new WideRoom(696) as any
     run(r, 300)
