@@ -26,6 +26,7 @@
 #   epic-add <epic> <ticket…>                   tie tickets to an epic (one parent each, all or nothing)
 #   ticket-start <ticket> [agent-id]            start a ticket, handed to that coworker or the lead
 #   ticket-route <ticket>                       send a ticket to the workspace's manager to staff
+#   ticket-claim <ticket> [who]                 claim a ticket worked by hand (who: uqbar), so intake leaves it alone
 #   hire <ws> <name> <archetype> [model [effort [ask]]]  seat a new coworker on a workspace's bench
 #   persona <ws> <name> [--reroll]               a seat's persona as JSON (made once at hire); --reroll draws a new seed
 #   soul <ws> [name]                             draft SOUL.md for a seat (or the whole bench); never over an existing file
@@ -44,6 +45,7 @@
 #   answer <prompt-id> <key> [text…]  answer one prompt (a pane's dialog, an ask, the release gate) by its id
 #   post --as <citizen> <id> <text…>  post as an outside citizen (uqbar), never as the operator
 #   post --notice --as <citizen> <id> <text…>  …as a notice: an FYI that wakes nobody
+#   note <id> <text…>              post as tlon, the server's own voice (a script's report)
 #   close-thread <id>              close a thread (its ticket is done; a child reports up)
 #   reopen <id>                    reopen a closed thread; a queued workline re-joins the merge queue if its approval stands
 #   reap                           the worktree sweep now: strays removed, the ones holding work kept with why
@@ -56,11 +58,13 @@
 #   advance <id> [from-stage]      advance a workline past its current stage, only from from-stage when given (verifier green path)
 #   send-back <id> spec|plan|build <why…>  move a workline back on its own branch, the build kept to improve
 #   flag <name> on|off             turn a feature flag on or off for everyone (Server.Flags)
+#   pause pencils_down|lights_out|back_to_work   the office's stop controls (Server.Pause)
 #   quiet                          "quiet", or "busy" and what a restart would cut off (server:restart asks)
 #   releasable <sha>               the release checks on a commit (gate, smoke, quiet) and the verdict
 #   announce-restart <why…>        a notice on every thread with a live session: the server is restarting
 #   worktree <id>                  the thread's own checkout, as the server resolves it (its project's repo)
 #   record-verify <id> <slug> <exit> <cmd> <tail…>  record verify-stage CHECK evidence
+#   red-verify <id> <finding…>     a red verify back to build on the same branch, with its finding
 #   approve <id>                   complete a workline's parked gate (awaiting: andrew)
 #     approve <id> --skip-qa <why…>  …and land a review past an owed QA pass, recorded with why
 set -euo pipefail
@@ -79,7 +83,13 @@ export ERL_FLAGS="${ERL_FLAGS:-} +S 1:1 +SDcpu 1:1 +SDio 1 +A 1 +sbwt none +sbwt
 # without a local release (that's the whole point of per-connect minting: any node, any
 # world). Gating them on the release strands every MCP headersHelper when no release is built.
 # `dossier` needs no release either when TLON_MCP_URL points it at a node over HTTP.
+# The header's Subcommands block is the one usage text.
+usage() {
+  echo "usage: tlon-cli.sh <subcommand> [args]"
+  sed -n '/^# Subcommands:$/,/^set -euo pipefail$/{/^# Subcommands:$/d;/^set /d;s/^#//;p}' "$0"
+}
 case "${1:-}" in
+  ''|-h|--help|help) usage >&2; exit 2 ;;
   token) ;;
   dossier) [ -n "${TLON_MCP_URL:-}" ] || [ -x "$SERVER" ] || { echo "no release at $SERVER and no TLON_MCP_URL — run 'mise run server:release' or launch via a server launcher" >&2; exit 1; } ;;
   *) [ -x "$SERVER" ] || { echo "no release at $SERVER — run 'mise run server:release' first" >&2; exit 1; } ;;
@@ -603,7 +613,7 @@ case "$cmd" in
     ;;
 
   *)
-    echo "usage: tlon-cli.sh {spawn|token|roster|announce-restart|dossier|read|message|post|shell-thread|close-thread|reopen|reap|canvas|ticket-file|epic-new|epic-add|ticket-route|ticket-start|hire|persona|soul|coworker-set|workspace-new|aside|fire|ticket-set|ticket-delete|workspace-delete|hand-off|flag|pause|workline|track|advance|record-verify|red-verify|approve|delete-thread|forget-fact|resolve-issue} [args]" >&2
+    usage >&2
     exit 2
     ;;
 esac
