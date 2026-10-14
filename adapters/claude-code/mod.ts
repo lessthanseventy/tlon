@@ -216,7 +216,9 @@ async function drainWakes($) {
       await $.prompt.submit({ text: String((wakes as { text?: string }).text ?? ""), asUser: true });
       return;
     }
-    if (superseded) {
+    // only a real wake list says the seat is free: a non-JSON reply (server mid-restart) must not
+    // register this stopped session over the live newer one
+    if (superseded && Array.isArray(wakes)) {
       superseded = false;
       const pane = await $.env.get("TMUX_PANE");
       registration = pane ? { pane_ref: pane } : {};
