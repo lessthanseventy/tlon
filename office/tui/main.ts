@@ -688,7 +688,7 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "publish_failed" && tid ? [{ key: "R", label: "republish (push, open its PR)", run: () => void did(data.republish(tid)).then(after) }] : []),
     ...(n.kind === "release_failed" && n.ref ? [{ key: "R", label: "retry the cut", run: () => void did(data.retryRelease(n.ref!)).then(after) }] : []),
     ...(n.kind === "pr_blocked" && tid ? [
-      { key: "b", label: "rebase it (GitHub, auto-merge armed)", run: () => void did(data.rebaseLanding(tid)).then(after) },
+      { key: "b", label: "rebase it (back in the merge queue)", run: () => void did(data.rebaseLanding(tid)).then(after) },
       { key: "L", label: "close and reland (back to build)", run: () => void did(data.relandLanding(tid)).then(after) },
       { key: "v", label: `show me: the thread${n.url ? ` (${n.url})` : ""}`, run: () => openReader(tid) },
     ] : []),

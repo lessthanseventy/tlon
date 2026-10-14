@@ -112,8 +112,8 @@ export async function needs(): Promise<Need[]> {
     return lastNeeds
   } catch { return lastNeeds }
 }
-/** a landing GitHub isn't merging: GitHub rebases its PR onto main, auto-merge armed again */
-export const rebaseLanding = (tid: number) => write(`rebasing #${tid}'s PR`, `/threads/${tid}/rebase`, {}, () => `#${tid}'s PR rebased; auto-merge armed`)
+/** a landing GitHub isn't merging: back in the merge queue — rebased, gated, merged at that head */
+export const rebaseLanding = (tid: number) => write(`requeuing #${tid}'s PR`, `/threads/${tid}/rebase`, {}, () => `#${tid}'s PR back in the merge queue`)
 /** a landing GitHub isn't merging: its PR closed, the workline back to build on its branch */
 export const relandLanding = (tid: number) => write(`relanding #${tid}`, `/threads/${tid}/reland`, {}, () => `#${tid}'s PR closed; back to build`)
 export const reverify = (tid: number) => write(`re-running verify on #${tid}`, `/threads/${tid}/verify`, {}, () => `verify on #${tid} queued`)
