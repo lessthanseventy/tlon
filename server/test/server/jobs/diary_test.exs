@@ -52,6 +52,24 @@ defmodule Server.Jobs.DiaryTest do
     assert Soul.diary("daneri") == [line]
   end
 
+  test "a landing written in last week's run is not written again the next Monday", %{ws: ws} do
+    import Ecto.Query
+
+    thread = land(ws, "stanza", "the stanza", "daneri")
+    seven_days_ago = DateTime.add(DateTime.utc_now(), -7 * 86_400, :second)
+    Server.Repo.update_all(from(e in Server.Event, where: e.thread_id == ^thread.id), set: [created_at: seven_days_ago])
+
+    written = Date.to_iso8601(Date.add(Date.utc_today(), -7))
+
+    File.write!(
+      Path.join(Application.get_env(:server, :souls_dir), "daneri.md"),
+      "## Wants\nA quiet desk.\n\n## Diary\n- #{written}: shipped \"the stanza\".\n"
+    )
+
+    assert :ok = Diary.perform(%Oban.Job{})
+    assert [_only] = Soul.diary("daneri")
+  end
+
   test "a seat with no history gets no line", %{ws: ws} do
     land(ws, "stanza", "the stanza", "daneri")
 
