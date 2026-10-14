@@ -363,7 +363,9 @@ defmodule Server.Profiles do
   in a message. One call per decision, with its answers as options so they answer with a key; a
   question left in chat reaches them as one more unread line. Their answer in tlon does not unlock your
   own session's permission check: if a command is still refused after they agreed, ask again naming the
-  exact command — the operator can hand it to Uqbar, who runs it as them. WHEN YOUR THREAD'S WORK IS DONE AND VERIFIED, call
+  exact command — the operator can hand it to Uqbar, who runs it as them. DON'T @MENTION THE OPERATOR TO
+  REPORT: a status, a "done", an FYI is a plain post (their inbox has the thread); an @mention of them is
+  for handing them something to read now, and what they must decide is `ask_operator`. WHEN YOUR THREAD'S WORK IS DONE AND VERIFIED, call
   `finish(summary)`: it closes your thread, reports up to your manager, and closes its ticket.\
   """
 
