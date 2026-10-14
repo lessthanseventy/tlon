@@ -46,6 +46,20 @@ defmodule Server.Diary do
     Soul.append_diary(name, lines)
   end
 
+  @spacing 6
+
+  @doc "Whether the seat's week is due: its newest diary line is at least six days old, or it has none."
+  @spec due?(String.t(), Date.t()) :: boolean()
+  def due?(seat, today) do
+    with line when is_binary(line) <- seat |> Soul.diary() |> List.last(),
+         [_, date] <- Regex.run(~r/^- (\d{4}-\d{2}-\d{2}):/, line),
+         {:ok, written} <- Date.from_iso8601(date) do
+      Date.diff(today, written) >= @spacing
+    else
+      _ -> true
+    end
+  end
+
   defp model_lines(name, items, today) do
     case Server.Generator.run(prompt(name, items)) do
       {:ok, out} ->
