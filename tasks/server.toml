@@ -212,6 +212,10 @@ run = "scripts/manual-gen.sh"
 description = "manual: fail if the generated task manual drifts from its source (run manual:gen)"
 run = "scripts/manual-gen.sh --check"
 
+["land"]
+description = "land a reviewed PR — `land -- <pr>`: handed to the server's merge queue (the same line and gate as worklines), which takes it only when its branch's review on tlon approves its head, then rebases, gates, posts tlon/check and merges at exactly that head; the outcome is posted on the review's thread"
+run = "scripts/land.sh"
+
 ["check:main"]
 description = "the whole gate on origin/main in a throwaway worktree (own test db) — main's health, whatever this checkout has out; the nightly schedule runs it"
 run = "scripts/check-main.sh"

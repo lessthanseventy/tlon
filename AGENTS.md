@@ -19,6 +19,12 @@ control loop, not two, and no second way to run anything:
   Its verdict is GitHub's required check on main: on a clean tree (nothing uncommitted or untracked) it posts
   the commit status `tlon/check` (success or failure) on HEAD's sha (`scripts/check.sh`); on a dirty tree it
   posts nothing and says so, and gh missing or refusing is said, never red. `TLON_CHECK_STATUS=0` posts nothing.
+- `mise run land -- <pr>` — land a reviewed PR through the server's merge queue (`scripts/land.sh` →
+  `Server.PRLanding`, the same line and gate as worklines): queued only when its branch's newest review on
+  tlon (`review_branch`) approves its head, or that head rebased onto main with the same patches; its turn
+  rebases it onto origin/main, gates it, pushes it with lease, comments the review on the PR, posts
+  `tlon/check` and merges at exactly that head (`gh pr merge --rebase --match-head-commit`). The outcome is
+  posted on the review's thread. The service must be up.
 - `mise run server:test` / `server:check` / `server:setup` / `server:doctor` — the server loop (Elixir/mix).
 - `mise run server:release` / `server:restart` / `server:stop` / `server:console` / `server:logs` — the always-up server channel: a headless `mix release` kept up by a `systemd --user` service (loopback, real db), and the ways to rebuild/stop/inspect/watch it (`server:stop` takes the coworker panes down with it).
 - `mise run release:cut` / `release:status` — what the service runs is the **release pointer** (`refs/heads/live`, built in `.release/`), not main: a merge ships when a cut moves the pointer (fast-forward, merged work only; `-- --rollback` to go back). `scripts/release.sh`. `release:status` also reads whether main is releasable (`Server.Release.Candidate`: `check:main` and `release:smoke` passed on exactly that commit — each run ends `ran-on: <check> <sha>`, which a scheduled run records — and nothing mid-flight). The `pm` coworker proposes cuts (`Server.Release.PM`): under `auto_land_risk` it cuts them itself, else they reach you as one gate on the root thread.
@@ -190,7 +196,9 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 - **History is linear.** GitHub's `main` is protected: rebase-merge only, every change through a PR,
   and its required check is `tlon/check` — the local gate's commit status, not a CI run (CI runs on
   release tags only). Rebase onto main, never merge it in, never make a merge commit; ship work as a PR
-  branch, or a stack of small ones with `gh stack`. A workline's approval lands its branch the same way — rebased onto origin's main and
+  branch, or a stack of small ones with `gh stack`. Review happens on tlon, before GitHub: branch → PR → a
+  reviewer's verdict on its head (`review_branch`) → `mise run land -- <pr>`; GitHub merges only what
+  the merge queue gated, at that head. A workline's approval lands its branch the same way — rebased onto origin's main and
   gated (`Server.Workline.Merge`), then published: the branch pushed, a PR opened, `tlon/check` posted on
   the sha the gate passed, auto-merged by GitHub (`Server.Workline.Publish`). The checkout's own main
   is never moved by a landing; it only follows origin. Rewriting pushed history is the human's call —

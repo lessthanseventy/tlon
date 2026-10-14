@@ -179,20 +179,23 @@ defmodule Server.Office.Room do
   end
 
   @doc """
-  The merge queue: worklines approved and landing, one at a time (`Server.Jobs.Land`) — the one
-  being gated now first, then the queued in order. `[%{thread_id, title, state}]`, `state`
-  `"landing"` or `"queued"`.
+  The merge queue: worklines approved and PRs reviewed, landing one at a time (`Server.Jobs.Land`)
+  — the one being gated now first, then the queued in order. `[%{thread_id, title, state}]`, `state`
+  `"landing"` or `"queued"`; a PR's `thread_id` is the thread its review was recorded on.
   """
   def merge_queue do
     from(j in Oban.Job,
       join: t in Server.Thread,
-      on: t.id == type(fragment("(?->>'thread_id')", j.args), :integer),
+      on: t.id == type(fragment("coalesce(?->>'thread_id', ?->>'on_thread')", j.args, j.args), :integer),
       where: j.worker == "Server.Jobs.Land" and j.state in ["executing", "available", "scheduled", "retryable"],
       order_by: [desc: fragment("? = 'executing'", j.state), asc: j.id],
-      select: %{thread_id: t.id, title: t.title, state: j.state}
+      select: %{thread_id: t.id, title: t.title, state: j.state, args: j.args}
     )
     |> Repo.all()
-    |> Enum.map(&%{&1 | state: if(&1.state == "executing", do: "landing", else: "queued")})
+    |> Enum.map(fn %{args: args} = row ->
+      title = if args["pr"], do: "PR ##{args["pr"]} #{args["branch"]}", else: row.title
+      %{thread_id: row.thread_id, title: title, state: if(row.state == "executing", do: "landing", else: "queued")}
+    end)
   end
 
   defp problems(h) do

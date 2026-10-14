@@ -38,6 +38,20 @@ defmodule Server.Office.RoomChecksTest do
     assert [%{title: "second approved", state: "landing"}, %{title: "first approved", state: "queued"}] =
              Room.merge_queue()
   end
+
+  test "a reviewed PR is on the same line, named as the PR, on the thread its review was recorded on" do
+    Server.TestDB.clean!()
+    start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+    {:ok, a} = Server.Channel.open_thread(%{title: "approved workline"})
+    {:ok, r} = Server.Channel.open_thread(%{title: "review chat-ux"})
+    {:ok, _} = %{thread_id: a.id} |> Server.Jobs.Land.new() |> Oban.insert()
+    {:ok, _} = %{"pr" => 7, "branch" => "chat-ux", "on_thread" => r.id} |> Server.Jobs.Land.new() |> Oban.insert()
+
+    assert [%{title: "approved workline"}, %{title: "PR #7 chat-ux", thread_id: id, state: "queued"}] =
+             Room.merge_queue()
+
+    assert id == r.id
+  end
 end
 
 defmodule Server.Office.RoomTest do

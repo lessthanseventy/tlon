@@ -6,6 +6,10 @@
 # A model only enters when a failure needs interpreting; the gates themselves are script.
 #
 # usage: workline-verify.sh <thread-id> <slug>
+#
+# A PR's landing gate (Server.Jobs.Land.gate_pr/4) is the same check in branch mode: WORKLINE_GATE=1,
+# thread id `-`, LAND_REF the rebased ref to check out instead of work/<slug>, no stray-path rule and no
+# evidence recorded.
 set -uo pipefail
 
 tid="${1:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
@@ -35,7 +39,8 @@ db="tlon_${role}_$(printf '%s' "$slug" | tr -c 'a-zA-Z0-9' '_' | tr 'A-Z' 'a-z')
 clean+=(TLON_TEST_DATABASE="${db:0:63}")
 # how the machine's checks queue names this run: the office's room and rack read "#<id> verify|landing"
 label=verify; [ -n "${WORKLINE_GATE:-}" ] && label=landing
-clean+=(CHECKS_LABEL="#$tid $label $slug")
+clean+=(CHECKS_LABEL="${CHECKS_LABEL:-#$tid $label $slug}")
+ref="${LAND_REF:-work/$slug}"
 if [ ! -d "$tree" ]; then
   note "$tid" "verify can't run: no checkout of work/$slug at $tree" || true
   echo "workline-verify: no checkout of work/$slug at $tree" >&2
@@ -65,7 +70,7 @@ done
 git -C "$repo" worktree prune
 fresh="$(mktemp -d -t "tlon-verify-XXXXXX")" && cd "$fresh" || exit 1
 trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"; git -C "$repo" worktree prune' EXIT
-git -C "$repo" worktree add -q --detach "$fresh" "work/$slug" || exit 1
+git -C "$repo" worktree add -q --detach "$fresh" "$ref" || exit 1
 if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
   git -C "$fresh" rebase --abort >/dev/null 2>&1
   note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
@@ -79,7 +84,9 @@ strays() { # slug
     $2 !~ /\// { if ($1 == "A") print $2; next }
     $2 ~ /^work\// && index($2, own) != 1 { print $2 }'
 }
-stray="$(git -C "$fresh" diff --name-status --no-renames origin/main HEAD | strays "$slug")"
+# a workline's rule, not a PR's: a PR's branch has no work/<slug>/ of its own
+stray=""
+[ -n "${LAND_REF:-}" ] || stray="$(git -C "$fresh" diff --name-status --no-renames origin/main HEAD | strays "$slug")"
 if [ -n "$stray" ]; then
   finding="work/$slug touches paths outside its own: a workline adds no file at the repo root and writes its docs under work/$slug/ only — move or drop:
 $stray"
@@ -136,7 +143,7 @@ run_gate() {
 $fails
 …
 }$(printf '%s' "$out" | tail -c 400)"
-  if ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$gate_tail"; then
+  if [ "$tid" != - ] && ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$gate_tail"; then
     echo "workline-verify: could not record evidence for '$name' (exit $code) — is the service up?" >&2
     unrecorded=1
   fi
