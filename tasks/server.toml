@@ -196,8 +196,8 @@ description = "names-exist gate: every Server.* module, mix task, mise task and 
 run = "scripts/check-names.sh"
 
 ["check"]
-description = "Everything green, one at a time on this machine: waits its turn in the checks queue (scripts/checks-queue.sh), then runs check:all"
-run = "scripts/checks-queue.sh mise run check:all"
+description = "Everything green, one at a time on this machine: waits its turn in the checks queue (scripts/checks-queue.sh), runs check:all, then posts the verdict as GitHub's commit status tlon/check on HEAD — only on a clean tree (scripts/check.sh; TLON_CHECK_STATUS=0 posts nothing)"
+run = "scripts/checks-queue.sh scripts/check.sh"
 
 ["check:all"]
 description = "Everything green: the names gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check (unqueued — `check` queues it)"

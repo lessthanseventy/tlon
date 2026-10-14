@@ -142,7 +142,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | verb | does |
 |---|---|
 | `cap` | Run a command once, capture ALL output to a log, print exit + failures + tail — then read the log for more, never re-run (see AGENTS.md) |
-| `check` | Everything green, one at a time on this machine: waits its turn in the checks queue (scripts/checks-queue.sh), then runs check:all |
+| `check` | Everything green, one at a time on this machine: waits its turn in the checks queue (scripts/checks-queue.sh), runs check:all, then posts the verdict as GitHub's commit status tlon/check on HEAD — only on a clean tree (scripts/check.sh; TLON_CHECK_STATUS=0 posts nothing) |
 | `lspd` | adapters/lspd: run the LSP sidecar daemon in the foreground (bun --watch, dev) |
 | `watch` | Re-run a command on every file change, printing cap's signal — register in the background, edit, get pass/fail automatically (see AGENTS.md) |
 
