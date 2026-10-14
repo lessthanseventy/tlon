@@ -64,7 +64,8 @@ export function propsAt(kind: EventKind, t: number, g: Geo): Prop[] {
     case "meteor": {
       if (t >= 60 && t < 140) return [{ kind: "streak", x: lerp(g.windowX + 28, g.windowX + 4, (t - 60) / 80), y: lerp(8, 34, (t - 60) / 80) }]
       if (t < 140 || t >= EVENTS.meteor.ticks - 60) return []
-      return [{ kind: t < 160 ? "puff" : "crater", x: g.doorX - 60, y: g.hallY }]
+      // it lands in the street seen through the window, where the streak stopped — the room has no street of its own
+      return [{ kind: t < 160 ? "puff" : "crater", x: g.windowX + 8, y: 35 }]
     }
     case "zoo": {
       const out: Prop[] = []
