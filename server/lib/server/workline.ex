@@ -1474,15 +1474,15 @@ defmodule Server.Workline do
 
         post_brief(
           thread,
-          "#{landed}; published as #{url} — waiting on GitHub's checks: the thread closes when GitHub merges it"
+          "#{landed}; published as #{url} — the thread closes once GitHub reports it merged"
         )
 
         ok
 
       {:auto_refused, url, why} = refused ->
         record_publish(thread, 0, url)
-        record_landing(thread, "check_failed", landing_check(url, 1, "auto-merge refused: #{why}"))
-        post_brief(thread, "#{landed}; published as #{url}, but GitHub refused to auto-merge it: #{why}")
+        record_landing(thread, "check_failed", landing_check(url, 1, "merge refused: #{why}"))
+        post_brief(thread, "#{landed}; published as #{url}, but GitHub refused to merge it: #{why}")
         refused
 
       :none ->

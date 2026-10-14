@@ -201,8 +201,8 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   → `mise run land -- <pr>`; GitHub merges only what the merge queue gated, at that head. A workline's
   approval lands its branch the same way — reviewed on its thread (never by its builder), rebased onto
   origin's main and gated (`Server.Workline.Merge`), then published: the branch pushed, a PR opened,
-  `tlon/check` posted on the sha the gate passed, auto-merged by GitHub (`Server.Workline.Publish`). The
-  checkout's own main is never moved by a landing; it only follows origin. Rewriting pushed history is
+  `tlon/check` posted on the sha the gate passed, and merged at once at that head
+  (`Server.Workline.Publish`). The checkout's own main is never moved by a landing; it only follows origin. Rewriting pushed history is
   the human's call — except a coworker's own thread branch: the server pushes `work/<slug>` for it,
   force-with-lease (the `push_branch` tool), and a coworker pane's own `git push` is refused
   (`scripts/git-hooks/pre-push`).

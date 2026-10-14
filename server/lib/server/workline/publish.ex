@@ -2,18 +2,19 @@ defmodule Server.Workline.Publish do
   @moduledoc """
   An approved workline's branch is rebased onto origin's main and gated (`Server.Workline.Merge`);
   this carries it to GitHub, whose main takes only PRs — the only way a landing reaches main, which
-  this machine's checkout then follows: push `work/<slug>`, open a PR, and ask GitHub to rebase-merge
-  it once its checks pass (`gh pr merge --auto`; with auto-merge off on the repo the PR stays open,
-  its link on the thread). Main's required check is `tlon/check`, the local gate's commit status, so a
-  landing whose gate passed posts it on the sha it gated. A repo with no `origin` is `:none` — nothing
-  to publish to.
+  this machine's checkout then follows: push `work/<slug>`, open a PR, post `tlon/check` (main's
+  required check, the local gate's commit status) on the sha the landing's gate passed on, and merge
+  it at once at exactly that head (`gh pr merge --rebase --match-head-commit`). A publish no gate
+  passed (a republish) posts nothing and arms auto-merge instead, which waits for a `tlon/check` on its
+  head. A repo with no `origin` is `:none` — nothing to publish to.
   """
 
   @doc """
   Publish `work/<slug>` from `repo`. `landing[:gated]`, the sha the landing's gate passed on, is posted
-  as the commit status `tlon/check` = success before auto-merge is armed; with none, no status is
-  posted (it vouches only for a commit it gated). `{:ok, pr_url}` | `{:auto_refused, pr_url, why}`
-  (the PR is open but GitHub refused to auto-merge it) | `:none` | `{:error, why}`.
+  as the commit status `tlon/check` = success and the PR merged at once at that head; with none, no
+  status is posted (it vouches only for a commit it gated) and auto-merge is armed. `{:ok, pr_url}` |
+  `{:auto_refused, pr_url, why}` (the PR is open but GitHub refused to merge it, or to arm auto-merge)
+  | `:none` | `{:error, why}`.
   """
   def publish(repo, slug, title, run \\ &System.cmd/3, landing \\ []) do
     branch = "work/#{slug}"
@@ -29,9 +30,18 @@ defmodule Server.Workline.Publish do
               opts
             )} do
       url = out |> String.split("\n", trim: true) |> List.last() |> String.trim()
-      if sha = landing[:gated], do: post_check(repo, sha, run)
 
-      case run.("gh", ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"], opts) do
+      merge =
+        case landing[:gated] do
+          nil ->
+            ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"]
+
+          sha ->
+            post_check(repo, sha, run)
+            ["pr", "merge", url, "--rebase", "--match-head-commit", sha, "--delete-branch"]
+        end
+
+      case run.("gh", merge, opts) do
         {_, 0} -> {:ok, url}
         {out, _} -> {:auto_refused, url, String.slice(String.trim(out), 0, 200)}
       end

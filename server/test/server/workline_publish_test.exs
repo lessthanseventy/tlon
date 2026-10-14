@@ -45,13 +45,26 @@ defmodule Server.WorklinePublishTest do
                        "context=tlon/check" | _
                      ]}
 
-    assert_received {:ran, ["gh", "pr", "merge" | _]}
+    assert_received {:ran,
+                     [
+                       "gh",
+                       "pr",
+                       "merge",
+                       "https://github.com/o/r/pull/9",
+                       "--rebase",
+                       "--match-head-commit",
+                       "abc123",
+                       "--delete-branch"
+                     ]}
+
+    refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--auto" | _]}
   end
 
-  test "a publish no gate passed posts no status" do
+  test "a publish no gate passed posts no status, and merges nothing itself: auto-merge waits for one" do
     run = runner([{&match?(["gh", "pr", "create" | _], &1), {"https://github.com/o/r/pull/9\n", 0}}])
     assert {:ok, _} = Publish.publish("/repo", "tiles", "Floor step 1", run)
     refute_received {:ran, ["gh", "api" | _]}
+    refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--match-head-commit" | _]}
   end
 
   test "GitHub refusing auto-merge is said, with the PR it opened" do
