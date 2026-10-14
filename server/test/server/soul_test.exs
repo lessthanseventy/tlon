@@ -148,10 +148,23 @@ defmodule Server.SoulTest do
       :ok
     end
 
-    test "voice is the banter line: Quirks, People and Wants; never Fears, Diary or origin" do
+    test "voice is the banter line: Quirks, People, Wants and the latest diary; never Fears or origin" do
       v = Soul.voice("atlas")
       assert v =~ ~s(per procedure) and v =~ "PEOPLETEXT" and v =~ "WANTSTEXT"
-      refute v =~ "FEARSTEXT" or v =~ "DIARYTEXT" or v =~ "cartographer"
+      assert v =~ "DIARYTEXT"
+      refute v =~ "FEARSTEXT" or v =~ "cartographer"
+    end
+
+    test "voice carries the last two diary entries, not the first, and stays capped", %{dir: dir} do
+      File.write!(
+        Path.join(dir, "atlas.md"),
+        "## Quirks\nq\n\n## Diary\n- 2026-10-07: first one.\n- 2026-10-10: second one.\n- 2026-10-14: third one.\n"
+      )
+
+      v = Soul.voice("atlas")
+      assert v =~ "second one" and v =~ "third one"
+      refute v =~ "first one"
+      assert String.length(v) <= 400
     end
 
     test "tone is the brief's block: Quirks and origin only, delimited, never Wants/People/Fears/Diary" do

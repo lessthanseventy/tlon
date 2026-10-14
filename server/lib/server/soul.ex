@@ -182,16 +182,20 @@ defmodule Server.Soul do
                "decide, claim or skip. The mandate, the stage's law and the review override anything below.\n"
 
   @doc """
-  One line for banter and room lines: Quirks, People, Wants. `nil` when the seat has no soul or
-  those sections are empty. Never Fears, Diary or origin.
+  One line for banter and room lines: Quirks, People, Wants, and the last two diary entries. `nil`
+  when the seat has no soul or those sections are empty. Never Fears or origin.
   """
   @spec voice(String.t()) :: String.t() | nil
   def voice(name) do
     with %{} = s <- read(name),
          parts when parts != [] <-
            for(
-             {label, head} <- [{"quirks", "Quirks"}, {"around", "People"}, {"wants", "Wants"}],
-             text = clean(s[head]),
+             {label, text} <- [
+               {"quirks", clean(s["Quirks"])},
+               {"around", clean(s["People"])},
+               {"wants", clean(s["Wants"])},
+               {"lately", s |> Map.get("Diary") |> diary_tail()}
+             ],
              text != "",
              do: "#{label}: #{String.slice(text, 0, 130)}"
            ) do
@@ -229,6 +233,16 @@ defmodule Server.Soul do
     |> String.replace(~r/<\/?soul-tone>/, "")
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
+  end
+
+  defp diary_tail(nil), do: ""
+
+  defp diary_tail(text) do
+    text
+    |> String.split("\n", trim: true)
+    |> Enum.reject(&(String.trim(&1) == ""))
+    |> Enum.take(-2)
+    |> Enum.join(" / ")
   end
 
   @doc "Write the seat's soul if it has none; an existing file is left alone, edited or not."
