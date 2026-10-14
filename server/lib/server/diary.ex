@@ -51,12 +51,28 @@ defmodule Server.Diary do
   @doc "Whether the seat's week is due: its newest diary line is at least six days old, or it has none."
   @spec due?(String.t(), Date.t()) :: boolean()
   def due?(seat, today) do
+    case written_through(seat) do
+      nil -> true
+      written -> Date.diff(today, written) >= @spacing
+    end
+  end
+
+  @doc "Drop the entries on or before the date of the seat's newest diary line: already written."
+  @spec unwritten(String.t(), [entry()]) :: [entry()]
+  def unwritten(seat, items) do
+    case written_through(seat) do
+      nil -> items
+      written -> Enum.reject(items, &(Date.compare(DateTime.to_date(&1.at), written) != :gt))
+    end
+  end
+
+  defp written_through(seat) do
     with line when is_binary(line) <- seat |> Soul.diary() |> List.last(),
          [_, date] <- Regex.run(~r/^- (\d{4}-\d{2}-\d{2}):/, line),
          {:ok, written} <- Date.from_iso8601(date) do
-      Date.diff(today, written) >= @spacing
+      written
     else
-      _ -> true
+      _ -> nil
     end
   end
 

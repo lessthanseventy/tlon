@@ -1,8 +1,9 @@
 defmodule Server.Jobs.Diary do
   @moduledoc """
   Weekly (Monday, `config/config.exs`), each builder seat's week is written to its soul's Diary
-  (`Server.Diary.write/3`). A seat whose newest diary line is under six days old is skipped, so a
-  retry or a restart never writes the week twice. A seat with no soul file is skipped, never created.
+  (`Server.Diary.write/3`). A seat whose newest diary line is under six days old is skipped, and entries dated on
+  or before that line are not written again, so a retry, a restart or the next week's overlapping
+  window never writes a landing twice. A seat with no soul file is skipped, never created.
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 3600]
 
@@ -18,7 +19,7 @@ defmodule Server.Jobs.Diary do
     for %{id: workspace_id} <- Workspaces.all(),
         {seat, items} <- Diary.history(workspace_id, since),
         Diary.due?(seat, today) do
-      Diary.write(seat, items, today)
+      Diary.write(seat, Diary.unwritten(seat, items), today)
     end
 
     :ok
