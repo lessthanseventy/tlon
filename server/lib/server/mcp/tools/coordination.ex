@@ -267,16 +267,7 @@ defmodule Server.MCP.Tool.CloseThread do
   # is its lead's, the lead above it's or the manager's
   defp may_close?(%Server.Thread{stage: stage}, _identity) when stage in [nil, "merged"], do: true
 
-  defp may_close?(thread, identity) do
-    manager = thread.workspace_id && Server.Workspaces.manager(thread.workspace_id)
-
-    (is_binary(identity.agent) and
-       identity.agent in [
-         Channel.thread_lead(thread.id),
-         thread.parent_thread_id && Channel.thread_lead(thread.parent_thread_id)
-       ]) or
-      match?(%Server.Coworker{name: name} when name == identity.agent, manager)
-  end
+  defp may_close?(thread, identity), do: Server.MCP.Tool.steers?(thread, identity)
 
   defp close(frame, thread, params) do
     why =

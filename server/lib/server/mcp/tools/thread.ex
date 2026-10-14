@@ -31,8 +31,10 @@ end
 defmodule Server.MCP.Tool.PostMessage do
   @moduledoc """
   Post to this connection's thread — talk on your thread, don't work in the void — or with
-  `thread_id` to a thread the caller leads (`acting_thread/2`), so a lead woken in its lobby window
-  answers on its own workline. The author is the bound agent; a reply targets the quoted message's author.
+  `thread_id` to a thread the caller steers (`Server.MCP.Tool.steers?/2`: its lead, the lead above
+  it or the manager), so a lead woken in its lobby window answers on its own workline and the
+  manager puts a decision on the thread it staffed. The author is the bound agent; a reply targets
+  the quoted message's author.
   """
   use Server.MCP.Tool
 
@@ -43,14 +45,15 @@ defmodule Server.MCP.Tool.PostMessage do
     field :reply_to, :integer, description: "Message id this replies to"
 
     field :thread_id, :integer,
-      description: "A thread you lead, when your session is bound to another thread (e.g. the lobby)"
+      description:
+        "A thread you lead, lead the parent of, or manage, when your session is bound to another thread (e.g. the lobby)"
   end
 
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
 
-    case acting_thread(params, frame) do
+    case acting_thread(params, frame, &Server.MCP.Tool.steers?/2) do
       %Server.Thread{id: thread_id} ->
         result =
           Channel.post(%{

@@ -4,7 +4,7 @@ defmodule Server.MCP.Tool do
   a second writer (§10), and identity (thread, agent, session) rides the connection via
   `Server.MCP.Identity`, so a self-thread tool takes no thread parameter — misdirection is
   unrepresentable. The one exception is `acting_thread/2`: a workline tool may name a thread the
-  caller LEADS, because a Claude Code pane can't re-handshake onto another thread. `use Server.MCP.Tool` makes a module an anubis tool component and imports the
+  caller LEADS (`post_message` one it `steers?/2`), because a Claude Code pane can't re-handshake onto another thread. `use Server.MCP.Tool` makes a module an anubis tool component and imports the
   reply helpers below; the tools themselves live in `lib/server/mcp/tools/<family>.ex`.
   """
   alias Anubis.Server.Frame
@@ -18,7 +18,7 @@ defmodule Server.MCP.Tool do
     quote do
       use Anubis.Server.Component, type: :tool
 
-      import Server.MCP.Tool, only: [ok: 2, fail: 2, reply: 3, own: 4, acting_thread: 2]
+      import Server.MCP.Tool, only: [ok: 2, fail: 2, reply: 3, own: 4, acting_thread: 2, acting_thread: 3]
 
       alias Server.MCP.Identity, warn: false
 
@@ -130,9 +130,10 @@ defmodule Server.MCP.Tool do
   The thread a workline tool acts on: the connection's own, or with `thread_id` one the caller
   LEADS. A lead woken in its lobby window is bound to the lobby, and a Claude Code pane can't take
   `switch_thread`'s token (its MCP auth is fixed at launch), so without this it could not move its
-  own workline. Anyone else's thread is refused. `%Thread{}` or `{:error, message}`.
+  own workline. Anyone else's thread is refused. `%Thread{}` or `{:error, message}`. `may_act?`
+  widens who may name it: `&steers?/2` for a post.
   """
-  def acting_thread(params, frame) do
+  def acting_thread(params, frame, may_act? \\ &leads?/2) do
     identity = Server.MCP.Identity.from_frame(frame)
     id = params[:thread_id]
 
@@ -141,9 +142,7 @@ defmodule Server.MCP.Tool do
         Server.Repo.get(Server.Thread, identity.thread_id) || {:error, "no thread bound to this session"}
 
       thread = Server.Repo.get(Server.Thread, id) ->
-        agent = Server.Staff.agent_by_name(identity.agent)
-
-        if agent && agent.id == thread.agent_id,
+        if may_act?.(thread, identity),
           do: thread,
           else:
             {:error, "#{identity.agent} doesn't lead thread ##{id}; only its lead can act on it from another thread"}
@@ -151,6 +150,22 @@ defmodule Server.MCP.Tool do
       true ->
         {:error, "no such thread: #{id}"}
     end
+  end
+
+  @doc """
+  Whether the caller steers `thread`: its lead, the lead of its parent thread, or the workspace's
+  manager — who may close a workline in flight and post on a thread from another one.
+  """
+  @spec steers?(Server.Thread.t(), Server.MCP.Identity.t()) :: boolean()
+  def steers?(thread, identity) do
+    manager = thread.workspace_id && Server.Workspaces.manager(thread.workspace_id)
+
+    (is_binary(identity.agent) and
+       identity.agent in [
+         Server.Channel.thread_lead(thread.id),
+         thread.parent_thread_id && Server.Channel.thread_lead(thread.parent_thread_id)
+       ]) or
+      match?(%Server.Coworker{name: name} when name == identity.agent, manager)
   end
 
   @doc """
@@ -174,5 +189,10 @@ defmodule Server.MCP.Tool do
 
   defp tool_name(module) do
     Enum.find_value(Server.MCP.Endpoint.__components__(:tool), &(&1.handler == module && &1.name))
+  end
+
+  defp leads?(thread, identity) do
+    agent = Server.Staff.agent_by_name(identity.agent)
+    agent && agent.id == thread.agent_id
   end
 end

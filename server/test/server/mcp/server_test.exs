@@ -416,6 +416,48 @@ defmodule Server.MCP.ServerTest do
              Repo.all(from m in Message, where: m.thread_id == ^line.id and m.author == "Carl")
   end
 
+  test "post_message with thread_id: the manager and the lead above post on a workline too, no one else" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Posting"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius", archetype: "surveyor"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "ireneo", archetype: "builder"})
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "builder"})
+    {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id, scope: "machine"})
+    {:ok, parent} = Channel.open_thread(%{title: "the plan", workspace_id: ws.id})
+    {:ok, _} = Channel.assign_lead(parent.id, "yu")
+
+    {:ok, line} =
+      Server.Workline.open(%{
+        title: "staffed",
+        slug: "staffed",
+        stage: "build",
+        workspace_id: ws.id,
+        parent_thread_id: parent.id
+      })
+
+    {:ok, _} = Channel.assign_lead(line.id, "ireneo")
+
+    post_as = fn name ->
+      token = MCP.Tokens.mint(lobby, Staff.agent_by_name(name))
+      session = handshake(token)
+      call(token, session, 3, "register", %{})
+      call(token, session, 4, "post_message", %{"body" => "from #{name}", "thread_id" => line.id})
+    end
+
+    r = post_as.("Carl")
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "Carl doesn't lead thread ##{line.id}; only its lead can act on it"
+
+    for name <- ["tertius", "yu", "ireneo"], do: refute(post_as.(name)["isError"], "#{name} was refused")
+
+    assert ["from ireneo", "from tertius", "from yu"] ==
+             from(m in Message,
+               where: m.thread_id == ^line.id and m.author in ["Carl", "tertius", "yu", "ireneo"],
+               select: m.body
+             )
+             |> Repo.all()
+             |> Enum.sort()
+  end
+
   test "close_thread on a workline that hasn't merged wants a why: superseded_by or abandoned", %{token: token} do
     session = handshake(token)
     call(token, session, 3, "register", %{})
