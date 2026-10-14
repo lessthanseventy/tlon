@@ -11,6 +11,10 @@ import type { Agents } from "./types"
 /** what a room draws besides the snapshot: the picked thread, a ticket being handed out, an open card */
 /** what the surface has open, and `tray`: how much of the in-tray you have not read */
 export type Focus = { picked: number | null; armed: number | null; person: string | null; tray?: number; board?: BoardCtx }
+
+/** is this coworker the one picked: the picked person when there is one, else everyone on the picked thread */
+export const isPicked = (focus: Focus, agent: string, threadId: number) =>
+  focus.person ? agent === focus.person : threadId > 0 && threadId === focus.picked
 /** a warm session's mug: three wisps of steam just after the turn, thinning to one as it goes cold, none when cold */
 export const steamOf = (warmth: number) => (warmth <= 0 ? 0 : Math.ceil(warmth * 3))
 /** a desk monitor's glow at a strength from 0 (dark) to 1 (lit) */
@@ -172,7 +176,7 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
         sc.blit(BUBBLE, left + 3, above, { a: ROLE.prose })
         sc.blit(GLYPH[actor.emote] ?? GLYPH["…"]!, left + 4, above + 1, { k: ROLE.fieldInk })
       } else above = top - 1
-      if (focus.person ? seat.agent === focus.person : seat.thread_id === focus.picked) sc.blit(ARROW, left + 4, above - 4 - bob, { v: ROLE.body })
+      if (isPicked(focus, seat.agent, seat.thread_id)) sc.blit(ARROW, left + 4, above - 4 - bob, { v: ROLE.body })
     })
   }
 }
