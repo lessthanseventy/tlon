@@ -1,61 +1,42 @@
-# request_changes
+# approve
 
-First verdict was approve; revised after the risk grade surfaced a real blast path I missed.
-The core fix is correct and I keep endorsing it — a superseded session must keep polling and reclaim
-the seat when the newer one is gone. `Tokens.resolve` attaching the *current* live session at read
-time (nil when none) makes `take_wakes` answer non-superseded on recovery, so the design holds. Two
-changes needed before this lands.
+Second round. Both blocking findings from the first review are fixed and verified on the branch;
+the third (visibility log line) I'm dropping to a follow-up — the dangerous silent path it guarded
+is now closed by the array gate, so what remains silent is a *legitimate* reclaim.
 
-## 1 (blocking) — recover only on a genuine array reply
+## finding 1 (was blocking, fixed) — recover only on a genuine array reply
 
-`call` (mod.ts:96-98) returns the raw `text` when `JSON.parse` fails — it does not throw. So any
-non-JSON reply to `take_wakes` while superseded (a mid-restart body, a proxy 502 page, an empty
-string) skips the `superseded`-object check and falls into the recovery branch, firing `registerNow`.
-`register` on a back-up server calls `Staff.start_session` → `supersede_live`, which ends the **live
-newer session** and routes wakes to the old pane. Silent seat-steal — the ticket's own failure mode,
-inverted.
+The reclaim branch is now `if (superseded && Array.isArray(wakes))` (mod.ts drainWakes). Verified the
+full path: `call` (mod.ts:95-98) returns the raw string when `JSON.parse` throws, so a non-JSON
+`take_wakes` reply (mid-restart body, proxy 502, empty string) reaches `drainWakes` as a string. The
+superseded-object check at line 211 misses it (`typeof string ≠ "object"`), and the reclaim guard
+misses it (`Array.isArray(string) === false`). The session stays stopped — the safe default. The
+seat-steal path (spurious `registerNow` → `supersede_live` ends the live newer session) is closed.
 
-The server signals "the seat is free" only one way: `Server.Wake.take(...)` → an array (possibly
-empty). Tighten the guard so nothing else recovers:
+Normal recovery still works: `[]` and `["wake"]` are arrays, so reclaim fires and, for a non-empty
+array, falls through to the wake-draining loop. The load-bearing comment explains the why.
 
-```diff
--    if (superseded) {
-+    if (superseded && Array.isArray(wakes)) {
-```
+## finding 3 (was blocking, fixed) — pin the non-array case
 
-This keeps the normal recovery (`[]` or `["wake"]`) and excludes strings, null, and non-superseded
-objects. A malformed reply leaves the session stopped, which is the safe default — a stopped pane
-holding no seat is strictly better than a stopped pane wrongly stealing one.
+New test "a superseded session does not claim the seat back on a reply that is not a wake list":
+`take_wakes` returns `{superseded: true, by: 9, text}` then the raw string `"upstream hiccup, not
+json"`; asserts register count stays 1 and submitted stays `[text]`. The engine sentinel
+(`typeof w === "string" ? w : JSON.stringify(w ?? [])`) passes string entries through verbatim
+instead of JSON-stringifying, so `call` gets a real non-JSON reply. Traced both polls: first sets
+`superseded` and submits the stop text; second hits neither guard and is a no-op. Correct.
 
-## 2 (blocking) — make reclaiming the seat visible
+## finding 2 (was blocking, now follow-up) — make reclaiming the seat visible
 
-The grader's detectability-4 is fair: taking the seat back is silent. Add a citizen-log line next to
-the re-register so a wrong reclaim is findable:
-
-```js
-if (superseded && Array.isArray(wakes)) {
-  superseded = false;
-  void note($, "take_wakes: no longer superseded — claiming the seat again");
-  const pane = await $.env.get("TMUX_PANE");
-  registration = pane ? { pane_ref: pane } : {};
-  void registerNow($);
-}
-```
-
-I am NOT asking for a user-facing "you hold the seat again" message. The old pane was told "Stop.";
-whether to resume is the operator's call, and a wake arriving is the real signal to go on. The log
-line is enough for detectability.
-
-## 3 (blocking) — pin the non-array case
-
-Add a test where `take_wakes` returns a superseded object and then a plain string; assert register is
-still called once and the session stays stopped. The engine today always `JSON.stringify`s
-`world.wakes?.shift() ?? []` (mod.test.ts:101), so it needs a way to return raw non-JSON text for a
-take_wakes entry — e.g. a sentinel that the harness passes through verbatim instead of stringifying.
+Dropping as a blocker. The detectability-4 concern was about the *silent seat-steal* — a stopped
+pane wrongly taking the seat back with no sign. That path is gone (finding 1). The reclaim that
+remains is the legitimate one: a real array reply means the server says the seat is free, and
+re-registering is the intended action. A `note($, "take_wakes: no longer superseded — claiming the
+seat again")` line next to the re-register is still worth having for debugging, but it no longer
+guards against a dangerous silent action, so it does not block this fix.
 
 ## what stays
 
-The modified "say so once" test (one register, one stop text across three superseded polls) and the
-recovery test (two registers, missed wake submitted) are both correct and should stay. The
-non-blocking observation about a two-stale-pane register race converging to one holder via
-`supersede_live` + Orphans still stands — not worth a ticket.
+The "say so once" logic (`if (superseded) return;` inside the superseded-object block) and the
+recovery test (two registers, missed wake submitted) are both correct and unchanged from the first
+round's endorsement. The non-blocking note about a two-stale-pane register race converging to one
+holder via `supersede_live` + Orphans still stands — not worth a ticket.
