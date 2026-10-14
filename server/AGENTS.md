@@ -11,10 +11,11 @@ The spine of Tlön: Postgres is the truth (a real db reads back under `psql`), E
 and every layer the spine design's re-laid §9 asked for
 (`../../docs/plans/2026-08-14-console-cockpit-and-elixir-spine.md`) is built and gated:
 
-- **db + doctor** — the schema (`priv/repo/migrations/`), `Server.Doctor` (integrity_check, tables,
-  pending migrations, JSONL export), `mix server.doctor`. The store is Postgres (`Server.Repo`): foreign
-  keys live in the schema, and `integrity_check` proves the store reachable by counting its relations.
-  `exqlite` is left only for `mix server.import_sqlite`, the one-time import from the old SQLite file.
+- **db + doctor** — the schema (`priv/repo/migrations/`), `Server.Doctor` (integrity_check, tables, an
+  `erl_crash.dump` at the tlon root read against the service's start, pending migrations, JSONL export),
+  `mix server.doctor`. The store is Postgres (`Server.Repo`): foreign keys live in the schema, and
+  `integrity_check` proves the store reachable by counting its relations. `exqlite` is left only for
+  `mix server.import_sqlite`, the one-time import from the old SQLite file.
   **Nothing ships that cannot be repaired at 2am.**
 - **thread + message** (`Server.Channel`) — the atom of work and the channel/§4 capture path.
   `delivered` is a separate column from `read`, and a sender cannot fake delivery (§5b.3). A thread is

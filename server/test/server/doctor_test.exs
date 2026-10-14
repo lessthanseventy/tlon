@@ -85,6 +85,49 @@ defmodule Server.DoctorTest do
     assert File.read!(Path.join(dir, "ticket.jsonl")) == ""
   end
 
+  describe "crash_dump/2" do
+    setup do
+      root = Path.join(System.tmp_dir!(), "doctor-crash-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(root)
+      on_exit(fn -> File.rm_rf!(root) end)
+      %{root: root, dump: Path.join(root, "erl_crash.dump")}
+    end
+
+    test "none when the root holds no erl_crash.dump", %{root: root} do
+      assert Doctor.crash_dump(root, DateTime.utc_now()) == "none"
+    end
+
+    test "a dump written since the service started is flagged with its path", %{root: root, dump: dump} do
+      File.write!(dump, "=erl_crash_dump:0.5\n")
+      started = DateTime.add(DateTime.utc_now(), -3600)
+      File.touch!(dump, DateTime.to_unix(started) + 60)
+
+      line = Doctor.crash_dump(root, started)
+      assert line =~ dump
+      assert line =~ "since the service started"
+    end
+
+    test "a dump older than the service's start says so", %{root: root, dump: dump} do
+      File.write!(dump, "=erl_crash_dump:0.5\n")
+      started = DateTime.utc_now()
+      File.touch!(dump, DateTime.to_unix(started) - 7200)
+
+      line = Doctor.crash_dump(root, started)
+      assert line =~ dump
+      assert line =~ "before the service started"
+    end
+
+    test "with no known start it reports the dump and its age", %{root: root, dump: dump} do
+      File.write!(dump, "=erl_crash_dump:0.5\n")
+      File.touch!(dump, System.os_time(:second) - 7200)
+
+      line = Doctor.crash_dump(root, nil)
+      assert line =~ dump
+      assert line =~ "2h old"
+      assert line =~ "service start unknown"
+    end
+  end
+
   test "refuses an unknown table rather than interpolating it" do
     assert_raise ArgumentError, ~r/no such table/, fn ->
       Doctor.table_to_jsonl("collection; DROP TABLE collection")
