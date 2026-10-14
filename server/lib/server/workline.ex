@@ -629,6 +629,24 @@ defmodule Server.Workline do
   end
 
   @doc """
+  A waiting landing GitHub holds (`why`) for what a rebase and a gate fix (behind main, `tlon/check`
+  missing on its head): back into the merge queue on its own (`reland_queued/2`, `auto`), no Need
+  raised. Once per PR `head`: held again at a head it was already requeued at, or not queueable, it
+  is blocked (`landing_blocked/2`), a `pr_blocked` Need. `:requeued` | `:ok` (blocked, not waiting,
+  or already queued).
+  """
+  def requeue_blocked(%Thread{} = thread, why, head) do
+    with %{url: url} <- pending_landing(thread),
+         false <- Server.Office.Needs.landing?(thread) do
+      if is_binary(head) and not requeued_at?(thread, head) and requeue(thread, url, why, head) == :ok,
+        do: :requeued,
+        else: landing_blocked(thread, why)
+    else
+      _ -> :ok
+    end
+  end
+
+  @doc """
   The merge queue's turn for a landing put back in it (`rebase_landing/1`): `work/<slug>` rebased
   onto origin's main and gated there (`Server.Workline.Merge`), pushed, `tlon/check` posted on the sha
   it gated and its open PR merged at exactly that head (`Publish.merge_at/5`), as a fresh landing is.
@@ -2026,6 +2044,7 @@ defmodule Server.Workline do
     merger = Keyword.get(opts, :merge, Server.Workline.Merge)
     gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(thread, &1, &2) end)
     run = Keyword.get(opts, :run, &System.cmd/3)
+    auto? = opts[:auto] == true
     repo = Git.root(thread)
 
     case merger.merge(repo, thread.slug, gate: gate) do
@@ -2038,6 +2057,11 @@ defmodule Server.Workline do
             record_landing(thread, "check_failed", landing_check(url, 1, "the merge queue's gate was cut off: #{why}"))
 
         cut
+
+      {:error, why} when auto? ->
+        record_landing(thread, "check_failed", landing_check(url, 1, "the merge queue couldn't land it again: #{why}"))
+        post_brief(thread, "⚠ the merge queue couldn't land it again: #{why} — it waits on the operator")
+        {:error, why}
 
       {:error, why} ->
         refuse_again(thread, url, repo, why, run)
@@ -2077,5 +2101,24 @@ defmodule Server.Workline do
         record_landing(thread, "check_failed", landing_check(url, 1, "#{why}; its PR wouldn't close: #{out}"))
         {:error, why}
     end
+  end
+
+  defp requeue(thread, url, why, head) do
+    with {:ok, _job} <-
+           Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id, reland: true, auto: true})) do
+      detail = Map.put(landing_check(url, 0, "#{why}: back in the merge queue on its own"), "requeued_head", head)
+      record_landing(thread, "check_passed", detail)
+      post_brief(thread, "⧗ #{why} — back in the merge queue on its own: #{url} lands once rebased and gated")
+      :ok
+    end
+  end
+
+  defp requeued_at?(thread, head) do
+    Repo.exists?(
+      from e in Server.Event,
+        where:
+          e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:landing" and
+            fragment("(?::jsonb ->> 'requeued_head') = ?", e.detail, ^head)
+    )
   end
 end
