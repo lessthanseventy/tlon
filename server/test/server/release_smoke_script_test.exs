@@ -80,7 +80,7 @@ defmodule Server.ReleaseSmokeScriptTest do
 
       assert {out, 1} = run_smoke(tmp, root, ["work/feature"])
       assert out =~ "is already being smoked (pid 123 on http://127.0.0.1:4777)"
-      refute tmp |> File.ls!() |> Enum.any?(&(&1 =~ ~r/^tlon-smoke-[A-Za-z0-9]{6}$/))
+      refute File.exists?(Path.join(tmp, "tlon-smoke"))
     end
   end
 
@@ -97,6 +97,95 @@ defmodule Server.ReleaseSmokeScriptTest do
     on_exit(fn -> System.cmd("kill", ["#{pid}"]) end)
   end
 
+  describe "two smokes at once" do
+    # the sweep a smoke ran before the build lock (c44fc5c), still in every checkout branched before
+    # it: a build no process names in its command line or cwd goes, and on a host where another user's
+    # /proc/<pid>/cwd can't be read the cwd test is always false (pipefail), so every build goes
+    @old_sweep ~S"""
+    set -uo pipefail
+    root="$1"
+    for stale in "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
+      stale="${stale%/}"; [ -d "$stale/server" ] || continue
+      pgrep -f "$stale/" >/dev/null && continue
+      find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" 2>/dev/null | grep -q . && continue
+      git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1; rm -rf "$stale"
+    done
+    """
+
+    setup do
+      tmp = Path.join(System.tmp_dir!(), "smoke-race-#{System.pid()}-#{System.unique_integer([:positive])}")
+      root = Path.join(tmp, "repo")
+      stubs = Path.join(tmp, "bin")
+      signal = Path.join(tmp, "signal")
+
+      Enum.each(
+        [Path.join(root, "scripts"), Path.join(root, "server"), Path.join(root, "office"), stubs, signal],
+        &File.mkdir_p!/1
+      )
+
+      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh) do
+        File.cp!(Path.expand("../../../scripts/#{f}", __DIR__), Path.join([root, "scripts", f]))
+      end
+
+      File.write!(Path.join([root, "server", "mix.exs"]), "")
+      File.write!(Path.join([root, "office", "package.json"]), "{}")
+      git = fn args -> {_, 0} = System.cmd("git", ["-C", root | args], stderr_to_stdout: true) end
+      git.(["init", "-q", "-b", "main"])
+      git.(["add", "-A"])
+      git.(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"])
+      git.(["branch", "work/feature"])
+      git.(["remote", "add", "origin", Path.join(tmp, "no-such-origin")])
+
+      # the build: `mix release` holds until the test says go, then says whether its build dir is still there
+      stub(stubs, "mix", ~S"""
+      [ "$1" = release ] || exit 0
+      touch "$SMOKE_SIGNAL/building"
+      until [ -e "$SMOKE_SIGNAL/go" ]; do sleep 0.1; done
+      if [ -d "$PWD" ]; then echo kept; else echo swept; fi >"$SMOKE_SIGNAL/result"
+      """)
+
+      for tool <- ~w(mise bun psql), do: stub(stubs, tool, "exit 0")
+      on_exit(fn -> File.rm_rf!(tmp) end)
+      %{tmp: tmp, root: root, stubs: stubs, signal: signal}
+    end
+
+    defp stub(dir, name, body) do
+      path = Path.join(dir, name)
+      File.write!(path, "#!/usr/bin/env bash\n" <> body)
+      File.chmod!(path, 0o755)
+    end
+
+    defp wait_for(path, tries \\ 200) do
+      cond do
+        File.exists?(path) -> :ok
+        tries == 0 -> flunk("#{path} never appeared")
+        true -> Process.sleep(100) && wait_for(path, tries - 1)
+      end
+    end
+
+    test "a smoke from a checkout older than the build lock leaves a running smoke's build alone", ctx do
+      env = [
+        {"TMPDIR", ctx.tmp},
+        {"PATH", ctx.stubs <> ":" <> System.get_env("PATH")},
+        {"SMOKE_SIGNAL", ctx.signal},
+        {"TLON_SMOKE_PORT", "4598"},
+        {"TLON_SMOKE_DATABASE", "tlon_smoke_race_test"}
+      ]
+
+      script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
+      smoke = Task.async(fn -> System.cmd("bash", [script, "work/feature"], env: env, stderr_to_stdout: true) end)
+      wait_for(Path.join(ctx.signal, "building"))
+
+      {_, 0} =
+        System.cmd("bash", ["-c", @old_sweep, "sweep", ctx.root], env: [{"TMPDIR", ctx.tmp}], stderr_to_stdout: true)
+
+      File.write!(Path.join(ctx.signal, "go"), "")
+      Task.await(smoke, 30_000)
+
+      assert File.read!(Path.join(ctx.signal, "result")) == "kept\n"
+    end
+  end
+
   describe "smoke-sweep.sh: what a SIGKILLed smoke left behind" do
     @sweep Path.expand("../../../scripts/smoke-sweep.sh", __DIR__)
 
@@ -110,7 +199,7 @@ defmodule Server.ReleaseSmokeScriptTest do
     end
 
     defp build(tmp, name) do
-      dir = Path.join(tmp, "tlon-smoke-#{name}")
+      dir = Path.join(tmp, name)
       File.mkdir_p!(Path.join(dir, "server"))
       dir
     end
@@ -129,9 +218,9 @@ defmodule Server.ReleaseSmokeScriptTest do
     end
 
     test "a build whose run holds its lock stays; one whose lock nobody holds goes", %{tmp: tmp, root: root} do
-      live = build(tmp, "live")
+      live = build(tmp, "tlon-smoke/live")
       hold(live <> ".lock")
-      dead = build(tmp, "dead")
+      dead = build(tmp, "tlon-smoke/dead")
       File.write!(dead <> ".lock", "")
 
       {_, 0} = System.cmd("bash", [@sweep, root], env: [{"TMPDIR", tmp}], stderr_to_stdout: true)
@@ -142,8 +231,8 @@ defmodule Server.ReleaseSmokeScriptTest do
     end
 
     test "with no lock (a run from before it), only a build older than any build takes goes", %{tmp: tmp, root: root} do
-      fresh = build(tmp, "fresh")
-      old = build(tmp, "old")
+      fresh = build(tmp, "tlon-smoke-fresh")
+      old = build(tmp, "tlon-smoke-old")
       {_, 0} = System.cmd("touch", ["-d", "3 hours ago", old])
       unbuilt = Path.join(tmp, "tlon-smoke-checking-out")
       File.mkdir_p!(unbuilt)
