@@ -73,16 +73,26 @@ export function drawShelf(sc: Scene, shelf: { x: number; y: number; w: number; h
   })
 }
 
-/** the book off the shelf: flying (riffle, then two flap frames) or perched (open at work, else closed), with its label and tip */
-export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number | null, shut = false) {
+/**
+ * The book off the shelf: flying (riffle, then two flap frames) or perched — open at work or reading
+ * (`open`), else closed; `shut` (a swat, a mirror) snaps it closed whatever it was doing; `nap` lets z's
+ * drift up from it; `doing` is its errand, for the tip.
+ */
+export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number | null, shut = false, extra: { open?: boolean; nap?: boolean; doing?: string | null } = {}) {
   if (mode === "shelved") return
-  const frame = mode === "perched" || shut ? (mood === "working" ? FRAMES.open : FRAMES.closed) : b.riffle > 0 ? FRAMES.riffle : (sc.tick >> 1) % 2 ? FRAMES.flapUp : FRAMES.flapDown
+  const still = mode === "perched" || shut
+  const frame = still ? (!shut && (mood === "working" || extra.open) ? FRAMES.open : FRAMES.closed) : b.riffle > 0 ? FRAMES.riffle : (sc.tick >> 1) % 2 ? FRAMES.flapUp : FRAMES.flapDown
   const w = frame[0]!.length, x = Math.round(b.x), y = Math.round(b.y)
   sc.overhead.push(() => {
     sc.blit([...frame], x, y, paint(mood))
     sc.px(x + w, y + 1, 1, 6, RIBBON[mood]())
     sc.text("XLVI", x + w / 2, y - 1, ROLE.body, 9)
-    if (tid !== null) sc.hits.push({ x, y, w: w + 1, h: 8, tip: `Uqbar · Vol. XLVI\n${mood} · #${tid}`, act: { kind: "thread", tid } })
+    if (extra.nap && still) {
+      const t = sc.tick % 60
+      sc.text("z", x + w + 2 + (t >> 4), y - 2 - (t >> 3), ROLE.assistant, 9)
+      if (t > 30) sc.text("z", x + w + 6, y - 8 - ((t - 30) >> 3), ROLE.assistant, 9)
+    }
+    if (tid !== null) sc.hits.push({ x, y, w: w + 1, h: 8, tip: `Uqbar · Vol. XLVI\n${mood} · #${tid}${extra.doing ? `\n${extra.doing}` : ""}`, act: { kind: "thread", tid } })
   })
 }
 
