@@ -105,6 +105,7 @@ defmodule Server.DoctorTest do
       line = Doctor.crash_dump(root, started)
       assert line =~ dump
       assert line =~ "since the service started"
+      assert line =~ "another node here crashed"
     end
 
     test "a dump older than the service's start says so", %{root: root, dump: dump} do
@@ -115,6 +116,7 @@ defmodule Server.DoctorTest do
       line = Doctor.crash_dump(root, started)
       assert line =~ dump
       assert line =~ "before the service started"
+      assert line =~ "the last restart followed a crash"
     end
 
     test "with no known start it reports the dump and its age", %{root: root, dump: dump} do
