@@ -7,7 +7,9 @@ defmodule Server.Attention.Stall do
   default 5 minutes) and resolved when the pane moves or the window closes. Nothing is typed or
   killed: deciding whether to nudge, restart or wait is the operator's.
 
-  A pane waiting on a dialog is `Server.Attention`'s prompt, not a stall. A frozen pane nobody is
+  A pane waiting on a dialog is `Server.Attention`'s prompt, not a stall; nor is one whose thread's
+  landing or verify is queued or running (`Server.Jobs.Land`, `Server.Jobs.Verify`): the checks
+  queue has it, one gate at a time, however long the line. A frozen pane nobody is
   thinking in is idle. A standing-thread window (no `@funes_thread` tag) counts only its OWN
   agent's thinking — the window name is the coworker's handle — so an idle coworker never
   inherits another's turn.
@@ -73,7 +75,7 @@ defmodule Server.Attention.Stall do
     since = since(panes[key], hash, open, now)
 
     if is_nil(open) and DateTime.diff(now, since, :millisecond) >= band and
-         thinking?(tid, tab) and is_nil(Attention.open_prompt(tid, tab.name)) do
+         thinking?(tid, tab) and is_nil(Attention.open_prompt(tid, tab.name)) and not machine_has_it?(tid) do
       open(workspace_id, tid, tab.name, DateTime.diff(now, since, :minute))
     end
 
@@ -95,6 +97,17 @@ defmodule Server.Attention.Stall do
       {out, 0} when is_binary(out) -> out
       _ -> ""
     end
+  end
+
+  # its landing or its verify queued or running: the checks queue is working on it, one gate at a time
+  defp machine_has_it?(thread_id) do
+    Repo.exists?(
+      from j in Oban.Job,
+        where:
+          j.worker in ["Server.Jobs.Land", "Server.Jobs.Verify"] and
+            j.state in ["available", "scheduled", "executing", "retryable"] and
+            fragment("(? ->> 'thread_id')::int = ?", j.args, ^thread_id)
+    )
   end
 
   defp thinking?(thread_id, %{thread_id: nil, name: name}),
