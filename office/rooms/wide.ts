@@ -7,11 +7,13 @@
 import { caughtNth, drawPlane, launch, stepPlane, type Plane } from "../kit/plane"
 import { drawDoor, drawVisitor } from "../kit/door"
 import { drawProp } from "../kit/zoo"
-import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, swatted, FLINCH, type Book, type Pt as Perch } from "../kit/uqbar"
+import { drawBook, drawShelf, goalOf, modeOf, moodOf, spineHome, STRAIGHTEN, stepBook, swatted, FLINCH, type Book, type Mood, type Pt as Perch } from "../kit/uqbar"
+import { DWELL, doing, lapOf, pickErrand, REST, UQBAR, type Errand, type ErrandKind, type Occasion } from "../kit/volume"
+import { BATH, SINK } from "../kit/bathroom"
 import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
-import { fit, type Frame, type Measure } from "../kit/canvas"
+import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
 import { boardColumns, COLS, isManager, peopleOf, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
@@ -151,6 +153,17 @@ export class WideRoom extends Sim<Layout> {
   /** the book is snapped shut until this tick; Nina may swat again after `swatQuiet` */
   private flinch = 0
   private swatQuiet = 0
+  /** what the book is up to while its session idles (kit/volume.ts); the next it may take up after `nextErrand` */
+  private errand: Errand | null = null
+  private lastErrand: ErrandKind | null = null
+  private nextErrand = 0
+  private awake = false
+  /** the hour and the stuck count last seen: a new hour is noted at the clock, a rise is an erratum */
+  private hourSeen = -1
+  private stuckSeen = -1
+  /** its ribbon goes the alarm's colour until this tick */
+  private erratumUntil = 0
+  private bookSaid: { text: string; from: number; until: number } | null = null
   /** Argos' path is a panic run: cut at the hallway when the panic ends, so he heads for the muster */
   private dogPanicRun = false
   private home: Home = { tiles: [] }
@@ -175,9 +188,28 @@ export class WideRoom extends Sim<Layout> {
     const d = this.plan.layout(a).desks.find((x) => x.kind === "boss")
     return d ? { x: d.x + d.w / 2 - 6, y: d.y - 12 } : null
   }
-  /** Uqbar's volume one tick toward where it wants to be; true while it is in the air */
+  /** Uqbar's volume one tick toward where it wants to be — its errand while its session idles, else its rest; true while it is in the air */
   private stepVolume(a: Agents): boolean {
-    this.book = stepBook(this.book, goalOf(a.uqbar, this.cards, this.yourDesk(a) ?? this.boardEdge, spineHome(corner(this.z).shelf)))
+    const s = a.uqbar, home = spineHome(corner(this.z).shelf)
+    if (!s) { this.errand = null; this.awake = false }
+    else {
+      if (!this.awake) { this.awake = true; this.nextErrand = this.tick + REST.min; this.bookSay("wake", true) }
+      this.bookReacts(a)
+      if (s.thinking && this.errand && this.errand.kind !== "lap") this.errand = null
+      if (!s.thinking && !this.errand && !this.book.flying && this.tick >= this.nextErrand) this.errand = this.errandFor(a, pickErrand(Math.random(), this.lastErrand, this.errandCan()))
+    }
+    const e = this.errand
+    if (e?.follow && e.path.length === 1 && e.arrived === null) e.path[0] = this.inRoom(e.follow())
+    const goal = e ? e.path[0]! : goalOf(s, this.cards, this.yourDesk(a) ?? this.boardEdge, home)
+    this.book = stepBook(this.book, goal)
+    if (e && !this.book.flying && this.book.x === goal.x && this.book.y === goal.y) {
+      if (e.path.length > 1) e.path.shift()
+      else if (e.arrived === null) { e.arrived = this.tick; this.arrive(e) }
+      else if (this.tick >= e.arrived + e.dwell) {
+        this.lastErrand = e.kind; this.errand = null
+        this.nextErrand = this.tick + REST.min + Math.floor(Math.random() * REST.spread)
+      }
+    }
     const c = this.cat
     if (c.mode !== "sleep" && c.mode !== "zoom" && !c.errand && this.tick >= this.swatQuiet && swatted(this.book, this.book.flying, c)) {
       c.mode = "play"; c.path = []; c.until = this.tick + 60
@@ -190,7 +222,66 @@ export class WideRoom extends Sim<Layout> {
       this.reading = reader ? this.reading + 1 : 0
       if (reader && this.reading >= STRAIGHTEN) { this.fallen = false; reader.emote = "♪"; reader.emoteUntil = this.tick + 30; return true }
     }
-    return this.book.flying
+    // a balloon appearing or going is a change to draw, as much as a wingbeat
+    const said = this.bookSaid
+    return this.book.flying || (!!said && (this.tick === said.from || this.tick === said.until))
+  }
+  /** the book says its line for `occasion` over its head; unasked, only when it has kept quiet a while */
+  private bookSay(occasion: Occasion, always = false, name = "") {
+    if (!always && this.bookSaid && !this.quiet(this.bookSaid.until)) return
+    this.bookSaid = { text: this.line("Uqbar", occasion, UQBAR[occasion], name), from: this.tick, until: this.tick + 70 }
+  }
+  /** a point the book can be at: clear of the room's edges */
+  private inRoom(p: Pt): Pt { return { x: Math.round(Math.max(2, Math.min(this.width - 16, p.x))), y: Math.round(Math.max(6, Math.min(WIDE_H - 12, p.y))) } }
+  /** what an idle book may take up now: a nap only after dark, a shoulder only with someone mid-turn, the pets only when they're about */
+  private errandCan() {
+    const c = this.cat, d = this.dog
+    return { dark: dark(this.hour()), working: this.typists().length > 0, cat: c.mode !== "sleep" && c.mode !== "zoom" && !c.errand, dog: d.mode === "sleep" || d.mode === "sit" }
+  }
+  private typists() { return [...this.actors.values()].filter((x) => x.seat.thinking && x.spot.kind === "desk" && !x.moving) }
+  /** where each errand goes */
+  private errandFor(a: Agents, kind: ErrandKind): Errand {
+    const at = (p: Pt, extra: Partial<Errand> = {}): Errand => ({ kind, path: [this.inRoom(p)], dwell: DWELL[kind], arrived: null, ...extra })
+    const shelf = spineHome(corner(this.z).shelf), desk = this.plan.layout(a).desks.find((x) => x.kind === "boss")
+    switch (kind) {
+      case "shoulder": {
+        const who = pick(this.typists())
+        const over = () => ({ x: who.x - 6, y: who.y - 34 })
+        return at(over(), { follow: over, name: who.seat.agent })
+      }
+      case "cork": return at({ x: this.z.F1 - 58 + 20, y: 12 })
+      case "shelf": return at({ x: shelf.x, y: shelf.y - 10 })
+      case "mirror": return at({ x: SINK.x - 6, y: BATH.y - 9 })
+      case "nap": return at(desk ? { x: desk.x + desk.w / 2 - 6, y: desk.y + 10 } : { x: 40, y: 66 })
+      case "nina": { const c = this.cat, near = () => ({ x: c.x - 6, y: c.y - 12 }); return at(near(), { follow: near }) }
+      case "argos": { const d = this.dog, near = () => ({ x: d.x - 6, y: d.y - 18 }); return at(near(), { follow: near }) }
+      case "window": return at({ x: this.z.M0 + 26, y: 12 })
+      case "tv": return at({ x: this.z.L0 + 56, y: 12 })
+      case "clock": return at({ x: this.width - 30, y: 10 }, { name: `${this.hour() % 12 || 12} o'clock` })
+      case "lap": return { kind, path: lapOf(this.width, 8, HALL - 40).map((p) => this.inRoom(p)), dwell: 0, arrived: null }
+      default: return at({ x: this.book.x, y: this.book.y })
+    }
+  }
+  /** the book gets there: its one thing, and its line */
+  private arrive(e: Errand) {
+    switch (e.kind) {
+      case "shelf": this.fallen = false; this.bookSay("shelf", true); return
+      case "mirror": this.flinch = this.tick + 30; this.bookSay("mirror", true); return
+      case "tv": this.tvSet.next(); this.bookSay("tv", true); return
+      case "argos": this.bookSay("argos", true); this.dogSay("*thump thump thump*", 45); return
+      case "nap": this.bookSay("nap", true); return
+      case "lap": return
+      default: this.bookSay(e.kind as Occasion, true, e.name ?? "")
+    }
+  }
+  /** what happened in the office, to the book: a new hour it goes to note at the clock; something new stuck is an erratum */
+  private bookReacts(a: Agents) {
+    const stuck = Object.values(a.triage).reduce((n, x) => n + x, 0)
+    if (this.stuckSeen >= 0 && stuck > this.stuckSeen) { this.erratumUntil = this.tick + 300; this.flinch = this.tick + FLINCH * 3; this.bookSay("erratum", true) }
+    this.stuckSeen = stuck
+    const h = Math.floor(this.hour())
+    if (this.hourSeen >= 0 && h !== this.hourSeen && !a.uqbar?.thinking && !this.errand) this.errand = this.errandFor(a, "clock")
+    this.hourSeen = h
   }
   /** a uqbar post to thread `tid`: a page tears out of the book and flies to its lead's desk, else its card, else yours; true when Argos jumps for it */
   fly(tid: number, a: Agents, passing: string | null = null): boolean {
@@ -224,7 +315,12 @@ export class WideRoom extends Sim<Layout> {
   protected override noticed(actor: Actor, what: string) {
     super.noticed(actor, what)
     // a landing: Argos howls it to the rafters, and runs a lap of honour
-    if (what === "shipped") { this.dogDo("walk"); this.dogSay(pick(HOWLS).replaceAll("{name}", actor.seat.agent), 20); return }
+    if (what === "shipped") {
+      this.dogDo("walk"); this.dogSay(pick(HOWLS).replaceAll("{name}", actor.seat.agent), 20)
+      // the book takes a lap of the room, if it's awake: a revised edition
+      if (this.awake && this.errand?.kind !== "lap") { this.errand = this.errandFor(EMPTY, "lap"); this.bookSay("lap", true) }
+      return
+    }
     if ((what === "test" || what === "done" || what === "queue") && this.quiet(this.dog.saidUntil) && Math.random() < 0.3) this.dogSay(this.argos(what, actor.seat.agent))
   }
 
@@ -426,7 +522,14 @@ export class WideRoom extends Sim<Layout> {
     }
     const shelf = corner(this.z).shelf, mode = modeOf(this.book, spineHome(shelf))
     drawShelf(sc, shelf, mode === "shelved", !!a.uqbar && this.fallen, this.shelfNudge())
-    drawBook(sc, this.book, a.uqbar ? moodOf(a.uqbar) : "idle", mode, a.uqbar?.thread_id ?? null, this.tick < this.flinch)
+    const e = this.errand, there = !!e && e.arrived !== null
+    const mood: Mood = this.tick < this.erratumUntil ? "failing" : e?.kind === "lap" ? "shipped" : a.uqbar ? moodOf(a.uqbar) : "idle"
+    drawBook(sc, this.book, mood, mode, a.uqbar?.thread_id ?? null, this.tick < this.flinch, {
+      open: there && ["shoulder", "cork", "argos", "window", "tv", "clock"].includes(e!.kind), nap: there && e!.kind === "nap", doing: doing(e),
+    })
+    const said = this.bookSaid
+    if (a.uqbar && said && mode !== "shelved" && this.tick >= said.from && this.tick < said.until)
+      sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: Math.round(this.book.x) + 6, top: Math.round(this.book.y) - 3 })
     for (const p of this.planes) drawPlane(sc, p)
     const caller = this.visitor()
     if (caller) drawVisitor(sc, caller.x, caller.y, caller.kind)
