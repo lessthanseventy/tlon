@@ -166,11 +166,16 @@ function followHall(): boolean {
   hallSeen = seen; hall = loadHall(HALL)
   return true
 }
-function hallHire() {
+async function hallHire() {
   const ctx = hallCtx(), c = candidateOf(hall, ctx)
-  if (!world) { status = "hiring in the office needs the server's hire call — not built yet"; return draw() }
   if (ctx.taken.includes(c.name)) { status = `${c.name} is already on the bench — pass, or unlock the name`; return draw() }
-  world.hire(c)
+  if (world) world.hire(c)
+  else {
+    if (ws === null) return
+    const said = await data.hire(ws, c.name, c.archetype)
+    // data.hire's own success line; anything else is the refusal, and nothing is kept
+    if (!said.startsWith("hired ")) { status = said; return draw() }
+  }
   saveLook(c.name, c.look)
   try { mkdirSync(SOULS, { recursive: true }); writeFileSync(join(SOULS, `${c.name}.md`), c.soul, { flag: "wx" }) } catch { /* theirs already: never overwritten */ }
   soulsSeen = ""
@@ -1640,7 +1645,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         actions: [
           { key: "left", label: "pass", run: () => { hallSet(pass(hall, hallCtx())); draw() } },
           { key: "up", label: "maybe", run: () => { hallSet(maybe(hall, hallCtx())); draw() } },
-          { key: "right", label: "hire", run: hallHire },
+          { key: "right", label: "hire", run: () => void hallHire() },
           { key: "space", label: "lock / unlock the row", run: () => rows[sel]?.open?.() },
           { key: "m", label: "the maybe pile", run: () => open({ kind: "hall-pile" }) },
           back1,
