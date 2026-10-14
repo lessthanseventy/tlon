@@ -32,7 +32,7 @@ src="${XDG_CONFIG_HOME:-$HOME/.config}/tlon"
 wide="${OFFICE_WIDE:-}"
 if [ -n "$wide" ]; then dcols=280 drows=75; else dcols=150 drows=60; fi
 t new-session -d -x "${OFFICE_COLS:-$dcols}" -y "${OFFICE_ROWS:-$drows}" \
-  "cd '$root/office' && unset TLON_HALL TLON_LOOKS TLON_PALETTE TLON_SOULS && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' XDG_CONFIG_HOME='$cfg' bun tui/main.ts 2>'$state/err'"
+  "cd '$root/office' && unset TLON_HALL TLON_HOME TLON_LOOKS TLON_PALETTE TLON_PETS TLON_SOULS && TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' XDG_CONFIG_HOME='$cfg' bun tui/main.ts 2>'$state/err'"
 sleep 3
 for step in "$@"; do
   case "$step" in
