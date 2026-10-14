@@ -75,6 +75,22 @@ defmodule Server.Attention.StallTest do
     assert Map.has_key?(panes, {ws.id, "t#{t.id}"})
   end
 
+  test "a thread waiting on the machine — its landing or its verify queued or running — is not stalled",
+       %{thread: t} do
+    tmux(leaf(t.id))
+    :ok = Thinking.thinking(t.id, "builder")
+    Process.put(:screen, "waiting on the merge queue")
+
+    for worker <- ["Server.Jobs.Land", "Server.Jobs.Verify"] do
+      Repo.delete_all(Oban.Job)
+      {:ok, _} = %{thread_id: t.id, slug: "x"} |> Oban.Job.new(worker: worker, queue: "default") |> Repo.insert()
+
+      panes = Stall.tick(%{}, now: at(0))
+      _ = Stall.tick(panes, now: at(30))
+      assert stalls(t.id) == [], "#{worker} queued: no stall"
+    end
+  end
+
   test "a frozen pane nobody is thinking in is idle, not stalled", %{thread: t} do
     tmux(leaf(t.id))
     Process.put(:screen, "❯ ")
