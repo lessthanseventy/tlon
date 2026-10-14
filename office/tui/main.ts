@@ -1771,6 +1771,8 @@ function draw() {
     roomChanged = true; imageDirty = true
     homeNow = loadHome()
     for (const r of rooms.values()) if (r instanceof WideRoom) r.setHome(homeNow)
+    // the annex below the office grows or shrinks with the home, and the room's rows with it
+    layoutScreen()
   }
   homeShown = building
   const vp = building ? { x: 0, y: 0, w: viewport.w, h: viewport.h } : viewport
