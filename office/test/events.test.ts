@@ -4,6 +4,7 @@ import { viewOf } from "../kit/crew"
 import { DRILL } from "../kit/sim"
 import { RailRoom } from "../rooms/rail"
 import { WideRoom } from "../rooms/wide"
+import { SEAT_REACT, reactLine } from "../kit/seat-voices"
 import { focus, measure, office, seeded } from "./golden"
 
 const geo: Geo = { doorX: 600, hallY: 190, ceilY: 12, leftX: 60, windowX: 200, cork: { x: 400, y: 40 } }
@@ -140,6 +141,17 @@ describe("the cast", () => {
     expect(asked.has("w0")).toBe(true)
     expect(asked.has("w2")).toBe(false)
     expect(asked.has("hronir")).toBe(false)
+  }))
+  test("a zoo draws a line from more than one seat, each from the seat voices' own table", () => seeded(3, () => {
+    const r = new WideRoom(696), a = view(["w0", "w1"]), given = new Map<string, string>(), heard = new Set<string>()
+    r.reactLine = (who, kind) => { const l = reactLine(who, kind, []); given.set(who, l); return l }
+    run(r, a, 300); r.event("zoo")
+    for (let i = 0; i < EVENTS.zoo.ticks; i++) {
+      r.step(a)
+      for (const [n, t] of (r as any).talk as Map<string, { text: string | null }>) if (t.text && t.text === given.get(n)) heard.add(n)
+    }
+    expect(heard.size).toBeGreaterThan(1)
+    for (const n of heard) if (SEAT_REACT[n]) expect(SEAT_REACT[n]!.zoo).toContain(given.get(n)!)
   }))
   test("the same seed runs the same twice", () => {
     const trace = () => seeded(4, () => {
