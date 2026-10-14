@@ -54,6 +54,11 @@ if [ -z "$url" ]; then
   fi
   sha="$(git -C "$root" rev-parse -q --verify "${1:-origin/main}^{commit}")" || fail "no commit ${1:-origin/main}"
   echo "smoke: ${sha:0:7} on :$port, database $db"
+  # one smoke per commit: a retry while one runs (or holds) would stack another 2 GB build in /tmp.
+  # The lock is held by this run and the node it starts; its text says which run that is.
+  exec 8<>"${TMPDIR:-/tmp}/tlon-smoke-commit-$sha.lock"
+  flock -n 8 || fail "${sha:0:7} is already being smoked ($(head -n 1 <&8)): drive or stop that one"
+  echo "pid $$ on $url" >&8
 
   # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep the builds no
   # run holds before making another
