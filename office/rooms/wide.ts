@@ -306,7 +306,7 @@ export class WideRoom extends Sim<Layout> {
     return this.planes.length > 0
   }
   /** Argos says something (after `delay`, when he is answering) */
-  private dogSay(text: string, delay = 0) { const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
+  private dogSay(text: string, delay = 0) { if (!this.petsOn) return; const d = this.dog; d.said = text; d.saidFrom = this.tick + delay; d.saidUntil = d.saidFrom + 45 }
   /** Argos' line for an occasion: the model's, else his own */
   private argos(occasion: Parameters<typeof argos>[0], name = "") {
     return argos(occasion, (o, c, n) => this.line("Argos", o, c, n, o === "muse" ? ARGOS_RIFF : undefined), name)
@@ -413,7 +413,10 @@ export class WideRoom extends Sim<Layout> {
    * remote now and then (about once a minute and a quarter each) and flips the channel.
    */
   override step(a: Agents): boolean {
-    const moved = [this.stepDog(), this.stepTalk(), this.stepAntics(), this.stepVolume(a), this.stepPlanes(), super.step(a)].some(Boolean)
+    // pets off: Argos goes to his bed and stays; no antics start between the pair (Nina's own half is Sim.stepCat)
+    const calm = !this.petsOn, d0 = this.dog
+    if (calm && d0.mode !== "sleep" && !d0.path.length && !d0.fuss && !this.alarmed) this.dogDo("bed")
+    const moved = [calm && d0.mode === "sleep" && !d0.path.length ? false : this.stepDog(), this.stepTalk(), calm ? false : this.stepAntics(), this.stepVolume(a), this.stepPlanes(), super.step(a)].some(Boolean)
     // after dark the pets turn in, once whatever they were up to is done
     if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog

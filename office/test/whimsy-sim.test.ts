@@ -48,15 +48,17 @@ describe("the dials gate the room", () => {
     expect(rings).toBe(0)
     expect(kinds.length).toBeGreaterThan(0)
   }, 40_000)
-  test("pets off: Nina is asleep and silent", () => {
-    const { r } = play(setDial(DEFAULT, "pets", false), 6_000)
-    expect((r as any).cat.mode).toBe("sleep")
-    const said = (r as any).cat.said
+  test("pets off: Nina is asleep and silent", () => seeded(5, () => {
+    const { r } = play(setDial(DEFAULT, "pets", false), 6_000, 5)
     const a = view()
-    for (let i = 0; i < 5_000; i++) r.step(a)
-    expect((r as any).cat.said).toBe(said)
-    expect((r as any).cat.mode).toBe("sleep")
-  })
+    const said = [(r as any).cat.said, (r as any).dog.said]
+    for (let i = 0; i < 5_000; i++) {
+      r.step(a)
+      expect((r as any).cat.mode).toBe("sleep")
+    }
+    expect([(r as any).cat.said, (r as any).dog.said]).toEqual(said)
+    expect((r as any).dog.mode).toBe("sleep")
+  }))
   test("the keyed event key plays nothing at all when every event is switched off", () => {
     const { r, a } = play({ ...DEFAULT, preset: "business" }, 600)
     r.play("event")
