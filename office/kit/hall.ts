@@ -15,10 +15,11 @@ export type Candidate = {
   look: Look; pitch: string; soul: string; drawn: boolean
 }
 
+// no "uqbar": the operator's delegate, an outside citizen — a seat by that name would take its identity
 export const BORGES = [
   "funes", "lonnrot", "tzinacan", "ireneo", "hladik", "otalora", "emma", "nolan", "asterion", "pierre",
   "menard", "droctulft", "cruz", "fervor", "zahir", "aleph", "beatriz", "carlos", "nils", "ts-ai-ang",
-  "yu-tsun", "albert", "stephen", "runeberg", "uqbar", "orbis", "tertius", "herbert", "ashe", "borges",
+  "yu-tsun", "albert", "stephen", "runeberg", "orbis", "tertius", "herbert", "ashe", "borges",
 ] as const
 
 const PITCHES = [
