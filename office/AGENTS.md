@@ -12,7 +12,7 @@ server's `landing` on the thread, kept on REVIEW); a thread's card names the one
 at a desk on; standing duties (`duty`: a schedule's threads, the sheriff's beat) are not work and stay
 off the board. The TICKETS column shows one row per epic (`Toy 2/13 → #52 sandbox mode`, from the snapshot's `kind`/`epic_id`/progress), its children hidden until ⏎ opens the epic; a ticket's card names its epic. The crew board says who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the
 terminals the TUI zooms into (`tui/terminal.ts`: tmux control mode on the workspace's tmux, one
-linked window at a time, Ctrl-] back to the room).
+linked window at a time, ctrl+] to the lobby).
 
 - `kit/` — what every office surface shares: the snapshot's types (`types.ts`, the shape of
   `Server.Office.status`, served at `GET /api/office`), the data views (`crew.ts`: a workspace's view, the crew, the
@@ -64,7 +64,10 @@ linked window at a time, Ctrl-] back to the room).
   `SPECIES_VOICE` pack, a `SPECIES_BASE` row and a `SLOT_SPECIES` entry (`fillArt` lets it ship `sit` alone).
   `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `S` to save) and the finder (`/`); `talk.ts` what `m` (to a person) and `'` (to the office) post, on the workspace lobby; `reader.ts` a thread
   full-screen with its composer (a thread opens, as its card or in the reader, with its reply box focused: ⏎ sends,
-  the first esc leaves the box — drawn still, the thread's keys live, `r` or ⏎ back in (⏎ on a running coworker's card steps into their session) — the second esc goes back); `editor.ts` the text editing every input shares; `fuzzy.ts` the
+  the first esc leaves the box — drawn still, the thread's keys live, `r` or ⏎ back in (⏎ on a running coworker's card steps into their session) — the second esc goes back);
+  ctrl+] is the lobby from anywhere — a card, a reply box, an input, the finder, the reader, a zoomed terminal — the room with
+  nothing open over it (the screen, not the workspace's lobby thread that `talk.ts` posts to); esc stays one step back, and every
+  hint that says how to get out names it `ctrl+] lobby` (`GLOBALS` in the foot); `editor.ts` the text editing every input shares; `fuzzy.ts` the
   finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). `R` on a workline thread reviews its branch: the diff with a line cursor, `⏎`/`a` a note on the line, `A` on the file, `n`/`p` hunks, `N`/`P` files, `s` submits the notes with a verdict (comment, request changes, approve); unsent notes are kept per thread. The crew screen has tabs (`v`): each crew the operator has named, then everyone, the crews not on dimmed; `c` moves the selected coworker to the next crew (or every crew), `n` puts them on a new one by name, and `S` puts the next crew on (also `shifts` in the finder); a click on the header's crew (shown once a workspace has crews) does the same. The finder's `pencils down`, `lights out` (confirmed) and `back to work` are the office's stop controls (`Server.Pause`); while one is on, the header carries its mark (`✎ pencils down` / `◼ lights out`), and a click on it offers back to work. The arcade's
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
   zoomed like a coworker's terminal. It is the
