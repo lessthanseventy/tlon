@@ -88,7 +88,7 @@ describe("Sim.event", () => {
   test("an event touches nothing the server owns", () => seeded(3, () => {
     const r = new WideRoom(696), a = view(["w0"]), before = structuredClone(a)
     run(r, a, 300)
-    for (const k of EVENT_KINDS) { r.event(k); run(r, a, 1300); expect(a).toEqual(before) }
+    for (const k of EVENT_KINDS) { expect(r.event(k)).toBe(true); run(r, a, 1300); expect(a).toEqual(before) }
   }))
   test("the rail room starts none", () => {
     const r = new RailRoom()
