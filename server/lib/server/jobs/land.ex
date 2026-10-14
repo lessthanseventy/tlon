@@ -1,7 +1,9 @@
 defmodule Server.Jobs.Land do
   @moduledoc """
-  The merge queue: an approved workline's landing, or a reviewed PR's (`Server.PRLanding`, args
-  `%{"pr", "branch", "on_thread"}`), one at a time (queue `landing`, concurrency 1).
+  The merge queue: an approved workline's landing, a landed one's GitHub isn't merging put back in
+  it (args `%{"thread_id", "reland" => true}`, `Server.Workline.reland_queued/2`), or a reviewed
+  PR's (`Server.PRLanding`, args `%{"pr", "branch", "on_thread"}`), one at a time (queue `landing`,
+  concurrency 1).
   `Server.Workline.land_queued/2` rebases `work/<slug>` onto origin's main and gates it there — so
   what lands is what was checked, on the main it lands on, never a verify against a main that has
   moved since. The gate is the full check (`scripts/workline-verify.sh` with
@@ -22,7 +24,7 @@ defmodule Server.Jobs.Land do
     end
   end
 
-  def perform(%Oban.Job{args: %{"thread_id" => tid}, attempt: attempt, max_attempts: max}) do
+  def perform(%Oban.Job{args: %{"thread_id" => tid} = args, attempt: attempt, max_attempts: max}) do
     # the lock only orders this read against a send-back (which moves the row under it): one in
     # flight is seen; it doesn't guard the landing, which send-back refuses once this job exists
     {:ok, thread} =
@@ -30,7 +32,8 @@ defmodule Server.Jobs.Land do
         Server.Repo.one(from t in Server.Thread, where: t.id == ^tid, lock: "FOR UPDATE")
       end)
 
-    if thread, do: land(thread, attempt, max), else: :ok
+    queued = if args["reland"], do: &Server.Workline.reland_queued/2, else: &Server.Workline.land_queued/2
+    if thread, do: land(thread, queued, attempt, max), else: :ok
   end
 
   @doc """
@@ -101,8 +104,8 @@ defmodule Server.Jobs.Land do
 
   # a gate cut off (a restart) leaves the landing queued; this attempt fails so Oban runs it again,
   # and only the last one cut off bounces it
-  defp land(thread, attempt, max) do
-    case reported(thread, attempt, max, fn -> Server.Workline.land_queued(thread, last: attempt >= max) end) do
+  defp land(thread, queued, attempt, max) do
+    case reported(thread, attempt, max, fn -> queued.(thread, last: attempt >= max) end) do
       {:error, {:interrupted, why}} -> {:error, why}
       _ -> :ok
     end

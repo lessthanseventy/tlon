@@ -123,7 +123,7 @@ export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState 
   if (ctx.checking === th.id) return { kind: "checking", why: "its full check is running" }
   if (needsYou(th) || ctx.needs?.includes(th.id)) return { kind: "needs", why: th.prompt ? `asks: ${th.prompt.summary}` : th.awaiting ? `awaits ${th.awaiting}` : "waiting on you" }
   // landed at the gate, but nothing is merged until GitHub merges its PR
-  if (th.landing) return { kind: "merging", why: "landing · waiting on GitHub's checks" }
+  if (th.landing) return { kind: "merging", why: "landing · merging on GitHub" }
   if (!th.lead) return null
   if (th.seat === "desk") return { kind: "running", why: th.thinking?.includes(th.lead) ? `${th.lead} is on it` : `${th.lead} is at a desk` }
   if (th.seat === "parked") {

@@ -2,6 +2,7 @@ defmodule Server.WorklineLandingTest do
   # Merged means merged: a landing published to GitHub waits, its thread open, until GitHub says
   # the PR is MERGED; only then is its thread closed, its ticket done and the issues it fixed resolved.
   use ExUnit.Case, async: false
+  use Oban.Testing, repo: Server.Repo
 
   import Ecto.Query
 
@@ -23,6 +24,20 @@ defmodule Server.WorklineLandingTest do
   defmodule Merges do
     @moduledoc false
     def merge(_repo, _slug, _opts \\ []), do: {:ok, %{from: "a", to: "b"}}
+  end
+
+  # main moved: the rebase gives a new head, which the gate it is handed runs on
+  defmodule RebasesOnto do
+    @moduledoc false
+    def merge(repo, slug, opts) do
+      {:ok, :green} = opts[:gate].(repo, "work/#{slug}")
+      {:ok, %{from: "m2", to: "c2"}}
+    end
+  end
+
+  defmodule Conflicts do
+    @moduledoc false
+    def merge(_repo, slug, _opts), do: {:error, "work/#{slug} conflicts with origin/main in lib/lamp.ex"}
   end
 
   @url "https://github.com/o/r/pull/9"
@@ -233,11 +248,58 @@ defmodule Server.WorklineLandingTest do
       assert rebase == "/api/threads/#{t.id}/rebase" and reland == "/api/threads/#{t.id}/reland"
     end
 
-    test "rebase: GitHub rebases it and auto-merge is armed; the Need goes until the clock or GitHub says otherwise" do
+    test "rebase: back in the merge queue as a landing; GitHub neither rebases it nor arms auto-merge" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
       %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+      flush_ran()
 
-      assert {:ok, _} = Workline.rebase_landing(Repo.get!(Thread, t.id), gh("OPEN"))
-      assert_received {:ran, ["gh", "pr", "update-branch", @url, "--rebase"]}
+      assert {:ok, _} = Workline.rebase_landing(Repo.get!(Thread, t.id))
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: t.id, reland: true})
+      refute_received {:ran, ["gh", "pr", "update-branch" | _]}
+      refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--auto" | _]}
+      assert blocked() == []
+    end
+
+    test "the requeued landing rebases and gates it, posts tlon/check on the gated sha and merges at that head" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+      {:ok, _} = Workline.rebase_landing(Repo.get!(Thread, t.id))
+      flush_ran()
+
+      assert {:ok, _} =
+               Workline.reland_queued(Repo.get!(Thread, t.id),
+                 merge: RebasesOnto,
+                 gate: fn _, _ ->
+                   send(self(), :gated)
+                   {:ok, :green}
+                 end,
+                 run: gh("OPEN")
+               )
+
+      assert_received :gated
+      assert_received {:ran, ["git", _, _, "push", "--force-with-lease", "origin", "work/lamp"]}
+      assert_received {:ran, ["gh", "api", "repos/{owner}/{repo}/statuses/c2" | _]}
+      assert_received {:ran, ["gh", "pr", "merge", @url, "--rebase", "--match-head-commit", "c2"]}
+      refute_received {:ran, ["gh", "pr", "update-branch" | _]}
+      refute_received {:ran, ["gh", "pr", "merge", _, "--rebase", "--auto" | _]}
+      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+      assert blocked() == []
+    end
+
+    test "a requeued landing a rebase can't resolve is refused on the thread: its PR closed, back at build" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+      {:ok, _} = Workline.rebase_landing(Repo.get!(Thread, t.id))
+      flush_ran()
+
+      assert {:error, {:bounced, why}} =
+               Workline.reland_queued(Repo.get!(Thread, t.id), merge: Conflicts, run: gh("OPEN"))
+
+      assert why =~ "conflicts with origin/main"
+      assert_received {:ran, ["gh", "pr", "close", @url | _]}
+      refute_received {:ran, ["gh", "pr", "merge" | _]}
+      assert %Thread{stage: "build", state: "open"} = Repo.get!(Thread, t.id)
+      assert Enum.any?(Server.Channel.thread_messages(t), &(&1.body =~ "conflicts with origin/main"))
       assert blocked() == []
     end
 
@@ -252,7 +314,7 @@ defmodule Server.WorklineLandingTest do
 
     test "a thread not waiting on GitHub has nothing to rebase or reland" do
       {:ok, t} = Workline.open(%{title: "x", slug: "x", stage: "build"})
-      assert {:error, :not_landing} = Workline.rebase_landing(t, gh("OPEN"))
+      assert {:error, :not_landing} = Workline.rebase_landing(t)
       assert {:error, :not_landing} = Workline.reland_landing(t, gh("OPEN"))
     end
   end

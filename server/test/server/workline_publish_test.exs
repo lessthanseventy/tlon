@@ -115,16 +115,6 @@ defmodule Server.WorklinePublishTest do
              Publish.publish("/repo", "tiles", "Floor step 1", run)
   end
 
-  test "rebase: GitHub rebases the PR onto main and auto-merge is armed again; a refusal is said" do
-    url = "https://github.com/o/r/pull/9"
-    assert :ok = Publish.rebase("/repo", url, runner([]))
-    assert_received {:ran, ["gh", "pr", "update-branch", ^url, "--rebase"]}
-    assert_received {:ran, ["gh", "pr", "merge", ^url, "--rebase", "--auto", "--delete-branch"]}
-
-    refused = runner([{&match?(["gh", "pr", "merge" | _], &1), {"not allowed", 1}}])
-    assert {:error, "auto-merge refused: not allowed"} = Publish.rebase("/repo", url, refused)
-  end
-
   describe "the PR's body — what a reader of the PR needs, from the branch itself" do
     defp git_show(name, text), do: {&match?(["git", _, _, "show", "work/tiles:work/tiles/" <> ^name], &1), {text, 0}}
     defp git_log(text), do: {&match?(["git", _, _, "log" | _], &1), {text, 0}}
