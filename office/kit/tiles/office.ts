@@ -2,7 +2,7 @@
 // the crew board, the manager's and the lead's desks, two tables of four, the filing cabinet, the
 // server rack, and your queue.
 import { fit, type Measure } from "../canvas"
-import { glowOf, screenOf, type Focus, type Scene } from "../draw"
+import { glowOf, isPicked, screenOf, type Focus, type Scene } from "../draw"
 import { needsYou, tipOf } from "../crew"
 import { bossDesk, crewBoard, decor, execDesk } from "../furniture"
 import { ROLE, tint } from "../palette"
@@ -52,7 +52,7 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
         const where = !owner ? "" : seated ? (owner.seat.thinking ? "working" : "between turns, still warm") : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : `idle, at the ${owner.spot.kind}`
         const agentId = a.bench.find((b) => b.name === c.agent)?.agent_id ?? null
         sc.hits.push({ x: hx, y: hy, w: hw, h: hh, tip: p ? tipOf(p, a.threads.find((t) => t.id === p.thread_id), where) : c.agent, act: { kind: "person", agentId, name: c.agent, tid: p && p.thread_id > 0 ? p.thread_id : null } })
-        if (p && p.thread_id > 0 && p.thread_id === focus.picked) sc.ink.push({ t: "brackets", x: hx, y: hy, w: hw, h: hh, color: ROLE.body })
+        if (p && isPicked(focus, c.agent, p.thread_id)) sc.ink.push({ t: "brackets", x: hx, y: hy, w: hw, h: hh, color: ROLE.body })
       }
     })
   }

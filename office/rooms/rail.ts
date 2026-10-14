@@ -4,7 +4,7 @@
 // right edge, so nobody needs a path finder. Its life is the kit's Sim; this file is its plan and
 // its drawing.
 import type { Frame, Measure } from "../kit/canvas"
-import { drawActors, drawCat, drawParty, Scene, type Focus } from "../kit/draw"
+import { drawActors, drawCat, drawParty, isPicked, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
 import { boardColumns, COLS, isManager, needsYou, peopleOf, STATE_GLYPH, tipOf, type Act } from "../kit/crew"
 import { ROLE, tint } from "../kit/palette"
@@ -289,7 +289,7 @@ export class RailRoom extends Sim<Layout> {
           const hx = c.x - 7, hy = c.feet - 15, hw = 16, hh = SIDE_GAP
           const where = !owner ? "" : seated ? "working" : owner.spot.kind === "queue" ? "in your queue" : owner.leaving ? "leaving" : owner.path.length ? "walking" : `idle, at the ${owner.spot.kind}`
           hits.push({ x: hx, y: hy, w: hw, h: hh, tip: p ? tipOf(p, threadOf(p.thread_id), where) : c.agent, act: { kind: "person", agentId: agentIdOf(c.agent), name: c.agent, tid: p && p.thread_id > 0 ? p.thread_id : null } })
-          if (p && p.thread_id > 0 && p.thread_id === focus.picked) brackets(hx, hy, hw, hh)
+          if (p && isPicked(focus, c.agent, p.thread_id)) brackets(hx, hy, hw, hh)
         } })
       }
     }
