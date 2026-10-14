@@ -143,6 +143,9 @@ and every layer the spine design's re-laid §9 asked for
   a per-minute dispatcher (`Server.Jobs.Dispatch`, OSS Oban having no dynamic cron); each firing a
   `schedule_run` row (the automation board); a script's `ran-on: <check> <sha>` line records the commit
   it checked, which `Server.Release.Candidate` reads. Crons read the server's local clock.
+- **branch reviews** (`Server.BranchReview`) — a review on tlon of a branch that is not a workline: a
+  reviewer's `review_branch` (branch, the full sha it read, approve | request_changes, the review) is an
+  event correlated `branch:<name>:review`; the newest is the branch's verdict (`tlon-cli branch-review <branch>`).
 - **feature flags** (`Server.Flags`) — `fun_with_flags` on the store's Postgres, each node's cache
   busted over `Server.PubSub` (no Redis, no restart): work that lands dark ships behind a flag the
   server names, off; the office gets every flag in its snapshot. Flip one with

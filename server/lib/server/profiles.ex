@@ -342,7 +342,11 @@ defmodule Server.Profiles do
                  )
 
   # QA uses the product and files what it saw; it neither edits code nor reviews the diff.
-  @qa_mcp update_in(@reviewer_mcp, ["tlon", "excludeTools"], &((&1 -- ["submit_qa"]) ++ ["submit_review"]))
+  @qa_mcp update_in(
+            @reviewer_mcp,
+            ["tlon", "excludeTools"],
+            &((&1 -- ["submit_qa"]) ++ ["submit_review", "review_branch"])
+          )
 
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
   # so filler progress pings are pure noise. Appended to the worker roles.

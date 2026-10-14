@@ -152,6 +152,7 @@ defmodule Server.MCP.ServerTest do
                "write_note",
                "get_notes",
                "push_branch",
+               "review_branch",
                "operator_inbox",
                # the PM's (pm-and-release design §1)
                "release_status",
@@ -1596,6 +1597,35 @@ defmodule Server.MCP.ServerTest do
 
     pushed = call(ntoken, handshake(ntoken), 3, "push_branch", %{"thread_id" => workline.id})
     assert pushed["isError"] and hd(pushed["content"])["text"] =~ "lead"
+  end
+
+  test "review_branch: a reviewer's verdict on a branch@sha is recorded as theirs; a short sha is refused", %{
+    token: token
+  } do
+    session = handshake(token)
+    sha = String.duplicate("c", 40)
+
+    refused =
+      call(token, session, 2, "review_branch", %{
+        "branch" => "lamp",
+        "sha" => "c0ffee",
+        "verdict" => "approve",
+        "body" => "ok"
+      })
+
+    assert refused["isError"]
+
+    assert %{"recorded" => "approve", "branch" => "lamp"} =
+             decode_tool_json(
+               call(token, session, 3, "review_branch", %{
+                 "branch" => "lamp",
+                 "sha" => sha,
+                 "verdict" => "approve",
+                 "body" => "approve: ok"
+               })
+             )
+
+    assert %{verdict: "approve", sha: ^sha, by: "Carl", body: "approve: ok"} = Server.BranchReview.latest("lamp")
   end
 
   test "the librarian's tools over the wire: a stated fact is refused, a proposal is listed, no judge says so" do

@@ -97,6 +97,8 @@ defmodule Server.MCP.Endpoint do
   # The PM's (pm-and-release design §1): the release pointer and the backlog's urgency.
   # a coworker's own thread branch to GitHub (its pane's own pushes are refused by the pre-push hook)
   component(Server.MCP.Tool.PushBranch, name: "push_branch")
+  # a reviewer's verdict on a non-workline branch, which `mise run land` requires
+  component(Server.MCP.Tool.ReviewBranch, name: "review_branch")
   component(Server.MCP.Tool.ReleaseStatus, name: "release_status")
   component(Server.MCP.Tool.CheckCandidate, name: "check_candidate")
   component(Server.MCP.Tool.ProposeRelease, name: "propose_release")
