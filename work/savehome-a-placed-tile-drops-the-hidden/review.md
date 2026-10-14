@@ -1,16 +1,36 @@
 ## Verdict: approve
 
-Re-review of work/savehome-a-placed-tile-drops-the-hidden at 2aca8ac (round 2). Nothing changed since the first verdict — `git diff 2aca8ac..work/savehome-a-placed-tile-drops-the-hidden` is empty; the branch HEAD is still the review commit. The verify gate passed (`mise run check` exit 0, recorded by the server), and QA's live drive on the :4122 scratch release confirmed the fix end-to-end: TLON_HOME seeded `{"tiles":[{"kind":"not-a-kind","at":[1,0]}]}`, placed `kitchen` on [1,0], read back exactly `{"tiles":[{"kind":"kitchen","at":[1,0]}]}` — no `not-a-kind`, no duplicate, repeated with the same result. Caveat logged by QA: not run on the pre-fix build, so it shows fixed behaviour, not a before/after; the unit test is the before/after proof.
+Round 3 — re-review of work/savehome-a-placed-tile-drops-the-hidden at 4fcffae, the malformed-`at` fix on top of 2aca8ac.
 
-### Spec compliance
-office/tui/home.ts:37-40 — a `Set` of `"x,y"` from the known tiles being saved, then `unknownTiles(path).filter(...)` drops any hidden tile whose `at` joins to a member of that set. Minimal and surgical; touches nothing else. The placed known tile wins its cell, exactly as ticket #140 / the decision asked. Hidden unknowns on free cells are still carried through load/save unchanged.
+### What changed since the last verdict (f1f4be4)
+`git diff f1f4be4..4fcffae` — two files:
+- `office/tui/home.ts`: the hidden-tile filter now guards `Array.isArray(at)` before calling `.join`, so a non-array `at` no longer throws.
+- `office/test/home.test.ts`: a new test seeds `{"kind":"not-a-kind","at":"x"}`, saves a `kitchen` at [1,0], and asserts the file holds both.
 
-office/test/home.test.ts:176-184 — unknown kind at [1,0], save kitchen at [1,0], assert the file holds exactly `[{ kind: "kitchen", at: [1,0] }]`. The test reads the raw JSON, not `loadHome` — the right choice, since `loadHome` filters unknown kinds and would mask whether the drop actually happened.
+### Correction to the round-2 review
+My round-2 review claimed a malformed hidden tile "resolves to `""` via `?.join(",") ?? ""`… Safe." That was wrong. On a string `at` (e.g. `"x"`), `at?.join(",")` evaluates `"x".join(",")` — strings have no `.join` method, so it throws `TypeError`, the surrounding `catch` swallowed the entire save, and the placed kitchen tile was lost too (not just the hidden one). QA's live drive on the :4122 scratch release caught this: seed `{"tiles":[{"kind":"not-a-kind","at":"x"}]}`, place kitchen, save, read back — file unchanged. This commit is the fix for that exact regression.
 
 ### Correctness
-A malformed hidden tile (missing or non-array `at`) resolves to `""` via `?.join(",") ?? ""`, which never matches a real known cell, so a cell-less hidden tile is carried rather than dropped or crashed on. Safe. The placed-known-wins direction is the only one that needed fixing; two hidden unknowns on the same cell are untouched (out of scope, harmless — both opaque).
+`office/tui/home.ts:39-42`:
+```
+const hidden = unknownTiles(path).filter((t) => {
+  const at = (t as { at?: unknown }).at
+  return !(Array.isArray(at) && cells.has(at.join(",")))
+})
+```
+- `at` is an array and `cells` has it → `!(true && true)` = false → dropped. Placed known tile wins its cell, per ticket #140 / decision #2049.
+- `at` is an array and `cells` does not have it → `!(true && false)` = true → kept. Hidden unknowns on free cells pass through unchanged.
+- `at` is non-array or missing → `!(false && …)` = true → kept, and `.join` is never called, so no throw. The save completes; the placed known tiles are written. Matches decision #2111 (kitchen at [1,0] saved, `at: "x"` tile preserved).
+
+`cells` itself (`home.tiles.map((t) => t.at.join(","))`) is safe: `home.tiles` are `HomeTile`, whose `isTile` guard requires `at` to be a length-2 number array, so `.join` there cannot throw.
+
+### Test
+`office/test/home.test.ts:185-195` — seeds the malformed hidden tile, saves a kitchen on [1,0], reads the raw JSON (not `loadHome`, which would filter the unknown kind and mask the result), asserts both tiles present. This is the before/after proof: it failed RED on the unfixed file (the save threw and the file stayed `{"kind":"not-a-kind","at":"x"}`) and passes GREEN with the guard. The round-2 test (hidden `[1,0]` dropped on a placed kitchen) still holds alongside it.
 
 ### Gate
-office suite green; typecheck exit 0; home.test.ts 28/28. `mise run check` green on the branch (verify evidence recorded).
+`office/test/home.test.ts` 29/29 (bun test). `mise run check` exit 0 on the branch — verify evidence recorded by the server at 18:47:37. QA re-drove the malformed-`at` case on the rebuilt :4676 scratch release per decision #2111 (build_mode enabled on :4676 only, never :4040).
+
+### Spec compliance
+Surgical: 4 lines of logic + one test, touching nothing outside the cell filter. The placed-known-wins direction is the only behaviour changed; two hidden unknowns on the same cell remain untouched (out of scope, harmless). The fix narrows the drop to tiles whose `at` is a real cell, so a cell-less hidden tile is now carried rather than silently lost — a strict improvement over the round-2 behaviour.
 
 No follow-ups.
