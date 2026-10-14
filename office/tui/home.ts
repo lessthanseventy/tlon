@@ -34,7 +34,10 @@ function unknownTiles(path: string): unknown[] {
 export function saveHome(home: Home, path: string = HOME_PATH): void {
   try {
     mkdirSync(dirname(path), { recursive: true })
-    const out = { ...home, tiles: [...home.tiles, ...unknownTiles(path)] }
+    // a placed known tile wins its cell: a hidden tile of an unknown kind there is dropped, not kept beside it
+    const cells = new Set(home.tiles.map((t) => t.at.join(",")))
+    const hidden = unknownTiles(path).filter((t) => !cells.has((t as { at?: number[] }).at?.join(",") ?? ""))
+    const out = { ...home, tiles: [...home.tiles, ...hidden] }
     writeFileSync(path, `${JSON.stringify(out, null, 2)}\n`)
   } catch { /* a read-only or blocked home: it just won't remember */ }
 }

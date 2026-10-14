@@ -173,6 +173,15 @@ describe("home.json round trip", () => {
       expect(loadHome(path).tiles.map((t) => t.kind)).toEqual(["living", "kitchen"])
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
+  test("a hidden unknown-kind tile on a cell a known tile was placed on is dropped on save: one tile per cell", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
+    const path = join(dir, "home.json")
+    try {
+      writeFileSync(path, JSON.stringify({ tiles: [{ kind: "not-a-kind", at: [1, 0] }] }))
+      saveHome({ tiles: [{ kind: "kitchen", at: [1, 0] }] }, path)
+      expect(JSON.parse(readFileSync(path, "utf8")).tiles).toEqual([{ kind: "kitchen", at: [1, 0] }])
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
   test("saveHome to a path it cannot create does not throw", () => {
     const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
     const blocker = join(dir, "blocker")
