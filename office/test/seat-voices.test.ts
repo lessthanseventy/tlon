@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { SEAT_VOICE, seatLine, SEATS } from "../kit/seat-voices"
+import { EVENT_KINDS } from "../kit/events"
+import { SEAT_REACT, SEAT_VOICE, reactLine, seatLine, SEATS } from "../kit/seat-voices"
 
 describe("the §2 voice table", () => {
   test("every sandbox seat has a voice", () => {
@@ -40,5 +41,20 @@ describe("seatLine", () => {
     const l = seatLine("nobody", [])
     expect(typeof l).toBe("string")
     expect(l.length).toBeGreaterThan(0)
+  })
+})
+
+describe("event reactions", () => {
+  test("every seat has at least two lines for every event", () => {
+    for (const s of SEATS) for (const k of EVENT_KINDS) expect(SEAT_REACT[s]?.[k]?.length ?? 0).toBeGreaterThanOrEqual(2)
+  })
+  test("seats do not share a line", () => {
+    const all = SEATS.flatMap((s) => EVENT_KINDS.flatMap((k) => SEAT_REACT[s]![k]!))
+    expect(new Set(all).size).toBe(all.length)
+  })
+  test("reactLine skips what was said lately and falls back for an unknown seat", () => {
+    const l = SEAT_REACT.yu!.duck!
+    expect(reactLine("yu", "duck", [l[0]!])).toBe(l[1])
+    expect(typeof reactLine("w9", "duck", [])).toBe("string")
   })
 })

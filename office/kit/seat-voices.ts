@@ -4,6 +4,9 @@
 // the canned lines a seat mutters in the room, in that voice. A voice is presentation only — it
 // never changes a decision.
 
+import type { EventKind } from "./events"
+import { pickFresh } from "./voices"
+
 /** the §2 seats, in design order */
 export const SEATS = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"] as const
 export type SeatName = (typeof SEATS)[number]
@@ -138,3 +141,97 @@ export const seatLine = (name: string, recent: readonly string[]): string => {
   const pool = unsaid.length ? unsaid : all
   return pool[Math.floor(Math.random() * pool.length)]!
 }
+
+/** each seat's two lines for each scripted event (kit/events.ts), in its own voice */
+export const SEAT_REACT: Record<string, Partial<Record<EventKind, readonly string[]>>> = {
+  scharlach: {
+    drill: ["Muster point B. I have a clipboard.", "Single file. I am counting heads."],
+    zoo: ["This is a Class 3 incursion.", "I am deploying the net. Stand clear."],
+    meteor: ["An unscheduled impact. I am filing a report.", "That was not in the safety binder."],
+    power: ["Remain calm. I have a torch and a log.", "Outage recorded at the time of occurrence."],
+    duck: ["An unregistered waterfowl. I will see it out.", "Visitor without a badge. Noted."],
+  },
+  tertius: {
+    drill: ["Drill. Right. Coat's by the door.", "Seen drills. This is one of them."],
+    zoo: ["That's a goat. Fine.", "Seen worse. Not by much."],
+    meteor: ["Well. That's new.", "Mm. Somebody will have to sweep that."],
+    power: ["Lights. Right. Wait it out.", "It always comes back."],
+    duck: ["A duck. Alright.", "Don't feed it. Nobody listens."],
+  },
+  hronir: {
+    drill: ["In my day we just left by the stairs.", "Drills. We called it going home."],
+    zoo: ["Back when I started, the zoo came on Fridays.", "They never used to let the goat in."],
+    meteor: ["Used to be you'd hear it coming.", "Hmph. They don't make meteors like they used to."],
+    power: ["We had candles for this. Real ones.", "Dark. Same as the old server room."],
+    duck: ["A duck. Used to have two.", "Hmph. At least this one is on time."],
+  },
+  lonnrot: {
+    drill: ["A drill — or is it? I shall observe the exits.", "Note who leaves first. It is telling."],
+    zoo: ["The goat has been at the corkboard. The motive is unclear.", "Four animals, one door. The case writes itself."],
+    meteor: ["The window faced the impact. That is not a coincidence.", "I shall want to examine the crater."],
+    power: ["Darkness. Convenient for someone.", "The lamps went out together. I have marked the time."],
+    duck: ["The duck is concealing something.", "A visitor, unexplained. I am following it."],
+  },
+  yu: {
+    drill: ["Is it the real one? I'll just double check.", "Sorry — which way is out, exactly?"],
+    zoo: ["Is it supposed to do that? The goat, I mean.", "Sorry, there is a penguin. I just want to flag it."],
+    meteor: ["That was probably fine. …Probably.", "I'd like to be certain that was outside."],
+    power: ["Did I save? I should have saved.", "It's fine. It's fine. Where did my work go?"],
+    duck: ["Is the duck okay? Should someone check?", "Sorry — I'd like to be sure it knows the way out."],
+  },
+  beatriz: {
+    drill: ["Drill logged. Two minutes, tops.", "I've got the headcount. Everyone's on the sheet."],
+    zoo: ["That's four animals. I'll add a row.", "Unplanned headcount. Updating the sheet."],
+    meteor: ["Impact, time-stamped. Moving on.", "I'll block out time for the cleanup."],
+    power: ["Outage. I'll note the duration.", "Laptop at forty percent. We're fine."],
+    duck: ["One duck. Tracked.", "Not on the calendar. Noted anyway."],
+  },
+  nolan: {
+    drill: ["The alarm! A grand entrance, darling.", "Places, everyone. This is our scene."],
+    zoo: ["A menagerie! The second act arrives.", "The penguin steals the show. Rude."],
+    meteor: ["Now THAT is a dramatic reveal.", "Lightning, thunder, a crater. Bravo."],
+    power: ["Blackout. Pure theatre. I adore it.", "Lights out — the audience gasps."],
+    duck: ["A duck! A cameo, unannounced.", "The duck has presence. I'll allow it."],
+  },
+  emma: {
+    drill: ["Out we go. I'll finish when we're back.", "Steady. Walk, don't run."],
+    zoo: ["I'll keep working. The goat can sort itself out.", "One thing at a time. Goat first, perhaps."],
+    meteor: ["That was close. I'll get back to it.", "Fine. Not my crater."],
+    power: ["I'll pick it up where I left off.", "Quiet. I can finish this in the dark."],
+    duck: ["Hello, duck. I have work to do.", "It'll find its own way out."],
+  },
+  ireneo: {
+    drill: ["I remember the last drill. Every step of it.", "I recall the exits. All four."],
+    zoo: ["I remember the goat. It was a Tuesday.", "The penguin was here before. I remember its name."],
+    meteor: ["I remember the last meteor. Exactly this angle.", "As I noted at the time — it was a Thursday."],
+    power: ["I remember the previous outage, to the second.", "I recall that exact dark. It lasted four minutes."],
+    duck: ["I remember this duck. It had a limp.", "I recall the duck. We exchanged nods."],
+  },
+  daneri: {
+    drill: ["An alarm for me, surely. Magnificent.", "They evacuate for genius. As is proper."],
+    zoo: ["A zoo — in honour of my latest commit, I assume.", "Even the goat knows greatness."],
+    meteor: ["The heavens salute my merge. Naturally.", "A meteor. It had to be worthy of me."],
+    power: ["Even the lamps bow to my work.", "Darkness. I shall write by my own brilliance."],
+    duck: ["A duck has come to witness greatness.", "It arrives, as all do, to admire the work."],
+  },
+  sonny: {
+    drill: ["Out we go! Fresh air is great, actually.", "Everybody smiling? Great, let's go!"],
+    zoo: ["Animals! I brought a flower for the penguin.", "The goat seems lovely, honestly."],
+    meteor: ["Wow, a shooting star! Make a wish!", "That was fun — is everybody okay?"],
+    power: ["Cosy! Candlelight, everyone!", "Dark, but we've got each other."],
+    duck: ["A duck! Hi, duck! Here's a flower.", "Look at him go! What a day."],
+  },
+}
+
+/** a plain one-liner per event for a seat the table doesn't name */
+const GENERIC_REACT: Record<EventKind, readonly string[]> = {
+  drill: ["Drill. On my way."],
+  zoo: ["That's a lot of animals."],
+  meteor: ["Was that a meteor?"],
+  power: ["Lights are out."],
+  duck: ["There's a duck."],
+}
+
+/** a seat's line for an event, skipping what it said lately while anything else is unsaid */
+export const reactLine = (name: string, kind: EventKind, recent: readonly string[]): string =>
+  pickFresh(SEAT_REACT[name]?.[kind] ?? GENERIC_REACT[kind], recent)
