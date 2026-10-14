@@ -207,5 +207,16 @@ export function hitAt(fr: Frame, g: Geometry, col: number, row: number, viewport
   const c = col - 1 - g.col, r = row - 1 - g.row
   if (c < 0 || r < 0 || c >= g.cols || r >= g.rows) return undefined
   const x = viewport.x + ((c + 0.5) * g.cw) / g.k, y = viewport.y + ((r + 0.5) * g.ch) / g.k
-  return fr.hits.find((h) => x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h)
+  const centre = fr.hits.find((h) => x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h)
+  if (centre) return centre
+  // a target thinner than a cell (a whiteboard line is ~6 px, a row 6–9) can fall between two cells'
+  // centres: then the cell takes whatever covers most of it, so no target is out of reach
+  const x0 = viewport.x + (c * g.cw) / g.k, x1 = viewport.x + ((c + 1) * g.cw) / g.k
+  const y0 = viewport.y + (r * g.ch) / g.k, y1 = viewport.y + ((r + 1) * g.ch) / g.k
+  let best: Hit | undefined, most = 0
+  for (const h of fr.hits) {
+    const area = Math.max(0, Math.min(x1, h.x + h.w) - Math.max(x0, h.x)) * Math.max(0, Math.min(y1, h.y + h.h) - Math.max(y0, h.y))
+    if (area > most) { most = area; best = h }
+  }
+  return best
 }

@@ -641,7 +641,8 @@ export class WideRoom extends Sim<Layout> {
     cols.forEach((col, c) => {
       const cx = x0 + c * colW
       if (c) px(Math.round(cx), 4, 1, 34, ROLE.edge)
-      const lh = measure.lineHeight?.(9) ?? 6
+      // a line at least a cell row tall: the mouse reports whole cells, so two lines in one row can't both be hovered
+      const lh = Math.max(measure.lineHeight?.(9) ?? 6, measure.rowHeight ?? 0)
       const head = `${COLS[c]} ${col.items.length}`
       sc.text(head, cx + 3, 3 + lh - 0.5, ROLE.key, measure(head, 10) <= colW - 4 ? 10 : 9, "left")
       sc.hits.push({ x: cx, y: 3, w: colW, h: lh + 1, tip: `${COLS[c]!.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
