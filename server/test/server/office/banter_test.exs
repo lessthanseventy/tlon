@@ -208,9 +208,16 @@ defmodule Server.Office.BanterTest do
       assert b =~ "Hums sea shanties" and a != b
     end
 
-    test "Fears and Diary never reach the scene", %{ws: ws, dir: dir} do
-      File.write!(Path.join(dir, "atlas.md"), "## Fears\nFEARSTEXT\n\n## Diary\nDIARYTEXT\n")
-      refute ws.id |> Banter.context() |> Banter.scene() =~ ~r/FEARSTEXT|DIARYTEXT/
+    test "Fears never reach the scene; the diary reaches it as its last two lines", %{ws: ws, dir: dir} do
+      File.write!(
+        Path.join(dir, "atlas.md"),
+        "## Fears\nFEARSTEXT\n\n## Diary\n- 2026-10-01: OLDESTTEXT\n- 2026-10-07: OLDTEXT\n- 2026-10-14: DIARYTEXT\n"
+      )
+
+      scene = ws.id |> Banter.context() |> Banter.scene()
+      refute scene =~ "FEARSTEXT"
+      assert scene =~ "DIARYTEXT" and scene =~ "OLDTEXT"
+      refute scene =~ "OLDESTTEXT"
     end
   end
 end
