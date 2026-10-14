@@ -4,14 +4,18 @@ defmodule Server.Workline.Publish do
   this carries it to GitHub, whose main takes only PRs — the only way a landing reaches main, which
   this machine's checkout then follows: push `work/<slug>`, open a PR, and ask GitHub to rebase-merge
   it once its checks pass (`gh pr merge --auto`; with auto-merge off on the repo the PR stays open,
-  its link on the thread). A repo with no `origin` is `:none` — nothing to publish to.
+  its link on the thread). Main's required check is `tlon/check`, the local gate's commit status, so a
+  landing whose gate passed posts it on the sha it gated. A repo with no `origin` is `:none` — nothing
+  to publish to.
   """
 
   @doc """
-  Publish `work/<slug>` from `repo`. `{:ok, pr_url}` | `{:auto_refused, pr_url, why}` (the PR is open
-  but GitHub refused to auto-merge it) | `:none` | `{:error, why}`.
+  Publish `work/<slug>` from `repo`. `opts[:gated]`, the sha the landing's gate passed on, is posted
+  as the commit status `tlon/check` = success before auto-merge is armed; with none, no status is
+  posted (it vouches only for a commit it gated). `{:ok, pr_url}` | `{:auto_refused, pr_url, why}`
+  (the PR is open but GitHub refused to auto-merge it) | `:none` | `{:error, why}`.
   """
-  def publish(repo, slug, title, run \\ &System.cmd/3) do
+  def publish(repo, slug, title, run \\ &System.cmd/3, landing \\ []) do
     branch = "work/#{slug}"
     opts = [cd: repo, stderr_to_stdout: true]
 
@@ -25,6 +29,7 @@ defmodule Server.Workline.Publish do
               opts
             )} do
       url = out |> String.split("\n", trim: true) |> List.last() |> String.trim()
+      if sha = landing[:gated], do: post_check(sha, opts, run)
 
       case run.("gh", ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"], opts) do
         {_, 0} -> {:ok, url}
@@ -246,5 +251,23 @@ defmodule Server.Workline.Publish do
     |> String.split("\n")
     |> Enum.map(&(&1 |> String.trim_leading("#") |> String.trim()))
     |> Enum.find("", &(&1 != "" and pick.(&1)))
+  end
+
+  # a status gh can't post leaves the PR waiting on its check, which KeepUp reads as `pr_blocked`
+  defp post_check(sha, opts, run) do
+    run.(
+      "gh",
+      [
+        "api",
+        "repos/{owner}/{repo}/statuses/#{sha}",
+        "-f",
+        "state=success",
+        "-f",
+        "context=tlon/check",
+        "-f",
+        "description=the landing's gate (mise run check)"
+      ],
+      opts
+    )
   end
 end

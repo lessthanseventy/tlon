@@ -69,6 +69,7 @@ defmodule Server.WorklineLandingTest do
     %{thread: t, ticket: ticket, issue: issue} = published!()
 
     assert_received {:ran, ["gh", "pr", "create" | _]}
+    assert_received {:ran, ["gh", "api", "repos/{owner}/{repo}/statuses/b" | _]}
     assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
     refute Server.Tickets.get(ticket.id).status == "done"
     assert %{state: "open"} = Repo.get!(Server.Issue, issue.id)
@@ -131,6 +132,7 @@ defmodule Server.WorklineLandingTest do
     t = publish_failed!()
 
     assert {:ok, @url} = Workline.republish(t, gh("OPEN"))
+    refute_received {:ran, ["gh", "api" | _]}
 
     assert publish_failed(t) == []
     assert [%{thread: %{id: id}, url: @url}] = Workline.waiting_on_github()
