@@ -61,6 +61,11 @@ export const NINA = {
   swat: ["Fly lower, book. See what happens.", "Pages are NOT for flapping at the princess.", "Got it. I am a fearsome hunter. Of encyclopedias."],
   // she carries a letter from the mailbox to someone
   letter: ["{name}, post for you. I only chewed the corner.", "{name}. A letter. Do not ask where I have been.", "Special delivery, {name}. Tip accepted in treats."],
+  // the scripted events (kit/events.ts): she is above all of it; the drill has her zoomies instead
+  event_zoo: ["A goat? On MY corkboard?", "They let a penguin in. A PENGUIN. The audacity.", "I'll watch from up here. Where it is clean."],
+  event_meteor: ["Rude. Somebody tell the sky.", "That crater is in my sunbeam."],
+  event_power: ["The dark is for sleeping. Carry on.", "Who turned off my lamps?"],
+  event_duck: ["A duck. In MY hall.", "That bird has no manners. And no collar."],
   // a worker fussing over her
   fuss: {
     pat: ["Gentle. I'm priceless.", "Head pats are a privilege, peasant.", "prrr... you may continue."],
