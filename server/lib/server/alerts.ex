@@ -7,7 +7,7 @@ defmodule Server.Alerts do
       ten minutes in: full screen, with Join;
     * **decision** — work has stopped on a choice (a gate, a dialog, a question, a coworker's
       ask): a banner with its answers;
-    * **sticky** — wants the operator, nothing waits on it (a red verify, a mention): stays until
+    * **sticky** — wants the operator, nothing waits on it (a red verify, stuck work): stays until
       dismissed or resolved. A rollout note raises nothing here: the office's inbox has it;
     * **info** — something the operator set going took effect where they can't see it: a toast
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
@@ -15,7 +15,8 @@ defmodule Server.Alerts do
       (`Server.Staffing.note_seated/2`); `landed`, GitHub merged a workline's PR
       (`Server.Workline.landed_since/1`); `fixing`, an issue a ticket
       took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
-      on a new release (`Server.Release.PM.note_live/1`).
+      on a new release (`Server.Release.PM.note_live/1`). A `mention` of the operator is info too: a
+      coworker's report goes by, and the office's inbox keeps it; what they must decide is an ask.
 
   Each alert is `%{key, level, kind, title, body, at, thread_id, link, actions}`; an action is a
   call on the operator API (`method`, `path`, `body`, and `input` naming the body field a typed
@@ -64,6 +65,7 @@ defmodule Server.Alerts do
     Enum.sort_by(alarms, & &1.at, DateTime) ++
       Enum.filter(from_needs, &(&1.level == "decision")) ++
       Enum.filter(from_needs, &(&1.level == "sticky")) ++
+      Enum.filter(from_needs, &(&1.level == "info")) ++
       Enum.map(Keyword.get(opts, :seated, []), &info("seated", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, "##{&1.thread_id} landed — #{&1.title}")) ++
       Enum.map(Keyword.get(opts, :fixing, []), &info("fixing", &1, &1.body)) ++
@@ -99,7 +101,12 @@ defmodule Server.Alerts do
   end
 
   defp from_need(n) do
-    level = if n.kind in ~w(gate dialog question ask pr_blocked), do: "decision", else: "sticky"
+    level =
+      cond do
+        n.kind in ~w(gate dialog question ask pr_blocked) -> "decision"
+        n.kind == "mention" -> "info"
+        true -> "sticky"
+      end
 
     %{
       key: n.key,

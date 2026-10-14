@@ -107,7 +107,7 @@ defmodule Server.AlertsTest do
   end
 
   test "what nothing waits on is put away on the server; an issue resolves, a stranded checkout comes down" do
-    [mention, issue, stranded] =
+    [issue, stranded, mention] =
       Alerts.build(
         [
           need("mention", %{level: "decide", key: "mention:3"}),
@@ -150,15 +150,17 @@ defmodule Server.AlertsTest do
   end
 
   test "what to decide when convenient is sticky, never an interruption" do
-    alerts =
-      Alerts.build(
-        [need("mention", %{level: "decide"}), need("verify_failed", %{key: "verify_failed:9", thread_id: 9})],
-        [],
-        @now
-      )
+    alerts = Alerts.build([need("verify_failed", %{key: "verify_failed:9", thread_id: 9})], [], @now)
 
-    assert Enum.map(alerts, & &1.level) == ["sticky", "sticky"]
+    assert Enum.map(alerts, & &1.level) == ["sticky"]
     assert Enum.any?(List.last(alerts).actions, &(&1.path == "/api/threads/9/verify"))
+  end
+
+  test "a mention is info: it goes by on its own, and the inbox keeps it" do
+    alerts =
+      Alerts.build([need("mention", %{level: "decide"}), need("verify_failed", %{key: "verify_failed:9"})], [], @now)
+
+    assert Enum.map(alerts, &{&1.kind, &1.level}) == [{"verify_failed", "sticky"}, {"mention", "info"}]
   end
 
   test "rollout notes stay in the inbox — no card on the desktop" do
@@ -189,7 +191,8 @@ defmodule Server.AlertsTest do
   test "a parked thread getting its seat is info: one toast per seating, nothing to do, last in the list" do
     seated = %{id: 90, thread_id: 7, body: "emma sat down on #7 — the finder", created_at: @now}
 
-    assert [%{level: "sticky"}, info] = Alerts.build([need("mention", %{level: "decide"})], [], @now, seated: [seated])
+    assert [%{level: "sticky"}, info] =
+             Alerts.build([need("verify_failed", %{key: "verify_failed:9"})], [], @now, seated: [seated])
 
     assert %{key: "seated:90", level: "info", kind: "seated", title: "emma sat down on #7 — the finder"} = info
     assert info.thread_id == 7 and info.at == @now and info.actions == []
@@ -229,7 +232,11 @@ defmodule Server.AlertsTest do
 
   test "alarms first, then decisions, then sticky" do
     alerts =
-      Alerts.build([need("mention", %{level: "decide"}), need("gate")], [meeting(~U[2026-10-08 16:00:00Z])], @now)
+      Alerts.build(
+        [need("verify_failed", %{key: "verify_failed:9"}), need("gate")],
+        [meeting(~U[2026-10-08 16:00:00Z])],
+        @now
+      )
 
     assert Enum.map(alerts, & &1.level) == ["alarm", "decision", "sticky"]
   end
