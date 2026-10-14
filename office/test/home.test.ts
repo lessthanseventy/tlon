@@ -182,6 +182,17 @@ describe("home.json round trip", () => {
       expect(JSON.parse(readFileSync(path, "utf8")).tiles).toEqual([{ kind: "kitchen", at: [1, 0] }])
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
+  test("a hidden unknown-kind tile with a malformed `at` is kept, and does not cancel the save of a placed tile", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
+    const path = join(dir, "home.json")
+    try {
+      writeFileSync(path, JSON.stringify({ tiles: [{ kind: "not-a-kind", at: "x" }] }))
+      saveHome({ tiles: [{ kind: "kitchen", at: [1, 0] }] }, path)
+      expect(JSON.parse(readFileSync(path, "utf8")).tiles).toEqual([
+        { kind: "kitchen", at: [1, 0] }, { kind: "not-a-kind", at: "x" },
+      ])
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
   test("saveHome to a path it cannot create does not throw", () => {
     const dir = mkdtempSync(join(tmpdir(), "tlon-home-"))
     const blocker = join(dir, "blocker")
