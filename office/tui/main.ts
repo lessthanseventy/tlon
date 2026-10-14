@@ -12,6 +12,9 @@ import type { Frame } from "../kit/canvas"
 import { personaLines } from "../kit/persona"
 import { FLOOR, Looks, marginInk, type Note } from "../kit/margin"
 import { seatLine } from "../kit/seat-voices"
+import { load as loadWhim, save as saveWhim } from "../kit/whimsy-file"
+import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
+import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
@@ -63,7 +66,7 @@ type Mode =
   | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
-  | { kind: "build" } | { kind: "settings" } | { kind: "review"; tid: number }
+  | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number }
   | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" }
   | { kind: "help"; from: Mode; title: string; keys: Hint[] }
@@ -100,6 +103,9 @@ const HALL = process.env.TLON_HALL ?? join(CONFIG, "hall.json")
 // the pet store: species + seed + locks + edits, polled the same way
 const STORE = process.env.TLON_STORE ?? join(CONFIG, "store.json")
 
+// the wackiness dial (kit/whimsy.ts): preset + overrides, remembered in the config dir
+const OFFICE = process.env.TLON_OFFICE ?? join(CONFIG, "office.json")
+let whim: WhimState = loadWhim(OFFICE)
 const readState = (p: string) => { try { return readFileSync(p, "utf8").trim() } catch { return "" } }
 const writeState = (p: string, s: string) => { try { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, s) } catch { /* a read-only home: it just won't remember */ } }
 
@@ -303,7 +309,14 @@ const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
   return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])), checking: checkingId(), merging: all.health?.merge_queue ?? [] }
 }
-const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow) } return r }
+const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow) } return r }
+/** the dial moved: remember it and hand every room the resolved dials */
+function setWhim(s: WhimState) {
+  whim = s
+  saveWhim(OFFICE, s)
+  for (const r of rooms.values()) r.setWhimsy(resolveWhim(s))
+  changed()
+}
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
 const wsName = (id = ws) => all.workspaces.find((w) => w.id === id)?.name ?? "—"
 const unread = () => feed.filter((x) => x.at > trayRead && x.who !== OPERATOR).length
@@ -417,7 +430,10 @@ async function tickLedger() {
   const count = all.triage[String(sws)] ?? 0
   const t = count > 0 ? await data.triage(sws) : null
   if (count > 0 && !t) return
+  const before = new Map(ledger.demerits)
   ledger = tickFromTriage(ledger, count, t?.failed_checks.shown.map((s) => s.thread_id) ?? [], all.threads)
+  // rimworld: a red build sours that coworker's afternoon — room-local, the room's own reading of what it already saw
+  for (const [who, n] of ledger.demerits) if (n > (before.get(who) ?? 0)) for (const r of rooms.values()) r.sourMood(who)
 }
 /** what changed since the last look that you'd want to hear about even with the office in the back */
 function tellNews(before: Agents, beforeNeeds: data.Need[]) {
@@ -457,9 +473,10 @@ async function chatter() {
   if (ws === null) return
   room().hear(await data.pets(ws, room().petProfile()))
   const here = ws
+  const banter = resolveWhim(whim).banter
   // two together in the room: the server writes what they say now, said turn by turn; in --sandbox
   // (or wherever the server wrote nothing) each says a canned line in their own voice
-  room().onTogether = (situation, a, b) => void data.talk(here, situation, a, b).then((turns) => {
+  room().onTogether = (situation, a, b) => !banter ? undefined : void data.talk(here, situation, a, b).then((turns) => {
     const said = turns.length ? turns : [a, b].map((who) => {
       const recent = recentBanter.get(who) ?? []
       const line = seatLine(who, recent)
@@ -480,7 +497,7 @@ async function chatter() {
     seenLines.add(k)
     convos.set(b.at, [...(convos.get(b.at) ?? []), { who: b.agent, line: b.line }])
   }
-  for (const turns of convos.values()) { room().converse(turns); heard(turns); changed() }
+  if (banter) for (const turns of convos.values()) { room().converse(turns); heard(turns); changed() }
   await answers(ws)
 }
 /** the operator's answers: a lobby post answering you is a balloon over its author, and a notification when a card covers the room */
@@ -742,6 +759,7 @@ const VERBS: [string, () => void][] = [
   ["health: the service and its box", () => open({ kind: "health" })], ["memory: pinned facts and habits", () => open({ kind: "memory" })],
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
   ["settings: the running system's knobs, and a restart", () => open({ kind: "settings" })],
+  ["the wackiness dial: business … rimworld", () => open({ kind: "whimsy" })],
   ["crew", () => open({ kind: "crew" })], ["shifts", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["pencils down: nothing new, everyone stops after their turn", () => void did(data.pause("pencils_down"))],
@@ -1444,6 +1462,16 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ],
       }
     }
+    case "whimsy": {
+      const rows: Row[] = whimsyRows(whim).map((w) => ({
+        segs: [plain(w.label.padEnd(16)), { s: w.value.padEnd(10), fg: ROLE.key }, dim(w.note ?? "")],
+        open: () => { setWhim(w.next(whim)); draw() },
+      }))
+      return {
+        title: `${whimsyTitle(whim)} · ⏎ changes the selected dial`, rows,
+        actions: [{ key: "0", label: "back to the preset's own dials", run: () => { setWhim(resetToPreset(whim)); draw() } }, back1],
+      }
+    }
     case "settings": {
       if (!settings) return { title: "THE RUNNING SYSTEM", rows: [{ segs: [dim("reading…")] }], actions: [back1] }
       const reload = () => void loadCard().then(draw)
@@ -1466,6 +1494,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: "THE RUNNING SYSTEM · ⏎ changes the selected knob", rows,
         actions: [
+          { key: "Z", label: "the wackiness dial", run: () => open({ kind: "whimsy" }) },
           { key: "R", label: "restart the server (waits for quiet)", run: () => void did(data.restart()).then(reload) },
           ...(settings.restart_pending ? [{ key: "x", label: "cancel the scheduled restart", run: () => void did(data.restartCancel()).then(reload) }] : []),
           back1,
@@ -2039,7 +2068,7 @@ function toyKey(k: string): boolean {
   const r = room(), under = mode.kind === "person" ? mode.name : null
   switch (k) {
     case "d": r.play("doorbell"); status = "ding dong"; break
-    case "e": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? "something's up" : "events need the wide room (kitty graphics)"; break
+    case "e": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
     case "f": r.play("drill"); status = "fire drill!"; break
     case "t": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
     case "n": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break

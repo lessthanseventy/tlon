@@ -470,6 +470,8 @@ export class Sim<L extends { people: Seat[] }> {
   play(kind: "doorbell" | "event" | "drill") {
     if (kind === "doorbell") { this.ring(); return }
     if (kind === "event" && this.event()) return
+    // the stand-in below is an event too: with every event switched off the key plays nothing
+    if (kind === "event" && !EVENT_KINDS.some((k) => this.dials.events[k])) return
     // a drill over a running scene would stack its own panic on top of it; refuse like event() does
     if (kind === "drill" && this.running) return
     const line = { event: "Did anyone else hear that?", drill: "Fire drill! Everybody out!" }[kind]
