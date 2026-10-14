@@ -176,4 +176,48 @@ defmodule Server.SoulTest do
       assert String.length(Soul.voice("loud")) <= 400
     end
   end
+
+  describe "diary/1 and append_diary/2" do
+    @soul "## Wants\nA quiet desk.\n\n## Quirks\nSays \"per procedure\".\n\n## Diary\n"
+
+    setup %{dir: dir} do
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, "daneri.md"), @soul)
+      :ok
+    end
+
+    test "an appended entry shows in diary/1 and no other section changes", %{dir: dir} do
+      assert Soul.diary("daneri") == []
+      assert :ok = Soul.append_diary("daneri", ["- 2026-10-14: shipped the stanza."])
+      assert Soul.diary("daneri") == ["- 2026-10-14: shipped the stanza."]
+      assert File.read!(Path.join(dir, "daneri.md")) == @soul <> "- 2026-10-14: shipped the stanza.\n"
+    end
+
+    test "a second append lands below the first" do
+      :ok = Soul.append_diary("daneri", ["- 2026-10-07: one."])
+      :ok = Soul.append_diary("daneri", ["- 2026-10-14: two.", "- 2026-10-14: three."])
+      assert Soul.diary("daneri") == ["- 2026-10-07: one.", "- 2026-10-14: two.", "- 2026-10-14: three."]
+    end
+
+    test "a soul with no Diary heading gets one", %{dir: dir} do
+      File.write!(Path.join(dir, "atlas.md"), "## Wants\nmap\n")
+      assert :ok = Soul.append_diary("atlas", ["- 2026-10-14: drew."])
+      assert Soul.diary("atlas") == ["- 2026-10-14: drew."]
+      assert Soul.read("atlas")["Wants"] == "map"
+    end
+
+    test "a section after Diary is kept after the entries", %{dir: dir} do
+      File.write!(Path.join(dir, "atlas.md"), "## Diary\n- 2026-10-07: old.\n\n## Postscript\nbye\n")
+      assert :ok = Soul.append_diary("atlas", ["- 2026-10-14: new."])
+      assert Soul.diary("atlas") == ["- 2026-10-07: old.", "- 2026-10-14: new."]
+      assert Soul.read("atlas")["Postscript"] == "bye"
+    end
+
+    test "no soul or a bad name is an error, and no file is created", %{dir: dir} do
+      assert {:error, :no_soul} = Soul.append_diary("nobody", ["- x"])
+      assert {:error, :bad_name} = Soul.append_diary("../x", ["- x"])
+      refute File.exists?(Path.join(dir, "nobody.md"))
+      assert Soul.diary("nobody") == []
+    end
+  end
 end

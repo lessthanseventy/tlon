@@ -2,7 +2,7 @@ defmodule Server.Soul do
   @moduledoc """
   A seat's first-draft SOUL.md (souls design §1, §5–6 step 2): written once to
   `<souls dir>/<name>.md`, the file the office TUI polls (`office/kit/souls.ts`). The draft never
-  replaces a file that exists — the operator edits these — and never writes diary (step 5's).
+  replaces a file that exists — the operator edits these — and writes diary only through `append_diary/2`.
   A soul shapes talk and room, never a work decision.
   """
   alias Server.Workspaces
@@ -129,6 +129,51 @@ defmodule Server.Soul do
       end)
 
     Map.new(acc, fn {h, lines} -> {h, lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()} end)
+  end
+
+  @doc "The Diary entries as lines, oldest first; `[]` when the seat has no soul or an empty Diary."
+  @spec diary(String.t()) :: [String.t()]
+  def diary(name) do
+    case read(name) do
+      %{"Diary" => text} -> text |> String.split("\n") |> Enum.reject(&(String.trim(&1) == ""))
+      _ -> []
+    end
+  end
+
+  @doc """
+  Append entry lines to the end of the Diary section, adding the heading when the soul has none.
+  Every other byte of the file is kept, including sections after Diary. Never creates a soul.
+  """
+  @spec append_diary(String.t(), [String.t()]) :: :ok | {:error, :no_soul | :bad_name | File.posix()}
+  def append_diary(name, entries) do
+    with :ok <- check_name(name),
+         path = Path.join(dir(), name <> ".md"),
+         {:ok, raw} <- read_soul(path) do
+      lines = raw |> String.trim_trailing("\n") |> String.split("\n")
+      File.write(path, Enum.join(insert_diary(lines, entries), "\n") <> "\n")
+    end
+  end
+
+  defp read_soul(path) do
+    case File.read(path) do
+      {:error, :enoent} -> {:error, :no_soul}
+      other -> other
+    end
+  end
+
+  defp insert_diary(lines, entries) do
+    case Enum.find_index(lines, &(&1 =~ ~r/^##\s+Diary\s*$/)) do
+      nil ->
+        lines ++ ["", "## Diary" | entries]
+
+      at ->
+        rest = Enum.drop(lines, at + 1)
+        len = Enum.find_index(rest, &(&1 =~ ~r/^##\s/)) || length(rest)
+        {section, after_section} = Enum.split(rest, len)
+        kept = section |> Enum.reverse() |> Enum.drop_while(&(String.trim(&1) == "")) |> Enum.reverse()
+        blanks = Enum.drop(section, length(kept))
+        Enum.take(lines, at + 1) ++ kept ++ entries ++ blanks ++ after_section
+    end
   end
 
   @voice_cap 400
