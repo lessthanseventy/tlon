@@ -160,6 +160,11 @@ describe("the meteor", () => {
     run(r, a, 400)
     expect(r.props()).toEqual([])
   }))
+  test("the puff and crater land where the streak ends: in the window pane, the street seen through it", () => {
+    // the wide room has no street in view; the one outside is the view through the window (ticket #348)
+    expect(propsAt("meteor", 150, geo)).toEqual([{ kind: "puff", x: geo.windowX + 8, y: 35 }])
+    expect(propsAt("meteor", 300, geo)).toEqual([{ kind: "crater", x: geo.windowX + 8, y: 35 }])
+  })
   test("the flicker lights and unlights the lamps in turn", () => {
     const seen = new Set<boolean | null>()
     for (let t = 60; t < 140; t++) seen.add(flickerAt("meteor", t))
