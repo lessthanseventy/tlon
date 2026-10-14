@@ -11,7 +11,8 @@ import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
 import { personaLines } from "../kit/persona"
 import { FLOOR, Looks, marginInk, type Note } from "../kit/margin"
-import { seatLine } from "../kit/seat-voices"
+import { reactLine, seatLine } from "../kit/seat-voices"
+import type { EventKind } from "../kit/events"
 import { load as loadWhim, save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
 import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
@@ -276,6 +277,13 @@ let needs: data.Need[] = []
 let ledger: Ledger = newLedger()
 /** the last banter line each seat said, so the canned fallback doesn't repeat itself */
 const recentBanter = new Map<string, string[]>()
+/** a seat's line for a scripted event, kept out of what it said lately */
+const reactFor = (who: string, kind: EventKind): string => {
+  const recent = recentBanter.get(who) ?? []
+  const line = reactLine(who, kind, recent)
+  recentBanter.set(who, [line, ...recent].slice(0, 8))
+  return line
+}
 /** the office revision this TUI started on: when main's moves past it, R reloads */
 let officeRev: string | null | undefined
 /** the suggestion box: corkboard ideas the banter wrote in a coworker's voice (never a request), for you to file or throw out */
@@ -337,7 +345,7 @@ const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
   return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])), checking: checkingId(), checkWaiting: checkWaitingIds(), merging: all.health?.merge_queue ?? [] }
 }
-const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow) } return r }
+const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow); r.reactLine = reactFor } return r }
 /** the dial moved: remember it and hand every room the resolved dials */
 function setWhim(s: WhimState) {
   whim = s
