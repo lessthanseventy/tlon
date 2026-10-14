@@ -45,7 +45,7 @@ import { ticketPicks } from "./finder"
 import { applyBuild, loadHome } from "./home"
 import { inSandbox, loadPets, PETS_PATH, savePets } from "./pets"
 import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } from "./paint"
-import { Reader, type ReaderDeps } from "./reader"
+import { READER_KEYS, Reader, type ReaderDeps } from "./reader"
 import { timelineRows } from "./timeline"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
 import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
@@ -66,6 +66,7 @@ type Mode =
   | { kind: "build" } | { kind: "settings" } | { kind: "review"; tid: number }
   | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" }
+  | { kind: "help"; from: Mode; title: string; keys: Hint[] }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
 type Row = { segs: Seg[]; open?: () => void; ref?: unknown }
 /** a choice an input cycles through with tab (the project a thread goes in, a template, …) */
@@ -1682,6 +1683,15 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ],
       }
     }
+    case "help": {
+      const m = mode
+      const sect = (name: string, hs: Hint[]): Row[] => hs.length ? [{ segs: [key(name)] }, ...hs.map((h) => ({ segs: [plain("  "), { s: h.key.padEnd(10), fg: ROLE.key, bold: true }, plain(h.label)] }))] : []
+      return {
+        title: `HELP · ${m.title}`,
+        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play keys (they win over a card's)", PLAY) : [])],
+        actions: [{ key: "esc", label: `back to ${m.title.toLowerCase()}`, run: () => { mode = m.from; sel = 0; scroll = 0; snapSel = true; draw() } }],
+      }
+    }
     case "look-editor": {
       const { name, view } = mode
       if (!editBuf) { editBuf = { front: blankBuf(), side: blankBuf(), back: blankBuf() } }
@@ -1799,7 +1809,7 @@ const keyName = (k: string) => ({ space: "␣", enter: "⏎", right: "→", left
 /** the actions take j/k and enter when the card's rows have nothing to open */
 const actionsFocused = () => !rows.some((r) => r.open)
 /** the keys that work everywhere a card's own actions don't claim them */
-const GLOBALS: Hint[] = [{ key: "/", label: "find" }, { key: "'", label: "talk to the office" }, { key: "i", label: "inbox" }, { key: "tab", label: "crew" }, { key: "[ ]", label: "workspace" }, { key: "esc", label: "back" }, { key: "q", label: "quit" }]
+const GLOBALS: Hint[] = [{ key: "/", label: "find" }, { key: "'", label: "talk to the office" }, { key: "i", label: "inbox" }, { key: "tab", label: "crew" }, { key: "[ ]", label: "workspace" }, { key: "?", label: "help" }, { key: "esc", label: "back" }, { key: "q", label: "quit" }]
 /** a window's line `i`, as a row index, an "↑ N more" (-1) or "↓ N more" (-2), or nothing */
 function lineOf(w: Window, i: number): number | undefined {
   if (w.above && i === 0) return -1
@@ -1962,6 +1972,13 @@ function editorKey(k: string) {
   if (LEGEND_CHARS.includes(k)) return paintAt(k)
 }
 
+/** the help card over the card you are on: its keys, the globals, the reader's and, in the sandbox, the play keys */
+function help() {
+  if (mode.kind === "help") return
+  const d = detail()
+  open({ kind: "help", from: mode, title: d.title, keys: (world ? playable(d.actions) : d.actions).map((x) => ({ key: keyName(x.key), label: x.label })) })
+}
+
 // the last keys pressed, for the Konami code
 let keyLog: string[] = []
 
@@ -2052,6 +2069,7 @@ function onKey(k: string) {
       if (mode.kind === "home" && lit !== null && !reader) return act({ kind: "thread", tid: lit })
       return onActions ? acts[asel]?.run() : rows[sel]?.open?.()
     case "/": case "ctrl-k": return void finder()
+    case "?": return help()
     case "i": return inbox()
     case "R": if (updated()) void relaunch(); return
     case "'": return talk(null)

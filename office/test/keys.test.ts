@@ -42,3 +42,12 @@ test("in the sandbox no card shows a key the play keys shadow, and the pane draw
 test("no play key is a global", () => {
   expect(PLAY.filter((p) => globals.some((g) => g.key === p.key))).toEqual([])
 })
+
+test("? is the help key everywhere: a global, and the help card lists the reader's keys it handles", async () => {
+  expect(globals.find((g) => g.key === "?")?.label).toBe("help")
+  expect(cards.map((c) => c.kind)).toContain("help")
+  const { READER_KEYS } = await import("../tui/reader")
+  const reader = await Bun.file(new URL("../tui/reader.ts", import.meta.url)).text()
+  const body = reader.slice(reader.indexOf("  key(k: string"), reader.indexOf("  paste("))
+  for (const h of READER_KEYS) for (const k of h.key.split(" ")) expect(body).toContain(`case "${k}"`)
+})
