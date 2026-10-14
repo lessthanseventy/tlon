@@ -1183,7 +1183,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (s && !rows.length) rows.push({ segs: [dim("nothing due, no open quests")] })
       return {
         title: s ? `LIFE · lv ${s.level} · ${s.xp} xp` : "LIFE", rows,
-        actions: [{ key: "r", label: "new routine", run: newRoutine }, { key: "q", label: "new quest", run: newQuest }, back1],
+        actions: [{ key: "r", label: "new routine", run: newRoutine }, { key: "Q", label: "new quest", run: newQuest }, back1],
       }
     }
     case "runs": {
