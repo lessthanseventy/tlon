@@ -104,7 +104,7 @@ linked window at a time, Ctrl-] back to the room).
   route first, never a query in the client. That is what lets a compiled TUI run with no checkout.
 - **A down channel is stale and honest, never empty.** `data.status()` returns the last good snapshot
   marked `ok: false` with `heldAt`; `data.needs()` keeps the last inbox on anything but a 200. Every surface draws
-  the held data and the header says its age and `mise run server:restart` (`tui/down.ts`). One refresh
+  the held data and the header says its age and `mise run server:restart` (`tui/down.ts`). A write while the last status was down is refused up front with that note, never sent to wait out the timeout. One refresh
   runs at a time, with at most one queued behind it (`tui/flight.ts`): a write's follow-up refresh reads what it wrote.
 - **Every worn part is data in `kit/parts.ts`** — a new hat is a `PARTS` entry whose test is the data gate, never a branch in `figure()`; `lookOf` must not gain fields (it would restyle everyone).
 

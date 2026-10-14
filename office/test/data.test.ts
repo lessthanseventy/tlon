@@ -5,10 +5,12 @@ const lifeBody = { xp: 650, level: 2, next_level_at: 900, streaks: { "1": 3 }, d
 let resolved: unknown = null
 let answered: unknown = null
 let handed = false
+let posted = 0, officeDown = false
 const server = Bun.serve({
   port: 0,
   fetch: (req) => {
     const path = new URL(req.url).pathname
+    if (path.endsWith("/office") && officeDown) return new Response("down", { status: 503 })
     if (path.endsWith("/office")) return Response.json({ roster: [], threads: [{ id: 2, title: "lobby", standing: true, workspace_id: 1 }, { id: 3, title: "lobby notes", standing: false, workspace_id: 1 }], revs: { office: "abc123" }, release: { sha: "0f00bar", cut_at: "2026-10-12T20:00:00Z" }, flags: { build_mode: true }, life: { "7": { level: 2, xp: 650, due: [] } }, pause: "pencils_down" })
     if (req.method === "GET" && path.endsWith("/life/7")) return Response.json(lifeBody)
     if (req.method === "GET" && path.endsWith("/office/margin/1")) return Response.json([{ id: 1, author: "uqbar", body: "cut 650fa4a", at: 5 }])
@@ -18,6 +20,7 @@ const server = Bun.serve({
     if (req.method === "POST" && path.endsWith("/office/prompts/9")) return req.json().then((b) => { answered = b; return Response.json({ ok: true, message_id: 10 }) })
     if (req.method === "POST" && path.endsWith("/office/prompts/9/uqbar")) { handed = true; return Response.json({ handed: 9 }) }
     if (req.method === "POST" && path.endsWith("/issues/31/resolve")) return req.json().then((b) => { resolved = b; return Response.json({ resolved: 31 }) })
+    if (req.method === "POST" && path.endsWith("/threads/77/messages")) { posted++; return Response.json({ id: 1 }, { status: 201 }) }
     if (req.method === "POST" && path.endsWith("/threads/44/rebase")) return Response.json({ rebased: 44 }, { status: 202 })
     if (req.method === "POST" && path.endsWith("/threads/44/reland")) return Response.json({ relanded: 44 }, { status: 202 })
     return new Response("no", { status: 404 })
@@ -105,4 +108,19 @@ test("an ask handed to Uqbar goes by its own id to the delegate's route", async 
   const data = await import("../tui/data")
   expect(await data.handToUqbar(9)).toBe("handed to Uqbar")
   expect(handed).toBe(true)
+})
+
+test("a write while the last status was down is refused up front, not sent to time out", async () => {
+  const data = await import("../tui/data")
+  const url = `http://127.0.0.1:${server.port}/api`
+  process.env.TLON_URL = url
+  expect((await data.status()).ok).toBe(true)
+  officeDown = true
+  expect((await data.status()).ok).toBe(false)
+  expect(await data.post(77, "hello")).toBe(`reply to #77 not sent: channel down (${url}) · mise run server:restart`)
+  expect(posted).toBe(0)
+  officeDown = false
+  expect((await data.status()).ok).toBe(true)
+  expect(await data.post(77, "hello")).toBe("sent to #77")
+  expect(posted).toBe(1)
 })

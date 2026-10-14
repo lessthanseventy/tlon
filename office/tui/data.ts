@@ -12,7 +12,7 @@ const base = () => (process.env.TLON_URL ?? "http://127.0.0.1:4040").replace(/\/
 let fake: Toy | null = null
 /** the sandbox's world instead of the server (`office --sandbox`) */
 /** a new source: what was held belongs to the old one */
-export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds = [] }
+export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds = []; down = null }
 
 async function call(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
   if (fake) {
@@ -30,6 +30,8 @@ async function call(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, b
 
 /** the last snapshot that answered, and when: a down channel returns it marked down, never an empty office */
 let lastGood: { a: Agents; at: number } | null = null
+/** the last status's down note, for the server it asked: a write there refuses up front rather than wait out the timeout */
+let down: { url: string; note: string } | null = null
 export async function status(): Promise<Agents> {
   try {
     const { status, json: j } = await call("GET", "/office")
@@ -39,9 +41,11 @@ export async function status(): Promise<Agents> {
       bench: j.bench ?? [], projects: j.projects ?? [], tickets: j.tickets ?? [], workspaces: j.workspaces ?? [], shifts: j.shifts ?? [], archetypes: j.archetypes ?? [], models: j.models ?? [], notes: j.notes ?? [], visits: j.visits ?? [], triage: j.triage ?? {}, health: j.health ?? null, calendar: j.calendar ?? {}, revs: j.revs, release: j.release, usage: j.usage, pause: j.pause, flags: j.flags ?? {}, life: j.life ?? {},
     }
     lastGood = { a, at: Date.now() }
+    down = null
     return a
   } catch {
     const note = `channel down (${base()})`
+    down = { url: base(), note }
     return lastGood ? { ...lastGood.a, ok: false, note, heldAt: lastGood.at } : { ...EMPTY, note }
   }
 }
@@ -159,6 +163,7 @@ export async function thread(id: number): Promise<ThreadView | null> {
 /** a write: a line for the status bar saying what happened, or why it didn't */
 const write = (what: string, path: string, body: unknown, ok: (j: any) => string) => send("POST", what, path, ok, body)
 async function send(method: "POST" | "PATCH" | "DELETE", what: string, path: string, ok: (j: any) => string, body: unknown = {}): Promise<string> {
+  if (down?.url === base()) return `${what} not sent: ${down.note} · mise run server:restart`
   try {
     const r = await call(method, path, body)
     return r.status < 300 ? ok(r.json) : `${what} failed: ${r.json?.error ?? r.status}`
