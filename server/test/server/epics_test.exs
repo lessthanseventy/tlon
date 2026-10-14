@@ -276,7 +276,9 @@ defmodule Server.EpicsTest do
       src = File.read!(@cli)
       assert src =~ ~r/^  epic-new\)/m
       assert src =~ ~r/^  epic-add\)/m
-      assert src =~ "|epic-new|epic-add|"
+      {usage, 2} = System.cmd("bash", [@cli], stderr_to_stdout: true)
+      assert usage =~ ~r/^   epic-new </m
+      assert usage =~ ~r/^   epic-add </m
     end
 
     test "what epic-new calls files an epic; what epic-add calls refuses a second parent", %{ws: ws} do
