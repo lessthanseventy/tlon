@@ -32,7 +32,8 @@ and every layer the spine design's re-laid §9 asked for
   finish its turn, commit and stop, as a notice; the calendar's agent and workline schedules wait,
   firing once back at work, but for the operator's delegate's, `Server.Outside`), lights out (that, plus the verify and landing
   queues paused — a boot under it starts them paused — and an Escape into every coworker pane),
-  back to work. `POST /api/office/pause`, `tlon-cli pause`, the office's finder.
+  back to work (every still-open thread pencils down stopped woken: a chat @mentioning its lead as it
+  is now). `POST /api/office/pause`, `tlon-cli pause`, the office's finder.
 - **agent + session + staffing** (`Server.Staff`) — the durable named identity and its ephemeral
   instance; warmth is measured from `last_active_at`, never a heartbeat.
 - **the two "gone quiet" clocks** — they mean different things; never read a third number for either.

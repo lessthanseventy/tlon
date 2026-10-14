@@ -116,6 +116,71 @@ defmodule Server.PauseTest do
              [default: 5, verify: [limit: 1, paused: true], landing: [limit: 1, paused: true]]
   end
 
+  defp tlon_chats(thread),
+    do: thread |> Channel.thread_messages() |> Enum.filter(&(&1.author == "tlon" and &1.kind == "chat"))
+
+  defp live_thread(ws, title, agent, pane) do
+    {:ok, thread} = Channel.open_thread(%{title: title, workspace_id: ws.id})
+    {:ok, thread} = Server.Staff.assign(thread, agent)
+    {:ok, _} = Server.Staff.start_session(%{thread_id: thread.id, agent_id: agent.id, pane_ref: pane})
+    thread
+  end
+
+  test "back to work wakes each thread pencils down stopped, by its lead as it is now, and skips a closed one",
+       %{ws: ws, lobby: lobby, quiet: quiet} do
+    emma = Server.Staff.agent_by_name("emma")
+    {:ok, daneri} = Server.Staff.register_agent(%{name: "daneri", mandate: "builder", engine: "local"})
+    stopped = live_thread(ws, "stopped", emma, "%1")
+    done = live_thread(ws, "done since", emma, "%2")
+    handed = live_thread(ws, "handed over", emma, "%3")
+
+    {:ok, _} = Pause.pencils_down()
+    Server.Repo.update_all(from(t in Server.Thread, where: t.id == ^done.id), set: [state: "closed"])
+    {:ok, _} = Server.Staff.assign(handed, daneri)
+    {:ok, :working} = Pause.back_to_work()
+
+    assert [%Message{body: "@emma ▶ back to work" <> _}] = tlon_chats(stopped)
+    assert [%Message{body: "@daneri ▶ back to work" <> _}] = tlon_chats(handed)
+    assert tlon_chats(done) == []
+    assert tlon_chats(quiet) == []
+    assert Enum.any?(bodies(lobby), &(&1 =~ "▶ back to work: intake"))
+
+    Server.Repo.update_all(from(s in Server.Session, where: s.thread_id == ^stopped.id),
+      set: [ended_at: DateTime.utc_now()]
+    )
+
+    {:ok, _} = Pause.pencils_down()
+    {:ok, :working} = Pause.back_to_work()
+
+    assert length(tlon_chats(stopped)) == 1
+    assert length(tlon_chats(handed)) == 2
+  end
+
+  test "the back-to-work post wakes the lead: a lead with no session gets a pane spawned", %{ws: ws} do
+    Application.put_env(:server, :arbiter, Server.Arbiter.Test)
+    Application.put_env(:server, :test_pid, self())
+
+    on_exit(fn ->
+      Application.delete_env(:server, :arbiter)
+      Application.delete_env(:server, :test_pid)
+    end)
+
+    emma = Server.Staff.agent_by_name("emma")
+    {:ok, daneri} = Server.Staff.register_agent(%{name: "daneri", mandate: "builder", engine: "local"})
+    handed = live_thread(ws, "handed over", emma, "%3")
+
+    {:ok, _} = Pause.pencils_down()
+    {:ok, _} = Server.Staff.assign(handed, daneri)
+    {:ok, :working} = Pause.back_to_work()
+
+    [wake] = tlon_chats(handed)
+    assert {:pending, _} = Server.Switchboard.deliver(wake)
+    assert_received {:spawned, exports}
+    assert exports =~ ~s(TLON_AUTHOR="daneri")
+    assert exports =~ ~s(TLON_THREAD="#{handed.id}")
+    assert_receive {:woke, nil, "New message on thread " <> _}, 1_000
+  end
+
   test "back to work clears the state and tells the lobby; already working, it says nothing", %{lobby: lobby} do
     {:ok, _} = Pause.lights_out()
     assert {:ok, :working} = Pause.back_to_work()
