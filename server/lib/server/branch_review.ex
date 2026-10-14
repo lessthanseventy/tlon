@@ -39,7 +39,7 @@ defmodule Server.BranchReview do
     end
   end
 
-  @doc "The newest verdict on `branch`: `%{verdict, sha, by, body, at}`, or nil when it has none."
+  @doc "The newest verdict on `branch`: `%{verdict, sha, by, body, at, thread_id}`, or nil when it has none."
   def latest(branch) do
     from(e in Server.Event,
       where: e.correlation == ^correlation(branch) and e.kind in ["check_passed", "check_failed"],
@@ -51,8 +51,8 @@ defmodule Server.BranchReview do
       nil ->
         nil
 
-      %{detail: d, created_at: at} ->
-        %{verdict: d["verdict"], sha: d["sha"], by: d["by"], body: d["body"], at: at}
+      %{detail: d, created_at: at, thread_id: thread_id} ->
+        %{verdict: d["verdict"], sha: d["sha"], by: d["by"], body: d["body"], at: at, thread_id: thread_id}
     end
   end
 

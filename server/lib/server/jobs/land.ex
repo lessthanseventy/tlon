@@ -1,6 +1,7 @@
 defmodule Server.Jobs.Land do
   @moduledoc """
-  The merge queue: an approved workline's landing, one at a time (queue `landing`, concurrency 1).
+  The merge queue: an approved workline's landing, or a reviewed PR's (`Server.PRLanding`, args
+  `%{"pr", "branch", "on_thread"}`), one at a time (queue `landing`, concurrency 1).
   `Server.Workline.land_queued/2` rebases `work/<slug>` onto origin's main and gates it there — so
   what lands is what was checked, on the main it lands on, never a verify against a main that has
   moved since. The gate is the full check (`scripts/workline-verify.sh` with
@@ -9,11 +10,18 @@ defmodule Server.Jobs.Land do
   use Oban.Worker,
     queue: :landing,
     max_attempts: 3,
-    unique: [period: :infinity, keys: [:thread_id], states: [:available, :scheduled, :executing]]
+    unique: [period: :infinity, keys: [:thread_id, :branch], states: [:available, :scheduled, :executing]]
 
   import Ecto.Query
 
   @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"pr" => _} = args, attempt: attempt, max_attempts: max}) do
+    case Server.PRLanding.land(args, last: attempt >= max) do
+      {:error, {:interrupted, why}} when attempt < max -> {:error, why}
+      _ -> :ok
+    end
+  end
+
   def perform(%Oban.Job{args: %{"thread_id" => tid}, attempt: attempt, max_attempts: max}) do
     # the lock only orders this read against a send-back (which moves the row under it): one in
     # flight is seen; it doesn't guard the landing, which send-back refuses once this job exists
@@ -59,6 +67,22 @@ defmodule Server.Jobs.Land do
       {:error, why} ->
         {:error, "there is no checkout of it to gate (#{inspect(why)})."}
     end
+  end
+
+  @doc """
+  A PR's landing gate: the same full check, by the same script in its branch mode (`LAND_REF`, the
+  rebased ref; no thread, so no evidence recorded), named on the checks rack as the PR.
+  """
+  def gate_pr(pr, branch, repo, ref) do
+    script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
+    slug = "pr-#{pr}-" <> String.replace(branch, ~r/[^A-Za-z0-9-]/, "-")
+
+    "bash"
+    |> System.cmd([script, "-", slug, repo],
+      env: [{"WORKLINE_GATE", "1"}, {"LAND_REF", ref}, {"CHECKS_LABEL", "PR ##{pr} landing #{branch}"}],
+      stderr_to_stdout: true
+    )
+    |> gate_result()
   end
 
   @doc """

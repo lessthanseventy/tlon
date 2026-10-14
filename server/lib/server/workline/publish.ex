@@ -10,7 +10,7 @@ defmodule Server.Workline.Publish do
   """
 
   @doc """
-  Publish `work/<slug>` from `repo`. `opts[:gated]`, the sha the landing's gate passed on, is posted
+  Publish `work/<slug>` from `repo`. `landing[:gated]`, the sha the landing's gate passed on, is posted
   as the commit status `tlon/check` = success before auto-merge is armed; with none, no status is
   posted (it vouches only for a commit it gated). `{:ok, pr_url}` | `{:auto_refused, pr_url, why}`
   (the PR is open but GitHub refused to auto-merge it) | `:none` | `{:error, why}`.
@@ -29,7 +29,7 @@ defmodule Server.Workline.Publish do
               opts
             )} do
       url = out |> String.split("\n", trim: true) |> List.last() |> String.trim()
-      if sha = landing[:gated], do: post_check(sha, opts, run)
+      if sha = landing[:gated], do: post_check(repo, sha, run)
 
       case run.("gh", ["pr", "merge", url, "--rebase", "--auto", "--delete-branch"], opts) do
         {_, 0} -> {:ok, url}
@@ -253,8 +253,12 @@ defmodule Server.Workline.Publish do
     |> Enum.find("", &(&1 != "" and pick.(&1)))
   end
 
-  # a status gh can't post leaves the PR waiting on its check, which KeepUp reads as `pr_blocked`
-  defp post_check(sha, opts, run) do
+  @doc """
+  Post the commit status `tlon/check` = success on `sha` in `repo`'s GitHub repo: the required check
+  on main, posted only for a commit a landing's gate passed on. A status gh can't post leaves the PR
+  waiting on its check. gh's `{out, exit}`.
+  """
+  def post_check(repo, sha, run \\ &System.cmd/3) do
     run.(
       "gh",
       [
@@ -267,7 +271,8 @@ defmodule Server.Workline.Publish do
         "-f",
         "description=the landing's gate (mise run check)"
       ],
-      opts
+      cd: repo,
+      stderr_to_stdout: true
     )
   end
 end

@@ -15,13 +15,14 @@ defmodule Server.Workline.Merge do
 
   @doc """
   Ready `work/<slug>` in `repo` to land: fetch origin, rebase the branch onto `origin/main`, gate it.
+  `opts[:branch]` names another local branch to land in its place (a PR's, `Server.PRLanding`).
   `opts[:gate]`, a `fn repo, branch -> {:ok, _} | {:error, why} end`, runs on the rebased branch —
   red, the branch keeps its rebase. `opts[:rehash]`, a `fn tree -> {:ok, _} | {:error, why} end`,
   rewrites the golden frames in the rebased checkout (default: `bun test/golden.ts` in its office).
   """
   @spec merge(String.t(), String.t(), keyword()) :: {:ok, %{from: String.t(), to: String.t()}} | {:error, String.t()}
   def merge(repo, slug, opts \\ []) do
-    branch = "work/#{slug}"
+    branch = Keyword.get(opts, :branch, "work/#{slug}")
     gate = Keyword.get(opts, :gate, fn _repo, _branch -> {:ok, :no_gate} end)
     rehash = Keyword.get(opts, :rehash, &bun_rehash/1)
 
