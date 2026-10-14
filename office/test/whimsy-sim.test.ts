@@ -57,6 +57,15 @@ describe("the dials gate the room", () => {
     expect((r as any).cat.said).toBe(said)
     expect((r as any).cat.mode).toBe("sleep")
   })
+  test("the keyed event key plays nothing at all when every event is switched off", () => {
+    const { r, a } = play({ ...DEFAULT, preset: "business" }, 600)
+    r.play("event")
+    r.step(a)
+    expect(r.eventNow()).toBeNull()
+    const emotes = [...(r as any).actors.values()].filter((x: any) => x.emote === "!" && x.emoteUntil > (r as any).tick).length
+    expect(emotes).toBe(0)
+    expect((r as any).talk.size).toBe(0)
+  })
   test("pickEvent draws from the enabled set only", () => {
     for (const roll of [0, 0.5, 0.99]) expect(pickEvent(roll, null, ["duck", "zoo"])).toMatch(/duck|zoo/)
     expect(pickEvent(0.5, "duck", ["duck"])).toBe("duck")
