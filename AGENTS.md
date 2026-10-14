@@ -60,8 +60,9 @@ another model on the same provider.
 | `mise run claude:fast`     | deepseek-v4.1-flash, effort low | Quick/cheap throwaway, fast tier — the efficient-MoE model that drains the plan slowest. |
 | `mise run claude:local`    | qwen3-coder (local daemon) | Free/offline grunt, tight iteration loops — zero cloud budget. |
 | `mise run server:claude`   | the Claude plan's default | When it has to be Claude. |
+| `mise run claude:operator` | the Claude plan's default | Your own session as the operator: the tlon-citizen mod's operator band (what waits on you, the release, your streak) and each coworker's ask put to you. No thread, no citizen identity. |
 
-Every launcher also makes the session a **server citizen**: it opens a fresh server thread (or JOINs one
+Every launcher but `claude:operator` also makes the session a **server citizen**: it opens a fresh server thread (or JOINs one
 with a trailing id — `mise run claude:code -- 42`) and hands the session its identity, so it shows up in
 `server:roster` and briefs from the thread. If the server channel is down, Claude Code still launches —
 just not as a citizen.
