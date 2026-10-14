@@ -12,6 +12,10 @@ where the harness reports none.
 
 | date | role | model | effort | harness | commit | suite | canary | full | rubric | wall | tokens in/out | cost |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-14 | reviewer | ollama-cloud/glm-5.2 | medium | claude_code | 4218ad7 | canary | 2/2 | – | – | 22.9s | 9606/1314 | – |
+| 2026-10-14 | reviewer | ollama-cloud/deepseek-v4-pro | medium | claude_code | 4218ad7 | canary | 2/2 | – | – | 23.9s | 33574/2641 | – |
+| 2026-10-14 | reviewer | ollama-cloud/glm-5.2 | high | claude_code | 4218ad7 | canary | 2/2 | – | – | 25.3s | 9606/1665 | – |
+| 2026-10-14 | reviewer | ollama-cloud/deepseek-v4-pro | high | claude_code | 4218ad7 | canary | 2/2 | – | – | 56.7s | 81796/9025 | – |
 | 2026-10-09 | builder-senior | anthropic/claude-sonnet-5-5 | medium | claude_code | 70df21c | full | – | 6/6 | – | 3366.8s | 2478493/38431 | $1.627 |
 | 2026-10-09 | builder-senior | anthropic/claude-sonnet-5-5 | medium | claude_code | 16d6626 | full | – | 3/6 | – | 1804.4s | 0/0 | – |
 | 2026-10-09 | librarian | ollama-cloud/deepseek-v4.1-flash | medium | pi | 1a56791 | canary | 2/2 | – | – | 9.0s | 5637/294 | – |
