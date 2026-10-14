@@ -220,6 +220,9 @@ const LEGEND_CHARS = ["h", "f", "k", "s", "p", "b", "y", "c", "g", "e", "w", "r"
 const blankBuf = () => Array.from({ length: 22 }, () => ".".repeat(12))
 let picker: { title: string; q: Editor; items: Pick[]; sel: number } | null = null
 let reader: Reader | null = null
+/** a thread card's reply box: focused, it takes the keys; unfocused, the card's actions do */
+let cardReply: { tid: number; ed: Editor; focused: boolean } | null = null
+const cardBox = () => (!reader && mode.kind === "thread" && cardReply?.tid === mode.tid ? cardReply : null)
 let cell: { w: number; h: number } | null = null, kitty = process.env.OFFICE_GRAPHICS === "kitty"
 let g: Geometry, frame: Frame | null = null, sentImage = false, rows: Row[] = []
 /** the floor's visible window: centred on the office zone while `follow`, fixed where a manual pan left it otherwise */
@@ -527,7 +530,7 @@ function openThread(): number | null {
 }
 function open(m: Mode) {
   mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
-  if (m.kind === "thread") picked = m.tid
+  if (m.kind === "thread") { picked = m.tid; cardReply = cardReply?.tid === m.tid ? { ...cardReply, focused: true } : { tid: m.tid, ed: new Editor(), focused: true } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
   if (m.kind === "look") lookDraft = { ...lookOf(m.name), ...overrideFor(m.name) }
@@ -602,7 +605,25 @@ function talk(to: string | null) {
   // every thread, not the workspace's view: uqbar's study may live on another workspace
   ask(to ? `say to ${to}` : "say to the office", (s) => { void did(say(all.threads, w, to, s)) }, { multiline: true })
 }
-function reply(tid: number) { openReader(tid, true) }
+function reply(tid: number) {
+  const box = cardBox()
+  if (box?.tid === tid) { box.focused = true; return draw() }
+  openReader(tid)
+}
+/** a key while a thread card's reply box has focus: Enter sends, Esc leaves the box (the card stays) */
+function boxKey(box: NonNullable<typeof cardReply>, k: string) {
+  if (k === "esc") { box.focused = false; return draw() }
+  if (k === "enter") {
+    if (box.ed.empty) return
+    const body = box.ed.text
+    box.ed = new Editor(); scroll = Infinity
+    void did(data.post(box.tid, body))
+    return draw()
+  }
+  if (k === "pgup" || k === "pgdn") return page(k === "pgdn" ? 1 : -1)
+  box.ed.key(k)
+  draw()
+}
 function hire() {
   if (ws === null) return
   const w = ws, kinds = all.archetypes.map((x) => ({ label: `${x.name}${x.meta ? " (manager)" : x.read_only ? " (read-only)" : ""}`, value: x.name }))
@@ -617,7 +638,7 @@ const tidSeg = (id: number): Seg => ({ s: `#${id} `, fg: ROLE.key })
 function goThread(id: number, wsId: number | null | undefined) {
   if (wsId != null && wsId !== ws) { choose(wsId); frame = null }
   picker = null
-  openReader(id, false)
+  openReader(id)
 }
 async function finder() {
   const picks: Pick[] = []
@@ -663,7 +684,7 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "pr_blocked" && tid ? [
       { key: "b", label: "rebase it (GitHub, auto-merge armed)", run: () => void did(data.rebaseLanding(tid)).then(after) },
       { key: "L", label: "close and reland (back to build)", run: () => void did(data.relandLanding(tid)).then(after) },
-      { key: "v", label: `show me: the thread${n.url ? ` (${n.url})` : ""}`, run: () => openReader(tid, false) },
+      { key: "v", label: `show me: the thread${n.url ? ` (${n.url})` : ""}`, run: () => openReader(tid) },
     ] : []),
     ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
     ...(n.kind === "stranded" ? [{ key: "X", label: "take the checkout down (branch kept)", run: () => void did(data.retireStranded(n.key)).then(after) }] : []),
@@ -678,7 +699,7 @@ function needActions(n: data.Need): Action[] {
       { key: "d", label: "wait for the reset (put away until it clears)", run: () => void did(data.dismissNeed(n.key)).then(after) },
     ] : []),
     ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ key: "d", label: "put away", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
-    ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid, false) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
+    ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
   ]
   return acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i)
 }
@@ -727,9 +748,9 @@ const VERBS: [string, () => void][] = [
 ]
 
 // ── the reader: a thread full-screen ────────────────────────────────────────────────────────────
-function openReader(tid: number, compose: boolean, extra: Partial<ReaderDeps> = {}) {
+function openReader(tid: number, extra: Partial<ReaderDeps> = {}) {
   picked = tid
-  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, compose)
+  reader = new Reader(tid, { load: (before) => (before ? data.page(tid, before) : data.thread(tid)), send: (body) => data.post(tid, body), operator: OPERATOR, redraw: () => draw(), dogeared: (m) => earmarked.has(earmarkOf(tid, m.at, m.author)), ...extra }, true)
   const v = threads.get(tid)
   if (v) reader.take(v)
   void reader.reload().then(draw)
@@ -740,7 +761,7 @@ function openReader(tid: number, compose: boolean, extra: Partial<ReaderDeps> = 
 function openConversation(name: string) {
   const lobby = lobbyOf(view().threads, ws)
   if (lobby === null) { status = "no front desk in this workspace"; return draw() }
-  openReader(lobby, false, {
+  openReader(lobby, {
     keep: (ms) => conversation(ms, name, OPERATOR),
     heading: `conversation with ${name}`,
     send: (body) => data.post(lobby, speech(name, body) ?? body),
@@ -762,7 +783,7 @@ function threadActions(tid: number, inReader = false): Action[] {
   const answers = (prompt?.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(prompt!.id, o.key)) }))
   return [
     ...answers,
-    ...(inReader ? [] : [{ key: "v", label: "read it all", run: () => openReader(tid, false) }]),
+    ...(inReader ? [] : [{ key: "v", label: "read it all", run: () => openReader(tid) }]),
     { key: "r", label: "reply", run: () => reply(tid) },
     ...(studyOf(all.threads, ws) !== null && studyOf(all.threads, ws) !== tid ? [{ key: "u", label: "hand to Uqbar", run: () => void did(handToUqbar(all.threads, ws, tid)) }] : []),
     ...(th?.awaiting && th.stage ? [{ key: "A", label: `approve: ${th.awaiting}`, run: () => void did(data.approve(tid)) }] : []),
@@ -1011,7 +1032,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "q", label: "quit", run: quit },
       ]
       if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone — or Nina, or Argos — a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], actions }
-      return { title: `WAITING ON YOU · ${waiting.length}`, rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => openReader(t.id, false) })), actions }
+      return { title: `WAITING ON YOU · ${waiting.length}`, rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => openReader(t.id) })), actions }
     }
     case "crew": {
       // tabs: each crew, then everyone; the crew on has the live status
@@ -1081,7 +1102,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (name === SHERIFF) {
         rows.push({ segs: [dim("nameplate: "), plain(NAMEPLATE)] }, { segs: [dim("mug: "), plain(MUG)] }, ...ledgerLines(ledger, a.bench).map((l) => ({ segs: [dim(l)] })))
       }
-      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, { key: "v", label: "the conversation", run: () => openConversation(name) }, ...(c.thread === null ? [] : [{ key: "w", label: `read #${c.thread}`, run: () => openReader(c.thread!, false) }, ...liveActions(c.thread), ...threadActions(c.thread).filter((x) => x.key !== "v")]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
+      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, { key: "v", label: "the conversation", run: () => openConversation(name) }, ...(c.thread === null ? [] : [{ key: "w", label: `read #${c.thread}`, run: () => openReader(c.thread!) }, ...liveActions(c.thread), ...threadActions(c.thread).filter((x) => x.key !== "v")]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {
       const tid = mode.tid
@@ -1196,7 +1217,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const id = mode.id, s = cal?.find((x) => x.id === id)
       const rows: Row[] = board.map((r) => ({
         segs: [runGlyph(r), dim(` ${stamp(r.started_at)} `), plain(r.status.padEnd(8)), dim(r.exit === null ? "" : `exit ${r.exit}  `), r.thread_id ? key(`→ #${r.thread_id}  `) : dim(""), dim((r.output ?? "").replace(/\s+/g, " ").slice(0, 80))],
-        open: () => (r.thread_id && !r.output ? openReader(r.thread_id, false) : open({ kind: "run", id, run: r.id })),
+        open: () => (r.thread_id && !r.output ? openReader(r.thread_id) : open({ kind: "run", id, run: r.id })),
         ref: r,
       }))
       return {
@@ -1211,7 +1232,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (!r) return { title: "RUN", rows: [{ segs: [dim("gone")] }], actions: [up] }
       const rows: Row[] = [{ segs: [runGlyph(r), dim(` started ${stamp(r.started_at)}${r.finished_at ? `, finished ${stamp(r.finished_at)}` : ", still running"}`), ...(r.thread_id ? [key(`  → #${r.thread_id}`)] : [])] }]
       for (const l of wrap(r.output ?? "(no output)", cols() - 40)) rows.push({ segs: [plain(l)] })
-      return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, actions: [...(r.thread_id ? [{ key: "t", label: "read its thread", run: () => openReader(r.thread_id!, false) }] : []), up] }
+      return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, actions: [...(r.thread_id ? [{ key: "t", label: "read its thread", run: () => openReader(r.thread_id!) }] : []), up] }
     }
     case "archive": {
       if (!archived) return { title: "FILING CABINET", rows: [{ segs: [dim("opening the drawers…")] }], actions: [back1] }
@@ -1219,7 +1240,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const rows: Row[] = [{ segs: [key(`TICKETS DONE · ${archived.tickets.length}`)] }]
       for (const t of archived.tickets) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${day(t.closed_at)}`)] })
       rows.push({ segs: [key(`THREADS CLOSED · ${archived.threads.length}`)] })
-      for (const t of archived.threads) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${t.stage ?? ""} ${day(t.at)}`)], open: () => openReader(t.id, false) })
+      for (const t of archived.threads) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${t.stage ?? ""} ${day(t.at)}`)], open: () => openReader(t.id) })
       return { title: "FILING CABINET", rows, actions: [back1] }
     }
     case "notes": {
@@ -1232,7 +1253,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     case "tray": {
       const rows = arrange(feed, traySort.cmp, null)[0]!.items.map((x): Row => ({
         segs: [dim(ago(x.at).padStart(4) + " "), x.thread_id ? key(`#${x.thread_id} `) : dim(""), { s: `${x.who ?? ""} ${KIND[x.kind] ?? x.kind.replace(/_/g, " ")} `, fg: x.kind === "issue" || x.kind === "check_failed" ? ROLE.alarm : x.kind === "question" ? ROLE.attention : ROLE.inactive }, plain(x.text.replace(/\s+/g, " "))],
-        open: x.thread_id ? () => openReader(x.thread_id!, false) : undefined, ref: `${x.at}${x.kind}${x.text}`,
+        open: x.thread_id ? () => openReader(x.thread_id!) : undefined, ref: `${x.at}${x.kind}${x.text}`,
       }))
       return {
         title: `IN-TRAY · ${wsName()}${traySort.name === "newest" ? "" : ` · by ${traySort.name}`}`, rows: rows.length ? rows : [{ segs: [dim("nothing yet")] }],
@@ -1245,7 +1266,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const section = (name: string, c: data.Capped<data.Stuck>) => {
         if (!c.shown.length) return
         rows.push({ segs: [key(name)] })
-        for (const s of c.shown) rows.push({ segs: [key(`  #${s.thread_id} `), plain(s.title), pink(`  ${s.text}`)], open: () => openReader(s.thread_id, false) })
+        for (const s of c.shown) rows.push({ segs: [key(`  #${s.thread_id} `), plain(s.title), pink(`  ${s.text}`)], open: () => openReader(s.thread_id) })
         if (c.more) rows.push({ segs: [dim(`  +${c.more} more`)] })
       }
       section("BLOCKERS — open issues", stuck.blockers); section("FAILED CHECKS", stuck.failed_checks); section("NOBODY LEADS", stuck.unled)
@@ -1443,7 +1464,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const row = (n: data.Need): Row => ({
         segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(n.thread_id ? [tidSeg(n.thread_id)] : []),
           { s: n.title, fg: ROLE.prose }, dim(`  ${ago(n.at)}  `), { s: n.text.replace(/\s+/g, " "), fg: n.level === "blocking" ? ROLE.prose : ROLE.inactive }],
-        open: n.thread_id ? () => openReader(n.thread_id!, false) : undefined, ref: n,
+        open: n.thread_id ? () => openReader(n.thread_id!) : undefined, ref: n,
       })
       const blocking = needs.filter((n) => n.level === "blocking"), deciding = needs.filter((n) => n.level === "decide")
       const live = all.threads.filter((t) => t.live && !t.standing && !needs.some((n) => n.thread_id === t.id))
@@ -1493,7 +1514,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const verbs: Action[] = study === null ? [] : [
         { key: "m", label: "ask Uqbar…", run: () => talk("uqbar") },
         { key: "t", label: "look over Uqbar's shoulder", run: () => void zoomInto(study) },
-        { key: "v", label: "read the study", run: () => openReader(study, false) },
+        { key: "v", label: "read the study", run: () => openReader(study) },
       ]
       return { title: e.title, tint: ROLE.inactive, rows, actions: [...verbs, back1] }
     }
@@ -1505,7 +1526,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const t = tid ? all.threads.find((x) => x.id === tid) : undefined
       const step = (d: number) => open({ kind: "decide", i: (i + d + order.length) % order.length })
       const rows: Row[] = [
-        { segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(tid ? [tidSeg(tid)] : []), { s: n.title, fg: ROLE.prose, bold: true }], open: tid ? () => openReader(tid, false) : undefined },
+        { segs: [{ s: ` ${NEED_KIND[n.kind]} `, fg: ROLE.ground, bg: NEED_TONE[n.kind] }, plain(" "), ...(tid ? [tidSeg(tid)] : []), { s: n.title, fg: ROLE.prose, bold: true }], open: tid ? () => openReader(tid) : undefined },
         { segs: [dim(`${n.level === "blocking" ? "work has stopped until you act" : "nothing waits on this"} · ${ago(n.at)}${t ? ` · ${t.lead ?? "no lead"}${t.stage ? ` at ${t.stage}` : ""}` : ""}`)] },
         { segs: [plain("")] },
         ...wrap(n.text, paneW() - 4).map((l): Row => ({ segs: [plain(l)] })),
@@ -1855,6 +1876,8 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   rows = segRows
   const split = acts.length > 0 && colsN >= 80
   const leftW = split ? colsN - ACTIONS_W - 1 : colsN
+  const box = picker || input ? null : cardBox(), bv = box?.ed.view(leftW - 4, 4), boxH = bv ? bv.rows.length + 1 : 0
+  if (box?.focused) keys = "enter send · alt-enter newline · esc leave the box · pgup/pgdn scroll"
   const selectable = rows.some((r) => r.open) && !input
   if (snapSel && selectable && !picker) { snapSel = false; if (!rows[sel]?.open) sel = rows.findIndex((r) => r.open) }
   if (sel >= rows.length) sel = Math.max(0, rows.length - 1)
@@ -1865,7 +1888,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   const globals = [...(world ? PLAY : []), ...GLOBALS.filter((h) => !h.key.split(" ").some((k) => claimed.has(k)))]
   let footN = 1, room = 0, win: Window, awin: Window = { first: 0, count: 0, above: 0, below: 0 }, foot: Hint[][] = []
   for (let pass = 0; pass < 3; pass++) {
-    room = Math.max(1, termRows - footN - 1 - top)
+    room = Math.max(1, termRows - footN - 1 - top - boxH)
     win = cursor && input ? offset(rows.length, room, 0) : selectable || picker ? followSel(rows.length, sel, room) : offset(rows.length, room, scroll)
     if (split) awin = !selectable ? followSel(acts.length, asel, room) : offset(acts.length, room, 0)
     const hidden = split ? acts.filter((_, i) => i < awin.first || i >= awin.first + awin.count) : acts
@@ -1892,6 +1915,13 @@ function drawPane(top: number, colsN: number, termRows: number): string {
       o += `${ESC}[${top + 1 + i};${leftW + 1}H` + line([dim("│")], 1) + line(x ? [lit ? key("▸") : plain(" "), { s: ` ${keyName(x.key).padStart(5)} `, fg: ROLE.key, bold: true }, { s: fit(x.label, ACTIONS_W - 8), fg: x.key === "esc" ? ROLE.inactive : ROLE.prose }] : ai !== undefined ? more(awin, ai, selectable ? " · in the foot" : "") : [], ACTIONS_W)
     }
   }
+  const boxAt = top + 1 + room
+  if (box && bv) {
+    const on = box.focused
+    o += `${ESC}[${boxAt};1H` + line([{ s: " reply ", fg: ROLE.ground, bg: on ? ROLE.attention : ROLE.inactive }, dim(on ? "" : `  r${acts.some((x) => x.key === "enter") ? "" : " or ⏎"} to write`)], leftW)
+    bv.rows.forEach((r, i) => { o += `${ESC}[${boxAt + 1 + i};1H` + line([on ? pink(" ▌ ") : dim(" ▌ "), on ? plain(r) : dim(r)], leftW) })
+    if (split) for (let i = 0; i < boxH; i++) o += `${ESC}[${boxAt + i};${leftW + 1}H` + line([dim("│")], 1) + line([], ACTIONS_W)
+  }
   // the foot: what you are typing, a confirm, or the keys — the lit one when the actions have them and no column shows it
   o += `${ESC}[${termRows - footN};1H` + line([], colsN)
   const one = input && !input.ed.multiline ? input : null
@@ -1903,7 +1933,8 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   if (one) {
     const pre = [...` ${one.label}: `].length
     o += `${ESC}[${termRows};${pre + one.ed.col + 1}H${ESC}[?25h`
-  } else if (cursor && cursor.r >= 0) o += `${ESC}[${top + 1 + cursor.r};${cursor.c + 3}H${ESC}[?25h`
+  } else if (box?.focused && bv && !confirm) o += `${ESC}[${boxAt + 1 + bv.cursor.r};${4 + bv.cursor.c}H${ESC}[?25h`
+  else if (cursor && cursor.r >= 0) o += `${ESC}[${top + 1 + cursor.r};${cursor.c + 3}H${ESC}[?25h`
   else if (cursor) o += `${ESC}[${top};${cursor.c + 1}H${ESC}[?25h`
   return o
 }
@@ -2028,6 +2059,10 @@ function onKey(k: string) {
     if (r !== "done") void r.then(draw)
     return draw()
   }
+  const box = cardBox()
+  if (box?.focused) return boxKey(box, k)
+  // a live thread's own ⏎ steps into the session; on any other thread card ⏎ is back into the box
+  if (box && k === "enter" && !detail().actions.some((x) => x.key === "enter")) { box.focused = true; return draw() }
   if (toyKey(k)) return
   // the card's own actions first: a key there means what its actions pane says
   const name = k === " " ? "space" : k
@@ -2112,6 +2147,8 @@ function onPaste(text: string) {
   if (picker) { picker.q.insert(text); return draw() }
   if (input) { input.ed.insert(text); return draw() }
   if (reader) { reader.paste(text); return draw() }
+  const box = cardBox()
+  if (box) { box.ed.insert(text); box.focused = true; return draw() }
 }
 
 /** the margin notes over a clipped frame: text ink after the clip so a pan can't push it off-screen, hits first so they win */
@@ -2313,7 +2350,7 @@ async function main() {
     seenFocus = f.at
     if (zoom) leaveZoom()
     goThread(f.thread_id, threadOf(f.thread_id)?.workspace_id)
-    openReader(f.thread_id, false)
+    openReader(f.thread_id)
   }, 1000)
   // a card showing a running coworker keeps their activity current
   every(() => {
