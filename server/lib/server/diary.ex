@@ -6,7 +6,7 @@ defmodule Server.Diary do
   """
   import Ecto.Query
 
-  alias Server.{Event, Message, Repo, Thread}
+  alias Server.{Event, Message, Repo, Soul, Thread}
 
   @type entry :: %{kind: :shipped | :bounced, thread_id: integer(), title: String.t(), at: DateTime.t()}
 
@@ -31,6 +31,54 @@ defmodule Server.Diary do
 
     Map.new(grouped, fn {seat, entries} -> {seat, Enum.sort_by(entries, & &1.at, DateTime)} end)
   end
+
+  @doc """
+  Append the seat's diary lines for `items` (from `history/2`) under `## Diary`. The model writes up
+  to three in-voice lines; when it is off, capped or says nothing usable, one dated line per item is
+  written instead. Never creates a soul: a seat with no soul file is `{:error, :no_soul}`.
+  """
+  @spec write(String.t(), [entry()], Date.t()) :: :ok | {:error, term()}
+  def write(name, items, today \\ Date.utc_today())
+  def write(_name, [], _today), do: :ok
+
+  def write(name, items, today) do
+    lines = model_lines(name, items, today) || Enum.map(items, &"- #{today}: #{fallback(&1)}")
+    Soul.append_diary(name, lines)
+  end
+
+  defp model_lines(name, items, today) do
+    case Server.Generator.run(prompt(name, items)) do
+      {:ok, out} ->
+        out
+        |> String.split("\n")
+        |> Enum.map(&String.trim/1)
+        |> Enum.filter(&String.starts_with?(&1, "- "))
+        |> Enum.take(3)
+        |> case do
+          [] -> nil
+          lines -> Enum.map(lines, &"- #{today}: #{String.slice(String.trim_leading(&1, "- "), 0, 200)}")
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp prompt(name, items) do
+    """
+    You are #{name}. #{Soul.voice(name)}
+
+    Write 1 to 3 diary lines for this week, each in your own voice, each starting with "- ". Dry,
+    no markdown headings, nothing about decisions. What happened:
+    #{Enum.map_join(items, "\n", &describe/1)}
+    """
+  end
+
+  defp describe(%{kind: :shipped, title: t}), do: ~s(- shipped "#{t}")
+  defp describe(%{kind: :bounced, title: t}), do: ~s(- sent back on "#{t}")
+
+  defp fallback(%{kind: :shipped, title: t}), do: ~s(shipped "#{t}".)
+  defp fallback(%{kind: :bounced, title: t}), do: ~s(sent back on "#{t}".)
 
   defp builders(workspace_id) do
     workspace_id
