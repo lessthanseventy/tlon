@@ -53,8 +53,9 @@ export function viewOf(a: Agents, ws: number | null): Agents {
   // a desk for every staffed open thread, not only the ones with a session: a Claude Code worker
   // registers none until it calls register. Without one, a thread's own running window means
   // working — but not the lobby's, whose lead runs there all day
+  // uqbar leads its study but is never crew: no session, it is the book on the shelf, not a person
   const unregistered = threads
-    .filter((t) => t.lead && !sessions.some((r) => r.thread_id === t.id))
+    .filter((t) => t.lead && t.lead !== "uqbar" && !sessions.some((r) => r.thread_id === t.id))
     .map((t) => {
       const c = bench.find((b) => b.name === t.lead)
       return { agent: t.lead!, thread_id: t.id, title: t.title, warm: !!t.live && !t.standing, thinking: !!t.thinking?.includes(t.lead!), archetype: c?.archetype ?? null, lead: c?.lead ?? false, workspace_id: ws }
