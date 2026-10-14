@@ -34,6 +34,10 @@ describe("the events table", () => {
     expect(propsAt("duck", 250, geo).map((p) => p.kind)).toEqual(["duck"])
     expect(propsAt("drill", 100, geo)).toEqual([])
   })
+  test("the duck crosses the whole hall: from the door to its far end, not just the lounge's edge", () => {
+    const xs = Array.from({ length: 261 }, (_, i) => propsAt("duck", 120 + i, geo)[0]!.x)
+    expect(Math.min(...xs)).toBeLessThanOrEqual(12)
+  })
   test("only the power cut blacks out; only the meteor flickers", () => {
     expect(blackoutAt("power", 300)).toBe(true)
     expect(blackoutAt("power", EVENTS.power.ticks - 1)).toBe(false)
