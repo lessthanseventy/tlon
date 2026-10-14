@@ -1880,7 +1880,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   const one = input && !input.ed.multiline ? input : null
   const litKey = !split && !selectable && acts[asel] ? keyName(acts[asel]!.key) : null
   const hintSegs = (l: Hint[]): Seg[] => l.flatMap((h, j): Seg[] => [...(j ? [dim(" · ")] : []), h.key === litKey ? { s: `${h.key} ${h.label}`, fg: ROLE.ground, bg: ROLE.key } : { s: h.key, fg: ROLE.key, bold: true }, ...(h.key === litKey ? [] : [plain(` ${h.label}`)])])
-  const feet: Seg[][] = one ? [[pink(` ${one.label}: `), plain(one.ed.text), ...(one.cycles?.length ? [dim("   tab: "), ...cyclesSegs(one)] : [])]] : confirm ? [[pink(` ${confirm.label} (y/n)`)]] : keys ? [[dim(` ${keys}`)]] : foot.map((l) => [plain(" "), ...hintSegs(l)])
+  const feet: Seg[][] = one ? [[pink(` ${one.label}: `), plain(one.ed.text), ...(one.cycles?.length ? [dim("   tab: "), ...cyclesSegs(one)] : [])]] : confirm ? [[pink(` ${confirm.label} (y/n) · enter is y`)]] : keys ? [[dim(` ${keys}`)]] : foot.map((l) => [plain(" "), ...hintSegs(l)])
   for (let i = 0; i < footN; i++) o += `${ESC}[${termRows - footN + 1 + i};1H` + line(feet[i] ?? [], colsN)
   o += `${ESC}[?7h`
   if (one) {
@@ -1988,7 +1988,12 @@ function onKey(k: string) {
   if (isKonami(keyLog)) { keyLog = []; room().disco(); status = "↑↑↓↓←→←→BA — everybody dance"; changed(); return draw() }
   if (picker) return pickerKey(k)
   if (input) return inputKey(k)
-  if (confirm) { const c = confirm; confirm = null; if (k === "y") c.run(); return draw() }
+  if (confirm) {
+    const c = confirm; confirm = null
+    if (k === "y" || k === "enter") c.run()
+    else { status = "cancelled"; if (reader) reader.status = status }
+    return draw()
+  }
   if (mode.kind === "look-editor") return editorKey(k)
   if (mode.kind === "hall" && (k === "tab" || k === "backtab")) { snapSel = false; sel = stepRow(sel, k === "tab" ? 1 : -1); return draw() }
   if (mode.kind === "store" && (k === "tab" || k === "backtab")) { snapSel = false; sel = stepStoreRow(sel, k === "tab" ? 1 : -1); return draw() }
