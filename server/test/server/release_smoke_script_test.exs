@@ -71,6 +71,30 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert {out, 1} = run_smoke(tmp, root, [])
       assert out =~ "smoke FAILED: can't fetch origin"
     end
+
+    test "a second smoke of a commit already being smoked refuses, naming the run", %{tmp: tmp, root: root} do
+      {sha, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/feature"])
+      lock = Path.join(tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
+      File.write!(lock, "pid 123 on http://127.0.0.1:4777\n")
+      hold_lock(lock)
+
+      assert {out, 1} = run_smoke(tmp, root, ["work/feature"])
+      assert out =~ "is already being smoked (pid 123 on http://127.0.0.1:4777)"
+      refute tmp |> File.ls!() |> Enum.any?(&(&1 =~ ~r/^tlon-smoke-[A-Za-z0-9]{6}$/))
+    end
+  end
+
+  # a lock held by another process for as long as the test needs it
+  defp hold_lock(lock) do
+    port =
+      Port.open({:spawn_executable, System.find_executable("bash")}, [
+        :binary,
+        args: ["-c", ~s(exec 9<"$0"; flock 9; echo held; exec sleep 60), lock]
+      ])
+
+    assert_receive {^port, {:data, "held\n"}}, 5_000
+    {:os_pid, pid} = Port.info(port, :os_pid)
+    on_exit(fn -> System.cmd("kill", ["#{pid}"]) end)
   end
 
   describe "smoke-sweep.sh: what a SIGKILLed smoke left behind" do
