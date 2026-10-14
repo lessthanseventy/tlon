@@ -51,7 +51,7 @@ linked window at a time, Ctrl-] back to the room).
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
   `mise run office:sandbox` (`--sandbox`, or `OFFICE_SANDBOX=1`) runs it on a made-up world, no server: `tui/sandbox.ts` is the
-  world and the play-key table, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only.
+  world and the play-key table, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only, so a card hides the actions they shadow (`playable`).
   The sandbox keeps its looks, souls, hall, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
   The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, locks, taken)` is seeded, no model, no I/O —
   `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `m` browses it), → hire, space locks a row so a pass keeps it. `hall.json`
