@@ -6,10 +6,9 @@ defmodule Server.Jobs.Diary do
   """
   use Oban.Worker, queue: :default, max_attempts: 1, unique: [period: 3600]
 
-  alias Server.{Diary, Soul, Workspaces}
+  alias Server.{Diary, Workspaces}
 
   @week 7
-  @spacing 6
 
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
@@ -18,20 +17,10 @@ defmodule Server.Jobs.Diary do
 
     for %{id: workspace_id} <- Workspaces.all(),
         {seat, items} <- Diary.history(workspace_id, since),
-        due?(seat, today) do
+        Diary.due?(seat, today) do
       Diary.write(seat, items, today)
     end
 
     :ok
-  end
-
-  defp due?(seat, today) do
-    with line when is_binary(line) <- seat |> Soul.diary() |> List.last(),
-         [_, date] <- Regex.run(~r/^- (\d{4}-\d{2}-\d{2}):/, line),
-         {:ok, written} <- Date.from_iso8601(date) do
-      Date.diff(today, written) >= @spacing
-    else
-      _ -> true
-    end
   end
 end
