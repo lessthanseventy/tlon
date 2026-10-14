@@ -164,6 +164,8 @@ export class Sim<L extends { people: Seat[] }> {
   protected nextRing = RING_FIRST
   /** the wackiness dials (kit/whimsy.ts): what the room does on its own; keyed plays are the operator's and ignore all but the event toggles */
   private dials: Dials = resolve(DEFAULT)
+  /** the pets (Nina, Argos) keep their own day; off, they nap and say nothing */
+  protected get petsOn() { return this.dials.pets }
   setWhimsy(d: Dials) { this.dials = d; this.nextEvent = -1; this.changed = true }
   private pizzaUntil = 0
   private nudgeUntil = 0
@@ -375,6 +377,8 @@ export class Sim<L extends { people: Seat[] }> {
       }
     }
     if (this.tick < c.until || this.tick < c.purr) return false
+    // pets off: she is asleep on her rug and stays there — no wake-and-walk-back between naps
+    if (!this.dials.pets && at(p.nap)) { c.mode = "sleep"; c.until = this.tick + 600; return true }
     const company = [...this.actors.values()].some((a) => !a.moving && LOUNGING.has(a.spot.kind))
     const r = Math.random()
     // now and then she goes to sit on the keyboard of someone hard at work
