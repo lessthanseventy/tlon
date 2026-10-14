@@ -93,8 +93,9 @@ little scripted scene in the sim that runs for a minute or two and then tidies i
   come back on to applause.
 - **A duck.** One duck walks in, looks around, and leaves. That's the whole event.
 
-`whimsy` sets how often: `off` never, `some` roughly one a week, `lots` a few times a day. Sandbox's
-`e` starts one now.
+The wackiness dial (§7) sets how often: `never`, `rare`, `some` (the default) or `lots`, in a mean gap
+of open-hours ticks; the room starts one on its own only inside open hours. Sandbox's `e` starts one now,
+unless every event is switched off.
 
 ## 4 · The bathroom
 
@@ -129,9 +130,24 @@ Halloween, a tree in December), and puns and nerdy jokes are welcome. That's a b
 
 ## 7 · Configuration
 
-One place, the office settings panel (`office.json`): `mode` (`office` | `sandbox`), `whimsy`
-(`off` | `some` | `lots`), and per-event toggles, so anyone can turn off the duck. Defaults:
-`office`, `some`, everything on.
+One file, `office.json` in the config dir, edited on the wackiness card (finder: "the wackiness dial", or `Z`
+on the settings card): `mode` (`office` | `sandbox`), one **preset**, and per-dial **overrides**. Choosing a
+preset sets the dials; touching a dial keeps the preset and shows it as `(custom)`. Defaults: `office`,
+`casual`, no overrides, everything on.
+
+| preset | banter | events | chain | severity | pets | doorbell | moods |
+|---|---|---|---|---|---|---|---|
+| `business` | off | never | no | 1 | asleep | off | no |
+| `casual` (default) | on | some | no | 1 | on | normal | no |
+| `party` | on | lots | no | 2 | on | busy | no |
+| `rimworld` | on | lots | yes | 3 | on | busy | a red build sours the afternoon |
+
+The dials under a preset: `banter`, `frequency`, `severity`, `chain`, per-event toggles, `pets`,
+`doorbell`, `moods`, and `souls` / `weirdness` (stored, not yet wired to the corkboard or the hall). A
+toggled-off event never plays, keyed or not.
+
+**The one rule at every setting: the work is never touched.** The dials gate the room's own behaviour;
+nothing here reads or writes a thread, ticket, turn or code (`test/whimsy-work-untouched.test.ts`).
 
 ## 8 · Steps, each a crew ticket
 
@@ -142,6 +158,6 @@ One place, the office settings panel (`office.json`): `mode` (`office` | `sandbo
 | 3 | **The bathroom**: the room, its pastime, Nina drinking from the tub, fading pawprints | Nina's trip leaves prints that fade; deterministic under the test seed |
 | 4 | **Front door and doorbell**: the door, the bell, the visitors in §5 | a ring brings a coworker to the door and a visitor in it; a cut brings pizza |
 | 5 | **Events**: the zoo, the meteor, the fire drill, the power cut, the duck | each plays and tidies itself; none touches a thread or a turn |
-| 6 | **Whimsy and toggles** in the settings panel | `whimsy: off` plays nothing; one event toggled off never plays |
+| 6 | **The wackiness dial** (preset + dials + toggles, `office.json`) | `business` plays no event and no banter; `rimworld` chains events; a dial overridden under a preset holds; a toggled-off event never plays — built |
 | 7 | **The rest of the cast's room reactions** to events, in voice | every seat reacts to each event in its own way |
 | 8 | **Generators**: personas per seat, and pools of visitors, reactions and puns, on cheap model calls (`Server.Persona`, `Server.ToyPool`) | a hired seat gets a persona; `--reroll` records a new seed; the room renders with the model off — built: the person card shows the persona, `E` makes, rerolls and edits it |
