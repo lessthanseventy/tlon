@@ -42,9 +42,13 @@ export class Reader {
   private draft: Editor | null = null
   status = ""
 
-  constructor(readonly tid: number, private readonly deps: ReaderDeps, compose = false) {
-    if (compose) this.composer = new Editor()
+  /** `text`: a draft to start from, in the composer when `compose`, else held for when you start */
+  constructor(readonly tid: number, private readonly deps: ReaderDeps, compose = false, text = "") {
+    if (compose) this.composer = new Editor(text)
+    else if (text.trim()) this.draft = new Editor(text)
   }
+  /** what you were writing, focused or not */
+  held(): string { const e = this.composer ?? this.draft; return e && !e.empty ? e.text : "" }
 
   /** take a fresh newest page, keeping the older ones already read */
   take(v: ThreadView) {

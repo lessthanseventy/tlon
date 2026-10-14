@@ -33,10 +33,12 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const t0 = Date.now(), deadline = t0 + 25_000
+const t0 = Date.now()
 const until = async (what: string, ok: () => boolean) => {
-  while (!ok() && Date.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what} after ${Date.now() - t0}ms; pane:\n${screen()}`)
+  const deadline = Date.now() + 25_000
+  let seen = ok()
+  while (!seen && Date.now() < deadline) { await Bun.sleep(50); seen = ok() }
+  if (!seen) throw new Error(`never saw ${what} after ${Date.now() - t0}ms; pane:\n${screen()}`)
 }
 
 const LOBBY = "nothing waits on you"
@@ -46,9 +48,9 @@ const lobby = async (from: string) => {
 }
 const card = async () => {
   tmux("send-keys", "-t", "0", "t")
-  await until("the tickets column", () => screen().includes("TICKETS"))
+  await until("the tickets column", () => screen().includes("TICKETS · "))
   tmux("send-keys", "-t", "0", "Right")
-  await until("the doing column", () => screen().includes("fix the sink"))
+  await until("the doing column", () => screen().includes("DOING · "))
   tmux("send-keys", "-t", "0", "Enter")
   await until("the thread card", () => screen().includes("THREAD #9"))
 }
@@ -76,5 +78,33 @@ test("ctrl-] goes to the lobby from a reply box, a card, the finder and the read
   tmux("send-keys", "-t", "0", "Enter")
   await until("the reader", () => screen().includes("the sink is fixed") && !screen().includes(LOBBY))
   await lobby("the reader")
+  expect(posts).toEqual([])
+}, 40_000)
+
+test("ctrl-] keeps what you were writing: the card's box, the reader's and an input's, there when you come back", async () => {
+  await card()
+  await until("the card's draft kept", () => screen().includes("half a thought"))
+  await lobby("the card")
+  tmux("send-keys", "-t", "0", "/")
+  await until("the finder", () => screen().includes("FIND"))
+  tmux("send-keys", "-t", "0", "-l", "#9")
+  await until("the thread in the finder", () => screen().includes("fix the sink"))
+  tmux("send-keys", "-t", "0", "Enter")
+  await until("the reader with the card's draft", () => screen().includes("the sink is fixed") && screen().includes("half a thought"))
+  tmux("send-keys", "-t", "0", "-l", " and more")
+  await until("the reader's typing", () => screen().includes("half a thought and more"))
+  await lobby("the reader")
+  await card()
+  await until("the reader's draft on the card", () => screen().includes("half a thought and more"))
+  await lobby("the card")
+  tmux("send-keys", "-t", "0", "'")
+  await until("the talk input", () => screen().includes("say to the office"))
+  tmux("send-keys", "-t", "0", "-l", "lunch at noon")
+  await until("the input's typing", () => screen().includes("lunch at noon"))
+  tmux("send-keys", "-t", "0", "C-]")
+  await until("the lobby from the input", () => screen().includes(LOBBY) && !screen().includes("say to the office"))
+  tmux("send-keys", "-t", "0", "'")
+  await until("the input's draft back", () => screen().includes("say to the office") && screen().includes("lunch at noon"))
+  tmux("send-keys", "-t", "0", "C-]")
   expect(posts).toEqual([])
 }, 40_000)
