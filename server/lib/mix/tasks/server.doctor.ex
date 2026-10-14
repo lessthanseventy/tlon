@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Server.Doctor do
-  @shortdoc "The 2am report: integrity_check, schema, tables; --export <dir> dumps every table as JSONL"
+  @shortdoc "The 2am report: integrity_check, schema, tables, erl_crash.dump; --export <dir> dumps every table as JSONL"
   @moduledoc """
   #{@shortdoc}.
 
@@ -18,6 +18,7 @@ defmodule Mix.Tasks.Server.Doctor do
     Mix.shell().info("integrity: #{r.integrity}")
     Mix.shell().info("tables:    #{Enum.join(r.tables, ", ")}")
     Mix.shell().info("migrations: #{r.pending} pending")
+    Mix.shell().info("crash dump: #{Server.Doctor.crash_dump()}")
 
     if dir = opts[:export] do
       paths = Server.Doctor.export(dir)

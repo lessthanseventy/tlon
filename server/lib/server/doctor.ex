@@ -53,6 +53,49 @@ defmodule Server.Doctor do
   end
 
   @doc """
+  The `erl_crash.dump` at `root` (the tlon checkout), as one report line: `none`, or its path and
+  age and whether it was written since the service started (`started_at`, from
+  `service_started_at/0`) — a dump from after the start is a crash nothing has surfaced yet. With
+  no known start, the dump and its age alone.
+  """
+  @spec crash_dump(Path.t(), DateTime.t() | nil) :: String.t()
+  def crash_dump(root \\ Server.Profiles.tlon_root(), started_at \\ service_started_at()) do
+    path = Path.join(root, "erl_crash.dump")
+
+    case File.stat(path, time: :posix) do
+      {:ok, %{mtime: mtime}} ->
+        age = "#{path}, #{div(System.os_time(:second) - mtime, 3600)}h old"
+
+        cond do
+          is_nil(started_at) -> "#{age} — service start unknown"
+          mtime >= DateTime.to_unix(started_at) -> "#{age} — written since the service started at #{started_at}"
+          true -> "#{age} — before the service started at #{started_at}"
+        end
+
+      {:error, _} ->
+        "none"
+    end
+  end
+
+  @doc """
+  When the `tlon` user service last became active, from systemd; nil where there is no systemd,
+  no such unit, or it never started.
+  """
+  @spec service_started_at() :: DateTime.t() | nil
+  def service_started_at do
+    args = ["--user", "show", "tlon", "-p", "ActiveEnterTimestamp", "--value", "--timestamp=unix"]
+
+    with {"@" <> secs, 0} <- System.cmd("systemctl", args, stderr_to_stdout: true),
+         {n, _} when n > 0 <- Integer.parse(secs) do
+      DateTime.from_unix!(n)
+    else
+      _ -> nil
+    end
+  rescue
+    ErlangError -> nil
+  end
+
+  @doc """
   Export every table as JSONL into `dir` (created if missing), one `<table>.jsonl` per table —
   `mix server.doctor --export <dir>`. Returns the paths written, in table order; an empty table
   writes an empty file, so a missing file always means a missing table.
