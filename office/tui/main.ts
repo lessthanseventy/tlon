@@ -38,7 +38,7 @@ import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wi
 import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk"
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
-import { PLAY, toy } from "./sandbox"
+import { PLAY, playable, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
@@ -1833,7 +1833,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
   } else {
     const d = detail()
-    title = d.title; segRows = d.rows; acts = d.actions; tint = d.tint ?? ROLE.key
+    title = d.title; segRows = d.rows; acts = world ? playable(d.actions) : d.actions; tint = d.tint ?? ROLE.key
   }
   rows = segRows
   const split = acts.length > 0 && colsN >= 80

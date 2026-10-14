@@ -46,3 +46,5 @@ export const PLAY: { key: string; label: string }[] = [
   { key: "d", label: "doorbell" }, { key: "e", label: "event" }, { key: "t", label: "treat" }, { key: "f", label: "fire drill" },
   { key: "n", label: "night" }, { key: "w", label: "weather" }, { key: "p", label: "pet" }, { key: "c", label: "call over" },
 ]
+/** a card's actions in the sandbox: those the play keys shadow are hidden, since toyKey() takes them first */
+export const playable = <T extends { key: string }>(acts: T[]): T[] => acts.filter((x) => !PLAY.some((p) => p.key === x.key))
