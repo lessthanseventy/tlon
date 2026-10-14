@@ -71,6 +71,22 @@ if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
   note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
   exit 1
 fi
+
+# The paths a workline's diff may not touch (name-status lines on stdin): a new file at the repo
+# root, or anything under another workline's work/<slug>/ — its docs belong in its own.
+strays() { # slug
+  awk -F '\t' -v own="work/$1/" '
+    $2 !~ /\// { if ($1 == "A") print $2; next }
+    $2 ~ /^work\// && index($2, own) != 1 { print $2 }'
+}
+stray="$(git -C "$fresh" diff --name-status --no-renames origin/main HEAD | strays "$slug")"
+if [ -n "$stray" ]; then
+  finding="work/$slug touches paths outside its own: a workline adds no file at the repo root and writes its docs under work/$slug/ only — move or drop:
+$stray"
+  if [ -n "${WORKLINE_GATE:-}" ]; then echo "$finding"; exit 1; fi
+  "$cli" red-verify "$tid" "$finding" || note "$tid" "verify FAILED for workline $slug — $finding" || true
+  exit 1
+fi
 mise trust -q "$fresh" >/dev/null 2>&1
 # Hex reads hex.config at every mix boot and rewrites it in place (File.write!: truncate, then write)
 # when a fetch refreshes the hex.pm token, so a gate booting mix while any other mix on the machine
