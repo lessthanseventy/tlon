@@ -98,7 +98,10 @@ function engine(on, world: World = {}): Declare[] {
       e.tool === "get_dossier"
         ? JSON.stringify(world.dossier ?? DOSSIER)
         : e.tool === "take_wakes"
-          ? JSON.stringify(world.wakes?.shift() ?? [])
+          ? (() => {
+              const w = world.wakes?.shift();
+              return typeof w === "string" ? w : JSON.stringify(w ?? []);
+            })()
           : e.tool === "register"
             ? JSON.stringify({ session_id: 5, agent: "lonnrot", thread_id: 42 })
           : e.tool === "office_glance"
@@ -507,6 +510,22 @@ test("a superseded session whose newer one is gone claims the seat again instead
 
   expect(sent.filter((d) => d.tool === "register").length).toBe(2);
   expect(world.submitted).toEqual([text, "a wake the seat missed"]);
+});
+
+test("a superseded session does not claim the seat back on a reply that is not a wake list", async ($, on) => {
+  const text = "This session was superseded: a newer session now holds lonnrot's seat on thread #42. Stop.";
+  const world: World = { ownClock: true, wakes: [{ superseded: true, by: 9, text }, "upstream hiccup, not json"], submitted: [] };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+
+  for (let i = 0; i < 2; i++) {
+    await clock.advance(3_000);
+    await settle();
+  }
+
+  expect(sent.filter((d) => d.tool === "register").length).toBe(1);
+  expect(world.submitted).toEqual([text]);
 });
 
 test("a wake whose submit fails is put back on the server, not lost", async ($, on) => {
