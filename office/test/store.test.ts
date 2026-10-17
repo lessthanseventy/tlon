@@ -46,6 +46,14 @@ test("shelve walks both families and wraps; locks carry", () => {
   const named = rename(toggleLock(s0, "name"), "Biscuit")
   expect(candidateOf(shelve(named, 1, []), []).name).toBe("Biscuit")
 })
+test("a carried or typed name is checked against the taken list of the species on the card", () => {
+  // shelve carries the lock with the cat family's taken list; the dog's card is read against the dog's
+  const nina = shelve(rename(toggleLock(emptyStore(), "name"), "Nina"), 1, ["Argos"])
+  expect(nina.species).toBe("dog")
+  expect(candidateOf(nina, ["Nina"]).name).not.toBe("Nina")
+  expect(candidateOf(rename(s0, "Ann"), ["Ann"]).name).not.toBe("Ann")
+  expect(candidateOf(rename(s0, "Ann"), []).name).toBe("Ann")
+})
 test("adopt writes one slot; a species outside the slot is refused", () => {
   const c = candidateOf(rename(s0, "Biscuit"), [])
   expect(adopt(c, "cat")).toEqual({ cat: { name: "Biscuit", species: "hamster", temperament: c.temperament, shade: c.shade } })
