@@ -36,6 +36,21 @@ describe("a fire drill is a panic, then a muster", () => {
     expect(r.eventNow()?.kind).toBe("duck")
   }))
 
+  test("an event key during a running scene or a drill plays nothing over it", () => seeded(3, () => {
+    for (const start of [(r: any) => r.event("duck"), (r: any) => r.play("drill")]) {
+      const r = new WideRoom(696) as any
+      run(r, 300)
+      start(r)
+      run(r, 10)
+      const said: string[] = []
+      r.say = (_: string, text: string | null) => { if (text) said.push(text) }
+      for (const a of r.actors.values()) a.emote = null
+      r.play("event")
+      expect(said).toEqual([])
+      expect([...r.actors.values()].filter((a: any) => a.emote === "!")).toEqual([])
+    }
+  }))
+
   test("they scream, but a handful of lines, not one per person per tick", () => seeded(3, () => {
     const r = new WideRoom(696) as any
     run(r, 300)
