@@ -78,6 +78,24 @@ defmodule Server.ReleaseScriptTest do
     assert rev(Path.join(ctx.repo, ".release"), "HEAD") == rev(ctx.repo, "origin/main")
   end
 
+  test "a cut from a citizen pane (TLON_THREAD set) still pushes live past the pre-push fence", ctx do
+    hook = Path.join(ctx.repo, ".git/hooks/pre-push")
+    File.cp!(Path.expand("../../../scripts/git-hooks/pre-push", __DIR__), hook)
+    File.chmod!(hook, 0o755)
+
+    assert {out, 0} = release(ctx, ["cut"], [{"TLON_THREAD", "269"}])
+    refute out =~ "the push to origin failed"
+    assert rev(ctx.repo, "origin/live") == rev(ctx.repo, "live")
+  end
+
+  test "a push that fails says why", ctx do
+    sh!(ctx.repo, "git remote set-url --push origin /nonexistent/origin.git")
+
+    assert {out, 0} = release(ctx, ["cut"])
+    assert out =~ "the push to origin failed"
+    assert out =~ "nonexistent"
+  end
+
   test "--no-restart cuts and builds but leaves the restart to the caller", ctx do
     File.write!(Path.join(ctx.bin, "curl"), ~s{#!/bin/sh\necho called >> "$(dirname "$0")/curl.log"\n})
 
