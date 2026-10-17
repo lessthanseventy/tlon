@@ -685,7 +685,7 @@ defmodule Server.ChannelTest do
 
     test "facts born on the thread survive with the thread link cleared", %{thread: thread} do
       {:ok, fact} =
-        Server.Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "kept", provenance: "derived"})
+        Server.Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "kept on", provenance: "derived"})
 
       {:ok, _} = Channel.delete_thread(thread)
       assert Repo.get!(Server.Fact, fact.id).thread_id == nil

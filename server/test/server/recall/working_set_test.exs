@@ -105,7 +105,7 @@ defmodule Server.Recall.WorkingSetTest do
 
   test "a cited touch lifts a fact above an equal unreferenced one", %{thread: thread} do
     {:ok, plain} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "plain", provenance: "derived"})
-    {:ok, used} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "used", provenance: "derived"})
+    {:ok, used} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "used often", provenance: "derived"})
     {:ok, _} = Dossier.record_event(%{thread_id: thread.id, kind: "cited", correlation: "fact:#{used.id}"})
 
     ids = ids(Recall.working_set_for_thread(thread, budget: 10_000))
