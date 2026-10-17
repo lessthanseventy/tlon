@@ -231,6 +231,19 @@ defmodule Server.SoulTest do
       assert Soul.diary("atlas") == ["- 2026-10-07: old.", "- 2026-10-14: new."]
     end
 
+    test "an append replaces the file whole, never rewriting it in place", %{dir: dir} do
+      path = Path.join(dir, "daneri.md")
+      # a second name for the old file: an in-place write would change what it reads too
+      link = Path.join(dir, "daneri.link")
+      File.ln!(path, link)
+
+      assert :ok = Soul.append_diary("daneri", ["- 2026-10-14: shipped the stanza."])
+
+      assert File.read!(link) == @soul
+      assert File.read!(path) == @soul <> "- 2026-10-14: shipped the stanza.\n"
+      assert dir |> File.ls!() |> Enum.sort() == ["daneri.link", "daneri.md"]
+    end
+
     test "no soul or a bad name is an error, and no file is created", %{dir: dir} do
       assert {:error, :no_soul} = Soul.append_diary("nobody", ["- x"])
       assert {:error, :bad_name} = Soul.append_diary("../x", ["- x"])

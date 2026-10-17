@@ -145,7 +145,9 @@ defmodule Server.Soul do
 
   @doc """
   Append entry lines to the end of the Diary section, adding the heading when the soul has none.
-  Every other byte of the file is kept, including sections after Diary. Never creates a soul.
+  Every other byte of the file is kept, including sections after Diary. Never creates a soul. The
+  file is replaced whole (a temp file renamed over it), so a write cut off midway leaves the
+  operator's soul as it was.
   """
   @spec append_diary(String.t(), [String.t()]) :: :ok | {:error, :no_soul | :bad_name | File.posix()}
   def append_diary(name, entries) do
@@ -153,7 +155,7 @@ defmodule Server.Soul do
          path = Path.join(dir(), name <> ".md"),
          {:ok, raw} <- read_soul(path) do
       lines = raw |> String.trim_trailing("\n") |> String.split("\n")
-      File.write(path, Enum.join(insert_diary(lines, entries), "\n") <> "\n")
+      replace(path, Enum.join(insert_diary(lines, entries), "\n") <> "\n")
     end
   end
 
@@ -325,5 +327,13 @@ defmodule Server.Soul do
 
     ## Diary
     """
+  end
+
+  defp replace(path, content) do
+    tmp = "#{path}.#{System.unique_integer([:positive])}.tmp"
+
+    result = with :ok <- File.write(tmp, content), do: File.rename(tmp, path)
+    if result != :ok, do: File.rm(tmp)
+    result
   end
 end
