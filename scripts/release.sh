@@ -71,7 +71,9 @@ case "$cmd" in
     # built first, moved after: a build that fails leaves the pointer naming what still runs
     build_at "$to" || { echo "release: live stays at ${from:0:7}" >&2; exit 1; }
     git branch -f live "$to" || exit 1
-    git push -q ${rollback:+--force} origin live 2>/dev/null || echo "release: moved here; the push to origin failed (pushed next cut)" >&2
+    # the cut is the operator's own act: run from a citizen pane it must not be fenced as a coworker's push
+    env -u TLON_THREAD git -C "$root" push -q ${rollback:+--force} origin live ||
+      echo "release: moved here; the push to origin failed (pushed next cut)" >&2
 
     echo "release → ${to:0:7}${from:+ (from ${from:0:7})}"
     [ -n "$from" ] && git log --format='  %h %s' "$from..$to"
