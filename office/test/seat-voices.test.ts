@@ -30,12 +30,12 @@ describe("Scharlach's voice", () => {
 })
 
 describe("seatLine", () => {
-  test("returns one of the seat's own lines, {name} filled in", () => {
+  test("returns one of the seat's own lines", () => {
     const l = seatLine("sonny", [])
-    expect(SEAT_VOICE["sonny"]!.banter.map((x) => x.replaceAll("{name}", "you")).includes(l)).toBe(true)
+    expect(SEAT_VOICE["sonny"]!.banter.includes(l)).toBe(true)
   })
   test("skips what was said lately while anything else is unsaid", () => {
-    const all = SEAT_VOICE["tertius"]!.banter.map((x) => x.replaceAll("{name}", "you"))
+    const all = SEAT_VOICE["tertius"]!.banter
     const said = all.slice(0, all.length - 1)
     expect(seatLine("tertius", said)).toBe(all[all.length - 1])
   })
