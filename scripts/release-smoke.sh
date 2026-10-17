@@ -83,10 +83,9 @@ if [ -z "$url" ]; then
   git -C "$root" worktree add -q --detach "$dir" "$sha" || fail "can't check out ${sha:0:7}"
   office="$dir"
   mise trust -q "$dir" >/dev/null 2>&1
-  # a Hex home of its own, as workline-verify.sh gives its gates: a mix booting while another rewrites
-  # the shared ~/.hex/hex.config dies in Hex.start
-  mkdir -p "$dir/.hex"
-  for f in hex.config cache.ets; do [ -f "${HEX_HOME:-$HOME/.hex}/$f" ] && cp "${HEX_HOME:-$HOME/.hex}/$f" "$dir/.hex/"; done
+  # a Hex home of its own (scripts/lib/seed-hex.sh)
+  . "$(dirname "$0")/lib/seed-hex.sh"
+  seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir/.hex"
   export HEX_HOME="$dir/.hex"
   # the drive runs the candidate's own office-drive.sh under a throwaway XDG_STATE_HOME, which hides the trust above
   export MISE_TRUSTED_CONFIG_PATHS="$dir"

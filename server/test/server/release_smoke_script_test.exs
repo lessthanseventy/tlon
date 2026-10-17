@@ -54,9 +54,9 @@ defmodule Server.ReleaseSmokeScriptTest do
     setup do
       tmp = Path.join(System.tmp_dir!(), "smoke-fetch-#{System.pid()}-#{System.unique_integer([:positive])}")
       root = Path.join(tmp, "repo")
-      File.mkdir_p!(Path.join(root, "scripts"))
+      File.mkdir_p!(Path.join(root, "scripts/lib"))
 
-      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh) do
+      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh lib/seed-hex.sh) do
         File.cp!(Path.expand("../../../scripts/#{f}", __DIR__), Path.join([root, "scripts", f]))
       end
 
@@ -154,11 +154,11 @@ defmodule Server.ReleaseSmokeScriptTest do
       signal = Path.join(tmp, "signal")
 
       Enum.each(
-        [Path.join(root, "scripts"), Path.join(root, "server"), Path.join(root, "office"), stubs, signal],
+        [Path.join(root, "scripts/lib"), Path.join(root, "server"), Path.join(root, "office"), stubs, signal],
         &File.mkdir_p!/1
       )
 
-      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh) do
+      for f <- ~w(release-smoke.sh git-fetch-origin.sh smoke-sweep.sh lib/seed-hex.sh) do
         File.cp!(Path.expand("../../../scripts/#{f}", __DIR__), Path.join([root, "scripts", f]))
       end
 
