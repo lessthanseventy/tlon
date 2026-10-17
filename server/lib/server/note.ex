@@ -4,7 +4,8 @@ defmodule Server.Note do
   it's a durable row rather than a text file. Polymorphic scope via `(scope, scope_id)`:
   `global` (scope_id nil) / `workspace` / `project` / `thread`. `scope` is a DB-CHECK'd
   closed set (not re-mirrored app-side). `body` is markdown; `author` who wrote it. Both
-  `created_at` and `updated_at` are stamped (a note is edited in place).
+  `created_at` and `updated_at` are stamped (a note is edited in place). `name`, when set, makes it
+  the one note of that name in its scope (a unique index), like a home's `dump` (`Server.Life.dump/1`).
   """
   use Ecto.Schema
 
@@ -12,11 +13,14 @@ defmodule Server.Note do
 
   @scopes ~w(global workspace project thread)
 
+  @type t :: %__MODULE__{}
+
   schema "note" do
     field :scope, :string, default: "global"
     field :scope_id, :integer
     field :body, :string, default: ""
     field :author, :string
+    field :name, :string
     field :created_at, :utc_datetime
     field :updated_at, :utc_datetime
   end
@@ -30,7 +34,7 @@ defmodule Server.Note do
     now = DateTime.truncate(DateTime.utc_now(), :second)
 
     %__MODULE__{}
-    |> cast(attrs, [:scope, :scope_id, :body, :author])
+    |> cast(attrs, [:scope, :scope_id, :body, :author, :name])
     |> validate_required([:body])
     |> validate_inclusion(:scope, @scopes)
     |> validate_scope_id()

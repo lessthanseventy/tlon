@@ -761,7 +761,8 @@ defmodule Server.MCP.GatewayTest do
                "streaks" => %{},
                "due" => [],
                "quests" => [],
-               "today" => []
+               "today" => [],
+               "dump" => nil
              }
 
       {201, r} = post_json("/api/life/#{ws.id}/routines", %{title: "stretch", every: "@daily"})
@@ -785,6 +786,24 @@ defmodule Server.MCP.GatewayTest do
       {200, %{"quest" => done_q, "level_up" => false}} = post_json("/api/life/quests/#{q["id"]}/done", %{})
       assert done_q["id"] == q["id"]
       assert {409, _} = post_json("/api/life/quests/#{q["id"]}/done", %{})
+    end
+
+    test "the dump: one page per home, written whole, never wiped by an empty save" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Home", type: "home"})
+
+      assert {200, %{"body" => "", "updated_at" => nil}} = get_json("/api/life/#{ws.id}/dump")
+
+      {200, d} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: "the move\nwinter coat\n"})
+      assert d["body"] == "the move\nwinter coat\n"
+
+      {200, again} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: "the move\nwinter coat\ndentist\n"})
+      assert again["id"] == d["id"]
+      assert {200, %{"body" => "the move\nwinter coat\ndentist\n"}} = get_json("/api/life/#{ws.id}/dump")
+      assert {200, %{"dump" => %{"lines" => 3}}} = get_json("/api/life/#{ws.id}")
+
+      assert {422, _} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: "  \n"})
+      assert {200, %{"body" => "the move\nwinter coat\ndentist\n"}} = get_json("/api/life/#{ws.id}/dump")
+      assert [_] = Server.Notes.for_scope("workspace", ws.id)
     end
   end
 end

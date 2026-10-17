@@ -7,7 +7,7 @@ export type Due = { routine_id: number; title: string; due_at: string; window_re
 export type LifeSummary = { level: number; xp: number; due: Due[] }
 export type LifeQuest = { id: number; title: string; due_at: string | null; xp: number }
 /** `GET /api/life/:ws`: a home workspace's life card body */
-export type LifeStatus = { xp: number; level: number; next_level_at: number; streaks: Record<string, number>; due: Due[]; quests: LifeQuest[]; today: { routine_id: number; title: string; due_at: string; done: boolean }[] }
+export type LifeStatus = { xp: number; level: number; next_level_at: number; streaks: Record<string, number>; due: Due[]; quests: LifeQuest[]; today: { routine_id: number; title: string; due_at: string; done: boolean }[]; dump?: { lines: number; updated_at: string } | null }
 
 /** `prompt`: its coworker is sitting on a dialog (Server.Attention) — the ask, answered from the thread */
 /** `lead`: who it is staffed with; `live`: a tmux window is running it; `standing`: its workspace's lobby; `thinking`: who is mid-turn on it; `seat`: its lead at a desk (a window, a warm session), parked for a seat under the leaf cap, or idle; `duty`: a standing duty (a schedule's, the sheriff's beat), not work; `landing`: landed, its PR waiting on GitHub to merge it (`Server.Workline.waiting_on_github/0`) */

@@ -1239,9 +1239,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         open: () => void did(r.kind === "routine" ? data.routineDone(r.id, r.title) : data.questDone(r.id, r.title)).then(loadCard).then(draw),
       })) : [{ segs: [dim("reading the day…")] }]
       if (s && !rows.length) rows.push({ segs: [dim("nothing due, no open quests")] })
+      if (s) rows.unshift({ segs: [s.dump ? plain(`dump · ${s.dump.lines} lines · edited ${stamp(s.dump.updated_at)}`) : dim("dump · empty — D to pour it all out")], open: openDump })
       return {
         title: s ? `LIFE · lv ${s.level} · ${s.xp} xp` : "LIFE", rows,
-        actions: [{ key: "r", label: "new routine", run: newRoutine }, { key: "Q", label: "new quest", run: newQuest }, back1],
+        actions: [{ key: "D", label: "the dump", run: openDump }, { key: "r", label: "new routine", run: newRoutine }, { key: "Q", label: "new quest", run: newQuest }, back1],
       }
     }
     case "runs": {
@@ -2248,7 +2249,7 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
 // ── zoomed into a terminal ─────────────────────────────────────────────────────────────────────
 // The whole screen is one coworker's terminal: a bar on top, every key to the pane but Ctrl-],
 // which goes to the lobby.
-let zoom: { view: TerminalView; label: string } | null = null
+let zoom: { view: TerminalView; label: string; after?: () => void } | null = null
 const ROOM_KEY = 0x1d // Ctrl-]
 /** Ctrl-] as `tokenize` names it: a control character is ctrl- and its byte + 0x60 */
 const LOBBY_KEY = "ctrl-}"
@@ -2289,6 +2290,32 @@ async function readDoc(tid: number, name: string) {
   tmux("new-session", "-d", "-s", session, "-n", "doc", "sh", "-c", show, file)
   zoomOn({ socket: OWN_TMUX, session, window: "doc" }, `#${tid} · ${name}`)
 }
+/** the home's dump in the operator's own editor, in the office's tmux; each time the pane is left its saved file
+ *  goes back to the server. A session already open is reattached, never rewritten, so an unsaved buffer survives */
+let dumpSent: string | null = null
+async function openDump() {
+  if (ws === null) return
+  const w = ws, session = `dump-${w}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
+  const file = `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/tlon-office/dump-${w}.md`
+  const sync = () => {
+    let text: string
+    try { text = readFileSync(file, "utf8") } catch { return }
+    if (text === dumpSent) return
+    if (!text.trim()) { status = "the dump came back blank — not saved; the last page stands"; return draw() }
+    dumpSent = text
+    void did(data.dumpPut(w, text)).then(loadCard).then(draw)
+  }
+  if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) {
+    const page = await data.dump(w)
+    if (!page) { status = "the dump can't be read: the server isn't answering"; return draw() }
+    mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, page.body); dumpSent = page.body
+    const edit = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; exec $e "$0"`
+    // a tmux server already up keeps its own env, so the editor this TUI was started with is handed over
+    const env = ["VISUAL", "EDITOR"].flatMap((k) => (process.env[k] ? ["-e", `${k}=${process.env[k]}`] : []))
+    tmux("new-session", "-d", "-s", session, "-n", "dump", ...env, "sh", "-c", edit, file)
+  }
+  zoomOn({ socket: OWN_TMUX, session, window: "dump" }, "the dump", sync)
+}
 /** the arcade's games: terminal games, played wherever the machine has installed them */
 const GAMES = [
   { name: "Space Invaders", cmd: "ninvaders", what: "ninvaders" },
@@ -2307,10 +2334,10 @@ function play(g: (typeof GAMES)[number]) {
   if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) tmux("new-session", "-d", "-s", session, "-n", "game", g.cmd)
   zoomOn({ socket: OWN_TMUX, session, window: "game" }, `arcade · ${g.name}`)
 }
-function zoomOn(target: Target, label: string) {
+function zoomOn(target: Target, label: string, after?: () => void) {
   const colsN = cols(), rowsN = Math.max(2, (process.stdout.rows ?? 24) - 1)
   out(`${ESC}_Ga=d,d=A,q=2${ESC}\\${ESC}[?1003l${ESC}[?1006l${ESC}[?2004l${ESC}[2J`)
-  zoom = { label, view: new TerminalView(target, colsN, rowsN, () => drawZoom(), () => leaveZoom()) }
+  zoom = { label, after, view: new TerminalView(target, colsN, rowsN, () => drawZoom(), () => leaveZoom()) }
   drawZoom()
 }
 function drawZoom() {
@@ -2329,6 +2356,7 @@ function leaveZoom(lobby = false): void {
   zoom = null
   z.view.close()
   out(`${ESC}[0m${ESC}[?25l${ESC}[?1003h${ESC}[?1006h${ESC}[?2004h`)
+  z.after?.()
   if (lobby) return toLobby()
   if (reader) { out(`${ESC}[2J`); return draw() }
   layoutScreen(); draw()

@@ -183,9 +183,35 @@ defmodule Server.Life do
       streaks: Map.new(routines, &{&1.id, streak(&1, now)}),
       due: due(workspace_id, now),
       quests: open_quests(workspace_id),
-      today: today(routines, now)
+      today: today(routines, now),
+      dump: dump_line(dump(workspace_id))
     }
   end
+
+  @doc """
+  The home's dump: the one page the operator pours everything into, a `Server.Note` named `dump`
+  on the workspace, so agents read it like any note. nil before the first write.
+  """
+  @spec dump(integer) :: Server.Note.t() | nil
+  def dump(workspace_id),
+    do:
+      Repo.one(
+        from n in Server.Note, where: n.scope == "workspace" and n.scope_id == ^workspace_id and n.name == "dump"
+      )
+
+  @doc "Replace the dump's body, making the note on the first write. A blank body is refused, never a wipe."
+  @spec put_dump(integer, String.t(), String.t()) :: {:ok, Server.Note.t()} | {:error, Ecto.Changeset.t()}
+  def put_dump(workspace_id, body, author) do
+    case dump(workspace_id) do
+      nil -> Server.Notes.write(%{scope: "workspace", scope_id: workspace_id, name: "dump", author: author, body: body})
+      note -> Server.Notes.edit(note, %{body: body})
+    end
+  end
+
+  defp dump_line(nil), do: nil
+
+  defp dump_line(note),
+    do: %{lines: note.body |> String.trim_trailing() |> String.split("\n") |> length(), updated_at: note.updated_at}
 
   defp open_quests(workspace_id) do
     Repo.all(
