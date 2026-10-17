@@ -12,8 +12,10 @@ defmodule Server.ModelCli do
 
   @keys %{"OLLAMA_API_KEY" => "ollama-api-key"}
   # a one-off call is headless: nothing saved, nothing to trust or approve — a CLI that stopped to
-  # ask would only sit there until the timeout
-  @headless ~w(--no-session-persistence --permission-mode dontAsk)
+  # ask would only sit there until the timeout; and no MCP servers, the operator's claude.ai
+  # connectors included, whose not-authorized notice otherwise ends up in the reply
+  @headless ["--no-session-persistence", "--permission-mode", "dontAsk", "--strict-mcp-config"] ++
+              ["--mcp-config", ~s({"mcpServers":{}})]
   @efforts ~w(low medium high xhigh max)
   # Off the Claude plan a one-off is a bare completion: no tools, no project context, the system
   # prompt alone — 79 tokens in, where Claude Code's own prompt is ~20k. `--bare` skips the Claude
