@@ -944,23 +944,26 @@ defmodule Server.Workline do
 
   Each round of a `door` (`:review` or `:qa`) replaces the held follow-ups its earlier rounds filed:
   the latest review knows what is still owed, so a finding fixed since is not filed, and one raised
-  again is not filed twice. `{:ok, tickets}`.
+  again is not filed twice. One no longer raised is closed done, labelled `superseded` and pointing
+  at the round's tickets — never deleted, so an id a thread quoted still resolves. `{:ok, tickets}`.
   """
   def follow_ups(%Thread{} = thread, author, items, door \\ :review) do
     label = "from-#{door}"
     titles = MapSet.new(items, &(&1 |> String.trim() |> String.split("\n", parts: 2) |> hd() |> String.trim()))
 
     # one still raised keeps its ticket; one this door no longer raises was fixed since
-    for t <- tied_follow_ups(thread.id),
-        "held" in t.labels,
-        label in t.labels or (door == :review and not Enum.any?(t.labels, &String.starts_with?(&1, "from-"))),
-        not MapSet.member?(titles, t.title) do
-      # a delete that fails leaves one stale follow-up; it must not cost the review its verdict
-      with {:error, why} <- Server.Tickets.remove(t),
-           do: Logger.warning("follow-up ##{t.id} not replaced: #{inspect(why)}")
-    end
+    superseded =
+      for t <- tied_follow_ups(thread.id),
+          "held" in t.labels,
+          label in t.labels or (door == :review and not Enum.any?(t.labels, &String.starts_with?(&1, "from-"))),
+          not MapSet.member?(titles, t.title),
+          do: t
 
-    filed = thread.id |> tied_follow_ups() |> MapSet.new(& &1.title)
+    filed =
+      for t <- tied_follow_ups(thread.id),
+          t not in superseded and "superseded" not in t.labels,
+          into: MapSet.new(),
+          do: t.title
 
     tickets =
       for text <- Enum.uniq_by(items, &(&1 |> String.trim() |> String.split("\n", parts: 2) |> hd())),
@@ -982,6 +985,7 @@ defmodule Server.Workline do
         ticket
       end
 
+    supersede(superseded, author, door, tickets)
     {:ok, tickets}
   end
 
@@ -2127,5 +2131,18 @@ defmodule Server.Workline do
           e.thread_id == ^thread.id and e.correlation == ^"workline:#{thread.slug}:landing" and
             fragment("(?::jsonb ->> 'requeued_head') = ?", e.detail, ^head)
     )
+  end
+
+  defp supersede(superseded, author, door, tickets) do
+    now = if tickets == [], do: "none", else: Enum.map_join(tickets, ", ", &"##{&1.id}")
+    note = "\n\nSuperseded: #{author}'s later #{door} round no longer raises it; that round's follow-ups: #{now}."
+
+    for t <- superseded do
+      attrs = %{status: "done", labels: (t.labels -- ["held"]) ++ ["superseded"], body: (t.body || "") <> note}
+
+      # a close that fails leaves one stale follow-up; it must not cost the review its verdict
+      with {:error, why} <- Server.Tickets.update(t, attrs),
+           do: Logger.warning("follow-up ##{t.id} not superseded: #{inspect(why)}")
+    end
   end
 end

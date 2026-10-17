@@ -195,17 +195,32 @@ defmodule Server.WorklineSendBackTest do
       assert {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["twice\n\na", "twice\n\nb"])
     end
 
-    test "a later review's list replaces the earlier one's: a finding fixed since goes, QA's stay" do
+    test "a later review's list replaces the earlier one's: a finding fixed since is closed superseded, QA's stay" do
       thread = at_review("rounds")
       {:ok, [fixed, kept]} = Workline.follow_ups(thread, "lonnrot", ["fixed since", "still open"])
       {:ok, [qa]} = Workline.follow_ups(thread, "cruz", ["the button is grey"], :qa)
 
       assert {:ok, [new]} = Workline.follow_ups(thread, "nolan", ["still open", "found now"])
 
-      refute Repo.get(Server.Ticket, fixed.id)
-      assert Repo.get(Server.Ticket, kept.id)
+      superseded = Repo.get(Server.Ticket, fixed.id)
+      assert %Server.Ticket{status: "done"} = superseded
+      assert "superseded" in superseded.labels and "held" not in superseded.labels
+      assert superseded.body =~ "##{new.id}"
+      assert Repo.get(Server.Ticket, kept.id).status != "done"
       assert Repo.get(Server.Ticket, qa.id)
       assert new.title == "found now" and "from-review" in new.labels
+
+      {:ok, _} = Channel.close_thread(Repo.get!(Thread, thread.id))
+      assert Repo.get(Server.Ticket, fixed.id).body == superseded.body
+    end
+
+    test "a superseded finding raised again by a later round is filed again" do
+      thread = at_review("raised-again")
+      {:ok, [first]} = Workline.follow_ups(thread, "lonnrot", ["flaky test"])
+      {:ok, []} = Workline.follow_ups(thread, "lonnrot", [])
+
+      assert {:ok, [again]} = Workline.follow_ups(thread, "nolan", ["flaky test"])
+      assert again.id != first.id and "held" in again.labels
     end
 
     test "a blank follow-up files nothing" do
