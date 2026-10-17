@@ -1621,6 +1621,7 @@ defmodule Server.Workline do
     drive the changed path as Andrew would, against a scratch release of work/#{thread.slug}: \
     `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/#{thread.slug}` builds it on its own port and db (it prints the url), \
     smokes it and keeps it up; drive it with `TLON_URL=<the url it printed> mise run office:drive -- <keys>`. \
+    Run both unsandboxed: a sandboxed Bash can't reach Postgres, and each sandboxed call is its own network namespace. \
     Never :4040, the live service. Then submit_qa with thread_id: #{thread.id}: pass, or fail with the \
     finding — what you pressed and the screen text you saw.\
     """
