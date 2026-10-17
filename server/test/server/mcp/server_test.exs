@@ -504,6 +504,17 @@ defmodule Server.MCP.ServerTest do
 
     # An unknown peer is refused.
     assert call(token, session, 5, "consult_peer", %{"peer" => "nobody", "prompt" => "hi"})["isError"]
+
+    # A thread the peer isn't on is refused in words, naming the threads it is on.
+    {:ok, elsewhere} = Channel.open_thread(%{title: "someone else's"})
+
+    r =
+      call(token, session, 6, "consult_peer", %{"peer" => "claude", "prompt" => "hi", "thread_id" => elsewhere.id})
+
+    assert r["isError"]
+
+    assert hd(r["content"])["text"] =~
+             "claude neither leads thread ##{elsewhere.id} nor has a live session on it; claude leads ##{peer_thread.id}"
   end
 
   test "record_check — measured verification over the wire (exit keys the kind)", %{token: token} do
