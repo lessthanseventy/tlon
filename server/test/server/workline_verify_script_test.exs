@@ -79,12 +79,28 @@ defmodule Server.WorklineVerifyScriptTest do
     assert failures("[office:check] (fail) the clock reads 404 [0.90ms]") == ["(fail) the clock reads 404 [0.90ms]"]
   end
 
-  test "bun: each (fail) line" do
-    assert failures(@bun) == ["(fail) the clock reads 404 [0.90ms]"]
+  test "bun: each (fail) line, after the error: line that says why" do
+    assert failures(@bun) == ["error: expect(received).toBe(expected)", "(fail) the clock reads 404 [0.90ms]"]
   end
 
-  test "a green run names nothing" do
-    assert failures("Finished in 0.1 seconds\nResult: 3/3 passed\n") == []
+  test "bun through mise, interleaved with another task's compile noise: the error: line still comes out" do
+    interleaved = """
+    [office:check] refresh.test.ts:
+    [server:check] ==> jason
+    [server:check] Compiling 10 files (.ex)
+    [office:check] error: the pane never showed the step: mise ERROR Config files in ~/office/mise.toml are not trusted.
+    [server:check] Generated jason app
+    [office:check] (fail) refresh > a step reaches the pane [5002.11ms]
+    """
+
+    assert failures(interleaved) == [
+             "error: the pane never showed the step: mise ERROR Config files in ~/office/mise.toml are not trusted.",
+             "(fail) refresh > a step reaches the pane [5002.11ms]"
+           ]
+  end
+
+  test "a green run names nothing, not even an error: line no test failed on" do
+    assert failures("error: a logged one\nFinished in 0.1 seconds\nResult: 3/3 passed\n") == []
   end
 
   test "a cut never splits a multibyte character: the names stay valid UTF-8" do
