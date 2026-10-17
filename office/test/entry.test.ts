@@ -102,7 +102,7 @@ describe("the entry (U)", () => {
     expect(unowned).toBeDefined() // health has a problem
   })
 })
-describe("the entry (U) with unled work", () => {
+describe("the entry (U) with unled and early-stage work", () => {
   const a = world()
   a.threads.push(th(17, "nolan", "spec"), { ...th(18, "nolan", "build"), lead: null, seat: undefined })
   const v = viewOf(a, 1)
@@ -117,9 +117,15 @@ describe("the entry (U) with unled work", () => {
       expect(inPivot).toBe(e.counts[st])
     }
   })
+
+  test("the prose names every stage it counts, so its parts add up to its total", () => {
+    expect(e.prose).toStartWith("8 works in hand: 1 at spec, 3 at build, 3 at review")
+    expect(e.prose).toContain(", 1 doing.")
+  })
 })
 
-test("no unled row when every stage thread is led", () => {
+test("no unled row and no spec/plan clause when there is nothing to put in them", () => {
   const e = entryOf(viewOf(world(), 1), ctx, needs, feed, NOW)
   expect(e.pivot.rows.map((r) => r.cow)).toEqual(["nolan", "paula"])
+  expect(e.prose).toStartWith("6 works in hand: 2 at build, 3 at review")
 })

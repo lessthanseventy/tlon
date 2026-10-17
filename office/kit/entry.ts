@@ -90,8 +90,10 @@ export function entryOf(a: Agents, ctx: BoardCtx, needs: EntryNeed[], feed: Entr
 
   const works = counts.DOING + counts.SPEC + counts.PLAN + counts.BUILD + counts.REVIEW
   const waits = waiting.length ? ` (${waiting.length} waiting on you${waitingMarks}${markOf("needs")})` : ""
+  // spec and plan are named only when non-empty, so the named parts always add up to `works`
+  const early = (["SPEC", "PLAN"] as const).filter((st) => counts[st]).map((st) => `${counts[st]} at ${st.toLowerCase()}, `).join("")
   const prose =
-    `${works} works in hand: ${counts.BUILD} at build, ${counts.REVIEW} at review${waits}, ${counts.DOING} doing. ` +
+    `${works} works in hand: ${early}${counts.BUILD} at build, ${counts.REVIEW} at review${waits}, ${counts.DOING} doing. ` +
     `${shipped.length} shipped since this morning${markOf("tray")}. ` +
     `${stuck} known and owned${markOf("beacon")}; ${a.health?.problems.length ?? 0} not${markOf("rack")}.`
 
