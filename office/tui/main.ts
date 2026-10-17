@@ -2336,7 +2336,7 @@ async function restorePage(id: number) {
  *  a time per home (a write that lands mid-PUT is sent when it settles), and one the server didn't take is sent on
  *  the next write, leave, open or refresh: a file that differs from the server's page is never overwritten, it is sent —
  *  safe because the server keeps the page each save replaces. A session already open is reattached, never rewritten */
-const dumpSent = new Map<number, string>(), dumpSending = new Set<number>(), dumpAgain = new Set<number>(), dumpWatched = new Set<number>(), dumpFailedAt = new Map<number, number>()
+const dumpSent = new Map<number, string>(), dumpSending = new Set<number>(), dumpAgain = new Set<number>(), dumpWatched = new Set<number>(), dumpFailedAt = new Map<number, number>(), dumpOldWatched = new Set<number>()
 // on disk, not the runtime tmpfs: words the server hasn't taken yet survive a logout or a reboot
 const dumpFile = (w: number) => join(STATE_DIR, OWN_TMUX, `dump-${w}.md`)
 function syncDump(w: number, quiet = false) {
@@ -2368,7 +2368,7 @@ async function openDump() {
     mkdirSync(dirname(file), { recursive: true })
     const bring = () => { try { const t = readFileSync(old, "utf8"); if (t.trim()) writeFileSync(file, t) } catch {} }
     bring()
-    if (open) watchFile(old, { interval: 1000 }, bring)
+    if (open && !dumpOldWatched.has(w)) { dumpOldWatched.add(w); watchFile(old, { interval: 1000 }, bring) }
     else unlinkSync(old)
   }
   if (!open || !dumpSent.has(w)) {
