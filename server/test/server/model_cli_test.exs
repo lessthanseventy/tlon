@@ -41,9 +41,10 @@ defmodule Server.ModelCliTest do
              ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s(echo "$OLLAMA_API_KEY")), "m"})
   end
 
-  test "a call on the Claude plan runs headless: no session saved, nothing to ask, the operator's own login",
+  test "a call on the Claude plan runs headless: no session saved, nothing to ask, no MCP servers or connectors, the operator's own login",
        %{dir: dir} do
-    assert {:ok, "anthropic -p hi --model haiku --no-session-persistence --permission-mode dontAsk\n"} =
+    assert {:ok,
+            ~s(anthropic -p hi --model haiku --no-session-persistence --permission-mode dontAsk --strict-mcp-config --mcp-config {"mcpServers":{}}\n)} =
              ModelCli.prompt(
                "hi",
                :test_cmd,
