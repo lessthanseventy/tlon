@@ -63,7 +63,7 @@ import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
-  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
+  | { kind: "column"; col: number } | { kind: "ticket"; id: number; from?: Mode } | { kind: "epic"; id: number; from?: Mode } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number }
@@ -560,10 +560,11 @@ function open(m: Mode) {
   void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(draw)
   draw()
 }
-/** Esc: a card back to home, home to nothing picked; `all` drops both at once */
+/** Esc: a card back to home (a ticket or epic to the list it was opened from), home to nothing picked; `all` drops both at once */
 function back(everything = false) {
+  const from = !everything && (mode.kind === "ticket" || mode.kind === "epic") ? mode.from : undefined
   if (everything || mode.kind === "home") picked = null
-  mode = { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null; lookDraft = null; petDraft = null
+  mode = from ?? { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null; lookDraft = null; petDraft = null
 }
 
 function act(x: Act) {
@@ -859,8 +860,8 @@ function seatActions(b: Coworker | undefined): Action[] {
         const p = b.persona
         const items: { label: string; run: () => void }[] = [
           p
-            ? { label: "draw a new one (reroll)", run: () => ask2(`reroll ${b.name}'s persona — the hand edits go`, () => void did(data.persona(w, b.agent_id, true))) }
-            : { label: "make one", run: () => void did(data.persona(w, b.agent_id, false)) },
+            ? { label: "draw a new one (reroll)", run: () => ask2(`reroll ${b.name}'s persona — the hand edits go`, () => { status = "drawing a new one…"; draw(); void did(data.persona(w, b.agent_id, true)) }) }
+            : { label: "make one", run: () => { status = "drawing one…"; draw(); void did(data.persona(w, b.agent_id, false)) } },
           ...(p ? [
             { label: "edit the voice", run: () => ask(`${b.name}'s voice`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { voice: s.trim() })) }, { text: p.voice }) },
             { label: "edit the backstory", run: () => ask(`${b.name}'s backstory`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { backstory: s.trim() })) }, { text: p.backstory }) },
@@ -1154,7 +1155,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           return {
             segs: [...(x.state ? [stateSeg(x.state)] : []), key(x.act.kind === "ticket" || x.act.kind === "epic" ? `#${x.act.id} ` : x.act.kind === "thread" ? `#${x.act.tid} ` : ""), plain(x.title), dim(`  ${x.stage}${x.who ? ` · ${x.who}` : ""}`),
               ...(x.state ? [{ s: `  ${x.state.why}`, fg: x.state.kind === "needs" ? ROLE.attention : ROLE.inactive }] : x.asks ? [pink("  waiting on you")] : []), ...(blocked ? [pink("  ⊘ blocked")] : [])],
-            open: () => act(x.act), ref: JSON.stringify(x.act),
+            open: () => x.act.kind === "ticket" || x.act.kind === "epic" ? open({ ...x.act, from: mode }) : act(x.act), ref: JSON.stringify(x.act),
           }
         }),
         actions: [
@@ -1172,7 +1173,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `EPIC #${id} · ${ep.done ?? 0}/${ep.total ?? 0}`,
         rows: [{ segs: [plain(ep.title)] }, { segs: [dim(`${ep.priority} priority${ep.next ? ` · next #${ep.next.id} ${ep.next.title}` : ""}`)] },
-          ...kids.map((k) => ({ segs: [key(`#${k.id} `), plain(k.title), dim(`  ${k.routed ? "with the manager" : "ticket"}`)], open: () => act({ kind: "ticket", id: k.id }), ref: JSON.stringify({ kind: "ticket", id: k.id }) }))],
+          ...kids.map((k) => ({ segs: [key(`#${k.id} `), plain(k.title), dim(`  ${k.routed ? "with the manager" : "ticket"}`)], open: () => open({ kind: "ticket", id: k.id, from: mode }), ref: JSON.stringify({ kind: "ticket", id: k.id }) }))],
         actions: [back1],
       }
     }
@@ -1573,7 +1574,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "t", label: "look over Uqbar's shoulder", run: () => void zoomInto(study) },
         { key: "v", label: "read the study", run: () => openReader(study) },
       ]
-      return { title: e.title, tint: ROLE.inactive, rows, actions: [...verbs, back1] }
+      const notes: Action[] = e.footnotes.slice(0, 9).map((f, i) => ({ key: String(i + 1), label: `footnote ${f.mark} — ${f.text}`, run: () => act(f.act) }))
+      return { title: e.title, tint: ROLE.inactive, rows, actions: [...verbs, ...notes, back1] }
     }
     case "decide": {
       // one waiting item at a time, everything to decide it on the card; acting moves to the next
@@ -2238,7 +2240,7 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
   const h = hitAt(clipped, g, m.col, m.row, viewport)
   if (m.motion) {
     const t = h?.tip ?? "", over = h?.note ?? null
-    if (over !== lit) { lit = over; roomChanged = true; return draw() }
+    if (over !== lit) { lit = over; tip = t; roomChanged = true; return draw() }
     if (t !== tip) { tip = t; draw() }
     return
   }
