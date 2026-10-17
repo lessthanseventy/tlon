@@ -38,6 +38,7 @@ defmodule Server.Note do
     |> validate_required([:body])
     |> validate_inclusion(:scope, @scopes)
     |> validate_scope_id()
+    |> unique_constraint(:name, name: :note_scope_scope_id_name_index)
     |> put_change(:created_at, now)
     |> put_change(:updated_at, now)
   end
