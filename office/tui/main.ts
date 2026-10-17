@@ -83,6 +83,7 @@ const STATE_DIR = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/sta
 const STATE = join(STATE_DIR, "office-workspace")
 const TRAY = join(STATE_DIR, "office-tray") // when you last read the in-tray
 const SAID = join(STATE_DIR, "office-banter") // the room's last lines said, for the banter log
+const EARS = join(STATE_DIR, "office-dogears") // the posts Argos caught, by earmarkOf
 const LOOKED = join(STATE_DIR, "margin-looked") // the last focused moment, epoch seconds: older margin notes start already seen
 const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
@@ -456,15 +457,18 @@ function notify(title: string, body: string) {
 /** the feed rows already flown as aeroplanes */
 const flown = new Set<string>()
 async function loadMargin() { notes = ws === null ? [] : await data.margin(ws) }
-/** the posts whose aeroplane Argos caught, by `earmarkOf`: the thread shows them dog-eared */
-const earmarked = new Set<string>()
+/** the posts whose aeroplane Argos caught, by `earmarkOf`: the thread shows them dog-eared, across restarts */
+const earmarked = new Set<string>((() => { try { return JSON.parse(readState(EARS) || "[]") as string[] } catch { return [] } })())
 async function loadFeed() {
   if (ws === null) return
   const first = !feed.length
   feed = (await data.activity(ws)) ?? feed
   const v = view(), r = room()
   for (const x of freshPosts(feed, flown, first)) {
-    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(v.visits, v, x.thread_id!, Date.now()))) earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
+    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(v.visits, v, x.thread_id!, Date.now()))) {
+      earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
+      writeState(EARS, JSON.stringify([...earmarked].slice(-200)))
+    }
   }
   // a first run starts with the tray read, not with everything that ever happened in it
   if (!trayRead && feed[0]) { trayRead = feed[0].at; writeState(TRAY, trayRead) }
