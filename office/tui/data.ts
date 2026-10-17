@@ -14,7 +14,7 @@ let fake: Toy | null = null
 /** a new source: what was held belongs to the old one */
 export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds = []; down = null }
 
-async function call(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
+async function call(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
   if (fake) {
     if (method !== "GET") return { status: 409, json: { error: "it's a toy — nothing here to change" } }
     return path === "/office" ? { status: 200, json: fake.snapshot() } : { status: 404, json: null }
@@ -162,7 +162,7 @@ export async function thread(id: number): Promise<ThreadView | null> {
 
 /** a write: a line for the status bar saying what happened, or why it didn't */
 const write = (what: string, path: string, body: unknown, ok: (j: any) => string) => send("POST", what, path, ok, body)
-async function send(method: "POST" | "PATCH" | "DELETE", what: string, path: string, ok: (j: any) => string, body: unknown = {}): Promise<string> {
+async function send(method: "POST" | "PUT" | "PATCH" | "DELETE", what: string, path: string, ok: (j: any) => string, body: unknown = {}): Promise<string> {
   if (down?.url === base()) return `${what} not sent: ${down.note} · mise run server:restart`
   try {
     const r = await call(method, path, body)
@@ -200,6 +200,10 @@ export const routineNew = (ws: number, title: string, every: string) =>
   write("adding the routine", `/life/${ws}/routines`, { title, every }, (j) => `added ${j.title}`)
 export const questNew = (ws: number, title: string) =>
   write("adding the quest", `/life/${ws}/quests`, { title }, (j) => `added ${j.title}`)
+/** the home's dump: the one page everything gets poured into (body "" before the first write) */
+export const dump = (ws: number) => read<{ id: number | null; body: string; updated_at: string | null }>(`/life/${ws}/dump`)
+export const dumpPut = (ws: number, body: string) =>
+  send("PUT", "saving the dump", `/life/${ws}/dump`, () => `dump saved · ${body.trimEnd().split("\n").length} lines`, { body })
 export type Activity = { kind: string; at: string; thread_id: number | null; who: string | null; text: string }[]
 export type Capped<T> = { shown: T[]; more: number }
 export type Stuck = { thread_id: number; title: string; text: string }

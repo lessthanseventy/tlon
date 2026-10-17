@@ -136,6 +136,8 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/life/routines/:id/done Life.routine_done; {run, level_up}
       POST   /api/life/:ws/quests        {"title", "due_at"?, "xp"?} → Life.create_quest; 201
       POST   /api/life/quests/:id/done   Life.quest_done; {quest, level_up}
+      GET    /api/life/:ws/dump          Life.dump; {id, body, updated_at} (body "" before the first write)
+      PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe
   """
 
   import Plug.Conn
@@ -434,6 +436,11 @@ defmodule Server.MCP.OperatorAPI do
 
   defp route(conn, "POST", "life", [ws, "routines"]), do: with_workspace(conn, ws, &new_routine(conn, &1))
   defp route(conn, "POST", "life", [ws, "quests"]), do: with_workspace(conn, ws, &new_quest(conn, &1))
+
+  defp route(conn, "GET", "life", [ws, "dump"]),
+    do: with_workspace(conn, ws, &json(conn, 200, dump_row(Server.Life.dump(&1.id))))
+
+  defp route(conn, "PUT", "life", [ws, "dump"]), do: with_workspace(conn, ws, &put_dump(conn, &1))
 
   defp route(conn, "PATCH", "life", ["routines", id]), do: with_row(conn, Server.Routine, id, &edit_routine(conn, &1))
 
@@ -879,6 +886,19 @@ defmodule Server.MCP.OperatorAPI do
       {:error, reason} -> refused(conn, reason)
     end
   end
+
+  defp put_dump(conn, ws) do
+    case body(conn) do
+      {%{"body" => text}, conn} when is_binary(text) ->
+        reply(conn, Server.Life.put_dump(ws.id, text, operator()), &dump_row/1)
+
+      {_, conn} ->
+        json(conn, 400, %{error: ~s(expected {"body": "…"})})
+    end
+  end
+
+  defp dump_row(nil), do: %{id: nil, body: "", updated_at: nil}
+  defp dump_row(note), do: Map.take(note, [:id, :body, :updated_at])
 
   defp new_quest(conn, ws) do
     {b, conn} = body(conn)
