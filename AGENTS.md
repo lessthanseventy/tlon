@@ -12,7 +12,7 @@ design that split it out: ficciones' `docs/plans/2026-09-25-sovereign-repos-and-
 The human and any agent drive this repo through the **same mise tasks** (`mise tasks` lists them) — one
 control loop, not two, and no second way to run anything:
 
-- `mise run check` — names gate + server, adapters and office gates + the task manual; the green-before-commit gate.
+- `mise run check` — names gate + tracked-junk gate (`check:ignored`: no tracked file under an ignored path) + server, adapters and office gates + the task manual; the green-before-commit gate.
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
   holds it) and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
   suites on the one test database at once. Don't call `check:all` to skip the line.
