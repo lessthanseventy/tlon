@@ -109,6 +109,20 @@ defmodule Server.Workline.Publish do
   end
 
   @doc """
+  Fetch `branch`'s head on origin into its tracking ref, so a `push_branch/3` after it leases
+  against what GitHub holds now — a head GitHub moved itself (an update-branch) is not a push the
+  lease should refuse. `:ok` | `{:error, why}`.
+  """
+  def fetch_branch(repo, branch, run \\ &System.cmd/3) do
+    refspec = "+refs/heads/#{branch}:refs/remotes/origin/#{branch}"
+
+    case run.("git", ["-C", repo, "fetch", "origin", refspec], cd: repo, stderr_to_stdout: true) do
+      {_, 0} -> :ok
+      {out, _} -> {:error, "fetch of #{branch} refused: #{String.slice(String.trim(out), 0, 300)}"}
+    end
+  end
+
+  @doc """
   Push one thread's branch to origin, force-with-lease — the only way a coworker's branch reaches
   GitHub (`push_branch`; the pre-push hook refuses a coworker pane's own pushes). Only a
   `work/<slug>` branch: never main, never anything else. `:ok` | `{:error, why}`.

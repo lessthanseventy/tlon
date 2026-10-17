@@ -2075,7 +2075,8 @@ defmodule Server.Workline do
   defp merge_again(thread, url, repo, sha, run) do
     branch = "work/#{thread.slug}"
 
-    with :ok <- Server.Workline.Publish.push_branch(repo, branch, run),
+    with :ok <- Server.Workline.Publish.fetch_branch(repo, branch, run),
+         :ok <- Server.Workline.Publish.push_branch(repo, branch, run),
          Server.Workline.Publish.post_check(repo, sha, run),
          how when how in [:merged, :auto] <- Server.Workline.Publish.merge_at(repo, url, sha, branch, run) do
       said = if how == :merged, do: "merged", else: "auto-merge armed at that head"
