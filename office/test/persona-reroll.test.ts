@@ -4,14 +4,16 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 
 // E → "draw a new one (reroll)" throws away the persona's hand edits, so it asks first: n changes
-// nothing, y rerolls. Drives the real TUI against a stub server and reads what it posted.
+// nothing, y rerolls, and says so while the model call runs. Drives the real TUI against a stub
+// server that holds the reroll's answer until the test lets it go, and reads what it posted.
 const persona = { seed: 7, source: "model", voice: "dry", backstory: "Grew up above a clockmaker's.", quirks: { desk_object: "a mug", hobby: "chess", catchphrase: "Noted.", pet_peeve: "tabs" } }
 const posts: string[] = []
+let answer = () => {}
 const server = Bun.serve({
   port: 0,
   fetch: async (req) => {
     const path = new URL(req.url).pathname
-    if (req.method === "POST" && path.endsWith("/persona")) { posts.push(path); return Response.json({ seed: 9 }) }
+    if (req.method === "POST" && path.endsWith("/persona")) { posts.push(path); await new Promise<void>((r) => { answer = r }); return Response.json({ seed: 9 }) }
     if (path.endsWith("/office/needs")) return Response.json([])
     if (path.endsWith("/office")) return Response.json({
       roster: [], threads: [], workspaces: [{ id: 1, name: "Toy" }],
@@ -65,4 +67,6 @@ test("E then reroll asks first: n changes nothing, y rerolls", async () => {
   tmux("send-keys", "-t", "0", "y")
   await until("the reroll posted", () => posts.length === 1)
   expect(posts).toEqual(["/api/workspaces/1/coworkers/5/persona"])
+  await until("the wait said", () => screen().includes("drawing a new one"))
+  answer()
 }, 40_000)
