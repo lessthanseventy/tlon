@@ -220,7 +220,8 @@ defmodule Server.Tickets do
   operator's post, so its lead is staffed like any ask), and the ticket promoted into it. `agent_id`
   hands the thread to that coworker; without one, or when it is the manager (who never leads a
   workline), the promotion staffs a builder — or, with none on the bench to staff, leaves it unled.
-  `{:ok, thread}` or `{:error, reason}`; an epic is never work: `{:error, :epic}`.
+  `{:ok, thread}` or `{:error, reason}`; an epic is never work: `{:error, :epic}`; while the office is
+  paused nothing starts: `{:error, line}` (`Server.Pause.at_work/0`).
   """
   def start_thread(ticket, agent_id \\ nil)
   def start_thread(%Ticket{kind: "epic"}, _agent_id), do: {:error, :epic}
@@ -230,7 +231,8 @@ defmodule Server.Tickets do
     ask = Enum.join(Enum.reject([ticket.title, ticket.body, "(ticket ##{ticket.id})"], &(&1 in [nil, ""])), "\n\n")
 
     # a workline before the ask is posted, so its lead is briefed for the stage it starts at
-    with :ok <- startable(ticket),
+    with :ok <- Server.Pause.at_work(),
+         :ok <- startable(ticket),
          {:ok, opened} <-
            %{title: ticket.title, workspace_id: ticket.workspace_id, project_id: ticket.project_id, scope: "machine"}
            |> then(&if(agent_id, do: Map.put(&1, :agent_id, agent_id), else: &1))

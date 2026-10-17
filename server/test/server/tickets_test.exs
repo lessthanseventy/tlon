@@ -252,6 +252,30 @@ defmodule Server.TicketsTest do
       assert {:ok, %{agent_id: b}} = Tickets.start_thread(plain)
       assert b == lead.agent_id
     end
+
+    test "start_thread is refused while the office is paused, and opens nothing", %{workspace: ws} do
+      path = Path.join(System.tmp_dir!(), "tk-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        File.rm(path)
+
+        if prior,
+          do: Application.put_env(:server, :operator_config_path, prior),
+          else: Application.delete_env(:server, :operator_config_path)
+      end)
+
+      {:ok, t} = Tickets.file(%{workspace_id: ws.id, title: "not now"})
+      File.write!(path, JSON.encode!(%{"pause" => "pencils_down"}))
+      before = Server.Repo.aggregate(Server.Thread, :count)
+
+      assert {:error, "the office is paused (pencils down): back to work first"} = Tickets.start_thread(t)
+      File.write!(path, JSON.encode!(%{"pause" => "lights_out"}))
+      assert {:error, "the office is paused (lights out): back to work first"} = Tickets.start_thread(t)
+      assert Server.Repo.aggregate(Server.Thread, :count) == before
+      assert %{status: "backlog"} = Tickets.get(t.id)
+    end
   end
 
   describe "links and ties (UX slice 4)" do

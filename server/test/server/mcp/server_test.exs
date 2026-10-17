@@ -1902,4 +1902,36 @@ defmodule Server.MCP.ServerTest do
     posted = Channel.recent_messages(thread, 5)
     assert Enum.any?(posted, &(&1.author == "oracle" and &1.body =~ "asked (claude)"))
   end
+
+  test "staff_child is refused while the office is paused, and opens nothing", %{token: token} do
+    path = Path.join(System.tmp_dir!(), "sc-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+    prior = Application.get_env(:server, :operator_config_path)
+    Application.put_env(:server, :operator_config_path, path)
+
+    on_exit(fn ->
+      File.rm(path)
+
+      if prior,
+        do: Application.put_env(:server, :operator_config_path, prior),
+        else: Application.delete_env(:server, :operator_config_path)
+    end)
+
+    {:ok, _} = Staff.register_agent(%{name: "hronir-paused", mandate: "build", engine: "fresh"})
+    File.write!(path, JSON.encode!(%{"pause" => "pencils_down"}))
+    before = Repo.aggregate(Thread, :count)
+
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r =
+      call(token, session, 4, "staff_child", %{
+        "title" => "not now",
+        "lead" => "hronir-paused",
+        "brief" => "Build it."
+      })
+
+    assert r["isError"]
+    assert hd(r["content"])["text"] =~ "the office is paused (pencils down): back to work first"
+    assert Repo.aggregate(Thread, :count) == before
+  end
 end

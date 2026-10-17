@@ -311,7 +311,7 @@ case "$cmd" in
     tk="${1:-}"; agent="${2:-nil}"
     { int "$tk" && { [ "$agent" = nil ] || int "$agent"; }; } ||
       { echo 'usage: tlon-cli.sh ticket-start <ticket-id> [agent-id]' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.start_thread(t, $agent) do {:ok, th} -> IO.puts(\"started ticket #$tk as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{inspect(why)}\"); raise(\"refused\") end end"
+    exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.start_thread(t, $agent) do {:ok, th} -> IO.puts(\"started ticket #$tk as thread ##{th.id}\"); {:error, why} -> IO.puts(\"refused: #{if is_binary(why), do: why, else: inspect(why)}\"); raise(\"refused\") end end"
     ;;
 
   ticket-claim)

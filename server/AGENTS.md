@@ -33,7 +33,8 @@ and every layer the spine design's re-laid §9 asked for
   finish its turn, commit and stop, as a notice; only the operator's own posts wake anyone — every
   other wake, a stage brief or a coworker's post, is held undelivered for the drain back at work; the
   calendar's agent and workline schedules wait, firing once back at work, the operator's delegate's
-  check-in too), lights out (that, plus the verify and landing
+  check-in too; staffing — `staff_child`, `Tickets.start_thread/2` and its API and CLI doors — is
+  refused, `Pause.at_work/0`), lights out (that, plus the verify and landing
   queues paused — a boot under it starts them paused — and an Escape into every coworker pane),
   back to work (every still-open thread pencils down stopped woken: a chat @mentioning its lead as it
   is now). `POST /api/office/pause`, `tlon-cli pause`, the office's finder.

@@ -5,7 +5,8 @@ defmodule Server.Pause do
   live thread hears, as a `notice` that wakes nobody, to finish its turn, commit and stop. While
   paused only the operator's own posts wake anyone (`Server.Switchboard.deliver/1`): every other
   wake — a stage brief, a sheriff's report, a coworker's post — is held undelivered and the drain after
-  back to work delivers it. Lights
+  back to work delivers it; and nothing is staffed (`at_work/0`, asked by `Server.Tickets.start_thread/2`
+  and `staff_child`). Lights
   out is pencils down plus the verify and landing queues paused (`Server.Rollout.pause_gates/1`)
   and an Escape into every coworker pane; nothing is killed and every branch stays where it is.
   Back to work undoes either, and wakes every thread this pause stopped that is still open: a chat
@@ -31,6 +32,15 @@ defmodule Server.Pause do
       "pencils_down" -> :pencils_down
       "lights_out" -> :lights_out
       _ -> :working
+    end
+  end
+
+  @doc "`:ok` at work; paused, `{:error, line}` — the line a door that would start work says instead."
+  def at_work do
+    case state() do
+      :working -> :ok
+      :pencils_down -> {:error, "the office is paused (pencils down): back to work first"}
+      :lights_out -> {:error, "the office is paused (lights out): back to work first"}
     end
   end
 
