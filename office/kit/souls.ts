@@ -8,10 +8,11 @@ export type Soul = { sections: Record<string, string>; raw: string }
 
 /** forgiving: unknown `## ` headings are kept, missing ones are empty, text with no headings is just `raw` */
 export function parseSoul(raw: string): Soul {
-  const sections: Record<string, string> = Object.fromEntries(SOUL_SECTIONS.map(h => [h, ""]))
+  // null-prototype maps: a heading is any text, `constructor` and `__proto__` included
+  const sections: Record<string, string> = Object.assign(Object.create(null), Object.fromEntries(SOUL_SECTIONS.map(h => [h, ""])))
   let head: string | null = null
-  const body: Record<string, string[]> = {}
-  for (const line of raw.split("\n")) {
+  const body: Record<string, string[]> = Object.create(null)
+  for (const line of raw.split(/\r?\n/)) {
     const m = /^##\s+(.+?)\s*$/.exec(line)
     if (m) { head = m[1]!; body[head] ??= []; continue }
     if (head) body[head]!.push(line)

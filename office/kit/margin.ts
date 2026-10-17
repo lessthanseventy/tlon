@@ -65,9 +65,10 @@ export const LINE_H = 9, SIZE = 9
 /**
  * The margin as ink + hits in room pixels, pinned to the viewport's bottom-left so a pan can't lose
  * it. `text` is baseline-anchored; a note that names a thread gets a hit that opens it, from the
- * viewport edge so the cell holding the first glyph is on it. A hit samples a cell's centre, so it
- * reaches half a terminal cell row (`measure.rowHeight`) below the baseline: the row holding the baseline is on it wherever in the cell
- * the baseline falls.
+ * viewport edge so the cell holding the first glyph is on it. Lines sit at least a terminal cell row
+ * (`measure.rowHeight`) apart, so every note owns a row of its own. A hit samples a cell's centre, so
+ * each note's hit is one line pitch ending half a cell row below its baseline: the row holding the
+ * baseline is on it wherever in the cell the baseline falls.
  */
 export function marginInk(
   notes: Note[], looks: Looks, over: number | null, vp: { x: number; y: number; w: number; h: number },
@@ -75,11 +76,12 @@ export function marginInk(
 ): { ink: Ink[]; hits: Hit[] } {
   const ls = linesOf(notes, looks, over), ink: Ink[] = [], hits: Hit[] = []
   const below = Math.max(2, (measure.rowHeight ?? 0) / 2 + 0.01)
-  const y0 = vp.y + vp.h - 4 - (ls.length - 1) * LINE_H
+  const lh = Math.max(LINE_H, measure.rowHeight ?? 0)
+  const y0 = vp.y + vp.h - 4 - (ls.length - 1) * lh
   ls.forEach((l, i) => {
-    const x = vp.x + 2, y = y0 + i * LINE_H
+    const x = vp.x + 2, y = y0 + i * lh
     ink.push({ t: "text", s: l.text, x, y, color: l.color, size: SIZE, align: "left" })
-    if (l.tid !== null) hits.push({ x: vp.x, y: y - LINE_H + 2, w: Math.min(vp.w - 2, measure(l.text, SIZE) + 2), h: LINE_H - 2 + below, tip: `${l.text} — enter opens #${l.tid}`, act: { kind: "thread", tid: l.tid }, note: l.tid })
+    if (l.tid !== null) hits.push({ x: vp.x, y: y - lh + below, w: Math.min(vp.w - 2, measure(l.text, SIZE) + 2), h: lh, tip: `${l.text} — enter opens #${l.tid}`, act: { kind: "thread", tid: l.tid }, note: l.tid })
   })
   return { ink, hits }
 }

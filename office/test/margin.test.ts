@@ -114,4 +114,13 @@ describe("marginInk", () => {
       }
     }
   })
+
+  test("a cell row taller than the line pitch spaces the notes a row apart, so no two share one", () => {
+    const measure = Object.assign((s: string) => s.length * 4, { rowHeight: 20 })
+    const { ink, hits } = marginInk([note(1, 10, "see #5"), note(2, 20, "and #6")], new Looks(0), null, { x: 0, y: 0, w: 300, h: 100 }, measure)
+    const ys = ink.flatMap((i) => (i.t === "text" ? [i.y] : []))
+    expect(ys[1]! - ys[0]!).toBeGreaterThanOrEqual(20)
+    expect(ys[1]!).toBeLessThanOrEqual(100)
+    expect(hits[0]!.y + hits[0]!.h).toBeLessThanOrEqual(hits[1]!.y + 0.01)
+  })
 })

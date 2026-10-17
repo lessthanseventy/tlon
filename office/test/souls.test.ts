@@ -20,6 +20,16 @@ describe("parseSoul", () => {
     expect(s.sections["Fears"]).toBe("")
     expect(s.sections["Wants"]).toBe("sleep")
   })
+  test("a heading named like an Object member is just a heading", () => {
+    const s = parseSoul("## constructor\nx\n## __proto__\ny\n## toString\nz\n")
+    expect(s.sections["constructor"]).toBe("x")
+    expect(s.sections["__proto__"]).toBe("y")
+    expect(s.sections["toString"]).toBe("z")
+  })
+  test("a CRLF file leaves no carriage returns in headings or sections", () => {
+    const s = parseSoul("## Wants\r\nsleep\r\nmore sleep\r\n")
+    expect(s.sections["Wants"]).toBe("sleep\nmore sleep")
+  })
   test("unknown headings are kept", () => {
     expect(parseSoul("## Hobbies\nchess\n").sections["Hobbies"]).toBe("chess")
   })

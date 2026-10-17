@@ -26,3 +26,13 @@ test("the backstory wraps to the width", () => {
   const l = personaLines({ ...p, backstory: "word ".repeat(30) }, 30)
   expect(l.every((x) => x.length <= 30)).toBe(true)
 })
+
+test("every labelled line wraps to the width too, its continuation indented under its text", () => {
+  const long = "a long and winding description that runs well past the panel edge"
+  const l = personaLines({ ...p, voice: long, quirks: { desk_object: long, hobby: long, catchphrase: long, pet_peeve: long } }, 30)
+  expect(l.every((x) => x.length <= 30)).toBe(true)
+  const v = l.findIndex((x) => x.startsWith("voice: "))
+  expect(l[v + 1]).toStartWith("       ")
+  expect(l.slice(v, l.findIndex((x) => x.startsWith("desk: "))).map((x) => x.trim().replace(/^voice: /, "")).join(" ")).toBe(long)
+  expect(l).toContain("hobby: a long and winding")
+})
