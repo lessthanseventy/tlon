@@ -74,13 +74,16 @@ defmodule Server.ReleaseSmokeScriptTest do
       %{tmp: tmp, root: root, port: free_port()}
     end
 
-    defp run_smoke(%{tmp: tmp, root: root, port: port}, args) do
+    defp run_smoke(%{tmp: tmp, root: root, port: port}, args, extra_env \\ []) do
       env = [
         {"TMPDIR", tmp},
+        {"SANDBOX_RUNTIME", nil},
         {"PATH", Path.join(tmp, "bin") <> ":" <> System.get_env("PATH")},
         {"TLON_SMOKE_PORT", "#{port}"},
         {"TLON_SMOKE_DATABASE", "tlon_smoke_fetch_#{port}"}
       ]
+
+      env = Enum.uniq_by(extra_env ++ env, &elem(&1, 0))
 
       System.cmd("bash", [Path.join([root, "scripts", "release-smoke.sh"]) | args], env: env, stderr_to_stdout: true)
     end
@@ -104,6 +107,12 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert {out, 1} = run_smoke(ctx, ["work/feature"])
       assert out =~ "smoke FAILED: can't reach Postgres"
       assert out =~ "unsandboxed"
+      refute File.exists?(Path.join(tmp, "tlon-smoke"))
+    end
+
+    test "a sandboxed smoke is refused in one line, before it touches anything", %{tmp: tmp} = ctx do
+      assert {out, 1} = run_smoke(ctx, ["work/feature"], [{"SANDBOX_RUNTIME", "1"}])
+      assert String.trim(out) == "smoke FAILED: this is a sandboxed Bash: run release:smoke unsandboxed"
       refute File.exists?(Path.join(tmp, "tlon-smoke"))
     end
 
@@ -231,6 +240,7 @@ defmodule Server.ReleaseSmokeScriptTest do
     defp race_env(ctx, port) do
       [
         {"TMPDIR", ctx.tmp},
+        {"SANDBOX_RUNTIME", nil},
         {"PATH", ctx.stubs <> ":" <> System.get_env("PATH")},
         {"SMOKE_SIGNAL", ctx.signal},
         {"TLON_SMOKE_PORT", "#{port}"},
