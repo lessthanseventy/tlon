@@ -53,7 +53,7 @@ linked window at a time, ctrl+] to the lobby).
   `mise run office:sandbox` (`--sandbox`, or `OFFICE_SANDBOX=1`) runs it on a made-up world, no server: `tui/sandbox.ts` is the
   world and the play-key table, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only, so a card hides the actions they shadow (`playable`).
   The sandbox keeps its looks, souls, hall, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
-  The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, locks, taken)` is seeded, no model, no I/O —
+  The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, taken)` is seeded, no model, no I/O; a lock is kept by `pass` baking it into the overrides —
   `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `m` browses it), → hire, space locks a row so a pass keeps it. `hall.json`
   (`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card. → hires — onto the toy's bench in the
   sandbox, through `data.hire` (`POST /api/workspaces/:id/coworkers`) on a live office — and keeps the candidate's look in `looks.json` and its soul in the souls dir (never over one already there).
