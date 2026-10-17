@@ -66,6 +66,8 @@ describe("the wide room", () => {
     const state = (i: number) => (i === 1 ? { warm: true, thinking: true } : i === 2 ? { warm: true, thinking: false } : { warm: false, thinking: false })
     const a = viewOf({ ...a0, roster: a0.roster.map((r, i) => ({ ...r, ...state(i) })) }, 1)
     const room = new WideRoom(560)
+    // pinned to mid-afternoon: the hour weights the pastimes (`moment`), so w1's lounge seat would move with the clock
+    room.setClock(() => new Date(2026, 9, 5, 15, 0))
     for (let i = 0; i < 600; i++) room.step(a)
     const at = (name: string) => (room as unknown as { actors: Map<string, { spot: { kind: string } }> }).actors.get(name)!.spot.kind
     expect([at("hronir"), at("w0")]).toEqual(["desk", "desk"])
