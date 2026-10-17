@@ -570,7 +570,9 @@ defmodule Server.Profiles do
   `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/<slug>` — its own port and db tlon_smoke_<port> (the run prints the url), the fixed
   smoke first (open, a thread, a card, R). Then drive the changed path as he would:
   `TLON_URL=<the url it printed> mise run office:drive -- <keys>` (the drive-office skill), the keys
-  he'd press and the screen after each. NEVER the live service on :4040 or its db `tlon`: a QA run
+  he'd press and the screen after each. A change to the toy (its keys e/f/d and events) lives only in
+  the made-up world: drive that with `OFFICE_SANDBOX=1 mise run office:drive -- <keys>`, no release
+  needed. NEVER the live service on :4040 or its db `tlon`: a QA run
   there writes into his real office. Stop the scratch release when you're done.
 
   FILE WHAT YOU SAW. `submit_qa(verdict, report, thread_id)`: pass, or fail with the finding, on the

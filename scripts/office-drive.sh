@@ -11,6 +11,8 @@
 # OFFICE_TAIL how many bottom rows to print (20; the detail pane and foot live there).
 # OFFICE_KEEP=1 keeps the drive's throwaway config and state and prints where (`kept: DIR`), so a check
 # can read back what the drive saved (home.json, looks.json, …: DIR/config/tlon/).
+# OFFICE_SANDBOX=1 starts the TUI with --sandbox: the made-up world, where the toy's keys (e, f, d) and its
+# events run; a scratch release has neither, and no server is needed (TLON_URL is ignored).
 # OFFICE_WIDE=1 draws the wide room (the door, the bathroom, Argos — it is otherwise only there under kitty
 # graphics, which tmux swallows) in half blocks at the scale the window allows, and sizes the window 280x75
 # unless OFFICE_COLS/OFFICE_ROWS say otherwise. OFFICE_TEXT=1 prints every row of the screen with the
@@ -36,7 +38,7 @@ src="${XDG_CONFIG_HOME:-$HOME/.config}/tlon"
 wide="${OFFICE_WIDE:-}"
 if [ -n "$wide" ]; then dcols=280 drows=75; else dcols=150 drows=60; fi
 t new-session -d -x "${OFFICE_COLS:-$dcols}" -y "${OFFICE_ROWS:-$drows}" \
-  "cd '$root/office' && unset TLON_HALL TLON_HOME TLON_LOOKS TLON_PALETTE TLON_PETS TLON_SOULS && TLON_OFFICE_TMUX='$own' TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' XDG_CONFIG_HOME='$cfg' bun tui/main.ts 2>'$state/err'"
+  "cd '$root/office' && unset TLON_HALL TLON_HOME TLON_LOOKS TLON_PALETTE TLON_PETS TLON_SOULS && TLON_OFFICE_TMUX='$own' TLON_URL='${TLON_URL:-http://127.0.0.1:4040}' OFFICE_WIDE='$wide' OFFICE_GRAPHICS=blocks MISE_TRUSTED_CONFIG_PATHS='$root' XDG_STATE_HOME='$state' XDG_CONFIG_HOME='$cfg' bun tui/main.ts ${OFFICE_SANDBOX:+--sandbox} 2>'$state/err'"
 sleep 3
 for step in "$@"; do
   case "$step" in
