@@ -229,7 +229,44 @@ defmodule Server.Workline.GradeTest do
       end
 
       {:ok, thread} = Workline.open(%{title: "pets", slug: "graded", stage: "review"})
-      %{fake: fake, thread: thread}
+      %{fake: fake, thread: thread, dir: dir}
+    end
+
+    test "a grader CLI that fails once is asked again after a pause: a transient exit grades", %{
+      thread: thread,
+      dir: dir
+    } do
+      cli = Path.join(dir, "grader")
+      seen = Path.join(dir, "seen")
+
+      File.write!(cli, """
+      #!/bin/sh
+      [ -e #{seen} ] || { touch #{seen}; exit 7; }
+      cat <<'EOF'
+      #{answer(@low, "return pick(line, recent)")}
+      EOF
+      """)
+
+      File.chmod!(cli, 0o755)
+      Application.put_env(:server, :grader_cmd, cli)
+      on_exit(fn -> Application.delete_env(:server, :grader_cmd) end)
+
+      assert {:ok, %{"scores" => @low}} = Grade.grade(thread, change: change(), docs: %{spec: "s", plan: "p"})
+    end
+
+    test "a grader CLI that fails twice is said in words: its exit code, and that it wrote nothing", %{
+      thread: thread,
+      dir: dir
+    } do
+      cli = Path.join(dir, "grader")
+      File.write!(cli, "#!/bin/sh\nexit 7\n")
+      File.chmod!(cli, 0o755)
+      Application.put_env(:server, :grader_cmd, cli)
+      on_exit(fn -> Application.delete_env(:server, :grader_cmd) end)
+
+      assert {:error, why} = Grade.grade(thread, change: change(), docs: %{spec: "s", plan: "p"})
+      assert why =~ "the model CLI exited 7 twice and wrote nothing (no stdout, no stderr)"
+      assert %{kind: "check_failed"} = last_grade(thread)
     end
 
     test "a grade is recorded, its quotes checked against this change", %{fake: fake, thread: thread} do
