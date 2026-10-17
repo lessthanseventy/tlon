@@ -828,5 +828,20 @@ defmodule Server.MCP.GatewayTest do
 
       assert {200, [%{"first" => "oops"} | _]} = get_json("/api/life/#{ws.id}/dump/revisions")
     end
+
+    test "two dump saves at once: no page is lost from the dump and its earlier pages together" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Home", type: "home"})
+      {:ok, _} = Server.Life.put_dump(ws.id, "first page", "andrew")
+
+      for round <- 1..10 do
+        pages = for i <- 1..4, do: "round #{round} page #{i}"
+        tasks = for p <- pages, do: Task.async(fn -> Server.Life.put_dump(ws.id, p, "andrew") end)
+        assert Enum.all?(Task.await_many(tasks), &match?({:ok, _}, &1))
+      end
+
+      kept = [Server.Life.dump(ws.id).body | Enum.map(Server.Repo.all(Server.NoteRevision), & &1.body)]
+      for round <- 1..10, i <- 1..4, do: assert("round #{round} page #{i}" in kept)
+      assert "first page" in kept
+    end
   end
 end
