@@ -16,7 +16,6 @@ export const SEAT_VOICE: Record<string, Voice> = {
   scharlach: {
     banter: [
       "Issue noted. I have filed it.",
-      "The build is red. I have recorded the demerit.",
       "Duly logged. Further action is at my discretion.",
       "I have reviewed the matter. It is resolved.",
       "A discrepancy. I will be keeping a record of this.",
