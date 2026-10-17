@@ -47,6 +47,7 @@ defmodule Server.Crew.Tmux do
          {:ok, %{exports: exports}} <- joiner().(thread_id, handle, mandate: "machine", assign: false),
          window = Crew.crew_window(role_key, thread_id),
          script = Tmux.boot_script(exports, Harness.driver(profile.harness).launch_command(profile)),
+         _ = Server.Orphans.retire(thread_id, handle, Application.get_env(:server, :orphans, [])),
          :ok <- open_window(ws, window, script) do
       if Keyword.get(opts, :inject, true), do: Server.Wake.queue(thread_id, handle, opening_turn(thread_id, task))
       {:ok, window}

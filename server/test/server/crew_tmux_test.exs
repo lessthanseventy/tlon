@@ -75,6 +75,32 @@ defmodule Server.Crew.TmuxTest do
     refute script =~ "new-session"
   end
 
+  test "a harness still holding the role's seat is retired before its window opens, and the thread is told",
+       %{thread: t} do
+    proc = Path.join(System.tmp_dir!(), "crew_proc_#{System.pid()}_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(Path.join(proc, "4242"))
+    File.write!(Path.join(proc, "4242/environ"), "TLON_THREAD=#{t.id}\0TLON_AUTHOR=reviewer\0")
+    test_pid = self()
+    prior = Application.fetch_env!(:server, :orphans)
+
+    Application.put_env(:server, :orphans,
+      proc_dir: proc,
+      grace: 0,
+      kill: fn pid -> send(test_pid, {:retired, pid}) end,
+      force: fn pid -> send(test_pid, {:forced, pid}) end
+    )
+
+    on_exit(fn ->
+      Application.put_env(:server, :orphans, prior)
+      File.rm_rf!(proc)
+    end)
+
+    assert {:ok, _} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    assert_received {:retired, 4242}
+    assert_received {:forced, 4242}
+    assert Enum.any?(Channel.thread_messages(t), &(&1.author == "tlon" and &1.body =~ "retired 1 earlier session"))
+  end
+
   test "no session yet → the role opens it (new-session), like the arbiter", %{thread: t, session: session} do
     test_pid = self()
 
