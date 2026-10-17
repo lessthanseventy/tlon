@@ -268,8 +268,7 @@ defmodule Server.Workline.Grade do
   defp ask(change, docs) do
     material = Enum.join([change.diff | Enum.map(change.files, &elem(&1, 1))], "\n")
 
-    with {:ok, out} <-
-           Server.ModelCli.prompt(prompt(docs.spec, docs.plan, change), :grader_cmd, :grader_model, {"claude", "opus"}),
+    with {:ok, out} <- run_grader(prompt(docs.spec, docs.plan, change)),
          {:ok, grade} <- parse(out, material) do
       {:ok, Map.put(grade, "limits", [])}
     else
@@ -277,6 +276,31 @@ defmodule Server.Workline.Grade do
       {:error, why} -> {:error, "the grader could not run: #{inspect(why)}"}
     end
   end
+
+  # A CLI that exits non-zero right after a restart (its daemon or credentials not up yet) is
+  # usually transient: one more try after `:grader_retry_ms` before the grade parks on the operator.
+  defp run_grader(prompt) do
+    ask = fn -> Server.ModelCli.prompt(prompt, :grader_cmd, :grader_model, {"claude", "opus"}) end
+
+    with {:error, {:model_cli_exit, _, _}} <- ask.() do
+      Process.sleep(Application.get_env(:server, :grader_retry_ms, 30_000))
+
+      case ask.() do
+        {:error, {:model_cli_exit, code, ""}} ->
+          {:error,
+           "the grader could not run: the model CLI exited #{exited(code)} twice and wrote nothing (no stdout, no stderr)"}
+
+        {:error, {:model_cli_exit, code, msg}} ->
+          {:error, "the grader could not run: the model CLI exited #{exited(code)} twice: #{String.trim(msg)}"}
+
+        other ->
+          other
+      end
+    end
+  end
+
+  defp exited(code) when code > 128, do: "#{code} (killed by signal #{code - 128})"
+  defp exited(code), do: "#{code}"
 
   defp record(thread, result) do
     {kind, detail} =

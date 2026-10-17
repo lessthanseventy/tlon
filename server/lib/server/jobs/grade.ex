@@ -3,7 +3,9 @@ defmodule Server.Jobs.Grade do
   A reviewed workline's risk grade (`Server.Workline.Grade`), off the request path: the grader is a
   model call that can take minutes. Enqueued when a reviewer approves; once the grade is on record,
   `Server.Workline.graded/2` lands a gate already parked on the operator that the grade lets through.
-  A thread that has left review since is not graded.
+  A thread that has left review since is not graded. A grader CLI that exits non-zero is asked once
+  more after a pause (`:grader_retry_ms`, 30 s) inside the one attempt, before the grade parks on the
+  operator.
   """
   use Oban.Worker,
     queue: :default,
