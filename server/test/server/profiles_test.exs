@@ -152,6 +152,7 @@ defmodule Server.ProfilesTest do
       assert qa.system_prompt =~ "release:smoke"
       assert qa.system_prompt =~ "4040"
       assert qa.system_prompt =~ "unsandboxed"
+      assert qa.system_prompt =~ "OFFICE_SANDBOX=1"
 
       for {k, t} <- Profiles.archetypes(), k != :qa, do: assert("submit_qa" in t.mcp["tlon"]["excludeTools"], "#{k}")
     end

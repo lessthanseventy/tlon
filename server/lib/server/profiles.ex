@@ -570,7 +570,9 @@ defmodule Server.Profiles do
   `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/<slug>` — its own port and db tlon_smoke_<port> (the run prints the url), the fixed
   smoke first (open, a thread, a card, R). Then drive the changed path as he would:
   `TLON_URL=<the url it printed> mise run office:drive -- <keys>` (the drive-office skill), the keys
-  he'd press and the screen after each. NEVER the live service on :4040 or its db `tlon`: a QA run
+  he'd press and the screen after each. A change to the toy (its keys e/f/d and events) lives only in
+  the made-up world: drive that with `OFFICE_SANDBOX=1 mise run office:drive -- <keys>`, no release
+  needed. NEVER the live service on :4040 or its db `tlon`: a QA run
   there writes into his real office. Stop the scratch release when you're done. The smoke needs
   Postgres's unix socket, which a sandboxed Bash can't open: run it unsandboxed, and the drive too —
   each sandboxed call is its own network namespace, blind to the port a held smoke serves on.
