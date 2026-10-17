@@ -634,7 +634,8 @@ defmodule Server.Workline do
   @doc """
   A waiting landing GitHub holds (`why`) for what a rebase and a gate fix (behind main, `tlon/check`
   missing on its head): back into the merge queue on its own (`reland_queued/2`, `auto`), no Need
-  raised. Once per PR `head`: held again at a head it was already requeued at, or not queueable, it
+  raised. Once per PR `head`: held again at a head it was already requeued at (or that a requeued
+  landing armed auto-merge at, `merge_again/5`), or not queueable, it
   is blocked (`landing_blocked/2`), a `pr_blocked` Need. `:requeued` | `:ok` (blocked, not waiting,
   or already queued).
   """
@@ -2080,7 +2081,10 @@ defmodule Server.Workline do
          Server.Workline.Publish.post_check(repo, sha, run),
          how when how in [:merged, :auto] <- Server.Workline.Publish.merge_at(repo, url, sha, branch, run) do
       said = if how == :merged, do: "merged", else: "auto-merge armed at that head"
-      record_landing(thread, "check_passed", landing_check(url, 0, "gated at #{String.slice(sha, 0, 7)}; #{said}"))
+      detail = landing_check(url, 0, "gated at #{String.slice(sha, 0, 7)}; #{said}")
+      # GitHub merges an armed head itself: KeepUp requeueing it again would gate it for nothing
+      detail = if how == :auto, do: Map.put(detail, "requeued_head", sha), else: detail
+      record_landing(thread, "check_passed", detail)
       post_brief(thread, "⤵ landed again as #{String.slice(sha, 0, 7)}, gated on main; #{url}: #{said}")
       {:ok, thread}
     else
