@@ -93,7 +93,10 @@ defmodule Server.ReleaseSmokeScriptTest do
       hold_lock(lock)
     end
 
-    test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused", %{tmp: tmp, root: root} do
+    test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused", %{
+      tmp: tmp,
+      root: root
+    } do
       stale_lock(tmp, root, "pid 999999 on http://127.0.0.1:4777\n")
 
       {out, _} = run_smoke(tmp, root, ["work/feature"])
