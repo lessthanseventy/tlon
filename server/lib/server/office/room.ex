@@ -67,7 +67,8 @@ defmodule Server.Office.Room do
   @doc """
   What is stuck in a workspace's open threads: open issues (blockers), failed checks (a command
   whose newest check failed), and threads nobody leads. Each section `%{shown, more}`, #{@cap} shown;
-  `count` is everything, the beacon's reason to flash.
+  `count` is everything, the beacon's reason to flash; `failed_thread_ids` names every red thread,
+  past the cap, for the sheriff's ledger.
   """
   @spec triage(integer()) :: map()
   def triage(workspace_id) do
@@ -115,6 +116,7 @@ defmodule Server.Office.Room do
     %{
       blockers: cap(blockers),
       failed_checks: cap(failed),
+      failed_thread_ids: failed |> Enum.map(& &1.thread_id) |> Enum.uniq(),
       unled: cap(unled),
       count: length(blockers) + length(failed) + length(unled)
     }
