@@ -34,6 +34,12 @@ defmodule Server.ReleaseSmokeScriptTest do
     assert out =~ "/api/office"
   end
 
+  test "an office with no machine workspace says the drive won't wait for it" do
+    office = ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "elsewhere"}]})
+    assert {out, 1} = smoke(stub({200, office}))
+    assert out =~ "smoke: no wait for the office (no machine workspace)"
+  end
+
   describe "the fetch of origin" do
     # a repo whose origin can't be fetched (a local path that isn't there): a smoke of a local ref
     # needs no fetch, so it must get past the fetch; a smoke of origin/main still needs it
