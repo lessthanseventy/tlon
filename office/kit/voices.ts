@@ -87,8 +87,22 @@ export function bucketFor(occasion: string, t: Temperament, rand: () => number, 
   return sweet && t.warmth > 0 && rand() < (Math.max(0, t.warmth) / 2) * 0.9 ? sweet : sassy
 }
 
-/** what a rabbit and a bird say, sassy or sweet by warmth; an occasion missing here falls back to Nina's lines */
+/** what each species but the cat says, sassy or sweet by warmth; an occasion missing here falls back to Nina's lines */
 export const SPECIES_VOICE = {
+  dog: {
+    sassy: {
+      pet: ["Fine. The ears. Then the ball.", "Patting is good. Walking is better. Just saying."],
+      muse: ["I have guarded this rug for an age. No thanks were given.", "The mailman returns. He always returns."],
+      wake: ["Was that the door? It was not the door.", "I was resting my eyes. On guard."],
+      done: ["Done? Then WALK. Now.", "Finished. Took you long enough. Ball?"],
+    },
+    sweet: {
+      pet: ["Yes! You! The best hands!", "*tail goes everywhere* Again!"],
+      muse: ["Everyone here is my favourite.", "Sing, O Muse, of this good, good room."],
+      wake: ["Good morning! Good morning! GOOD MORNING!", "You're here! I missed you the whole nap!"],
+      done: ["You did it! I'm so proud I could howl!", "Hooray! Is it walk time? It's walk time."],
+    },
+  },
   rabbit: {
     sassy: {
       pet: ["Ears are off limits. Ask first.", "Fine. Two strokes. Count them."],
