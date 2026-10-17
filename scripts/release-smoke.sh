@@ -12,7 +12,8 @@
 # built, started or recorded. A run ends `ran-on: smoke <sha>`, which a scheduled run records.
 # TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped, or
 # until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
-# database for good.
+# database for good. A sandboxed Bash is refused up front: it can't reach Postgres, and each of
+# its calls has a network namespace of its own, blind to the port a hold serves on.
 set -uo pipefail
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
@@ -45,6 +46,7 @@ trap cleanup EXIT
 trap 'exit 143' TERM INT
 
 if [ -z "$url" ]; then
+  [ -z "${SANDBOX_RUNTIME:-}" ] || fail "this is a sandboxed Bash: run release:smoke unsandboxed"
   [ "$port" != 4040 ] || fail "4040 is the service's port"
   [ "$db" != tlon ] || fail "tlon is the service's database"
   url="http://127.0.0.1:$port"
