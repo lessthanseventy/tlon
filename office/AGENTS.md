@@ -71,7 +71,11 @@ linked window at a time, ctrl+] to the lobby).
   comes back when the same input is asked again, and a reply's draft is the thread's (`cardReply`), its card and its reader alike; `editor.ts` the text editing every input shares; `fuzzy.ts` the
   finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). `R` on a workline thread reviews its branch: the diff with a line cursor, `⏎`/`a` a note on the line, `A` on the file, `n`/`p` hunks, `N`/`P` files, `s` submits the notes with a verdict (comment, request changes, approve); unsent notes are kept per thread. The crew screen has tabs (`v`): each crew the operator has named, then everyone, the crews not on dimmed; `c` moves the selected coworker to the next crew (or every crew), `n` puts them on a new one by name, and `S` puts the next crew on (also `shifts` in the finder); a click on the header's crew (shown once a workspace has crews) does the same. The finder's `pencils down`, `lights out` (confirmed) and `back to work` are the office's stop controls (`Server.Pause`); while one is on, the header carries its mark (`✎ pencils down` / `◼ lights out`), and a click on it offers back to work. The arcade's
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
-  zoomed like a coworker's terminal. It is the
+  zoomed like a coworker's terminal. `D` on a home workspace (its home card or LIFE card) opens the dump,
+  the one page the operator pours everything into, in their own `$VISUAL`/`$EDITOR` the same way: every save
+  goes to the server (`PUT /api/life/:ws/dump`), a save the server didn't take is retried, and `E` lists the
+  earlier pages each save kept, to read or put back. That tmux is `TLON_OFFICE_TMUX` (default `tlon-office`), its
+  files under `$XDG_RUNTIME_DIR/<it>`, so a drive's never touch the operator's. It is the
   operator's surface. Its header carries what waits on you (`⚑ N blocking · M to decide`, from
   `GET /api/office/needs`), `i` (or a click on it) opens that queue with each item's own actions, a click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
   office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,

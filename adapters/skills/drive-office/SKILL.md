@@ -16,7 +16,9 @@ TLON_URL=http://127.0.0.1:4041 mise run office:drive -- "/" "'108'" "Enter" "r" 
 - **Point it at a scratch server**, not the service, for anything that writes: `mise run
   server:dev` serves the dev db on :4041. Against the service (the default URL) you are acting as
   the operator on real threads. The TUI's own files are safe either way: the drive runs on a
-  throwaway copy of `~/.config/tlon`, so pets, the store, the hall and souls it writes go to the copy.
+  throwaway copy of `~/.config/tlon`, so pets, the store, the hall and souls it writes go to the copy,
+  and on a tmux of its own (`TLON_OFFICE_TMUX`), so the docs, games and dump it opens never land in the
+  operator's office. The dump's editor is `$VISUAL`/`$EDITOR`: set it to a script to drive one.
 - Keys: `Enter`, `Escape`, `Tab`, `BTab` (shift-tab), `M-Enter` (a newline in a composer),
   `Space`, `PPage`; text in single quotes inside the step: `"'fix the clock'"`.
 - Under tmux the room draws in half blocks, so the screen is text — the room's own labels land in

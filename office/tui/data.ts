@@ -202,10 +202,16 @@ export const questNew = (ws: number, title: string) =>
   write("adding the quest", `/life/${ws}/quests`, { title }, (j) => `added ${j.title}`)
 /** the home's dump: the one page everything gets poured into (body "" before the first write) */
 export const dump = (ws: number) => read<{ id: number | null; body: string; updated_at: string | null }>(`/life/${ws}/dump`)
+/** "1 line", "4 lines" */
+export const lines = (n: number) => `${n} line${n === 1 ? "" : "s"}`
+export type DumpPage = { id: number; at: string; lines: number; first: string }
+/** the dump's earlier pages, newest first: every page a save replaced */
+export const dumpPages = (ws: number) => read<DumpPage[]>(`/life/${ws}/dump/revisions`)
+export const dumpPage = (ws: number, id: number) => read<{ id: number; at: string; body: string }>(`/life/${ws}/dump/revisions/${id}`)
 /** `ok` only when the server took it: a page not taken stays unsent, so the next leave tries again */
 export async function dumpPut(ws: number, body: string): Promise<{ ok: boolean; line: string }> {
   let ok = false
-  const line = await send("PUT", "saving the dump", `/life/${ws}/dump`, () => ((ok = true), `dump saved · ${body.trimEnd().split("\n").length} lines`), { body })
+  const line = await send("PUT", "saving the dump", `/life/${ws}/dump`, () => ((ok = true), `dump saved · ${lines(body.trimEnd().split("\n").length)}`), { body })
   return { ok, line }
 }
 export type Activity = { kind: string; at: string; thread_id: number | null; who: string | null; text: string }[]

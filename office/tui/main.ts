@@ -5,7 +5,7 @@
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
 import { arrivals } from "../kit/door"
 import { babelPage, isKonami, KONAMI } from "../kit/eggs"
-import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, realpathSync, statSync, watchFile, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
@@ -63,7 +63,7 @@ import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string } | { kind: "thread"; tid: number }
-  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" }
+  | { kind: "column"; col: number } | { kind: "ticket"; id: number } | { kind: "epic"; id: number } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number }
@@ -270,6 +270,7 @@ let shelf: data.Memory | null = null, tickets: data.BoardTicket[] = [], card: da
 let review: data.Review | null = null
 const reviewNotes = new Map<number, data.ReviewNote[]>()
 let lifeCard: LifeStatus | null = null
+let dumpPages: data.DumpPage[] | null = null
 let cal: data.Schedule[] | null = null, board: data.Run[] = []
 let trayRead = readState(TRAY)
 /** Uqbar's margin notes; `looks` fades each by the time the window was focused after it was first seen */
@@ -533,6 +534,7 @@ async function loadCard() {
     case "review": review = await data.review(mode.tid); break
     case "calendar": cal = await data.schedules(w); break
     case "life": lifeCard = (await data.life(w)) ?? lifeCard; break
+    case "pages": dumpPages = await data.dumpPages(w); break
     case "runs": case "run": board = (await data.runs(mode.id)) ?? board; cal ??= await data.schedules(w); break
     case "tray": trayRead = feed[0]?.at ?? trayRead; writeState(TRAY, trayRead); changed(); break
   }
@@ -1054,7 +1056,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "w", label: "in-tray", run: () => open({ kind: "tray" }) }, { key: "!", label: "triage", run: () => open({ kind: "triage" }) },
         { key: "a", label: "calendar", run: () => open({ kind: "calendar" }) }, { key: "o", label: "notes", run: () => open({ kind: "notes" }) },
         { key: "b", label: "memory", run: () => open({ kind: "memory" }) }, { key: "H", label: "the rack (health)", run: () => open({ kind: "health" }) },
-        ...(all.life?.[String(w)] ? [{ key: "L", label: "life", run: () => open({ kind: "life" }) }] : []),
+        ...(all.life?.[String(w)] ? [{ key: "L", label: "life", run: () => open({ kind: "life" }) }, { key: "D", label: "the dump", run: openDump }] : []),
         ...(flagOn(all, "build_mode") ? [{ key: "B", label: "build mode", run: () => open({ kind: "build" }) }] : []),
         { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
         { key: "S", label: "settings (the running system)", run: () => open({ kind: "settings" }) },
@@ -1239,10 +1241,21 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         open: () => void did(r.kind === "routine" ? data.routineDone(r.id, r.title) : data.questDone(r.id, r.title)).then(loadCard).then(draw),
       })) : [{ segs: [dim("reading the day…")] }]
       if (s && !rows.length) rows.push({ segs: [dim("nothing due, no open quests")] })
-      if (s) rows.unshift({ segs: [s.dump ? plain(`dump · ${s.dump.lines} lines · edited ${stamp(s.dump.updated_at)}`) : dim("dump · empty — D to pour it all out")], open: openDump })
+      if (s) rows.unshift({ segs: [s.dump ? plain(`dump · ${data.lines(s.dump.lines)} · edited ${stamp(s.dump.updated_at)}`) : dim("dump · empty — D to pour it all out")], open: openDump })
       return {
         title: s ? `LIFE · lv ${s.level} · ${s.xp} xp` : "LIFE", rows,
-        actions: [{ key: "D", label: "the dump", run: openDump }, { key: "r", label: "new routine", run: newRoutine }, { key: "Q", label: "new quest", run: newQuest }, back1],
+        actions: [{ key: "D", label: "the dump", run: openDump }, { key: "E", label: "earlier pages", run: () => open({ kind: "pages" }) }, { key: "r", label: "new routine", run: newRoutine }, { key: "Q", label: "new quest", run: newQuest }, back1],
+      }
+    }
+    case "pages": {
+      const rows: Row[] = !dumpPages ? [{ segs: [dim("turning back the pages…")] }]
+        : !dumpPages.length ? [{ segs: [dim("no earlier pages yet: every save keeps the one it replaced")] }]
+        : dumpPages.map((p) => ({ segs: [dim(`${stamp(p.at)}  `), plain(data.lines(p.lines)), dim(`  ${p.first}`)], open: () => void readPage(p.id), ref: p }))
+      const p = rows[sel]?.ref as data.DumpPage | undefined
+      const up: Action = { key: "esc", label: "life", run: () => open({ kind: "life" }) }
+      return {
+        title: "THE DUMP · EARLIER PAGES", rows,
+        actions: [...(p ? [{ key: "enter", label: "read it", run: () => void readPage(p.id) }, { key: "R", label: "put it back", run: () => ask2(`put back the ${stamp(p.at)} page (today's is kept as an earlier page)`, () => void restorePage(p.id)) }] : []), up],
       }
     }
     case "runs": {
@@ -2263,7 +2276,9 @@ async function zoomInto(tid: number) {
  * lazygit in the thread's worktree, in a tmux session the office keeps (`-L tlon-office`, one per
  * thread), so it is where you left it next time; quitting lazygit closes the window and the zoom.
  */
-const OWN_TMUX = "tlon-office"
+// a drive names its own (scripts/office-drive.sh), so its panes and files never land in the operator's office
+const OWN_TMUX = process.env.TLON_OFFICE_TMUX || "tlon-office"
+const OWN_DIR = `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/${OWN_TMUX}`
 async function zoomGit(tid: number) {
   if (!Bun.which("lazygit")) { status = "lazygit is not installed"; return draw() }
   const path = await data.worktree(tid)
@@ -2282,27 +2297,46 @@ async function pickDoc(tid: number) {
 async function readDoc(tid: number, name: string) {
   const text = await data.doc(tid, name)
   if (text === null) { status = `#${tid}: no ${name}`; return draw() }
-  const dir = `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/tlon-office`, file = `${dir}/doc-${tid}-${name}`
+  pageThrough(`doc-${tid}-${name.replace(/\W/g, "_")}`, text, `#${tid} · ${name}`)
+}
+function pageThrough(session: string, text: string, label: string) {
+  const dir = OWN_DIR, file = `${dir}/${session}`
   mkdirSync(dir, { recursive: true }); writeFileSync(file, text)
-  const session = `doc-${tid}-${name.replace(/\W/g, "_")}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
+  const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
   tmux("kill-session", "-t", `=${session}`)
   const show = `if command -v glow >/dev/null; then glow -p "$0"; elif command -v bat >/dev/null; then bat --paging=always --style=plain -l md "$0"; else less "$0"; fi`
   tmux("new-session", "-d", "-s", session, "-n", "doc", "sh", "-c", show, file)
-  zoomOn({ socket: OWN_TMUX, session, window: "doc" }, `#${tid} · ${name}`)
+  zoomOn({ socket: OWN_TMUX, session, window: "doc" }, label)
+}
+async function readPage(id: number) {
+  if (ws === null) return
+  const p = await data.dumpPage(ws, id)
+  if (!p) { status = "that page can't be read: the server isn't answering"; return draw() }
+  pageThrough(`page-${ws}-${id}`, p.body, `the dump · ${stamp(p.at)}`)
+}
+/** an earlier page made the dump again; the page it replaces is kept, so this is undone the same way */
+async function restorePage(id: number) {
+  if (ws === null) return
+  const w = ws, p = await data.dumpPage(w, id)
+  if (!p) { status = "that page can't be read: the server isn't answering"; return draw() }
+  if (Bun.spawnSync(["tmux", "-L", OWN_TMUX, "has-session", "-t", `=dump-${w}`]).exitCode === 0) { status = "the dump is open in its editor: close it first, then put the page back"; return draw() }
+  await did(data.dumpPut(w, p.body).then((r) => (r.ok && dumpSent.set(w, p.body), r.line)))
+  await loadCard(); draw()
 }
 /** the home's dump in the operator's own editor, in the office's tmux; each time the pane is left its saved file
  *  goes back to the server. A session already open is reattached, never rewritten, so an unsaved buffer survives */
-const dumpSent = new Map<number, string>()
+const dumpSent = new Map<number, string>(), dumpSending = new Map<number, string>(), dumpWatched = new Set<number>()
 async function openDump() {
   if (ws === null) return
   const w = ws, session = `dump-${w}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
-  const file = `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/tlon-office/dump-${w}.md`
+  const file = `${OWN_DIR}/dump-${w}.md`
   const sync = () => {
     let text: string
     try { text = readFileSync(file, "utf8") } catch { return }
-    if (text === dumpSent.get(w)) return
+    if (text === dumpSent.get(w) || text === dumpSending.get(w)) return
     if (!text.trim()) { status = "the dump came back blank — not saved; the last page stands"; return draw() }
-    void did(data.dumpPut(w, text).then((r) => (r.ok && dumpSent.set(w, text), r.line))).then(loadCard).then(draw)
+    dumpSending.set(w, text)
+    void did(data.dumpPut(w, text).then((r) => (dumpSending.delete(w), r.ok && dumpSent.set(w, text), r.line))).then(loadCard).then(draw)
   }
   const open = tmux("has-session", "-t", `=${session}`).exitCode === 0
   if (!open || !dumpSent.has(w)) {
@@ -2310,10 +2344,11 @@ async function openDump() {
     if (!page) { status = "the dump can't be read: the server isn't answering"; return draw() }
     dumpSent.set(w, page.body)
   }
+  if (!dumpWatched.has(w)) { dumpWatched.add(w); watchFile(file, { interval: 1000 }, sync) }
   if (!open) {
     mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, dumpSent.get(w)!)
-    // $e unquoted on purpose: VISUAL="code --wait" is a command and its flags
-    const edit = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; [ -n "$e" ] || { echo "no editor: set VISUAL or EDITOR"; read _; exit 1; }; exec $e "$0"`
+    // VISUAL/EDITOR is a shell command, as git reads it: flags work, and a path with spaces is quoted inside it
+    const edit = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; [ -n "$e" ] || { echo "no editor: set VISUAL or EDITOR"; read _; exit 1; }; eval "exec $e \\"\\$0\\""`
     // a tmux server already up keeps its own env, so the editor this TUI was started with is handed over
     const env = ["VISUAL", "EDITOR"].flatMap((k) => (process.env[k] ? ["-e", `${k}=${process.env[k]}`] : []))
     tmux("new-session", "-d", "-s", session, "-n", "dump", ...env, "sh", "-c", edit, file)
