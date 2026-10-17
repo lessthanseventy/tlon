@@ -175,7 +175,7 @@ function followHall(): boolean {
 }
 async function hallHire() {
   const ctx = hallCtx(), c = candidateOf(hall, ctx)
-  if (ctx.taken.includes(c.name)) { status = `${c.name} is already on the bench — pass, or unlock the name`; return draw() }
+  if (ctx.taken.includes(c.name)) { status = `${c.name} is already on the bench — pass, or drop it`; return draw() }
   if (world) world.hire(c)
   else {
     if (ws === null) return
