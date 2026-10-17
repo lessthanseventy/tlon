@@ -136,6 +136,12 @@ run_gate() {
 $fails
 …
 }$(printf '%s' "$out" | tail -c 400)"
+  # the whole of a red gate's output, where a flake can be read to its failing assertion and line;
+  # the checkout it ran in is gone on exit
+  if [ "$code" -ne 0 ] && mkdir -p "$root/.logs" && printf '%s\n' "$out" >"$root/.logs/verify-$slug.log"; then
+    gate_tail="$gate_tail
+(the full log: $root/.logs/verify-$slug.log)"
+  fi
   if [ "$tid" != - ] && ! "$cli" record-verify "$tid" "$slug" "$code" "$name" "$gate_tail"; then
     echo "workline-verify: could not record evidence for '$name' (exit $code) — is the service up?" >&2
     unrecorded=1

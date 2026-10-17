@@ -168,6 +168,7 @@ defmodule Server.WorklineVerifyScriptTest do
       #!/bin/sh
       [ "$1" = run ] || exit 0
       echo "$(git rev-parse HEAD) $CHECKS_LABEL ${TLON_TEST_DATABASE:-}" >"$GATE_LOG"
+      [ -z "$GATE_NOISE" ] || { echo "the failing assertion, line 42"; seq 1 2000; }
       exit "${FAKE_GATE:-0}"
       """)
 
@@ -201,6 +202,19 @@ defmodule Server.WorklineVerifyScriptTest do
     test "red: exit 1 and the gate's tail on stdout, still nothing recorded", ctx do
       assert {out, 1} = gate(ctx, [{"FAKE_GATE", "1"}])
       refute out =~ "could not record"
+    end
+
+    test "red: the full log is kept and its path is in the evidence", ctx do
+      assert {out, 1} = gate(ctx, [{"FAKE_GATE", "1"}, {"GATE_NOISE", "1"}])
+      log = Path.join(ctx.repo, ".logs/verify-pr-7-feature.log")
+      assert out =~ "(the full log: #{log})"
+      refute out =~ "the failing assertion, line 42"
+      assert File.read!(log) =~ "the failing assertion, line 42"
+    end
+
+    test "green: no log is kept", ctx do
+      assert {_, 0} = gate(ctx, [{"GATE_NOISE", "1"}])
+      refute File.exists?(Path.join(ctx.repo, ".logs"))
     end
   end
 
