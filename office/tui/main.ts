@@ -48,7 +48,7 @@ import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
 import { adder, bind, hints, LEGEND_CHARS, type KeyId } from "./keys"
-import { PLAY, toy } from "./sandbox"
+import { PLAY, toy, toyEventKey } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
@@ -2290,13 +2290,20 @@ function help() {
 // the last keys pressed, for the Konami code
 let keyLog: string[] = []
 
-/** sandbox only: one key, one thing to do with the toy; true when the key was one of them */
+function fireEvent() {
+  const r = room()
+  r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"
+}
+/** sandbox only: one key, one thing to do with the toy; true when the key was one of them. Off the sandbox, only `E` (OFFICE_TOY_KEYS=1) */
 function toyKey(k: string): boolean {
-  if (!world) return false
+  if (!world) {
+    if (!toyEventKey(k, detail().actions.some((x) => x.key === "E"))) return false
+    fireEvent(); changed(); draw(); return true
+  }
   const r = room(), under = mode.kind === "person" ? mode.name : null
   switch (k) {
     case "D": r.play("doorbell"); status = "ding dong"; break
-    case "E": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
+    case "E": fireEvent(); break
     case "F": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
     case "T": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
     case "N": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break

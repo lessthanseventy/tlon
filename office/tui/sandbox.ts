@@ -100,3 +100,6 @@ export type Toy = ReturnType<typeof toy>
 
 /** the sandbox's play keys, as the help line lists them; `toyKey()` in main.ts handles each */
 export const PLAY = hints("sandbox-play")
+/** off the sandbox, `E` alone fires an event (OFFICE_TOY_KEYS=1), and only where the card has no `E` of its own */
+export const toyEventKey = (k: string, cardClaimsE: boolean, env: Record<string, string | undefined> = process.env): boolean =>
+  k === "E" && !cardClaimsE && env.OFFICE_TOY_KEYS === "1"
