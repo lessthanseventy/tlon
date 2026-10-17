@@ -307,8 +307,8 @@ defmodule Server.MCP.Tool.AssignLead do
   different coworker fits. Takes a thread_id BY DESIGN — like close_thread, staffing a thread other
   than the caller's own is exactly the coordination act this verb exists for. A missing thread or an
   unregistered handle refuses cleanly, never leaving a half-staffed thread. The reassignment is a
-  hand-off (`Server.Staffing.hand_off/2`): the old lead's leaf window closes, or the new lead could
-  never be spawned onto the thread's one window.
+  hand-off (`Server.Staffing.hand_off/3`), posted as the caller: the old lead's leaf window closes,
+  or the new lead could never be spawned onto the thread's one window.
   """
   use Server.MCP.Tool
 
@@ -322,7 +322,7 @@ defmodule Server.MCP.Tool.AssignLead do
 
   @impl true
   def execute(params, frame) do
-    case Server.Staffing.hand_off(params[:thread_id], params[:lead]) do
+    case Server.Staffing.hand_off(params[:thread_id], params[:lead], Identity.from_frame(frame).agent) do
       {:ok, _thread} -> ok(frame, %{"thread_id" => params[:thread_id], "lead" => params[:lead]})
       {:error, :no_agent} -> fail(frame, "no registered agent named #{inspect(params[:lead])}")
       {:error, :no_thread} -> fail(frame, "no such thread: #{params[:thread_id]}")
