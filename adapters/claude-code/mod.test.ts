@@ -22,6 +22,8 @@ type World = {
   ownClock?: boolean;
   serverDown?: boolean;
   dossierHangs?: boolean;
+  /** every get_dossier asked for, answered or not */
+  dossierCalls?: number;
   dossierFails?: string;
   submitFails?: boolean;
   /** registers refused until this many have been tried: the MCP server still connecting at boot */
@@ -91,6 +93,7 @@ function engine(on, world: World = {}): Declare[] {
     if (e.server === "lsp") return { value: { content: [{ type: "text", text: world.diagnostics ?? "no diagnostics" }], isError: false } };
     if (world.serverDown) throw new Error("connection refused");
     if (e.tool === "register" && world.notConnectedFor && world.notConnectedFor-- > 0) throw new Error('no connected MCP tool "register" on a server named "tlon"');
+    if (e.tool === "get_dossier" && world.dossierCalls !== undefined) world.dossierCalls++;
     if (e.tool === "get_dossier" && world.dossierHangs) return new Promise(() => {});
     if (e.tool === "get_dossier" && world.dossierFails) return { value: { content: [{ type: "text", text: world.dossierFails }], isError: true } };
     sent.push({ tool: e.tool, args: e.args ?? {} });
@@ -210,6 +213,27 @@ test("a get_dossier that never answers holds the prompt only so long: the last b
 
   expect(r.context?.[0]).toContain("# Brief: ship the mod");
   expect(r.context?.[0]).toContain("the server didn't answer in time: this brief is as of");
+});
+
+test("one get_dossier in flight: prompts during a hung one queue one more behind it, which runs once it gives up", async ($, on) => {
+  const world: World = { ownClock: true, dossierHangs: true, dossierCalls: 0 };
+  engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+  await settle();
+  expect(world.dossierCalls).toBe(1);
+
+  for (const text of ["one", "two"]) {
+    const r = $.prompt.submit({ text, wait: false });
+    await settle();
+    await clock.advance(3_000);
+    await r;
+  }
+  expect(world.dossierCalls).toBe(1);
+
+  await clock.advance(30_000);
+  await settle();
+  expect(world.dossierCalls).toBe(2);
 });
 
 test("a get_dossier that fails fast still dates the brief it falls back on, with why", async ($, on) => {
