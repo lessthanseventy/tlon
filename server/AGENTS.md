@@ -123,8 +123,9 @@ and every layer the spine design's re-laid §9 asked for
   render path: `Generator.run/1` is the one door (banter on, `:generator_daily_cap` per day counted in
   `generator_call`, failures included). A seat's persona (`workspace_agent.persona`, with its seed)
   is made at hire or by `tlon-cli persona <ws> <name> [--reroll]`, falling back to the §2 voice table;
-  `ToyPool` holds doorbell visitors (weekly), per-seat reaction lines per event, and puns, read as
-  `[]` until generated so callers use their handwritten lines. `Server.Soul` writes a seat's first-draft
+  `ToyPool` holds doorbell visitors, per-seat reaction lines per event, and puns, read as
+  `[]` until generated so callers use their handwritten lines, and refilled daily on the ollama model
+  by a script schedule, `mise run toys:refresh` (`ToyPool.refresh_all_due/1` on each staffed workspace). `Server.Soul` writes a seat's first-draft
   SOUL.md (design §5–6 step 2) to the souls dir the office polls, at hire or by `tlon-cli soul <ws> [name]`:
   the three §5 samples verbatim, else `Generator`, else a template; created exclusively, so an existing
   file (edited or not) is never touched. Step 3: it is also read (`read/1`, `voice/1`,

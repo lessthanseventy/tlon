@@ -1,8 +1,8 @@
 defmodule Server.Generator do
   @moduledoc """
   The one door to the toy's cheap model calls (`Server.Persona`, `Server.ToyPool`): `run/1` asks
-  `Server.ModelCli` (`config :server, generator_cmd:, generator_model:`, default `pi` on
-  `ollama-cloud/deepseek-v4.1-flash`, the flat ollama bucket) only while banter is on and fewer than
+  `Server.ModelCli` (`config :server, generator_cmd:, generator_model:`, default Claude Code on
+  `ollama-cloud/deepseek-v4.1-flash` through `gateway.sh`, the flat ollama bucket, never the Claude plan) only while banter is on and fewer than
   `:generator_daily_cap` (default 50) calls were made today. Every call counts, a failed one too, and
   the count is the db's, so a restart does not reset it.
   """
