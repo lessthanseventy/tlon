@@ -1,10 +1,10 @@
 defmodule Server.ToyPool do
   @moduledoc """
   The toy's generated pools, per workspace, written by `Server.Generator` and stored in `toy_pool`:
-  doorbell visitors (name, look seed, one line; refreshed weekly by `refresh_due/2`), each seat's
-  in-voice reaction lines per event, and pun/joke ideas for the canvas brief. Every read is the
-  stored pool or `[]` — the render path never calls the model, and a caller with `[]` uses its
-  handwritten lines.
+  doorbell visitors (name, look seed, one line), each seat's in-voice reaction lines per event, and
+  pun/joke ideas for the canvas brief, refilled daily by `refresh_all_due/1` (the `toys:refresh`
+  task, a script schedule). Every read is the stored pool or `[]` — the render path never calls the
+  model, and a caller with `[]` uses its handwritten lines.
   """
   use Ecto.Schema
 
@@ -13,7 +13,8 @@ defmodule Server.ToyPool do
   alias Server.{Generator, Persona, Repo}
 
   @events ~w(zoo meteor fire_drill power_cut duck)
-  @fresh_days 7
+  # under a day, so a daily run whose last one finished a little later still refills
+  @fresh_hours 20
 
   schema "toy_pool" do
     field :workspace_id, :integer
@@ -53,13 +54,22 @@ defmodule Server.ToyPool do
     end
   end
 
-  @doc "`refresh/3` unless the pool was written in the last week."
+  @doc """
+  `refresh_due/2` for every pool of `ws`: visitors, puns, and the reactions of each seat on its bench,
+  either crew. `[{kind, result}]`.
+  """
+  def refresh_all_due(ws) do
+    seats = for %{name: name} <- Server.Workspaces.bench_all(ws), do: {:reactions, name}
+    for kind <- [:visitors, :puns | seats], do: {kind, refresh_due(ws, kind)}
+  end
+
+  @doc "`refresh/3` unless the pool was written in the last #{@fresh_hours} hours."
   def refresh_due(ws, kind) do
     {key, _, _} = spec(ws, kind, 0)
 
     case Repo.get_by(__MODULE__, workspace_id: ws, key: key) do
       %{generated_at: at, items: %{"items" => items}} ->
-        if DateTime.diff(now(), at, :day) < @fresh_days, do: {:ok, items}, else: refresh(ws, kind)
+        if DateTime.diff(now(), at, :hour) < @fresh_hours, do: {:ok, items}, else: refresh(ws, kind)
 
       nil ->
         refresh(ws, kind)

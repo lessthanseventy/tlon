@@ -50,6 +50,7 @@
 #   reopen <id>                    reopen a closed thread; a queued workline re-joins the merge queue if its approval stands
 #   reap                           the worktree sweep now: strays removed, the ones holding work kept with why
 #   canvas                         repaint the GitHub contribution-graph canvas now (Server.Canvas.Paint)
+#   toys                           refill the toy's generated pools that are a day old, on every staffed workspace (Server.ToyPool)
 #   delete-thread <id>             operator hard delete (messages go too; facts survive unlinked)
 #   forget-fact <id>               operator tombstone — out of recall, row kept
 #   resolve-issue <id> [why…]      close a stack issue (BLOCKERS), recording the resolution
@@ -260,6 +261,12 @@ case "$cmd" in
     tid="${1:-}"
     int "$tid" || { echo 'usage: tlon-cli.sh reopen <thread-id>' >&2; exit 2; }
     exec "$SERVER" rpc "case Server.Repo.get(Server.Thread, $tid) do nil -> IO.puts(\"no thread #$tid\"); raise(\"refused\"); t -> case Server.Workline.reopen(t) do {:ok, r} -> IO.puts(\"reopened thread #$tid — #{r.title}#{if r.stage, do: \" (#{r.stage})\"}\"); other -> IO.puts(\"reopened thread #$tid, but: #{inspect(other)}\"); raise(\"refused\") end end"
+    ;;
+
+  toys)
+    # The daily refill (a script schedule): each staffed workspace's visitors, puns and seats' reactions,
+    # on the generator's ollama model. Off banter refills nothing and is no failure.
+    exec "$SERVER" rpc "r = for %{id: ws} <- Server.Workspaces.all(), Server.Workspaces.bench_all(ws) != [], {kind, res} <- Server.ToyPool.refresh_all_due(ws), do: {ws, kind, res}; bad = for {ws, kind, {:error, why}} <- r, why != :off, do: \"##{ws} #{inspect(kind)}: #{inspect(why)}\"; off = Enum.count(r, &match?({_, _, {:error, :off}}, &1)); IO.puts(\"toys: #{length(r) - length(bad) - off} of #{length(r)} pools fresh#{if off > 0, do: \" (banter is off)\"}\"); Enum.each(bad, &IO.puts/1); if bad != [], do: raise(\"refused\")"
     ;;
 
   canvas)
