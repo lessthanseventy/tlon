@@ -34,14 +34,56 @@ defmodule Server.OrphansTest do
     process(proc, 105, ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
     test = self()
 
-    assert Orphans.retire(257, "emma", proc_dir: proc, kill: fn pid -> send(test, {:killed, pid}) end) == 2
+    opts = [proc_dir: proc, kill: fn pid -> send(test, {:killed, pid}) end, grace: 0, force: fn _ -> :ok end]
+
+    assert Orphans.retire(257, "emma", [notify: fn _ -> :ok end] ++ opts) == 2
     assert_received {:killed, 101}
     assert_received {:killed, 105}
+  end
+
+  test "a holder that ignores SIGTERM is SIGKILLed after the grace, and the thread is told", %{proc: proc} do
+    process(proc, 101, ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
+    process(proc, 105, ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
+    test = self()
+
+    opts = [
+      proc_dir: proc,
+      grace: 0,
+      kill: fn pid -> if pid == 101, do: File.rm_rf!(Path.join(proc, "101")) end,
+      force: fn pid -> send(test, {:forced, pid}) end,
+      notify: fn text -> send(test, {:notice, text}) end
+    ]
+
+    assert Orphans.retire(257, "emma", opts) == 2
+    assert_received {:forced, 105}
+    refute_received {:forced, 101}
+    assert_received {:notice, text}
+    assert text =~ "retired 2" and text =~ "SIGKILL" and text =~ "105"
+  end
+
+  test "holders that let go within the grace are never SIGKILLed, and no seat held means no notice", %{proc: proc} do
+    process(proc, 101, ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
+    test = self()
+
+    opts = [
+      proc_dir: proc,
+      kill: fn pid -> File.rm_rf!(Path.join(proc, "#{pid}")) end,
+      force: fn pid -> send(test, {:forced, pid}) end,
+      notify: fn text -> send(test, {:notice, text}) end
+    ]
+
+    assert Orphans.retire(257, "emma", opts) == 1
+    refute_received {:forced, _}
+    assert_received {:notice, text}
+    refute text =~ "SIGKILL"
+
+    assert Orphans.retire(257, "emma", opts) == 0
+    refute_received {:notice, _}
   end
 
   test "never signals the caller's own process", %{proc: proc} do
     process(proc, List.to_integer(:os.getpid()), ["TLON_THREAD=257", "TLON_AUTHOR=emma"])
 
-    assert Orphans.retire(257, "emma", proc_dir: proc, kill: fn _ -> flunk("signalled self") end) == 0
+    assert Orphans.retire(257, "emma", proc_dir: proc, kill: fn _ -> flunk("signalled self") end, notify: &flunk/1) == 0
   end
 end
