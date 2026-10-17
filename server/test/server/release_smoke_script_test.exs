@@ -82,6 +82,33 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert out =~ "is already being smoked (pid 123 on http://127.0.0.1:4777)"
       refute File.exists?(Path.join(tmp, "tlon-smoke"))
     end
+
+    # a record a holder wrote long ago: a pid from another sandbox's namespace means nothing here,
+    # so only a url that answers, a pid that lives, or a record too young to be a finished build says the holder is real
+    defp stale_lock(tmp, root, record) do
+      {sha, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/feature"])
+      lock = Path.join(tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
+      File.write!(lock, record)
+      File.touch!(lock, {{2020, 1, 1}, {0, 0, 0}})
+      hold_lock(lock)
+    end
+
+    test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused", %{tmp: tmp, root: root} do
+      stale_lock(tmp, root, "pid 999999 on http://127.0.0.1:4777\n")
+
+      {out, _} = run_smoke(tmp, root, ["work/feature"])
+
+      refute out =~ "already being smoked"
+      assert out =~ ~r/smoke: [0-9a-f]{7} on :4599/
+    end
+
+    test "an old record whose url still answers is a live holder: refused", %{tmp: tmp, root: root} do
+      url = stub({200, "{}"})
+      stale_lock(tmp, root, "pid 999999 on #{url}\n")
+
+      assert {out, 1} = run_smoke(tmp, root, ["work/feature"])
+      assert out =~ "is already being smoked (pid 999999 on #{url})"
+    end
   end
 
   # a lock held by another process for as long as the test needs it
