@@ -7,6 +7,8 @@ defmodule Server.Soul do
   """
   alias Server.Workspaces
 
+  require Logger
+
   # The three souls of design §5, shipped verbatim: no model call, so Scharlach is the Dwight
   # every time.
   @sections ["Where they're from", "Wants", "Fears", "Quirks", "People", "The side project"]
@@ -252,7 +254,7 @@ defmodule Server.Soul do
   end
 
   @doc "Write the seat's soul if it has none; an existing file is left alone, edited or not."
-  @spec draft(integer(), String.t()) :: {:ok, :written | :exists} | {:error, :no_seat | :bad_name}
+  @spec draft(integer(), String.t()) :: {:ok, :written | :exists} | {:error, :no_seat | :bad_name | File.posix()}
   def draft(workspace_id, name) do
     with :ok <- check_name(name),
          %{archetype: archetype} <-
@@ -263,13 +265,33 @@ defmodule Server.Soul do
   end
 
   defp create(path, name, archetype) do
-    File.mkdir_p!(dir())
-
-    case File.write(path, body(name, archetype), [:exclusive]) do
-      :ok -> {:ok, :written}
-      {:error, :eexist} -> {:ok, :exists}
+    with :ok <- File.mkdir_p(dir()) do
+      case File.write(path, body(name, archetype), [:exclusive]) do
+        :ok -> {:ok, :written}
+        {:error, :eexist} -> {:ok, :exists}
+        {:error, posix} -> {:error, posix}
+      end
     end
   end
+
+  @doc "Whether `name` is a handle a soul file can be named for: what `draft/2` and `append_diary/2` accept."
+  @spec valid_name?(term()) :: boolean()
+  def valid_name?(name), do: is_binary(name) and check_name(name) == :ok
+
+  @doc """
+  A freshly hired seat's persona and first-draft soul, made off the caller's path (each is a model
+  call) and best-effort: a failure of either is logged, never raised into the hire.
+  """
+  @spec after_hire(integer(), String.t()) :: {:ok, pid()} | {:error, term()}
+  def after_hire(workspace_id, name) do
+    Task.Supervisor.start_child(Server.TaskSupervisor, fn ->
+      made(:persona, name, safely(fn -> Server.Persona.ensure(workspace_id, name) end))
+      made(:soul, name, safely(fn -> draft(workspace_id, name) end))
+    end)
+  end
+
+  defp made(_what, _name, {:ok, _}), do: :ok
+  defp made(what, name, other), do: Logger.warning("hire #{name}: its #{what} was not made: #{inspect(other)}")
 
   @doc "`draft/2` for every seat on the bench, as `%{name => result}`."
   @spec draft_all(integer()) :: %{String.t() => {:ok, :written | :exists} | {:error, atom()}}
@@ -336,5 +358,11 @@ defmodule Server.Soul do
     result = with :ok <- File.write(tmp, content), do: File.rename(tmp, path)
     if result != :ok, do: File.rm(tmp)
     result
+  end
+
+  defp safely(fun) do
+    fun.()
+  rescue
+    e -> {:raised, Exception.message(e)}
   end
 end
