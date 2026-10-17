@@ -1574,7 +1574,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { key: "t", label: "look over Uqbar's shoulder", run: () => void zoomInto(study) },
         { key: "v", label: "read the study", run: () => openReader(study) },
       ]
-      return { title: e.title, tint: ROLE.inactive, rows, actions: [...verbs, back1] }
+      const notes: Action[] = e.footnotes.slice(0, 9).map((f, i) => ({ key: String(i + 1), label: `footnote ${f.mark} — ${f.text}`, run: () => act(f.act) }))
+      return { title: e.title, tint: ROLE.inactive, rows, actions: [...verbs, ...notes, back1] }
     }
     case "decide": {
       // one waiting item at a time, everything to decide it on the card; acting moves to the next
