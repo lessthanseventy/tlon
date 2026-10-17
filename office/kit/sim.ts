@@ -471,21 +471,22 @@ export class Sim<L extends { people: Seat[] }> {
   }
 
   /** the toy's one-key happenings; steps 3–5 of the toy design give each a scene — this is the stand-in */
-  play(kind: "doorbell" | "event" | "drill") {
-    if (kind === "doorbell") { this.ring(); return }
-    if (kind === "event" && this.event()) return
+  play(kind: "doorbell" | "event" | "drill"): boolean {
+    if (kind === "doorbell") { this.ring(); return true }
+    if (kind === "event" && this.event()) return true
     // event() refused because a scene or a drill is on: the stand-in would play over it
-    if (kind === "event" && (this.running || this.alarmed)) return
+    if (kind === "event" && (this.running || this.alarmed)) return false
     // the stand-in below is an event too: with every event switched off the key plays nothing
-    if (kind === "event" && !EVENT_KINDS.some((k) => this.dials.events[k])) return
+    if (kind === "event" && !EVENT_KINDS.some((k) => this.dials.events[k])) return false
     // a drill over a running scene would stack its own panic on top of it; refuse like event() does
-    if (kind === "drill" && this.running) return
+    if (kind === "drill" && this.running) return false
     const line = { event: "Did anyone else hear that?", drill: "Fire drill! Everybody out!" }[kind]
     for (const x of this.actors.values()) { x.emote = "!"; x.emoteUntil = this.tick + 60 }
     const first = this.actors.keys().next().value
     if (first) this.say(first, line)
     if (kind === "drill") this.drillUntil = this.tick + DRILL
     this.changed = true
+    return true
   }
 
   /** fired at an event's start (`beat` null) and at each beat — step 7's cast reacts here; default none */
