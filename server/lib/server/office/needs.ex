@@ -601,11 +601,17 @@ defmodule Server.Office.Needs do
     if Server.Pause.state() == :working do
       cutoff = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("quiet_workline_minutes") * 60, :second)
 
-      for %Thread{stage: stage} = t <- open,
-          stage not in [nil, "merged"],
-          is_nil(t.awaiting),
-          not MapSet.member?(listed, t.id),
-          moved = last_moved(t),
+      candidates =
+        for %Thread{stage: stage} = t <- open,
+            stage not in [nil, "merged"],
+            is_nil(t.awaiting),
+            not MapSet.member?(listed, t.id),
+            do: {t, Server.Workline.Artifacts.Git.root(t)}
+
+      tips = candidates |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Map.new(&{&1, work_tips(&1)})
+
+      for {t, root} <- candidates,
+          moved = last_moved(t, Map.get(tips[root], t.slug)),
           DateTime.before?(moved, cutoff),
           not on_duty?(t) do
         item("stalled", "blocking", t, stalled_text(t, moved), moved)
@@ -617,7 +623,7 @@ defmodule Server.Office.Needs do
 
   # a coworker's chatter is not movement, nor a prompt the machine closed ("window closed"); an
   # operator's answer starts the clock again, so the lead gets the window to act on it
-  defp last_moved(t) do
+  defp last_moved(t, commit_at) do
     operator = Application.get_env(:server, :operator, "andrew")
 
     event =
@@ -636,29 +642,28 @@ defmodule Server.Office.Needs do
           select: max(fragment("greatest(?, ?)", m.created_at, m.resolved_at))
       )
 
-    [t.created_at, event, answer && DateTime.from_naive!(answer, "Etc/UTC"), commit_at(t)]
+    [t.created_at, event, answer && DateTime.from_naive!(answer, "Etc/UTC"), commit_at]
     |> Enum.reject(&is_nil/1)
     |> Enum.max(DateTime)
   end
 
-  defp commit_at(%Thread{slug: slug} = t) when is_binary(slug) do
-    case System.cmd(
-           "git",
-           ["-C", Server.Workline.Artifacts.Git.root(t), "log", "-1", "--format=%cI", "work/#{slug}", "--"],
-           stderr_to_stdout: true
-         ) do
-      {iso, 0} ->
-        case DateTime.from_iso8601(String.trim(iso)) do
-          {:ok, at, _} -> at
-          _ -> nil
-        end
+  # every work/<slug> tip's commit time in `root`, by slug: one git call per refresh, not one per workline
+  defp work_tips(root) do
+    git = Application.get_env(:server, :git_cmd, &System.cmd/3)
+    args = ["-C", root, "for-each-ref", "--format=%(refname:lstrip=3) %(committerdate:iso-strict)", "refs/heads/work/"]
+
+    case git.("git", args, stderr_to_stdout: true) do
+      {out, 0} ->
+        for line <- String.split(out, "\n", trim: true),
+            [slug, iso] <- [String.split(line, " ", parts: 2)],
+            {:ok, at, _} <- [DateTime.from_iso8601(iso)],
+            into: %{},
+            do: {slug, at}
 
       _ ->
-        nil
+        %{}
     end
   end
-
-  defp commit_at(_), do: nil
 
   # someone is on it: the merge queue, a verify run queued or running, a coworker mid-turn here (a
   # mark past the stale-turn clock is a turn nothing will end, not someone on it)
