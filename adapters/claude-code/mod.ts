@@ -43,6 +43,9 @@ const HOT_5H = 75;
 // How long a prompt waits on get_dossier before going on with the last brief (a hook's own
 // budget is 10s, and a $.clock wait counts against it).
 const DOSSIER_WAIT_MS = 3_000;
+// How long one get_dossier holds the refresh flight before it is abandoned (its late reply dropped),
+// so a call that never answers can't wedge every refresh queued behind it.
+const DOSSIER_GIVE_UP_MS = 30_000;
 const NO_BRIEF = "(no brief)";
 
 type Message = { author: string; body: string; at?: string };
@@ -113,11 +116,26 @@ async function note($, what: string) {
   }
 }
 
+// One dossier read in flight, at most one queued behind it (office/tui/flight.ts's shape): two
+// replies landing out of order would let the older overwrite the newer and advance seenMessage twice.
+let dossierFlight: Promise<void> | null = null;
+let dossierQueued: Promise<void> | null = null;
+function refresh($): Promise<void> {
+  if (!dossierFlight) return (dossierFlight = readDossier($).finally(() => { dossierFlight = null; }));
+  const again = () => { dossierQueued = null; return refresh($); };
+  return (dossierQueued ??= dossierFlight.then(again, again));
+}
+
 // The thread's dossier, and what in it is news: a mention of this seat, a workline landing.
-async function refresh($) {
+async function readDossier($) {
   let got: unknown;
   try {
-    got = await call($, "get_dossier");
+    // a sleep the host refuses never gives up rather than abandoning a call that may yet answer
+    const giveUp = $.clock.sleep(DOSSIER_GIVE_UP_MS).then(
+      () => { throw new Error(`took over ${DOSSIER_GIVE_UP_MS / 1000}s`); },
+      () => new Promise<never>(() => {}),
+    );
+    got = await Promise.race([call($, "get_dossier"), giveUp]);
   } catch (err) {
     dossierError = err instanceof Error ? err.message : String(err);
     return void note($, `get_dossier: ${dossierError}`);
