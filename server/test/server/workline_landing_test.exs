@@ -337,6 +337,39 @@ defmodule Server.WorklineLandingTest do
       assert blocked() == []
     end
 
+    test "a requeued landing fetches work/<slug> before its lease, so a head GitHub moved doesn't refuse the push" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
+      {:ok, _} = Workline.rebase_landing(Repo.get!(Thread, t.id))
+      flush_ran()
+      github = gh("OPEN")
+
+      # GitHub moved work/lamp's head: the lease holds only once the tracking ref is fetched
+      run = fn
+        "git", [_, _, "fetch", "origin", "+refs/heads/work/lamp:refs/remotes/origin/work/lamp"] = args, _opts ->
+          send(self(), {:ran, ["git" | args]})
+          Process.put(:fetched, true)
+          {"", 0}
+
+        "git", [_, _, "push", "--force-with-lease" | _] = args, _opts ->
+          send(self(), {:ran, ["git" | args]})
+          if Process.get(:fetched), do: {"", 0}, else: {"! [rejected] work/lamp (stale info)", 1}
+
+        cmd, args, opts ->
+          github.(cmd, args, opts)
+      end
+
+      assert {:ok, _} =
+               Workline.reland_queued(Repo.get!(Thread, t.id),
+                 merge: RebasesOnto,
+                 gate: fn _, _ -> {:ok, :green} end,
+                 run: run
+               )
+
+      assert_received {:ran, ["gh", "pr", "merge", @url, "--rebase", "--match-head-commit", "c2"]}
+      assert blocked() == []
+    end
+
     test "close and reland: its PR closed, the workline back at build on its branch" do
       %{thread: t} = published!(gh("OPEN", %{merge: {"auto-merge is not allowed", 1}}))
 
