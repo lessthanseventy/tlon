@@ -699,6 +699,24 @@ defmodule Server.MCP.ServerTest do
              ["for the live one"]
   end
 
+  test "while any live session holds the seat, every other session id gets superseded, never a wake list",
+       %{thread: thread, agent: agent, token: token} do
+    first = handshake(token)
+    %{"session_id" => old_id} = decode_tool_json(call(token, first, 3, "register", %{}))
+    reconnected = handshake(token)
+    %{"session_id" => live_id} = decode_tool_json(call(token, reconnected, 3, "register", %{}))
+    {:ok, _} = Server.Wake.queue(thread.id, agent.name, "for the live one")
+
+    for {claimed, n} <- Enum.with_index([old_id, live_id + 1000, 0, -1], 10) do
+      conn = handshake(token)
+
+      assert %{"superseded" => true, "by" => ^live_id} =
+               decode_tool_json(call(token, conn, n, "take_wakes", %{"session_id" => claimed}))
+    end
+
+    assert Server.Wake.take(thread.id, agent.name) == ["for the live one"]
+  end
+
   test "a session whose seat was ended with no successor is not fenced: its wakes are still taken",
        %{thread: thread, agent: agent, token: token} do
     session = handshake(token)
