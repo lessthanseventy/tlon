@@ -450,6 +450,13 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"pause" => "pencils_down"}} = post_json("/api/office/pause", %{mode: "pencils_down"})
       assert {200, %{"pause" => "pencils_down"}} = get_json("/api/office")
       assert {400, _} = post_json("/api/office/pause", %{mode: "nap"})
+
+      {:ok, ws} = Server.Workspaces.register(%{name: "Paused"})
+      {:ok, tk} = Server.Tickets.file(%{workspace_id: ws.id, title: "not now"})
+
+      assert {409, %{"error" => "the office is paused (pencils down): back to work first"}} =
+               post_json("/api/tickets/#{tk.id}/start", %{})
+
       assert {200, %{"pause" => "working"}} = post_json("/api/office/pause", %{mode: "back_to_work"})
     end
 

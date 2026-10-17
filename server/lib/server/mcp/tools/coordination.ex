@@ -76,7 +76,8 @@ defmodule Server.MCP.Tool.StaffChild do
 
     params = Map.put(params, :lead, params[:lead] || picked(params, parent))
 
-    with :ok <- briefed(params[:brief]),
+    with :ok <- paused(),
+         :ok <- briefed(params[:brief]),
          :ok <- routes_here(parent, identity.agent_id),
          :ok <- ticket_free(params[:ticket_id]),
          {:agent, %Agent{}} <- {:agent, params[:lead] && Staff.agent_by_name(params[:lead])},
@@ -88,6 +89,9 @@ defmodule Server.MCP.Tool.StaffChild do
          :ok <- promote_ticket(params[:ticket_id], thread.id) do
       ok(frame, %{"thread_id" => thread.id, "lead" => lead})
     else
+      {:paused, line} ->
+        fail(frame, "staff_child refused: #{line}")
+
       :blank ->
         fail(
           frame,
@@ -133,6 +137,10 @@ defmodule Server.MCP.Tool.StaffChild do
     else
       _ -> :ok
     end
+  end
+
+  defp paused do
+    with {:error, line} <- Server.Pause.at_work(), do: {:paused, line}
   end
 
   defp briefed(brief) when is_binary(brief), do: if(String.trim(brief) == "", do: :blank, else: :ok)
