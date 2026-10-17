@@ -1,4 +1,4 @@
-// The hiring hall's candidate: everything on the card is a pure function of (seed, locks, taken, prev).
+// The hiring hall's candidate: everything on the card is a pure function of (seed, taken) and the stored edits.
 // roll() does no I/O and calls no model; hall.json (below) stores only seed + edits, and a drawn soul/pitch
 // is laid over the skeleton by the caller.
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
@@ -33,27 +33,14 @@ export function nextSeed(s: string): string {
   return `hall:${(n ? Number(n) : 0) + 1}`
 }
 
-export function roll(seed: string, o: { taken: readonly string[]; locks: Locks; prev?: Candidate; vocab: Vocab }): Candidate {
+export function roll(seed: string, o: { taken: readonly string[]; vocab: Vocab }): Candidate {
   const pick = <T,>(xs: readonly T[], k: string) => xs[hash(seed + k) % xs.length]!
-  const locked = (f: Field) => !!o.locks.fields?.includes(f) && !!o.prev
   const free = BORGES.filter(n => !o.taken.includes(n))
-  const fresh = free.length ? pick(free, "name") : `hall-${(hash(seed + "n") % 9000) + 1000}`
-  const name = locked("name") && !o.taken.includes(o.prev!.name) ? o.prev!.name : fresh
-
-  const rolled = rollLook(seed)
-  const parts = { ...rolled.parts }
-  for (const s of SLOTS) {
-    if (!o.locks.slots?.includes(s) || !o.prev) continue
-    const p = o.prev.look.parts?.[s]
-    if (p) parts[s] = p
-    else delete parts[s]
-  }
-  const look: Look = { ...lookOf(seed), ...rolled, parts }
-
-  const field = (f: Exclude<Field, "name">, xs: string[]) => (locked(f) ? o.prev![f] : pick(xs, f))
-  const archetype = field("archetype", o.vocab.archetypes)
-  const grade = field("grade", o.vocab.grades)
-  const specialty = field("specialty", o.vocab.specialties)
+  const name = free.length ? pick(free, "name") : `hall-${(hash(seed + "n") % 9000) + 1000}`
+  const look: Look = { ...lookOf(seed), ...rollLook(seed) }
+  const archetype = pick(o.vocab.archetypes, "archetype")
+  const grade = pick(o.vocab.grades, "grade")
+  const specialty = pick(o.vocab.specialties, "specialty")
 
   const pitch = pick(PITCHES, "pitch")(name, grade, archetype, specialty)
   const soul = SOUL_SECTIONS.filter(h => h !== "Diary").map(h => `## ${h}\n`).join("\n")
@@ -82,14 +69,22 @@ function cleanLocks(raw: unknown): Locks {
   return { ...(slots.length ? { slots } : {}), ...(fields.length ? { fields } : {}) }
 }
 
+// Server.Soul's name check: the name becomes souls/<name>.md and a looks.json key
+const SOUL_NAME = /^[a-z0-9][a-z0-9_-]*$/
+function cleanOverrides(raw: unknown): Overrides {
+  if (!raw || typeof raw !== "object") return {}
+  const { name, ...rest } = raw as Overrides
+  return typeof name === "string" && SOUL_NAME.test(name) ? { ...rest, name } : rest
+}
+
 export function loadHall(path: string): Hall {
   try {
     const j = JSON.parse(readFileSync(path, "utf8"))
     return {
       seed: typeof j.seed === "string" ? j.seed : "hall:1",
       locks: cleanLocks(j.locks),
-      overrides: j.overrides && typeof j.overrides === "object" ? j.overrides : {},
-      pile: Array.isArray(j.pile) ? j.pile.filter((e: PileEntry) => e && typeof e.seed === "string").map((e: PileEntry) => ({ seed: e.seed, overrides: e.overrides ?? {} })) : [],
+      overrides: cleanOverrides(j.overrides),
+      pile: Array.isArray(j.pile) ? j.pile.filter((e: PileEntry) => e && typeof e.seed === "string").map((e: PileEntry) => ({ seed: e.seed, overrides: cleanOverrides(e.overrides) })) : [],
     }
   } catch { return emptyHall() }
 }
@@ -125,7 +120,7 @@ export const dropPile = (pile: PileEntry[], i: number): PileEntry[] => pile.filt
 type Ctx = { taken: readonly string[]; vocab: Vocab }
 
 /** the card the hall shows: the seed rolled, then the edits laid over it */
-export const candidateOf = (h: Hall, o: Ctx): Candidate => applyOverrides(roll(h.seed, { ...o, locks: h.locks }), h.overrides)
+export const candidateOf = (h: Hall, o: Ctx): Candidate => applyOverrides(roll(h.seed, o), h.overrides)
 
 /**
  * Draw the next seed. What a lock keeps is written into the new overrides, so the stored hall (seed +
@@ -155,7 +150,7 @@ export function bringBack(h: Hall, i: number): Hall {
 /** names a new candidate must not take: the bench's and everyone on the pile */
 export const takenNames = (h: Hall, bench: readonly string[], vocab: Vocab): string[] => [
   ...bench,
-  ...h.pile.map(e => e.overrides.name ?? roll(e.seed, { taken: bench, locks: {}, vocab }).name),
+  ...h.pile.map(e => e.overrides.name ?? roll(e.seed, { taken: bench, vocab }).name),
 ]
 
 export function toggleLock(l: Locks, kind: "slots" | "fields", key: Slot | Field): Locks {

@@ -4,7 +4,7 @@ import { SLOTS } from "../kit/parts"
 import { hallRows, stepRow, HALL_ROWS } from "../tui/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer"], grades: ["junior", "senior"], specialties: ["office", "server"] }
-const cand = () => roll("hall:3", { taken: [], locks: {}, vocab: VOCAB })
+const cand = () => roll("hall:3", { taken: [], vocab: VOCAB })
 const text = (r: { segs: { s: string }[] }) => r.segs.map(s => s.s).join("")
 
 test("the card has one row per field then one per slot", () => {

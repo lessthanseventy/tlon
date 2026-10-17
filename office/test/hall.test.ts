@@ -9,11 +9,11 @@ const LEGAL = /^[a-z0-9][a-z0-9_-]*$/
 
 describe("hall roll", () => {
   test("same (seed, locks, taken) → identical candidate", () => {
-    expect(roll("hall:7", { taken: [], locks: {}, vocab: VOCAB })).toEqual(roll("hall:7", { taken: [], locks: {}, vocab: VOCAB }))
+    expect(roll("hall:7", { taken: [], vocab: VOCAB })).toEqual(roll("hall:7", { taken: [], vocab: VOCAB }))
   })
   test("never offers uqbar, the operator's delegate: a seat by that name would take its identity", () => {
     expect(BORGES as readonly string[]).not.toContain("uqbar")
-    for (let i = 0; i < 300; i++) expect(roll(`hall:${i}`, { taken: [], locks: {}, vocab: VOCAB }).name).not.toBe("uqbar")
+    for (let i = 0; i < 300; i++) expect(roll(`hall:${i}`, { taken: [], vocab: VOCAB }).name).not.toBe("uqbar")
   })
   test("every Borges name is legal", () => {
     expect(BORGES.length).toBeGreaterThanOrEqual(24)
@@ -21,32 +21,17 @@ describe("hall roll", () => {
   })
   test("the name is legal and not already taken", () => {
     const taken = BORGES.slice(0, BORGES.length - 1)
-    const c = roll("hall:3", { taken, locks: {}, vocab: VOCAB })
+    const c = roll("hall:3", { taken, vocab: VOCAB })
     expect(c.name).toMatch(LEGAL)
     expect(taken).not.toContain(c.name)
   })
   test("all names taken → a seeded original name, still legal", () => {
-    const c = roll("hall:3", { taken: [...BORGES], locks: {}, vocab: VOCAB })
+    const c = roll("hall:3", { taken: [...BORGES], vocab: VOCAB })
     expect(c.name).toMatch(LEGAL)
     expect(BORGES as readonly string[]).not.toContain(c.name)
   })
-  test("a pass keeps locked slots and locked fields from the previous candidate", () => {
-    const a = roll("hall:1", { taken: [], locks: {}, vocab: VOCAB })
-    const b = roll("hall:2", { taken: [], locks: { slots: ["head", "hand"], fields: ["grade"] }, prev: a, vocab: VOCAB })
-    expect(b.look.parts?.head).toEqual(a.look.parts?.head)
-    expect(b.look.parts?.hand).toEqual(a.look.parts?.hand)
-    expect(b.grade).toBe(a.grade)
-    expect(b.seed).toBe("hall:2")
-  })
-  test("a locked name that has since been taken re-rolls", () => {
-    const a = roll("hall:1", { taken: [], locks: {}, vocab: VOCAB })
-    const b = roll("hall:2", { taken: [a.name], locks: { fields: ["name"] }, prev: a, vocab: VOCAB })
-    expect(b.name).not.toBe(a.name)
-    const c = roll("hall:2", { taken: [], locks: { fields: ["name"] }, prev: a, vocab: VOCAB })
-    expect(c.name).toBe(a.name)
-  })
   test("pitch and soul skeleton are deterministic text, drawn=false", () => {
-    const c = roll("hall:9", { taken: [], locks: {}, vocab: VOCAB })
+    const c = roll("hall:9", { taken: [], vocab: VOCAB })
     expect(c.pitch.length).toBeGreaterThan(0)
     expect(c.soul).toContain("## Wants")
     expect(c.soul).not.toContain("## Diary")
@@ -89,11 +74,11 @@ describe("hall.json", () => {
     expect(hallSignature(p)).not.toBe(a)
   })
   test("a pile entry re-renders identically from seed + overrides", () => {
-    const c = roll("hall:2", { taken: [], locks: {}, vocab: VOCAB })
-    expect(applyOverrides(roll("hall:2", { taken: [], locks: {}, vocab: VOCAB }), {})).toEqual(c)
+    const c = roll("hall:2", { taken: [], vocab: VOCAB })
+    expect(applyOverrides(roll("hall:2", { taken: [], vocab: VOCAB }), {})).toEqual(c)
   })
   test("overrides replace fields but never the seed", () => {
-    const c = applyOverrides(roll("hall:2", { taken: [], locks: {}, vocab: VOCAB }), { name: "zed", grade: "senior", seed: "evil" } as never)
+    const c = applyOverrides(roll("hall:2", { taken: [], vocab: VOCAB }), { name: "zed", grade: "senior", seed: "evil" } as never)
     expect(c.name).toBe("zed")
     expect(c.grade).toBe("senior")
     expect(c.seed).toBe("hall:2")
@@ -110,7 +95,7 @@ describe("hall.json", () => {
     expect(big.at(-1)!.seed).toBe(`hall:${PILE_MAX + 5 + 9}`)
   })
   test("a part override replaces a slot, null clears it; the seed's other slots stay", () => {
-    const c = roll("hall:2", { taken: [], locks: {}, vocab: VOCAB })
+    const c = roll("hall:2", { taken: [], vocab: VOCAB })
     const spec = { id: "x-part", dials: {} }
     const o = applyOverrides(c, { parts: { head: spec as never, hand: null } })
     expect(o.look.parts?.head).toEqual(spec as never)
@@ -124,6 +109,13 @@ describe("hall.json", () => {
     expect(loadHall(p).locks).toEqual({ fields: ["grade"] })
     writeFileSync(p, JSON.stringify({ seed: "hall:3", locks: { slots: ["eyes", "nope"], fields: 3 }, overrides: {}, pile: [] }))
     expect(loadHall(p).locks).toEqual({ slots: ["eyes"] })
+  })
+  test("a hand-edited name that is not a soul file's name is dropped, on the card and on the pile", () => {
+    const p = tmp()
+    writeFileSync(p, JSON.stringify({ seed: "hall:3", locks: {}, overrides: { name: "../x", grade: "senior" }, pile: [{ seed: "hall:2", overrides: { name: "Bad Name" } }, { seed: "hall:4", overrides: { name: "ts-ai-ang" } }] }))
+    const h = loadHall(p)
+    expect(h.overrides).toEqual({ grade: "senior" })
+    expect(h.pile.map((e) => e.overrides)).toEqual([{}, { name: "ts-ai-ang" }])
   })
   test("pushing a seed already in the pile replaces it, not duplicates it", () => {
     let pile = pushPile([], { seed: "hall:1", overrides: {} })
@@ -139,7 +131,7 @@ describe("the hall's turn-by-turn state", () => {
   const hall = (over = {}) => ({ ...emptyHall(), ...over })
   test("candidateOf is roll + overrides, so a stored hall re-renders identically", () => {
     const h = hall({ seed: "hall:4", overrides: { grade: "senior" } })
-    expect(candidateOf(h, o)).toEqual(applyOverrides(roll("hall:4", { ...o, locks: {} }), { grade: "senior" }))
+    expect(candidateOf(h, o)).toEqual(applyOverrides(roll("hall:4", o), { grade: "senior" }))
   })
   test("a pass moves to the next seed and bakes locked values into the overrides", () => {
     const h = hall({ seed: "hall:1", locks: { slots: ["head" as const], fields: ["grade" as const] } })
@@ -192,7 +184,7 @@ describe("the hall's turn-by-turn state", () => {
     const names = takenNames(h, ["funes"], VOCAB)
     expect(names).toContain("funes")
     expect(names).toContain("zed")
-    expect(names).toContain(roll("hall:2", { taken: ["funes"], locks: {}, vocab: VOCAB }).name)
+    expect(names).toContain(roll("hall:2", { taken: ["funes"], vocab: VOCAB }).name)
   })
   test("toggleLock flips a slot or field and drops empty lists", () => {
     let l = toggleLock({}, "slots", "head")
