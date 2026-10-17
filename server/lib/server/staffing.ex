@@ -30,6 +30,7 @@ defmodule Server.Staffing do
 
   alias Server.Agent
   alias Server.Channel
+  alias Server.Crew
   alias Server.Message
   alias Server.OperatorConfig
   alias Server.Presence
@@ -275,19 +276,24 @@ defmodule Server.Staffing do
 
   # A session still mid-turn with no window to run it: the machine went down under it. End it (so
   # the switchboard does not try to wake a pane that is gone) and tell its coworker on the thread
-  # to carry on — the message spawns them fresh, brief-seeded, like any other.
+  # to carry on — the message spawns them fresh, brief-seeded, like any other. Not told when the
+  # thread has moved on to another lead (a stage handover): a session that no longer leads cannot
+  # answer there, and the turn it had was landed by the one that does. The standing thread has no
+  # single lead and a crew role is never one, so those are always told.
   defp resume_interrupted(workspace_id, tabs, standing) do
     for %{session_id: sid, thread_id: tid, agent: agent} <- Staff.interrupted(workspace_id),
         not has_window?(tabs, tid, agent, standing) do
       # one row gone or one post refused doesn't stop the rest of the pass
       with %Session{} = session <- Repo.get(Session, sid), do: Staff.end_session(session)
 
-      _ =
-        Channel.post(%{
-          thread_id: tid,
-          author: "tlon",
-          body: "@#{agent} the machine restarted while you were mid-turn here — pick it up from the brief."
-        })
+      if still_theirs?(tid, agent, standing) do
+        _ =
+          Channel.post(%{
+            thread_id: tid,
+            author: "tlon",
+            body: "@#{agent} the machine restarted while you were mid-turn here — pick it up from the brief."
+          })
+      end
     end
 
     :ok
@@ -556,4 +562,7 @@ defmodule Server.Staffing do
          ),
        do: sessions
   end
+
+  defp still_theirs?(tid, _agent, standing) when tid == standing, do: true
+  defp still_theirs?(tid, agent, _standing), do: Crew.handle_role(agent) != nil or Channel.thread_lead(tid) == agent
 end
