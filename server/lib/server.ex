@@ -84,11 +84,16 @@ defmodule Server do
   @doc """
   Resolve a thread to the working dir its coworker (and a STACK-zoom lazygit) works in: its
   project's repo, then a lazily-ensured per-thread `git worktree` at `.worktrees/<name>` —
-  `Server.Worktree.name_for/1`: the slug, else `t<id>`. Never the main tree (2026-09-08).
+  `Server.Worktree.name_for/1`: the slug, else `t<id>`. Never the main tree (2026-09-08). The
+  checkout is marked with the thread (`Server.Worktree.mark_thread/2`), which its commits are stamped with.
   `{:ok, path}`, `{:error, :no_repo | :no_thread | reason}`.
   """
   def worktree_for_thread(%Server.Thread{} = thread) do
-    with {:ok, repo, name} <- repo_and_name(thread), do: Server.Worktree.ensure(repo, name)
+    with {:ok, repo, name} <- repo_and_name(thread),
+         {:ok, wt} <- Server.Worktree.ensure(repo, name) do
+      Server.Worktree.mark_thread(wt, thread.id)
+      {:ok, wt}
+    end
   end
 
   def worktree_for_thread(thread_id) when is_integer(thread_id) do

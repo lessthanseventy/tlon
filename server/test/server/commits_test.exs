@@ -67,6 +67,31 @@ defmodule Server.CommitsTest do
     assert at =~ ~r/^\d{4}-\d{2}-\d{2}T/
   end
 
+  test "in a checkout marked with its thread, the hook stamps that thread, not the pane's", %{repo: repo} do
+    wt = repo <> "-wt"
+    on_exit(fn -> File.rm_rf!(wt) end)
+    {_, 0} = System.cmd("git", ["-C", repo, "worktree", "add", "-q", "-b", "work/marked", wt])
+    :ok = Server.Worktree.mark_thread(wt, 253)
+
+    File.write!(Path.join(wt, "c"), "c\n")
+    {_, 0} = System.cmd("git", ["-C", wt, "add", "c"])
+
+    {_, 0} =
+      System.cmd("git", ["-C", wt, "commit", "-qm", "the workline's build"],
+        env: [{"TLON_THREAD", "1"}, {"TLON_AUTHOR", "ireneo"}, {"TLON_MODEL", nil}]
+      )
+
+    {body, 0} = System.cmd("git", ["-C", wt, "log", "-1", "--format=%B"])
+    assert body =~ "Tlon-Thread: 253\n"
+    assert body =~ "Tlon-Author: ireneo\n"
+
+    {_, 0} =
+      System.cmd("git", ["-C", wt, "commit", "-q", "--allow-empty", "-m", "by hand"], env: [{"TLON_THREAD", nil}])
+
+    {body, 0} = System.cmd("git", ["-C", wt, "log", "-1", "--format=%B"])
+    refute body =~ "Tlon-"
+  end
+
   test "another thread's commits, and an unrelated trailer, do not match", %{repo: repo, commit: commit} do
     commit.("a", "mine", [{"TLON_THREAD", "7"}])
     commit.("b", "theirs", [{"TLON_THREAD", "70"}])

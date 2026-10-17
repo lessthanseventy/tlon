@@ -134,6 +134,8 @@ defmodule Server.WorktreeTest do
       assert {:ok, wt} = Server.worktree_for_thread(thread)
       assert wt == Worktree.path(repo, "redis-cache")
       assert File.exists?(Path.join(wt, ".git"))
+      {git_dir, 0} = System.cmd("git", ["-C", wt, "rev-parse", "--absolute-git-dir"])
+      assert File.read!(Path.join(String.trim(git_dir), "tlon-thread")) == "1\n"
     end
 
     # Andrew, 2026-09-08: "the minute it starts writing code it needs to be in a worktree" — a
