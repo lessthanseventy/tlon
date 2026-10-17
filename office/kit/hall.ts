@@ -69,14 +69,22 @@ function cleanLocks(raw: unknown): Locks {
   return { ...(slots.length ? { slots } : {}), ...(fields.length ? { fields } : {}) }
 }
 
+// Server.Soul's name check: the name becomes souls/<name>.md and a looks.json key
+const SOUL_NAME = /^[a-z0-9][a-z0-9_-]*$/
+function cleanOverrides(raw: unknown): Overrides {
+  if (!raw || typeof raw !== "object") return {}
+  const { name, ...rest } = raw as Overrides
+  return typeof name === "string" && SOUL_NAME.test(name) ? { ...rest, name } : rest
+}
+
 export function loadHall(path: string): Hall {
   try {
     const j = JSON.parse(readFileSync(path, "utf8"))
     return {
       seed: typeof j.seed === "string" ? j.seed : "hall:1",
       locks: cleanLocks(j.locks),
-      overrides: j.overrides && typeof j.overrides === "object" ? j.overrides : {},
-      pile: Array.isArray(j.pile) ? j.pile.filter((e: PileEntry) => e && typeof e.seed === "string").map((e: PileEntry) => ({ seed: e.seed, overrides: e.overrides ?? {} })) : [],
+      overrides: cleanOverrides(j.overrides),
+      pile: Array.isArray(j.pile) ? j.pile.filter((e: PileEntry) => e && typeof e.seed === "string").map((e: PileEntry) => ({ seed: e.seed, overrides: cleanOverrides(e.overrides) })) : [],
     }
   } catch { return emptyHall() }
 }

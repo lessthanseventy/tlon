@@ -55,7 +55,7 @@ linked window at a time, ctrl+] to the lobby).
   The sandbox keeps its looks, souls, hall, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
   The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, taken)` is seeded, no model, no I/O; a lock is kept by `pass` baking it into the overrides —
   `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `m` browses it), → hire, space locks a row so a pass keeps it. `hall.json`
-  (`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card. → hires — onto the toy's bench in the
+  (`TLON_HALL`, polled like `looks.json`) holds seed + locks + edits + pile, never the rendered card; an edited name that fails `Server.Soul`'s name check is dropped on load, so it never reaches a file name. → hires — onto the toy's bench in the
   sandbox, through `data.hire` (`POST /api/workspaces/:id/coworkers`) on a live office — and keeps the candidate's look in `looks.json` and its soul in the souls dir (never over one already there).
   The pet store (`P` from home; `kit/store.ts` the pure candidate — `roll(species, seed, taken)`, seeded, no model, no I/O —
   `tui/store.ts` its card rows): ←/→ the shelf (every species, each into the slot its family belongs to: cat, dog, rabbit, bird, hamster, pet rock, A Bao A Qu), ↑ pass,
