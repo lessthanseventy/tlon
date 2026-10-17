@@ -21,6 +21,8 @@ defmodule Server.Recall do
   alias Server.Repo
   alias Server.Thread
 
+  require Logger
+
   # Fact-correlated events that count as strength touches (weighted in Server.Recall.Strength).
   @touch_kinds ["check_passed", "check_failed", "cited"]
   @default_budget 4000
@@ -192,8 +194,12 @@ defmodule Server.Recall do
 
   def embed_query(q) do
     case Embedding.embed(q, model: embedding_model(), timeout: @query_embed_timeout_ms) do
-      {:ok, vec} -> vec
-      {:error, _} -> nil
+      {:ok, vec} ->
+        vec
+
+      {:error, reason} ->
+        Logger.warning("recall: the query embedding failed, relevance is keyword-only: #{inspect(reason)}")
+        nil
     end
   end
 

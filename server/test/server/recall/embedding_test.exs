@@ -6,6 +6,12 @@ defmodule Server.Recall.EmbeddingTest do
 
   alias Server.Recall.Embedding
 
+  test "a query the embedder can't embed is nil, and says why in the log" do
+    log = ExUnit.CaptureLog.capture_log(fn -> assert Server.Recall.embed_query("anything") == nil end)
+    assert log =~ "[warning]"
+    assert log =~ "recall: the query embedding failed, relevance is keyword-only:"
+  end
+
   test "identical vectors have cosine 1.0" do
     assert_in_delta Embedding.cosine([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]), 1.0, 0.0001
   end
