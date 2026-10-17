@@ -9,8 +9,10 @@
 #
 #   scripts/checks-queue.sh <command…>        e.g. scripts/checks-queue.sh mise run check:all
 #
-# A shell that cannot open the lock file (a sandbox that hides the runtime dir) runs unqueued, and
-# says so: the check still runs, it just doesn't wait.
+# A shell that cannot open the lock file (a sandbox that hides the runtime dir) is refused, exit 2:
+# its suite would run beside the merge queue's gates, and a sandboxed run can't post tlon/check
+# anyway. Run it unsandboxed. CHECKS_UNQUEUED=1 runs it without the queue, for a box with no
+# usable XDG_RUNTIME_DIR.
 set -u
 
 dir="${XDG_RUNTIME_DIR:-/tmp}"
@@ -19,8 +21,12 @@ holder="$dir/tlon-checks.holder"
 
 # braces: a bare `exec … 2>/dev/null` would silence the whole script's stderr, the check's too
 if ! { exec 9>>"$lock"; } 2>/dev/null; then
-  echo "checks queue: can't open $lock — running unqueued" >&2
-  exec "$@"
+  if [ "${CHECKS_UNQUEUED:-}" = 1 ]; then
+    echo "checks queue: can't open $lock — running unqueued (CHECKS_UNQUEUED=1)" >&2
+    exec "$@"
+  fi
+  echo "checks queue: can't open $lock — run the check unsandboxed (a sandboxed Bash hides the queue), or set CHECKS_UNQUEUED=1 on a box with no runtime dir" >&2
+  exit 2
 fi
 
 # CHECKS_LABEL names the run for the rack and the room (a workline's: "#<id> verify|landing <slug>")
