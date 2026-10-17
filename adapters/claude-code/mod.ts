@@ -238,6 +238,7 @@ async function drainWakes($) {
     // register this stopped session over the live newer one
     if (superseded && Array.isArray(wakes)) {
       superseded = false;
+      void note($, "take_wakes: no longer superseded — claiming the seat again");
       const pane = await $.env.get("TMUX_PANE");
       registration = pane ? { pane_ref: pane } : {};
       void registerNow($);
