@@ -19,17 +19,19 @@ run = "bun cli.ts import-sprite \"$@\""
 ["office:watch"]
 description = "office: re-run the suite on every change (cap signal)"
 dir = "office"
-run = "../scripts/watch.sh bun test"
+run = "../scripts/watch.sh bun test --timeout 20000"
 
+# --timeout on every bun test line: CPU-bound render tests run past bun's 5 s default on a saturated box,
+# and bun does not read a timeout from bunfig.toml
 ["office:test"]
 description = "office: the kit, room and TUI unit suite (bun test)"
 dir = "office"
-run = "bun test"
+run = "bun test --timeout 20000"
 
 ["office:check"]
 description = "office: the precommit gate — install (frozen), typecheck, tests at 03:00 and at 15:00 (a frozen clock: test/clock.ts)"
 dir = "office"
-run = "bun install --frozen-lockfile && bun run typecheck && OFFICE_TEST_HOUR=3 bun test && OFFICE_TEST_HOUR=15 bun test"
+run = "bun install --frozen-lockfile && bun run typecheck && OFFICE_TEST_HOUR=3 bun test --timeout 20000 && OFFICE_TEST_HOUR=15 bun test --timeout 20000"
 
 ["office:build"]
 description = "office: the TUI as standalone executables, one per platform (macOS + Linux, arm64 + x64), in office/dist — no bun or checkout needed to run one"
