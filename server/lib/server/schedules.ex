@@ -114,21 +114,17 @@ defmodule Server.Schedules do
   @doc """
   Fire everything due at `now`: claim it (its `last_run_at` moves to `now`, only if no one else
   moved it first), write its run, and queue the work where Oban runs. While the office is paused
-  (`Server.Pause`), an agent or workline schedule is not fired: it stays due and fires once back at
-  work; a script (a check) runs, and under pencils down so does an outside citizen's (the operator's
-  delegate, `Server.Outside`). The runs it started.
+  (`Server.Pause`), an agent or workline schedule is not fired — the operator's delegate's
+  (`Server.Outside`) among them, since what it posts is signed as the operator, which a pause lets
+  through: it stays due and fires once back at work. A script (a check) runs. The runs it started.
   """
   @spec dispatch(DateTime.t()) :: [ScheduleRun.t()]
   def dispatch(now \\ DateTime.utc_now()) do
     now = DateTime.truncate(now, :second)
 
-    # paused, what wakes a coworker or opens work waits, still due, and fires once on back to work; the
-    # operator's delegate (an outside citizen) works through pencils down, not lights out
-    pause = Server.Pause.state()
-    held = if pause == :working, do: [], else: ~w(agent workline)
-    delegates = if pause == :pencils_down, do: Server.Outside.names(), else: []
+    held = if Server.Pause.state() == :working, do: [], else: ~w(agent workline)
 
-    for s <- Repo.all(from s in Schedule, where: s.enabled and (s.kind not in ^held or s.agent in ^delegates)),
+    for s <- Repo.all(from s in Schedule, where: s.enabled and s.kind not in ^held),
         due?(s, now),
         {:ok, run} <- [claim(s, now)] do
       _ = Server.Jobs.enqueue(Server.Jobs.RunSchedule.new(%{run_id: run.id}))
