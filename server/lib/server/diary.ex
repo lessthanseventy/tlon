@@ -1,14 +1,21 @@
 defmodule Server.Diary do
   @moduledoc """
   What each builder seat did, read from real rows (souls design §4, step 5): a workline it posted
-  on that landed (`shipped`), and a send-back of a thread it posted on (`bounced`). Read only; the
-  weekly job turns it into diary lines. A seat is credited only when its archetype is `builder`.
+  on that landed (`shipped`), and a send-back of a thread it posted on (`bounced`, with `by`, the
+  seat that sent it back, when one did — never credited with it). Read only; the weekly job turns
+  it into diary lines. A seat is credited only when its archetype is `builder`.
   """
   import Ecto.Query
 
   alias Server.{Event, Message, Repo, Soul, Thread}
 
-  @type entry :: %{kind: :shipped | :bounced, thread_id: integer(), title: String.t(), at: DateTime.t()}
+  @type entry :: %{
+          required(:kind) => :shipped | :bounced,
+          required(:thread_id) => integer(),
+          required(:title) => String.t(),
+          required(:at) => DateTime.t(),
+          optional(:by) => String.t() | nil
+        }
 
   @doc "Per builder seat, its entries since `since`, oldest first. `%{}` when nothing happened."
   @spec history(integer(), DateTime.t()) :: %{String.t() => [entry()]}
@@ -23,9 +30,10 @@ defmodule Server.Diary do
       for {kind, row} <- Enum.map(landed, &{:shipped, &1}) ++ Enum.map(bounced, &{:bounced, &1}),
           seat <- Map.get(authors, row.thread_id, []),
           MapSet.member?(builders, seat),
+          seat != row[:by],
           reduce: %{} do
         acc ->
-          entry = %{kind: kind, thread_id: row.thread_id, title: row.title, at: row.at}
+          entry = row |> Map.take([:thread_id, :title, :at, :by]) |> Map.put(:kind, kind)
           Map.update(acc, seat, [entry], &(&1 ++ [entry]))
       end
 
@@ -105,9 +113,11 @@ defmodule Server.Diary do
   end
 
   defp describe(%{kind: :shipped, title: t}), do: ~s(- shipped "#{t}")
+  defp describe(%{kind: :bounced, title: t, by: by}) when is_binary(by), do: ~s(- sent back by #{by} on "#{t}")
   defp describe(%{kind: :bounced, title: t}), do: ~s(- sent back on "#{t}")
 
   defp fallback(%{kind: :shipped, title: t}), do: ~s(shipped "#{t}".)
+  defp fallback(%{kind: :bounced, title: t, by: by}) when is_binary(by), do: ~s(sent back by #{by} on "#{t}".)
   defp fallback(%{kind: :bounced, title: t}), do: ~s(sent back on "#{t}".)
 
   defp builders(workspace_id) do
@@ -138,7 +148,7 @@ defmodule Server.Diary do
     )
     |> Repo.all()
     |> Enum.filter(&Map.has_key?(&1.detail || %{}, "bounced"))
-    |> Enum.map(&Map.delete(&1, :detail))
+    |> Enum.map(&(&1 |> Map.put(:by, &1.detail["by"]) |> Map.delete(:detail)))
   end
 
   defp authors(thread_ids) do

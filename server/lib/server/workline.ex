@@ -809,7 +809,12 @@ defmodule Server.Workline do
       })
 
     if verdict == "fail" do
-      bounce(thread, "QA found a problem", "QA (#{author}) drove it and found:\n\n#{report}\n\nFix it test-first")
+      bounce(
+        thread,
+        "QA found a problem",
+        "QA (#{author}) drove it and found:\n\n#{report}\n\nFix it test-first",
+        author
+      )
     else
       post_brief(thread, "✓ QA passed (#{author}):\n\n#{report}")
       advance(Repo.get!(Thread, thread.id), opts)
@@ -879,13 +884,15 @@ defmodule Server.Workline do
     )
   end
 
-  defp bounce(thread, why, headline) do
+  defp bounce(thread, why, headline, by \\ nil) do
     {:ok, _} =
       move_back(
         thread,
         "build",
         why,
-        "↩ back to build — #{headline}, then advance_stage; it comes back through verify and review."
+        "↩ back to build — #{headline}, then advance_stage; it comes back through verify and review.",
+        fn _ -> :ok end,
+        by
       )
 
     {:error, {:bounced, why}}
@@ -905,7 +912,8 @@ defmodule Server.Workline do
       fn
         %Thread{stage: "verify"} -> :ok
         %Thread{stage: stage} -> {:error, {:not_at, stage}}
-      end
+      end,
+      nil
     )
   end
 
@@ -933,7 +941,7 @@ defmodule Server.Workline do
            do: may_send_back(locked, to, by)
     end
 
-    move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by), allowed)
+    move_back(thread, to, "sent back by #{by}: #{why}", send_back_brief(to, why, by), allowed, by)
   end
 
   @doc """
@@ -1707,8 +1715,9 @@ defmodule Server.Workline do
   # back to `to` on the same thread and branch: the stage and its ledger row in one write, the
   # stage's lead staffed and handed `brief`. `allowed` is judged on the row locked FOR UPDATE, the
   # lock the landing reads it under (`Server.Jobs.Land`), so a landing starting at the same instant
-  # either sees the move or is seen by `allowed`.
-  defp move_back(thread, to, why, brief, allowed \\ fn _ -> :ok end) do
+  # either sees the move or is seen by `allowed`. `by`, the seat that moved it back, is recorded for
+  # the diary; nil when the machine did.
+  defp move_back(thread, to, why, brief, allowed, by) do
     fn ->
       locked = Repo.one!(from t in Thread, where: t.id == ^thread.id, lock: "FOR UPDATE")
 
@@ -1721,7 +1730,7 @@ defmodule Server.Workline do
               thread_id: thread.id,
               kind: "stage_advanced",
               correlation: "workline:#{thread.slug}",
-              detail: %{"from" => locked.stage, "to" => to, "bounced" => why}
+              detail: %{"from" => locked.stage, "to" => to, "bounced" => why, "by" => by}
             })
 
           back
@@ -2023,7 +2032,8 @@ defmodule Server.Workline do
         bounce(
           thread,
           "the review requested changes",
-          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first"
+          "the review requested changes: read work/#{thread.slug}/review.md, fix them test-first",
+          author
         )
 
       if changes_requested(thread) >= 2,

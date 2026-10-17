@@ -51,6 +51,16 @@ defmodule Server.WorklineSendBackTest do
 
   defp bodies(thread), do: thread |> Channel.thread_messages() |> Enum.map(& &1.body)
 
+  defp last_move(thread) do
+    Repo.one(
+      from e in Server.Event,
+        where: e.thread_id == ^thread.id and e.kind == "stage_advanced",
+        order_by: [desc: e.id],
+        limit: 1,
+        select: e.detail
+    )
+  end
+
   describe "send_back/4" do
     test "the tech lead sends it back to plan: a planner leads, told the build stays to be improved" do
       thread = at_review("wrong-shape")
@@ -141,6 +151,19 @@ defmodule Server.WorklineSendBackTest do
       assert :ok = Server.Jobs.Land.perform(job)
       Task.await(sender)
       assert %Thread{stage: "plan", state: "open"} = Repo.get!(Thread, thread.id)
+    end
+
+    test "a send-back and a review's request for changes record the seat that moved it back" do
+      thread = at_review("by-whom")
+      assert {:ok, _} = Workline.send_back(thread, "build", "the wick", "hronir")
+      assert %{"by" => "hronir", "bounced" => "sent back by hronir: the wick"} = last_move(thread)
+
+      {1, _} = Repo.update_all(from(t in Thread, where: t.id == ^thread.id), set: [stage: "review"])
+
+      assert {:error, {:bounced, _}} =
+               Workline.review_verdict(Repo.get!(Thread, thread.id), "request_changes", "lonnrot", branch_head: nil)
+
+      assert %{"by" => "lonnrot", "bounced" => "the review requested changes"} = last_move(thread)
     end
 
     test "only backwards, only to a working stage" do

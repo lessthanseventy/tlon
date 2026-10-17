@@ -63,6 +63,24 @@ defmodule Server.DiaryTest do
     assert %{"daneri" => [%{kind: :bounced, thread_id: _, title: "the lamp"}]} = Diary.history(ws.id, @since)
   end
 
+  test "a send-back names the seat that sent it back, and isn't credited to that seat", %{ws: ws} do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "emma", archetype: "builder"})
+    thread = workline(ws, "wick", "the wick")
+    {:ok, _} = Channel.post(%{thread_id: thread.id, author: "daneri", body: "built the wick"})
+    {:ok, _} = Channel.post(%{thread_id: thread.id, author: "emma", body: "reviewed: trim it"})
+
+    {:ok, _} =
+      Dossier.record_event(%{
+        thread_id: thread.id,
+        kind: "stage_advanced",
+        correlation: "workline:wick",
+        detail: %{"from" => "review", "to" => "build", "bounced" => "sent back by emma: trim it", "by" => "emma"}
+      })
+
+    assert %{"daneri" => [%{kind: :bounced, by: "emma"}]} = history = Diary.history(ws.id, @since)
+    refute Map.has_key?(history, "emma")
+  end
+
   test "a landing older than since is left out", %{ws: ws} do
     thread = workline(ws, "old", "the old one")
     {:ok, _} = Channel.post(%{thread_id: thread.id, author: "daneri", body: "built it"})
@@ -118,10 +136,15 @@ defmodule Server.DiaryTest do
     end
 
     test "with the model unavailable, one dated fallback line per item", %{dir: dir} do
-      assert :ok = Diary.write("daneri", [entry(:shipped, "the stanza"), entry(:bounced, "the lamp")], @today)
+      bounced = Map.put(entry(:bounced, "the wick"), :by, "emma")
+
+      assert :ok =
+               Diary.write("daneri", [entry(:shipped, "the stanza"), entry(:bounced, "the lamp"), bounced], @today)
 
       assert File.read!(Path.join(dir, "daneri.md")) ==
-               @soul <> ~s(- 2026-10-14: shipped "the stanza".\n- 2026-10-14: sent back on "the lamp".\n)
+               @soul <>
+                 ~s(- 2026-10-14: shipped "the stanza".\n- 2026-10-14: sent back on "the lamp".\n) <>
+                 ~s(- 2026-10-14: sent back by emma on "the wick".\n)
     end
 
     test "the model's lines are used, dated, at most three, each capped", ctx do
