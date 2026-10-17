@@ -1,0 +1,1 @@
+RESULT wake-words wake-and-consult-words 8d6143b0fa46a2c8c4535af50b20c6feeeb28952 GATE-RED
