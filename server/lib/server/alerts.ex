@@ -142,10 +142,10 @@ defmodule Server.Alerts do
   defp actions(%{kind: "dialog", thread_id: t, ref: id, options: options}),
     do: answers("/api/office/prompts/#{id}", options) ++ [other(t)]
 
-  defp actions(%{kind: "ask", ref: id, options: options}),
-    do:
-      answers("/api/office/asks/#{id}", options) ++
-        [%{label: "Hand it to Uqbar", method: "POST", path: "/api/office/prompts/#{id}/uqbar", body: %{}}]
+  defp actions(%{kind: "ask", ref: id, options: options} = need) do
+    handoff = %{label: "Hand it to Uqbar", method: "POST", path: "/api/office/prompts/#{id}/uqbar", body: %{}}
+    answers("/api/office/asks/#{id}", options) ++ if(need[:ask] == "uqbar", do: [], else: [handoff])
+  end
 
   defp actions(%{kind: k, thread_id: t}) when k in ~w(question mention stalled),
     do: ["Reply…" |> call("/messages", t) |> Map.put(:input, "body")]

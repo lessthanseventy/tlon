@@ -51,7 +51,7 @@ and every layer the spine design's re-laid §9 asked for
   Every boot ensures its check-in (`Outside.ensure_checkin/1`), so the study exists from the first boot
   with uqbar registered, before anyone has talked to it; a closed study is reopened, never replaced.
   The operator hands it an ask (`Attention.hand_to_uqbar/2`, `POST /api/office/prompts/:id/uqbar`, `u` on
-  an ask in the office): one post as the operator on its study, the ask resolved `handed to uqbar`.
+  an ask in the office): one post as the operator on its study, the ask resolved `handed to uqbar`; Uqbar's own ask is refused (`:own_ask`) and not offered.
 - **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;
   `check_cmd` as a separate reproducibility axis; `supersedes`; `forgotten_at` tombstones), append-only
   `event` with a closed `kind`, `issue`, `todo`, `question`, `habit`. Read capped-and-counted.

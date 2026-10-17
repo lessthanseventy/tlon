@@ -462,6 +462,17 @@ defmodule Server.AttentionTest do
       assert {:error, :answered} = Attention.hand_to_uqbar(a.id, "andrew")
     end
 
+    test "uqbar's own ask stays with the operator", %{ws: ws} do
+      {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
+      {:ok, lobby} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+      {:ok, a} = Attention.ask(lobby.id, "uqbar", "run release:cut?", ["run", "hold"])
+
+      assert {:error, :own_ask} = Attention.hand_to_uqbar(a.id, "andrew")
+      assert Repo.get!(Message, a.id).resolved_at == nil
+      assert {:ok, study} = Server.Outside.study(ws.id)
+      assert Repo.all(from x in Message, where: x.thread_id == ^study.id) == []
+    end
+
     test "no ask, or no study to hand it to", %{thread: t} do
       assert {:error, :not_found} = Attention.hand_to_uqbar(-1, "andrew")
       {:ok, nowhere} = Channel.open_thread(%{title: "no workspace"})

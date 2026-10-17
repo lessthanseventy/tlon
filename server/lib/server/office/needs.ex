@@ -7,7 +7,7 @@ defmodule Server.Office.Needs do
     * **blocking** — work has stopped until the operator acts:
       `gate` (a workline at its gate: approve), `question` (a coworker asked: reply), `dialog` (a pane
       sits on a prompt, or the PM's release gate waits: pick an option, answered by `ref`, the prompt's id), `ask` (one decision a
-      coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id,
+      coworker filed with its answers, `Server.Attention.ask/4`: one item per ask, `ref` its id, `ask` who filed it,
       answered by key), `verify_failed` (a workline whose last gate run was red — the sheriff, where
       there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline nothing has moved for past
       the quiet window (the operator's `quiet_workline_minutes` knob, the one Maintain nudges at) — no
@@ -168,6 +168,7 @@ defmodule Server.Office.Needs do
     for m <- Server.Attention.open_asks(), t = by_id[m.thread_id] do
       item("ask", "blocking", t, "#{m.payload["ask"]}: #{m.payload["summary"]}", m.created_at, %{
         key: "ask:#{m.id}",
+        ask: m.payload["ask"],
         options: m.payload["options"],
         ref: m.id
       })
