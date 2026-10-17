@@ -218,6 +218,19 @@ defmodule Server.StaffingTest do
     refute Enum.any?(Channel.thread_messages(standing), &(&1.author == "tlon"))
   end
 
+  test "a cut turn on a thread that has moved to another lead ends its session and tells nobody",
+       %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    cut = session!("borges", thread.id, 30, true)
+    {:ok, _} = Channel.assign_lead(thread.id, "hronir")
+    tmux("")
+
+    assert :ok = Staffing.pass(ws.id)
+
+    assert Server.Repo.get!(Server.Session, cut.id).ended_at
+    refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
+  end
+
   test "clearing a coworker's context ends their sessions and closes their windows, nobody else's",
        %{ws: ws, standing: standing, sock: sock, session: session} do
     thread = staffed_thread(ws, "borges")
