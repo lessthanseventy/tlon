@@ -922,15 +922,9 @@ defmodule Server.MCP.ServerTest do
     Application.put_env(:server, :arbiter, Server.Arbiter.Test)
     Application.put_env(:server, :test_pid, self())
 
-    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _ ->
-      send(self(), {:tmux, args})
-      {"", 0}
-    end)
-
     on_exit(fn ->
       Application.delete_env(:server, :arbiter)
       Application.delete_env(:server, :test_pid)
-      Application.delete_env(:server, :tmux_cmd)
     end)
 
     {:ok, ws} =
@@ -971,7 +965,10 @@ defmodule Server.MCP.ServerTest do
 
   # The seat the ticket is about: a pane bound to `thread_id` (TLON_THREAD) as `name`. A spawn bound
   # anywhere else — the lobby, the parent, #1 — is the failure it names.
-  defp seated?(thread_id, name, tries \\ 4) do
+  defp seated?(thread_id, name, tries \\ 4)
+  defp seated?(thread_id, name, 0), do: flunk("no pane came up bound to thread #{thread_id} as #{name}")
+
+  defp seated?(thread_id, name, tries) do
     receive do
       {:spawned, exports} ->
         if exports =~ ~s(TLON_THREAD="#{thread_id}") and exports =~ ~s(TLON_AUTHOR="#{name}"),
