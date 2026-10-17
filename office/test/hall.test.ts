@@ -110,6 +110,13 @@ describe("hall.json", () => {
     writeFileSync(p, JSON.stringify({ seed: "hall:3", locks: { slots: ["eyes", "nope"], fields: 3 }, overrides: {}, pile: [] }))
     expect(loadHall(p).locks).toEqual({ slots: ["eyes"] })
   })
+  test("a hand-edited name that is not a soul file's name is dropped, on the card and on the pile", () => {
+    const p = tmp()
+    writeFileSync(p, JSON.stringify({ seed: "hall:3", locks: {}, overrides: { name: "../x", grade: "senior" }, pile: [{ seed: "hall:2", overrides: { name: "Bad Name" } }, { seed: "hall:4", overrides: { name: "ts-ai-ang" } }] }))
+    const h = loadHall(p)
+    expect(h.overrides).toEqual({ grade: "senior" })
+    expect(h.pile.map((e) => e.overrides)).toEqual([{}, { name: "ts-ai-ang" }])
+  })
   test("pushing a seed already in the pile replaces it, not duplicates it", () => {
     let pile = pushPile([], { seed: "hall:1", overrides: {} })
     pile = pushPile(pile, { seed: "hall:2", overrides: {} })
