@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { loadSouls, parseSoul, soulLines, soulFor, soulsGen, soulsSignature, useSouls } from "../kit/souls"
+import { SOUL_SECTIONS, loadSouls, parseSoul, soulLines, soulFor, soulNote, soulsGen, soulsSignature, useSouls } from "../kit/souls"
 
 const FIXTURE = await Bun.file(join(import.meta.dir, "fixtures/daneri.md")).text()
 
@@ -87,5 +87,12 @@ describe("soulLines", () => {
   })
   test("an empty file shows nothing", () => {
     expect(soulLines(parseSoul(""))).toEqual([])
+  })
+})
+
+describe("soulNote", () => {
+  test("People says it is read by verb; no other section has a note", () => {
+    expect(soulNote("People")).toMatch(/read by verb.*admires.*needles.*would cover for/)
+    for (const h of SOUL_SECTIONS.filter(h => h !== "People")) expect(soulNote(h)).toBeUndefined()
   })
 })

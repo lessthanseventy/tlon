@@ -45,6 +45,10 @@ export function loadSouls(dir: string): Record<string, Soul> {
   return out
 }
 
+/** a one-line note a card shows under a section's heading, if the section has one */
+export const soulNote = (head: string): string | undefined =>
+  head === "People" ? "read by verb: admires / needles / would cover for — reworded, it yields no affinity" : undefined
+
 /** what a card shows: the known sections in design order then any extras, filled ones only; a file with no headings shows raw */
 export function soulLines(s: Soul): { head: string; text: string }[] {
   const known = new Set<string>(SOUL_SECTIONS)
