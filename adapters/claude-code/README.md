@@ -56,6 +56,8 @@ pure parts are `lib/` (bun-tested).
   A prompt waits 3s at most for `get_dossier`: past that, or when it fails, it goes with the last
   brief, saying how old it is and why; with no brief yet it carries one line saying the server
   didn't answer, and why.
+  One `get_dossier` is in flight at a time, at most one queued behind it; one unanswered after 30s
+  is abandoned (its late reply dropped) so the queued read can go.
 - **Capture**: at turn end, above a 2k-char floor, the new transcript (brief cut out, secrets
   redacted) goes to the cheap ollama extractor and comes back as `derived` facts and questions;
   a compaction flushes whatever is there. A correction in a prompt is proposed as a habit, once.
