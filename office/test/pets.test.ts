@@ -286,6 +286,10 @@ describe("the preview speaks in the species' voice", () => {
     const v = SPECIES_VOICE.hamster, own = [...v.sassy.pet, ...v.sassy.muse, ...v.sweet.pet, ...v.sweet.muse]
     for (let t = 0; t < 400; t += 10) expect(own).toContain(previewOf({ name: "Biscuit", species: "hamster", temperament: { warmth: 2, wits: 0, energy: 0 } }, t).line)
   })
+  test("a dog's preview lines are the dog's, never Nina's", () => {
+    const v = SPECIES_VOICE.dog, own = [...v.sassy.pet, ...v.sassy.muse, ...v.sweet.pet, ...v.sweet.muse]
+    for (const warmth of [-2, 2]) for (let t = 0; t < 400; t += 10) expect(own).toContain(previewOf({ name: "Rex", species: "dog", temperament: { warmth, wits: 0, energy: 0 } }, t).line)
+  })
 })
 
 describe("a pet's shade", () => {
