@@ -10,13 +10,15 @@
 # and a database named after it, so concurrent smokes never share either); the service's
 # 4040 and `tlon` are refused. TLON_SMOKE_URL smokes a server already up there instead: nothing is
 # built, started or recorded. A run ends `ran-on: smoke <sha>`, which a scheduled run records.
-# TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped.
+# TLON_SMOKE_HOLD=1 keeps a passing scratch node up to drive by hand (QA) until this is stopped, or
+# until TLON_SMOKE_HOLD_TTL seconds pass (default 7200): a forgotten hold would hold its port and
+# database for good.
 set -uo pipefail
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
-hold="${TLON_SMOKE_HOLD:-}"
+hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
 fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exit 1; }
 
@@ -167,6 +169,10 @@ echo "smoke passed${sha:+ on ${sha:0:7}}"
 if [ -n "$hold" ] && [ -n "$node" ]; then
   echo "smoke: holding $url up — TLON_URL=$url mise run office:drive -- <keys>; stop this to tear it down"
   trap 'exit 0' TERM INT
-  wait "$node"
+  for ((left = ttl; left > 0; left--)); do
+    kill -0 "$node" 2>/dev/null || exit 0
+    sleep 1
+  done
+  echo "smoke: the hold of $url expired after ${ttl}s; tearing it down"
 fi
 exit 0
