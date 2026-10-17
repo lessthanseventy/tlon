@@ -106,6 +106,13 @@ defmodule Server.AlertsTest do
            ] = a.actions
   end
 
+  test "uqbar's own ask offers its answers, never handing it to Uqbar" do
+    ask = need("ask", %{key: "ask:42", ref: 42, ask: "uqbar", options: [%{"key" => "1", "label" => "Ran it"}]})
+    [a] = Alerts.build([ask], [], @now)
+    refute Enum.any?(a.actions, &(&1.label == "Hand it to Uqbar"))
+    assert Enum.any?(a.actions, &(&1.label == "Ran it"))
+  end
+
   test "what nothing waits on is put away on the server; an issue resolves, a stranded checkout comes down" do
     [issue, stranded, mention] =
       Alerts.build(

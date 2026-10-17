@@ -697,7 +697,7 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
     ...(n.kind === "dialog" && n.ref ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
     ...(n.kind === "ask" && n.ref ? (n.options ?? []).slice(0, 9).map((o): Action => ({ key: o.key, label: o.label, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
-    ...(n.kind === "ask" && n.ref ? [{ key: "u", label: "hand it to Uqbar (decides and acts as you)", run: () => void did(data.handToUqbar(n.ref!)).then(after) }] : []),
+    ...(n.kind === "ask" && n.ref && n.ask !== "uqbar" ? [{ key: "u", label: "hand it to Uqbar (decides and acts as you)", run: () => void did(data.handToUqbar(n.ref!)).then(after) }] : []),
     ...(n.kind === "seats" && n.ref ? [{ key: "1", label: `raise the cap to ${n.ref}`, run: () => void did(data.settingsEdit("max_leaves", n.ref)).then(after) }] : []),
     ...(n.kind === "job_failed" && n.ref ? [
       { key: "R", label: "run it again", run: () => void did(data.retryJob(n.ref!)).then(after) },
