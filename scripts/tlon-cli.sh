@@ -76,10 +76,12 @@
 set -euo pipefail
 
 # the release the service runs (.release, the release pointer's build), from the main checkout
-# wherever this copy is; a machine that never cut a release has only the main checkout's
+# wherever this copy is; a machine that never cut a release has only the main checkout's.
+# TLON_CLI_SERVER names another bin/server (a scratch release, a QA node's) and wins; point
+# RELEASE_NODE at its node too.
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
-SERVER="$root/.release/server/_build/prod/rel/server/bin/server"
-[ -x "$SERVER" ] || SERVER="$root/server/_build/prod/rel/server/bin/server"
+SERVER="${TLON_CLI_SERVER:-$root/.release/server/_build/prod/rel/server/bin/server}"
+[ -x "$SERVER" ] || [ -n "${TLON_CLI_SERVER:-}" ] || SERVER="$root/server/_build/prod/rel/server/bin/server"
 # `bin/server rpc` boots a throwaway client node; with a scheduler per core busy-waiting it
 # cost ~2 s CPU for a 0.3 s call (the shell's 30 s agents poll: 7% of a core). One scheduler,
 # no spin: ~0.25 s CPU. Only these client nodes see it; the service node is started elsewhere.
