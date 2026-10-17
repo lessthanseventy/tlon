@@ -65,12 +65,17 @@ export function entryOf(a: Agents, ctx: BoardCtx, needs: EntryNeed[], feed: Entr
   const waiting = footnotes.filter((f) => f.act.kind === "thread")
   const waitingMarks = waiting.map((f) => f.mark).join("")
 
-  // the stage × coworker pivot: TICKETS has no owner, so it is prose only
+  // the stage × coworker pivot: TICKETS has no owner, so it is prose only; work no bench coworker
+  // leads gets an "unled" row, so each stage's column sums to the board's count
   const stages = COLS.slice(1) // DOING SPEC PLAN BUILD REVIEW
-  const rows: PivotRow[] = a.bench.map((c) => {
-    const cells = stages.map((_st, i) => cellOf(cols[i + 1]!.items, c.name, feed, now))
-    return { cow: c.name, cells, total: cells.reduce((n, x) => n + x.count, 0) }
-  })
+  const benched = new Set(a.bench.map((c) => c.name))
+  const rowOf = (cow: string, mine: (it: BoardItem) => boolean): PivotRow => {
+    const cells = stages.map((_st, i) => cellOf(cols[i + 1]!.items.filter(mine), feed, now))
+    return { cow, cells, total: cells.reduce((n, x) => n + x.count, 0) }
+  }
+  const rows: PivotRow[] = a.bench.map((c) => rowOf(c.name, (it) => it.who === c.name))
+  const unled = rowOf("unled", (it) => it.who == null || !benched.has(it.who))
+  if (unled.total) rows.push(unled)
 
   const sections: EntrySection[] = [
     section("WAITING ON YOU", needs.map((n) => ({ text: `${n.kind} #${n.thread_id ?? "?"} ${n.title}`, act: thread(n.thread_id) }))),
@@ -93,8 +98,7 @@ export function entryOf(a: Agents, ctx: BoardCtx, needs: EntryNeed[], feed: Entr
   return { title: "The Office, today", prose, counts, pivot: { stages, rows }, sections, footnotes, diary }
 }
 
-const cellOf = (items: BoardItem[], cow: string, feed: EntryEvent[], now: Date): PivotCell => {
-  const here = items.filter((it) => it.who === cow)
+const cellOf = (here: BoardItem[], feed: EntryEvent[], now: Date): PivotCell => {
   const waiting = here.filter((it) => (it.state?.kind === "needs" || it.state?.kind === "parked") && it.act.kind === "thread")
   const times = waiting.flatMap((it) => feed.filter((e) => e.thread_id === (it.act as { tid: number }).tid).map((e) => e.at)).sort()
   return { count: here.length, wait: times.length ? ago(times[0]!, now) : null }
