@@ -860,8 +860,8 @@ function seatActions(b: Coworker | undefined): Action[] {
         const p = b.persona
         const items: { label: string; run: () => void }[] = [
           p
-            ? { label: "draw a new one (reroll)", run: () => ask2(`reroll ${b.name}'s persona — the hand edits go`, () => void did(data.persona(w, b.agent_id, true))) }
-            : { label: "make one", run: () => void did(data.persona(w, b.agent_id, false)) },
+            ? { label: "draw a new one (reroll)", run: () => ask2(`reroll ${b.name}'s persona — the hand edits go`, () => { status = "drawing a new one…"; draw(); void did(data.persona(w, b.agent_id, true)) }) }
+            : { label: "make one", run: () => { status = "drawing one…"; draw(); void did(data.persona(w, b.agent_id, false)) } },
           ...(p ? [
             { label: "edit the voice", run: () => ask(`${b.name}'s voice`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { voice: s.trim() })) }, { text: p.voice }) },
             { label: "edit the backstory", run: () => ask(`${b.name}'s backstory`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { backstory: s.trim() })) }, { text: p.backstory }) },
