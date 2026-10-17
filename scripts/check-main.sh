@@ -4,8 +4,19 @@
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "$root/scripts/git-fetch-origin.sh" "$root" main || { echo "check-main: fetch failed"; exit 1; }
+# what a SIGKILLed run left: its worktree and log, once older than any gate takes
+for stale in "${TMPDIR:-/tmp}"/tlon-main-*; do
+  [ -n "$(find "$stale" -maxdepth 0 -mmin +120 2>/dev/null)" ] || continue
+  [ -d "$stale" ] && git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1
+  rm -rf "$stale"
+done
+git -C "$root" worktree prune
 dir="$(mktemp -d -t tlon-main-XXXXXX)"
-trap 'git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir"' EXIT
+log="$(mktemp -t tlon-main-check-XXXXXX)"
+trap 'git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir" "$log"' EXIT
+# bash dies of an untrapped TERM without running the EXIT trap (a service stop signals the whole tree)
+trap 'exit 143' TERM
+trap 'exit 130' INT
 git -C "$root" worktree add -q --detach "$dir" origin/main || exit 1
 cd "$dir" || exit 1
 echo "check-main: origin/main @ $(git log -1 --format='%h %s')"
@@ -20,7 +31,6 @@ mise trust -q "$dir" >/dev/null 2>&1
 seed_hex_home "${HEX_HOME:-$HOME/.hex}" "$dir/.hex"
 export HEX_HOME="$dir/.hex"
 (cd server && mix deps.get >/dev/null) || { echo "check-main: mix deps.get failed"; exit 1; }
-log="$(mktemp -t tlon-main-check-XXXXXX)"
 mise run check >"$log" 2>&1
 code=$?
 # the verdict: every suite's counts, and on a red gate where it broke
@@ -30,7 +40,6 @@ if [ "$code" -ne 0 ]; then
   fails="$(grep -E -A14 "^\[[a-z:]+\] +[0-9]+\) test" "$log" | grep -vE "\] *$|\[debug\]")"
   if [ -n "$fails" ]; then echo "--- failures:"; echo "$fails"; else echo "--- the end of the log:"; tail -n 30 "$log"; fi
 fi
-rm -f "$log"
 # last, past any failure output: the nightly's run records it (Server.ScheduleRun), so "the gate
 # passed on X" is a lookup
 echo "ran-on: gate $sha"
