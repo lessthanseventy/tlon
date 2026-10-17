@@ -1200,7 +1200,8 @@ defmodule Server.MCP.ServerTest do
     assert Channel.thread_lead(target.id) == "hronir"
     assert_receive {:tmux, ["-L", _, "kill-window", "-t", window]}
     assert window =~ ":1"
-    assert %{body: body} = List.last(Channel.thread_messages(target))
+    # the coworker who handed it over says so, not the operator
+    assert %{author: "tertius", body: body} = List.last(Channel.thread_messages(target))
     assert body =~ "@hronir"
   end
 

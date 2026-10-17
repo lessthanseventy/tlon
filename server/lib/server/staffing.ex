@@ -302,18 +302,18 @@ defmodule Server.Staffing do
   end
 
   @doc """
-  Hand a running thread to another coworker (the office): restaff it, post the handoff as the
-  operator — which wakes the new lead, spawning them — and close the old worker's leaf. `{:ok,
-  thread}`, or `Channel.assign_lead/2`'s error with nothing changed.
+  Hand a running thread to another coworker: restaff it, post the handoff as `author` (who handed
+  it over: the operator from the office, a coworker through `assign_lead`) — which wakes the new
+  lead, spawning them — and close the old worker's leaf. `{:ok, thread}`, or
+  `Channel.assign_lead/2`'s error with nothing changed.
   """
-  def hand_off(thread_id, handle) do
+  def hand_off(thread_id, handle, author \\ Application.get_env(:server, :operator, "andrew")) do
     with {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
       with %{index: index} <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id),
            do: Tmux.kill_window(thread.workspace_id, index)
 
-      operator = Application.get_env(:server, :operator, "andrew")
       body = "Handing this to @#{handle}: pick it up from the brief."
-      {:ok, _} = Channel.post(%{thread_id: thread.id, author: operator, body: body})
+      {:ok, _} = Channel.post(%{thread_id: thread.id, author: author, body: body})
       {:ok, thread}
     end
   end
