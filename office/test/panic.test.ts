@@ -14,7 +14,7 @@ describe("a fire drill is a panic, then a muster", () => {
   test("the crew scatters over the room before anyone files out", () => seeded(7, () => {
     const r = new WideRoom(696) as any
     run(r, 300)
-    r.play("drill")
+    expect(r.play("drill")).toBe(true)
     run(r, 150)
     const actors = [...r.actors.values()] as any[]
     expect(actors.length).toBeGreaterThan(3)
@@ -31,7 +31,7 @@ describe("a fire drill is a panic, then a muster", () => {
     run(r, 300)
     expect(r.event("duck")).toBe(true)
     run(r, 10)
-    r.play("drill")
+    expect(r.play("drill")).toBe(false)
     expect(r.alarmed).toBe(false)
     expect(r.eventNow()?.kind).toBe("duck")
   }))
