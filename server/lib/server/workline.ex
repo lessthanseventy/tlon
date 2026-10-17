@@ -383,16 +383,18 @@ defmodule Server.Workline do
 
   # what was approved is the branch at that commit: a later push needs approving again. Recorded
   # before its Land job, so the job's time is never before the approval's (second-truncated) one.
+  # A db fault is returned, not raised: queue/3 has already cleared `awaiting` and puts it back.
   defp record_approval(thread, by) do
-    {:ok, _} =
-      Dossier.record_event(%{
-        thread_id: thread.id,
-        kind: "check_passed",
-        correlation: "workline:#{thread.slug}:approval",
-        detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => branch_head(thread)}
-      })
-
-    :ok
+    with {:ok, _} <-
+           Dossier.record_event(%{
+             thread_id: thread.id,
+             kind: "check_passed",
+             correlation: "workline:#{thread.slug}:approval",
+             detail: %{"cmd" => "approved by #{by}", "exit" => 0, "by" => by, "sha" => branch_head(thread)}
+           }),
+         do: :ok
+  rescue
+    e in [Postgrex.Error, DBConnection.ConnectionError] -> {:error, Exception.message(e)}
   end
 
   @doc """
