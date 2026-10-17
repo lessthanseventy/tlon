@@ -2086,7 +2086,7 @@ function toyKey(k: string): boolean {
   switch (k) {
     case "d": r.play("doorbell"); status = "ding dong"; break
     case "e": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
-    case "f": r.play("drill"); status = "fire drill!"; break
+    case "f": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
     case "t": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
     case "n": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
     case "w": world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break

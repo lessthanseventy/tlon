@@ -234,3 +234,17 @@ describe("the drill is one of the five", () => {
     expect(r.eventNow()).toBeNull()
   }))
 })
+
+describe("play says whether it played", () => {
+  test("a drill refused over a running scene returns false; a drill on a calm room returns true", () => seeded(12, () => {
+    const a = viewOf(office(4), 1), r = new WideRoom(696) as any
+    run(r, a, 300)
+    expect(r.event("zoo")).toBe(true)
+    expect(r.play("drill")).toBe(false)
+    expect(r.alarmed).toBe(false)
+    const calm = new WideRoom(696) as any
+    run(calm, a, 300)
+    expect(calm.play("drill")).toBe(true)
+    expect(calm.alarmed).toBe(true)
+  }))
+})
