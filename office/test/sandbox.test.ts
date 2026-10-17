@@ -28,6 +28,14 @@ test("night toggles a clock override", () => {
   t.toggleNight(); expect(t.now().getHours()).toBe(new Date().getHours())
 })
 
+test("off the sandbox, only e fires an event, and only with OFFICE_TOY_KEYS=1 and no card e of its own", async () => {
+  const { toyEventKey } = await import("../tui/sandbox")
+  expect(toyEventKey("e", false, { OFFICE_TOY_KEYS: "1" })).toBe(true)
+  expect(toyEventKey("e", true, { OFFICE_TOY_KEYS: "1" })).toBe(false)
+  expect(toyEventKey("e", false, {})).toBe(false)
+  expect(toyEventKey("d", false, { OFFICE_TOY_KEYS: "1" })).toBe(false)
+})
+
 test("the help line's play keys are the keys toyKey() handles", async () => {
   const { PLAY } = await import("../tui/sandbox")
   expect(PLAY.map((p) => p.key).join("")).toBe("detfnwpc")
