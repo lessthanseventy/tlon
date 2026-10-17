@@ -337,7 +337,7 @@ case "$cmd" in
     ws="${1:-}"; name="${2:-}"; arch="${3:-}"; model="${4:--}"; effort="${5:--}"; ask="${6:--}"
     { int "$ws" && [ -n "$name" ] && [ -n "$arch" ] && knobs "$model" "$effort" "$ask"; } ||
       { echo 'usage: tlon-cli.sh hire <workspace-id> <name> <archetype> [<provider/model>|- [low|medium|high|xhigh|max|- [ask|allow|-]]]' >&2; exit 2; }
-    exec "$SERVER" rpc "case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); {:ok, _} = Server.Persona.ensure($ws, c.name); {:ok, _} = Server.Soul.draft($ws, c.name); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
+    exec "$SERVER" rpc "if not Server.Soul.valid_name?(\"$(esc "$name")\"), do: (IO.puts(\"refused: a name is lowercase letters, digits, - and _, starting with a letter or digit\"); raise(\"refused\")); case Server.Workspaces.seat($ws, %{name: \"$(esc "$name")\", archetype: \"$(esc "$arch")\"}) do {:ok, c} -> {:ok, _} = Server.Workspaces.retarget($ws, c.agent_id, %{model: $(knob "$model"), effort: $(knob "$effort"), ask: $(knob "$ask")}); IO.puts(\"hired #{c.name} (#{c.archetype}) on workspace #$ws\"); Server.Soul.after_hire($ws, c.name); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end"
     ;;
 
   persona)

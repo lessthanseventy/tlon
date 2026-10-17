@@ -52,6 +52,29 @@ defmodule Server.SoulTest do
     assert {:error, :bad_name} = Soul.draft(ws.id, "../etc/passwd")
   end
 
+  test "valid_name? is the handle a soul file can be named for" do
+    assert Soul.valid_name?("sonny") and Soul.valid_name?("a-b_9")
+    refute Soul.valid_name?("Sonny") or Soul.valid_name?("../x") or Soul.valid_name?("") or Soul.valid_name?(nil)
+  end
+
+  test "a souls dir that cannot be made is an error, not a raise", %{ws: ws, dir: dir} do
+    File.write!(dir, "a file where the dir should be")
+    assert {:error, _} = Soul.draft(ws.id, "lonnrot")
+  end
+
+  test "after_hire writes the soul off the caller's path, and an unwritable dir fails nothing", %{ws: ws, dir: dir} do
+    {:ok, pid} = Soul.after_hire(ws.id, "lonnrot")
+    ref = Process.monitor(pid)
+    assert_receive {:DOWN, ^ref, _, _, :normal}, 5_000
+    assert File.exists?(Path.join(dir, "lonnrot.md"))
+
+    File.rm_rf!(dir)
+    File.write!(dir, "a file where the dir should be")
+    {:ok, pid} = Soul.after_hire(ws.id, "lonnrot")
+    ref = Process.monitor(pid)
+    assert_receive {:DOWN, ^ref, _, _, :normal}, 5_000
+  end
+
   test "the §5 samples are written verbatim with no model call; Scharlach is the Dwight", %{dir: dir} do
     {:ok, ws} = Server.Workspaces.register(%{name: "Other"})
     for n <- ~w(scharlach daneri sonny), do: {:ok, _} = Server.Workspaces.seat(ws.id, %{name: n, archetype: "builder"})
