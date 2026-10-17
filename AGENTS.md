@@ -15,7 +15,9 @@ control loop, not two, and no second way to run anything:
 - `mise run check` — names gate + server, adapters and office gates + the task manual; the green-before-commit gate.
   One at a time per machine: it waits its turn in the checks queue (`scripts/checks-queue.sh`, saying who
   holds it) and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
-  suites on the one test database at once. Don't call `check:all` to skip the line.
+  suites on the one test database at once. Don't call `check:all` to skip the line. A shell that can't open
+  the queue's lock (a sandboxed Bash) is refused with exit 2: run it unsandboxed; `CHECKS_UNQUEUED=1` runs it
+  unqueued on a box with no usable `XDG_RUNTIME_DIR`.
   Its verdict is GitHub's required check on main: on a clean tree (nothing uncommitted or untracked) it posts
   the commit status `tlon/check` (success or failure) on HEAD's sha (`scripts/check.sh`); on a dirty tree it
   posts nothing and says so, and gh missing or refusing is said, never red. `TLON_CHECK_STATUS=0` posts nothing.
