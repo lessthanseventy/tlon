@@ -93,15 +93,16 @@ if [ -z "$url" ]; then
   [ -d "$root/office/node_modules" ] && cp -a --reflink=auto "$root/office/node_modules" "$dir/office/"
   (cd "$dir/office" && bun install --frozen-lockfile >/dev/null 2>&1) || fail "bun install failed"
 
+  # chained with &&, not set -e: a subshell tested by `||` ignores set -e, and a failed build
+  # would go on to the steps after it
   (
-    set -e
-    cd "$dir/server"
-    export MIX_ENV=prod TLON_DATABASE="$db"
-    mix deps.get
-    mix release --overwrite
-    mix ecto.drop --quiet --force --force-drop
-    mix ecto.create --quiet
-    _build/prod/rel/server/bin/server eval 'Server.Release.migrate()'
+    cd "$dir/server" &&
+      export MIX_ENV=prod TLON_DATABASE="$db" &&
+      mix deps.get &&
+      mix release --overwrite &&
+      mix ecto.drop --quiet --force --force-drop &&
+      mix ecto.create --quiet &&
+      _build/prod/rel/server/bin/server eval 'Server.Release.migrate()'
   ) >>"$log" 2>&1 || { tail -n 20 "$log"; fail "the build or the migration of ${sha:0:7} failed"; }
 
   # MCP is what serves /api; everything that would talk to a model, the weather or a pane stays off
