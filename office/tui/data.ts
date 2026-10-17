@@ -102,6 +102,8 @@ export type Need = {
   url?: string
   /** no_seat: the kind of seat the workline's stage needs */
   archetype?: string
+  /** ask: who asked; Uqbar's own ask is never handed back to it */
+  asker?: string
 }
 let lastNeeds: Need[] = []
 /** everything waiting on the operator, blocking first; a server that can't answer keeps the last list, so the flag never vanishes mid-outage */

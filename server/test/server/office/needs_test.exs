@@ -158,6 +158,12 @@ defmodule Server.Office.NeedsTest do
       assert [%{kind: "mention", text: "sonny: @andrew a real question"}] = Needs.list()
     end
 
+    test "an ask names its asker, so the office can keep uqbar's own from uqbar", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
+      {:ok, _} = Server.Attention.ask(t.id, "uqbar", "run it?", ["run", "hold"])
+      assert [%{kind: "ask", asker: "uqbar"}] = Needs.list()
+    end
+
     test "an ask put away is withdrawn, and its asker is told", %{ws: ws} do
       {:ok, t} = Channel.open_thread(%{title: "lobby", workspace_id: ws.id})
       {:ok, a} = Server.Attention.ask(t.id, "tertius", "hold new work?", ["hold", "carry on"])

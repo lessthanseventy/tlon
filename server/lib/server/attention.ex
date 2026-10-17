@@ -308,11 +308,13 @@ defmodule Server.Attention do
   Hand open ask `id` to Uqbar, the operator's delegate: one post as `operator` on its study
   (`Server.Outside.study/1`) on the ask's workspace, carrying the whole ask and asking it to decide
   and act, then the ask resolved `handed to uqbar`. A post there reaches Uqbar's pane as the
-  operator's own message, which a coworker's relay of the answer does not. `{:ok, message}`, or
-  `{:error, :not_found | :answered | :no_study}`.
+  operator's own message, which a coworker's relay of the answer does not. Uqbar's own ask is never
+  handed back to it (it asked because it could not do the step itself): `{:error, :own_ask}`.
+  `{:ok, message}`, or `{:error, :not_found | :answered | :no_study | :own_ask}`.
   """
   def hand_to_uqbar(id, operator) do
     with %Message{kind: "prompt", resolved_at: nil, payload: %{"ask" => asker} = p} = ask <- Repo.get(Message, id),
+         :ok <- if(asker == "uqbar", do: {:error, :own_ask}, else: :ok),
          %Thread{workspace_id: ws} = thread when not is_nil(ws) <- Repo.get(Thread, ask.thread_id),
          {:ok, study} <- Server.Outside.study(ws),
          {:ok, posted} <- Channel.post(%{thread_id: study.id, author: operator, body: handed(asker, thread, p)}) do
