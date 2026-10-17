@@ -65,6 +65,19 @@ defmodule Server.Worktree do
   end
 
   @doc """
+  Record the thread a checkout belongs to in its own git dir (`tlon-thread`). The
+  prepare-commit-msg hook stamps that thread rather than the pane's, so a commit made in a
+  workline's checkout from a pane bound elsewhere (the lobby) still joins the workline's thread.
+  """
+  @spec mark_thread(String.t(), integer()) :: :ok | {:error, term()}
+  def mark_thread(wt, thread_id) do
+    case git(wt, ["rev-parse", "--absolute-git-dir"]) do
+      {dir, 0} -> File.write(Path.join(String.trim(dir), "tlon-thread"), "#{thread_id}\n")
+      {out, _} -> {:error, String.trim(out)}
+    end
+  end
+
+  @doc """
   Tear a thread's worktree down when its thread is deleted. The checkout goes when it is clean
   and its branch carries nothing unmerged; otherwise both stay and the reason names the branch —
   real work nobody asked to lose. `{:removed, path}` · `{:kept, reason}` · `:none` (never existed).
