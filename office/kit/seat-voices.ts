@@ -8,7 +8,7 @@
 export const SEATS = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"] as const
 export type SeatName = (typeof SEATS)[number]
 
-/** a seat's voice: `banter` is what it mutters in the room, `{name}` whoever it is about */
+/** a seat's voice: `banter` is what it mutters in the room */
 export type Voice = { banter: readonly string[] }
 
 export const SEAT_VOICE: Record<string, Voice> = {
@@ -16,7 +16,6 @@ export const SEAT_VOICE: Record<string, Voice> = {
   scharlach: {
     banter: [
       "Issue noted. I have filed it.",
-      "The build is red. I have recorded the demerit.",
       "Duly logged. Further action is at my discretion.",
       "I have reviewed the matter. It is resolved.",
       "A discrepancy. I will be keeping a record of this.",
@@ -133,7 +132,7 @@ const GENERIC: Voice = {
 /** a pick that skips what was said lately, while anything else is left to say */
 export const seatLine = (name: string, recent: readonly string[]): string => {
   const voice = SEAT_VOICE[name] ?? GENERIC
-  const all = voice.banter.map((l) => l.replaceAll("{name}", "you"))
+  const all = voice.banter
   const unsaid = all.filter((l) => !recent.includes(l))
   const pool = unsaid.length ? unsaid : all
   return pool[Math.floor(Math.random() * pool.length)]!

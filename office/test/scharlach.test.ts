@@ -37,6 +37,10 @@ describe("the demerit ledger", () => {
     expect(demerits(l, "yu")).toBe(2)
     expect(demerits(l, "tertius")).toBe(1)
   })
+  test("a thread listed twice in one read (two failed checks) ticks once", () => {
+    const l = tickForRedThreads(newLedger(), [7, 7], [{ id: 7, lead: "yu" }])
+    expect(demerits(l, "yu")).toBe(1)
+  })
   test("a thread already ticked this round is not ticked again", () => {
     const threads = [{ id: 1, lead: "yu" }] as { id: number; lead: string }[]
     let l = tickForRedThreads(newLedger(), [1], threads)
