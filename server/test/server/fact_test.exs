@@ -10,7 +10,7 @@ defmodule Server.FactTest do
     cs =
       Fact.bank_changeset(%{
         kind: "learned",
-        text: "x",
+        text: "the port is 4041",
         provenance: "derived",
         intent: "why we kept it"
       })

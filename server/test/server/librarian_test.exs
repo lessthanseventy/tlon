@@ -45,6 +45,17 @@ defmodule Server.LibrarianTest do
     f
   end
 
+  # junk banked before bank_changeset refused it: the rows the sweep still finds
+  defp junk!(t) do
+    Repo.insert!(%Fact{
+      thread_id: t.id,
+      kind: "learned",
+      provenance: "derived",
+      text: "...",
+      created_at: DateTime.truncate(DateTime.utc_now(), :second)
+    })
+  end
+
   defp events(kind), do: Repo.all(from e in Event, where: e.kind == ^kind, order_by: e.id)
 
   defp propose!(t, new, old) do
@@ -82,8 +93,8 @@ defmodule Server.LibrarianTest do
     end
 
     test "refuses without a reason, a fact onto itself, and a fact it cannot find", %{t: t} do
-      a = fact!(t, "a")
-      b = fact!(t, "b")
+      a = fact!(t, "the port is 4041")
+      b = fact!(t, "the port is 4042")
       assert {:error, :no_reason} = Librarian.supersede(a.id, b.id, "  ", by: "quain")
       assert {:error, :same_fact} = Librarian.supersede(a.id, a.id, "dup", by: "quain")
       assert {:error, :not_found} = Librarian.supersede(a.id, -1, "dup", by: "quain")
@@ -91,15 +102,15 @@ defmodule Server.LibrarianTest do
 
     test "a fact outside the caller's workspace is not found", %{t: t} do
       {:ok, other} = Workspaces.register(%{name: "Elsewhere"})
-      a = fact!(t, "a")
-      b = fact!(t, "b")
+      a = fact!(t, "the port is 4041")
+      b = fact!(t, "the port is 4042")
       assert {:error, :not_found} = Librarian.supersede(a.id, b.id, "dup", by: "quain", workspace_id: other.id)
     end
   end
 
   describe "forget/3" do
     test "tombstones junk with its reason on the record", %{t: t} do
-      junk = fact!(t, "...")
+      junk = junk!(t)
       assert {:ok, %Fact{forgotten_at: %DateTime{}}} = Librarian.forget(junk.id, "placeholder text", by: "quain")
       assert [%Event{correlation: corr, detail: %{"reason" => "placeholder text"}}] = events("forgotten")
       assert corr == "fact:#{junk.id}"
@@ -128,8 +139,8 @@ defmodule Server.LibrarianTest do
     end
 
     test "a citation of the new fact does not close its proposal", %{ws: ws, t: t} do
-      old = fact!(t, "x is 1")
-      new = fact!(t, "x is 2")
+      old = fact!(t, "the port is 1")
+      new = fact!(t, "the port is 2")
       propose!(t, new, old)
       Dossier.cite_facts([new.id], t.id, %{"via" => "search_facts"})
       assert [_] = Librarian.proposals(ws.id)
@@ -137,8 +148,8 @@ defmodule Server.LibrarianTest do
 
     test "without the judge installed, deciding says so and changes nothing", %{t: t} do
       Application.put_env(:server, :supersede_judge, NoJudge)
-      old = fact!(t, "x is 1")
-      new = fact!(t, "x is 2")
+      old = fact!(t, "the port is 1")
+      new = fact!(t, "the port is 2")
       e = propose!(t, new, old)
 
       assert {:error, :judge_not_installed} = Librarian.decide(e.id, "apply", "right", by: "quain")
@@ -148,8 +159,8 @@ defmodule Server.LibrarianTest do
 
     test "with the judge installed, apply and reject go through it", %{t: t} do
       Application.put_env(:server, :supersede_judge, Judge)
-      old = fact!(t, "x is 1")
-      new = fact!(t, "x is 2")
+      old = fact!(t, "the port is 1")
+      new = fact!(t, "the port is 2")
       e = propose!(t, new, old)
 
       assert {:ok, :applied} = Librarian.decide(e.id, "apply", "right", by: "quain")
@@ -206,7 +217,7 @@ defmodule Server.LibrarianTest do
     test "posts the counts and the librarian's notes in the lobby, waking no one", %{ws: ws, t: t} do
       fact!(t, "a stated rule", "stated")
       fact!(t, "a finding")
-      junk = fact!(t, "...")
+      junk = junk!(t)
       {:ok, _} = Librarian.forget(junk.id, "placeholder", by: "quain")
 
       assert {:ok, %Message{} = m} = Librarian.report(ws.id, "the port facts are shaky", by: "quain")
