@@ -65,6 +65,10 @@ if [ -z "$url" ]; then
   exec 7>"$dblock"
   flock -n 7 || { dblock=""; fail "database $db is another smoke's"; }
 
+  # a sandboxed Bash can't open Postgres's unix socket (:eperm), and the build would only die of it
+  # minutes later, at a migration's pool timeout
+  pgerr="$(psql -h "${PGHOST:-/run/postgresql}" -d postgres -XAtqc 'select 1' 2>&1)" ||
+    fail "can't reach Postgres at ${PGHOST:-/run/postgresql} (${pgerr//$'\n'/ }) — in a sandboxed Bash, run release:smoke unsandboxed"
   # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep the builds no
   # run holds before making another
   "$(dirname "$0")/smoke-sweep.sh" "$root"

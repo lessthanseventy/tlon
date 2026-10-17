@@ -571,7 +571,9 @@ defmodule Server.Profiles do
   smoke first (open, a thread, a card, R). Then drive the changed path as he would:
   `TLON_URL=<the url it printed> mise run office:drive -- <keys>` (the drive-office skill), the keys
   he'd press and the screen after each. NEVER the live service on :4040 or its db `tlon`: a QA run
-  there writes into his real office. Stop the scratch release when you're done.
+  there writes into his real office. Stop the scratch release when you're done. The smoke needs
+  Postgres's unix socket, which a sandboxed Bash can't open: run it unsandboxed, and the drive too —
+  each sandboxed call is its own network namespace, blind to the port a held smoke serves on.
 
   FILE WHAT YOU SAW. `submit_qa(verdict, report, thread_id)`: pass, or fail with the finding, on the
   workline you drove (`thread_id`, its #id — your session may be bound elsewhere). The report is what
