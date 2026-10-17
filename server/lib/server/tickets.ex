@@ -371,6 +371,27 @@ defmodule Server.Tickets do
     |> tap(fn result -> if kind == "parent" and match?({:ok, _}, result), do: refresh_epic(from_id) end)
   end
 
+  @doc """
+  The ids in `ids` that name no ticket, or `self_id` itself: what a `blocked_by` list cannot hold.
+  Checked before anything is written, so a refused list files and changes nothing.
+  """
+  @spec bad_blockers([integer()], integer() | nil) :: [integer()]
+  def bad_blockers(ids, self_id \\ nil) do
+    known = Repo.all(from(t in Ticket, where: t.id in ^ids, select: t.id))
+    Enum.filter(ids, &(&1 == self_id or &1 not in known))
+  end
+
+  @doc "Make `ids` exactly the tickets that block `ticket_id` (`bad_blockers/2` first): the rest are unlinked."
+  @spec set_blockers(integer(), [integer()]) :: :ok
+  def set_blockers(ticket_id, ids) do
+    for %{kind: "blocks", direction: :in, ticket_id: by} <- links_of(ticket_id),
+        by not in ids,
+        do: unlink(by, ticket_id, "blocks")
+
+    for by <- ids, do: {:ok, _} = link(by, ticket_id, "blocks")
+    :ok
+  end
+
   @doc "Remove a link. One that is not there is `:ok` — the end state is what was asked for."
   @spec unlink(integer(), integer(), String.t()) :: :ok
   def unlink(from_id, to_id, kind) do
