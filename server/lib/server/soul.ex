@@ -131,11 +131,14 @@ defmodule Server.Soul do
     Map.new(acc, fn {h, lines} -> {h, lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()} end)
   end
 
-  @doc "The Diary entries as lines, oldest first; `[]` when the seat has no soul or an empty Diary."
+  @doc """
+  The Diary entries — its `- ` lines, any other line in the section left out — oldest first; `[]`
+  when the seat has no soul or an empty Diary.
+  """
   @spec diary(String.t()) :: [String.t()]
   def diary(name) do
     case read(name) do
-      %{"Diary" => text} -> text |> String.split("\n") |> Enum.reject(&(String.trim(&1) == ""))
+      %{"Diary" => text} -> text |> String.split("\n") |> Enum.filter(&String.starts_with?(&1, "- "))
       _ -> []
     end
   end

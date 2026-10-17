@@ -226,6 +226,11 @@ defmodule Server.SoulTest do
       assert Soul.read("atlas")["Postscript"] == "bye"
     end
 
+    test "diary/1 is the `- ` entries only: a stray line in the section is not one", %{dir: dir} do
+      File.write!(Path.join(dir, "atlas.md"), "## Diary\n- 2026-10-07: old.\na note to self\n- 2026-10-14: new.\n")
+      assert Soul.diary("atlas") == ["- 2026-10-07: old.", "- 2026-10-14: new."]
+    end
+
     test "no soul or a bad name is an error, and no file is created", %{dir: dir} do
       assert {:error, :no_soul} = Soul.append_diary("nobody", ["- x"])
       assert {:error, :bad_name} = Soul.append_diary("../x", ["- x"])
