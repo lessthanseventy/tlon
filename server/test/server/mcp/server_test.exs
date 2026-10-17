@@ -1378,6 +1378,38 @@ defmodule Server.MCP.ServerTest do
     refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "bad"))
   end
 
+  test "file_ticket and update_ticket set blocked_by; a missing or own id is refused and nothing is filed" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "BlockWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "BlockFiler", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    {:ok, a} = Server.Tickets.file(%{workspace_id: ws.id, title: "first"})
+    {:ok, b} = Server.Tickets.file(%{workspace_id: ws.id, title: "second"})
+
+    filed =
+      token |> call(session, 2, "file_ticket", %{"title" => "waits", "blocked_by" => [a.id]}) |> decode_tool_json()
+
+    assert filed["blocked_by"] == [a.id]
+    assert Server.Tickets.blockers(filed["id"]) == [a.id]
+
+    updated =
+      token |> call(session, 3, "update_ticket", %{"id" => filed["id"], "blocked_by" => [b.id]}) |> decode_tool_json()
+
+    assert updated["blocked_by"] == [b.id]
+
+    cleared =
+      token |> call(session, 4, "update_ticket", %{"id" => filed["id"], "blocked_by" => []}) |> decode_tool_json()
+
+    assert cleared["blocked_by"] == []
+
+    assert call(token, session, 5, "file_ticket", %{"title" => "ghost wait", "blocked_by" => [-1]})["isError"]
+    refute ws.id |> Server.Tickets.in_workspace() |> Enum.any?(&(&1.title == "ghost wait"))
+    assert call(token, session, 6, "update_ticket", %{"id" => filed["id"], "blocked_by" => [-1]})["isError"]
+    assert call(token, session, 7, "update_ticket", %{"id" => filed["id"], "blocked_by" => [filed["id"]]})["isError"]
+    assert Server.Tickets.blockers(filed["id"]) == []
+  end
+
   test "file_ticket with issue_id owns that open issue, filed by the caller; owned or closed is refused" do
     {:ok, ws} = Server.Workspaces.register(%{name: "IssueWS"})
     {:ok, thread} = Channel.open_thread(%{title: "sheriff's beat", workspace_id: ws.id})
