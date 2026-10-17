@@ -351,13 +351,13 @@ defmodule Server.BoardTest do
       on_exit(fn -> Application.delete_env(:server, :recall) end)
 
       {:ok, thread} = Channel.open_thread(%{title: "t"})
-      {:ok, _a} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "aaaa", provenance: "derived"})
-      {:ok, b} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "bbbb", provenance: "derived"})
+      {:ok, _a} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "aaaaa", provenance: "derived"})
+      {:ok, b} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "bbbbb", provenance: "derived"})
       {:ok, _} = Dossier.record_event(%{thread_id: thread.id, kind: "check_passed", correlation: "fact:#{b.id}"})
 
       learnings = Board.brief(thread).learnings
       assert length(learnings.shown) == 1
-      assert hd(learnings.shown).text == "bbbb"
+      assert hd(learnings.shown).text == "bbbbb"
       assert learnings.more == 1
     end
   end

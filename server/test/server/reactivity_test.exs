@@ -58,7 +58,7 @@ defmodule Server.ReactivityTest do
         Dossier.bank_fact(%{
           thread_id: thread.id,
           kind: "learned",
-          text: "x",
+          text: "the port is 4041",
           provenance: "derived"
         })
 

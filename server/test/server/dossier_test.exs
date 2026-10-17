@@ -58,6 +58,17 @@ defmodule Server.DossierTest do
       assert Repo.get!(Fact, fact.id).thread_id == nil
     end
 
+    test "a placeholder is no fact: text with fewer than five letters or digits is refused", %{thread: thread} do
+      for text <- ["...", "  —  ", "a.b.c"] do
+        assert {:error, cs} =
+                 Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: text, provenance: "derived"})
+
+        assert %{text: ["is a placeholder, not a fact"]} = errors_on(cs)
+      end
+
+      assert Repo.aggregate(Fact, :count) == 0
+    end
+
     test "kind, text, and provenance are required", %{thread: thread} do
       assert {:error, cs} =
                Dossier.bank_fact(%{thread_id: thread.id, text: "t", provenance: "stated"})
@@ -81,7 +92,7 @@ defmodule Server.DossierTest do
         Dossier.bank_fact(%{
           thread_id: thread.id,
           kind: "opinion",
-          text: "t",
+          text: "the port is 4041",
           provenance: "derived"
         })
       end
@@ -96,7 +107,7 @@ defmodule Server.DossierTest do
         Dossier.bank_fact(%{
           thread_id: thread.id,
           kind: "learned",
-          text: "t",
+          text: "the port is 4041",
           provenance: "measured"
         })
       end
@@ -107,7 +118,7 @@ defmodule Server.DossierTest do
         Dossier.bank_fact(%{
           thread_id: thread.id,
           kind: "constraint",
-          text: "t",
+          text: "the port is 4041",
           provenance: "stated",
           supersedes: 999_999
         })
@@ -121,7 +132,7 @@ defmodule Server.DossierTest do
         Dossier.bank_fact(%{
           thread_id: thread.id,
           kind: "learned",
-          text: "t",
+          text: "the port is 4041",
           provenance: "derived",
           source_session_id: 999_999
         })

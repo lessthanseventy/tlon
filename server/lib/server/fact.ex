@@ -32,6 +32,9 @@ defmodule Server.Fact do
     belongs_to :source_session, Server.Session
   end
 
+  # A model sometimes answers with a placeholder ("...") in place of a claim.
+  @min_alnum 5
+
   @doc """
   Scope a fact query to a workspace's memory: a fact belongs to it when it is GLOBAL (no thread —
   the seed self-knowledge) or its thread lives in that workspace. `nil` = every workspace.
@@ -56,7 +59,9 @@ defmodule Server.Fact do
   @doc """
   Bank a fact. `kind`, `text`, and `provenance` are required; the closed sets on
   `kind`/`provenance` and the FKs on `thread`/`supersedes`/`source_session` are the
-  DB's own guards (§10) — a bad value raises rather than being re-checked here.
+  DB's own guards (§10) — a bad value raises rather than being re-checked here. A placeholder
+  (`junk?/1`) is refused here, so every door that banks — the extractor, `bank_fact`, a stated
+  fact — is held to it.
   """
   def bank_changeset(attrs) do
     %__MODULE__{}
@@ -74,7 +79,11 @@ defmodule Server.Fact do
       :observed_at
     ])
     |> validate_required([:kind, :text, :provenance])
+    |> validate_change(:text, fn :text, text -> if junk?(text), do: [text: "is a placeholder, not a fact"], else: [] end)
     |> Server.Secrets.validate_no_secret(:text)
     |> put_change(:created_at, DateTime.truncate(DateTime.utc_now(), :second))
   end
+
+  @doc "Whether `text` is too thin to be a claim: fewer than #{@min_alnum} letters or digits."
+  def junk?(text), do: length(Regex.scan(~r/[\p{L}\p{N}]/u, text)) < @min_alnum
 end

@@ -12,7 +12,10 @@ defmodule Server.Recall.CutoverTest do
   setup do
     Server.TestDB.clean!()
     {:ok, thread} = Channel.open_thread(%{title: "t"})
-    {:ok, fact} = Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "x", provenance: "derived"})
+
+    {:ok, fact} =
+      Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", text: "the port is 4041", provenance: "derived"})
+
     %{fact: fact}
   end
 

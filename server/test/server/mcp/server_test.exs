@@ -348,13 +348,13 @@ defmodule Server.MCP.ServerTest do
     result =
       call(token, session, 4, "bank_fact", %{
         "kind" => "learned",
-        "text" => "x",
+        "text" => "the port is 4041",
         "intent" => "for the value loop"
       })
 
     refute result["isError"]
 
-    fact = Repo.get_by!(Fact, thread_id: thread.id, text: "x")
+    fact = Repo.get_by!(Fact, thread_id: thread.id, text: "the port is 4041")
     assert fact.intent == "for the value loop"
   end
 
@@ -1678,8 +1678,8 @@ defmodule Server.MCP.ServerTest do
     {:ok, thread} = Channel.open_thread(%{title: "sweep", workspace_id: ws.id})
     bank = &Dossier.bank_fact(%{thread_id: thread.id, kind: "learned", provenance: &2, text: &1})
     {:ok, stated} = bank.("never push to main", "stated")
-    {:ok, old} = bank.("x is 1", "derived")
-    {:ok, new} = bank.("x is 2", "derived")
+    {:ok, old} = bank.("the port is 1", "derived")
+    {:ok, new} = bank.("the port is 2", "derived")
 
     {:ok, e} =
       Dossier.record_event(%{
@@ -1697,7 +1697,7 @@ defmodule Server.MCP.ServerTest do
     assert refused["isError"]
     assert hd(refused["content"])["text"] =~ "stated"
 
-    assert [%{"event_id" => id, "new" => %{"text" => "x is 2"}, "old" => %{"text" => "x is 1"}}] =
+    assert [%{"event_id" => id, "new" => %{"text" => "the port is 2"}, "old" => %{"text" => "the port is 1"}}] =
              decode_tool_json(call(token, session, 3, "review_proposals", %{}))
 
     assert id == e.id
