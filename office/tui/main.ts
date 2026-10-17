@@ -434,7 +434,7 @@ async function tickLedger() {
   const t = count > 0 ? await data.triage(sws) : null
   if (count > 0 && !t) return
   const before = new Map(ledger.demerits)
-  ledger = tickFromTriage(ledger, count, t?.failed_checks.shown.map((s) => s.thread_id) ?? [], all.threads)
+  ledger = tickFromTriage(ledger, count, t?.failed_thread_ids ?? t?.failed_checks.shown.map((s) => s.thread_id) ?? [], all.threads)
   // rimworld: a red build sours that coworker's afternoon — room-local, the room's own reading of what it already saw
   for (const [who, n] of ledger.demerits) if (n > (before.get(who) ?? 0)) for (const r of rooms.values()) r.sourMood(who)
 }
