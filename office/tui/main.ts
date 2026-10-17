@@ -5,7 +5,7 @@
 // graphics where the terminal has them (ghostty, kitty, WezTerm), half blocks where it does not.
 import { arrivals } from "../kit/door"
 import { babelPage, isKonami, KONAMI } from "../kit/eggs"
-import { mkdirSync, readFileSync, realpathSync, statSync, watchFile, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync, watchFile, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import type { Frame } from "../kit/canvas"
@@ -2336,7 +2336,7 @@ async function restorePage(id: number) {
  *  a time per home (a write that lands mid-PUT is sent when it settles), and one the server didn't take is sent on
  *  the next write, leave, open or refresh: a file that differs from the server's page is never overwritten, it is sent —
  *  safe because the server keeps the page each save replaces. A session already open is reattached, never rewritten */
-const dumpSent = new Map<number, string>(), dumpSending = new Set<number>(), dumpAgain = new Set<number>(), dumpWatched = new Set<number>()
+const dumpSent = new Map<number, string>(), dumpSending = new Set<number>(), dumpAgain = new Set<number>(), dumpWatched = new Set<number>(), dumpFailedAt = new Map<number, number>()
 // on disk, not the runtime tmpfs: words the server hasn't taken yet survive a logout or a reboot
 const dumpFile = (w: number) => join(STATE_DIR, OWN_TMUX, `dump-${w}.md`)
 function syncDump(w: number, quiet = false) {
@@ -2345,18 +2345,32 @@ function syncDump(w: number, quiet = false) {
   if (text === dumpSent.get(w)) return
   if (dumpSending.has(w)) { dumpAgain.add(w); return }
   if (!text.trim()) { if (quiet) return; status = "the dump came back blank — not saved; the last page stands"; return draw() }
+  // a quiet retry waits a minute after a refusal, so a server away or refusing is not hammered
+  if (quiet && Date.now() - (dumpFailedAt.get(w) ?? 0) < 60_000) return
   dumpSending.add(w)
-  void did(data.dumpPut(w, text).then((r) => {
+  const put = data.dumpPut(w, text).then((r) => {
     dumpSending.delete(w)
-    if (r.ok) dumpSent.set(w, text)
+    if (r.ok) { dumpSent.set(w, text); dumpFailedAt.delete(w) } else dumpFailedAt.set(w, Date.now())
     if (dumpAgain.delete(w)) syncDump(w)
-    return r.line
-  })).then(loadCard).then(draw)
+    return r
+  })
+  // quiet runs from inside a refresh, so it must not start another (`did` does)
+  if (quiet) void put.then((r) => { if (r.ok) { status = r.line; draw() } })
+  else void did(put.then((r) => r.line)).then(loadCard).then(draw)
 }
 async function openDump() {
   if (ws === null) return
   const w = ws, session = `dump-${w}`, file = dumpFile(w), tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
   const open = tmux("has-session", "-t", `=${session}`).exitCode === 0
+  // an editor an older office started writes to the runtime dir: its words are brought across, and kept coming while it is open
+  const old = `${OWN_DIR}/dump-${w}.md`
+  if (existsSync(old)) {
+    mkdirSync(dirname(file), { recursive: true })
+    const bring = () => { try { const t = readFileSync(old, "utf8"); if (t.trim()) writeFileSync(file, t) } catch {} }
+    bring()
+    if (open) watchFile(old, { interval: 1000 }, bring)
+    else unlinkSync(old)
+  }
   if (!open || !dumpSent.has(w)) {
     const page = await data.dump(w)
     if (!page) { status = "the dump can't be read: the server isn't answering"; return draw() }
