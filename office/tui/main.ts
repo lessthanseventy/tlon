@@ -28,7 +28,7 @@ import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "..
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
 import { usageHeader } from "../kit/usage"
-import { nextPart, SLOTS } from "../kit/parts"
+import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
 import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, toggleLock as storeToggle, type Store } from "../kit/store"
@@ -1697,11 +1697,17 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         field("outfit", draft.outfit ?? "none", () => { draft.outfit = cycleOpt(Object.keys(OUTFIT) as Outfit[], draft.outfit) }),
         field("accessory", draft.accessory ?? "none", () => { draft.accessory = cycleOpt(Object.keys(ACCESSORY) as Accessory[], draft.accessory) }),
         field("build", draft.body ?? "average", () => { draft.body = cycleVal(BODIES, draft.body ?? "average") }),
-        ...SLOTS.map((slot) => field(slot, draft.parts?.[slot]?.id ?? "none", () => {
-          const next = nextPart(slot, draft.parts?.[slot]), parts = { ...draft.parts }
-          if (next) parts[slot] = next; else delete parts[slot]
-          draft.parts = parts
-        })),
+        ...SLOTS.flatMap((slot) => {
+          const spec = draft.parts?.[slot], p = spec ? PARTS[spec.id] : undefined
+          return [
+            field(slot, spec?.id ?? "none", () => {
+              const next = nextPart(slot, spec), parts = { ...draft.parts }
+              if (next) parts[slot] = next; else delete parts[slot]
+              draft.parts = parts
+            }),
+            ...Object.keys(p?.dials ?? {}).map((dial) => field(`  ${dial}`, String(dialsOf(p!, spec!.dials)[dial]), () => { draft.parts = { ...draft.parts, [slot]: nextDial(spec!, dial) } })),
+          ]
+        }),
       ]
       return {
         title: `LOOK · ${name.toUpperCase()}`, rows,

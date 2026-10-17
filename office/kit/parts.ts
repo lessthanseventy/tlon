@@ -158,3 +158,11 @@ export function nextPart(slot: Slot, cur: PartSpec | undefined): PartSpec | unde
   const ids = idsIn(slot), i = cur ? ids.indexOf(cur.id) : -1
   return i + 1 < ids.length ? { id: ids[i + 1]! } : undefined
 }
+
+/** a spec with one dial stepped to its next option (round again after the last); the other dials stay as set */
+export function nextDial(spec: PartSpec, dial: string): PartSpec {
+  const p = PARTS[spec.id], opts = p?.dials[dial]
+  if (!p || !opts) return spec
+  const cur = dialsOf(p, spec.dials)
+  return { ...spec, dials: { ...spec.dials, [dial]: opts[(opts.indexOf(cur[dial]!) + 1) % opts.length]! } }
+}
