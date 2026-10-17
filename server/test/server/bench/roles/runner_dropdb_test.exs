@@ -8,7 +8,7 @@ defmodule Server.Bench.Roles.RunnerDropdbTest do
 
   test "drop_database with no dropdb on PATH says so instead of raising" do
     path = System.get_env("PATH")
-    empty = Path.join(System.tmp_dir!(), "no-dropdb-#{System.unique_integer([:positive])}")
+    empty = Path.join(System.tmp_dir!(), "no-dropdb-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(empty)
     System.put_env("PATH", empty)
 
