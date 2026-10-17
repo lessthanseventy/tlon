@@ -48,7 +48,7 @@ import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
 import { adder, bind, hints, LEGEND_CHARS, type KeyId } from "./keys"
-import { PLAY, toy, toyEventKey } from "./sandbox"
+import { PLAY, ROOM_PLAY, roomKey, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
@@ -98,6 +98,8 @@ const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 const PALETTE = process.env.TLON_PALETTE ?? join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon/palette.json")
 // `--sandbox`: the TUI on a made-up world (tui/sandbox.ts) instead of the server
 const SANDBOX = inSandbox()
+// OFFICE_TOY_KEYS=1: the room's play keys (ROOM_PLAY) run on the real office too, a card's own key still wins
+const TOY_KEYS = process.env.OFFICE_TOY_KEYS === "1"
 // the toy keeps its looks, souls and hall in a dir of its own, so a pretend hire never reaches the machine's files
 const CONFIG = SANDBOX ? join(tmpdir(), "tlon-sandbox") : join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "tlon")
 // per-agent look overrides, same poll shape as PALETTE above
@@ -1983,8 +1985,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const sect = (name: string, hs: Hint[]): Row[] => hs.length ? [{ segs: [key(name)] }, ...hs.map((h) => ({ segs: [plain("  "), { s: h.key.padEnd(10), fg: ROLE.key, bold: true }, plain(h.label)] }))] : []
       return {
         title: `HELP · ${m.title}`,
-        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play keys (they win over a card's)", PLAY) : []), ...boardLegend()],
         actions: [{ ...bind("help.esc", `back to ${m.title.toLowerCase()}`), run: () => { mode = m.from; sel = 0; scroll = 0; snapSel = true; draw() } }],
+        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play keys (they win over a card's)", PLAY) : TOY_KEYS ? sect("the room's play keys (a card's own key wins)", ROOM_PLAY) : []), ...boardLegend()],
       }
     }
     case "look-editor": {
@@ -2290,26 +2292,19 @@ function help() {
 // the last keys pressed, for the Konami code
 let keyLog: string[] = []
 
-function fireEvent() {
-  const r = room()
-  r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"
-}
-/** sandbox only: one key, one thing to do with the toy; true when the key was one of them. Off the sandbox, only `E` (OFFICE_TOY_KEYS=1) */
+/** one key, one thing to do with the toy; true when the key was one of them. Off the sandbox only the room's keys, with OFFICE_TOY_KEYS=1 */
 function toyKey(k: string): boolean {
-  if (!world) {
-    if (!toyEventKey(k, detail().actions.some((x) => x.key === "E"))) return false
-    fireEvent(); changed(); draw(); return true
-  }
+  if (!world && !roomKey(k, detail().actions.some((x) => x.key === k), TOY_KEYS)) return false
   const r = room(), under = mode.kind === "person" ? mode.name : null
   switch (k) {
     case "D": r.play("doorbell"); status = "ding dong"; break
-    case "E": fireEvent(); break
+    case "E": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
     case "F": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
     case "T": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
-    case "N": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
-    case "W": world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break
+    case "N": if (!world) return false; world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
+    case "W": if (!world) return false; world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break
     case "P": if (mode.kind === "pet" && mode.who === "dog" && r instanceof WideRoom) r.patDog(); else if (under) r.pat(under); else r.pet(); status = "pat pat"; break
-    case "C": world.callOver(under ?? world.snapshot().bench[1]!.name); status = `calling someone over to ${under ?? "the desk"}`; void refresh(); break
+    case "C": if (!world) return false; world.callOver(under ?? world.snapshot().bench[1]!.name); status = `calling someone over to ${under ?? "the desk"}`; void refresh(); break
     default: return false
   }
   changed(); draw(); return true

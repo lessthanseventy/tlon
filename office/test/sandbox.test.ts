@@ -28,12 +28,14 @@ test("night toggles a clock override", () => {
   t.toggleNight(); expect(t.now().getHours()).toBe(new Date().getHours())
 })
 
-test("off the sandbox, only E fires an event, and only with OFFICE_TOY_KEYS=1 and no card E of its own", async () => {
-  const { toyEventKey } = await import("../tui/sandbox")
-  expect(toyEventKey("E", false, { OFFICE_TOY_KEYS: "1" })).toBe(true)
-  expect(toyEventKey("E", true, { OFFICE_TOY_KEYS: "1" })).toBe(false)
-  expect(toyEventKey("E", false, {})).toBe(false)
-  expect(toyEventKey("D", false, { OFFICE_TOY_KEYS: "1" })).toBe(false)
+test("off the sandbox, D E F T P run on the room with OFFICE_TOY_KEYS=1, unless the card claims the key", async () => {
+  const { roomKey } = await import("../tui/sandbox")
+  for (const k of ["D", "E", "F", "T", "P"]) {
+    expect(roomKey(k, false, true)).toBe(true)
+    expect(roomKey(k, true, true)).toBe(false)
+    expect(roomKey(k, false, false)).toBe(false)
+  }
+  for (const k of ["N", "W", "C"]) expect(roomKey(k, false, true)).toBe(false)
 })
 
 test("the help line's play keys are the keys toyKey() handles", async () => {
