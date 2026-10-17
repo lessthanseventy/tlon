@@ -217,7 +217,8 @@ export async function dumpPut(ws: number, body: string): Promise<{ ok: boolean; 
 export type Activity = { kind: string; at: string; thread_id: number | null; who: string | null; text: string }[]
 export type Capped<T> = { shown: T[]; more: number }
 export type Stuck = { thread_id: number; title: string; text: string }
-export type Triage = { blockers: Capped<Stuck>; failed_checks: Capped<Stuck>; unled: Capped<Stuck>; count: number }
+/** `failed_checks.ids`: every failed check's thread, past the cap (absent from an older server) */
+export type Triage = { blockers: Capped<Stuck>; failed_checks: Capped<Stuck> & { ids?: number[] }; unled: Capped<Stuck>; count: number }
 export type Health = { state: "ok" | "warn"; problems: string[]; version: string; up_s: number; db: boolean; jobs: boolean; failed_jobs: number; tmux: boolean; disk_pct: number | null; mem_pct: number | null; load: number | null
   /** one full check at a time (scripts/checks-queue.sh): who has it, who waits */
   checks?: { running: string | null; waiting: string[] }
