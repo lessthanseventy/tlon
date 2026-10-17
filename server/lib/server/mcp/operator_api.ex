@@ -137,7 +137,9 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/life/:ws/quests        {"title", "due_at"?, "xp"?} → Life.create_quest; 201
       POST   /api/life/quests/:id/done   Life.quest_done; {quest, level_up}
       GET    /api/life/:ws/dump          Life.dump; {id, body, updated_at} (body "" before the first write)
-      PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe
+      PUT    /api/life/:ws/dump          {"body"} → Life.put_dump as the operator; a blank body is 422, never a wipe; the page it replaces is kept
+      GET    /api/life/:ws/dump/revisions      Life.dump_revisions; [{id, at, lines, first}], newest first
+      GET    /api/life/:ws/dump/revisions/:id  {id, at, body}: one earlier page (restore = PUT its body)
   """
 
   import Plug.Conn
@@ -441,6 +443,12 @@ defmodule Server.MCP.OperatorAPI do
     do: with_workspace(conn, ws, &json(conn, 200, dump_row(Server.Life.dump(&1.id))))
 
   defp route(conn, "PUT", "life", [ws, "dump"]), do: with_workspace(conn, ws, &put_dump(conn, &1))
+
+  defp route(conn, "GET", "life", [ws, "dump", "revisions"]),
+    do: with_workspace(conn, ws, &json(conn, 200, Server.Life.dump_revisions(&1.id)))
+
+  defp route(conn, "GET", "life", [ws, "dump", "revisions", id]),
+    do: with_workspace(conn, ws, fn w -> with_int(conn, id, &dump_revision(conn, w, &1)) end)
 
   defp route(conn, "PATCH", "life", ["routines", id]), do: with_row(conn, Server.Routine, id, &edit_routine(conn, &1))
 
@@ -894,6 +902,13 @@ defmodule Server.MCP.OperatorAPI do
 
       {_, conn} ->
         json(conn, 400, %{error: ~s(expected {"body": "…"})})
+    end
+  end
+
+  defp dump_revision(conn, ws, id) do
+    case Server.Life.dump_revision(ws.id, id) do
+      nil -> not_found(conn, "earlier page", id)
+      r -> json(conn, 200, %{id: r.id, at: r.created_at, body: r.body})
     end
   end
 

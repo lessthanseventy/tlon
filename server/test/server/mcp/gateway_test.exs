@@ -805,5 +805,28 @@ defmodule Server.MCP.GatewayTest do
       assert {200, %{"body" => "the move\nwinter coat\ndentist\n"}} = get_json("/api/life/#{ws.id}/dump")
       assert [_] = Server.Notes.for_scope("workspace", ws.id)
     end
+
+    test "the dump keeps every page a save replaced, and an earlier page can be put back" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Home", type: "home"})
+      {:ok, other} = Server.Workspaces.register(%{name: "Other home", type: "home"})
+
+      assert {200, []} = get_json("/api/life/#{ws.id}/dump/revisions")
+      {200, _} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: "\n  the move\nwinter coat\n"})
+      {200, _} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: "the move\nwinter coat\n"})
+      {200, _} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: "the move\nwinter coat\n"})
+      {200, _} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: "oops"})
+      assert {422, _} = request_json(:put, "/api/life/#{ws.id}/dump", %{body: ""})
+
+      assert {200, [%{"id" => last, "lines" => 2, "first" => "the move"}, %{"id" => first, "lines" => 3}]} =
+               get_json("/api/life/#{ws.id}/dump/revisions")
+
+      assert {200, %{"body" => "the move\nwinter coat\n"}} = get_json("/api/life/#{ws.id}/dump/revisions/#{last}")
+      assert {404, _} = get_json("/api/life/#{other.id}/dump/revisions/#{first}")
+
+      {200, %{"body" => "the move\nwinter coat\n"}} =
+        request_json(:put, "/api/life/#{ws.id}/dump", %{body: "the move\nwinter coat\n"})
+
+      assert {200, [%{"first" => "oops"} | _]} = get_json("/api/life/#{ws.id}/dump/revisions")
+    end
   end
 end

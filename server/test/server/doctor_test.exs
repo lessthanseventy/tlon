@@ -23,6 +23,7 @@ defmodule Server.DoctorTest do
                "message",
                "need_dismissal",
                "note",
+               "note_revision",
                "playbook",
                "project",
                "quest",

@@ -199,19 +199,56 @@ defmodule Server.Life do
         from n in Server.Note, where: n.scope == "workspace" and n.scope_id == ^workspace_id and n.name == "dump"
       )
 
-  @doc "Replace the dump's body, making the note on the first write. A blank body is refused, never a wipe."
+  @doc """
+  Replace the dump's body, making the note on the first write. The page it replaces is kept as a
+  `Server.NoteRevision`; the same body again changes nothing. A blank body is refused, never a wipe.
+  """
   @spec put_dump(integer, String.t(), String.t()) :: {:ok, Server.Note.t()} | {:error, Ecto.Changeset.t()}
   def put_dump(workspace_id, body, author) do
     case dump(workspace_id) do
-      nil -> Server.Notes.write(%{scope: "workspace", scope_id: workspace_id, name: "dump", author: author, body: body})
-      note -> Server.Notes.edit(note, %{body: body})
+      nil ->
+        Server.Notes.write(%{scope: "workspace", scope_id: workspace_id, name: "dump", author: author, body: body})
+
+      %{body: ^body} = note ->
+        {:ok, note}
+
+      note ->
+        Repo.transaction(fn -> replace_keeping(note, body) end)
     end
+  end
+
+  @doc "The dump's earlier pages, newest first: `%{id, at, lines, first}`, `first` its first non-blank line."
+  @spec dump_revisions(integer) :: [map]
+  def dump_revisions(workspace_id) do
+    from(r in Server.NoteRevision,
+      join: n in Server.Note,
+      on: n.id == r.note_id,
+      where: n.scope == "workspace" and n.scope_id == ^workspace_id and n.name == "dump",
+      order_by: [desc: r.id]
+    )
+    |> Repo.all()
+    |> Enum.map(fn r ->
+      first = r.body |> String.split("\n") |> Enum.find("", &(String.trim(&1) != "")) |> String.trim()
+      %{id: r.id, at: r.created_at, lines: line_count(r.body), first: first}
+    end)
+  end
+
+  @doc "One of the dump's earlier pages, or nil when `id` is not one of this home's."
+  @spec dump_revision(integer, integer) :: Server.NoteRevision.t() | nil
+  def dump_revision(workspace_id, id) do
+    Repo.one(
+      from r in Server.NoteRevision,
+        join: n in Server.Note,
+        on: n.id == r.note_id,
+        where: r.id == ^id and n.scope == "workspace" and n.scope_id == ^workspace_id and n.name == "dump"
+    )
   end
 
   defp dump_line(nil), do: nil
 
-  defp dump_line(note),
-    do: %{lines: note.body |> String.trim_trailing() |> String.split("\n") |> length(), updated_at: note.updated_at}
+  defp dump_line(note), do: %{lines: line_count(note.body), updated_at: note.updated_at}
+
+  defp line_count(body), do: body |> String.trim_trailing() |> String.split("\n") |> length()
 
   defp open_quests(workspace_id) do
     Repo.all(
@@ -229,6 +266,15 @@ defmodule Server.Life do
         due_at != nil,
         Date.compare(Schedules.local_date(due_at), today_date) == :eq do
       %{routine_id: routine.id, title: routine.title, due_at: due_at, done: has_run?(routine.id, due_at)}
+    end
+  end
+
+  defp replace_keeping(note, body) do
+    Repo.insert!(%Server.NoteRevision{note_id: note.id, body: note.body, created_at: note.updated_at})
+
+    case Server.Notes.edit(note, %{body: body}) do
+      {:ok, edited} -> edited
+      {:error, cs} -> Repo.rollback(cs)
     end
   end
 end
