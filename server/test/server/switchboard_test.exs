@@ -599,6 +599,18 @@ defmodule Server.SwitchboardTest do
       assert_receive {:spawned, _}
     end
 
+    test "the drain's coalesced wake names every message it stands for, by id" do
+      %{thread: thread} = staffed_thread()
+      {:ok, a} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "one"})
+      {:ok, b} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "two"})
+
+      Switchboard.drain()
+      assert_received {:woke, "wSandra", text}
+      assert text =~ "you have 2 unread message(s)"
+      assert text =~ "##{a.id}, ##{b.id}"
+      assert text =~ "get_message"
+    end
+
     test "a closed thread's backlog spawns nobody" do
       {:ok, thread} = Channel.open_thread(%{title: "done with"})
       {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "lead", engine: "fresh"})

@@ -576,13 +576,18 @@ defmodule Server.Switchboard do
     # contributes nothing here.
     reached = Enum.flat_map(undelivered, &claim_reached/1)
 
-    # Coalesce per recipient thread, keeping the COUNT §3b wants ("you have 50 unread") — one
-    # nudge per recipient, never one per message. A thread whose pane has closed gets its
-    # messages back as undelivered (its sessions ended), for the next drain to spawn someone.
+    # Coalesce per recipient thread, keeping the COUNT §3b wants ("you have 50 unread") and each
+    # message's id to read it by — one nudge per recipient, never one per message. A thread whose
+    # pane has closed gets its messages back as undelivered (its sessions ended), for the next
+    # drain to spawn someone.
     reached
     |> Enum.group_by(fn {session, _id} -> session.thread_id end)
     |> Enum.each(fn {_thread_id, [{session, _} | _] = pairs} ->
-      case poke(session, "you have #{length(pairs)} unread message(s) on your threads") do
+      ids = pairs |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> Enum.sort()
+      listed = Enum.map_join(ids, ", ", &"##{&1}")
+      wake = "you have #{length(ids)} unread message(s) on your threads: #{listed} (read each with get_message)"
+
+      case poke(session, wake) do
         :gone ->
           pairs |> Enum.map(&elem(&1, 0)) |> Enum.uniq_by(& &1.id) |> Enum.each(&end_gone/1)
           pairs |> Enum.map(&elem(&1, 1)) |> unclaim()
