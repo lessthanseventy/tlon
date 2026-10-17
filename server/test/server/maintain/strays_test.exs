@@ -72,4 +72,26 @@ defmodule Server.Maintain.StraysTest do
 
     assert [%{kind: "stranded", thread_id: nil}] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded"))
   end
+
+  test "an unchanged stranded worktree is read from git once, not on every list", %{repo: repo, ws: ws, project: p} do
+    {:ok, t} = Server.Channel.open_thread(%{title: "left", scope: "machine", workspace_id: ws.id, project_id: p.id})
+    {:ok, held} = Worktree.ensure(repo, Worktree.name_for(t))
+    File.write!(Path.join(held, "wip.txt"), "wip\n")
+    {:ok, _} = t |> Server.Thread.state_changeset("closed") |> Server.Repo.update()
+    assert [%{text: why}] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded"))
+    assert why =~ "uncommitted changes"
+
+    test = self()
+
+    Application.put_env(:server, :git_cmd, fn cmd, args, opts ->
+      send(test, {:git, args})
+      System.cmd(cmd, args, opts)
+    end)
+
+    on_exit(fn -> Application.delete_env(:server, :git_cmd) end)
+
+    assert [%{text: ^why}] = Enum.filter(Server.Office.Needs.list(), &(&1.kind == "stranded"))
+    {:messages, sent} = Process.info(self(), :messages)
+    assert for({:git, args} <- sent, Enum.any?(args, &String.starts_with?(&1, held)), do: args) == []
+  end
 end

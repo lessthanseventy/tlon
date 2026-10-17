@@ -58,6 +58,7 @@ defmodule Server.Office.Needs do
 
   @mention_hours 12
   @landing_grace_s 3600
+  @holds_ttl_s 300
 
   @doc "Every item waiting on the operator, across the workspaces."
   def list do
@@ -352,7 +353,7 @@ defmodule Server.Office.Needs do
     for %{repo: repo, name: name, thread: t} <- Server.Maintain.Strays.worktrees(),
         not just_landed?(t),
         !(t && landing?(t)),
-        why = Server.Worktree.holds(repo, name) do
+        why = holds(repo, name) do
       %{
         key: "stranded:#{repo}:#{name}",
         repo: repo,
@@ -708,4 +709,45 @@ defmodule Server.Office.Needs do
   end
 
   defp failure(j), do: {j.worker, last_error(j.errors)}
+
+  # Worktree.holds runs git several times per checkout, too slow for every refresh: its answer is kept
+  # while the checkout's HEAD, index and reflog and the repo's refs are untouched, and at most
+  # @holds_ttl_s, since an edit to a file git doesn't track yet moves none of them
+  defp holds(repo, name) do
+    key = {__MODULE__, :holds, repo, name}
+    stamp = holds_stamp(repo, name)
+    now = System.monotonic_time(:second)
+
+    case :persistent_term.get(key, nil) do
+      {^stamp, at, why} when now - at < @holds_ttl_s ->
+        why
+
+      _ ->
+        why = Server.Worktree.holds(repo, name)
+        :persistent_term.put(key, {holds_stamp(repo, name), now, why})
+        why
+    end
+  end
+
+  defp holds_stamp(repo, name) do
+    wt_git =
+      case File.read(Path.join(Server.Worktree.path(repo, name), ".git")) do
+        {:ok, "gitdir: " <> dir} -> String.trim(dir)
+        _ -> Path.join([repo, ".git", "worktrees", name])
+      end
+
+    for path <- [
+          Path.join(wt_git, "HEAD"),
+          Path.join(wt_git, "index"),
+          Path.join(wt_git, "logs/HEAD"),
+          Path.join(repo, ".git/packed-refs"),
+          Path.join(repo, ".git/logs/HEAD"),
+          Path.join(repo, ".git/logs/refs/remotes/origin/main")
+        ] do
+      case File.stat(path, time: :posix) do
+        {:ok, %{mtime: mtime, size: size}} -> {mtime, size}
+        _ -> nil
+      end
+    end
+  end
 end

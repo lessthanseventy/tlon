@@ -357,7 +357,8 @@ defmodule Server.Worktree do
     File.dir?(repo_path) and match?({_out, 0}, git(repo_path, ["rev-parse", "--git-dir"]))
   end
 
-  defp git(repo_path, args), do: System.cmd("git", ["-C", repo_path | args], stderr_to_stdout: true)
+  defp git(repo_path, args),
+    do: Application.get_env(:server, :git_cmd, &System.cmd/3).("git", ["-C", repo_path | args], stderr_to_stdout: true)
 
   # nothing the checkout holds may go with it: half-done operations undone, edits committed, a
   # detached HEAD named
