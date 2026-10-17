@@ -829,6 +829,19 @@ defmodule Server.WorklineTest do
       assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: queued.id})
     end
 
+    test "unchanged code approved again by another reviewer records their approval; the same one again records nothing" do
+      queued = queued_lamp!()
+      assert %{"by" => "andrew"} = Workline.approval(queued)
+
+      {:ok, again} = queued |> Server.Thread.workline_stage_changeset(%{awaiting: "tzinacan"}) |> Repo.update()
+      {:ok, reapproved} = Workline.approve(again, artifacts: AllPresent, land: :queue)
+      assert %{"by" => "tzinacan", "at" => at} = Workline.approval(reapproved)
+
+      {:ok, again} = reapproved |> Server.Thread.workline_stage_changeset(%{awaiting: "tzinacan"}) |> Repo.update()
+      {:ok, reapproved} = Workline.approve(again, artifacts: AllPresent, land: :queue)
+      assert %{"by" => "tzinacan", "at" => ^at} = Workline.approval(reapproved)
+    end
+
     test "a branch that moved since the approval voids it: reopen opens the thread and queues nothing", %{repo: repo} do
       queued = queued_lamp!()
 
