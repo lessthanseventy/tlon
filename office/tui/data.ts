@@ -202,8 +202,12 @@ export const questNew = (ws: number, title: string) =>
   write("adding the quest", `/life/${ws}/quests`, { title }, (j) => `added ${j.title}`)
 /** the home's dump: the one page everything gets poured into (body "" before the first write) */
 export const dump = (ws: number) => read<{ id: number | null; body: string; updated_at: string | null }>(`/life/${ws}/dump`)
-export const dumpPut = (ws: number, body: string) =>
-  send("PUT", "saving the dump", `/life/${ws}/dump`, () => `dump saved · ${body.trimEnd().split("\n").length} lines`, { body })
+/** `ok` only when the server took it: a page not taken stays unsent, so the next leave tries again */
+export async function dumpPut(ws: number, body: string): Promise<{ ok: boolean; line: string }> {
+  let ok = false
+  const line = await send("PUT", "saving the dump", `/life/${ws}/dump`, () => ((ok = true), `dump saved · ${body.trimEnd().split("\n").length} lines`), { body })
+  return { ok, line }
+}
 export type Activity = { kind: string; at: string; thread_id: number | null; who: string | null; text: string }[]
 export type Capped<T> = { shown: T[]; more: number }
 export type Stuck = { thread_id: number; title: string; text: string }

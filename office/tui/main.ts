@@ -2292,7 +2292,7 @@ async function readDoc(tid: number, name: string) {
 }
 /** the home's dump in the operator's own editor, in the office's tmux; each time the pane is left its saved file
  *  goes back to the server. A session already open is reattached, never rewritten, so an unsaved buffer survives */
-let dumpSent: string | null = null
+const dumpSent = new Map<number, string>()
 async function openDump() {
   if (ws === null) return
   const w = ws, session = `dump-${w}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
@@ -2300,16 +2300,20 @@ async function openDump() {
   const sync = () => {
     let text: string
     try { text = readFileSync(file, "utf8") } catch { return }
-    if (text === dumpSent) return
+    if (text === dumpSent.get(w)) return
     if (!text.trim()) { status = "the dump came back blank — not saved; the last page stands"; return draw() }
-    dumpSent = text
-    void did(data.dumpPut(w, text)).then(loadCard).then(draw)
+    void did(data.dumpPut(w, text).then((r) => (r.ok && dumpSent.set(w, text), r.line))).then(loadCard).then(draw)
   }
-  if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) {
+  const open = tmux("has-session", "-t", `=${session}`).exitCode === 0
+  if (!open || !dumpSent.has(w)) {
     const page = await data.dump(w)
     if (!page) { status = "the dump can't be read: the server isn't answering"; return draw() }
-    mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, page.body); dumpSent = page.body
-    const edit = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; exec $e "$0"`
+    dumpSent.set(w, page.body)
+  }
+  if (!open) {
+    mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, dumpSent.get(w)!)
+    // $e unquoted on purpose: VISUAL="code --wait" is a command and its flags
+    const edit = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; [ -n "$e" ] || { echo "no editor: set VISUAL or EDITOR"; read _; exit 1; }; exec $e "$0"`
     // a tmux server already up keeps its own env, so the editor this TUI was started with is handed over
     const env = ["VISUAL", "EDITOR"].flatMap((k) => (process.env[k] ? ["-e", `${k}=${process.env[k]}`] : []))
     tmux("new-session", "-d", "-s", session, "-n", "dump", ...env, "sh", "-c", edit, file)

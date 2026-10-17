@@ -130,7 +130,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/schedules/:id/run       Schedules.run_now (its calendar untouched); 201 + the run
       GET    /api/schedules/:id/runs      Office.Room.runs (the automation board, newest first)
 
-      GET    /api/life/:ws               Server.Life.status; {xp, level, next_level_at, streaks, due, quests, today}
+      GET    /api/life/:ws               Server.Life.status; {xp, level, next_level_at, streaks, due, quests, today, dump}
       POST   /api/life/:ws/routines      {"title", "every", "window_minutes"?, "xp"?, "tile"?} → Life.create_routine; 201
       PATCH  /api/life/routines/:id      any of those, + "enabled" → Life.update_routine
       POST   /api/life/routines/:id/done Life.routine_done; {run, level_up}
