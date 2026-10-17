@@ -193,29 +193,15 @@ defmodule Server.Life do
   on the workspace, so agents read it like any note. nil before the first write.
   """
   @spec dump(integer) :: Server.Note.t() | nil
-  def dump(workspace_id),
-    do:
-      Repo.one(
-        from n in Server.Note, where: n.scope == "workspace" and n.scope_id == ^workspace_id and n.name == "dump"
-      )
+  def dump(workspace_id), do: Repo.one(dump_query(workspace_id))
 
   @doc """
   Replace the dump's body, making the note on the first write. The page it replaces is kept as a
   `Server.NoteRevision`; the same body again changes nothing. A blank body is refused, never a wipe.
+  The note is read under a row lock, so two saves at once each keep the page the other replaced.
   """
   @spec put_dump(integer, String.t(), String.t()) :: {:ok, Server.Note.t()} | {:error, Ecto.Changeset.t()}
-  def put_dump(workspace_id, body, author) do
-    case dump(workspace_id) do
-      nil ->
-        Server.Notes.write(%{scope: "workspace", scope_id: workspace_id, name: "dump", author: author, body: body})
-
-      %{body: ^body} = note ->
-        {:ok, note}
-
-      note ->
-        Repo.transaction(fn -> replace_keeping(note, body) end)
-    end
-  end
+  def put_dump(workspace_id, body, author), do: Repo.transaction(fn -> put_dump_locked(workspace_id, body, author) end)
 
   @doc "The dump's earlier pages, newest first: `%{id, at, lines, first}`, `first` its first non-blank line."
   @spec dump_revisions(integer) :: [map]
@@ -269,12 +255,25 @@ defmodule Server.Life do
     end
   end
 
-  defp replace_keeping(note, body) do
-    Repo.insert!(%Server.NoteRevision{note_id: note.id, body: note.body, created_at: note.updated_at})
+  defp dump_query(workspace_id),
+    do: from(n in Server.Note, where: n.scope == "workspace" and n.scope_id == ^workspace_id and n.name == "dump")
 
-    case Server.Notes.edit(note, %{body: body}) do
-      {:ok, edited} -> edited
-      {:error, cs} -> Repo.rollback(cs)
+  defp put_dump_locked(workspace_id, body, author) do
+    case Repo.one(from n in dump_query(workspace_id), lock: "FOR UPDATE") do
+      nil ->
+        committed(
+          Server.Notes.write(%{scope: "workspace", scope_id: workspace_id, name: "dump", author: author, body: body})
+        )
+
+      %{body: ^body} = note ->
+        note
+
+      note ->
+        Repo.insert!(%Server.NoteRevision{note_id: note.id, body: note.body, created_at: note.updated_at})
+        committed(Server.Notes.edit(note, %{body: body}))
     end
   end
+
+  defp committed({:ok, row}), do: row
+  defp committed({:error, cs}), do: Repo.rollback(cs)
 end

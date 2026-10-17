@@ -208,7 +208,7 @@ export type DumpPage = { id: number; at: string; lines: number; first: string }
 /** the dump's earlier pages, newest first: every page a save replaced */
 export const dumpPages = (ws: number) => read<DumpPage[]>(`/life/${ws}/dump/revisions`)
 export const dumpPage = (ws: number, id: number) => read<{ id: number; at: string; body: string }>(`/life/${ws}/dump/revisions/${id}`)
-/** `ok` only when the server took it: a page not taken stays unsent, so the next leave tries again */
+/** `ok` only when the server took it: a page not taken stays unsent, and the next write, leave or open sends it */
 export async function dumpPut(ws: number, body: string): Promise<{ ok: boolean; line: string }> {
   let ok = false
   const line = await send("PUT", "saving the dump", `/life/${ws}/dump`, () => ((ok = true), `dump saved · ${lines(body.trimEnd().split("\n").length)}`), { body })

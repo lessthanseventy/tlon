@@ -2320,40 +2320,59 @@ async function restorePage(id: number) {
   const w = ws, p = await data.dumpPage(w, id)
   if (!p) { status = "that page can't be read: the server isn't answering"; return draw() }
   if (Bun.spawnSync(["tmux", "-L", OWN_TMUX, "has-session", "-t", `=dump-${w}`]).exitCode === 0) { status = "the dump is open in its editor: close it first, then put the page back"; return draw() }
-  await did(data.dumpPut(w, p.body).then((r) => (r.ok && dumpSent.set(w, p.body), r.line)))
+  let file: string | null = null
+  try { file = readFileSync(dumpFile(w), "utf8") } catch {}
+  const now = await data.dump(w)
+  if (!now) { status = "the dump can't be read: the server isn't answering"; return draw() }
+  if (dumpSending.has(w) || (file?.trim() && file !== now.body)) { status = "the dump has a save still on its way: D to send it, then put the page back"; return draw() }
+  await did(data.dumpPut(w, p.body).then((r) => {
+    if (r.ok) { dumpSent.set(w, p.body); mkdirSync(OWN_DIR, { recursive: true }); writeFileSync(dumpFile(w), p.body) }
+    return r.line
+  }))
   await loadCard(); draw()
 }
-/** the home's dump in the operator's own editor, in the office's tmux; each time the pane is left its saved file
- *  goes back to the server. A session already open is reattached, never rewritten, so an unsaved buffer survives */
-const dumpSent = new Map<number, string>(), dumpSending = new Map<number, string>(), dumpWatched = new Set<number>()
+/** the home's dump in the operator's own editor, in the office's tmux. Every save goes to the server, one PUT at
+ *  a time per home (a write that lands mid-PUT is sent when it settles), and one the server didn't take is sent on
+ *  the next write, leave or open: a file that differs from the server's page is never overwritten, it is sent —
+ *  safe because the server keeps the page each save replaces. A session already open is reattached, never rewritten */
+const dumpSent = new Map<number, string>(), dumpSending = new Set<number>(), dumpAgain = new Set<number>(), dumpWatched = new Set<number>()
+const dumpFile = (w: number) => `${OWN_DIR}/dump-${w}.md`
+function syncDump(w: number) {
+  let text: string
+  try { text = readFileSync(dumpFile(w), "utf8") } catch { return }
+  if (text === dumpSent.get(w)) return
+  if (dumpSending.has(w)) { dumpAgain.add(w); return }
+  if (!text.trim()) { status = "the dump came back blank — not saved; the last page stands"; return draw() }
+  dumpSending.add(w)
+  void did(data.dumpPut(w, text).then((r) => {
+    dumpSending.delete(w)
+    if (r.ok) dumpSent.set(w, text)
+    if (dumpAgain.delete(w)) syncDump(w)
+    return r.line
+  })).then(loadCard).then(draw)
+}
 async function openDump() {
   if (ws === null) return
-  const w = ws, session = `dump-${w}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
-  const file = `${OWN_DIR}/dump-${w}.md`
-  const sync = () => {
-    let text: string
-    try { text = readFileSync(file, "utf8") } catch { return }
-    if (text === dumpSent.get(w) || text === dumpSending.get(w)) return
-    if (!text.trim()) { status = "the dump came back blank — not saved; the last page stands"; return draw() }
-    dumpSending.set(w, text)
-    void did(data.dumpPut(w, text).then((r) => (dumpSending.delete(w), r.ok && dumpSent.set(w, text), r.line))).then(loadCard).then(draw)
-  }
+  const w = ws, session = `dump-${w}`, file = dumpFile(w), tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
   const open = tmux("has-session", "-t", `=${session}`).exitCode === 0
   if (!open || !dumpSent.has(w)) {
     const page = await data.dump(w)
     if (!page) { status = "the dump can't be read: the server isn't answering"; return draw() }
-    dumpSent.set(w, page.body)
+    if (!dumpSending.has(w)) dumpSent.set(w, page.body)
   }
-  if (!dumpWatched.has(w)) { dumpWatched.add(w); watchFile(file, { interval: 1000 }, sync) }
+  if (!dumpWatched.has(w)) { dumpWatched.add(w); watchFile(file, { interval: 1000 }, () => syncDump(w)) }
   if (!open) {
-    mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, dumpSent.get(w)!)
+    let unsent: string | null = null
+    try { unsent = readFileSync(file, "utf8") } catch {}
+    if (unsent?.trim() && unsent !== dumpSent.get(w)) { status = "sending what you wrote while the server was away"; syncDump(w) }
+    else { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, dumpSent.get(w)!) }
     // VISUAL/EDITOR is a shell command, as git reads it: flags work, and a path with spaces is quoted inside it
     const edit = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; [ -n "$e" ] || { echo "no editor: set VISUAL or EDITOR"; read _; exit 1; }; eval "exec $e \\"\\$0\\""`
     // a tmux server already up keeps its own env, so the editor this TUI was started with is handed over
     const env = ["VISUAL", "EDITOR"].flatMap((k) => (process.env[k] ? ["-e", `${k}=${process.env[k]}`] : []))
     tmux("new-session", "-d", "-s", session, "-n", "dump", ...env, "sh", "-c", edit, file)
   }
-  zoomOn({ socket: OWN_TMUX, session, window: "dump" }, "the dump", sync)
+  zoomOn({ socket: OWN_TMUX, session, window: "dump" }, "the dump", () => syncDump(w))
 }
 /** the arcade's games: terminal games, played wherever the machine has installed them */
 const GAMES = [
