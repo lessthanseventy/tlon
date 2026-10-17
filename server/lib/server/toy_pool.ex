@@ -104,8 +104,16 @@ defmodule Server.ToyPool do
 
     {"reactions:#{seat}", prompt,
      fn
-       %{"reactions" => %{} = r} -> Map.new(for e <- @events, is_list(r[e]), do: {e, Enum.filter(r[e], &is_binary/1)})
-       _ -> nil
+       %{"reactions" => %{} = r} ->
+         reactions =
+           Map.new(
+             for e <- @events, is_list(r[e]), lines = Enum.filter(r[e], &is_binary/1), lines != [], do: {e, lines}
+           )
+
+         if reactions != %{}, do: reactions
+
+       _ ->
+         nil
      end}
   end
 

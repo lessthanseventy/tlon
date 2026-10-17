@@ -69,6 +69,17 @@ defmodule Server.ToyPoolTest do
     assert [<<"I'd tell a UDP", _::binary>>] = ToyPool.puns(ws.id)
   end
 
+  test "a reactions reply with no valid event stores nothing, so it is not fresh", %{ws: ws, cli: cli, calls: calls} do
+    File.write!(
+      cli,
+      "#!/bin/sh\necho x >> #{calls}\necho '{\"reactions\": {\"zoo\": \"not a list\", \"duck\": [1], \"nope\": [\"x\"]}}'\n"
+    )
+
+    assert {:error, :unparsed} = ToyPool.refresh_due(ws.id, {:reactions, "lonnrot"})
+    assert {:error, :unparsed} = ToyPool.refresh_due(ws.id, {:reactions, "lonnrot"})
+    assert count(calls) == 2
+  end
+
   test "a failing call stores nothing and the pool stays as it was", %{ws: ws, cli: cli} do
     {:ok, _} = ToyPool.refresh(ws.id, :puns, seed: 1)
     File.write!(cli, "#!/bin/sh\nexit 3\n")
