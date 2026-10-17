@@ -8,6 +8,7 @@ import { loungeTile } from "../kit/tiles/lounge"
 import { meetingTile } from "../kit/tiles/meeting"
 import { officeTile } from "../kit/tiles/office"
 import type { Home } from "../kit/home"
+import { refsOf } from "../kit/margin"
 import { annexHeight } from "../kit/homeart"
 import { type Agents, EMPTY } from "../kit/types"
 import type { Tv } from "../kit/tv"
@@ -59,6 +60,22 @@ describe("the wide room", () => {
     expect(busy.get("beacon")).toContain("3 issues")
     expect(busy.get("beacon")).toContain("nothing for you to do")
     expect(busy.get("rack")).toContain("disk 95% full")
+  })
+
+  test("a hovered margin note naming a thread lights that thread's lead in the room", () => {
+    // the TUI hands the note's thread in as the picked card (`lit ?? picked`): its lead gets the arrow over their head
+    const a = viewOf(office(1), 1), now = new Date(2026, 9, 5, 15, 0), tid = refsOf("see #101")[0]!
+    const shot = (picked: number | null) => seeded(7, () => {
+      const room = new WideRoom(560)
+      for (let i = 0; i < 600; i++) room.step(a)
+      const hronir = (room as unknown as { actors: Map<string, { x: number }> }).actors.get("hronir")!
+      return { fr: room.render(a, { ...focus, picked }, measure, now), x: hronir.x }
+    })
+    const off = shot(null), lit = shot(tid)
+    const xs: number[] = []
+    for (let i = 0; i < lit.fr.rgba.length; i += 4) if ([0, 1, 2].some((k) => lit.fr.rgba[i + k] !== off.fr.rgba[i + k])) xs.push((i / 4) % lit.fr.width)
+    expect(xs.length).toBe(9)
+    expect(Math.max(...xs.map((x) => Math.abs(x - lit.x)))).toBeLessThanOrEqual(8)
   })
 
   test("mid-turn works at a desk; warm but unbusy waits there too; cold goes to the lounge", () => seeded(3, () => {
