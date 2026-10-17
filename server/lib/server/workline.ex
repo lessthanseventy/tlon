@@ -360,7 +360,7 @@ defmodule Server.Workline do
 
   defp queue(thread, why, by) do
     with {:ok, queued} <- thread |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update(),
-         :ok <- if(approval(queued), do: :ok, else: record_approval(queued, by)),
+         :ok <- if(match?(%{"by" => ^by}, approval(queued)), do: :ok, else: record_approval(queued, by)),
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
       post_brief(
         queued,
@@ -402,7 +402,8 @@ defmodule Server.Workline do
   who approved it into the merge queue, the commit `work/<slug>` was at, and when), while the
   branch's code is what it was then (its own docs, `work/<slug>/`, may have moved); nil once the
   code has changed, or when none was recorded. A requeue or reopen under it keeps it rather than
-  recording another.
+  recording another; the same code approved by someone else records theirs, the newest, so the
+  landing names the latest approver.
   """
   def approval(%Thread{} = thread) do
     correlation = "workline:#{thread.slug}:approval"
