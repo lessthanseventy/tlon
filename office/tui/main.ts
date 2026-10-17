@@ -2240,7 +2240,7 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
   const h = hitAt(clipped, g, m.col, m.row, viewport)
   if (m.motion) {
     const t = h?.tip ?? "", over = h?.note ?? null
-    if (over !== lit) { lit = over; roomChanged = true; return draw() }
+    if (over !== lit) { lit = over; tip = t; roomChanged = true; return draw() }
     if (t !== tip) { tip = t; draw() }
     return
   }
