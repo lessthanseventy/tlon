@@ -144,6 +144,7 @@ ws="$(jq -r '.workspaces[0].id' "$body")"
 home="$(jq -r '[.workspaces[] | select(.name | ascii_downcase == "machine")][0].name // empty' "$body")"
 rm -f "$body"
 echo "smoke: /api/office ✓"
+[ -n "$home" ] || echo "smoke: no wait for the office (no machine workspace)"
 
 title="release smoke $$"
 tid="$(curl -s -m 10 -X POST -H 'content-type: application/json' \
