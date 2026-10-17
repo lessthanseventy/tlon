@@ -2,7 +2,7 @@ export type Affinities = { admires: string[]; needles: string[]; covers: string[
 export type Relation = "friend" | "rival" | "none"
 type SoulLike = { sections: Record<string, string> }
 
-const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 const VERBS: [keyof Affinities, RegExp][] = [["covers", /would cover for/g], ["admires", /\badmires\b/g], ["needles", /\bneedles\b/g]]
 
 /** the People section → who they admire / needle / would cover for, by verb; names off the bench are ignored */
@@ -21,8 +21,10 @@ export function affinities(people: string, bench: string[]): Affinities {
 /** symmetric: either liking the other makes friends (admires beats needles); else either needling makes rivals */
 export function relation(a: string, b: string, souls: Record<string, SoulLike | undefined>, bench: string[]): Relation {
   const ab = affinities(souls[a]?.sections.People ?? "", bench), ba = affinities(souls[b]?.sections.People ?? "", bench)
+  // affinities holds folded names
+  const fa = fold(a), fb = fold(b)
   const likes = (x: Affinities, who: string) => x.admires.includes(who) || x.covers.includes(who)
-  if (likes(ab, b) || likes(ba, a)) return "friend"
-  if (ab.needles.includes(b) || ba.needles.includes(a)) return "rival"
+  if (likes(ab, fb) || likes(ba, fa)) return "friend"
+  if (ab.needles.includes(fb) || ba.needles.includes(fa)) return "rival"
   return "none"
 }
