@@ -520,6 +520,36 @@ defmodule Server.Office.NeedsTest do
       assert [{"stalled", "blocking"}] = kinds(ws)
     end
 
+    test "a commit on work/<slug> is movement, read for every workline in one git call", %{ws: ws} do
+      repo = Path.join(System.tmp_dir!(), "needs-tips-#{System.pid()}-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(repo)
+      on_exit(fn -> File.rm_rf!(repo) end)
+      git = fn args -> {_, 0} = System.cmd("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t" | args]) end
+      git.(["init", "-q"])
+      git.(["commit", "-q", "--allow-empty", "-m", "seed"])
+      prior = Application.get_env(:server, :workline_root)
+      Application.put_env(:server, :workline_root, repo)
+      test = self()
+
+      Application.put_env(:server, :git_cmd, fn cmd, args, opts ->
+        send(test, {:git, args})
+        System.cmd(cmd, args, opts)
+      end)
+
+      on_exit(fn ->
+        Application.put_env(:server, :workline_root, prior)
+        Application.delete_env(:server, :git_cmd)
+      end)
+
+      moving = workline(ws, "build", 4)
+      quiet = workline(ws, "build", 4)
+      git.(["branch", "work/#{moving.slug}"])
+
+      assert [%{kind: "stalled", thread_id: id}] = Needs.list()
+      assert id == quiet.id
+      assert [_] = for({:git, args} <- self() |> Process.info(:messages) |> elem(1), do: args)
+    end
+
     test "under pencils down nothing is stalled: the operator stopped it", %{ws: ws} do
       _ = workline(ws, "build", 4)
       path = Path.join(System.tmp_dir!(), "needs-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
