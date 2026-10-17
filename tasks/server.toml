@@ -199,13 +199,17 @@ run = "mise exec zig@0.16.0 -- mix release tlon --overwrite"
 description = "names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist (grep, offline, fast)"
 run = "scripts/check-names.sh"
 
+["check:ignored"]
+description = "tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp)"
+run = 'junk="$(git ls-files -ci --exclude-standard)"; [ -z "$junk" ] || { echo "check:ignored — tracked files under ignored paths (git rm --cached them, or stop ignoring them):"; echo "$junk"; exit 1; }'
+
 ["check"]
 description = "Everything green, one at a time on this machine: waits its turn in the checks queue (scripts/checks-queue.sh), runs check:all, then posts the verdict as GitHub's commit status tlon/check on HEAD — only on a clean tree (scripts/check.sh; TLON_CHECK_STATUS=0 posts nothing)"
 run = "scripts/checks-queue.sh scripts/check.sh"
 
 ["check:all"]
-description = "Everything green: the names gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check (unqueued — `check` queues it)"
-depends = ["check:names", "server:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
+description = "Everything green: the names gate + the tracked-junk gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check (unqueued — `check` queues it)"
+depends = ["check:names", "check:ignored", "server:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
 
 # The task manual (docs/manual/tasks.md) comes from `mise tasks ls`, never by hand. `--check` diffs.
 ["manual:gen"]
