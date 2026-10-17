@@ -558,6 +558,23 @@ defmodule Server.Office.NeedsTest do
       assert [{"verify_failed", "blocking"}] = kinds(ws)
     end
 
+    test "a red verify whose re-run is queued or running is on duty, not listed", %{ws: ws} do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      t = workline(ws, "verify", 0)
+
+      {:ok, _} =
+        Server.Dossier.record_check(%{
+          thread_id: t.id,
+          cmd: "mise run check",
+          exit: 1,
+          tail: "boom",
+          correlation: "workline:#{t.slug}:verify"
+        })
+
+      {:ok, _} = %{thread_id: t.id, slug: t.slug} |> Server.Jobs.Verify.new() |> Oban.insert()
+      assert kinds(ws) == []
+    end
+
     # the invariant: any open thread holding work with no movement past the quiet window is a Need
     # (or someone is on duty for it) — the inbox can never read empty over a stopped workline
     test "every open workline left alone past the quiet window is on the list", %{ws: ws} do
