@@ -26,7 +26,7 @@ fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exi
 for v in $(compgen -e | grep -E '^(TLON_|RELEASE_)'); do unset "$v"; done
 unset INVOCATION_ID
 
-dir="" node="" sha="" ok="" office="$root"
+dir="" node="" sha="" ok="" office="$root" dblock=""
 cleanup() {
   if [ -n "$node" ]; then kill "$node" 2>/dev/null; wait "$node" 2>/dev/null; fi
   if [ -n "$dir" ]; then
@@ -35,6 +35,7 @@ cleanup() {
     rm -rf "$dir" "$dir.lock"
     psql -h "${PGHOST:-/run/postgresql}" -d postgres -qc "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >>"$log" 2>&1
   fi
+  [ -n "$dblock" ] && rm -f "$dblock"
   # a failure's log is kept for reading, unless there is nothing in it
   if [ -n "$ok" ] || [ ! -s "$log" ]; then rm -f "$log"; fi
 }
@@ -80,6 +81,10 @@ if [ -z "$url" ]; then
   # truncated, so a shorter record leaves no tail of the last run's
   : >"$lock"
   echo "pid $$ on $url" >&8
+  # the database's: a sweep drops a tlon_smoke_* database only while nobody holds it (smoke-sweep.sh)
+  dblock="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)/tlon-smoke-db-$db.lock"
+  exec 7>"$dblock"
+  flock -n 7 || { dblock=""; fail "database $db is another smoke's"; }
 
   # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep the builds no
   # run holds before making another

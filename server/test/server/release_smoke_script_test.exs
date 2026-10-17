@@ -51,12 +51,23 @@ defmodule Server.ReleaseSmokeScriptTest do
       git.(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"])
       git.(["branch", "work/feature"])
       git.(["remote", "add", "origin", Path.join(tmp, "no-such-origin")])
+      # the smoke's sweep drops every unlocked tlon_smoke_* database: never the machine's Postgres
+      bin = Path.join(tmp, "bin")
+      File.mkdir_p!(bin)
+      File.write!(Path.join(bin, "psql"), "#!/bin/sh\nexit 0\n")
+      File.chmod!(Path.join(bin, "psql"), 0o755)
       on_exit(fn -> File.rm_rf!(tmp) end)
       %{tmp: tmp, root: root}
     end
 
     defp run_smoke(tmp, root, args) do
-      env = [{"TMPDIR", tmp}, {"TLON_SMOKE_PORT", "4599"}, {"TLON_SMOKE_DATABASE", "tlon_smoke_fetch_test"}]
+      env = [
+        {"TMPDIR", tmp},
+        {"PATH", Path.join(tmp, "bin") <> ":" <> System.get_env("PATH")},
+        {"TLON_SMOKE_PORT", "4599"},
+        {"TLON_SMOKE_DATABASE", "tlon_smoke_fetch_test"}
+      ]
+
       System.cmd("bash", [Path.join([root, "scripts", "release-smoke.sh"]) | args], env: env, stderr_to_stdout: true)
     end
 
@@ -222,10 +233,37 @@ defmodule Server.ReleaseSmokeScriptTest do
     setup do
       tmp = Path.join(System.tmp_dir!(), "smoke-sweep-#{System.pid()}-#{System.unique_integer([:positive])}")
       root = Path.join(tmp, "repo")
+      bin = Path.join(tmp, "bin")
       File.mkdir_p!(root)
+      File.mkdir_p!(bin)
       {_, 0} = System.cmd("git", ["-C", root, "init", "-q"])
+
+      # never the machine's Postgres: the listing answers $SMOKE_DBS, and every other call is logged
+      File.write!(Path.join(bin, "psql"), ~S"""
+      #!/usr/bin/env bash
+      case "$*" in
+        *"from pg_database"*) [ -n "$SMOKE_DBS" ] && printf '%s\n' $SMOKE_DBS ;;
+        *) printf '%s\n' "${@: -1}" >>"$SMOKE_PSQL_LOG" ;;
+      esac
+      """)
+
+      File.chmod!(Path.join(bin, "psql"), 0o755)
       on_exit(fn -> File.rm_rf!(tmp) end)
-      %{tmp: tmp, root: root}
+      %{tmp: tmp, root: root, bin: bin}
+    end
+
+    defp sweep(ctx, dbs \\ "") do
+      log = Path.join(ctx.tmp, "psql.log")
+
+      env = [
+        {"TMPDIR", ctx.tmp},
+        {"PATH", ctx.bin <> ":" <> System.get_env("PATH")},
+        {"SMOKE_DBS", dbs},
+        {"SMOKE_PSQL_LOG", log}
+      ]
+
+      {_, 0} = System.cmd("bash", [@sweep, ctx.root], env: env, stderr_to_stdout: true)
+      if File.exists?(log), do: String.split(File.read!(log), "\n", trim: true), else: []
     end
 
     defp build(tmp, name) do
@@ -247,31 +285,70 @@ defmodule Server.ReleaseSmokeScriptTest do
       on_exit(fn -> System.cmd("kill", ["#{pid}"]) end)
     end
 
-    test "a build whose run holds its lock stays; one whose lock nobody holds goes", %{tmp: tmp, root: root} do
+    test "a build whose run holds its lock stays; one whose lock nobody holds goes", %{tmp: tmp} = ctx do
       live = build(tmp, "tlon-smoke/live")
       hold(live <> ".lock")
       dead = build(tmp, "tlon-smoke/dead")
       File.write!(dead <> ".lock", "")
 
-      {_, 0} = System.cmd("bash", [@sweep, root], env: [{"TMPDIR", tmp}], stderr_to_stdout: true)
+      sweep(ctx)
 
       assert File.dir?(live)
       refute File.exists?(dead)
       refute File.exists?(dead <> ".lock")
     end
 
-    test "with no lock (a run from before it), only a build older than any build takes goes", %{tmp: tmp, root: root} do
+    test "with no lock (a run from before it), only a build older than any build takes goes", %{tmp: tmp} = ctx do
       fresh = build(tmp, "tlon-smoke-fresh")
       old = build(tmp, "tlon-smoke-old")
       {_, 0} = System.cmd("touch", ["-d", "3 hours ago", old])
       unbuilt = Path.join(tmp, "tlon-smoke-checking-out")
       File.mkdir_p!(unbuilt)
 
-      {_, 0} = System.cmd("bash", [@sweep, root], env: [{"TMPDIR", tmp}], stderr_to_stdout: true)
+      sweep(ctx)
 
       assert File.dir?(fresh)
       refute File.exists?(old)
       assert File.dir?(unbuilt)
+    end
+
+    test "a run killed before its checkout: its dir goes once its lock is free, and a lock whose dir is gone goes",
+         %{tmp: tmp} = ctx do
+      early = Path.join(tmp, "tlon-smoke/early")
+      File.mkdir_p!(early)
+      File.write!(early <> ".lock", "")
+      checking_out = Path.join(tmp, "tlon-smoke/checking-out")
+      File.mkdir_p!(checking_out)
+      hold(checking_out <> ".lock")
+      orphan = Path.join(tmp, "tlon-smoke/gone.lock")
+      File.write!(orphan, "")
+      held = Path.join(tmp, "tlon-smoke/starting.lock")
+      hold(held)
+
+      sweep(ctx)
+
+      refute File.exists?(early)
+      refute File.exists?(early <> ".lock")
+      assert File.dir?(checking_out)
+      refute File.exists?(orphan)
+      assert File.exists?(held)
+    end
+
+    test "a smoke database goes unless its run holds the database's lock; the lock goes with it", %{root: root} = ctx do
+      locks = Path.join(root, ".git")
+      hold(Path.join(locks, "tlon-smoke-db-tlon_smoke_live.lock"))
+      File.write!(Path.join(locks, "tlon-smoke-db-tlon_smoke_killed.lock"), "")
+
+      dropped = sweep(ctx, "tlon_smoke_live tlon_smoke_killed tlon_smoke_unrecorded")
+
+      assert dropped == [
+               ~s(DROP DATABASE IF EXISTS "tlon_smoke_killed"),
+               ~s(DROP DATABASE IF EXISTS "tlon_smoke_unrecorded")
+             ]
+
+      assert File.exists?(Path.join(locks, "tlon-smoke-db-tlon_smoke_live.lock"))
+      refute File.exists?(Path.join(locks, "tlon-smoke-db-tlon_smoke_killed.lock"))
+      refute File.exists?(Path.join(locks, "tlon-smoke-db-tlon_smoke_unrecorded.lock"))
     end
   end
 end
