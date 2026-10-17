@@ -42,7 +42,7 @@ export function tickForRedThreads(l: Ledger, redIds: readonly number[], threads:
   let next = l
   const ticked = new Set<number>()
   for (const id of redIds) {
-    if (l.ticked.has(id)) { ticked.add(id); continue }
+    if (l.ticked.has(id) || ticked.has(id)) { ticked.add(id); continue }
     const lead = byId.get(id)
     if (lead) { next = tickRed(next, lead); ticked.add(id) }
   }
