@@ -522,7 +522,7 @@ test("a session the server says was superseded is told to stop once, and takes n
 
 test("a superseded session whose newer one is gone claims the seat again instead of staying stopped", async ($, on) => {
   const text = "This session was superseded: a newer session now holds lonnrot's seat on thread #42. Stop.";
-  const world: World = { ownClock: true, wakes: [{ superseded: true, by: 9, text }, [], ["a wake the seat missed"]], submitted: [] };
+  const world: World = { ownClock: true, wakes: [{ superseded: true, by: 9, text }, [], ["a wake the seat missed"]], submitted: [], writes: [], env: { ...IDENTITY, XDG_STATE_HOME: "/state" } };
   const sent = engine(on, world);
   const clock = mock.clock(on);
   await $.session.start(START);
@@ -534,6 +534,7 @@ test("a superseded session whose newer one is gone claims the seat again instead
 
   expect(sent.filter((d) => d.tool === "register").length).toBe(2);
   expect(world.submitted).toEqual([text, "a wake the seat missed"]);
+  expect(world.writes!.some((w) => w.text.includes("take_wakes: no longer superseded — claiming the seat again"))).toBe(true);
 });
 
 test("a superseded session does not claim the seat back on a reply that is not a wake list", async ($, on) => {
@@ -550,6 +551,24 @@ test("a superseded session does not claim the seat back on a reply that is not a
 
   expect(sent.filter((d) => d.tool === "register").length).toBe(1);
   expect(world.submitted).toEqual([text]);
+});
+
+test("a later session.start whose register fails takes wakes without the earlier session's id", async ($, on) => {
+  const world: World = { ownClock: true };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+  expect(sent.filter((d) => d.tool === "take_wakes").at(-1)?.args).toEqual({ session_id: 5 });
+
+  world.notConnectedFor = 99;
+  await $.session.start(START);
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+  expect(sent.filter((d) => d.tool === "take_wakes").at(-1)?.args).toEqual({});
 });
 
 test("a wake whose submit fails is put back on the server, not lost", async ($, on) => {
