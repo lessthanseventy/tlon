@@ -137,7 +137,9 @@ defmodule Server.WorklineVerifyScriptTest do
       repo = Path.join(tmp, "tlon")
       File.mkdir_p!(Path.join(repo, "scripts"))
 
-      for s <- ~w(workline-verify.sh git-fetch-origin.sh),
+      File.mkdir_p!(Path.join(repo, "scripts/lib"))
+
+      for s <- ~w(workline-verify.sh git-fetch-origin.sh lib/seed-hex.sh),
           do: File.cp!(Path.join(Path.dirname(@script), s), Path.join(repo, "scripts/#{s}"))
 
       sh.(repo, """
@@ -186,13 +188,15 @@ defmodule Server.WorklineVerifyScriptTest do
     end
   end
 
-  # the script's seed_hex_home(), lifted out: `seed_hex_home <src> <dest>`
+  # scripts/lib/seed-hex.sh, which every gate sources: `seed_hex_home <src> <dest>`
   @seed ~S"""
-  eval "$(sed -n '/^seed_hex_home() {/,/^}/p' "$0")"
+  . "$0"
   seed_hex_home "$1" "$2"
   """
 
-  defp seed_hex_home(src, dest), do: System.cmd("bash", ["-c", @seed, @script, src, dest], stderr_to_stdout: true)
+  @seed_lib Path.expand("../../../scripts/lib/seed-hex.sh", __DIR__)
+
+  defp seed_hex_home(src, dest), do: System.cmd("bash", ["-c", @seed, @seed_lib, src, dest], stderr_to_stdout: true)
 
   describe "seed_hex_home: the gate's own Hex home" do
     @tag :tmp_dir
@@ -215,6 +219,19 @@ defmodule Server.WorklineVerifyScriptTest do
       dest = Path.join(tmp, "dest")
       assert {_, 0} = seed_hex_home(Path.join(tmp, "nowhere"), dest)
       assert File.ls!(dest) == []
+    end
+
+    @tag :tmp_dir
+    test "a config caught mid-rewrite (empty) is never seeded blank", %{tmp_dir: tmp} do
+      src = Path.join(tmp, "src")
+      File.mkdir_p!(src)
+      File.write!(Path.join(src, "hex.config"), "")
+      File.write!(Path.join(src, "cache.ets"), "ets")
+      dest = Path.join(tmp, "dest")
+
+      assert {_, 0} = seed_hex_home(src, dest)
+      refute File.exists?(Path.join(dest, "hex.config"))
+      assert File.read!(Path.join(dest, "cache.ets")) == "ets"
     end
   end
 end
