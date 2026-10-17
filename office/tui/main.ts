@@ -23,7 +23,7 @@ import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
-import { loadSouls, soulFor, soulLines, soulsSignature, useSouls } from "../kit/souls"
+import { loadSouls, soulFor, soulLines, soulNote, soulsSignature, useSouls } from "../kit/souls"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
@@ -1133,7 +1133,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
       }
       const soul = soulFor(name)
-      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
+      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...(soulNote(h) ? [{ segs: [dim(soulNote(h)!)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
       const rows: Row[] = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
       for (const l of personaLines(b?.persona, Math.max(20, cols() - 40))) rows.push({ segs: [dim(l)] })
       // Scharlach's desk dressing: the nameplate (tertius never agreed to the second part), the mug
