@@ -49,14 +49,26 @@ defmodule Server.Wake do
   @doc """
   Report each wake left untaken past `@overdue_s` to its workspace's sheriff, and let it go: its
   pane's session is not draining (no tlon-citizen mod, a session that never registered), which is a
-  fault to fix, never a pane to type into. The message it was for is still a row, and
+  fault to fix, never a pane to type into. A wake whose coworker is mid-turn on its thread (a live
+  session's `thinking_since` within the stale-turn clock, `Server.Presence.Thinking`) waits: a pane
+  in a long tool call drains only once the call returns. The message it was for is still a row, and
   `Server.Switchboard.redeliver_unheard/1` offers it again. Returns how many were reported.
   """
   def report_overdue(now \\ DateTime.utc_now()) do
     cutoff = DateTime.add(now, -@overdue_s)
+    live = DateTime.add(now, -Server.Presence.Thinking.stale_turn_seconds())
+
+    busy =
+      from s in Server.Session,
+        join: a in Server.Agent,
+        on: a.id == s.agent_id,
+        where:
+          s.thread_id == parent_as(:wake).thread_id and a.name == parent_as(:wake).agent and is_nil(s.ended_at) and
+            s.thinking_since > ^live,
+        select: 1
 
     {n, wakes} =
-      Repo.delete_all(from(w in __MODULE__, where: w.inserted_at < ^cutoff, select: w))
+      Repo.delete_all(from(w in __MODULE__, as: :wake, where: w.inserted_at < ^cutoff and not exists(busy), select: w))
 
     wakes
     |> Enum.uniq_by(&{&1.thread_id, &1.agent})
