@@ -14,6 +14,8 @@
 # anyway. Run it unsandboxed. CHECKS_UNQUEUED=1 runs it without the queue, for a box with no
 # usable XDG_RUNTIME_DIR.
 set -u
+. "$(dirname "$0")/lib/fresh-script.sh"
+refuse_stale_script "$0"
 
 dir="${XDG_RUNTIME_DIR:-/tmp}"
 lock="$dir/tlon-checks.lock"

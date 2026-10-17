@@ -34,6 +34,9 @@ control loop, not two, and no second way to run anything:
   detached worktree under `~/.cache/tlon-scratch/` (never inside the repo, where a `tN` dir reads as stranded
   work) with the gates' and menard's deps installed; publish with `git push origin HEAD:refs/heads/<branch>`.
   Prune removes the ones whose work landed (clean, every commit on origin/main by patch) and says why the rest stay.
+- Machine-wide scripts (`checks-queue.sh`, `release-smoke.sh`) act on state every checkout shares, so a
+  checkout whose copy `origin/main` has changed since it branched is refused (exit 2, `scripts/lib/fresh-script.sh`):
+  rebase onto origin/main; `TLON_STALE_SCRIPTS_OK=1` runs it anyway. A sandboxed `release:smoke` is refused too.
 - `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against
   server recall on the throwaway `tlon_bench` db, never the live store; `bench/longmemeval/bridge.exs` says what each
   `TLON_BENCH_MODE` measures, and `-- --memory bm25` runs the keyword reference on the same slice.
