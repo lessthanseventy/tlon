@@ -35,6 +35,17 @@ export const caughtNth = (n: number) => n % 4 === 3
 /** a post's identity across the feed and a thread's messages: the thread, its moment, its author */
 export const earmarkOf = (tid: number, at: string, who: string | null) => `${tid}|${at}|${who ?? ""}`
 
+/** how many earmarks a restart remembers: the newest */
+export const EARMARKS_MAX = 200
+/** the earmarks as the TUI keeps them on disk; a missing or damaged file is none */
+export function earmarksIn(text: string): Set<string> {
+  try {
+    const v = JSON.parse(text)
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [])
+  } catch { return new Set() }
+}
+export const earmarksOut = (marks: Set<string>): string => JSON.stringify([...marks].slice(-EARMARKS_MAX))
+
 export type FeedRow = { kind: string; at: string; thread_id: number | null; who: string | null; text: string }
 /** the feed's uqbar posts not seen yet, oldest first; marks every row seen. `first`: history, not news */
 export function freshPosts(feed: FeedRow[], seen: Set<string>, first: boolean): FeedRow[] {
