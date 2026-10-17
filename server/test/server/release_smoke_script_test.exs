@@ -22,6 +22,14 @@ defmodule Server.ReleaseSmokeScriptTest do
     "http://127.0.0.1:#{port}"
   end
 
+  # a port nothing answers on now, so overlapping suite runs never meet on one
+  defp free_port do
+    {:ok, socket} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
+    {:ok, port} = :inet.port(socket)
+    :gen_tcp.close(socket)
+    port
+  end
+
   defp smoke(url), do: System.cmd("bash", [@script], env: [{"TLON_SMOKE_URL", url}], stderr_to_stdout: true)
 
   test "a broken /api/office fails the smoke, saying so" do
@@ -63,39 +71,39 @@ defmodule Server.ReleaseSmokeScriptTest do
       File.write!(Path.join(bin, "psql"), "#!/bin/sh\nexit 0\n")
       File.chmod!(Path.join(bin, "psql"), 0o755)
       on_exit(fn -> File.rm_rf!(tmp) end)
-      %{tmp: tmp, root: root}
+      %{tmp: tmp, root: root, port: free_port()}
     end
 
-    defp run_smoke(tmp, root, args) do
+    defp run_smoke(%{tmp: tmp, root: root, port: port}, args) do
       env = [
         {"TMPDIR", tmp},
         {"PATH", Path.join(tmp, "bin") <> ":" <> System.get_env("PATH")},
-        {"TLON_SMOKE_PORT", "4599"},
-        {"TLON_SMOKE_DATABASE", "tlon_smoke_fetch_test"}
+        {"TLON_SMOKE_PORT", "#{port}"},
+        {"TLON_SMOKE_DATABASE", "tlon_smoke_fetch_#{port}"}
       ]
 
       System.cmd("bash", [Path.join([root, "scripts", "release-smoke.sh"]) | args], env: env, stderr_to_stdout: true)
     end
 
-    test "a smoke of a local work/<slug> ref goes on past a failed fetch", %{tmp: tmp, root: root} do
-      {out, _} = run_smoke(tmp, root, ["work/feature"])
+    test "a smoke of a local work/<slug> ref goes on past a failed fetch", ctx do
+      {out, _} = run_smoke(ctx, ["work/feature"])
 
       refute out =~ "smoke FAILED: can't fetch origin"
-      assert out =~ ~r/smoke: [0-9a-f]{7} on :4599/
+      assert out =~ ~r/smoke: [0-9a-f]{7} on :#{ctx.port}/
     end
 
-    test "a smoke of origin/main still fails when origin can't be fetched", %{tmp: tmp, root: root} do
-      assert {out, 1} = run_smoke(tmp, root, [])
+    test "a smoke of origin/main still fails when origin can't be fetched", ctx do
+      assert {out, 1} = run_smoke(ctx, [])
       assert out =~ "smoke FAILED: can't fetch origin"
     end
 
-    test "a second smoke of a commit already being smoked refuses, naming the run", %{tmp: tmp, root: root} do
+    test "a second smoke of a commit already being smoked refuses, naming the run", %{tmp: tmp, root: root} = ctx do
       {sha, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/feature"])
       lock = Path.join(tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
       File.write!(lock, "pid 123 on http://127.0.0.1:4777\n")
       hold_lock(lock)
 
-      assert {out, 1} = run_smoke(tmp, root, ["work/feature"])
+      assert {out, 1} = run_smoke(ctx, ["work/feature"])
       assert out =~ "is already being smoked (pid 123 on http://127.0.0.1:4777)"
       refute File.exists?(Path.join(tmp, "tlon-smoke"))
     end
@@ -181,12 +189,13 @@ defmodule Server.ReleaseSmokeScriptTest do
     end
 
     test "a smoke from a checkout older than the build lock leaves a running smoke's build alone", ctx do
+      port = free_port()
       env = [
         {"TMPDIR", ctx.tmp},
         {"PATH", ctx.stubs <> ":" <> System.get_env("PATH")},
         {"SMOKE_SIGNAL", ctx.signal},
-        {"TLON_SMOKE_PORT", "4598"},
-        {"TLON_SMOKE_DATABASE", "tlon_smoke_race_test"}
+        {"TLON_SMOKE_PORT", "#{port}"},
+        {"TLON_SMOKE_DATABASE", "tlon_smoke_race_#{port}"}
       ]
 
       script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
