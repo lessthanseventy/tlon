@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { contrast, ROLE } from "../kit/palette"
-import { dialsOf, gearOf, idsIn, nextPart, PARTS, PART_IDS, SLOTS, type DialVals, type Slot } from "../kit/parts"
+import { dialsOf, gearOf, idsIn, nextDial, nextPart, PARTS, PART_IDS, SLOTS, type DialVals, type Slot } from "../kit/parts"
 import { BODIES, figure, heightOf, lookOf, paints, rollLook, type Dir, type Look } from "../kit/sprites"
 
 /** every combination of a part's dials */
@@ -60,6 +60,20 @@ describe("dials", () => {
     for (let i = 0; i < 20 && cur; i++) { seen.push(cur.id); cur = nextPart("head", cur) }
     expect(seen).toEqual(idsIn("head"))
     expect(nextPart("head", undefined)!.id).toBe(idsIn("head")[0]!)
+  })
+  test("nextDial walks one dial's options and round again, leaving the part's other dials as set", () => {
+    const opts = PARTS.tophat!.dials.crown!
+    let cur: { id: string; dials?: DialVals } = { id: "tophat" }
+    const seen: (string | number)[] = []
+    for (let i = 0; i < opts.length; i++) { seen.push(dialsOf(PARTS.tophat!, cur.dials).crown!); cur = nextDial(cur, "crown") }
+    expect(seen).toEqual([...opts])
+    expect(dialsOf(PARTS.tophat!, cur.dials).crown).toBe(opts[0]!)
+    for (const [id, p] of Object.entries(PARTS)) {
+      const names = Object.keys(p.dials)
+      if (names.length < 2) continue
+      const set = nextDial({ id, dials: { [names[1]!]: p.dials[names[1]!]!.at(-1)! } }, names[0]!)
+      expect(set.dials![names[1]!]).toBe(p.dials[names[1]!]!.at(-1)!)
+    }
   })
 })
 

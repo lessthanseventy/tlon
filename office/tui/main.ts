@@ -23,13 +23,13 @@ import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
-import { loadSouls, soulFor, soulLines, soulsSignature, useSouls } from "../kit/souls"
+import { loadSouls, soulFor, soulLines, soulNote, soulsSignature, useSouls } from "../kit/souls"
 import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
 import { usageHeader } from "../kit/usage"
-import { nextPart, SLOTS } from "../kit/parts"
-import { bringBack, candidateOf, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
+import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
+import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, toggleLock as storeToggle, type Store } from "../kit/store"
 import { stepStoreRow, storeRows, storeNamesTaken } from "./store"
@@ -57,7 +57,7 @@ import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewpor
 import { parseWhen, showWhen } from "./when"
 import { downHeader } from "./down"
 import { oneInFlight } from "./flight"
-import { earmarkOf, freshPosts, handoffFrom } from "../kit/plane"
+import { earmarkOf, earmarksIn, earmarksOut, freshPosts, handoffFrom } from "../kit/plane"
 import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
 type Mode =
@@ -83,6 +83,7 @@ const STATE_DIR = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local/sta
 const STATE = join(STATE_DIR, "office-workspace")
 const TRAY = join(STATE_DIR, "office-tray") // when you last read the in-tray
 const SAID = join(STATE_DIR, "office-banter") // the room's last lines said, for the banter log
+const EARS = join(STATE_DIR, "office-earmarks") // the posts Argos caught, so a restart keeps their dog-ears
 const LOOKED = join(STATE_DIR, "margin-looked") // the last focused moment, epoch seconds: older margin notes start already seen
 const OPERATOR = process.env.TLON_OPERATOR ?? "andrew"
 // the machine's palette, when it hands one in: `{ "role": { "<role>": "#rrggbb", … } }` (or the bare
@@ -175,7 +176,7 @@ function followHall(): boolean {
 }
 async function hallHire() {
   const ctx = hallCtx(), c = candidateOf(hall, ctx)
-  if (ctx.taken.includes(c.name)) { status = `${c.name} is already on the bench — pass, or unlock the name`; return draw() }
+  if (ctx.taken.includes(c.name)) { status = `${c.name} is already on the bench — pass, or drop it`; return draw() }
   if (world) world.hire(c)
   else {
     if (ws === null) return
@@ -433,7 +434,7 @@ async function tickLedger() {
   const t = count > 0 ? await data.triage(sws) : null
   if (count > 0 && !t) return
   const before = new Map(ledger.demerits)
-  ledger = tickFromTriage(ledger, count, t?.failed_checks.shown.map((s) => s.thread_id) ?? [], all.threads)
+  ledger = tickFromTriage(ledger, count, t?.failed_thread_ids ?? t?.failed_checks.shown.map((s) => s.thread_id) ?? [], all.threads)
   // rimworld: a red build sours that coworker's afternoon — room-local, the room's own reading of what it already saw
   for (const [who, n] of ledger.demerits) if (n > (before.get(who) ?? 0)) for (const r of rooms.values()) r.sourMood(who)
 }
@@ -457,14 +458,17 @@ function notify(title: string, body: string) {
 const flown = new Set<string>()
 async function loadMargin() { notes = ws === null ? [] : await data.margin(ws) }
 /** the posts whose aeroplane Argos caught, by `earmarkOf`: the thread shows them dog-eared */
-const earmarked = new Set<string>()
+const earmarked = earmarksIn(readState(EARS))
 async function loadFeed() {
   if (ws === null) return
   const first = !feed.length
   feed = (await data.activity(ws)) ?? feed
   const v = view(), r = room()
   for (const x of freshPosts(feed, flown, first)) {
-    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(v.visits, v, x.thread_id!, Date.now()))) earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
+    if (r instanceof WideRoom && r.fly(x.thread_id!, v, handoffFrom(v.visits, v, x.thread_id!, Date.now()))) {
+      earmarked.add(earmarkOf(x.thread_id!, x.at, x.who))
+      writeState(EARS, earmarksOut(earmarked))
+    }
   }
   // a first run starts with the tray read, not with everything that ever happened in it
   if (!trayRead && feed[0]) { trayRead = feed[0].at; writeState(TRAY, trayRead) }
@@ -1129,7 +1133,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
       }
       const soul = soulFor(name)
-      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
+      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...(soulNote(h) ? [{ segs: [dim(soulNote(h)!)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
       const rows: Row[] = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
       for (const l of personaLines(b?.persona, Math.max(20, cols() - 40))) rows.push({ segs: [dim(l)] })
       // Scharlach's desk dressing: the nameplate (tertius never agreed to the second part), the mug
@@ -1693,11 +1697,17 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         field("outfit", draft.outfit ?? "none", () => { draft.outfit = cycleOpt(Object.keys(OUTFIT) as Outfit[], draft.outfit) }),
         field("accessory", draft.accessory ?? "none", () => { draft.accessory = cycleOpt(Object.keys(ACCESSORY) as Accessory[], draft.accessory) }),
         field("build", draft.body ?? "average", () => { draft.body = cycleVal(BODIES, draft.body ?? "average") }),
-        ...SLOTS.map((slot) => field(slot, draft.parts?.[slot]?.id ?? "none", () => {
-          const next = nextPart(slot, draft.parts?.[slot]), parts = { ...draft.parts }
-          if (next) parts[slot] = next; else delete parts[slot]
-          draft.parts = parts
-        })),
+        ...SLOTS.flatMap((slot) => {
+          const spec = draft.parts?.[slot], p = spec ? PARTS[spec.id] : undefined
+          return [
+            field(slot, spec?.id ?? "none", () => {
+              const next = nextPart(slot, spec), parts = { ...draft.parts }
+              if (next) parts[slot] = next; else delete parts[slot]
+              draft.parts = parts
+            }),
+            ...Object.keys(p?.dials ?? {}).map((dial) => field(`  ${dial}`, String(dialsOf(p!, spec!.dials)[dial]), () => { draft.parts = { ...draft.parts, [slot]: nextDial(spec!, dial) } })),
+          ]
+        }),
       ]
       return {
         title: `LOOK · ${name.toUpperCase()}`, rows,
@@ -1763,7 +1773,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `MAYBE PILE · ${hall.pile.length}`,
         rows: rows.length ? rows : [{ segs: [dim("nobody yet — ↑ in the hall keeps a candidate here")] }],
         actions: [
-          { key: "x", label: "drop", run: () => { const i = rows[sel]?.ref; if (typeof i === "number") { hallSet({ ...hall, pile: hall.pile.filter((_, j) => j !== i) }); sel = Math.max(0, sel - 1); draw() } } },
+          { key: "x", label: "drop", run: () => { const i = rows[sel]?.ref; if (typeof i === "number") { hallSet({ ...hall, pile: dropPile(hall.pile, i) }); sel = Math.max(0, sel - 1); draw() } } },
           { key: "esc", label: "back to the hall", run: () => open({ kind: "hall" }) },
         ],
       }
@@ -2086,7 +2096,7 @@ function toyKey(k: string): boolean {
   switch (k) {
     case "d": r.play("doorbell"); status = "ding dong"; break
     case "e": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
-    case "f": r.play("drill"); status = "fire drill!"; break
+    case "f": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
     case "t": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
     case "n": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
     case "w": world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break

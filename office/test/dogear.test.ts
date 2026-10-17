@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { earmarkOf } from "../kit/plane"
+import { EARMARKS_MAX, earmarkOf, earmarksIn, earmarksOut } from "../kit/plane"
 import { Reader } from "../tui/reader"
 import { viewOf } from "../kit/crew"
 import { WideRoom } from "../rooms/wide"
@@ -39,5 +39,21 @@ describe("the room says which plane Argos caught", () => {
       for (let i = 0; i < 300; i++) room.step(v)
       expect([0, 1, 2, 3, 4].map(() => room.fly(102, v))).toEqual([false, false, false, true, false])
     })
+  })
+})
+
+describe("dog-ears survive a restart", () => {
+  test("what is written reads back, in order", () => {
+    const a = earmarkOf(7, "2026-10-12T10:02:00.000000Z", "uqbar"), b = earmarkOf(8, "2026-10-12T10:03:00.000000Z", "uqbar")
+    expect([...earmarksIn(earmarksOut(new Set([a, b])))]).toEqual([a, b])
+  })
+  test("a missing, empty or damaged file is no earmarks", () => {
+    for (const t of ["", "not json", "{}", "[1,2]"]) expect([...earmarksIn(t)]).toEqual([])
+  })
+  test("only the newest are kept", () => {
+    const all = new Set(Array.from({ length: EARMARKS_MAX + 5 }, (_, i) => earmarkOf(i, "t", "uqbar")))
+    const back = [...earmarksIn(earmarksOut(all))]
+    expect(back.length).toBe(EARMARKS_MAX)
+    expect(back.at(-1)).toBe(earmarkOf(EARMARKS_MAX + 4, "t", "uqbar"))
   })
 })
