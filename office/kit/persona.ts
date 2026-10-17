@@ -12,12 +12,23 @@ export type Persona = {
 export function personaLines(p: Persona | null | undefined, width: number): string[] {
   if (!p) return []
   const out: string[] = []
-  let line = ""
-  for (const w of p.backstory.split(/\s+/).filter(Boolean)) {
-    if (line && line.length + 1 + w.length > width) { out.push(line); line = w } else line = line ? `${line} ${w}` : w
+  // a labelled line's continuation is indented under its text, so the label still reads as a column
+  const wrap = (text: string, label = "") => {
+    const pad = " ".repeat(label.length)
+    let line = label, empty = true
+    for (const w of text.split(/\s+/).filter(Boolean)) {
+      if (empty) line += w
+      else if (line.length + 1 + w.length > width) { out.push(line); line = pad + w } else line += ` ${w}`
+      empty = false
+    }
+    if (!empty) out.push(line)
   }
-  if (line) out.push(line)
-  out.push(`voice: ${p.voice}`, `desk: ${p.quirks.desk_object}`, `hobby: ${p.quirks.hobby}`, `says: "${p.quirks.catchphrase}"`, `peeve: ${p.quirks.pet_peeve}`)
+  wrap(p.backstory)
+  wrap(p.voice, "voice: ")
+  wrap(p.quirks.desk_object, "desk: ")
+  wrap(p.quirks.hobby, "hobby: ")
+  wrap(`"${p.quirks.catchphrase}"`, "says: ")
+  wrap(p.quirks.pet_peeve, "peeve: ")
   out.push(p.edited ? `edited · seed ${p.seed}` : p.source === "fallback" ? `handwritten · seed ${p.seed}` : `seed ${p.seed}`)
   return out
 }
