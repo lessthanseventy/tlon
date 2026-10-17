@@ -73,9 +73,9 @@ linked window at a time, ctrl+] to the lobby).
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
   zoomed like a coworker's terminal. `D` on a home workspace (its home card or LIFE card) opens the dump,
   the one page the operator pours everything into, in their own `$VISUAL`/`$EDITOR` the same way: every save
-  goes to the server (`PUT /api/life/:ws/dump`), a save the server didn't take is retried, and `E` lists the
+  goes to the server (`PUT /api/life/:ws/dump`), a save the server didn't take is retried on the next write, leave, open or refresh, and `E` lists the
   earlier pages each save kept, to read or put back. That tmux is `TLON_OFFICE_TMUX` (default `tlon-office`), its
-  files under `$XDG_RUNTIME_DIR/<it>`, so a drive's never touch the operator's. It is the
+  files under `$XDG_RUNTIME_DIR/<it>` (the dump's under `$XDG_STATE_HOME/tlon/<it>`, so unsent words survive a reboot), so a drive's never touch the operator's. It is the
   operator's surface. Its header carries what waits on you (`⚑ N blocking · M to decide`, from
   `GET /api/office/needs`), `i` (or a click on it) opens that queue with each item's own actions, a click on the header's `⚠` warning opens the rack (`H`), and a TUI on an older
   office than main offers `R` to reload itself. Work that lands dark hides behind a server flag,

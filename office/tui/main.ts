@@ -401,6 +401,7 @@ let lastOk: Agents = EMPTY, lastOkNeeds: data.Need[] = []
 // one refresh in flight and at most one queued: a write's follow-up reads what it wrote (tui/flight.ts)
 const refresh = oneInFlight(refreshOnce)
 async function refreshOnce() {
+  for (const w of dumpSent.keys()) syncDump(w, true)
   // the snapshot lands, and shows, as soon as it comes: the inbox read beside it takes seconds (a git
   // check per stray worktree), and a finder opened meanwhile would list nothing
   const rest = Promise.all([data.needs(), data.settings()])
@@ -2326,23 +2327,24 @@ async function restorePage(id: number) {
   if (!now) { status = "the dump can't be read: the server isn't answering"; return draw() }
   if (dumpSending.has(w) || (file?.trim() && file !== now.body)) { status = "the dump has a save still on its way: D to send it, then put the page back"; return draw() }
   await did(data.dumpPut(w, p.body).then((r) => {
-    if (r.ok) { dumpSent.set(w, p.body); mkdirSync(OWN_DIR, { recursive: true }); writeFileSync(dumpFile(w), p.body) }
+    if (r.ok) { dumpSent.set(w, p.body); mkdirSync(dirname(dumpFile(w)), { recursive: true }); writeFileSync(dumpFile(w), p.body) }
     return r.line
   }))
   await loadCard(); draw()
 }
 /** the home's dump in the operator's own editor, in the office's tmux. Every save goes to the server, one PUT at
  *  a time per home (a write that lands mid-PUT is sent when it settles), and one the server didn't take is sent on
- *  the next write, leave or open: a file that differs from the server's page is never overwritten, it is sent —
+ *  the next write, leave, open or refresh: a file that differs from the server's page is never overwritten, it is sent —
  *  safe because the server keeps the page each save replaces. A session already open is reattached, never rewritten */
 const dumpSent = new Map<number, string>(), dumpSending = new Set<number>(), dumpAgain = new Set<number>(), dumpWatched = new Set<number>()
-const dumpFile = (w: number) => `${OWN_DIR}/dump-${w}.md`
-function syncDump(w: number) {
+// on disk, not the runtime tmpfs: words the server hasn't taken yet survive a logout or a reboot
+const dumpFile = (w: number) => join(STATE_DIR, OWN_TMUX, `dump-${w}.md`)
+function syncDump(w: number, quiet = false) {
   let text: string
   try { text = readFileSync(dumpFile(w), "utf8") } catch { return }
   if (text === dumpSent.get(w)) return
   if (dumpSending.has(w)) { dumpAgain.add(w); return }
-  if (!text.trim()) { status = "the dump came back blank — not saved; the last page stands"; return draw() }
+  if (!text.trim()) { if (quiet) return; status = "the dump came back blank — not saved; the last page stands"; return draw() }
   dumpSending.add(w)
   void did(data.dumpPut(w, text).then((r) => {
     dumpSending.delete(w)
