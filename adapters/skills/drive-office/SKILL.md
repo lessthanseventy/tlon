@@ -31,6 +31,8 @@ TLON_URL=http://127.0.0.1:4041 mise run office:drive -- "/" "'108'" "Enter" "r" 
   window, the wide room in half blocks) and `OFFICE_TEXT=1` (every row, pixels dropped: "Ding
   dong!", "Pizza! …", the wall's `NOTES n` read as lines). Doors, bubbles and who stands where
   come out as balloon text and labels; a shape is not text, so to see one render a frame.
+- The toy's keys (`e`, `f`, `d`) and its events run only in the made-up world, never against a server:
+  `OFFICE_SANDBOX=1` starts the TUI with `--sandbox` (no `TLON_URL` needed) for a change to the toy.
 - `OFFICE_TAIL=60` prints the whole screen; `OFFICE_WAIT` lengthens the settle for slow reads.
 - `"wait:TEXT"` sends no keys: it waits (30 s at most) until the screen shows TEXT. Open the finder
   only after `"wait:‹ Machine ›"`: until the TUI's first snapshot lands it lists nothing.
