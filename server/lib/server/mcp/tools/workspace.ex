@@ -165,20 +165,27 @@ defmodule Server.MCP.Tool.FileTicket do
     field :assignee, :string, description: "Who it's for (an agent handle or the operator), optional"
     field :epic_id, :integer, description: "File the ticket as a child of this epic (a ticket of kind epic), optional"
     field :issue_id, :integer, description: "The open issue this ticket fixes, optional: the ticket owns it"
+
+    field :blocked_by, {:list, :integer},
+      description: "Ids of the tickets this one waits on, optional (a missing id is refused)"
   end
 
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
     {issue_id, params} = Map.pop(params, :issue_id)
+    {blocked_by, params} = Map.pop(params, :blocked_by, [])
 
     with workspace_id when not is_nil(workspace_id) <- Tool.workspace_of(identity),
          {:ok, issue} <- ownable(issue_id, workspace_id),
+         [] <- Tickets.bad_blockers(blocked_by),
          {:ok, ticket} <- Tickets.file(Map.put(params, :workspace_id, workspace_id)) do
       if issue, do: {:ok, _} = Server.Dossier.own_issue(issue, ticket, "filed by #{identity.agent}")
+      :ok = Tickets.set_blockers(ticket.id, blocked_by)
       reply(frame, {:ok, ticket}, &MCP.Brief.ticket/1)
     else
       nil -> fail(frame, "no workspace bound to this session")
+      [_ | _] = bad -> fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
       error -> reply(frame, error, &MCP.Brief.ticket/1)
     end
   end
@@ -256,7 +263,11 @@ defmodule Server.MCP.Tool.ListTickets do
 end
 
 defmodule Server.MCP.Tool.UpdateTicket do
-  @moduledoc "Update a ticket's status/priority/title/body/assignee/labels. `id` identifies it; a missing ticket is refused."
+  @moduledoc """
+  Update a ticket's status/priority/title/body/assignee/labels/blocked_by. `id` identifies it; a missing
+  ticket is refused. `blocked_by` replaces the tickets it waits on (`[]` clears them); a missing id, or
+  its own, is refused.
+  """
   use Server.MCP.Tool
 
   alias Server.MCP
@@ -270,6 +281,7 @@ defmodule Server.MCP.Tool.UpdateTicket do
     field :title, :string
     field :body, :string
     field :assignee, :string
+    field :blocked_by, {:list, :integer}, description: "Replace the tickets it waits on; `[]` clears them"
   end
 
   @impl true
@@ -279,8 +291,20 @@ defmodule Server.MCP.Tool.UpdateTicket do
         fail(frame, "no ticket ##{params[:id]}")
 
       ticket ->
+        {blocked_by, params} = Map.pop(params, :blocked_by)
         attrs = params |> Map.delete(:id) |> Map.reject(fn {_k, v} -> is_nil(v) end)
-        reply(frame, Tickets.update(ticket, attrs), &MCP.Brief.ticket/1)
+
+        case Tickets.bad_blockers(blocked_by || [], ticket.id) do
+          [] -> reply(frame, update(ticket, attrs, blocked_by), &MCP.Brief.ticket/1)
+          bad -> fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
+        end
+    end
+  end
+
+  defp update(ticket, attrs, blocked_by) do
+    with {:ok, _} = result <- Tickets.update(ticket, attrs) do
+      if is_list(blocked_by), do: Tickets.set_blockers(ticket.id, blocked_by)
+      result
     end
   end
 end
