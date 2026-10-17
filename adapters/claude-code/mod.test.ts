@@ -552,6 +552,24 @@ test("a superseded session does not claim the seat back on a reply that is not a
   expect(world.submitted).toEqual([text]);
 });
 
+test("a later session.start whose register fails takes wakes without the earlier session's id", async ($, on) => {
+  const world: World = { ownClock: true };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+  expect(sent.filter((d) => d.tool === "take_wakes").at(-1)?.args).toEqual({ session_id: 5 });
+
+  world.notConnectedFor = 99;
+  await $.session.start(START);
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+  expect(sent.filter((d) => d.tool === "take_wakes").at(-1)?.args).toEqual({});
+});
+
 test("a wake whose submit fails is put back on the server, not lost", async ($, on) => {
   const world: World = { ownClock: true, wakes: [["wake one", "wake two"]], submitFails: true };
   const sent = engine(on, world);

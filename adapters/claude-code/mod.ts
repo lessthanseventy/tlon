@@ -478,6 +478,7 @@ export function register(on) {
     registration = pane ? { pane_ref: pane } : {};
     registerFailed = false;
     superseded = false;
+    sessionId = null;
     void registerNow($);
     $.clock.every(WAKE_POLL_MS, async () => {
       if (registration) await registerNow($);
