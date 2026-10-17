@@ -97,6 +97,16 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert out =~ "smoke FAILED: can't fetch origin"
     end
 
+    test "a smoke that can't reach Postgres (a sandboxed Bash) says to run it unsandboxed, before any build",
+         %{tmp: tmp} = ctx do
+      File.write!(Path.join([tmp, "bin", "psql"]), "#!/bin/sh\necho 'psql: error: '; exit 2\n")
+
+      assert {out, 1} = run_smoke(ctx, ["work/feature"])
+      assert out =~ "smoke FAILED: can't reach Postgres"
+      assert out =~ "unsandboxed"
+      refute File.exists?(Path.join(tmp, "tlon-smoke"))
+    end
+
     test "a second smoke of a commit already being smoked refuses, naming the run", %{tmp: tmp, root: root} = ctx do
       {sha, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/feature"])
       lock = Path.join(tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
