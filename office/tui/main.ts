@@ -29,7 +29,7 @@ import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
 import { usageHeader } from "../kit/usage"
 import { nextPart, SLOTS } from "../kit/parts"
-import { bringBack, candidateOf, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
+import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, toggleLock as storeToggle, type Store } from "../kit/store"
 import { stepStoreRow, storeRows, storeNamesTaken } from "./store"
@@ -1763,7 +1763,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `MAYBE PILE · ${hall.pile.length}`,
         rows: rows.length ? rows : [{ segs: [dim("nobody yet — ↑ in the hall keeps a candidate here")] }],
         actions: [
-          { key: "x", label: "drop", run: () => { const i = rows[sel]?.ref; if (typeof i === "number") { hallSet({ ...hall, pile: hall.pile.filter((_, j) => j !== i) }); sel = Math.max(0, sel - 1); draw() } } },
+          { key: "x", label: "drop", run: () => { const i = rows[sel]?.ref; if (typeof i === "number") { hallSet({ ...hall, pile: dropPile(hall.pile, i) }); sel = Math.max(0, sel - 1); draw() } } },
           { key: "esc", label: "back to the hall", run: () => open({ kind: "hall" }) },
         ],
       }
