@@ -310,6 +310,33 @@ defmodule Server.WorklineTest do
       assert Enum.any?(Channel.thread_messages(queued), &(&1.body =~ "merge queue"))
     end
 
+    test "an approval the db refuses to record leaves the gate on whoever held it, not a stranded thread" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      thread = open!(%{slug: "unrecorded", stage: "review"})
+      {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+
+      Repo.query!("""
+      CREATE FUNCTION refuse_approval() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'the disk is full'; END $$
+      """)
+
+      Repo.query!("""
+      CREATE TRIGGER refuse_approval BEFORE INSERT ON event FOR EACH ROW
+      WHEN (NEW.correlation = 'workline:unrecorded:approval') EXECUTE FUNCTION refuse_approval()
+      """)
+
+      on_exit(fn ->
+        Repo.query!("DROP TRIGGER IF EXISTS refuse_approval ON event")
+        Repo.query!("DROP FUNCTION IF EXISTS refuse_approval()")
+      end)
+
+      assert {:error, {:queue, why}} = Workline.approve(parked, artifacts: AllPresent, land: :queue)
+      assert why =~ "the disk is full"
+      assert %Server.Thread{stage: "review", awaiting: awaiting} = Repo.get(Server.Thread, thread.id)
+      assert awaiting == parked.awaiting
+      refute_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+    end
+
     test "its turn, green on main, no GitHub to wait on: merged, closed" do
       thread = open!(%{slug: "lands", stage: "review"})
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
