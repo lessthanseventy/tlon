@@ -46,8 +46,9 @@ export const PLAY: { key: string; label: string }[] = [
   { key: "d", label: "doorbell" }, { key: "e", label: "event" }, { key: "t", label: "treat" }, { key: "f", label: "fire drill" },
   { key: "n", label: "night" }, { key: "w", label: "weather" }, { key: "p", label: "pet" }, { key: "c", label: "call over" },
 ]
-/** off the sandbox, `e` alone fires an event (OFFICE_TOY_KEYS=1), and only where the card has no `e` of its own */
-export const toyEventKey = (k: string, cardClaimsE: boolean, env: Record<string, string | undefined> = process.env): boolean =>
-  k === "e" && !cardClaimsE && env.OFFICE_TOY_KEYS === "1"
+/** the play keys that need only the room, so the real office runs them under OFFICE_TOY_KEYS=1 */
+export const ROOM_PLAY = PLAY.filter((p) => ["d", "e", "f", "t", "p"].includes(p.key))
+/** off the sandbox, a room key runs when the flag is on and the card has no action of its own on that key */
+export const roomKey = (k: string, cardClaims: boolean, flag: boolean): boolean => ROOM_PLAY.some((p) => p.key === k) && !cardClaims && flag
 /** a card's actions in the sandbox: those the play keys shadow are hidden, since toyKey() takes them first */
 export const playable = <T extends { key: string }>(acts: T[]): T[] => acts.filter((x) => !PLAY.some((p) => p.key === x.key))
