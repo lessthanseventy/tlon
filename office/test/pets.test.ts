@@ -228,6 +228,7 @@ describe("every species is data", () => {
   test("art, exactly one slot, a destination table, a voice that falls back to Nina", () => {
     for (const sp of SPECIES) {
       const slot = slotOf(sp)
+      expect({ sp, sits: ((SPECIES_ART as Record<string, { sit: string[][] } | undefined>)[sp]?.sit.length ?? 0) > 0 }).toEqual({ sp, sits: true })
       expect({ sp, slots: ["cat", "dog"].filter((s) => (SLOT_SPECIES as Record<string, readonly string[]>)[s]!.includes(sp)).length }).toEqual({ sp, slots: 1 })
       if (slot !== "cat") continue
       const art = (SPECIES_ART as Record<string, Record<string, string[][]>>)[sp]!

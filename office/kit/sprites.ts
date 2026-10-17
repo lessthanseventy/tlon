@@ -281,9 +281,6 @@ export const BAOAQU = {
   stretch: [hop(BAO_SIT)],
 }
 
-/** the art the cat slot's species draws with */
-export const SPECIES_ART = { cat: CAT, rabbit: RABBIT, bird: BIRD, hamster: HAMSTER, rock: ROCK, baoaqu: BAOAQU }
-
 // Argos, the office dog (Borges' "The Immortal"), facing right: coat (k), ears (e), eye (i), nose
 // (n), tongue (p), tail (t), an eye shut (c)
 export const DOG = {
@@ -300,6 +297,9 @@ export const DOG = {
           ["...k.k....kk....", "..k...k...k..k..", ".kkkkkkkkkkkkke.", "tkkkkkkkkkkkkcke", ".kkkkkkkkkkkkkkn", "..kkkkkkkkkkkpp."]],
 }
 export const DOG_NAME = "Argos"
+
+/** each species' art: drawCat reads the cat slot's, the store's card any one's (the room's Argos is drawn from DOG itself) */
+export const SPECIES_ART = { cat: CAT, dog: fillArt(DOG), rabbit: RABBIT, bird: BIRD, hamster: HAMSTER, rock: ROCK, baoaqu: BAOAQU }
 
 /** `over` onto `rows`: a letter paints, `.` leaves the pixel, `_` clears it; `behind` paints only the clear pixels */
 function overlay(rows: string[], over: View | undefined, behind = false) {
