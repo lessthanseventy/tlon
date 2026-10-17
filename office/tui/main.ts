@@ -1133,7 +1133,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],
       }
       const soul = soulFor(name)
-      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text }) => [...(h ? [{ segs: [key(h)] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
+      const soulRows: Row[] = soul ? [{ segs: [dim("soul")] }, ...soulLines(soul).flatMap(({ head: h, text, note }) => [...(h ? [{ segs: [key(h), ...(note ? [dim(`  ${note}`)] : [])] }] : []), ...text.split("\n").map((l) => ({ segs: [plain(l)] }))])] : []
       const rows: Row[] = [...(c.thread === null ? [head, { segs: [dim("on the bench")] }] : [head, ...threadRows(threadOf(c.thread), c.thread, 1)]), ...soulRows]
       for (const l of personaLines(b?.persona, Math.max(20, cols() - 40))) rows.push({ segs: [dim(l)] })
       // Scharlach's desk dressing: the nameplate (tertius never agreed to the second part), the mug

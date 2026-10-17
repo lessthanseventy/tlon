@@ -44,11 +44,14 @@ export function loadSouls(dir: string): Record<string, Soul> {
   return out
 }
 
+/** People is parsed by these verbs (kit/company.ts), so a reworded section yields no affinity: the card says so */
+export const PEOPLE_NOTE = "read by verb: admires, needles, would cover for — other wording is not read"
+
 /** what a card shows: the known sections in design order then any extras, filled ones only; a file with no headings shows raw */
-export function soulLines(s: Soul): { head: string; text: string }[] {
+export function soulLines(s: Soul): { head: string; text: string; note?: string }[] {
   const known = new Set<string>(SOUL_SECTIONS)
   const order = [...SOUL_SECTIONS.filter(h => h !== "Diary"), ...Object.keys(s.sections).filter(h => !known.has(h)), "Diary"]
-  const lines = order.filter(h => s.sections[h]).map(h => ({ head: h, text: s.sections[h]! }))
+  const lines = order.filter(h => s.sections[h]).map(h => ({ head: h, text: s.sections[h]!, ...(h === "People" ? { note: PEOPLE_NOTE } : {}) }))
   const raw = s.raw.trim()
   return lines.length || !raw ? lines : [{ head: "", text: raw }]
 }

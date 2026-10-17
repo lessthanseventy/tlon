@@ -78,4 +78,10 @@ describe("soulLines", () => {
   test("an empty file shows nothing", () => {
     expect(soulLines(parseSoul(""))).toEqual([])
   })
+  test("People carries the note that it is read by verb, naming the verbs company.ts reads", () => {
+    const [people] = soulLines(parseSoul("## People\nadmires ada\n"))
+    expect(people!.head).toBe("People")
+    expect(people!.note).toContain("read by verb")
+    for (const verb of ["admires", "needles", "would cover for"]) expect(people!.note).toContain(verb)
+  })
 })
