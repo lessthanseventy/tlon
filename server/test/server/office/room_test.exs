@@ -104,6 +104,20 @@ defmodule Server.Office.RoomTest do
     assert Room.triage(ctx.other.id).count == 0
   end
 
+  test "triage: every failed check thread is named, however many the shown list caps", ctx do
+    for n <- 1..7 do
+      {:ok, t} = Channel.open_thread(%{title: "red #{n}", workspace_id: ctx.ws.id})
+      {:ok, _} = Dossier.record_check(%{thread_id: t.id, exit: 1, cmd: "mix test"})
+    end
+
+    tr = Room.triage(ctx.ws.id)
+
+    assert length(tr.failed_checks.shown) == 5
+    assert tr.failed_checks.more == 2
+    assert length(tr.failed_thread_ids) == 7
+    assert Enum.all?(tr.failed_checks.shown, &(&1.thread_id in tr.failed_thread_ids))
+  end
+
   test "health: says ok or names its problems, and encodes" do
     h = Room.health()
     assert h.db
