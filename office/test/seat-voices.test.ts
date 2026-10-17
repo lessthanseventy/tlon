@@ -24,6 +24,9 @@ describe("Scharlach's voice", () => {
     for (const l of lines) expect(l).toMatch(/[A-Z]/) // starts a sentence
     expect(lines.some((l) => /noted|resolved|filed|recorded|logged|issue|duly|hereby/i.test(l))).toBe(true)
   })
+  test("his room banter never claims a red build — it is said whatever the build's state", () => {
+    for (const l of SEAT_VOICE["scharlach"]!.banter) expect(l).not.toMatch(/build is red|demerit/i)
+  })
 })
 
 describe("seatLine", () => {
