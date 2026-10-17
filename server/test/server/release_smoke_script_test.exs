@@ -228,16 +228,32 @@ defmodule Server.ReleaseSmokeScriptTest do
       end
     end
 
-    test "a smoke from a checkout older than the build lock leaves a running smoke's build alone", ctx do
-      port = free_port()
-
-      env = [
+    defp race_env(ctx, port) do
+      [
         {"TMPDIR", ctx.tmp},
         {"PATH", ctx.stubs <> ":" <> System.get_env("PATH")},
         {"SMOKE_SIGNAL", ctx.signal},
         {"TLON_SMOKE_PORT", "#{port}"},
         {"TLON_SMOKE_DATABASE", "tlon_smoke_race_#{port}"}
       ]
+    end
+
+    test "a failed build stops the smoke at the build, not at a bin/server that isn't there", ctx do
+      stub(ctx.stubs, "mix", ~S"""
+      [ "$1" = release ] && { echo "mix release: boom"; exit 1; }
+      exit 0
+      """)
+
+      script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
+      env = race_env(ctx, free_port())
+      assert {out, 1} = System.cmd("bash", [script, "work/feature"], env: env, stderr_to_stdout: true)
+      assert out =~ "mix release: boom"
+      assert out =~ "the build or the migration of"
+      refute out =~ "No such file"
+    end
+
+    test "a smoke from a checkout older than the build lock leaves a running smoke's build alone", ctx do
+      env = race_env(ctx, free_port())
 
       script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
       smoke = Task.async(fn -> System.cmd("bash", [script, "work/feature"], env: env, stderr_to_stdout: true) end)
