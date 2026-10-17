@@ -30,8 +30,10 @@ and every layer the spine design's re-laid §9 asked for
   offers the other crews in the lobby, and a taken offer offers the way back at the reset.
 - **pause** (`Server.Pause`) — the office's stop controls, in the settings file's `"pause"` key so a
   restart keeps them: pencils down (intake and continuation nudges off, every live thread told to
-  finish its turn, commit and stop, as a notice; the calendar's agent and workline schedules wait,
-  firing once back at work, but for the operator's delegate's, `Server.Outside`), lights out (that, plus the verify and landing
+  finish its turn, commit and stop, as a notice; only the operator's own posts wake anyone — every
+  other wake, a stage brief or a coworker's post, is held undelivered for the drain back at work; the
+  calendar's agent and workline schedules wait, firing once back at work, the operator's delegate's
+  check-in too), lights out (that, plus the verify and landing
   queues paused — a boot under it starts them paused — and an Escape into every coworker pane),
   back to work (every still-open thread pencils down stopped woken: a chat @mentioning its lead as it
   is now). `POST /api/office/pause`, `tlon-cli pause`, the office's finder.

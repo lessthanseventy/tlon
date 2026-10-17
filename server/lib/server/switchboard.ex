@@ -39,6 +39,10 @@ defmodule Server.Switchboard do
      engine `Server.Presence.Engine.clocked_out?/1` reports spent (a pluggable §8
      backend, defaulting to always-available).
 
+  While the office is paused (`Server.Pause`) only the operator's own posts wake anyone; every other
+  message stays undelivered, by `deliver/1` and `drain/0` alike, and the first drain back at work
+  delivers it.
+
   With no arbiter configured (the headless service) every wake is bookkeeping only: the
   message is claimed as delivered, the recipient's warmth bumped, nothing poked.
   """
@@ -76,9 +80,11 @@ defmodule Server.Switchboard do
     # The pane is sitting on a dialog (Server.Attention): typing a message into it would answer
     # the dialog with garbage. Hold; the drain re-delivers once the prompt is resolved. A restart
     # waiting for quiet holds every new wake too, so the bench drains instead of starting turns
-    # the restart would cut; the drain after it delivers them.
+    # the restart would cut; the drain after it delivers them. A paused office holds every wake but
+    # the operator's own posts until back to work.
     if is_nil(message.delivered_at) and
-         (Server.Attention.waiting?(message.thread_id) or Server.Rollout.restart_pending?()),
+         (Server.Attention.waiting?(message.thread_id) or Server.Rollout.restart_pending?() or
+            paused_for?(message)),
        do: {:pending, message},
        else: deliver_now(message)
   end
@@ -166,7 +172,10 @@ defmodule Server.Switchboard do
   defp claim_reached(message) do
     touch_author(message)
 
-    case recipients(message) do
+    case if(paused_for?(message), do: :held, else: recipients(message)) do
+      :held ->
+        []
+
       [] ->
         # nobody warm is addressed: open their panes (a no-op while one is still booting); a message
         # that can reach nobody at all is settled, or every drain would read it again forever
@@ -583,4 +592,7 @@ defmodule Server.Switchboard do
       end
     end)
   end
+
+  defp paused_for?(%Message{author: author}),
+    do: Server.Pause.state() != :working and not Server.Channel.operator?(author)
 end

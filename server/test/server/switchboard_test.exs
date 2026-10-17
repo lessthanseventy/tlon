@@ -814,6 +814,69 @@ defmodule Server.SwitchboardTest do
     end
   end
 
+  describe "under a pause only the operator's own posts wake anyone (Server.Pause)" do
+    setup do
+      path = Path.join(System.tmp_dir!(), "sb-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      prior = Application.get_env(:server, :operator_config_path)
+      Application.put_env(:server, :operator_config_path, path)
+
+      on_exit(fn ->
+        File.rm(path)
+
+        if prior,
+          do: Application.put_env(:server, :operator_config_path, prior),
+          else: Application.delete_env(:server, :operator_config_path)
+      end)
+
+      %{config: path}
+    end
+
+    test "a stage brief and a coworker's wake are held under pencils down, by the drain too" do
+      %{thread: thread} = staffed_thread()
+      {:ok, :pencils_down} = Server.Pause.pencils_down()
+
+      {:ok, brief} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "review: read the diff"})
+      {:ok, peer} = Channel.post(%{thread_id: thread.id, author: "Robert", body: "@Sandra over to you"})
+
+      assert {:pending, _} = Switchboard.deliver(brief)
+      assert {:pending, _} = Switchboard.deliver(peer)
+      Switchboard.drain()
+
+      refute_received {:woke, _, _}
+      refute_received {:spawned, _}
+      assert Repo.get!(Message, brief.id).delivered_at == nil
+      assert Repo.get!(Message, peer.id).delivered_at == nil
+    end
+
+    test "the operator's own post is delivered under pencils down and under lights out", %{config: path} do
+      %{thread: thread} = staffed_thread()
+      {:ok, :pencils_down} = Server.Pause.pencils_down()
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "andrew", body: "one thing before you stop"})
+      assert {:delivered, _} = Switchboard.deliver(m)
+      assert_received {:woke, "wSandra", _}
+
+      File.write!(path, JSON.encode!(%{"pause" => "lights_out"}))
+      {:ok, late} = Channel.post(%{thread_id: thread.id, author: "Andrew", body: "and this"})
+      Switchboard.drain()
+      assert Repo.get!(Message, late.id).delivered_at
+      assert_received {:woke, "wSandra", _}
+    end
+
+    test "back to work: the next drain delivers every wake the pause held" do
+      %{thread: thread} = staffed_thread()
+      {:ok, :pencils_down} = Server.Pause.pencils_down()
+      {:ok, brief} = Channel.post(%{thread_id: thread.id, author: "tlon", body: "review: read the diff"})
+      assert {:pending, _} = Switchboard.deliver(brief)
+
+      {:ok, :working} = Server.Pause.back_to_work()
+      Switchboard.drain()
+
+      assert_received {:woke, "wSandra", _}
+      assert Repo.get!(Message, brief.id).delivered_at
+    end
+  end
+
   defp flush do
     receive do
       _ -> flush()

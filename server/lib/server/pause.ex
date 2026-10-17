@@ -2,7 +2,10 @@ defmodule Server.Pause do
   @moduledoc """
   The office's stop controls. Pencils down asks it to stop: intake routes nothing and no workline
   is nudged to continue (`Server.Intake`, `Server.Workline.Continuation`), and every coworker on a
-  live thread hears, as a `notice` that wakes nobody, to finish its turn, commit and stop. Lights
+  live thread hears, as a `notice` that wakes nobody, to finish its turn, commit and stop. While
+  paused only the operator's own posts wake anyone (`Server.Switchboard.deliver/1`): every other
+  wake — a stage brief, a sheriff's report, a coworker's post — is held undelivered and the drain after
+  back to work delivers it. Lights
   out is pencils down plus the verify and landing queues paused (`Server.Rollout.pause_gates/1`)
   and an Escape into every coworker pane; nothing is killed and every branch stays where it is.
   Back to work undoes either, and wakes every thread this pause stopped that is still open: a chat

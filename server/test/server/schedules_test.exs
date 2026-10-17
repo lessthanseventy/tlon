@@ -134,13 +134,12 @@ defmodule Server.SchedulesTest do
     File.write!(path, JSON.encode!(%{"pause" => "working"}))
     assert MapSet.new(Schedules.dispatch(now), & &1.schedule_id) == MapSet.new([agent.id, workline.id])
 
-    # the operator's delegate works through pencils down (that is when it does the releases); lights out stops it too
+    # an agent schedule posts as the operator, which a pause lets through: so the operator's delegate's
+    # check-in waits too
     {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
-    delegate = schedule!(ws, %{cron: "* * * * *", kind: "agent", agent: "uqbar", title: "check-in"})
+    _delegate = schedule!(ws, %{cron: "* * * * *", kind: "agent", agent: "uqbar", title: "check-in"})
     File.write!(path, JSON.encode!(%{"pause" => "pencils_down"}))
-
-    assert MapSet.new(Schedules.dispatch(DateTime.add(now, 120)), & &1.schedule_id) ==
-             MapSet.new([check.id, delegate.id])
+    assert MapSet.new(Schedules.dispatch(DateTime.add(now, 120)), & &1.schedule_id) == MapSet.new([check.id])
 
     File.write!(path, JSON.encode!(%{"pause" => "lights_out"}))
     assert MapSet.new(Schedules.dispatch(DateTime.add(now, 240)), & &1.schedule_id) == MapSet.new([check.id])
