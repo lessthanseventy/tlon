@@ -36,7 +36,7 @@ Adopting writes the candidate into the slot its family belongs to.
 
 **D-a, default (1) — adopt replaces the slot's occupant.** The old pet leaves by the door; the slot holds
 one pet. Chosen because slots are one-pet and a bigger slot model is slice 4. A confirm line names who
-leaves ("Nina leaves by the door. Adopt Biscuit? ⏎ / esc"). The alternatives, if Andrew picks them:
+leaves ("Nina leaves by the door. adopt Biscuit?", answered y / n like every confirm in the office). The alternatives, if Andrew picks them:
 (2) keep the old pet on a shelf/history — needs a slot-model rewrite, out of this slice; (3) refuse unless
 the slot is empty — but both slots always hold a pet (`DEFAULT_PETS`), so the store could never adopt.
 

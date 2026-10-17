@@ -228,6 +228,7 @@ describe("every species is data", () => {
   test("art, exactly one slot, a destination table, a voice that falls back to Nina", () => {
     for (const sp of SPECIES) {
       const slot = slotOf(sp)
+      expect({ sp, sits: ((SPECIES_ART as Record<string, { sit: string[][] } | undefined>)[sp]?.sit.length ?? 0) > 0 }).toEqual({ sp, sits: true })
       expect({ sp, slots: ["cat", "dog"].filter((s) => (SLOT_SPECIES as Record<string, readonly string[]>)[s]!.includes(sp)).length }).toEqual({ sp, slots: 1 })
       if (slot !== "cat") continue
       const art = (SPECIES_ART as Record<string, Record<string, string[][]>>)[sp]!
@@ -285,6 +286,10 @@ describe("the preview speaks in the species' voice", () => {
   test("a hamster's preview lines are the hamster's, never Nina's", () => {
     const v = SPECIES_VOICE.hamster, own = [...v.sassy.pet, ...v.sassy.muse, ...v.sweet.pet, ...v.sweet.muse]
     for (let t = 0; t < 400; t += 10) expect(own).toContain(previewOf({ name: "Biscuit", species: "hamster", temperament: { warmth: 2, wits: 0, energy: 0 } }, t).line)
+  })
+  test("a dog's preview lines are the dog's, never Nina's", () => {
+    const v = SPECIES_VOICE.dog, own = [...v.sassy.pet, ...v.sassy.muse, ...v.sweet.pet, ...v.sweet.muse]
+    for (const warmth of [-2, 2]) for (let t = 0; t < 400; t += 10) expect(own).toContain(previewOf({ name: "Rex", species: "dog", temperament: { warmth, wits: 0, energy: 0 } }, t).line)
   })
 })
 

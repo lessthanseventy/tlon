@@ -29,9 +29,10 @@ export function roll(species: Species, seed: string, taken: readonly string[]): 
   return { seed, species, name, temperament: { warmth: axis("warmth"), wits: axis("wits"), energy: axis("energy") }, shade: h("shade") % SHADES }
 }
 
+/** `taken` is the card's own species' list: a carried lock or a typed name that is taken there gives way to the roll */
 export function candidateOf(s: Store, taken: readonly string[]): Candidate {
   const c = roll(s.species, s.seed, taken), o = s.overrides
-  return { ...c, name: o.name ?? c.name, shade: o.shade ?? c.shade, temperament: { ...c.temperament, ...o.temperament } }
+  return { ...c, name: o.name && !taken.includes(o.name) ? o.name : c.name, shade: o.shade ?? c.shade, temperament: { ...c.temperament, ...o.temperament } }
 }
 
 /** what a lock keeps goes into the next overrides, so the stored store re-renders the same card after a restart */
