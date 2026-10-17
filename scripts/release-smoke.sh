@@ -15,6 +15,8 @@
 # database for good. A sandboxed Bash is refused up front: it can't reach Postgres, and each of
 # its calls has a network namespace of its own, blind to the port a hold serves on.
 set -uo pipefail
+. "$(dirname "$0")/lib/fresh-script.sh"
+refuse_stale_script "$0"
 
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
