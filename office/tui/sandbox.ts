@@ -100,6 +100,7 @@ export type Toy = ReturnType<typeof toy>
 
 /** the sandbox's play keys, as the help line lists them; `toyKey()` in main.ts handles each */
 export const PLAY = hints("sandbox-play")
-/** off the sandbox, `E` alone fires an event (OFFICE_TOY_KEYS=1), and only where the card has no `E` of its own */
-export const toyEventKey = (k: string, cardClaimsE: boolean, env: Record<string, string | undefined> = process.env): boolean =>
-  k === "E" && !cardClaimsE && env.OFFICE_TOY_KEYS === "1"
+/** the play keys that need only the room, so the real office runs them under OFFICE_TOY_KEYS=1 */
+export const ROOM_PLAY = PLAY.filter((p) => ["D", "E", "F", "T", "P"].includes(p.key))
+/** off the sandbox, a room key runs when the flag is on and the card has no action of its own on that key */
+export const roomKey = (k: string, cardClaims: boolean, flag: boolean): boolean => ROOM_PLAY.some((p) => p.key === k) && !cardClaims && flag
