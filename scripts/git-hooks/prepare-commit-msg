@@ -10,6 +10,10 @@
 # A trailer rides the message through rebase, amend and cherry-pick, which is why it is a
 # trailer and not a database keyed on patch-id.
 #
+# The thread is the checkout's when the server marked it (`tlon-thread` in the worktree's git
+# dir, Server.Worktree.mark_thread/2), else the pane's: a pane bound to the lobby that builds in a
+# workline's checkout makes the workline's commit.
+#
 # Hooks live in the repo's common dir (core.hooksPath), so every worktree under .worktrees/
 # gets this. A plain human terminal has no TLON_THREAD and gets no trailer: that commit was not
 # a thread's work. Never fail the commit.
@@ -19,7 +23,8 @@ msg="$1"
 [ -n "${TLON_THREAD:-}" ] || exit 0
 [ -f "$msg" ] || exit 0
 
-args=(--in-place --if-exists doNothing --trailer "Tlon-Thread: $TLON_THREAD")
+thread="$(cat "$(git rev-parse --absolute-git-dir 2>/dev/null)/tlon-thread" 2>/dev/null)"
+args=(--in-place --if-exists doNothing --trailer "Tlon-Thread: ${thread:-$TLON_THREAD}")
 [ -n "${TLON_AUTHOR:-}" ] && args+=(--trailer "Tlon-Author: $TLON_AUTHOR")
 [ -n "${TLON_MODEL:-}" ] && args+=(--trailer "Tlon-Model: $TLON_MODEL")
 git interpret-trailers "${args[@]}" "$msg" 2>/dev/null || true
