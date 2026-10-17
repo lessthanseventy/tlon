@@ -139,10 +139,21 @@ defmodule Server.Bench.Roles.Runner do
     [{"TLON_TEST_DATABASE", "tlon_bench_#{slug}_#{System.unique_integer([:positive])}"}]
   end
 
-  @doc "Drop the database `task_env/1` named, forcing out any process the role left connected."
+  @doc """
+  Drop the database `task_env/1` named, forcing out any process the role left connected. With no
+  `dropdb` on PATH it says so and returns `:skipped`, so the run keeps its graded result.
+  """
   def drop_database(env) do
     {_, db} = List.keyfind(env, "TLON_TEST_DATABASE", 0)
-    System.cmd("dropdb", ["--if-exists", "--force", db], stderr_to_stdout: true)
+
+    case System.find_executable("dropdb") do
+      nil ->
+        info("  dropdb not found on PATH; database #{db} left behind")
+        :skipped
+
+      dropdb ->
+        System.cmd(dropdb, ["--if-exists", "--force", db], stderr_to_stdout: true)
+    end
   end
 
   defp seed(repo, work) do
