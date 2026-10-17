@@ -55,9 +55,30 @@ if [ -z "$url" ]; then
   sha="$(git -C "$root" rev-parse -q --verify "${1:-origin/main}^{commit}")" || fail "no commit ${1:-origin/main}"
   echo "smoke: ${sha:0:7} on :$port, database $db"
   # one smoke per commit: a retry while one runs (or holds) would stack another 2 GB build in /tmp.
-  # The lock is held by this run and the node it starts; its text says which run that is.
-  exec 8<>"${TMPDIR:-/tmp}/tlon-smoke-commit-$sha.lock"
-  flock -n 8 || fail "${sha:0:7} is already being smoked ($(head -n 1 <&8)): drive or stop that one"
+  # The lock is held by this run alone (not the node, whose daemons would outlive it); its text says which run that is.
+  lock="${TMPDIR:-/tmp}/tlon-smoke-commit-$sha.lock"
+  exec 8<>"$lock"
+  if ! flock -n 8; then
+    holder="$(head -n 1 <&8)"
+    # The lock says someone holds it, not that anyone is there: a holder in another sandbox's pid
+    # namespace has a pid this one can't see, and one that was killed can leave the lock with a process
+    # that never ran for it. The holder is real if its pid lives, its url answers, or its record is too
+    # young to be a build that has finished; otherwise take the lock over on a file of its own.
+    hpid="$(printf '%s' "$holder" | sed -n 's/^pid \([0-9]*\) .*/\1/p')"
+    hurl="$(printf '%s' "$holder" | sed -n 's/.* on \(http[^ ]*\)$/\1/p')"
+    if { [ -n "$hpid" ] && kill -0 "$hpid" 2>/dev/null; } ||
+      { [ -n "$hurl" ] && curl -s -m 2 -o /dev/null "$hurl/api/office"; } ||
+      [ -z "$(find "$lock" -maxdepth 0 -mmin +20)" ]; then
+      fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
+    fi
+    echo "smoke: reclaiming the lock on ${sha:0:7} from a holder that is gone ($holder)"
+    exec 8>&-
+    rm -f "$lock"
+    exec 8<>"$lock"
+    flock -n 8 || fail "${sha:0:7} is already being smoked (a run took the lock as this one reclaimed it)"
+  fi
+  # truncated, so a shorter record leaves no tail of the last run's
+  : >"$lock"
   echo "pid $$ on $url" >&8
 
   # a smoke SIGKILLed (a service restart, server:stop) never ran its cleanup: sweep the builds no
@@ -99,7 +120,7 @@ if [ -z "$url" ]; then
   # MCP is what serves /api; everything that would talk to a model, the weather or a pane stays off
   TLON_NODE="tlon-smoke-$port@127.0.0.1" TLON_DATABASE="$db" TLON_START_MCP=1 TLON_MCP_PORT="$port" \
     TLON_BANTER=0 TLON_WEATHER=0 TLON_CALENDAR=0 \
-    "$dir/server/_build/prod/rel/server/bin/server" start >>"$log" 2>&1 &
+    "$dir/server/_build/prod/rel/server/bin/server" start >>"$log" 2>&1 8>&- &
   node=$!
   for _ in $(seq 90); do
     curl -s -m 2 -o /dev/null "$url/api/office" && break
