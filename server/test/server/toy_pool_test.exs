@@ -47,12 +47,12 @@ defmodule Server.ToyPoolTest do
     assert count(calls) == 1
   end
 
-  test "the weekly refresh is a no-op while the pool is fresh", %{ws: ws, calls: calls} do
+  test "the daily refresh is a no-op while the pool is fresh", %{ws: ws, calls: calls} do
     assert {:ok, _} = ToyPool.refresh_due(ws.id, :visitors)
     assert {:ok, _} = ToyPool.refresh_due(ws.id, :visitors)
     assert count(calls) == 1
 
-    ToyPool.age!(ws.id, :visitors, 8)
+    ToyPool.age!(ws.id, :visitors, 1)
     assert {:ok, _} = ToyPool.refresh_due(ws.id, :visitors)
     assert count(calls) == 2
   end
@@ -107,5 +107,46 @@ defmodule Server.ToyPoolTest do
     assert {:ok, _} = ToyPool.refresh(ws.id, :puns, seed: 1)
     assert {:error, :capped} = ToyPool.refresh(ws.id, :visitors, seed: 1)
     assert count(calls) == 2
+  end
+
+  test "refresh_all_due fills every pool — visitors, puns, each bench seat's reactions — on the ollama bucket", %{
+    ws: ws,
+    cli: cli,
+    calls: calls
+  } do
+    {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "yu", archetype: "builder", crew: "night"})
+    prior = System.get_env("OLLAMA_API_KEY")
+    System.put_env("OLLAMA_API_KEY", "test-key")
+    on_exit(fn -> if prior, do: System.put_env("OLLAMA_API_KEY", prior), else: System.delete_env("OLLAMA_API_KEY") end)
+
+    File.write!(
+      cli,
+      ~s(#!/bin/sh\nm=\nprev=\nfor a in "$@"; do [ "$prev" = --model ] && m=$a; prev=$a; done\n) <>
+        "echo \"$ANTHROPIC_BASE_URL $m\" >> #{calls}\ncat <<'END'\n#{@reply}\nEND\n"
+    )
+
+    results = ToyPool.refresh_all_due(ws.id)
+
+    assert Enum.sort(Enum.map(results, &elem(&1, 0))) ==
+             Enum.sort([:visitors, :puns, {:reactions, "lonnrot"}, {:reactions, "yu"}])
+
+    assert Enum.all?(results, &match?({_, {:ok, _}}, &1))
+    assert [%{"name" => "Mabel"}] = ToyPool.visitors(ws.id)
+    assert ToyPool.reactions(ws.id, "yu", "zoo") == ["Is that a goat?"]
+
+    lines = calls |> File.read!() |> String.split("\n", trim: true)
+    assert length(lines) == 4
+    assert Enum.uniq(lines) == ["https://ollama.com deepseek-v4.1-flash"]
+  end
+
+  test "a daily run: a second the same day calls nothing, a day later every pool is refilled", %{ws: ws, calls: calls} do
+    assert [_, _, _] = ToyPool.refresh_all_due(ws.id)
+    assert count(calls) == 3
+    ToyPool.refresh_all_due(ws.id)
+    assert count(calls) == 3
+
+    for kind <- [:visitors, :puns, {:reactions, "lonnrot"}], do: ToyPool.age!(ws.id, kind, 1)
+    ToyPool.refresh_all_due(ws.id)
+    assert count(calls) == 6
   end
 end
