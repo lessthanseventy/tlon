@@ -19,6 +19,8 @@ TLON_URL=http://127.0.0.1:4041 mise run office:drive -- "/" "'108'" "Enter" "r" 
   throwaway copy of `~/.config/tlon`, so pets, the store, the hall and souls it writes go to the copy,
   and on a tmux of its own (`TLON_OFFICE_TMUX`), so the docs, games and dump it opens never land in the
   operator's office. The dump's editor is `$VISUAL`/`$EDITOR`: set it to a script to drive one.
+  To read back what a drive saved (home.json, looks.json), `OFFICE_KEEP=1` keeps the copy and
+  prints `kept: DIR`; the files are under `DIR/config/tlon/`.
 - Keys: `Enter`, `Escape`, `Tab`, `BTab` (shift-tab), `M-Enter` (a newline in a composer),
   `Space`, `PPage`; text in single quotes inside the step: `"'fix the clock'"`.
 - Under tmux the room draws in half blocks, so the screen is text — the room's own labels land in
