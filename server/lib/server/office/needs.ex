@@ -259,10 +259,11 @@ defmodule Server.Office.Needs do
   @doc "Run a failed job again. `:ok`."
   def retry_job(id), do: Oban.retry_job(id)
 
-  # a workline sitting at verify whose newest verify run was red
+  # a workline sitting at verify whose newest verify run was red, and no re-run queued or running
   defp red_verifies(open) do
     for %Thread{stage: "verify", slug: slug} = t <- open,
         %{kind: "check_failed"} = e <- [last_verify(slug)],
+        not verifying?(t),
         do:
           item(
             "verify_failed",
@@ -664,17 +665,20 @@ defmodule Server.Office.Needs do
   defp on_duty?(t) do
     live = DateTime.add(DateTime.utc_now(), -Server.Presence.Thinking.stale_turn_seconds(), :second)
 
-    landing?(t) or
-      Repo.exists?(
-        from j in Oban.Job,
-          where:
-            j.worker == "Server.Jobs.Verify" and j.state in ["available", "scheduled", "executing", "retryable"] and
-              fragment("(? ->> 'thread_id')::int = ?", j.args, ^t.id)
-      ) or
+    landing?(t) or verifying?(t) or
       Repo.exists?(
         from s in Server.Session,
           where: s.thread_id == ^t.id and is_nil(s.ended_at) and s.thinking_since > ^live
       )
+  end
+
+  defp verifying?(t) do
+    Repo.exists?(
+      from j in Oban.Job,
+        where:
+          j.worker == "Server.Jobs.Verify" and j.state in ["available", "scheduled", "executing", "retryable"] and
+            fragment("(? ->> 'thread_id')::int = ?", j.args, ^t.id)
+    )
   end
 
   defp stalled_text(t, moved) do
