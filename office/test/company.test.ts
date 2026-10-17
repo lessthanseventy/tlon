@@ -35,4 +35,10 @@ describe("relation", () => {
     expect(relation("daneri", "tertius", souls, bench)).toBe("friend")
     expect(relation("nolan", "daneri", souls, bench)).toBe("none")
   })
+  test("a handle with a capital or an accent still matches its own folded affinities", () => {
+    const caps = ["Scharlach", "Tertius", "Lönnrot"], s = { Scharlach: soulOf("admires tertius, needles lonnrot") }
+    expect(relation("Scharlach", "Tertius", s, caps)).toBe("friend")
+    expect(relation("Tertius", "Scharlach", s, caps)).toBe("friend")
+    expect(relation("Lönnrot", "Scharlach", s, caps)).toBe("rival")
+  })
 })
