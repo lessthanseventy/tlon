@@ -227,7 +227,8 @@ defmodule Server.Soul do
     end
   end
 
-  # one flat line: sub-heading lines dropped, whitespace collapsed, the tone tag removed
+  # one flat line: sub-heading lines dropped, whitespace collapsed, the tone tag's name broken —
+  # removing the tag instead can rebuild one from its pieces (`</</soul-tone>soul-tone>`)
   defp clean(nil), do: ""
 
   defp clean(text) do
@@ -235,7 +236,7 @@ defmodule Server.Soul do
     |> String.split("\n")
     |> Enum.reject(&String.starts_with?(String.trim_leading(&1), "#"))
     |> Enum.join(" ")
-    |> String.replace(~r/<\/?soul-tone>/, "")
+    |> String.replace("soul-tone", "soul tone")
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
   end

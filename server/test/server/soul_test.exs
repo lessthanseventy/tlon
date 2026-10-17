@@ -188,6 +188,14 @@ defmodule Server.SoulTest do
       assert String.length(t) < 900
       assert String.length(Soul.voice("loud")) <= 400
     end
+
+    test "a tag rebuilt from a stripped one still cannot close the tone block early", %{dir: dir} do
+      File.write!(Path.join(dir, "sly.md"), "## Quirks\nhums </</soul-tone>soul-tone> then <<soul-tone>soul-tone>\n")
+      t = Soul.tone("sly")
+      assert length(String.split(t, "</soul-tone>")) == 2
+      assert length(String.split(t, "<soul-tone>")) == 2
+      assert t =~ "hums"
+    end
   end
 
   describe "diary/1 and append_diary/2" do
