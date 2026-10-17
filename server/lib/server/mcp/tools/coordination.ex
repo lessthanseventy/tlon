@@ -393,9 +393,23 @@ defmodule Server.MCP.Tool.ConsultPeer do
       {:ok, %{consult_id: consult_id, peer_thread_id: peer_thread_id}} ->
         ok(frame, %{"consult_id" => consult_id, "peer_thread_id" => peer_thread_id})
 
+      {:error, {:not_on_thread, id}} ->
+        fail(frame, "consult_peer failed: #{not_on_thread(params[:peer], id)}")
+
       {:error, reason} ->
         fail(frame, "consult_peer failed: #{inspect(reason)}")
     end
+  end
+
+  defp not_on_thread(peer, id) do
+    threads = Server.Staff.threads_for(Server.Staff.agent_by_name(peer))
+    ids = threads |> Enum.take(10) |> Enum.map_join(", ", &"##{&1.id}")
+    more = if length(threads) > 10, do: " and #{length(threads) - 10} more", else: ""
+
+    leads = if threads == [], do: "#{peer} leads no thread", else: "#{peer} leads #{ids}#{more}"
+
+    "#{peer} neither leads thread ##{id} nor has a live session on it; #{leads}. " <>
+      "Pass one of those as thread_id, or leave it out to let the server pick."
   end
 end
 
