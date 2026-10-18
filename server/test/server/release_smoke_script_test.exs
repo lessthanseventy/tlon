@@ -190,15 +190,14 @@ defmodule Server.ReleaseSmokeScriptTest do
 
   describe "two smokes at once" do
     # the sweep a smoke ran before the build lock (c44fc5c), still in every checkout branched before
-    # it: a build no process names in its command line or cwd goes, and on a host where another user's
-    # /proc/<pid>/cwd can't be read the cwd test is always false (pipefail), so every build goes
+    # it, on a host where another user's /proc/<pid>/cwd can't be read: its cwd test is always false,
+    # so a build no process names in its command line goes
     @old_sweep ~S"""
     set -uo pipefail
     root="$1"
     for stale in "${TMPDIR:-/tmp}"/tlon-smoke-*/; do
       stale="${stale%/}"; [ -d "$stale/server" ] || continue
       pgrep -f "$stale/" >/dev/null && continue
-      find /proc/[0-9]*/cwd -maxdepth 0 -lname "$stale*" 2>/dev/null | grep -q . && continue
       git -C "$root" worktree remove --force "$stale" >/dev/null 2>&1; rm -rf "$stale"
     done
     """
