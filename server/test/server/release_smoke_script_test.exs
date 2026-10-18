@@ -186,6 +186,7 @@ defmodule Server.ReleaseSmokeScriptTest do
     assert_receive {^port, {:data, "held\n"}}, 5_000
     {:os_pid, pid} = Port.info(port, :os_pid)
     on_exit(fn -> System.cmd("kill", ["#{pid}"]) end)
+    pid
   end
 
   describe "two smokes at once" do
@@ -327,42 +328,116 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert out =~ "the hold of http://127.0.0.1:#{port} expired after 2s"
     end
 
-    test "two smokes reclaiming one stale lock at once: exactly one builds", ctx do
+    defp stale_lock_in(ctx) do
       {sha, 0} = System.cmd("git", ["-C", ctx.root, "rev-parse", "work/feature"])
       lock = Path.join(ctx.tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
       File.write!(lock, "pid 999999 on http://127.0.0.1:#{free_port()}\n")
       File.touch!(lock, {{2020, 1, 1}, {0, 0, 0}})
-      hold_lock(lock)
+      lock
+    end
 
-      # the staleness check answers, then dawdles for a second: the second smoke starts half of one in, reads the
-      # same stale record, and removes the lock the first has just reclaimed
-      stub(ctx.stubs, "find", ~S"""
-      out="$(PATH="${PATH#*:}" find "$@")"
-      case "$*" in *-mmin*) sleep 1 ;; esac
-      printf '%s' "$out"
-      """)
-
+    defp build_stub(ctx) do
       stub(ctx.stubs, "mix", ~S"""
       [ "$1" = release ] || exit 0
       echo build >>"$SMOKE_SIGNAL/builds"
       until [ -e "$SMOKE_SIGNAL/go" ]; do sleep 0.1; done
       """)
+    end
 
+    # the staleness check of the lock, answered and then held until `release` says go: what the run saw is
+    # settled before anything else moves
+    defp hold_staleness_check(ctx, release) do
+      stub(ctx.stubs, "find", ~s"""
+      out="$(PATH="${PATH#*:}" find "$@")"
+      case "$*" in *"-mmin +20"*)
+        touch "$SMOKE_SIGNAL/arrived.$$"
+        #{release}
+      ;; esac
+      printf '%s' "$out"
+      """)
+    end
+
+    defp smoke_async(ctx) do
       script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
+      env = race_env(ctx, free_port())
+      Task.async(fn -> System.cmd("bash", [script, "work/feature"], env: env, stderr_to_stdout: true) end)
+    end
 
-      smokes =
-        for i <- 1..2 do
-          env = race_env(ctx, free_port())
-          if i == 2, do: Process.sleep(500)
-          Task.async(fn -> System.cmd("bash", [script, "work/feature"], env: env, stderr_to_stdout: true) end)
-        end
+    defp until_free(lock, tries \\ 100) do
+      case System.cmd("flock", ["-n", lock, "true"]) do
+        {_, 0} -> :ok
+        _ when tries == 0 -> flunk("#{lock} stays held")
+        _ -> Process.sleep(50) && until_free(lock, tries - 1)
+      end
+    end
 
+    defp wait_for_count(glob, n, tries \\ 200) do
+      cond do
+        length(Path.wildcard(glob)) >= n -> :ok
+        tries == 0 -> flunk("#{glob} never reached #{n}")
+        true -> Process.sleep(50) && wait_for_count(glob, n, tries - 1)
+      end
+    end
+
+    test "two smokes reclaiming one stale lock at once: exactly one builds", ctx do
+      hold_lock(stale_lock_in(ctx))
+      build_stub(ctx)
+
+      # both read the stale record before either reclaims; the first to arrive goes on once the other has
+      # arrived, the other goes on once the first is building
+      hold_staleness_check(ctx, ~S"""
+        if mkdir "$SMOKE_SIGNAL/first" 2>/dev/null; then
+          for _ in $(seq 100); do [ "$(ls "$SMOKE_SIGNAL" | grep -c '^arrived\.')" -ge 2 ] && break; sleep 0.1; done
+        else
+          for _ in $(seq 100); do [ -e "$SMOKE_SIGNAL/builds" ] && break; sleep 0.1; done
+        fi
+      """)
+
+      smokes = [smoke_async(ctx), smoke_async(ctx)]
       wait_for(Path.join(ctx.signal, "builds"))
-      Process.sleep(2_500)
       File.write!(Path.join(ctx.signal, "go"), "")
       Task.await_many(smokes, 30_000)
 
       assert File.read!(Path.join(ctx.signal, "builds")) == "build\n"
+    end
+
+    test "a smoke that takes the lock while a reclaimer weighs its holder is not built over", ctx do
+      lock = stale_lock_in(ctx)
+      holder = hold_lock(lock)
+      build_stub(ctx)
+
+      hold_staleness_check(ctx, ~S"""
+        for _ in $(seq 100); do [ -e "$SMOKE_SIGNAL/release" ] && break; sleep 0.1; done
+      """)
+
+      reclaimer = smoke_async(ctx)
+      wait_for_count(Path.join(ctx.signal, "arrived.*"), 1)
+
+      # the holder lets go; a new smoke takes the same file and builds
+      System.cmd("kill", ["#{holder}"])
+      until_free(lock)
+      newcomer = smoke_async(ctx)
+      wait_for(Path.join(ctx.signal, "builds"))
+      File.write!(Path.join(ctx.signal, "release"), "")
+      # the newcomer keeps building until the reclaimer is done, or has gone on to build too
+      result = Task.yield(reclaimer, 5_000)
+      File.write!(Path.join(ctx.signal, "go"), "")
+      {out, 1} = if result, do: elem(result, 1), else: Task.await(reclaimer, 30_000)
+      Task.await(newcomer, 30_000)
+
+      assert out =~ "is already being smoked"
+      assert File.read!(Path.join(ctx.signal, "builds")) == "build\n"
+    end
+
+    test "the lock to reclaim is not held by what a reclaiming run started", ctx do
+      hold_lock(stale_lock_in(ctx))
+      build_stub(ctx)
+
+      smoke = smoke_async(ctx)
+      wait_for(Path.join(ctx.signal, "builds"))
+      assert {_, 0} = System.cmd("flock", ["-n", Enum.at(Path.wildcard(Path.join(ctx.tmp, "*.reclaim")), 0), "true"])
+      File.write!(Path.join(ctx.signal, "go"), "")
+      Task.await(smoke, 30_000)
     end
 
     test "a smoke from a checkout older than the build lock leaves a running smoke's build alone", ctx do
