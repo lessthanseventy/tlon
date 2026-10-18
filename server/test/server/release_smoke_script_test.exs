@@ -128,23 +128,21 @@ defmodule Server.ReleaseSmokeScriptTest do
       hold_lock(lock)
     end
 
-    test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused", %{
-      tmp: tmp,
-      root: root
-    } do
+    test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused",
+         %{tmp: tmp, root: root} = ctx do
       stale_lock(tmp, root, "pid 999999 on http://127.0.0.1:4777\n")
 
-      {out, _} = run_smoke(tmp, root, ["work/feature"])
+      {out, _} = run_smoke(ctx, ["work/feature"])
 
       refute out =~ "already being smoked"
-      assert out =~ ~r/smoke: [0-9a-f]{7} on :4599/
+      assert out =~ ~r/smoke: [0-9a-f]{7} on :#{ctx.port}/
     end
 
-    test "an old record whose url still answers is a live holder: refused", %{tmp: tmp, root: root} do
+    test "an old record whose url still answers is a live holder: refused", %{tmp: tmp, root: root} = ctx do
       url = stub({200, "{}"})
       stale_lock(tmp, root, "pid 999999 on #{url}\n")
 
-      assert {out, 1} = run_smoke(tmp, root, ["work/feature"])
+      assert {out, 1} = run_smoke(ctx, ["work/feature"])
       assert out =~ "is already being smoked (pid 999999 on #{url})"
     end
   end
