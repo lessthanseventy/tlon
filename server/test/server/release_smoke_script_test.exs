@@ -144,7 +144,26 @@ defmodule Server.ReleaseSmokeScriptTest do
       {out, _} = run_smoke(ctx, ["work/feature"])
 
       refute out =~ "already being smoked"
+      assert out =~ "smoke: reclaiming the lock on"
       assert out =~ ~r/smoke: [0-9a-f]{7} on :#{ctx.port}/
+    end
+
+    test "an old record whose pid lives is a live holder: refused", %{tmp: tmp, root: root} = ctx do
+      stale_lock(tmp, root, "pid #{System.pid()} on http://127.0.0.1:#{free_port()}\n")
+
+      assert {out, 1} = run_smoke(ctx, ["work/feature"])
+      assert out =~ "is already being smoked (pid #{System.pid()} on"
+      refute out =~ "reclaiming"
+    end
+
+    test "a record is truncated, so a shorter one leaves no tail of the last run's", %{tmp: tmp, root: root} = ctx do
+      {sha, 0} = System.cmd("git", ["-C", root, "rev-parse", "work/feature"])
+      lock = Path.join(tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
+      File.write!(lock, "pid 1 on http://127.0.0.1:1/" <> String.duplicate("x", 200) <> "\n")
+
+      run_smoke(ctx, ["work/feature"])
+
+      assert File.read!(lock) =~ ~r/\Apid \d+ on http:\/\/127\.0\.0\.1:#{ctx.port}\n\z/
     end
 
     test "an old record whose url still answers is a live holder: refused", %{tmp: tmp, root: root} = ctx do
