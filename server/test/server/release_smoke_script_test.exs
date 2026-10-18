@@ -137,23 +137,21 @@ defmodule Server.ReleaseSmokeScriptTest do
       hold_lock(lock)
     end
 
-    test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused", %{
-      tmp: tmp,
-      root: root
-    } do
+    test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused",
+         %{tmp: tmp, root: root} = ctx do
       stale_lock(tmp, root, "pid 999999 on http://127.0.0.1:4777\n")
 
-      {out, _} = run_smoke(tmp, root, ["work/feature"])
+      {out, _} = run_smoke(ctx, ["work/feature"])
 
       refute out =~ "already being smoked"
-      assert out =~ ~r/smoke: [0-9a-f]{7} on :4599/
+      assert out =~ ~r/smoke: [0-9a-f]{7} on :#{ctx.port}/
     end
 
-    test "an old record whose url still answers is a live holder: refused", %{tmp: tmp, root: root} do
+    test "an old record whose url still answers is a live holder: refused", %{tmp: tmp, root: root} = ctx do
       url = stub({200, "{}"})
       stale_lock(tmp, root, "pid 999999 on #{url}\n")
 
-      assert {out, 1} = run_smoke(tmp, root, ["work/feature"])
+      assert {out, 1} = run_smoke(ctx, ["work/feature"])
       assert out =~ "is already being smoked (pid 999999 on #{url})"
     end
   end
@@ -260,6 +258,55 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert out =~ "mix release: boom"
       assert out =~ "the build or the migration of"
       refute out =~ "No such file"
+    end
+
+    test "a held smoke ends at TLON_SMOKE_HOLD_TTL, saying so, and tears its node down", ctx do
+      port = free_port()
+      office = ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "machine"}], "id": 7})
+
+      # the smoke refuses a port that already answers: the stub node comes up once the build is running
+      stub(ctx.stubs, "mix", ~S"""
+      [ "$1" = release ] || exit 0
+      touch "$SMOKE_SIGNAL/building"
+      until [ -e "$SMOKE_SIGNAL/go" ]; do sleep 0.1; done
+      mkdir -p _build/prod/rel/server/bin
+      printf '#!/bin/sh\n[ "$1" = start ] && exec sleep 300\nexit 0\n' >_build/prod/rel/server/bin/server
+      chmod +x _build/prod/rel/server/bin/server
+      """)
+
+      drive = Path.join([ctx.root, "scripts", "office-drive.sh"])
+
+      File.write!(drive, ~S"""
+      #!/bin/sh
+      t="${3#\'}"; t="${t%\'}"
+      printf '=== after: .\nHOME\n=== after: Enter\n#7  %s\n=== after: c\nCREW\n=== after: R\nHOME\n' "$t"
+      """)
+
+      File.chmod!(drive, 0o755)
+      # the smoke drives the office from its checkout of the commit
+      for args <- [
+            ["add", "-A"],
+            ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "drive"],
+            ["branch", "-f", "work/feature"]
+          ],
+          do: {_, 0} = System.cmd("git", ["-C", ctx.root | args], stderr_to_stdout: true)
+
+      script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
+      env = [{"TLON_SMOKE_HOLD", "1"}, {"TLON_SMOKE_HOLD_TTL", "2"} | race_env(ctx, port)]
+
+      # timeout: without the TTL check the hold never ends, and the test fails instead of hanging
+      smoke =
+        Task.async(fn ->
+          System.cmd("timeout", ["20", "bash", script, "work/feature"], env: env, stderr_to_stdout: true)
+        end)
+
+      wait_for(Path.join(ctx.signal, "building"))
+      start_supervised!({Bandit, plug: {Stub, {200, office}}, ip: {127, 0, 0, 1}, port: port, startup_log: false})
+      File.write!(Path.join(ctx.signal, "go"), "")
+
+      assert {out, 0} = Task.await(smoke, 30_000)
+      assert out =~ "smoke: holding"
+      assert out =~ "the hold of http://127.0.0.1:#{port} expired after 2s"
     end
 
     test "a smoke from a checkout older than the build lock leaves a running smoke's build alone", ctx do
