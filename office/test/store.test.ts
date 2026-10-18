@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { resolvePets, slotOf } from "../kit/pets"
-import { adopt, back, candidateOf, emptyStore, loadStore, pass, rename, roll, saveStore, SHELF, shelve, toggleLock, type Store } from "../kit/store"
+import { adopt, back, candidateOf, emptyStore, loadStore, pass, rename, roll, saveStore, SHELF, shelve, storeNamesTaken, toggleLock, type Store } from "../kit/store"
 import { loadPets, savePets } from "../tui/pets"
 
 const s0: Store = { ...emptyStore(), species: "hamster" }
@@ -85,4 +85,8 @@ test("store.json round-trips and a damaged one is the empty store", () => {
     expect(loadStore(path).species).toBe("cat")
     expect(loadStore(join(dir, "none.json"))).toEqual(emptyStore())
   } finally { rmSync(dir, { recursive: true, force: true }) }
+})
+test("storeNamesTaken: the bench plus the OTHER slot's pet, never the occupant being replaced", () => {
+  expect(storeNamesTaken(["Ann"], { cat: { name: "Nina" }, dog: { name: "Argos" } }, "dog")).toEqual(["Ann", "Nina"])
+  expect(storeNamesTaken(["Ann"], { cat: { name: "Nina" }, dog: { name: "Argos" } }, "hamster")).toEqual(["Ann", "Argos"])
 })
