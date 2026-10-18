@@ -10,11 +10,6 @@ import type { Seg } from "./term"
 
 export type StoreViewRow = { segs: Seg[]; lock: StoreRow | null }
 export const STORE_VIEW_ROWS = 8
-/** names a new pet must not take: the bench's and the other slot's pet (the occupant it replaces leaves) */
-export function storeNamesTaken(bench: readonly string[], pets: { cat: { name: string }; dog: { name: string } }, species: string): string[] {
-  const other = (slotOf(species) ?? "cat") === "cat" ? "dog" : "cat"
-  return [...bench, pets[other].name]
-}
 export const stepStoreRow = (i: number, d: number) => (i + d + STORE_VIEW_ROWS) % STORE_VIEW_ROWS
 
 /** halfBlocks folds two pixel rows to a cell; an odd-height frame gets an empty row under it */

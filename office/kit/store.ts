@@ -2,7 +2,7 @@
 // edits, never the rendered card. roll() does no I/O and calls no model. kit/hall.ts is the same shape for people.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
-import { SHADES, SLOT_SPECIES, SPECIES, type PetsFile, type Species } from "./pets"
+import { SHADES, SLOT_SPECIES, SPECIES, slotOf, type PetsFile, type Species } from "./pets"
 import { hash } from "./sprites"
 import { clampAxis, type Temperament } from "./temperament"
 
@@ -54,6 +54,12 @@ export function shelve(s: Store, step: 1 | -1, taken: readonly string[]): Store 
 }
 export const toggleLock = (s: Store, r: StoreRow): Store => ({ ...s, locks: s.locks.includes(r) ? s.locks.filter((x) => x !== r) : [...s.locks, r] })
 export const rename = (s: Store, name: string): Store => ({ ...s, overrides: { ...s.overrides, name } })
+
+/** names a new pet must not take: the bench's and the other slot's pet (the occupant it replaces leaves) */
+export function storeNamesTaken(bench: readonly string[], pets: { cat: { name: string }; dog: { name: string } }, species: string): string[] {
+  const other = (slotOf(species) ?? "cat") === "cat" ? "dog" : "cat"
+  return [...bench, pets[other].name]
+}
 
 /** the pets.json fragment that adopts `c` into `slot` (replacing its occupant), or null: not that slot's species, or no name */
 export function adopt(c: Candidate, slot: "cat" | "dog"): PetsFile | null {
