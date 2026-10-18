@@ -66,30 +66,37 @@ if [ -z "$url" ]; then
   lock="${TMPDIR:-/tmp}/tlon-smoke-commit-$sha.lock"
   exec 8<>"$lock"
   if ! flock -n 8; then
-    holder="$(head -n 1 <&8)"
     # The lock says someone holds it, not that anyone is there: a holder in another sandbox's pid
     # namespace has a pid this one can't see, and one that was killed can leave the lock with a process
     # that never ran for it. The holder is real if its pid lives, its url answers, or its record is too
     # young to be a build that has finished; otherwise take the lock over on a file of its own.
-    hpid="$(printf '%s' "$holder" | sed -n 's/^pid \([0-9]*\) .*/\1/p')"
-    hurl="$(printf '%s' "$holder" | sed -n 's/.* on \(http[^ ]*\)$/\1/p')"
-    if { [ -n "$hpid" ] && kill -0 "$hpid" 2>/dev/null; } ||
-      { [ -n "$hurl" ] && curl -s -m 2 -o /dev/null "$hurl/api/office"; } ||
-      [ -z "$(find "$lock" -maxdepth 0 -mmin +20)" ]; then
-      fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
-    fi
+    holder_is_live() {
+      holder="$(head -n 1 "/proc/$$/fd/8")"
+      hpid="$(printf '%s' "$holder" | sed -n 's/^pid \([0-9]*\) .*/\1/p')"
+      hurl="$(printf '%s' "$holder" | sed -n 's/.* on \(http[^ ]*\)$/\1/p')"
+      { [ -n "$hpid" ] && kill -0 "$hpid" 2>/dev/null; } ||
+        { [ -n "$hurl" ] && curl -s -m 2 -o /dev/null "$hurl/api/office"; } ||
+        [ -z "$(find "$lock" -maxdepth 0 -mmin +20)" ]
+    }
+    holder_is_live && fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
     # Reclaiming replaces the lock file, so two reclaimers would each lock a file of their own and both
-    # build. One at a time, by a lock beside it held to the end; and the file this run opened must still be
-    # the one at the path, or another reclaimer got there between its read of the record and this.
+    # build. One at a time, by a lock beside it held only through the reclaim; and the file this run opened
+    # must still be the one at the path, or another reclaimer got there between its read of the record and this.
     exec 6>"$lock.reclaim"
     flock -n 6 || fail "${sha:0:7} is already being smoked (another run is reclaiming its lock)"
     [ "$(stat -L -c %i /proc/$$/fd/8)" = "$(stat -c %i "$lock" 2>/dev/null)" ] ||
       fail "${sha:0:7} is already being smoked (another run reclaimed its lock first)"
-    echo "smoke: reclaiming the lock on ${sha:0:7} from a holder that is gone ($holder)"
-    exec 8>&-
-    rm -f "$lock"
-    exec 8<>"$lock"
-    flock -n 8 || fail "${sha:0:7} is already being smoked (a run took the lock as this one reclaimed it)"
+    # weighing the holder took a while: it may have let go, and a run that never takes the guard may
+    # have the file by now
+    if ! flock -n 8; then
+      holder_is_live && fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
+      echo "smoke: reclaiming the lock on ${sha:0:7} from a holder that is gone ($holder)"
+      exec 8>&-
+      rm -f "$lock"
+      exec 8<>"$lock"
+      flock -n 8 || fail "${sha:0:7} is already being smoked (a run took the lock as this one reclaimed it)"
+    fi
+    exec 6>&-
   fi
   # truncated, so a shorter record leaves no tail of the last run's
   : >"$lock"
@@ -142,7 +149,7 @@ if [ -z "$url" ]; then
   # MCP is what serves /api; everything that would talk to a model, the weather or a pane stays off
   TLON_NODE="tlon-smoke-$port@127.0.0.1" TLON_DATABASE="$db" TLON_START_MCP=1 TLON_MCP_PORT="$port" \
     TLON_BANTER=0 TLON_WEATHER=0 TLON_CALENDAR=0 \
-    "$dir/server/_build/prod/rel/server/bin/server" start >>"$log" 2>&1 6>&- 8>&- &
+    "$dir/server/_build/prod/rel/server/bin/server" start >>"$log" 2>&1 8>&- &
   node=$!
   for _ in $(seq 90); do
     curl -s -m 2 -o /dev/null "$url/api/office" && break
