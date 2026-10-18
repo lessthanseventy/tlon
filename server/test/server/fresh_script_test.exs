@@ -32,7 +32,11 @@ defmodule Server.FreshScriptTest do
 
   defp queue(ctx, env \\ []) do
     env = [{"XDG_RUNTIME_DIR", ctx.tmp} | env]
-    System.cmd("bash", [Path.join(ctx.root, "scripts/checks-queue.sh"), "echo", "ran"], env: env, stderr_to_stdout: true)
+
+    System.cmd("bash", [Path.join(ctx.root, "scripts/checks-queue.sh"), "echo", "ran"],
+      env: env,
+      stderr_to_stdout: true
+    )
   end
 
   test "a checkout up to date with main runs the script", ctx do
