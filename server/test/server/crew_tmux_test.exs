@@ -101,6 +101,42 @@ defmodule Server.Crew.TmuxTest do
     assert Enum.any?(Channel.thread_messages(t), &(&1.author == "tlon" and &1.body =~ "retired 1 earlier session"))
   end
 
+  test "a role whose window is already open is not spawned again, and nothing holding its seat is signalled",
+       %{thread: t} do
+    proc = Path.join(System.tmp_dir!(), "crew_live_#{System.pid()}_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(Path.join(proc, "4243"))
+    File.write!(Path.join(proc, "4243/environ"), "TLON_THREAD=#{t.id}\0TLON_AUTHOR=reviewer\0")
+    test_pid = self()
+    prior = Application.fetch_env!(:server, :orphans)
+
+    Application.put_env(:server, :orphans,
+      proc_dir: proc,
+      grace: 0,
+      kill: fn pid -> send(test_pid, {:retired, pid}) end,
+      force: fn pid -> send(test_pid, {:forced, pid}) end
+    )
+
+    Application.put_env(:server, :tmux_cmd, fn
+      "tmux", ["-L", _, "list-windows" | _], _opts ->
+        {"0\tr#{t.id}\t\t\t1\t\t\n", 0}
+
+      "tmux", argv, _opts ->
+        send(test_pid, {:tmux, argv})
+        {"", 0}
+    end)
+
+    on_exit(fn ->
+      Application.put_env(:server, :orphans, prior)
+      File.rm_rf!(proc)
+    end)
+
+    assert {:error, {:already_running, "r" <> _}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    refute_received {:retired, _}
+    refute_received {:forced, _}
+    refute_received {:join, _, _, _}
+    refute_received {:tmux, ["-L", _, "new-window" | _]}
+  end
+
   test "no session yet → the role opens it (new-session), like the arbiter", %{thread: t, session: session} do
     test_pid = self()
 
@@ -122,7 +158,42 @@ defmodule Server.Crew.TmuxTest do
     assert {:error, :no_thread} = Crew.Tmux.spawn("reviewer", 999_999, "x")
 
     Application.put_env(:server, :tmux_cmd, fn "tmux", _argv, _opts -> {"dup window", 1} end)
-    assert {:error, {:tmux_failed, "dup window"}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    assert {:error, {:tmux, "dup window"}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+  end
+
+  test "a tmux that cannot list windows fails closed: nothing is retired, joined or opened", %{thread: t} do
+    proc = Path.join(System.tmp_dir!(), "crew_fault_#{System.pid()}_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(Path.join(proc, "4244"))
+    File.write!(Path.join(proc, "4244/environ"), "TLON_THREAD=#{t.id}\0TLON_AUTHOR=reviewer\0")
+    test_pid = self()
+    prior = Application.fetch_env!(:server, :orphans)
+
+    Application.put_env(:server, :orphans,
+      proc_dir: proc,
+      grace: 0,
+      kill: fn pid -> send(test_pid, {:retired, pid}) end,
+      force: fn pid -> send(test_pid, {:forced, pid}) end
+    )
+
+    Application.put_env(:server, :tmux_cmd, fn
+      "tmux", ["-L", _, "list-windows" | _], _opts ->
+        {"server busy", 1}
+
+      "tmux", argv, _opts ->
+        send(test_pid, {:tmux, argv})
+        {"", 0}
+    end)
+
+    on_exit(fn ->
+      Application.put_env(:server, :orphans, prior)
+      File.rm_rf!(proc)
+    end)
+
+    assert {:error, {:tmux, "server busy"}} = Crew.Tmux.spawn("reviewer", t.id, "x", inject: false)
+    refute_received {:retired, _}
+    refute_received {:forced, _}
+    refute_received {:join, _, _, _}
+    refute_received {:tmux, ["-L", _, "new-window" | _]}
   end
 
   test "the opening turn is queued for the reviewer's session to take — nothing typed into the booting pane",
