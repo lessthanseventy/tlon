@@ -231,6 +231,17 @@ defmodule Server.StaffingTest do
     refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
   end
 
+  test "a cut turn on a leadless thread still tells its agent", %{ws: ws} do
+    {:ok, thread} = Channel.open_thread(%{title: "no lead", scope: "machine", workspace_id: ws.id})
+    session!("borges", thread.id, 30, true)
+    thread |> Ecto.Changeset.change(agent_id: nil) |> Server.Repo.update!()
+    tmux("")
+
+    assert :ok = Staffing.pass(ws.id)
+
+    assert Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "@borges the machine restarted"))
+  end
+
   test "clearing a coworker's context ends their sessions and closes their windows, nobody else's",
        %{ws: ws, standing: standing, sock: sock, session: session} do
     thread = staffed_thread(ws, "borges")
