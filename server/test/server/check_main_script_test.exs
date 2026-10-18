@@ -19,11 +19,11 @@ defmodule Server.CheckMainScriptTest do
     stub(bin, "mix", "exit 0")
 
     sh!(tmp, "git init -q --bare origin.git && git clone -q origin.git tlon")
-    File.mkdir_p!(Path.join(root, "scripts"))
+    File.mkdir_p!(Path.join(root, "scripts/lib"))
     File.mkdir_p!(Path.join(root, "server"))
     File.write!(Path.join(root, "server/mix.exs"), "")
 
-    for f <- ~w(check-main.sh git-fetch-origin.sh),
+    for f <- ~w(check-main.sh git-fetch-origin.sh lib/seed-hex.sh),
         do: File.cp!(Path.join(@scripts, f), Path.join(root, "scripts/#{f}"))
 
     sh!(root, """
