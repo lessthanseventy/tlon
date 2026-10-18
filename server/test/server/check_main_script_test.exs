@@ -22,7 +22,9 @@ defmodule Server.CheckMainScriptTest do
     File.mkdir_p!(Path.join(root, "scripts"))
     File.mkdir_p!(Path.join(root, "server"))
     File.write!(Path.join(root, "server/mix.exs"), "")
-    for f <- ~w(check-main.sh git-fetch-origin.sh), do: File.cp!(Path.join(@scripts, f), Path.join(root, "scripts/#{f}"))
+
+    for f <- ~w(check-main.sh git-fetch-origin.sh),
+        do: File.cp!(Path.join(@scripts, f), Path.join(root, "scripts/#{f}"))
 
     sh!(root, """
     git config user.email t@t && git config user.name t &&
