@@ -43,9 +43,10 @@ defmodule Server.Crew.Tmux do
          %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
          ws when is_integer(ws) <- Arbiter.Tmux.workspace_id(thread) || {:error, :no_workspace},
          %Profile{} = profile <- Profiles.fetch(profile_name, ws) || {:error, {:missing_profile, profile_name}},
+         window = Crew.crew_window(role_key, thread_id),
+         :absent <- window_state(ws, window),
          :ok <- materialise(profile),
          {:ok, %{exports: exports}} <- joiner().(thread_id, handle, mandate: "machine", assign: false),
-         window = Crew.crew_window(role_key, thread_id),
          script = Tmux.boot_script(exports, Harness.driver(profile.harness).launch_command(profile)),
          _ = Server.Orphans.retire(thread_id, handle, Application.get_env(:server, :orphans, [])),
          :ok <- open_window(ws, window, script) do
@@ -53,6 +54,7 @@ defmodule Server.Crew.Tmux do
       {:ok, window}
     else
       {:error, _} = err -> err
+      :present -> {:error, {:already_running, window_name(role_key, thread_id)}}
       other -> {:error, other}
     end
   end
@@ -102,5 +104,16 @@ defmodule Server.Crew.Tmux do
   defp opening_turn(thread_id, task) do
     "You are reviewing on server thread ##{thread_id}. Leader handle: claude. " <>
       "Task: #{task}. Read the diff (git diff/show), post findings, and escalate any fix per your protocol."
+  end
+
+  defp window_name(role_key, thread_id), do: Crew.crew_window(role_key, thread_id)
+
+  # Orphans.retire is only safe on a windowless seat: a live window's harness holds the same
+  # identity. A tmux fault is an error, never "absent": the window may be there.
+  defp window_state(ws, window) do
+    case Tmux.list_windows(ws) do
+      tabs when is_list(tabs) -> if Enum.any?(tabs, &(&1.name == window)), do: :present, else: :absent
+      {:error, why} -> {:error, {:tmux, why}}
+    end
   end
 end
