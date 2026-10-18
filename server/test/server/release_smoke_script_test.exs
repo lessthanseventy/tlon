@@ -309,6 +309,44 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert out =~ "the hold of http://127.0.0.1:#{port} expired after 2s"
     end
 
+    test "two smokes reclaiming one stale lock at once: exactly one builds", ctx do
+      {sha, 0} = System.cmd("git", ["-C", ctx.root, "rev-parse", "work/feature"])
+      lock = Path.join(ctx.tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
+      File.write!(lock, "pid 999999 on http://127.0.0.1:#{free_port()}\n")
+      File.touch!(lock, {{2020, 1, 1}, {0, 0, 0}})
+      hold_lock(lock)
+
+      # the staleness check answers, then dawdles for a second: the second smoke starts half of one in, reads the
+      # same stale record, and removes the lock the first has just reclaimed
+      stub(ctx.stubs, "find", ~S"""
+      out="$(PATH="${PATH#*:}" find "$@")"
+      case "$*" in *-mmin*) sleep 1 ;; esac
+      printf '%s' "$out"
+      """)
+
+      stub(ctx.stubs, "mix", ~S"""
+      [ "$1" = release ] || exit 0
+      echo build >>"$SMOKE_SIGNAL/builds"
+      until [ -e "$SMOKE_SIGNAL/go" ]; do sleep 0.1; done
+      """)
+
+      script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
+
+      smokes =
+        for i <- 1..2 do
+          env = race_env(ctx, free_port())
+          if i == 2, do: Process.sleep(500)
+          Task.async(fn -> System.cmd("bash", [script, "work/feature"], env: env, stderr_to_stdout: true) end)
+        end
+
+      wait_for(Path.join(ctx.signal, "builds"))
+      Process.sleep(2_500)
+      File.write!(Path.join(ctx.signal, "go"), "")
+      Task.await_many(smokes, 30_000)
+
+      assert File.read!(Path.join(ctx.signal, "builds")) == "build\n"
+    end
+
     test "a smoke from a checkout older than the build lock leaves a running smoke's build alone", ctx do
       env = race_env(ctx, free_port())
 
