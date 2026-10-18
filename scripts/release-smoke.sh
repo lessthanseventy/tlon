@@ -102,7 +102,7 @@ if [ -z "$url" ]; then
   mkdir -p "${TMPDIR:-/tmp}/tlon-smoke"
   dir="$(mktemp -d "${TMPDIR:-/tmp}/tlon-smoke/XXXXXX")"
   # held until this run and everything it started exits: the sweep's sign that the build is live.
-  # Taken before the checkout, as the sweep skips a dir with no server/ in it yet
+  # Taken before the checkout: the sweep reaps any dir whose lock is free, checked out or not
   exec 9>"$dir.lock"
   flock -n 9 || fail "can't lock $dir"
   git -C "$root" worktree add -q --detach "$dir" "$sha" || fail "can't check out ${sha:0:7}"
