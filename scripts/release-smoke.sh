@@ -78,6 +78,13 @@ if [ -z "$url" ]; then
       [ -z "$(find "$lock" -maxdepth 0 -mmin +20)" ]; then
       fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
     fi
+    # Reclaiming replaces the lock file, so two reclaimers would each lock a file of their own and both
+    # build. One at a time, by a lock beside it held to the end; and the file this run opened must still be
+    # the one at the path, or another reclaimer got there between its read of the record and this.
+    exec 6>"$lock.reclaim"
+    flock -n 6 || fail "${sha:0:7} is already being smoked (another run is reclaiming its lock)"
+    [ "$(stat -L -c %i /proc/$$/fd/8)" = "$(stat -c %i "$lock" 2>/dev/null)" ] ||
+      fail "${sha:0:7} is already being smoked (another run reclaimed its lock first)"
     echo "smoke: reclaiming the lock on ${sha:0:7} from a holder that is gone ($holder)"
     exec 8>&-
     rm -f "$lock"
@@ -135,7 +142,7 @@ if [ -z "$url" ]; then
   # MCP is what serves /api; everything that would talk to a model, the weather or a pane stays off
   TLON_NODE="tlon-smoke-$port@127.0.0.1" TLON_DATABASE="$db" TLON_START_MCP=1 TLON_MCP_PORT="$port" \
     TLON_BANTER=0 TLON_WEATHER=0 TLON_CALENDAR=0 \
-    "$dir/server/_build/prod/rel/server/bin/server" start >>"$log" 2>&1 8>&- &
+    "$dir/server/_build/prod/rel/server/bin/server" start >>"$log" 2>&1 6>&- 8>&- &
   node=$!
   for _ in $(seq 90); do
     curl -s -m 2 -o /dev/null "$url/api/office" && break
