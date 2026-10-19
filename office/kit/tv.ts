@@ -323,6 +323,12 @@ const aquarium = (): Show => {
   }
 }
 
+/** seconds to midnight while the clock is in the last ten minutes of Dec 31, else null */
+export function newYearLeft(d: Date): number | null {
+  if (d.getMonth() !== 11 || d.getDate() !== 31 || d.getHours() !== 23 || d.getMinutes() < 50) return null
+  return 3600 - d.getMinutes() * 60 - d.getSeconds()
+}
+
 /** a cut's notes as an encyclopedia entry: "UQBAR — release 650fa4a. 1. first. 2. second." */
 export const releaseText = (sha: string, notes: readonly string[]) =>
   `UQBAR — release ${sha.slice(0, 7)}. ${notes.map((n, i) => `${i + 1}. ${n.replace(/\s+/g, " ").trim().replace(/\.$/, "")}.`).join(" ")}`.trim()
@@ -338,7 +344,10 @@ export class Tv {
   private idx = Math.floor(Math.random() * this.shows.length)
   private ticks = 0
   constructor(w: number, h: number) { this.screen = new Screen(w, h); this.shows[this.idx]!.init(this.screen) }
-  get channel() { return this.levelLeft > 0 ? "level" : this.cut ? "release" : this.shows[this.idx]!.name }
+  get channel() { return this.levelLeft > 0 ? "level" : this.countdown !== null ? "countdown" : this.cut ? "release" : this.shows[this.idx]!.name }
+  /** the New Year's countdown: seconds to midnight, set by the room from its clock, null the rest of the year */
+  private countdown: number | null = null
+  setCountdown(seconds: number | null) { this.countdown = seconds }
   /** the release channel: Uqbar's entry for a cut, up from the cut until `settle()` (after at least RELEASE_MIN frames) */
   private cut: { sha: string; text: string; at: number; settled: boolean } | null = null
   showRelease(sha: string, notes: readonly string[]) { this.cut = { sha: sha.slice(0, 7), text: releaseText(sha, notes), at: 0, settled: false } }
@@ -377,6 +386,13 @@ export class Tv {
       this.drawText("LEVEL", 2, 1, 3)
       this.drawText(String(this.level), 13, 2, this.levelLeft % 8 < 4 ? 1 : 2)
       if (--this.levelLeft === 0) { this.screen.clear(); this.shows[this.idx]!.init(this.screen) }
+      return
+    }
+    if (this.countdown !== null) {
+      const left = this.countdown, s = this.screen
+      s.clear()
+      this.drawText("NEW YEAR", 1, 1, 3)
+      this.drawText(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`, 13, 2, left < 11 && this.ticks++ % 8 < 4 ? 2 : 1)
       return
     }
     if (this.cut) {
