@@ -1633,7 +1633,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const r = room(), highs: Row[] = r instanceof WideRoom ? r.highScores().flatMap((h, i): Row[] => (h ? [{ segs: [key(`cabinet ${i + 1}  `), plain(`best ${h.score}`), dim(`  by ${h.name}`)] }] : [])) : []
       const rows: Row[] = GAMES.map((g): Row => (Bun.which(g.cmd) ? { segs: [plain(g.name.padEnd(16)), dim(g.what)], open: () => play(g) } : { segs: [dim(g.name.padEnd(16)), dim("not installed")] }))
       return {
-        title: "ARCADE", rows: [{ segs: [plain("the office's cabinets. a game you leave with ctrl+] (to the lobby) waits for you; quitting it brings the room back.")] }, ...highs, ...rows],
+        title: "ARCADE", rows: [{ segs: [plain("the office's cabinets. a game you leave with ctrl+] (to the room) waits for you; quitting it brings the room back.")] }, ...highs, ...rows],
         actions: [back1],
       }
     }
@@ -1844,7 +1844,7 @@ function draw() {
   const colsN = cols(), termRows = process.stdout.rows ?? 40
   if (reader) {
     if (picker || confirm) { out(`${ESC}[?25l` + drawOverlay(colsN, termRows)); return }
-    out(reader.draw(colsN, termRows, threadOf(reader.tid), [...threadActions(reader.tid, true).map((x) => `${x.key} ${x.label}`), "pgup/pgdn scroll", "esc back", "ctrl+] lobby"].join(" · ")))
+    out(reader.draw(colsN, termRows, threadOf(reader.tid), [...threadActions(reader.tid, true).map((x) => `${x.key} ${x.label}`), "pgup/pgdn scroll", "esc back", "ctrl+] room"].join(" · ")))
     return
   }
   const a = view()
@@ -1930,14 +1930,14 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     picker.sel = Math.min(picker.sel, Math.max(0, shown.length - 1))
     title = `${picker.title}: ${picker.q.text}`
     segRows = shown.map((p) => ({ segs: p.segs, open: p.run }))
-    keys = "type to narrow · ↑↓ move · enter pick · esc close · ctrl+] lobby"
+    keys = "type to narrow · ↑↓ move · enter pick · esc close · ctrl+] room"
     cursor = { r: -1, c: title.length + 1 }
     sel = picker.sel
   } else if (input?.ed.multiline) {
     const v = input.ed.view(colsN - 6, Math.max(1, termRows - top - 3))
     title = input.label
     segRows = [{ segs: cyclesSegs(input) }, ...v.rows.map((r) => ({ segs: [pink(" ▌ "), plain(r)] }))]
-    keys = `enter done · alt-enter newline${input.cycles?.length ? ` · tab change the lit choice${input.cycles.length > 1 ? " · shift-tab the next choice" : ""}` : ""} · esc cancel · ctrl+] lobby`
+    keys = `enter done · alt-enter newline${input.cycles?.length ? ` · tab change the lit choice${input.cycles.length > 1 ? " · shift-tab the next choice" : ""}` : ""} · esc cancel · ctrl+] room`
     cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
   } else {
     const d = detail()
@@ -1947,7 +1947,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
   const split = acts.length > 0 && colsN >= 80
   const leftW = split ? colsN - ACTIONS_W - 1 : colsN
   const box = picker || input ? null : cardBox(), bv = box?.ed.view(leftW - 4, 4), boxH = bv ? bv.rows.length + 1 : 0
-  if (box?.focused) keys = "enter send · alt-enter newline · esc leave the box · pgup/pgdn scroll · ctrl+] lobby"
+  if (box?.focused) keys = "enter send · alt-enter newline · esc leave the box · pgup/pgdn scroll · ctrl+] room"
   const selectable = rows.some((r) => r.open) && !input
   if (snapSel && selectable && !picker) { snapSel = false; if (!rows[sel]?.open) sel = rows.findIndex((r) => r.open) }
   if (sel >= rows.length) sel = Math.max(0, rows.length - 1)
@@ -2111,7 +2111,7 @@ function toyKey(k: string): boolean {
 function onKey(k: string) {
   keyLog = [...keyLog, k].slice(-KONAMI.length)
   if (isKonami(keyLog)) { keyLog = []; room().disco(); status = "↑↑↓↓←→←→BA — everybody dance"; changed(); return draw() }
-  if (k === LOBBY_KEY) return toLobby()
+  if (k === ROOM_CTRL) return toRoom()
   if (picker) return pickerKey(k)
   if (input) return inputKey(k)
   if (confirm) {
@@ -2275,11 +2275,11 @@ function onMouse(m: Extract<Input, { t: "mouse" }>) {
 
 // ── zoomed into a terminal ─────────────────────────────────────────────────────────────────────
 // The whole screen is one coworker's terminal: a bar on top, every key to the pane but Ctrl-],
-// which goes to the lobby.
+// which goes to the room.
 let zoom: { view: TerminalView; label: string; after?: () => void } | null = null
 const ROOM_KEY = 0x1d // Ctrl-]
 /** Ctrl-] as `tokenize` names it: a control character is ctrl- and its byte + 0x60 */
-const LOBBY_KEY = "ctrl-}"
+const ROOM_CTRL = "ctrl-}"
 
 async function zoomInto(tid: number) {
   const target = await data.terminal(tid)
@@ -2431,32 +2431,32 @@ function drawZoom() {
   if (!zoom) return
   const colsN = cols(), vt = zoom.view.vt
   // no autowrap while drawing: a row the VT and this terminal measure differently can't wrap and scroll the bar away
-  let o = `${ESC}[?2026h${ESC}[?7l${ESC}[?25l${ESC}[1;1H` + line([{ s: " ROOM ", fg: ROLE.ground, bg: ROLE.attention }, key(" ctrl+] lobby "), { s: zoom.label, fg: ROLE.body, bold: true }], colsN)
+  let o = `${ESC}[?2026h${ESC}[?7l${ESC}[?25l${ESC}[1;1H` + line([{ s: " ROOM ", fg: ROLE.ground, bg: ROLE.attention }, key(" ctrl+] room "), { s: zoom.label, fg: ROLE.body, bold: true }], colsN)
   vtRows(vt).forEach((r, i) => { o += `${ESC}[${i + 2};1H${r}` })
   const b = vt.buffer.active
   o += `${ESC}[?7h${ESC}[${b.cursorY + 2};${b.cursorX + 1}H${ESC}[?25h${ESC}[?2026l`
   out(o)
 }
-function leaveZoom(lobby = false): void {
+function leaveZoom(toTheRoom = false): void {
   if (!zoom) return
   const z = zoom
   zoom = null
   z.view.close()
   out(`${ESC}[0m${ESC}[?25l${ESC}[?1003h${ESC}[?1006h${ESC}[?2004h`)
   z.after?.()
-  if (lobby) return toLobby()
+  if (toTheRoom) return toRoom()
   if (reader) { out(`${ESC}[2J`); return draw() }
   layoutScreen(); draw()
 }
-/** raw keys while zoomed: Ctrl-] goes to the lobby, the rest goes to the pane as it came */
+/** raw keys while zoomed: Ctrl-] goes to the room, the rest goes to the pane as it came */
 function zoomInput(b: Uint8Array) {
   const at = b.indexOf(ROOM_KEY)
   if (at < 0) return zoom?.view.send(b)
   zoom?.view.send(b.subarray(0, at))
   leaveZoom(true)
 }
-/** Ctrl-] from anywhere: the lobby, the room with nothing open over it */
-function toLobby(): void {
+/** Ctrl-] from anywhere: the room with nothing open over it */
+function toRoom(): void {
   if (zoom) return leaveZoom(true)
   if (input && !input.ed.empty) banked.set(input.label, input.ed.text)
   bankReader()
