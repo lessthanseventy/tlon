@@ -38,7 +38,7 @@ new() {
   }
   install "$dir/server" "mix deps.get" mix deps.get
   # menard formats with the plugins from the host's last build, which a fresh worktree has none of
-  install "$dir/server" "formatter plugins" mix deps.compile quokka doctest_formatter
+  install "$dir/server" "formatter plugins" mix deps.compile credo quokka doctest_formatter
   install "$dir/office" "bun install" bun install --frozen-lockfile
   local pkg
   for pkg in "$dir"/adapters/*/package.json; do
