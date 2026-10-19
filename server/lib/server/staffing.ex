@@ -66,7 +66,11 @@ defmodule Server.Staffing do
       [] ->
         :ok
 
-      # every step reads an absent window as gone: a tmux that can't be asked skips the pass
+      # every step reads an absent window as gone: a tmux that is down or can't be asked skips the
+      # pass, so a restart ends no session and posts no notice until tmux answers again
+      {:error, :not_up} ->
+        :ok
+
       {:error, why} ->
         Logger.warning("staffing pass #{workspace_id} skipped: tmux #{why}")
         :ok

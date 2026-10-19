@@ -11,6 +11,10 @@ defmodule Server.Office do
   alias Server.Office.Room
   alias Server.Repo
 
+  @restamp_s 30
+
+  @held_s 120
+
   @consult_window_s 180
   @page 60
 
@@ -242,16 +246,26 @@ defmodule Server.Office do
   defp home_ws_ids(wss), do: wss |> Enum.filter(&(&1.type == "home")) |> Enum.map(& &1.id)
 
   # a session is only warm with a window to wake in: the thread's leaf, or the coworker's own on the standing thread
-  # the last windows tmux answered with: a read that faults keeps them, so a hiccup never empties the room
+  # the last windows tmux answered with: a read that fails (a fault, a restart) keeps them for
+  # @held_s, so a hiccup never empties the room, and a tmux that stays down does not keep ghosts
   defp held_windows(ws) do
     key = {__MODULE__, :windows, ws}
+    now = System.monotonic_time(:second)
 
     case Server.Tmux.list_windows(ws) do
       {:error, _} ->
-        :persistent_term.get(key, [])
+        case :persistent_term.get(key, nil) do
+          {tabs, at} when now - at <= @held_s -> tabs
+          _ -> []
+        end
 
       tabs ->
-        if :persistent_term.get(key, nil) != tabs, do: :persistent_term.put(key, tabs)
+        # re-stamped at most every @restamp_s: a persistent_term write that changes the value costs a global GC
+        case :persistent_term.get(key, nil) do
+          {^tabs, at} when now - at <= @restamp_s -> :ok
+          _ -> :persistent_term.put(key, {tabs, now})
+        end
+
         tabs
     end
   end

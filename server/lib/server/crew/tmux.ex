@@ -113,6 +113,7 @@ defmodule Server.Crew.Tmux do
   defp window_state(ws, window) do
     case Tmux.list_windows(ws) do
       tabs when is_list(tabs) -> if Enum.any?(tabs, &(&1.name == window)), do: :present, else: :absent
+      {:error, :not_up} -> :absent
       {:error, why} -> {:error, {:tmux, why}}
     end
   end

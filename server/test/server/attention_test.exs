@@ -137,9 +137,11 @@ defmodule Server.AttentionTest do
       Process.put(:screen, @claude)
       :ok = Attention.tick(ws.id)
 
-      Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"server exited unexpectedly", 1} end)
-      :ok = Attention.tick(ws.id)
-      assert [%Message{resolved_at: nil}] = prompts(t.id)
+      for out <- ["server exited unexpectedly", "no server running on /tmp/tmux-1000/x"] do
+        Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {out, 1} end)
+        :ok = Attention.tick(ws.id)
+        assert [%Message{resolved_at: nil}] = prompts(t.id)
+      end
     end
 
     test "a new dialog on the same window supersedes; a window that is gone closes its prompt", %{ws: ws, thread: t} do

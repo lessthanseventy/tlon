@@ -458,4 +458,26 @@ defmodule Server.StaffingTest do
     {_, cron} = Enum.find(plugins, &match?({Oban.Plugins.Cron, _}, &1))
     assert {"* * * * *", Server.Jobs.Staff} in cron[:crontab]
   end
+
+  test "a tmux server that is not up ends no session and posts no restart notice (a restart must not read as every window closed)",
+       %{ws: ws} do
+    thread = staffed_thread(ws, "borges")
+    cut = session!("borges", thread.id, 30, true)
+    idle = session!("hronir", thread.id, 30)
+    before = length(Channel.thread_messages(thread))
+
+    for out <- [
+          "no server running on /tmp/tmux-1000/tlon-workspace-#{ws.id}",
+          "error connecting to /tmp/tmux-1000/x (No such file or directory)",
+          "can't find session: w#{ws.id}"
+        ] do
+      Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {out, 1} end)
+      assert :ok = Staffing.pass(ws.id)
+    end
+
+    refute Server.Repo.get!(Server.Session, cut.id).ended_at
+    refute Server.Repo.get!(Server.Session, idle.id).ended_at
+    assert length(Channel.thread_messages(thread)) == before
+    refute Enum.any?(Channel.thread_messages(thread), &(&1.body =~ "the machine restarted"))
+  end
 end

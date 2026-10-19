@@ -187,8 +187,8 @@ defmodule Server.Web.PanelsLive do
       <div class="row">
         windows:
         <span :for={t <- if(is_list(w.windows), do: w.windows, else: [])}><code>{t.name}</code><span :if={t.thread_id} class="meta">→#{t.thread_id}</span> </span>
-        <span :if={w.windows == []} class="meta">(no tmux session)</span>
-        <span :if={match?({:error, _}, w.windows)} class="meta">(tmux didn't answer: {elem(w.windows, 1)})</span>
+        <span :if={w.windows == [] or w.windows == {:error, :not_up}} class="meta">(no tmux session)</span>
+        <span :if={match?({:error, why} when why != :not_up, w.windows)} class="meta">(tmux didn't answer: {elem(w.windows, 1)})</span>
       </div>
     </div>
     <button phx-click="staff">run the staffing pass now</button>
