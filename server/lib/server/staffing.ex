@@ -313,7 +313,7 @@ defmodule Server.Staffing do
   lead, spawning them — and close the old worker's leaf. `{:ok, thread}`, or
   `Channel.assign_lead/2`'s error with nothing changed.
   """
-  def hand_off(thread_id, handle, author \\ Application.get_env(:server, :operator, "andrew")) do
+  def hand_off(thread_id, handle, author \\ Server.OperatorConfig.operator()) do
     with {:ok, thread} <- Channel.assign_lead(thread_id, handle) do
       with %{index: index} <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id),
            do: Tmux.kill_window(thread.workspace_id, index)

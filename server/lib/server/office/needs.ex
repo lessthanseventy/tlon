@@ -146,7 +146,7 @@ defmodule Server.Office.Needs do
 
   # the question is the newest message from someone other than the operator
   defp question(t) do
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Server.OperatorConfig.operator()
 
     m =
       Repo.one(
@@ -429,7 +429,7 @@ defmodule Server.Office.Needs do
 
   defp withdraw_ask(id) do
     with %Message{kind: "prompt", resolved_at: nil} = ask <- Repo.get(Message, id) do
-      operator = Application.get_env(:server, :operator, "andrew")
+      operator = Server.OperatorConfig.operator()
       Server.Attention.resolve(ask, "dismissed by #{operator}")
 
       Server.Channel.post(%{
@@ -464,7 +464,7 @@ defmodule Server.Office.Needs do
 
   # everything, put away or not
   defp all do
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Server.OperatorConfig.operator()
     open = Repo.all(from t in Thread, where: t.state == "open")
     prompts = Server.Attention.open_prompts_by_thread()
 
@@ -626,7 +626,7 @@ defmodule Server.Office.Needs do
   # a coworker's chatter is not movement, nor a prompt the machine closed ("window closed"); an
   # operator's answer starts the clock again, so the lead gets the window to act on it
   defp last_moved(t, commit_at) do
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Server.OperatorConfig.operator()
 
     event =
       Repo.one(

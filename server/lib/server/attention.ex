@@ -251,7 +251,7 @@ defmodule Server.Attention do
   clears it (`respond/3`). `{:ok, message}`.
   """
   def ask(thread_id, author, text) do
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Server.OperatorConfig.operator()
 
     with {:ok, message} <- Channel.post(%{thread_id: thread_id, author: author, body: text}),
          %Thread{} = thread <- Repo.get(Thread, thread_id),

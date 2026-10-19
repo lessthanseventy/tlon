@@ -217,7 +217,7 @@ defmodule Server.Channel do
         detail: %{
           "thread_id" => thread.id,
           "title" => thread.title,
-          "deleted_by" => Application.get_env(:server, :operator, "andrew")
+          "deleted_by" => Server.OperatorConfig.operator()
         }
       })
 
@@ -452,7 +452,7 @@ defmodule Server.Channel do
   def operator?(author) when is_binary(author), do: String.downcase(author) == operator()
   def operator?(_author), do: false
 
-  defp operator, do: :server |> Application.get_env(:operator, "andrew") |> String.downcase()
+  defp operator, do: String.downcase(Server.OperatorConfig.operator())
 
   @doc """
   Recent messages ACROSS all threads — the Comms rollup feed (a "slack for agents" timeline, not

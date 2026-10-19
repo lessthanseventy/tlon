@@ -86,7 +86,7 @@ defmodule Server.Workline.Continuation do
       sheriff = Server.Sheriff.of(thread.workspace_id)
 
       if !sheriff do
-        operator = Application.get_env(:server, :operator, "andrew")
+        operator = Server.OperatorConfig.operator()
         {:ok, _} = thread |> Thread.workline_stage_changeset(%{awaiting: operator}) |> Repo.update()
       end
 

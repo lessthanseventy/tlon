@@ -28,7 +28,7 @@ defmodule Server.Projects do
   import's memory thread), and those are not the operator using a project.
   """
   def last_used(workspace_id) do
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Server.OperatorConfig.operator()
 
     Repo.one(
       from m in Server.Message,

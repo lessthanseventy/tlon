@@ -293,6 +293,10 @@ defmodule Server.OperatorConfig do
     end
   end
 
+  @doc "The operator's handle: `config :server, :operator` (TLON_OPERATOR), \"andrew\" when unset."
+  @spec operator() :: String.t()
+  def operator, do: Application.get_env(:server, :operator, "andrew")
+
   defp xdg_config_home do
     System.get_env("XDG_CONFIG_HOME") || Path.join(System.user_home!(), ".config")
   end
