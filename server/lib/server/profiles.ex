@@ -74,8 +74,8 @@ defmodule Server.Profiles do
     `open_thread`/`close_thread` and the cross-leaf `machine_overview`); they ride as deny rules
     (`Server.Harness.ClaudeCode`).
   - **Driver.** Sonnet; a workspace policy `model` points it at any other model, ollama's included.
-  - **Sandboxed + yolo permissions.** `@tlon_sandbox` + `@tlon_permissions`: on a non-Anthropic
-    model `yoloMode` runs it in its sandbox with no prompts, so an autonomous coworker never stalls,
+  - **Sandboxed + yolo permissions.** `@tlon_sandbox` + `@tlon_permissions`: on any model
+    `yoloMode` runs it in its sandbox with no prompts, so an autonomous coworker never stalls,
     and the catastrophic-command + secret-path floor holds as deny rules.
   """
   alias Server.OperatorConfig
@@ -225,7 +225,7 @@ defmodule Server.Profiles do
   # deny rules (`Server.Harness.ClaudeCode`), which hold in every permission mode: `sudo *` and the
   # secret paths are denied even when the coworker runs without asking. `yoloMode` is the
   # per-coworker knob (the CONFIG pane's ask-vs-allow): Tlön runs AUTONOMOUSLY, so an ask would just
-  # hang it, and on a sandboxed non-Anthropic model yolo runs it with no prompts at all.
+  # hang it, and a sandboxed seat on yolo runs with no prompts at all.
   @tlon_permissions %{
     "yoloMode" => true,
     "permissionReviewLog" => true,
