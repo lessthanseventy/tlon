@@ -37,6 +37,8 @@ new() {
     (cd "$d" && "$@") >"$log" 2>&1 || { tail -n 20 "$log" >&2; fail "$what failed in $d"; }
   }
   install "$dir/server" "mix deps.get" mix deps.get
+  # menard formats with the plugins from the host's last build, which a fresh worktree has none of
+  install "$dir/server" "formatter plugins" mix deps.compile quokka doctest_formatter
   install "$dir/office" "bun install" bun install --frozen-lockfile
   local pkg
   for pkg in "$dir"/adapters/*/package.json; do
