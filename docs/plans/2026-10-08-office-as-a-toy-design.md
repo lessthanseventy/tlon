@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-08
 **Status:** proposed by Uqbar from ideas by Andrew's son, who asked for most of what is good here.
-Seven steps in §8, each a crew ticket.
+Steps 1, 3, 4, 5 are built; 2, 6, 7, 8 are partial or in flight (status in §8), each a crew ticket.
 **Asked:** Andrew, relaying his son: *"a dwight type character … distinct personalities in their
 interactions and responses … hijinxy type things to happen … monkeys and animals breaking out of the
 zoo and rampaging the office, or an asteroid blowing things up … a bathroom … nina to go in and drink
@@ -135,12 +135,12 @@ on the settings card): `mode` (`office` | `sandbox`), one **preset**, and per-di
 preset sets the dials; touching a dial keeps the preset and shows it as `(custom)`. Defaults: `office`,
 `casual`, no overrides, everything on.
 
-| preset | banter | events | chain | severity | pets | doorbell | moods |
-|---|---|---|---|---|---|---|---|
-| `business` | off | never | no | 1 | asleep | off | no |
-| `casual` (default) | on | some | no | 1 | on | normal | no |
-| `party` | on | lots | no | 2 | on | busy | no |
-| `rimworld` | on | lots | yes | 3 | on | busy | a red build sours the afternoon |
+| preset | banter | events | chain | severity | pets | doorbell | moods | souls |
+|---|---|---|---|---|---|---|---|---|
+| `business` | off | never | no | 1 | asleep | off | no | off |
+| `casual` (default) | on | some | no | 1 | on | normal | no | on (#478, unmerged) |
+| `party` | on | lots | no | 2 | on | busy | no | on |
+| `rimworld` | on | lots | yes | 3 | on | busy | a red build sours the afternoon | on |
 
 The dials under a preset: `banter`, `frequency`, `severity`, `chain`, per-event toggles, `pets`,
 `doorbell`, `moods`, `souls` and `weirdness`. `souls` off: the sim ignores the souls' People sections (no
@@ -157,10 +157,10 @@ nothing here reads or writes a thread, ticket, turn or code (`test/whimsy-work-u
 | # | Step | Check |
 |---|---|---|
 | 1 | **Sandbox mode**: a fake snapshot source in `tui/data.ts`, `office:sandbox`, the play keys | the TUI runs with no server; each key does what §1 says — built; `Sim.play` is the stand-in steps 3–5 replace |
-| 2 | **Voices**: a voice per seat (posts and room lines), the §2 table; Scharlach's nameplate, ledger and mug | each seat's banter reads in its voice; the ledger ticks on a red build |
-| 3 | **The bathroom**: the room, its pastime, Nina drinking from the tub, fading pawprints | Nina's trip leaves prints that fade; deterministic under the test seed |
-| 4 | **Front door and doorbell**: the door, the bell, the visitors in §5 | a ring brings a coworker to the door and a visitor in it; a cut brings pizza |
-| 5 | **Events**: the zoo, the meteor, the fire drill, the power cut, the duck | each plays and tidies itself; none touches a thread or a turn |
-| 6 | **The wackiness dial** (preset + dials + toggles, `office.json`) | `business` plays no event and no banter; `rimworld` chains events; a dial overridden under a preset holds; a toggled-off event never plays — built |
-| 7 | **The rest of the cast's room reactions** to events, in voice | every seat reacts to each event in its own way |
-| 8 | **Generators**: personas per seat, and pools of visitors, reactions and puns, on cheap model calls (`Server.Persona`, `Server.ToyPool`) | a hired seat gets a persona; `--reroll` records a new seed; the room renders with the model off — built: the person card shows the persona, `E` makes, rerolls and edits it |
+| 2 | **Voices**: a voice per seat (posts and room lines), the §2 table; Scharlach's nameplate, ledger and mug | each seat's banter reads in its voice; the ledger ticks on a red build — partial: voices are built; the nameplate and mug are drawn by #448 (unmerged); the ledger is open |
+| 3 | **The bathroom**: the room, its pastime, Nina drinking from the tub, fading pawprints | Nina's trip leaves prints that fade; deterministic under the test seed — built |
+| 4 | **Front door and doorbell**: the door, the bell, the visitors in §5 | a ring brings a coworker to the door and a visitor in it; a cut brings pizza — built |
+| 5 | **Events**: the zoo, the meteor, the fire drill, the power cut, the duck | each plays and tidies itself; none touches a thread or a turn — built |
+| 6 | **The wackiness dial** (preset + dials + toggles, `office.json`) | `business` plays no event and no banter; `rimworld` chains events; a dial overridden under a preset holds; a toggled-off event never plays — built; the `souls` and `weirdness` dials are wired by #475 and the casual preset keeps souls on in #478 (both unmerged) |
+| 7 | **The rest of the cast's room reactions** to events, in voice | every seat reacts to each event in its own way — in flight: scripted lines exist; pooled generated reactions land with #475 (unmerged) |
+| 8 | **Generators**: personas per seat, and pools of visitors, reactions and puns, on cheap model calls (`Server.Persona`, `Server.ToyPool`) | a hired seat gets a persona; `--reroll` records a new seed; the room renders with the model off — partial: the person card shows the persona, `E` makes, rerolls and edits it; the pools reach the room through `GET /api/office/toys/:ws` (#456, #475, unmerged); pools of puns are open |

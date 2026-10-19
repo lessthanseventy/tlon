@@ -1,6 +1,6 @@
 # Cohesion off the happy path — audit and plan
 
-**2026-10-13**, Andrew + Uqbar. Status: proposed. Built from four read-only audits of the repo and
+**2026-10-13**, Andrew + Uqbar. Status: partly built; each cause carries its own status line (as of 2026-10-19; PRs marked unmerged are open). Built from four read-only audits of the repo and
 the live store on the evening of 2026-10-12 (design docs vs code; the server's lifecycle; the
 operator surfaces; the system's own records of friction).
 
@@ -28,6 +28,8 @@ So the feeling "good pieces, not cohesive off the happy path" is exactly right, 
 causes. Each is below with its evidence and its fix.
 
 ## Cause 1 — one door, many stops, most stops don't reach it
+
+**Status (2026-10-19): mostly built.** On main: a landing is merged only when GitHub says so (#233), `publish_failed` and `release_failed` (#234), `quota` and `no_seat` (#235) are Needs with answers, one stale-turn clock and one quiet-workline clock (#239), and a workline nothing has moved past the quiet window is a stalled Need. Open: the stalled Need's verbs nudge / hand off / close (#446, unmerged); one landed-alert row and wording (#459, unmerged).
 
 **Three mechanisms mean "waiting on the operator"** (`server/lib/server/`): the `thread.awaiting`
 column (workline gates, worker questions; `attention.ex:257-386`), `prompt` message rows (pane
@@ -107,6 +109,8 @@ is the test that would have gone red on 2026-10-12 with three stuck worklines an
 
 ## Cause 2 — the vocabulary and the state model forked across surfaces
 
+**Status (2026-10-19): in flight, all unmerged.** Glossary and its gate (#438); `TLON_OPERATOR` is a handle everywhere (#440, #443); one seat status on the server (#461), the office (#474) and the mod's `/thread` crew line (#468); one key table and one meaning per key (#441, #442) and the room / front desk words (#444). The renames (`Server.Crew`, `Server.Staffing`) are `pending:` glossary rows, not done.
+
 One concept, several names or glyphs, each surface choosing its own:
 
 - **`○`** is "nobody at a desk" on the board, "idle" on the crew screen, "warm" in the mod's
@@ -162,6 +166,8 @@ asserts each surface's rendering comes from the one function.
 
 ## Cause 3 — degraded states are drawn as nothing, or as the toy
 
+**Status (2026-10-19): half built.** On main: a down channel is a held, dimmed snapshot with its age and the verb, never the fire drill. Unmerged: tmux not up is an error, not an empty office (#450), and a tmux down past the stale clock settles open prompts (#460); the toy answers every card's read and a failed read says why (#463), kept per card (#471).
+
 - **A real outage looks like a fire drill.** Channel down 10 s burns the rack, the crew screams and
   the floor reads FIRE DRILL (`office/kit/sim.ts:603-617`, `rooms/wide.ts:411`) — the same art as
   the sandbox's `f`. The only true signal is a red `channel down` in the header, which names nothing
@@ -206,6 +212,8 @@ returns within the timeout.
 
 ## Cause 4 — off the happy path the office hands you to a shell
 
+**Status (2026-10-19): mostly open.** Only the stalled Need's verbs exist (#446, unmerged). The recovery routes (`send_back`, `republish`, `reopen`, `skip_qa`, `/api/release*`, `bench/hire`, `clock_out`) and the release card are not built.
+
 Operator verbs that exist only in `tlon-cli`/mise/gh: release cut, status, rollback, smoke (no
 `/api/release*` route at all; the office shows a cut as a pizza); `send-back`, `track`, `approve
 --skip-qa`, `reopen`, republish (doesn't exist anywhere), `record-verify`, `hire` for a missing
@@ -232,6 +240,8 @@ don't, so each one ends in `mise run …`.
 
 ## Cause 5 — the docs lie about what's built
 
+**Status (2026-10-19): in progress.** Status lines on the stale design docs and the office `AGENTS.md` souls line are the D1 pass (#479, unmerged, plus the plan docs in this change); the glossary gate (#438, unmerged) is the start of the cite check.
+
 Not a UX cause by itself, but the thing a weaker model trusts: five design docs still say
 "proposed" / "nothing built" for shipped work (home-space, toy, souls, uqbar, git-toolbox); the PM
 doc's body says `refs/heads/release` and `Release.Pointer` (it is `refs/heads/live`, no module); the
@@ -246,6 +256,8 @@ contradictions, the dangling cites moved or dropped, the husks deleted), and `ch
 to fail on a `docs/plans/` cite that doesn't resolve.
 
 ## Cause 6 — the operator's own delegate lives outside the office
+
+**Status (2026-10-19): built.** On main: Uqbar is a pane the server spawns on its own study (#222), kept warm by a 50-minute check-in (#223) and one memory with its study's facts (#225), and drivable from its entry in the office (#224).
 
 Uqbar (`docs/plans/2026-10-08-uqbar-design.md`) is a citizen, not a seat: a Claude Code session in
 Andrew's own terminal, posting with `tlon-cli post --as uqbar`, drawn as a book on the shelf. Its

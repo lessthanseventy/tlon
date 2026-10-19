@@ -1,7 +1,7 @@
 # A home beside the office — the dollhouse, the life quests, and a room that scrolls — design
 
 **Date:** 2026-10-06
-**Status:** agreed with Andrew (the calls in §9), nothing built. Three tracks in §8, each step gated by a check.
+**Status:** agreed with Andrew (the calls in §9); the three tracks in §8 are mostly built, what is open is in the table at the end of §8. Each step was gated by a check.
 **Asked:** Andrew: *"an alternative space … to manage more of my life and less of a dev shop. like
 where my sim clocks out … use the primitives we've managed to come up with to gamify my life. down
 to like leveling up when i brush my teeth … a scrollable office so it doesn't have to feel so
@@ -413,7 +413,17 @@ as three worklines; within a track the steps stack. The two joins are named.
 | 7 | **Pets + temperament** — `kit/pets.ts`, two new species, `pets.json`, the pet card with live preview | per-axis: mode-table weights move the way the table says (a unit test over 10k ticks); the card's preview is driven and read back |
 | 8 | **Whimsy** — from §7, one each, as they appeal | each its own one-line check in its PR |
 
-Step 1 ships with `wide.ts` cut into tiles and Argos in `kit/pets.ts`; step 4 and step 6 can open
+**Status (2026-10-19)**
+
+| Track | Built | Open |
+|---|---|---|
+| **Floor** (steps 1–3) | `kit/tiles.ts` and `kit/floor.ts` compose a plan from tile modules (`kit/tiles/`: office, meeting, lounge, games, kitchen, bathroom, cat-corner); the viewport (`tui/viewport.ts`) follows and pans; build mode places, removes and writes `home.json`; the home's tiles are pixel art (`kit/homeart.ts`) | the grid offset in `home.tiles[].at` is read but not yet applied, so tiles still share absolute coordinates; the home hangs below the office as a static annex, not a street on one floor; the §6 floor presets other than the default; most of the §6 tile catalogue |
+| **Life** (steps 4–5) | the `home` workspace, routines, quests, XP, streaks and level-ups (`Server.Life`, `kit/life.ts`); the life card and header; the dump (one page at home to pour into, saved on every write) | routine packs (`POST /api/life/packs/:name`) and nags (a `Server.Schedule` per routine) |
+| **Dollies** (steps 6–7) | the parts catalogue, the look card and editor, `import-sprite`, `looks.json`; pets as data with seven species (cat, dog, rabbit, bird, hamster, rock, baoaqu), temperament, the pet card, the hiring hall and the pet store | outfits in the parts catalogue; the §6 pet presets beyond the cat slot's and the dog's species (fish, duck, capybara pond-life) |
+
+Step 8 (whimsy) is ongoing: each item is its own PR or ticket.
+
+Step 1 shipped with `wide.ts` cut into tiles and Argos in `kit/pets.ts`; step 4 and step 6 can open
 the same day, on nothing.
 
 ## 9 · Decided (2026-10-06)

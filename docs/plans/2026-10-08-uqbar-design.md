@@ -123,9 +123,9 @@ footnotes at the bottom lists what Uqbar did today, so the operator can audit me
 |---|---|---|
 | 1 | **Uqbar is a citizen**: register agent `uqbar` (not on the bench); `tlon-cli --as`; my sessions post as `uqbar` | a post made with `--as uqbar` shows `uqbar` as its author; no staffing pass ever picks it |
 | 2 | **The volume**: the sprite (closed, open, flap ×2, riffle), the extra spine on the shelf, presence → shelved / flying / perched | with no session the shelf has one wiggling extra spine; a live session's book perches on its focus thread's card |
-| 3 | **Torn pages**: a `uqbar` post → aeroplane to the lead's desk or the card; hand-off loop; the TV's changelog channel on a cut; Argos catches one in N | a post animates an aeroplane to the right desk; a cut shows the entry on the TV |
+| 3 | **Torn pages**: a `uqbar` post → aeroplane to the lead's desk or the card; hand-off loop; the TV's changelog channel on a cut; Argos catches one in N | a post animates an aeroplane to the right desk; a cut shows the entry on the TV — the TV's release channel is #476 and the cut's commit subjects on the snapshot are #457 (both unmerged); the rest is built |
 | 4 | **Marginalia**: the `margin` note kind; margins drawn; full ink while unfocused, fading once seen | notes written while the office was unfocused are full ink on return and fade after |
-| 5 | **The entry (`U`)**: the article, the footnotes as keys, the stage × coworker pivot | `U` shows counts that match the board; a footnote key opens its thread |
+| 5 | **The entry (`U`)**: the article, the footnotes as keys, the stage × coworker pivot | `U` shows counts that match the board; a footnote key opens its thread — built as a card over the room, not a takeover of the screen |
 | 6 | **The small joys**: the knocked-over book and its straightening, Nina's swat, the dog-ear | each appears in the sim's pastimes, deterministic under the test seed |
 
 Step 1 is server-only and comes first. Everything after it is office work and can be a workline

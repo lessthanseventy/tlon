@@ -88,8 +88,8 @@ Andrew's GitHub graph each morning).
 
 | # | Step | Check |
 |---|---|---|
-| 1 | **SOUL.md files**: the format, the folder, live polling, shown on each coworker's card | edit a soul; the card shows it within a poll |
-| 2 | **First drafts**: the generators (toy design step 8) write each soul from its Borges story, role and the voice table; Andrew edits | every seat has a soul; Scharlach's is the Dwight |
-| 3 | **Voice from the soul**: banter, room lines and post tone read it; the mandate still wins | a coworker's lines change when their soul does; a work decision doesn't |
-| 4 | **The room from the soul**: wants and people steer pastimes and company; side projects on the corkboard | rivals avoid each other; Daneri's stanza count grows |
-| 5 | **The diary**: weekly, from real history, in voice | after a merged workline its builder's diary mentions it |
+| 1 | **SOUL.md files**: the format, the folder, live polling, shown on each coworker's card | edit a soul; the card shows it within a poll — built |
+| 2 | **First drafts**: the generators (toy design step 8) write each soul from its Borges story, role and the voice table; Andrew edits | every seat has a soul; Scharlach's is the Dwight — built |
+| 3 | **Voice from the soul**: banter, room lines and post tone read it; the mandate still wins | a coworker's lines change when their soul does; a work decision doesn't — server side built; the office's pair talk reads the soul when the `souls` dial is on (#475, unmerged) |
+| 4 | **The room from the soul**: wants and people steer pastimes and company; side projects on the corkboard | rivals avoid each other; Daneri's stanza count grows — partial: rivals avoid each other and play for blood at foosball and pool (`kit/company.ts`, #449 unmerged); side projects on the corkboard are open (ticket #323) |
+| 5 | **The diary**: weekly, from real history, in voice | after a merged workline its builder's diary mentions it — built; the diary also credits QA, reviewers and the librarian (#455, unmerged) |
