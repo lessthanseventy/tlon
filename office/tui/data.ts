@@ -17,7 +17,9 @@ export const useFake = (t: Toy | null) => { fake = t; lastGood = null; lastNeeds
 async function call(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<{ status: number; json: any }> {
   if (fake) {
     if (method !== "GET") return { status: 409, json: { error: "it's a toy — nothing here to change" } }
-    return path === "/office" ? { status: 200, json: fake.snapshot() } : { status: 404, json: null }
+    if (path === "/office") return { status: 200, json: fake.snapshot() }
+    const json = fake.read(path)
+    return json === undefined ? { status: 404, json: null } : { status: 200, json }
   }
   const r = await fetch(`${base()}/api${path}`, {
     method,
@@ -66,9 +68,7 @@ export type ReviewLine = { kind: "+" | "-" | " "; old: number | null; new: numbe
 export type Review = { head: string | null; files: { path: string; status: string; added: number; deleted: number; binary: boolean; hunks: { header: string; lines: ReviewLine[] }[] }[] }
 /** a note on a line (`line` and its `side`) or on a whole file */
 export type ReviewNote = { path: string; line?: number; side?: "+" | "-" | " "; text: string }
-export async function review(id: number): Promise<Review | null> {
-  try { const r = await call("GET", `/threads/${id}/review`); return r.status === 200 ? r.json : null } catch { return null }
-}
+export const review = (id: number) => read<Review>(`/threads/${id}/review`)
 export const reviewSubmit = (id: number, verdict: string, summary: string, notes: ReviewNote[]) =>
   write(`reviewing #${id}`, `/threads/${id}/review`, { verdict, summary, notes }, (j) => `#${id} reviewed (${verdict}) · at ${j.stage ?? "?"}`)
 
@@ -82,9 +82,7 @@ export async function doc(id: number, name: string): Promise<string | null> {
 }
 export type Archive = { tickets: { id: number; title: string; closed_at: string | null }[]; threads: { id: number; title: string; stage: string | null; at: string }[] }
 /** a workspace's finished work: done tickets and closed threads, newest first */
-export async function archive(ws: number): Promise<Archive | null> {
-  try { const r = await call("GET", `/office/archive/${ws}`); return r.status === 200 ? r.json : null } catch { return null }
-}
+export const archive = (ws: number) => read<Archive>(`/office/archive/${ws}`)
 /** the workspace's recent small talk (empty where the server's banter is off) */
 export async function banter(ws: number): Promise<{ agent: string; line: string; at: number }[]> {
   try { const r = await call("GET", `/office/banter/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
@@ -188,8 +186,17 @@ export const closeThread = (id: number) => write(`closing #${id}`, `/threads/${i
 export async function page(id: number, before: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}?before=${before}`); return r.status === 200 ? r.json : null } catch { return null }
 }
+/** why the last `read` gave nothing, or null when it answered: a card that has nothing to show says so instead of "reading…" for ever */
+let readWhy: string | null = null
+export const readFailure = () => readWhy
+export const readReset = () => { readWhy = null }
 async function read<T>(path: string): Promise<T | null> {
-  try { const r = await call("GET", path); return r.status === 200 ? r.json : null } catch { return null }
+  try {
+    const r = await call("GET", path)
+    if (r.status === 200 && r.json !== null) { readWhy = null; return r.json }
+    readWhy = r.status === 200 ? "the server sent nothing" : r.status === 404 ? "the server has no such page" : `the server answered ${r.status}`
+  } catch (e) { readWhy = (e as Error).name === "TimeoutError" ? "the server isn't answering" : (e as Error).message }
+  return null
 }
 /** a home workspace's life card body */
 export const life = (ws: number) => read<LifeStatus>(`/life/${ws}`)

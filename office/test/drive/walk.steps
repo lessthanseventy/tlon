@@ -9,7 +9,7 @@ wait:Toy
 Escape
 i
 Escape
-N
+I
 Escape
 '!'
 Escape
@@ -21,7 +21,7 @@ b
 Escape
 H
 Escape
-W
+O
 Escape
 S
 Escape
@@ -31,7 +31,7 @@ f
 Escape
 h
 Escape
-P
+'*'
 Escape
 Tab
 BTab
@@ -39,26 +39,26 @@ BTab
 ']'
 
 # --- play keys on home
-d
-e
-t
-f
-n
-w
-p
-c
+D
+E
+T
+F
+N
+W
+P
+C
 
 # --- person: Tab onto scharlach
 Tab
 v
 M
 Escape
-y
-E
+'&'
+e
 Escape
-C
+X
 n
-l
+'\'
 Escape
 m
 'psst'
@@ -69,20 +69,20 @@ Escape
 -l $'\033[<0;62;22M\033[<0;62;22m'
 '?'
 Escape
-z
-y
-s
-b
-u
-g
-l
+1
+2
+4
+5
+6
+7
+8
 Enter
 Down
 Enter
 Down
 Enter
 Right
-S
+Enter
 
 # --- the board, by click: header, then a card (#177)
 -l $'\033[<0;84;3M\033[<0;84;3m'
@@ -98,8 +98,6 @@ Escape
 Escape
 v
 Escape
-q
-Escape
 r
 'reply from the walk'
 Enter
@@ -112,15 +110,15 @@ Escape
 Escape
 '>'
 g
-R
+V
 Escape
-h
+'@'
 Escape
-P
+\#
 Escape
 x
 n
-D
+d
 n
 Escape
 Escape
@@ -140,22 +138,22 @@ Escape
 Escape
 
 # --- crew screen via the finder: tabs, sort, group, shifts, pencils, lights out
-/
+'/'
 'crew'
 Enter
-v
-v
-S
+'}'
+'}'
+'%'
 s
-g
-g
-P
-L
+G
+G
+'|'
+'~'
 n
 Escape
 
 # --- finder: every verb that opens a card, plus an empty result
-/
+'/'
 'wack'
 Enter
 Enter
@@ -165,44 +163,44 @@ Enter
 Right
 0
 Escape
-/
+'/'
 'argos'
 Enter
 w
 Escape
-/
+'/'
 'banter'
 Enter
 Escape
-/
+'/'
 'arcade'
 Enter
 Escape
-/
+'/'
 'suggestion'
 Enter
 Escape
-/
+'/'
 'filing'
 Enter
 Escape
-/
+'/'
 'this workspace'
 Enter
 Escape
-/
+'/'
 'in-tray'
 Enter
 Escape
-/
+'/'
 'schedule'
 Enter
 Escape
-/
+'/'
 'tickets'
 Enter
 Escape
-/
+'/'
 'nina'
 Escape
 
@@ -212,12 +210,12 @@ Down
 Space
 Left
 Up
-m
-x
+l
+d
 Escape
 Right
 Escape
-P
+'*'
 Right
 Down
 Up
@@ -238,7 +236,7 @@ Enter
 # --- ctrl+] from depth lands in the lobby
 -l $'\033[<0;78;5M\033[<0;78;5m'
 C-]
-/
+'/'
 C-]
 h
 C-]

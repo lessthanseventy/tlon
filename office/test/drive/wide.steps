@@ -31,11 +31,11 @@ Escape
 Escape
 -l $'\033[<0;150;43M\033[<0;150;43m'
 Escape
-e
-f
-d
-t
-n
-w
-p
-c
+E
+F
+D
+T
+N
+W
+P
+C
