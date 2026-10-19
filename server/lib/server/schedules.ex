@@ -376,7 +376,7 @@ defmodule Server.Schedules do
 
   defp naive_utc(erl), do: erl |> NaiveDateTime.from_erl!() |> DateTime.from_naive!("Etc/UTC")
 
-  defp operator, do: Application.get_env(:server, :operator, "andrew")
+  defp operator, do: Server.OperatorConfig.operator()
 
   # the last `ran-on: <check> <sha>` line a script printed: the commit it checked
   defp ran_on(out) do

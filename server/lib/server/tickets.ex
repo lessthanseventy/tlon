@@ -189,7 +189,7 @@ defmodule Server.Tickets do
   def route(%Ticket{} = ticket) do
     case {Server.Workspaces.manager(ticket.workspace_id), Server.Channel.machine_thread(ticket.workspace_id)} do
       {%Server.Coworker{name: name}, %Server.Thread{} = root} ->
-        operator = Application.get_env(:server, :operator, "andrew")
+        operator = Server.OperatorConfig.operator()
 
         intake =
           Enum.join(
@@ -227,7 +227,7 @@ defmodule Server.Tickets do
   def start_thread(%Ticket{kind: "epic"}, _agent_id), do: {:error, :epic}
 
   def start_thread(%Ticket{} = ticket, agent_id) do
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Server.OperatorConfig.operator()
     ask = Enum.join(Enum.reject([ticket.title, ticket.body, "(ticket ##{ticket.id})"], &(&1 in [nil, ""])), "\n\n")
 
     # a workline before the ask is posted, so its lead is briefed for the stage it starts at

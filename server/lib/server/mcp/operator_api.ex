@@ -527,7 +527,7 @@ defmodule Server.MCP.OperatorAPI do
       do:
         reply(
           conn,
-          Workline.send_back(t, b["stage"], b["why"], Application.get_env(:server, :operator, "andrew")),
+          Workline.send_back(t, b["stage"], b["why"], Server.OperatorConfig.operator()),
           &thread_row/1
         ),
       else: json(conn, 400, %{error: "send_back takes a stage and a why"})
@@ -1163,7 +1163,7 @@ defmodule Server.MCP.OperatorAPI do
     }
   end
 
-  defp operator, do: Application.get_env(:server, :operator, "andrew")
+  defp operator, do: Server.OperatorConfig.operator()
 
   defp json(conn, status, body) do
     conn

@@ -87,7 +87,7 @@ defmodule Server.Web.HomeLive do
   defp touches?(%{thread_id: tid}, id), do: tid == id
   defp touches?(_row, _id), do: false
 
-  defp operator, do: Application.get_env(:server, :operator, "andrew")
+  defp operator, do: Server.OperatorConfig.operator()
 
   @impl true
   def render(assigns) do

@@ -2158,5 +2158,5 @@ defmodule Server.Workline do
     end
   end
 
-  defp operator, do: Application.get_env(:server, :operator, "andrew")
+  defp operator, do: Server.OperatorConfig.operator()
 end

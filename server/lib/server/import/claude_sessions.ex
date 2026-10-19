@@ -224,7 +224,7 @@ defmodule Server.Import.ClaudeSessions do
   end
 
   defp insert(session, workspace_id, {project, repo}) do
-    operator = Application.get_env(:server, :operator, "andrew")
+    operator = Server.OperatorConfig.operator()
     workspace_id = (project && project.workspace_id) || workspace_id
     title = title_for(session)
 

@@ -304,7 +304,7 @@ defmodule Server.Office.Banter do
 
     %{
       crew: crew,
-      operator: Application.get_env(:server, :operator, "andrew"),
+      operator: Server.OperatorConfig.operator(),
       awaiting: Enum.count(status.threads, &(&1.workspace_id == ws and &1.awaiting)),
       boss: boss,
       finished: ws |> Server.Office.archive() |> Map.fetch!(:threads) |> Enum.take(5) |> Enum.map(& &1.title),

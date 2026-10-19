@@ -86,4 +86,8 @@ defmodule Server.OperatorConfigTest do
     :ok = OperatorConfig.put("banter", true, nested)
     assert OperatorConfig.read(nested) == %{"banter" => true}
   end
+
+  test "operator is the configured handle" do
+    assert OperatorConfig.operator() == Application.get_env(:server, :operator, "andrew")
+  end
 end
