@@ -298,7 +298,7 @@ defmodule Server.Profiles do
     "tlon" => %{
       "excludeTools" =>
         ["register", "consult_peer", "open_thread", "close_thread", "operator_inbox", "staff_child", "assign_lead"] ++
-          ~w(release_status check_candidate propose_release set_urgency submit_qa) ++
+          ~w(release_status check_candidate propose_release set_urgency submit_qa start_smoke drive_smoke stop_smoke) ++
           ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
     }
   }
@@ -345,7 +345,7 @@ defmodule Server.Profiles do
   @qa_mcp update_in(
             @reviewer_mcp,
             ["tlon", "excludeTools"],
-            &((&1 -- ["submit_qa"]) ++ ["submit_review", "review_branch"])
+            &((&1 -- ~w(submit_qa start_smoke drive_smoke stop_smoke)) ++ ["submit_review", "review_branch"])
           )
 
   # Shared chat etiquette — the office shows a live "…is typing" indicator while a coworker works,
@@ -566,16 +566,15 @@ defmodule Server.Profiles do
   reviewer did). A workline that changes something he sees (the office, or the operator API it
   reads) comes to you once its review approves it; the brief names its branch.
 
-  DRIVE IT. Build the branch as a scratch release and keep it up, in the background:
-  `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/<slug>` — its own port and db tlon_smoke_<port> (the run prints the url), the fixed
-  smoke first (open, a thread, a card, R). Then drive the changed path as he would:
-  `TLON_URL=<the url it printed> mise run office:drive -- <keys>` (the drive-office skill), the keys
-  he'd press and the screen after each. A change to the toy (its keys e/f/d and events) lives only in
-  the made-up world: drive that with `OFFICE_SANDBOX=1 mise run office:drive -- <keys>`, no release
-  needed. NEVER the live service on :4040 or its db `tlon`: a QA run
-  there writes into his real office. Stop the scratch release when you're done. The smoke needs
-  Postgres's unix socket, which a sandboxed Bash can't open: run it unsandboxed, and the drive too —
-  each sandboxed call is its own network namespace, blind to the port a held smoke serves on.
+  DRIVE IT. `start_smoke(thread_id)` has the service build the branch as a scratch release, smoke it
+  (open, a thread, a card, R) and keep it up on its own port and db; it posts the url on the thread
+  in a few minutes. Then drive the changed path as he would with `drive_smoke(keys, thread_id)`:
+  the same steps as `office:drive` (the drive-office skill), the keys he'd press, the screen back after
+  each. `stop_smoke(thread_id)` when you're done; a forgotten one tears itself down after two hours.
+  Your Bash cannot do either: it is sandboxed, with no Postgres socket and a network of its own, blind
+  to the smoke's port. A change to the toy (its keys e/f/d and events) lives only in the made-up
+  world: drive that with `OFFICE_SANDBOX=1 mise run office:drive -- <keys>` in your Bash, no release
+  needed. NEVER the live service on :4040 or its db `tlon`: a QA run there writes into his real office.
 
   FILE WHAT YOU SAW. `submit_qa(verdict, report, thread_id)`: pass, or fail with the finding, on the
   workline you drove (`thread_id`, its #id — your session may be bound elsewhere). The report is what

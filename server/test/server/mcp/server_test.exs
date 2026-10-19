@@ -161,6 +161,9 @@ defmodule Server.MCP.ServerTest do
                "set_urgency",
                # QA's (roster design §5)
                "submit_qa",
+               "start_smoke",
+               "drive_smoke",
+               "stop_smoke",
                # the librarian's
                "supersede_fact",
                "forget_fact",

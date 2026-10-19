@@ -149,9 +149,15 @@ defmodule Server.ProfilesTest do
       for cut <- ~w(submit_qa), do: refute(cut in qa.mcp["tlon"]["excludeTools"])
       for cut <- ~w(submit_review edit_clause rename_identifier), do: assert(cut in qa.mcp["tlon"]["excludeTools"])
       assert get_in(qa.permissions, ["permission", "write"]) == "deny"
-      assert qa.system_prompt =~ "release:smoke"
+
+      for tool <- ~w(start_smoke drive_smoke stop_smoke) do
+        refute tool in qa.mcp["tlon"]["excludeTools"]
+        assert tool in Profiles.archetype(:builder).mcp["tlon"]["excludeTools"]
+        assert qa.system_prompt =~ tool
+      end
+
+      refute qa.system_prompt =~ "unsandboxed"
       assert qa.system_prompt =~ "4040"
-      assert qa.system_prompt =~ "unsandboxed"
       assert qa.system_prompt =~ "OFFICE_SANDBOX=1"
 
       for {k, t} <- Profiles.archetypes(), k != :qa, do: assert("submit_qa" in t.mcp["tlon"]["excludeTools"], "#{k}")

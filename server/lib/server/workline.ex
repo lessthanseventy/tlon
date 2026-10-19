@@ -1633,9 +1633,9 @@ defmodule Server.Workline do
   defp qa_playbook(thread) do
     """
     drive the changed path as Andrew would, against a scratch release of work/#{thread.slug}: \
-    `TLON_SMOKE_HOLD=1 mise run release:smoke -- work/#{thread.slug}` builds it on its own port and db (it prints the url), \
-    smokes it and keeps it up; drive it with `TLON_URL=<the url it printed> mise run office:drive -- <keys>`. \
-    Run both unsandboxed: a sandboxed Bash can't reach Postgres, and each sandboxed call is its own network namespace. \
+    `start_smoke(thread_id: #{thread.id})` has the service build it on its own port and db, smoke it and keep it up \
+    (it posts the url here); drive it with `drive_smoke(keys, thread_id: #{thread.id})`, the steps of `office:drive`; \
+    `stop_smoke` when done. Your own Bash can run neither: it has no Postgres socket and a network of its own. \
     Never :4040, the live service. Then submit_qa with thread_id: #{thread.id}: pass, or fail with the \
     finding — what you pressed and the screen text you saw.\
     """

@@ -73,7 +73,7 @@ defmodule Server.WorklineQATest do
 
     {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot", opts)
     assert Channel.thread_lead(thread.id) == "nolan"
-    brief = thread |> bodies() |> Enum.find(&(&1 =~ "release:smoke"))
+    brief = thread |> bodies() |> Enum.find(&(&1 =~ "start_smoke"))
     assert brief =~ "work/broken-r"
     assert brief =~ "submit_qa"
 
@@ -195,7 +195,8 @@ defmodule Server.WorklineQATest do
     led = Repo.get!(Thread, thread.id)
 
     assert {:error, why} = Workline.owed_status(led, opts)
-    assert why =~ "submit_qa" and why =~ "release:smoke"
+    assert why =~ "submit_qa" and why =~ "start_smoke" and why =~ "drive_smoke"
+    refute why =~ "unsandboxed"
     refute why =~ "submit_review"
 
     :ok = Server.Workline.Continuation.run(led.id, opts)
