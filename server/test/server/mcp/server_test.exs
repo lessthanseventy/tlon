@@ -767,8 +767,11 @@ defmodule Server.MCP.ServerTest do
 
     glance = decode_tool_json(call(token, session, 4, "office_glance", %{}))
 
-    assert %{"agent" => "lonnrot", "thread_id" => peer_id} = Enum.find(glance["crew"], &(&1["agent"] == "lonnrot"))
+    assert %{"agent" => "lonnrot", "thread_id" => peer_id, "status" => status} =
+             Enum.find(glance["crew"], &(&1["agent"] == "lonnrot"))
+
     assert peer_id == peer_thread.id
+    assert status in ~w(working waiting idle cold off)
     assert [%{"text" => "the band overflows"}] = glance["red"]
     assert Map.has_key?(glance, "persona") and Map.has_key?(glance, "landed")
     assert Repo.get!(Session, db_session.id).last_active_at == cold

@@ -9,8 +9,6 @@ defmodule Server.MCP.Tool.OfficeGlance do
   """
   use Server.MCP.Tool
 
-  import Ecto.Query, only: [from: 2]
-
   alias Server.Repo
   alias Server.Thread
 
@@ -40,12 +38,8 @@ defmodule Server.MCP.Tool.OfficeGlance do
   defp glance(_thread, _agent), do: %{archetype: nil, crew: [], red: [], persona: nil, line: nil, landed: []}
 
   defp crew(ws, me) do
-    turns = Server.Presence.Thinking.thinking_all()
-    threads = MapSet.new(Repo.all(from(t in Thread, where: t.workspace_id == ^ws, select: t.id)))
-
-    for r <- Server.Staff.roster(), r.agent != me, MapSet.member?(threads, r.thread_id), uniq: true do
-      turn = Enum.find(Map.get(turns, r.thread_id, []), &(&1.agent == r.agent))
-      %{agent: r.agent, thread_id: r.thread_id, warm: r.warm?, thinking: turn != nil, doing: turn && turn.doing}
+    for r <- Server.Office.roster(ws), r.agent != me, uniq: true do
+      %{agent: r.agent, thread_id: r.thread_id, warm: r.warm, thinking: r.thinking, doing: r.doing, status: r.status}
     end
   catch
     :exit, _ -> []

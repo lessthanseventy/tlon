@@ -189,6 +189,20 @@ defmodule Server.Office do
     :exit, _ -> %{}
   end
 
+  @doc "One workspace's roster rows, each with its `status`, built exactly as `status/0` builds them."
+  @spec roster(integer()) :: [map()]
+  def roster(ws) do
+    rows =
+      roster(
+        Server.Workspaces.bench_by_workspace([ws]),
+        thinking(),
+        %{ws => held_windows(ws)},
+        Server.Attention.open_prompts_by_thread()
+      )
+
+    Enum.filter(rows, &(&1.workspace_id == ws))
+  end
+
   defp roster(benches, thinking, tabs, prompts) do
     rows = Server.Staff.roster()
     thread_ws = rows |> Enum.map(& &1.thread_id) |> workspaces_of()
