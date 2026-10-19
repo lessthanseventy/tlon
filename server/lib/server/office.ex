@@ -30,7 +30,7 @@ defmodule Server.Office do
   threads await the operator, each workspace's triage count (the beacon), the service's health
   (the rack), the days this month each workspace has something scheduled (the wall calendar),
   today's birthdays and anniversaries (`celebrations`, from the .ics feeds) and the feature flags
-  (`Server.Flags.office/0`), and the release the service runs (`release`: `{sha, cut_at}` from
+  (`Server.Flags.office/0`), and the release the service runs (`release`: `{sha, cut_at, notes}` (notes: the subjects of the commits the cut moved over, at most 12) from
   `Server.Release.PM.live_release/0`, nil before the first).
   A surface shows one workspace and filters by `workspace_id`.
   """
