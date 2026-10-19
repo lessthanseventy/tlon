@@ -183,7 +183,7 @@ export const ticketRoute = (id: number) =>
 /** start a ticket's thread with the workspace's lead */
 export const ticketStart = (id: number) => write(`starting #${id}`, `/tickets/${id}/start`, {}, (j) => `ticket #${id} started as thread #${j.thread}`)
 /** close a thread as done: its sessions end, its ticket is done, a child reports up */
-export const closeThread = (id: number) => write(`closing #${id}`, `/threads/${id}/close`, {}, (j) => `closed #${id} — ${j.title}`)
+export const closeThread = (id: number, abandoned?: string) => write(`closing #${id}`, `/threads/${id}/close`, abandoned ? { abandoned } : {}, (j) => `closed #${id} — ${j.title}`)
 
 /** a page of a thread's messages: the newest, or with `before` the ones older than that message id */
 export async function page(id: number, before: number): Promise<ThreadView | null> {
