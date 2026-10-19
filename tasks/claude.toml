@@ -27,4 +27,4 @@ run = "TLON_PROVIDER=ollama adapters/claude-code/launch.sh --model qwen3-coder"
 # the band, and each coworker's ask put to you as a question. No thread, no citizen identity.
 ["claude:operator"]
 description = "Claude Code as the operator: the tlon-citizen mod's operator band and the coworkers' asks, on the Claude plan"
-run = "TLON_OPERATOR=1 claude --plugin-dir adapters"
+run = "TLON_OPERATOR_MODE=1 claude --plugin-dir adapters"
