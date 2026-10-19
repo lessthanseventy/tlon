@@ -261,6 +261,8 @@ exists so a reader of the repo knows where the law comes from and edits the one 
 
 `mise run check` is the gate. `mise run check:names` (first in it) is the names-exist gate: every
 `Server.*` module, mix task and mise task that scripts, `mise.toml`, the adapters or a
-guide name must actually exist — a rename that strands a reference fails here instead of at 2am. A
+guide name must actually exist — a rename that strands a reference fails here instead of at 2am. The same task holds
+`docs/glossary.md` — one meaning per noun; its "lives in" names must exist and its retired words stay out of
+AGENTS.md, `office/tui` and new plans. A
 claim that something works is backed by the command that proved it — and the agent and human run the
 *same* `mise` tasks, so "it works" means the shared task passed, not two private ones.

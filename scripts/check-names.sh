@@ -10,6 +10,7 @@
 #       →  <app>/lib/mix/tasks/<app>.<task>.ex
 #   (c) `mise run <task>` in any AGENTS.md / README.md, mise.toml, scripts
 #       →  a task `mise tasks ls` knows (`<prefix>:*` is a glob: some task must match)
+#   (d) docs/glossary.md: its "lives in" names exist, the retired words stay out (check-glossary.sh)
 #
 # grep/awk only, offline, a few hundred ms. One line per miss; exit 1 if any. docs/ is not an
 # input: prose there may name a retired module on purpose.
@@ -22,7 +23,7 @@ fail=0
 miss() { echo "check-names: $*"; fail=1; }
 
 # This file names the patterns it hunts; every other script is an input.
-scripts="$(ls scripts/*.sh | grep -v '/check-names.sh$')"
+scripts="$(ls scripts/*.sh | grep -vE '/check-(names|glossary)(\.test)?.sh$')"
 
 # Everything adapters ships as source, minus each package's node_modules.
 adapter_sources() { find adapters -path '*/node_modules' -prune -o -type f \( -name '*.ts' -o -name '*.sh' \) -print; }
@@ -67,6 +68,9 @@ while IFS=: read -r file line ref; do
     *) grep -qxF "$task" <<<"$known" || miss "(c) $file:$line names \`$ref\` — not a task \`mise tasks ls\` knows" ;;
   esac
 done < <(grep -noE 'mise run [A-Za-z0-9:_*-]+' mise.toml $scripts $(guides) 2>/dev/null | sort -u)
+
+# ---- (d) the glossary (docs/glossary.md) ------------------------------------------------------
+scripts/check-glossary.sh || fail=1
 
 if [ "$fail" -ne 0 ]; then
   echo "check-names: FAILED — a name above points at nothing (rename left a dangling reference)"
