@@ -1,0 +1,248 @@
+# B7 drive walk, rail room (150x60): every card the sandbox can show x the keys its hint lists.
+# Replay: office/test/drive/run.sh   (narrow: OFFICE_COLS=60 OFFICE_ROWS=30 office/test/drive/run.sh)
+# Read the screen after each step. Clicks are SGR mouse presses at 1-based cell COL,ROW of this layout.
+# The sandbox shadows t c n w f p e d on every card (play keys), so tickets/crew/etc. are reached by click or the finder.
+wait:Toy
+
+# --- home: help, then each action key the card lists
+'?'
+Escape
+i
+Escape
+N
+Escape
+'!'
+Escape
+a
+Escape
+o
+Escape
+b
+Escape
+H
+Escape
+W
+Escape
+S
+Escape
+U
+Escape
+f
+Escape
+h
+Escape
+P
+Escape
+Tab
+BTab
+'['
+']'
+
+# --- play keys on home
+d
+e
+t
+f
+n
+w
+p
+c
+
+# --- person: Tab onto scharlach
+Tab
+v
+M
+Escape
+y
+E
+Escape
+C
+n
+l
+Escape
+m
+'psst'
+Escape
+Escape
+
+# --- Nina (click the cat): her rows and keys
+-l $'\033[<0;62;22M\033[<0;62;22m'
+'?'
+Escape
+z
+y
+s
+b
+u
+g
+l
+Enter
+Down
+Enter
+Down
+Enter
+Right
+S
+
+# --- the board, by click: header, then a card (#177)
+-l $'\033[<0;84;3M\033[<0;84;3m'
+Right
+Right
+Left
+s
+s
+J
+K
+Escape
+-l $'\033[<0;78;5M\033[<0;78;5m'
+Escape
+v
+Escape
+q
+Escape
+r
+'reply from the walk'
+Enter
+Escape
+Escape
+Escape
+
+# --- thread card keys (after a click on #103 and esc to leave the reply box)
+-l $'\033[<0;78;5M\033[<0;78;5m'
+Escape
+'>'
+g
+R
+Escape
+h
+Escape
+P
+Escape
+x
+n
+D
+n
+Escape
+Escape
+
+# --- the other room clicks: tickets header, notes, crew, the operator's desk, the arcade via the finder
+-l $'\033[<0;45;4M\033[<0;45;4m'
+Escape
+-l $'\033[<0;68;8M\033[<0;68;8m'
+Escape
+-l $'\033[<0;72;27M\033[<0;72;27m'
+Down
+Down
+Enter
+Escape
+Escape
+-l $'\033[<0;57;19M\033[<0;57;19m'
+Escape
+
+# --- crew screen via the finder: tabs, sort, group, shifts, pencils, lights out
+/
+'crew'
+Enter
+v
+v
+S
+s
+g
+g
+P
+L
+n
+Escape
+
+# --- finder: every verb that opens a card, plus an empty result
+/
+'wack'
+Enter
+Enter
+Enter
+Down
+Enter
+Right
+0
+Escape
+/
+'argos'
+Enter
+w
+Escape
+/
+'banter'
+Enter
+Escape
+/
+'arcade'
+Enter
+Escape
+/
+'suggestion'
+Enter
+Escape
+/
+'filing'
+Enter
+Escape
+/
+'this workspace'
+Enter
+Escape
+/
+'in-tray'
+Enter
+Escape
+/
+'schedule'
+Enter
+Escape
+/
+'tickets'
+Enter
+Escape
+/
+'nina'
+Escape
+
+# --- hiring hall and pet store
+h
+Down
+Space
+Left
+Up
+m
+x
+Escape
+Right
+Escape
+P
+Right
+Down
+Up
+Space
+e
+Left
+Enter
+Escape
+
+# --- talk: the office input keeps a draft over ctrl+], loses it on a failed send
+"'"
+'hello team'
+C-]
+"'"
+Enter
+"'"
+
+# --- ctrl+] from depth lands in the lobby
+-l $'\033[<0;78;5M\033[<0;78;5m'
+C-]
+/
+C-]
+h
+C-]
+S
+C-]
+'?'
+C-]

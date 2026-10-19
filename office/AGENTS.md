@@ -142,6 +142,7 @@ linked window at a time, ctrl+] to the room).
 
 - `mise run office:run` — the TUI over the live server; `mise run office:build` — the executables.
 - `mise run office:watch` — the suite on every change; `mise run office:test` once.
+- `office/test/drive/run.sh [walk]` — replays a drive walk (`walk.steps`, `wide.steps`: one `office:drive` step per line) in the sandbox on a throwaway `TMPDIR`; exits 1 on a malformed step or TUI stderr. Re-run it after a UI fix and read the screens; `OFFICE_WIDE=1` / `OFFICE_COLS`/`OFFICE_ROWS` size the window.
 - `mise run office:golden` — re-hash the wide room's golden frames (`test/golden.json`) after a
   change meant to move its pixels. A landing re-hashes them itself after its rebase, so two such
   branches never conflict on the file.
