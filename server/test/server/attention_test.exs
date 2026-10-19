@@ -168,6 +168,42 @@ defmodule Server.AttentionTest do
       row = Board.sidebar() |> Enum.flat_map(& &1.threads) |> Enum.find(&(&1.id == t.id))
       assert %{summary: "Do you want to proceed?", options: [%{"key" => "1"} | _]} = row.prompt
     end
+
+    test "a tmux down past the stale clock settles the open prompt with a note; coming back first restarts the clock",
+         %{ws: ws, thread: t} do
+      stale = Server.Presence.Thinking.stale_turn_seconds()
+      t0 = ~U[2026-10-19 12:00:00Z]
+      at = fn s -> DateTime.add(t0, s) end
+
+      tmux(leaf(t.id))
+      Process.put(:screen, @claude)
+      :ok = Attention.tick(ws.id, now: at.(0))
+      assert [%Message{resolved_at: nil}] = prompts(t.id)
+
+      down = fn ->
+        Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"no server running on /tmp/x", 1} end)
+      end
+
+      down.()
+      :ok = Attention.tick(ws.id, now: at.(10))
+      :ok = Attention.tick(ws.id, now: at.(10 + stale - 1))
+      assert [%Message{resolved_at: nil}] = prompts(t.id)
+
+      # tmux answers once: the down clock starts over
+      tmux(leaf(t.id))
+      :ok = Attention.tick(ws.id, now: at.(10 + stale))
+      down.()
+      :ok = Attention.tick(ws.id, now: at.(20 + stale))
+      :ok = Attention.tick(ws.id, now: at.(20 + 2 * stale - 1))
+      assert [%Message{resolved_at: nil}] = prompts(t.id)
+
+      :ok = Attention.tick(ws.id, now: at.(20 + 2 * stale))
+      note = "tmux was down; the dialog was never answered"
+      assert [%Message{resolution: ^note, resolved_at: %DateTime{}}] = prompts(t.id)
+      refute Attention.waiting?(t.id)
+
+      assert Repo.exists?(from m in Message, where: m.thread_id == ^t.id and m.kind == "notice" and m.body == ^note)
+    end
   end
 
   test "the sweep forgets the limit memory of a pane whose window is gone", %{ws: ws, thread: t} do
