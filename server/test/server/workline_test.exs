@@ -506,7 +506,7 @@ defmodule Server.WorklineTest do
 
     test "the operator is the configured handle: parking and standing approval follow it" do
       start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
-      previous = Application.get_env(:server, :operator)
+      previous = Server.OperatorConfig.operator()
       Application.put_env(:server, :operator, "someone")
       on_exit(fn -> Application.put_env(:server, :operator, previous) end)
 
