@@ -34,7 +34,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 | `check:all` | Everything green: the names gate + the tracked-junk gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check (unqueued — `check` queues it) |
 | `check:ignored` | tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp) |
 | `check:main` | the whole gate on origin/main in a throwaway worktree (own test db) — main's health, whatever this checkout has out; the nightly schedule runs it |
-| `check:names` | names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist (grep, offline, fast) |
+| `check:names` | names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist, and docs/glossary.md holds (grep, offline, fast) |
 
 ## claude
 
