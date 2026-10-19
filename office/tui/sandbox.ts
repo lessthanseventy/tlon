@@ -64,7 +64,7 @@ export function toy() {
     read: (path: string) => answer(path),
     snapshot(): Agents {
       const shifts = bench.map((b, i) => ({ workspace_id: 1, seat_id: b.seat_id, name: b.name, archetype: b.archetype, crew: (hired.has(b.name) ? "all" : i < 6 ? "day" : "night") as "day" | "night" | "all" }))
-      return { ...EMPTY, ok: true, tickets: TICKETS, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "" }, { name: "sheriff", meta: false, read_only: true, model: "" }], bench, threads: [front, ...threads], roster, weather: { ...WEATHER[w]! }, visits }
+      return { ...EMPTY, ok: true, tickets: TICKETS, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "anthropic/claude-sonnet" }, { name: "sheriff", meta: false, read_only: true, model: "anthropic/claude-haiku" }], bench, threads: [front, ...threads], roster, weather: { ...WEATHER[w]! }, visits }
     },
     /** the hall's hire: a pretend seat on the bench, on shift for everyone */
     hire(c: { name: string; archetype: string }) {

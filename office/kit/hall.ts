@@ -18,8 +18,8 @@ export type Candidate = {
 // no "uqbar": the operator's delegate, an outside citizen — a seat by that name would take its identity
 export const BORGES = [
   "funes", "lonnrot", "tzinacan", "ireneo", "hladik", "otalora", "emma", "nolan", "asterion", "pierre",
-  "menard", "droctulft", "cruz", "fervor", "zahir", "aleph", "beatriz", "carlos", "nils", "ts-ai-ang",
-  "yu-tsun", "albert", "stephen", "runeberg", "orbis", "tertius", "herbert", "ashe", "borges",
+  "menard", "droctulft", "cruz", "fervor", "zahir", "aleph", "beatriz", "carlos", "nils", "quain",
+  "tsun", "albert", "stephen", "runeberg", "orbis", "tertius", "herbert", "ashe", "borges",
 ] as const
 
 const PITCHES = [
@@ -33,10 +33,15 @@ export function nextSeed(s: string): string {
   return `hall:${(n ? Number(n) : 0) + 1}`
 }
 
+const ONSETS = ["b", "d", "f", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "v", "z"]
+const VOWELS = ["a", "e", "i", "o", "u"]
+/** a name that can be said aloud, seeded: three consonant-vowel syllables */
+const spoken = (seed: string) => [0, 1, 2].map((i) => ONSETS[hash(`${seed}o${i}`) % ONSETS.length]! + VOWELS[hash(`${seed}v${i}`) % VOWELS.length]!).join("")
+
 export function roll(seed: string, o: { taken: readonly string[]; vocab: Vocab }): Candidate {
   const pick = <T,>(xs: readonly T[], k: string) => xs[hash(seed + k) % xs.length]!
   const free = BORGES.filter(n => !o.taken.includes(n))
-  const name = free.length ? pick(free, "name") : `hall-${(hash(seed + "n") % 9000) + 1000}`
+  const name = free.length ? pick(free, "name") : spoken(seed + "n")
   const look: Look = { ...lookOf(seed), ...rollLook(seed) }
   const archetype = pick(o.vocab.archetypes, "archetype")
   const grade = pick(o.vocab.grades, "grade")

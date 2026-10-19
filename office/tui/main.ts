@@ -18,7 +18,7 @@ import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
 import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
-import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
+import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES_BLURB, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
 import { drop, move, pickUp, place, remove, rotate, startBuild, undo, type Build } from "../kit/home"
 import { renderHome } from "../kit/homeart"
@@ -42,7 +42,7 @@ import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wi
 import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk"
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
-import { bind, hints, LEGEND_CHARS, type KeyId } from "./keys"
+import { adder, bind, hints, LEGEND_CHARS, type KeyId } from "./keys"
 import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
@@ -324,6 +324,8 @@ function setWhim(s: WhimState) {
   changed()
 }
 const threadOf = (id: number | null) => (id === null ? undefined : all.threads.find((t) => t.id === id))
+/** the model a seat gets when it sets none of its own: its archetype's, else the server's default */
+const inheritedModel = (archetype: string | null) => all.archetypes.find((x) => x.name === archetype)?.model || "the server's default"
 const wsName = (id = ws) => all.workspaces.find((w) => w.id === id)?.name ?? "—"
 const unread = () => feed.filter((x) => x.at > trayRead && x.who !== OPERATOR).length
 const changed = () => { roomChanged = true; imageDirty = true }
@@ -873,7 +875,7 @@ function seatActions(b: Coworker | undefined): Action[] {
   return [
     {
       ...bind("seat.M"), run: () => {
-        const models = [{ label: `the archetype's (${a.archetypes.find((x) => x.name === b.archetype)?.model ?? "?"})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
+        const models = [{ label: `the archetype's (${inheritedModel(b.archetype)})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
         find(`${b.name.toUpperCase()}'S MODEL`, models.map((m) => ({ segs: [plain(m.label)], text: m.label, run: () => { picker = null; void did(data.retarget(w, b.agent_id, { model: m.value })) } })))
       },
     },
@@ -1142,7 +1144,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const name = mode.name
       const c = crewOf(a).find((x) => x.name === name), b = a.bench.find((x) => x.name === name)
       if (!c) return { title: name.toUpperCase(), rows: [{ segs: [dim("not in this office any more")] }], actions: [back1] }
-      const model = b?.model ? `${b.model.provider}/${b.model.model}` : `${a.archetypes.find((x) => x.name === c.archetype)?.model ?? "?"} (archetype's)`
+      const model = b?.model ? `${b.model.provider}/${b.model.model}` : `${inheritedModel(c.archetype)} (archetype's)`
       const where = c.status === "working" ? "mid-turn" : a.roster.some((r) => r.agent === name && r.warm) ? "on call" : c.status === "waiting" ? "waiting on you" : "in the lounge"
       // a pill for where they are, and what they're at mid-turn (the thought bubble's kind)
       const doing = a.roster.find((r) => r.agent === name && r.thinking)?.doing
@@ -1410,7 +1412,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const rows: Row[] = [{ segs: [plain(all.awaiting ? `${all.awaiting} thread(s) wait on you across the office` : "nothing waits on you")] }]
       for (const x of all.workspaces) {
         const n = all.threads.filter((t) => t.workspace_id === x.id && needsYou(t)).length, s = all.triage[String(x.id)] ?? 0
-        rows.push({ segs: [key(x.id === ws ? "▸ " : "  "), plain(x.name.padEnd(16)), n ? pink(`${n} waiting  `) : dim(""), s ? dim(`${s} issues`) : dim("")], open: () => goWs(x.id) })
+        rows.push({ segs: [key(x.id === ws ? "◆ " : "  "), plain(x.name.padEnd(16)), n ? pink(`${n} waiting  `) : dim(""), s ? dim(`${s} issues`) : dim("")], open: () => goWs(x.id) })
       }
       return {
         title: "WORKSPACES", rows,
@@ -1666,7 +1668,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         const row = (label: string, value: string, cycle: () => void): Row => ({ segs: [dim(label.padEnd(12)), plain(value)], open: () => { cycle(); draw() } })
         const beat = previewOf(draft, previewTick)
         const rows: Row[] = [
-          { segs: [plain("your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.")] },
+          { segs: [plain(SPECIES_BLURB[draft.species as CatSpecies] ?? SPECIES_BLURB.cat)] },
           { segs: [dim("name".padEnd(12)), plain(draft.name)] },
           row("species", draft.species, () => { draft.species = cycleVal(SLOT_SPECIES.cat, draft.species as CatSpecies) }),
           row("temperament", named ?? "custom", () => { const names = Object.keys(TEMPERAMENTS); draft.temperament = { ...TEMPERAMENTS[names[(names.indexOf(named ?? "") + 1) % names.length]!]! } }),
@@ -1959,7 +1961,9 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
   } else {
     const d = detail()
-    title = d.title; segRows = d.rows; acts = d.actions; tint = d.tint ?? ROLE.key
+    const add = adder(`card:${mode.kind}`)
+    title = d.title; acts = d.actions; tint = d.tint ?? ROLE.key
+    segRows = d.rows.length ? d.rows : [{ segs: [dim(`nothing here yet${add ? ` — ${keyName(add.key)} ${add.label}` : ""}`)] }]
   }
   rows = segRows
   const split = acts.length > 0 && colsN >= 80

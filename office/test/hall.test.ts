@@ -25,6 +25,17 @@ describe("hall roll", () => {
     expect(c.name).toMatch(LEGAL)
     expect(taken).not.toContain(c.name)
   })
+  test("no name is junk: the list has no hyphenated fragments, and the fallback is a word", () => {
+    for (const n of BORGES) expect(n, n).toMatch(/^[a-z]{3,}$/)
+    const names = new Set<string>()
+    for (let i = 0; i < 200; i++) {
+      const n = roll(`hall:${i}`, { taken: [...BORGES], vocab: VOCAB }).name
+      expect(n).toMatch(/^[a-z]{6}$/)
+      expect(n).not.toMatch(/(^|-)[a-z]{1,2}(-|$)/)
+      names.add(n)
+    }
+    expect(names.size).toBeGreaterThan(50)
+  })
   test("all names taken → a seeded original name, still legal", () => {
     const c = roll("hall:3", { taken: [...BORGES], vocab: VOCAB })
     expect(c.name).toMatch(LEGAL)

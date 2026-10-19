@@ -300,6 +300,12 @@ export const bind = (id: KeyId, label?: string): { key: string; label: string } 
 export const hints = (scope: Scope): { key: string; label: string }[] =>
   KEYS.filter((b) => b.scope === scope && !("quiet" in b)).map((b) => ({ key: b.key, label: b.label }))
 
+/** the key that adds to a card's list (a new note, ticket, routine…), for the line an empty card shows */
+export const adder = (scope: Scope): { key: string; label: string } | undefined => {
+  const b = KEYS.find((x) => x.scope === scope && ["new", "new ticket", "new quest", "add"].includes(verbOf(x)))
+  return b && { key: b.key, label: b.label }
+}
+
 /** the helper scopes a card's action list is built from; a card's keys are its own scope's plus these */
 export const CARD_PARTS: Record<string, readonly Scope[]> = {
   "card:crew": ["card:seat"],
