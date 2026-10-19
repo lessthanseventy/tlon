@@ -35,6 +35,8 @@ defmodule Server.Attention do
 
   # ---- detection (pure) --------------------------------------------------------------------
 
+  @down_note "tmux was down; the dialog was never answered"
+
   @doc "The waiting dialog in captured pane text, or nil when the pane is not waiting on anyone."
   @spec detect(String.t()) :: prompt() | nil
   def detect(text) when is_binary(text) do
@@ -75,14 +77,21 @@ defmodule Server.Attention do
   @doc """
   One workspace: every window's pane is read; a waiting pane with no open prompt opens one, a
   pane that moved on resolves its prompt (`answered in the terminal`), a new dialog on the same
-  window supersedes the old row, a window that is gone closes what it left open. A window with no
+  window supersedes the old row, a window that is gone closes what it left open, and so does a tmux
+  unreachable for the stale-turn clock (`Presence.Thinking.stale_turn_seconds/0`), with a note on
+  the thread. A window with no
   `@funes_thread` tag belongs to the workspace's standing machine thread.
   """
-  def tick(workspace_id) do
+  def tick(workspace_id, opts \\ []) do
     case Tmux.list_windows(workspace_id) do
-      # a tmux that can't be asked is no window closed: the next tick reads the panes again
-      {:error, _} -> :ok
-      tabs -> tick_tabs(workspace_id, tabs)
+      # a tmux that can't be asked is no window closed: the next tick reads the panes again, until
+      # it has been down longer than the stale clock
+      {:error, _} ->
+        tmux_down(workspace_id, Keyword.get_lazy(opts, :now, &DateTime.utc_now/0))
+
+      tabs ->
+        :persistent_term.erase({__MODULE__, :down, workspace_id})
+        tick_tabs(workspace_id, tabs)
     end
   end
 
@@ -571,5 +580,26 @@ defmodule Server.Attention do
     #{Enum.map_join(p["options"], " · ", &"(#{&1["key"]}) #{&1["label"]}")}
     Handle this for me: decide as I would, do the step yourself if the coworker can't, and post what you did and its evidence on ##{thread.id} (as yourself, `tlon-cli post --as uqbar #{thread.id} …`).\
     """
+  end
+
+  defp tmux_down(workspace_id, now) do
+    key = {__MODULE__, :down, workspace_id}
+    since = :persistent_term.get(key, nil)
+
+    cond do
+      is_nil(since) ->
+        :persistent_term.put(key, now)
+
+      DateTime.diff(now, since) >= Server.Presence.Thinking.stale_turn_seconds() ->
+        for prompt <- open_prompts(workspace_id), prompt.payload["window"] do
+          resolve(prompt, @down_note)
+          Channel.post(%{thread_id: prompt.thread_id, author: "tlon", kind: "notice", body: @down_note})
+        end
+
+      true ->
+        :ok
+    end
+
+    :ok
   end
 end
