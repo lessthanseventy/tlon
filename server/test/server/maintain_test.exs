@@ -29,8 +29,7 @@ defmodule Server.MaintainTest do
   end
 
   # Bands at zero so anything open is stale now; `renag_ms` a day so a second sweep is quiet.
-  defp sweep(args \\ %{}),
-    do: perform_job(Maintain, Map.merge(%{gate_stale_ms: 0, stalled_ms: 0, renag_ms: to_timeout(day: 1)}, args))
+  defp sweep(args \\ %{}), do: perform_job(Maintain, Map.merge(%{gate_stale_ms: 0, renag_ms: to_timeout(day: 1)}, args))
 
   test "flag opens a machine-born workline already parked at the intent gate, evidence first" do
     {:ok, flagged} = Workline.flag(%{title: "maintain: x stalled", slug: "maint-x"}, "breach: no advance in 3d")
@@ -114,17 +113,14 @@ defmodule Server.MaintainTest do
     refute body =~ "approve"
   end
 
-  test "a stalled workline is flagged as a machine-born intent, once per slug" do
+  test "a stalled workline opens no second workline: the needs list carries it as stalled" do
     {:ok, stalled} = Workline.open(%{title: "going nowhere", slug: "stuck"})
 
     assert :ok = sweep()
     assert :ok = sweep()
 
-    flags = Thread |> Repo.all() |> Enum.filter(&(&1.slug == "maint-stuck"))
-    assert [flag] = flags
-    assert flag.born == "machine"
-    assert flag.awaiting == "andrew"
-    assert stalled.id != flag.id
+    assert Thread |> Repo.all() |> Enum.filter(&String.starts_with?(&1.slug || "", "maint-")) == []
+    assert Repo.get!(Thread, stalled.id).awaiting == nil
   end
 
   test "a merged workline never breaches" do

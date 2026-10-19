@@ -6,8 +6,8 @@ defmodule Server.Maintain.Sweep do
 
   Bands (opts, defaults below):
     * a gate parked longer than `gate_stale_ms` → a reminder post (once per `renag_ms`)
-    * a non-merged workline with no stage advance for `stalled_ms` → `Workline.flag/2`
-      (once per slug; `maint-*` flags never flag themselves)
+    * a stalled workline is not flagged here: it is a `stalled` Need, derived from its state
+      (`Server.Office.Needs`), with its answers — never a second workline parked on the operator
     * a workline quiet for `quiet_ms` (a lead whose window died is never idle) → a continuation,
       toward the budget that stops a stuck one on the operator
 
@@ -41,7 +41,6 @@ defmodule Server.Maintain.Sweep do
 
   @defaults [
     gate_stale_ms: to_timeout(day: 1),
-    stalled_ms: to_timeout(day: 3),
     renag_ms: to_timeout(day: 1),
     quiet_ms: to_timeout(hour: 1)
   ]
@@ -51,7 +50,7 @@ defmodule Server.Maintain.Sweep do
     quiet = to_timeout(minute: Server.OperatorConfig.setting("quiet_workline_minutes"))
     opts = @defaults |> Keyword.put(:quiet_ms, quiet) |> Keyword.merge(opts)
     sweep_gates(opts)
-    sweep_stalled(opts)
+
     sweep_quiet(opts)
     sweep_tickets()
     sweep_worktrees()
@@ -190,34 +189,9 @@ defmodule Server.Maintain.Sweep do
     last != nil and DateTime.diff(DateTime.utc_now(), last, :millisecond) < renag_ms
   end
 
-  defp sweep_stalled(opts) do
-    for thread <- stalled_candidates(),
-        stale?(thread, opts[:stalled_ms]),
-        not String.starts_with?(thread.slug, "maint-"),
-        is_nil(Repo.get_by(Thread, slug: "maint-#{thread.slug}")) do
-      case Workline.flag(
-             %{title: "maintain: #{thread.slug} stalled at #{thread.stage}", slug: "maint-#{thread.slug}"},
-             "breach: workline #{thread.slug} (##{thread.id}) has not advanced past #{thread.stage} " <>
-               "within the control band — decide: push it, restaff it, or delete it."
-           ) do
-        {:ok, _flagged} -> :ok
-        {:error, _changeset} -> :ok
-      end
-    end
-
-    :ok
-  end
-
   # worklines only: a plain thread waiting on a reply is not a parked gate
   defp parked_gates do
     Repo.all(from t in Thread, where: t.state == "open" and not is_nil(t.awaiting) and not is_nil(t.stage))
-  end
-
-  defp stalled_candidates do
-    Repo.all(
-      from t in Thread,
-        where: t.state == "open" and not is_nil(t.stage) and t.stage != "merged" and is_nil(t.awaiting)
-    )
   end
 
   # Age from the LAST stage advance (or open) — the band is about progress, not existence.
