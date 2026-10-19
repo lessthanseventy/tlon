@@ -787,7 +787,7 @@ const VERBS: [string, () => void][] = [
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
   ["settings: the running system's knobs", () => open({ kind: "settings" })], ["restart the server (waits for quiet)", () => void did(data.restart())],
   ["the wackiness dial: business … rimworld", () => open({ kind: "whimsy" })],
-  ["crew", () => open({ kind: "crew" })], ["shifts", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
+  ["crew", () => open({ kind: "crew" })], ["shifts", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["tickets & worklines: the board", () => open({ kind: "column", col: 0 })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
   ["pencils down: nothing new, everyone stops after their turn", () => void did(data.pause("pencils_down"))],
   ["lights out: stop everyone now", () => ask2("lights out — pause verify and landing, interrupt every pane", () => void did(data.pause("lights_out")))],
