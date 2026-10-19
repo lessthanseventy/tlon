@@ -8,6 +8,8 @@ import { PLAY } from "../tui/sandbox"
 // `q` that doesn't quit, a listed key that fires a toy instead. The table in tui/keys.ts is the only
 // place a key is written down, so it is the only thing read here.
 const all: readonly Binding[] = KEYS
+/** the one exemption from "a key has one verb": the look editor is a paint mode that takes every key before any card does (its letters paint, `m` mirrors), so it shares letters with the card keys it hides */
+const PAINT_MODES: readonly Scope[] = ["card:look-editor"]
 const keysOf = (b: Binding) => b.key.split(" ")
 /** letters, symbols and esc carry one verb; digits are a card's own numbered menu, ⏎ and space and the arrows are the lit row */
 const guarded = (k: string) => k === "esc" || (k.length === 1 && !/\d/.test(k))
@@ -26,7 +28,7 @@ test("the table reads: ids are unique, every key has a label, and the scopes the
 
 test("no key has two verbs: one meaning per key, everywhere", () => {
   const verbs = new Map<string, Map<string, string[]>>()
-  for (const b of all) for (const k of keysOf(b).filter(guarded)) {
+  for (const b of all.filter((b) => !PAINT_MODES.includes(b.scope))) for (const k of keysOf(b).filter(guarded)) {
     const byVerb = verbs.get(k) ?? new Map<string, string[]>()
     byVerb.set(verbOf(b), [...(byVerb.get(verbOf(b)) ?? []), b.id])
     verbs.set(k, byVerb)
@@ -46,6 +48,26 @@ test("a screen binds a key once: a second row on the same key is a mode apart or
     }
   }
   expect([...new Set(twice)]).toEqual([])
+})
+
+test("a card binds a digit once: the pet cards' numbered menus are per species, never twice on one card", () => {
+  const twice: string[] = []
+  for (const { screen, scopes } of screens) {
+    const live = all.filter((b) => scopes.includes(b.scope) && !PAINT_MODES.includes(b.scope))
+    for (const [i, x] of live.entries()) for (const y of live.slice(i + 1)) {
+      if (x.scope === y.scope && x.mode !== y.mode) continue
+      for (const k of keysOf(x).filter((k) => /^\d$/.test(k) && keysOf(y).includes(k))) twice.push(`${screen}: ${k} ${x.id} / ${y.id}`)
+    }
+  }
+  expect(twice).toEqual([])
+  expect(all.filter((b) => b.scope === "card:pet" && /^\d$/.test(b.key)).every((b) => b.mode)).toBe(true)
+})
+
+test("the look editor's keys are in the table, and its hint line is drawn from it", async () => {
+  expect(all.filter((b) => b.scope === "card:look-editor").map((b) => b.id)).toEqual(expect.arrayContaining(["lookedit.mirror", "lookedit.view", "lookedit.paint"]))
+  expect(all.find((b) => b.id === "lookedit.mirror")?.key).toBe("m")
+  const src = await Bun.file(new URL("../tui/main.ts", import.meta.url)).text()
+  expect(src).not.toContain("1/2/3 view")
 })
 
 test("the play keys are shifted letters, and nothing else answers to one", () => {
