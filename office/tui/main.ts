@@ -42,6 +42,7 @@ import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wi
 import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk"
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
+import { bind, hints } from "./keys"
 import { PLAY, playable, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
@@ -699,39 +700,39 @@ function needActions(n: data.Need): Action[] {
   const tid = n.thread_id ?? null
   const after = () => void refresh()
   const acts: Action[] = [
-    ...(n.kind === "gate" && tid ? [{ key: "A", label: "approve", run: () => void did(data.approve(tid)).then(after) }] : []),
+    ...(n.kind === "gate" && tid ? [{ ...bind("need.A.gate"), run: () => void did(data.approve(tid)).then(after) }] : []),
     ...(n.kind === "dialog" && n.ref ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
     ...(n.kind === "ask" && n.ref ? (n.options ?? []).slice(0, 9).map((o): Action => ({ key: o.key, label: o.label, run: () => void did(data.answer(n.ref!, o.key)).then(after) })) : []),
-    ...(n.kind === "ask" && n.ref && n.ask !== "uqbar" ? [{ key: "u", label: "hand it to Uqbar (decides and acts as you)", run: () => void did(data.handToUqbar(n.ref!)).then(after) }] : []),
-    ...(n.kind === "seats" && n.ref ? [{ key: "1", label: `raise the cap to ${n.ref}`, run: () => void did(data.settingsEdit("max_leaves", n.ref)).then(after) }] : []),
+    ...(n.kind === "ask" && n.ref && n.ask !== "uqbar" ? [{ ...bind("need.u.ask"), run: () => void did(data.handToUqbar(n.ref!)).then(after) }] : []),
+    ...(n.kind === "seats" && n.ref ? [{ ...bind("need.1.seats", `raise the cap to ${n.ref}`), run: () => void did(data.settingsEdit("max_leaves", n.ref)).then(after) }] : []),
     ...(n.kind === "job_failed" && n.ref ? [
-      { key: "R", label: "run it again", run: () => void did(data.retryJob(n.ref!)).then(after) },
-      { key: "d", label: "dismiss", run: () => void did(data.dismissJob(n.ref!)).then(after) },
+      { ...bind("need.R.job_failed"), run: () => void did(data.retryJob(n.ref!)).then(after) },
+      { ...bind("need.d.job_failed"), run: () => void did(data.dismissJob(n.ref!)).then(after) },
     ] : []),
-    ...((n.kind === "question" || n.kind === "mention") && tid ? [{ key: "r", label: "reply", run: () => reply(tid) }] : []),
-    ...(n.kind === "stalled" && tid ? [{ key: "r", label: "tell the lead what to do (wakes them)", run: () => reply(tid) }] : []),
-    ...(n.kind === "verify_failed" && tid ? [{ key: "V", label: "run verify again", run: () => void did(data.reverify(tid)).then(after) }] : []),
-    ...(n.kind === "publish_failed" && tid ? [{ key: "R", label: "republish (push, open its PR)", run: () => void did(data.republish(tid)).then(after) }] : []),
-    ...(n.kind === "release_failed" && n.ref ? [{ key: "R", label: "retry the cut", run: () => void did(data.retryRelease(n.ref!)).then(after) }] : []),
+    ...((n.kind === "question" || n.kind === "mention") && tid ? [{ ...bind("need.r.question"), run: () => reply(tid) }] : []),
+    ...(n.kind === "stalled" && tid ? [{ ...bind("need.r.stalled"), run: () => reply(tid) }] : []),
+    ...(n.kind === "verify_failed" && tid ? [{ ...bind("need.V.verify_failed"), run: () => void did(data.reverify(tid)).then(after) }] : []),
+    ...(n.kind === "publish_failed" && tid ? [{ ...bind("need.R.publish_failed"), run: () => void did(data.republish(tid)).then(after) }] : []),
+    ...(n.kind === "release_failed" && n.ref ? [{ ...bind("need.R.release_failed"), run: () => void did(data.retryRelease(n.ref!)).then(after) }] : []),
     ...(n.kind === "pr_blocked" && tid ? [
-      { key: "b", label: "rebase it (back in the merge queue)", run: () => void did(data.rebaseLanding(tid)).then(after) },
-      { key: "L", label: "close and reland (back to build)", run: () => void did(data.relandLanding(tid)).then(after) },
-      { key: "v", label: `show me: the thread${n.url ? ` (${n.url})` : ""}`, run: () => openReader(tid) },
+      { ...bind("need.b.pr_blocked"), run: () => void did(data.rebaseLanding(tid)).then(after) },
+      { ...bind("need.L.pr_blocked"), run: () => void did(data.relandLanding(tid)).then(after) },
+      { ...bind("need.v.pr_blocked", `show me: the thread${n.url ? ` (${n.url})` : ""}`), run: () => openReader(tid) },
     ] : []),
-    ...(n.kind === "rollout" && n.ref ? [{ key: "d", label: "done", run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
-    ...(n.kind === "stranded" ? [{ key: "X", label: "take the checkout down (branch kept)", run: () => void did(data.retireStranded(n.key)).then(after) }] : []),
-    ...(n.kind === "issue" && n.ref ? [{ key: "g", label: "get it fixed (a ticket, routed)", run: () => void did(data.fixIssue(n.ref!)).then(after) }] : []),
-    ...(n.kind === "issue" && n.ref ? [{ key: "x", label: "resolve…", run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (s) => { if (s.trim()) void did(data.resolveIssue(n.ref!, s.trim())).then(after) }) }] : []),
-    ...(n.kind === "publish_failed" && tid ? [{ key: "d", label: "opened by hand (the command is above): its PR's url…", run: () => ask("its PR's url — waited on until GitHub merges it", (s) => { if (s.trim()) void did(data.publishedByHand(tid, s.trim())).then(after) }) }] : []),
-    ...(n.kind === "no_seat" && n.archetype && n.workspace_id != null ? [{ key: "h", label: `hire a ${n.archetype}`, run: () => ask(`hire a ${n.archetype} — their name`, (s) => { if (s.trim()) void did(data.hire(n.workspace_id!, s.trim(), n.archetype!)).then(after) }) }] : []),
-    ...(n.kind === "no_seat" && tid ? [{ key: "o", label: "hand it to…", run: () => ask(`hand #${tid} to — a coworker's name`, (s) => { if (s.trim()) void did(data.handOff(tid, s.trim())).then(after) }) }] : []),
+    ...(n.kind === "rollout" && n.ref ? [{ ...bind("need.d.rollout"), run: () => void did(data.dismissRollout(n.ref!)).then(after) }] : []),
+    ...(n.kind === "stranded" ? [{ ...bind("need.X.stranded"), run: () => void did(data.retireStranded(n.key)).then(after) }] : []),
+    ...(n.kind === "issue" && n.ref ? [{ ...bind("need.g.issue"), run: () => void did(data.fixIssue(n.ref!)).then(after) }] : []),
+    ...(n.kind === "issue" && n.ref ? [{ ...bind("need.x.issue"), run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (s) => { if (s.trim()) void did(data.resolveIssue(n.ref!, s.trim())).then(after) }) }] : []),
+    ...(n.kind === "publish_failed" && tid ? [{ ...bind("need.d.publish_failed"), run: () => ask("its PR's url — waited on until GitHub merges it", (s) => { if (s.trim()) void did(data.publishedByHand(tid, s.trim())).then(after) }) }] : []),
+    ...(n.kind === "no_seat" && n.archetype && n.workspace_id != null ? [{ ...bind("need.h.no_seat", `hire a ${n.archetype}`), run: () => ask(`hire a ${n.archetype} — their name`, (s) => { if (s.trim()) void did(data.hire(n.workspace_id!, s.trim(), n.archetype!)).then(after) }) }] : []),
+    ...(n.kind === "no_seat" && tid ? [{ ...bind("need.o.no_seat"), run: () => ask(`hand #${tid} to — a coworker's name`, (s) => { if (s.trim()) void did(data.handOff(tid, s.trim())).then(after) }) }] : []),
     ...(n.kind === "quota" && n.workspace_id != null ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: o.label, run: () => void did(data.shiftSwitch(n.workspace_id!, o.key)).then(after) })) : []),
     ...(n.kind === "quota" ? [
-      { key: "P", label: "pencils down", run: () => void did(data.pause("pencils_down")).then(after) },
-      { key: "d", label: "wait for the reset (put away until it clears)", run: () => void did(data.dismissNeed(n.key)).then(after) },
+      { ...bind("need.P.quota"), run: () => void did(data.pause("pencils_down")).then(after) },
+      { ...bind("need.d.quota"), run: () => void did(data.dismissNeed(n.key)).then(after) },
     ] : []),
-    ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ key: "d", label: "put away", run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
-    ...(tid ? [{ key: "v", label: "read the thread", run: () => openReader(tid) }, { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) }] : []),
+    ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ ...bind("need.d.decide"), run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
+    ...(tid ? [{ ...bind("need.v"), run: () => openReader(tid) }, { ...bind("need.t"), run: () => void zoomInto(tid) }] : []),
   ]
   return acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i)
 }
@@ -823,28 +824,28 @@ function threadActions(tid: number, inReader = false): Action[] {
   const answers = (prompt?.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: `answer: ${o.label}`, run: () => void did(data.answer(prompt!.id, o.key)) }))
   return [
     ...answers,
-    ...(inReader ? [] : [{ key: "v", label: "read it all", run: () => openReader(tid) }]),
-    { key: "r", label: "reply", run: () => reply(tid) },
-    ...(studyOf(all.threads, ws) !== null && studyOf(all.threads, ws) !== tid ? [{ key: "u", label: "hand to Uqbar", run: () => void did(handToUqbar(all.threads, ws, tid)) }] : []),
-    ...(th?.awaiting && th.stage ? [{ key: "A", label: `approve: ${th.awaiting}`, run: () => void did(data.approve(tid)) }] : []),
-    ...(th?.stage ? [{ key: ">", label: "advance the workline", run: () => void did(data.advance(tid)) }] : []),
-    ...(th && cardState(view(), th, boardCtx())?.atCap ? [{ key: "S", label: "raise the cap (settings)", run: () => { if (reader) closeReader(); open({ kind: "settings" }) } }] : []),
-    { key: "t", label: "look over their shoulder", run: () => void zoomInto(tid) },
-    { key: "g", label: "git (lazygit)", run: () => void zoomGit(tid) },
-    ...(th?.stage ? [{ key: "d", label: "read its docs (spec, plan…)", run: () => void pickDoc(tid) }, { key: "R", label: "review its branch", run: () => { if (reader) closeReader(); open({ kind: "review", tid }) } }] : []),
+    ...(inReader ? [] : [{ ...bind("thread.v"), run: () => openReader(tid) }]),
+    { ...bind("thread.r"), run: () => reply(tid) },
+    ...(studyOf(all.threads, ws) !== null && studyOf(all.threads, ws) !== tid ? [{ ...bind("thread.u"), run: () => void did(handToUqbar(all.threads, ws, tid)) }] : []),
+    ...(th?.awaiting && th.stage ? [{ ...bind("thread.A", `approve: ${th.awaiting}`), run: () => void did(data.approve(tid)) }] : []),
+    ...(th?.stage ? [{ ...bind("thread.>"), run: () => void did(data.advance(tid)) }] : []),
+    ...(th && cardState(view(), th, boardCtx())?.atCap ? [{ ...bind("thread.S"), run: () => { if (reader) closeReader(); open({ kind: "settings" }) } }] : []),
+    { ...bind("thread.t"), run: () => void zoomInto(tid) },
+    { ...bind("thread.g"), run: () => void zoomGit(tid) },
+    ...(th?.stage ? [{ ...bind("thread.d"), run: () => void pickDoc(tid) }, { ...bind("thread.R"), run: () => { if (reader) closeReader(); open({ kind: "review", tid }) } }] : []),
     {
-      key: "h", label: "hand off to…", run: () => {
+      ...bind("thread.h"), run: () => {
         const bench = view().bench
         find(`HAND #${tid} OFF TO`, bench.map((c) => ({ segs: [{ s: c.name, fg: shirtOf(c.archetype) }, { s: `  ${c.archetype ?? ""}${c.name === th?.lead ? " · leads it now" : ""}`, fg: ROLE.inactive }], text: c.name, run: () => { picker = null; void did(data.handOff(tid, c.name)) } })))
       },
     },
     {
-      key: "P", label: "move to project…", run: () => {
+      ...bind("thread.P"), run: () => {
         find(`MOVE #${tid} TO PROJECT`, view().projects.map((p) => ({ segs: [{ s: p.name, fg: ROLE.prose }], text: p.name, run: () => { picker = null; void did(data.move(tid, p.id)) } })))
       },
     },
-    { key: "x", label: "close as done", run: () => ask2(`close #${tid} as done`, () => did(data.closeThread(tid))) },
-    { key: "D", label: "delete for good", run: () => ask2(`delete #${tid} for good (its worktree goes too, if it loses nothing)`, () => { if (reader) closeReader(); back(); void did(data.deleteThread(tid)) }) },
+    { ...bind("thread.x"), run: () => ask2(`close #${tid} as done`, () => did(data.closeThread(tid))) },
+    { ...bind("thread.D"), run: () => ask2(`delete #${tid} for good (its worktree goes too, if it loses nothing)`, () => { if (reader) closeReader(); back(); void did(data.deleteThread(tid)) }) },
   ]
 }
 
@@ -854,14 +855,14 @@ function seatActions(b: Coworker | undefined): Action[] {
   if (!b || w === null) return []
   return [
     {
-      key: "M", label: "model…", run: () => {
+      ...bind("seat.M"), run: () => {
         const models = [{ label: `the archetype's (${a.archetypes.find((x) => x.name === b.archetype)?.model ?? "?"})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
         find(`${b.name.toUpperCase()}'S MODEL`, models.map((m) => ({ segs: [plain(m.label)], text: m.label, run: () => { picker = null; void did(data.retarget(w, b.agent_id, { model: m.value })) } })))
       },
     },
-    { key: "y", label: b.ask === "allow" ? "ask before acting" : "allow without asking", run: () => void did(data.retarget(w, b.agent_id, { ask: b.ask === "allow" ? "ask" : "allow" })) },
+    { ...bind("seat.y", b.ask === "allow" ? "ask before acting" : "allow without asking"), run: () => void did(data.retarget(w, b.agent_id, { ask: b.ask === "allow" ? "ask" : "allow" })) },
     {
-      key: "E", label: "persona…", run: () => {
+      ...bind("seat.E"), run: () => {
         const p = b.persona
         const items: { label: string; run: () => void }[] = [
           p
@@ -876,8 +877,8 @@ function seatActions(b: Coworker | undefined): Action[] {
         find(`${b.name.toUpperCase()}'S PERSONA`, items.map((i) => ({ segs: [plain(i.label)], text: i.label, run: () => { picker = null; i.run() } })))
       },
     },
-    { key: "C", label: "clear context (fresh next time)", run: () => ask2(`clear ${b.name}'s context — their session ends, they start fresh when next needed`, () => did(data.clearContext(w, b.agent_id, b.name))) },
-    { key: "-", label: "let go", run: () => ask2(`let ${b.name} go from ${wsName()} (the agent itself stays)`, () => did(data.unseat(b.seat_id, b.name))) },
+    { ...bind("seat.C"), run: () => ask2(`clear ${b.name}'s context — their session ends, they start fresh when next needed`, () => did(data.clearContext(w, b.agent_id, b.name))) },
+    { ...bind("seat.-"), run: () => ask2(`let ${b.name} go from ${wsName()} (the agent itself stays)`, () => did(data.unseat(b.seat_id, b.name))) },
   ]
 }
 
@@ -920,8 +921,8 @@ async function pollActivity(tid: number) {
 function liveActions(tid: number): Action[] {
   if (!threadOf(tid)?.live) return []
   return [
-    { key: "enter", label: "step into their session", run: () => void zoomInto(tid) },
-    { key: "c", label: talkView.has(tid) ? "their activity" : "the conversation", run: () => { if (!talkView.delete(tid)) talkView.add(tid); draw() } },
+    { ...bind("live.enter"), run: () => void zoomInto(tid) },
+    { ...bind("live.c", talkView.has(tid) ? "their activity" : "the conversation"), run: () => { if (!talkView.delete(tid)) talkView.add(tid); draw() } },
   ]
 }
 /** an author's colour: you in pink, the server dim, a coworker in their archetype's */
@@ -984,9 +985,9 @@ const stateSeg = (st: CardState): Seg => ({ s: `${STATE_GLYPH[st.kind]} `, fg: s
 function nextStep(th: Thread, st: CardState): { key: string; label: string } {
   const options = th.prompt?.options?.length ?? 0
   if (st.kind === "needs" && options) return { key: options > 1 ? `1–${Math.min(9, options)}` : "1", label: "answer it" }
-  if (st.kind === "needs" && th.awaiting && th.stage) return { key: "A", label: `approve: ${th.awaiting}` }
-  if (st.atCap) return { key: "S", label: "raise the cap in settings" }
-  return { key: "v", label: "open the reader" }
+  if (st.kind === "needs" && th.awaiting && th.stage) return bind("thread.A", `approve: ${th.awaiting}`)
+  if (st.atCap) return bind("thread.S", "raise the cap in settings")
+  return bind("thread.v", "open the reader")
 }
 const ago = (at: string) => {
   const s = Math.max(0, (Date.now() - new Date(at).getTime()) / 1000)
@@ -1047,7 +1048,7 @@ function newQuest() {
 }
 const KIND: Record<string, string> = { message: "said", fact: "learned", issue: "raised", question: "asked", check_failed: "check failed", check_passed: "check passed", work_landed: "landed", stage_advanced: "advanced", handoff_opened: "handed off" }
 
-const back1: Action = { key: "esc", label: "back", run: () => { back(); roomChanged = true; draw() } }
+const back1: Action = { ...bind("back.esc"), run: () => { back(); roomChanged = true; draw() } }
 const pick = <T,>(xs: T[], i: number) => (i >= 0 ? xs[i] : undefined)
 
 /** the card the pane shows: its title, its rows (the left, j/k + enter when any open), its actions (the right, by key) */
@@ -1057,19 +1058,19 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     case "home": {
       const waiting = a.threads.filter(needsYou)
       const actions: Action[] = [
-        { key: "/", label: "find anything", run: () => void finder() }, { key: "i", label: "inbox — everywhere", run: inbox },
-        { key: "n", label: "new thread", run: newThread }, { key: "N", label: "new ticket", run: newTicket },
-        { key: "c", label: "crew", run: () => open({ kind: "crew" }) }, { key: "t", label: "tickets & worklines", run: () => open({ kind: "column", col: 0 }) },
-        { key: "w", label: "in-tray", run: () => open({ kind: "tray" }) }, { key: "!", label: "triage", run: () => open({ kind: "triage" }) },
-        { key: "a", label: "calendar", run: () => open({ kind: "calendar" }) }, { key: "o", label: "notes", run: () => open({ kind: "notes" }) },
-        { key: "b", label: "memory", run: () => open({ kind: "memory" }) }, { key: "H", label: "the rack (health)", run: () => open({ kind: "health" }) },
-        ...(all.life?.[String(w)] ? [{ key: "L", label: "life", run: () => open({ kind: "life" }) }, { key: "D", label: "the dump", run: openDump }] : []),
-        ...(flagOn(all, "build_mode") ? [{ key: "B", label: "build mode", run: () => open({ kind: "build" }) }] : []),
-        { key: "f", label: "filing cabinet", run: () => open({ kind: "archive" }) }, { key: "W", label: "workspaces", run: () => open({ kind: "boss" }) },
-        { key: "S", label: "settings (the running system)", run: () => open({ kind: "settings" }) },
-        { key: "h", label: "the hiring hall", run: () => open({ kind: "hall" }) },
-        { key: "P", label: "the pet store", run: () => open({ kind: "store" }) },
-        { key: "q", label: "quit", run: quit },
+        { ...bind("home./"), run: () => void finder() }, { ...bind("home.i"), run: inbox },
+        { ...bind("home.n"), run: newThread }, { ...bind("home.N"), run: newTicket },
+        { ...bind("home.c"), run: () => open({ kind: "crew" }) }, { ...bind("home.t"), run: () => open({ kind: "column", col: 0 }) },
+        { ...bind("home.w"), run: () => open({ kind: "tray" }) }, { ...bind("home.!"), run: () => open({ kind: "triage" }) },
+        { ...bind("home.a"), run: () => open({ kind: "calendar" }) }, { ...bind("home.o"), run: () => open({ kind: "notes" }) },
+        { ...bind("home.b"), run: () => open({ kind: "memory" }) }, { ...bind("home.H"), run: () => open({ kind: "health" }) },
+        ...(all.life?.[String(w)] ? [{ ...bind("home.L"), run: () => open({ kind: "life" }) }, { ...bind("home.D"), run: openDump }] : []),
+        ...(flagOn(all, "build_mode") ? [{ ...bind("home.B"), run: () => open({ kind: "build" }) }] : []),
+        { ...bind("home.f"), run: () => open({ kind: "archive" }) }, { ...bind("home.W"), run: () => open({ kind: "boss" }) },
+        { ...bind("home.S"), run: () => open({ kind: "settings" }) },
+        { ...bind("home.h"), run: () => open({ kind: "hall" }) },
+        { ...bind("home.P"), run: () => open({ kind: "store" }) },
+        { ...bind("home.q"), run: quit },
       ]
       if (!waiting.length) return { title: "HOME", rows: [{ segs: [dim("nothing waits on you. click someone — or Nina, or Argos — a sticky or the crew board;")] }, { segs: [dim("tab walks the crew, [ ] the workspaces.")] }], actions }
       return { title: `WAITING ON YOU · ${waiting.length}`, rows: waiting.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), pink(`  ${t.prompt?.summary ?? `awaits ${t.awaiting}`}`)], open: () => openReader(t.id) })), actions }
@@ -1108,15 +1109,15 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `CREW · ${crew.length} · ${tabLabel(crewTab)} · by ${crewGroup ? `${crewGroup.name}, ` : ""}${crewSort.name}`,
         rows,
-        actions: [{ key: "v", label: `tab: ${tabLabel(next(tabsOf, crewTab))}`, run: () => { crewTab = next(tabsOf, crewTab); sel = 0; draw() } },
-          ...(seat ? [{ key: "c", label: `${seat.name} on ${seatTo === "all" ? "every crew" : seatTo}`, run: () => void did(data.seatShift(seat.seat_id, seat.name, seatTo)) }, { key: "n", label: "a new crew…", run: newCrew }] : []),
-          ...(other ? [{ key: "S", label: `put the ${other} crew on`, run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } }] : []),
-          { key: "+", label: "hire", run: hire },
-          paused ? { key: "P", label: "back to work", run: () => void did(data.pause("back_to_work")) }
-            : { key: "P", label: "pencils down: nothing new, all stop after their turn", run: () => void did(data.pause("pencils_down")) },
-          ...(all.pause !== "lights_out" ? [{ key: "L", label: "lights out…", run: () => ask2("lights out — pause verify and landing, interrupt every pane", () => void did(data.pause("lights_out"))) }] : []),
-          { key: "s", label: `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`, run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
-          { key: "g", label: `group: ${crewGroup?.name ?? "none"} → ${next(CREW_GROUP_MODES, crewGroup)?.name ?? "none"}`, run: () => resort(() => { crewGroup = next(CREW_GROUP_MODES, crewGroup) }) },
+        actions: [{ ...bind("crew.v", `tab: ${tabLabel(next(tabsOf, crewTab))}`), run: () => { crewTab = next(tabsOf, crewTab); sel = 0; draw() } },
+          ...(seat ? [{ ...bind("crew.c", `${seat.name} on ${seatTo === "all" ? "every crew" : seatTo}`), run: () => void did(data.seatShift(seat.seat_id, seat.name, seatTo)) }, { ...bind("crew.n"), run: newCrew }] : []),
+          ...(other ? [{ ...bind("crew.S", `put the ${other} crew on`), run: () => { if (ws !== null) void did(data.shiftSwitch(ws, other)) } }] : []),
+          { ...bind("crew.+"), run: hire },
+          paused ? { ...bind("crew.P.paused"), run: () => void did(data.pause("back_to_work")) }
+            : { ...bind("crew.P.running"), run: () => void did(data.pause("pencils_down")) },
+          ...(all.pause !== "lights_out" ? [{ ...bind("crew.L"), run: () => ask2("lights out — pause verify and landing, interrupt every pane", () => void did(data.pause("lights_out"))) }] : []),
+          { ...bind("crew.s", `sort: ${crewSort.name} → ${next(CREW_SORTS, crewSort).name}`), run: () => resort(() => { crewSort = next(CREW_SORTS, crewSort) }) },
+          { ...bind("crew.g", `group: ${crewGroup?.name ?? "none"} → ${next(CREW_GROUP_MODES, crewGroup)?.name ?? "none"}`), run: () => resort(() => { crewGroup = next(CREW_GROUP_MODES, crewGroup) }) },
           ...seatActions(chosen), back1],
       }
     }
@@ -1142,7 +1143,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (name === SHERIFF) {
         rows.push({ segs: [dim("nameplate: "), plain(NAMEPLATE)] }, { segs: [dim("mug: "), plain(MUG)] }, ...ledgerLines(ledger, a.bench).map((l) => ({ segs: [dim(l)] })))
       }
-      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ key: "m", label: "talk", run: () => talk(name) }, { key: "v", label: "the conversation", run: () => openConversation(name) }, ...(c.thread === null ? [] : [{ key: "w", label: `read #${c.thread}`, run: () => openReader(c.thread!) }, ...liveActions(c.thread), ...threadActions(c.thread).filter((x) => x.key !== "v")]), ...seatActions(b), { key: "l", label: "look", run: () => open({ kind: "look", name }) }, back1] }
+      return { title: name.toUpperCase(), rows, tint: shirtOf(c.archetype), actions: [{ ...bind("person.m"), run: () => talk(name) }, { ...bind("person.v"), run: () => openConversation(name) }, ...(c.thread === null ? [] : [{ ...bind("person.w", `read #${c.thread}`), run: () => openReader(c.thread!) }, ...liveActions(c.thread), ...threadActions(c.thread).filter((x) => x.key !== "v")]), ...seatActions(b), { ...bind("person.l"), run: () => open({ kind: "look", name }) }, back1] }
     }
     case "thread": {
       const tid = mode.tid
@@ -1152,7 +1153,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     case "column": {
       const col = boardColumns(a, boardCtx())[mode.col]!, items = arrange(col.items, colSort.cmp, null)[0]!.items
       const it = pick(items, sel)
-      const reorder = (dir: "up" | "down"): Action => ({ key: dir === "up" ? "K" : "J", label: `move ${dir}`, run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), items.length - 1)); draw() }) } })
+      const reorder = (dir: "up" | "down"): Action => ({ ...bind(dir === "up" ? "column.K" : "column.J", `move ${dir}`), run: () => { if (it?.act.kind === "ticket") void did(data.ticketReorder(it.act.id, dir)).then(() => { sel = Math.max(0, Math.min(sel + (dir === "up" ? -1 : 1), items.length - 1)); draw() }) } })
       return {
         title: `${col.name} · ${items.length}${colSort.name === "board" ? "" : ` · by ${colSort.name}`}`,
         rows: items.map((x) => {
@@ -1164,9 +1165,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           }
         }),
         actions: [
-          ...(mode.col === 0 ? [{ key: "n", label: "new ticket", run: newTicket }, ...(colSort.name === "board" ? [reorder("up"), reorder("down")] : [])] : []),
-          { key: "s", label: `sort: ${colSort.name} → ${next(COL_SORTS, colSort).name}`, run: () => resort(() => { colSort = next(COL_SORTS, colSort) }) },
-          { key: "right", label: "next column (← →)", run: () => open({ kind: "column", col: ((mode as { col: number }).col + 1) % COLS.length }) },
+          ...(mode.col === 0 ? [{ ...bind("column.n"), run: newTicket }, ...(colSort.name === "board" ? [reorder("up"), reorder("down")] : [])] : []),
+          { ...bind("column.s", `sort: ${colSort.name} → ${next(COL_SORTS, colSort).name}`), run: () => resort(() => { colSort = next(COL_SORTS, colSort) }) },
+          { ...bind("column.right"), run: () => open({ kind: "column", col: ((mode as { col: number }).col + 1) % COLS.length }) },
           back1,
         ],
       }
@@ -1194,18 +1195,18 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `TICKET #${id}`, rows,
         actions: [
-          { key: "S", label: "start it with the lead", run: () => void did(data.ticketStart(id)) },
-          { key: "s", label: "send to the manager to staff", run: () => void did(data.ticketRoute(id)) },
-          { key: "e", label: "edit the title", run: () => ask(`ticket #${id} title`, (s) => { if (s.trim()) did(data.ticketPatch(id, { title: s.trim() })) }, { text: tk.title }) },
+          { ...bind("ticket.S"), run: () => void did(data.ticketStart(id)) },
+          { ...bind("ticket.s"), run: () => void did(data.ticketRoute(id)) },
+          { ...bind("ticket.e"), run: () => ask(`ticket #${id} title`, (s) => { if (s.trim()) did(data.ticketPatch(id, { title: s.trim() })) }, { text: tk.title }) },
           {
-            key: "b", label: "blocked by…", run: () => {
+            ...bind("ticket.b"), run: () => {
               const others = tickets.filter((t) => t.id !== id && t.status !== "done")
               find(`#${id} IS BLOCKED BY`, others.map((t) => ({ segs: [key(`#${t.id} `), plain(t.title), dim(`  ${t.status}`)], text: `#${t.id} ${t.title}`, run: () => { picker = null; void did(data.ticketBlock(id, t.id)) } })))
             },
           },
-          ...(full?.blocked_by.length ? [{ key: "u", label: "unblock", run: () => { for (const by of full.blocked_by) void did(data.ticketUnblock(id, by)) } }] : []),
-          { key: "K", label: "move up", run: () => void did(data.ticketReorder(id, "up")) }, { key: "J", label: "move down", run: () => void did(data.ticketReorder(id, "down")) },
-          { key: "d", label: "delete", run: () => ask2(`delete ticket #${id}`, () => { back(); void did(data.ticketDelete(id)) }) },
+          ...(full?.blocked_by.length ? [{ ...bind("ticket.u"), run: () => { for (const by of full.blocked_by) void did(data.ticketUnblock(id, by)) } }] : []),
+          { ...bind("ticket.K"), run: () => void did(data.ticketReorder(id, "up")) }, { ...bind("ticket.J"), run: () => void did(data.ticketReorder(id, "down")) },
+          { ...bind("ticket.d"), run: () => ask2(`delete ticket #${id}`, () => { back(); void did(data.ticketDelete(id)) }) },
           back1,
         ],
       }
@@ -1230,12 +1231,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: now.toLocaleString("en", { month: "long", year: "numeric" }).toUpperCase(), rows,
         actions: [
-          { key: "n", label: "schedule something", run: () => newSchedule() },
+          { ...bind("calendar.n"), run: () => newSchedule() },
           ...(s ? [
-            { key: "e", label: "edit it", run: () => newSchedule(s) },
-            { key: "space", label: s.enabled ? "pause it" : "resume it", run: () => void did(data.schedulePatch(s.id, { enabled: !s.enabled })).then(loadCard).then(draw) },
-            { key: "r", label: "run it now", run: () => void did(data.scheduleRun(s.id)).then(loadCard).then(draw) },
-            { key: "d", label: "delete it", run: () => ask2(`remove "${s.title}" and its runs`, () => void did(data.scheduleDelete(s.id)).then(loadCard).then(draw)) },
+            { ...bind("calendar.e"), run: () => newSchedule(s) },
+            { ...bind("calendar.space", s.enabled ? "pause it" : "resume it"), run: () => void did(data.schedulePatch(s.id, { enabled: !s.enabled })).then(loadCard).then(draw) },
+            { ...bind("calendar.r"), run: () => void did(data.scheduleRun(s.id)).then(loadCard).then(draw) },
+            { ...bind("calendar.d"), run: () => ask2(`remove "${s.title}" and its runs`, () => void did(data.scheduleDelete(s.id)).then(loadCard).then(draw)) },
           ] : []),
           back1,
         ],
@@ -1251,7 +1252,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (s) rows.unshift({ segs: [s.dump ? plain(`dump · ${data.lines(s.dump.lines)} · edited ${stamp(s.dump.updated_at)}`) : dim("dump · empty — D to pour it all out")], open: openDump })
       return {
         title: s ? `LIFE · lv ${s.level} · ${s.xp} xp` : "LIFE", rows,
-        actions: [{ key: "D", label: "the dump", run: openDump }, { key: "E", label: "earlier pages", run: () => open({ kind: "pages" }) }, { key: "r", label: "new routine", run: newRoutine }, { key: "Q", label: "new quest", run: newQuest }, back1],
+        actions: [{ ...bind("life.D"), run: openDump }, { ...bind("life.E"), run: () => open({ kind: "pages" }) }, { ...bind("life.r"), run: newRoutine }, { ...bind("life.Q"), run: newQuest }, back1],
       }
     }
     case "pages": {
@@ -1259,10 +1260,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         : !dumpPages.length ? [{ segs: [dim("no earlier pages yet: every save keeps the one it replaced")] }]
         : dumpPages.map((p) => ({ segs: [dim(`${stamp(p.at)}  `), plain(data.lines(p.lines)), dim(`  ${p.first}`)], open: () => void readPage(p.id), ref: p }))
       const p = rows[sel]?.ref as data.DumpPage | undefined
-      const up: Action = { key: "esc", label: "life", run: () => open({ kind: "life" }) }
+      const up: Action = { ...bind("pages.esc"), run: () => open({ kind: "life" }) }
       return {
         title: "THE DUMP · EARLIER PAGES", rows,
-        actions: [...(p ? [{ key: "enter", label: "read it", run: () => void readPage(p.id) }, { key: "R", label: "put it back", run: () => ask2(`put back the ${stamp(p.at)} page (today's is kept as an earlier page)`, () => void restorePage(p.id)) }] : []), up],
+        actions: [...(p ? [{ ...bind("pages.enter"), run: () => void readPage(p.id) }, { ...bind("pages.R"), run: () => ask2(`put back the ${stamp(p.at)} page (today's is kept as an earlier page)`, () => void restorePage(p.id)) }] : []), up],
       }
     }
     case "runs": {
@@ -1274,17 +1275,17 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }))
       return {
         title: `RUNS · ${s?.title ?? ""}`, rows: rows.length ? rows : [{ segs: [dim("it hasn't run yet")] }],
-        actions: [{ key: "r", label: "run it now", run: () => void did(data.scheduleRun(id)).then(loadCard).then(draw) }, { key: "esc", label: "the calendar", run: () => open({ kind: "calendar" }) }],
+        actions: [{ ...bind("runs.r"), run: () => void did(data.scheduleRun(id)).then(loadCard).then(draw) }, { ...bind("runs.esc"), run: () => open({ kind: "calendar" }) }],
       }
     }
     case "run": {
       const { id, run } = mode
       const r = board.find((x) => x.id === run)
-      const up: Action = { key: "esc", label: "the runs", run: () => open({ kind: "runs", id }) }
+      const up: Action = { ...bind("run.esc"), run: () => open({ kind: "runs", id }) }
       if (!r) return { title: "RUN", rows: [{ segs: [dim("gone")] }], actions: [up] }
       const rows: Row[] = [{ segs: [runGlyph(r), dim(` started ${stamp(r.started_at)}${r.finished_at ? `, finished ${stamp(r.finished_at)}` : ", still running"}`), ...(r.thread_id ? [key(`  → #${r.thread_id}`)] : [])] }]
       for (const l of wrap(r.output ?? "(no output)", cols() - 40)) rows.push({ segs: [plain(l)] })
-      return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, actions: [...(r.thread_id ? [{ key: "t", label: "read its thread", run: () => openReader(r.thread_id!) }] : []), up] }
+      return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, actions: [...(r.thread_id ? [{ ...bind("run.t"), run: () => openReader(r.thread_id!) }] : []), up] }
     }
     case "archive": {
       if (!archived) return { title: "FILING CABINET", rows: [{ segs: [dim("opening the drawers…")] }], actions: [back1] }
@@ -1300,7 +1301,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const rows: Row[] = a.notes.map((n) => ({ segs: [who(n.author), plain(n.body.replace(/\s+/g, " "))] }))
       // the crew's chatter, apart from the notes they work from (their suggestions go in the box)
       if (cork.length) rows.push({ segs: [key(`CORKBOARD · ${cork.length} — the crew's notes to each other`)] }, ...cork.map((n): Row => ({ segs: [dim(`${n.kind.padEnd(10)} `), who(n.author), plain(n.body), dim(n.re ? `  (re #${n.re})` : "")], ref: n })))
-      return { title: `NOTES · ${a.notes.length}`, rows, actions: [{ key: "n", label: "pin a note", run: newNote }, back1] }
+      return { title: `NOTES · ${a.notes.length}`, rows, actions: [{ ...bind("notes.n"), run: newNote }, back1] }
     }
     case "tray": {
       const rows = arrange(feed, traySort.cmp, null)[0]!.items.map((x): Row => ({
@@ -1309,7 +1310,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }))
       return {
         title: `IN-TRAY · ${wsName()}${traySort.name === "newest" ? "" : ` · by ${traySort.name}`}`, rows: rows.length ? rows : [{ segs: [dim("nothing yet")] }],
-        actions: [{ key: "s", label: `sort: ${traySort.name} → ${next(TRAY_SORTS, traySort).name}`, run: () => resort(() => { traySort = next(TRAY_SORTS, traySort) }) }, back1],
+        actions: [{ ...bind("tray.s", `sort: ${traySort.name} → ${next(TRAY_SORTS, traySort).name}`), run: () => resort(() => { traySort = next(TRAY_SORTS, traySort) }) }, back1],
       }
     }
     case "triage": {
@@ -1357,8 +1358,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: "MEMORY", rows,
         actions: [
-          ...(at?.habit ? [{ key: "a", label: "approve the habit", run: () => void did(data.habit(at.habit!.id, "approve")).then(reload) }, { key: "r", label: "reject the habit", run: () => void did(data.habit(at.habit!.id, "reject")).then(reload) }] : []),
-          ...(at?.fact ? [{ key: "d", label: "forget the fact", run: () => ask2(`forget "${at.fact!.text.slice(0, 50)}"`, () => void did(data.forget(at.fact!.id)).then(reload)) }] : []),
+          ...(at?.habit ? [{ ...bind("memory.a"), run: () => void did(data.habit(at.habit!.id, "approve")).then(reload) }, { ...bind("memory.r"), run: () => void did(data.habit(at.habit!.id, "reject")).then(reload) }] : []),
+          ...(at?.fact ? [{ ...bind("memory.d"), run: () => ask2(`forget "${at.fact!.text.slice(0, 50)}"`, () => void did(data.forget(at.fact!.id)).then(reload)) }] : []),
           back1,
         ],
       }
@@ -1375,16 +1376,16 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `BUILD MODE${b.carrying ? ` · carrying ${b.carrying.kind}` : ""}${b.refused ? " · refused — overlap or it would split the floor" : ""}`,
         rows,
         actions: [
-          { key: "up", label: "move", run: mutate((x) => move(x, 0, -1)) },
-          { key: "down", label: "move", run: mutate((x) => move(x, 0, 1)) },
-          { key: "left", label: "move", run: mutate((x) => move(x, -1, 0)) },
-          { key: "right", label: "move", run: mutate((x) => move(x, 1, 0)) },
-          { key: "enter", label: b.carrying ? "drop" : "pick up", run: mutate((x) => (x.carrying ? drop(x) : pickUp(x))) },
-          { key: "n", label: "new tile (cycles the kind)", run: mutate((x) => place(x)) },
-          { key: "x", label: "remove", run: mutate((x) => remove(x)) },
-          { key: "r", label: "rotate", run: mutate((x) => rotate(x)) },
-          { key: "u", label: "undo", run: mutate((x) => undo(x)) },
-          { key: "esc", label: "leave", run: () => { back(true); roomChanged = true; draw() } },
+          { ...bind("build.up"), run: mutate((x) => move(x, 0, -1)) },
+          { ...bind("build.down"), run: mutate((x) => move(x, 0, 1)) },
+          { ...bind("build.left"), run: mutate((x) => move(x, -1, 0)) },
+          { ...bind("build.right"), run: mutate((x) => move(x, 1, 0)) },
+          { ...bind("build.enter", b.carrying ? "drop" : "pick up"), run: mutate((x) => (x.carrying ? drop(x) : pickUp(x))) },
+          { ...bind("build.n"), run: mutate((x) => place(x)) },
+          { ...bind("build.x"), run: mutate((x) => remove(x)) },
+          { ...bind("build.r"), run: mutate((x) => rotate(x)) },
+          { ...bind("build.u"), run: mutate((x) => undo(x)) },
+          { ...bind("build.esc"), run: () => { back(true); roomChanged = true; draw() } },
         ],
       }
     }
@@ -1398,15 +1399,15 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: "WORKSPACES", rows,
         actions: [
           {
-            key: "n", label: "new workspace", run: () => {
+            ...bind("boss.n"), run: () => {
               const tpl = ["code", "life", "blank"].map((t) => ({ label: t, value: t }))
               ask("new workspace — its name", (s, [t]) => { if (s.trim()) did(data.workspaceNew(s.trim(), t as string)) }, { cycles: [{ name: "from", values: tpl, i: 0 }] })
             },
           },
-          { key: "e", label: "this one's settings", run: () => open({ kind: "card" }) },
-          { key: "S", label: "the running system", run: () => open({ kind: "settings" }) },
-          ...(w === null ? [] : [{ key: "d", label: "close this one", run: () => ask2(`close ${wsName()} (its threads move to another workspace)`, () => void did(data.workspaceDelete(w))) }]),
-          { key: "+", label: "hire", run: hire },
+          { ...bind("boss.e"), run: () => open({ kind: "card" }) },
+          { ...bind("boss.S"), run: () => open({ kind: "settings" }) },
+          ...(w === null ? [] : [{ ...bind("boss.d"), run: () => ask2(`close ${wsName()} (its threads move to another workspace)`, () => void did(data.workspaceDelete(w))) }]),
+          { ...bind("boss.+"), run: hire },
           back1,
         ],
       }
@@ -1424,11 +1425,11 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `${c.name.toUpperCase()} · SETTINGS`, rows,
         actions: [
-          { key: "T", label: `type: ${c.type} → next`, run: () => void did(data.workspaceEdit(w, { type: ring(["code", "life", "blank"], c.type) })).then(reload) },
-          { key: "s", label: `scope: ${c.scope} → next`, run: () => void did(data.workspaceEdit(w, { scope: ring(["project", "machine"], c.scope) })).then(reload) },
-          { key: "I", label: "icon", run: () => ask("icon", (s) => void did(data.workspaceEdit(w, { icon: s.trim() })).then(reload), { text: c.icon ?? "" }) },
-          { key: "+", label: "add a repo", run: () => ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(reload) }) },
-          ...(repo ? [{ key: "-", label: `remove ${repo.path.split("/").pop()}`, run: () => ask2(`remove ${repo.path} from ${c.name}`, () => void did(data.repoRemove(repo.id)).then(reload)) }] : []),
+          { ...bind("card.T", `type: ${c.type} → next`), run: () => void did(data.workspaceEdit(w, { type: ring(["code", "life", "blank"], c.type) })).then(reload) },
+          { ...bind("card.s", `scope: ${c.scope} → next`), run: () => void did(data.workspaceEdit(w, { scope: ring(["project", "machine"], c.scope) })).then(reload) },
+          { ...bind("card.I"), run: () => ask("icon", (s) => void did(data.workspaceEdit(w, { icon: s.trim() })).then(reload), { text: c.icon ?? "" }) },
+          { ...bind("card.+"), run: () => ask("add a repo — its path", (s) => { if (s.trim()) void did(data.repoAdd(w, s.trim())).then(reload) }) },
+          ...(repo ? [{ ...bind("card.-", `remove ${repo.path.split("/").pop()}`), run: () => ask2(`remove ${repo.path} from ${c.name}`, () => void did(data.repoRemove(repo.id)).then(reload)) }] : []),
           back1,
         ],
       }
@@ -1473,12 +1474,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `REVIEW · #${tid}${review.head ? ` @ ${review.head.slice(0, 7)}` : ""} · ${review.files.length} files · ${notes.length} notes · ⏎ notes the selected line`,
         rows,
         actions: [
-          { key: "a", label: "note this line", run: () => { if (here && !here.hunk) noteOn(here) } },
-          { key: "A", label: "note the whole file", run: () => { if (here) noteOn({ path: here.path }) } },
-          ...(here && notes.some((n) => same(n, here)) ? [{ key: "x", label: "drop its note", run: () => { reviewNotes.set(tid, notes.filter((n) => !same(n, here))); draw() } }] : []),
-          { key: "n", label: "next hunk", run: () => jump(1, (a) => !!a.hunk) }, { key: "p", label: "previous hunk", run: () => jump(-1, (a) => !!a.hunk) },
-          { key: "N", label: "next file", run: () => jump(1, isFile) }, { key: "P", label: "previous file", run: () => jump(-1, isFile) },
-          { key: "s", label: `submit${notes.length ? ` ${notes.length} notes` : ""}…`, run: submit },
+          { ...bind("review.a"), run: () => { if (here && !here.hunk) noteOn(here) } },
+          { ...bind("review.A"), run: () => { if (here) noteOn({ path: here.path }) } },
+          ...(here && notes.some((n) => same(n, here)) ? [{ ...bind("review.x"), run: () => { reviewNotes.set(tid, notes.filter((n) => !same(n, here))); draw() } }] : []),
+          { ...bind("review.n"), run: () => jump(1, (a) => !!a.hunk) }, { ...bind("review.p"), run: () => jump(-1, (a) => !!a.hunk) },
+          { ...bind("review.N"), run: () => jump(1, isFile) }, { ...bind("review.P"), run: () => jump(-1, isFile) },
+          { ...bind("review.s", `submit${notes.length ? ` ${notes.length} notes` : ""}…`), run: submit },
           back1,
         ],
       }
@@ -1490,7 +1491,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }))
       return {
         title: `${whimsyTitle(whim)} · ⏎ changes the selected dial`, rows,
-        actions: [{ key: "0", label: "back to the preset's own dials", run: () => { setWhim(resetToPreset(whim)); draw() } }, back1],
+        actions: [{ ...bind("whimsy.0"), run: () => { setWhim(resetToPreset(whim)); draw() } }, back1],
       }
     }
     case "settings": {
@@ -1515,9 +1516,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: "THE RUNNING SYSTEM · ⏎ changes the selected knob", rows,
         actions: [
-          { key: "Z", label: "the wackiness dial", run: () => open({ kind: "whimsy" }) },
-          { key: "R", label: "restart the server (waits for quiet)", run: () => void did(data.restart()).then(reload) },
-          ...(settings.restart_pending ? [{ key: "x", label: "cancel the scheduled restart", run: () => void did(data.restartCancel()).then(reload) }] : []),
+          { ...bind("settings.Z"), run: () => open({ kind: "whimsy" }) },
+          { ...bind("settings.R"), run: () => void did(data.restart()).then(reload) },
+          ...(settings.restart_pending ? [{ ...bind("settings.x"), run: () => void did(data.restartCancel()).then(reload) }] : []),
           back1,
         ],
       }
@@ -1538,7 +1539,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         ...(live.length ? [section(`UNDER WAY · ${live.length}`, ROLE.live, "being worked on"), ...live.map((t): Row => ({ segs: [tidSeg(t.id), { s: t.title, fg: ROLE.prose }, dim(`  ${t.lead ?? ""}${t.stage ? ` · ${t.stage}` : ""}`)], open: () => goThread(t.id, t.workspace_id) }))] : []),
       ]
       const n = rows[sel]?.ref as data.Need | undefined
-      const acts: Action[] = !n ? [] : [...needActions(n), { key: "f", label: "one at a time", run: () => open({ kind: "decide", i: Math.max(0, needs.indexOf(n)) }) }]
+      const acts: Action[] = !n ? [] : [...needActions(n), { ...bind("needs.f"), run: () => open({ kind: "decide", i: Math.max(0, needs.indexOf(n)) }) }]
       return {
         title: needs.length ? `WAITING ON YOU · ${blocking.length} blocking · ${deciding.length} to decide` : "WAITING ON YOU",
         tint: blocking.length ? ROLE.attention : deciding.length ? ROLE.body : ROLE.live,
@@ -1550,7 +1551,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       title: "THE LIBRARY OF BABEL · a page, at random",
       tint: ROLE.inactive,
       rows: mode.page.map((l): Row => ({ segs: [/[a-z]{4,} [a-z]{3,}/.test(l.trim()) && !l.includes(",") ? { s: l, fg: ROLE.attention } : dim(l)] })),
-      actions: [{ key: "n", label: "another page", run: openBabel }, back1],
+      actions: [{ ...bind("babel.n"), run: openBabel }, back1],
     }
     case "entry": {
       const e = entryOf(a, boardCtx(), needs, feed, new Date())
@@ -1575,9 +1576,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (e.diary.length) { rows.push({ segs: [{ s: "WHAT UQBAR DID TODAY", fg: ROLE.attention }] }); for (const d of e.diary) rows.push(row(d.text, d.act)) }
       if (e.footnotes.length) { rows.push({ segs: [{ s: "FOOTNOTES", fg: ROLE.attention }] }); for (const f of e.footnotes) rows.push(row(`${f.mark} ${f.text}`, f.act)) }
       const verbs: Action[] = study === null ? [] : [
-        { key: "m", label: "ask Uqbar…", run: () => talk("uqbar") },
-        { key: "t", label: "look over Uqbar's shoulder", run: () => void zoomInto(study) },
-        { key: "v", label: "read the study", run: () => openReader(study) },
+        { ...bind("entry.m"), run: () => talk("uqbar") },
+        { ...bind("entry.t"), run: () => void zoomInto(study) },
+        { ...bind("entry.v"), run: () => openReader(study) },
       ]
       const notes: Action[] = e.footnotes.slice(0, 9).map((f, i) => ({ key: String(i + 1), label: `footnote ${f.mark} — ${f.text}`, run: () => act(f.act) }))
       return { title: e.title, tint: ROLE.inactive, rows, actions: [...verbs, ...notes, back1] }
@@ -1599,7 +1600,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `DECIDE · ${i + 1} of ${order.length}`,
         tint: n.level === "blocking" ? ROLE.attention : ROLE.body,
         rows,
-        actions: [...needActions(n), { key: "n", label: "next", run: () => step(1) }, { key: "p", label: "previous", run: () => step(-1) }, { key: "l", label: "the whole list", run: () => open({ kind: "needs" }) }, back1],
+        actions: [...needActions(n), { ...bind("decide.n"), run: () => step(1) }, { ...bind("decide.p"), run: () => step(-1) }, { ...bind("decide.l"), run: () => open({ kind: "needs" }) }, back1],
       }
     }
     case "ideas": {
@@ -1611,8 +1612,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `SUGGESTION BOX · ${ideas.length} · the crew's ideas, yours to file or throw out`, rows: rows.length ? rows : [{ segs: [dim("the box is empty. a coworker drops an idea in it when they see one while working.")] }],
         actions: [
           ...(picked && w !== null ? [
-            { key: "t", label: "file it as a ticket", run: () => void did(data.ticketFile(w, picked.body)).then(() => data.dropSuggestion(w, picked.id)).then(() => { gone(picked.id); draw() }) },
-            { key: "d", label: "throw it out", run: () => void data.dropSuggestion(w, picked.id).then(() => { gone(picked.id); draw() }) },
+            { ...bind("ideas.t"), run: () => void did(data.ticketFile(w, picked.body)).then(() => data.dropSuggestion(w, picked.id)).then(() => { gone(picked.id); draw() }) },
+            { ...bind("ideas.d"), run: () => void data.dropSuggestion(w, picked.id).then(() => { gone(picked.id); draw() }) },
           ] : []),
           back1,
         ],
@@ -1659,16 +1660,16 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         return {
           title: `${draft.name.toUpperCase()}`, rows,
           actions: [
-            { key: "S", label: "save her temperament", run: () => { savePets({ cat: { species: draft.species, temperament: named ?? { ...draft.temperament } } }); petsSeen = ""; followPets(); back(); roomChanged = true; draw() } },
-            { key: "p", label: "pat her", run: doIt(() => r.pet()) },
-            { key: "z", label: "the zoomies", run: doIt(() => r.catDo("zoomies")) },
-            { key: "y", label: "play with the yarn", run: doIt(() => r.catDo("play")) },
-            { key: "c", label: "come to my desk", run: doIt(() => r.catDo("come")) },
-            { key: "s", label: "go have a nap", run: doIt(() => r.catDo("nap")) },
-            { key: "b", label: "a drink from the tub", run: doIt(() => r.catDo("drink")) },
-            { key: "u", label: "curl up in the tub", run: doIt(() => r.catDo("tub")) },
-            ...(busy().length ? [{ key: "g", label: "go cheer someone on", run: cheer((name) => r.catCheer(name)) }] : []),
-            ...(busy().length ? [{ key: "l", label: "Nina carries a letter", run: cheer((name) => r.catLetter(name)) }] : []),
+            { ...bind("pet.S.cat"), run: () => { savePets({ cat: { species: draft.species, temperament: named ?? { ...draft.temperament } } }); petsSeen = ""; followPets(); back(); roomChanged = true; draw() } },
+            { ...bind("pet.p.cat"), run: doIt(() => r.pet()) },
+            { ...bind("pet.z.cat"), run: doIt(() => r.catDo("zoomies")) },
+            { ...bind("pet.y.cat"), run: doIt(() => r.catDo("play")) },
+            { ...bind("pet.c.cat"), run: doIt(() => r.catDo("come")) },
+            { ...bind("pet.s.cat"), run: doIt(() => r.catDo("nap")) },
+            { ...bind("pet.b.cat"), run: doIt(() => r.catDo("drink")) },
+            { ...bind("pet.u.cat"), run: doIt(() => r.catDo("tub")) },
+            ...(busy().length ? [{ ...bind("pet.g.cat"), run: cheer((name) => r.catCheer(name)) }] : []),
+            ...(busy().length ? [{ ...bind("pet.l.cat"), run: cheer((name) => r.catLetter(name)) }] : []),
             back1,
           ],
         }
@@ -1676,12 +1677,12 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: "ARGOS", rows: [{ segs: [plain(wideRoom ? "the office dog. good boy." : "Argos lives in the wide room — make the terminal wider to see him.")] }],
         actions: wideRoom ? [
-          { key: "p", label: "pat him", run: doIt(() => wideRoom.patDog()) },
-          { key: "w", label: "go for a walk", run: doIt(() => wideRoom.dogDo("walk")) },
-          { key: "o", label: "come to my office", run: doIt(() => wideRoom.dogDo("office")) },
-          { key: "s", label: "sit", run: doIt(() => wideRoom.dogDo("sit")) },
-          { key: "b", label: "bed", run: doIt(() => wideRoom.dogDo("bed")) },
-          ...(busy().length ? [{ key: "g", label: "go cheer someone on", run: cheer((name) => wideRoom.dogCheer(name)) }] : []),
+          { ...bind("pet.p.dog"), run: doIt(() => wideRoom.patDog()) },
+          { ...bind("pet.w.dog"), run: doIt(() => wideRoom.dogDo("walk")) },
+          { ...bind("pet.o.dog"), run: doIt(() => wideRoom.dogDo("office")) },
+          { ...bind("pet.s.dog"), run: doIt(() => wideRoom.dogDo("sit")) },
+          { ...bind("pet.b.dog"), run: doIt(() => wideRoom.dogDo("bed")) },
+          ...(busy().length ? [{ ...bind("pet.g.dog"), run: cheer((name) => wideRoom.dogCheer(name)) }] : []),
           back1,
         ] : [back1],
       }
@@ -1714,9 +1715,9 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `LOOK · ${name.toUpperCase()}`, rows,
         actions: [
           // not "enter": rows[sel].open() (field-cycling) owns Enter here, same as every other card with cycled rows
-          { key: "s", label: "save", run: () => { saveLook(name, draft); lookDraft = null; back(); roomChanged = true; draw() } },
-          { key: "r", label: "roll", run: () => { Object.assign(draft, rollLook(`${name}:${rolls++}`)); draw() } },
-          { key: "e", label: "draw a custom look", run: () => {
+          { ...bind("look.s"), run: () => { saveLook(name, draft); lookDraft = null; back(); roomChanged = true; draw() } },
+          { ...bind("look.r"), run: () => { Object.assign(draft, rollLook(`${name}:${rolls++}`)); draw() } },
+          { ...bind("look.e"), run: () => {
             editBuf = { front: draft.custom?.front ? [...draft.custom.front] : blankBuf(), side: draft.custom?.side ? [...draft.custom.side] : blankBuf(), back: draft.custom?.back ? [...draft.custom.back] : blankBuf() }
             editEntry = { front: [...editBuf.front], side: [...editBuf.side], back: [...editBuf.back] }
             editCursor = { x: 0, y: 0 }; editScroll = 0
@@ -1735,11 +1736,11 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `HIRING HALL · ${hall.seed} · ${hall.pile.length} maybe`, rows,
         actions: [
-          { key: "left", label: "pass", run: () => { hallSet(pass(hall, hallCtx())); draw() } },
-          { key: "up", label: "maybe", run: () => { hallSet(maybe(hall, hallCtx())); draw() } },
-          { key: "right", label: "hire", run: () => void hallHire() },
-          { key: "space", label: "lock / unlock the row", run: () => rows[sel]?.open?.() },
-          { key: "m", label: "the maybe pile", run: () => open({ kind: "hall-pile" }) },
+          { ...bind("hall.left"), run: () => { hallSet(pass(hall, hallCtx())); draw() } },
+          { ...bind("hall.up"), run: () => { hallSet(maybe(hall, hallCtx())); draw() } },
+          { ...bind("hall.right"), run: () => void hallHire() },
+          { ...bind("hall.space"), run: () => rows[sel]?.open?.() },
+          { ...bind("hall.m"), run: () => open({ kind: "hall-pile" }) },
           back1,
         ],
       }
@@ -1754,13 +1755,13 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `PET STORE · ${store.seed}`, rows,
         actions: [
-          { key: "left", label: "previous species", run: () => { storeSet(shelve(store, -1, storeTaken())); draw() } },
-          { key: "right", label: "next species", run: () => { storeSet(shelve(store, 1, storeTaken())); draw() } },
-          { key: "up", label: "pass", run: () => { storeSet(storePass(store, storeTaken())); draw() } },
-          { key: "down", label: "back", run: () => { storeSet(storeBack(store, storeTaken())); draw() } },
-          { key: "space", label: "lock / unlock the row", run: () => rows[sel]?.open?.() },
-          { key: "e", label: "rename", run: () => ask("name", (s) => { if (s.trim()) { storeSet(rename(store, s.trim())); draw() } }, { text: c.name }) },
-          { key: "enter", label: "adopt", run: storeAdopt },
+          { ...bind("store.left"), run: () => { storeSet(shelve(store, -1, storeTaken())); draw() } },
+          { ...bind("store.right"), run: () => { storeSet(shelve(store, 1, storeTaken())); draw() } },
+          { ...bind("store.up"), run: () => { storeSet(storePass(store, storeTaken())); draw() } },
+          { ...bind("store.down"), run: () => { storeSet(storeBack(store, storeTaken())); draw() } },
+          { ...bind("store.space"), run: () => rows[sel]?.open?.() },
+          { ...bind("store.e"), run: () => ask("name", (s) => { if (s.trim()) { storeSet(rename(store, s.trim())); draw() } }, { text: c.name }) },
+          { ...bind("store.enter"), run: storeAdopt },
           back1,
         ],
       }
@@ -1774,8 +1775,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: `MAYBE PILE · ${hall.pile.length}`,
         rows: rows.length ? rows : [{ segs: [dim("nobody yet — ↑ in the hall keeps a candidate here")] }],
         actions: [
-          { key: "x", label: "drop", run: () => { const i = rows[sel]?.ref; if (typeof i === "number") { hallSet({ ...hall, pile: dropPile(hall.pile, i) }); sel = Math.max(0, sel - 1); draw() } } },
-          { key: "esc", label: "back to the hall", run: () => open({ kind: "hall" }) },
+          { ...bind("hall-pile.x"), run: () => { const i = rows[sel]?.ref; if (typeof i === "number") { hallSet({ ...hall, pile: dropPile(hall.pile, i) }); sel = Math.max(0, sel - 1); draw() } } },
+          { ...bind("hall-pile.esc"), run: () => open({ kind: "hall" }) },
         ],
       }
     }
@@ -1785,7 +1786,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `HELP · ${m.title}`,
         rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play keys (they win over a card's)", PLAY) : [])],
-        actions: [{ key: "esc", label: `back to ${m.title.toLowerCase()}`, run: () => { mode = m.from; sel = 0; scroll = 0; snapSel = true; draw() } }],
+        actions: [{ ...bind("help.esc", `back to ${m.title.toLowerCase()}`), run: () => { mode = m.from; sel = 0; scroll = 0; snapSel = true; draw() } }],
       }
     }
     case "look-editor": {
@@ -1907,7 +1908,7 @@ const keyName = (k: string) => ({ space: "␣", enter: "⏎", right: "→", left
 /** the actions take j/k and enter when the card's rows have nothing to open */
 const actionsFocused = () => !rows.some((r) => r.open)
 /** the keys that work everywhere a card's own actions don't claim them */
-const GLOBALS: Hint[] = [{ key: "/", label: "find" }, { key: "'", label: "talk to the office" }, { key: "i", label: "inbox" }, { key: "tab", label: "crew" }, { key: "[ ]", label: "workspace" }, { key: "?", label: "help" }, { key: "esc", label: "back" }, { key: "ctrl+]", label: "lobby" }, { key: "q", label: "quit" }]
+const GLOBALS: Hint[] = hints("global")
 /** a window's line `i`, as a row index, an "↑ N more" (-1) or "↓ N more" (-2), or nothing */
 function lineOf(w: Window, i: number): number | undefined {
   if (w.above && i === 0) return -1

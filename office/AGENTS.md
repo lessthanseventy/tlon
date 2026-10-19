@@ -51,7 +51,7 @@ linked window at a time, ctrl+] to the lobby).
 - `tui/` — the standalone terminal app (`mise run office:run`), Linux and macOS; `mise run
   office:build` compiles it to one self-contained executable per platform (`office/dist/`).
   `mise run office:sandbox` (`--sandbox`, or `OFFICE_SANDBOX=1`) runs it on a made-up world, no server: `tui/sandbox.ts` is the
-  world and the play-key table, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only, so a card hides the actions they shadow (`playable`).
+  world, `data.useFake` the one seam in `data.ts`; the play keys (`d e t f n w p c`) shadow the browse keys there only, so a card hides the actions they shadow (`playable`).
   The sandbox keeps its looks, souls, hall, pets and store in `$TMPDIR/tlon-sandbox/` (the `TLON_*` vars still win), so a pretend hire or adopt never reaches the machine's files.
   The hiring hall (`h` from home; `kit/hall.ts` the pure candidate — `roll(seed, taken)` is seeded, no model, no I/O; a lock is kept by `pass` baking it into the overrides —
   `tui/hall.ts` its card rows): ← pass, ↑ maybe (the pile, `m` browses it), → hire, space locks a row so a pass keeps it. `hall.json`
@@ -67,7 +67,7 @@ linked window at a time, ctrl+] to the lobby).
   the first esc leaves the box — drawn still, the thread's keys live, `r` or ⏎ back in (⏎ on a running coworker's card steps into their session) — the second esc goes back);
   ctrl+] is the lobby from anywhere — a card, a reply box, an input, the finder, the reader, a zoomed terminal — the room with
   nothing open over it (the screen, not the workspace's lobby thread that `talk.ts` posts to); esc stays one step back, and every
-  hint that says how to get out names it `ctrl+] lobby` (`GLOBALS` in the foot); it never drops what you were writing: an input's text
+  hint that says how to get out names it `ctrl+] lobby` (`GLOBALS` in the foot, from `tui/keys.ts`); it never drops what you were writing: an input's text
   comes back when the same input is asked again, and a reply's draft is the thread's (`cardReply`), its card and its reader alike; `editor.ts` the text editing every input shares; `fuzzy.ts` the
   finder's matcher; `order.ts` how list cards sort and group (`s` steps the sort on the crew, a board column and the in-tray; `g` the crew's grouping — the cursor stays on its row); `when.ts` reads a schedule's "when" (a cron, or a local time). `R` on a workline thread reviews its branch: the diff with a line cursor, `⏎`/`a` a note on the line, `A` on the file, `n`/`p` hunks, `N`/`P` files, `s` submits the notes with a verdict (comment, request changes, approve); unsent notes are kept per thread. The crew screen has tabs (`v`): each crew the operator has named, then everyone, the crews not on dimmed; `c` moves the selected coworker to the next crew (or every crew), `n` puts them on a new one by name, and `S` puts the next crew on (also `shifts` in the finder); a click on the header's crew (shown once a workspace has crews) does the same. The finder's `pencils down`, `lights out` (confirmed) and `back to work` are the office's stop controls (`Server.Pause`); while one is on, the header carries its mark (`✎ pencils down` / `◼ lights out`), and a click on it offers back to work. The arcade's
   cabinets open terminal games (whichever the machine has installed) in the office's own tmux,
@@ -83,7 +83,12 @@ linked window at a time, ctrl+] to the lobby).
   `build_mode` on. A running coworker's card shows their activity timeline
   (`timeline.ts`, from the thread view's `activity`, which the harnesses' tool hooks feed: one line per tool call, a glyph and colour per kind, grouped by coworker in their shirt colour, a rule per fresh turn, newest at the bottom, scrolled with the card; `c` the conversation, ⏎ step into their real screen). Under the room the pane splits: what you clicked on the left, what you can
   do to it on the right — each card's actions (`detail()`) are its keys, its clickable list and
-  its docs at once, so they cannot drift apart. A card's rows scroll (`tui/pane.ts`: with the
+  its docs at once, so they cannot drift apart. Every key is written down once, in `tui/keys.ts`
+  (scope, key, label, mode): a card's rows are `{ ...bind("thread.r"), run }`, and the foot, the help card
+  and the sandbox's play line read the same table — a new key is a row there, never a literal `key: "x"`
+  in `main.ts`. `test/keys.test.ts` reads the table and fails on a collision (two meanings of a key on one
+  screen) not declared in `SHADOWS`, or a new meaning of `R S d x c f p` not listed in `POLYSEMY`.
+  The reader's handlers are still `case`s in `reader.ts`; only its hints come from the table. A card's rows scroll (`tui/pane.ts`: with the
   selection, or pgup/pgdn and the wheel, `↑/↓ N more` where rows hide); the foot lists the actions
   the column can't show — all of them on a terminal too narrow for it — then the global keys; `?` opens the help card (that card's keys, the globals, the reader's, the sandbox's play keys). Popups only where a choice needs a list (the finder).
 
