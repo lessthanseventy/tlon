@@ -132,9 +132,10 @@ const rooms = new Map<number, RailRoom | WideRoom>()
 const threads = new Map<number, ThreadView>()
 let mode: Mode = { kind: "home" }, picked: number | null = null, sel = 0
 let tip = "", status = ""
-/** why the open card's read came back empty (`data.readFailure`), or null while it is still on its way */
-let readWhy: string | null = null
-const waiting = (what: string): Seg => dim(readWhy ? `couldn't read: ${readWhy}` : what)
+/** why each card's read came back empty (`data.reading`), by card: a poll still in flight for one card never sets the reason another shows */
+const readWhys = new Map<string, string>()
+const cardKey = (m: Mode) => JSON.stringify({ ...m, from: undefined })
+const waiting = (what: string): Seg => { const why = readWhys.get(cardKey(mode)); return dim(why ? `couldn't read: ${why}` : what) }
 /** the header's clickable spans, in 1-based columns, as last drawn */
 let headHits: { from: number; to: number; go: () => void }[] = []
 // how the list cards are ordered (`s` sort, `g` group): kept across visits
@@ -534,8 +535,9 @@ async function loadThread(tid: number) { const v = await data.thread(tid); if (v
 async function loadCard() {
   if (ws === null) return
   const w = ws
-  data.readReset()
-  try { await readCard(w) } finally { readWhy = data.readFailure() }
+  const key = cardKey(mode)
+  const why = await data.reading(() => readCard(w))
+  if (why) readWhys.set(key, why); else readWhys.delete(key)
 }
 async function readCard(w: number) {
   switch (mode.kind) {
@@ -566,7 +568,7 @@ function openThread(): number | null {
 }
 function open(m: Mode) {
   if ((m.kind === "person" || m.kind === "thread" || m.kind === "look" || m.kind === "review") && m.from === undefined && mode.kind !== "home" && mode.kind !== "help" && mode.kind !== m.kind) m = { ...m, from: mode }
-  status = ""; readWhy = null; mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
+  status = ""; readWhys.delete(cardKey(m)); mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }

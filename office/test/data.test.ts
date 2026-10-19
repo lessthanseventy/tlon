@@ -130,13 +130,19 @@ test("a write while the last status was down is refused up front, not sent to ti
 test("a card's read that fails or comes back empty says why, and a good read clears it", async () => {
   process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
   const data = await import("../tui/data")
-  expect(await data.health()).toBeNull()
-  expect(data.readFailure()).toBe("the server answered 503")
-  expect(await data.archive(1)).toBeNull()
-  expect(data.readFailure()).toBe("the server sent nothing")
-  expect(await data.triage(9)).toBeNull()
-  expect(data.readFailure()).toBe("the server has no such page")
-  expect(await data.life(7)).not.toBeNull()
-  expect(data.readFailure()).toBeNull()
-  data.readReset()
+  expect(await data.reading(() => data.health())).toBe("the server answered 503")
+  expect(await data.reading(() => data.archive(1))).toBe("the server sent nothing")
+  expect(await data.reading(() => data.triage(9))).toBe("the server has no such page")
+  expect(await data.reading(() => data.life(7))).toBeNull()
+})
+
+test("two cards reading at once keep their own reasons: a poll of one never rewrites the other's", async () => {
+  process.env.TLON_URL = `http://127.0.0.1:${server.port}/api`
+  const data = await import("../tui/data")
+  const [bad, good, other] = await Promise.all([
+    data.reading(() => data.health()),
+    data.reading(() => data.life(7)),
+    data.reading(() => data.triage(9)),
+  ])
+  expect([bad, good, other]).toEqual(["the server answered 503", null, "the server has no such page"])
 })
