@@ -6,7 +6,7 @@
 #   OFFICE_COLS=60 OFFICE_ROWS=30 office/test/drive/run.sh walk     a narrow window
 #   OFFICE_WIDE=1 office/test/drive/run.sh walk                      the wide room (280x75)
 # Exit 1 when a step is malformed or the TUI wrote to stderr.
-# A mouse click is a step: -l $'\033[<0;COL;ROWM\033[<0;COL;ROWm' (SGR press+release at 1-based cell COL,ROW).
+# A mouse click is a step: click:TEXT[@DX,DY] (a click on the label TEXT shows; a missing label fails the replay).
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 walk="${1:-walk}"
@@ -15,4 +15,4 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 TMUX_TMPDIR=/tmp TMPDIR="$tmp" OFFICE_SANDBOX=1 "$here/../../../scripts/office-drive.sh" "${steps[@]}" 2>&1 | tee "$tmp/out"
 # office-drive.sh exits 0 whatever happened; a bad step or a TUI stderr is what makes a replay fail
-! grep -qE '^=== stderr|eval: line' "$tmp/out"
+! grep -qE '^=== stderr|eval: line|^=== no such text' "$tmp/out"

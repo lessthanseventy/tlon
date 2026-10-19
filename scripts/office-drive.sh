@@ -4,7 +4,8 @@
 # harness may reap a tmux server between calls. Half blocks under tmux, so the frame is text.
 #
 #   office-drive.sh STEP...      each STEP is tmux send-keys arguments: "/" "'108'" "Enter" "M-Enter"
-#                                or wait:TEXT — no keys; waits until the screen shows TEXT (30 s at most)
+#                                or click:TEXT[@DX,DY] — a left click on the first screen cell where TEXT starts (+DX columns,
+#                                +DY rows): aim at what the screen shows, never at a measured coordinate; or wait:TEXT — no keys; waits until the screen shows TEXT (30 s at most)
 #
 # TLON_URL picks the server (default the service's 127.0.0.1:4040; `server:dev` is :4041).
 # OFFICE_COLS/OFFICE_ROWS size the window (150x60), OFFICE_WAIT the settle per step (1.5 s),
@@ -43,6 +44,13 @@ sleep 3
 for step in "$@"; do
   case "$step" in
     wait:*) for _ in $(seq 150); do t capture-pane -p -t 0 | grep -qF -- "${step#wait:}" && break; sleep 0.2; done ;;
+    click:*)
+      spec="${step#click:}"; want="${spec%%@*}"; off=0,0; [ "$spec" != "$want" ] && off="${spec#*@}"
+      pos="$(t capture-pane -p -t 0 | python3 -I -c 'import sys; w,o=sys.argv[1],sys.argv[2].split(","); L=sys.stdin.read().split("\n")
+for r,l in enumerate(L):
+    c=l.find(w)
+    if c>=0: print(c+1+int(o[0]), r+1+int(o[1])); break' "$want" "$off")"
+      if [ -z "$pos" ]; then echo "=== no such text on screen: $want"; else set -- $pos; t send-keys -t 0 -l $'\033[<0;'"$1;$2"$'M\033[<0;'"$1;$2"$'m'; sleep "${OFFICE_WAIT:-1.5}"; fi ;;
     *) eval "t send-keys -t 0 $step"; sleep "${OFFICE_WAIT:-1.5}" ;;
   esac
   echo "=== after: $step"
