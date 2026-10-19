@@ -17,7 +17,7 @@
 #   spawn --join <id> <agent>      JOIN an existing thread instead of opening one
 #   token                          headersHelper: mint a FRESH token for (TLON_THREAD,
 #                                  TLON_AUTHOR) from the env → {"Authorization":"Bearer …"}
-#   roster                         who's on the clock (warm ●/cold ○)
+#   roster                         who's on the clock, each with its one status (working/waiting/idle/cold/off)
 #   shell-status                   roster + open threads + counts as JSON, for the desktop shell
 #   shell-dossier <id>             a thread's brief as JSON, for the shell's AGENTS pane
 #   shell-thread <id>              a thread's last messages + its worker's pane, for the office's wide view
@@ -435,14 +435,10 @@ case "$cmd" in
     ;;
 
   roster)
-    # Who's on the clock (Staff.roster): every live session, warm ● / cold ○.
+    # Who's on the clock: every live session, with the one status the snapshot's roster rows carry.
     exec "$SERVER" rpc '
-      Server.Staff.roster()
-      |> Enum.map_join("\n", fn r ->
-        mark = if r.warm?, do: "●", else: "○"
-        pane = if r.pane_ref, do: " [" <> r.pane_ref <> "]", else: ""
-        "#{mark} #{r.agent} — ##{r.thread_id} #{r.thread_title}#{pane}"
-      end)
+      Server.Office.status().roster
+      |> Enum.map_join("\n", &Server.Coworker.roster_line/1)
       |> then(fn "" -> "(no one on the clock)"; s -> s end)
       |> IO.puts()'
     ;;

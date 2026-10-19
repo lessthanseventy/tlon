@@ -46,6 +46,10 @@ defmodule Server.Coworker do
           lead?: boolean()
         }
 
+  @statuses [:working, :waiting, :idle, :off, :cold]
+
+  @glyphs %{working: "●", waiting: "!", idle: "○", off: "·", cold: "◌"}
+
   @doc """
   The bench's lead — its first `builder`, the default worker, else its first seat. Better a
   lead than none: a workspace whose bench is staffed but whose archetypes are all unusual still
@@ -73,4 +77,50 @@ defmodule Server.Coworker do
   @spec to_wire(t()) :: map()
   def to_wire(%__MODULE__{} = c),
     do: %{"agent_id" => c.agent_id, "name" => c.name, "archetype" => c.archetype, "lead" => c.lead?}
+
+  @type status :: :working | :waiting | :idle | :off | :cold
+
+  @doc "Every status, in the order a surface lists them."
+  @spec statuses() :: [status()]
+  def statuses, do: @statuses
+
+  @doc "The one glyph a text surface draws for a status."
+  @spec glyph(status()) :: String.t()
+  def glyph(status), do: Map.fetch!(@glyphs, status)
+
+  @doc """
+  The one answer to "what is this seat doing", from facts the roster and the office already hold:
+  `on_shift` (its crew is on, `Server.Shifts`), `session` (a registered live session), `windowed` (a
+  tmux window runs it), `warm` (that window and a session warm enough to wake), `thinking` (mid-turn,
+  `Server.Presence.Thinking`) and `waiting` (it leads a thread that waits on the operator: a pane
+  prompt or an ask).
+
+    * `:off` — its crew is off shift, or nothing runs it: no session, no window;
+    * `:waiting` — waiting on the operator (outranks mid-turn: the turn is stuck on the answer);
+    * `:working` — mid-turn;
+    * `:idle` — a window it can be woken in (warm), or a window up before its session registers;
+    * `:cold` — a session whose window is gone or whose warmth has run out: the next wake rotates it onto a fresh one.
+  """
+  @spec status(%{
+          on_shift: boolean(),
+          session: boolean(),
+          windowed: boolean(),
+          warm: boolean(),
+          thinking: boolean(),
+          waiting: boolean()
+        }) :: status()
+  def status(%{on_shift: false}), do: :off
+  def status(%{session: false, windowed: false}), do: :off
+  def status(%{waiting: true}), do: :waiting
+  def status(%{thinking: true}), do: :working
+  def status(%{warm: true}), do: :idle
+  def status(%{session: false, windowed: true}), do: :idle
+  def status(_facts), do: :cold
+
+  @doc "One roster row (`Server.Office.status/0`) as the line `tlon-cli roster` prints."
+  @spec roster_line(map()) :: String.t()
+  def roster_line(%{status: status, agent: agent, thread_id: tid, title: title} = row) do
+    pane = if row[:pane_ref], do: " [#{row.pane_ref}]", else: ""
+    "#{glyph(status)} #{agent} #{status} — ##{tid} #{title}#{pane}"
+  end
 end

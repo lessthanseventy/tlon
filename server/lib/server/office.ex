@@ -19,7 +19,7 @@ defmodule Server.Office do
   @page 60
 
   @doc """
-  Every workspace at once: the roster (each row with its thread's workspace, bench seat, and
+  Every workspace at once: the roster (each row with its thread's workspace, bench seat, `status` (`Server.Coworker.status/1`), and
   whether that agent is mid-turn), the benches with their policies, the open threads (lead,
   whether a window runs it, whether it is the workspace's standing thread, any open prompt, who is
   mid-turn on it, `seat`: its lead at a `"desk"` (a window runs it, or a warm session with a window to wake in), `"parked"` for a seat
@@ -43,7 +43,7 @@ defmodule Server.Office do
     prompts = Server.Attention.open_prompts_by_thread()
     thinking = thinking()
     tabs = Map.new(ws_ids, &{&1, held_windows(&1)})
-    roster = roster(benches, thinking, tabs)
+    roster = roster(benches, thinking, tabs, prompts)
 
     %{
       roster: roster,
@@ -189,22 +189,38 @@ defmodule Server.Office do
     :exit, _ -> %{}
   end
 
-  defp roster(benches, thinking, tabs) do
+  defp roster(benches, thinking, tabs, prompts) do
     rows = Server.Staff.roster()
     thread_ws = rows |> Enum.map(& &1.thread_id) |> workspaces_of()
     everyone = List.flatten(Map.values(benches))
+    asks = rows |> Enum.map(& &1.thread_id) |> asks_of()
+    resting = thread_ws |> Map.values() |> Enum.uniq() |> resting(benches)
 
     Enum.map(rows, fn r ->
       ws = thread_ws[r.thread_id]
       seat = Enum.find(Map.get(benches, ws, []), &(&1.name == r.agent)) || Enum.find(everyone, &(&1.name == r.agent))
       turn = Enum.find(Map.get(thinking, r.thread_id, []), &(&1.agent == r.agent))
       windowed = windowed?(Map.get(tabs, ws, []), r.thread_id, r.agent)
+      warm = windowed and Server.Presence.warm_for?(r.last_active_at, r.agent, ws)
+      ask = asks[r.thread_id]
+
+      status =
+        Server.Coworker.status(%{
+          on_shift: not MapSet.member?(resting, {ws, r.agent}),
+          session: true,
+          windowed: windowed,
+          warm: warm,
+          thinking: turn != nil,
+          waiting: asks_you?(r.agent, ask, prompts[r.thread_id])
+        })
 
       %{
+        status: status,
         agent: r.agent,
+        pane_ref: r.pane_ref,
         thread_id: r.thread_id,
         title: r.thread_title,
-        warm: windowed and Server.Presence.warm_for?(r.last_active_at, r.agent, ws),
+        warm: warm,
         warmth: if(windowed, do: Float.round(Server.Presence.warmth(r.last_active_at, r.agent, ws), 3), else: 0.0),
         workspace_id: ws,
         archetype: seat && seat.archetype,
@@ -459,5 +475,33 @@ defmodule Server.Office do
     Server.Presence.Thinking.activity(thread_id)
   catch
     :exit, _ -> []
+  end
+
+  # seats whose crew is off shift in a workspace: on its bench but not on the bench that is on
+  defp resting(ws_ids, benches) do
+    for ws <- ws_ids,
+        c <- Server.Workspaces.bench_all(ws),
+        c.name not in Enum.map(Map.get(benches, ws, []), & &1.name),
+        into: MapSet.new(),
+        do: {ws, c.name}
+  end
+
+  # each thread's open ask and its lead, by thread id
+  defp asks_of(thread_ids) do
+    Map.new(
+      Repo.all(
+        from(t in Server.Thread,
+          left_join: a in Server.Agent,
+          on: a.id == t.agent_id,
+          where: t.id in ^thread_ids,
+          select: {t.id, %{awaiting: t.awaiting, lead: a.name}}
+        )
+      )
+    )
+  end
+
+  # a thread with a pane prompt or an ask waits on the operator; its lead (any seat on it when unled) is the one waiting
+  defp asks_you?(agent, ask, prompt) do
+    (prompt != nil or (ask != nil and ask.awaiting != nil)) and (ask == nil or ask.lead in [nil, agent])
   end
 end
