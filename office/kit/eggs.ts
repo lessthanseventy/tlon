@@ -18,8 +18,9 @@ export const isKonami = (keys: readonly string[]) =>
 /** the Library's alphabet: letters, the space, the comma and the full stop */
 export const BABEL_ALPHABET = "abcdefghijklmnopqrstuvwxyz ,."
 
-// what a librarian might find, once in a thousand pages, among the noise
-const FOUND = [
+/** what a librarian might find among the noise, on one page in `1 / FOUND_ODDS` */
+export const FOUND_ODDS = 0.001
+export const FOUND = [
   "somewhere in these rooms is the book of you",
   "the librarian who read this page went home happy",
   "every page is true in some other library",
@@ -28,11 +29,22 @@ const FOUND = [
   "the catalogue of catalogues is on the next shelf",
 ]
 
+/** a found sentence wrapped to `width` for a page too narrow to hold it on one line, or null on the usual page (one in `1 / FOUND_ODDS`) */
+export function foundLines(width: number, rng: () => number): string[] | null {
+  if (rng() >= FOUND_ODDS) return null
+  const out: string[] = []
+  for (const word of FOUND[Math.floor(rng() * FOUND.length)]!.split(" ")) {
+    if (out.length && `${out.at(-1)} ${word}`.length <= width) out[out.length - 1] += ` ${word}`
+    else out.push(word.slice(0, width))
+  }
+  return out
+}
+
 /** a page of the Library of Babel, `lines` of `width`; once in a thousand pages, one line means something */
 export function babelPage(lines: number, width: number, rng: () => number = Math.random): string[] {
   const line = () => Array.from({ length: width }, () => BABEL_ALPHABET[Math.floor(rng() * BABEL_ALPHABET.length)]!).join("")
   const page = Array.from({ length: lines }, line)
-  if (rng() < 0.001) {
+  if (rng() < FOUND_ODDS) {
     const found = FOUND[Math.floor(rng() * FOUND.length)]!.slice(0, width)
     page[Math.floor(rng() * lines)] = found.padEnd(width, " ")
   }
