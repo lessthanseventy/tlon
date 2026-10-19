@@ -174,5 +174,55 @@ defmodule Server.DiaryTest do
       assert {:error, :no_soul} = Diary.write("nobody", [entry(:shipped, "x")], @today)
       refute File.exists?(Path.join(dir, "nobody.md"))
     end
+
+    test "a QA verdict is credited to the seat that gave it, pass or fail", %{ws: ws} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "nolan", archetype: "qa"})
+      thread = workline(ws, "kettle", "the kettle")
+
+      for {cmd, exit} <- [{"qa by nolan", 0}, {"qa by nolan", 1}] do
+        {:ok, _} =
+          Dossier.record_check(%{
+            thread_id: thread.id,
+            cmd: cmd,
+            exit: exit,
+            tail: "saw it",
+            correlation: "workline:kettle:qa"
+          })
+      end
+
+      assert %{"nolan" => [%{kind: :qa, verdict: "pass", title: "the kettle"}, %{kind: :qa, verdict: "fail"}]} =
+               Diary.history(ws.id, @since)
+    end
+
+    test "a review is credited to the reviewer who filed it, approval or changes", %{ws: ws} do
+      thread = workline(ws, "teapot", "the teapot")
+
+      for verdict <- ~w(approve request_changes) do
+        {:ok, _} =
+          Dossier.record_check(%{
+            thread_id: thread.id,
+            cmd: "review verdict by lonnrot",
+            exit: if(verdict == "approve", do: 0, else: 1),
+            tail: verdict,
+            correlation: "workline:teapot:review"
+          })
+      end
+
+      assert %{"lonnrot" => [%{kind: :reviewed, verdict: "approve"}, %{kind: :reviewed, verdict: "request_changes"}]} =
+               Diary.history(ws.id, @since)
+    end
+
+    test "a librarian's supersede and forget are credited to it, a thread or not", %{ws: ws} do
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "dewey", archetype: "librarian"})
+      {:ok, old} = Dossier.bank_fact(%{kind: "learned", text: "the old way", provenance: "derived"})
+      {:ok, new} = Dossier.bank_fact(%{kind: "learned", text: "the new way", provenance: "derived"})
+      {:ok, junk} = Dossier.bank_fact(%{kind: "learned", text: "scratch state, mid-flight only", provenance: "derived"})
+
+      {:ok, _} = Server.Librarian.supersede(old.id, new.id, "restated", by: "dewey")
+      {:ok, _} = Server.Librarian.forget(junk.id, "placeholder", by: "dewey")
+
+      assert %{"dewey" => [%{kind: :curated, action: "superseded"}, %{kind: :curated, action: "forgotten"}]} =
+               Diary.history(ws.id, @since)
+    end
   end
 end
