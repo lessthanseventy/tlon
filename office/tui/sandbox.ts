@@ -1,5 +1,6 @@
 // The sandbox: a made-up world for the TUI to run on with no server (`office --sandbox`) — the toy
 // in docs/plans/2026-10-08-office-as-a-toy-design.md §1. Same sim, same rooms; only the snapshot's source differs.
+import { hints } from "./keys"
 import { EMPTY, type Agents, type Visit } from "../kit/types"
 
 const NAMES = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"]
@@ -42,9 +43,6 @@ export function toy() {
 export type Toy = ReturnType<typeof toy>
 
 /** the sandbox's play keys, as the help line lists them; `toyKey()` in main.ts handles each */
-export const PLAY: { key: string; label: string }[] = [
-  { key: "d", label: "doorbell" }, { key: "e", label: "event" }, { key: "t", label: "treat" }, { key: "f", label: "fire drill" },
-  { key: "n", label: "night" }, { key: "w", label: "weather" }, { key: "p", label: "pet" }, { key: "c", label: "call over" },
-]
+export const PLAY = hints("sandbox-play")
 /** a card's actions in the sandbox: those the play keys shadow are hidden, since toyKey() takes them first */
 export const playable = <T extends { key: string }>(acts: T[]): T[] => acts.filter((x) => !PLAY.some((p) => p.key === x.key))
