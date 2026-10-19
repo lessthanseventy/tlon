@@ -3,7 +3,7 @@ import * as data from "./data"
 import type { Thread } from "../kit/types"
 import { studyOf } from "../kit/uqbar"
 
-/** the workspace's lobby — its standing thread, where the manager hears the office and a home window lives */
+/** the workspace's lobby — its standing thread (shown as "the front desk"), where the manager hears the office and a coworker's desk (their home window) lives */
 export const lobbyOf = (threads: Thread[], ws: number | null): number | null =>
   threads.find((t) => t.standing && t.workspace_id === ws)?.id ?? null
 

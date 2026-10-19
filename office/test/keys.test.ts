@@ -79,3 +79,8 @@ test("? is the help key everywhere: a global, and the help card lists the reader
   const body = reader.slice(reader.indexOf("  key(k: string"), reader.indexOf("  paste("))
   for (const h of READER_KEYS) for (const k of h.key.split(" ")) expect(body).toContain(`case "${k}"`)
 })
+
+test("the screen is the room: no hint says ctrl+] goes to the lobby", async () => {
+  expect(all.find((b) => b.id === "global.room")?.label).toBe("room")
+  for (const f of ["main.ts", "reader.ts", "keys.ts"]) expect(await Bun.file(new URL(`../tui/${f}`, import.meta.url)).text(), f).not.toMatch(/ctrl\+\] lobby/)
+})
