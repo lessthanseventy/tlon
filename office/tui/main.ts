@@ -64,12 +64,12 @@ import { arrange, CREW_GROUPS, CREW_SORTS, next, type Sort } from "./order"
 
 type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
-  | { kind: "person"; name: string } | { kind: "thread"; tid: number }
+  | { kind: "person"; name: string; from?: Mode } | { kind: "thread"; tid: number; from?: Mode }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number; from?: Mode } | { kind: "epic"; id: number; from?: Mode } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
   | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
-  | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number }
-  | { kind: "look"; name: string } | { kind: "look-editor"; name: string; view: "front" | "side" | "back" }
+  | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
+  | { kind: "look"; name: string; from?: Mode } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode }
   | { kind: "hall" } | { kind: "hall-pile" } | { kind: "store" }
   | { kind: "help"; from: Mode; title: string; keys: Hint[] }
 /** a detail-pane row, and what a click (or Enter, on the selected one) does with it */
@@ -563,7 +563,8 @@ function openThread(): number | null {
   return null
 }
 function open(m: Mode) {
-  readWhy = null; mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
+  if ((m.kind === "person" || m.kind === "thread" || m.kind === "look" || m.kind === "review") && m.from === undefined && mode.kind !== "home" && mode.kind !== "help" && mode.kind !== m.kind) m = { ...m, from: mode }
+  status = ""; readWhy = null; mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
@@ -572,9 +573,10 @@ function open(m: Mode) {
   void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(draw)
   draw()
 }
-/** Esc: a card back to home (a ticket or epic to the list it was opened from), home to nothing picked; `all` drops both at once */
+/** Esc: a card back to the card it was opened from, else home; home to nothing picked; `all` drops both at once */
 function back(everything = false) {
-  const from = !everything && (mode.kind === "ticket" || mode.kind === "epic") ? mode.from : undefined
+  const from = !everything && mode.kind !== "help" && "from" in mode ? mode.from : undefined
+  status = ""
   if (everything || mode.kind === "home") picked = null
   mode = from ?? { kind: "home" }; sel = 0; scroll = 0; confirm = null; picker = null; lookDraft = null; petDraft = null
 }
@@ -642,7 +644,13 @@ function talk(to: string | null) {
   if (ws === null) return
   const w = ws
   // every thread, not the workspace's view: uqbar's study may live on another workspace
-  ask(to ? `say to ${to}` : "say to the office", (s) => { void did(say(all.threads, w, to, s)) }, { multiline: true })
+  const label = to ? `say to ${to}` : "say to the office"
+  ask(label, (s) => {
+    const sent = say(all.threads, w, to, s)
+    // a post that did not go keeps its words: `'` brings them back
+    void sent.then((line) => { if (s.trim() && !data.landed(line)) banked.set(label, s) })
+    void did(sent)
+  }, { multiline: true })
 }
 function reply(tid: number) {
   const box = cardBox()
@@ -656,7 +664,10 @@ function boxKey(box: NonNullable<typeof cardReply>, k: string) {
     if (box.ed.empty) return
     const body = box.ed.text
     box.ed = new Editor(); scroll = Infinity
-    void did(data.post(box.tid, body))
+    const sent = data.post(box.tid, body)
+    // a post that did not go puts the words back in the box, ahead of anything typed since
+    void sent.then((line) => { if (!data.landed(line)) box.ed = new Editor(box.ed.empty ? body : `${body}\n${box.ed.text}`) })
+    void did(sent)
     return draw()
   }
   if (k === "pgup" || k === "pgdn") return page(k === "pgdn" ? 1 : -1)
@@ -1693,7 +1704,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "look": {
-      const name = mode.name
+      const m = mode, name = m.name
       const draft = (lookDraft ??= { ...lookOf(name), ...overrideFor(name) })
       const field = (label: string, value: string, cycle: () => void): Row => ({ segs: [dim(label.padEnd(12)), plain(value)], open: () => { cycle(); draw() } })
       const rows: Row[] = [
@@ -1726,7 +1737,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
             editBuf = { front: draft.custom?.front ? [...draft.custom.front] : blankBuf(), side: draft.custom?.side ? [...draft.custom.side] : blankBuf(), back: draft.custom?.back ? [...draft.custom.back] : blankBuf() }
             editEntry = { front: [...editBuf.front], side: [...editBuf.side], back: [...editBuf.back] }
             editCursor = { x: 0, y: 0 }; editScroll = 0
-            mode = { kind: "look-editor", name, view: "front" }; sel = 0; snapSel = true; draw()
+            mode = { kind: "look-editor", name, view: "front", from: m.from }; sel = 0; snapSel = true; draw()
           } },
           back1,
         ],
@@ -2068,12 +2079,12 @@ function editorKey(k: string) {
   if (k === "right") { editCursor.x = Math.min(11, editCursor.x + 1); return draw() }
   if (k === "m") { editMirror = !editMirror; return draw() }
   if (k === "1" || k === "2" || k === "3") {
-    mode = { kind: "look-editor", name, view: k === "1" ? "front" : k === "2" ? "side" : "back" }
+    mode = { kind: "look-editor", name, view: k === "1" ? "front" : k === "2" ? "side" : "back", from: mode.from }
     return draw()
   }
   if (k === "esc") {
     if (editEntry) editBuf[view] = [...editEntry[view]]
-    mode = { kind: "look", name }; sel = 0; snapSel = true; return draw()
+    mode = { kind: "look", name, from: mode.from }; sel = 0; snapSel = true; return draw()
   }
   if (k === "enter") {
     if (lookDraft) {
@@ -2081,7 +2092,7 @@ function editorKey(k: string) {
       if (custom) lookDraft.custom = custom
       else delete lookDraft.custom
     }
-    mode = { kind: "look", name }; sel = 0; snapSel = true; return draw()
+    mode = { kind: "look", name, from: mode.from }; sel = 0; snapSel = true; return draw()
   }
   if (k === ".") return paintAt(".")
   if ((LEGEND_CHARS as readonly string[]).includes(k)) return paintAt(k)

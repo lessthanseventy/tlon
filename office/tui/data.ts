@@ -171,6 +171,8 @@ async function send(method: "POST" | "PUT" | "PATCH" | "DELETE", what: string, p
     return `${what} failed: ${(e as Error).message}`
   }
 }
+/** whether a post's status line says it went (`sent to #9`, `said to …`, `handed …`); anything else is the reason it did not */
+export const landed = (line: string) => /^(sent|said|handed)\b/.test(line)
 /** post to a thread as the operator: a plain post, never an answer to a prompt (that is `answer`) */
 export const post = (id: number, body: string) => write(`reply to #${id}`, `/threads/${id}/messages`, { body }, () => `sent to #${id}`)
 export const ticketFile = (ws: number, title: string) => write("filing a ticket", "/tickets", { workspace_id: ws, title }, (j) => `filed ticket #${j.id}`)

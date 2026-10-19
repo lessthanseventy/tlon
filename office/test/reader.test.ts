@@ -29,3 +29,27 @@ test("the first esc leaves the reply box and keeps it drawn with its draft; the 
   r.key("esc", 10)
   expect(r.key("esc", 10)).toBe("leave")
 })
+
+test("a reply that fails to send stays in the box; one that goes is cleared", async () => {
+  let result = "reply to #7 failed: it's a toy"
+  const r = new Reader(7, { load: async () => null, send: async () => result, operator: "andrew", redraw() {} }, true)
+  r.take(page)
+  for (const ch of "on my way") r.key(ch, 10)
+  await r.key("enter", 10)
+  expect(r.composer?.text).toBe("on my way")
+  result = "sent to #7"
+  await r.key("enter", 10)
+  expect(r.composer?.empty).toBe(true)
+})
+
+test("a failed reply sent and then left keeps its words as the held draft", async () => {
+  let release!: () => void
+  const gate = new Promise<void>((res) => (release = res))
+  const r = new Reader(7, { load: async () => null, send: async () => (await gate, "reply to #7 failed: down"), operator: "andrew", redraw() {} }, true)
+  r.take(page)
+  for (const ch of "hello") r.key(ch, 10)
+  const sending = r.key("enter", 10) as Promise<void>
+  r.key("esc", 10)
+  release(); await sending
+  expect(r.held()).toBe("hello")
+})

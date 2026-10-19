@@ -3,6 +3,7 @@
 // grows as you write. What the reader can't do itself (send, answer, the room's verbs) it hands back.
 import { ROLE } from "../kit/palette"
 import type { Thread, ThreadView } from "../kit/types"
+import { landed } from "./data"
 import { Editor, wrap } from "./editor"
 import { hints } from "./keys"
 import { ESC, line, type Seg } from "./term"
@@ -81,7 +82,15 @@ export class Reader {
         const body = c.text
         this.composer = new Editor()
         this.scroll = 0
-        return this.deps.send(body).then(async (s) => { this.status = s; await this.reload() })
+        return this.deps.send(body).then(async (s) => {
+          this.status = s
+          // a post that did not go keeps its words, in the box if it is open, else as the held draft
+          if (!landed(s)) {
+            if (this.composer) this.composer = new Editor(this.composer.empty ? body : `${body}\n${this.composer.text}`)
+            else this.draft = new Editor(this.draft && !this.draft.empty ? `${body}\n${this.draft.text}` : body)
+          }
+          await this.reload()
+        })
       }
       if (k === "pgup" || k === "pgdn") return this.scrollBy(k === "pgup" ? page : -page)
       c.key(k)
