@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { marqueeWindow, parseNowPlaying } from "../kit/stereo"
+import { marqueeWindow, NOW_PLAYING_FORMAT, parseNowPlaying } from "../kit/stereo"
 
 describe("parseNowPlaying", () => {
+  test("playerctl is asked for the tempo by its MPRIS name, the third field the parser reads", () => {
+    expect(NOW_PLAYING_FORMAT).toBe("{{ title }}|{{ artist }}|{{ xesam:audioBPM }}")
+    expect(parseNowPlaying("Song|Artist|174.5")).toEqual({ text: "Song - Artist", bpm: 174.5 })
+  })
   test("title and artist, no bpm field", () => {
     expect(parseNowPlaying("Song|Artist|")).toEqual({ text: "Song - Artist", bpm: null })
   })

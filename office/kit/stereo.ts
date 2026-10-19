@@ -5,7 +5,10 @@
  *  actually carries a tempo field (most don't — the dance trigger stays inert until one does) */
 export type NowPlaying = { text: string; bpm: number | null }
 
-/** `stdout` of `playerctl metadata --format '{{ title }}|{{ artist }}|{{ bpm }}'`; null when
+/** the `--format` for `playerctl metadata`: the tempo is MPRIS's `xesam:audioBPM`, which playerctl has no short name for */
+export const NOW_PLAYING_FORMAT = "{{ title }}|{{ artist }}|{{ xesam:audioBPM }}"
+
+/** `stdout` of `playerctl metadata --format NOW_PLAYING_FORMAT`; null when
  *  there's nothing playing (blank title and artist) */
 export function parseNowPlaying(stdout: string): NowPlaying | null {
   const [title = "", artist = "", bpmRaw = ""] = stdout.trim().split("|")
