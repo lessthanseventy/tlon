@@ -37,6 +37,8 @@ control loop, not two, and no second way to run anything:
 - Machine-wide scripts (`checks-queue.sh`, `release-smoke.sh`) act on state every checkout shares, so a
   checkout whose copy `origin/main` has changed since it branched is refused (exit 2, `scripts/lib/fresh-script.sh`):
   rebase onto origin/main; `TLON_STALE_SCRIPTS_OK=1` runs it anyway. A sandboxed `release:smoke` is refused too.
+  `release:smoke` goes through `scripts/run-from-root.sh`, which runs the shared root checkout's (main's) copy, so a
+  seat on an old base that has the wrapper still smokes with current tooling; one too old to have it needs a rebase.
 - `mise run bench:longmemeval` — LongMemEval (agent-memory-benchmark's harness, ollama.com answers and judges) against
   server recall on the throwaway `tlon_bench` db, never the live store; `bench/longmemeval/bridge.exs` says what each
   `TLON_BENCH_MODE` measures, and `-- --memory bm25` runs the keyword reference on the same slice.

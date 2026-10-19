@@ -8,4 +8,4 @@ run = "scripts/release.sh status"
 
 ["release:smoke"]
 description = "release: smoke a candidate (default origin/main) — a scratch release on a scratch port and db, /api/office, the office driven headless; exit code is the verdict"
-run = "scripts/release-smoke.sh"
+run = "scripts/run-from-root.sh release-smoke.sh"
