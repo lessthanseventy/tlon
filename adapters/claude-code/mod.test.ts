@@ -357,8 +357,8 @@ test("a short turn waits for more before paying for an extraction", async ($, on
   let calls = 0;
   engine(on, {
     transcript: [{ role: "user", text: "hi" }],
-    fetch: () => {
-      calls++;
+    fetch: (e) => {
+      if (e.url.includes("ollama.com")) calls++;
       return { status: 200, ok: true, headers: {}, text: "{}" };
     },
   });
@@ -695,4 +695,37 @@ test("a rate-limit window that moves is posted to the office's usage meter; a co
   await settle();
   expect(posts.map((p) => p.url)).toEqual(["http://127.0.0.1:4040/api/usage/claude"]);
   expect(JSON.parse(posts[0]!.body!)).toEqual({ five_hour: { percent: 35, resets_at: "2026-10-13T19:00:00Z" }, seven_day: { percent: 44, resets_at: null } });
+});
+
+const LANDING = { id: 9, source: "event", kind: "work_landed", summary: "landed", at: null };
+
+test("a landing the seat led is toasted in the alert row's own words", async ($, on) => {
+  const world: World = {
+    toasts: [],
+    dossier: { ...DOSSIER, done: { shown: [{ ...LANDING, id: 3 }], more: 0 } } as never,
+    http: (e) => ({ status: 200, ok: true, headers: {}, text: e.url.endsWith("/api/alerts") ? JSON.stringify([{ kind: "landed", key: "landed:9", level: "info", title: "#42 landed — ship the mod", thread_id: 42, at: "2026-10-19T10:00:00Z" }, { kind: "landed", key: "landed:8", level: "info", title: "#7 landed — other", thread_id: 7, at: "2026-10-19T11:00:00Z" }]) : "{}" }),
+  };
+  engine(on, world);
+  await $.session.start(START);
+  await $.prompt.submit({ text: "go", wait: false });
+
+  world.dossier = { ...DOSSIER, done: { shown: [LANDING, { ...LANDING, id: 3 }], more: 0 } } as never;
+  await $.prompt.submit({ text: "and", wait: false });
+  await settle();
+
+  expect(world.toasts).toContain("#42 landed — ship the mod");
+  expect(world.toasts).not.toContain("landed ✓");
+});
+
+test("with no alert row to read, a landing still toasts", async ($, on) => {
+  const world: World = { toasts: [], dossier: { ...DOSSIER, done: { shown: [{ ...LANDING, id: 3 }], more: 0 } } as never };
+  engine(on, world);
+  await $.session.start(START);
+  await $.prompt.submit({ text: "go", wait: false });
+
+  world.dossier = { ...DOSSIER, done: { shown: [LANDING, { ...LANDING, id: 3 }], more: 0 } } as never;
+  await $.prompt.submit({ text: "and", wait: false });
+  await settle();
+
+  expect(world.toasts).toContain("landed ✓");
 });

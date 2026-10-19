@@ -24,7 +24,7 @@ import {
 } from "./lib/capture.ts";
 import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
 import { seatGlyph, seatStatus } from "./lib/status.ts";
-import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
+import { attribution, bandParts, figureCells, gateOf, landedAlerts, landingsOf, mentionsOf, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
 import { CHIME_WAV } from "./lib/chime.ts";
 
 // Below this much new transcript a turn's capture waits for the next turn instead of paying for
@@ -156,11 +156,21 @@ async function readDossier($) {
   seenMessage = Math.max(seenMessage, newest);
   const landed = landingsOf(dossier, seenLanding);
   if (seenLanding >= 0 && landed.length && dossier.lead === author) {
-    $.ui.toast("landed ✓");
+    $.ui.toast((await landedToday($)).find((a) => a.thread_id === Number(thread))?.title ?? "landed ✓");
     $.audio.play({ base64: CHIME_WAV, mime: "audio/wav" }).catch(() => {});
   }
   seenLanding = Math.max(seenLanding, ...landed, ...dossier.done.shown.map((e) => e.id));
   $.ui.invalidate("ui.render");
+}
+
+// The landing rows of the alerts the desktop raises, so both surfaces toast the server's own wording.
+async function landedToday($) {
+  try {
+    const res = await $.http.fetch(`${api}/alerts`);
+    return res.ok ? landedAlerts(JSON.parse(res.text)) : [];
+  } catch {
+    return [];
+  }
 }
 
 // The office from this seat: who else is on, what is red here, this seat's voice, a line now and then.
@@ -490,8 +500,10 @@ export function register(on) {
     void refresh($);
     void refreshGlance($).then(() => {
       void loadFigure($, glance?.archetype ?? null);
-      const landed = glance?.landed ?? [];
-      if (landed.length) $.ui.toast(`landed today: ${landed.slice(0, 3).map((l) => `#${l.thread_id} ${l.title}`).join(" · ")}${landed.length > 3 ? ` +${landed.length - 3}` : ""}`, { timeoutMs: 10_000 });
+      void landedToday($).then((rows) => {
+        const titles = rows.length ? rows.map((a) => a.title) : (glance?.landed ?? []).map((l) => `#${l.thread_id} ${l.title}`);
+        if (titles.length) $.ui.toast(`landed today: ${titles.slice(0, 3).join(" · ")}${titles.length > 3 ? ` +${titles.length - 3}` : ""}`, { timeoutMs: 10_000 });
+      });
     });
     try {
       await $.tool.register({
