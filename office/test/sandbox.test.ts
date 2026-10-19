@@ -47,3 +47,17 @@ test("hire puts a new person on the bench, on shift for everyone, and they are n
   expect(new Set(a.bench.map((c) => c.seat_id)).size).toBe(a.bench.length)
   expect(a.shifts!.find((s) => s.seat_id === b.seat_id)!.crew).toBe("all")
 })
+
+test("the toy answers every card's read, so none waits for ever", () => {
+  const t = toy()
+  const paths = ["/office/triage/1", "/office/health", "/office/memory/1", "/office/tickets/1", "/office/workspace/1", "/settings", "/office/schedules/1", "/office/archive/1", "/threads/101/review", "/office/threads/100"]
+  for (const p of paths) expect(t.read(p)).toBeDefined()
+  expect(t.read("/office/nonsense")).toBeUndefined()
+})
+
+test("the toy has a front desk to talk to and two tickets on the board", () => {
+  const a = toy().snapshot()
+  const desk = a.threads.find((x) => x.standing && x.workspace_id === 1)
+  expect(desk?.title).toBe("lobby")
+  expect(a.tickets.map((x) => x.id)).toEqual([201, 202])
+})

@@ -132,6 +132,9 @@ const rooms = new Map<number, RailRoom | WideRoom>()
 const threads = new Map<number, ThreadView>()
 let mode: Mode = { kind: "home" }, picked: number | null = null, sel = 0
 let tip = "", status = ""
+/** why the open card's read came back empty (`data.readFailure`), or null while it is still on its way */
+let readWhy: string | null = null
+const waiting = (what: string): Seg => dim(readWhy ? `couldn't read: ${readWhy}` : what)
 /** the header's clickable spans, in 1-based columns, as last drawn */
 let headHits: { from: number; to: number; go: () => void }[] = []
 // how the list cards are ordered (`s` sort, `g` group): kept across visits
@@ -529,6 +532,10 @@ async function loadThread(tid: number) { const v = await data.thread(tid); if (v
 async function loadCard() {
   if (ws === null) return
   const w = ws
+  data.readReset()
+  try { await readCard(w) } finally { readWhy = data.readFailure() }
+}
+async function readCard(w: number) {
   switch (mode.kind) {
     case "archive": archived = await data.archive(w); break
     case "triage": stuck = await data.triage(w); break
@@ -556,7 +563,7 @@ function openThread(): number | null {
   return null
 }
 function open(m: Mode) {
-  mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
+  readWhy = null; mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
@@ -1220,7 +1227,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         week.push(d === now.getDate() ? { s: cell, fg: ROLE.attention, bold: true } : booked.has(d) ? key(cell) : d < now.getDate() ? dim(cell) : plain(cell))
         if ((first + d) % 7 === 0 || d === days) { rows.push({ segs: week }); week = [] }
       }
-      if (!cal) rows.push({ segs: [dim("reading the schedule…")] })
+      if (!cal) rows.push({ segs: [waiting("reading the schedule…")] })
       else if (!cal.length) rows.push({ segs: [dim("nothing scheduled yet")] })
       else {
         rows.push({ segs: [key(`SCHEDULED · ${cal.length}`)] })
@@ -1246,7 +1253,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const rows: Row[] = s ? lifeRows(s).map((r) => ({
         segs: [plain(r.text)],
         open: () => void did(r.kind === "routine" ? data.routineDone(r.id, r.title) : data.questDone(r.id, r.title)).then(loadCard).then(draw),
-      })) : [{ segs: [dim("reading the day…")] }]
+      })) : [{ segs: [waiting("reading the day…")] }]
       if (s && !rows.length) rows.push({ segs: [dim("nothing due, no open quests")] })
       if (s) rows.unshift({ segs: [s.dump ? plain(`dump · ${data.lines(s.dump.lines)} · edited ${stamp(s.dump.updated_at)}`) : dim("dump · empty — ⏎ to pour it all out")], open: openDump })
       return {
@@ -1255,7 +1262,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "pages": {
-      const rows: Row[] = !dumpPages ? [{ segs: [dim("turning back the pages…")] }]
+      const rows: Row[] = !dumpPages ? [{ segs: [waiting("turning back the pages…")] }]
         : !dumpPages.length ? [{ segs: [dim("no earlier pages yet: every save keeps the one it replaced")] }]
         : dumpPages.map((p) => ({ segs: [dim(`${stamp(p.at)}  `), plain(data.lines(p.lines)), dim(`  ${p.first}`)], open: () => void readPage(p.id), ref: p }))
       const p = rows[sel]?.ref as data.DumpPage | undefined
@@ -1287,7 +1294,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `RUN #${r.id} · ${r.status}${r.exit === null ? "" : ` · exit ${r.exit}`}`, rows, actions: [...(r.thread_id ? [{ ...bind("run.t"), run: () => openReader(r.thread_id!) }] : []), up] }
     }
     case "archive": {
-      if (!archived) return { title: "FILING CABINET", rows: [{ segs: [dim("opening the drawers…")] }], actions: [back1] }
+      if (!archived) return { title: "FILING CABINET", rows: [{ segs: [waiting("opening the drawers…")] }], actions: [back1] }
       const day = (s: string | null) => (s ? s.slice(0, 10) : "")
       const rows: Row[] = [{ segs: [key(`TICKETS DONE · ${archived.tickets.length}`)] }]
       for (const t of archived.tickets) rows.push({ segs: [dim(`#${t.id} `), plain(t.title), dim(`  ${day(t.closed_at)}`)] })
@@ -1313,7 +1320,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "triage": {
-      if (!stuck) return { title: "TRIAGE", rows: [{ segs: [dim("looking…")] }], actions: [back1] }
+      if (!stuck) return { title: "TRIAGE", rows: [{ segs: [waiting("looking…")] }], actions: [back1] }
       const rows: Row[] = []
       const section = (name: string, c: data.Capped<data.Stuck>) => {
         if (!c.shown.length) return
@@ -1325,7 +1332,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `TRIAGE · ${stuck.count} known problems · the sheriff's`, rows: rows.length ? rows : [{ segs: [dim("nothing is stuck. the beacon is dark.")] }], actions: [back1] }
     }
     case "health": {
-      if (!rack) return { title: "THE RACK", rows: [{ segs: [dim("probing…")] }], actions: [back1] }
+      if (!rack) return { title: "THE RACK", rows: [{ segs: [waiting("probing…")] }], actions: [back1] }
       const ok = (b: boolean, s: string): Row => ({ segs: [{ s: b ? "● " : "✕ ", fg: b ? ROLE.live : ROLE.alarm }, plain(s)] })
       const up = rack.up_s < 3600 ? `${Math.floor(rack.up_s / 60)}m` : rack.up_s < 86400 ? `${Math.floor(rack.up_s / 3600)}h` : `${Math.floor(rack.up_s / 86400)}d`
       const rows: Row[] = [
@@ -1346,7 +1353,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return { title: `THE RACK · ${rack.state === "ok" ? "all green" : "needs a look"}`, rows, actions: [back1] }
     }
     case "memory": {
-      if (!shelf) return { title: "MEMORY", rows: [{ segs: [dim("taking the books down…")] }], actions: [back1] }
+      if (!shelf) return { title: "MEMORY", rows: [{ segs: [waiting("taking the books down…")] }], actions: [back1] }
       const rows: Row[] = [{ segs: [dim(`${shelf.coverage.facts} facts, ${shelf.coverage.embedded} embedded · pinned ${shelf.coverage.pinned_count} (~${shelf.coverage.pinned_tokens} of ${shelf.coverage.budget} tokens)`)] }]
       rows.push({ segs: [key(`HABITS TO REVIEW · ${shelf.habits.length}`)] })
       for (const h of shelf.habits) rows.push({ segs: [dim(`  ${h.by ?? "?"}: `), plain(h.text)], open: () => void 0, ref: { habit: h } })
@@ -1412,7 +1419,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "card": {
-      if (!card || w === null) return { title: "SETTINGS", rows: [{ segs: [dim("reading…")] }], actions: [back1] }
+      if (!card || w === null) return { title: "SETTINGS", rows: [{ segs: [waiting("reading…")] }], actions: [back1] }
       const c = card, ring = (xs: string[], x: string) => xs[(xs.indexOf(x) + 1) % xs.length]!
       const reload = () => void loadCard().then(draw)
       const rows: Row[] = [
@@ -1435,7 +1442,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "review": {
       const tid = mode.tid, notes = reviewNotes.get(tid) ?? []
-      if (!review) return { title: `REVIEW · #${tid}`, rows: [{ segs: [dim("reading the branch…")] }], actions: [back1] }
+      if (!review) return { title: `REVIEW · #${tid}`, rows: [{ segs: [waiting("reading the branch…")] }], actions: [back1] }
       type At = { path: string; line?: number; side?: "+" | "-" | " "; hunk?: boolean }
       const same = (n: data.ReviewNote, at: At) => n.path === at.path && n.line === at.line && n.side === at.side
       const rows: Row[] = []
@@ -1494,7 +1501,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
     }
     case "settings": {
-      if (!settings) return { title: "THE RUNNING SYSTEM", rows: [{ segs: [dim("reading…")] }], actions: [back1] }
+      if (!settings) return { title: "THE RUNNING SYSTEM", rows: [{ segs: [waiting("reading…")] }], actions: [back1] }
       const reload = () => void loadCard().then(draw)
       const show = (k: data.Knob) => (k.value === null ? "off" : k.type === "bool" ? (k.value ? "on" : "off") : String(k.value) || "—")
       const change = (k: data.Knob) => {

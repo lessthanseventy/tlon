@@ -1,7 +1,7 @@
 // The sandbox: a made-up world for the TUI to run on with no server (`office --sandbox`) — the toy
 // in docs/plans/2026-10-08-office-as-a-toy-design.md §1. Same sim, same rooms; only the snapshot's source differs.
 import { hints } from "./keys"
-import { EMPTY, type Agents, type Visit } from "../kit/types"
+import { EMPTY, type Agents, type Ticket, type Visit } from "../kit/types"
 
 const NAMES = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatriz", "nolan", "emma", "ireneo", "daneri", "sonny"]
 const TITLES = ["the doorbell", "teach Nina to code", "a fire drill, but gentle", "the great sticky-note audit"]
@@ -12,16 +12,59 @@ const WEATHER = [
   { kind: "storm", desc: "Thunderstorm", temp_c: 16 },
 ] as const
 
+/** two filed tickets, so the toy's board has something to click on */
+const TICKETS: Ticket[] = [
+  { id: 201, workspace_id: 1, project_id: null, title: "teach the doorbell to ring twice", priority: "normal" },
+  { id: 202, workspace_id: 1, project_id: null, title: "a plant for the server closet", priority: "low" },
+]
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
+
+const knob = (key: string, type: string, value: number | boolean, doc: string, boot: boolean, min?: number, max?: number) => ({ key, type, value, default: value, min, max, boot, doc })
+
+/** what the toy answers a card's read with (GET `/api<path>`), or undefined for a path it has nothing for */
+function answer(path: string): unknown {
+  const p = path.split("?")[0]!
+  if (/^\/office\/threads\/\d+$/.test(p)) return { messages: [], peek: null, window: null }
+  if (/^\/office\/triage\/\d+$/.test(p)) return { blockers: { shown: [], more: 0 }, failed_checks: { shown: [], more: 0 }, unled: { shown: [], more: 0 }, count: 0 }
+  if (p === "/office/health") return { state: "ok", problems: [], version: "toy", up_s: 7200, db: true, jobs: true, failed_jobs: 0, tmux: true, disk_pct: 41, mem_pct: 37, load: 0.4, checks: { running: null, waiting: [] }, merge_queue: [] }
+  if (/^\/office\/memory\/\d+$/.test(p)) return {
+    pinned: [{ id: 1, text: "Nina is not allowed on the keyboard." }, { id: 2, text: "The doorbell rings at the worst moment, on purpose." }],
+    habits: [{ id: 1, text: "Check the server closet before a fire drill.", rationale: null, by: "scharlach" }],
+    coverage: { facts: 6, embedded: 6, pinned_count: 2, pinned_tokens: 24, budget: 2000 },
+  }
+  if (/^\/office\/tickets\/\d+$/.test(p)) return TICKETS.map((t) => ({ id: t.id, title: t.title, body: null, status: "todo", priority: t.priority, project_id: null, blocked_by: [] }))
+  if (/^\/office\/workspace\/\d+$/.test(p)) return { id: 1, name: "Toy", type: "code", scope: "workspace", icon: null, repos: [{ id: 1, path: "~/projects/toy", remote: null }] }
+  if (p === "/settings") return { restart_pending: false, knobs: [
+    knob("warm_minutes", "int", 20, "how long a session stays warm", false, 1, 240),
+    knob("banter", "bool", true, "small talk between coworkers", false),
+    knob("port", "int", 4040, "where the server listens", true, 1024, 65535),
+  ] }
+  if (/^\/office\/schedules\/\d+$/.test(p)) return [
+    { id: 1, kind: "agent", title: "water the plants", body: "", cron: "0 9 * * 1", at: null, agent: "tertius", standing: true, thread_id: null, dir: null, enabled: true, next_at: ago(-60 * 20), days: [], last: null },
+    { id: 2, kind: "script", title: "tidy the sticky notes", body: "", cron: "0 17 * * 5", at: null, agent: null, standing: false, thread_id: null, dir: null, enabled: false, next_at: null, days: [], last: null },
+  ]
+  if (/^\/office\/archive\/\d+$/.test(p)) return {
+    tickets: [{ id: 190, title: "paint the lounge", closed_at: ago(60 * 24 * 3) }],
+    threads: [{ id: 99, title: "the first fire drill", stage: "done", at: ago(60 * 24 * 5) }],
+  }
+  if (/^\/threads\/\d+\/review$/.test(p)) return { head: "toy", files: [{ path: "doorbell.ts", status: "modified", added: 1, deleted: 1, binary: false, hunks: [{ header: "@@ -1,2 +1,2 @@", lines: [
+    { kind: " ", old: 1, new: 1, text: "export const ring = () => {" }, { kind: "-", old: 2, new: null, text: "  ding()" }, { kind: "+", old: null, new: 2, text: "  ding(); dong()" }] }] }] }
+  return undefined
+}
+
 export function toy() {
   let w = 0, night = false, visits: Visit[] = [], who = 0
   const hired = new Set<string>()
+  const front = { id: 100, title: "lobby", stage: null, awaiting: null, workspace_id: 1, lead: null, live: false, standing: true }
   const threads = TITLES.map((title, i) => ({ id: 101 + i, title, stage: i % 2 ? "build" : "plan", awaiting: null, workspace_id: 1, lead: NAMES[1 + i]!, live: true, seat: "desk" as const }))
   const bench: Agents["bench"] = NAMES.map((name, i) => ({ workspace_id: 1, seat_id: i + 1, agent_id: i + 1, name, archetype: name === "scharlach" ? "sheriff" : "builder", lead: i === 1, model: null, ask: null }))
   const roster = threads.map((t) => ({ agent: t.lead, thread_id: t.id, title: t.title, warm: true, thinking: t.id % 2 === 0, workspace_id: 1 }))
   return {
+    /** a card's read: the toy's small plausible data, or undefined (a 404) */
+    read: (path: string) => answer(path),
     snapshot(): Agents {
       const shifts = bench.map((b, i) => ({ workspace_id: 1, seat_id: b.seat_id, name: b.name, archetype: b.archetype, crew: (hired.has(b.name) ? "all" : i < 6 ? "day" : "night") as "day" | "night" | "all" }))
-      return { ...EMPTY, ok: true, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "" }, { name: "sheriff", meta: false, read_only: true, model: "" }], bench, threads, roster, weather: { ...WEATHER[w]! }, visits }
+      return { ...EMPTY, ok: true, tickets: TICKETS, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "" }, { name: "sheriff", meta: false, read_only: true, model: "" }], bench, threads: [front, ...threads], roster, weather: { ...WEATHER[w]! }, visits }
     },
     /** the hall's hire: a pretend seat on the bench, on shift for everyone */
     hire(c: { name: string; archetype: string }) {
