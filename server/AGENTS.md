@@ -280,7 +280,7 @@ The **shell parity pack** — operate the live channel from the shell, our peer 
 
 - `mise run server:spawn -- "<title>" <agent>` — open a thread, staff+register the agent, mint a
   token, print the `export TLON_*` block for a hand-run pane.
-- `mise run server:roster` — who's on the clock (live sessions, warm/cold).
+- `mise run server:roster` — who's on the clock (live sessions, each with its `Server.Coworker.status/1`: working, waiting, idle, cold or off).
 - `mise run server:dossier -- <thread-id>` — render a thread's brief (parity with get_dossier).
 - `mise run server:post -- <thread-id> <text…>` — post as the operator (parity with post_message); a
   plain post, never an answer: `mise run server:cli -- answer <prompt-id> <key>` answers a prompt.

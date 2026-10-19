@@ -216,6 +216,50 @@ defmodule Server.OfficeTest do
       :persistent_term.put(key, {tabs, System.monotonic_time(:second) - 600})
       refute warm.()
     end
+
+    test "every roster row carries one status: working, waiting, idle, cold or off", %{ws: ws} do
+      for name <- ~w(hronir borges dana otto),
+          do: {:ok, _} = Workspaces.seat(ws.id, %{name: name, archetype: "builder"})
+
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "nolan", archetype: "builder", crew: "night"})
+
+      on = fn name, title ->
+        {:ok, t} = Channel.open_thread(%{title: title, workspace_id: ws.id})
+        {:ok, _} = Channel.assign_lead(t.id, name)
+        {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name(name).id, thread_id: t.id})
+        t
+      end
+
+      busy = on.("hronir", "busy")
+      asked = on.("borges", "asked")
+      _cold = on.("dana", "cold")
+      idle = on.("otto", "idle")
+      resting = on.("nolan", "resting")
+      :ok = Server.Presence.Thinking.thinking(busy.id, "hronir")
+      on_exit(fn -> Server.Presence.Thinking.idle(busy.id, "hronir") end)
+
+      {:ok, _} =
+        Channel.post(%{
+          thread_id: asked.id,
+          author: "tlon",
+          kind: "prompt",
+          body: "waiting",
+          payload: %{"window" => "t#{asked.id}", "summary" => "Proceed?", "options" => []}
+        })
+
+      windows(
+        Enum.map_join(
+          [{busy, "hronir"}, {asked, "borges"}, {idle, "otto"}, {resting, "nolan"}],
+          fn {t, name} -> "0\tt#{t.id}\t#{t.id}\t\t\t#{name}\t\n" end
+        )
+      )
+
+      roster = Office.status().roster
+      status = fn name -> Enum.find(roster, &(&1.agent == name)).status end
+
+      assert {status.("hronir"), status.("borges"), status.("otto"), status.("dana"), status.("nolan")} ==
+               {:working, :waiting, :idle, :cold, :off}
+    end
   end
 
   describe "aside_spec/3" do
