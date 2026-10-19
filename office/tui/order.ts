@@ -1,6 +1,6 @@
 // How a list card orders what it shows: `s` steps its sort, `g` its grouping (the same keys on every
 // card that has them). Pure, so the cards only say which modes they offer.
-import type { Crew } from "../kit/crew"
+import { STATUS_ORDER, statusWord, type Crew } from "../kit/crew"
 
 export type Sort<T> = { name: string; cmp: (a: T, b: T) => number }
 /** `label` heads a group; groups are shown in `rank` order (then by label) */
@@ -19,19 +19,17 @@ export function arrange<T>(items: T[], cmp: (a: T, b: T) => number, group: Group
   return [...by].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b)).map(([label, items]) => ({ label, items }))
 }
 
-const STATUS_RANK = { waiting: 0, working: 1, idle: 2 } as const
-const STATUS_LABEL = { waiting: "waiting on you", working: "working", idle: "idle" } as const
 const byName = (a: Crew, b: Crew) => a.name.localeCompare(b.name)
 
 export const CREW_SORTS: Sort<Crew>[] = [
   { name: "bench", cmp: () => 0 },
   { name: "name", cmp: byName },
-  { name: "status", cmp: (a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] },
+  { name: "status", cmp: (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) },
   { name: "thread", cmp: (a, b) => (a.thread ?? Infinity) - (b.thread ?? Infinity) },
 ]
 const role = (c: Crew) => (c.manager ? "manager" : c.archetype ?? "?")
 export const CREW_GROUPS: Group<Crew>[] = [
   { name: "role", label: role },
-  { name: "status", label: (c) => STATUS_LABEL[c.status], rank: (l) => Object.values(STATUS_LABEL).indexOf(l as never) },
+  { name: "status", label: (c) => statusWord(c.status), rank: (l) => STATUS_ORDER.findIndex((x) => statusWord(x) === l) },
   { name: "thread", label: (c) => (c.thread === null ? "on the bench" : `#${c.thread}`), rank: (l) => (l.startsWith("#") ? Number(l.slice(1)) : Infinity) },
 ]

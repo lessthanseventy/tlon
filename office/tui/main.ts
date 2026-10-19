@@ -16,7 +16,7 @@ import { load as loadWhim, save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
 import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
-import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, viewOf, type Act, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
 import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES_BLURB, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
@@ -974,7 +974,7 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
         ? STAGE_RING.flatMap((st, i): Seg[] => [...(i ? [dim(" ▸ ")] : []), i === cur ? { s: ` ${st === "merged" && th.landing ? "landing" : st} `, fg: ROLE.ground, bg: th.awaiting ? ROLE.attention : ROLE.key, bold: true } : { s: st, fg: i < cur ? ROLE.live : ROLE.inactive }])
         : [dim("thread")]),
       ...(th?.lead ? [dim("  · "), { s: th.lead, fg: authorColor(th.lead), bold: true }] : []),
-      ...(th?.live ? [{ s: "  ● running", fg: ROLE.live }] : []),
+      ...(th?.live ? [{ s: `  ${statusGlyph("working")} running`, fg: statusTone("working") }] : []),
     ],
   })
   // a board card's state, and the one thing that moves it
@@ -1007,7 +1007,7 @@ function threadRows(th: Thread | undefined, tid: number, above = 0): Row[] {
   if (!v?.messages.length && v?.peek) for (const l of v.peek.split("\n").filter((x) => x.trim()).slice(-4)) out.push({ segs: [dim(l)] })
   return out
 }
-/** a card state's glyph: ▶ at a desk, ⏸ parked, ○ idle, ⚑ needs you */
+/** a card state's glyph: ▶ at a desk, ⏸ parked, ◇ idle, ⚑ needs you */
 const stateSeg = (st: CardState): Seg => ({ s: `${STATE_GLYPH[st.kind]} `, fg: st.kind === "running" ? ROLE.live : st.kind === "needs" ? ROLE.attention : ROLE.inactive, bold: true })
 /** the one thing to do about a board card, by where it stands */
 function nextStep(th: Thread, st: CardState): { key: string; label: string } {
@@ -1110,7 +1110,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       if (!tabsOf.includes(crewTab)) crewTab = "all"
       const live = crewOf(a)
       const inTab = (name: string) => crewTab === "all" || seats.find((x) => x.name === name)?.crew === crewTab
-      const crew = [...live, ...seats.filter((x) => !live.some((c) => c.name === x.name)).map((x) => ({ name: x.name, archetype: x.archetype, status: "off", thread: null, title: "", manager: false, lead: false }))].filter((c) => inTab(c.name))
+      const crew = [...live, ...seats.filter((x) => !live.some((c) => c.name === x.name)).map((x) => ({ name: x.name, archetype: x.archetype, status: "off" as SeatStatus, thread: null, title: "", manager: false, lead: false }))].filter((c) => inTab(c.name))
       const shiftOf = (name: string) => seats.find((x) => x.name === name)?.crew
       const tabs: Seg[] = tabsOf.flatMap((t) => [t === crewTab ? { s: ` ${tabLabel(t)} `, fg: ROLE.ground, bg: ROLE.key, bold: true } : dim(` ${tabLabel(t)} `), plain(" ")])
       const paused = all.pause === "pencils_down" || all.pause === "lights_out"
@@ -1123,10 +1123,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           const model = b?.model ? b.model.model : arch?.model?.split("/").pop() ?? ""
           const off = c.status === "off", shift = shiftOf(c.name)
           rows.push({
-            segs: [{ s: off ? "◌ " : c.status === "working" ? "● " : c.status === "waiting" ? "! " : "○ ", fg: off ? ROLE.inactive : c.status === "working" ? ROLE.live : c.status === "waiting" ? ROLE.attention : ROLE.inactive },
+            segs: [{ s: `${statusGlyph(c.status)} `, fg: statusTone(c.status) },
               { s: c.name.padEnd(10), fg: off ? ROLE.inactive : shirtOf(c.archetype) }, dim(`${c.manager ? "manager" : c.archetype ?? "?"}${c.lead ? " · lead" : ""}`.padEnd(18)), key(model.padEnd(16)), plain(" "),
               dim((shift === "all" || !shift ? "every crew" : shift).padEnd(12)),
-              dim(off ? "off shift" : c.thread !== null ? `#${c.thread} ${c.title}` : "on the bench")],
+              dim(off && !live.some((l) => l.name === c.name) ? "off shift" : c.thread !== null ? `#${c.thread} ${c.title}` : "on the bench")],
             open: () => open({ kind: "person", name: c.name }), ref: c.name,
           })
         }
@@ -1154,10 +1154,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const c = crewOf(a).find((x) => x.name === name), b = a.bench.find((x) => x.name === name)
       if (!c) return { title: name.toUpperCase(), rows: [{ segs: [dim("not in this office any more")] }], actions: [back1] }
       const model = b?.model ? `${b.model.provider}/${b.model.model}` : `${inheritedModel(c.archetype)} (archetype's)`
-      const where = c.status === "working" ? "mid-turn" : a.roster.some((r) => r.agent === name && r.warm) ? "on call" : c.status === "waiting" ? "waiting on you" : "in the lounge"
+      const where = `${statusGlyph(c.status)} ${statusWord(c.status)}`
       // a pill for where they are, and what they're at mid-turn (the thought bubble's kind)
       const doing = a.roster.find((r) => r.agent === name && r.thinking)?.doing
-      const pill = c.status === "working" ? ROLE.live : c.status === "waiting" ? ROLE.attention : where === "on call" ? ROLE.key : ROLE.inactive
+      const pill = statusTone(c.status)
       const head: Row = {
         segs: [{ s: ` ${c.name} `, fg: ROLE.ground, bg: shirtOf(c.archetype), bold: true }, plain(" "), { s: ` ${where}${doing ? ` · ${doing}` : ""} `, fg: ROLE.ground, bg: pill },
           dim(`  ${c.manager ? "manager" : c.archetype ?? ""}${c.lead ? " · lead" : ""} · ${model} · ${b?.ask ?? "ask (archetype's)"}`)],

@@ -2,7 +2,7 @@
 // manager's and the lead's desks, the crew board, the trinkets on a desk. A room places them; their
 // look is the same everywhere.
 import { fit, type Measure } from "./canvas"
-import { crewOf, needsYou, STAGES, tipOf, type CrewStatus } from "./crew"
+import { crewOf, needsYou, STAGES, statusGlyph, statusTone, tipOf } from "./crew"
 import type { Scene } from "./draw"
 import { ROLE } from "./palette"
 import { BOSS_LOOK, DECOR, figure, paints, shirtOf, type Look } from "./sprites"
@@ -23,7 +23,6 @@ export function decor(sc: Scene, look: Look, x: number, top: number) {
 export function crewBoard(sc: Scene, a: Agents, measure: Measure, bx: number, by: number, bw: number, bh: number, nameSize = 11) {
   sc.px(bx, by, bw, bh, ROLE.structure); sc.px(bx + 1, by + 1, bw - 2, bh - 2, ROLE.ground)
   sc.text("CREW", bx + bw / 2, by + 6, ROLE.key, 11)
-  const light: Record<CrewStatus, string> = { working: ROLE.live, waiting: ROLE.attention, idle: ROLE.inactive }
   // a surface that knows its text's height gets as many rows as fit at it, and a "+n" for the rest;
   // otherwise one column of names while they fit (six), a full office of ten in two, smaller
   const lh = measure.lineHeight?.(nameSize)
@@ -33,10 +32,10 @@ export function crewBoard(sc: Scene, a: Agents, measure: Measure, bx: number, by
   const cols = lh ? 1 : crew.length > 6 ? 2 : 1, per = lh ? fits : cols === 1 ? 6 : 5, size = cols === 1 ? nameSize : 9
   crew.forEach((c, i) => {
     const cx = bx + 3 + Math.floor(i / per) * Math.floor(bw / 2), cy = by + 10 + (i % per) * (lh ?? (cols === 1 ? 4.5 : 5))
-    sc.px(cx, Math.round(cy), 2, 2, c.status === "waiting" && sc.f % 2 ? ROLE.raised : light[c.status])
+    sc.px(cx, Math.round(cy), 2, 2, c.status === "waiting" && sc.f % 2 ? ROLE.raised : statusTone(c.status))
     // waiting is said in the name too, not by the light's colour alone
-    const name = c.status === "waiting" ? `!${c.name}` : c.name
-    sc.text(fit(measure, name, bw / cols - 8, size), cx + 4, cy + 2.5, c.status === "idle" ? ROLE.inactive : ROLE.prose, size, "left")
+    const name = c.status === "waiting" ? `${statusGlyph("waiting")}${c.name}` : c.name
+    sc.text(fit(measure, name, bw / cols - 8, size), cx + 4, cy + 2.5, c.status === "idle" || c.status === "cold" || c.status === "off" ? ROLE.inactive : ROLE.prose, size, "left")
   })
   if (all.length > crew.length) sc.text(`+${all.length - crew.length}`, bx + 7, by + 10 + crew.length * (lh ?? 4.5) + 2.5, ROLE.key, size, "left")
   sc.hits.push({ x: bx, y: by, w: bw, h: bh, tip: "the crew: who is on what — click for the card", act: { kind: "crew" } })

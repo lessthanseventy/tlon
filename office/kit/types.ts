@@ -13,7 +13,9 @@ export type LifeStatus = { xp: number; level: number; next_level_at: number; str
 /** `lead`: who it is staffed with; `live`: a tmux window is running it; `standing`: its workspace's lobby; `thinking`: who is mid-turn on it; `seat`: its lead at a desk (a window, a warm session), parked for a seat under the leaf cap, or idle; `duty`: a standing duty (a schedule's, the sheriff's beat), not work; `landing`: landed, its PR waiting on GitHub to merge it (`Server.Workline.waiting_on_github/0`) */
 export type Thread = { id: number; title: string; stage: string | null; awaiting: string | null; workspace_id?: number | null; lead?: string | null; live?: boolean; standing?: boolean; thinking?: string[]; seat?: "desk" | "parked" | "idle"; duty?: boolean; study?: boolean; landing?: boolean; prompt?: { id: number; summary: string; options?: { key: string; label: string }[] | null } | null }
 /** `archetype`/`lead`: the agent's seat on its workspace bench (null/false off every bench); `warm`: its session is recent; `warmth`: how much of its warmth window is left, 1 fresh to 0 cold (the server's, per provider); `thinking`: it is mid-turn (its harness said so); `doing`: the kind of tool running in that turn (read, edit, bash, search, web, test, delegate), null between tools */
-export type Seat = { agent: string; thread_id: number; title: string; warm: boolean; warmth?: number; thinking?: boolean; doing?: string | null; archetype?: string | null; lead?: boolean; workspace_id?: number | null }
+export type Seat = { agent: string; thread_id: number; title: string; warm: boolean; warmth?: number; thinking?: boolean; doing?: string | null; archetype?: string | null; lead?: boolean; workspace_id?: number | null
+  /** the server's word for the seat (`Server.Coworker.status`); absent on an older server */
+  status?: "working" | "waiting" | "idle" | "cold" | "off" }
 /** a model as the server names it; `thinking` is the effort level */
 export type ModelSpec = { provider: string; model: string; thinking: string }
 import type { Persona } from "./persona"

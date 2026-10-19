@@ -6,7 +6,7 @@ steam fades over the warmth window, from the turn's end as the sim saw it; their
 mid-turn, a screensaver dot while warm, dark once cold: `screenOf`) — in the lounge when
 cold, queued at your door when a thread waits on you; the whiteboard holds the worklines, each
 marked where it stands (`cardState` in `kit/crew.ts`, read from the server's `seat` on each
-thread: ▶ its lead is at a desk, ⏸ parked for a seat under the leaf cap, ○ idle — nobody at a desk —
+thread: ▶ its lead is at a desk, ⏸ parked for a seat under the leaf cap, ◇ idle — nobody at a desk —
 ⚑ it needs you, ⤵ landing — in the merge queue, or landed and waiting on GitHub to merge its PR (the
 server's `landing` on the thread, kept on REVIEW); a thread's card names the one key that moves it). DOING is a plain thread someone is
 at a desk on; standing duties (`duty`: a schedule's threads, the sheriff's beat) are not work and stay

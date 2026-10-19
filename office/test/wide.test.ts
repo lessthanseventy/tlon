@@ -89,7 +89,7 @@ describe("the wide room", () => {
     const at = (name: string) => (room as unknown as { actors: Map<string, { spot: { kind: string } }> }).actors.get(name)!.spot.kind
     expect([at("hronir"), at("w0")]).toEqual(["desk", "desk"])
     expect(["couch", "cooler", "coffee", "roam"]).toContain(at("w1"))
-    expect(crewOf(a).map((c) => [c.name, c.status])).toEqual([["tertius", "idle"], ["hronir", "working"], ["w0", "idle"], ["w1", "idle"]])
+    expect(crewOf(a).map((c) => [c.name, c.status])).toEqual([["tertius", "cold"], ["hronir", "working"], ["w0", "idle"], ["w1", "cold"]])
   }))
 
   test("the pets do what you tell them: Nina naps, zooms, comes to your desk; Argos goes to bed", () => seeded(5, () => {
