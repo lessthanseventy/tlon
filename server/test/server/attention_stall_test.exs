@@ -69,9 +69,12 @@ defmodule Server.Attention.StallTest do
     panes = Stall.tick(panes, now: at(6))
     assert [%Message{resolved_at: nil}] = stalls(t.id)
 
-    Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"server exited unexpectedly", 1} end)
-    assert Stall.tick(panes, now: at(7)) == panes
-    assert [%Message{resolved_at: nil}] = stalls(t.id)
+    for out <- ["server exited unexpectedly", "no server running on /tmp/tmux-1000/x"] do
+      Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {out, 1} end)
+      assert Stall.tick(panes, now: at(7)) == panes
+      assert [%Message{resolved_at: nil}] = stalls(t.id)
+    end
+
     assert Map.has_key?(panes, {ws.id, "t#{t.id}"})
   end
 

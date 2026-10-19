@@ -42,9 +42,7 @@ defmodule Server.Arbiter.TmuxTest do
     end
   end
 
-  test "list_windows: a session not up is no windows; a tmux that can't be asked is an error, never an empty office", %{
-    thread: t
-  } do
+  test "list_windows: a tmux that is not up or can't be asked is an error, never an empty office", %{thread: t} do
     ws = t.workspace_id
 
     for out <- [
@@ -53,8 +51,10 @@ defmodule Server.Arbiter.TmuxTest do
           "error connecting to /tmp/tmux-1000/x (No such file or directory)"
         ] do
       Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {out, 1}}))
-      assert Tmux.list_windows(ws) == []
+      assert Tmux.list_windows(ws) == {:error, :not_up}
     end
+
+    assert Tmux.list_windows(nil) == []
 
     Application.put_env(:server, :tmux_cmd, record(%{"list-windows" => {"server exited unexpectedly", 1}}))
     assert {:error, "server exited unexpectedly"} = Tmux.list_windows(ws)

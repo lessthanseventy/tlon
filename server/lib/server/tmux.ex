@@ -75,9 +75,10 @@ defmodule Server.Tmux do
   @not_up ~r/no server running|error connecting to|can't find session|no current session/
 
   @doc """
-  The session's windows. A session not up (or no workspace) is `[]`; a tmux that can't be asked
-  (a fault, the binary missing) is `{:error, why}` — never `[]`, which every caller would read as
-  "every window closed".
+  The session's windows. No workspace is `[]`. A tmux server that is not up is `{:error, :not_up}`
+  and one that can't be asked (a fault, the binary missing) is `{:error, why}` — never `[]`, which
+  a restart would make every caller read as "every window closed". A caller that may START the
+  server (a spawn) reads `:not_up` as no windows; every other one holds its last value or skips.
   """
   def list_windows(id, opts \\ [])
   def list_windows(nil, _opts), do: []
@@ -85,7 +86,7 @@ defmodule Server.Tmux do
   def list_windows(id, opts) do
     case run(id, ["list-windows", "-t", session(id), "-F", @list_format], opts) do
       {out, 0} -> parse_windows(out)
-      {out, _} -> if Regex.match?(@not_up, out), do: [], else: {:error, String.trim(out)}
+      {out, _} -> if Regex.match?(@not_up, out), do: {:error, :not_up}, else: {:error, String.trim(out)}
     end
   end
 

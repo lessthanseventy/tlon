@@ -90,7 +90,11 @@ defmodule Server.Arbiter.Tmux do
 
   # windows it can't see could already hold this coworker: a fault spawns nothing
   defp tmux_windows(ws) do
-    with {:error, why} <- Tmux.list_windows(ws), do: {:error, {:tmux, why}}
+    case Tmux.list_windows(ws) do
+      {:error, :not_up} -> []
+      {:error, why} -> {:error, {:tmux, why}}
+      tabs -> tabs
+    end
   end
 
   defp standing?(ws, %Thread{id: id}), do: match?(%Thread{id: ^id}, Server.Channel.machine_thread(ws))

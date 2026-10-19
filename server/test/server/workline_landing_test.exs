@@ -440,6 +440,24 @@ defmodule Server.WorklineLandingTest do
       assert %Thread{state: "open"} = Repo.get!(Thread, t.id)
       assert [_one] = Workline.landed_since(since)
     end
+
+    test "a gh that cannot be read blocks, closes and merges nothing: the landing waits as it was" do
+      %{thread: t, ticket: ticket} = published!()
+      waiting = Workline.waiting_on_github()
+
+      down = fn cmd, args, _opts ->
+        send(self(), {:ran, [cmd | args]})
+        {"gh: HTTP 502", 1}
+      end
+
+      log = ExUnit.CaptureLog.capture_log(fn -> KeepUp.landings(down) end)
+
+      assert log =~ "unread" and log =~ "HTTP 502"
+      assert %Thread{stage: "merged", state: "open"} = Repo.get!(Thread, t.id)
+      refute Server.Tickets.get(ticket.id).status == "done"
+      assert Enum.map(Workline.waiting_on_github(), & &1.event.kind) == Enum.map(waiting, & &1.event.kind)
+      refute Enum.any?(Workline.waiting_on_github(), &(&1.event.kind == "check_failed"))
+    end
   end
 
   # the queued landing's turn came and went

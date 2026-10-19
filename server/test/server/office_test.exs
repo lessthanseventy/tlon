@@ -195,6 +195,27 @@ defmodule Server.OfficeTest do
       assert status.life[home.id] |> Map.keys() |> Enum.sort() == [:due, :level, :xp]
       refute Map.has_key?(status.life, code.id)
     end
+
+    test "a tmux that stops answering keeps the room's last windows for a minute or two, then the room goes quiet", %{
+      ws: ws
+    } do
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, t} = Channel.open_thread(%{title: "at a desk", workspace_id: ws.id})
+      {:ok, _} = Channel.assign_lead(t.id, "hronir")
+      {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("hronir").id, thread_id: t.id})
+      warm = fn -> Enum.find(Office.status().roster, &(&1.agent == "hronir")).warm end
+
+      windows("0\tt#{t.id}\t#{t.id}\t\t\thronir\t")
+      assert warm.()
+
+      Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"no server running on /tmp/x", 1} end)
+      assert warm.()
+
+      key = {Server.Office, :windows, ws.id}
+      {tabs, _at} = :persistent_term.get(key)
+      :persistent_term.put(key, {tabs, System.monotonic_time(:second) - 600})
+      refute warm.()
+    end
   end
 
   describe "aside_spec/3" do
