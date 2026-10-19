@@ -5,6 +5,7 @@
 // `Plan` (its spots, its routes) and draws what the sim says; the sim never draws.
 import { asksYou } from "./crew"
 import { relation } from "./company"
+import { soreLine } from "./seat-voices"
 import { soulFor } from "./souls"
 import { DRINK, FALL_ODDS, FALL_WET, layPrint, prune, STRIDE, WET, type Print } from "./bathroom"
 import { homeLevel } from "./life"
@@ -849,6 +850,7 @@ export class Sim<L extends { people: Seat[] }> {
       const gk = spotKey(goal)
       if (gk !== actor.spotKey) {
         held.delete(actor.spotKey); held.add(gk)
+        this.endGame(actor)
         // settled somewhere, they leave the way they came: back to its aisle first, never through what is in front of them
         const from = actor.path.length === 0 ? actor.spot.aisle : actor.y
         actor.path = plan.route(actor.x, from, goal)
@@ -886,8 +888,36 @@ export class Sim<L extends { people: Seat[] }> {
         changed = true
       }
     }
+    this.rivalGames()
     if (this.highFives()) changed = true
     return changed
+  }
+
+  /** a rivalry played out at foosball or pool: the loser, by agent, for each of the two until one walks off */
+  private grudge = new Map<string, string>()
+  /** how much longer rivals play than anyone, in ticks */
+  protected bloodTicks = 800
+
+  /** two rivals sat across a game table: it runs longer, and one of them is going to lose it */
+  private rivalGames() {
+    const { bench, souls } = this.companyOf()
+    for (const a of this.actors.values()) {
+      if (a.moving || a.path.length || (a.spot.kind !== "foosball" && a.spot.kind !== "pool") || this.grudge.has(a.seat.agent) || !a.spot.with) continue
+      const b = [...this.actors.values()].find((x) => x !== a && !x.moving && !x.path.length && x.spotKey === spotKey({ ...a.spot, ...a.spot.with! }))
+      if (!b || relation(a.seat.agent, b.seat.agent, souls, bench) !== "rival") continue
+      const loser = Math.random() < 0.5 ? a : b
+      this.grudge.set(a.seat.agent, loser.seat.agent); this.grudge.set(b.seat.agent, loser.seat.agent)
+      a.until += this.bloodTicks; b.until += this.bloodTicks
+    }
+  }
+
+  /** `actor` is leaving a game table: if it was a rivalry, the loser has something to say */
+  private endGame(actor: Actor) {
+    const loser = this.grudge.get(actor.seat.agent)
+    if (!loser) return
+    this.grudge.delete(actor.seat.agent)
+    for (const [k, v] of this.grudge) if (v === loser) this.grudge.delete(k)
+    this.say(loser, soreLine(loser))
   }
 
   /** a thread `actor` led has shipped: confetti, a cheer from everyone idle, and the pets' opinions */

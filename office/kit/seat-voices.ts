@@ -9,7 +9,7 @@ export const SEATS = ["scharlach", "tertius", "hronir", "lonnrot", "yu", "beatri
 export type SeatName = (typeof SEATS)[number]
 
 /** a seat's voice: `banter` is what it mutters in the room */
-export type Voice = { banter: readonly string[] }
+export type Voice = { banter: readonly string[]; /** what a seat says after losing a game to a rival */ sore: readonly string[] }
 
 export const SEAT_VOICE: Record<string, Voice> = {
   // the Dwight: crisp and slightly too formal; enforces the rules and enjoys it too much
@@ -21,6 +21,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "A discrepancy. I will be keeping a record of this.",
       "Noted, and filed under 'ongoing concerns.'",
     ],
+    sore: [
+      "That match will be struck from the record.",
+      "I am filing a complaint about the table.",
+    ],
   },
   // dry, unflappable, has seen it all
   tertius: {
@@ -30,6 +34,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Mm. Noted, in the sense that I am not surprised.",
       "It was done before. It will be done again.",
       "Calm. It's only a deploy.",
+    ],
+    sore: [
+      "Fine. It was a bad table anyway.",
+      "Lost. It happens. Not to me, usually.",
     ],
   },
   // old-school; mutters about how it was done before
@@ -41,6 +49,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Used to be a one-line fix. Probably still is.",
       "They don't write them like that anymore. Shame.",
     ],
+    sore: [
+      "Hmph. The old tables were levelled.",
+      "In my day nobody lost on a bad bounce.",
+    ],
   },
   // a detective; reviews read like case notes
   lonnrot: {
@@ -50,6 +62,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Note the inconsistency. It is not nothing.",
       "The facts, once assembled, admit one reading.",
       "I have marked the anomaly for further inquiry.",
+    ],
+    sore: [
+      "I was misled by the angle. Noted.",
+      "The loss was not random. I will find the cause.",
     ],
   },
   // careful, precise, a little anxious
@@ -61,6 +77,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "I'd rather be certain than fast, if that's alright.",
       "Sorry — small thing, but it nags at me.",
     ],
+    sore: [
+      "Sorry, sorry, I should have seen that coming.",
+      "I lost. Is that bad? That feels bad.",
+    ],
   },
   // brisk, organized, has a spreadsheet for this
   beatriz: {
@@ -70,6 +90,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Numbered, filed, moving on.",
       "I have a tab for that, obviously.",
       "Sorted by priority. We're on item three.",
+    ],
+    sore: [
+      "That was an outlier. I have the numbers.",
+      "Rematch. I have a bracket drawn up.",
     ],
   },
   // theatrical; QA is "the performance"
@@ -81,6 +105,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Curtain up on the next suite. Break a leg.",
       "Critics agree: this build is a triumph.",
     ],
+    sore: [
+      "A tragedy in three acts, and I played the fool.",
+      "The performance was robbed!",
+    ],
   },
   // quietly determined; finishes what she starts
   emma: {
@@ -90,6 +118,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Not done yet. Soon.",
       "One thing at a time. That one's almost done.",
       "I said I'd finish it. So I will.",
+    ],
+    sore: [
+      "Again. I'm not done.",
+      "One game. I'm taking the next one.",
     ],
   },
   // remembers everything, says so
@@ -101,6 +133,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "As I noted at the time — and I do note things —",
       "I remember every line of this. Every one.",
     ],
+    sore: [
+      "I remember every shot. This one still lost.",
+      "I will never forget this. Rematch.",
+    ],
   },
   // grandiose; every change is a masterpiece
   daneri: {
@@ -110,6 +146,10 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Behold: the definitive solution. You're welcome.",
       "My finest yet, and I say that without vanity.",
       "History will remember this merge. Mark it.",
+    ],
+    sore: [
+      "A masterpiece, undone by a single bounce!",
+      "History will record this as a draw.",
     ],
   },
   // sunny; brings a flower to every handoff
@@ -121,12 +161,17 @@ export const SEAT_VOICE: Record<string, Voice> = {
       "Passing it along with good vibes only.",
       "Done and dusted. Sunny side up, as ever.",
     ],
+    sore: [
+      "Good game! Mostly. A bit sore, honestly.",
+      "Well played. I'm picking you a flower out of spite.",
+    ],
   },
 }
 
 /** a plain-spoken builder, the fallback for a seat the table doesn't name */
 const GENERIC: Voice = {
   banter: ["Done. Moving on.", "That's built. Next.", "Right, that's sorted.", "Shipped it. On to the next."],
+  sore: ["Lost. Again, then.", "That table is rigged."],
 }
 
 /** a pick that skips what was said lately, while anything else is left to say */
@@ -136,4 +181,10 @@ export const seatLine = (name: string, recent: readonly string[]): string => {
   const unsaid = all.filter((l) => !recent.includes(l))
   const pool = unsaid.length ? unsaid : all
   return pool[Math.floor(Math.random() * pool.length)]!
+}
+
+/** what a seat says after losing a game to a rival */
+export const soreLine = (name: string): string => {
+  const sore = (SEAT_VOICE[name] ?? GENERIC).sore
+  return sore[Math.floor(Math.random() * sore.length)]!
 }

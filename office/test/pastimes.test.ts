@@ -4,6 +4,7 @@ import type { Actor } from "../kit/sim"
 import { parseSoul, useSouls } from "../kit/souls"
 import { EMPTY, type Agents } from "../kit/types"
 import { moment } from "../kit/sim"
+import { SEAT_VOICE } from "../kit/seat-voices"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { zones } from "../rooms/wide"
 import { WideRoom, widePlan } from "../rooms/wide"
@@ -287,5 +288,39 @@ describe("company: rivals pass without a high five", () => {
   test("friends and strangers still do", () => {
     expect(passing({ hronir: "admires yu" })).toEqual([true, true])
     expect(passing({})).toEqual([true, true])
+  })
+})
+
+describe("rivals play for blood", () => {
+  /** two coworkers across a game table, souls as given; `act` runs with Math.random fixed at 0.999 */
+  const game = (kind: "foosball" | "pool", people: Record<string, string>) => chance(0.999, () => {
+    useSouls(Object.fromEntries(Object.entries(people).map(([k, v]) => [k, parseSoul("## People\n" + v)])))
+    try {
+      const room = new WideRoom(560), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room)
+      room.step(a)
+      const [p, q] = [...r.actors.values()], [s1, s2] = widePlan(560).lounge.filter((s) => s.kind === kind)
+      const sit = (x: Actor, s: NonNullable<typeof s1>, until: number) => Object.assign(x, { x: s.x, y: s.y, spot: s, spotKey: `${s.kind}:${s.x}:${s.y}`, path: [], moving: false, until })
+      sit(p!, s1!, r.tick + 100); sit(q!, s2!, r.tick + 100)
+      room.step(a)
+      return { room, a, r, p: p!, q: q!, until: [p!.until - r.tick, q!.until - r.tick] }
+    } finally { useSouls({}) }
+  })
+  for (const kind of ["foosball", "pool"] as const) {
+    test(`rivals at ${kind} play longer than strangers`, () => {
+      const rivals = game(kind, { hronir: "needles yu" }), strangers = game(kind, {})
+      expect(rivals.until[0]! - strangers.until[0]!).toBe(800)
+      expect(rivals.until[1]! - strangers.until[1]!).toBe(800)
+    })
+  }
+  test("when the game breaks up the loser says a sour line in their own voice, and the sheriff's ledger is not touched", () => {
+    const g = game("foosball", { hronir: "needles yu" })
+    chance(0.999, () => { g.p.until = 0; g.q.until = 1e9; g.room.step(g.a) })
+    const said = (n: string) => (g.room as unknown as { talk: Map<string, { text: string | null }> }).talk.get(n)?.text
+    // Math.random 0.999 picks the second of the pair as the loser; it is `yu`
+    expect(SEAT_VOICE["yu"]!.sore).toContain(said("yu")!)
+    expect(said("hronir")).toBeUndefined()
+  })
+  test("friends and strangers play the ordinary game", () => {
+    expect(game("foosball", { hronir: "admires yu" }).until).toEqual(game("foosball", {}).until)
   })
 })
