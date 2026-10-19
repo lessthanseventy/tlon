@@ -390,6 +390,27 @@ defmodule Server.Release.PMTest do
       assert [] == PM.live_since(DateTime.add(DateTime.utc_now(), -60))
       refute Enum.any?(bodies(ws), &(&1 =~ "is live"))
     end
+
+    test "the live release carries the subjects of the commits the cut moved over, newest last, at most 12", %{repo: repo, live: seed, main: main} do
+      assert :ok = PM.note_live(root: repo)
+      assert %{sha: ^seed, notes: []} = PM.live_release()
+
+      git!(repo, ["branch", "-f", "live", main])
+      assert :ok = PM.note_live(root: repo)
+      assert %{sha: ^main, notes: ["office: the lamp says hello", "office: the desk says hello"]} = PM.live_release()
+
+      now = System.os_time(:second)
+      for n <- 1..14, do: commit!(repo, "f#{n}.txt", "#{n}\n", "change #{n}", now + 200 + n)
+      git!(repo, ["branch", "-f", "live", "HEAD"])
+      assert :ok = PM.note_live(root: repo)
+      assert %{notes: notes} = PM.live_release()
+      assert length(notes) == 12
+      assert List.last(notes) == "change 14"
+
+      git!(repo, ["branch", "-f", "live", seed])
+      assert :ok = PM.note_live(root: repo)
+      assert %{sha: ^seed, notes: []} = PM.live_release()
+    end
   end
 
   defp workline_merged!(ws, title, at) do

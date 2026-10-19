@@ -46,6 +46,9 @@ defmodule Server.Release.PM do
   ]
   @running_for 3600
 
+  # the subjects the cut moved the pointer over, the newest @notes_max; none on a first cut or a rollback
+  @notes_max 12
+
   @doc "What runs (`live`), origin/main, the commits waiting (oldest first), and main's checks as lines."
   def status(opts \\ []) do
     root = root(opts)
@@ -239,7 +242,7 @@ defmodule Server.Release.PM do
   Say on the root thread that the service runs a new release, once per release: the release
   pointer (`refs/heads/live` — a cut moves it only after building it, so a boot runs what it
   names) against the newest one said. The notice reads `release <sha> is live — N changes`
-  (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha}`. No
+  (`— back from <sha>` on a rollback, nothing more on the first), payload `%{"live" => sha, "notes" => [subject]}` (the subjects it moved over, at most 12; none on the first or a rollback). No
   pointer or no root thread says nothing. `:ok`. `opts`: `root:`.
   """
   def note_live(opts \\ []) do
@@ -258,7 +261,8 @@ defmodule Server.Release.PM do
     with {:ok, sha} when sha != prev <- live(root),
          %Thread{id: tid} <- Channel.machine_thread() do
       body = "release #{short(sha)} is live" <> since_last(root, prev, sha)
-      _ = Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: body, payload: %{"live" => sha}})
+      payload = %{"live" => sha, "notes" => notes(root, prev, sha)}
+      _ = Channel.post(%{thread_id: tid, author: "tlon", kind: "notice", body: body, payload: payload})
     end
 
     :ok
@@ -276,8 +280,8 @@ defmodule Server.Release.PM do
   defp changes(1), do: "1 change"
   defp changes(n), do: "#{n} changes"
 
-  @doc "The release the service runs and when it was said live (the newest `note_live/1` notice); nil before the first."
-  @spec live_release() :: %{sha: String.t(), cut_at: DateTime.t()} | nil
+  @doc "The release the service runs and when it was said live (the newest `note_live/1` notice), with its `notes`; nil before the first."
+  @spec live_release() :: %{sha: String.t(), cut_at: DateTime.t(), notes: [String.t()]} | nil
   def live_release do
     case Repo.one(
            from m in Message,
@@ -285,7 +289,7 @@ defmodule Server.Release.PM do
              order_by: [desc: m.id],
              limit: 1
          ) do
-      %Message{payload: %{"live" => sha}, created_at: at} -> %{sha: sha, cut_at: at}
+      %Message{payload: %{"live" => sha} = p, created_at: at} -> %{sha: sha, cut_at: at, notes: p["notes"] || []}
       nil -> nil
     end
   end
@@ -532,4 +536,13 @@ defmodule Server.Release.PM do
   defp git(root, args), do: System.cmd("git", ["-C", root | args], stderr_to_stdout: true)
 
   defp short(sha), do: String.slice(sha, 0, 7)
+
+  defp notes(_root, nil, _sha), do: []
+
+  defp notes(root, prev, sha) do
+    case git(root, ["merge-base", "--is-ancestor", prev, sha]) do
+      {_, 0} -> root |> commits(prev, sha) |> Enum.map(& &1.subject) |> Enum.take(-@notes_max)
+      _ -> []
+    end
+  end
 end
