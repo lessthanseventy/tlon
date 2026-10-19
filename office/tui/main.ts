@@ -42,7 +42,7 @@ import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wi
 import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk"
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
-import { bind, hints } from "./keys"
+import { bind, hints, LEGEND_CHARS, type KeyId } from "./keys"
 import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
@@ -225,7 +225,6 @@ let editEntry: Record<"front" | "side" | "back", string[]> | null = null
 let editCursor = { x: 0, y: 0 }
 let editScroll = 0
 let editMirror = true
-const LEGEND_CHARS = ["h", "f", "k", "s", "p", "b", "y", "c", "g", "e", "w", "r", "o"]
 const blankBuf = () => Array.from({ length: 22 }, () => ".".repeat(12))
 let picker: { title: string; q: Editor; items: Pick[]; sel: number } | null = null
 let reader: Reader | null = null
@@ -1807,7 +1806,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         }
         rows.push({ segs })
       }
-      rows.push({ segs: [dim(`1/2/3 view (${view}) · m mirror (${editMirror ? "on" : "off"}) · letter paints · . clears · ⏎ save · esc discard`)] })
+      const hint = (id: KeyId, label: string) => { const k = bind(id, label).key.split(" "); return k.length > 3 ? label : `${k.map(keyName).join("/")} ${label}` }
+      rows.push({ segs: [dim([hint("lookedit.view", `view (${view})`), hint("lookedit.mirror", `mirror (${editMirror ? "on" : "off"})`), hint("lookedit.paint", "letter paints"), hint("lookedit.clear", "clears"), hint("lookedit.save", "save"), hint("lookedit.discard", "discard")].join(" · "))] })
       return { title: `DRAW · ${name.toUpperCase()}`, rows, actions: [] }
     }
   }
@@ -2077,7 +2077,7 @@ function editorKey(k: string) {
     mode = { kind: "look", name }; sel = 0; snapSel = true; return draw()
   }
   if (k === ".") return paintAt(".")
-  if (LEGEND_CHARS.includes(k)) return paintAt(k)
+  if ((LEGEND_CHARS as readonly string[]).includes(k)) return paintAt(k)
 }
 
 /** the help card over the card you are on: its keys, the globals, the reader's and, in the sandbox, the play keys */

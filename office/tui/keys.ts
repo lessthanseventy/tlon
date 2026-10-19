@@ -17,6 +17,9 @@ export type Binding = {
   quiet?: boolean
 }
 
+/** the look editor's paint letters: each paints its colour, so they are the editor's alone */
+export const LEGEND_CHARS = ["h", "f", "k", "s", "p", "b", "y", "c", "g", "e", "w", "r", "o"] as const
+
 export const KEYS = [
   // global: the foot's hints, the help card's "everywhere"
   { id: "global.find", scope: "global", key: "/", label: "find", verb: "find" },
@@ -240,6 +243,14 @@ export const KEYS = [
   { id: "look.s", scope: "card:look", key: "enter", label: "save" },
   { id: "look.r", scope: "card:look", key: "y", label: "roll", verb: "again" },
   { id: "look.e", scope: "card:look", key: "e", label: "draw a custom look", verb: "edit" },
+  // card:look-editor: a paint mode that takes every key before the card does, so its letters are exempt from the one-verb rule (test/keys.test.ts)
+  { id: "lookedit.move", scope: "card:look-editor", key: "up down left right", label: "move the cursor" },
+  { id: "lookedit.paint", scope: "card:look-editor", key: LEGEND_CHARS.join(" "), label: "letter paints" },
+  { id: "lookedit.clear", scope: "card:look-editor", key: ".", label: "clears" },
+  { id: "lookedit.view", scope: "card:look-editor", key: "1 2 3", label: "view" },
+  { id: "lookedit.mirror", scope: "card:look-editor", key: "m", label: "mirror" },
+  { id: "lookedit.save", scope: "card:look-editor", key: "enter", label: "save" },
+  { id: "lookedit.discard", scope: "card:look-editor", key: "esc", label: "discard" },
   // card:hall
   { id: "hall.left", scope: "card:hall", key: "left", label: "pass" },
   { id: "hall.up", scope: "card:hall", key: "up", label: "maybe" },
