@@ -98,8 +98,15 @@ defmodule Server.Office.RoomTest do
 
     tr = Room.triage(ctx.ws.id)
 
-    assert [%{text: "blocked on review"}] = tr.blockers.shown
-    assert [%{text: "mix test"}] = tr.failed_checks.shown
+    assert [%{text: "blocked on review", summary: "blocked on review", issue_id: issue_id} = blocker] =
+             tr.blockers.shown
+
+    assert blocker.thread_id == ctx.t.id
+    assert Map.has_key?(blocker, :evidence) and Map.has_key?(blocker, :found_by) and blocker.created_at
+    assert is_integer(issue_id)
+    assert [%{text: "mix test", check_id: check_id, stage: stage, thread_id: tid} = failed] = tr.failed_checks.shown
+    assert is_integer(check_id) and Map.has_key?(failed, :slug) and tid == ctx.t.id and stage == ctx.t.stage
+    assert [%{thread_id: _}] = tr.unled.shown
     assert tr.count == length(tr.blockers.shown) + 1 + length(tr.unled.shown)
     assert Room.triage(ctx.other.id).count == 0
   end

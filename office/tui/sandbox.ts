@@ -25,7 +25,11 @@ const knob = (key: string, type: string, value: number | boolean, doc: string, b
 function answer(path: string): unknown {
   const p = path.split("?")[0]!
   if (/^\/office\/threads\/\d+$/.test(p)) return { messages: [], peek: null, window: null }
-  if (/^\/office\/triage\/\d+$/.test(p)) return { blockers: { shown: [], more: 0 }, failed_checks: { shown: [], more: 0 }, unled: { shown: [], more: 0 }, count: 0 }
+  if (/^\/office\/triage\/\d+$/.test(p)) return {
+    blockers: { shown: [{ thread_id: 100, title: "the sheriff's beat", text: "the build is red on main", issue_id: 7, found_by: "scharlach", created_at: ago(95), summary: "the build is red on main", evidence: "mix test: 3 failures in Server.Office.RoomTest\nfirst red at 4:04" }], more: 0 },
+    failed_checks: { shown: [{ thread_id: 101, title: "a ticket at verify", text: "mix test", check_id: 9, slug: "workline:t:verify", stage: "verify" }], more: 0 },
+    unled: { shown: [{ thread_id: 102, title: "an orphan thread", text: "nobody leads it" }], more: 0 }, count: 3,
+  }
   if (/^\/office\/toys\/\d+$/.test(p)) return {
     visitors: [{ name: "Mr. Plover", look_seed: "plover", line: "Is this the room with the ducks?" }, { name: "Dr. Ismene", look_seed: "ismene", line: "I am here about the aquarium. It is calling." }],
     puns: ["I would tell you a UDP joke, but you might not get it."],

@@ -66,7 +66,7 @@ type Mode =
   | { kind: "home" } | { kind: "crew" } | { kind: "notes" } | { kind: "boss" } | { kind: "archive" }
   | { kind: "person"; name: string; from?: Mode } | { kind: "thread"; tid: number; from?: Mode }
   | { kind: "column"; col: number } | { kind: "ticket"; id: number; from?: Mode } | { kind: "epic"; id: number; from?: Mode } | { kind: "calendar" } | { kind: "life" } | { kind: "pages" }
-  | { kind: "tray" } | { kind: "triage" } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
+  | { kind: "tray" } | { kind: "triage" } | { kind: "issue"; id: number; from?: Mode } | { kind: "health" } | { kind: "memory" } | { kind: "card" }
   | { kind: "runs"; id: number } | { kind: "run"; id: number; run: number } | { kind: "pet"; who: "cat" | "dog" } | { kind: "arcade" } | { kind: "ideas" } | { kind: "banter" } | { kind: "needs" } | { kind: "decide"; i: number } | { kind: "babel"; page: string[] } | { kind: "entry" }
   | { kind: "build" } | { kind: "settings" } | { kind: "whimsy" } | { kind: "review"; tid: number; from?: Mode }
   | { kind: "look"; name: string; from?: Mode } | { kind: "look-editor"; name: string; view: "front" | "side" | "back"; from?: Mode }
@@ -554,7 +554,7 @@ async function loadCard() {
 async function readCard(w: number) {
   switch (mode.kind) {
     case "archive": archived = await data.archive(w); break
-    case "triage": stuck = await data.triage(w); break
+    case "triage": case "issue": stuck = await data.triage(w); break
     case "health": rack = await data.health(); break
     case "memory": shelf = await data.memory(w); break
     case "ticket": case "epic": case "column": tickets = (await data.board(w)) ?? tickets; break
@@ -579,7 +579,7 @@ function openThread(): number | null {
   return null
 }
 function open(m: Mode) {
-  if ((m.kind === "person" || m.kind === "thread" || m.kind === "look" || m.kind === "review") && m.from === undefined && mode.kind !== "home" && mode.kind !== "help" && mode.kind !== m.kind) m = { ...m, from: mode }
+  if ((m.kind === "person" || m.kind === "thread" || m.kind === "look" || m.kind === "review" || m.kind === "issue") && m.from === undefined && mode.kind !== "home" && mode.kind !== "help" && mode.kind !== m.kind) m = { ...m, from: mode }
   status = ""; readWhys.delete(cardKey(m)); mode = m; sel = 0; scroll = m.kind === "thread" || m.kind === "person" ? Infinity : 0; confirm = null; picker = null; snapSel = true
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
@@ -729,6 +729,24 @@ async function finder() {
 /** a page of the Library of Babel, the width of the card */
 function openBabel() { open({ kind: "babel", page: babelPage(DETAIL - 2, Math.max(20, paneW() - 4)) }) }
 
+/** what a triage item is: its section, and so which actions it has */
+type StuckKind = "blocker" | "check" | "unled"
+const oneLine = (t: string) => t.replace(/\s+/g, " ")
+/** the triage card's lit row and the issue card share these: the issue verbs are the inbox's issue need's */
+function stuckActions(s: data.Stuck, kind: StuckKind): Action[] {
+  const after = () => { if (mode.kind === "issue" && !stuck?.blockers.shown.some((x) => x.issue_id === s.issue_id)) back(); draw() }
+  const read: Action = { ...bind("need.v"), run: () => openReader(s.thread_id) }
+  if (kind === "blocker" && s.issue_id !== undefined) {
+    const id = s.issue_id
+    return [
+      { ...bind("need.g.issue"), run: () => void did(data.fixIssue(id)).then(after) },
+      { ...bind("need.x.issue"), run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (r) => { if (r.trim()) void did(data.resolveIssue(id, r.trim())).then(after) }) },
+      read,
+    ]
+  }
+  if (kind === "check") return [...(s.stage === "verify" ? [{ ...bind("need.V.verify_failed"), run: () => void did(data.reverify(s.thread_id)).then(after) }] : []), read]
+  return [{ ...bind("need.o.stalled"), run: () => ask(`hand #${s.thread_id} to — a coworker's name`, (r) => { if (r.trim()) void did(data.handOff(s.thread_id, r.trim())).then(after) }) }, read]
+}
 /** what a stalled need's nudge says to the lead */
 const NUDGE = "Nothing has moved here for a while: advance the stage if its work is done, or say what is blocking you."
 /** what can be done about one waiting item — the inbox's list and its one-at-a-time card share these */
@@ -1357,14 +1375,38 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     case "triage": {
       if (!stuck) return { title: "TRIAGE", rows: [{ segs: [waiting("looking…")] }], actions: [back1] }
       const rows: Row[] = []
-      const section = (name: string, c: data.Capped<data.Stuck>) => {
+      const section = (name: string, c: data.Capped<data.Stuck>, kind: StuckKind) => {
         if (!c.shown.length) return
         rows.push({ segs: [key(name)] })
-        for (const s of c.shown) rows.push({ segs: [key(`  #${s.thread_id} `), plain(s.title), pink(`  ${s.text}`)], open: () => openReader(s.thread_id) })
+        for (const s of c.shown) {
+          const segs = kind === "blocker"
+            ? [key(`  #${s.issue_id} `), dim(`${s.created_at ? ago(s.created_at) : ""} ${s.found_by ?? ""}  `), pink(oneLine(s.summary ?? s.text))]
+            : [key(`  #${s.thread_id} `), plain(s.title), pink(`  ${s.text}`)]
+          rows.push({ segs, open: kind === "blocker" ? () => open({ kind: "issue", id: s.issue_id! }) : () => openReader(s.thread_id), ref: { s, kind } })
+        }
         if (c.more) rows.push({ segs: [dim(`  +${c.more} more`)] })
       }
-      section("BLOCKERS — open issues", stuck.blockers); section("FAILED CHECKS", stuck.failed_checks); section("NOBODY LEADS", stuck.unled)
-      return { title: `TRIAGE · ${stuck.count} known problems · the sheriff's`, rows: rows.length ? rows : [{ segs: [dim("nothing is stuck. the beacon is dark.")] }], actions: [back1] }
+      section("BLOCKERS — open issues", stuck.blockers, "blocker"); section("FAILED CHECKS", stuck.failed_checks, "check")
+      if (stuck.failed_checks.shown.length) rows.push({ segs: [dim("  y re-runs verify, only for a thread at its verify stage")] })
+      section("NOBODY LEADS", stuck.unled, "unled")
+      // the cursor lands on the first row only after this build, so its actions are read from where it will be
+      const at = rows[rows[sel]?.open ? sel : rows.findIndex((r) => r.open)]?.ref as { s: data.Stuck; kind: StuckKind } | undefined
+      return {
+        title: `TRIAGE · ${stuck.count} known problems · the sheriff's`, rows: rows.length ? rows : [{ segs: [dim("nothing is stuck. the beacon is dark.")] }],
+        actions: [...(at ? stuckActions(at.s, at.kind) : []), back1],
+      }
+    }
+    case "issue": {
+      const id = mode.id, s = stuck?.blockers.shown.find((x) => x.issue_id === id)
+      if (!stuck) return { title: `ISSUE #${id}`, rows: [{ segs: [waiting("looking…")] }], actions: [back1] }
+      if (!s) return { title: `ISSUE #${id}`, rows: [{ segs: [dim("it is no longer an open blocker: fixed, resolved or owned.")] }], actions: [back1] }
+      const w = Math.max(20, paneW() - 4), paras = (t: string) => t.split("\n").flatMap((p) => (p.trim() ? wrap(p, w) : [""])).map((l): Row => ({ segs: [plain(l)] }))
+      const rows: Row[] = [
+        { segs: [dim(`found by ${s.found_by ?? "?"} · ${s.created_at ? ago(s.created_at) : "?"} ago · raised on `), key(`#${s.thread_id} `), plain(s.title)] },
+        { segs: [plain("")] }, { segs: [key("SUMMARY")] }, ...paras(s.summary ?? s.text),
+        ...(s.evidence ? [{ segs: [plain("")] }, { segs: [key("EVIDENCE")] }, ...paras(s.evidence)] : []),
+      ]
+      return { title: `ISSUE #${id}`, tint: ROLE.attention, rows, actions: [...stuckActions(s, "blocker"), back1] }
     }
     case "health": {
       if (!rack) return { title: "THE RACK", rows: [{ segs: [waiting("probing…")] }], actions: [back1] }
