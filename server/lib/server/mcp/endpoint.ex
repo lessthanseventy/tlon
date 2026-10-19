@@ -105,6 +105,9 @@ defmodule Server.MCP.Endpoint do
   component(Server.MCP.Tool.SetUrgency, name: "set_urgency")
   # QA's (roster design §5): what it saw driving a reviewed user-visible change.
   component(Server.MCP.Tool.SubmitQA, name: "submit_qa")
+  component(Server.MCP.Tool.StartSmoke, name: "start_smoke")
+  component(Server.MCP.Tool.DriveSmoke, name: "drive_smoke")
+  component(Server.MCP.Tool.StopSmoke, name: "stop_smoke")
   # The librarian's: curating the office's memory, each change with its reason.
   component(Server.MCP.Tool.SupersedeFact, name: "supersede_fact")
   component(Server.MCP.Tool.ForgetFact, name: "forget_fact")

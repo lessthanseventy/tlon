@@ -27,7 +27,7 @@ config :phoenix, :json_library, JSON
 config :server, Oban,
   engine: Oban.Engines.Basic,
   repo: Server.Repo,
-  queues: [default: 5, maintain: 1, staff: 1, verify: 1, landing: 1, schedules: 2],
+  queues: [default: 5, maintain: 1, staff: 1, verify: 1, smoke: 2, landing: 1, schedules: 2],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
     # a job left `executing` by a restart is requeued at boot (Server.Jobs.Orphans); this rescues one
