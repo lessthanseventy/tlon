@@ -57,8 +57,10 @@ function answer(path: string): unknown {
   return undefined
 }
 
+const NOTES = ["doorbell: the bell rattles", "nina: no more keyboard", "tv: a channel for releases", "uqbar: footnotes get numbers", "crew: one word for a seat", "door: a pool of guests"]
+
 export function toy() {
-  let w = 0, night = false, visits: Visit[] = [], who = 0
+  let w = 0, night = false, visits: Visit[] = [], who = 0, cuts = 0
   const hired = new Set<string>()
   const front = { id: 100, title: "lobby", stage: null, awaiting: null, workspace_id: 1, lead: null, live: false, standing: true }
   const threads = TITLES.map((title, i) => ({ id: 101 + i, title, stage: i % 2 ? "build" : "plan", awaiting: null, workspace_id: 1, lead: NAMES[1 + i]!, live: true, seat: "desk" as const }))
@@ -69,7 +71,7 @@ export function toy() {
     read: (path: string) => answer(path),
     snapshot(): Agents {
       const shifts = bench.map((b, i) => ({ workspace_id: 1, seat_id: b.seat_id, name: b.name, archetype: b.archetype, crew: (hired.has(b.name) ? "all" : i < 6 ? "day" : "night") as "day" | "night" | "all" }))
-      return { ...EMPTY, ok: true, tickets: TICKETS, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "anthropic/claude-sonnet" }, { name: "sheriff", meta: false, read_only: true, model: "anthropic/claude-haiku" }], bench, threads: [front, ...threads], roster, weather: { ...WEATHER[w]! }, visits }
+      return { ...EMPTY, ok: true, tickets: TICKETS, workspaces: [{ id: 1, name: "Toy", shift: "day" as const }], shifts, archetypes: [{ name: "builder", meta: false, read_only: false, model: "anthropic/claude-sonnet" }, { name: "sheriff", meta: false, read_only: true, model: "anthropic/claude-haiku" }], bench, threads: [front, ...threads], roster, weather: { ...WEATHER[w]! }, visits, release: cuts ? { sha: `${(0x650fa4a + cuts * 0x1111).toString(16).padStart(7, "0")}beef`, cut_at: new Date().toISOString(), notes: NOTES.slice(0, 2 + cuts % 5) } : null }
     },
     /** the hall's hire: a pretend seat on the bench, on shift for everyone */
     hire(c: { name: string; archetype: string }) {
@@ -79,6 +81,8 @@ export function toy() {
       bench.push({ workspace_id: 1, seat_id: id, agent_id: id, name: c.name, archetype: c.archetype, lead: false, model: null, ask: null })
     },
     nextWeather() { w = (w + 1) % WEATHER.length },
+    /** a pretend release: the next snapshot carries a new sha and its notes */
+    cut() { cuts++ },
     /** someone else walks over to `to` (the sim reads a visit younger than a minute) */
     callOver(to: string) {
       const from = NAMES.filter((n) => n !== to)[who++ % (NAMES.length - 1)]!

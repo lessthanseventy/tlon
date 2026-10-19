@@ -100,3 +100,17 @@ describe("the toys payload", () => {
       .toEqual({ visitors: [{ name: "A", look_seed: "A", line: "hi" }], puns: ["p"], reactions: { x: { fire_drill: ["a"] } } })
   })
 })
+
+describe("a cut on the wide room", () => {
+  test("the TV takes the release and Uqbar is sent to it; settling lets the book go home", () => seeded(3, () => {
+    const room = new WideRoom(560), a = { ...viewOf(office(CREW), 1), uqbar: { agent: "uqbar", thread_id: 9, title: "", warm: true, thinking: false } }
+    const r = room as unknown as { errand: { kind: string; name?: string; dwell: number } | null; awake: boolean }
+    for (let i = 0; i < 5; i++) room.step(a)
+    expect(r.awake).toBe(true)
+    room.cut("650fa4a", ["one", "two"])
+    expect(room.cutting).toBe(true)
+    expect(r.errand).toMatchObject({ kind: "tv", name: "cut", dwell: Infinity })
+    room.cutDone()
+    expect(r.errand!.dwell).toBeLessThan(Infinity)
+  }))
+})
