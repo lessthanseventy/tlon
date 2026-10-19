@@ -1,0 +1,41 @@
+# B7 drive walk, wide room (OFFICE_WIDE=1 office/test/drive/run.sh wide): board cards (#177) and the hit map by click.
+# Layout is the 280x75 window: board header row 3, cards rows 4-5, NOTES at (146,5).
+wait:Toy
+-l $'\033[<0;88;4M\033[<0;88;4m'
+Escape
+Escape
+-l $'\033[<0;105;4M\033[<0;105;4m'
+Escape
+Escape
+-l $'\033[<0;88;5M\033[<0;88;5m'
+Escape
+Escape
+-l $'\033[<0;105;5M\033[<0;105;5m'
+Escape
+Escape
+-l $'\033[<0;84;3M\033[<0;84;3m'
+Escape
+-l $'\033[<0;34;3M\033[<0;34;3m'
+Escape
+-l $'\033[<0;147;5M\033[<0;147;5m'
+Escape
+-l $'\033[<0;166;7M\033[<0;166;7m'
+Escape
+-l $'\033[<0;6;19M\033[<0;6;19m'
+Escape
+-l $'\033[<0;198;35M\033[<0;198;35m'
+Escape
+-l $'\033[<0;54;39M\033[<0;54;39m'
+Escape
+-l $'\033[<0;54;35M\033[<0;54;35m'
+Escape
+-l $'\033[<0;150;43M\033[<0;150;43m'
+Escape
+e
+f
+d
+t
+n
+w
+p
+c
