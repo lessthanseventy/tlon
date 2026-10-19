@@ -1,6 +1,6 @@
 defmodule Server.Jobs.Diary do
   @moduledoc """
-  Weekly (Monday, `config/config.exs`), each builder seat's week is written to its soul's Diary
+  Weekly (Monday, `config/config.exs`), each seat's week is written to its soul's Diary
   (`Server.Diary.write/3`). A seat whose newest diary line is under six days old is skipped, and entries dated on
   or before that line are not written again, so a retry, a restart or the next week's overlapping
   window never writes a landing twice. A seat with no soul file is skipped, never created.
