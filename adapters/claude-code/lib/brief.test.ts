@@ -70,6 +70,13 @@ describe("renderBrief — the honest brief (pi doc §2b)", () => {
     expect(out).toContain('"tabs, not splits"');
   });
 
+  test("a stated fact is credited to the configured operator, not a literal", () => {
+    const stated = { id: 1, kind: "constraint", text: "tabs, not splits", provenance: "stated", check_cmd: null, certainty: "stated", at: minsAgo(10) };
+    const out = renderBrief(dossier({ learnings: { shown: [stated], more: 0 } } as never), NOW, undefined, "Claude Code", "someone");
+    expect(out).toContain('[stated] someone: "tabs, not splits"');
+    expect(out).not.toContain("andrew");
+  });
+
   test("a checked fact carries the command that re-runs it", () => {
     const out = renderBrief(
       dossier({
