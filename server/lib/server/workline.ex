@@ -9,7 +9,7 @@ defmodule Server.Workline do
   `advance/2` is the single mutation point and carries the invariant: NO advance without the
   stage's owed artifact (checked through the `Server.Workline.Artifacts` behaviour, recorded
   as a CHECK either way, correlation `workline:<slug>:artifact`). Gated transitions —
-  spec→plan, review→merged, and a machine-born intent→spec — park in `awaiting: "andrew"`
+  spec→plan, review→merged, and a machine-born intent→spec — park in `awaiting: <operator>`
   instead of flipping; `approve/1` is the operator's completion verb. A reviewed change Andrew
   would see (`@user_visible` paths) also owes a QA pass before its gate (`qa_verdict/5`), when the
   bench seats a qa. Every completed flip
@@ -334,7 +334,7 @@ defmodule Server.Workline do
          :ok <- reviewed_current(thread),
          :ok <- qa_cleared(thread, opts) do
       if queue?(thread, checker, opts),
-        do: queue(thread, "approved", thread.awaiting || "andrew"),
+        do: queue(thread, "approved", thread.awaiting || operator()),
         else: approve_now(thread, checker, opts)
     end
   end
@@ -834,7 +834,7 @@ defmodule Server.Workline do
     thread = Repo.get!(Thread, thread.id)
     checker = Keyword.get(opts, :artifacts, Git)
 
-    if thread.stage == "review" and thread.awaiting == "andrew" and auto_land?(thread, checker, opts),
+    if thread.stage == "review" and thread.awaiting == operator() and auto_land?(thread, checker, opts),
       do: queue(thread, auto_land_note(thread, opts), "auto_land_risk"),
       else: {:ok, thread}
   end
@@ -1027,7 +1027,7 @@ defmodule Server.Workline do
   def flag(attrs, evidence) do
     with {:ok, thread} <- open(Map.put(attrs, :born, "machine")) do
       post_brief(thread, evidence)
-      {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
+      {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: operator()}) |> Repo.update()
       Server.Bus.broadcast({:workline_gated, parked})
       post_brief(parked, Brief.gate_message(parked))
       {:ok, parked}
@@ -1109,7 +1109,7 @@ defmodule Server.Workline do
   end
 
   defp park_on_operator(thread, checker) do
-    {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: "andrew"}) |> Repo.update()
+    {:ok, parked} = thread |> Thread.workline_stage_changeset(%{awaiting: operator()}) |> Repo.update()
     Server.Bus.broadcast({:workline_gated, parked})
     proof = if parked.stage == "review", do: proof(parked, artifacts: checker)
     post_brief(parked, Brief.gate_message(parked, proof))
@@ -1767,7 +1767,7 @@ defmodule Server.Workline do
     lead = Server.Channel.thread_lead(thread.id)
 
     cond do
-      by == Application.get_env(:server, :operator, "andrew") or by == tech ->
+      by == operator() or by == tech ->
         :ok
 
       to == "build" and by == lead ->
@@ -1780,7 +1780,7 @@ defmodule Server.Workline do
       true ->
         {:error,
          {:not_yours,
-          "back to #{to} is the tech lead's call: say why on the thread and @#{tech || "andrew"}, who decides"}}
+          "back to #{to} is the tech lead's call: say why on the thread and @#{tech || operator()}, who decides"}}
     end
   end
 
@@ -2157,4 +2157,6 @@ defmodule Server.Workline do
            do: Logger.warning("follow-up ##{t.id} not superseded: #{inspect(why)}")
     end
   end
+
+  defp operator, do: Application.get_env(:server, :operator, "andrew")
 end
