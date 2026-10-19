@@ -62,8 +62,8 @@ to, and at what cost, so routing is a measurement rather than a guess.
 
 ## Try it without a server
 
-The office has a sandbox: a made-up world with its own crew and play keys (`d` doorbell, `e` event,
-`t` treat, `f` fire drill, `n` night, `w` weather, `p` pet, `c` call over). The moods above come from it.
+The office has a sandbox: a made-up world with its own crew and play keys (`D` doorbell, `E` event,
+`T` treat, `F` fire drill, `N` night, `W` weather, `P` pet, `C` call over). The moods above come from it.
 
 ```sh
 OFFICE_SANDBOX=1 tlon office      # from a release

@@ -88,12 +88,12 @@ export class Reader {
       return "done"
     }
     switch (k) {
-      case "esc": case "q": return "leave"
-      case "r": case "i": case "enter": this.composer = this.draft ?? new Editor(); this.draft = null; return "done"
+      case "esc": return "leave"
+      case "r": case "enter": this.composer = this.draft ?? new Editor(); this.draft = null; return "done"
       case "j": case "down": return this.scrollBy(-1)
       case "k": case "up": return this.scrollBy(1)
       case "pgdn": case " ": return this.scrollBy(-page)
-      case "pgup": case "b": return this.scrollBy(page)
+      case "pgup": return this.scrollBy(page)
       case "end": this.scroll = 0; return "done"
       case "home": this.scroll = Infinity; return this.older()
     }

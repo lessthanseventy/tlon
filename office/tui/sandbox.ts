@@ -44,5 +44,3 @@ export type Toy = ReturnType<typeof toy>
 
 /** the sandbox's play keys, as the help line lists them; `toyKey()` in main.ts handles each */
 export const PLAY = hints("sandbox-play")
-/** a card's actions in the sandbox: those the play keys shadow are hidden, since toyKey() takes them first */
-export const playable = <T extends { key: string }>(acts: T[]): T[] => acts.filter((x) => !PLAY.some((p) => p.key === x.key))

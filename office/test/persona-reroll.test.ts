@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-// E → "draw a new one (reroll)" throws away the persona's hand edits, so it asks first: n changes
+// e → "draw a new one (reroll)" throws away the persona's hand edits, so it asks first: n changes
 // nothing, y rerolls, and says so while the model call runs. Drives the real TUI against a stub
 // server that holds the reroll's answer until the test lets it go, and reads what it posted.
 const persona = { seed: 7, source: "model", voice: "dry", backstory: "Grew up above a clockmaker's.", quirks: { desk_object: "a mug", hobby: "chess", catchphrase: "Noted.", pet_peeve: "tabs" } }
@@ -41,7 +41,7 @@ const until = async (what: string, ok: () => boolean) => {
 }
 const settle = () => Bun.sleep(400)
 
-test("E then reroll asks first: n changes nothing, y rerolls", async () => {
+test("e then reroll asks first: n changes nothing, y rerolls", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
     `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
@@ -52,7 +52,7 @@ test("E then reroll asks first: n changes nothing, y rerolls", async () => {
   await until("ada in the finder", () => screen().includes("coworker ada"))
   tmux("send-keys", "-t", "0", "enter")
   await settle()
-  tmux("send-keys", "-t", "0", "E")
+  tmux("send-keys", "-t", "0", "e")
   await until("the persona picker", () => screen().includes("ADA'S PERSONA"))
   tmux("send-keys", "-t", "0", "enter")
   await until("the reroll ask", () => screen().includes("reroll") && screen().includes("(y/n)"))
@@ -60,7 +60,7 @@ test("E then reroll asks first: n changes nothing, y rerolls", async () => {
   await settle()
   expect(screen()).not.toContain("(y/n)")
   expect(posts).toEqual([])
-  tmux("send-keys", "-t", "0", "E")
+  tmux("send-keys", "-t", "0", "e")
   await until("the persona picker again", () => screen().includes("ADA'S PERSONA"))
   tmux("send-keys", "-t", "0", "enter")
   await until("the reroll ask again", () => screen().includes("(y/n)"))
