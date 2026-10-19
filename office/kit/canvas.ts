@@ -52,6 +52,8 @@ export function fit(measure: Measure, name: string, w: number, size: number) {
   while (n.length > 2 && measure(n, size) > w) n = n.slice(0, -1)
   return n === name ? name : `${n.slice(0, -1)}.`
 }
+/** an overflowing balloon ends with this: `v` is the key that opens the conversation (keys.ts `person.v`), so the rest is one key away */
+const MORE = "... (v)"
 /** what someone said, as a balloon's few lines: ASCII (a toy font has no fallback), 34x4 by default, a word longer than a line hard-broken */
 export function balloonLines(said: string, width = 34, rows = 4): string[] {
   const flat = said.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...")
@@ -68,6 +70,7 @@ export function balloonLines(said: string, width = 34, rows = 4): string[] {
   if (line) lines.push(line)
   if (lines.length <= rows) return lines
   const kept = lines.slice(0, rows)
-  kept[rows - 1] = kept[rows - 1]!.slice(0, Math.max(0, width - 3)).trimEnd() + "..."
+  const more = width > MORE.length ? MORE : "..."
+  kept[rows - 1] = kept[rows - 1]!.slice(0, Math.max(0, width - more.length)).trimEnd() + more
   return kept
 }
