@@ -71,7 +71,8 @@ test("the finder has a verb for the tickets board and does not list unrelated ro
   keys("Escape")
   text("/")
   text("nina")
-  await until("nina in the finder", () => screen().includes("Nina, the cat"))
+  // the query echoes key by key, and a partial "ni" rightly matches more: assert once all of it is in
+  await until("nina in the finder", () => /FIND\b.*: nina\b/.test(screen()) && screen().includes("Nina, the cat"))
   expect(screen()).not.toContain("settings: the running")
   keys("Escape")
   text("/")
