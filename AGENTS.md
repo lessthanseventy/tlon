@@ -223,7 +223,7 @@ exists so a reader of the repo knows where the law comes from and edits the one 
   commit (a review's commit too). It is the model as launched (a mid-session switch is not seen), so
   the record holds even when a model is wrong about itself.
 - **Sandboxed Bash — phantom dotfiles and unreachable localhost are the sandbox, not the repo.** Claude
-  Code's bash sandbox (an ollama coworker's runs strict, from its profile's `sandbox.json`) has three
+  Code's bash sandbox (a coworker's runs strict, from its profile's `sandbox.json`) has three
   symptoms, and none is a bug to chase:
   - *Phantom untracked dotfiles.* The wrapper bind-mounts over shell-rc / `.gitconfig` / editor paths,
     so `git status` **run inside a bash call** reports `.bashrc`, `.zshrc`, `.gitconfig`, `.env`,

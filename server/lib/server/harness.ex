@@ -57,8 +57,10 @@ defmodule Server.Harness.ClaudeCode do
   prompt — a second `--append-system-prompt` flag would *replace* the citizen protocol, not add to
   it); the model as `--model` and its thinking as `--effort`; the provider as `TLON_PROVIDER`. Its
   permission floor (`Server.Profiles`) lands as deny rules (`TLON_PERMISSIONS_DENY`), which hold in
-  every permission mode. A non-Anthropic seat whose workspace allows without asking runs in its
-  sandbox (`TLON_SANDBOX_FILE`) with no prompts; one set to ask keeps auto mode.
+  every permission mode. A seat whose workspace allows without asking, on any provider, runs in its
+  sandbox (`TLON_SANDBOX_FILE`) with no prompts; one set to ask keeps auto mode. The Claude plan is
+  no exception: auto mode refuses a command that must run outside the sandbox and nobody is at the
+  pane to allow it, so what a seat needs outside it is a server tool.
   """
   @behaviour Server.Harness.Driver
 
@@ -110,8 +112,8 @@ defmodule Server.Harness.ClaudeCode do
     end
   end
 
-  defp sandbox_env(%Profile{sandbox: sandbox, permissions: perms, model: model} = p) when is_map(sandbox) do
-    if provider(model) != "anthropic" and (perms || %{})["yoloMode"] != false,
+  defp sandbox_env(%Profile{sandbox: sandbox, permissions: perms} = p) when is_map(sandbox) do
+    if (perms || %{})["yoloMode"] != false,
       do: "TLON_SANDBOX_FILE=#{Path.join(Profiles.config_dir(p), "sandbox.json")} ",
       else: ""
   end

@@ -79,7 +79,7 @@ defmodule Server.HarnessTest do
       assert cmd =~ "--model glm-5.2 --effort medium"
     end
 
-    test "a sandboxed ollama seat that runs without asking gets its sandbox; one set to ask, or on the Claude plan, doesn't" do
+    test "a sandboxed seat that runs without asking gets its sandbox, on any provider; one set to ask doesn't" do
       sandboxed = Profiles.instantiate(%{archetype: :builder, name: "hronir", model: @glm})
       assert Harness.driver(:claude_code).launch_command(sandboxed) =~ "TLON_SANDBOX_FILE="
 
@@ -87,7 +87,10 @@ defmodule Server.HarnessTest do
       refute Harness.driver(:claude_code).launch_command(asks) =~ "TLON_SANDBOX_FILE"
 
       on_plan = Profiles.instantiate(%{archetype: :builder, name: "hronir"})
-      refute Harness.driver(:claude_code).launch_command(on_plan) =~ "TLON_SANDBOX_FILE"
+      assert Harness.driver(:claude_code).launch_command(on_plan) =~ "TLON_SANDBOX_FILE="
+
+      plan_asks = %{on_plan | permissions: Map.put(on_plan.permissions, "yoloMode", false)}
+      refute Harness.driver(:claude_code).launch_command(plan_asks) =~ "TLON_SANDBOX_FILE"
     end
 
     test "a write-denying policy (the reviewer) exports the write fence" do

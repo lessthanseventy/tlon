@@ -85,10 +85,10 @@ perms_json=""
 # statusLine stays out of a citizen's window.
 settings_json="{\"statusLine\":{\"type\":\"command\",\"command\":\"true\"}$perms_json}"
 
-# A sandboxed role (`Server.Harness` sets TLON_SANDBOX_FILE, the profile's sandbox settings) never
+# A sandboxed seat, on any provider (`Server.Harness` sets TLON_SANDBOX_FILE, the profile's sandbox settings) never
 # waits on a prompt: its bash runs fenced (strict, so it can neither reach a host off the allowlist
 # nor retry outside the sandbox, nor start without one), the tools it works with are allowed, and
-# dontAsk refuses anything else instead of asking a pane nobody watches.
+# dontAsk refuses anything else instead of asking a pane nobody watches. Auto mode (a seat set to ask) is the fallback.
 mode=auto
 if [ -n "${TLON_SANDBOX_FILE:-}" ] && [ -f "$TLON_SANDBOX_FILE" ]; then
   sandbox="$(jq -c '. * {enabled: true, autoAllowBashIfSandboxed: true, allowUnsandboxedCommands: false, failIfUnavailable: true, network: {strictAllowlist: true}}' "$TLON_SANDBOX_FILE")"
