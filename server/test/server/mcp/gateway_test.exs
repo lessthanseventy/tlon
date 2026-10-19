@@ -850,5 +850,34 @@ defmodule Server.MCP.GatewayTest do
       for round <- 1..10, i <- 1..4, do: assert("round #{round} page #{i}" in kept)
       assert "first page" in kept
     end
+
+    test "GET /api/office/toys/:ws is the day's visitors, reactions and puns, empty until generated" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "toyed", type: "code", scope: "project", repos: [], roster: []})
+
+      assert {200, %{"visitors" => [], "puns" => [], "reactions" => %{}}} = get_json("/api/office/toys/#{ws.id}")
+
+      for {key, items} <- [
+            {"visitors", [%{"name" => "Mabel", "look_seed" => 3, "line" => "Cookies, anyone?"}]},
+            {"puns", ["UDP joke"]},
+            {"reactions:lonnrot", %{"zoo" => ["Is that a goat?"]}}
+          ] do
+        Server.Repo.insert!(%Server.ToyPool{
+          workspace_id: ws.id,
+          key: key,
+          items: %{"items" => items},
+          seed: 1,
+          generated_at: DateTime.truncate(DateTime.utc_now(), :second)
+        })
+      end
+
+      assert {200,
+              %{
+                "visitors" => [%{"name" => "Mabel", "line" => "Cookies, anyone?"}],
+                "puns" => ["UDP joke"],
+                "reactions" => %{"lonnrot" => %{"zoo" => ["Is that a goat?"]}}
+              }} = get_json("/api/office/toys/#{ws.id}")
+
+      assert {404, _} = get_json("/api/office/toys/nope")
+    end
   end
 end

@@ -149,4 +149,20 @@ defmodule Server.ToyPoolTest do
     ToyPool.refresh_all_due(ws.id)
     assert count(calls) == 6
   end
+
+  test "day is every stored pool of the workspace, empty until generated", %{ws: ws} do
+    assert ToyPool.day(ws.id) == %{visitors: [], puns: [], reactions: %{}}
+
+    {:ok, _} = ToyPool.refresh(ws.id, :visitors)
+    {:ok, _} = ToyPool.refresh(ws.id, :puns)
+    {:ok, _} = ToyPool.refresh(ws.id, {:reactions, "lonnrot"})
+
+    assert %{
+             visitors: [%{"name" => "Mabel"}],
+             puns: [pun],
+             reactions: %{"lonnrot" => %{"zoo" => ["Is that a goat?"], "duck" => ["Hm."]}}
+           } = ToyPool.day(ws.id)
+
+    assert pun =~ "UDP"
+  end
 end

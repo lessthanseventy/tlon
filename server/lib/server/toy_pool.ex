@@ -83,6 +83,25 @@ defmodule Server.ToyPool do
     Repo.update_all(from(p in __MODULE__, where: p.workspace_id == ^ws and p.key == ^key), set: [generated_at: at])
   end
 
+  @doc """
+  Everything stored for `ws` in one read, for the office to show: `%{visitors, puns, reactions}`,
+  `reactions` being `%{seat => %{event => [line]}}`. Empty parts are `[]` / `%{}` until generated.
+  """
+  def day(ws) do
+    reactions =
+      Map.new(
+        Repo.all(
+          from(p in __MODULE__,
+            where: p.workspace_id == ^ws and like(p.key, "reactions:%"),
+            select: {p.key, p.items}
+          )
+        ),
+        fn {"reactions:" <> seat, %{"items" => by_event}} -> {seat, by_event} end
+      )
+
+    %{visitors: visitors(ws), puns: puns(ws), reactions: reactions}
+  end
+
   defp read(ws, key) do
     case Repo.get_by(__MODULE__, workspace_id: ws, key: key) do
       %{items: %{"items" => items}} -> items
