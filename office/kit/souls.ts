@@ -1,5 +1,3 @@
-import { readdirSync, readFileSync, statSync } from "node:fs"
-import { join } from "node:path"
 
 /** the §1 headings of the souls design: steps 2-4 read these by name, so they are the contract */
 export const SOUL_SECTIONS = ["Where they're from", "Wants", "Fears", "Quirks", "People", "The side project", "Diary"] as const
@@ -29,21 +27,6 @@ export function useSouls(s: Record<string, Soul>) { souls = s; gen++ }
 export function soulFor(name: string): Soul | undefined { return souls[name] }
 /** bumps on every useSouls call */
 export function soulsGen(): number { return gen }
-
-const files = (dir: string) => { try { return readdirSync(dir).filter(f => f.endsWith(".md")).sort() } catch { return [] } }
-
-/** names and mtimes of the dir's `<name>.md` files; "" when there are none, so a poll can tell a change from a quiet dir */
-export function soulsSignature(dir: string): string {
-  return files(dir).map(f => { try { return `${f}@${statSync(join(dir, f)).mtimeMs}` } catch { return f } }).join("|")
-}
-
-export function loadSouls(dir: string): Record<string, Soul> {
-  const out: Record<string, Soul> = {}
-  for (const f of files(dir)) {
-    try { out[f.slice(0, -3)] = parseSoul(readFileSync(join(dir, f), "utf8")) } catch { /* unreadable: no soul, not a crash */ }
-  }
-  return out
-}
 
 /** a one-line note a card shows under a section's heading, if the section has one */
 export const soulNote = (head: string): string | undefined =>

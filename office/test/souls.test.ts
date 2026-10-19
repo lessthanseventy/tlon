@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { SOUL_SECTIONS, loadSouls, parseSoul, soulLines, soulFor, soulNote, soulsGen, soulsSignature, useSouls } from "../kit/souls"
+import { SOUL_SECTIONS, parseSoul, soulLines, soulFor, soulNote, soulsGen, useSouls } from "../kit/souls"
+import { loadSouls, soulsSignature } from "../tui/souls"
 
 const FIXTURE = await Bun.file(join(import.meta.dir, "fixtures/daneri.md")).text()
 
