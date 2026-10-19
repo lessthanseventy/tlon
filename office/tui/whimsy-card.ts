@@ -25,8 +25,8 @@ export function whimsyRows(s: State): WhimsyRow[] {
     flip("pets"),
     pick("doorbell", ["off", "normal", "busy"]),
     flip("moods"),
-    { ...flip("souls"), note: "not wired yet" },
-    { ...pick("weirdness", ["curated", "procedural", "invented"]), note: "not wired yet" },
+    { ...flip("souls"), note: "off ignores the souls (no friends or rivals) and uses canned voices" },
+    { ...pick("weirdness", ["curated", "procedural", "invented"]), note: "past curated: the server's generated visitors, puns and reactions" },
     ...EVENT_KINDS.map((k): WhimsyRow => ({
       label: `event: ${k}`, value: onOff(d.events[k]),
       next: (x) => setDial(x, "events", { ...resolve(x).events, [k]: !resolve(x).events[k] }),

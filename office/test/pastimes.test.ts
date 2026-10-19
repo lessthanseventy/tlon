@@ -8,6 +8,9 @@ import { SEAT_VOICE } from "../kit/seat-voices"
 import { kitchenTile } from "../kit/tiles/kitchen"
 import { zones } from "../rooms/wide"
 import { WideRoom, widePlan } from "../rooms/wide"
+import { DEFAULT, resolve, setDial } from "../kit/whimsy"
+/** the souls dial is off in the default preset; the rivalry tests switch it on */
+const souled = <T extends { setWhimsy: (d: ReturnType<typeof resolve>) => void }>(r: T): T => { r.setWhimsy(resolve(setDial(DEFAULT, "souls", true))); return r }
 
 /** run `f` with Math.random fixed at `r`: every chance taken (0), or none (0.999) */
 function chance<T>(r: number, f: () => T): T {
@@ -274,7 +277,7 @@ describe("the bathroom", () => {
 describe("company: rivals pass without a high five", () => {
   const passing = (people: Record<string, string>) => chance(0.999, () => {
     useSouls(Object.fromEntries(Object.entries(people).map(([k, v]) => [k, parseSoul("## People\n" + v)])))
-    const room = new WideRoom(560), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room)
+    const room = souled(new WideRoom(560)), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room)
     room.step(a)
     const [p, q] = [...r.actors.values()]
     Object.assign(p!, { finished: r.tick, x: 200, y: 176, pose: "stand" }); Object.assign(q!, { x: 205, y: 176, pose: "stand" })
@@ -296,7 +299,7 @@ describe("rivals play for blood", () => {
   const game = (kind: "foosball" | "pool", people: Record<string, string>) => chance(0.999, () => {
     useSouls(Object.fromEntries(Object.entries(people).map(([k, v]) => [k, parseSoul("## People\n" + v)])))
     try {
-      const room = new WideRoom(560), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room)
+      const room = souled(new WideRoom(560)), a = viewOf(office(["hronir", "yu"]), 1), r = inside(room)
       room.step(a)
       const [p, q] = [...r.actors.values()], [s1, s2] = widePlan(560).lounge.filter((s) => s.kind === kind)
       const sit = (x: Actor, s: NonNullable<typeof s1>, until: number) => Object.assign(x, { x: s.x, y: s.y, spot: s, spotKey: `${s.kind}:${s.x}:${s.y}`, path: [], moving: false, until })

@@ -486,10 +486,12 @@ async function chatter() {
   if (ws === null) return
   room().hear(await data.pets(ws, room().petProfile()))
   const here = ws
-  const banter = resolveWhim(whim).banter
-  // two together in the room: the server writes what they say now, said turn by turn; in --sandbox
-  // (or wherever the server wrote nothing) each says a canned line in their own voice
-  room().onTogether = (situation, a, b) => !banter ? undefined : void data.talk(here, situation, a, b).then((turns) => {
+  const dials = resolveWhim(whim), banter = dials.banter
+  // generated visitors, puns and reactions reach the room only past `curated`; the room ignores a pool it is not given
+  room().setToys(dials.weirdness === "curated" ? null : await data.toys(here))
+  // two together in the room: with souls on the server writes what they say now (from their souls), said turn by turn;
+  // with them off, in --sandbox, or wherever the server wrote nothing, each says a canned line in their own voice
+  room().onTogether = (situation, a, b) => !banter ? undefined : void (dials.souls ? data.talk(here, situation, a, b) : Promise.resolve([])).then((turns) => {
     const said = turns.length ? turns : [a, b].map((who) => {
       const recent = recentBanter.get(who) ?? []
       const line = seatLine(who, recent)

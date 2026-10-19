@@ -15,7 +15,7 @@ import { CAT_NAME, lookOf, type Dir, type Fav, type Look, type Pose } from "./sp
 import type { Agents, CorkNote, Seat } from "./types"
 import { keyMash, nightOwl } from "./eggs"
 import { lean, pickDest, speciesBase, type Dest, type Temperament } from "./temperament"
-import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type VisitorKind } from "./door"
+import { BELL, LINE, OPEN_FROM, OPEN_TO, pickVisitor, PIZZA_TICKS, QUEUE_MAX, RING_FIRST, RING_MIN, RING_SPAN, STAY, WAIT, type Guest, type Toys, type VisitorKind } from "./door"
 import { CHAINS, EVENTS, EVENT_KINDS, blackoutAt, flickerAt, noteEatenAt, pickEvent, propsAt, type Beat, type EventKind, type Geo, type Prop } from "./events"
 import { SHERIFF } from "./scharlach"
 import { DEFAULT, meanGap, resolve, type Dials } from "./whimsy"
@@ -137,6 +137,9 @@ export type Party = { agent: string; until: number }
 /** ticks (100 ms) a said line stays up: time to read it at an easy pace, ~10 s at the least */
 export const readTicks = (text: string) => Math.min(400, Math.max(100, 40 + text.length * 2))
 
+/** the server's names for the scenes, as its reaction pool keys them */
+const SERVER_EVENT: Record<EventKind, string> = { drill: "fire_drill", zoo: "zoo", meteor: "meteor", power: "power_cut", duck: "duck" }
+
 export class Sim<L extends { people: Seat[] }> {
   protected cat: Cat
   protected temperament: Temperament = { warmth: 0, wits: 0, energy: 0 }
@@ -160,8 +163,8 @@ export class Sim<L extends { people: Seat[] }> {
   protected tick = 0
   private seeded = false
   /** the front door (`kit/door.ts`): visitors waiting, the one at it, and when the schedule rings next */
-  private callers: VisitorKind[] = []
-  protected caller: { kind: VisitorKind; who: string; bell: number; here: number } | null = null
+  private callers: { kind: VisitorKind; guest?: Guest }[] = []
+  protected caller: { kind: VisitorKind; guest?: Guest; who: string; bell: number; here: number } | null = null
   protected nextRing = RING_FIRST
   /** the wackiness dials (kit/whimsy.ts): what the room does on its own; keyed plays are the operator's and ignore all but the event toggles */
   private dials: Dials = resolve(DEFAULT)
@@ -515,6 +518,7 @@ export class Sim<L extends { people: Seat[] }> {
     this.lastEvent = k
     this.onEvent?.(k, null)
     this.beats(0)
+    this.react(k)
     if (k === "drill") this.drillUntil = this.tick + DRILL
     this.changed = true
     return true
@@ -565,10 +569,19 @@ export class Sim<L extends { people: Seat[] }> {
       if (b.at !== t) continue
       const who = b.who === "sheriff" ? (r.sheriff ? [r.sheriff] : []) : b.who === "first" ? r.idle.slice(0, 1) : r.idle
       for (const n of who) {
-        if (b.say) this.say(n, b.say)
+        const own = this.pooled().reactions[n]?.[SERVER_EVENT[r.kind]]
+        if (b.say) this.say(n, own?.length ? pick(own) : b.say)
         if (b.emote) { const x = this.actors.get(n); if (x) { x.emote = b.emote; x.emoteUntil = this.tick + 60 } }
       }
       this.onEvent?.(r.kind, b)
+    }
+  }
+  /** at an event's start, each seat the pool has a reaction for says it, unless the script already has them talking */
+  private react(kind: EventKind) {
+    const r = this.running!
+    for (const n of [...(r.sheriff ? [r.sheriff] : []), ...r.idle]) {
+      const own = this.pooled().reactions[n]?.[SERVER_EVENT[kind]]
+      if (own?.length && !this.talk.has(n)) this.say(n, pick(own))
     }
   }
   /** a spontaneous event: draws only when it makes one, never per tick, so a seeded run before the first is untouched */
@@ -638,13 +651,22 @@ export class Sim<L extends { people: Seat[] }> {
     if (first) this.say(first, "Ding dong!")
     this.changed = true
     if (!this.plan.door || !this.actors.size || this.callers.length >= QUEUE_MAX) return false
-    this.callers.push(kind ?? pickVisitor(Math.random(), this.date()))
+    const guests = kind ? [] : this.pooled().visitors
+    // the pool's draw is made only when there is a pool, so a room without one rolls exactly what it always did
+    if (guests.length && Math.random() < 0.5) this.callers.push({ kind: "guest", guest: pick(guests) })
+    else this.callers.push({ kind: kind ?? pickVisitor(Math.random(), this.date()) })
     return true
   }
+  /** the server's generated toys, used only while the weirdness dial is past `curated` */
+  private toys: Toys | null = null
+  setToys(t: Toys | null) { this.toys = t }
+  private pooled(): Toys {
+    return this.dials.weirdness !== "curated" && this.toys ? this.toys : { visitors: [], puns: [], reactions: {} }
+  }
   /** the visitor in the doorway, if one is there (not while they wait for someone to come) */
-  visitor(): { kind: VisitorKind; x: number; y: number } | null {
+  visitor(): { kind: VisitorKind; seed?: string | number; x: number; y: number } | null {
     const c = this.caller, d = this.plan.door
-    return c && c.here >= 0 && d ? { kind: c.kind, x: d.x + 12, y: d.y } : null
+    return c && c.here >= 0 && d ? { kind: c.kind, seed: c.guest?.look_seed, x: d.x + 12, y: d.y } : null
   }
   doorSpot(): Spot | undefined { return this.plan.door }
   /** the bell is still rattling (the last BELL ticks of a ring that has a visitor coming) */
@@ -666,12 +688,12 @@ export class Sim<L extends { people: Seat[] }> {
     }
     let c = this.caller
     if (!c) {
-      const kind = this.callers[0]
-      if (!kind) return false
+      const next = this.callers[0]
+      if (!next) return false
       const who = this.answerer(door)
       this.callers.shift()
       if (!who) return false
-      this.caller = c = { kind, who, bell: this.tick + BELL, here: -1 }
+      this.caller = c = { ...next, who, bell: this.tick + BELL, here: -1 }
       return true
     }
     const x = this.actors.get(c.who)
@@ -684,14 +706,19 @@ export class Sim<L extends { people: Seat[] }> {
         return false
       }
       c.here = this.tick
-      this.say(c.who, LINE[c.kind])
-      x.emote = { carrier: "✉", pizza: "♥", cookies: "♥", tourist: "?", trick: "*", carol: "♪" }[c.kind]; x.emoteUntil = this.tick + 60
+      this.say(c.who, c.guest ? `${c.guest.name}: ${c.guest.line}` : LINE[c.kind])
+      x.emote = { carrier: "✉", pizza: "♥", cookies: "♥", tourist: "?", trick: "*", carol: "♪", guest: "?" }[c.kind]; x.emoteUntil = this.tick + 60
       if (c.kind === "carrier") this.catLetter(c.who)
       if (c.kind === "pizza") this.pizzaUntil = this.tick + PIZZA_TICKS
       if (c.kind === "tourist") this.nudgeUntil = this.tick + 40
       return true
     }
-    if (this.tick >= c.here + STAY) { this.caller = null; return true }
+    if (this.tick >= c.here + STAY) {
+      this.caller = null
+      const puns = this.pooled().puns
+      if (puns.length && Math.random() < 0.3) this.say(c.who, pick(puns))
+      return true
+    }
     return false
   }
   /** the nearest coworker who is not mid-turn (the nearest of anyone, if all are), ties by name: no draw, so the same under any seed */
@@ -958,6 +985,7 @@ export class Sim<L extends { people: Seat[] }> {
 
   /** who is on the bench and what their souls say, for `relation` */
   private companyOf() {
+    if (!this.dials.souls) return { bench: [] as string[], souls: {} as Record<string, ReturnType<typeof soulFor>> }
     const bench = [...this.actors.values()].map((x) => x.seat.agent)
     return { bench, souls: Object.fromEntries(bench.map((n) => [n, soulFor(n)])) }
   }

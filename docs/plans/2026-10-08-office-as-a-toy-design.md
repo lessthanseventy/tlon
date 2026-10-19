@@ -143,8 +143,11 @@ preset sets the dials; touching a dial keeps the preset and shows it as `(custom
 | `rimworld` | on | lots | yes | 3 | on | busy | a red build sours the afternoon |
 
 The dials under a preset: `banter`, `frequency`, `severity`, `chain`, per-event toggles, `pets`,
-`doorbell`, `moods`, and `souls` / `weirdness` (stored, not yet wired to the corkboard or the hall). A
-toggled-off event never plays, keyed or not.
+`doorbell`, `moods`, `souls` and `weirdness`. `souls` off: the sim ignores the souls' People sections (no
+friends, no rivals) and a pair's small talk is the canned seat voice, not a model line written from the souls.
+`weirdness` past `curated`: the door also draws the server's generated visitors, puns say a groan after a
+visit, and a seat's generated reaction lines replace the scripted ones at an event (`GET /api/office/toys/:ws`,
+`Server.ToyPool`; empty until generated). A toggled-off event never plays, keyed or not.
 
 **The one rule at every setting: the work is never touched.** The dials gate the room's own behaviour;
 nothing here reads or writes a thread, ticket, turn or code (`test/whimsy-work-untouched.test.ts`).
