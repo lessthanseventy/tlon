@@ -173,7 +173,7 @@ export class Sim<L extends { people: Seat[] }> {
   setWhimsy(d: Dials) { this.dials = d; this.nextEvent = -1; this.changed = true }
   private pizzaUntil = 0
   private nudgeUntil = 0
-  private date: () => Date = () => new Date()
+  protected date: () => Date = () => new Date()
   private drillUntil = -1
   private alarmSince = -1
   /** a keyed drill (the play key, never an outage): the rack burns and the crew panics, then musters */

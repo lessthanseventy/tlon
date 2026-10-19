@@ -33,7 +33,7 @@ import type { Home } from "../kit/home"
 import { annexHeight, paintAnnex } from "../kit/homeart"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA, pick } from "../kit/voices"
-import { hueRole, RELEASE_MIN, Tv } from "../kit/tv"
+import { hueRole, newYearLeft, RELEASE_MIN, Tv } from "../kit/tv"
 import { marqueeWindow, type NowPlaying } from "../kit/stereo"
 import { SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
@@ -448,6 +448,7 @@ export class WideRoom extends Sim<Layout> {
       this.tvSet.next(); x.emote = "*"; x.emoteUntil = this.tick + 20
       break
     }
+    this.tvSet.setCountdown(newYearLeft(this.date()))
     this.tvSet.step()
     return true
   }
@@ -502,7 +503,7 @@ export class WideRoom extends Sim<Layout> {
     px(0, 0, W, BAND - 1, ROLE.edge); px(0, BAND - 1, W, 1, ROLE.structure)
     this.calendar(sc, 4, now, Object.values(a.calendar).flat())
     this.whiteboard(sc, a, measure, 62, F1 - 64, focus.board)
-    this.corkboard(sc, a, F1 - 58)
+    this.corkboard(sc, a, F1 - 58, now)
     this.drawBox(sc, F1 - 4)
     this.windows(sc, M0 + 4, L0 + 30, now, a.weather ?? null)
     this.season(sc, now)
@@ -784,7 +785,7 @@ export class WideRoom extends Sim<Layout> {
   }
 
   /** the corkboard: the notes left for each other, a squiggle each in its author's colour */
-  private corkboard(sc: Scene, a: Agents, x0: number) {
+  private corkboard(sc: Scene, a: Agents, x0: number, now: Date) {
     sc.px(x0, 5, 52, 34, ROLE.structure); sc.px(x0 + 1, 6, 50, 32, tint(ROLE.borderInactive, ROLE.body, 0.25))
     sc.text(`NOTES ${a.notes.length}`, x0 + 26, 12, ROLE.fieldInk, 9)
     a.notes.slice(0, 8).forEach((n, i) => {
@@ -801,6 +802,13 @@ export class WideRoom extends Sim<Layout> {
       sc.px(x, y, 9, 7, tones[n.kind] ?? ROLE.prose); sc.px(x + 1, y + 2, 7, 1, ROLE.fieldInk); sc.px(x + 1, y + 4, 5, 1, ROLE.fieldInk); sc.px(x + 4, y - 1, 1, 2, ROLE.alarm)
       sc.hits.push({ x, y, w: 9, h: 7, tip: `${n.author} (${n.kind}): ${n.body}`, act: { kind: "notes" } })
     })
+    // Feb 14: one valentine in the last slot, unsigned
+    if (now.getMonth() === 1 && now.getDate() === 14) {
+      const x = x0 + 3 + 3 * 12, y = 26
+      sc.px(x, y, 11, 8, tint(ROLE.alarm, ROLE.prose, 0.55))
+      sc.blit([".r.r.", "rrrrr", "rrrrr", ".rrr.", "..r.."], x + 3, y + 2, { r: ROLE.alarm })
+      sc.hits.push({ x, y, w: 11, h: 8, tip: "a valentine, unsigned: roses are red, the build is green", act: { kind: "notes" } })
+    }
     if (this.noteHidden()) sc.px(x0 + 3, 16, 11, 8, tint(ROLE.borderInactive, ROLE.body, 0.25))
     sc.hits.push({ x: x0, y: 5, w: 52, h: 34, tip: `${a.notes.length} note(s), ${this.cork.length} on the corkboard: open as a list`, act: { kind: "notes" } })
   }
