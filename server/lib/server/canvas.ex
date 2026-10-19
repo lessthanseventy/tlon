@@ -4,8 +4,8 @@ defmodule Server.Canvas do
   last column being this week. A picture is seven lines of `.` (blank) and `1`–`4` or `#` (shade 1–4,
   `#` the darkest); a shaded day is painted with backdated empty commits, more for a darker shade,
   scaled over the busiest real day so the picture reads over real work (`Server.Canvas.Paint` does
-  the git). With no new picture the canvas plays Conway's Life, one
-  generation a day, on a torus.
+  the git). With no new picture the canvas draws the day's holiday picture, if it is one, else plays
+  Conway's Life, one generation a day, on a torus.
 
   Pure: grids are maps of `{col, row} => shade`, every cell present.
   """
@@ -108,6 +108,21 @@ defmodule Server.Canvas do
     end)
   end
 
+  @doc """
+  The picture a holiday draws on `date`, `{:ok, name, grid}`, else `:error`: a pumpkin Oct 25–31, a
+  tree Dec 18–25, fireworks Jan 1, a heart Feb 14, an egg on Easter.
+  """
+  @spec holiday(Date.t()) :: {:ok, atom(), grid()} | :error
+  def holiday(%Date{} = date) do
+    case {date.month, date.day} do
+      {10, d} when d >= 25 -> drawn(:pumpkin)
+      {12, d} when d in 18..25 -> drawn(:tree)
+      {1, 1} -> drawn(:fireworks)
+      {2, 14} -> drawn(:heart)
+      _ -> if date == easter(date.year), do: drawn(:egg), else: :error
+    end
+  end
+
   defp neighbours(col, row) do
     for dc <- -1..1,
         dr <- -1..1,
@@ -122,4 +137,38 @@ defmodule Server.Canvas do
   defp char_of(0), do: "."
   defp char_of(4), do: "#"
   defp char_of(s), do: Integer.to_string(s)
+
+  # the anonymous Gregorian algorithm (Meeus/Jones/Butcher)
+  defp easter(year) do
+    a = rem(year, 19)
+    b = div(year, 100)
+    c = rem(year, 100)
+    e = rem(b, 4)
+    g = div(8 * b + 13, 25)
+    h = rem(19 * a + b - div(b, 4) - g + 15, 30)
+    l = rem(32 + 2 * e + 2 * div(c, 4) - h - rem(c, 4), 7)
+    m = div(a + 11 * h + 19 * l, 433)
+    n = h + l - 7 * m + 114
+    Date.new!(year, div(n, 31), rem(n, 31) + 1)
+  end
+
+  defp centered(rows) do
+    pad = div(@width - String.length(hd(rows)), 2)
+    {:ok, grid} = parse(Enum.map_join(rows, "\n", &(String.duplicate(".", pad) <> &1)))
+    grid
+  end
+
+  defp sprite(:pumpkin), do: ~w(.....3..... ..#######.. .#########. ###.###.### #####.##### .#########. ..#######..)
+
+  defp sprite(:tree), do: ~w(....#.... ...###... ..#####.. ...###... ..#####.. .#######. ....2....)
+
+  defp sprite(:heart), do: ~w(.##...##. ####.#### ######### ######### .#######. ..#####.. ...###...)
+
+  defp sprite(:egg), do: ~w(..###.. .#####. .33333. ####### .22222. .#####. ..###..)
+
+  defp sprite(:fireworks),
+    do:
+      ~w(..#....3....#.. ...#...3...#... ....#..#..#.... .....#.#.#..... ##..##333##..## .....#.#.#..... ....#..#..#....)
+
+  defp drawn(name), do: {:ok, name, name |> sprite() |> centered()}
 end

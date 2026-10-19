@@ -66,4 +66,12 @@ defmodule Server.Canvas.PaintTest do
     {:ok, before} = Canvas.parse(Enum.join(blinker, "\n"))
     assert git(remote, ["show", "main:canvas.txt"]) == Canvas.to_text(Canvas.life(before))
   end
+
+  test "on a holiday with no post the canvas draws its picture, but a coworker's post wins", %{opts: opts} do
+    opts = Keyword.put(opts, :today, ~D[2026-12-20])
+    assert {:ok, %{source: :holiday}} = Paint.run(opts)
+
+    picture = Enum.join(["#" <> String.duplicate(".", 51) | List.duplicate(String.duplicate(".", 52), 6)], "\n")
+    assert {:ok, %{source: :picture}} = Paint.run(Keyword.put(opts, :picture, picture))
+  end
 end
