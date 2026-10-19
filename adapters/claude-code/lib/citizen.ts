@@ -3,11 +3,12 @@
 // mod (../mod.ts) does the calling and drawing; everything here is data in, data out.
 
 import type { ChatterMessage, Dossier } from "./brief.ts";
+import type { SeatStatus } from "./status.ts";
 
 // The server's read of the office from this seat (`office_glance`).
 export type Glance = {
   archetype: string | null;
-  crew: { agent: string; thread_id: number; warm: boolean; thinking: boolean; doing: string | null }[];
+  crew: { agent: string; thread_id: number; status?: SeatStatus; warm: boolean; thinking: boolean; doing: string | null }[];
   red: { text: string }[];
   persona: { voice: string | null; catchphrase: string | null } | null;
   line: string | null;
