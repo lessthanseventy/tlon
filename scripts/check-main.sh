@@ -13,7 +13,8 @@ done
 git -C "$root" worktree prune
 dir="$(mktemp -d -t tlon-main-XXXXXX)"
 log="$(mktemp -t tlon-main-check-XXXXXX)"
-trap 'git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir" "$log"' EXIT
+# the cleanup ignores a second TERM: a signal landing inside it would run `exit 143` and skip the rest
+trap 'trap "" TERM INT; rm -f "$log"; git -C "$root" worktree remove --force "$dir" >/dev/null 2>&1; rm -rf "$dir"' EXIT
 # bash dies of an untrapped TERM without running the EXIT trap (a service stop signals the whole tree)
 trap 'exit 143' TERM
 trap 'exit 130' INT
