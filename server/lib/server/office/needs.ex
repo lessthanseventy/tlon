@@ -12,7 +12,7 @@ defmodule Server.Office.Needs do
       there is one, gets a copy: `Server.Sheriff`), `stalled` (a workline nothing has moved for past
       the quiet window (the operator's `quiet_workline_minutes` knob, the one Maintain nudges at) — no
       stage advance, check, commit or operator answer — and nobody on duty for it (a mid-turn mark
-      counts until `Server.Presence.Thinking.stale_turn_seconds/0`): whatever stopped it has no kind of its own yet; its text carries the thread's last word.
+      counts until `Server.Presence.Thinking.stale_turn_seconds/0`): its text carries the thread's last word; answered by nudging the lead, handing it off, or closing it (`Server.Alerts`).
       Put away, it stays away until the workline moves; under pencils down or lights out nothing
       stalls, the operator stopped it), `publish_failed` (a workline merged here whose newest publish
       to GitHub — recorded under `Server.Workline.publish_correlation/1` — failed: republish it, or open its PR by
@@ -598,7 +598,7 @@ defmodule Server.Office.Needs do
     end
   end
 
-  # nothing moved it past the quiet window and nobody is on it: the stop that has no kind of its own
+  # nothing moved it past the quiet window and nobody is on it
   defp stalled(open, listed) do
     if Server.Pause.state() == :working do
       cutoff = DateTime.add(DateTime.utc_now(), -Server.OperatorConfig.setting("quiet_workline_minutes") * 60, :second)
