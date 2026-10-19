@@ -102,13 +102,13 @@ defmodule Server.Web.HomeLive do
             patch={"/threads/#{t.id}"}
             class={["thread", t.root && "root", t.working && "working", @thread && @thread.id == t.id && "current"]}
           >
-            {if t.working, do: "●", else: "○"} {t.title}
+            {Server.Coworker.glyph(if t.working, do: :working, else: :idle)} {t.title}
             <span :if={t.stage} class="stage">[{t.stage}]</span>
             <span :if={t.awaiting} class="flag">⚑ {t.awaiting}</span>
             <span :if={t.lead} class="lead">·{t.lead}</span>
           </.link>
           <div :if={g.crew != []} class="crew">
-            crew {Enum.map_join(g.crew, " ", fn c -> (if(c.working, do: "●", else: "○")) <> c.name <> if(c.lead, do: "*", else: "") end)}
+            crew {Enum.map_join(g.crew, " ", fn c -> Server.Coworker.glyph(if(c.working, do: :working, else: :idle)) <> c.name <> if(c.lead, do: "*", else: "") end)}
           </div>
         </div>
         <div :if={@groups == []} class="meta">(no workspaces)</div>
