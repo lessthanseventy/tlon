@@ -651,7 +651,7 @@ test("the operator's session puts a coworker's ask to them and answers it by its
   let answered = "";
   const ask = { key: "ask:9", kind: "ask", level: "blocking", ref: 9, title: "keep the last one?", options: [{ key: "1", label: "keep" }, { key: "2", label: "drop" }] };
   engine(on, {
-    env: { TLON_OPERATOR: "1" },
+    env: { TLON_OPERATOR_MODE: "1" },
     answer: "drop",
     http: (e) => {
       if (e.url.endsWith("/office/needs")) return { status: 200, ok: true, headers: {}, text: JSON.stringify([ask]) };
@@ -668,7 +668,7 @@ test("the operator's session puts a coworker's ask to them and answers it by its
 test("the operator's band reads the server the session points at, a scratch release's port too", async ($, on) => {
   const urls: string[] = [];
   engine(on, {
-    env: { TLON_OPERATOR: "1", TLON_MCP_URL: "http://127.0.0.1:4141/mcp" },
+    env: { TLON_OPERATOR_MODE: "1", TLON_MCP_URL: "http://127.0.0.1:4141/mcp" },
     http: (e) => {
       urls.push(e.url);
       return { status: 200, ok: true, headers: {}, text: "[]" };

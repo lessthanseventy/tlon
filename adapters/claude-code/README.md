@@ -97,7 +97,7 @@ pure parts are `lib/` (bun-tested).
 - Auto-vision: an image Read on a text-only ollama model is described by a vision model instead.
 - `web_search`: on the ollama gateway, where Claude Code's own WebSearch cannot reach.
 
-**Operator mode** (`claude:operator`: `TLON_OPERATOR`, no thread): the band shows what waits on you
+**Operator mode** (`claude:operator`: `TLON_OPERATOR_MODE=1`, no thread; `TLON_OPERATOR` stays your handle): the band shows what waits on you
 (`/api/office/needs`, at `TLON_MCP_URL`'s origin, else `127.0.0.1:4040`), the live release and what is unreleased, and your streak; each coworker's ask
 is put to you as a question and answered by its key.
 

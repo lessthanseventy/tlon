@@ -7,7 +7,7 @@
 // briefed, how far capture has read, which mentions were shown), lost on a reload, never a queue of
 // unsent work. A slow or down server never holds a prompt, a tool, a turn or the session's start.
 //
-// With no thread identity and TLON_OPERATOR set, the same mod is the operator's: a band of what
+// With no thread identity and TLON_OPERATOR_MODE set, the same mod is the operator's: a band of what
 // waits on them, the release and their streak, and the coworkers' asks put to them as questions.
 
 import { doingOf, summaryOf } from "./lib/doing.ts";
@@ -465,7 +465,7 @@ export function register(on) {
     api = operatorApi(await $.env.get("TLON_MCP_URL"));
     compactAt = Number(await $.env.get("TLON_COMPACT_AT")) || 0;
     if (!thread || !author) {
-      operator = !!(await $.env.get("TLON_OPERATOR"));
+      operator = !!(await $.env.get("TLON_OPERATOR_MODE"));
       if (operator) {
         $.clock.every(GLANCE_MS, () => refreshOperator($));
         $.clock.every(GLANCE_MS * 5, () => refreshRelease($));
