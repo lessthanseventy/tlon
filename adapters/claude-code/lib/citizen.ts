@@ -170,6 +170,16 @@ export function landingsOf(d: Dossier, seen: number): number[] {
   return d.done.shown.filter((e) => e.source === "event" && e.kind === "work_landed" && e.id > seen).map((e) => e.id);
 }
 
+/** A landing row of `GET /api/alerts`: the server words the title, every surface toasts it as given. */
+export type LandedAlert = { kind: "landed"; key: string; title: string; thread_id: number; at: string | null };
+
+/** The landing rows of an alerts reply, newest first; anything that isn't one is dropped. */
+export function landedAlerts(rows: unknown): LandedAlert[] {
+  if (!Array.isArray(rows)) return [];
+  const landed = rows.filter((r): r is LandedAlert => r?.kind === "landed" && typeof r.title === "string");
+  return landed.sort((a, b) => String(b.at ?? "").localeCompare(String(a.at ?? "")));
+}
+
 const VERBS = ["Catalogued", "Deciphered", "Dreamed", "Mapped", "Indexed", "Annotated", "Transcribed", "Unriddled", "Mirrored", "Labyrinthed"];
 
 /** The word under a finished turn, the same for the same turn: a Borgesian verb. */
