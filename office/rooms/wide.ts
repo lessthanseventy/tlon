@@ -535,7 +535,7 @@ export class WideRoom extends Sim<Layout> {
       sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: Math.round(this.book.x) + 6, top: Math.round(this.book.y) - 3 })
     for (const p of this.planes) drawPlane(sc, p)
     const caller = this.visitor()
-    if (caller) drawVisitor(sc, caller.x, caller.y, caller.kind)
+    if (caller) drawVisitor(sc, caller.x, caller.y, caller.kind, caller.seed)
     for (const p of this.props()) drawProp(sc, p)
 
     // ── people, Nina ──

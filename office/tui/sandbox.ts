@@ -26,6 +26,11 @@ function answer(path: string): unknown {
   const p = path.split("?")[0]!
   if (/^\/office\/threads\/\d+$/.test(p)) return { messages: [], peek: null, window: null }
   if (/^\/office\/triage\/\d+$/.test(p)) return { blockers: { shown: [], more: 0 }, failed_checks: { shown: [], more: 0 }, unled: { shown: [], more: 0 }, count: 0 }
+  if (/^\/office\/toys\/\d+$/.test(p)) return {
+    visitors: [{ name: "Mr. Plover", look_seed: "plover", line: "Is this the room with the ducks?" }, { name: "Dr. Ismene", look_seed: "ismene", line: "I am here about the aquarium. It is calling." }],
+    puns: ["I would tell you a UDP joke, but you might not get it."],
+    reactions: { tertius: { fire_drill: ["Calmly. Calmly. Run."], duck: ["That is not in the runbook."] } },
+  }
   if (p === "/office/health") return { state: "ok", problems: [], version: "toy", up_s: 7200, db: true, jobs: true, failed_jobs: 0, tmux: true, disk_pct: 41, mem_pct: 37, load: 0.4, checks: { running: null, waiting: [] }, merge_queue: [] }
   if (/^\/office\/memory\/\d+$/.test(p)) return {
     pinned: [{ id: 1, text: "Nina is not allowed on the keyboard." }, { id: 2, text: "The doorbell rings at the worst moment, on purpose." }],

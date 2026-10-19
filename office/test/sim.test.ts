@@ -5,6 +5,9 @@ import { parseSoul, useSouls } from "../kit/souls"
 import { screenOf, steamOf } from "../kit/draw"
 import { MEET_BOTTOM, WideRoom, widePlan, zones } from "../rooms/wide"
 import { office } from "./wcag.test"
+import { DEFAULT, resolve, setDial } from "../kit/whimsy"
+/** the souls dial is off in the default preset; the rivalry tests switch it on */
+const souled = <T extends { setWhimsy: (d: ReturnType<typeof resolve>) => void }>(r: T): T => { r.setWhimsy(resolve(setDial(DEFAULT, "souls", true))); return r }
 
 describe("Sim.at", () => {
   test("Sim.at returns a seated actor's current spot, or null for a stranger", () => {
@@ -157,7 +160,7 @@ describe("company: the soul steers who pairs up", () => {
   /** `waiter` stands at one end of a pair spot; how many of `n` idle choices by `who` take the other end */
   function pairChoices(who: string, waiter: string, n: number, seed = 7): number {
     Math.random = mulberry32(seed)
-    const room = new WideRoom(560)
+    const room = souled(new WideRoom(560))
     room.step(viewOf(office(), 1))
     const r = inner(room), pair = r.plan.lounge.find((s) => s.with)!
     const w = r.actors.get(waiter)!, a = r.actors.get(who)!
@@ -192,7 +195,7 @@ describe("company: the soul steers who pairs up", () => {
   test("a seat with no People section picks exactly as with no souls", () => {
     const trace = () => {
       Math.random = mulberry32(11)
-      const room = new WideRoom(560), r = inner(room)
+      const room = souled(new WideRoom(560)), r = inner(room)
       room.step(viewOf(office(), 1))
       const a = r.actors.get("yu")!, held = new Set([...r.actors.values()].map((x) => x.spotKey))
       return Array.from({ length: 100 }, () => { Object.assign(a, { until: 0, spot: { ...a.spot, kind: "desk" }, spotKey: "desk" }); const g = r.idleGoal(a, held, {}); return `${g.kind}:${g.x}:${g.y}` })

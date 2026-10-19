@@ -5,7 +5,24 @@ import { mailbox } from "./mailbox"
 import { ROLE } from "./palette"
 import type { Agents } from "./types"
 
-export type VisitorKind = "carrier" | "pizza" | "cookies" | "tourist" | "trick" | "carol"
+export type VisitorKind = "carrier" | "pizza" | "cookies" | "tourist" | "trick" | "carol" | "guest"
+/** a visitor the server generated (`GET /api/office/toys/:ws`): a name, a seed for their look, what they say at the door */
+export type Guest = { name: string; look_seed: string | number; line: string }
+/** the server's pooled toys: visitors, puns, and per-seat per-event reaction lines — each empty until generated (`Server.ToyPool`) */
+export type Toys = { visitors: Guest[]; puns: string[]; reactions: Record<string, Record<string, string[]>> }
+/** a toys payload from an older or newer server, narrowed to what is usable; null when it is neither */
+export function toysOf(j: unknown): Toys | null {
+  if (!j || typeof j !== "object") return null
+  const o = j as Record<string, unknown>
+  const strs = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string" && v.trim() !== "") : [])
+  const visitors = (Array.isArray(o.visitors) ? o.visitors : []).filter((v): v is Guest => !!v && typeof v === "object" && typeof (v as Guest).name === "string" && typeof (v as Guest).line === "string").map((v) => ({ name: v.name, look_seed: v.look_seed ?? v.name, line: v.line }))
+  const reactions: Toys["reactions"] = {}
+  if (o.reactions && typeof o.reactions === "object") for (const [seat, evs] of Object.entries(o.reactions)) if (evs && typeof evs === "object") for (const [ev, lines] of Object.entries(evs)) {
+    const ok = strs(lines)
+    if (ok.length) (reactions[seat] ??= {})[ev] = ok
+  }
+  return { visitors, puns: strs(o.puns), reactions }
+}
 /** the first scheduled ring; later ones are RING_MIN + a draw of RING_SPAN (15 to 45 minutes at 100 ms) */
 export const RING_FIRST = 6_000, RING_MIN = 9_000, RING_SPAN = 18_000
 /** the hours a scheduled ring may come (a bell asked for by a cut or a key rings whenever) */
@@ -23,6 +40,7 @@ export const LINE: Record<VisitorKind, string> = {
   tourist: "Uqbar? No idea, sorry. Try the shelf?",
   trick: "Happy Halloween!",
   carol: "Oh, lovely. Truly.",
+  guest: "Hello.",
 }
 
 /** a day's own visitor, or null */
@@ -70,9 +88,16 @@ const KIT: Record<VisitorKind, { rows: Record<number, string>; body: string }> =
   tourist: { rows: { 0: "hhhhhhh", 5: "ppbbbbb", 6: "ppbbbb." }, body: ROLE.live },
   trick: { rows: { 0: "..h.h..", 1: ".hhhhh.", 6: "bbbbbbp", 7: ".bbbbpp" }, body: ROLE.assistant },
   carol: { rows: { 0: ".hhhhh.", 1: "hhhhhhh", 6: "bbbbbp.", 7: "bbbbbp." }, body: ROLE.prose },
+  guest: { rows: { 0: "..hhh..", 5: "pbbbbbp" }, body: ROLE.key },
 }
 /** a visitor standing with their feet at (x, y) */
-export function drawVisitor(sc: Scene, x: number, y: number, kind: VisitorKind) {
-  const k = KIT[kind], rows = BASE.map((r, i) => k.rows[i] ?? r)
+const GUEST_BODY = [ROLE.key, ROLE.live, ROLE.attention, ROLE.assistant, ROLE.prose]
+const GUEST_HEAD = ["..hhh..", ".hhhhh.", "h.hhh.h", "hhhhhhh"]
+const seedHash = (seed: string | number) => [...String(seed)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
+export function drawVisitor(sc: Scene, x: number, y: number, kind: VisitorKind, seed?: string | number) {
+  const k = kind === "guest" && seed !== undefined
+    ? { rows: { ...KIT.guest.rows, 0: GUEST_HEAD[(seedHash(seed) >> 3) % GUEST_HEAD.length]! }, body: GUEST_BODY[seedHash(seed) % GUEST_BODY.length]! }
+    : KIT[kind]
+  const rows = BASE.map((r, i) => k.rows[i] ?? r)
   sc.item(y + 0.5, () => sc.blit(rows, x - 3, y - 10, { h: ROLE.structure, s: ROLE.body, b: k.body, l: ROLE.inactive, p: ROLE.prose }))
 }

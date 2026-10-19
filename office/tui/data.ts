@@ -3,6 +3,7 @@
 // beside it: a compiled TUI runs anywhere the server answers.
 import { AsyncLocalStorage } from "node:async_hooks"
 import { EMPTY, type Agents, type CorkNote, type LifeStatus, type Thread, type ThreadView } from "../kit/types"
+import { toysOf, type Toys } from "../kit/door"
 import type { Note } from "../kit/margin"
 import type { Target } from "./terminal"
 import type { Toy } from "./sandbox"
@@ -88,6 +89,8 @@ export const archive = (ws: number) => read<Archive>(`/office/archive/${ws}`)
 export async function banter(ws: number): Promise<{ agent: string; line: string; at: number }[]> {
   try { const r = await call("GET", `/office/banter/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
 }
+/** the toy pool the server generated for a workspace (`Server.ToyPool`): null on a server without the route or with nothing readable */
+export const toys = async (ws: number): Promise<Toys | null> => toysOf(await read<unknown>(`/office/toys/${ws}`))
 /** the office corkboard: the coworkers' notes to each other, newest first (empty where banter is off) */
 export async function corkboard(ws: number): Promise<CorkNote[]> {
   try { const r = await call("GET", `/office/corkboard/${ws}`); return r.status === 200 ? r.json : [] } catch { return [] }
