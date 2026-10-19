@@ -244,3 +244,43 @@ S
 C-]
 '?'
 C-]
+
+# --- the hunt's fixes: esc is one step back, a status ends with its card, a failed send keeps its words
+Escape
+Escape
+T
+c
+Enter
+Escape
+Enter
+'\'
+Escape
+Escape
+Escape
+"'"
+'hello team'
+Enter
+"'"
+Escape
+Escape
+# --- the front desk exists in the toy: m on a person talks to it
+Tab
+m
+'psst'
+Enter
+Escape
+Escape
+# --- cards with nothing in them, the current workspace, the tickets verb, and the "you" desk and a ticket by click
+o
+Escape
+O
+Escape
+/
+'tickets'
+Enter
+Escape
+-l $'\033[<0;57;19M\033[<0;57;19m'
+Escape
+-l $'\033[<0;47;5M\033[<0;47;5m'
+Escape
+Escape

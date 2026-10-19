@@ -31,6 +31,13 @@ Escape
 Escape
 -l $'\033[<0;150;43M\033[<0;150;43m'
 Escape
+# the operator's own desk (label and desk) and two ticket cards (#177)
+-l $'\033[<0;26;26M\033[<0;26;26m'
+Escape
+-l $'\033[<0;36;4M\033[<0;36;4m'
+Escape
+-l $'\033[<0;36;5M\033[<0;36;5m'
+Escape
 E
 F
 D
