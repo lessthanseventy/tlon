@@ -65,7 +65,7 @@ export function bossDesk(sc: Scene, a: Agents, d: DeskAt) {
     sc.blit([".yyy.", "yyyyy", ".yyy.", "..y..", ".yyy."], d.x + d.w - 8, d.y + 14, { y: ROLE.body })
     decor(sc, BOSS_LOOK, d.x + d.w - 1, d.y + 19)
     sc.text(a.awaiting ? `you - ${a.awaiting} waiting` : "you", d.x + d.w / 2, d.y + 38 - 2 / 3, ROLE.attention, a.awaiting ? 14 : 12)
-    sc.hits.push({ x: d.x, y: d.y + 4, w: d.w, h: 30, tip: "you: hire, file, workspaces, what waits on you", act: { kind: "boss" } })
+    sc.hits.push({ x: d.x, y: d.y + 4, w: d.w, h: 38, tip: "you: hire, file, workspaces, what waits on you", act: { kind: "boss" } })
   })
 }
 

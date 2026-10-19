@@ -214,6 +214,15 @@ export const SPECIES = ["cat", "dog", "rabbit", "bird", "hamster", "rock", "baoa
 /** what each slot may hold: the cat slot is the room's cat-family pet */
 export const SLOT_SPECIES = { cat: ["cat", "rabbit", "bird", "hamster", "rock", "baoaqu"], dog: ["dog"] } as const
 export type CatSpecies = (typeof SLOT_SPECIES.cat)[number]
+/** the cat slot's card opens with a line about whoever lives in it: the species it holds now, not the one it started as */
+export const SPECIES_BLURB: Record<CatSpecies, string> = {
+  cat: "your cat, and a princess. she does what you ask — if she feels like it — then her own day carries on.",
+  rabbit: "your rabbit, soft-footed and watchful. she does what you ask — if she feels like it — then her own day carries on.",
+  bird: "your bird, loud and certain. she does what you ask — if she feels like it — then her own day carries on.",
+  hamster: "your hamster, small and busy. she does what you ask — if she feels like it — then her own day carries on.",
+  rock: "your pet rock. it does what you ask, which is nothing, magnificently.",
+  baoaqu: "A Bao A Qu, who only wakes when someone climbs. it does what you ask — if it feels like it.",
+}
 /** the slot a species lives in, or undefined for a name no slot holds */
 export const slotOf = (sp: string): "cat" | "dog" | undefined => (["cat", "dog"] as const).find((s) => (SLOT_SPECIES[s] as readonly string[]).includes(sp))
 /** grows with the roster, never ahead of it */

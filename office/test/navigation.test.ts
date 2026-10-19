@@ -79,3 +79,28 @@ test("the finder has a verb for the tickets board and does not list unrelated ro
   keys("Enter")
   await until("the tickets column", () => screen().includes("TICKETS · "))
 }, 40_000)
+
+const home = async () => { keys("Escape"); await Bun.sleep(250); keys("Escape"); await Bun.sleep(250) }
+
+test("cards say what they hold: the inherited model, the current workspace, an empty list, the pet's species", async () => {
+  await home()
+  text("o")
+  await until("the empty notes card", () => screen().includes("nothing here yet — n pin a note"))
+  await home()
+  text("O")
+  await until("the workspaces card", () => screen().includes("WORKSPACES"))
+  expect(screen()).toContain("◆ Toy")
+  expect(screen()).not.toContain("▸ ▸")
+  await home()
+  keys("Tab")
+  await until("a person card", () => screen().includes("(archetype's)"))
+  expect(screen()).toMatch(/anthropic\/claude-\w+ \(archetype's\)/)
+  expect(screen()).not.toContain("·  (archetype's)")
+  await home()
+  text("/"); text("nina, the cat"); keys("Enter")
+  await until("Nina's card", () => screen().includes("your cat, and a princess"))
+  const row = screen().split("\n").findIndex((l) => l.includes("species")) + 1
+  text(`\x1b[<0;8;${row}M\x1b[<0;8;${row}m`)
+  await until("the species cycled", () => screen().includes("your rabbit"))
+  expect(screen()).not.toContain("princess")
+}, 60_000)
