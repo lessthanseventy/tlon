@@ -625,5 +625,18 @@ defmodule Server.Office.NeedsTest do
       assert idle != []
       for t <- idle, do: assert(MapSet.member?(listed, t.id), "##{t.id} at #{t.stage} is idle and not a Need")
     end
+
+    test "a stalled workline carries its answers: nudge the lead, hand it off, close it", %{ws: ws} do
+      t = workline(ws, "review", 4)
+      assert [need] = Enum.filter(Needs.list(), &(&1.kind == "stalled"))
+
+      assert [%{actions: [nudge, hand, close | _]}] = Server.Alerts.build([need], [], DateTime.utc_now())
+      assert %{label: "Nudge the lead", path: path, body: %{body: body}} = nudge
+      assert path == "/api/threads/#{t.id}/messages" and body =~ "Nothing has moved"
+      assert %{label: "Hand it to…", input: "agent", path: hand_path} = hand
+      assert hand_path == "/api/threads/#{t.id}/hand-off"
+      assert %{label: "Close it…", input: "abandoned", path: close_path} = close
+      assert close_path == "/api/threads/#{t.id}/close"
+    end
   end
 end

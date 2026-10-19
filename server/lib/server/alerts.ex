@@ -151,8 +151,18 @@ defmodule Server.Alerts do
     answers("/api/office/asks/#{id}", options) ++ if(need[:ask] == "uqbar", do: [], else: [handoff])
   end
 
-  defp actions(%{kind: k, thread_id: t}) when k in ~w(question mention stalled),
+  defp actions(%{kind: k, thread_id: t}) when k in ~w(question mention),
     do: ["Reply…" |> call("/messages", t) |> Map.put(:input, "body")]
+
+  defp actions(%{kind: "stalled", thread_id: t}),
+    do: [
+      call("Nudge the lead", "/messages", t, %{
+        body: "Nothing has moved here for a while: advance the stage if its work is done, or say what is blocking you."
+      }),
+      "Hand it to…" |> call("/hand-off", t, %{}) |> Map.put(:input, "agent"),
+      "Close it…" |> call("/close", t, %{}) |> Map.put(:input, "abandoned"),
+      "Tell the lead…" |> call("/messages", t) |> Map.put(:input, "body")
+    ]
 
   defp actions(%{kind: "verify_failed", thread_id: t}), do: [call("Run verify again", "/verify", t)]
 
