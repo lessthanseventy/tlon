@@ -66,7 +66,10 @@ defmodule Server.Office.Room do
 
   @doc """
   What is stuck in a workspace's open threads: open issues (blockers), failed checks (a command
-  whose newest check failed), and threads nobody leads. Each section `%{shown, more}`, #{@cap} shown;
+  whose newest check failed), and threads nobody leads. Each item names what to act on: a blocker its
+  `issue_id` with `summary`, `evidence`, `found_by` and `created_at`; a failed check its `check_id`,
+  `slug` (the correlation) and the thread's `stage` (only a thread at `verify` can re-run it).
+  Each section `%{shown, more}`, #{@cap} shown;
   `count` is everything, the beacon's reason to flash; `failed_thread_ids` names every red thread,
   past the cap, for the sheriff's ledger.
   """
@@ -81,7 +84,16 @@ defmodule Server.Office.Room do
           on: t.id == i.thread_id,
           where: i.state == "open",
           order_by: [desc: i.id],
-          select: %{thread_id: t.id, title: t.title, text: i.summary}
+          select: %{
+            thread_id: t.id,
+            title: t.title,
+            text: i.summary,
+            issue_id: i.id,
+            found_by: i.found_by,
+            created_at: i.created_at,
+            summary: i.summary,
+            evidence: i.evidence
+          }
       )
 
     checks =
@@ -91,7 +103,15 @@ defmodule Server.Office.Room do
           on: t.id == e.thread_id,
           where: e.kind in ["check_passed", "check_failed"],
           order_by: [desc: e.id],
-          select: %{thread_id: t.id, title: t.title, kind: e.kind, detail: e.detail}
+          select: %{
+            thread_id: t.id,
+            title: t.title,
+            stage: t.stage,
+            kind: e.kind,
+            detail: e.detail,
+            check_id: e.id,
+            correlation: e.correlation
+          }
       )
 
     failed =
@@ -100,7 +120,16 @@ defmodule Server.Office.Room do
       |> Enum.filter(&(&1.kind == "check_failed"))
       # a stage's owed doc not there yet is work in progress, not something stuck
       |> Enum.reject(&String.starts_with?(cmd(&1.detail), "workline artifact"))
-      |> Enum.map(&%{thread_id: &1.thread_id, title: &1.title, text: cmd(&1.detail)})
+      |> Enum.map(
+        &%{
+          thread_id: &1.thread_id,
+          title: &1.title,
+          text: cmd(&1.detail),
+          check_id: &1.check_id,
+          slug: &1.correlation,
+          stage: &1.stage
+        }
+      )
 
     # #random is led by nobody on purpose (`Server.Office.Random`)
     random = from(c in Server.ChannelRow, where: c.workspace_id == ^workspace_id and c.name == "random", select: c.id)
