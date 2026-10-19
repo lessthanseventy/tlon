@@ -13,6 +13,8 @@ defmodule Server.Life do
   alias Server.RoutineRun
   alias Server.Schedules
 
+  @home_types ~w(home life)
+
   @doc "floor(sqrt(xp / 100)) — quick at first, slows down. A placeholder curve (spec §10)."
   @spec level(integer) :: integer
   def level(xp) when xp >= 0, do: xp |> Kernel./(100) |> :math.sqrt() |> Float.floor() |> trunc()
@@ -277,4 +279,28 @@ defmodule Server.Life do
 
   defp committed({:ok, row}), do: row
   defp committed({:error, cs}), do: Repo.rollback(cs)
+
+  @doc """
+  May `agent` read or write `workspace_id`'s life rows (routines, quests, the dump)? Only the
+  operator's own sessions and an `assistant` seat on a home workspace: any other seat, a builder on
+  the same workspace included, gets `{:error, :not_yours}`.
+  """
+  @spec authorize(String.t() | nil, integer() | nil) :: :ok | {:error, :not_yours}
+  def authorize(agent, workspace_id) do
+    if is_binary(agent) and (Server.Channel.operator?(agent) or assistant_seat?(agent, workspace_id)),
+      do: :ok,
+      else: {:error, :not_yours}
+  end
+
+  defp assistant_seat?(_agent, nil), do: false
+
+  defp assistant_seat?(agent, workspace_id) do
+    case Server.Workspaces.get(workspace_id) do
+      %{type: type} when type in @home_types ->
+        Enum.any?(Server.Workspaces.bench_all(workspace_id), &(&1.name == agent and &1.archetype == "assistant"))
+
+      _ ->
+        false
+    end
+  end
 end
