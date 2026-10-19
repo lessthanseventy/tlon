@@ -35,7 +35,7 @@ import { hallRows, stepRow } from "./hall"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, storeNamesTaken, toggleLock as storeToggle, type Store } from "../kit/store"
 import { stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
-import { parseNowPlaying } from "../kit/stereo"
+import { NOW_PLAYING_FORMAT, parseNowPlaying } from "../kit/stereo"
 import { EMPTY, flagOn, type Agents, type LifeStatus, type CorkNote, type Coworker, type Thread, type ThreadView } from "../kit/types"
 import { H, RailRoom, W } from "../rooms/rail"
 import { BAND, OFF_DOOR, OFF_W, WIDE_H, WIDE_MIN_W, WideRoom } from "../rooms/wide"
@@ -903,7 +903,7 @@ function pollPlayer() {
   const rm = room()
   if (!(rm instanceof WideRoom)) return
   try {
-    const r = Bun.spawnSync(["playerctl", "metadata", "--format", "{{ title }}|{{ artist }}|{{ bpm }}"])
+    const r = Bun.spawnSync(["playerctl", "metadata", "--format", NOW_PLAYING_FORMAT])
     rm.setPlayer(r.exitCode === 0 ? parseNowPlaying(r.stdout.toString()) : null)
   } catch {
     rm.setPlayer(null)
