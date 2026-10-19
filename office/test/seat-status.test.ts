@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Glob } from "bun"
-import { crewOf, STATUS_ORDER, statusGlyph, statusTone, statusWord, type SeatStatus } from "../kit/crew"
+import { crewOf, STATUS_ORDER, statusGlyph, statusLight, statusTone, statusWord, type SeatStatus } from "../kit/crew"
 import { CREW_GROUPS } from "../tui/order"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
 
@@ -50,4 +50,11 @@ describe("one seat status, one renderer", () => {
     }
     expect(hits.map((h) => h.split(":")[0]!).sort()).toEqual(["kit/pets.ts", "tui/main.ts", "tui/main.ts"])
   })
+})
+
+test("each state's board light is its own shape, so the board never says a state by colour alone", () => {
+  const shapes = STATUS_ORDER.map((s) => statusLight(s).join("x"))
+  // waiting shares working's square but blinks and puts its glyph before the name
+  expect(new Set(shapes.filter((_, i) => STATUS_ORDER[i] !== "waiting")).size).toBe(STATUS_ORDER.length - 1)
+  expect(statusLight("off")).toEqual([0, 0])
 })

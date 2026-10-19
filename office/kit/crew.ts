@@ -103,6 +103,9 @@ const TONE: Record<SeatStatus, string> = { working: ROLE.live, waiting: ROLE.att
 export const statusGlyph = (s: SeatStatus) => GLYPH[s]
 export const statusWord = (s: SeatStatus) => WORD[s]
 export const statusTone = (s: SeatStatus) => TONE[s]
+/** a state's light on the pixel crew board, as [w, h]: the shape says the state, so it never rests on colour alone */
+const LIGHT: Record<SeatStatus, readonly [number, number]> = { working: [2, 2], waiting: [2, 2], idle: [2, 1], cold: [1, 1], off: [0, 0] }
+export const statusLight = (s: SeatStatus) => LIGHT[s]
 /** one row of the crew: who, in what role, doing what — a crew board's light and a crew card's row */
 export type Crew = { name: string; archetype: string | null; manager: boolean; lead: boolean; status: SeatStatus; thread: number | null; title: string }
 /** the office's crew, in bench order. A server that sends `status` on its roster rows is believed (no row at all is "off");
