@@ -2,8 +2,9 @@
 // the crew board, the manager's and the lead's desks, two tables of four, the filing cabinet, the
 // server rack, and your queue.
 import { fit, type Measure } from "../canvas"
-import { glowOf, isPicked, screenOf, type Focus, type Scene } from "../draw"
+import { glowOf, isPicked, screenOf, steamOf, type Focus, type Scene } from "../draw"
 import { needsYou, tipOf } from "../crew"
+import { NAMEPLATE, SHERIFF } from "../scharlach"
 import { bossDesk, crewBoard, decor, execDesk } from "../furniture"
 import { ROLE, tint } from "../palette"
 import { at, type Live, type Rect, type Tile } from "../tiles"
@@ -14,6 +15,15 @@ import {
   BAND, CREW_W, EXEC_Y, HALL, OFF_DOOR, OFF_W, OFFICE_PLANT, OFFICE_WATERER, SEAT_GAP, SEATS, TABLE_YS, TRAY,
   seatX, type Chair, type Layout, type Zones,
 } from "../../rooms/wide"
+
+/** Scharlach's desk dressing: a brass plate on the desk front (the nameplate, clipped to the desk) and the mug he bought himself, steaming only while his session is warm */
+function sheriffsDesk(sc: Scene, measure: Measure, x: number, ty: number, warmth: number) {
+  sc.px(x - 12, ty + 15, 24, 6, ROLE.body)
+  sc.text(fit(measure, NAMEPLATE, 23, 6), x, ty + 20, ROLE.ground, 6)
+  const mx = x - 12, my = ty + 10
+  sc.px(mx, my, 3, 3, ROLE.prose); sc.px(mx + 3, my + 1, 1, 1, ROLE.prose)
+  for (let k = 0; k < steamOf(warmth); k++) sc.px(mx + ((sc.tick >> 3) + k) % 2, my - 2 - k * 2, 1, 1, tint(ROLE.prose, ROLE.ground, 0.35 + 0.5 * warmth))
+}
 
 export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: string): Spot | null } {
   const { F0, F1 } = z
@@ -40,6 +50,7 @@ export function officeTile(z: Zones): Tile<Layout> & { home(l: Layout, agent: st
           else if (screen === "saver") sc.px(mx + 1 + (((f >> 1) + c.x) % 8), my + 1 + (((f >> 2) + c.x) % 5), 1, 1, glowOf(0.6))
         }
         if (owner) decor(sc, owner.look, c.x + 11, ty + 12)
+        if (c.agent === SHERIFF) sheriffsDesk(sc, measure, c.x, ty, owner?.warmth ?? 0)
       }
     })
     sc.item(ty + 30, () => {
