@@ -391,7 +391,11 @@ defmodule Server.Release.PMTest do
       refute Enum.any?(bodies(ws), &(&1 =~ "is live"))
     end
 
-    test "the live release carries the subjects of the commits the cut moved over, newest last, at most 12", %{repo: repo, live: seed, main: main} do
+    test "the live release carries the subjects of the commits the cut moved over, newest last, at most 12", %{
+      repo: repo,
+      live: seed,
+      main: main
+    } do
       assert :ok = PM.note_live(root: repo)
       assert %{sha: ^seed, notes: []} = PM.live_release()
 
