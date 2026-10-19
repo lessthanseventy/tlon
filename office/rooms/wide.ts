@@ -33,7 +33,7 @@ import type { Home } from "../kit/home"
 import { annexHeight, paintAnnex } from "../kit/homeart"
 import { DEFAULT_OFFICE } from "../kit/tiles"
 import { NINA, pick } from "../kit/voices"
-import { hueRole, Tv } from "../kit/tv"
+import { hueRole, RELEASE_MIN, Tv } from "../kit/tv"
 import { marqueeWindow, type NowPlaying } from "../kit/stereo"
 import { SCRIBBLES, shirtOf } from "../kit/sprites"
 import { EMPTY, type Agents, type Seat } from "../kit/types"
@@ -267,7 +267,7 @@ export class WideRoom extends Sim<Layout> {
     switch (e.kind) {
       case "shelf": this.fallen = false; this.bookSay("shelf", true); return
       case "mirror": this.flinch = this.tick + 30; this.bookSay("mirror", true); return
-      case "tv": this.tvSet.next(); this.bookSay("tv", true); return
+      case "tv": if (e.name !== "cut") this.tvSet.next(); this.bookSay("tv", true); return
       case "argos": this.bookSay("argos", true); this.dogSay("*thump thump thump*", 45); return
       case "nap": this.bookSay("nap", true); return
       case "lap": return
@@ -451,6 +451,17 @@ export class WideRoom extends Sim<Layout> {
     this.tvSet.step()
     return true
   }
+  /** a cut: the TV types the release's notes up as Uqbar's entry, and the book flies to it, until `cutDone` */
+  cut(sha: string, notes: readonly string[]) {
+    this.tvSet.showRelease(sha, notes)
+    if (this.awake) this.errand = { ...this.errandFor(EMPTY, "tv"), dwell: Infinity, name: "cut" }
+  }
+  /** the next snapshot's sha held: the entry finishes its minimum and the book goes home */
+  cutDone() {
+    this.tvSet.settle()
+    if (this.errand?.name === "cut") this.errand.dwell = RELEASE_MIN
+  }
+  get cutting() { return this.tvSet.cutting }
   /** the lounge TV flashes the new level over whatever it was showing */
   protected override levelUp(level: number) { super.levelUp(level); this.tvSet.showLevel(level) }
   /** the remote: the next channel */

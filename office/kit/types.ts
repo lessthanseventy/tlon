@@ -78,7 +78,7 @@ export type Agents = {
   /** the server's feature flags by name (`Server.Flags`): what the office shows of work that lands dark */
   flags?: Record<string, boolean>
   /** the release the service runs (`Server.Release.PM.live_release`): a change of `sha` between refreshes is a cut; null before the first, absent from an older server */
-  release?: { sha: string; cut_at: string } | null
+  release?: { sha: string; cut_at: string; /** the cut's commit subjects, oldest to newest, at most 12 (`Server.Release`); absent from an older server */ notes?: string[] } | null
   /** the Claude plan's windows as the last session on it reported them (`Server.Usage`); claude is null before any */
   usage?: { claude: { five_hour?: UsageWindow; seven_day?: UsageWindow; at: string } | null }
   /** the life side per `home` workspace id (`Server.Office.status`); absent for every other workspace */

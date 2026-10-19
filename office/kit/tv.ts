@@ -323,6 +323,14 @@ const aquarium = (): Show => {
   }
 }
 
+/** a cut's notes as an encyclopedia entry: "UQBAR — release 650fa4a. 1. first. 2. second." */
+export const releaseText = (sha: string, notes: readonly string[]) =>
+  `UQBAR — release ${sha.slice(0, 7)}. ${notes.map((n, i) => `${i + 1}. ${n.replace(/\s+/g, " ").trim().replace(/\.$/, "")}.`).join(" ")}`.trim()
+/** frames a cut's channel stays up at least, so it can be read; the notes' crawl ends it when the restart is through */
+export const RELEASE_MIN = 240
+/** columns of the crawl a frame moves */
+const CRAWL = 2
+
 /** the TV: a screen, its channels in turn (a minute each), and the remote */
 export class Tv {
   readonly screen: Screen
@@ -330,7 +338,13 @@ export class Tv {
   private idx = Math.floor(Math.random() * this.shows.length)
   private ticks = 0
   constructor(w: number, h: number) { this.screen = new Screen(w, h); this.shows[this.idx]!.init(this.screen) }
-  get channel() { return this.levelLeft > 0 ? "level" : this.shows[this.idx]!.name }
+  get channel() { return this.levelLeft > 0 ? "level" : this.cut ? "release" : this.shows[this.idx]!.name }
+  /** the release channel: Uqbar's entry for a cut, up from the cut until `settle()` (after at least RELEASE_MIN frames) */
+  private cut: { sha: string; text: string; at: number; settled: boolean } | null = null
+  showRelease(sha: string, notes: readonly string[]) { this.cut = { sha: sha.slice(0, 7), text: releaseText(sha, notes), at: 0, settled: false } }
+  /** the next snapshot's sha has settled: the entry ends once it has been up long enough */
+  settle() { if (this.cut) this.cut.settled = true }
+  get cutting() { return this.cut !== null }
   /** the level channel: "LEVEL" and the number, for `frames`, then the interrupted show again */
   showLevel(n: number, frames = 150) { this.level = n; this.levelLeft = frames }
   private level = 0
@@ -341,6 +355,21 @@ export class Tv {
       for (let c = 0; c < SMALL.w; c++) if (bits & (1 << (SMALL.w - 1 - c))) for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) s.plot(x0 + (i * SMALL.w + c) * scale + dx, y + r * scale + dy, hue)
     }))
   }
+  private drawRelease(c: NonNullable<Tv["cut"]>) {
+    const s = this.screen
+    s.clear()
+    this.drawText("UQBAR", 1, 1, 3)
+    this.drawText(c.sha, 10, 1, c.at % 16 < 8 ? 1 : 2)
+    // the entry crawls right to left along the bottom row
+    const crawl = c.text.replace(/—/g, "-"), x0 = s.w - c.at * CRAWL
+    ;[...crawl].forEach((ch, i) => {
+      const gx = x0 + i * SMALL.w
+      if (gx < -SMALL.w || gx >= s.w) return
+      SMALL.glyph(ch).forEach((bits, r) => {
+        for (let col = 0; col < SMALL.w; col++) if (bits & (1 << (SMALL.w - 1 - col))) s.plot(gx + col, 19 + r, 4)
+      })
+    })
+  }
   /** one frame of the show; changes channel every 300 frames */
   step() {
     if (this.levelLeft > 0) {
@@ -348,6 +377,13 @@ export class Tv {
       this.drawText("LEVEL", 2, 1, 3)
       this.drawText(String(this.level), 13, 2, this.levelLeft % 8 < 4 ? 1 : 2)
       if (--this.levelLeft === 0) { this.screen.clear(); this.shows[this.idx]!.init(this.screen) }
+      return
+    }
+    if (this.cut) {
+      const c = this.cut
+      this.drawRelease(c)
+      c.at++
+      if (c.settled && c.at >= RELEASE_MIN) { this.cut = null; this.screen.clear(); this.shows[this.idx]!.init(this.screen) }
       return
     }
     if (++this.ticks % 300 === 0) return this.next()

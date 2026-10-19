@@ -50,3 +50,8 @@ Escape
 Escape
 D
 wait:Ding dong!
+# --- a cut (the toy has no release of its own): pizza at the door, Uqbar's entry on the TV
+/
+'cut a release'
+Enter
+wait:Pizza

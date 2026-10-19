@@ -455,6 +455,16 @@ function tellNews(before: Agents, beforeNeeds: data.Need[]) {
   else if (fresh.length > 1) notify(`${fresh.length} things wait on you`, fresh.map(needTitle).join(" · "))
   if (before.health?.state === "ok" && all.health?.state === "warn") notify("tlon needs a look", all.health.problems.join("; "))
   for (const kind of arrivals(before, all, beforeNeeds, needs)) room().ring(kind)
+  releaseOnTv(before, all)
+}
+/** a cut puts Uqbar's entry on the TV; the next snapshot that holds the same sha ends it */
+function releaseOnTv(before: Agents, after: Agents) {
+  if (!before.ok || !after.ok || !after.release) return
+  for (const r of rooms.values()) {
+    if (!(r instanceof WideRoom)) continue
+    if (before.release?.sha !== after.release.sha) r.cut(after.release.sha, after.release.notes ?? [])
+    else if (r.cutting) r.cutDone()
+  }
 }
 /** a desktop notification (OSC 777, as ghostty, kitty, WezTerm and foot take it) */
 function notify(title: string, body: string) {
@@ -705,7 +715,8 @@ async function finder() {
   picks.push(...ticketPicks(all.tickets, wsName, (id) => open({ kind: "ticket", id })))
   for (const w of all.workspaces) picks.push({ segs: [{ s: "workspace ", fg: ROLE.inactive }, { s: w.name, fg: ROLE.body }], text: `workspace ${w.name}`, run: () => goWs(w.id) })
   for (const c of all.bench.filter((b) => b.workspace_id === ws)) picks.push({ segs: [{ s: "coworker ", fg: ROLE.inactive }, { s: c.name, fg: shirtOf(c.archetype) }, { s: `  ${c.archetype ?? ""}`, fg: ROLE.inactive }], text: `${c.name} ${c.archetype}`, run: () => open({ kind: "person", name: c.name }) })
-  for (const [label, run] of VERBS) picks.push({ segs: [{ s: "do ", fg: ROLE.inactive }, { s: label, fg: ROLE.prose }], text: label, run })
+  const toyVerbs: [string, () => void][] = world ? [["cut a release (the toy: Uqbar's entry on the TV)", () => { world.cut(); status = "a cut: pizza at the door, the entry on the TV"; void refresh() }]] : []
+  for (const [label, run] of [...VERBS, ...toyVerbs]) picks.push({ segs: [{ s: "do ", fg: ROLE.inactive }, { s: label, fg: ROLE.prose }], text: label, run })
   picks.push({ segs: [{ s: "the Library of Babel", fg: ROLE.inactive }], text: "babel library borges", run: () => openBabel() })
   find("FIND — a thread, a workspace, a coworker, a verb", picks)
   const closed = await data.history()
