@@ -67,7 +67,7 @@ pure parts are `lib/` (bun-tested).
   check, todos, blockers, what is red (`office_glance`), and context / 5h / week use.
 - **`/thread`**: a pane with the coworker's own figure (`office/cli.ts figure`), its voice, the
   workline with **advance** / **finish** buttons that fill the prompt (never call), the branch's
-  commits, cited threads, the crew and what each is doing, and the thread's conversation.
+  commits, cited threads, the crew and what each is doing (a seat's `status` as the server words it, `lib/status.ts`: ● working, ! waiting, ○ idle, ◌ cold, · off), and the thread's conversation.
 - **Toasts**: a new @mention of this seat, something newly red, the day's landings at start, a
   landing the seat led (with a chime), and a line from the office's pool at most hourly.
 - The spinner speaks in the seat's catchphrase; a finished turn gets a Borgesian verb.

@@ -23,6 +23,7 @@ import {
   type Entry,
 } from "./lib/capture.ts";
 import { DEFAULT_MODEL, delegateSettings, isImagePath, mimeOf, parseArgs, parseToolArgs, serializeTranscript, VISION_MODELS, visionPrompt } from "./lib/consult.ts";
+import { seatGlyph, seatStatus } from "./lib/status.ts";
 import { attribution, bandParts, figureCells, gateOf, landingsOf, mentionsOf, operatorApi, turnWord, usageReport, type Glance } from "./lib/citizen.ts";
 import { CHIME_WAV } from "./lib/chime.ts";
 
@@ -781,7 +782,7 @@ export function register(on) {
     if (d?.cited?.length) head.push(Text({ key: "cited", dimColor: true, children: [`cites ${d.cited.map((c) => `#${c.id}${c.stage ? ` (${c.stage})` : ""}`).join(", ")}`] }));
     const crew = glance?.crew ?? [];
     if (crew.length)
-      head.push(Text({ key: "crew", children: [crew.map((c) => `${c.thinking ? "●" : c.warm ? "○" : "·"} ${c.agent}${c.doing ? ` ${c.doing}` : ""}`).join("  ")] }));
+      head.push(Text({ key: "crew", children: [crew.map((c) => `${seatGlyph(seatStatus(c))} ${c.agent}${c.doing ? ` ${c.doing}` : ""}`).join("  ")] }));
     const body = messages.length
       ? messages.map((m, i) => Box({ key: `m${i}`, flexDirection: "column", children: [Text({ bold: true, children: [m.author] }), Markdown({ text: m.body })] }))
       : [Text({ key: "empty", dimColor: true, children: ["no messages on this thread yet"] })];
