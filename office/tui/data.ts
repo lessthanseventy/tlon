@@ -1,6 +1,7 @@
 // The TUI's line to the server: the operator API over loopback HTTP (Server.MCP.OperatorAPI) — the
 // always-up service at 127.0.0.1:4040 unless TLON_URL says otherwise. No checkout, no release
 // beside it: a compiled TUI runs anywhere the server answers.
+import { AsyncLocalStorage } from "node:async_hooks"
 import { EMPTY, type Agents, type CorkNote, type LifeStatus, type Thread, type ThreadView } from "../kit/types"
 import type { Note } from "../kit/margin"
 import type { Target } from "./terminal"
@@ -188,16 +189,21 @@ export const closeThread = (id: number) => write(`closing #${id}`, `/threads/${i
 export async function page(id: number, before: number): Promise<ThreadView | null> {
   try { const r = await call("GET", `/office/threads/${id}?before=${before}`); return r.status === 200 ? r.json : null } catch { return null }
 }
-/** why the last `read` gave nothing, or null when it answered: a card that has nothing to show says so instead of "reading…" for ever */
-let readWhy: string | null = null
-export const readFailure = () => readWhy
-export const readReset = () => { readWhy = null }
+/** why a `read` gave nothing: kept per `reading` scope, so one card's poll never rewrites another card's reason */
+const readScope = new AsyncLocalStorage<{ why: string | null }>()
+/** run a card's reads together and say why the last one that came back empty did, or null when it answered: a card with nothing to show says so instead of "reading…" for ever */
+export async function reading(fn: () => Promise<unknown>): Promise<string | null> {
+  const scope = { why: null as string | null }
+  await readScope.run(scope, fn)
+  return scope.why
+}
 async function read<T>(path: string): Promise<T | null> {
+  const scope = readScope.getStore()
   try {
     const r = await call("GET", path)
-    if (r.status === 200 && r.json !== null) { readWhy = null; return r.json }
-    readWhy = r.status === 200 ? "the server sent nothing" : r.status === 404 ? "the server has no such page" : `the server answered ${r.status}`
-  } catch (e) { readWhy = (e as Error).name === "TimeoutError" ? "the server isn't answering" : (e as Error).message }
+    if (r.status === 200 && r.json !== null) { if (scope) scope.why = null; return r.json }
+    if (scope) scope.why = r.status === 200 ? "the server sent nothing" : r.status === 404 ? "the server has no such page" : `the server answered ${r.status}`
+  } catch (e) { if (scope) scope.why = (e as Error).name === "TimeoutError" ? "the server isn't answering" : (e as Error).message }
   return null
 }
 /** a home workspace's life card body */
