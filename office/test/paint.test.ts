@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { Frame } from "../kit/canvas"
 import { geometry, kittyImage, textLayer } from "../tui/paint"
 
 describe("kittyImage", () => {
@@ -114,4 +115,13 @@ describe("inkInto text backing (kitty)", () => {
     const o = (34 * W + 22) * 4 // the strip, inside the label's box
     expect([big[o], big[o + 1], big[o + 2]]).not.toEqual([0x5a, 0x5a, 0x5a])
   })
+})
+
+test("a label that straddles the room's edge slides in whole instead of being cut mid-word", () => {
+  const W = 40, H = 20
+  const fr = { width: W, height: H, rgba: new Uint8Array(W * H * 4), ink: [{ t: "text", x: 1, y: 6, s: "TICKETS 2", color: "#ffffff", size: 8 }, { t: "text", x: 39, y: 10, s: "notes land here", color: "#ffffff", size: 8 }], hits: [] } as unknown as Frame
+  const g = geometry(W, H, 40, 10, 0, null, false)
+  const text = textLayer(fr, g).join("\n").replace(/\x1b\[[\d;]*m/g, "")
+  expect(text).toContain("TICKETS 2")
+  expect(text).toContain("notes land here")
 })
