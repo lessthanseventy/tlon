@@ -1,5 +1,6 @@
 // A thread's activity feed as the card's timeline: who did what, a run of one coworker's events under
 // their name, a rule where a fresh turn began, newest at the bottom (the pane opens there and scrolls back).
+import { statusGlyph } from "../kit/crew"
 import { ROLE, type Role } from "../kit/palette"
 import type { Activity } from "../kit/types"
 import type { Seg } from "./term"
@@ -51,7 +52,7 @@ export function timelineRows(feed: Activity[], o: TimelineOpts): { segs: Seg[] }
     }
     const k = KINDS[e.kind] ?? KINDS.tool!, fg = ROLE[k.role]
     const newest = i === feed.length - 1
-    const mark: Seg = newest ? (o.live.has(e.agent) ? { s: "● ", fg: ROLE.live } : { s: "▸ ", fg: ROLE.key }) : { s: "  " }
+    const mark: Seg = newest ? (o.live.has(e.agent) ? { s: `${statusGlyph("working")} `, fg: ROLE.live } : { s: "▸ ", fg: ROLE.key }) : { s: "  " }
     const cut = e.summary.indexOf(" · ")
     const tool = cut < 0 ? e.summary : e.summary.slice(0, cut), target = cut < 0 ? "" : e.summary.slice(cut + 3)
     const head = `${mark.s}  ${clock(e.at)} ${k.glyph} ${tool}`

@@ -1,6 +1,7 @@
 // The office's data views: the snapshot narrowed to a workspace, who is on the crew and what they
 // are doing, the whiteboard's columns. Every room and every card reads these, so they cannot
 // disagree.
+import { ROLE } from "./palette"
 import type { Agents, Seat, Thread, Ticket } from "./types"
 
 /** what a click on a room means: a thread to show, a ticket to hand out, a person, or a tool */
@@ -90,14 +91,30 @@ export function peopleOf(a: Agents): Seat[] {
   return [...byName.values()]
 }
 
-export type CrewStatus = "working" | "waiting" | "idle"
+/** a seat's state, as the server's roster says it (`Server.Coworker.status`): the ONE vocabulary every surface uses */
+export type SeatStatus = "working" | "waiting" | "idle" | "cold" | "off"
+export type CrewStatus = SeatStatus
+/** most to least in need of a look: the order sorts, groups and the pick among a person's several sessions follow */
+export const STATUS_ORDER: readonly SeatStatus[] = ["waiting", "working", "idle", "cold", "off"]
+const GLYPH: Record<SeatStatus, string> = { working: "●", waiting: "!", idle: "○", cold: "◌", off: "·" }
+const WORD: Record<SeatStatus, string> = { working: "working", waiting: "waiting on you", idle: "idle", cold: "cold", off: "off" }
+const TONE: Record<SeatStatus, string> = { working: ROLE.live, waiting: ROLE.attention, idle: ROLE.inactive, cold: ROLE.inactive, off: ROLE.inactive }
+/** the one glyph, word and colour a seat's state is drawn with, on every surface */
+export const statusGlyph = (s: SeatStatus) => GLYPH[s]
+export const statusWord = (s: SeatStatus) => WORD[s]
+export const statusTone = (s: SeatStatus) => TONE[s]
 /** one row of the crew: who, in what role, doing what — a crew board's light and a crew card's row */
-export type Crew = { name: string; archetype: string | null; manager: boolean; lead: boolean; status: CrewStatus; thread: number | null; title: string }
-/** the office's crew, in bench order */
+export type Crew = { name: string; archetype: string | null; manager: boolean; lead: boolean; status: SeatStatus; thread: number | null; title: string }
+/** the office's crew, in bench order. A server that sends `status` on its roster rows is believed (no row at all is "off");
+ *  an older one gets the same words worked out here from the session's warmth */
 export function crewOf(a: Agents): Crew[] {
+  const served = a.roster.some((r) => r.status)
   return peopleOf(a).map((p) => {
     const t = p.thread_id > 0 ? a.threads.find((x) => x.id === p.thread_id) : undefined
-    const status: CrewStatus = asksYou(p.agent, t) ? "waiting" : p.thinking ? "working" : "idle"
+    const rows = a.roster.filter((r) => r.agent === p.agent)
+    const sent = rows.map((r) => r.status).filter((x): x is SeatStatus => !!x).sort((x, y) => STATUS_ORDER.indexOf(x) - STATUS_ORDER.indexOf(y))[0]
+    const worked: SeatStatus = asksYou(p.agent, t) ? "waiting" : p.thinking ? "working" : p.warm ? "idle" : "cold"
+    const status = sent ?? (served && !rows.length ? "off" : worked)
     return { name: p.agent, archetype: p.archetype ?? null, manager: isManager(a, p), lead: !!p.lead, status, thread: p.thread_id > 0 ? p.thread_id : null, title: p.title }
   })
 }
@@ -109,11 +126,11 @@ const STAGE_COL: Record<string, number> = { intent: 2, spec: 2, plan: 3, build: 
 export const COLS = ["TICKETS", "DOING", "SPEC", "PLAN", "BUILD", "REVIEW"]
 /** one note on the whiteboard: what a click on it does, and what its sticky and its list row say */
 export type BoardItem = { act: Act; title: string; who: string | null; stage: string; asks: boolean; archetype: string | null; high: boolean; routed?: boolean; state?: CardState | null }
-/** where a workline stands, from the server's `seat`: its lead at a desk (▶), parked for a seat under the leaf cap (⏸), nobody at a desk (○), or waiting on you (⚑) */
+/** where a workline stands, from the server's `seat`: its lead at a desk (▶), parked for a seat under the leaf cap (⏸), nobody at a desk (◇), or waiting on you (⚑) */
 export type CardState = { kind: "running" | "parked" | "idle" | "needs" | "checking" | "merging"; why: string; atCap?: boolean }
 /** what a board knows beyond the snapshot: the leaf cap (`max_leaves` from the settings) and the threads on the needs list */
 export type BoardCtx = { maxLeaves?: number | null; needs?: number[]; checking?: number | null; merging?: { thread_id: number; state: "landing" | "queued" }[] }
-export const STATE_GLYPH: Record<CardState["kind"], string> = { running: "▶", parked: "⏸", idle: "○", needs: "⚑", checking: "✓", merging: "⤵" }
+export const STATE_GLYPH: Record<CardState["kind"], string> = { running: "▶", parked: "⏸", idle: "◇", needs: "⚑", checking: "✓", merging: "⤵" }
 
 /** a thread's card state, or null when nobody leads it */
 export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState | null {
