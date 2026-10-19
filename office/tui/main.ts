@@ -716,6 +716,8 @@ async function finder() {
 /** a page of the Library of Babel, the width of the card */
 function openBabel() { open({ kind: "babel", page: babelPage(DETAIL - 2, Math.max(20, paneW() - 4)) }) }
 
+/** what a stalled need's nudge says to the lead */
+const NUDGE = "Nothing has moved here for a while: advance the stage if its work is done, or say what is blocking you."
 /** what can be done about one waiting item — the inbox's list and its one-at-a-time card share these */
 function needActions(n: data.Need): Action[] {
   const tid = n.thread_id ?? null
@@ -731,7 +733,12 @@ function needActions(n: data.Need): Action[] {
       { ...bind("need.d.job_failed"), run: () => void did(data.dismissJob(n.ref!)).then(after) },
     ] : []),
     ...((n.kind === "question" || n.kind === "mention") && tid ? [{ ...bind("need.r.question"), run: () => reply(tid) }] : []),
-    ...(n.kind === "stalled" && tid ? [{ ...bind("need.r.stalled"), run: () => reply(tid) }] : []),
+    ...(n.kind === "stalled" && tid ? [
+      { ...bind("need.n.stalled"), run: () => void did(data.post(tid, NUDGE)).then(after) },
+      { ...bind("need.o.stalled"), run: () => ask(`hand #${tid} to — a coworker's name`, (s) => { if (s.trim()) void did(data.handOff(tid, s.trim())).then(after) }) },
+      { ...bind("need.x.stalled"), run: () => ask(`close #${tid} — why it is dropped`, (s) => { if (s.trim()) void did(data.closeThread(tid, s.trim())).then(after) }) },
+      { ...bind("need.r.stalled"), run: () => reply(tid) },
+    ] : []),
     ...(n.kind === "verify_failed" && tid ? [{ ...bind("need.V.verify_failed"), run: () => void did(data.reverify(tid)).then(after) }] : []),
     ...(n.kind === "publish_failed" && tid ? [{ ...bind("need.R.publish_failed"), run: () => void did(data.republish(tid)).then(after) }] : []),
     ...(n.kind === "release_failed" && n.ref ? [{ ...bind("need.R.release_failed"), run: () => void did(data.retryRelease(n.ref!)).then(after) }] : []),
