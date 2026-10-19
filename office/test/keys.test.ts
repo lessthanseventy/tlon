@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { CARD_PARTS, HELPERS, KEYS, OMITS, verbOf, type Binding, type Scope } from "../tui/keys"
+import { balloonLines } from "../kit/canvas"
 import { PLAY } from "../tui/sandbox"
 
 // A key means one thing everywhere. A card's own actions run before the global keys, and in the
@@ -83,4 +84,9 @@ test("? is the help key everywhere: a global, and the help card lists the reader
 test("the screen is the room: no hint says ctrl+] goes to the lobby", async () => {
   expect(all.find((b) => b.id === "global.room")?.label).toBe("room")
   for (const f of ["main.ts", "reader.ts", "keys.ts"]) expect(await Bun.file(new URL(`../tui/${f}`, import.meta.url)).text(), f).not.toMatch(/ctrl\+\] lobby/)
+})
+
+test("a clipped balloon names the key that opens the conversation", () => {
+  expect(all.find((b) => b.id === "person.v")?.key).toBe("v")
+  expect(balloonLines("word ".repeat(60))[3]).toMatch(/\(v\)$/)
 })

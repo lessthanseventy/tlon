@@ -17,10 +17,12 @@ describe("balloonLines", () => {
       for (const l of out) expect(l.length).toBeLessThanOrEqual(width)
     }
   })
-  test("default is 34 x 4; overflow ends in ...", () => {
+  test("default is 34 x 4; overflow ends in ... (v), the key to the conversation, and still fits", () => {
     const out = balloonLines("word ".repeat(60))
     expect(out.length).toBe(4)
-    expect(out[3]!.endsWith("...")).toBe(true)
+    expect(out[3]!.endsWith("... (v)")).toBe(true)
+    expect(out[3]!.length).toBeLessThanOrEqual(34)
+    expect(balloonLines("word ".repeat(60), 6)[3]!.endsWith("...")).toBe(true)
     expect(balloonLines("done - merged the thing")).toEqual(["done - merged the thing"])
   })
 })
