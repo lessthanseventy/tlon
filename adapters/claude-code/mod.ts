@@ -559,7 +559,7 @@ export function register(on) {
     const now = await $.clock.now();
     const why = late ? " in time" : dossierError ? ` (${dossierError})` : "";
     const asOf = why ? `\n_the server didn't answer${why}: this brief is as of ${ago(new Date(dossierAt), new Date(now))}, the last it gave._` : "";
-    return brief(renderBrief(dossier, new Date(), await $.session.model()) + asOf);
+    return brief(renderBrief(dossier, new Date(), await $.session.model(), undefined, (await $.env.get("TLON_OPERATOR")) || undefined) + asOf);
   });
 
   // #42 and @seat: the threads and the crew this session knows of.

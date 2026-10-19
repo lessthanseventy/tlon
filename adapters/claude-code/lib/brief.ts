@@ -126,13 +126,11 @@ export interface Commit {
   at: string;
 }
 
-// The operator's handle, so a stated fact reads as HIS words. The server trusts only this
-// author for `stated` provenance; the render names him for the reader.
-const OPERATOR = "andrew";
 
 const CHATTER_TAIL = 5;
 
-export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, harness = "Claude Code"): string {
+/** `operator` is the handle a `stated` fact is credited to: the server trusts only that author for `stated` provenance. */
+export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, harness = "Claude Code", operator = "andrew"): string {
   const lines: string[] = [];
 
   const goal = d.goal ?? "(untitled thread)";
@@ -157,13 +155,13 @@ export function renderBrief(d: Dossier, now: Date = new Date(), model?: string, 
 
   if (d.learnings.shown.length > 0) {
     lines.push("", "## What's known");
-    for (const f of d.learnings.shown) lines.push(renderFact(f));
+    for (const f of d.learnings.shown) lines.push(renderFact(f, operator));
     pushMore(lines, d.learnings.more, "learnings");
   }
 
   if (d.knowledge && d.knowledge.shown.length > 0) {
     lines.push("", "## What the office knows  (pinned, and learned on other threads)");
-    for (const f of d.knowledge.shown) lines.push(renderFact(f));
+    for (const f of d.knowledge.shown) lines.push(renderFact(f, operator));
     pushMore(lines, d.knowledge.more, "knowledge");
   }
 
@@ -236,10 +234,10 @@ function renderChatter(m: ChatterMessage): string {
 // The default case FAILS CLOSED: `opinion`, or any certainty the server emits that we don't
 // model, degrades to the least-authoritative rendering — never an unmarked line, which
 // would launder an unknown into apparent truth.
-function renderFact(f: Fact): string {
+function renderFact(f: Fact, operator: string): string {
   switch (f.certainty) {
     case "stated":
-      return `- [stated] ${OPERATOR}: "${f.text}"`;
+      return `- [stated] ${operator}: "${f.text}"`;
     case "checked":
       return `- [checked] ${f.text}  (verify: \`${f.check_cmd}\`)`;
     default:
