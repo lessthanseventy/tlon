@@ -43,7 +43,7 @@ import { say, handToUqbar, lobbyOf, replies, conversation, speech } from "./talk
 import { studyOf } from "../kit/uqbar"
 import * as data from "./data"
 import { bind, hints } from "./keys"
-import { PLAY, playable, toy } from "./sandbox"
+import { PLAY, toy } from "./sandbox"
 import { Editor, wrap } from "./editor"
 import { rank } from "./fuzzy"
 import { ticketPicks } from "./finder"
@@ -732,7 +732,7 @@ function needActions(n: data.Need): Action[] {
       { ...bind("need.d.quota"), run: () => void did(data.dismissNeed(n.key)).then(after) },
     ] : []),
     ...(n.level === "decide" || n.kind === "ask" || n.kind === "stalled" ? [{ ...bind("need.d.decide"), run: () => void did(data.dismissNeed(n.key)).then(after) }] : []),
-    ...(tid ? [{ ...bind("need.v"), run: () => openReader(tid) }, { ...bind("need.t"), run: () => void zoomInto(tid) }] : []),
+    ...(tid ? [...(n.kind === "pr_blocked" ? [] : [{ ...bind("need.v"), run: () => openReader(tid) }]), { ...bind("need.t"), run: () => void zoomInto(tid) }] : []),
   ]
   return acts.filter((a, i, all) => all.findIndex((b) => b.key === a.key) === i)
 }
@@ -768,7 +768,7 @@ const VERBS: [string, () => void][] = [
   ["in-tray: what just happened", () => open({ kind: "tray" })], ["triage: what is stuck", () => open({ kind: "triage" })],
   ["health: the service and its box", () => open({ kind: "health" })], ["memory: pinned facts and habits", () => open({ kind: "memory" })],
   ["workspaces", () => open({ kind: "boss" })], ["this workspace's settings and repos", () => open({ kind: "card" })],
-  ["settings: the running system's knobs, and a restart", () => open({ kind: "settings" })],
+  ["settings: the running system's knobs", () => open({ kind: "settings" })], ["restart the server (waits for quiet)", () => void did(data.restart())],
   ["the wackiness dial: business … rimworld", () => open({ kind: "whimsy" })],
   ["crew", () => open({ kind: "crew" })], ["shifts", () => open({ kind: "crew" })], ["calendar", () => open({ kind: "calendar" })], ["filing cabinet", () => open({ kind: "archive" })],
   ["inbox: everything waiting on you", () => inbox()], ["schedule something", () => newSchedule()],
@@ -1064,7 +1064,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         { ...bind("home.w"), run: () => open({ kind: "tray" }) }, { ...bind("home.!"), run: () => open({ kind: "triage" }) },
         { ...bind("home.a"), run: () => open({ kind: "calendar" }) }, { ...bind("home.o"), run: () => open({ kind: "notes" }) },
         { ...bind("home.b"), run: () => open({ kind: "memory" }) }, { ...bind("home.H"), run: () => open({ kind: "health" }) },
-        ...(all.life?.[String(w)] ? [{ ...bind("home.L"), run: () => open({ kind: "life" }) }, { ...bind("home.D"), run: openDump }] : []),
+        ...(all.life?.[String(w)] ? [{ ...bind("home.L"), run: () => open({ kind: "life" }) }] : []),
         ...(flagOn(all, "build_mode") ? [{ ...bind("home.B"), run: () => open({ kind: "build" }) }] : []),
         { ...bind("home.f"), run: () => open({ kind: "archive" }) }, { ...bind("home.W"), run: () => open({ kind: "boss" }) },
         { ...bind("home.S"), run: () => open({ kind: "settings" }) },
@@ -1249,10 +1249,10 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         open: () => void did(r.kind === "routine" ? data.routineDone(r.id, r.title) : data.questDone(r.id, r.title)).then(loadCard).then(draw),
       })) : [{ segs: [dim("reading the day…")] }]
       if (s && !rows.length) rows.push({ segs: [dim("nothing due, no open quests")] })
-      if (s) rows.unshift({ segs: [s.dump ? plain(`dump · ${data.lines(s.dump.lines)} · edited ${stamp(s.dump.updated_at)}`) : dim("dump · empty — D to pour it all out")], open: openDump })
+      if (s) rows.unshift({ segs: [s.dump ? plain(`dump · ${data.lines(s.dump.lines)} · edited ${stamp(s.dump.updated_at)}`) : dim("dump · empty — ⏎ to pour it all out")], open: openDump })
       return {
         title: s ? `LIFE · lv ${s.level} · ${s.xp} xp` : "LIFE", rows,
-        actions: [{ ...bind("life.D"), run: openDump }, { ...bind("life.E"), run: () => open({ kind: "pages" }) }, { ...bind("life.r"), run: newRoutine }, { ...bind("life.Q"), run: newQuest }, back1],
+        actions: [{ ...bind("life.E"), run: () => open({ kind: "pages" }) }, { ...bind("life.r"), run: newRoutine }, { ...bind("life.Q"), run: newQuest }, back1],
       }
     }
     case "pages": {
@@ -1517,7 +1517,6 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         title: "THE RUNNING SYSTEM · ⏎ changes the selected knob", rows,
         actions: [
           { ...bind("settings.Z"), run: () => open({ kind: "whimsy" }) },
-          { ...bind("settings.R"), run: () => void did(data.restart()).then(reload) },
           ...(settings.restart_pending ? [{ ...bind("settings.x"), run: () => void did(data.restartCancel()).then(reload) }] : []),
           back1,
         ],
@@ -1942,7 +1941,7 @@ function drawPane(top: number, colsN: number, termRows: number): string {
     cursor = { r: v.cursor.r + 1, c: v.cursor.c + 3 }
   } else {
     const d = detail()
-    title = d.title; segRows = d.rows; acts = world ? playable(d.actions) : d.actions; tint = d.tint ?? ROLE.key
+    title = d.title; segRows = d.rows; acts = d.actions; tint = d.tint ?? ROLE.key
   }
   rows = segRows
   const split = acts.length > 0 && colsN >= 80
@@ -2085,7 +2084,7 @@ function editorKey(k: string) {
 function help() {
   if (mode.kind === "help") return
   const d = detail()
-  open({ kind: "help", from: mode, title: d.title, keys: (world ? playable(d.actions) : d.actions).map((x) => ({ key: keyName(x.key), label: x.label })) })
+  open({ kind: "help", from: mode, title: d.title, keys: d.actions.map((x) => ({ key: keyName(x.key), label: x.label })) })
 }
 
 // the last keys pressed, for the Konami code
@@ -2096,14 +2095,14 @@ function toyKey(k: string): boolean {
   if (!world) return false
   const r = room(), under = mode.kind === "person" ? mode.name : null
   switch (k) {
-    case "d": r.play("doorbell"); status = "ding dong"; break
-    case "e": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
-    case "f": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
-    case "t": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
-    case "n": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
-    case "w": world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break
-    case "p": if (mode.kind === "pet" && mode.who === "dog" && r instanceof WideRoom) r.patDog(); else if (under) r.pat(under); else r.pet(); status = "pat pat"; break
-    case "c": world.callOver(under ?? world.snapshot().bench[1]!.name); status = `calling someone over to ${under ?? "the desk"}`; void refresh(); break
+    case "D": r.play("doorbell"); status = "ding dong"; break
+    case "E": r.play("event"); status = r.eventNow() ? `event: ${r.eventNow()!.kind}` : r.eventsHere() ? (Object.values(resolveWhim(whim).events).some(Boolean) ? "something's up" : "events are switched off (the wackiness dial)") : "events need the wide room (kitty graphics)"; break
+    case "F": status = r.play("drill") ? "fire drill!" : "a scene is running — no drill until it ends"; break
+    case "T": r.catDo("come"); if (r instanceof WideRoom) r.dogDo("office"); status = "treat! they come running"; break
+    case "N": world.toggleNight(); for (const x of rooms.values()) x.setClock(world.now); status = world.now().getHours() === 23 ? "night falls" : "morning"; break
+    case "W": world.nextWeather(); status = `weather: ${world.snapshot().weather!.desc.toLowerCase()}`; void refresh(); break
+    case "P": if (mode.kind === "pet" && mode.who === "dog" && r instanceof WideRoom) r.patDog(); else if (under) r.pat(under); else r.pet(); status = "pat pat"; break
+    case "C": world.callOver(under ?? world.snapshot().bench[1]!.name); status = `calling someone over to ${under ?? "the desk"}`; void refresh(); break
     default: return false
   }
   changed(); draw(); return true
@@ -2188,7 +2187,7 @@ function onKey(k: string) {
     case "R": if (updated()) void relaunch(); return
     case "'": return talk(null)
     case "n": return newThread()
-    case "N": return newTicket()
+    case "I": return newTicket()
     case "c": return open({ kind: "crew" })
     case "t": return open({ kind: "column", col: 0 })
     case "o": return open({ kind: "notes" })
@@ -2201,7 +2200,7 @@ function onKey(k: string) {
     case "L": if (all.life?.[String(ws)]) open({ kind: "life" }); return
     case "B": if (flagOn(all, "build_mode")) open({ kind: "build" }); return
     case "U": return open({ kind: "entry" })
-    case "W": return open({ kind: "boss" })
+    case "O": return open({ kind: "boss" })
     case "S": return open({ kind: "settings" })
     case "p": room().pet(); changed(); return draw()
   }
