@@ -223,7 +223,7 @@ export const KEYS = [
   { id: "ideas.t", scope: "card:ideas", key: "I", label: "file it as a ticket", verb: "new ticket" },
   { id: "ideas.d", scope: "card:ideas", key: "d", label: "throw it out", verb: "remove" },
   // card:pet
-  { id: "pet.S.cat", scope: "card:pet", key: "enter", label: "save her temperament", mode: "cat" },
+  { id: "pet.S.cat", scope: "card:pet", key: "_", label: "save her temperament", mode: "cat", verb: "save" },
   { id: "pet.p.cat", scope: "card:pet", key: "p", label: "pat her", mode: "cat", verb: "pat" },
   { id: "pet.z.cat", scope: "card:pet", key: "1", label: "the zoomies", mode: "cat" },
   { id: "pet.y.cat", scope: "card:pet", key: "2", label: "play with the yarn", mode: "cat" },
@@ -240,7 +240,7 @@ export const KEYS = [
   { id: "pet.b.dog", scope: "card:pet", key: "6", label: "bed", mode: "dog" },
   { id: "pet.g.dog", scope: "card:pet", key: "7", label: "go cheer someone on", mode: "dog" },
   // card:look
-  { id: "look.s", scope: "card:look", key: "enter", label: "save" },
+  { id: "look.s", scope: "card:look", key: "_", label: "save", verb: "save" },
   { id: "look.r", scope: "card:look", key: "y", label: "roll", verb: "again" },
   { id: "look.e", scope: "card:look", key: "e", label: "draw a custom look", verb: "edit" },
   // card:look-editor: a paint mode that takes every key before the card does, so its letters are exempt from the one-verb rule (test/keys.test.ts)

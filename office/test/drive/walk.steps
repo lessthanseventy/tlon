@@ -59,14 +59,17 @@ Escape
 X
 n
 '\'
-Escape
+Enter
+_
 m
 'psst'
 Escape
 Escape
 
-# --- Nina (click the cat): her rows and keys
--l $'\033[<0;62;22M\033[<0;62;22m'
+# --- Nina (by the finder: she wanders, so a click can miss): her rows and keys
+/
+'Nina, the cat'
+Enter
 '?'
 Escape
 1
@@ -83,6 +86,7 @@ Down
 Enter
 Right
 Enter
+_
 
 # --- the board, by click: header, then a card (#177)
 -l $'\033[<0;84;3M\033[<0;84;3m'

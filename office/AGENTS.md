@@ -62,7 +62,7 @@ linked window at a time, ctrl+] to the room).
   ↓ back, space locks a row, `e` renames, ⏎ adopts into the species' slot — the occupant leaves by the door (one pet per slot, no
   history). `store.json` (`TLON_STORE`) holds species + seed + locks + edits. A new species is data: frames in `SPECIES_ART`, a
   `SPECIES_VOICE` pack, a `SPECIES_BASE` row and a `SLOT_SPECIES` entry (`fillArt` lets it ship `sit` alone).
-  `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `⏎` to save) and the finder (`/`); `talk.ts` what `m` (to a person) and `'` (to the office) post, on the workspace's front desk (the server's lobby thread); `reader.ts` a thread
+  `main.ts` is the room, its detail pane's cards (Nina's has her temperament rows, a live preview and `_` to save, `⏎` cycles the lit row) and the finder (`/`); `talk.ts` what `m` (to a person) and `'` (to the office) post, on the workspace's front desk (the server's lobby thread); `reader.ts` a thread
   full-screen with its composer (a thread opens, as its card or in the reader, with its reply box focused — unfocused when it has an open prompt, so 1–9 answer at once, or when another surface pushed it (`data.focus`), which never takes your keys unasked: ⏎ sends,
   the first esc leaves the box — drawn still, the thread's keys live, `r` or ⏎ back in (⏎ on a running coworker's card steps into their session) — the second esc goes back);
   ctrl+] is the room from anywhere — a card, a reply box, an input, the finder, the reader, a zoomed terminal — the room with

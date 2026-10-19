@@ -1732,7 +1732,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       return {
         title: `LOOK · ${name.toUpperCase()}`, rows,
         actions: [
-          // not "enter": rows[sel].open() (field-cycling) owns Enter here, same as every other card with cycled rows
+          // ⏎ is the lit row (it cycles a field); save has its own key
           { ...bind("look.s"), run: () => { saveLook(name, draft); lookDraft = null; back(); roomChanged = true; draw() } },
           { ...bind("look.r"), run: () => { Object.assign(draft, rollLook(`${name}:${rolls++}`)); draw() } },
           { ...bind("look.e"), run: () => {

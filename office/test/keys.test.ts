@@ -112,3 +112,10 @@ test("a clipped balloon names the key that opens the conversation", () => {
   expect(all.find((b) => b.id === "person.v")?.key).toBe("v")
   expect(balloonLines("word ".repeat(60))[3]).toMatch(/\(v\)$/)
 })
+
+test("save is one key with one verb, and ⏎ stays the lit row's on both cards that save", () => {
+  const saves = all.filter((b) => verbOf(b) === "save" && !PAINT_MODES.includes(b.scope))
+  expect(saves.map((b) => b.id).sort()).toEqual(["look.s", "pet.S.cat"])
+  expect(new Set(saves.map((b) => b.key)).size).toBe(1)
+  expect(saves.map((b) => b.key)).not.toContain("enter")
+})
