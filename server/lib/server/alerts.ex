@@ -13,7 +13,8 @@ defmodule Server.Alerts do
       that goes by on its own, no actions. One per happening, keyed by it, and listed for ten
       minutes after. Kinds: `seated`, a thread parked on the leaf cap got its coworker
       (`Server.Staffing.note_seated/2`); `landed`, GitHub merged a workline's PR
-      (`Server.Workline.landed_since/1`); `fixing`, an issue a ticket
+      (`Server.Workline.landed_since/1`; one row per landing, keyed by its event, worded by
+      `landed_title/1` — the desktop's toast and the Claude Code plugin's read this row); `fixing`, an issue a ticket
       took, saying who has it (`Server.Dossier.own_issue/3`); `live`, the service booted
       on a new release (`Server.Release.PM.note_live/1`). A `mention` of the operator is info too: a
       coworker's report goes by, and the office's inbox keeps it; what they must decide is an ask.
@@ -67,10 +68,13 @@ defmodule Server.Alerts do
       Enum.filter(from_needs, &(&1.level == "sticky")) ++
       Enum.filter(from_needs, &(&1.level == "info")) ++
       Enum.map(Keyword.get(opts, :seated, []), &info("seated", &1, &1.body)) ++
-      Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, "##{&1.thread_id} landed — #{&1.title}")) ++
+      Enum.map(Keyword.get(opts, :landed, []), &info("landed", &1, landed_title(&1))) ++
       Enum.map(Keyword.get(opts, :fixing, []), &info("fixing", &1, &1.body)) ++
       Enum.map(Keyword.get(opts, :live, []), &info("live", &1, &1.body))
   end
+
+  @doc "The one wording of a landing, for every surface that toasts it: `#185 landed — <title>`."
+  def landed_title(%{thread_id: id, title: title}), do: "##{id} landed — #{title}"
 
   defp info(kind, m, title) do
     %{
