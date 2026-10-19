@@ -503,6 +503,23 @@ defmodule Server.WorklineTest do
       {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
       assert {:ok, %{stage: "review", awaiting: "andrew"}} = Workline.land_queued(parked, merge: Merges)
     end
+
+    test "the operator is the configured handle: parking and standing approval follow it" do
+      start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
+      previous = Application.get_env(:server, :operator)
+      Application.put_env(:server, :operator, "someone")
+      on_exit(fn -> Application.put_env(:server, :operator, previous) end)
+
+      thread = open!(%{slug: "other-operator", stage: "review"})
+      {:ok, _} = Workline.review_verdict(thread, "approve", "lonnrot")
+
+      assert {:awaiting, %{awaiting: "someone"} = parked} =
+               Workline.advance(Repo.get!(Server.Thread, thread.id), artifacts: AllPresent, auto_land_risk: 2)
+
+      graded!(parked, @low)
+      assert {:ok, %{awaiting: nil}} = Workline.graded(parked, artifacts: AllPresent, auto_land_risk: 2)
+      assert_enqueued(worker: Server.Jobs.Land, args: %{thread_id: thread.id})
+    end
   end
 
   test "a merge that can't land keeps the gate parked, and says why on the thread" do
