@@ -25,7 +25,7 @@ const allOff = Object.fromEntries(EVENT_KINDS.map((k) => [k, false])) as Record<
 
 export const PRESETS: Record<Preset, Dials> = {
   business: { banter: false, frequency: "never", severity: 1, chain: false, events: allOff, weirdness: "curated", pets: false, doorbell: "off", souls: false, moods: false },
-  casual: { banter: true, frequency: "some", severity: 1, chain: false, events: allOn, weirdness: "curated", pets: true, doorbell: "normal", souls: false, moods: false },
+  casual: { banter: true, frequency: "some", severity: 1, chain: false, events: allOn, weirdness: "curated", pets: true, doorbell: "normal", souls: true, moods: false },
   party: { banter: true, frequency: "lots", severity: 2, chain: false, events: allOn, weirdness: "invented", pets: true, doorbell: "busy", souls: true, moods: false },
   rimworld: { banter: true, frequency: "lots", severity: 3, chain: true, events: allOn, weirdness: "invented", pets: true, doorbell: "busy", souls: true, moods: true },
 }
