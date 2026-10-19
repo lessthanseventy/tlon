@@ -240,7 +240,8 @@ defmodule Server.Life do
     Repo.all(
       from q in Quest,
         where: q.workspace_id == ^workspace_id and is_nil(q.done_at),
-        order_by: [asc_nulls_last: q.due_at]
+        order_by: [asc_nulls_last: q.due_at],
+        select: %{id: q.id, title: q.title, due_at: q.due_at, xp: q.xp}
     )
   end
 

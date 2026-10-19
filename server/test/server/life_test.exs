@@ -184,7 +184,8 @@ defmodule Server.LifeTest do
       assert status.next_level_at == 100
       assert Map.has_key?(status.streaks, routine.id)
       assert is_list(status.due)
-      assert is_list(status.quests)
+      assert [%{title: "dentist"}] = status.quests
+      assert %{"quests" => [%{"title" => "dentist"}]} = status |> JSON.encode!() |> JSON.decode!()
       assert is_list(status.today)
     end
 
