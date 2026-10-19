@@ -170,7 +170,7 @@ defmodule Server.Web.PanelsLive do
     <div class="panel">
       <span class="label">ON THE CLOCK</span>
       <div :for={s <- @sessions} class="row">
-        <span class={if s.warm?, do: "ok", else: "meta"}>{if s.warm?, do: "●", else: "○"}</span>
+        <span class={if s.warm?, do: "ok", else: "meta"}>{Server.Coworker.glyph(if s.warm?, do: :idle, else: :cold)}</span>
         <b>{s.agent}</b> on
         <.link navigate={"/threads/#{s.thread_id}"}>#{s.thread_id} {s.thread_title}</.link>
         <span class="meta">{s.pane_ref}</span>
