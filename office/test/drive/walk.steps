@@ -1,6 +1,6 @@
 # B7 drive walk, rail room (150x60): every card the sandbox can show x the keys its hint lists.
 # Replay: office/test/drive/run.sh   (narrow: OFFICE_COLS=60 OFFICE_ROWS=30 office/test/drive/run.sh)
-# Read the screen after each step. Clicks are SGR mouse presses at 1-based cell COL,ROW of this layout.
+# Read the screen after each step. A click is `click:TEXT[@DX,DY]`: it aims at a label the screen shows, never at a measured cell.
 # The sandbox shadows t c n w f p e d on every card (play keys), so tickets/crew/etc. are reached by click or the finder.
 wait:Toy
 
@@ -66,7 +66,7 @@ m
 Escape
 Escape
 
-# --- Nina (by the finder: she wanders, so a click can miss): her rows and keys
+# --- Nina (by the finder: she wanders, so no click finds her): her rows and keys
 /
 'Nina, the cat'
 Enter
@@ -89,7 +89,7 @@ Enter
 _
 
 # --- the board, by click: header, then a card (#177)
--l $'\033[<0;84;3M\033[<0;84;3m'
+click:PLAN
 Right
 Right
 Left
@@ -98,7 +98,7 @@ s
 J
 K
 Escape
--l $'\033[<0;78;5M\033[<0;78;5m'
+click:PLAN@0,1
 Escape
 v
 Escape
@@ -109,8 +109,8 @@ Escape
 Escape
 Escape
 
-# --- thread card keys (after a click on #103 and esc to leave the reply box)
--l $'\033[<0;78;5M\033[<0;78;5m'
+# --- thread card keys (after a click on the first PLAN card and esc to leave the reply box)
+click:PLAN@0,1
 Escape
 '>'
 g
@@ -128,17 +128,17 @@ Escape
 Escape
 
 # --- the other room clicks: tickets header, notes, crew, the operator's desk, the arcade via the finder
--l $'\033[<0;45;4M\033[<0;45;4m'
+click:TICKETS
 Escape
--l $'\033[<0;68;8M\033[<0;68;8m'
+click:notes land here
 Escape
--l $'\033[<0;72;27M\033[<0;72;27m'
+click:CREW
 Down
 Down
 Enter
 Escape
 Escape
--l $'\033[<0;57;19M\033[<0;57;19m'
+click:you
 Escape
 
 # --- crew screen via the finder: tabs, sort, group, shifts, pencils, lights out
@@ -238,7 +238,8 @@ Enter
 "'"
 
 # --- ctrl+] from depth lands in the lobby
--l $'\033[<0;78;5M\033[<0;78;5m'
+Escape
+click:PLAN@0,1
 C-]
 '/'
 C-]
@@ -283,8 +284,8 @@ Escape
 'tickets'
 Enter
 Escape
--l $'\033[<0;57;19M\033[<0;57;19m'
+click:you
 Escape
--l $'\033[<0;47;5M\033[<0;47;5m'
+click:TICKETS@2,1
 Escape
 Escape
