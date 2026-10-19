@@ -6,7 +6,7 @@ defmodule Server.Canvas.Paint do
   fast-import` writes the whole history, so a year of thousands of commits is one process.
 
   Today's picture is the newest one a coworker posted on the workspace's `canvas` thread in the last
-  day; with none, Life steps yesterday's canvas; a canvas Life has emptied or frozen is reseeded from
+  day; with none, a holiday's own picture (`Canvas.holiday/1`); with none, Life steps yesterday's canvas; a canvas Life has emptied or frozen is reseeded from
   the date. Each shade is scaled over the busiest real day on the graph (GitHub's daily totals, read
   with `gh`, less the canvas's own commits); when GitHub can't be read the result's `peak` is nil and
   the canvas paints a quiet graph's shades. Opts: `remote:`, `today:`, `author: {name, email}`,
@@ -59,10 +59,17 @@ defmodule Server.Canvas.Paint do
         {:picture, grid}
 
       :error ->
-        prev = previous(remote)
-        next = prev && Canvas.life(prev)
-        if (next && next != prev) and next != Canvas.blank(), do: {:life, next}, else: {:seed, soup(today)}
+        case Canvas.holiday(today) do
+          {:ok, _name, grid} -> {:holiday, grid}
+          :error -> life_or_seed(remote, today)
+        end
     end
+  end
+
+  defp life_or_seed(remote, today) do
+    prev = previous(remote)
+    next = prev && Canvas.life(prev)
+    if (next && next != prev) and next != Canvas.blank(), do: {:life, next}, else: {:seed, soup(today)}
   end
 
   defp picture(opts) do

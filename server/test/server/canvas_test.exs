@@ -80,6 +80,41 @@ defmodule Server.CanvasTest do
     assert Canvas.real_peak(%{}, %{}) == 0
   end
 
+  test "a holiday picks its picture by date; Easter is computed, in March some years and April others" do
+    name = fn date ->
+      case Canvas.holiday(date) do
+        {:ok, name, _grid} -> name
+        :error -> nil
+      end
+    end
+
+    assert name.(~D[2026-10-25]) == :pumpkin
+    assert name.(~D[2026-10-31]) == :pumpkin
+    assert name.(~D[2026-10-24]) == nil
+    assert name.(~D[2026-11-01]) == nil
+    assert name.(~D[2026-12-17]) == nil
+    assert name.(~D[2026-12-18]) == :tree
+    assert name.(~D[2026-12-25]) == :tree
+    assert name.(~D[2026-12-26]) == nil
+    assert name.(~D[2027-01-01]) == :fireworks
+    assert name.(~D[2027-02-14]) == :heart
+    assert name.(~D[2027-02-13]) == nil
+    assert name.(~D[2024-03-31]) == :egg
+    assert name.(~D[2025-04-20]) == :egg
+    assert name.(~D[2026-04-05]) == :egg
+    assert name.(~D[2025-03-31]) == nil
+    assert name.(~D[2026-10-08]) == nil
+  end
+
+  test "every holiday picture is a shaded 52 × 7 grid that survives its own text" do
+    for date <- [~D[2026-10-28], ~D[2026-12-20], ~D[2027-01-01], ~D[2027-02-14], ~D[2026-04-05]] do
+      assert {:ok, _name, grid} = Canvas.holiday(date)
+      assert map_size(grid) == 52 * 7
+      assert Enum.any?(grid, fn {_, s} -> s > 0 end)
+      assert {:ok, ^grid} = Canvas.parse(Canvas.to_text(grid))
+    end
+  end
+
   defp put(blank, row, col),
     do: blank |> Enum.at(row) |> String.to_charlist() |> List.replace_at(col, ?#) |> to_string()
 end
