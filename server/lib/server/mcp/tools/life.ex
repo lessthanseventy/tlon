@@ -7,7 +7,8 @@ defmodule Server.MCP.Tool.LifeStatus do
   end
 
   @impl true
-  def execute(params, frame), do: ok(frame, Server.Life.status(params.workspace_id))
+  def execute(params, frame),
+    do: Server.MCP.Tool.life(frame, params.workspace_id, fn -> ok(frame, Server.Life.status(params.workspace_id)) end)
 end
 
 defmodule Server.MCP.Tool.RoutineCreate do
@@ -26,7 +27,10 @@ defmodule Server.MCP.Tool.RoutineCreate do
   @impl true
   def execute(params, frame) do
     {workspace_id, attrs} = Map.pop!(params, :workspace_id)
-    reply(frame, Server.Life.create_routine(workspace_id, attrs), fn r -> %{"routine_id" => r.id} end)
+
+    Server.MCP.Tool.life(frame, workspace_id, fn ->
+      reply(frame, Server.Life.create_routine(workspace_id, attrs), fn r -> %{"routine_id" => r.id} end)
+    end)
   end
 end
 
@@ -34,7 +38,6 @@ defmodule Server.MCP.Tool.RoutineUpdate do
   @moduledoc "Edit a ROUTINE's mutable fields, by id."
   use Server.MCP.Tool
 
-  alias Server.Repo
   alias Server.Routine
 
   schema do
@@ -51,10 +54,9 @@ defmodule Server.MCP.Tool.RoutineUpdate do
   def execute(params, frame) do
     {routine_id, attrs} = Map.pop!(params, :routine_id)
 
-    case Repo.get(Routine, routine_id) do
-      nil -> fail(frame, "no such routine #{routine_id}")
-      routine -> reply(frame, Server.Life.update_routine(routine, attrs), fn r -> %{"routine_id" => r.id} end)
-    end
+    Server.MCP.Tool.life_row(frame, Routine, routine_id, fn routine ->
+      reply(frame, Server.Life.update_routine(routine, attrs), fn r -> %{"routine_id" => r.id} end)
+    end)
   end
 end
 
@@ -68,10 +70,12 @@ defmodule Server.MCP.Tool.RoutineDone do
 
   @impl true
   def execute(params, frame) do
-    case Server.Life.routine_done(params.routine_id) do
-      {:ok, run, level_up} -> ok(frame, %{"run_id" => run.id, "level_up" => level_up})
-      {:error, reason} -> fail(frame, to_string(reason))
-    end
+    Server.MCP.Tool.life_row(frame, Server.Routine, params.routine_id, fn routine ->
+      case Server.Life.routine_done(routine.id) do
+        {:ok, run, level_up} -> ok(frame, %{"run_id" => run.id, "level_up" => level_up})
+        {:error, reason} -> fail(frame, to_string(reason))
+      end
+    end)
   end
 end
 
@@ -89,7 +93,10 @@ defmodule Server.MCP.Tool.QuestCreate do
   @impl true
   def execute(params, frame) do
     {workspace_id, attrs} = Map.pop!(params, :workspace_id)
-    reply(frame, Server.Life.create_quest(workspace_id, attrs), fn q -> %{"quest_id" => q.id} end)
+
+    Server.MCP.Tool.life(frame, workspace_id, fn ->
+      reply(frame, Server.Life.create_quest(workspace_id, attrs), fn q -> %{"quest_id" => q.id} end)
+    end)
   end
 end
 
@@ -103,9 +110,11 @@ defmodule Server.MCP.Tool.QuestDone do
 
   @impl true
   def execute(params, frame) do
-    case Server.Life.quest_done(params.quest_id) do
-      {:ok, quest, level_up} -> ok(frame, %{"quest_id" => quest.id, "level_up" => level_up})
-      {:error, reason} -> fail(frame, to_string(reason))
-    end
+    Server.MCP.Tool.life_row(frame, Server.Quest, params.quest_id, fn quest ->
+      case Server.Life.quest_done(quest.id) do
+        {:ok, quest, level_up} -> ok(frame, %{"quest_id" => quest.id, "level_up" => level_up})
+        {:error, reason} -> fail(frame, to_string(reason))
+      end
+    end)
   end
 end

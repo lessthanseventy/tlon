@@ -187,6 +187,30 @@ defmodule Server.MCP.Tool do
     |> Enum.map_join("; ", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
   end
 
+  @doc """
+  Run `fun` only if the connection's agent may touch `workspace_id`'s life rows
+  (`Server.Life.authorize/2`); otherwise the tool fails with `not_yours`.
+  """
+  @spec life(Frame.t(), integer() | nil, (-> tool_reply())) :: tool_reply()
+  def life(frame, workspace_id, fun) do
+    case Server.Life.authorize(Server.MCP.Identity.from_frame(frame).agent, workspace_id) do
+      :ok ->
+        fun.()
+
+      {:error, :not_yours} ->
+        fail(frame, "not_yours: life rows answer to the operator and the home workspace's assistant")
+    end
+  end
+
+  @doc "`life/3` for a routine or quest by id: no such row is `not_found`, otherwise `fun` gets the row."
+  @spec life_row(Frame.t(), module(), integer(), (struct() -> tool_reply())) :: tool_reply()
+  def life_row(frame, schema, id, fun) do
+    case Server.Repo.get(schema, id) do
+      nil -> fail(frame, "not_found")
+      row -> life(frame, row.workspace_id, fn -> fun.(row) end)
+    end
+  end
+
   defp tool_name(module) do
     Enum.find_value(Server.MCP.Endpoint.__components__(:tool), &(&1.handler == module && &1.name))
   end
