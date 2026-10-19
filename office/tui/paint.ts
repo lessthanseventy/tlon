@@ -90,7 +90,9 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
   for (const i of ink) {
     if (i.t === "text") {
       const { font, sc } = typeFor(i.size, zoom), tw = i.s.length * font.w * sc, th = font.h * sc
-      const x = Math.round(i.align === "center" ? i.x * k - tw / 2 : i.x * k), base = Math.round(i.y * k - sc)
+      // a label is never cut at the floor's edge: it slides in whole, or is not drawn if the floor is narrower than it
+      if (tw > w) continue
+      const x = Math.max(0, Math.min(w - tw, Math.round(i.align === "center" ? i.x * k - tw / 2 : i.x * k))), base = Math.round(i.y * k - sc)
       let bg = behind(x, base - font.ascent * sc, tw, th, i.color)
       if (contrast(i.color, bg) < MIN_CONTRAST) { bg = backingFor(i.color); fill(x - sc, base - font.ascent * sc - sc, tw + 2 * sc, th + 2 * sc, bg) }
       backed?.push({ text: i.color, behind: bg })
@@ -178,7 +180,12 @@ export function textLayer(fr: Frame, g: Geometry, viewport: Viewport = { x: 0, y
   const toCol = (x: number) => Math.floor((x * g.k) / g.cw), toRow = (y: number) => Math.floor((y * g.k - 0.01) / g.ch)
   const taken: Box[] = []
   for (const i of fr.ink) {
-    if (i.t === "text") put(i.align === "center" ? toCol(i.x) - Math.floor(i.s.length / 2) : toCol(i.x), toRow(i.y), i.s, i.color)
+    if (i.t === "text") {
+      // a label is never cut at the room's edge: it slides in whole when it straddles the edge, and is not drawn if the room is narrower than it
+      if (i.s.length > cols0) continue
+      const col = i.align === "center" ? toCol(i.x) - Math.floor(i.s.length / 2) : toCol(i.x)
+      if (col + i.s.length > 0 && col < cols0) put(Math.max(0, Math.min(cols0 - i.s.length, col)), toRow(i.y), i.s, i.color)
+    }
     else if (i.t === "brackets") {
       const c0 = toCol(i.x), c1 = toCol(i.x + i.w) - 1, r0 = toRow(i.y + 0.5), r1 = toRow(i.y + i.h)
       put(c0, r0, "┌", i.color); put(c1, r0, "┐", i.color); put(c0, r1, "└", i.color); put(c1, r1, "┘", i.color)

@@ -100,14 +100,27 @@ function charCells(ch: string): number {
 }
 /** the columns a string takes in a terminal */
 export const cells = (s: string) => [...s].reduce((n, ch) => n + charCells(ch), 0)
-/** segments as escape-coded text, cut to `width` columns and padded to it with plain spaces */
+/** segments as escape-coded text, cut to `width` columns (the cut ends in "…", in the style of the text it cut) and padded to it with plain spaces */
 export function line(segs: Seg[], width: number): string {
-  let o = "", n = 0, full = false
+  const kept: { g: Seg; s: string }[] = []
+  let n = 0, cut = false
   for (const g of segs) {
-    if (full) break
+    if (cut) break
     let s = ""
-    for (const ch of g.s) { const w = charCells(ch); if (n + w > width) { full = true; break } s += ch; n += w }
-    o += (g.fg ? sgr(g.fg, 38) : "") + (g.bg ? sgr(g.bg, 48) : "") + (g.bold ? `${ESC}[1m` : "") + s + `${ESC}[0m`
+    for (const ch of g.s) { const w = charCells(ch); if (n + w > width) { cut = true; break } s += ch; n += w }
+    kept.push({ g, s })
   }
+  if (cut && width > 0) {
+    // make room for the ellipsis, taking whole characters off the end
+    for (let k = kept.length - 1; k >= 0 && n > width - 1; k--) {
+      const chars = [...kept[k]!.s]
+      while (chars.length && n > width - 1) n -= charCells(chars.pop()!)
+      kept[k]!.s = chars.join("")
+    }
+    const last = [...kept].reverse().find((k) => k.s) ?? kept[kept.length - 1]
+    if (last) { last.s += "…"; n += 1 }
+  }
+  let o = ""
+  for (const { g, s } of kept) o += (g.fg ? sgr(g.fg, 38) : "") + (g.bg ? sgr(g.bg, 48) : "") + (g.bold ? `${ESC}[1m` : "") + s + `${ESC}[0m`
   return o + " ".repeat(Math.max(0, width - n))
 }
