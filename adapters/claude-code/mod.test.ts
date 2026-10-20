@@ -596,6 +596,20 @@ test("a push is held for the server's push_branch; a status runs", async ($, on)
   expect(status.decision).toBe("allow");
 });
 
+test("a refusal beneath the mod is reported with the call and the check's reason, never acted on", async ($, on) => {
+  const sent = engine(on);
+  on("tool.check", () => ({ decision: "deny", reason: "Auto-Mode Bypass" }));
+  await $.session.start(START);
+
+  const r = await $.tool.check({ tool: "Bash", input: { command: "mise run release:smoke" } });
+  await settle();
+
+  expect(r.decision).toBe("deny");
+  expect(sent.filter((d) => d.tool === "tool_denied")).toEqual([
+    { tool: "tool_denied", args: { tool: "Bash", summary: "Bash · mise run release:smoke", reason: "Auto-Mode Bypass" } },
+  ]);
+});
+
 test("a commit is signed by the model that is running, on its provider's address", async ($, on) => {
   engine(on, { env: ON_OLLAMA, model: "kimi-k2.7-code" });
   on("attribution.text", ($, e) => ({ text: e.text }));
