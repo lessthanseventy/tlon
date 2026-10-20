@@ -32,22 +32,29 @@ defmodule Server.Jobs.Orphans do
 
   @doc """
   Put this node's `executing` jobs back to `available` when they have attempts left, discard the
-  rest. The number requeued.
+  rest, in one transaction: a failure leaves every job as it was. The number requeued.
   """
   def requeue(node) do
     now = DateTime.utc_now()
     mine = from(j in Oban.Job, where: j.state == "executing" and fragment("?[1] = ?", j.attempted_by, ^node))
 
-    {discarded, spent} =
-      mine
-      |> where([j], j.attempt >= j.max_attempts)
-      |> select([j], map(j, [:worker, :args]))
-      |> Server.Repo.update_all(set: [state: "discarded", discarded_at: now])
+    {:ok, {discarded, n}} =
+      Server.Repo.transaction(fn ->
+        {discarded, spent} =
+          mine
+          |> where([j], j.attempt >= j.max_attempts)
+          |> select([j], map(j, [:worker, :args]))
+          |> Server.Repo.update_all(set: [state: "discarded", discarded_at: now])
 
-    interrupt_runs(spent, now)
+        interrupt_runs(spent, now)
 
-    {n, _} =
-      Server.Repo.update_all(where(mine, [j], j.attempt < j.max_attempts), set: [state: "available", scheduled_at: now])
+        {n, _} =
+          Server.Repo.update_all(where(mine, [j], j.attempt < j.max_attempts),
+            set: [state: "available", scheduled_at: now]
+          )
+
+        {discarded, n}
+      end)
 
     if discarded > 0,
       do:

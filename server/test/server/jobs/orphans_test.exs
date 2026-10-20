@@ -99,4 +99,11 @@ defmodule Server.Jobs.OrphansTest do
     assert %{status: "failed", output: "interrupted: " <> _, finished_at: %DateTime{}} =
              Server.Repo.get!(Server.ScheduleRun, run.id)
   end
+
+  test "a failure closing a discarded run leaves the discard uncommitted" do
+    spent = executing("funes@here", %{attempt: 1, changeset: Server.Jobs.RunSchedule.new(%{run_id: "not-an-id"})})
+
+    assert Orphans.requeue("funes@here") == 0
+    assert %{state: "executing", discarded_at: nil} = Server.Repo.get!(Oban.Job, spent)
+  end
 end
