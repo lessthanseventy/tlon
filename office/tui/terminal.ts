@@ -1,11 +1,35 @@
 // A coworker's terminal inside the office: tmux control mode on the workspace's tmux server, a
 // throwaway session holding only the one window we look at (so only that window takes our size),
 // its pane's output fed to a headless VT (@xterm/headless), the VT's screen drawn back as rows.
-// Keys go back as raw bytes (`send-keys -H`). Nothing native: it compiles into the one binary.
+// Keys go back as raw bytes (`send-keys -H`), but a known escape sequence goes as its key name
+// (`keyArgs`). Nothing native: it compiles into the one binary.
 import xterm from "@xterm/headless"
 import type { Subprocess } from "bun"
 
 export type Target = { socket: string; session: string; window: string }
+
+// An arrow as hex bytes reaches the pane as ESC, then `[`, then `C`: a program that reads ESC on
+// its own (myman pauses on it, bastet drops the arrow) never sees the arrow. Named, tmux writes the key the pane expects.
+const NAMED: [string, string][] = [
+  ["\x1b[A", "Up"], ["\x1b[B", "Down"], ["\x1b[C", "Right"], ["\x1b[D", "Left"],
+  ["\x1bOA", "Up"], ["\x1bOB", "Down"], ["\x1bOC", "Right"], ["\x1bOD", "Left"],
+  ["\x1b[H", "Home"], ["\x1b[F", "End"], ["\x1bOH", "Home"], ["\x1bOF", "End"],
+  ["\x1b[5~", "PPage"], ["\x1b[6~", "NPage"], ["\x1b[2~", "IC"], ["\x1b[3~", "DC"], ["\x1b[Z", "BTab"],
+]
+
+/** what `send-keys` is called with for `bytes`, in order: a known escape sequence by its tmux key name, every other run of bytes as hex (`-H`) */
+export function keyArgs(bytes: Uint8Array): string[][] {
+  const s = new TextDecoder("latin1").decode(bytes), out: string[][] = []
+  let hex: string[] = []
+  const flush = () => { if (hex.length) out.push(["-H", ...hex]); hex = [] }
+  for (let i = 0; i < s.length;) {
+    const named = s[i] === "\x1b" ? NAMED.find(([seq]) => s.startsWith(seq, i)) : undefined
+    if (named) { flush(); out.push([named[1]]); i += named[0].length; continue }
+    hex.push(s.charCodeAt(i).toString(16).padStart(2, "0")); i++
+  }
+  flush()
+  return out
+}
 
 /** tmux control mode escapes bytes under 0x20 and the backslash as \ooo; the rest is raw */
 export function unescape(b: Uint8Array): Uint8Array {
@@ -92,7 +116,9 @@ export class TerminalView {
     const [pane, cx, cy] = (info ?? "").split(" ")
     if (!pane?.startsWith("%")) return this.close()
     const screen = await this.cmd(`capture-pane -p -e -t ${pane}`)
-    this.vt.write(`\x1b[2J\x1b[H${screen.join("\r\n")}\x1b[${Number(cy) + 1};${Number(cx) + 1}H`)
+    // tmux writes a line-drawing cell into the snapshot as its letter between SO and SI (`\x0elqqk\x0f`):
+    // G1 must be the line-drawing set (`ESC ) 0`) or a box drawn before we came reads as letters
+    this.vt.write(`\x1b)0\x1b[2J\x1b[H${screen.join("\r\n")}\x1b[${Number(cy) + 1};${Number(cx) + 1}H`)
     this.pane = pane
     for (const b of this.pending) if (b.pane === pane) this.vt.write(b.bytes)
     this.pending = []
@@ -145,7 +171,7 @@ export class TerminalView {
   /** what the operator typed, as the bytes the pane should get */
   send(bytes: Uint8Array) {
     if (!this.pane || !bytes.length) return
-    void this.cmd(`send-keys -t ${this.pane} -H ${[...bytes].map((x) => x.toString(16).padStart(2, "0")).join(" ")}`)
+    for (const args of keyArgs(bytes)) void this.cmd(`send-keys -t ${this.pane} ${args.join(" ")}`)
   }
   resize(cols: number, rowsN: number) { this.vt.resize(cols, rowsN); void this.cmd(`refresh-client -C ${cols}x${rowsN}`) }
   close() {

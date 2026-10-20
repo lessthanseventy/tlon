@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { rows, TerminalView, unescape } from "../tui/terminal"
+import { keyArgs, rows, TerminalView, unescape } from "../tui/terminal"
 
 const enc = new TextEncoder(), dec = new TextDecoder()
 
@@ -45,6 +45,17 @@ test("a window's screen arrives, keys typed into it come back", async () => {
   expect(sessions()).toBe("w9")
 }, 30_000)
 
+test("a box drawn before the view came reads as lines, not the letters tmux snapshots it as", async () => {
+  tmux("new-session", "-d", "-s", "box", "-n", "game", "-x", "40", "-y", "6", "sh -c 'printf \"\\033(0lqqk\\033(B drawn\\n\"; exec cat'")
+  const until = async (ok: () => boolean) => { for (let i = 0; i < 300 && !ok(); i++) await Bun.sleep(50) }
+  await until(() => dec.decode(tmux("capture-pane", "-p", "-t", "box").stdout).includes("drawn"))
+  const view = new TerminalView({ socket, session: "box", window: "game" }, 40, 6, () => {}, () => {})
+  const text = () => rows(view.vt).map((r) => r.replace(/\x1b\[[0-9;]*m/g, "")).join("\n")
+  await until(() => text().includes("drawn"))
+  expect(text()).toContain("┌──┐ drawn")
+  view.close()
+}, 30_000)
+
 test("the placeholder window's own output never reaches the view — only the coworker's pane does", async () => {
   const sock = `tlon-office-test-ph-${process.pid}`
   const t = (...a: string[]) => Bun.spawnSync(["tmux", "-L", sock, ...a])
@@ -64,3 +75,13 @@ test("the placeholder window's own output never reaches the view — only the co
     killServer(sock)
   }
 }, 30_000)
+
+test("an escape sequence goes as its key name, so a program reading ESC alone never sees a bare ESC", () => {
+  const enc = (s: string) => new TextEncoder().encode(s)
+  expect(keyArgs(enc("\x1b[C"))).toEqual([["Right"]])
+  expect(keyArgs(enc("\x1bOA"))).toEqual([["Up"]])
+  expect(keyArgs(enc("ab\x1b[Dc"))).toEqual([["-H", "61", "62"], ["Left"], ["-H", "63"]])
+  // a lone ESC, or one the table doesn't know, still goes as the byte it was
+  expect(keyArgs(enc("\x1b"))).toEqual([["-H", "1b"]])
+  expect(keyArgs(enc("\x1b[1;5C"))).toEqual([["-H", "1b", "5b", "31", "3b", "35", "43"]])
+})
