@@ -25,7 +25,7 @@ import { renderHome } from "../kit/homeart"
 import { mailbox } from "../kit/mailbox"
 import { soulFor, soulLines, soulNote, useSouls } from "../kit/souls"
 import { loadSouls, soulsSignature } from "./souls"
-import { overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
+import { baseLook, OPERATOR as MY_LOOK, overrideFor, trimCustom, useLookOverrides, type LookOverride } from "../kit/looks"
 import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
 import { usageHeader } from "../kit/usage"
@@ -587,7 +587,7 @@ function open(m: Mode) {
   if (m.kind === "thread") { picked = m.tid; cardReply = { tid: m.tid, ed: cardReply?.tid === m.tid ? cardReply.ed : new Editor(), focused: !asks(m.tid) } }
   if (m.kind === "person") picked = crewOf(view()).find((c) => c.name === m.name)?.thread ?? null
   if (m.kind === "pet" && m.who === "cat") { petDraft = structuredClone((petsNow ?? resolvePets(loadPets())).cat); previewTick = 0 }
-  if (m.kind === "look") lookDraft = { ...lookOf(m.name), ...overrideFor(m.name) }
+  if (m.kind === "look") lookDraft = { ...baseLook(m.name), ...overrideFor(m.name) }
   const tid = openThread()
   void Promise.all([tid !== null ? loadThread(tid) : null, loadCard()]).then(draw)
   draw()
@@ -1508,6 +1508,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
           { ...bind("boss.S"), run: () => open({ kind: "settings" }) },
           ...(w === null ? [] : [{ ...bind("boss.d"), run: () => ask2(`close ${wsName()} (its threads move to another workspace)`, () => void did(data.workspaceDelete(w))) }]),
           { ...bind("boss.+"), run: hire },
+          { ...bind("boss.\\"), run: () => open({ kind: "look", name: MY_LOOK }) },
           back1,
         ],
       }
@@ -1788,7 +1789,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
     }
     case "look": {
       const m = mode, name = m.name
-      const draft = (lookDraft ??= { ...lookOf(name), ...overrideFor(name) })
+      const draft = (lookDraft ??= { ...baseLook(name), ...overrideFor(name) })
       const field = (label: string, value: string, cycle: () => void): Row => ({ segs: [dim(label.padEnd(12)), plain(value)], open: () => { cycle(); draw() } })
       const rows: Row[] = [
         { segs: [dim("look at the room — a saved change shows there live, with no restart")] },

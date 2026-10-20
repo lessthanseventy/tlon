@@ -191,6 +191,7 @@ export const KEYS = [
   { id: "boss.S", scope: "card:boss", key: "S", label: "the running system", verb: "settings" },
   { id: "boss.d", scope: "card:boss", key: "d", label: "close this one", verb: "remove" },
   { id: "boss.+", scope: "card:boss", key: "+", label: "hire", verb: "add" },
+  { id: "boss.\\", scope: "card:boss", key: "\\", label: "your look", verb: "look" },
   // card:card
   { id: "card.T", scope: "card:card", key: "1", label: "type: … → next" },
   { id: "card.s", scope: "card:card", key: "2", label: "scope: … → next" },
