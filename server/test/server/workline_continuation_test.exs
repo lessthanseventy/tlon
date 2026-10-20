@@ -52,6 +52,32 @@ defmodule Server.Workline.ContinuationTest do
     assert length(continuations(t.id)) == 4
   end
 
+  test "the third nudge of a round goes to a fresh session: the lead's session on the thread is rolled first" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "Freedonia", type: "code", scope: "project", repos: []})
+    {:ok, t} = Workline.open(%{title: "roll it", slug: "rolling", stage: "plan", workspace_id: ws.id})
+    test_pid = self()
+    leaf = "1\tt#{t.id}\t#{t.id}\tdone\t999999991\thronir\t0\n"
+
+    Application.put_env(:server, :tmux_cmd, fn "tmux", args, _opts ->
+      send(test_pid, {:tmux, args})
+      if "list-windows" in args, do: {leaf, 0}, else: {"", 0}
+    end)
+
+    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+    {:ok, a} = Server.Staff.register_agent(%{name: "hronir", mandate: "builds", engine: "claude-code"})
+    {:ok, s} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
+
+    for _ <- 1..2, do: :ok = Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+    assert is_nil(Repo.get!(Server.Session, s.id).ended_at)
+    refute_received {:tmux, [_, _, "kill-window" | _]}
+
+    :ok = Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+    refute is_nil(Repo.get!(Server.Session, s.id).ended_at)
+    assert_received {:tmux, [_, _, "kill-window", "-t", _]}
+    assert [_, _, third] = continuations(t.id)
+    assert third.body =~ "↻ continue (3/3) (a fresh session"
+  end
+
   test "nudges run out: the workline stops on the operator, once, saying it is stuck and why", %{thread: t} do
     for _ <- 1..5, do: Continuation.run(t.id, artifacts: Missing, max_turns: 3)
 
