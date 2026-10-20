@@ -166,18 +166,51 @@ defmodule Server.MCP.Tool.RaiseIssue do
   Record a defect in the STACK itself — the machine's own tracker, never product
   work or a task question (a knowledge gap is a question; being stuck is a
   message). This thread is recorded as the discovery site.
+
+  A summary that looks like an open issue's, or one from the last 30 days, is refused with the
+  matches: the same fault again is `seen_again` on that issue (it counts, reopens it, and its ticket
+  is seen again too); a different one is raised with `distinct: true`.
   """
   use Server.MCP.Tool
 
   alias Server.Dossier
+  alias Server.Recurrence
 
   schema do
     field :summary, :string, required: true
     field :evidence, :string, description: "Where the evidence is"
+
+    field :seen_again, :integer,
+      description: "The id of the issue this is the same fault as: recorded there instead of raised"
+
+    field :distinct, :boolean, description: "Raise it even though open issues look like it: a different fault"
   end
 
   @impl true
+  def execute(%{seen_again: id} = params, frame) when is_integer(id) do
+    identity = Identity.from_frame(frame)
+    detail = Enum.join(Enum.reject([params[:summary], params[:evidence]], &(&1 in [nil, ""])), "\n\n")
+
+    reply(frame, Recurrence.issue_seen(id, detail, identity.agent), fn issue ->
+      %{"issue_id" => issue.id, "seen" => issue.seen}
+    end)
+  end
+
   def execute(params, frame) do
+    case if(params[:distinct], do: [], else: Recurrence.similar_issues(params[:summary])) do
+      [] ->
+        raise_it(params, frame)
+
+      like ->
+        fail(
+          frame,
+          "not raised: these look like it\n#{Recurrence.listing(like)}\n" <>
+            "The same fault: raise_issue with seen_again: <its id>. A different one: again with distinct: true."
+        )
+    end
+  end
+
+  defp raise_it(params, frame) do
     identity = Identity.from_frame(frame)
 
     %{

@@ -36,6 +36,7 @@ defmodule Server.Ticket do
     field :priority, :string, default: "med"
     field :labels, Server.JSONColumn
     field :assignee, :string
+    field :seen, :integer, default: 1
     field :backend, :string, default: "local"
     field :external_key, :string
     field :external_url, :string
@@ -49,7 +50,7 @@ defmodule Server.Ticket do
     has_many :ticket_threads, Server.TicketThread
   end
 
-  @mutable [:title, :body, :status, :priority, :labels, :assignee, :project_id, :sort]
+  @mutable [:title, :body, :status, :priority, :labels, :assignee, :project_id, :sort, :seen]
 
   @urgency %{"high" => 0, "med" => 1, "low" => 2}
 
