@@ -1138,7 +1138,7 @@ defmodule Server.MCP.ServerTest do
       assert Repo.get!(Thread, wl.id).stage == "plan"
     end
 
-    test "submit_qa files its follow-ups as held tickets on the workline", %{wl: wl} do
+    test "submit_qa posts its follow-ups on the workline, filing no ticket", %{wl: wl} do
       {token, session} = as("nolan", wl)
 
       r =
@@ -1150,8 +1150,8 @@ defmodule Server.MCP.ServerTest do
 
       refute r["isError"]
       assert decode_tool_json(r)["follow_ups"] == 1
-      assert [t] = Repo.all(from t in Server.Ticket, where: t.title == "the help line wraps at 80 cols")
-      assert "held" in t.labels
+      assert Repo.all(from t in Server.Ticket, where: t.title == "the help line wraps at 80 cols") == []
+      assert Enum.any?(Channel.thread_messages(wl), &(&1.body =~ "1. the help line wraps at 80 cols"))
     end
 
     test "a refused submit_qa files no follow-ups", %{wl: wl} do
