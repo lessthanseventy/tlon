@@ -28,16 +28,28 @@ describe("hall roll", () => {
     expect(c.name).toMatch(LEGAL)
     expect(taken).not.toContain(c.name)
   })
-  test("no name is junk: the list has no hyphenated fragments, and the fallback is a word", () => {
+  test("no name is junk: the list has no hyphenated fragments, and a generated name is a word", () => {
     for (const n of BORGES) expect(n, n).toMatch(/^[a-z]{3,}$/)
     const names = new Set<string>()
     for (let i = 0; i < 200; i++) {
       const n = roll(`hall:${i}`, { taken: [...BORGES], vocab: VOCAB }).name
-      expect(n).toMatch(/^[a-z]{6}$/)
-      expect(n).not.toMatch(/(^|-)[a-z]{1,2}(-|$)/)
+      expect(n).toMatch(/^[a-z]{4,10}$/)
+      expect(n).not.toMatch(/[aeiou]{3}/)
       names.add(n)
     }
-    expect(names.size).toBeGreaterThan(50)
+    expect(names.size).toBeGreaterThan(150)
+  })
+  test("mostly names of their own; a Borges character now and then, as a flavour", () => {
+    let borges = 0
+    for (let i = 0; i < 400; i++) if ((BORGES as readonly string[]).includes(roll(`hall:${i}`, { taken: [], vocab: VOCAB }).name)) borges++
+    expect(borges).toBeGreaterThan(40)
+    expect(borges).toBeLessThan(140)
+  })
+  test("three generators: everyday names, villain names, and Borges", () => {
+    const names = Array.from({ length: 400 }, (_, i) => roll(`hall:${i}`, { taken: [], vocab: VOCAB }).name)
+    const villain = names.filter((n) => /(x|th|rax|oth)$|^(kr|dr|gr|zh|vr|sk)|ae|au/.test(n)).length
+    expect(villain).toBeGreaterThan(40)
+    expect(names.filter((n) => !(BORGES as readonly string[]).includes(n)).length).toBeGreaterThan(200)
   })
   test("all names taken → a seeded original name, still legal", () => {
     const c = roll("hall:3", { taken: [...BORGES], vocab: VOCAB })

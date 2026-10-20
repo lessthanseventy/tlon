@@ -52,15 +52,37 @@ export function nextSeed(s: string): string {
   return `hall:${(n ? Number(n) : 0) + 1}`
 }
 
-const ONSETS = ["b", "d", "f", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "v", "z"]
-const VOWELS = ["a", "e", "i", "o", "u"]
-/** a name that can be said aloud, seeded: three consonant-vowel syllables */
-const spoken = (seed: string) => [0, 1, 2].map((i) => ONSETS[hash(`${seed}o${i}`) % ONSETS.length]! + VOWELS[hash(`${seed}v${i}`) % VOWELS.length]!).join("")
+/** a way of making names: the parts its syllables are built from */
+type Parts = { onsets: readonly string[]; vowels: readonly string[]; codas: readonly string[] }
+// everyday: names a person could have (Tesi, Biwon, Rupar); no x endings, no vowel pileups
+const EVERYDAY: Parts = {
+  onsets: ["b", "d", "f", "g", "h", "k", "l", "m", "n", "p", "r", "s", "t", "v", "br", "st", "sh", "ch", "j", "w"],
+  vowels: ["a", "e", "i", "o", "u", "a", "e", "i", "o"],
+  codas: ["", "", "", "", "n", "r", "l", "s", "m"],
+}
+// villain: hard clusters and dark endings (Laekrix, Rustox, Vorthaz)
+const VILLAIN: Parts = {
+  onsets: ["k", "kr", "dr", "gr", "th", "v", "z", "x", "s", "sk", "m", "r", "vr", "zh", "n", "g"],
+  vowels: ["a", "o", "u", "e", "i", "ae", "au", "y"],
+  codas: ["x", "th", "z", "r", "k", "n", "rax", "oth", "", ""],
+}
+/** a name that can be said aloud, seeded, from `parts`: two or three syllables, the last perhaps closed */
+const spoken = (seed: string, parts: Parts) => {
+  const n = 2 + (hash(`${seed}len`) % 2)
+  // a name may open on a vowel (Ana, Oren); a syllable inside one never does, or vowels pile up
+  const onset = (i: number) => (i === 0 && hash(`${seed}open`) % 6 === 0 ? "" : parts.onsets[hash(`${seed}o${i}`) % parts.onsets.length]!)
+  const syllables = Array.from({ length: n }, (_, i) => onset(i) + parts.vowels[hash(`${seed}v${i}`) % parts.vowels.length]!)
+  return syllables.join("") + parts.codas[hash(`${seed}c`) % parts.codas.length]!
+}
+/** which generator a candidate's name comes from, by its seed, out of five: three everyday, one villain, one Borges */
+const styleOf = (seed: string): "everyday" | "villain" | "borges" => (["everyday", "everyday", "everyday", "villain", "borges"] as const)[hash(seed + "style") % 5]!
 
 export function roll(seed: string, o: { taken: readonly string[]; vocab: Vocab }): Candidate {
   const pick = <T,>(xs: readonly T[], k: string) => xs[hash(seed + k) % xs.length]!
   const free = BORGES.filter(n => !o.taken.includes(n))
-  const name = free.length ? pick(free, "name") : spoken(seed + "n")
+  // mostly a name of its own, everyday or villainous; now and then a Borges character, as a flavour
+  const style = styleOf(seed)
+  const name = style === "borges" && free.length ? pick(free, "name") : freshName(seed, o.taken, style === "villain" ? VILLAIN : EVERYDAY)
   const look: Look = { ...lookOf(seed), ...rollLook(seed) }
   const archetype = pick(o.vocab.archetypes, "archetype")
   const grade = pick(o.vocab.grades, "grade")
@@ -182,4 +204,12 @@ export function toggleLock(l: Locks, kind: "slots" | "fields", key: Slot | Field
   const next = cur.includes(key) ? cur.filter(k => k !== key) : [...cur, key]
   const { [kind]: _, ...rest } = l
   return next.length ? { ...rest, [kind]: next } : rest
+}
+
+/** a spoken name no seat or pile entry has, nor a Borges one: the seed's, re-rolled on a clash */
+function freshName(seed: string, taken: readonly string[], parts: Parts): string {
+  for (let i = 0; ; i++) {
+    const n = spoken(`${seed}n${i}`, parts)
+    if (n.length >= 4 && n.length <= 10 && !taken.includes(n) && !(BORGES as readonly string[]).includes(n)) return n
+  }
 }
