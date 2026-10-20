@@ -13,7 +13,12 @@ defmodule Server.CheckScriptTest do
     File.mkdir_p!(bin)
     File.mkdir_p!(repo)
     stub!(bin, "mise", ~s(exit "${FAKE_GATE:-0}"))
-    stub!(bin, "gh", ~s(echo "$*" >>"$GH_LOG"))
+    # the verdict already on a commit is FAKE_STATUS; every other call is recorded
+    stub!(
+      bin,
+      "gh",
+      ~s(case "$*" in *commits/*/statuses*\) echo "${FAKE_STATUS:-}" ;; *\) echo "$*" >>"$GH_LOG" ;; esac)
+    )
 
     {_, 0} =
       System.cmd(
@@ -50,6 +55,22 @@ defmodule Server.CheckScriptTest do
   test "red on a clean tree: failure posted, the gate's exit kept", ctx do
     assert {_, 3} = check(ctx, [{"FAKE_GATE", "3"}])
     assert gh_calls(ctx) =~ ~r"statuses/#{ctx.sha} .*state=failure.*context=tlon/check"
+  end
+
+  test "a clean commit tlon/check already passed is not gated again", ctx do
+    assert {out, 0} = check(ctx, [{"FAKE_STATUS", "success"}, {"FAKE_GATE", "3"}])
+    assert out =~ "already success for #{String.slice(ctx.sha, 0, 12)}"
+    assert gh_calls(ctx) == ""
+  end
+
+  test "a commit whose last verdict was a failure is gated again", ctx do
+    assert {_, 0} = check(ctx, [{"FAKE_STATUS", "failure"}])
+    assert gh_calls(ctx) =~ ~r"statuses/#{ctx.sha} .*state=success"
+  end
+
+  test "TLON_CHECK_FORCE=1 gates a commit that already passed", ctx do
+    assert {_, 3} = check(ctx, [{"FAKE_STATUS", "success"}, {"FAKE_GATE", "3"}, {"TLON_CHECK_FORCE", "1"}])
+    assert gh_calls(ctx) =~ ~r"statuses/#{ctx.sha} .*state=failure"
   end
 
   test "an untracked file: nothing posted, and it says why", ctx do

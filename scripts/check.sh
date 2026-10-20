@@ -11,6 +11,15 @@ set -uo pipefail
 
 state() { printf '%s\n%s' "$(git rev-parse HEAD 2>/dev/null)" "$(git status --porcelain 2>/dev/null)"; }
 before="$(state)"
+# A clean commit tlon/check already passed is not gated again: a second ask for the same commit (two
+# sessions in one checkout) waits its turn, then takes the first one's verdict. A failure runs again
+# (a flake is retried); TLON_CHECK_FORCE=1 runs it whatever was posted.
+if [ "${TLON_CHECK_FORCE:-0}" != 1 ] && [ "${TLON_CHECK_STATUS:-1}" != 0 ] && [ "$before" = "$(git rev-parse HEAD 2>/dev/null)" ] &&
+  command -v gh >/dev/null 2>&1 &&
+  [ "$(gh api "repos/{owner}/{repo}/commits/$before/statuses" --jq '[.[] | select(.context == "tlon/check")][0].state' 2>/dev/null)" = success ]; then
+  echo "tlon/check: already success for ${before:0:12} — not run again (TLON_CHECK_FORCE=1 runs it)"
+  exit 0
+fi
 mise run check:all
 code=$?
 
