@@ -88,6 +88,15 @@ defmodule Server.Office.RoomTest do
     assert is_binary(JSON.encode!(feed))
   end
 
+  test "triage: an issue a ticket took names the ticket and where it stands", ctx do
+    {:ok, issue} = Dossier.raise_issue(%{thread_id: ctx.t.id, summary: "a flake"})
+    {:ok, ticket} = Server.Tickets.file(%{workspace_id: ctx.ws.id, title: "fix the flake"})
+    {:ok, _} = Dossier.own_issue(issue, ticket, "tertius")
+
+    assert [%{issue_id: id, ticket_id: tid, ticket_status: "backlog"}] = Room.triage(ctx.ws.id).blockers.shown
+    assert {id, tid} == {issue.id, ticket.id}
+  end
+
   test "triage: open issues, a command whose NEWEST check failed, threads nobody leads", ctx do
     {:ok, _} = Dossier.raise_issue(%{thread_id: ctx.t.id, summary: "blocked on review"})
     {:ok, _} = Dossier.record_check(%{thread_id: ctx.t.id, exit: 1, cmd: "mix test"})

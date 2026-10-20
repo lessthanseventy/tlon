@@ -82,6 +82,8 @@ defmodule Server.Office.Room do
         from i in Issue,
           join: t in subquery(open),
           on: t.id == i.thread_id,
+          left_join: k in Server.Ticket,
+          on: k.id == i.ticket_id,
           where: i.state == "open",
           order_by: [desc: i.id],
           select: %{
@@ -89,6 +91,8 @@ defmodule Server.Office.Room do
             title: t.title,
             text: i.summary,
             issue_id: i.id,
+            ticket_id: i.ticket_id,
+            ticket_status: k.status,
             found_by: i.found_by,
             created_at: i.created_at,
             summary: i.summary,
