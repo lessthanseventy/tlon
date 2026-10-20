@@ -5,7 +5,8 @@ import { fit, type Measure } from "./canvas"
 import { crewOf, needsYou, STAGES, statusGlyph, statusTone, tipOf, statusLight } from "./crew"
 import type { Scene } from "./draw"
 import { ROLE } from "./palette"
-import { BOSS_LOOK, DECOR, figure, paints, shirtOf, type Look } from "./sprites"
+import { bossLook } from "./looks"
+import { DECOR, figure, paints, shirtOf, type Look } from "./sprites"
 import type { Agents, Seat } from "./types"
 
 /** a desk's place: its left edge, its top, its width; the seat behind it is at x + w/2 */
@@ -53,8 +54,8 @@ export function bossDesk(sc: Scene, a: Agents, d: DeskAt) {
     for (let i = 0; i < 3; i++) sc.px(sx - 7 + i * 6, d.y + 1, 2, 2, ROLE.body)
   })
   sc.item(d.y + 25, () => {
-    const pj = sc.dark
-    sc.blit(figure(BOSS_LOOK, null, false, !pj, "down", "sit", 0, (f + BOSS_LOOK.blink) % 13 === 0), sx - 6, d.y + 5, pj ? { ...paints(ROLE.planner, BOSS_LOOK), p: ROLE.planner } : paints(ROLE.attention, BOSS_LOOK))
+    const pj = sc.dark, me = bossLook()
+    sc.blit(figure(me, null, false, !pj, "down", "sit", 0, (f + me.blink) % 13 === 0), sx - 6, d.y + 5, pj ? { ...paints(ROLE.planner, me), p: ROLE.planner } : paints(ROLE.attention, me))
   })
   sc.item(d.y + 30, () => {
     for (const mx of [d.x + 1, sx + 6]) { sc.px(mx, d.y + 11, 10, 7, ROLE.inactive); sc.px(mx + 1, d.y + 12, 8, 5, ROLE.edge); sc.px(mx + 4, d.y + 18, 2, 1, ROLE.inactive) }
@@ -63,7 +64,7 @@ export function bossDesk(sc: Scene, a: Agents, d: DeskAt) {
     sc.px(d.x + 1, d.y + 22, d.w - 2, 9, ROLE.borderInactive)
     sc.px(d.x + 8, d.y + 24, d.w - 16, 5, ROLE.structure); sc.px(d.x + 9, d.y + 25, d.w - 18, 3, ROLE.body)
     sc.blit([".yyy.", "yyyyy", ".yyy.", "..y..", ".yyy."], d.x + d.w - 8, d.y + 14, { y: ROLE.body })
-    decor(sc, BOSS_LOOK, d.x + d.w - 1, d.y + 19)
+    decor(sc, bossLook(), d.x + d.w - 1, d.y + 19)
     sc.text(a.awaiting ? `you - ${a.awaiting} waiting` : "you", d.x + d.w / 2, d.y + 38 - 2 / 3, ROLE.attention, a.awaiting ? 14 : 12)
     sc.hits.push({ x: d.x, y: d.y + 4, w: d.w, h: 38, tip: "you: hire, file, workspaces, what waits on you", act: { kind: "boss" } })
   })
