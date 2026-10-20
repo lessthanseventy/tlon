@@ -127,14 +127,19 @@ defmodule Server.Profiles do
   # interactive agent — it runs autonomously, so a bash probe returning 000 with nobody to correct it
   # is how a coworker talks itself into "server is down" and stops posting. Use the server tools; a
   # bash probe cannot answer the question.
-  @dev_caches ~w(mise mix rebar3 elixir_make rustler_precompiled zigler_precompiled expert menard
-                 menard-scratch tlon tlon-scratch tlon-bench ms-playwright node node-gyp pnpm yarn
+  # `mix`, `menard-scratch` and `tlon-scratch` are absent: each gathers repos across every seat
+  # without bound, and their mounts took bwrap past 9000. A seat writes its own `scratch_root/1`.
+  @dev_caches ~w(mise rebar3 elixir_make rustler_precompiled zigler_precompiled expert menard
+                 tlon tlon-bench ms-playwright node node-gyp pnpm yarn
                  typescript deno uv pip go-build tree-sitter jiti)
 
   @fable %{provider: "anthropic", model: "claude-fable-5-1", thinking: "high"}
 
   @doc "The `~/.cache` dirs a coworker's sandbox may write: the dev tools', never the whole of it."
   def dev_caches, do: @dev_caches
+
+  @doc "A seat's one scratch root: its worktrees live here, so its bwrap mounts are its own."
+  def scratch_root(name), do: "~/.cache/tlon-scratch/" <> name
 
   @tlon_sandbox %{
     "enabled" => true,
@@ -893,7 +898,7 @@ defmodule Server.Profiles do
       harness: t[:harness] || :claude_code,
       mcp: t.mcp,
       model: model,
-      sandbox: t.sandbox,
+      sandbox: seat_sandbox(t.sandbox, name),
       permissions: apply_yolo_override(t.permissions, policy[:yolo]),
       system_prompt: personalize(t.system_prompt, name) <> lead_duties(workspace_id, name) <> Server.Soul.tone(name)
     }
@@ -1190,4 +1195,6 @@ defmodule Server.Profiles do
   defp model_name(%{provider: provider, model: model}), do: "#{provider}/#{model}"
   defp model_name(model) when is_binary(model), do: model
   defp model_name(model), do: inspect(model)
+
+  defp seat_sandbox(sandbox, name), do: update_in(sandbox, ["filesystem", "allowWrite"], &(&1 ++ [scratch_root(name)]))
 end
