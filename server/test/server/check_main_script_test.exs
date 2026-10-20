@@ -89,6 +89,28 @@ defmodule Server.CheckMainScriptTest do
     refute sh!(ctx.root, "git worktree list") =~ "tlon-main-"
   end
 
+  # a second TERM (a service stop signals the whole tree) lands while the EXIT trap removes the worktree
+  test "a TERM that lands during the cleanup still removes the worktree and the log", ctx do
+    git = System.find_executable("git")
+
+    stub(
+      ctx.bin,
+      "git",
+      ~s{case "$*" in *"worktree remove"*) touch "$SCRATCH/cleaning"; sleep 1 ;; esac\nexec #{git} "$@"}
+    )
+
+    port = start(ctx)
+
+    wait_for(Path.join(ctx.scratch, "gating"))
+    {:os_pid, pid} = Port.info(port, :os_pid)
+    System.cmd("pkill", ["-TERM", "-P", "#{pid}"])
+    wait_for(Path.join(ctx.scratch, "cleaning"))
+    System.cmd("kill", ["-TERM", "#{pid}"])
+
+    assert_receive {^port, {:exit_status, 143}}, 10_000
+    assert leftovers(ctx) == []
+  end
+
   test "a run sweeps the worktree and log a SIGKILLed one left", ctx do
     stale = Path.join(ctx.scratch, "tlon-main-STALE1")
     sh!(ctx.root, "git worktree add -q --detach #{stale} HEAD")
