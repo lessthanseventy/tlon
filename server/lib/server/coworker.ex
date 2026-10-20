@@ -98,8 +98,8 @@ defmodule Server.Coworker do
     * `:off` — its crew is off shift, or nothing runs it: no session, no window;
     * `:waiting` — waiting on the operator (outranks mid-turn: the turn is stuck on the answer);
     * `:working` — mid-turn;
-    * `:idle` — a window it can be woken in (warm), or a window up before its session registers;
-    * `:cold` — a session whose window is gone or whose warmth has run out: the next wake rotates it onto a fresh one.
+    * `:idle` — a window it can be woken in (warm);
+    * `:cold` — a session whose window is gone or whose warmth has run out, or a window with no session behind it: the next wake rotates it onto a fresh one.
   """
   @spec status(%{
           on_shift: boolean(),
@@ -114,7 +114,7 @@ defmodule Server.Coworker do
   def status(%{waiting: true}), do: :waiting
   def status(%{thinking: true}), do: :working
   def status(%{warm: true}), do: :idle
-  def status(%{session: false, windowed: true}), do: :idle
+
   def status(_facts), do: :cold
 
   @doc "One roster row (`Server.Office.status/0`) as the line `tlon-cli roster` prints."

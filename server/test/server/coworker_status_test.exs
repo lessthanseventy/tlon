@@ -16,10 +16,10 @@ defmodule Server.CoworkerStatusTest do
     assert Coworker.status(%{@live | session: false, windowed: false, warm: false}) == :off
   end
 
-  test "waiting on the operator outranks mid-turn; off outranks everything; a window with no session yet is up" do
+  test "waiting on the operator outranks mid-turn; off outranks everything; a window with no session is cold" do
     assert Coworker.status(%{@live | thinking: true, waiting: true}) == :waiting
     assert Coworker.status(%{@live | on_shift: false, thinking: true, waiting: true}) == :off
-    assert Coworker.status(%{@live | session: false, warm: false}) == :idle
+    assert Coworker.status(%{@live | session: false, warm: false}) == :cold
   end
 
   test "every state has its one glyph" do

@@ -22,7 +22,7 @@ defmodule Server.Office do
   Every workspace at once: the roster (each row with its thread's workspace, bench seat, `status` (`Server.Coworker.status/1`), and
   whether that agent is mid-turn), the benches with their policies, the open threads (lead,
   whether a window runs it, whether it is the workspace's standing thread, any open prompt, who is
-  mid-turn on it, `seat`: its lead at a `"desk"` (a window runs it, or a warm session with a window to wake in), `"parked"` for a seat
+  mid-turn on it, `seat`: its lead at a `"desk"` (a window runs it and a session is registered, or a warm session with a window to wake in), `"parked"` for a seat
   under the leaf cap (`Server.Staffing.parked_note?/1`) or `"idle"`, and `duty`: a standing duty,
   not work (`Server.Staffing.duty_threads/1`), and `landing`: landed, its PR waiting on GitHub
   (`Server.Workline.waiting_on_github/0`)), projects, unstarted tickets, notes, the consults and hand-offs of the last
@@ -327,6 +327,7 @@ defmodule Server.Office do
       )
 
     warm = MapSet.new(for r <- roster, r.warm or r.thinking, do: {r.thread_id, r.agent})
+    sessioned = MapSet.new(roster, &{&1.thread_id, &1.agent})
 
     open =
       Repo.all(
@@ -351,7 +352,7 @@ defmodule Server.Office do
       on_it = thinking |> Map.get(t.id, []) |> Enum.map(& &1.agent)
       lead = leads[t.id]
 
-      desk? = live or lead in on_it or MapSet.member?(warm, {t.id, lead})
+      desk? = (live and MapSet.member?(sessioned, {t.id, lead})) or lead in on_it or MapSet.member?(warm, {t.id, lead})
 
       Map.merge(t, %{
         prompt: prompts[t.id],
