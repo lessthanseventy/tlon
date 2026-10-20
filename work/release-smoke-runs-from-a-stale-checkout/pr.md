@@ -8,7 +8,7 @@ exists (aad4dcc), and neither reaches a checkout too old to have the new task �
 rebase, which AGENTS.md now says. The nightly (schedule 4) runs in `.release`, so it also goes
 through the wrapper.
 
-Closes ticket #273.
+Closes ticket #273. Also resolves ticket #430 (canvas_paint_test: no auto-gc on the scratch remote, so on_exit no longer races a detached gc).
 
 Checked: `server/test/server/run_from_root_test.exs` — a worktree on an old base prints
 `new-script work/x` (root's copy) — was red (wrapper missing), green now; `mix test` on it,
