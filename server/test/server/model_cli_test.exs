@@ -17,9 +17,16 @@ defmodule Server.ModelCliTest do
     path
   end
 
-  test "the prompt and the model reach the CLI as -p and --model", %{dir: dir} do
-    assert {:ok, "-p hi --model m " <> _} =
-             ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s(echo "$@")), "m"})
+  test "the prompt reaches the CLI on stdin, the model as --model", %{dir: dir} do
+    assert {:ok, "-p --model m " <> rest} =
+             ModelCli.prompt("hi", :test_cmd, :test_model, {cli(dir, ~s{echo "$@ | $(cat)"}), "m"})
+
+    assert rest =~ "| hi"
+  end
+
+  test "a prompt past exec's 128 KB argument limit (a grade's diff) reaches the CLI whole", %{dir: dir} do
+    big = String.duplicate("x", 200_000)
+    assert {:ok, "200000\n"} = ModelCli.prompt(big, :test_cmd, :test_model, {cli(dir, "wc -c | tr -d ' '"), "m"})
   end
 
   test "a service with no OLLAMA_API_KEY in its env hands the CLI the machine's agenix key", %{dir: dir} do
@@ -44,7 +51,7 @@ defmodule Server.ModelCliTest do
   test "a call on the Claude plan runs headless: no session saved, nothing to ask, no MCP servers or connectors, the operator's own login",
        %{dir: dir} do
     assert {:ok,
-            ~s(anthropic -p hi --model haiku --no-session-persistence --permission-mode dontAsk --strict-mcp-config --mcp-config {"mcpServers":{}}\n)} =
+            ~s(anthropic -p --model haiku --no-session-persistence --permission-mode dontAsk --strict-mcp-config --mcp-config {"mcpServers":{}}\n)} =
              ModelCli.prompt(
                "hi",
                :test_cmd,
@@ -67,7 +74,7 @@ defmodule Server.ModelCliTest do
                {cli(dir, ~s(echo "$ANTHROPIC_BASE_URL $@")), "ollama-cloud/deepseek-v4-pro:high"}
              )
 
-    assert out =~ "https://ollama.com -p hi --model deepseek-v4-pro "
+    assert out =~ "https://ollama.com -p --model deepseek-v4-pro "
     assert out =~ "--effort high"
     assert out =~ "--bare --tools  --system-prompt"
   end
