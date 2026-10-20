@@ -32,7 +32,9 @@ if ! { exec 9>>"$lock"; } 2>/dev/null; then
 fi
 
 # CHECKS_LABEL names the run for the rack and the room (a workline's: "#<id> verify|landing <slug>")
-label="${CHECKS_LABEL:-$*}"
+# who asked, so a queue of bare `scripts/check.sh` lines says whose each is: a seat by its handle and
+# thread, anything else (a terminal, the operator's own session) as the operator
+label="${CHECKS_LABEL:-${TLON_AUTHOR:-operator}${TLON_THREAD:+ on #$TLON_THREAD}: $* @ $(git rev-parse --short HEAD 2>/dev/null || echo '?')}"
 me="$label (pid $$) in $PWD since $(date +%H:%M:%S)"
 
 # the office's rack reads the holder and the waiters (Server.Office.Room.checks/0)

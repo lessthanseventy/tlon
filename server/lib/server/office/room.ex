@@ -190,8 +190,9 @@ defmodule Server.Office.Room do
 
   @doc """
   The machine's checks queue (`scripts/checks-queue.sh`): the full check running now, as it said
-  when it took the lock, and the ones waiting their turn, each `"<command> (pid N) in <dir> since
-  HH:MM:SS"`. A waiter whose process is gone is not counted. `%{running: line | nil, waiting: [line]}`.
+  when it took the lock, and the ones waiting their turn, each `"<who>: <command> (pid N) in <dir>
+  since HH:MM:SS"` (a labelled run, like a verify, says its own label). A waiter whose process is
+  gone is not counted. `%{running: line | nil, waiting: [line]}`.
   """
   def checks(dir \\ System.get_env("XDG_RUNTIME_DIR") || "/tmp") do
     # a holder whose process is gone (killed outright) left its line: no check runs
