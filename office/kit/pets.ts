@@ -200,10 +200,10 @@ export function drawDog(sc: Scene, d: Dog, bed: Spot, bowl: Spot, bpm: number | 
   const w = rows[0]!.length, h = rows.length, x = d.x - Math.floor(w / 2), y = d.y - h - (dance ? phase : 0)
   sc.item(d.y, () => {
     const rim = tint(ROLE.prose, ROLE.ground, 0.55), r = { k: rim, e: rim, t: rim, n: rim, i: rim, p: rim, c: rim }
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, r)
-    sc.blit(rows, x, y, { k: ROLE.body, t: ROLE.body, e: tint(ROLE.body, ROLE.structure, 0.4), n: ROLE.fieldInk, i: ROLE.fieldInk, c: ROLE.fieldInk, p: ROLE.attention })
-    if (d.mode === "sleep" && !belly && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
-    if (d.creep && f % 4 < 2) sc.text("...", d.x, y - 2, ROLE.inactive, 9)
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.figure(rows, x + dx, y + dy, r)
+    sc.figure(rows, x, y, { k: ROLE.body, t: ROLE.body, e: tint(ROLE.body, ROLE.structure, 0.4), n: ROLE.fieldInk, i: ROLE.fieldInk, c: ROLE.fieldInk, p: ROLE.attention })
+    if (d.mode === "sleep" && !belly && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10, "center", true)
+    if (d.creep && f % 4 < 2) sc.text("...", d.x, y - 2, ROLE.inactive, 9, "center", true)
     if (d.fuss) drawFuss(sc, d.fuss, { x, y, w, h })
     sc.hits.push({ x: x - 1, y: y - 2, w: w + 2, h: h + 3, tip: `${DOG_NAME} - click to pat him`, act: { kind: "dog" } })
   })

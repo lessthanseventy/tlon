@@ -32,6 +32,8 @@ export class Scene {
   readonly ink: Ink[] = []
   readonly balloons: Ink[] = []
   readonly hits: Hit[] = []
+  /** 1 where a figure's sprite is; the painters keep furniture labels from drawing over it */
+  readonly cover: Uint8Array
   /** people's click targets — they take a click before the furniture behind them */
   readonly people: Hit[] = []
   readonly items: Item[] = []
@@ -46,18 +48,24 @@ export class Scene {
 
   constructor(readonly width: number, readonly height: number, readonly tick: number) {
     this.cv = new Canvas(width, height)
+    this.cover = new Uint8Array(width * height)
     this.f = Math.floor(tick / 4)
   }
   px(x: number, y: number, w: number, h: number, c: string) { this.cv.px(x, y, w, h, c) }
   blit(rows: string[], x: number, y: number, map: Record<string, string>) { this.cv.blit(rows, x, y, map) }
-  text(s: string, x: number, y: number, color: string, size = 12, align: "center" | "left" = "center") { this.ink.push({ t: "text", s, x, y, color, size, align }) }
+  /** a person's or pet's sprite: blitted, and marked so labels behind it do not print over it */
+  figure(rows: string[], x: number, y: number, map: Record<string, string>) {
+    this.cv.blit(rows, x, y, map)
+    rows.forEach((row, j) => { for (let i = 0; i < row.length; i++) if (map[row[i]!] && x + i >= 0 && x + i < this.width && y + j >= 0 && y + j < this.height) this.cover[(y + j) * this.width + x + i] = 1 })
+  }
+  text(s: string, x: number, y: number, color: string, size = 12, align: "center" | "left" = "center", over = false) { this.ink.push(over ? { t: "text", s, x, y, color, size, align, over: true } : { t: "text", s, x, y, color, size, align }) }
   item(base: number, draw: () => void) { this.items.push({ base, draw }) }
 
   /** everything drawn back to front, then overhead; the frame, people's targets first */
   finish(): Frame {
     this.items.sort((p, q) => p.base - q.base).forEach((x) => x.draw())
     this.overhead.forEach((d) => d())
-    return { rgba: this.cv.rgba, width: this.width, height: this.height, ink: [...this.ink, ...this.balloons], hits: [...this.people.reverse(), ...this.hits] }
+    return { rgba: this.cv.rgba, width: this.width, height: this.height, ink: [...this.ink, ...this.balloons], cover: this.cover, hits: [...this.people.reverse(), ...this.hits] }
   }
 }
 
@@ -91,7 +99,7 @@ export function drawActors(sc: Scene, actors: Iterable<Actor>, talk: Map<string,
     const top = sitting || couch ? actor.y - 14 : actor.y - heightOf(actor.look) + (actor.moving && step === 2 ? -1 : 0)
     const left = actor.x - 6
     sc.item(sitting ? actor.y : actor.y + 0.5, () => {
-      sc.blit(rows, left, top, paints(shirtOf(seat.archetype), actor.look))
+      sc.figure(rows, left, top, paints(shirtOf(seat.archetype), actor.look))
       if (lounging) {
         // hands behind their head, elbows out
         sc.px(left - 1, top + 4, 2, 1, ROLE.prose); sc.px(left + 11, top + 4, 2, 1, ROLE.prose)
@@ -208,22 +216,22 @@ export function drawCat(sc: Scene, c: Cat, over: number | null, bpm: number | nu
   // the zoomies go over everything: she is on the couch, the TV, your desk
   sc.item(c.mode === "zoom" ? 999 : over ?? c.y, () => {
     const r = tint(ROLE.prose, ROLE.ground, 0.55), rim = { k: r, e: r, t: r, c: r, w: r, p: r, g: r, j: r }
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.blit(rows, x + dx, y + dy, rim)
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, -1]] as const) sc.figure(rows, x + dx, y + dy, rim)
     // the collar's gems trade colours as they catch the light
     const [g, j] = f % 2 ? [ROLE.key, ROLE.body] : [ROLE.body, ROLE.key]
-    sc.blit(rows, x, y, { k: fur, t: fur, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge, p: ROLE.attention, g, j })
+    sc.figure(rows, x, y, { k: fur, t: fur, e: ROLE.body, c: ROLE.inactive, w: ROLE.edge, p: ROLE.attention, g, j })
     const gem = rows.findIndex((row) => row.includes("g"))
     if (gem >= 0 && f % 9 === 0) {
       // a twinkle off the collar
       const gx = x + rows[gem]!.indexOf("g"), gy = y + gem - 3
       sc.px(gx, gy - 1, 1, 3, ROLE.prose); sc.px(gx - 1, gy, 3, 1, ROLE.prose)
     }
-    if (c.mode === "sleep" && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10)
+    if (c.mode === "sleep" && f % 6 < 3) sc.text("z", x + w + 1, y - 1, ROLE.inactive, 10, "center", true)
     if (c.mode === "zoom") {
       // speed lines behind her, and now and then a "!"
       const back = c.face < 0 ? x + w + 1 : x - 5
       for (const dy of [1, 3]) sc.px(back + ((f + dy) % 2), y + dy, 4, 1, ROLE.inactive)
-      if (f % 7 < 2) sc.text("!", c.x, y - 2, ROLE.attention, 11)
+      if (f % 7 < 2) sc.text("!", c.x, y - 2, ROLE.attention, 11, "center", true)
     }
     // your hand, stroking her back
     if (sc.tick < c.purr && c.byYou) sc.px(x + 3 + (f % 2) * 2, y + 3, 3, 1, ROLE.prose)

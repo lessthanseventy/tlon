@@ -37,7 +37,7 @@ function labels(room: RailRoom | WideRoom, w: number, h: number, cell: { w: numb
   const backed: { text: string; behind: string }[] = []
   for (let vy = 0; vy <= maxY; vy += step) for (let vx = 0; vx <= maxX; vx += step) {
     const viewport = clampViewport({ x: vx, y: vy, w: vw, h: vh }, g.floorW, g.floorH)
-    inkInto(big, bw, bh, clipFrame(fr, viewport).ink, g.k, textScale(g), backed)
+    inkInto(big, bw, bh, clipFrame(fr, viewport).ink, g.k, textScale(g), backed, undefined, fr.cover)
   }
   return backed
 }
