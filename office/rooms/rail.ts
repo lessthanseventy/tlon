@@ -6,7 +6,7 @@
 import type { Frame, Measure } from "../kit/canvas"
 import { drawActors, drawCat, drawParty, isPicked, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
-import { boardColumns, COLS, isManager, needsYou, peopleOf, STATE_GLYPH, tipOf, type Act } from "../kit/crew"
+import { boardColumns, isManager, needsYou, peopleOf, STATE_GLYPH, tipOf, type Act } from "../kit/crew"
 import { ROLE, tint } from "../kit/palette"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
 import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -165,7 +165,10 @@ export class RailRoom extends Sim<Layout> {
     px(4, 30, 136, 2, ROLE.borderInactive)
     blit(["kk.aa.ll"], 100, 30, { k: ROLE.key, a: ROLE.alarm, l: ROLE.live })
     type Sticky = { tip: string; act: Act; colour: string; mark?: string; blink?: boolean }
-    const cols: Sticky[][] = boardColumns(a, focus.board).map((col) => col.items.map((it): Sticky => {
+    // six columns fit the rail: verify shares build's, and a header opens the column it is named for
+    const full = boardColumns(a, focus.board), folded = [...full.slice(0, 4), { name: "BUILD", items: [...full[4]!.items, ...full[5]!.items] }, full[6]!]
+    const colOf = [0, 1, 2, 3, 4, 6]
+    const cols: Sticky[][] = folded.map((col) => col.items.map((it): Sticky => {
       if (it.act.kind === "ticket")
         return { tip: `ticket #${it.act.id} ${it.title}\n${it.routed ? "with the manager to staff" : "click: send to the manager, or click a coworker to hand it over"}`, act: it.act, colour: it.routed ? ROLE.meta : ROLE.prose, mark: it.high ? ROLE.alarm : undefined, blink: it.act.id === focus.armed }
       const id = it.act.kind === "thread" ? it.act.tid : 0
@@ -175,9 +178,9 @@ export class RailRoom extends Sim<Layout> {
     cols.forEach((list, c) => {
       const x0 = 5 + c * COL_W
       if (c) px(x0 - 2, 4, 1, 25, ROLE.edge)
-      text(`${COLS[c]} ${list.length}`, x0 + 9, 10, ROLE.key, 10)
+      text(`${folded[c]!.name} ${list.length}`, x0 + 9, 10, ROLE.key, 10)
       // the header opens the column as a list, where the titles have room
-      hits.push({ x: x0 - 1, y: 3, w: COL_W, h: 8, tip: `${COLS[c]!.toLowerCase()}: open as a list`, act: { kind: "column", col: c } })
+      hits.push({ x: x0 - 1, y: 3, w: COL_W, h: 8, tip: `${folded[c]!.name.toLowerCase()}: open as a list`, act: { kind: "column", col: colOf[c]! } })
       const shown = c === 0 ? [...list.slice(0, PER_COL - 1), null] : list.slice(0, PER_COL)
       shown.forEach((n, i) => {
         const sx = x0 + (i % PER_ROW) * 6, sy = 12 + Math.floor(i / PER_ROW) * 5

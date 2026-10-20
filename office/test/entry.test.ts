@@ -70,9 +70,9 @@ describe("the entry (U)", () => {
   })
 
   test("the pivot is stage × coworker, counts per cell, and its column totals match the board", () => {
-    expect(e.pivot.stages).toEqual(["DOING", "SPEC", "PLAN", "BUILD", "REVIEW"])
+    expect(e.pivot.stages).toEqual(["DOING", "SPEC", "PLAN", "BUILD", "VERIFY", "REVIEW"])
     const byName = Object.fromEntries(e.pivot.rows.map((r) => [r.cow, r]))
-    expect(byName.nolan.cells).toHaveLength(5) // DOING SPEC PLAN BUILD REVIEW
+    expect(byName.nolan.cells).toHaveLength(6) // DOING SPEC PLAN BUILD VERIFY REVIEW
     // nolan: build×2, review×1; paula: doing×1, review×2
     const build = e.pivot.stages.indexOf("BUILD"), review = e.pivot.stages.indexOf("REVIEW"), doing = e.pivot.stages.indexOf("DOING")
     expect(byName.nolan.cells[build]!.count).toBe(2)
