@@ -6,5 +6,5 @@ const hour = process.env.OFFICE_TEST_HOUR
 if (hour !== undefined) {
   const at = new Date()
   at.setHours(Number(hour), 0, 0, 0)
-  setSystemTime(at)
+  setSystemTime(at) // freezes Date.now(): a wait's deadline reads performance.now()
 }
