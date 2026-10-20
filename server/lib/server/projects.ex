@@ -12,6 +12,8 @@ defmodule Server.Projects do
   alias Server.Project
   alias Server.Repo
 
+  @max_nested_repos 100
+
   @doc "Register a project under a workspace. `{:ok, project}` or `{:error, changeset}` (dup name within the workspace / bad workspace_id)."
   def register(attrs) do
     attrs |> Project.register_changeset() |> Repo.insert() |> Bus.announce(:project_registered)
@@ -122,7 +124,9 @@ defmodule Server.Projects do
   @doc """
   The thread's project's OTHER checkouts, `~`-expanded: what its coworker may read but not write
   (the harness opens them beside the worktree). Never the thread's own repo, never a scope glob;
-  `[]` for a thread with no project.
+  `[]` for a thread with no project. Claude Code makes a read dir a write root and bwrap mounts ~45
+  args per repo found under one (9000 max, ~65 repos already fixed), so a checkout nesting more than
+  `@max_nested_repos` (test tmp_dirs, scratch clones) is not opened.
   """
   def read_dirs(%Server.Thread{project_id: pid} = thread) when not is_nil(pid) do
     own = with {:ok, path} <- repo_for_thread(thread), do: path
@@ -131,6 +135,7 @@ defmodule Server.Projects do
         not String.contains?(path, "*"),
         dir = Path.expand(path),
         dir != own,
+        nested_repos(dir) <= @max_nested_repos,
         do: dir
   end
 
@@ -144,4 +149,10 @@ defmodule Server.Projects do
   end
 
   def primary_repo_path(_project), do: {:error, :no_repo}
+
+  # `find -prune` never walks into a repo's own .git, which `**/.git` does (minutes on a big one)
+  defp nested_repos(dir) do
+    {out, _} = System.cmd("find", [dir, "-name", ".git", "-prune", "-print"], stderr_to_stdout: true)
+    out |> String.split("\n", trim: true) |> length()
+  end
 end
