@@ -196,8 +196,8 @@ run = "mise exec zig@0.16.0 -- mix release tlon --overwrite"
 # The seams no compiler covers: a script calling a module that no longer exists, a mise task a
 # guide names but mise.toml lost, a pi config file the adapter reads but the flake stopped writing.
 ["check:names"]
-description = "names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist, and docs/glossary.md holds (grep, offline, fast)"
-run = "scripts/check-names.sh && scripts/check-glossary.test.sh"
+description = "names-exist gate: every Server.* module, mix task, mise task and ~/.pi/agent file the glue names must exist, docs/glossary.md holds, and scratch.sh prune keeps exactly the unlanded work (grep and a temp repo, offline, fast)"
+run = "scripts/check-names.sh && scripts/check-glossary.test.sh && scripts/scratch.test.sh"
 
 ["check:ignored"]
 description = "tracked-junk gate: fail on any tracked file that .gitignore ignores (scratch committed under an ignored path such as server/tmp)"

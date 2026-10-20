@@ -10,10 +10,11 @@
 # TLON_SCRATCH_DIR moves the directory (default ${XDG_CACHE_HOME:-~/.cache}/tlon-scratch).
 #
 # Its work is done when the worktree is clean and every commit it has beyond origin/main is on
-# origin/main by patch: a PR lands by rebase-merge, which rewrites SHAs, so ancestry never
-# matches and `git cherry` (patch-id) is the test. Kept: uncommitted or untracked changes, a
-# commit main doesn't have, a process working in it, or one touched within the hour (a session
-# that just made it hasn't committed yet).
+# origin/main: by patch (`git cherry`: a rebase-merge rewrites SHAs, so ancestry never matches),
+# or by subject among main's commits since the worktree branched (a landing that reformatted or
+# resolved a conflict changes the patch, not the subject). Kept: uncommitted or untracked changes,
+# a commit main doesn't have, a process working in it, or one touched within the hour (a session
+# that just made it hasn't committed yet). A removal names its HEAD, recoverable until git's gc.
 set -uo pipefail
 
 base="${TLON_SCRATCH_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/tlon-scratch}"
@@ -58,7 +59,13 @@ held() {
   dirty="$(GIT_OPTIONAL_LOCKS=0 git -C "$dir" status --porcelain 2>&1)" || { echo "git status failed"; return; }
   [ -n "$dirty" ] && { echo "uncommitted changes"; return; }
   cherry="$(git -C "$dir" cherry origin/main HEAD 2>&1)" || { echo "git cherry failed"; return; }
-  [ "$(grep -c '^+' <<<"$cherry")" -gt 0 ] && { echo "$(grep -c '^+' <<<"$cherry") commit(s) not on origin/main"; return; }
+  local since mark sha open=0
+  since="$(git -C "$dir" log --format=%s "$(git -C "$dir" merge-base origin/main HEAD)..origin/main")"
+  while read -r mark sha; do
+    [ "$mark" = "+" ] || continue
+    grep -qxF -- "$(git -C "$dir" log -1 --format=%s "$sha")" <<<"$since" || open=$((open + 1))
+  done <<<"$cherry"
+  [ "$open" -gt 0 ] && { echo "$open commit(s) not on origin/main"; return; }
   for pid in /proc/[0-9]*; do
     case "$(readlink "$pid/cwd" 2>/dev/null)" in "$dir" | "$dir"/*) echo "in use by pid ${pid#/proc/}"; return ;; esac
   done
@@ -84,8 +91,8 @@ prune() {
       echo "keep   $dir — $why"
     elif [ -n "$dry" ]; then
       echo "would remove $dir"
-    elif out="$(git worktree remove "$dir" 2>&1)"; then
-      echo "remove $dir"
+    elif head="$(git -C "$dir" rev-parse --short HEAD)" && out="$(git worktree remove "$dir" 2>&1)"; then
+      echo "remove $dir — its HEAD was $head"
     else
       echo "keep   $dir — git refused: ${out%%$'\n'*}"
     fi
