@@ -179,6 +179,30 @@ defmodule Server.ProjectsTest do
       assert Projects.read_dirs(t) == ["/p/mix_master"]
       assert Projects.read_dirs(%{t | project_id: nil}) == []
     end
+
+    # Claude Code treats a read dir as a write root and bwrap mounts ~45 args per repo found under
+    # it (9000 max), so a checkout that nests hundreds of repos (test tmp_dirs) can't be opened.
+    @tag :tmp_dir
+    test "read_dirs drop a checkout nesting more repos than a seat's bwrap budget allows", %{
+      workspace: ws,
+      tmp_dir: dir
+    } do
+      slim = Path.join(dir, "slim")
+      fat = Path.join(dir, "fat")
+      File.mkdir_p!(Path.join(slim, ".git"))
+      for i <- 1..120, do: File.mkdir_p!(Path.join([fat, "tmp", "r#{i}", ".git"]))
+
+      repos = [
+        %{"name" => "own", "path" => "/p/own"},
+        %{"name" => "slim", "path" => slim},
+        %{"name" => "fat", "path" => fat}
+      ]
+
+      {:ok, p} = Projects.register(%{workspace_id: ws.id, name: "budget", repos: repos})
+      {:ok, t} = Channel.open_thread(%{title: "w", workspace_id: ws.id, project_id: p.id})
+
+      assert Projects.read_dirs(t) == [slim]
+    end
   end
 
   describe "repo_for_thread/1 — a scope glob is not a checkout" do
