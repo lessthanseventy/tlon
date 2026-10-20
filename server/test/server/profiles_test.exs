@@ -381,8 +381,9 @@ defmodule Server.ProfilesTest do
       # identity = the instance name
       assert p.name == "atlas"
       assert p.archetype == :builder
-      # content (sandbox/mcp) from the builder template
-      assert p.sandbox == Profiles.archetype(:builder).sandbox
+      # content (sandbox/mcp) from the builder template; the seat adds only its own scratch root
+      template = Profiles.archetype(:builder).sandbox
+      assert p.sandbox == update_in(template, ["filesystem", "allowWrite"], &(&1 ++ ["~/.cache/tlon-scratch/atlas"]))
       assert p.mcp == Profiles.archetype(:builder).mcp
     end
 
