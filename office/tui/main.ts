@@ -740,9 +740,10 @@ function stuckActions(s: data.Stuck, kind: StuckKind): Action[] {
   const after = () => { if (mode.kind === "issue" && !stuck?.blockers.shown.some((x) => x.issue_id === s.issue_id)) back(); draw() }
   const read: Action = { ...bind("need.v"), run: () => openReader(s.thread_id) }
   if (kind === "blocker" && s.issue_id !== undefined) {
-    const id = s.issue_id
+    const id = s.issue_id, ticket = s.ticket_id
     return [
-      { ...bind("need.g.issue"), run: () => void did(data.fixIssue(id)).then(after) },
+      // owned: the ticket is the fix in flight; the issue comes back to you to close when it is done
+      ticket ? { ...bind("need.g.issue"), label: `open ticket #${ticket}`, run: () => open({ kind: "ticket", id: ticket }) } : { ...bind("need.g.issue"), run: () => void did(data.fixIssue(id)).then(after) },
       { ...bind("need.x.issue"), run: () => ask("resolve — why (naming the PR banks the sheriff's postmortem)", (r) => { if (r.trim()) void did(data.resolveIssue(id, r.trim())).then(after) }) },
       read,
     ]
@@ -954,6 +955,7 @@ function cycleOpt<T>(values: readonly T[], cur: T | undefined): T | undefined {
 }
 const dim = (s: string): Seg => ({ s, fg: ROLE.inactive }), plain = (s: string): Seg => ({ s, fg: ROLE.prose })
 const key = (s: string): Seg => ({ s, fg: ROLE.key }), pink = (s: string): Seg => ({ s, fg: ROLE.attention })
+const live = (s: string): Seg => ({ s, fg: ROLE.live })
 const cols = () => process.stdout.columns ?? 80
 
 /**
@@ -1383,7 +1385,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         rows.push({ segs: [key(name)] })
         for (const s of c.shown) {
           const segs = kind === "blocker"
-            ? [key(`  #${s.issue_id} `), dim(`${s.created_at ? ago(s.created_at) : ""} ${s.found_by ?? ""}  `), pink(oneLine(s.summary ?? s.text))]
+            ? [key(`  #${s.issue_id} `), ...(s.ticket_id ? [live(`→ ticket #${s.ticket_id} ${s.ticket_status ?? ""} `)] : []), dim(`${s.created_at ? ago(s.created_at) : ""} ${s.found_by ?? ""}  `), pink(oneLine(s.summary ?? s.text))]
             : [key(`  #${s.thread_id} `), plain(s.title), pink(`  ${s.text}`)]
           rows.push({ segs, open: kind === "blocker" ? () => open({ kind: "issue", id: s.issue_id! }) : () => openReader(s.thread_id), ref: { s, kind } })
         }
@@ -1406,6 +1408,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const w = Math.max(20, paneW() - 4), paras = (t: string) => t.split("\n").flatMap((p) => (p.trim() ? wrap(p, w) : [""])).map((l): Row => ({ segs: [plain(l)] }))
       const rows: Row[] = [
         { segs: [dim(`found by ${s.found_by ?? "?"} · ${s.created_at ? ago(s.created_at) : "?"} ago · raised on `), key(`#${s.thread_id} `), plain(s.title)] },
+        ...(s.ticket_id ? [{ segs: [live(`being fixed: ticket #${s.ticket_id} (${s.ticket_status ?? "?"}); it comes back to you to close when that ticket is done`)] }] : []),
         { segs: [plain("")] }, { segs: [key("SUMMARY")] }, ...paras(s.summary ?? s.text),
         ...(s.evidence ? [{ segs: [plain("")] }, { segs: [key("EVIDENCE")] }, ...paras(s.evidence)] : []),
       ]
