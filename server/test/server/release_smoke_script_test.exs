@@ -176,7 +176,8 @@ defmodule Server.ReleaseSmokeScriptTest do
 
     test "a holder that is gone (no such pid, nothing on its url, an old record) is reclaimed, not refused",
          %{tmp: tmp, root: root} = ctx do
-      stale_lock(tmp, root, "pid 999999 on http://127.0.0.1:4777\n")
+      # above PID_MAX_LIMIT: a pid no process can hold
+      stale_lock(tmp, root, "pid 9999999 on http://127.0.0.1:4777\n")
 
       {out, _} = run_smoke(ctx, ["work/feature"])
 
@@ -205,10 +206,10 @@ defmodule Server.ReleaseSmokeScriptTest do
 
     test "an old record whose url still answers is a live holder: refused", %{tmp: tmp, root: root} = ctx do
       url = stub({200, "{}"})
-      stale_lock(tmp, root, "pid 999999 on #{url}\n")
+      stale_lock(tmp, root, "pid 9999999 on #{url}\n")
 
       assert {out, 1} = run_smoke(ctx, ["work/feature"])
-      assert out =~ "is already being smoked (pid 999999 on #{url})"
+      assert out =~ "is already being smoked (pid 9999999 on #{url})"
     end
   end
 
@@ -421,7 +422,7 @@ defmodule Server.ReleaseSmokeScriptTest do
     defp stale_lock_in(ctx) do
       {sha, 0} = System.cmd("git", ["-C", ctx.root, "rev-parse", "work/feature"])
       lock = Path.join(ctx.tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
-      File.write!(lock, "pid 999999 on http://127.0.0.1:#{free_port()}\n")
+      File.write!(lock, "pid 9999999 on http://127.0.0.1:#{free_port()}\n")
       File.touch!(lock, {{2020, 1, 1}, {0, 0, 0}})
       lock
     end
