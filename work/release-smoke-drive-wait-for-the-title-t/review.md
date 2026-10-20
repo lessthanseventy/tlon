@@ -1,0 +1,11 @@
+APPROVE
+
+release-smoke: the office drive waits for the title, not a fixed 2 s (a339fc7 + 149235c pr.md)
+
+The fix is sound and surgical. scripts/release-smoke.sh inserts `wait:$title` before `/` and `wait:#$tid  $title` after Enter, both gated on the candidate's office-drive.sh supporting `wait:*` — the same gate the existing `loaded` wait uses. When the drive lacks `wait:*` the arrays stay empty and the call degenerates to the old behaviour (backward compatible). The `wait:TEXT` semantics (office-drive.sh:46) poll up to 30 s for a fixed-string substring, so a cold TUI's late first snapshot no longer makes the find miss the thread.
+
+Test (release_smoke_script_test.exs): a new red-first test stubs office-drive.sh to record its args and asserts (a) a `wait:release smoke <pid>` step precedes `/` and (b) the step right after Enter is `wait:#7  release smoke <pid>`. The stub contains `wait:*)` so the smoke's `grep -q 'wait:\*'` gate fires and the wait path is actually exercised. 24/24 pass via `menard run test --in server test/server/release_smoke_script_test.exs`; the full gate ran green on the branch (`mise run check`, exit 0, 09:55).
+
+Rebase: the branch sits on d63f7fc; origin/main has since advanced 3 commits to 83eaf7b. f349377 touches the same test file but a different region (the `smoke/1` helper at line 45, adding `TLON_STALE_SCRIPTS_OK=1`); the branch's new test is inserted at line 356 — no overlap, clean rebase. The new test runs the temp checkout's own script (no origin/main ref → fresh-script.sh's `merge-base` fails → guard skips), so it needs no `TLON_STALE_SCRIPTS_OK`. The merge gate rebases and gates again.
+
+Follow-up (non-blocking): the after-Enter `wait:#$tid  $title` protects the downstream Escape/c/R navigation, but `expect "Enter" "#$tid  $title"` reads the `=== after: Enter` snapshot, captured 2 s after Enter (OFFICE_WAIT) and before the wait step runs. The find-side wait addresses the reported failure's root cause (cold snapshot missed the title → wrong/no thread opened → header never showed), so this is likely moot in practice; flagged only so a recurrence of the `expect "Enter"` race isn't a surprise.
