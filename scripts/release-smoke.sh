@@ -75,7 +75,7 @@ if [ -z "$url" ]; then
       hpid="$(printf '%s' "$holder" | sed -n 's/^pid \([0-9]*\) .*/\1/p')"
       hurl="$(printf '%s' "$holder" | sed -n 's/.* on \(http[^ ]*\)$/\1/p')"
       { [ -n "$hpid" ] && kill -0 "$hpid" 2>/dev/null; } ||
-        { [ -n "$hurl" ] && curl -s -m 2 -o /dev/null "$hurl/api/office"; } ||
+        { [ -n "$hurl" ] && curl -s -m 5 -o /dev/null "$hurl/api/office"; } ||
         [ -z "$(find "$lock" -maxdepth 0 -mmin +20)" ]
     }
     holder_is_live && fail "${sha:0:7} is already being smoked ($holder): drive or stop that one"
