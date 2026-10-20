@@ -145,11 +145,18 @@ defmodule Server.OfficeTest do
       # a warm session whose window is gone (the pane closed, the session never ended) is no desk
       gone = staffed.("window gone", "dana")
       {:ok, _} = Server.Staff.start_session(%{agent_id: Server.Staff.agent_by_name("dana").id, thread_id: gone.id})
-      windows("0\tt#{desk.id}\t#{desk.id}\t\t\thronir\t")
+      # a window with no session behind it is no desk either
+      {:ok, _} = Workspaces.seat(ws.id, %{name: "ana", archetype: "builder"})
+      bare = staffed.("window only", "ana")
+
+      windows("0\tt#{desk.id}\t#{desk.id}\t\t\thronir\t\n1\tt#{bare.id}\t#{bare.id}\t\t\tana\t")
 
       status = Office.status()
       seat = fn t -> Enum.find(status.threads, &(&1.id == t.id)).seat end
-      assert {seat.(desk), seat.(parked), seat.(idle), seat.(gone)} == {"desk", "parked", "idle", "idle"}
+
+      assert {seat.(desk), seat.(parked), seat.(idle), seat.(gone), seat.(bare)} ==
+               {"desk", "parked", "idle", "idle", "idle"}
+
       assert %{warm: false} = Enum.find(status.roster, &(&1.agent == "dana"))
       assert %{warm: true} = Enum.find(status.roster, &(&1.agent == "hronir"))
     end
