@@ -5,7 +5,9 @@ defmodule Server.Workline.Continuation do
   posts a `tlon` continuation on the thread — the stage, why its artifact is missing, what to do
   — and the switchboard wakes the lead with it, the same for every harness.
 
-  Bounded: at most `max_turns` (default 3) between stage advances. A coworker that genuinely cannot
+  Bounded: at most `max_turns` (default 3) between stage advances. The third nudge of a round goes
+  to a fresh session: the lead's session on the thread is rolled first (`Server.Staffing.roll_leaf/1`).
+  A coworker that genuinely cannot
   produce the artifact is not pushed again: the workline stops on the operator, saying it is stuck
   and why, so it reaches them as something to decide rather than sitting quiet.
   Each continuation names the `stage_advanced` event it follows in its payload, so the count is a
@@ -24,6 +26,8 @@ defmodule Server.Workline.Continuation do
   alias Server.Repo
   alias Server.Thread
   alias Server.Workline
+
+  @roll_after 2
 
   @doc "Queue a continuation check for `thread_id`; never raises (an idle must not fail on it)."
   def schedule(thread_id) when is_integer(thread_id), do: Jobs.enqueue(Jobs.Continue.new(%{thread_id: thread_id}))
@@ -44,11 +48,19 @@ defmodule Server.Workline.Continuation do
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),
          {:budget, true, _} <- {:budget, sent < max, {thread, why, sent, after_id}} do
+      # After two nudges in one context, a fresh session reading the thread beats a third push
+      # into a context full of failed attempts: roll the lead first, once per stage round.
+      rolled = sent == @roll_after
+
+      if rolled, do: Server.Staffing.roll_leaf(thread)
+
+      fresh = if rolled, do: " (a fresh session: the last #{sent} turns ended without it — read them above)", else: ""
+
       Channel.post(%{
         thread_id: thread_id,
         author: "tlon",
-        body: "↻ continue (#{sent + 1}/#{max}) — workline #{thread.slug} is at #{thread.stage} and #{say}",
-        payload: %{"continue_after" => after_id}
+        body: "↻ continue (#{sent + 1}/#{max})#{fresh} — workline #{thread.slug} is at #{thread.stage} and #{say}",
+        payload: %{"continue_after" => after_id, "rolled" => rolled}
       })
 
       :ok

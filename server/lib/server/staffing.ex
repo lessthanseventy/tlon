@@ -329,6 +329,19 @@ defmodule Server.Staffing do
   end
 
   @doc """
+  Roll a thread's lead: end the live sessions on the thread and close its leaf window, so the next
+  wake spawns a fresh, brief-seeded session there. The lead's other threads are untouched. `:ok`.
+  """
+  def roll_leaf(%Thread{} = thread) do
+    Staff.end_thread_sessions(thread.id)
+
+    with %{index: index} <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id),
+         do: Tmux.kill_window(thread.workspace_id, index)
+
+    :ok
+  end
+
+  @doc """
   Clear a coworker's context: end their live sessions in `workspace_id` and close their windows.
   The next message addressed to them spawns a fresh, brief-seeded session. `:ok`.
   """
