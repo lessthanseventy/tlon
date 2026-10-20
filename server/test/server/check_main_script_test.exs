@@ -84,7 +84,8 @@ defmodule Server.CheckMainScriptTest do
     stop(port)
 
     assert_receive {^port, {:exit_status, 143}}, 10_000
-    assert leftovers(ctx) == []
+    left = leftovers(ctx)
+    assert left == [], "left behind: #{inspect(Enum.map(left, &{&1, File.ls(&1)}))}"
     refute sh!(ctx.root, "git worktree list") =~ "tlon-main-"
   end
 
