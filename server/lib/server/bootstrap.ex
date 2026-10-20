@@ -59,6 +59,7 @@ defmodule Server.Bootstrap do
       # Base self-knowledge + baseline projects (2026-08-31) — idempotent, so a reset/fresh scratch
       # DB heals to "funes already knows the basics" on the next boot. Absorbs its own failures.
       Server.Seed.ensure_safe()
+      :ok = Server.Outside.ensure_citizens()
       _ = Server.Outside.ensure_checkin(workspace.id)
       {:ok, workspace}
     end

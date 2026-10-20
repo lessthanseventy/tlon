@@ -37,6 +37,18 @@ defmodule Server.Outside do
   @doc "Whether a thread, by its title and the name of its lead, is a citizen's study."
   def study?(title, lead, citizens \\ names()), do: title == @study and lead in citizens
 
+  @doc """
+  Register each citizen with a window (`Server.Profiles.citizen_names/0`: uqbar, the aleph) that has
+  no agent yet, as `outside`, so a fresh or reset store grows them at boot rather than by hand. `:ok`.
+  """
+  def ensure_citizens(names \\ Server.Profiles.citizen_names()) do
+    for name <- names,
+        is_nil(Server.Staff.agent_by_name(name)),
+        do: Server.Staff.register_agent(%{name: name, mandate: "outside", engine: "claude-code"})
+
+    :ok
+  end
+
   @doc "The outside citizens' names: agents registered as `outside` and seated on no bench."
   def names do
     Repo.all(
