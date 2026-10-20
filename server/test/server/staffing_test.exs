@@ -78,8 +78,8 @@ defmodule Server.StaffingTest do
     session!("borges", thread.id, 7_200, true)
 
     tmux(
-      "0\trufus\t\t\t1\trufus\t#{old()}\n1\thronir\t\t\t2\thronir\t#{old()}\n" <>
-        "2\tt#{thread.id}\t#{thread.id}\tdone\t3\tborges\t#{old()}\n3\tborges\t\t\t4\tborges\t#{fresh()}\n"
+      "0\trufus\t\t\t999999991\trufus\t#{old()}\n1\thronir\t\t\t999999992\thronir\t#{old()}\n" <>
+        "2\tt#{thread.id}\t#{thread.id}\tdone\t999999993\tborges\t#{old()}\n3\tborges\t\t\t999999994\tborges\t#{fresh()}\n"
     )
 
     assert :ok = Staffing.pass(ws.id)
@@ -102,8 +102,8 @@ defmodule Server.StaffingTest do
     session!("rufus", standing.id, 120)
 
     tmux(
-      "0\thronir\t\t\t1\thronir\t#{four_hours}\n" <>
-        "1\tt#{thread.id}\t#{thread.id}\tdone\t2\tborges\t#{four_hours}\n2\trufus\t\t\t3\trufus\t#{old()}\n"
+      "0\thronir\t\t\t999999991\thronir\t#{four_hours}\n" <>
+        "1\tt#{thread.id}\t#{thread.id}\tdone\t999999992\tborges\t#{four_hours}\n2\trufus\t\t\t999999993\trufus\t#{old()}\n"
     )
 
     assert :ok = Staffing.pass(ws.id)
@@ -120,7 +120,7 @@ defmodule Server.StaffingTest do
     thread = staffed_thread(ws, "borges")
     # marked mid-turn two hours ago, and not warm since
     session!("borges", thread.id, 7_200, true)
-    tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t1\tborges\t#{old()}\n")
+    tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t999999991\tborges\t#{old()}\n")
     leaf = "#{session}:0"
 
     Application.put_env(:server, :stale_turn_seconds, 3 * 3600)
@@ -140,7 +140,11 @@ defmodule Server.StaffingTest do
     # borges: marked mid-turn 20 minutes ago, on a window older than max_session_hours
     session!("borges", thread.id, 1_200, true)
     four_hours = System.os_time(:second) - 4 * 3600
-    tmux("0\trufus\t\t\t1\trufus\t#{old()}\n1\tt#{thread.id}\t#{thread.id}\tdone\t2\tborges\t#{four_hours}\n")
+
+    tmux(
+      "0\trufus\t\t\t999999991\trufus\t#{old()}\n1\tt#{thread.id}\t#{thread.id}\tdone\t999999992\tborges\t#{four_hours}\n"
+    )
+
     leaf = "#{session}:1"
 
     Application.put_env(:server, :stale_turn_seconds, 3600)
@@ -158,7 +162,7 @@ defmodule Server.StaffingTest do
     here = staffed_thread(ws, "borges")
     kept = session!("borges", here.id, 1_200)
 
-    tmux("0\tt#{here.id}\t#{here.id}\tdone\t1\tborges\t#{old()}\n")
+    tmux("0\tt#{here.id}\t#{here.id}\tdone\t999999991\tborges\t#{old()}\n")
     assert :ok = Staffing.pass(ws.id)
 
     assert Server.Repo.get!(Server.Session, lost.id).ended_at
@@ -188,7 +192,7 @@ defmodule Server.StaffingTest do
     thread = staffed_thread(ws, "borges")
     session!("borges", thread.id, 86_400, true)
 
-    tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t1\tborges\t#{old()}\n")
+    tmux("0\tt#{thread.id}\t#{thread.id}\tdone\t999999991\tborges\t#{old()}\n")
     assert :ok = Staffing.pass(ws.id)
 
     stale = "#{session}:0"
@@ -197,7 +201,7 @@ defmodule Server.StaffingTest do
 
   test "a window nobody can be attributed to (a crew role, a hand-made one) is never swept as cold",
        %{ws: ws, session: session} do
-    tmux("0\tr12\t\t\t1\t\t\n1\tscratch\t\t\t2\t\t\n")
+    tmux("0\tr12\t\t\t999999991\t\t\n1\tscratch\t\t\t999999992\t\t\n")
     assert :ok = Staffing.pass(ws.id)
     for i <- 0..1, t = "#{session}:#{i}", do: refute_received({:tmux, ["-L", _, "kill-window", "-t", ^t]})
   end
@@ -207,7 +211,7 @@ defmodule Server.StaffingTest do
     thread = staffed_thread(ws, "borges")
     cut = session!("borges", thread.id, 30, true)
     alive = session!("hronir", standing.id, 30, true)
-    tmux("0\thronir\t\t\t1\thronir\t#{fresh()}\n")
+    tmux("0\thronir\t\t\t999999991\thronir\t#{fresh()}\n")
 
     assert :ok = Staffing.pass(ws.id)
 
@@ -247,7 +251,10 @@ defmodule Server.StaffingTest do
     thread = staffed_thread(ws, "borges")
     s1 = session!("borges", thread.id, 30)
     s2 = session!("hronir", standing.id, 30)
-    tmux("0\thronir\t\t\t1\thronir\t#{old()}\n1\tt#{thread.id}\t#{thread.id}\tdone\t2\tborges\t#{old()}\n")
+
+    tmux(
+      "0\thronir\t\t\t999999991\thronir\t#{old()}\n1\tt#{thread.id}\t#{thread.id}\tdone\t999999992\tborges\t#{old()}\n"
+    )
 
     assert :ok = Staffing.clear_context(ws.id, "borges")
 
@@ -264,7 +271,7 @@ defmodule Server.StaffingTest do
     thread = staffed_thread(ws, "borges")
 
     tmux(
-      "0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-live\t#{thread.id}\tdone\t4\n4\treviewer-stale\t999888\tdone\t5\n5\tt777666\t\t\t6\n"
+      "0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n2\tborges\t\t\t999999993\n3\tplanner-live\t#{thread.id}\tdone\t999999994\n4\treviewer-stale\t999888\tdone\t999999995\n5\tt777666\t\t\t999999996\n"
     )
 
     assert :ok = Staffing.pass(ws.id)
@@ -280,7 +287,7 @@ defmodule Server.StaffingTest do
        %{ws: ws, standing: standing, sock: sock, session: session} do
     {:ok, child} = Channel.open_thread(%{title: "finder", workspace_id: ws.id, parent_thread_id: standing.id})
     {:ok, _} = Channel.assign_lead(child.id, "borges")
-    tmux("0\tborges\t\t\t1\n1\tt#{child.id}\t#{child.id}\t\t2\n")
+    tmux("0\tborges\t\t\t999999991\n1\tt#{child.id}\t#{child.id}\t\t999999992\n")
 
     assert :ok = Staffing.pass(ws.id)
     t1 = "#{session}:1"
@@ -325,7 +332,7 @@ defmodule Server.StaffingTest do
       session!("borges", build.id, 600)
       ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
 
-      tmux("0\tt#{build.id}\t#{build.id}\tdone\t1\tborges\t#{old()}\n")
+      tmux("0\tt#{build.id}\t#{build.id}\tdone\t999999991\tborges\t#{old()}\n")
       assert :ok = Staffing.pass(ws.id)
 
       yielded = "#{session}:0"
@@ -337,7 +344,7 @@ defmodule Server.StaffingTest do
       session!("borges", build.id, 60, true)
       ws |> staffed_thread("hronir") |> at_stage("review") |> parked!()
 
-      tmux("0\tt#{build.id}\t#{build.id}\tdone\t1\tborges\t#{old()}\n")
+      tmux("0\tt#{build.id}\t#{build.id}\tdone\t999999991\tborges\t#{old()}\n")
       assert :ok = Staffing.pass(ws.id)
 
       busy = "#{session}:0"
@@ -349,7 +356,7 @@ defmodule Server.StaffingTest do
       session!("borges", review.id, 600)
       ws |> staffed_thread("hronir") |> at_stage("build") |> parked!()
 
-      tmux("0\tt#{review.id}\t#{review.id}\tdone\t1\tborges\t#{old()}\n")
+      tmux("0\tt#{review.id}\t#{review.id}\tdone\t999999991\tborges\t#{old()}\n")
       assert :ok = Staffing.pass(ws.id)
 
       kept = "#{session}:0"
@@ -361,7 +368,7 @@ defmodule Server.StaffingTest do
       session!("hronir", beat.id, 600)
       ws |> staffed_thread("borges") |> at_stage("review") |> parked!()
 
-      tmux("0\tt#{beat.id}\t#{beat.id}\tdone\t1\thronir\t#{old()}\n")
+      tmux("0\tt#{beat.id}\t#{beat.id}\tdone\t999999991\thronir\t#{old()}\n")
       assert :ok = Staffing.pass(ws.id)
 
       duty = "#{session}:0"
@@ -381,7 +388,10 @@ defmodule Server.StaffingTest do
     test "restaffs it, posts the handoff as the operator, and ends the old worker's leaf so the next pass spawns the new one",
          %{ws: ws, sock: sock} do
       thread = staffed_thread(ws, "borges")
-      tmux("0\trufus\t\t\t1\n1\thronir\t\t\t2\n2\tborges\t\t\t3\n3\tplanner-task\t#{thread.id}\tdone\t4\n")
+
+      tmux(
+        "0\trufus\t\t\t999999991\n1\thronir\t\t\t999999992\n2\tborges\t\t\t999999993\n3\tplanner-task\t#{thread.id}\tdone\t999999994\n"
+      )
 
       assert {:ok, _} = Staffing.hand_off(thread.id, "hronir")
 
@@ -394,7 +404,7 @@ defmodule Server.StaffingTest do
 
     test "an unknown coworker is refused and changes nothing", %{ws: ws} do
       thread = staffed_thread(ws, "borges")
-      tmux("0\trufus\t\t\t1\n")
+      tmux("0\trufus\t\t\t999999991\n")
 
       assert {:error, :no_agent} = Staffing.hand_off(thread.id, "nobody")
       assert Channel.thread_lead(thread.id) == "borges"
@@ -403,7 +413,7 @@ defmodule Server.StaffingTest do
 
     test "the manager never leads a workline: handing one to them is refused and changes nothing", %{ws: ws} do
       build = ws |> staffed_thread("borges") |> Ecto.Changeset.change(stage: "build") |> Server.Repo.update!()
-      tmux("0\trufus\t\t\t1\n")
+      tmux("0\trufus\t\t\t999999991\n")
 
       assert {:error, :manager_leads_no_workline} = Staffing.hand_off(build.id, "rufus")
       assert Channel.thread_lead(build.id) == "borges"
@@ -425,7 +435,8 @@ defmodule Server.StaffingTest do
   end
 
   describe "stale_coworkers/3 — a rename left a process minting under a handle the bench lost" do
-    defp tab(name, author), do: {%{name: name, index: name, thread_id: nil, opening: nil, pane_pid: 1}, author}
+    defp tab(name, author),
+      do: {%{name: name, index: name, thread_id: nil, opening: nil, pane_pid: 999_999_991}, author}
 
     defp check(pairs, bench) do
       tabs = Enum.map(pairs, &elem(&1, 0))
