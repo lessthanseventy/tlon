@@ -146,6 +146,20 @@ export type CardState = { kind: "running" | "parked" | "idle" | "needs" | "check
 /** what a board knows beyond the snapshot: the leaf cap (`max_leaves` from the settings) and the threads on the needs list */
 export type BoardCtx = { maxLeaves?: number | null; needs?: number[]; checking?: number | null; /** threads whose full check waits its turn (the queue lines name them; their order is not the queue's) */ checkWaiting?: number[]; merging?: { thread_id: number; state: "landing" | "queued" }[] }
 export const STATE_GLYPH: Record<CardState["kind"], string> = { running: "▶", parked: "⏸", idle: "◇", needs: "⚑", checking: "✓", merging: "⤵" }
+/** what each mark on the whiteboard says, for its legend (the help screen, a column's list) */
+export const STATE_WORDS: Record<CardState["kind"], string> = {
+  needs: "waiting on you: a question, a gate, or blocked",
+  running: "its lead is at a desk, working",
+  checking: "its full check is running, or waiting its turn",
+  merging: "in the merge queue, or landing",
+  parked: "waiting for a seat (the leaf cap)",
+  idle: "nobody is at a desk on it",
+}
+/** the whiteboard's legend, in the order it reads: an unstarted ticket's square, then each state's mark */
+export const BOARD_LEGEND: [mark: string, words: string][] = [
+  ["■", "a ticket nobody has started"],
+  ...(Object.keys(STATE_WORDS) as CardState["kind"][]).map((k): [string, string] => [STATE_GLYPH[k], STATE_WORDS[k]]),
+]
 
 /** a thread's card state, or null when nobody leads it */
 export function cardState(a: Agents, th: Thread, ctx: BoardCtx = {}): CardState | null {

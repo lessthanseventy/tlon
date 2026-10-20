@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { boardColumns, cardState, epicChildren } from "../kit/crew"
+import { BOARD_LEGEND, boardColumns, cardState, epicChildren, STATE_GLYPH } from "../kit/crew"
 import { EMPTY, type Agents, type Seat, type Thread, type Ticket } from "../kit/types"
 
 const thread = (id: number, over: Partial<Thread> = {}): Thread => ({ id, title: `t${id}`, stage: "build", awaiting: null, workspace_id: 1, lead: "ireneo", seat: "idle", ...over })
@@ -101,4 +101,11 @@ describe("epics on the TICKETS column", () => {
     expect(boardColumns(quiet)[0]!.items[0]!.title).toBe("Toy 2/13")
     expect(epicChildren(a, 50).map((t) => t.id)).toEqual([52, 53])
   })
+})
+
+test("the whiteboard's legend words every mark the board can draw", () => {
+  const marks = BOARD_LEGEND.map(([m]) => m)
+  for (const g of Object.values(STATE_GLYPH)) expect(marks).toContain(g)
+  expect(marks).toContain("■")
+  for (const [, words] of BOARD_LEGEND) expect(words.length).toBeGreaterThan(5)
 })
