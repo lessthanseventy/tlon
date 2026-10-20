@@ -15,7 +15,7 @@ defmodule Server.Canvas.PaintTest do
     File.mkdir_p!(remote)
     {_, 0} = System.cmd("git", ["init", "-q", "--bare", "-b", "main", remote])
 
-    # a 100-commit push makes the bare repo spawn a detached `gc --auto` that can still be writing when on_exit removes it
+    # a 100-commit push makes the bare repo spawn a detached `gc --auto`, still writing when on_exit removes it
     {_, 0} = System.cmd("git", ["--git-dir", remote, "config", "receive.autogc", "false"])
     on_exit(fn -> File.rm_rf!(dir) end)
     %{remote: remote, opts: [remote: remote, today: @today, author: {"Andrew", "a@example.com"}]}
