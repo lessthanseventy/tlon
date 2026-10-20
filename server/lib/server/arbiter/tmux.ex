@@ -69,6 +69,7 @@ defmodule Server.Arbiter.Tmux do
       case Tmux.run(ws, args) do
         {_out, 0} ->
           tag(ws, window, leaf_thread, author)
+          Tmux.set_window_option(ws, "=" <> window, "@funes_launch", launch_stamp(ws, author))
           _ = parked? and Server.Staffing.note_seated(thread, author)
           {:ok, target(ws, window)}
 
@@ -189,12 +190,22 @@ defmodule Server.Arbiter.Tmux do
   # spawn-on-post and a staffing spawn can never disagree about a seat. Only an author with no seat
   # on the workspace's bench and no citizen profile (`Profiles.citizen_profile/2`) falls back to
   # `launcher_by_engine/1`.
-  defp launcher(ws, author) do
-    # everyone hired, not only the crew on shift: an off-shift seat's duty (the sheriff's beat, a
-    # nightly schedule) still runs as that seat, never as the engine fallback
-    bench = Workspaces.bench_all(ws)
+  @doc """
+  The stamp a pane for `author` in workspace `ws` is launched with now (`Server.Profiles.fingerprint/1`
+  of its profile; the engine launcher's path for a seat with none). Spawn tags the window with it as
+  `@funes_launch`; the staffing pass compares a live window's tag with it.
+  """
+  def launch_stamp(ws, author) do
+    case profile_for(ws, author) do
+      %Profile{} = profile -> Profiles.fingerprint(profile)
+      nil -> "engine:" <> launcher_by_engine(author)
+    end
+  rescue
+    _ -> "engine:" <> launcher_by_engine(author)
+  end
 
-    case Profiles.seat_profile(author, bench, ws) || Profiles.citizen_profile(author, ws) do
+  defp launcher(ws, author) do
+    case profile_for(ws, author) do
       %Profile{} = profile ->
         _ = Profiles.materialise!(profile)
         Harness.driver(profile.harness).launch_command(profile)
@@ -231,4 +242,11 @@ defmodule Server.Arbiter.Tmux do
   end
 
   def ready?(_handle), do: true
+
+  # everyone hired, not only the crew on shift: an off-shift seat's duty (the sheriff's beat, a
+  # nightly schedule) still runs as that seat, never as the engine fallback
+  defp profile_for(ws, author) do
+    bench = Workspaces.bench_all(ws)
+    Profiles.seat_profile(author, bench, ws) || Profiles.citizen_profile(author, ws)
+  end
 end

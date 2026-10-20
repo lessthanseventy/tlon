@@ -433,6 +433,32 @@ defmodule Server.SwitchboardTest do
       assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
 
+    test "a lead respawned after the server retired its pane opens knowing where it left off" do
+      {:ok, thread} = Channel.open_thread(%{title: "rolled thread"})
+      {:ok, carl} = Staff.register_agent(%{name: "Carl", mandate: "review", engine: "fresh"})
+      {:ok, _} = Staff.assign(thread, carl)
+      {:ok, last} = Channel.post(%{thread_id: thread.id, author: "Carl", body: "half the review is in"})
+
+      {:ok, _} =
+        Server.Dossier.record_event(%{
+          thread_id: thread.id,
+          kind: "pane_retired",
+          correlation: "pane:Carl",
+          detail: %{
+            "why" => "its launch changed",
+            "last_post_id" => last.id,
+            "last_post" => last.body,
+            "sessions_before" => 0
+          }
+        })
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "please finish"})
+      assert {:pending, _} = Switchboard.deliver(m)
+      assert_received {:spawned, _exports}
+      assert_receive {:woke, nil, "Where you left off: " <> rest}, 1_000
+      assert rest =~ "its launch changed" and rest =~ "##{last.id}" and rest =~ "New message on thread"
+    end
+
     test "the operator's message on uqbar's study spawns uqbar's pane there, as itself" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
       {:ok, _} = Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})

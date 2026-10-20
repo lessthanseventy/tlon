@@ -394,7 +394,11 @@ defmodule Server.Switchboard do
 
   defp poke_spawned(message, spawned) do
     for {agent, _handle, home} <- spawned,
-        do: poke(%{thread_id: home, agent: agent, pane_ref: nil}, prompt_for(message, home))
+        do:
+          poke(
+            %{thread_id: home, agent: agent, pane_ref: nil},
+            Server.Staffing.left_off(home, agent) <> prompt_for(message, home)
+          )
   end
 
   defp await_ready(handle, budget_ms) do

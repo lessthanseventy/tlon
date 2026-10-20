@@ -54,6 +54,8 @@ config :server, operator_config_path: "/nonexistent/tlon-test-config.json"
 # The PM's release desk acts on the tlon checkout (Server.Release.PM): a test hands it a throwaway
 # repo, so one that forgets can never cut a release of the real one.
 config :server, release_root: "/nonexistent/tlon-test-release"
+# the stale-launch sweep retires unstamped fake windows; its own tests turn it on
+config :server, retire_stale_launch: false
 config :server, souls_dir: Path.join(System.tmp_dir!(), "tlon-test-souls-unset")
 # The consult mirror is off in tests: the pure maybe_mirror tests call it directly, and the
 # round-trip test starts it explicitly. An always-on subscriber would double-mirror.
@@ -62,8 +64,8 @@ config :server, start_consult_mirror: false
 # In test the harness manages the repo lifecycle (fresh, migrated DB per run),
 # so the application does not start it. The DB is the suite's own `tlon_test`,
 # never the real one.
-config :server, start_repo: false
 # The supersede judge (Server.Recall.Judge) never reaches a model from the suite; its tests hand one in.
+config :server, start_repo: false
 config :server, supersede_judge_cmd: "/nonexistent/tlon-test-judge-cli"
 
 # a wake's look-again for a swallowed Enter (Server.Arbiter.Tmux): off, but where a test turns it on

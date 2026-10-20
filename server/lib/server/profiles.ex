@@ -1108,6 +1108,27 @@ defmodule Server.Profiles do
     dir
   end
 
+  @doc """
+  What a pane launched from `p` was launched with, as a short hash: its launch command (model,
+  effort, deny list and the rest of its env) and the bytes `materialise!/2` writes for it (sandbox,
+  system prompt, tmux.conf). A live pane stamped with another one is running a launch its profile
+  no longer gives (`Server.Staffing`'s stale-launch sweep).
+  """
+  def fingerprint(%Profile{} = p) do
+    r = render(p)
+
+    [
+      Server.Harness.driver(p.harness).launch_command(p),
+      if(r.sandbox, do: Jason.encode!(r.sandbox), else: ""),
+      r.system_prompt || "",
+      @coworker_tmux_conf
+    ]
+    |> Enum.join(<<0>>)
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 16)
+  end
+
   defp profiles_root do
     state = System.get_env("XDG_STATE_HOME") || Path.expand("~/.local/state")
     Path.join([state, "tlon", "profiles"])

@@ -20,7 +20,8 @@ defmodule Server.Tmux do
           opening: String.t() | nil,
           pane_pid: integer() | nil,
           agent: String.t() | nil,
-          born: integer() | nil
+          born: integer() | nil,
+          launch: String.t() | nil
         }
 
   def session(id), do: "w#{id}"
@@ -70,7 +71,7 @@ defmodule Server.Tmux do
       "--description=tlon coworkers, workspace #{id}"
     ]
 
-  @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}"
+  @list_format "\#{window_index}\t\#{window_name}\t\#{@funes_thread}\t\#{@funes_opening}\t\#{pane_pid}\t\#{@funes_agent}\t\#{@funes_born}\t\#{@funes_launch}"
 
   @not_up ~r/no server running|error connecting to|can't find session|no current session/
 
@@ -100,9 +101,9 @@ defmodule Server.Tmux do
     out
     |> String.split("\n", trim: true)
     |> Enum.flat_map(fn line ->
-      case String.split(line, "\t", parts: 7) do
+      case String.split(line, "\t", parts: 8) do
         [index, name | rest] when name != "" ->
-          [thread, opening, pid, agent, born] = Enum.map(0..4, &Enum.at(rest, &1, ""))
+          [thread, opening, pid, agent, born, launch] = Enum.map(0..5, &Enum.at(rest, &1, ""))
 
           [
             %{
@@ -112,7 +113,8 @@ defmodule Server.Tmux do
               opening: if(opening in ["typed", "done"], do: opening),
               pane_pid: int_or_nil(pid),
               agent: if(agent != "", do: agent),
-              born: int_or_nil(born)
+              born: int_or_nil(born),
+              launch: if(launch != "", do: launch)
             }
           ]
 
