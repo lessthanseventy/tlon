@@ -88,6 +88,7 @@ defmodule Server.Staffing do
       |> sweep_long(workspace_id, standing, bench)
       |> yield_seat(workspace_id, standing, bench)
       |> retire_stale_launch(workspace_id, standing)
+      |> dismiss_aleph(workspace_id)
 
     resume_interrupted(workspace_id, tabs, standing)
     end_windowless(workspace_id, tabs, standing, bench)
@@ -255,7 +256,7 @@ defmodule Server.Staffing do
   # whose window a tab is: the spawn's tags; else (a window from before the tags) the identity its
   # process holds, on its tagged thread or the standing one
   defp owner(%{agent: agent, thread_id: thread}, standing, _seats) when is_binary(agent),
-    do: {thread || standing, agent}
+    do: {thread || called_to(agent) || standing, agent}
 
   defp owner(tab, standing, seats) do
     case pane_author(tab) do
@@ -644,7 +645,7 @@ defmodule Server.Staffing do
     end
   end
 
-  defp retire_pane(workspace_id, tab, thread_id, tabs) do
+  defp retire_pane(workspace_id, tab, thread_id, tabs, why \\ "its launch changed: a release or a profile edit") do
     from(s in Session,
       join: a in Agent,
       on: a.id == s.agent_id,
@@ -654,9 +655,49 @@ defmodule Server.Staffing do
     |> Enum.each(&Staff.end_session/1)
 
     Tmux.kill_window(workspace_id, tab.index)
-    record_retired(thread_id, tab.agent, "its launch changed: a release or a profile edit")
-    Logger.info("staffing: retired #{tab.agent}'s pane on ##{thread_id}, its launch changed")
+    record_retired(thread_id, tab.agent, why)
+    Logger.info("staffing: retired #{tab.agent}'s pane on ##{thread_id} (#{why})")
     List.delete(tabs, tab)
+  end
+
+  # the Aleph's window carries no thread tag (it would read as the thread's leaf): its thread is
+  # the one its live session was called to
+  defp called_to(agent) do
+    if agent == Server.Aleph.name(),
+      do:
+        Repo.one(
+          from s in Session,
+            join: a in Agent,
+            on: a.id == s.agent_id,
+            where: a.name == ^agent and is_nil(s.ended_at),
+            order_by: [desc: s.id],
+            limit: 1,
+            select: s.thread_id
+        )
+  end
+
+  # The Aleph is called in for one job (`Server.Aleph`): once it has posted on the thread it was
+  # called to and its turn is over, its pane is retired, so it never idles warm on the bench's quota.
+  defp dismiss_aleph(tabs, workspace_id) do
+    name = Server.Aleph.name()
+
+    with %{} = tab <- Enum.find(tabs, &(&1.agent == name)),
+         false <- MapSet.member?(mid_turn_agents(workspace_id), name),
+         %Session{thread_id: tid, started_at: since} <-
+           Repo.one(
+             from s in Session,
+               join: a in Agent,
+               on: a.id == s.agent_id,
+               where: a.name == ^name and is_nil(s.ended_at),
+               order_by: [desc: s.id],
+               limit: 1
+           ),
+         true <-
+           Repo.exists?(from m in Message, where: m.thread_id == ^tid and m.author == ^name and m.created_at >= ^since) do
+      retire_pane(workspace_id, tab, tid, tabs, "answered: the Aleph leaves once it has posted")
+    else
+      _ -> tabs
+    end
   end
 
   defp mid_turn_agents(workspace_id) do

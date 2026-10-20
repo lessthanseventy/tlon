@@ -50,6 +50,32 @@ defmodule Server.OutsideTest do
     assert Channel.thread_messages(thread) == []
   end
 
+  describe "the citizens are seeded, and the Aleph is called in only by those allowed to" do
+    test "ensure_citizens/0 registers uqbar and the aleph as outside citizens, once" do
+      :ok = Outside.ensure_citizens()
+      :ok = Outside.ensure_citizens()
+      assert Outside.names() == ["aleph", "uqbar"]
+      assert Server.Staff.agent_by_name("aleph").mandate == "outside"
+      # on Fable, and it can't write: a deny that holds whatever mode it runs in
+      aleph = Server.Profiles.citizen_profile("aleph", nil)
+      assert aleph.model.model == "claude-fable-5-1"
+      assert Server.Harness.driver(:claude_code).launch_command(aleph) =~ "Write"
+    end
+
+    test "the operator, the manager and the tech lead may call the Aleph in; anyone else may not" do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Bench"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "tertius", archetype: "surveyor"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "pierre", archetype: "builder"})
+      {:ok, thread} = Channel.open_thread(%{title: "stuck", workspace_id: ws.id})
+
+      for who <- [Server.OperatorConfig.operator(), "tertius", "hronir"],
+          do: assert(Server.Aleph.called?(thread, who), who)
+
+      refute Server.Aleph.called?(thread, "pierre")
+    end
+  end
+
   describe "uqbar in the app: a citizen with a window of its own" do
     test "names/0 lists the outside citizens: registered as outside, seated nowhere" do
       {:ok, _} = Server.Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})

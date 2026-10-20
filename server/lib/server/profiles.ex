@@ -131,6 +131,8 @@ defmodule Server.Profiles do
                  menard-scratch tlon tlon-scratch tlon-bench ms-playwright node node-gyp pnpm yarn
                  typescript deno uv pip go-build tree-sitter jiti)
 
+  @fable %{provider: "anthropic", model: "claude-fable-5-1", thinking: "high"}
+
   @doc "The `~/.cache` dirs a coworker's sandbox may write: the dev tools', never the whole of it."
   def dev_caches, do: @dev_caches
 
@@ -440,6 +442,10 @@ defmodule Server.Profiles do
 
   Be terse and high-signal; a rollup nobody reads is worse than none. Stay quiet unless @-mentioned or
   asked — you are the vantage and the router, not another voice in the room.
+
+  THE ALEPH. When a thread is stuck on something hard (a design question, a stage that keeps
+  bouncing, a knot nobody can untangle), call in the Aleph: post `@aleph` and the question on that
+  thread. It reads everything, answers once, and leaves. It is the heavy hitter: not for routine work.
   """
 
   # The reviewer persona → `system_prompt.md`. Names the write-deny explicitly so the model doesn't
@@ -502,7 +508,9 @@ defmodule Server.Profiles do
   before a failing test. Never claim a task done without running the verification (tests/build/lint)
   and showing the actual output — evidence before assertions, always. Commit small and often. If you
   are blocked or a test will not pass, post the failure and escalate to the thread's leader rather
-  than faking green. Be terse and high-signal.#{@chat_etiquette}
+  than faking green. If you are the workspace's tech lead and a thread is stuck on something hard,
+  you may call in the Aleph: `@aleph` and the question, on that thread; it answers once and leaves. Be
+  terse and high-signal.#{@chat_etiquette}
   """
 
   # The sheriff persona → `system_prompt.md`. Owns red: triage, route, fix the small, escalate the real.
@@ -549,6 +557,27 @@ defmodule Server.Profiles do
   Claude Code memory (MEMORY.md, this project's) and the facts on your study are one memory: what you
   save there about tlon, bank here too, so the office and the librarian see it. A fresh session loses
   nothing that matters.#{@chat_etiquette}
+  """
+
+  # The Aleph → `system_prompt.md` (`Server.Aleph`): called in, never seated.
+  @aleph_role """
+  You are the Aleph: the point in the room from which every other point can be seen. You are not
+  on any bench and you lead nothing. Someone the office trusts (the operator, the manager, the tech
+  lead) has called you in on THIS thread with an @aleph mention, because it is stuck: a hard design
+  question, a stage that keeps bouncing, something nobody can untangle.
+
+  THE ONE JOB. Read the whole thread (get_dossier), its branch and its docs, and whatever of the
+  codebase the question touches. Then do exactly what the call asked: a plan, a verdict, an
+  untangling, a diagnosis. Say it on the thread with post_message, as `aleph`, once: what you found,
+  why, and the next concrete step and who takes it. Name files and lines. If the call is unclear,
+  say what you would need, in one post, rather than guess.
+
+  YOU DO NOT BUILD. You don't commit, push, advance stages, approve gates or staff anyone: the
+  thread's lead and the office do that from your post. You don't stay: once you have posted your
+  answer you are dismissed, and a later call brings you back fresh.
+
+  Arriving, you may say "I have seen everything. Show me where it bends."; leaving, "It was all
+  here. You were standing in the wrong place." Say each at most once, and only if it fits.#{@chat_etiquette}
   """
 
   # The PM persona → `system_prompt.md` (pm-and-release design §1, §4, §6).
@@ -983,7 +1012,20 @@ defmodule Server.Profiles do
   # The outside citizens a window is launched for (`Server.Outside`): on the Claude plan, unsandboxed,
   # as the operator's own sessions run. A long-lived delegate compacts before a turn at half full
   # (`compact_at`, percent of its context window), so it never runs deep into it.
-  @citizens %{"uqbar" => %{model: @opus, mcp: @tlon_mcp, system_prompt: @uqbar_role, compact_at: 50}}
+  @citizens %{
+    "uqbar" => %{model: @opus, mcp: @tlon_mcp, system_prompt: @uqbar_role, compact_at: 50},
+    # it reads and answers; it never writes (the reviewer's fence, a deny that holds in every mode)
+    "aleph" => %{
+      model: @fable,
+      mcp: @tlon_mcp,
+      system_prompt: @aleph_role,
+      compact_at: 50,
+      permissions: %{"permission" => %{"write" => "deny", "edit" => "deny"}}
+    }
+  }
+
+  @doc "The outside citizens with a window of their own (`Server.Outside`): the names bootstrap seeds."
+  def citizen_names, do: Map.keys(@citizens)
 
   @doc """
   The `%Profile{}` an outside citizen's window is launched with on `workspace_id`; nil for a name that
@@ -1003,7 +1045,8 @@ defmodule Server.Profiles do
           mcp: t.mcp,
           model: t.model,
           system_prompt: t.system_prompt,
-          compact_at: t.compact_at
+          compact_at: t.compact_at,
+          permissions: t[:permissions]
         }
     end
   end

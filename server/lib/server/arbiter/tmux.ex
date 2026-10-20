@@ -50,7 +50,9 @@ defmodule Server.Arbiter.Tmux do
     with {:ok, thread_id, author} <- identity(exports),
          %Thread{} = thread <- Repo.get(Thread, thread_id) || {:error, :no_thread},
          ws when not is_nil(ws) <- workspace_id(thread),
-         standing? = standing?(ws, thread),
+         # the Aleph's window is named for it like a lobby window: one at a time, no leaf seat, and
+         # no thread tag, which would make it the thread's leaf (`Tmux.leaf_tab/2`) in its lead's place
+         standing? = standing?(ws, thread) or author == Server.Aleph.name(),
          tabs when is_list(tabs) <- tmux_windows(ws),
          :absent <- running(tabs, thread, author, standing?),
          _ = Server.Orphans.retire(thread_id, author, Application.get_env(:server, :orphans, [])),
