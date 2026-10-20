@@ -34,7 +34,7 @@
 #   workspace-new <name> [repo-path]            a new workspace, with a repo when given
 #   aside <ws> <agent-id> <question…>           ask a coworker one thing, outside any thread
 #   fire <seat-id>                              take a coworker off a bench (the agent survives)
-#   ticket-set <id> status|title|body <value…>  change a ticket; ticket-delete <id> removes one
+#   ticket-set <id> status|title|body|priority <value…>  change a ticket; ticket-delete <id> removes one
 #   workspace-delete <id>                       delete one; its threads move to the oldest left
 #   hand-off <thread-id> <agent-name>           give a running thread to another coworker
 #   dossier <id>                   render a thread's brief — over MCP at TLON_MCP_URL when set
@@ -391,10 +391,10 @@ case "$cmd" in
     ;;
 
   ticket-set)
-    # Change one field of a ticket: ticket-set <id> status <backlog|todo|doing|done> | title <text…> | body <text…>
+    # Change one field of a ticket: ticket-set <id> status <backlog|todo|doing|done> | priority <low|med|high> | title <text…> | body <text…>
     tk="${1:-}"; field="${2:-}"; shift 2 2>/dev/null || true; value="$*"
-    { int "$tk" && case "$field" in status|title|body) true ;; *) false ;; esac; } ||
-      { echo 'usage: tlon-cli.sh ticket-set <ticket-id> status|title|body <value…>' >&2; exit 2; }
+    { int "$tk" && case "$field" in status|title|body|priority) true ;; *) false ;; esac; } ||
+      { echo 'usage: tlon-cli.sh ticket-set <ticket-id> status|title|body|priority <value…>' >&2; exit 2; }
     exec "$SERVER" rpc "case Server.Tickets.get($tk) do nil -> IO.puts(\"no ticket #$tk\"); raise(\"refused\"); t -> case Server.Tickets.update(t, %{$field: \"$(esc "$value")\"}) do {:ok, _} -> IO.puts(\"ticket #$tk $field set\"); {:error, cs} -> IO.puts(\"refused: #{inspect(cs.errors)}\"); raise(\"refused\") end end"
     ;;
 
