@@ -91,6 +91,17 @@ export function peopleOf(a: Agents): Seat[] {
   return [...byName.values()]
 }
 
+/**
+ * who sits where, for every room: the lead at its own desk, and the chairs' order: whoever has a live
+ * session first (waiting, working or between turns), the bench order after. Two tiers, not the status
+ * order, so a turn ending never moves anyone.
+ */
+export function seating(a: Agents, workers: Seat[]): { lead: Seat | undefined; grunts: Seat[] } {
+  const live = new Set(crewOf(a).filter((c) => c.status === "waiting" || c.status === "working" || c.status === "idle").map((c) => c.name))
+  const lead = workers.find((p) => p.lead), rest = workers.filter((p) => p !== lead)
+  return { lead, grunts: [...rest.filter((p) => live.has(p.agent)), ...rest.filter((p) => !live.has(p.agent))] }
+}
+
 /** a seat's state, as the server's roster says it (`Server.Coworker.status`): the ONE vocabulary every surface uses */
 export type SeatStatus = "working" | "waiting" | "idle" | "cold" | "off"
 export type CrewStatus = SeatStatus
