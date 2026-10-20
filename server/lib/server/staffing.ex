@@ -87,6 +87,7 @@ defmodule Server.Staffing do
       |> sweep_cold(workspace_id, standing, bench)
       |> sweep_long(workspace_id, standing, bench)
       |> yield_seat(workspace_id, standing, bench)
+      |> retire_stale_launch(workspace_id, standing)
 
     resume_interrupted(workspace_id, tabs, standing)
     end_windowless(workspace_id, tabs, standing, bench)
@@ -335,10 +336,48 @@ defmodule Server.Staffing do
   def roll_leaf(%Thread{} = thread) do
     Staff.end_thread_sessions(thread.id)
 
-    with %{index: index} <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id),
-         do: Tmux.kill_window(thread.workspace_id, index)
+    with %{index: index} = tab <- thread.workspace_id |> Tmux.list_windows() |> Tmux.leaf_tab(thread.id) do
+      Tmux.kill_window(thread.workspace_id, index)
+      if tab.agent, do: record_retired(thread.id, tab.agent, "two turns ended without the stage's artifact")
+    end
 
     :ok
+  end
+
+  @doc """
+  The opening note for `agent`'s first wake on `thread_id` after its pane there was retired
+  (`pane_retired`): when and why it closed, its last post, and that its worktree and branch are as
+  it left them. `""` when its pane was not retired, or a session has registered there since: a
+  Claude Code session registers on its first prompt, so the opening wake is written before it does.
+  """
+  def left_off(thread_id, agent) do
+    with %Server.Event{} = e <-
+           Repo.one(
+             from e in Server.Event,
+               where: e.thread_id == ^thread_id and e.kind == "pane_retired" and e.correlation == ^"pane:#{agent}",
+               order_by: [desc: e.id],
+               limit: 1
+           ),
+         %{} = d <- e.detail,
+         0 <-
+           Repo.aggregate(
+             from(s in Session,
+               join: a in Agent,
+               on: a.id == s.agent_id,
+               where: a.name == ^agent and s.thread_id == ^thread_id and s.id > ^(d["sessions_before"] || 0)
+             ),
+             :count
+           ) do
+      ago = div(DateTime.diff(DateTime.utc_now(), e.created_at), 60)
+
+      last =
+        if d["last_post_id"], do: " Your last post here was ##{d["last_post_id"]}: \"#{d["last_post"]}\".", else: ""
+
+      "Where you left off: your pane on this thread was closed #{ago} min ago (#{d["why"]}).#{last} " <>
+        "Your worktree and branch are as you left them; this is a fresh session, so read the thread from there.\n\n"
+    else
+      _ -> ""
+    end
   end
 
   @doc """
@@ -584,5 +623,75 @@ defmodule Server.Staffing do
 
   defp still_theirs?(tid, agent, _standing) do
     Crew.handle_role(agent) != nil or Channel.thread_lead(tid) in [nil, agent]
+  end
+
+  # A pane launched with what its profile no longer gives (a release, a profile edit; no stamp at
+  # all is a pane from before stamps) is retired between turns: one per pass, never one whose
+  # coworker is mid-turn, its sessions ended. Nothing respawns it until a message needs it.
+  defp retire_stale_launch(tabs, workspace_id, standing) do
+    if Application.get_env(:server, :retire_stale_launch, true) do
+      busy = mid_turn_agents(workspace_id)
+
+      stale =
+        Enum.find(tabs, fn tab ->
+          tab.agent && not MapSet.member?(busy, tab.agent) &&
+            tab.launch != Server.Arbiter.Tmux.launch_stamp(workspace_id, tab.agent)
+        end)
+
+      if stale, do: retire_pane(workspace_id, stale, stale.thread_id || standing, tabs), else: tabs
+    else
+      tabs
+    end
+  end
+
+  defp retire_pane(workspace_id, tab, thread_id, tabs) do
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      where: a.name == ^tab.agent and s.thread_id == ^thread_id and is_nil(s.ended_at)
+    )
+    |> Repo.all()
+    |> Enum.each(&Staff.end_session/1)
+
+    Tmux.kill_window(workspace_id, tab.index)
+    record_retired(thread_id, tab.agent, "its launch changed: a release or a profile edit")
+    Logger.info("staffing: retired #{tab.agent}'s pane on ##{thread_id}, its launch changed")
+    List.delete(tabs, tab)
+  end
+
+  defp mid_turn_agents(workspace_id) do
+    from(s in Session,
+      join: a in Agent,
+      on: a.id == s.agent_id,
+      join: t in Thread,
+      on: t.id == s.thread_id,
+      where: is_nil(s.ended_at) and not is_nil(s.thinking_since) and t.workspace_id == ^workspace_id,
+      select: {a.name, s.thinking_since}
+    )
+    |> Repo.all()
+    |> Enum.filter(fn {_name, since} -> live_turn?(since) end)
+    |> MapSet.new(&elem(&1, 0))
+  end
+
+  defp record_retired(thread_id, agent, why) do
+    last =
+      Repo.one(
+        from m in Message,
+          where: m.thread_id == ^thread_id and m.author == ^agent,
+          order_by: [desc: m.id],
+          limit: 1
+      )
+
+    Server.Dossier.record_event(%{
+      thread_id: thread_id,
+      kind: "pane_retired",
+      correlation: "pane:#{agent}",
+      detail: %{
+        "why" => why,
+        "last_post_id" => last && last.id,
+        "last_post" => last && String.slice(last.body, 0, 200),
+        "sessions_before" => Repo.aggregate(Session, :max, :id) || 0
+      }
+    })
   end
 end

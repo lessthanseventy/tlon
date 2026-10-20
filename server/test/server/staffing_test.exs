@@ -434,6 +434,62 @@ defmodule Server.StaffingTest do
     refute Staffing.duty_thread?(work.id)
   end
 
+  describe "a pane launched with what its profile no longer gives" do
+    setup do
+      Application.put_env(:server, :retire_stale_launch, true)
+      on_exit(fn -> Application.put_env(:server, :retire_stale_launch, false) end)
+    end
+
+    defp win(index, name, thread, agent, launch),
+      do: "#{index}\t#{name}\t#{thread}\tdone\t99999999#{index}\t#{agent}\t#{old()}\t#{launch}\n"
+
+    test "is retired between turns, one per pass: an idle one now, a mid-turn one once it is idle",
+         %{ws: ws, standing: standing, session: session} do
+      leaf = staffed_thread(ws, "borges")
+      _ = session!("hronir", standing.id, 30)
+      busy = session!("borges", leaf.id, 5, true)
+      tmux(win(0, "hronir", "", "hronir", "stale") <> win(1, "t#{leaf.id}", leaf.id, "borges", "stale"))
+
+      assert :ok = Staffing.pass(ws.id)
+      hronir = "#{session}:0"
+      assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^hronir]}
+      refute_receive {:tmux, ["-L", _, "kill-window", "-t", _]}, 20
+
+      assert [%{correlation: "pane:hronir"}] =
+               Server.Event |> Server.Repo.all() |> Enum.filter(&(&1.kind == "pane_retired"))
+
+      busy |> Ecto.Changeset.change(thinking_since: nil) |> Server.Repo.update!()
+      tmux(win(1, "t#{leaf.id}", leaf.id, "borges", "stale"))
+      assert :ok = Staffing.pass(ws.id)
+      borges = "#{session}:1"
+      assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^borges]}
+    end
+
+    test "a pane stamped with what its profile gives now is left alone", %{ws: ws, standing: standing} do
+      _ = session!("hronir", standing.id, 30)
+      tmux(win(0, "hronir", "", "hronir", Server.Arbiter.Tmux.launch_stamp(ws.id, "hronir")))
+      assert Server.Arbiter.Tmux.launch_stamp(ws.id, "hronir") == Server.Arbiter.Tmux.launch_stamp(ws.id, "hronir")
+
+      assert :ok = Staffing.pass(ws.id)
+      refute_receive {:tmux, ["-L", _, "kill-window", "-t", _]}, 20
+    end
+
+    test "the next session there opens knowing where it left off, and only that one", %{ws: ws} do
+      leaf = staffed_thread(ws, "borges")
+      {:ok, post} = Server.Channel.post(%{thread_id: leaf.id, author: "borges", body: "plan drafted, committing next"})
+      _ = session!("borges", leaf.id, 30)
+      tmux(win(1, "t#{leaf.id}", leaf.id, "borges", "stale"))
+      assert :ok = Staffing.pass(ws.id)
+
+      note = Staffing.left_off(leaf.id, "borges")
+      assert note =~ "Where you left off" and note =~ "its launch changed"
+      assert note =~ "##{post.id}" and note =~ "plan drafted, committing next"
+
+      _ = session!("borges", leaf.id, 0)
+      assert Staffing.left_off(leaf.id, "borges") == ""
+    end
+  end
+
   describe "stale_coworkers/3 — a rename left a process minting under a handle the bench lost" do
     defp tab(name, author),
       do: {%{name: name, index: name, thread_id: nil, opening: nil, pane_pid: 999_999_991}, author}
