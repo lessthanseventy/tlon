@@ -208,8 +208,21 @@ description = "Everything green, one at a time on this machine: waits its turn i
 run = "scripts/checks-queue.sh scripts/check.sh"
 
 ["check:all"]
-description = "Everything green: the names gate + the tracked-junk gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check (unqueued — `check` queues it)"
+description = "Everything green: the server's deps fetched and compiled first (server:deps), then check:suites (unqueued — `check` queues it)"
+depends = ["server:deps"]
+run = "mise run check:suites"
+
+# Every suite at once. A worktree's deps are its own (seeded copies), so a branch rebased onto a lock
+# change has them behind; server:deps runs before this, never beside it, where a cold compile of every
+# dep would starve the office's tmux-driven tests.
+["check:suites"]
+description = "the names gate + the tracked-junk gate + the server + adapters (claude-code + its mod + lsp + lspd) + office precommit gates (format + warnings + credo + types + tests) + the manual's drift check, in parallel"
 depends = ["check:names", "check:ignored", "server:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
+
+["server:deps"]
+description = "server: fetch the locked deps when they are behind the lock, and compile them for the test env (a no-op when current)"
+dir = "server"
+run = "mix deps.get && MIX_ENV=test mix deps.compile"
 
 # The task manual (docs/manual/tasks.md) comes from `mise tasks ls`, never by hand. `--check` diffs.
 ["manual:gen"]
