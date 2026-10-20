@@ -1,0 +1,9 @@
+approve
+
+The change does what the plan (#9142) set: one launcher — `Jobs.Smoke.launch/1` — shared by the smoke job's `perform` and `Smoke.drive/2`; the drive runs the candidate's `office-drive.sh` from the smoke's build dir, through `mise exec` with `MISE_YES=1`, `cd` to that dir. `release-smoke.sh` prints `(dir $office)` on the hold line; `hold/5` stores it in meta beside `url`; the drive falls back to `tlon_root()` for holds captured before this change. Test-first: a stub `office-drive.sh` proves the drive runs from `dir` through the launcher (cwd, argv, `MISE_YES=1`, `TLON_URL`), and a regex test pins the hold-line parser for both `(dir …)` and old holds. The gate is green on the branch (`mise run check` exit 0).
+
+No blocking bugs. Checked: the `\S+`-then-`)` capture backtracks correctly (no trailing paren in `dir`); old holds yield `dir: nil` and fall back to the checkout; `launch/1` is the only launcher and `Smoke.drive` is its only new caller; `System.cmd`'s `env` is additive, so `TLON_URL`/`MISE_YES` inherit alongside the service env; the build dir is `mise trust`ed by `release-smoke.sh`, so the bun shim under the drive's tmux resolves the candidate's mise.toml without a trust prompt — the original failure mode.
+
+Follow-up (non-blocking): `release-smoke.sh`'s hold line now prints `(dir $office)`, but no test pins that the script *emits* it — `release_smoke_script_test.exs:327` only asserts `out =~ "smoke: holding"`. The regex test in `smoke_test.exs` pins the job's parser against a hardcoded string, so a format drift in the script would slip past unit tests and surface only at live QA. Strengthening that assertion to also expect `(dir ` closes the gap.
+
+Live acceptance is still owed and tracked: #431 stays open until `drive_smoke(["/"])` returns a screen against a held smoke after release. That's the real proof; not a review blocker.
