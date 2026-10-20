@@ -43,7 +43,8 @@ defmodule Server.Workline.Continuation do
     with :working <- Server.Pause.state(),
          %Thread{state: "open", awaiting: nil} = thread <- Repo.get(Thread, thread_id),
          {:nudge, why, say} <- nudge(thread, opts),
-         false <- Attention.waiting?(thread_id),
+         # any open prompt, a pane's dialog or a pane-less ask_operator decision: the lead is waiting
+         nil <- Attention.open_prompt(thread_id),
          false <- verifying?(thread),
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),

@@ -182,6 +182,19 @@ defmodule Server.Workline.ContinuationTest do
     assert continuations(plain.id) == []
   end
 
+  test "an open ask_operator decision is waiting too: no nudge, and no stuck, until it is answered",
+       %{thread: t} do
+    {:ok, ask} = Server.Attention.ask(t.id, "nolan", "pass or fail?", ["pass", "fail"])
+
+    for _ <- 1..5, do: :ok = Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+    assert continuations(t.id) == []
+    refute Repo.exists?(from m in Message, where: m.thread_id == ^t.id and like(m.body, "⚠ stuck%"))
+
+    Server.Attention.resolve(ask, "answered")
+    :ok = Continuation.run(t.id, artifacts: Missing, max_turns: 3)
+    assert [_] = continuations(t.id)
+  end
+
   test "a workline waiting in the merge queue isn't nudged: an advance there would pull it out of the queue" do
     {:ok, r} = Workline.open(%{title: "land it", slug: "landing-quietly", stage: "review"})
     job = Repo.insert!(Server.Jobs.Land.new(%{thread_id: r.id}))
