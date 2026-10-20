@@ -49,8 +49,8 @@ const room = async (from: string) => {
 const card = async () => {
   tmux("send-keys", "-t", "0", "t")
   await until("the tickets column", () => screen().includes("TICKETS · "))
-  tmux("send-keys", "-t", "0", "Right")
-  await until("the doing column", () => screen().includes("DOING · "))
+  tmux("send-keys", "-t", "0", "Right", "Right", "Right")
+  await until("the build column", () => screen().includes("BUILD · "))
   tmux("send-keys", "-t", "0", "Enter")
   await until("the thread card", () => screen().includes("THREAD #9"))
 }

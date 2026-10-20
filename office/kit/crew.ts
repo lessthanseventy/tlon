@@ -124,9 +124,9 @@ export function crewOf(a: Agents): Crew[] {
 
 /** a workline's stages, in order */
 export const STAGES = ["intent", "spec", "plan", "build", "verify", "review"]
-// TICKETS (unstarted) and DOING (a plain thread — no workline stage — someone is at a desk on) before the stages; intent shares SPEC
-const STAGE_COL: Record<string, number> = { intent: 2, spec: 2, plan: 3, build: 4, verify: 5, review: 6 }
-export const COLS = ["TICKETS", "DOING", "SPEC", "PLAN", "BUILD", "VERIFY", "REVIEW"]
+// TICKETS (unstarted) before the stages; intent shares SPEC, and a plain thread someone is at a desk on (no workline stage) is BUILD's, its stage "doing"
+const STAGE_COL: Record<string, number> = { intent: 1, spec: 1, plan: 2, build: 3, verify: 4, review: 5 }
+export const COLS = ["TICKETS", "SPEC", "PLAN", "BUILD", "VERIFY", "REVIEW"]
 const REVIEW_COL = COLS.length - 1
 /** one note on the whiteboard: what a click on it does, and what its sticky and its list row say */
 export type BoardItem = { act: Act; title: string; who: string | null; stage: string; asks: boolean; archetype: string | null; high: boolean; routed?: boolean; state?: CardState | null }
@@ -173,7 +173,7 @@ export function boardColumns(a: Agents, ctx: BoardCtx = {}): { name: string; ite
   }
   for (const th of a.threads) {
     if (th.duty) continue
-    const c = th.landing ? REVIEW_COL : th.stage ? STAGE_COL[th.stage] : th.lead && !th.standing && th.seat === "desk" ? 1 : undefined
+    const c = th.landing ? REVIEW_COL : th.stage ? STAGE_COL[th.stage] : th.lead && !th.standing && th.seat === "desk" ? STAGE_COL.build : undefined
     if (c === undefined) continue
     const r = a.roster.find((x) => x.thread_id === th.id)
     cols[c]!.push({ act: { kind: "thread", tid: th.id }, title: th.title, who: r?.agent ?? th.lead ?? null, stage: th.stage ?? "doing", asks: needsYou(th), archetype: r?.archetype ?? null, high: false, state: cardState(a, th, ctx) })

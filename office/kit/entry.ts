@@ -67,7 +67,7 @@ export function entryOf(a: Agents, ctx: BoardCtx, needs: EntryNeed[], feed: Entr
 
   // the stage × coworker pivot: TICKETS has no owner, so it is prose only; work no bench coworker
   // leads gets an "unled" row, so each stage's column sums to the board's count
-  const stages = COLS.slice(1) // DOING SPEC PLAN BUILD VERIFY REVIEW
+  const stages = COLS.slice(1) // SPEC PLAN BUILD VERIFY REVIEW
   const benched = new Set(a.bench.map((c) => c.name))
   const rowOf = (cow: string, mine: (it: BoardItem) => boolean): PivotRow => {
     const cells = stages.map((_st, i) => cellOf(cols[i + 1]!.items.filter(mine), feed, now))
@@ -88,12 +88,12 @@ export function entryOf(a: Agents, ctx: BoardCtx, needs: EntryNeed[], feed: Entr
 
   const diary = feed.filter((e) => e.who === "uqbar" && sameDay(e.at, now)).map((e) => ({ text: e.text, act: thread(e.thread_id) }))
 
-  const works = counts.DOING + counts.SPEC + counts.PLAN + counts.BUILD + counts.VERIFY + counts.REVIEW
+  const works = counts.SPEC + counts.PLAN + counts.BUILD + counts.VERIFY + counts.REVIEW
   const waits = waiting.length ? ` (${waiting.length} waiting on you${waitingMarks}${markOf("needs")})` : ""
   // spec, plan and verify are named only when non-empty, so the named parts always add up to `works`
   const early = (["SPEC", "PLAN"] as const).filter((st) => counts[st]).map((st) => `${counts[st]} at ${st.toLowerCase()}, `).join("")
   const prose =
-    `${works} works in hand: ${early}${counts.BUILD} at build, ${counts.VERIFY ? `${counts.VERIFY} at verify, ` : ""}${counts.REVIEW} at review${waits}, ${counts.DOING} doing. ` +
+    `${works} works in hand: ${early}${counts.BUILD} at build, ${counts.VERIFY ? `${counts.VERIFY} at verify, ` : ""}${counts.REVIEW} at review${waits}. ` +
     `${shipped.length} shipped since this morning${markOf("tray")}. ` +
     `${stuck} known and owned${markOf("beacon")}; ${a.health?.problems.length ?? 0} not${markOf("rack")}.`
 
