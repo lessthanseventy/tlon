@@ -26,6 +26,7 @@ defmodule Server.MCP.Endpoint do
   alias Server.MCP.Tool.GetBrief
 
   component(Server.MCP.Tool.Register, name: "register")
+  component(Server.MCP.Tool.ToolDenied, name: "tool_denied")
   component(Server.MCP.Tool.PostMessage, name: "post_message")
   component(Server.MCP.Tool.MarginNote, name: "margin_note")
   component(Server.MCP.Tool.BankFact, name: "bank_fact")

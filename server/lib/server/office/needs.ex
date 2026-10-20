@@ -26,7 +26,9 @@ defmodule Server.Office.Needs do
       workspace: Claude's usage limit with no other crew to put on, until its reset —
       `Server.Shifts.out_of_quota/1` — or a provider's plan spent with a seat on it —
       `Server.Presence.Engine.spent/0`: `options` the other crews to put on; put away, it waits for
-      the reset);
+      the reset), `tool_denied` (a seat's permission check refused its tool twice or more since the
+      workline last moved — the adapter's `tool_denied` event — and nobody is working it: done by
+      hand, sent back, or handed to Uqbar; an answer is movement, so a refusal after it is a new item);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -470,6 +472,7 @@ defmodule Server.Office.Needs do
 
     blocking = waits(open, prompts) ++ asks(open) ++ red_verifies(open) ++ unpublished() ++ pr_blocked()
     blocking = blocking ++ no_seat(open, MapSet.new(blocking, & &1.thread_id)) ++ quota()
+    blocking = blocking ++ tool_denied(open, MapSet.new(blocking, & &1.thread_id))
     blocking = blocking ++ stalled(open, MapSet.new(blocking, & &1.thread_id))
 
     decide =
@@ -596,6 +599,34 @@ defmodule Server.Office.Needs do
         %{ref: e.id}
       )
     end
+  end
+
+  # a seat's permission check refused its tool twice or more since the workline last moved, and
+  # nobody is working it now: it cannot get past the refusal alone (the adapter's `tool_denied`
+  # report). An operator's answer is movement, so a refusal after it is a new item.
+  defp tool_denied(open, listed) do
+    for t <- open,
+        not MapSet.member?(listed, t.id),
+        denials = denials_since(t, last_moved(t, nil)),
+        length(denials) >= 2,
+        not on_duty?(t) do
+      last = hd(denials)
+
+      item("tool_denied", "blocking", t, tool_denied_text(t, denials), last.created_at)
+    end
+  end
+
+  defp denials_since(t, moved) do
+    Repo.all(
+      from e in Event,
+        where: e.thread_id == ^t.id and e.kind == "tool_denied" and e.created_at > ^moved,
+        order_by: [desc: e.id]
+    )
+  end
+
+  defp tool_denied_text(t, [last | _] = denials) do
+    "#{last.detail["agent"]} on #{t.slug} was refused #{last.detail["tool"]} #{length(denials)} times" <>
+      if(last.detail["summary"], do: ": #{last.detail["summary"]}", else: "")
   end
 
   # nothing moved it past the quiet window and nobody is on it
