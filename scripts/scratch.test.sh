@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Self-test of scratch.sh prune: work landed by patch or by subject goes, work main lacks stays.
+# Self-test of scratch.sh: prune removes work landed by patch or by subject and keeps work main
+# lacks; a seat's worktrees go under its own dir, and the operator's prune reaches them.
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 bad=0
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t TLON_SCRATCH_DIR="$tmp/scratch"
+unset TLON_AUTHOR
 g() { git -C "$tmp/repo" "$@" >/dev/null 2>&1; }
 commit() { # commit <dir> <file> <text> <subject>
   echo "$3" >"$1/$2" && git -C "$1" add "$2" && git -C "$1" commit -qm "$4" >/dev/null
@@ -34,4 +36,21 @@ expect removed reformatted "landed under a new patch, same subject: removed"
 expect kept unlanded "a commit main lacks: kept"
 expect kept reused "a subject main had before it branched: kept"
 grep -q "remove .*reformatted — its HEAD was [0-9a-f]" "$tmp/out" || { echo "FAIL the removal names its HEAD"; cat "$tmp/out"; bad=1; }
+
+at() { # at <want> <got> <what>
+  if [ "$1" = "$2" ]; then echo "ok   $3"; else echo "FAIL $3: $2"; bad=1; fi
+}
+at "$TLON_SCRATCH_DIR/zunz/seatwork" "$(cd "$tmp/repo" && TLON_AUTHOR=zunz "$here/scratch.sh" new seatwork 2>&1 | tail -n 1)" \
+  "a seat's worktree goes under its own dir"
+at "$TLON_SCRATCH_DIR/opwork" "$(cd "$tmp/repo" && "$here/scratch.sh" new opwork 2>&1 | tail -n 1)" \
+  "the operator's worktree stays flat"
+for d in zunz/seatwork opwork; do
+  gd="$(git -C "$TLON_SCRATCH_DIR/$d" rev-parse --path-format=absolute --git-dir)"
+  touch -d '2 hours ago' "$gd/HEAD" "$gd/index"
+done
+(cd "$tmp/repo" && "$here/scratch.sh" prune) >"$tmp/out" 2>&1
+for d in zunz/seatwork opwork; do
+  grep -q "^remove $TLON_SCRATCH_DIR/$d — " "$tmp/out" && echo "ok   the operator's prune removes $d" ||
+    { echo "FAIL the operator's prune removes $d"; cat "$tmp/out"; bad=1; }
+done
 exit "$bad"

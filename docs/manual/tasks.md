@@ -93,7 +93,7 @@ Every verb is `mise run <name>`; the same loop for the human and the agents (AGE
 
 | verb | does |
 |---|---|
-| `scratch:new` | a detached worktree at ~/.cache/tlon-scratch/<name> from origin/main (or a ref), deps installed for the gates and menard — `scratch:new -- <name> [<ref>]`; prints its path |
+| `scratch:new` | a detached worktree at ~/.cache/tlon-scratch/<name> (a seat's at tlon-scratch/<seat>/<name>) from origin/main (or a ref), deps installed for the gates and menard — `scratch:new -- <name> [<ref>]`; prints its path |
 | `scratch:prune` | remove the scratch worktrees whose work is done (clean, every commit on origin/main by patch); lists what stays and why — `-- --dry-run` to only look |
 
 ## server

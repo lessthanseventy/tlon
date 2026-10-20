@@ -7,7 +7,9 @@
 #                                           with what the gates and menard need installed
 #   scripts/scratch.sh prune [--dry-run]    remove the ones whose work is done; say what stays
 #
-# TLON_SCRATCH_DIR moves the directory (default ${XDG_CACHE_HOME:-~/.cache}/tlon-scratch).
+# TLON_SCRATCH_DIR moves the directory (default ${XDG_CACHE_HOME:-~/.cache}/tlon-scratch). A seat
+# (TLON_AUTHOR set) works in its own <dir>/<seat>: the only scratch its sandbox may write, so its
+# bwrap mounts count its own repos, not every seat's. The operator's prune walks the seats' dirs too.
 #
 # Its work is done when the worktree is clean and every commit it has beyond origin/main is on
 # origin/main: by patch (`git cherry`: a rebase-merge rewrites SHAs, so ancestry never matches),
@@ -17,7 +19,7 @@
 # that just made it hasn't committed yet). A removal names its HEAD, recoverable until git's gc.
 set -uo pipefail
 
-base="${TLON_SCRATCH_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/tlon-scratch}"
+base="${TLON_SCRATCH_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/tlon-scratch}${TLON_AUTHOR:+/$TLON_AUTHOR}"
 common="$(git rev-parse --path-format=absolute --git-common-dir)" || exit 1
 fail() { echo "scratch: $*" >&2; exit 1; }
 
@@ -78,8 +80,11 @@ prune() {
   [ "${1:-}" = "--dry-run" ] && dry=1
   [ -d "$base" ] || { echo "nothing in $base"; return 0; }
   git fetch -q origin || fail "git fetch origin failed"
-  local dir why
-  for dir in "$base"/*/; do
+  local dir why d dirs=()
+  for d in "$base"/*/; do
+    [ -e "$d/.git" ] && dirs+=("$d") || for dir in "$d"*/; do [ -e "$dir/.git" ] && dirs+=("$dir"); done
+  done
+  for dir in "${dirs[@]}"; do
     dir="${dir%/}"
     if [ "$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" != "$common" ] ||
       [ "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" != "$dir" ]; then
