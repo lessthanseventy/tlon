@@ -603,4 +603,15 @@ defmodule Server.ProfilesTest do
   defp seed_repos(home, rel, n) do
     for i <- 1..n, do: File.mkdir_p!(Path.join([home, rel, "r#{i}", ".git"]))
   end
+
+  test "the repo's own .claude/settings.json never widens a seat's sandbox: Claude Code merges it into every seat's" do
+    settings = "../../../.claude/settings.json" |> Path.expand(__DIR__) |> File.read!() |> Jason.decode!()
+    writes = get_in(settings, ["sandbox", "filesystem", "allowWrite"]) || []
+
+    refute "~/.cache" in writes
+    refute "~/.local/share" in writes
+
+    for "~/.cache/" <> dir <- writes,
+        do: assert(dir in Server.Profiles.dev_caches(), "~/.cache/#{dir} is not a dev cache")
+  end
 end
