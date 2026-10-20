@@ -24,7 +24,9 @@ defmodule Server.ProfilesTest do
     test "its write roots are narrow enough for bwrap" do
       writes = Profiles.fetch("tertius").sandbox["filesystem"]["allowWrite"]
       refute "~/.local" in writes, "~/.local holds container and game stores: thousands of *.pem/*.key"
+      refute "~/.cache" in writes, "~/.cache holds AUR clones and app stores: thousands of .git and *.pem"
       assert "~/.local/share/mise" in writes
+      assert "~/.cache/mix" in writes and "~/.cache/tlon-scratch" in writes
     end
 
     test "carries the ORCHESTRATOR toolset (Slice 4D): staffing + cross-thread verbs, minus register/consult" do
