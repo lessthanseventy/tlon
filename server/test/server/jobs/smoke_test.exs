@@ -47,6 +47,16 @@ defmodule Server.Jobs.SmokeTest do
     assert {:error, "not a ref: " <> _} = Smoke.start(t, "--upload-pack=x")
   end
 
+  test "a thread with no slug and no ref is refused; it never queues the bare work/ ref", %{thread: t} do
+    assert {:error, "no ref" <> _} = Smoke.start(%{t | slug: nil}, nil)
+    refute_enqueued(worker: Server.Jobs.Smoke, args: %{ref: "work/"})
+  end
+
+  test "a ref ending in / is refused", %{thread: t} do
+    assert {:error, "not a ref: " <> _} = Smoke.start(t, "work/")
+    refute_enqueued(worker: Server.Jobs.Smoke, args: %{ref: "work/"})
+  end
+
   test "the job posts the held url on the thread, and stop tears it down", %{thread: t} do
     {:ok, _} = Smoke.start(t, nil)
     task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
