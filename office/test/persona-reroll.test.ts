@@ -34,10 +34,10 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const t0 = Date.now(), deadline = t0 + 25_000
+const t0 = performance.now(), deadline = t0 + 25_000
 const until = async (what: string, ok: () => boolean) => {
-  while (!ok() && Date.now() < deadline) await Bun.sleep(50)
-  if (!ok()) throw new Error(`never saw ${what} after ${Date.now() - t0}ms; pane:\n${screen()}`)
+  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
+  if (!ok()) throw new Error(`never saw ${what} after ${performance.now() - t0}ms; pane:\n${screen()}`)
 }
 const settle = () => Bun.sleep(400)
 

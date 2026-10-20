@@ -33,8 +33,8 @@ afterAll(() => {
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
 const until = async (what: string, ok: () => boolean) => {
-  const deadline = Date.now() + 20_000
-  while (!ok() && Date.now() < deadline) await Bun.sleep(50)
+  const deadline = performance.now() + 20_000
+  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
 }
 const keys = (...k: string[]) => tmux("send-keys", "-t", "0", ...k)

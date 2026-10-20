@@ -27,9 +27,9 @@ afterAll(() => {
 
 const dec = new TextDecoder()
 const screen = () => dec.decode(tmux("capture-pane", "-p", "-t", "0").stdout)
-const deadline = Date.now() + 25_000
+const deadline = performance.now() + 25_000
 const until = async (what: string, ok: () => boolean) => {
-  while (!ok() && Date.now() < deadline) await Bun.sleep(50)
+  while (!ok() && performance.now() < deadline) await Bun.sleep(50)
   if (!ok()) throw new Error(`never saw ${what}; pane:\n${screen()}`)
 }
 
