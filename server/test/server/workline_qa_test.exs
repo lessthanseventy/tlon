@@ -68,6 +68,13 @@ defmodule Server.WorklineQATest do
 
   defp bodies(thread), do: thread |> Channel.thread_messages() |> Enum.map(& &1.body)
 
+  defp checks(thread),
+    do:
+      Repo.aggregate(
+        from(e in Server.Event, where: e.thread_id == ^thread.id and e.kind in ["check_passed", "check_failed"]),
+        :count
+      )
+
   test "a driven workline with a broken R gets a QA finding before it lands" do
     {thread, opts} = at_review("broken-r", ["office/tui/main.ts"])
 
@@ -206,6 +213,14 @@ defmodule Server.WorklineQATest do
 
     {:ok, _} = Workline.qa_verdict(led, "pass", "nolan", "=== after: R\n HOME", opts)
     assert {:ok, _} = Workline.owed_status(Repo.get!(Thread, thread.id), opts)
+  end
+
+  test "asking whether the artifact is there records no check: only a move does" do
+    {thread, opts} = at_review("owed-asks", ["office/kit/room.ts"])
+    before = checks(thread)
+    Workline.owed_status(thread, opts)
+    :ok = Server.Workline.Continuation.run(thread.id, opts)
+    assert checks(thread) == before
   end
 
   defp skips_qa(slug, paths, qa?) do
