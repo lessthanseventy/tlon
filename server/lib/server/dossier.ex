@@ -250,6 +250,22 @@ defmodule Server.Dossier do
   end
 
   @doc """
+  A ticket closed: the open issues it owns are resolved, naming it, so the sheriff never re-announces
+  a finding whose ticket is done. A landing already does this through `resolve_fixed/2`; this covers
+  every other close (by hand, a sweep, a fix landed elsewhere). The issues resolved.
+  """
+  def resolve_owned(ticket_id, how) do
+    from(i in Issue, where: i.ticket_id == ^ticket_id and i.state == "open")
+    |> Repo.all()
+    |> Enum.flat_map(fn issue ->
+      case resolve_issue(issue, how) do
+        {:ok, closed} -> [closed]
+        {:error, _} -> []
+      end
+    end)
+  end
+
+  @doc """
   A thread's open issues, ranked and cut (§5): `%{shown: [issue], more: n}` where
   `shown` is at most five (newest first) and `more` counts the open issues beyond
   them. This is the BLOCKERS read `orient` calls at session start — the acceptance
