@@ -86,16 +86,23 @@ export function gamesTile(z: Zones): Tile<Layout> & {
         for (const [dx, dy] of [[1, 1], [pool.w / 2 - 1, 1], [pool.w - 3, 1], [1, pool.h - 3], [pool.w / 2 - 1, pool.h - 3], [pool.w - 3, pool.h - 3]] as const) px(pool.x + dx, pool.y + dy, 2, 2, ROLE.fieldInk)
         px(pool.x + 3, pool.y + pool.h, 2, 3, ROLE.structure); px(pool.x + pool.w - 5, pool.y + pool.h, 2, 3, ROLE.structure)
         const colours = [ROLE.body, ROLE.alarm, ROLE.key, ROLE.assistant, ROLE.attention, ROLE.edge]
-        if (sim.at("pool").length === 2) {
-          const shot = tick % 60, tt = Math.min(1, shot / 20)
-          const cue = { x: pool.x + 6 + Math.round(tt * 10), y: pool.y + 6 - Math.round(tt * 2) }
-          if (shot < 4) px(cue.x - 7 + shot, cue.y, 6, 1, ROLE.borderInactive)
-          px(cue.x, cue.y, 1, 1, ROLE.prose)
+        const players = sim.at("pool")
+        if (players.length === 2) {
+          // a shot a minute, the two taking turns: aim and draw back (0-14), strike (15-18), the cue ball
+          // rolls into the rack (19-38) and the rack breaks; the cue is in the shooter's hands throughout
+          const shot = tick % 60, tt = Math.min(1, Math.max(0, (shot - 18) / 20))
+          const ball = { x: pool.x + 6 + Math.round(tt * 10), y: pool.y + 6 - Math.round(tt * 2) }
+          px(ball.x, ball.y, 1, 1, ROLE.prose)
           colours.forEach((c, k) => {
-            if ((tick >> 6) % 7 === k && shot > 40) return
-            const bx = pool.x + 14 + ((k * 5 + (shot > 20 ? Math.round((shot - 20) / 8) * (k % 2 ? 1 : -1) : 0) + 20) % 8), by = pool.y + 3 + ((k * 3) % 6)
+            if ((tick >> 6) % 7 === k && shot > 50) return
+            const bx = pool.x + 14 + ((k * 5 + (shot > 38 ? Math.round((shot - 38) / 8) * (k % 2 ? 1 : -1) : 0) + 20) % 8), by = pool.y + 3 + ((k * 3) % 6)
             px(bx, by, 1, 1, c)
           })
+          const shooter = players[Math.floor(tick / 60) % 2]!
+          if (shot <= 18) {
+            const back = shot < 15 ? 2 + Math.round((shot / 14) * 3) : 0
+            sc.overhead.push(() => cueStick(px, { x: shooter.x, y: shooter.y - 7 }, { x: pool.x + 6, y: pool.y + 6 }, back))
+          }
         } else {
           colours.forEach((c, k) => { const row = k < 1 ? 0 : k < 3 ? 1 : 2, col = k < 1 ? 0 : k < 3 ? k - 1 : k - 3; px(pool.x + 16 + row * 2, pool.y + 5 - row + col * 2, 1, 1, c) })
           px(pool.x + 6, pool.y + 6, 1, 1, ROLE.prose)
@@ -124,4 +131,10 @@ export function gamesTile(z: Zones): Tile<Layout> & {
     },
     highScores() { return highs },
   }
+}
+
+/** a cue: from the shooter's hands toward the ball, its tip `back` px short of it (0: striking) */
+function cueStick(px: (x: number, y: number, w: number, h: number, c: string) => void, hands: { x: number; y: number }, ball: { x: number; y: number }, back: number) {
+  const dx = hands.x - ball.x, dy = hands.y - ball.y, len = Math.hypot(dx, dy) || 1
+  for (let d = back + 1; d <= back + 11; d++) px(Math.round(ball.x + (dx / len) * d), Math.round(ball.y + (dy / len) * d), 1, 1, d <= back + 2 ? ROLE.prose : ROLE.body)
 }
