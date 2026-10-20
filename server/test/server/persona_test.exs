@@ -19,7 +19,7 @@ defmodule Server.PersonaTest do
     File.write!(cli, """
     #!/bin/sh
     echo x >> #{calls}
-    seed=$(echo "$2" | grep -o 'Seed: [0-9]*' | cut -d' ' -f2)
+    seed=$(grep -o 'Seed: [0-9]*' | cut -d' ' -f2)
     echo "{\\"backstory\\": \\"born under seed $seed\\", \\"quirks\\": {\\"desk_object\\": \\"a magnifying glass\\", \\"hobby\\": \\"chess\\", \\"catchphrase\\": \\"Elementary.\\", \\"pet_peeve\\": \\"loose ends\\"}, \\"voice\\": \\"reads like case notes\\"}"
     """)
 
