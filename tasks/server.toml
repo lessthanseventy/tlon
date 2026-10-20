@@ -137,7 +137,7 @@ description = "Run a command once, capture ALL output to a log, print exit + fai
 run = "scripts/cap.sh"
 
 ["scratch:new"]
-description = "a detached worktree at ~/.cache/tlon-scratch/<name> from origin/main (or a ref), deps installed for the gates and menard — `scratch:new -- <name> [<ref>]`; prints its path"
+description = "a detached worktree at ~/.cache/tlon-scratch/<name> (a seat's at tlon-scratch/<seat>/<name>) from origin/main (or a ref), deps installed for the gates and menard — `scratch:new -- <name> [<ref>]`; prints its path"
 run = "scripts/scratch.sh new"
 
 ["scratch:prune"]
