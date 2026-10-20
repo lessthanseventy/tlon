@@ -206,7 +206,7 @@ ok=1
 echo "smoke passed${sha:+ on ${sha:0:7}}"
 [ -n "$sha" ] && echo "ran-on: smoke $sha"
 if [ -n "$hold" ] && [ -n "$node" ]; then
-  echo "smoke: holding $url up — TLON_URL=$url mise run office:drive -- <keys>; stop this to tear it down"
+  echo "smoke: holding $url up (dir $office) — TLON_URL=$url mise run office:drive -- <keys>; stop this to tear it down"
   trap 'exit 0' TERM INT
   for ((left = ttl; left > 0; left--)); do
     kill -0 "$node" 2>/dev/null || exit 0

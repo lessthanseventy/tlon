@@ -61,9 +61,12 @@ defmodule Server.Smoke do
       nil ->
         {:error, "no smoke is up for this thread: start_smoke first"}
 
-      %{meta: %{"url" => url}} ->
-        script = Path.join(Server.Profiles.tlon_root(), "scripts/office-drive.sh")
-        task = Task.async(fn -> System.cmd(script, keys, env: [{"TLON_URL", url}], stderr_to_stdout: true) end)
+      %{meta: %{"url" => url} = meta} ->
+        # the smoke's own build dir, so a TUI change drives the candidate's TUI (old holds: the checkout)
+        dir = meta["dir"] || Server.Profiles.tlon_root()
+        {exe, args} = Job.launch([Path.join(dir, "scripts/office-drive.sh") | keys])
+        opts = [cd: dir, env: [{"TLON_URL", url}, {"MISE_YES", "1"}], stderr_to_stdout: true]
+        task = Task.async(fn -> System.cmd(exe, args, opts) end)
 
         case Task.yield(task, 180_000) || Task.shutdown(task, :brutal_kill) do
           {:ok, {out, _code}} -> {:ok, out}
