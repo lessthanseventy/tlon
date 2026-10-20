@@ -355,4 +355,10 @@ describe("where the book is drawn", () => {
     drawBook(sc, book(true), "idle", "flying", 1)
     expect([sc.items.length, sc.overhead.length]).toEqual([0, 1])
   })
+  test("it covers the words it flies over, as a person does: the board's lines do not print through it", () => {
+    const sc = new Scene(100, 80, 0)
+    drawBook(sc, book(true), "idle", "flying", 1)
+    sc.overhead.forEach((d) => d())
+    expect(sc.cover.some((v) => v === 1)).toBe(true)
+  })
 })

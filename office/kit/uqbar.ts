@@ -86,7 +86,8 @@ export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number
   // in flight it is over everything; resting, it takes its depth, so it sits behind whoever is in front of it
   const draw = (f: () => void) => (still ? sc.item(y + frame.length, f) : sc.overhead.push(f))
   draw(() => {
-    sc.blit([...frame], x, y, paint(mood))
+    // a figure, not a blit: it covers the words it flies over, as a person does
+    sc.figure([...frame], x, y, paint(mood))
     sc.px(x + w, y + 1, 1, 6, RIBBON[mood]())
     sc.text("XLVI", x + w / 2, y - 1, ROLE.body, 9)
     if (extra.nap && still) {
