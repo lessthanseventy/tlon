@@ -16,10 +16,29 @@ export type Candidate = {
 }
 
 // no "uqbar": the operator's delegate, an outside citizen — a seat by that name would take its identity
+// Characters from across Borges' stories, so the hall doesn't cycle a handful once the bench has
+// taken the famous ones. Never the names the machine itself uses (funes, menard, aleph, orbis, tlon,
+// uqbar, borges): those are systems and citizens, not coworkers.
 export const BORGES = [
-  "funes", "lonnrot", "tzinacan", "ireneo", "hladik", "otalora", "emma", "nolan", "asterion", "pierre",
-  "menard", "droctulft", "cruz", "fervor", "zahir", "aleph", "beatriz", "carlos", "nils", "quain",
-  "tsun", "albert", "stephen", "runeberg", "orbis", "tertius", "herbert", "ashe", "borges",
+  // Death and the Compass · Emma Zunz · The Garden of Forking Paths
+  "lonnrot", "scharlach", "treviranus", "yarmolinsky", "azevedo", "ginzberg", "gryphius", "emma", "zunz",
+  "loewenthal", "tsun", "albert", "stephen", "madden",
+  // The Secret Miracle · The Form of the Sword · Theme of the Traitor and the Hero · The Immortal
+  "hladik", "jaromir", "moon", "kilpatrick", "nolan", "ryan", "cartaphilus", "rufus", "argos",
+  // Funes · The Aleph · Deutsches Requiem · The Zahir · Averroes' Search · The Writing of the God
+  "ireneo", "beatriz", "carlos", "daneri", "zunino", "zungri", "linde", "jerusalem", "teodelina", "zahir",
+  "averroes", "farach", "albucasim", "tzinacan", "asterion",
+  // Tlön (its people, not its name) · Three Versions of Judas · Pierre Menard's reader · Herbert Quain
+  "ashe", "erfjord", "haslam", "runeberg", "nils", "pierre", "quain", "herbert", "tertius",
+  // The Dead Man · The South · The Other Death · The Gospel According to Mark · The Intruder
+  "otalora", "bandeira", "ulpiano", "dahlmann", "damian", "espinosa", "gutre", "nilsen", "juliana",
+  "cristian", "eduardo",
+  // The Duel · Ulrikke · The Congress · Guayaquil · The End · The Encounter · Juan Muraña · Rosendo
+  "glencairn", "clara", "marta", "ulrikke", "otarola", "ferri", "glencoe", "zimerman", "recabarren",
+  "uriarte", "duncan", "murana", "rosendo",
+  // Ibn Hakkan al-Bokhari · Shakespeare's Memory · The Rose of Paracelsus · Blue Tigers · the rest
+  "dunraven", "unwin", "zaid", "abenjacan", "soergel", "thorpe", "paracelsus", "griesebach", "craigie",
+  "almotasim", "hakim", "droctulft", "cruz", "fervor", "jauregui", "villari", "castro", "eastman",
 ] as const
 
 const PITCHES = [

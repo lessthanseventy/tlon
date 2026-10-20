@@ -13,6 +13,9 @@ describe("hall roll", () => {
   })
   test("never offers uqbar, the operator's delegate: a seat by that name would take its identity", () => {
     expect(BORGES as readonly string[]).not.toContain("uqbar")
+    // the machine's own names are systems and citizens, never a new coworker's
+    for (const sys of ["funes", "menard", "aleph", "orbis", "tlon", "borges"]) expect(BORGES as readonly string[]).not.toContain(sys)
+    expect(new Set(BORGES).size).toBe(BORGES.length)
     for (let i = 0; i < 300; i++) expect(roll(`hall:${i}`, { taken: [], vocab: VOCAB }).name).not.toBe("uqbar")
   })
   test("every Borges name is legal", () => {
