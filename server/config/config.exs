@@ -32,8 +32,9 @@ config :server, Oban,
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 3600},
     # a job left `executing` by a restart is requeued at boot (Server.Jobs.Orphans); this rescues one
     # stuck any other way, after longer than any gate runs, its wait in the machine's checks queue
-    # (scripts/checks-queue.sh) included: a few ~10 min checks ahead
-    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 120)},
+    # (scripts/checks-queue.sh) included, and a held smoke's two hours; the lifeline_rescue_minutes
+    # knob replaces it at boot (Server.OperatorConfig.boot_oban/2)
+    {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 180)},
     {Oban.Plugins.Cron,
      crontab: [
        {"* * * * *", Server.Jobs.Drain},

@@ -49,8 +49,15 @@ defmodule Server.OperatorConfigTest do
     refute Map.has_key?(OperatorConfig.read(path), "auto_land_risk")
   end
 
+  test "Lifeline can never be set to take a held smoke for stuck: its floor is past the smoke's hold", %{path: path} do
+    File.write!(path, "{}")
+    hold_minutes = div(7200, 60)
+    assert OperatorConfig.setting("lifeline_rescue_minutes", path) > hold_minutes
+    assert {:error, _} = OperatorConfig.put_settings(%{"lifeline_rescue_minutes" => hold_minutes}, path)
+  end
+
   test "boot_oban applies the boot knobs to Oban's config, leaving the rest as compiled", %{path: path} do
-    File.write!(path, ~s({"intake_every_minutes": 5, "lifeline_rescue_minutes": 60}))
+    File.write!(path, ~s({"intake_every_minutes": 5, "lifeline_rescue_minutes": 200}))
 
     compiled = [
       queues: [default: 5],
@@ -67,7 +74,7 @@ defmodule Server.OperatorConfigTest do
 
     booted = OperatorConfig.boot_oban(compiled, path)
     assert booted[:queues] == [default: 5]
-    assert {Oban.Plugins.Lifeline, rescue_after: to_timeout(hour: 1)} in booted[:plugins]
+    assert {Oban.Plugins.Lifeline, rescue_after: to_timeout(minute: 200)} in booted[:plugins]
     {_, cron} = List.keyfind(booted[:plugins], Oban.Plugins.Cron, 0)
 
     assert cron[:crontab] == [
