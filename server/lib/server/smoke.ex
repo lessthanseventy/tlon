@@ -14,13 +14,23 @@ defmodule Server.Smoke do
 
   @doc "Queue the held smoke of `ref` (default the thread's own branch) for `thread`."
   @spec start(Server.Thread.t(), String.t() | nil) :: {:ok, Oban.Job.t()} | {:error, String.t()}
-  def start(%Server.Thread{} = thread, ref, by \\ nil) do
+  def start(%Server.Thread{} = thread, ref, by \\ nil, flags \\ []) do
     ref = ref || "work/#{thread.slug}"
 
     cond do
-      !Regex.match?(@ref, ref) -> {:error, "not a ref: #{inspect(ref)}"}
-      held(thread.id) -> {:error, "a smoke is already up for this thread: #{held(thread.id).meta["url"]}"}
-      true -> Oban.insert(Job.new(Map.reject(%{thread_id: thread.id, ref: ref, by: by}, fn {_k, v} -> is_nil(v) end)))
+      !Regex.match?(@ref, ref) ->
+        {:error, "not a ref: #{inspect(ref)}"}
+
+      Enum.any?(flags, &(!Regex.match?(~r/\A[a-z][a-z0-9_]*\z/, &1))) ->
+        {:error, "not a flag name: #{inspect(flags)}"}
+
+      held(thread.id) ->
+        {:error, "a smoke is already up for this thread: #{held(thread.id).meta["url"]}"}
+
+      true ->
+        Oban.insert(
+          Job.new(Map.reject(%{thread_id: thread.id, ref: ref, by: by, flags: flags}, fn {_k, v} -> v in [nil, []] end))
+        )
     end
   end
 

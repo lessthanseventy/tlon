@@ -21,7 +21,7 @@ refuse_stale_script "$0"
 root="$(cd "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 port="${TLON_SMOKE_PORT:-$((4100 + $$ % 800))}"
 db="${TLON_SMOKE_DATABASE:-tlon_smoke_$port}" url="${TLON_SMOKE_URL:-}"
-hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}"
+hold="${TLON_SMOKE_HOLD:-}" ttl="${TLON_SMOKE_HOLD_TTL:-7200}" flags="${TLON_SMOKE_FLAGS:-}"
 log="$(mktemp -t tlon-smoke-log-XXXXXX)"
 fail() { echo "smoke FAILED: $*$([ -s "$log" ] && echo " (the log: $log)")"; exit 1; }
 
@@ -168,6 +168,14 @@ ws="$(jq -r '.workspaces[0].id' "$body")"
 home="$(jq -r '[.workspaces[] | select(.name | ascii_downcase == "machine")][0].name // empty' "$body")"
 rm -f "$body"
 echo "smoke: /api/office ✓"
+# TLON_SMOKE_FLAGS: feature flags a path under QA needs (`start_smoke`'s flags), set on THIS node
+# through its own operator API; a flag the build doesn't know fails the smoke rather than QA a lie
+for flag in $flags; do
+  code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X PATCH -H 'content-type: application/json' \
+    -d '{"enabled": true}' "$url/api/flags/$flag")"
+  [ "$code" = 200 ] || fail "flag $flag: /api/flags answered ${code:-nothing} (a flag this build has?)"
+  echo "smoke: flag $flag on"
+done
 [ -n "$home" ] || echo "smoke: no wait for the office (no machine workspace)"
 
 title="release smoke $$"
