@@ -55,7 +55,7 @@ defmodule Server.Office.BanterTest do
 
       File.write!(cli, """
       #!/bin/sh
-      printf '%s' "$2" > #{prompt}
+      cat > #{prompt}
       echo '{"turns": [{"who": "hronir", "line": "Your serve."}, {"who": "yu", "line": "It always is."}, {"who": "ghost", "line": "boo"}]}'
       """)
 

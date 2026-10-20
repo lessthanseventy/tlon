@@ -19,11 +19,11 @@ defmodule Server.SoulTest do
     %{ws: ws, dir: dir}
   end
 
-  # a stand-in model CLI: prints `reply`, and logs its prompt (`$2`) to `<cli>.prompt`
+  # a stand-in model CLI: prints `reply`, and logs its prompt (its stdin) to `<cli>.prompt`
   defp stub_model(%{dir: dir}, reply) do
     File.mkdir_p!(dir)
     cli = Path.join(dir, "model")
-    File.write!(cli, "#!/bin/sh\nprintf '%s' \"$2\" > #{cli}.prompt\ncat <<'EOF'\n#{reply}\nEOF\n")
+    File.write!(cli, "#!/bin/sh\ncat > #{cli}.prompt\ncat <<'EOF'\n#{reply}\nEOF\n")
     File.chmod!(cli, 0o755)
     Application.put_env(:server, :generator_cmd, cli)
     on_exit(fn -> Application.put_env(:server, :generator_cmd, "/nonexistent/tlon-test-generator") end)
