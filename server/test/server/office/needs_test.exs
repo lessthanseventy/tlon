@@ -476,6 +476,15 @@ defmodule Server.Office.NeedsTest do
       refute Enum.any?(labels, &(&1 =~ "Allowed it"))
     end
 
+    test "a plain thread, which has no slug, is named by its number", %{ws: ws} do
+      {:ok, t} = Channel.open_thread(%{title: "release smoke", workspace_id: ws.id})
+      t = age(t, 1)
+      deny(t, 2)
+
+      assert [%{kind: "tool_denied", text: text}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+      assert text =~ "nolan on ##{t.id} was refused Bash 2 times"
+    end
+
     test "one refusal is a seat finding another way, not a Need", %{ws: ws} do
       t = workline(ws, "review", 3)
       deny(t, 1)
