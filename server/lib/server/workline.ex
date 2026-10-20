@@ -946,56 +946,29 @@ defmodule Server.Workline do
   end
 
   @doc """
-  File a reviewer's or QA's non-blocking findings as follow-up tickets: each text's first line is
-  its title, the rest its body. Tied to the workline and labelled `follow-up` and `held`, so intake
-  leaves them until its thread closes (`release_follow_ups/1`, run by the close); then they reach the
-  manager like any ticket. Blank ones, and a title already filed on the workline, are skipped.
-
-  Each round of a `door` (`:review` or `:qa`) replaces the held follow-ups its earlier rounds filed:
-  the latest review knows what is still owed, so a finding fixed since is not filed, and one raised
-  again is not filed twice. One no longer raised is closed done, labelled `superseded` and pointing
-  at the round's tickets — never deleted, so an id a thread quoted still resolves. `{:ok, tickets}`.
+  A reviewer's or QA's non-blocking findings, posted on the workline for its lead: one message, each
+  text numbered (its first line the title, the rest the detail), blanks and repeated titles dropped.
+  None becomes a ticket here: the lead fixes what sits in the change's own lines before it lands,
+  drops the rest, or defers one with `file_ticket`, which matches it against open tickets. Filing
+  every finding grew the backlog faster than the office closed it. `{:ok, items}`, the items posted.
   """
   def follow_ups(%Thread{} = thread, author, items, door \\ :review) do
-    label = "from-#{door}"
-    titles = MapSet.new(items, &(&1 |> String.trim() |> String.split("\n", parts: 2) |> hd() |> String.trim()))
+    items = items |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == "")) |> Enum.uniq_by(&follow_up_title/1)
 
-    # one still raised keeps its ticket; one this door no longer raises was fixed since
-    superseded =
-      for t <- tied_follow_ups(thread.id),
-          "held" in t.labels,
-          label in t.labels or (door == :review and not Enum.any?(t.labels, &String.starts_with?(&1, "from-"))),
-          not MapSet.member?(titles, t.title),
-          do: t
+    if items != [] do
+      lead = Server.Channel.thread_lead(thread.id)
+      to = if lead && lead != author, do: "@#{lead} ", else: ""
+      list = items |> Enum.with_index(1) |> Enum.map_join("\n", fn {text, i} -> "#{i}. #{text}" end)
 
-    filed =
-      for t <- tied_follow_ups(thread.id),
-          t not in superseded and "superseded" not in t.labels,
-          into: MapSet.new(),
-          do: t.title
+      post_brief(
+        thread,
+        "#{to}follow-ups from #{author}'s #{door}:\n#{list}\n\n" <>
+          "Fix any that sits in lines this change already touches before it lands. Drop the rest, or " <>
+          "defer one someone would act on within a week with file_ticket (it is checked against open tickets)."
+      )
+    end
 
-    tickets =
-      for text <- Enum.uniq_by(items, &(&1 |> String.trim() |> String.split("\n", parts: 2) |> hd())),
-          String.trim(text) != "",
-          [title | rest] = text |> String.trim() |> String.split("\n", parts: 2),
-          not MapSet.member?(filed, String.trim(title)) do
-        origin = "Follow-up from ##{thread.id} (#{thread.title}), raised by #{author}. Held until ##{thread.id} closes."
-
-        {:ok, ticket} =
-          Server.Tickets.file(%{
-            workspace_id: thread.workspace_id || Server.Bootstrap.default_workspace_id(),
-            project_id: thread.project_id,
-            title: String.trim(title),
-            body: Enum.join(Enum.reject([String.trim(Enum.join(rest)), origin], &(&1 == "")), "\n\n"),
-            labels: ["follow-up", "held", label]
-          })
-
-        {:ok, _} = Server.Tickets.tie(ticket, thread.id, "relates")
-        ticket
-      end
-
-    supersede(superseded, author, door, tickets)
-    {:ok, tickets}
+    {:ok, items}
   end
 
   @doc """
@@ -2145,21 +2118,10 @@ defmodule Server.Workline do
     )
   end
 
-  defp supersede(superseded, author, door, tickets) do
-    now = if tickets == [], do: "none", else: Enum.map_join(tickets, ", ", &"##{&1.id}")
-    note = "\n\nSuperseded: #{author}'s later #{door} round no longer raises it; that round's follow-ups: #{now}."
-
-    for t <- superseded do
-      attrs = %{status: "done", labels: (t.labels -- ["held"]) ++ ["superseded"], body: (t.body || "") <> note}
-
-      # a close that fails leaves one stale follow-up; it must not cost the review its verdict
-      with {:error, why} <- Server.Tickets.update(t, attrs),
-           do: Logger.warning("follow-up ##{t.id} not superseded: #{inspect(why)}")
-    end
-  end
-
   defp operator, do: Server.OperatorConfig.operator()
 
   defp owed_artifact(thread, checker),
     do: thread |> checker.check(Map.fetch!(@owed, thread.stage)) |> this_round(thread)
+
+  defp follow_up_title(text), do: text |> String.split("\n", parts: 2) |> hd() |> String.trim()
 end

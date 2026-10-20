@@ -45,7 +45,7 @@ defmodule Server.MCP.Tool.SubmitReview do
   denied). On THIS thread, or with `thread_id` one you lead; refused outside the review stage. The `verdict`
   is recorded too (`Server.Workline.review_verdict/3`): `request_changes` sends the workline back
   to build at once; after `approve`, call advance_stage to hand it to the merge gate. A finding that
-  shouldn't block goes in `follow_ups`: each becomes a ticket held until the workline merges.
+  shouldn't block goes in `follow_ups`: posted on the workline for its lead, not filed as tickets.
   """
   use Server.MCP.Tool
 
@@ -61,7 +61,7 @@ defmodule Server.MCP.Tool.SubmitReview do
 
     field :follow_ups, {:list, :string},
       description:
-        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges. This list REPLACES the follow-ups an earlier review of this workline filed: list every non-blocking finding still open, not only new ones"
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Posted on the workline for its lead, who fixes what is in the change's own lines and drops or files the rest. Keep it to what matters: a nit nobody would act on is not a follow-up"
   end
 
   @impl true
@@ -115,7 +115,7 @@ defmodule Server.MCP.Tool.SubmitQA do
   Lands on THIS thread, or on `thread_id` — the workline QA'd — when the caller is a `qa` seat on
   that workline's bench: a QA session can be bound to another thread (the lobby) than the one it
   was called to. Refused outside the review stage. A finding that shouldn't block goes in
-  `follow_ups`: each becomes a ticket held until the workline merges.
+  `follow_ups`: posted on the workline for its lead, not filed as tickets.
   """
   use Server.MCP.Tool
 
@@ -134,7 +134,7 @@ defmodule Server.MCP.Tool.SubmitQA do
 
     field :follow_ups, {:list, :string},
       description:
-        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Each becomes a ticket, held until the workline merges. This list REPLACES the follow-ups an earlier QA pass of this workline filed: list every finding still open"
+        "Findings that shouldn't block this change, one per entry: first line the title, the rest the detail. Posted on the workline for its lead, who fixes what is in the change's own lines and drops or files the rest"
   end
 
   @impl true

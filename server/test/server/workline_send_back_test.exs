@@ -174,81 +174,51 @@ defmodule Server.WorklineSendBackTest do
     end
   end
 
-  describe "follow_ups/3" do
-    test "each follow-up is a held ticket tied to the workline, handed to intake when it merges" do
+  describe "follow_ups/4" do
+    test "posts the findings on the workline for its lead, numbered, and files no ticket" do
       thread = at_review("with-nits")
+      lead = Channel.thread_lead(thread.id)
 
-      assert {:ok, [ticket]} =
-               Workline.follow_ups(thread, "lonnrot", ["clean! could clear stray 99… rows\n\nIf the BEAM dies first."])
+      assert {:ok, [_, _]} =
+               Workline.follow_ups(thread, "nolan", [
+                 "clean! could clear stray 99… rows\n\nIf the BEAM dies first.",
+                 "a typo in the help"
+               ])
 
-      assert ticket.title == "clean! could clear stray 99… rows"
-      assert ticket.body =~ "If the BEAM dies first."
-      assert ticket.body =~ "##{thread.id}"
-      assert "held" in ticket.labels and "follow-up" in ticket.labels
+      assert [post] = Enum.filter(bodies(thread), &(&1 =~ "follow-ups from nolan's review"))
 
-      assert Repo.exists?(
-               from tt in Server.TicketThread, where: tt.ticket_id == ^ticket.id and tt.thread_id == ^thread.id
-             )
+      assert post =~ "1. clean! could clear stray 99… rows" and post =~ "If the BEAM dies first." and
+               post =~ "2. a typo"
 
-      {:awaiting, parked} = Workline.advance(Repo.get!(Thread, thread.id), artifacts: AllPresent)
-      assert {:ok, %{stage: "merged"}} = Workline.approve(parked, artifacts: AllPresent, merge: Merges)
-
-      released = Repo.get!(Server.Ticket, ticket.id)
-      refute "held" in released.labels
-      assert "follow-up" in released.labels
-      assert Enum.any?(bodies(thread), &(&1 =~ "follow-up" and &1 =~ "##{ticket.id}"))
+      if lead, do: assert(post =~ "@#{lead}")
+      assert post =~ "file_ticket"
+      assert Repo.all(Server.Ticket) == []
     end
 
-    test "closed without merging, its follow-ups still reach intake, saying so" do
+    test "blanks and repeated titles are dropped; nothing to say posts nothing" do
+      thread = at_review("blank")
+      assert {:ok, []} = Workline.follow_ups(thread, "lonnrot", ["  ", ""])
+      refute Enum.any?(bodies(thread), &(&1 =~ "follow-ups from"))
+      assert {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["twice\n\na", "twice\n\nb"])
+    end
+
+    test "a held follow-up filed before still reaches intake when its workline closes, saying so" do
       thread = at_review("abandoned")
-      {:ok, [ticket]} = Workline.follow_ups(thread, "lonnrot", ["a real nit"])
+
+      {:ok, ticket} =
+        Server.Tickets.file(%{
+          workspace_id: thread.workspace_id || Server.Bootstrap.default_workspace_id(),
+          title: "an old nit",
+          labels: ["follow-up", "held", "from-review"]
+        })
+
+      {:ok, _} = Server.Tickets.tie(ticket, thread.id, "relates")
 
       {:ok, _} = Channel.close_thread(Repo.get!(Thread, thread.id))
 
       released = Repo.get!(Server.Ticket, ticket.id)
       refute "held" in released.labels
       assert released.body =~ "closed without merging"
-    end
-
-    test "a follow-up already filed on the workline isn't filed again" do
-      thread = at_review("repeat")
-      {:ok, [first]} = Workline.follow_ups(thread, "lonnrot", ["same nit\n\nfirst review"])
-      assert {:ok, []} = Workline.follow_ups(thread, "nolan", ["same nit\n\nsecond review"])
-      assert Repo.get(Server.Ticket, first.id)
-      assert {:ok, [_]} = Workline.follow_ups(thread, "lonnrot", ["twice\n\na", "twice\n\nb"])
-    end
-
-    test "a later review's list replaces the earlier one's: a finding fixed since is closed superseded, QA's stay" do
-      thread = at_review("rounds")
-      {:ok, [fixed, kept]} = Workline.follow_ups(thread, "lonnrot", ["fixed since", "still open"])
-      {:ok, [qa]} = Workline.follow_ups(thread, "cruz", ["the button is grey"], :qa)
-
-      assert {:ok, [new]} = Workline.follow_ups(thread, "nolan", ["still open", "found now"])
-
-      superseded = Repo.get(Server.Ticket, fixed.id)
-      assert %Server.Ticket{status: "done"} = superseded
-      assert "superseded" in superseded.labels and "held" not in superseded.labels
-      assert superseded.body =~ "##{new.id}"
-      assert Repo.get(Server.Ticket, kept.id).status != "done"
-      assert Repo.get(Server.Ticket, qa.id)
-      assert new.title == "found now" and "from-review" in new.labels
-
-      {:ok, _} = Channel.close_thread(Repo.get!(Thread, thread.id))
-      assert Repo.get(Server.Ticket, fixed.id).body == superseded.body
-    end
-
-    test "a superseded finding raised again by a later round is filed again" do
-      thread = at_review("raised-again")
-      {:ok, [first]} = Workline.follow_ups(thread, "lonnrot", ["flaky test"])
-      {:ok, []} = Workline.follow_ups(thread, "lonnrot", [])
-
-      assert {:ok, [again]} = Workline.follow_ups(thread, "nolan", ["flaky test"])
-      assert again.id != first.id and "held" in again.labels
-    end
-
-    test "a blank follow-up files nothing" do
-      thread = at_review("blank")
-      assert {:ok, []} = Workline.follow_ups(thread, "lonnrot", ["  ", ""])
     end
   end
 end
