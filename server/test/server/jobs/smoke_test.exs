@@ -61,6 +61,17 @@ defmodule Server.Jobs.SmokeTest do
     assert {:error, "no smoke is up for this thread"} = Smoke.stop(t.id)
   end
 
+  test "the smoke's notices go to whoever started it, not the thread's lead", %{thread: t} do
+    {:ok, _} = Smoke.start(t, nil, "nolan")
+    task = Task.async(fn -> Oban.drain_queue(queue: :smoke) end)
+
+    wait_for(fn -> Enum.any?(bodies(t.id), &(&1 =~ "http://127.0.0.1:4999")) end)
+    assert Enum.any?(bodies(t.id), &String.starts_with?(&1, "@nolan the smoke is up"))
+
+    assert :ok = Smoke.stop(t.id)
+    assert %{success: 1} = Task.await(task, 10_000)
+  end
+
   test "the hold line names the smoke's build dir beside its url" do
     re = Server.Jobs.Smoke.hold_line()
 

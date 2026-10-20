@@ -19,7 +19,7 @@ defmodule Server.MCP.Tool.StartSmoke do
   @impl true
   def execute(params, frame) do
     with {:ok, thread} <- Server.MCP.Tool.QASmoke.thread(params, frame),
-         {:ok, job} <- Smoke.start(thread, params[:ref]) do
+         {:ok, job} <- Smoke.start(thread, params[:ref], Server.MCP.Identity.from_frame(frame).agent) do
       ok(frame, %{
         "queued" => job.id,
         "next" => "the url is posted on thread ##{thread.id} when the build is up (minutes)"
