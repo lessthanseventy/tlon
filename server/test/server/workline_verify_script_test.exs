@@ -54,6 +54,12 @@ defmodule Server.WorklineVerifyScriptTest do
   printf '%s' "$2" | strays "$1"
   """
 
+  # the script's copy_deps(), lifted out: a tree's deps dir copied into a fresh checkout
+  @copy ~S"""
+  eval "$(sed -n '/^copy_deps() {/,/^}/p' "$0")"
+  copy_deps "$1" "$2" "$3"
+  """
+
   defp failures(output) do
     # the service runs with no LANG: the C locale, where tools count bytes, not characters
     {out, 0} = System.cmd("bash", ["-c", @run, @script, output], env: [{"LC_ALL", "C"}, {"LANG", nil}])
@@ -263,5 +269,25 @@ defmodule Server.WorklineVerifyScriptTest do
       refute File.exists?(Path.join(dest, "hex.config"))
       assert File.read!(Path.join(dest, "cache.ets")) == "ets"
     end
+  end
+
+  @tag :tmp_dir
+  test "a deps dir that is a symlink into a shared one is copied, never linked", %{tmp_dir: tmp} do
+    shared = Path.join(tmp, "shared/deps")
+    File.mkdir_p!(Path.join(shared, "jason"))
+    File.write!(Path.join(shared, "jason/x"), "shared\n")
+
+    tree = Path.join(tmp, "tree")
+    File.mkdir_p!(Path.join(tree, "server"))
+    File.ln_s!(shared, Path.join(tree, "server/deps"))
+
+    fresh = Path.join(tmp, "fresh")
+    File.mkdir_p!(Path.join(fresh, "server"))
+
+    assert {_, 0} = System.cmd("bash", ["-c", @copy, @script, tree, fresh, "server"])
+
+    assert {:error, :einval} = File.read_link(Path.join(fresh, "server/deps"))
+    File.write!(Path.join(fresh, "server/deps/jason/x"), "rebuilt\n")
+    assert File.read!(Path.join(shared, "jason/x")) == "shared\n"
   end
 end

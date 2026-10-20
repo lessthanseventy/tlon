@@ -103,9 +103,14 @@ clean+=(HEX_HOME="$fresh/.hex")
 # each mix project in the tree (tlon's under server/, menard's at its root): the lead's fetched dep
 # sources, copy-on-write, to save the download — never its _build: compiled against the branch's
 # old base, it fails the gate on lock mismatches main has moved past — then what main's lock pins now
+# -L: a deps dir an older checkout linked into the shared one is copied, not linked, so the gate's
+# deps.get writes only this checkout's
+copy_deps() { # tree fresh dir
+  [ -d "$1/$3/deps" ] && cp -rL --reflink=auto "$1/$3/deps" "$2/$3/deps"
+}
 for d in server .; do
   [ -f "$fresh/$d/mix.exs" ] || continue
-  [ -d "$tree/$d/deps" ] && cp -r --reflink=auto "$tree/$d/deps" "$fresh/$d/deps"
+  copy_deps "$tree" "$fresh" "$d"
   (cd "$fresh/$d" && "${clean[@]}" MISE_YES=1 mise exec -- mix deps.get >/dev/null 2>&1) || {
     note "$tid" "verify can't run: mix deps.get failed in $d on work/$slug rebased onto origin/main" || true
     exit 1
