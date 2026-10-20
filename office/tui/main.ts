@@ -16,7 +16,7 @@ import { load as loadWhim, save as saveWhim } from "../kit/whimsy-file"
 import { resolve as resolveWhim, type State as WhimState } from "../kit/whimsy"
 import { resetToPreset, whimsyRows, whimsyTitle } from "./whimsy-card"
 import { ledgerLines, MUG, NAMEPLATE, newLedger, SHERIFF, tickFromTriage, type Ledger } from "../kit/scharlach"
-import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, busiest, cardState, COLS, crewOf, epicChildren, needsYou, BOARD_LEGEND, STATE_GLYPH, statusGlyph, statusTone, statusWord, viewOf, type Act, type SeatStatus, type BoardCtx, type CardState } from "../kit/crew"
 import { entryOf } from "../kit/entry"
 import { cycleAxis, dots, previewOf, resolvePets, SLOT_SPECIES, slotOf, SPECIES_BLURB, TEMPERAMENTS, type CatSpecies, type PetSetting, type Pets } from "../kit/pets"
 import { AXES } from "../kit/temperament"
@@ -736,6 +736,15 @@ function openBabel() { open({ kind: "babel", page: babelPage(DETAIL - 2, Math.ma
 type StuckKind = "blocker" | "check" | "unled"
 const oneLine = (t: string) => t.replace(/\s+/g, " ")
 /** the triage card's lit row and the issue card share these: the issue verbs are the inbox's issue need's */
+/** the whiteboard's marks, worded: one row per state the board draws, and what its colour is */
+function boardLegend(): Row[] {
+  return [
+    { segs: [key("the whiteboard's marks")] },
+    ...BOARD_LEGEND.map(([mark, words]): Row => ({ segs: [plain("  "), { s: mark.padEnd(3), fg: ROLE.key, bold: true }, plain(words)] })),
+    { segs: [dim("  a mark's colour is its lead's role (their shirt); hover a line for its state in words")] },
+  ]
+}
+
 function stuckActions(s: data.Stuck, kind: StuckKind): Action[] {
   const after = () => { if (mode.kind === "issue" && !stuck?.blockers.shown.some((x) => x.issue_id === s.issue_id)) back(); draw() }
   const read: Action = { ...bind("need.v"), run: () => openReader(s.thread_id) }
@@ -1873,7 +1882,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const sect = (name: string, hs: Hint[]): Row[] => hs.length ? [{ segs: [key(name)] }, ...hs.map((h) => ({ segs: [plain("  "), { s: h.key.padEnd(10), fg: ROLE.key, bold: true }, plain(h.label)] }))] : []
       return {
         title: `HELP · ${m.title}`,
-        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play keys (they win over a card's)", PLAY) : [])],
+        rows: [...sect(m.title.toLowerCase(), m.keys), ...sect("everywhere", GLOBALS), ...sect("reading a thread (its card's keys work there too)", READER_KEYS), ...(world ? sect("the sandbox's play keys (they win over a card's)", PLAY) : []), ...boardLegend()],
         actions: [{ ...bind("help.esc", `back to ${m.title.toLowerCase()}`), run: () => { mode = m.from; sel = 0; scroll = 0; snapSel = true; draw() } }],
       }
     }
