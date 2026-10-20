@@ -434,6 +434,26 @@ defmodule Server.StaffingTest do
     refute Staffing.duty_thread?(work.id)
   end
 
+  test "the Aleph leaves once it has answered: its pane stays until it posts, then retires at idle",
+       %{ws: ws, session: session} do
+    :ok = Server.Outside.ensure_citizens()
+    thread = staffed_thread(ws, "hronir")
+    _ = session!("aleph", thread.id, 5)
+    tmux("0\taleph\t\t\t999999991\taleph\t#{old()}\n")
+
+    assert :ok = Staffing.pass(ws.id)
+    refute_receive {:tmux, ["-L", _, "kill-window" | _]}, 20
+
+    {:ok, _} = Server.Channel.post(%{thread_id: thread.id, author: "aleph", body: "it bends at Workline.advance/2"})
+    assert :ok = Staffing.pass(ws.id)
+    aleph = "#{session}:0"
+    assert_receive {:tmux, ["-L", _, "kill-window", "-t", ^aleph]}
+
+    assert Server.Event
+           |> Server.Repo.all()
+           |> Enum.any?(&(&1.kind == "pane_retired" and &1.correlation == "pane:aleph"))
+  end
+
   describe "a pane launched with what its profile no longer gives" do
     setup do
       Application.put_env(:server, :retire_stale_launch, true)

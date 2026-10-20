@@ -60,6 +60,12 @@ and every layer the spine design's re-laid §9 asked for
   unsandboxed, started in the repo's main checkout); the study is a duty, so it takes no coworker's seat.
   Every boot ensures its check-in (`Outside.ensure_checkin/1`), so the study exists from the first boot
   with uqbar registered, before anyone has talked to it; a closed study is reopened, never replaced.
+  Every boot seeds each citizen with a profile (`Outside.ensure_citizens/0`). **The Aleph**
+  (`Server.Aleph`, on Fable) is the other: called in, never seated. An `@aleph` on a thread from the
+  operator, the manager or the tech lead spawns it there (`Aleph.called?/2`) in a window named for it,
+  untagged so it is never taken for the thread's leaf; it answers once, and the staffing pass dismisses
+  it when idle after posting. The office draws it as a sphere over the card (`office/kit/aleph.ts`);
+  `:` on a thread card calls it.
   The operator hands it an ask (`Attention.hand_to_uqbar/2`, `POST /api/office/prompts/:id/uqbar`, `u` on
   an ask in the office): one post as the operator on its study, the ask resolved `handed to uqbar`; Uqbar's own ask is refused (`:own_ask`) and not offered.
 - **the dossier** (`Server.Dossier`) — `fact` (provenance stated | derived, CHECKed by the db;

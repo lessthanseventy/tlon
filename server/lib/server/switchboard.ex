@@ -349,7 +349,8 @@ defmodule Server.Switchboard do
         for name <- target_names(message),
             String.downcase(name) != author,
             %Agent{} = agent <- [Staff.agent_by_name(name)],
-            agent.id == thread.agent_id or agent.id in benched,
+            agent.id == thread.agent_id or agent.id in benched or
+              (agent.name == Server.Aleph.name() and Server.Aleph.called?(thread, message.author)),
             home = spawn_home(thread, agent, standing?),
             home != nil,
             not has_warm_session?(home, agent),
@@ -370,6 +371,8 @@ defmodule Server.Switchboard do
   defp spawn_home(thread, agent, standing?) do
     cond do
       standing? or agent.id == thread.agent_id -> thread
+      # called in: it works the thread it was called to, never from the lobby
+      agent.name == Server.Aleph.name() -> thread
       lobby = elsewhere(thread, agent.name) -> Repo.get(Thread, lobby)
       true -> nil
     end

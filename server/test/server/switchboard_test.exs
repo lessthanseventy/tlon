@@ -459,6 +459,32 @@ defmodule Server.SwitchboardTest do
       assert rest =~ "its launch changed" and rest =~ "##{last.id}" and rest =~ "New message on thread"
     end
 
+    test "an @aleph from the operator calls the Aleph in on that thread; from a builder it calls nobody" do
+      :ok = Server.Outside.ensure_citizens()
+      {:ok, ws} = Server.Workspaces.register(%{name: "Called"})
+      # the first builder is the tech lead (Coworker.lead/1): pierre is the second, a plain builder
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "hronir", archetype: "builder"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "pierre", archetype: "builder"})
+      {:ok, thread} = Channel.open_thread(%{title: "stuck thread", workspace_id: ws.id})
+
+      {:ok, m} = Channel.post(%{thread_id: thread.id, author: "pierre", body: "@aleph help me untangle this"})
+      Switchboard.deliver(m)
+      refute_received {:spawned, _}
+
+      {:ok, m} =
+        Channel.post(%{
+          thread_id: thread.id,
+          author: Server.OperatorConfig.operator(),
+          body: "@aleph why does verify keep bouncing?"
+        })
+
+      Switchboard.deliver(m)
+      assert_received {:spawned, exports}
+      assert exports =~ ~s(TLON_AUTHOR="aleph")
+      assert exports =~ ~s(TLON_THREAD="#{thread.id}")
+      assert_receive {:woke, nil, _}, 1_000
+    end
+
     test "the operator's message on uqbar's study spawns uqbar's pane there, as itself" do
       {:ok, ws} = Server.Workspaces.register(%{name: "Home"})
       {:ok, _} = Staff.register_agent(%{name: "uqbar", mandate: "outside", engine: "claude-code"})
