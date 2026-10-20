@@ -362,6 +362,59 @@ defmodule Server.ReleaseSmokeScriptTest do
       assert out =~ "the hold of http://127.0.0.1:#{port} expired after 2s"
     end
 
+    test "the office drive waits for the title before the find and for the thread after Enter", ctx do
+      port = free_port()
+      office = ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "machine"}], "id": 7})
+
+      stub(ctx.stubs, "mix", ~S"""
+      [ "$1" = release ] || exit 0
+      touch "$SMOKE_SIGNAL/building"
+      until [ -e "$SMOKE_SIGNAL/go" ]; do sleep 0.1; done
+      mkdir -p _build/prod/rel/server/bin
+      printf '#!/bin/sh\n[ "$1" = start ] && exec sleep 300\nexit 0\n' >_build/prod/rel/server/bin/server
+      chmod +x _build/prod/rel/server/bin/server
+      """)
+
+      # supports wait:TEXT (the smoke only waits when the candidate's drive says so)
+      drive = Path.join([ctx.root, "scripts", "office-drive.sh"])
+
+      File.write!(drive, ~S"""
+      #!/bin/sh
+      printf '%s\n' "$@" >"$SMOKE_SIGNAL/drive.args"
+      for a in "$@"; do case "$a" in \'*) t="${a#\'}"; t="${t%\'}" ;; wait:*) ;; esac; done
+      printf '=== after: .\nHOME\n=== after: Enter\n#7  %s\n=== after: c\nCREW\n=== after: R\nHOME\n' "$t"
+      """)
+
+      File.chmod!(drive, 0o755)
+
+      for args <- [
+            ["add", "-A"],
+            ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "drive"],
+            ["branch", "-f", "work/feature"]
+          ],
+          do: {_, 0} = System.cmd("git", ["-C", ctx.root | args], stderr_to_stdout: true)
+
+      script = Path.join([ctx.root, "scripts", "release-smoke.sh"])
+      env = [{"TLON_SMOKE_HOLD", "1"}, {"TLON_SMOKE_HOLD_TTL", "2"} | race_env(ctx, port)]
+
+      smoke =
+        Task.async(fn ->
+          System.cmd("timeout", ["20", "bash", script, "work/feature"], env: env, stderr_to_stdout: true)
+        end)
+
+      wait_for(Path.join(ctx.signal, "building"))
+      start_supervised!({Bandit, plug: {Stub, {200, office}}, ip: {127, 0, 0, 1}, port: port, startup_log: false})
+      File.write!(Path.join(ctx.signal, "go"), "")
+      Task.await(smoke, 30_000)
+
+      args = ctx.signal |> Path.join("drive.args") |> File.read!() |> String.split("\n", trim: true)
+      slash = Enum.find_index(args, &(&1 == "/"))
+      enter = Enum.find_index(args, &(&1 == "Enter"))
+
+      assert Enum.any?(Enum.take(args, slash), &(&1 =~ ~r/^wait:release smoke \d+$/))
+      assert Enum.at(args, enter + 1) =~ ~r/^wait:#7  release smoke \d+$/
+    end
+
     defp stale_lock_in(ctx) do
       {sha, 0} = System.cmd("git", ["-C", ctx.root, "rev-parse", "work/feature"])
       lock = Path.join(ctx.tmp, "tlon-smoke-commit-#{String.trim(sha)}.lock")
