@@ -22,7 +22,7 @@ const server = Bun.serve({
     return new Response("no", { status: 404 })
   },
 })
-const socket = `tlon-office-hall-hire-${process.pid}`
+let socket = `tlon-office-hall-hire-${process.pid}`
 const state = mkdtempSync(join(tmpdir(), "office-hall-hire-")), config = mkdtempSync(join(tmpdir(), "office-hall-hire-cfg-"))
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
 afterAll(() => {
@@ -56,6 +56,7 @@ test("→ in the hall hires on the server and keeps the look and soul", async ()
 
 test("→ on a name already on the bench is refused: nothing posted, nothing kept", async () => {
   tmux("kill-server")
+  socket = `tlon-office-hall-taken-${process.pid}`
   const cfg = mkdtempSync(join(tmpdir(), "office-hall-taken-cfg-"))
   mkdirSync(join(cfg, "tlon"), { recursive: true })
   writeFileSync(join(cfg, "tlon/hall.json"), JSON.stringify({ seed: "hall:1", locks: {}, overrides: { name: "funes" }, pile: [] }))
