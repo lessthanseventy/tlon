@@ -14,7 +14,7 @@ import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
-import { boardColumns, COLS, isManager, peopleOf, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
+import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
 import { ARGOS_RIFF, argos, dogBed, dogBowl, dogCheer, dogDo, drawDog, fussDog, patDog, stepDog, type Dog } from "../kit/pets"
@@ -100,7 +100,7 @@ export function layoutFor(z: Zones) {
     const people = peopleOf(a)
     const managers = people.filter((p) => isManager(a, p)), workers = people.filter((p) => !isManager(a, p))
     if (managers[0]) desks.push({ x: z.F0 + CREW_W + 12, y: EXEC_Y, w: EXEC_W, kind: "manager", seat: managers[0] })
-    const lead = workers.find((p) => p.lead), grunts = workers.filter((p) => p !== lead)
+    const { lead, grunts } = seating(a, workers)
     if (lead) desks.push({ x: z.F0 + CREW_W + EXEC_W + 16, y: EXEC_Y, w: EXEC_W, kind: "lead", seat: lead })
     const chairs: Chair[] = []
     TABLE_YS.forEach((ty, t) => {

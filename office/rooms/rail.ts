@@ -6,7 +6,7 @@
 import type { Frame, Measure } from "../kit/canvas"
 import { drawActors, drawCat, drawParty, isPicked, Scene, type Focus } from "../kit/draw"
 import { bossDesk, crewBoard, execDesk } from "../kit/furniture"
-import { boardColumns, isManager, needsYou, peopleOf, STATE_GLYPH, tipOf, type Act } from "../kit/crew"
+import { boardColumns, isManager, needsYou, peopleOf, seating, STATE_GLYPH, tipOf, type Act } from "../kit/crew"
 import { ROLE, tint } from "../kit/palette"
 import { Sim, keyOf, type Actor, type Plan, type Pt, type Spot } from "../kit/sim"
 import { BIG_PLANT, COFFEE, COOLER, SCRIBBLES, shirtOf } from "../kit/sprites"
@@ -40,7 +40,7 @@ function layout(a: Agents) {
   const people = peopleOf(a)
   const managers = people.filter((p) => isManager(a, p)), workers = people.filter((p) => !isManager(a, p))
   if (managers[0]) desks.push({ x: MANAGER_X, y: FLOOR, w: EXEC_W, kind: "manager", seat: managers[0] })
-  const lead = workers.find((p) => p.lead), grunts = workers.filter((p) => p !== lead)
+  const { lead, grunts } = seating(a, workers)
   if (lead) desks.push({ x: LEAD_X, y: FLOOR + ROW_H, w: EXEC_W, kind: "lead", seat: lead })
   const chairs: Chair[] = []
   TABLES_X.forEach((tx, t) => {
