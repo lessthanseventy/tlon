@@ -1958,7 +1958,7 @@ defmodule Server.MCP.ServerTest do
     # Carl is not a Claude-plan agent, so the oracle is the Claude side; its CLI is stubbed with one
     # that prints its argv and its stdin (where the prompt comes) back, so the answer carries both
     previous = Application.get_env(:server, :oracle_claude_cmd)
-    stub = Path.join(System.tmp_dir!(), "oracle-echo-#{System.unique_integer([:positive])}")
+    stub = Path.join(System.tmp_dir!(), "oracle-echo-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.write!(stub, "#!/bin/sh\necho \"$@\"\ncat\n")
     File.chmod!(stub, 0o755)
     on_exit(fn -> File.rm(stub) end)
