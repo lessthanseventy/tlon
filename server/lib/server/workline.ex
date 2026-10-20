@@ -1053,10 +1053,7 @@ defmodule Server.Workline do
   defp verified_artifact(thread, checker) do
     requirement = Map.fetch!(@owed, thread.stage)
 
-    thread
-    |> checker.check(requirement)
-    |> this_round(thread)
-    |> case do
+    case owed_artifact(thread, checker) do
       {:ok, evidence} ->
         record_artifact_check(thread, requirement, 0, evidence)
         :ok
@@ -1206,11 +1203,14 @@ defmodule Server.Workline do
   def owed_status(%Thread{} = thread, opts) do
     checker = Keyword.get(opts, :artifacts, Git)
 
-    with :ok <- verified_artifact(thread, checker),
+    # A question, not a move: only advance and approve record the artifact check, or every brief
+    # and turn-end nudge writes one (two at the same instant when both ask).
+    with {:ok, _} <- owed_artifact(thread, checker),
          :ok <- qa_cleared(thread, opts) do
       {:ok, "#{thread.stage} artifact committed"}
     else
       {:error, {:artifact_missing, why}} -> {:error, why}
+      {:error, why} when is_binary(why) -> {:error, why}
     end
   end
 
@@ -2159,4 +2159,7 @@ defmodule Server.Workline do
   end
 
   defp operator, do: Server.OperatorConfig.operator()
+
+  defp owed_artifact(thread, checker),
+    do: thread |> checker.check(Map.fetch!(@owed, thread.stage)) |> this_round(thread)
 end
