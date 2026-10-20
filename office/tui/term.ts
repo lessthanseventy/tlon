@@ -100,6 +100,11 @@ function charCells(ch: string): number {
 }
 /** the columns a string takes in a terminal */
 export const cells = (s: string) => [...s].reduce((n, ch) => n + charCells(ch), 0)
+/** a highlighted mark with its leading gap left plain: a background on the gap would run the mark into the segment before it */
+export function badge(g: Seg & { go?: () => void }): (Seg & { go?: () => void })[] {
+  const gap = g.s.length - g.s.trimStart().length
+  return !g.bg || !gap ? [g] : [{ s: g.s.slice(0, gap) }, { ...g, s: g.s.slice(gap) }]
+}
 /** segments as escape-coded text, cut to `width` columns (the cut ends in "…", in the style of the text it cut) and padded to it with plain spaces */
 export function line(segs: Seg[], width: number): string {
   const kept: { g: Seg; s: string }[] = []

@@ -53,7 +53,7 @@ import { geometry, hitAt, kittyImage, measureFor, textLayer, type Geometry } fro
 import { READER_KEYS, Reader, type ReaderDeps } from "./reader"
 import { timelineRows } from "./timeline"
 import { footLines, follow as followSel, offset, type Hint, type Window } from "./pane"
-import { cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
+import { badge, cells, enter, ESC, leave, line, mute, out, query, tokenize, type Input, type Seg } from "./term"
 import { rows as vtRows, TerminalView, type Target } from "./terminal"
 import { centerViewport, clipFrame, panViewport, type Viewport } from "./viewport"
 import { parseWhen, showWhen } from "./when"
@@ -1146,7 +1146,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       const tabs: Seg[] = tabsOf.flatMap((t) => [t === crewTab ? { s: ` ${tabLabel(t)} `, fg: ROLE.ground, bg: ROLE.key, bold: true } : dim(` ${tabLabel(t)} `), plain(" ")])
       const paused = all.pause === "pencils_down" || all.pause === "lights_out"
       const rows: Row[] = [{ segs: [...tabs, dim(crews.length ? `   the ${on} crew is on` : "   no crews yet: c puts a seat on one"),
-        paused ? { s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true } : dim("   at work")] }]
+        ...(paused ? badge({ s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true }) : [dim("   at work")])] }]
       for (const g of arrange(crew as any, crewSort.cmp, crewGroup)) {
         if (g.label !== null) rows.push({ segs: [key(`${g.label} · ${g.items.length}`)] })
         for (const c of g.items as any[]) {
@@ -1937,11 +1937,11 @@ function draw() {
   const blocking = needs.filter((n) => n.level === "blocking").length, deciding = needs.length - blocking, usage = usageHeader(all, Date.now())
   const head: (Seg & { go?: () => void })[] = [{ s: " OFFICE ", fg: ROLE.ground, bg: ROLE.attention }, key(" ‹ "), { s: wsName(), fg: ROLE.body, bold: true }, key(" › "),
     ...(all.ok ? [] : [{ s: `  ${downHeader(all, Date.now())}`, fg: ROLE.alarm }]),
-    ...(blocking ? [{ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }] : []),
+    ...(blocking ? badge({ s: `  ⚑ ${blocking} blocking `, fg: ROLE.ground, bg: ROLE.attention, bold: true, go: inbox }) : []),
     ...(deciding ? [{ s: `  ${blocking ? "· " : "⚑ "}${deciding} to decide`, fg: ROLE.body, go: inbox }] : []),
     ...(needs.length ? [{ ...dim("  (i)"), go: inbox }] : []),
     ...(shiftHeader() ? [{ s: `  ${shiftHeader()}`, fg: ROLE.body, go: toggleShift }] : []),
-    ...(all.pause === "pencils_down" || all.pause === "lights_out" ? [{ s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true, go: () => ask2("back to work", () => void did(data.pause("back_to_work"))) }] : []),
+    ...(all.pause === "pencils_down" || all.pause === "lights_out" ? badge({ s: all.pause === "lights_out" ? "  ◼ lights out " : "  ✎ pencils down ", fg: ROLE.ground, bg: ROLE.attention, bold: true, go: () => ask2("back to work", () => void did(data.pause("back_to_work"))) }) : []),
     ...(queuesHeader() ? [{ s: `  ${queuesHeader()}`, fg: ROLE.live, go: () => open({ kind: "health" }) }] : []),
     ...(lifeHeader(all, ws) ? [{ s: `  ${lifeHeader(all, ws)}`, fg: ROLE.body }, dim("  (L)")] : []),
     ...(usage ? [{ s: `  ${usage.text}`, fg: usage.hot ? ROLE.attention : ROLE.body, bold: usage.hot }] : []),
