@@ -113,9 +113,9 @@ defmodule Server.Harness.ClaudeCode do
   end
 
   defp sandbox_env(%Profile{sandbox: sandbox, permissions: perms} = p) when is_map(sandbox) do
-    if (perms || %{})["yoloMode"] != false,
-      do: "TLON_SANDBOX_FILE=#{Path.join(Profiles.config_dir(p), "sandbox.json")} ",
-      else: ""
+    if (perms || %{})["yoloMode"] == false,
+      do: "",
+      else: "TLON_SANDBOX_FILE=#{Path.join(Profiles.config_dir(p), "sandbox.json")} "
   end
 
   defp sandbox_env(_p), do: ""
