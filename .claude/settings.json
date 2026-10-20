@@ -21,12 +21,19 @@
     },
     "filesystem": {
       "allowWrite": [
-        "~/.cache",
-        "~/.local/share",
+        "~/.local/share/mise",
         "~/.local/state",
         "~/.mix",
         "~/.hex",
         "~/.bun",
+        "~/.cache/mise",
+        "~/.cache/rebar3",
+        "~/.cache/elixir_make",
+        "~/.cache/expert",
+        "~/.cache/menard",
+        "~/.cache/tlon",
+        "~/.cache/node",
+        "~/.cache/typescript",
         "~/.claude/projects/-home-andrew-projects-tlon/memory"
       ]
     },
