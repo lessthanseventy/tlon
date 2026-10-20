@@ -14,16 +14,17 @@ defmodule Server.Jobs.Smoke do
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"thread_id" => tid, "ref" => ref}} = job) do
     log = Path.join(System.tmp_dir!(), "tlon-smoke-job-#{job.id}.log")
-    bash = System.find_executable("bash")
+    {exe, args} = launch(Server.Smoke.script(), ref)
 
     port =
-      Port.open({:spawn_executable, bash}, [
+      Port.open({:spawn_executable, exe}, [
         :binary,
         :exit_status,
         :stderr_to_stdout,
         {:line, 4096},
-        {:args, [Server.Smoke.script(), ref]},
-        {:env, [{~c"TLON_SMOKE_HOLD", ~c"1"}]}
+        {:args, args},
+        {:cd, script_root(Server.Smoke.script())},
+        {:env, [{~c"TLON_SMOKE_HOLD", ~c"1"}, {~c"MISE_YES", ~c"1"}]}
       ])
 
     # nil when the script already exited: its messages are still in the mailbox
@@ -32,6 +33,17 @@ defmodule Server.Jobs.Smoke do
     if code != 0, do: post(tid, "smoke of #{ref} ended (exit #{code}); the log: #{log}")
     :ok
   end
+
+  # the service runs under systemd, whose PATH has no mise shims: the script's bare `mix`/`bun` are
+  # found through `mise exec`, from the checkout whose mise.toml pins them
+  defp launch(script, ref) do
+    case System.find_executable("mise") do
+      nil -> {System.find_executable("bash"), [script, ref]}
+      mise -> {mise, ["exec", "--", "bash", script, ref]}
+    end
+  end
+
+  defp script_root(script), do: script |> Path.dirname() |> Path.dirname()
 
   defp pump(port, job, tid, os_pid, log, tail) do
     receive do
