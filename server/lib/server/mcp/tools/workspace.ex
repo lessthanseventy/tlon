@@ -145,11 +145,15 @@ end
 
 defmodule Server.MCP.Tool.FileTicket do
   @moduledoc """
-  File a TICKET into the current workspace's lightweight tracker — the 2-second capture ("this
-  is fucked, file it") that does NOT spin up a thread. Workspace-scoped (resolved from the bound
-  thread). Lands at `backlog`; promote it into a thread later when work starts. With `issue_id` the
-  ticket owns that open issue: it leaves the operator's list, and the ticket's workline landing
-  resolves it naming its PR.
+  File a TICKET into the current workspace's tracker: something someone would act on within a week,
+  that does NOT spin up a thread (a nit is a line on the thread, not a ticket). Workspace-scoped
+  (resolved from the bound thread). Lands at `backlog`; promote it into a thread later when work
+  starts. With `issue_id` the ticket owns that open issue: it leaves the operator's list, and the
+  ticket closing resolves it.
+
+  A title that looks like an open ticket's, or one closed in the last 30 days, is refused with the
+  matches (`Server.Recurrence`): the same fault again is `seen_again` on that ticket (it counts, and
+  reopens a closed one); a different one is filed with `distinct: true`.
   """
   use Server.MCP.Tool
 
@@ -168,15 +172,30 @@ defmodule Server.MCP.Tool.FileTicket do
 
     field :blocked_by, {:list, :integer},
       description: "Ids of the tickets this one waits on, optional (a missing id is refused)"
+
+    field :seen_again, :integer,
+      description:
+        "The id of the ticket this is the same fault as: it is recorded there (seen count, your title and body appended, reopened if closed) instead of filed"
+
+    field :distinct, :boolean,
+      description: "File it even though open tickets look like it: you checked, and it is a different fault"
   end
 
   @impl true
+  def execute(%{seen_again: id} = params, frame) when is_integer(id) do
+    identity = Identity.from_frame(frame)
+    detail = Enum.join(Enum.reject([params[:title], params[:body]], &(&1 in [nil, ""])), "\n\n")
+    reply(frame, Server.Recurrence.ticket_seen(id, detail, identity.agent), &MCP.Brief.ticket/1)
+  end
+
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
     {issue_id, params} = Map.pop(params, :issue_id)
     {blocked_by, params} = Map.pop(params, :blocked_by, [])
+    {distinct, params} = Map.pop(params, :distinct, false)
 
     with workspace_id when not is_nil(workspace_id) <- Tool.workspace_of(identity),
+         [] <- if(distinct, do: [], else: Server.Recurrence.similar_tickets(workspace_id, params[:title])),
          {:ok, issue} <- ownable(issue_id, workspace_id),
          [] <- Tickets.bad_blockers(blocked_by),
          {:ok, ticket} <- Tickets.file(Map.put(params, :workspace_id, workspace_id)) do
@@ -184,9 +203,21 @@ defmodule Server.MCP.Tool.FileTicket do
       :ok = Tickets.set_blockers(ticket.id, blocked_by)
       reply(frame, {:ok, ticket}, &MCP.Brief.ticket/1)
     else
-      nil -> fail(frame, "no workspace bound to this session")
-      [_ | _] = bad -> fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
-      error -> reply(frame, error, &MCP.Brief.ticket/1)
+      nil ->
+        fail(frame, "no workspace bound to this session")
+
+      [%Server.Ticket{} | _] = like ->
+        fail(
+          frame,
+          "not filed: these look like it\n#{Server.Recurrence.listing(like)}\n" <>
+            "The same fault: file_ticket with seen_again: <its id>. A different one: again with distinct: true."
+        )
+
+      [_ | _] = bad ->
+        fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
+
+      error ->
+        reply(frame, error, &MCP.Brief.ticket/1)
     end
   end
 

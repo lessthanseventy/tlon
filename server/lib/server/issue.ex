@@ -15,6 +15,7 @@ defmodule Server.Issue do
     field :resolution, :string
     field :found_by, :string
     field :state, :string, default: "open"
+    field :seen, :integer, default: 1
     field :created_at, :utc_datetime
     belongs_to :thread, Server.Thread
     belongs_to :ticket, Server.Ticket
