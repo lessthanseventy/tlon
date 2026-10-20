@@ -5,8 +5,9 @@ defmodule Server.ChecksQueueScriptTest do
 
   @script Path.expand("../../../scripts/checks-queue.sh", __DIR__)
 
+  # this checkout's own copy is the one under test, behind origin/main's or not (fresh-script.sh)
   defp queue(env) do
-    env = [{"XDG_RUNTIME_DIR", "/nonexistent/tlon-test-runtime"} | env]
+    env = [{"XDG_RUNTIME_DIR", "/nonexistent/tlon-test-runtime"}, {"TLON_STALE_SCRIPTS_OK", "1"} | env]
     System.cmd("bash", [@script, "echo", "ran"], env: env, stderr_to_stdout: true)
   end
 
