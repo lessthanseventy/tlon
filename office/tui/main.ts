@@ -2517,6 +2517,7 @@ const GAMES = [
   { name: "Minesweeper", cmd: "freesweep", what: "freesweep" },
   { name: "Sudoku", cmd: "nudoku", what: "nudoku" },
   { name: "Solitaire", cmd: "ttysolitaire", what: "klondike" },
+  { name: "Doom", cmd: "doom", what: "Freedoom, drawn in text" },
 ]
 /** a game in the office's own tmux, one session each, so a game you leave is where you left it */
 function play(g: (typeof GAMES)[number]) {
