@@ -61,6 +61,7 @@ defmodule Server.WorktreeTest do
 
       assert {:ok, wt} = Worktree.ensure(repo, "seeded")
       assert File.read!(Path.join(wt, "server/deps/jason/x")) == "built\n"
+      assert {:error, :einval} = File.read_link(Path.join(wt, "server/deps"))
       assert File.read!(Path.join(wt, "server/_build/dev/x")) == "built\n"
       refute File.exists?(Path.join(wt, "office/node_modules"))
     end
@@ -353,15 +354,17 @@ defmodule Server.WorktreeTest do
     end
   end
 
-  test "a new worktree symlinks the main tree's gitignored dependency dirs (deps, node_modules), never _build", %{
+  test "a new worktree links only the shell's store-backed node_modules; mutable deps are never shared", %{
     repo: repo
   } do
-    for d <- ["deps", "node_modules", "_build"], do: File.mkdir_p!(Path.join(repo, d))
+    for d <- ["deps", "node_modules", "_build", "modules/desktop/shell/node_modules"],
+        do: File.mkdir_p!(Path.join(repo, d))
+
     File.write!(Path.join(repo, ".gitignore"), "deps\nnode_modules\n_build\n")
     assert {:ok, wt} = Worktree.ensure(repo, "linked")
-    assert {:ok, target} = File.read_link(Path.join(wt, "deps"))
-    assert target == Path.join(repo, "deps")
-    assert {:ok, _} = File.read_link(Path.join(wt, "node_modules"))
-    refute File.exists?(Path.join(wt, "_build"))
+
+    assert {:ok, target} = File.read_link(Path.join(wt, "modules/desktop/shell/node_modules"))
+    assert target == Path.join(repo, "modules/desktop/shell/node_modules")
+    for d <- ["deps", "node_modules", "_build"], do: refute(File.exists?(Path.join(wt, d)))
   end
 end

@@ -317,12 +317,10 @@ defmodule Server.Worktree do
     end
   end
 
-  # Dependency dirs are gitignored, so a fresh worktree has none and the first `mix compile` /
-  # `npm` there is minutes (survey §1: CCManager's .worktreeinclude, parallel-code's symlinks).
-  # Share them by SYMLINK from the main tree — `deps` and `node_modules` are content-addressed by
-  # their lockfiles and safe to share; `_build` is NOT (compiled artifacts of a different branch),
-  # so each worktree builds its own. Best-effort: a missing dir in the main tree is skipped.
-  @shared_deps ["deps", "node_modules", "server/deps", "modules/desktop/shell/node_modules"]
+  # Only what nothing in a worktree can write is shared by symlink: the desktop shell's
+  # node_modules is links into the read-only nix store, with no lockfile for `seed_deps` to match.
+  # Mutable deps are seeded as copies, or a `mix deps.update` on one branch rewrites every checkout's.
+  @shared_deps ["modules/desktop/shell/node_modules"]
 
   defp link_deps(repo_path, wt) do
     for rel <- @shared_deps,
