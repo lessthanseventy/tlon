@@ -297,7 +297,7 @@ defmodule Server.Profiles do
   @tlon_mcp %{
     "tlon" => %{
       "excludeTools" =>
-        ["register", "consult_peer", "open_thread", "close_thread", "operator_inbox", "staff_child", "assign_lead"] ++
+        ["register", "tool_denied", "consult_peer", "open_thread", "close_thread", "operator_inbox", "staff_child", "assign_lead"] ++
           ~w(release_status check_candidate propose_release set_urgency submit_qa start_smoke drive_smoke stop_smoke) ++
           ~w(supersede_fact forget_fact review_proposals decide_proposal landed_facts knowledge_report)
     }

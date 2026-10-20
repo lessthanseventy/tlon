@@ -599,6 +599,14 @@ export function register(on) {
     return next(e);
   });
 
+  // A refusal is reported, never acted on: the server derives the operator's `tool_denied` Need from
+  // these (two or more since the workline last moved, nobody working it).
+  on("tool.check", async ($, e, next) => {
+    const r = await next(e);
+    if (thread && r && (r as { decision?: string }).decision === "deny") declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e, cwd) });
+    return r;
+  });
+
   // Held before they run: a push (the server pushes), a branch switch in the live checkout, a
   // production write (the operator's to press).
   on("tool.check", { tool: "Bash" }, async ($, e, next) => {

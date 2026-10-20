@@ -96,6 +96,7 @@ defmodule Server.MCP.ServerTest do
     assert names ==
              Enum.sort([
                "register",
+               "tool_denied",
                "post_message",
                "margin_note",
                "advance_stage",

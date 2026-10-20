@@ -164,6 +164,13 @@ defmodule Server.Alerts do
       "Tell the lead…" |> call("/messages", t) |> Map.put(:input, "body")
     ]
 
+  defp actions(%{kind: "tool_denied", thread_id: t}),
+    do: [
+      "I did it by hand…" |> call("/messages", t) |> Map.put(:input, "body"),
+      send_back("build", t),
+      call("Hand it to Uqbar", "/hand-off", t, %{agent: "uqbar"})
+    ]
+
   defp actions(%{kind: "verify_failed", thread_id: t}), do: [call("Run verify again", "/verify", t)]
 
   defp actions(%{kind: "pr_blocked", thread_id: t, url: url}),

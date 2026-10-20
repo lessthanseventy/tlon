@@ -6,7 +6,8 @@ defmodule Server.Event do
   `work_landed`, `command_approved`, `check_passed`, `check_failed`, `handoff_opened`,
   `cited`, `stage_advanced`, `thread_deleted`, and the memory's curation: `superseded`,
   `forgotten` (the librarian's, with its reason), `supersede_proposed` and `supersede_rejected`
-  (the correction judge's, `Server.Recall.Supersede`). A message and a session are NOT events — they
+  (the correction judge's, `Server.Recall.Supersede`), and `tool_denied` (a seat's permission check
+  refused a tool call: the adapter reports it, `Server.Office.Needs` reads it). A message and a session are NOT events — they
   are their own rows with their own timestamps, and the timeline derives them; an
   event copying them would be a second source (§2) and a dual write (§10).
   `correlation` is the explicit id of the lifecycle a row belongs to; `detail` is

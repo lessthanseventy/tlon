@@ -417,6 +417,50 @@ defmodule Server.Office.NeedsTest do
       assert text =~ "treviranus: QA is blocked"
     end
 
+    defp deny(t, n) do
+      for _ <- 1..n do
+        {:ok, _} =
+          Server.Dossier.record_event(%{
+            thread_id: t.id,
+            kind: "tool_denied",
+            correlation: "tool_denied:#{t.id}",
+            detail: %{"agent" => "nolan", "tool" => "Bash", "summary" => "Bash · mise run release:smoke"}
+          })
+      end
+    end
+
+    test "a seat refused its tool twice, with nobody working, is tool_denied with its answers", %{ws: ws} do
+      t = workline(ws, "review", 3)
+      deny(t, 2)
+
+      assert [%{kind: "tool_denied", level: "blocking", thread_id: tid, text: text}] = Needs.list()
+      assert tid == t.id
+      assert text =~ "nolan" and text =~ "refused Bash 2 times" and text =~ "release:smoke"
+
+      labels = for a <- Server.Alerts.list(), a.thread_id == t.id, x <- a.actions, do: x.label
+      assert Enum.any?(labels, &(&1 =~ "by hand")) and "Hand it to Uqbar" in labels
+      assert Enum.any?(labels, &(&1 =~ "Back to build"))
+    end
+
+    test "one refusal is a seat finding another way, not a Need", %{ws: ws} do
+      t = workline(ws, "review", 3)
+      deny(t, 1)
+      refute Enum.any?(Needs.list(), &(&1.kind == "tool_denied"))
+    end
+
+    test "an answer clears it; a refusal after the answer is a new item", %{ws: ws} do
+      t = workline(ws, "review", 3)
+      deny(t, 2)
+      {:ok, m} = Channel.post(%{thread_id: t.id, author: "andrew", body: "allowed"})
+      assert [] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+
+      back = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.truncate(:second)
+      Server.Repo.update_all(from(e in Server.Event, where: e.thread_id == ^t.id), set: [created_at: back])
+      Server.Repo.update_all(from(x in Server.Message, where: x.id == ^m.id), set: [created_at: back])
+      deny(t, 2)
+      assert [%{kind: "tool_denied"}] = for(n <- Needs.list(), n.kind == "tool_denied", do: n)
+    end
+
     test "a fresh workline is not stalled", %{ws: ws} do
       _ = workline(ws, "build", 0)
       assert kinds(ws) == []

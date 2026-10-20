@@ -11,7 +11,7 @@ defmodule Server.MCP.Tool do
   alias Anubis.Server.Response
 
   # the adapter's own verbs: a seat's cut list hides them from its model, while the mod calls them
-  @adapter_verbs ~w(register)
+  @adapter_verbs ~w(register tool_denied)
   @fence_ttl_ms 5_000
 
   defmacro __using__(_opts) do
