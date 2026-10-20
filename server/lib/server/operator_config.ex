@@ -132,13 +132,16 @@ defmodule Server.OperatorConfig do
       doc: "how often the sweeps nag stale gates and nudge quiet worklines"
     },
     %{
+      # Lifeline takes a job `executing` this long as stuck, live or not: on its last attempt it is
+      # discarded with no error. A held smoke runs up to its two-hour hold (release-smoke.sh's
+      # TLON_SMOKE_HOLD_TTL), so the floor sits above it.
       key: "lifeline_rescue_minutes",
       type: "int",
-      min: 15,
-      max: 240,
-      default: 30,
+      min: 150,
+      max: 480,
+      default: 180,
       boot: true,
-      doc: "a job left running by a stopped server is retried after this"
+      doc: "a job still executing after this is taken as stuck: rescued, or on its last attempt discarded"
     }
   ]
 
