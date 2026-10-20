@@ -30,7 +30,7 @@ defmodule Server.Jobs.Smoke do
     # nil when the script already exited: its messages are still in the mailbox
     os_pid = with info when is_list(info) <- Port.info(port), do: info[:os_pid]
     code = pump(port, job, tid, os_pid, log, [])
-    if code != 0, do: post(tid, "smoke of #{ref} ended (exit #{code}); the log: #{log}")
+    if code != 0, do: post(job, "smoke of #{ref} ended (exit #{code}); the log: #{log}")
     :ok
   end
 
@@ -54,20 +54,20 @@ defmodule Server.Jobs.Smoke do
     receive do
       {^port, {:data, {_eol, line}}} ->
         File.write!(log, [line, "\n"], [:append])
-        hold(job, tid, os_pid, log, line)
+        hold(job, os_pid, log, line)
         pump(port, job, tid, os_pid, log, Enum.take([line | tail], 12))
 
       {^port, {:exit_status, 0}} ->
-        post(tid, "the held smoke is down")
+        post(job, "the held smoke is down")
         0
 
       {^port, {:exit_status, code}} ->
-        post(tid, "smoke failed:\n" <> (tail |> Enum.reverse() |> Enum.join("\n")))
+        post(job, "smoke failed:\n" <> (tail |> Enum.reverse() |> Enum.join("\n")))
         code
     end
   end
 
-  defp hold(job, tid, os_pid, log, line) do
+  defp hold(job, os_pid, log, line) do
     with [_, url | dir] <- Regex.run(hold_line(), line) do
       held = %{"url" => url, "os_pid" => os_pid, "log" => log, "dir" => List.first(dir)}
 
@@ -77,12 +77,17 @@ defmodule Server.Jobs.Smoke do
         |> Server.Repo.update()
 
       post(
-        tid,
+        job,
         "the smoke is up at #{url} (log: #{log}). Drive it with drive_smoke(keys); stop_smoke when done. " <>
           "It tears itself down after the hold's TTL."
       )
     end
   end
 
-  defp post(tid, body), do: {:ok, _} = Channel.post(%{thread_id: tid, author: "tlon", body: body})
+  # to whoever started it (`by`, the start_smoke caller): unaddressed, the post would wake the
+  # thread's lead, often a builder with no smoke tools
+  defp post(%Oban.Job{args: %{"thread_id" => tid} = args}, body) do
+    to = if args["by"], do: "@#{args["by"]} ", else: ""
+    {:ok, _} = Channel.post(%{thread_id: tid, author: "tlon", body: to <> body})
+  end
 end

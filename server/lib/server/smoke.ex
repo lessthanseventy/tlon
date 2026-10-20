@@ -14,13 +14,13 @@ defmodule Server.Smoke do
 
   @doc "Queue the held smoke of `ref` (default the thread's own branch) for `thread`."
   @spec start(Server.Thread.t(), String.t() | nil) :: {:ok, Oban.Job.t()} | {:error, String.t()}
-  def start(%Server.Thread{} = thread, ref) do
+  def start(%Server.Thread{} = thread, ref, by \\ nil) do
     ref = ref || "work/#{thread.slug}"
 
     cond do
       !Regex.match?(@ref, ref) -> {:error, "not a ref: #{inspect(ref)}"}
       held(thread.id) -> {:error, "a smoke is already up for this thread: #{held(thread.id).meta["url"]}"}
-      true -> Oban.insert(Job.new(%{thread_id: thread.id, ref: ref}))
+      true -> Oban.insert(Job.new(Map.reject(%{thread_id: thread.id, ref: ref, by: by}, fn {_k, v} -> is_nil(v) end)))
     end
   end
 
