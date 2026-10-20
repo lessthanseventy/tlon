@@ -27,8 +27,11 @@ defmodule Server.Office.Needs do
       `Server.Shifts.out_of_quota/1` — or a provider's plan spent with a seat on it —
       `Server.Presence.Engine.spent/0`: `options` the other crews to put on; put away, it waits for
       the reset), `tool_denied` (a seat's permission check refused its tool twice or more since the
-      workline last moved — the adapter's `tool_denied` event — and nobody is working it: done by
-      hand, sent back, or handed to Uqbar; an answer is movement, so a refusal after it is a new item);
+      workline last moved — the adapter's `tool_denied` event, the call and the check's reason — and
+      nobody is working it: allowed (`rule`, the Claude Code allow rule for a refused Bash command, is
+      the operator's to add to their own settings, the one place the check honours one; saying so on
+      the thread is the answer), done by hand, sent back, or handed to Uqbar; an answer is movement,
+      so a refusal after it is a new item);
     * **decide** — wants the operator, nothing waits on it: `mention` (an @operator on an open thread
       with no reply from them since, from the last 12 hours: one older than that is history, still on
       its thread), `rollout` (what a
@@ -612,7 +615,7 @@ defmodule Server.Office.Needs do
         not on_duty?(t) do
       last = hd(denials)
 
-      item("tool_denied", "blocking", t, tool_denied_text(t, denials), last.created_at)
+      item("tool_denied", "blocking", t, tool_denied_text(t, denials), last.created_at, %{rule: rule_of(last)})
     end
   end
 
@@ -626,8 +629,18 @@ defmodule Server.Office.Needs do
 
   defp tool_denied_text(t, [last | _] = denials) do
     "#{last.detail["agent"]} on #{t.slug} was refused #{last.detail["tool"]} #{length(denials)} times" <>
-      if(last.detail["summary"], do: ": #{last.detail["summary"]}", else: "")
+      if(last.detail["summary"], do: ": #{last.detail["summary"]}", else: "") <>
+      if(last.detail["reason"], do: " (#{last.detail["reason"]})", else: "")
   end
+
+  # the Claude Code allow rule that would pass the refused call, for the operator to add to their own
+  # settings (the one place the permission check honours one; the server never writes them): a
+  # Bash command whose summary line holds it whole
+  defp rule_of(%{detail: %{"tool" => "Bash", "summary" => "Bash · " <> command}}) do
+    if !String.ends_with?(command, "…"), do: "Bash(#{command})"
+  end
+
+  defp rule_of(_event), do: nil
 
   # nothing moved it past the quiet window and nobody is on it
   defp stalled(open, listed) do

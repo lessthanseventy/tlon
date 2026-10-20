@@ -10,6 +10,7 @@ defmodule Server.MCP.Tool.ToolDenied do
   schema do
     field :tool, :string, required: true, description: "The refused tool, e.g. Bash"
     field :summary, :string, description: "The call in one line, its target and never contents"
+    field :reason, :string, description: "The permission check's reason for refusing it, as it gave it"
   end
 
   @impl true
@@ -21,7 +22,12 @@ defmodule Server.MCP.Tool.ToolDenied do
         thread_id: identity.thread_id,
         kind: "tool_denied",
         correlation: "tool_denied:#{identity.thread_id}",
-        detail: %{"agent" => identity.agent, "tool" => params[:tool], "summary" => params[:summary]}
+        detail: %{
+          "agent" => identity.agent,
+          "tool" => params[:tool],
+          "summary" => params[:summary],
+          "reason" => params[:reason]
+        }
       })
 
     ok(frame, %{"recorded" => true})

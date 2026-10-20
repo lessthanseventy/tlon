@@ -549,6 +549,26 @@ defmodule Server.MCP.ServerTest do
     assert Enum.any?(brief["checks"]["shown"], &(&1["cmd"] == "mise run check" and &1["passed"] == true))
   end
 
+  test "tool_denied — a refusal is recorded with the call and the check's reason", %{thread: thread, token: token} do
+    session = handshake(token)
+    call(token, session, 3, "register", %{})
+
+    r =
+      call(token, session, 4, "tool_denied", %{
+        "tool" => "Bash",
+        "summary" => "Bash · mise run release:smoke",
+        "reason" => "Auto-Mode Bypass"
+      })
+
+    refute r["isError"]
+
+    assert [%{detail: detail}] =
+             Server.Repo.all(from(e in Server.Event, where: e.thread_id == ^thread.id and e.kind == "tool_denied"))
+
+    assert detail["summary"] == "Bash · mise run release:smoke"
+    assert detail["reason"] == "Auto-Mode Bypass"
+  end
+
   test "recheck_fact — re-verify a fact's OWN check_cmd over the wire (drift signal)",
        %{thread: thread, token: token} do
     {:ok, fact} =
