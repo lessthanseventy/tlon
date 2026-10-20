@@ -30,7 +30,13 @@ defmodule Server.ReleaseSmokeScriptTest do
     port
   end
 
-  defp smoke(url), do: System.cmd("bash", [@script], env: [{"TLON_SMOKE_URL", url}], stderr_to_stdout: true)
+  # this checkout's own copy is the one under test, behind origin/main's or not (fresh-script.sh)
+  defp smoke(url),
+    do:
+      System.cmd("bash", [@script],
+        env: [{"TLON_SMOKE_URL", url}, {"TLON_STALE_SCRIPTS_OK", "1"}],
+        stderr_to_stdout: true
+      )
 
   test "a broken /api/office fails the smoke, saying so" do
     assert {out, 1} = smoke(stub({500, "boom"}))
