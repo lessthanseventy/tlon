@@ -67,7 +67,10 @@ defmodule Server.ReleaseSmokeScriptTest do
     url = stub(["build_mode"], FlagStub)
 
     flagged =
-      &System.cmd("bash", [@script], env: [{"TLON_SMOKE_URL", url}, {"TLON_SMOKE_FLAGS", &1}], stderr_to_stdout: true)
+      &System.cmd("bash", [@script],
+        env: [{"TLON_SMOKE_URL", url}, {"TLON_SMOKE_FLAGS", &1}, {"TLON_STALE_SCRIPTS_OK", "1"}],
+        stderr_to_stdout: true
+      )
 
     {out, _} = flagged.("build_mode")
     assert out =~ "smoke: flag build_mode on"
