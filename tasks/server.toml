@@ -220,9 +220,9 @@ description = "the names gate + the tracked-junk gate + the server + adapters (c
 depends = ["check:names", "check:ignored", "server:check", "adapters:claude-code:check", "adapters:claude-code:mod", "adapters:lsp:check", "adapters:lspd:check", "office:check", "manual:check"]
 
 ["server:deps"]
-description = "server: fetch the locked deps when they are behind the lock, and compile them for the test env (a no-op when current)"
+description = "server: fetch the locked deps when they are behind the lock, and compile them for the test env and the dev env server:check's evals boot (a no-op when current)"
 dir = "server"
-run = "mix deps.get && MIX_ENV=test mix deps.compile"
+run = "mix deps.get && MIX_ENV=test mix deps.compile && mix deps.compile"
 
 # The task manual (docs/manual/tasks.md) comes from `mise tasks ls`, never by hand. `--check` diffs.
 ["manual:gen"]
