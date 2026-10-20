@@ -48,6 +48,11 @@ describe("the dials gate the room", () => {
     expect(rings).toBe(0)
     expect(kinds.length).toBeGreaterThan(0)
   }, 40_000)
+  test("pets off: the post carries itself, Nina sleeps through the doorbell", () => {
+    const { r } = play(setDial(DEFAULT, "pets", false), 10)
+    expect((r as any).catLetter("w2")).toBe(false)
+    expect((r as any).cat.errand ?? null).toBeNull()
+  })
   test("pets off: Nina is asleep and silent", () => seeded(5, () => {
     const { r } = play(setDial(DEFAULT, "pets", false), 6_000, 5)
     const a = view()

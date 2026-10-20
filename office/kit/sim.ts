@@ -459,7 +459,8 @@ export class Sim<L extends { people: Seat[] }> {
 
   private catErrand(name: string, kind: "cheer" | "keys" | "letter"): boolean {
     const host = this.actors.get(name)
-    if (!host) return false
+    // pets off: she sleeps through the doorbell too
+    if (!host || !this.dials.pets) return false
     const c = this.cat, p = this.plan.cat, to = this.plan.visit(host)
     const down = c.mode === "zoom" ? null : p.via(c)
     c.path = [...(down ? [down] : []), ...p.door(down ?? c, to), { ...to }]
