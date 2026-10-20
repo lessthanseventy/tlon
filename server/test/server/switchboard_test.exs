@@ -860,7 +860,9 @@ defmodule Server.SwitchboardTest do
 
       {:ok, _} = Channel.post(%{thread_id: thread.id, author: "stakeholder", body: "live!"})
 
-      assert_receive {:woke, "wSandra", _}, 1000
+      # Runner sends :woke from inside its own process, so a synchronous call is the barrier.
+      :sys.get_state(Runner, :infinity)
+      assert_received {:woke, "wSandra", _}
     end
 
     test "on start it drains a backlog posted while it was down (§10 durability)" do
@@ -873,7 +875,9 @@ defmodule Server.SwitchboardTest do
       assert Repo.get!(Message, m.id).delivered_at == nil
 
       start_supervised!(Runner)
-      assert_receive {:woke, "wSandra", _}, 1000
+      # Runner sends :woke from inside its own process, so a synchronous call is the barrier.
+      :sys.get_state(Runner, :infinity)
+      assert_received {:woke, "wSandra", _}
       assert %DateTime{} = Repo.get!(Message, m.id).delivered_at
     end
   end
