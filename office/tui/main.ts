@@ -798,6 +798,12 @@ function needActions(n: data.Need): Action[] {
     ...(n.kind === "publish_failed" && tid ? [{ ...bind("need.d.publish_failed"), run: () => ask("its PR's url — waited on until GitHub merges it", (s) => { if (s.trim()) void did(data.publishedByHand(tid, s.trim())).then(after) }) }] : []),
     ...(n.kind === "no_seat" && n.archetype && n.workspace_id != null ? [{ ...bind("need.h.no_seat", `hire a ${n.archetype}`), run: () => ask(`hire a ${n.archetype} — their name`, (s) => { if (s.trim()) void did(data.hire(n.workspace_id!, s.trim(), n.archetype!)).then(after) }) }] : []),
     ...(n.kind === "no_seat" && tid ? [{ ...bind("need.o.no_seat"), run: () => ask(`hand #${tid} to — a coworker's name`, (s) => { if (s.trim()) void did(data.handOff(tid, s.trim())).then(after) }) }] : []),
+    ...(n.kind === "tool_denied" && tid && n.rule ? [{ ...bind("need.A.tool_denied", `allowed it: ${n.rule} is in your own settings (wakes the lead)`), run: () => void did(data.allowed(tid, n.rule!)).then(after) }] : []),
+    ...(n.kind === "tool_denied" && tid ? [
+      { ...bind("need.r.tool_denied"), run: () => reply(tid) },
+      { ...bind("need.B.tool_denied"), run: () => ask(`#${tid} back to build — what to change`, (s) => { if (s.trim()) void did(data.sendBack(tid, "build", s.trim())).then(after) }) },
+      { ...bind("need.u.tool_denied"), run: () => void did(data.handOff(tid, "uqbar")).then(after) },
+    ] : []),
     ...(n.kind === "quota" && n.workspace_id != null ? (n.options ?? []).slice(0, 9).map((o, i): Action => ({ key: String(i + 1), label: o.label, run: () => void did(data.shiftSwitch(n.workspace_id!, o.key)).then(after) })) : []),
     ...(n.kind === "quota" ? [
       { ...bind("need.P.quota"), run: () => void did(data.pause("pencils_down")).then(after) },
@@ -812,8 +818,8 @@ function needActions(n: data.Need): Action[] {
 /** what waits on you: one at a time when anything does — the whole list is a key away */
 function inbox() { open(needs.length ? { kind: "decide", i: 0 } : { kind: "needs" }) }
 /** a need's one-line name: what kind, and where */
-const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work", issue: "issue", publish_failed: "not on GitHub", release_failed: "cut failed", pr_blocked: "PR not merging", quota: "out of quota", no_seat: "no seat" }
-const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, publish_failed: ROLE.alarm, release_failed: ROLE.alarm, pr_blocked: ROLE.alarm, quota: ROLE.attention, no_seat: ROLE.attention }
+const NEED_KIND: Record<data.Need["kind"], string> = { gate: "gate", question: "question", dialog: "dialog", ask: "asks you", verify_failed: "verify red", stalled: "stalled", mention: "mentioned you", rollout: "rollout", seats: "waits for a seat", job_failed: "job failed", stranded: "stranded work", issue: "issue", publish_failed: "not on GitHub", release_failed: "cut failed", pr_blocked: "PR not merging", quota: "out of quota", no_seat: "no seat", tool_denied: "tool refused" }
+const NEED_TONE: Record<data.Need["kind"], string> = { gate: ROLE.attention, question: ROLE.key, dialog: ROLE.alarm, ask: ROLE.key, verify_failed: ROLE.alarm, stalled: ROLE.attention, mention: ROLE.body, rollout: ROLE.live, seats: ROLE.attention, job_failed: ROLE.alarm, stranded: ROLE.attention, issue: ROLE.alarm, publish_failed: ROLE.alarm, release_failed: ROLE.alarm, pr_blocked: ROLE.alarm, quota: ROLE.attention, no_seat: ROLE.attention, tool_denied: ROLE.alarm }
 const needTitle = (n: data.Need) => `${NEED_KIND[n.kind]}${n.thread_id ? ` #${n.thread_id}` : ""} — ${n.title}`
 /** main's office has moved past the revision this TUI started on */
 const updated = () => !!officeRev && !!all.revs?.office && all.revs.office !== officeRev

@@ -97,7 +97,7 @@ export async function corkboard(ws: number): Promise<CorkNote[]> {
 }
 /** an item waiting on the operator (`Server.Office.Needs`): blocking ones stop work until acted on */
 export type Need = {
-  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "stranded" | "issue" | "publish_failed" | "release_failed" | "pr_blocked" | "quota" | "no_seat"
+  key: string; kind: "gate" | "question" | "dialog" | "ask" | "verify_failed" | "stalled" | "mention" | "rollout" | "seats" | "job_failed" | "stranded" | "issue" | "publish_failed" | "release_failed" | "pr_blocked" | "quota" | "no_seat" | "tool_denied"
   level: "blocking" | "decide"; thread_id: number | null; workspace_id: number | null; title: string; text: string; at: string
   options: { key: string; label: string }[] | null; ref: number | null
   /** a pr_blocked item's PR */
@@ -106,6 +106,8 @@ export type Need = {
   archetype?: string
   /** ask: who asked; Uqbar's own ask is never handed back to it */
   ask?: string
+  /** tool_denied: the Claude Code allow rule the refused command needs, yours to add to your own settings */
+  rule?: string
 }
 let lastNeeds: Need[] = []
 /** everything waiting on the operator, blocking first; a server that can't answer keeps the last list, so the flag never vanishes mid-outage */
@@ -276,6 +278,10 @@ export const note = (ws: number, body: string) => write("pinning a note", "/note
 export const approve = (id: number) => write(`approving #${id}`, `/threads/${id}/approve`, {}, (j) => `#${id} approved — now ${j.stage}`)
 export const advance = (id: number) => write(`advancing #${id}`, `/threads/${id}/advance`, {}, (j) => (j.gated ? `#${id} is at a gate: ${j.stage}` : `#${id} now ${j.stage}`))
 export const handOff = (id: number, agent: string) => write(`handing #${id} off`, `/threads/${id}/hand-off`, { agent }, () => `#${id} handed to ${agent}`)
+/** a workline back to an earlier stage on its own branch, the build kept; `why` reaches the stage's lead */
+export const sendBack = (id: number, stage: "spec" | "plan" | "build", why: string) => write(`sending #${id} back to ${stage}`, `/threads/${id}/send_back`, { stage, why }, () => `#${id} back to ${stage}`)
+/** the refused command's allow rule is in your own settings now: said on the thread, which wakes the lead to run it again */
+export const allowed = (id: number, rule: string) => write(`telling #${id} it is allowed`, `/threads/${id}/messages`, { body: `Allowed: \`${rule}\` is in my Claude Code settings now; run it again.` }, () => `#${id} told: allowed`)
 export const move = (id: number, project: number) => write(`moving #${id}`, `/threads/${id}/move`, { project_id: project }, () => `#${id} moved`)
 export const deleteThread = (id: number) => send("DELETE", `deleting #${id}`, `/threads/${id}`, (j) => `deleted #${id}${j.worktree ? ` — worktree ${j.worktree}` : ""}`)
 
