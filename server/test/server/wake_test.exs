@@ -39,4 +39,95 @@ defmodule Server.WakeTest do
     assert Wake.report_overdue() == 1
     assert Wake.take(t.id, "nolan") == []
   end
+
+  describe "the sheriff's page" do
+    setup do
+      {:ok, ws} = Server.Workspaces.register(%{name: "Watched"})
+      {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
+      {:ok, t} = Channel.open_thread(%{title: "a pane that never drains", workspace_id: ws.id})
+      %{ws: ws, t: t}
+    end
+
+    defp age!(wake, seconds \\ 600) do
+      at = DateTime.utc_now() |> DateTime.add(-seconds) |> DateTime.truncate(:second)
+      Repo.update_all(from(w in Wake, where: w.id == ^wake.id), set: [inserted_at: at])
+    end
+
+    defp pages(ws) do
+      Repo.all(
+        from m in Server.Message,
+          join: t in Server.Thread,
+          on: t.id == m.thread_id,
+          where: t.workspace_id == ^ws.id and t.title == ^Server.Sheriff.beat_title() and like(m.body, "🚨%"),
+          order_by: m.id
+      )
+    end
+
+    defp backdate_messages!(seconds) do
+      at = DateTime.utc_now() |> DateTime.add(-seconds) |> DateTime.truncate(:second)
+      Repo.update_all(Server.Message, set: [created_at: at])
+    end
+
+    test "closing a thread lets go of its wakes", %{t: t} do
+      {:ok, _} = Wake.queue(t.id, "pierre", "ping")
+      {:ok, _} = Channel.close_thread(t)
+
+      assert Wake.take(t.id, "pierre") == []
+    end
+
+    test "a wake on a closed thread is not reported", %{ws: ws, t: t} do
+      {:ok, _} = Channel.close_thread(t)
+      {:ok, w} = Wake.queue(t.id, "pierre", "ping")
+      age!(w)
+
+      assert Wake.report_overdue() == 0
+      assert pages(ws) == []
+    end
+
+    test "a seat that posted anywhere since the wake was queued took it", %{ws: ws, t: t} do
+      {:ok, lobby} = Channel.open_thread(%{title: "the lobby", workspace_id: ws.id})
+      {:ok, w} = Wake.queue(t.id, "pierre", "ping")
+      age!(w)
+      {:ok, _} = Channel.post(%{thread_id: lobby.id, author: "pierre", body: "answered here"})
+
+      assert Wake.report_overdue() == 0
+      assert pages(ws) == []
+      assert Wake.take(t.id, "pierre") == []
+    end
+
+    test "a post from before the wake was queued does not count", %{ws: ws, t: t} do
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "pierre", body: "old news"})
+      backdate_messages!(3600)
+      {:ok, w} = Wake.queue(t.id, "pierre", "ping")
+      age!(w)
+
+      assert Wake.report_overdue() == 1
+      assert [_] = pages(ws)
+    end
+
+    test "one stuck seat is paged once per stall, and again after it drains", %{ws: ws, t: t} do
+      {:ok, a} = Wake.queue(t.id, "pierre", "one")
+      age!(a)
+      assert Wake.report_overdue() == 1
+      assert [_] = pages(ws)
+
+      {:ok, b} = Wake.queue(t.id, "pierre", "two")
+      age!(b)
+      assert Wake.report_overdue() == 0
+      assert [_] = pages(ws)
+
+      backdate_messages!(3000)
+      {:ok, _} = Channel.post(%{thread_id: t.id, author: "pierre", body: "drained"})
+
+      Repo.update_all(from(m in Server.Message, where: m.author == "pierre"),
+        set: [created_at: DateTime.add(DateTime.utc_now(), -2000)]
+      )
+
+      {:ok, d} = Wake.queue(t.id, "pierre", "three")
+      age!(d)
+
+      assert Wake.report_overdue() == 1
+      assert [_, _] = pages(ws)
+    end
+  end
 end

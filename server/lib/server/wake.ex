@@ -35,6 +35,9 @@ defmodule Server.Wake do
     wakes |> Enum.sort_by(&{&1.inserted_at, &1.id}) |> Enum.map(& &1.prompt)
   end
 
+  @doc "Let go of every wake waiting on `thread_id`: a closed thread has no pane to take them."
+  def clear(thread_id), do: Repo.delete_all(from(w in __MODULE__, where: w.thread_id == ^thread_id))
+
   @doc """
   Queue `prompts` again for `agent` on `thread_id`: wakes it took but could not submit, put back
   in order so the next take hands them over again. `{:ok, count}`.
@@ -52,7 +55,9 @@ defmodule Server.Wake do
   fault to fix, never a pane to type into. A wake whose coworker is mid-turn on its thread (a live
   session's `thinking_since` within the stale-turn clock, `Server.Presence.Thinking`) waits: a pane
   in a long tool call drains only once the call returns. The message it was for is still a row, and
-  `Server.Switchboard.redeliver_unheard/1` offers it again. Returns how many were reported.
+  `Server.Switchboard.redeliver_unheard/1` offers it again. A wake on a closed thread, or whose seat
+  posted anywhere since it was queued, is let go unreported; a seat already paged and silent since is
+  paged once per stall. Returns how many were reported.
   """
   def report_overdue(now \\ DateTime.utc_now()) do
     cutoff = DateTime.add(now, -@overdue_s)
@@ -67,22 +72,56 @@ defmodule Server.Wake do
             s.thinking_since > ^live,
         select: 1
 
-    {n, wakes} =
+    {_, wakes} =
       Repo.delete_all(from(w in __MODULE__, as: :wake, where: w.inserted_at < ^cutoff and not exists(busy), select: w))
 
-    wakes
-    |> Enum.uniq_by(&{&1.thread_id, &1.agent})
-    |> Enum.each(fn w ->
-      with %Server.Thread{} = thread <- Repo.get(Server.Thread, w.thread_id) do
-        Server.Sheriff.report(
-          thread,
-          "#{w.agent}'s pane has not taken its wake in #{div(@overdue_s, 60)} minutes — its session " <>
-            "is not draining wakes (is the tlon-citizen mod loaded?)"
-        )
-      end
-    end)
+    reported =
+      wakes
+      |> Enum.uniq_by(&{&1.thread_id, &1.agent})
+      |> Enum.filter(fn w ->
+        with %Server.Thread{state: "open"} = thread <- Repo.get(Server.Thread, w.thread_id),
+             false <- took_it?(w),
+             false <- paged_and_silent?(thread, w.agent) do
+          Server.Sheriff.report(
+            thread,
+            "#{w.agent}'s pane has not taken its wake in #{div(@overdue_s, 60)} minutes — its session " <>
+              "is not draining wakes (is the tlon-citizen mod loaded?)"
+          )
 
-    n
+          true
+        else
+          _ -> false
+        end
+      end)
+
+    length(reported)
+  end
+
+  # A seat that posted anywhere since its wake was queued is alive and heard it, whichever pane
+  # it answered from.
+  defp took_it?(w) do
+    Repo.exists?(from m in Server.Message, where: m.author == ^w.agent and m.created_at >= ^w.inserted_at)
+  end
+
+  # One page per stall: the seat's last page on this thread stands until it posts again.
+  defp paged_and_silent?(%{workspace_id: nil}, _agent), do: false
+
+  defp paged_and_silent?(thread, agent) do
+    like = "🚨 ##{thread.id} %: #{agent}'s pane has not taken its wake%"
+
+    page_at =
+      Repo.one(
+        from m in Server.Message,
+          join: t in Server.Thread,
+          on: t.id == m.thread_id,
+          where:
+            t.workspace_id == ^thread.workspace_id and t.title == ^Server.Sheriff.beat_title() and
+              like(m.body, ^like),
+          select: max(m.created_at)
+      )
+
+    page_at != nil and
+      not Repo.exists?(from m in Server.Message, where: m.author == ^agent and m.created_at >= ^page_at)
   end
 
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
