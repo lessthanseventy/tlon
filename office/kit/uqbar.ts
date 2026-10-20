@@ -83,7 +83,9 @@ export function drawBook(sc: Scene, b: Book, mood: Mood, mode: Mode, tid: number
   const still = mode === "perched" || shut
   const frame = still ? (!shut && (mood === "working" || extra.open) ? FRAMES.open : FRAMES.closed) : b.riffle > 0 ? FRAMES.riffle : (sc.tick >> 1) % 2 ? FRAMES.flapUp : FRAMES.flapDown
   const w = frame[0]!.length, x = Math.round(b.x), y = Math.round(b.y)
-  sc.overhead.push(() => {
+  // in flight it is over everything; resting, it takes its depth, so it sits behind whoever is in front of it
+  const draw = (f: () => void) => (still ? sc.item(y + frame.length, f) : sc.overhead.push(f))
+  draw(() => {
     sc.blit([...frame], x, y, paint(mood))
     sc.px(x + w, y + 1, 1, 6, RIBBON[mood]())
     sc.text("XLVI", x + w / 2, y - 1, ROLE.body, 9)

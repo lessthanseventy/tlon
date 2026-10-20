@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { crewOf, peopleOf, viewOf } from "../kit/crew"
-import { studyOf } from "../kit/uqbar"
+import { drawBook, studyOf } from "../kit/uqbar"
+import { Scene } from "../kit/draw"
 import { readFileSync } from "node:fs"
 import { focus, frameHashes, GOLDEN, measure, office, seeded } from "./golden"
 
@@ -340,4 +341,18 @@ test("uqbar's study is the thread the server flags as its study, this workspace'
   expect(studyOf([handed, there, here], 1)).toBe(9)
   expect(studyOf([handed, there], 1)).toBe(12)
   expect(studyOf([handed, t(3, 1, "tertius")], 1)).toBeNull()
+})
+
+describe("where the book is drawn", () => {
+  const book = (flying: boolean) => ({ x: 40, y: 30, flying, riffle: 0 })
+  test("resting on a desk it takes its depth, behind whoever stands in front of it", () => {
+    const sc = new Scene(100, 80, 0)
+    drawBook(sc, book(false), "idle", "perched", 1, false, { nap: true })
+    expect([sc.items.length, sc.overhead.length]).toEqual([1, 0])
+  })
+  test("in flight it is over everything", () => {
+    const sc = new Scene(100, 80, 0)
+    drawBook(sc, book(true), "idle", "flying", 1)
+    expect([sc.items.length, sc.overhead.length]).toEqual([0, 1])
+  })
 })
