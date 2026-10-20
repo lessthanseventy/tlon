@@ -600,10 +600,10 @@ export function register(on) {
   });
 
   // A refusal is reported, never acted on: the server derives the operator's `tool_denied` Need from
-  // these (two or more since the workline last moved, nobody working it).
+  // these (two or more since the workline last moved, nobody working it), the check's reason with it.
   on("tool.check", async ($, e, next) => {
-    const r = await next(e);
-    if (thread && r && (r as { decision?: string }).decision === "deny") declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e, cwd) });
+    const r = (await next(e)) as { decision?: string; reason?: string } | undefined;
+    if (thread && r?.decision === "deny") declare($, "tool_denied", { tool: e.tool, summary: summaryOf(e.tool, e.input, cwd), ...(r.reason ? { reason: r.reason } : {}) });
     return r;
   });
 
