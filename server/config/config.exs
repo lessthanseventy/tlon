@@ -57,7 +57,7 @@ config :server, Oban,
      ]}
   ]
 
-config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 16
+config :server, Server.Repo, socket_dir: "/run/postgresql", pool_size: 18
 
 config :server, Server.Web.Endpoint,
   adapter: Bandit.PhoenixAdapter,
