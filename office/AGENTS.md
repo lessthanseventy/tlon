@@ -4,10 +4,10 @@ The office is the server's state as a room: coworkers at desks when they work �
 while their session stays warm, chair turned to the room, leaning back with a steaming mug (the
 steam fades over the warmth window, from the turn's end as the sim saw it; their screen is code
 mid-turn, a screensaver dot while warm, dark once cold: `screenOf`) — in the lounge when
-cold, queued at your door when a thread waits on you; the whiteboard holds the worklines, each
+cold, queued at your door when a thread waits on you; the whiteboard holds the worklines in columns TICKETS · DOING · SPEC (intent shares it) · PLAN · BUILD · VERIFY · REVIEW (the rail is narrower and folds VERIFY into BUILD), each
 marked where it stands (`cardState` in `kit/crew.ts`, read from the server's `seat` on each
 thread: ▶ its lead is at a desk, ⏸ parked for a seat under the leaf cap, ◇ idle — nobody at a desk —
-⚑ it needs you, ⤵ landing — in the merge queue, or landed and waiting on GitHub to merge its PR (the
+⚑ it needs you, ✓ checking — its full check runs or waits its turn in the machine's queue (`health.checks`; the lines name the workline, their order is not the queue's), ⤵ landing — in the merge queue, or landed and waiting on GitHub to merge its PR (the
 server's `landing` on the thread, kept on REVIEW); a thread's card names the one key that moves it). DOING is a plain thread someone is
 at a desk on; standing duties (`duty`: a schedule's threads, the sheriff's beat) are not work and stay
 off the board. The TICKETS column shows one row per epic (`Toy 2/13 → #52 sandbox mode`, from the snapshot's `kind`/`epic_id`/progress), its children hidden until ⏎ opens the epic; a ticket's card names its epic. The crew board says who is on what; Nina, your cat, keeps you company. TypeScript on bun; one runtime dep, `@xterm/headless` (pure JS, compiled into the binary), for the

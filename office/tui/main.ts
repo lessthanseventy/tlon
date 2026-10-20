@@ -297,8 +297,11 @@ const toggleShift = () => {
 }
 /** the crew on, once the workspace has crews; nothing for one with none */
 const shiftHeader = () => (crewsOf(ws).length ? `⇄ ${crewOn()} crew` : null)
+const checkLine = /^#(\d+) (?:verify|landing)/
 /** the workline the machine's full check runs on now ("#235 verify …"), or null for a session's own check */
-const checkingId = (): number | null => { const m = /^#(\d+) (?:verify|landing)/.exec(all.health?.checks?.running ?? ""); return m ? Number(m[1]) : null }
+const checkingId = (): number | null => { const m = checkLine.exec(all.health?.checks?.running ?? ""); return m ? Number(m[1]) : null }
+/** the worklines whose check waits in the queue */
+const checkWaitingIds = (): number[] => (all.health?.checks?.waiting ?? []).flatMap((l) => { const m = checkLine.exec(l); return m ? [Number(m[1])] : [] })
 /** the header's queues: what is checked and what is merged right now */
 function queuesHeader(): string | null {
   const c = all.health?.checks, mq = all.health?.merge_queue ?? []
@@ -314,7 +317,7 @@ function queuesHeader(): string | null {
 /** what the board reads beyond the snapshot: the leaf cap, and which threads are on the needs list */
 const boardCtx = (): BoardCtx => {
   const cap = settings?.knobs.find((k) => k.key === "max_leaves")?.value
-  return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])), checking: checkingId(), merging: all.health?.merge_queue ?? [] }
+  return { maxLeaves: typeof cap === "number" ? cap : null, needs: needs.flatMap((n) => (n.thread_id ? [n.thread_id] : [])), checking: checkingId(), checkWaiting: checkWaitingIds(), merging: all.health?.merge_queue ?? [] }
 }
 const room = () => { const k = ws ?? 0; let r = rooms.get(k); if (!r) { rooms.set(k, (r = wide ? new WideRoom(wide) : new RailRoom())); r.setWhimsy(resolveWhim(whim)); if (petsNow) r.setPets(petsNow); if (r instanceof WideRoom) r.setHome(homeNow) } return r }
 /** the dial moved: remember it and hand every room the resolved dials */
