@@ -24,7 +24,12 @@ defmodule Server.Jobs.Smoke do
         {:line, 4096},
         {:args, args},
         {:cd, script_root(Server.Smoke.script())},
-        {:env, [{~c"TLON_SMOKE_HOLD", ~c"1"}, {~c"MISE_YES", ~c"1"}]}
+        {:env,
+         [
+           {~c"TLON_SMOKE_HOLD", ~c"1"},
+           {~c"MISE_YES", ~c"1"},
+           {~c"TLON_SMOKE_FLAGS", String.to_charlist(Enum.join(job.args["flags"] || [], " "))}
+         ]}
       ])
 
     # nil when the script already exited: its messages are still in the mailbox

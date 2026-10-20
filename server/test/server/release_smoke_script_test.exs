@@ -16,8 +16,23 @@ defmodule Server.ReleaseSmokeScriptTest do
     def call(conn, {code, body}), do: Plug.Conn.send_resp(conn, code, body)
   end
 
-  defp stub(answer) do
-    pid = start_supervised!({Bandit, plug: {Stub, answer}, ip: {127, 0, 0, 1}, port: 0, startup_log: false})
+  defmodule FlagStub do
+    @moduledoc false
+    @behaviour Plug
+
+    @office ~s({"roster": [], "threads": [], "workspaces": [{"id": 1, "name": "elsewhere"}]})
+
+    @impl true
+    def init(known), do: known
+    @impl true
+    def call(%{method: "PATCH", path_info: ["api", "flags", flag]} = conn, known),
+      do: Plug.Conn.send_resp(conn, if(flag in known, do: 200, else: 404), "{}")
+
+    def call(conn, _known), do: Plug.Conn.send_resp(conn, 200, @office)
+  end
+
+  defp stub(answer, plug \\ Stub) do
+    pid = start_supervised!({Bandit, plug: {plug, answer}, ip: {127, 0, 0, 1}, port: 0, startup_log: false})
     {:ok, {_ip, port}} = ThousandIsland.listener_info(pid)
     "http://127.0.0.1:#{port}"
   end
@@ -40,6 +55,19 @@ defmodule Server.ReleaseSmokeScriptTest do
   test "an /api/office without the office's shape fails it" do
     assert {out, 1} = smoke(stub({200, ~s({"roster": "nope"})}))
     assert out =~ "/api/office"
+  end
+
+  test "TLON_SMOKE_FLAGS turns each flag on through the node's own API; a flag it doesn't know fails the smoke" do
+    url = stub(["build_mode"], FlagStub)
+
+    flagged =
+      &System.cmd("bash", [@script], env: [{"TLON_SMOKE_URL", url}, {"TLON_SMOKE_FLAGS", &1}], stderr_to_stdout: true)
+
+    {out, _} = flagged.("build_mode")
+    assert out =~ "smoke: flag build_mode on"
+
+    assert {out, 1} = flagged.("nope")
+    assert out =~ "flag nope: /api/flags answered 404"
   end
 
   test "an office with no machine workspace says the drive won't wait for it" do

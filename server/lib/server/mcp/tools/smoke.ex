@@ -14,12 +14,16 @@ defmodule Server.MCP.Tool.StartSmoke do
       description: "The workline you QA (its #id), when your session is bound to another thread"
 
     field :ref, :string, description: "The ref to smoke (default: the workline's branch, work/<slug>)"
+
+    field :flags, {:list, :string},
+      description: "Feature flags to turn on in the smoke's own database (e.g. [\"build_mode\"]) for a flagged path"
   end
 
   @impl true
   def execute(params, frame) do
     with {:ok, thread} <- Server.MCP.Tool.QASmoke.thread(params, frame),
-         {:ok, job} <- Smoke.start(thread, params[:ref], Server.MCP.Identity.from_frame(frame).agent) do
+         {:ok, job} <-
+           Smoke.start(thread, params[:ref], Server.MCP.Identity.from_frame(frame).agent, params[:flags] || []) do
       ok(frame, %{
         "queued" => job.id,
         "next" => "the url is posted on thread ##{thread.id} when the build is up (minutes)"
