@@ -71,12 +71,15 @@ test("triage rows name the issue and carry the actions of the lit row; the issue
 }, 60_000)
 
 test("an issue a ticket took names it, and its key opens the ticket rather than filing another", async () => {
-  tmux("kill-server")
   ownedOnly = true
-  const office = join(import.meta.dir, "..")
-  tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
-  await until("the room", () => screen().includes("Toy"))
+  // the first test's TUI, reused: a second boot is what a loaded gate can't fit in the budget
+  if (!screen().includes("Toy") && !screen().includes("TRIAGE")) {
+    const office = join(import.meta.dir, "..")
+    tmux("new-session", "-d", "-x", "150", "-y", "50",
+      `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' '${process.execPath}' tui/main.ts`)
+  }
+  keys("Escape")
+  await until("the room", () => screen().includes("Toy") && !screen().includes("TRIAGE"))
   keys("!")
   await until("the owned issue's row", () => screen().includes("#8") && screen().includes("→ ticket #452 todo"))
   expect(screen()).toMatch(/\$ +open ticket #452/)
