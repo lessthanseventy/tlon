@@ -127,6 +127,13 @@ defmodule Server.Profiles do
   # interactive agent — it runs autonomously, so a bash probe returning 000 with nobody to correct it
   # is how a coworker talks itself into "server is down" and stops posting. Use the server tools; a
   # bash probe cannot answer the question.
+  @dev_caches ~w(mise mix rebar3 elixir_make rustler_precompiled zigler_precompiled expert menard
+                 menard-scratch tlon tlon-scratch tlon-bench ms-playwright node node-gyp pnpm yarn
+                 typescript deno uv pip go-build tree-sitter jiti)
+
+  @doc "The `~/.cache` dirs a coworker's sandbox may write: the dev tools', never the whole of it."
+  def dev_caches, do: @dev_caches
+
   @tlon_sandbox %{
     "enabled" => true,
     "network" => %{
@@ -194,18 +201,19 @@ defmodule Server.Profiles do
       ]
     },
     "filesystem" => %{
-      # Writes: the repo (edits), tlon's own checkout, /tmp + the socket dir (adapters-lspd),
-      # caches. Never the nix store, nor all of ~/.local: each denyWrite match under a write root is
-      # a bwrap mount, and its container and game stores would take bwrap past 9000 arguments.
-      "allowWrite" => [
-        @repo,
-        Path.expand("../../..", __DIR__),
-        "/tmp",
-        "$XDG_RUNTIME_DIR",
-        "~/.cache",
-        "~/.local/share/mise",
-        "~/.local/state"
-      ],
+      # Writes: the repo (edits), tlon's own checkout, /tmp + the socket dir (adapters-lspd), and
+      # the dev-tool caches by name. Never the nix store, nor all of ~/.local or ~/.cache: each
+      # denyWrite match and each repo's protected git files under a write root is a bwrap mount, and
+      # an AUR clone cache or an app's store takes bwrap past its 9000 arguments, refusing every command.
+      "allowWrite" =>
+        [
+          @repo,
+          Path.expand("../../..", __DIR__),
+          "/tmp",
+          "$XDG_RUNTIME_DIR",
+          "~/.local/share/mise",
+          "~/.local/state"
+        ] ++ Enum.map(@dev_caches, &("~/.cache/" <> &1)),
       # Reads re-opened inside a denied region: the repo and tlon's checkout, plus /nix/store +
       # ~/.nix-profile (any flake-managed binary's files) and the config/cache dirs.
       "allowRead" => [
