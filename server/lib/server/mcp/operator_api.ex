@@ -91,7 +91,7 @@ defmodule Server.MCP.OperatorAPI do
       POST   /api/notes                   {"workspace_id", "body"} → Notes.write as the operator; 201
 
       POST   /api/tickets                 {"workspace_id", "title", "project_id"?, "body"?, "epic_id"?} → Tickets.file; 201
-      PATCH  /api/tickets/:id             {"status"?, "title"?, "body"?} → Tickets.update
+      PATCH  /api/tickets/:id             {"status"?, "title"?, "body"?, "priority"?} → Tickets.update
       DELETE /api/tickets/:id             Tickets.remove
       POST   /api/tickets/:id/route       Tickets.route: to the workspace's manager (no manager: its lead starts it)
       POST   /api/tickets/:id/start       {"agent_id"?} → Tickets.start_thread (default: the lead); 201 + the thread
@@ -744,10 +744,12 @@ defmodule Server.MCP.OperatorAPI do
 
   defp update_ticket(conn, t) do
     {b, conn} = body(conn)
-    attrs = for {k, v} <- b, k in ~w(status title body), is_binary(v), into: %{}, do: {String.to_existing_atom(k), v}
+
+    attrs =
+      for {k, v} <- b, k in ~w(status title body priority), is_binary(v), into: %{}, do: {String.to_existing_atom(k), v}
 
     if attrs == %{},
-      do: json(conn, 400, %{error: ~s(expected some of {"status", "title", "body"})}),
+      do: json(conn, 400, %{error: ~s(expected some of {"status", "title", "body", "priority"})}),
       else: reply(conn, Tickets.update(t, attrs), &ticket/1)
   end
 

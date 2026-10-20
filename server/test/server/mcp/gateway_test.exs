@@ -560,6 +560,9 @@ defmodule Server.MCP.GatewayTest do
       {200, t} = request_json(:patch, "/api/tickets/#{tk.id}", %{status: "done", title: "b"})
       assert {t["status"], t["title"]} == {"done", "b"}
       assert {422, _} = request_json(:patch, "/api/tickets/#{tk.id}", %{status: "frozen"})
+      {200, t} = request_json(:patch, "/api/tickets/#{tk.id}", %{priority: "high"})
+      assert t["priority"] == "high"
+      assert {422, _} = request_json(:patch, "/api/tickets/#{tk.id}", %{priority: "urgent"})
       {200, _} = request_json(:delete, "/api/tickets/#{tk.id}", %{})
       assert {404, _} = request_json(:delete, "/api/tickets/#{tk.id}", %{})
     end
