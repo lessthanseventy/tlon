@@ -96,7 +96,7 @@ linked window at a time, ctrl+] to the room).
 ## Law
 
 - **A room renders to a `Frame`, never to a toolkit.** Art into a 1x RGBA canvas; text, brackets
-  and balloons as `Ink` in logical pixels; clicks as `Hit`s. Each surface paints the frame its own
+  and balloons as `Ink` in logical pixels — text is furniture-deep: people and pets are drawn with `Scene.figure`, which marks `Frame.cover`, and a painter leaves a label's pixels under a figure to the art (`over` text, balloons and brackets stay on top); clicks as `Hit`s. Each surface paints the frame its own
   way (the desktop with Cairo, the TUI as a kitty image or half blocks) and measures its own text
   (`Measure`). A Cairo, Gdk or terminal import under `kit/` or `rooms/` breaks every other surface. So does a `node:` import anywhere `rooms/rail.ts` reaches: the desktop bundles that graph under GJS (`test/rail-portable.test.ts`).
 - **Shared means the kit; a room is a surface's own.** Sprites, looks, data views and the frame are

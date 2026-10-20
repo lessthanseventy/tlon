@@ -10,12 +10,15 @@ export type Hit = { x: number; y: number; w: number; h: number; tip: string; act
 /**
  * Over the art: text (`size` the font's px at the desktop's 3x — a hint; a terminal has one size),
  * the corner brackets around a picked person, and a speech balloon of a few wrapped lines.
+ * Text is furniture-deep: a figure in `Frame.cover` hides the letters under it, unless the text is `over`.
  */
 export type Ink =
-  | { t: "text"; s: string; x: number; y: number; color: string; size: number; align: "center" | "left" }
+  | { t: "text"; s: string; x: number; y: number; color: string; size: number; align: "center" | "left"; over?: true }
   | { t: "brackets"; x: number; y: number; w: number; h: number; color: string }
   | { t: "balloon"; lines: string[]; cx: number; top: number }
-export type Frame = { rgba: Uint8Array; width: number; height: number; ink: Ink[]; hits: Hit[] }
+export type Frame = { rgba: Uint8Array; width: number; height: number; ink: Ink[]; hits: Hit[]
+  /** width×height, 1 where a person or pet is drawn: text without `over` is not painted there */
+  cover?: Uint8Array }
 /**
  * How wide `s` is at font `size`, in logical pixels — each surface measures its own text. A surface
  * that knows its text's height says so in `lineHeight`, and a room spaces its lines by it; one that

@@ -62,16 +62,26 @@ export function backingFor(text: string) { return contrast(text, ROLE.ground) >=
  * balloons. Text whose colour falls under 4.5:1 against the art behind it gets a solid backing
  * (WCAG 1.4.3); `backed` collects each label's colour and the colour actually behind it.
  */
-export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number, zoom: number, backed?: { text: string; behind: string }[], view: Box = { x: 0, y: 0, w, h }) {
+export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: number, zoom: number, backed?: { text: string; behind: string }[], view: Box = { x: 0, y: 0, w, h }, cover?: Uint8Array) {
   const taken: Box[] = []
   const fill = (x: number, y: number, fw: number, fh: number, c: string) => {
     const [r, g, b] = rgb(c)
     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + fh)); j++)
       for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + fw)); i++) { const o = (j * w + i) * 4; big[o] = r!; big[o + 1] = g!; big[o + 2] = b!; big[o + 3] = 255 }
   }
+  // `cover` is the frame's 1x figure mask: a furniture label's pixels under a figure are left to the art
+  const fw = Math.round(w / k)
+  const covered = (i: number, j: number) => !!cover && cover[Math.floor(j / k) * fw + Math.floor(i / k)] === 1
+  let under = false
+  const fillText = (x: number, y: number, fw2: number, fh: number, c: string) => {
+    if (!under) return fill(x, y, fw2, fh, c)
+    const [r, g, b] = rgb(c)
+    for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + fh)); j++)
+      for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + fw2)); i++) if (!covered(i, j)) { const o = (j * w + i) * 4; big[o] = r!; big[o + 1] = g!; big[o + 2] = b!; big[o + 3] = 255 }
+  }
   const write = (s: string, x: number, baseline: number, c: string, font: Cut, sc: number) => {
     ;[...s].forEach((ch, n) => font.glyph(ch).forEach((bits, row) => {
-      for (let col = 0; col < font.w; col++) if ((bits >> (font.w - 1 - col)) & 1) fill(x + (n * font.w + col) * sc, baseline - (font.ascent - row) * sc, sc, sc, c)
+      for (let col = 0; col < font.w; col++) if ((bits >> (font.w - 1 - col)) & 1) fillText(x + (n * font.w + col) * sc, baseline - (font.ascent - row) * sc, sc, sc, c)
     }))
   }
   // the art's colour under a box that `c` reads worst against, as #rrggbb: the box is judged by its
@@ -82,19 +92,21 @@ export function inkInto(big: Uint8Array, w: number, h: number, ink: Ink[], k: nu
     for (let j = Math.max(0, Math.round(y)); j < Math.min(h, Math.round(y + bh)); j++)
       for (let i = Math.max(0, Math.round(x)); i < Math.min(w, Math.round(x + bw)); i++) {
         const o = (j * w + i) * 4, l = 0.2126 * LINEAR[big[o]!]! + 0.7152 * LINEAR[big[o + 1]!]! + 0.0722 * LINEAR[big[o + 2]!]!
+        if (under && covered(i, j)) continue
         const r = l > L ? (l + 0.05) / (L + 0.05) : (L + 0.05) / (l + 0.05)
         if (r < low) { low = r; worst = o }
       }
     return worst < 0 ? ROLE.ground : "#" + [big[worst]!, big[worst + 1]!, big[worst + 2]!].map((v) => v.toString(16).padStart(2, "0")).join("")
   }
   for (const i of ink) {
+    under = i.t === "text" && !i.over
     if (i.t === "text") {
       const { font, sc } = typeFor(i.size, zoom), tw = i.s.length * font.w * sc, th = font.h * sc
       // a label is never cut at the floor's edge: it slides in whole, or is not drawn if the floor is narrower than it
       if (tw > w) continue
       const x = Math.max(0, Math.min(w - tw, Math.round(i.align === "center" ? i.x * k - tw / 2 : i.x * k))), base = Math.round(i.y * k - sc)
       let bg = behind(x, base - font.ascent * sc, tw, th, i.color)
-      if (contrast(i.color, bg) < MIN_CONTRAST) { bg = backingFor(i.color); fill(x - sc, base - font.ascent * sc - sc, tw + 2 * sc, th + 2 * sc, bg) }
+      if (contrast(i.color, bg) < MIN_CONTRAST) { bg = backingFor(i.color); fillText(x - sc, base - font.ascent * sc - sc, tw + 2 * sc, th + 2 * sc, bg) }
       backed?.push({ text: i.color, behind: bg })
       write(i.s, x, base, i.color, font, sc)
     } else if (i.t === "brackets") {
@@ -134,7 +146,7 @@ export function kittyImage(fr: Frame, g: Geometry, viewport: Viewport): string {
     const sy = Math.floor(y / g.k) * fr.width, row = y * w
     for (let x = 0; x < w; x++) dst[row + x] = src[sy + Math.floor(x / g.k)]!
   }
-  inkInto(big, w, h, fr.ink, g.k, textScale(g), undefined, { x: viewport.x * g.k, y: viewport.y * g.k, w: viewport.w * g.k, h: viewport.h * g.k })
+  inkInto(big, w, h, fr.ink, g.k, textScale(g), undefined, { x: viewport.x * g.k, y: viewport.y * g.k, w: viewport.w * g.k, h: viewport.h * g.k }, fr.cover)
   const data = png(w, h, big).toString("base64")
   let o = ""
   if (data !== lastImageData) {
@@ -172,10 +184,16 @@ export function textLayer(fr: Frame, g: Geometry, viewport: Viewport = { x: 0, y
     }
     cells.push(row)
   }
-  const put = (col: number, row: number, s: string, fg: string, bg?: string) => {
+  // a cell is under a figure when either art pixel it shows is one
+  const figured = (col: number, row: number) => {
+    if (!fr.cover) return false
+    const x = Math.min(fr.width - 1, Math.floor(viewport.x + (col * g.cw) / g.k))
+    return [row * g.ch, row * g.ch + 1].some((py) => fr.cover![Math.min(fr.height - 1, Math.floor(viewport.y + py / g.k)) * fr.width + x] === 1)
+  }
+  const put = (col: number, row: number, s: string, fg: string, bg?: string, behind = false) => {
     const r = cells[row]
     if (!r || [...s].some((_, i) => r[col + i]?.ink)) return
-    ;[...s].forEach((ch, i) => { const c = r[col + i]; if (c) { c.ch = ch; c.fg = fg; c.bg = bg ?? c.bg; c.ink = true } })
+    ;[...s].forEach((ch, i) => { const c = r[col + i]; if (c && !(behind && figured(col + i, row))) { c.ch = ch; c.fg = fg; c.bg = bg ?? c.bg; c.ink = true } })
   }
   const toCol = (x: number) => Math.floor((x * g.k) / g.cw), toRow = (y: number) => Math.floor((y * g.k - 0.01) / g.ch)
   const taken: Box[] = []
@@ -184,7 +202,7 @@ export function textLayer(fr: Frame, g: Geometry, viewport: Viewport = { x: 0, y
       // a label is never cut at the room's edge: it slides in whole when it straddles the edge, and is not drawn if the room is narrower than it
       if (i.s.length > cols0) continue
       const col = i.align === "center" ? toCol(i.x) - Math.floor(i.s.length / 2) : toCol(i.x)
-      if (col + i.s.length > 0 && col < cols0) put(Math.max(0, Math.min(cols0 - i.s.length, col)), toRow(i.y), i.s, i.color)
+      if (col + i.s.length > 0 && col < cols0) put(Math.max(0, Math.min(cols0 - i.s.length, col)), toRow(i.y), i.s, i.color, undefined, !i.over)
     }
     else if (i.t === "brackets") {
       const c0 = toCol(i.x), c1 = toCol(i.x + i.w) - 1, r0 = toRow(i.y + 0.5), r1 = toRow(i.y + i.h)

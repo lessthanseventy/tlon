@@ -43,12 +43,12 @@ export function clipFrame(fr: Frame, v: Viewport): Frame {
     if (i.t === "text") {
       if (inside(i.x, i.y)) return [i]
       const m = edgeMarker(i.x, i.y, v)
-      return m ? [{ ...i, s: `${m.glyph} ${i.s}`, x: m.x, y: m.y, align: "left" }] : []
+      return m ? [{ ...i, s: `${m.glyph} ${i.s}`, x: m.x, y: m.y, align: "left", over: true }] : []
     }
     if (i.t === "brackets") return inside(i.x + i.w / 2, i.y + i.h / 2) ? [i] : []
     if (inside(i.cx, i.top)) return [i]
     const m = edgeMarker(i.cx, i.top, v)
-    return m ? [{ t: "text", s: `${m.glyph} ${i.lines[0] ?? ""}`, x: m.x, y: m.y, color: ROLE.fieldInk, size: 11, align: "left" }] : []
+    return m ? [{ t: "text", s: `${m.glyph} ${i.lines[0] ?? ""}`, x: m.x, y: m.y, color: ROLE.fieldInk, size: 11, align: "left", over: true }] : []
   })
   return { ...fr, ink, hits }
 }
