@@ -55,6 +55,8 @@ defmodule Server.Source.ToolsTest do
     assert File.read!(Path.join(wt, "demo.ex")) =~ "def three, do: 3"
     assert {:ok, _} = Tools.clause(t, :delete, "demo.ex", "three/0", "", nil)
     refute File.read!(Path.join(wt, "demo.ex")) =~ "three"
+    # one clause takes its edit whatever head is named; with two, a head matching neither is refused
+    assert {:ok, _} = Tools.clause(t, :insert_after, "demo.ex", "old_name/1", "x", "def old_name(:z), do: :z")
     assert {:error, msg} = Tools.clause(t, :replace, "demo.ex", "old_name/1", "zzz", "1")
     assert msg =~ "have:"
   end
