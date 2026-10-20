@@ -1,36 +1,22 @@
 ## Verdict: approve
 
-Round 3 — re-review of work/savehome-a-placed-tile-drops-the-hidden at 4fcffae, the malformed-`at` fix on top of 2aca8ac.
+Round 4 — re-review of work/savehome-a-placed-tile-drops-the-hidden at 01817cc.
 
-### What changed since the last verdict (f1f4be4)
-`git diff f1f4be4..4fcffae` — two files:
-- `office/tui/home.ts`: the hidden-tile filter now guards `Array.isArray(at)` before calling `.join`, so a non-array `at` no longer throws.
-- `office/test/home.test.ts`: a new test seeds `{"kind":"not-a-kind","at":"x"}`, saves a `kitchen` at [1,0], and asserts the file holds both.
+### What changed since the round-3 verdict (a7de6fb ≡ 4fcffae)
+`git diff a7de6fb..HEAD -- office/tui/home.ts office/test/home.test.ts` is empty — the saveHome fix and its two tests are byte-identical to what round 3 approved. The only additions on top are check-main test work (ticket #416), authored by pierre:
 
-### Correction to the round-2 review
-My round-2 review claimed a malformed hidden tile "resolves to `""` via `?.join(",") ?? ""`… Safe." That was wrong. On a string `at` (e.g. `"x"`), `at?.join(",")` evaluates `"x".join(",")` — strings have no `.join` method, so it throws `TypeError`, the surrounding `catch` swallowed the entire save, and the placed kitchen tile was lost too (not just the hidden one). QA's live drive on the :4122 scratch release caught this: seed `{"tiles":[{"kind":"not-a-kind","at":"x"}]}`, place kitchen, save, read back — file unchanged. This commit is the fix for that exact regression.
+- `2830104` — `check_main_script_test.exs`: the existing `leftovers(ctx) == []` assert now names the leftover and its contents on failure. Diagnostic only.
+- `01817cc` — `check_main_script_test.exs`: a new test that sends a second TERM while the EXIT trap is mid-removal and asserts no leftovers. Red-first; passes against the `trap "" TERM INT` fix.
 
-### Correctness
-`office/tui/home.ts:39-42`:
-```
-const hidden = unknownTiles(path).filter((t) => {
-  const at = (t as { at?: unknown }).at
-  return !(Array.isArray(at) && cells.has(at.join(",")))
-})
-```
-- `at` is an array and `cells` has it → `!(true && true)` = false → dropped. Placed known tile wins its cell, per ticket #140 / decision #2049.
-- `at` is an array and `cells` does not have it → `!(true && false)` = true → kept. Hidden unknowns on free cells pass through unchanged.
-- `at` is non-array or missing → `!(false && …)` = true → kept, and `.join` is never called, so no throw. The save completes; the placed known tiles are written. Matches decision #2111 (kitchen at [1,0] saved, `at: "x"` tile preserved).
+The fix the new test exercises is **already on main** as `40eae98` (#416), and the branch's base (dc38176) is past it, so `scripts/check-main.sh` on this branch already carries the fix — `git show HEAD:scripts/check-main.sh` lines 16-17 match `origin/main`. The test is green on the branch; no duplicate of the fix is carried.
 
-`cells` itself (`home.tiles.map((t) => t.at.join(","))`) is safe: `home.tiles` are `HomeTile`, whose `isTile` guard requires `at` to be a length-2 number array, so `.join` there cannot throw.
+### saveHome correctness (unchanged, re-confirmed)
+`office/tui/home.ts:37-43` — `cells` is the set of placed-tile cells; a hidden unknown tile is dropped iff its `at` is a real array in `cells`. Non-array/missing `at` is kept and `.join` is never called, so the save is no longer cancelled by a malformed hidden tile (the regression round 2 missed and round 3 fixed). `cells` itself is safe: `home.tiles` are `HomeTile`, whose guard requires a length-2 number `at`. Surgical: 4 logic lines + 2 tests, touching nothing outside the cell filter.
 
-### Test
-`office/test/home.test.ts:185-195` — seeds the malformed hidden tile, saves a kitchen on [1,0], reads the raw JSON (not `loadHome`, which would filter the unknown kind and mask the result), asserts both tiles present. This is the before/after proof: it failed RED on the unfixed file (the save threw and the file stayed `{"kind":"not-a-kind","at":"x"}`) and passes GREEN with the guard. The round-2 test (hidden `[1,0]` dropped on a placed kitchen) still holds alongside it.
+### Scope note (non-blocking)
+The check-main test additions are #416 work, not saveHome. The operator directed that chase onto #281 test-first (decision 2200 / fact 2228), so they ride this branch by his call; they apply cleanly on rebase (main already has the fix, the test is net-new). Not a reason to hold.
 
 ### Gate
-`office/test/home.test.ts` 29/29 (bun test). `mise run check` exit 0 on the branch — verify evidence recorded by the server at 18:47:37. QA re-drove the malformed-`at` case on the rebuilt :4676 scratch release per decision #2111 (build_mode enabled on :4676 only, never :4040).
-
-### Spec compliance
-Surgical: 4 lines of logic + one test, touching nothing outside the cell filter. The placed-known-wins direction is the only behaviour changed; two hidden unknowns on the same cell remain untouched (out of scope, harmless). The fix narrows the drop to tiles whose `at` is a real cell, so a cell-less hidden tile is now carried rather than silently lost — a strict improvement over the round-2 behaviour.
+Verify recorded `check_passed` on 01817cc (2026-10-20T04:07:41Z, exit 0). `origin/main...HEAD` is the five files above and nothing else.
 
 No follow-ups.
