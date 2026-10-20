@@ -18,7 +18,7 @@ defmodule Server.Jobs.SmokeTest do
   setup do
     Server.TestDB.clean!()
     start_supervised!({Oban, Application.fetch_env!(:server, Oban)})
-    script = Path.join(System.tmp_dir!(), "smoke-stub-#{System.unique_integer([:positive])}.sh")
+    script = Path.join(System.tmp_dir!(), "smoke-stub-#{System.pid()}-#{System.unique_integer([:positive])}.sh")
     File.write!(script, @stub)
     Application.put_env(:server, :smoke_script, script)
 
