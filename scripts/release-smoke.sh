@@ -208,7 +208,11 @@ echo "smoke: the office drove ✓"
 # the wide room (the door, the bathroom, Argos) is reachable headless: its labels are on screen. A candidate whose
 # drive predates OFFICE_WIDE only has the rail room.
 if grep -q OFFICE_WIDE "$office/scripts/office-drive.sh"; then
-  wide_screen="$(TLON_URL="$url" OFFICE_WIDE=1 OFFICE_TEXT=1 "$office/scripts/office-drive.sh" "wait:no signal" 2>&1)"
+  # the stereo shows whatever the host's playerctl is playing; a playerctl that finds no player keeps it at "no signal"
+  noplayer="$(mktemp -d)"
+  printf '#!/bin/sh\nexit 1\n' >"$noplayer/playerctl" && chmod +x "$noplayer/playerctl"
+  wide_screen="$(PATH="$noplayer:$PATH" TLON_URL="$url" OFFICE_WIDE=1 OFFICE_TEXT=1 "$office/scripts/office-drive.sh" "wait:no signal" 2>&1)"
+  rm -rf "$noplayer"
   printf '%s\n' "$wide_screen" >>"$log"
   case "$(printf '%s\n' "$wide_screen" | grep -v '^===')" in *"no signal"*) ;; *) fail "the wide room didn't draw under OFFICE_WIDE: no stereo label (only the wide room draws it)" ;; esac
   echo "smoke: the wide room drove ✓"
