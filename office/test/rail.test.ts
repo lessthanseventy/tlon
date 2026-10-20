@@ -71,7 +71,7 @@ describe("the data views", () => {
     ])
     const cols = boardColumns(v)
     expect(cols[0]!.items.map((i) => i.title)).toEqual(["a ticket"])
-    expect(cols[4]!.items.map((i) => i.who)).toEqual(["hronir"])
+    expect(cols.find((c) => c.name === "BUILD")!.items.map((i) => i.who)).toEqual(["hronir"])
   })
 })
 

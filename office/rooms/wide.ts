@@ -772,6 +772,8 @@ export class WideRoom extends Sim<Layout> {
         const colour = it.asks ? (sc.f % 2 ? ROLE.attention : ROLE.prose) : it.act.kind === "ticket" || it.act.kind === "epic" ? (it.routed ? ROLE.meta : ROLE.prose) : it.who ? shirtOf(it.archetype) : ROLE.inactive
         if (it.state) sc.blit(STATE_ICON[it.state.kind], cx + 3, y - 4, { k: colour })
         else px(cx + 3, y - 3, 2, 2, colour)
+        // BUILD holds plain threads too (no workline stage): a violet tick sets them apart
+        if (it.stage === "doing") px(cx + 1, y - 4, 1, 3, ROLE.assistant)
         if (it.act.kind === "thread") this.cards.set(it.act.tid, { x: cx + colW - 13, y: y - 8 })
         sc.text(fit(measure, `#${id} ${it.title}`, colW - 9, 9), cx + 7, y, colour, 9, "left")
         const state = it.state ? `\n${STATE_GLYPH[it.state.kind]} ${it.state.why}` : it.asks ? "\nwaiting on you" : ""

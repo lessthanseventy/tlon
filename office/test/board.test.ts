@@ -67,18 +67,18 @@ describe("a workline card's state", () => {
     const a = { ...snap([t]), tickets: [{ id: 3, workspace_id: 1, project_id: null, title: "x", priority: "normal" }] }
     const cols = boardColumns(a)
     expect(cols[0]!.items[0]!.state).toBeUndefined()
-    expect(cols[4]!.items[0]!.state?.kind).toBe("running")
+    expect(cols.find((c) => c.name === "BUILD")!.items[0]!.state?.kind).toBe("running")
   })
 })
 
 describe("who's doing what", () => {
-  test("DOING is a plain thread someone is at a desk on — not one parked or idle", () => {
+  test("a plain thread someone is at a desk on is BUILD's, marked doing — not one parked or idle", () => {
     const a = snap([thread(1, { stage: null, seat: "desk" }), thread(2, { stage: null, seat: "parked" }), thread(3, { stage: null })])
-    expect(col(a, "DOING")).toEqual([1])
+    expect(col(a, "BUILD")).toEqual([1])
+    expect(boardColumns(a).find((c) => c.name === "BUILD")!.items[0]!.stage).toBe("doing")
   })
-  test("a standing duty is not work: off DOING and off the stage columns", () => {
+  test("a standing duty is not work: off the stage columns", () => {
     const a = snap([thread(1, { stage: null, seat: "desk", duty: true }), thread(2, { stage: "build", seat: "desk", duty: true }), thread(3, { seat: "parked" })])
-    expect(col(a, "DOING")).toEqual([])
     expect(col(a, "BUILD")).toEqual([3])
   })
   test("a parked workline stays in its stage, marked parked", () => {
