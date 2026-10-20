@@ -88,8 +88,11 @@ defmodule Server.BoardSidebarTest do
     {:ok, _} = Channel.post(%{thread_id: older.id, author: "andrew", body: "still on this one"})
 
     [%{threads: threads}] = Board.sidebar()
-    # The root leads (it's flagged root), then the rest by newest activity.
-    assert Enum.map(threads, & &1.id) == [root.id, older.id, newer.id]
+    # The root leads (it's flagged root), then the rest by newest activity (uqbar's study, seeded at
+    # boot, falls among them; the order of these three is the point)
+    ours = [root.id, older.id, newer.id]
+    assert threads |> Enum.map(& &1.id) |> Enum.filter(&(&1 in ours)) == ours
+    assert hd(threads).id == root.id
   end
 
   test "a thread whose workspace is GONE lands in the default group — never dropped" do

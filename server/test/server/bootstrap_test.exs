@@ -32,9 +32,12 @@ defmodule Server.BootstrapTest do
     assert %{provider: "ollama-cloud", model: "deepseek-v4.1-flash"} =
              Server.Profiles.instantiate(Server.Profiles.roster_entry(quain), workspace.id).model
 
-    assert [%{cron: "0 7 * * *", agent: "quain"}, %{agent: "quain"}] = Server.Schedules.in_workspace(workspace.id)
+    # beside uqbar's check-in, which every boot ensures now that uqbar is seeded (Outside.ensure_citizens/0)
+    quains = fn -> workspace.id |> Server.Schedules.in_workspace() |> Enum.filter(&(&1.agent == "quain")) end
+    assert [%{cron: "0 7 * * *", agent: "quain"}, %{agent: "quain"}] = quains.()
+    all = length(Server.Schedules.in_workspace(workspace.id))
     {:ok, _} = Bootstrap.ensure()
-    assert length(Server.Schedules.in_workspace(workspace.id)) == 2
+    assert length(quains.()) == 2 and length(Server.Schedules.in_workspace(workspace.id)) == all
   end
 
   test "an existing workspace is left untouched — no second seed, name preserved" do
@@ -195,11 +198,13 @@ defmodule Server.BootstrapTest do
     test "idempotent — a second ensure does not mint a second root" do
       {:ok, workspace} = Bootstrap.ensure()
       root = Channel.machine_thread(workspace.id)
+      # the root and uqbar's study (seeded every boot): a second ensure adds to neither
+      count = fn -> workspace.id |> Channel.machine_threads() |> Enum.count(&(&1.thread.stage == nil)) end
+      before = count.()
       {:ok, _} = Bootstrap.ensure()
 
       assert Channel.machine_thread(workspace.id).id == root.id
-      count = workspace.id |> Channel.machine_threads() |> Enum.count(&(&1.thread.stage == nil))
-      assert count == 1
+      assert count.() == before
     end
 
     test "the default project's repos come from the workspace's repo rows" do
