@@ -152,6 +152,13 @@ export function bringBack(h: Hall, i: number): Hall {
   return e ? { ...h, seed: e.seed, overrides: e.overrides, pile: dropPile(h.pile, i) } : h
 }
 
+/**
+ * every name already seated, any crew, any workspace: the snapshot's bench is the crew on shift, so a
+ * name off shift (a night crew's) read as free and its hire hit the seat's unique key
+ */
+export const seatedNames = (a: { bench: { name: string }[]; shifts?: { name: string }[] }): string[] =>
+  [...new Set([...(a.shifts ?? []).map((s) => s.name), ...a.bench.map((b) => b.name)])]
+
 /** names a new candidate must not take: the bench's and everyone on the pile */
 export const takenNames = (h: Hall, bench: readonly string[], vocab: Vocab): string[] => [
   ...bench,

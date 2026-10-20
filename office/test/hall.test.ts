@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall } from "../kit/hall"
+import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames } from "../kit/hall"
 
 const VOCAB = { archetypes: ["builder", "reviewer", "planner"], grades: ["junior", "senior", "greybeard"], specialties: ["office", "server"] }
 const LEGAL = /^[a-z0-9][a-z0-9_-]*$/
@@ -204,4 +204,13 @@ describe("the hall's turn-by-turn state", () => {
     expect(l).toEqual({ slots: ["head"], fields: ["grade"] })
     expect(toggleLock(toggleLock(l, "slots", "head"), "fields", "grade")).toEqual({})
   })
+})
+
+test("a name seated off shift, or in another workspace, is taken: the hall never offers it", () => {
+  const a = {
+    bench: [{ name: "tertius" }],
+    shifts: [{ name: "tertius" }, { name: "asterion" }, { name: "elsewhere-seat" }],
+  }
+  expect(seatedNames(a).sort()).toEqual(["asterion", "elsewhere-seat", "tertius"])
+  expect(seatedNames({ bench: [{ name: "only" }] })).toEqual(["only"])
 })

@@ -30,7 +30,7 @@ import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
 import { usageHeader } from "../kit/usage"
 import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
-import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
+import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, storeNamesTaken, toggleLock as storeToggle, type Store } from "../kit/store"
 import { stepStoreRow, storeRows } from "./store"
@@ -171,7 +171,7 @@ const hallVocab = (): Vocab => {
   const names = all.archetypes.filter((a) => !a.meta).map((a) => a.name)
   return { archetypes: names.length ? names : ["builder"], grades: GRADES, specialties: SPECIALTIES }
 }
-const hallCtx = () => ({ taken: takenNames(hall, all.bench.map((b) => b.name), hallVocab()), vocab: hallVocab() })
+const hallCtx = () => ({ taken: takenNames(hall, seatedNames(all), hallVocab()), vocab: hallVocab() })
 function hallSet(h: Hall) { hall = h; saveHall(HALL, h); hallSeen = hallSignature(HALL) }
 /** a hand edit of hall.json shows up on the next poll; true when it did */
 function followHall(): boolean {
