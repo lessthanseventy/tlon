@@ -532,6 +532,17 @@ defmodule Server.MCP.ServerTest do
     fail = call(token, session, 5, "record_check", %{"cmd" => "mix test", "exit" => 1, "tail" => "1 failure"})
     assert decode_tool_json(fail)["kind"] == "check_failed"
 
+    # the checks queue refusing a sandboxed Bash ran nothing: refused, not a check_failed
+    refused =
+      call(token, session, 7, "record_check", %{
+        "cmd" => "scripts/cap.sh mise run check",
+        "exit" => 2,
+        "tail" => "checks queue: can't open /run/user/1000/tlon-checks.lock — run the check unsandboxed"
+      })
+
+    assert refused["isError"]
+    assert inspect(refused) =~ "nothing ran"
+
     # get_dossier: CHECKS surfaces both, newest first
     brief = decode_tool_json(call(token, session, 6, "get_dossier", %{}))
     assert Enum.any?(brief["checks"]["shown"], &(&1["cmd"] == "mix test" and &1["passed"] == false))

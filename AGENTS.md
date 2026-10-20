@@ -16,7 +16,9 @@ control loop, not two, and no second way to run anything:
   holds it) and runs `check:all`, so a verify, a landing's gate, a schedule and a session never run two full
   suites on the one test database at once. Don't call `check:all` to skip the line. A shell that can't open
   the queue's lock (a sandboxed Bash) is refused with exit 2: run it unsandboxed; `CHECKS_UNQUEUED=1` runs it
-  unqueued on a box with no usable `XDG_RUNTIME_DIR`.
+  unqueued on a box with no usable `XDG_RUNTIME_DIR`. **A coworker seat never runs it:** its sandbox has no
+  checks queue, Postgres or GitHub. Run `menard run check --in server` (or a module's own check) on your
+  change and advance; verify runs the full gate on the server, and landing rebases onto main and gates again.
   Its verdict is GitHub's required check on main: on a clean tree (nothing uncommitted or untracked) it posts
   the commit status `tlon/check` (success or failure) on HEAD's sha (`scripts/check.sh`); on a dirty tree it
   posts nothing and says so, and gh missing or refusing is said, never red. `TLON_CHECK_STATUS=0` posts nothing.

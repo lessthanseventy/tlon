@@ -460,13 +460,26 @@ defmodule Server.MCP.Tool.RecordCheck do
     field :tail, :string, description: "A short tail of the output"
   end
 
+  # scripts/checks-queue.sh's refusal in a sandboxed Bash: the gate never ran, so there is no
+  # verdict to record, and a check_failed would show the triage a failure that never happened
+  @not_run ~r/^checks queue: can't open/m
+
   @impl true
   def execute(params, frame) do
     identity = Identity.from_frame(frame)
+    tail = Map.get(params, :tail)
 
-    %{thread_id: identity.thread_id, cmd: params[:cmd], exit: params[:exit], tail: Map.get(params, :tail)}
-    |> Dossier.record_check()
-    |> then(&reply(frame, &1, fn event -> %{"event_id" => event.id, "kind" => event.kind} end))
+    if is_binary(tail) and Regex.match?(@not_run, tail) do
+      fail(
+        frame,
+        "nothing ran: the checks queue refused a sandboxed Bash, so there is no result to record. " <>
+          "The full gate runs on the server at verify; record what you did run (menard run check --in server)."
+      )
+    else
+      %{thread_id: identity.thread_id, cmd: params[:cmd], exit: params[:exit], tail: tail}
+      |> Dossier.record_check()
+      |> then(&reply(frame, &1, fn event -> %{"event_id" => event.id, "kind" => event.kind} end))
+    end
   end
 end
 
