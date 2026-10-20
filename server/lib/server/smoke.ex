@@ -10,14 +10,17 @@ defmodule Server.Smoke do
 
   alias Server.Jobs.Smoke, as: Job
 
-  @ref ~r|\A[A-Za-z0-9][A-Za-z0-9._/-]*\z|
+  @ref ~r|\A[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9._-])?\z|
 
   @doc "Queue the held smoke of `ref` (default the thread's own branch) for `thread`."
   @spec start(Server.Thread.t(), String.t() | nil) :: {:ok, Oban.Job.t()} | {:error, String.t()}
   def start(%Server.Thread{} = thread, ref, by \\ nil, flags \\ []) do
-    ref = ref || "work/#{thread.slug}"
+    ref = ref || (thread.slug && "work/#{thread.slug}")
 
     cond do
+      is_nil(ref) ->
+        {:error, "no ref: the thread has no slug to name its work/ branch"}
+
       !Regex.match?(@ref, ref) ->
         {:error, "not a ref: #{inspect(ref)}"}
 
