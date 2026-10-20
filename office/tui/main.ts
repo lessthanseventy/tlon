@@ -899,6 +899,8 @@ function threadActions(tid: number, inReader = false): Action[] {
     ...(inReader ? [] : [{ ...bind("thread.v"), run: () => openReader(tid) }]),
     { ...bind("thread.r"), run: () => reply(tid) },
     ...(studyOf(all.threads, ws) !== null && studyOf(all.threads, ws) !== tid ? [{ ...bind("thread.u"), run: () => void did(handToUqbar(all.threads, ws, tid)) }] : []),
+    // the heavy hitter: an @aleph from you calls it in on this thread (Server.Aleph); it answers and leaves
+    { ...bind("thread.a"), run: () => ask("call in the Aleph — what should it look at?", (q) => { if (q.trim()) void did(data.post(tid, `@aleph ${q.trim()}`)) }) },
     ...(th?.awaiting && th.stage ? [{ ...bind("thread.A", `approve: ${th.awaiting}`), run: () => void did(data.approve(tid)) }] : []),
     ...(th?.stage ? [{ ...bind("thread.>"), run: () => void did(data.advance(tid)) }] : []),
     ...(th && cardState(view(), th, boardCtx())?.atCap ? [{ ...bind("thread.S"), run: () => { if (reader) closeReader(); open({ kind: "settings" }) } }] : []),

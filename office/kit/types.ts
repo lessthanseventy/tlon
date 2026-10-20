@@ -40,6 +40,8 @@ export type Agents = {
   roster: Seat[]
   /** uqbar's open session, if any (kit/uqbar.ts): lifted out of the roster by viewOf, so it never gets a desk */
   uqbar?: Seat | null
+  /** the Aleph's session while it is called in (kit/aleph.ts), lifted out of the roster like uqbar's */
+  aleph?: Seat | null
   /** every open thread, newest first; a staffed one carries its roster entry */
   threads: Thread[]
   counts: Record<string, number>

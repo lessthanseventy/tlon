@@ -14,6 +14,7 @@ import { dark, darkness, lampsLit } from "../kit/daylight"
 import { clockFace } from "../kit/eggs"
 import { posterOf } from "../kit/poster"
 import { balloonLines, fit, type Frame, type Measure } from "../kit/canvas"
+import { ARRIVE, LEAVE, drawAleph, gone, STEP as ALEPH_STEP, type Visit } from "../kit/aleph"
 import { boardColumns, COLS, isManager, peopleOf, seating, STATE_GLYPH, type BoardCtx, type CardState } from "../kit/crew"
 import { drawActors, drawCat, drawCloset, drawFire, drawParty, Scene, type Focus } from "../kit/draw"
 import { ROLE, tint } from "../kit/palette"
@@ -164,6 +165,9 @@ export class WideRoom extends Sim<Layout> {
   /** its ribbon goes the alarm's colour until this tick */
   private erratumUntil = 0
   private bookSaid: { text: string; from: number; until: number } | null = null
+  /** the Aleph's visit while it is called in or leaving (kit/aleph.ts), and its line */
+  private visit: Visit | null = null
+  private alephSaid: { text: string; until: number } | null = null
   /** Argos' path is a panic run: cut at the hallway when the panic ends, so he heads for the muster */
   private dogPanicRun = false
   private home: Home = { tiles: [] }
@@ -189,6 +193,22 @@ export class WideRoom extends Sim<Layout> {
     return d ? { x: d.x + d.w / 2 - 6, y: d.y - 12 } : null
   }
   /** Uqbar's volume one tick toward where it wants to be — its errand while its session idles, else its rest; true while it is in the air */
+  /** the Aleph comes when its session appears (called in) and leaves when it ends (dismissed): a change every tick it is here */
+  private stepAleph(a: Agents): boolean {
+    const tid = a.aleph?.thread_id ?? null, v = this.visit
+    if (tid !== null && (!v || v.leaving !== null)) {
+      this.visit = { tid, since: this.tick, leaving: null }
+      this.alephSaid = { text: ARRIVE, until: this.tick + 50 }
+    } else if (tid === null && v && v.leaving === null) {
+      v.leaving = this.tick
+      this.alephSaid = { text: LEAVE, until: this.tick + ALEPH_STEP * 3 + 50 }
+    }
+    if (this.alephSaid && this.tick >= this.alephSaid.until) this.alephSaid = null
+    // gone once it has shrunk away and said its last line where it was
+    if (this.visit && gone(this.visit, this.tick) && !this.alephSaid) this.visit = null
+    return this.visit !== null || this.alephSaid !== null
+  }
+
   private stepVolume(a: Agents): boolean {
     const s = a.uqbar, home = spineHome(corner(this.z).shelf)
     if (!s) { this.errand = null; this.awake = false }
@@ -416,7 +436,7 @@ export class WideRoom extends Sim<Layout> {
     // pets off: Argos goes to his bed and stays; no antics start between the pair (Nina's own half is Sim.stepCat)
     const calm = !this.petsOn, d0 = this.dog
     if (calm && d0.mode !== "sleep" && !d0.path.length && !d0.fuss && !this.alarmed) this.dogDo("bed")
-    const moved = [calm && d0.mode === "sleep" && !d0.path.length ? false : this.stepDog(), this.stepTalk(), calm ? false : this.stepAntics(), this.stepVolume(a), this.stepPlanes(), super.step(a)].some(Boolean)
+    const moved = [calm && d0.mode === "sleep" && !d0.path.length ? false : this.stepDog(), this.stepTalk(), calm ? false : this.stepAntics(), this.stepVolume(a), this.stepAleph(a), this.stepPlanes(), super.step(a)].some(Boolean)
     // after dark the pets turn in, once whatever they were up to is done
     if (dark(this.hour()) && this.tick % 20 === 0) {
       const c = this.cat, d = this.dog
@@ -545,6 +565,10 @@ export class WideRoom extends Sim<Layout> {
     const said = this.bookSaid
     if (a.uqbar && said && mode !== "shelved" && this.tick >= said.from && this.tick < said.until)
       sc.balloons.push({ t: "balloon", lines: balloonLines(said.text), cx: Math.round(this.book.x) + 6, top: Math.round(this.book.y) - 3 })
+    // the Aleph over the card it was called to (or the board's edge when that card is not on it)
+    const at = this.visit ? (this.cards.get(this.visit.tid) ?? this.boardEdge) : null
+    if (this.visit && at) drawAleph(sc, this.visit, at)
+    if (this.alephSaid && at) sc.balloons.push({ t: "balloon", lines: balloonLines(this.alephSaid.text), cx: at.x, top: at.y - 12 })
     for (const p of this.planes) drawPlane(sc, p)
     const caller = this.visitor()
     if (caller) drawVisitor(sc, caller.x, caller.y, caller.kind, caller.seed)
