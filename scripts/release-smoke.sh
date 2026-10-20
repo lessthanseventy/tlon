@@ -189,8 +189,12 @@ tid="$(curl -s -m 10 -X POST -H 'content-type: application/json' \
 # before `/`, where the candidate's drive can wait at all
 loaded=()
 [ -n "$home" ] && grep -q 'wait:\*' "$office/scripts/office-drive.sh" && loaded=("wait:‹ $home ›")
+# a cold TUI takes its first snapshot late: the title must be on screen before `/`, and the thread
+# after Enter, not a fixed OFFICE_WAIT after each key
+find_wait=() enter_wait=()
+grep -q 'wait:\*' "$office/scripts/office-drive.sh" && { find_wait=("wait:$title"); enter_wait=("wait:#$tid  $title"); }
 screens="$(TLON_URL="$url" OFFICE_TAIL=60 OFFICE_WAIT=2 "$office/scripts/office-drive.sh" \
-  "." "${loaded[@]}" "/" "'$title'" "Enter" "Escape" "Escape" "c" "Escape" "R" 2>&1)"
+  "." "${loaded[@]}" "${find_wait[@]}" "/" "'$title'" "Enter" "${enter_wait[@]}" "Escape" "Escape" "c" "Escape" "R" 2>&1)"
 after() { printf '%s\n' "$screens" | awk -v s="=== after: $1" '$0 == s {on = 1; next} /^=== / {on = 0} on'; }
 printf '%s\n' "$screens" >>"$log"
 expect() { case "$(after "$1")" in *"$2"*) ;; *) fail "the office after '$1' doesn't show '$2'" ;; esac; }
