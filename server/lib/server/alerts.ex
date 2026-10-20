@@ -164,12 +164,29 @@ defmodule Server.Alerts do
       "Tell the lead…" |> call("/messages", t) |> Map.put(:input, "body")
     ]
 
-  defp actions(%{kind: "tool_denied", thread_id: t}),
-    do: [
-      "I did it by hand…" |> call("/messages", t) |> Map.put(:input, "body"),
-      send_back("build", t),
-      call("Hand it to Uqbar", "/hand-off", t, %{agent: "uqbar"})
-    ]
+  # the rule is the operator's to add to their own Claude Code settings (the one place the permission
+  # check honours one); saying so on the thread is the movement that clears the item and wakes the lead
+  defp actions(%{kind: "tool_denied", thread_id: t} = need) do
+    allowed =
+      case need[:rule] do
+        nil ->
+          []
+
+        rule ->
+          [
+            call("Allowed it: #{rule}", "/messages", t, %{
+              body: "Allowed: `#{rule}` is in my Claude Code settings now; run it again."
+            })
+          ]
+      end
+
+    allowed ++
+      [
+        "I did it by hand…" |> call("/messages", t) |> Map.put(:input, "body"),
+        send_back("build", t),
+        call("Hand it to Uqbar", "/hand-off", t, %{agent: "uqbar"})
+      ]
+  end
 
   defp actions(%{kind: "verify_failed", thread_id: t}), do: [call("Run verify again", "/verify", t)]
 

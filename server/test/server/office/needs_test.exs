@@ -424,7 +424,12 @@ defmodule Server.Office.NeedsTest do
             thread_id: t.id,
             kind: "tool_denied",
             correlation: "tool_denied:#{t.id}",
-            detail: %{"agent" => "nolan", "tool" => "Bash", "summary" => "Bash · mise run release:smoke"}
+            detail: %{
+              "agent" => "nolan",
+              "tool" => "Bash",
+              "summary" => "Bash · mise run release:smoke",
+              "reason" => "Auto-Mode Bypass"
+            }
           })
       end
     end
@@ -433,13 +438,42 @@ defmodule Server.Office.NeedsTest do
       t = workline(ws, "review", 3)
       deny(t, 2)
 
-      assert [%{kind: "tool_denied", level: "blocking", thread_id: tid, text: text}] = Needs.list()
+      assert [%{kind: "tool_denied", level: "blocking", thread_id: tid, text: text, rule: rule}] = Needs.list()
       assert tid == t.id
       assert text =~ "nolan" and text =~ "refused Bash 2 times" and text =~ "release:smoke"
+      assert text =~ "Auto-Mode Bypass"
+      assert rule == "Bash(mise run release:smoke)"
 
-      labels = for a <- Server.Alerts.list(), a.thread_id == t.id, x <- a.actions, do: x.label
+      actions = for a <- Server.Alerts.list(), a.thread_id == t.id, x <- a.actions, do: x
+      labels = Enum.map(actions, & &1.label)
       assert Enum.any?(labels, &(&1 =~ "by hand")) and "Hand it to Uqbar" in labels
       assert Enum.any?(labels, &(&1 =~ "Back to build"))
+
+      # the operator adds the rule to their own Claude Code settings (the server never writes them):
+      # the verb says which rule, and posting it is the movement that clears the item
+      allowed = Enum.find(actions, &(&1.label =~ "Allowed it"))
+      assert allowed.path == "/api/threads/#{t.id}/messages"
+      assert allowed.body.body =~ "Bash(mise run release:smoke)"
+    end
+
+    test "a refusal of another tool, or with no reason, is said as it came", %{ws: ws} do
+      t = workline(ws, "review", 3)
+
+      for _ <- 1..2 do
+        {:ok, _} =
+          Server.Dossier.record_event(%{
+            thread_id: t.id,
+            kind: "tool_denied",
+            correlation: "tool_denied:#{t.id}",
+            detail: %{"agent" => "nolan", "tool" => "mcp__tlon__record_check", "summary" => "record_check"}
+          })
+      end
+
+      assert [%{kind: "tool_denied", text: text, rule: nil}] = Needs.list()
+      assert text == "nolan on #{t.slug} was refused mcp__tlon__record_check 2 times: record_check"
+
+      labels = for a <- Server.Alerts.list(), a.thread_id == t.id, x <- a.actions, do: x.label
+      refute Enum.any?(labels, &(&1 =~ "Allowed it"))
     end
 
     test "one refusal is a seat finding another way, not a Need", %{ws: ws} do
