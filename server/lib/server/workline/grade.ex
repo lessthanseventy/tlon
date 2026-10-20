@@ -300,6 +300,9 @@ defmodule Server.Workline.Grade do
   end
 
   defp exited(code) when code > 128, do: "#{code} (killed by signal #{code - 128})"
+  # Node's own code: an uncaught exception whose fatal handler then failed too, which prints nothing.
+  # The Claude CLI runs on that runtime; seen on #277 and #294 with no output at all (#449).
+  defp exited(7), do: "7 (likely the CLI's runtime crashing in its own error handler)"
   defp exited(code), do: "#{code}"
 
   defp record(thread, result) do

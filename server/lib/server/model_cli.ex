@@ -42,29 +42,34 @@ defmodule Server.ModelCli do
   provider's endpoint; a bare one (`haiku`) on the operator's own Claude login.
   """
   def run(prompt, cmd, model, opts \\ []) do
-    err = Path.join(System.tmp_dir!(), "model-cli-#{System.unique_integer([:positive])}.err")
+    base = Path.join(System.tmp_dir!(), "model-cli-#{System.unique_integer([:positive])}")
+    err = base <> ".err"
+    input = base <> ".in"
 
     try do
-      call(prompt, cmd, model, opts, err)
+      File.write!(input, prompt)
+      call(input, cmd, model, opts, err)
     after
       File.rm(err)
+      File.rm(input)
     end
   end
 
-  defp call(prompt, cmd, model, opts, err) do
+  defp call(input, cmd, model, opts, err) do
     timeout = opts[:timeout_s] || Application.get_env(:server, :model_cli_timeout_s, 120)
 
     {provider, model, flags} = parse_model(model)
 
-    # System.cmd leaves stdin an open pipe, and a CLI may read it as the rest of the prompt — it
-    # waits forever. The CLI gets /dev/null, and `timeout` bounds a call that hangs regardless.
-    # stderr goes to its own file: a CLI warns there (an unknown model's catalog notice) even when
-    # it answers, and the answer is stdout alone; a failure is told by what it wrote there.
+    # The prompt is the CLI's stdin, read from a file: as an argument, one past 128 KB (a grade's
+    # diff) can't be passed to exec at all. A file, never System.cmd's own stdin, which stays an open
+    # pipe a CLI would wait on forever; `timeout` bounds a call that hangs regardless. stderr goes to
+    # its own file: a CLI warns there (an unknown model's catalog notice) even when it answers, and
+    # the answer is stdout alone; a failure is told by what it wrote there.
     args =
-      ["-c", ~s(exec timeout "$0" "$@" </dev/null 2>"$MODEL_CLI_ERR"), to_string(timeout)] ++
-        [Server.Harness.ClaudeCode.gateway(), provider, cmd, "-p", prompt, "--model", model] ++ flags
+      ["-c", ~s(exec timeout "$0" "$@" <"$MODEL_CLI_IN" 2>"$MODEL_CLI_ERR"), to_string(timeout)] ++
+        [Server.Harness.ClaudeCode.gateway(), provider, cmd, "-p", "--model", model] ++ flags
 
-    case System.cmd("sh", args, env: [{"MODEL_CLI_ERR", err} | keys()]) do
+    case System.cmd("sh", args, env: [{"MODEL_CLI_ERR", err}, {"MODEL_CLI_IN", input} | keys()]) do
       {out, 0} -> {:ok, out}
       {_out, 124} -> {:error, {:model_cli_timeout, timeout}}
       {out, code} when code in [126, 127] -> {:error, {:model_cli_missing, why(err, out)}}

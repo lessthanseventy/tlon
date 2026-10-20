@@ -265,7 +265,8 @@ defmodule Server.Workline.GradeTest do
       on_exit(fn -> Application.delete_env(:server, :grader_cmd) end)
 
       assert {:error, why} = Grade.grade(thread, change: change(), docs: %{spec: "s", plan: "p"})
-      assert why =~ "the model CLI exited 7 twice and wrote nothing (no stdout, no stderr)"
+      assert why =~ "the model CLI exited 7 (likely the CLI's runtime crashing in its own error handler) twice"
+      assert why =~ "wrote nothing (no stdout, no stderr)"
       assert %{kind: "check_failed"} = last_grade(thread)
     end
 
