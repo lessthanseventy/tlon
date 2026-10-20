@@ -61,6 +61,32 @@ defmodule Server.Jobs.SmokeTest do
     assert {:error, "no smoke is up for this thread"} = Smoke.stop(t.id)
   end
 
+  test "the hold line names the smoke's build dir beside its url" do
+    re = Server.Jobs.Smoke.hold_line()
+
+    assert [_, "http://127.0.0.1:4999", "/tmp/tlon-smoke/Ab1"] =
+             Regex.run(re, "smoke: holding http://127.0.0.1:4999 up (dir /tmp/tlon-smoke/Ab1) — x")
+
+    assert [_, "http://127.0.0.1:4999"] = Regex.run(re, "smoke: holding http://127.0.0.1:4999 up — x")
+  end
+
+  test "drive runs the candidate's script from the smoke's dir, through the smoke's launcher", %{thread: t} do
+    dir = Path.join(System.tmp_dir!(), "smoke-dir-#{System.pid()}-#{System.unique_integer([:positive])}")
+    File.mkdir_p!(Path.join(dir, "scripts"))
+    drive = Path.join(dir, "scripts/office-drive.sh")
+    File.write!(drive, "#!/usr/bin/env bash\necho \"cwd=$PWD argv=$* yes=$MISE_YES url=$TLON_URL\"\n")
+    File.chmod!(drive, 0o755)
+    on_exit(fn -> File.rm_rf(dir) end)
+
+    {:ok, _} =
+      %{thread_id: t.id, ref: "x"}
+      |> Server.Jobs.Smoke.new(state: "executing", meta: %{"url" => "http://127.0.0.1:4999", "dir" => dir})
+      |> Oban.insert()
+
+    assert {:ok, out} = Smoke.drive(t.id, ["/", "Enter"])
+    assert out =~ "cwd=#{dir} argv=/ Enter yes=1 url=http://127.0.0.1:4999"
+  end
+
   test "a smoke that fails posts its last lines", %{thread: t} do
     File.write!(Smoke.script(), "#!/usr/bin/env bash\necho 'smoke FAILED: no build'\nexit 1\n")
     {:ok, _} = Smoke.start(t, nil)

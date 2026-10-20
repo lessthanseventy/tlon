@@ -3,7 +3,7 @@ defmodule Server.Jobs.Smoke do
   Runs `scripts/release-smoke.sh` with `TLON_SMOKE_HOLD=1` for a QA seat, from the service (a
   seat's Bash can't: `Server.Smoke`). The job is the hold: it lives as long as the script does, until
   `stop_smoke` or the script's own hold TTL. When the script says it is holding, the job records
-  the url and the script's pid in its meta (what `Server.Smoke` finds it by) and posts the url and the
+  the url, the smoke's build dir (`Server.Smoke.drive/2` runs the candidate's drive from it) and the script's pid in its meta (what `Server.Smoke` finds it by) and posts the url and the
   log's path on the thread; a smoke that fails posts its last lines instead. One attempt: a retry
   would stack another build.
   """
@@ -14,7 +14,7 @@ defmodule Server.Jobs.Smoke do
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"thread_id" => tid, "ref" => ref}} = job) do
     log = Path.join(System.tmp_dir!(), "tlon-smoke-job-#{job.id}.log")
-    {exe, args} = launch(Server.Smoke.script(), ref)
+    {exe, args} = launch([Server.Smoke.script(), ref])
 
     port =
       Port.open({:spawn_executable, exe}, [
@@ -36,14 +36,19 @@ defmodule Server.Jobs.Smoke do
 
   # the service runs under systemd, whose PATH has no mise shims: the script's bare `mix`/`bun` are
   # found through `mise exec`, from the checkout whose mise.toml pins them
-  defp launch(script, ref) do
+  # (also how `Server.Smoke.drive/2` runs office-drive.sh: its tmux shell puts the mise shims first)
+  @doc false
+  def launch([script | _] = argv) when is_binary(script) do
     case System.find_executable("mise") do
-      nil -> {System.find_executable("bash"), [script, ref]}
-      mise -> {mise, ["exec", "--", "bash", script, ref]}
+      nil -> {System.find_executable("bash"), argv}
+      mise -> {mise, ["exec", "--", "bash" | argv]}
     end
   end
 
   defp script_root(script), do: script |> Path.dirname() |> Path.dirname()
+
+  @doc false
+  def hold_line, do: ~r/^smoke: holding (http\S+) up(?: \(dir (\S+)\))?/
 
   defp pump(port, job, tid, os_pid, log, tail) do
     receive do
@@ -63,10 +68,12 @@ defmodule Server.Jobs.Smoke do
   end
 
   defp hold(job, tid, os_pid, log, line) do
-    with [_, url] <- Regex.run(~r/^smoke: holding (http\S+) up/, line) do
+    with [_, url | dir] <- Regex.run(hold_line(), line) do
+      held = %{"url" => url, "os_pid" => os_pid, "log" => log, "dir" => List.first(dir)}
+
       {:ok, _} =
         job
-        |> Ecto.Changeset.change(meta: Map.merge(job.meta, %{"url" => url, "os_pid" => os_pid, "log" => log}))
+        |> Ecto.Changeset.change(meta: Map.merge(job.meta, held))
         |> Server.Repo.update()
 
       post(
