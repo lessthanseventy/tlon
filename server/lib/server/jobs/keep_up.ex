@@ -56,13 +56,25 @@ defmodule Server.Jobs.KeepUp do
     end
   end
 
-  # a gh read that failed is said, and acted on as nothing: never a PR set read as empty in silence
+  # a gh read that failed is said, and acted on as nothing: never a PR set read as empty in silence.
+  # Said once: a keyed note for the operator, logged only when it is new or its reason changed (a
+  # repo GitHub no longer resolves fails every pass, and filled the log), cleared once it reads.
   defp read(repo, what, {:error, why}) do
-    require(Logger) && Logger.warning("keep_up #{repo}: #{what} unread — #{why}")
+    key = "keep_up:#{repo}:#{what}"
+    text = "keep_up can't read #{what} of #{repo}: #{why}"
+
+    if !Enum.any?(Server.Rollout.pending(), &(&1[:key] == key and &1.text == text)) do
+      require(Logger) && Logger.warning("keep_up #{repo}: #{what} unread — #{why}")
+      Server.Rollout.note(key, text)
+    end
+
     []
   end
 
-  defp read(_repo, _what, prs), do: prs
+  defp read(repo, what, prs) do
+    Server.Rollout.clear("keep_up:#{repo}:#{what}")
+    prs
+  end
 
   @doc false
   # a landing is done when GitHub says its PR is MERGED, never at the local gate

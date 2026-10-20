@@ -182,6 +182,21 @@ defmodule Server.Jobs.KeepUpTest do
       assert %Server.Thread{stage: "merged"} = Repo.get!(Server.Thread, t.id)
     end
 
+    test "a gh that keeps failing the same way is said once, as one note, and the note clears once it reads" do
+      failing = fn _cmd, _args, _opts -> {"gh: Could not resolve to a Repository", 1} end
+      first = ExUnit.CaptureLog.capture_log(fn -> KeepUp.red_checks("/gone", failing) end)
+      _ = :sys.get_state(Rollout)
+      again = ExUnit.CaptureLog.capture_log(fn -> KeepUp.red_checks("/gone", failing) end)
+
+      assert first =~ "red PRs unread"
+      refute again =~ "unread"
+      assert [%{text: "keep_up can't read red PRs of /gone" <> _}] = Rollout.pending()
+
+      _ = KeepUp.red_checks("/gone", fn _cmd, _args, _opts -> {"[]", 0} end)
+      _ = :sys.get_state(Rollout)
+      assert Rollout.pending() == []
+    end
+
     test "a PR whose workline has not landed is left alone", %{thread: t} do
       Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "review"])
       KeepUp.red_checks("/repo", gh(@red))
