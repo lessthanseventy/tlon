@@ -628,7 +628,7 @@ defmodule Server.Office.Needs do
   end
 
   defp tool_denied_text(t, [last | _] = denials) do
-    "#{last.detail["agent"]} on #{t.slug} was refused #{last.detail["tool"]} #{length(denials)} times" <>
+    "#{last.detail["agent"]} on #{t.slug || "##{t.id}"} was refused #{last.detail["tool"]} #{length(denials)} times" <>
       if(last.detail["summary"], do: ": #{last.detail["summary"]}", else: "") <>
       if(last.detail["reason"], do: " (#{last.detail["reason"]})", else: "")
   end
