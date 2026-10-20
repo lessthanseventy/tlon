@@ -26,7 +26,39 @@ defmodule Server.ProfilesTest do
       refute "~/.local" in writes, "~/.local holds container and game stores: thousands of *.pem/*.key"
       refute "~/.cache" in writes, "~/.cache holds AUR clones and app stores: thousands of .git and *.pem"
       assert "~/.local/share/mise" in writes
-      assert "~/.cache/mix" in writes and "~/.cache/tlon-scratch" in writes
+    end
+
+    # bwrap takes 9000 args; Claude Code mounts ~45 per repo found under a write root. 7500 leaves
+    # headroom; 65 repos are the fixed checkouts (ficciones, tlon and its worktrees).
+    @tag :tmp_dir
+    test "a seat's write roots stay under the bwrap budget however many repos the box has", %{tmp_dir: home} do
+      # unbounded growers: 300 repos in each cache a seat might share, and in another seat's scratch
+      for cache <- ~w(mix menard-scratch tlon-scratch/other-seat), do: seed_repos(home, ".cache/#{cache}", 300)
+
+      for cache <- Profiles.dev_caches() -- ~w(mix menard-scratch tlon-scratch),
+          do: seed_repos(home, ".cache/#{cache}", 2)
+
+      for seat <- ["hronir", "zunz"], archetype <- [:builder, :qa] do
+        seed_repos(home, ".cache/tlon-scratch/#{seat}", 40)
+        roots = Profiles.instantiate(%{archetype: archetype, name: seat}).sandbox["filesystem"]["allowWrite"]
+
+        count =
+          roots
+          |> Enum.filter(&String.starts_with?(&1, "~/"))
+          |> Enum.map(&Path.join(home, String.replace_prefix(&1, "~/", "")))
+          |> Enum.map(&length(Path.wildcard(Path.join(&1, "**/.git"), match_dot: true)))
+          |> Enum.sum()
+
+        assert (count + 65) * 45 <= 7500, "#{seat}/#{archetype}: #{count} repos under ~ write roots"
+      end
+    end
+
+    test "no seat can write another seat's scratch dir, nor the shared growers" do
+      writes = Profiles.instantiate(%{archetype: :builder, name: "zunz"}).sandbox["filesystem"]["allowWrite"]
+      assert "~/.cache/tlon-scratch/zunz" in writes
+
+      for gone <- ~w(~/.cache/mix ~/.cache/tlon-scratch ~/.cache/menard-scratch ~/.cache ~/.local),
+          do: refute(gone in writes)
     end
 
     test "carries the ORCHESTRATOR toolset (Slice 4D): staffing + cross-thread verbs, minus register/consult" do
@@ -565,5 +597,9 @@ defmodule Server.ProfilesTest do
       assert dir == Path.join([state, "tlon", "profiles", "w7", "amy"])
       assert File.exists?(Path.join(dir, "tmux.conf"))
     end
+  end
+
+  defp seed_repos(home, rel, n) do
+    for i <- 1..n, do: File.mkdir_p!(Path.join([home, rel, "r#{i}", ".git"]))
   end
 end
