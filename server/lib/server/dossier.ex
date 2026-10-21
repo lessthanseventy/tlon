@@ -250,9 +250,10 @@ defmodule Server.Dossier do
   end
 
   @doc """
-  A ticket closed: the open issues it owns are resolved, naming it, so the sheriff never re-announces
-  a finding whose ticket is done. A landing already does this through `resolve_fixed/2`; this covers
-  every other close (by hand, a sweep, a fix landed elsewhere). The issues resolved.
+  A ticket closed WITH its evidence (`update_ticket`'s `fixed_by` or `because`): the open issues it
+  owns are resolved with it, so the sheriff never re-announces a finding settled that way. A landing
+  does this through `resolve_fixed/2`; a ticket that merely ends (its thread closed, nothing landed)
+  hands its issues back to the operator instead. The issues resolved.
   """
   def resolve_owned(ticket_id, how) do
     from(i in Issue, where: i.ticket_id == ^ticket_id and i.state == "open")

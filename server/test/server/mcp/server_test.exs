@@ -1475,6 +1475,33 @@ defmodule Server.MCP.ServerTest do
     assert Server.Tickets.blockers(filed["id"]) == []
   end
 
+  test "update_ticket closes a ticket only with its evidence: the commit that fixed it, or why not" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "CloseWS"})
+    {:ok, thread} = Channel.open_thread(%{title: "work", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "Closer", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(thread, agent)
+    session = handshake(token)
+    {:ok, a} = Server.Tickets.file(%{workspace_id: ws.id, title: "a flaky thing"})
+    {:ok, b} = Server.Tickets.file(%{workspace_id: ws.id, title: "an old wish"})
+
+    bare = call(token, session, 2, "update_ticket", %{"id" => a.id, "status" => "done"})
+    assert bare["isError"]
+    assert Server.Tickets.get(a.id).status == "backlog"
+
+    fixed = call(token, session, 3, "update_ticket", %{"id" => a.id, "status" => "done", "fixed_by" => "4907a68"})
+    refute fixed["isError"]
+    assert %{status: "done", body: body} = Server.Tickets.get(a.id)
+    assert body =~ "Closed by Closer: fixed by 4907a68"
+
+    because = %{"id" => b.id, "status" => "done", "because" => "superseded by the new hall"}
+    {:ok, issue} = Server.Dossier.raise_issue(%{summary: "the old wish nags"})
+    {:ok, _} = Server.Dossier.own_issue(issue, Server.Tickets.get(b.id), "test")
+    refute call(token, session, 4, "update_ticket", because)["isError"]
+    assert Server.Tickets.get(b.id).body =~ "Closed by Closer: superseded by the new hall"
+    assert %{state: "closed", resolution: resolution} = Server.Repo.get(Server.Issue, issue.id)
+    assert resolution =~ "superseded by the new hall"
+  end
+
   test "file_ticket with issue_id owns that open issue, filed by the caller; owned or closed is refused" do
     {:ok, ws} = Server.Workspaces.register(%{name: "IssueWS"})
     {:ok, thread} = Channel.open_thread(%{title: "sheriff's beat", workspace_id: ws.id})

@@ -298,6 +298,10 @@ defmodule Server.MCP.Tool.UpdateTicket do
   Update a ticket's status/priority/title/body/assignee/labels/blocked_by. `id` identifies it; a missing
   ticket is refused. `blocked_by` replaces the tickets it waits on (`[]` clears them); a missing id, or
   its own, is refused.
+
+  Closing one (`status: done`) takes its evidence, appended to its body: `fixed_by`, the commit that
+  fixed it, or `because`, why it closes without one (a duplicate of #N, won't fix, stale). A ticket
+  marked done with neither was how a fault still open read as fixed.
   """
   use Server.MCP.Tool
 
@@ -313,6 +317,11 @@ defmodule Server.MCP.Tool.UpdateTicket do
     field :body, :string
     field :assignee, :string
     field :blocked_by, {:list, :integer}, description: "Replace the tickets it waits on; `[]` clears them"
+
+    field :fixed_by, :string, description: "Closing it (status done) as fixed: the commit (sha) on main that fixed it"
+
+    field :because, :string,
+      description: "Closing it (status done) without a fix: why (a duplicate of #N, won't fix, stale)"
   end
 
   @impl true
@@ -322,13 +331,43 @@ defmodule Server.MCP.Tool.UpdateTicket do
         fail(frame, "no ticket ##{params[:id]}")
 
       ticket ->
-        {blocked_by, params} = Map.pop(params, :blocked_by)
-        attrs = params |> Map.delete(:id) |> Map.reject(fn {_k, v} -> is_nil(v) end)
+        closing = ticket.status != "done" and params[:status] == "done"
+        why = if params[:fixed_by], do: "fixed by #{params[:fixed_by]}", else: params[:because]
 
-        case Tickets.bad_blockers(blocked_by || [], ticket.id) do
-          [] -> reply(frame, update(ticket, attrs, blocked_by), &MCP.Brief.ticket/1)
-          bad -> fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
+        if closing and is_nil(why) do
+          fail(
+            frame,
+            "closing ##{ticket.id} takes its evidence: fixed_by (the commit on main that fixed it) or because (why it closes without one)"
+          )
+        else
+          change(ticket, params, closing && why, frame)
         end
+    end
+  end
+
+  defp change(ticket, params, closed_why, frame) do
+    {blocked_by, params} = Map.pop(params, :blocked_by)
+    attrs = params |> Map.drop([:id, :fixed_by, :because]) |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+    attrs =
+      if closed_why,
+        do:
+          Map.put(
+            attrs,
+            :body,
+            Map.get(attrs, :body, ticket.body || "") <>
+              "\n\nClosed by #{Identity.from_frame(frame).agent}: #{closed_why}"
+          ),
+        else: attrs
+
+    case Tickets.bad_blockers(blocked_by || [], ticket.id) do
+      [] ->
+        result = update(ticket, attrs, blocked_by)
+        if closed_why, do: Server.Dossier.resolve_owned(ticket.id, "its ticket ##{ticket.id} was closed: #{closed_why}")
+        reply(frame, result, &MCP.Brief.ticket/1)
+
+      bad ->
+        fail(frame, "blocked_by: no such ticket #{Enum.map_join(bad, ", ", &"##{&1}")}")
     end
   end
 
