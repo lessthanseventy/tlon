@@ -274,4 +274,50 @@ defmodule Server.Workline.MergeTest do
       refute_received {:rehashed, _}
     end
   end
+
+  describe "stack/3: a merge train" do
+    defp branch(git, repo, name, file, text) do
+      {_, 0} = git.(["checkout", "-qb", name, "main"])
+      File.write!(Path.join(repo, file), text)
+      {_, 0} = git.(["add", file])
+      {_, 0} = git.(["commit", "-qm", name])
+      {_, 0} = git.(["checkout", "-q", "main"])
+    end
+
+    test "each branch rides on the one before; the last, holding them all, is gated once", %{
+      repo: repo,
+      git: git,
+      other: other
+    } do
+      branch(git, repo, "work/second", "c.txt", "second\n")
+      upstream = land_upstream(other, "theirs.txt", "from github\n", "theirs")
+      gated = :counters.new(1, [])
+
+      gate = fn _repo, branch ->
+        :counters.add(gated, 1, 1)
+        send(self(), {:gated, branch})
+        {:ok, :green}
+      end
+
+      assert {:ok, %{from: ^upstream, cars: [first, second]}} = Merge.stack(repo, ["finder", "second"], gate: gate)
+      assert :counters.get(gated, 1) == 1
+      assert_received {:gated, "work/second"}
+      assert subjects(git, "work/second") == ["work/second", "build", "theirs", "seed"]
+      assert first.to == sha(git, "work/finder") and second.to == sha(git, "work/second")
+      assert second.tree == Merge.tree(repo, "work/second")
+      assert first.tree != second.tree
+    end
+
+    test "a red gate says so, and every car keeps its rebase", %{repo: repo, git: git} do
+      branch(git, repo, "work/second", "c.txt", "second\n")
+      assert {:error, {:gate, "red"}} = Merge.stack(repo, ["finder", "second"], gate: fn _, _ -> {:error, "red"} end)
+      assert "build" in subjects(git, "work/second")
+    end
+
+    test "a car that conflicts with the one before it names itself", %{repo: repo, git: git} do
+      branch(git, repo, "work/clash", "b.txt", "not what finder built\n")
+      assert {:error, {"clash", why}} = Merge.stack(repo, ["finder", "clash"])
+      assert why =~ "conflict"
+    end
+  end
 end

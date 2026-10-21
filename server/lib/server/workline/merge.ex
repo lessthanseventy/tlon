@@ -31,40 +31,89 @@ defmodule Server.Workline.Merge do
          {:ok, _} <- run(repo, ["remote", "get-url", "origin"], "#{repo} has no origin to land on"),
          {:ok, _} <- run(repo, ["fetch", "--quiet", "origin", "main"], "could not fetch origin"),
          {:ok, from} <- run(repo, ["rev-parse", "origin/main"], "origin has no main"),
-         {:ok, _} <- rebase(repo, branch, rehash),
+         {:ok, _} <- rebase(repo, branch, rehash, "origin/main"),
          {:ok, _} <- gate.(repo, branch),
          {:ok, to} <- run(repo, ["rev-parse", branch], "no #{branch}") do
       {:ok, %{from: from, to: to}}
     end
   end
 
+  @doc """
+  Ready a merge train in `repo`: each `work/<slug>` of `slugs`, in order, rebased onto the one before
+  it (the first onto a freshly fetched `origin/main`), then the last, which holds them all, gated once.
+  `{:ok, %{from, cars: [%{slug, to, tree}]}}`, each car's tip and the tree the train put there, so a car
+  re-landed later onto a main that holds the cars before it is known to be the train's by its tree;
+  `{:error, {slug, why}}` for a conflict, `{:error, {:gate, why}}` for a red gate. `opts` as `merge/3`.
+  """
+  def stack(repo, slugs, opts \\ []) do
+    gate = Keyword.get(opts, :gate, fn _repo, _branch -> {:ok, :no_gate} end)
+    rehash = Keyword.get(opts, :rehash, &bun_rehash/1)
+
+    with {:ok, _} <- run(repo, ["fetch", "--quiet", "origin", "main"], "could not fetch origin"),
+         {:ok, from} <- run(repo, ["rev-parse", "origin/main"], "origin has no main"),
+         {:ok, cars} <- stack_cars(repo, slugs, rehash),
+         {:gate, {:ok, _}} <- {:gate, gate.(repo, "work/#{List.last(slugs)}")} do
+      {:ok, %{from: from, cars: cars}}
+    else
+      {:gate, {:error, why}} -> {:error, {:gate, why}}
+      {:error, _} = error -> error
+    end
+  end
+
+  @doc "The tree `ref` points at in `repo`, or nil."
+  def tree(repo, ref) do
+    case git(repo, ["rev-parse", ref <> "^{tree}"]) do
+      {out, 0} -> String.trim(out)
+      _ -> nil
+    end
+  end
+
+  defp stack_cars(repo, slugs, rehash) do
+    slugs
+    |> Enum.reduce_while({[], "origin/main"}, fn slug, {cars, onto} ->
+      branch = "work/#{slug}"
+
+      with {:ok, _} <- run(repo, ["rev-parse", "--verify", "--quiet", branch], "there is no branch #{branch}"),
+           {:ok, _} <- rebase(repo, branch, rehash, onto),
+           {:ok, to} <- run(repo, ["rev-parse", branch], "no #{branch}") do
+        {:cont, {cars ++ [%{slug: slug, to: to, tree: tree(repo, branch)}], branch}}
+      else
+        {:error, why} -> {:halt, {:error, {slug, why}}}
+      end
+    end)
+    |> case do
+      {cars, _} when is_list(cars) -> {:ok, cars}
+      error -> error
+    end
+  end
+
   # where the branch is checked out it can only be rebased there; elsewhere, in a throwaway worktree
-  defp rebase(repo, branch, rehash) do
+  defp rebase(repo, branch, rehash, onto) do
     case checked_out(repo, branch) do
       nil ->
         tmp = Path.join(System.tmp_dir!(), "tlon-land-#{System.unique_integer([:positive])}")
 
         with {:ok, _} <- run(repo, ["worktree", "add", "--quiet", tmp, branch], "could not check out #{branch}") do
           try do
-            rebase_in(tmp, branch, rehash)
+            rebase_in(tmp, branch, rehash, onto)
           after
             git(repo, ["worktree", "remove", "--force", tmp])
           end
         end
 
       tree ->
-        rebase_in(tree, branch, rehash)
+        rebase_in(tree, branch, rehash, onto)
     end
   end
 
   # rebase drops the commits whose patch origin already has: this machine's copies of what GitHub
   # merged under new ids
-  defp rebase_in(tree, branch, rehash) do
+  defp rebase_in(tree, branch, rehash, onto) do
     # ExUnit's tmp_dir leaves ignored files here; git refuses to replay a commit that once tracked
     # one of them over its ignored copy
     _ = git(tree, ["clean", "-fdxq", "--", "server/tmp"])
 
-    case past_golden(tree, git(tree, ["rebase", "--quiet", "origin/main"])) do
+    case past_golden(tree, git(tree, ["rebase", "--quiet", onto])) do
       {:ok, _} ->
         rehash_golden(tree, rehash)
 
@@ -72,7 +121,7 @@ defmodule Server.Workline.Merge do
         _ = git(tree, ["rebase", "--abort"])
 
         {:error,
-         "rebasing #{branch} onto origin/main hit a conflict, aborted — the branch is as it was: #{out |> without_hints() |> String.slice(0, 300)}"}
+         "rebasing #{branch} onto #{onto} hit a conflict, aborted — the branch is as it was: #{out |> without_hints() |> String.slice(0, 300)}"}
     end
   end
 
