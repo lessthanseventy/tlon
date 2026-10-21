@@ -29,11 +29,12 @@ defmodule Server.ProfilesTest do
     end
 
     # bwrap takes 9000 args; Claude Code mounts ~45 per repo found under a write root. 7500 leaves
-    # headroom; 65 repos are the fixed checkouts (ficciones, tlon and its worktrees).
+    # headroom; 65 repos are the fixed checkouts (ficciones, tlon and its worktrees). One grower in the
+    # roots must break it alone: (110 + 65) * 45 = 7875 > 7500. Seeding more only slows the gate under load.
     @tag :tmp_dir
     test "a seat's write roots stay under the bwrap budget however many repos the box has", %{tmp_dir: home} do
-      # unbounded growers: 300 repos in each cache a seat might share, and in another seat's scratch
-      for cache <- ~w(mix menard-scratch tlon-scratch/other-seat), do: seed_repos(home, ".cache/#{cache}", 300)
+      # unbounded growers: 110 repos in each cache a seat might share, and in another seat's scratch
+      for cache <- ~w(mix menard-scratch tlon-scratch/other-seat), do: seed_repos(home, ".cache/#{cache}", 110)
 
       for cache <- Profiles.dev_caches() -- ~w(mix menard-scratch tlon-scratch),
           do: seed_repos(home, ".cache/#{cache}", 2)
