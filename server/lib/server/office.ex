@@ -321,7 +321,8 @@ defmodule Server.Office do
     end
   end
 
-  defp windowed?(tabs, thread_id, agent) do
+  @doc "Does a tab in `tabs` run `agent` on `thread_id` (its leaf window, or its own standing window)?"
+  def windowed?(tabs, thread_id, agent) do
     Enum.any?(tabs, fn tab ->
       leaf? = (tab.thread_id == thread_id or tab.name == "t#{thread_id}") and tab.agent in [nil, agent]
       own? = tab.thread_id == nil and (tab.agent || tab.name) == agent

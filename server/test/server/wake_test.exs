@@ -9,11 +9,23 @@ defmodule Server.WakeTest do
 
   setup do
     Server.TestDB.clean!()
-    {:ok, thread} = Channel.open_thread(%{title: "a pane that never drains"})
+    on_exit(fn -> Application.delete_env(:server, :tmux_cmd) end)
+    {:ok, ws} = Server.Workspaces.register(%{name: "Seated"})
+    {:ok, thread} = Channel.open_thread(%{title: "a pane that never drains", workspace_id: ws.id})
     %{thread: thread}
   end
 
+  # A seat whose pane is up: a live session on the thread and a window tagged with its name.
+  defp live_seat!(thread, name) do
+    {:ok, a} = Server.Staff.register_agent(%{name: name, mandate: "m", engine: "e"})
+    {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: thread.id})
+    windows!("1\tt#{thread.id}\t#{thread.id}\t\t100\t#{name}\t0")
+  end
+
+  defp windows!(out), do: Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {out, 0} end)
+
   test "a wake its pane never took is reported and let go; a fresh one waits", %{thread: t} do
+    live_seat!(t, "hronir")
     {:ok, old} = Wake.queue(t.id, "hronir", "ping")
     old_at = DateTime.utc_now() |> DateTime.add(-600) |> DateTime.truncate(:second)
     Repo.update_all(from(w in Wake, where: w.id == ^old.id), set: [inserted_at: old_at])
@@ -25,8 +37,7 @@ defmodule Server.WakeTest do
 
   test "a wake whose pane is mid-turn (a long tool call) is not overdue; one past the stale-turn clock is",
        %{thread: t} do
-    {:ok, a} = Server.Staff.register_agent(%{name: "nolan", mandate: "m", engine: "e"})
-    {:ok, _} = Server.Staff.start_session(%{agent_id: a.id, thread_id: t.id})
+    live_seat!(t, "nolan")
     :ok = Server.Staff.mark_thinking(t.id, "nolan", DateTime.truncate(DateTime.utc_now(), :second))
     {:ok, old} = Wake.queue(t.id, "nolan", "ping")
     old_at = DateTime.utc_now() |> DateTime.add(-600) |> DateTime.truncate(:second)
@@ -45,6 +56,7 @@ defmodule Server.WakeTest do
       {:ok, ws} = Server.Workspaces.register(%{name: "Watched"})
       {:ok, _} = Server.Workspaces.seat(ws.id, %{name: "scharlach", archetype: "sheriff"})
       {:ok, t} = Channel.open_thread(%{title: "a pane that never drains", workspace_id: ws.id})
+      live_seat!(t, "pierre")
       %{ws: ws, t: t}
     end
 
@@ -89,6 +101,46 @@ defmodule Server.WakeTest do
       {:ok, w} = Wake.queue(t.id, "pierre", "ping")
       age!(w)
       {:ok, _} = Channel.post(%{thread_id: lobby.id, author: "pierre", body: "answered here"})
+
+      assert Wake.report_overdue() == 0
+      assert pages(ws) == []
+      assert Wake.take(t.id, "pierre") == []
+    end
+
+    test "a wake to a seat with no window never pages", %{ws: ws, t: t} do
+      Application.put_env(:server, :tmux_cmd, fn "tmux", _args, _opts -> {"no server running", 1} end)
+      {:ok, w} = Wake.queue(t.id, "pierre", "ping")
+      age!(w)
+
+      assert Wake.report_overdue() == 0
+      assert pages(ws) == []
+      assert Wake.take(t.id, "pierre") == []
+    end
+
+    test "a wake to a seat whose window has no session never pages", %{ws: ws, t: t} do
+      Repo.update_all(Server.Session, set: [ended_at: DateTime.utc_now()])
+      {:ok, w} = Wake.queue(t.id, "pierre", "ping")
+      age!(w)
+
+      assert Wake.report_overdue() == 0
+      assert pages(ws) == []
+    end
+
+    test "a wake to a seat with a session but no window never pages", %{ws: ws, t: t} do
+      windows!("1\tscharlach\t\t\t100\tscharlach\t0")
+      {:ok, w} = Wake.queue(t.id, "pierre", "ping")
+      age!(w)
+
+      assert Wake.report_overdue() == 0
+      assert pages(ws) == []
+    end
+
+    test "a wake to a seat that no longer holds the workline's stage never pages", %{ws: ws, t: t} do
+      {:ok, emma} = Server.Staff.register_agent(%{name: "emma", mandate: "m", engine: "e"})
+      {:ok, t} = Server.Staff.assign(t, emma)
+      Repo.update_all(from(x in Server.Thread, where: x.id == ^t.id), set: [stage: "build"])
+      {:ok, w} = Wake.queue(t.id, "pierre", "ping")
+      age!(w)
 
       assert Wake.report_overdue() == 0
       assert pages(ws) == []
