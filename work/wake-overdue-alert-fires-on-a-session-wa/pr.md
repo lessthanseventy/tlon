@@ -5,4 +5,4 @@ Wake-overdue no longer fires falsely on a session waiting on its own background 
 - A subagent's `turn.start` no longer declares `presence_thinking`, on purpose: the main turn's presence stands, and subagents are tracked in `running` plus the heartbeat. Pinned by a test.
 - Server guard (`Wake.report_overdue`) unchanged: with presence correct it reads busy.
 
-Checked: `mise run adapters:claude-code:mod` (45 pass; new tests failed first: a wake arriving during a held submit stays on the server and lands in order; it survives `session.end`; a subagent `turn.start` declares no `presence_thinking`). Not measured live in a seat (#546); the fix does not depend on whether the host's submit blocks.
+Checked: `mise run adapters:claude-code:mod` (45 pass; two new tests failed first: a wake arriving during a held submit stays on the server and lands in order, and survives `session.end`; a third pins the existing rule that a subagent `turn.start` declares no `presence_thinking`). Not measured live in a seat (#546); the fix does not depend on whether the host's submit blocks.
