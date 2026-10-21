@@ -929,36 +929,47 @@ function threadActions(tid: number, inReader = false): Action[] {
   ]
 }
 
+/** the model picker for a seat; the seat card and the cast view share it */
+function pickModel(b: Coworker) {
+  const w = ws, a = view()
+  if (w === null) return
+  const models = [{ label: `the archetype's (${inheritedModel(b.archetype)})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
+  find(`${b.name.toUpperCase()}'S MODEL`, models.map((m) => ({ segs: [plain(m.label)], text: m.label, run: () => { picker = null; void did(data.retarget(w, b.agent_id, { model: m.value })) } })))
+}
+
+/** the persona picker for a seat: make or reroll one, or edit its voice, backstory and quirks */
+function pickPersona(b: Coworker) {
+  const w = ws
+  if (w === null) return
+  const p = b.persona
+  const items: { label: string; run: () => void }[] = [
+    p
+      ? { label: "draw a new one (reroll)", run: () => ask2(`reroll ${b.name}'s persona — the hand edits go`, () => { status = "drawing a new one…"; draw(); void did(data.persona(w, b.agent_id, true)) }) }
+      : { label: "make one", run: () => { status = "drawing one…"; draw(); void did(data.persona(w, b.agent_id, false)) } },
+    ...(p ? [
+      { label: "edit the voice", run: () => ask(`${b.name}'s voice`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { voice: s.trim() })) }, { text: p.voice }) },
+      { label: "edit the backstory", run: () => ask(`${b.name}'s backstory`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { backstory: s.trim() })) }, { text: p.backstory }) },
+      ...(["desk_object", "hobby", "catchphrase", "pet_peeve"] as const).map((k) => ({ label: `edit ${k.replace("_", " ")}`, run: () => ask(`${b.name}'s ${k.replace("_", " ")}`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { quirks: { [k]: s.trim() } })) }, { text: p.quirks[k] }) })),
+    ] : []),
+  ]
+  find(`${b.name.toUpperCase()}'S PERSONA`, items.map((i) => ({ segs: [plain(i.label)], text: i.label, run: () => { picker = null; i.run() } })))
+}
+
+/** confirm, then let a seat go from this workspace (the agent itself stays) */
+function unseatAsk(b: Coworker) {
+  ask2(`let ${b.name} go from ${wsName()} (the agent itself stays)`, () => did(data.unseat(b.seat_id, b.name)))
+}
+
 /** the verbs on a seated coworker: their model, ask/allow, a clean slate, letting them go */
 function seatActions(b: Coworker | undefined): Action[] {
-  const w = ws, a = view()
+  const w = ws
   if (!b || w === null) return []
   return [
-    {
-      ...bind("seat.M"), run: () => {
-        const models = [{ label: `the archetype's (${inheritedModel(b.archetype)})`, value: "inherit" }, ...a.models.map((m) => ({ label: `${m.key}  ${m.thinking} · ${m.harness}`, value: m.key }))]
-        find(`${b.name.toUpperCase()}'S MODEL`, models.map((m) => ({ segs: [plain(m.label)], text: m.label, run: () => { picker = null; void did(data.retarget(w, b.agent_id, { model: m.value })) } })))
-      },
-    },
+    { ...bind("seat.M"), run: () => pickModel(b) },
     { ...bind("seat.y", b.ask === "allow" ? "ask before acting" : "allow without asking"), run: () => void did(data.retarget(w, b.agent_id, { ask: b.ask === "allow" ? "ask" : "allow" })) },
-    {
-      ...bind("seat.E"), run: () => {
-        const p = b.persona
-        const items: { label: string; run: () => void }[] = [
-          p
-            ? { label: "draw a new one (reroll)", run: () => ask2(`reroll ${b.name}'s persona — the hand edits go`, () => { status = "drawing a new one…"; draw(); void did(data.persona(w, b.agent_id, true)) }) }
-            : { label: "make one", run: () => { status = "drawing one…"; draw(); void did(data.persona(w, b.agent_id, false)) } },
-          ...(p ? [
-            { label: "edit the voice", run: () => ask(`${b.name}'s voice`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { voice: s.trim() })) }, { text: p.voice }) },
-            { label: "edit the backstory", run: () => ask(`${b.name}'s backstory`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { backstory: s.trim() })) }, { text: p.backstory }) },
-            ...(["desk_object", "hobby", "catchphrase", "pet_peeve"] as const).map((k) => ({ label: `edit ${k.replace("_", " ")}`, run: () => ask(`${b.name}'s ${k.replace("_", " ")}`, (s) => { if (s.trim()) void did(data.personaEdit(w, b.agent_id, { quirks: { [k]: s.trim() } })) }, { text: p.quirks[k] }) })),
-          ] : []),
-        ]
-        find(`${b.name.toUpperCase()}'S PERSONA`, items.map((i) => ({ segs: [plain(i.label)], text: i.label, run: () => { picker = null; i.run() } })))
-      },
-    },
+    { ...bind("seat.E"), run: () => pickPersona(b) },
     { ...bind("seat.C"), run: () => ask2(`clear ${b.name}'s context — their session ends, they start fresh when next needed`, () => did(data.clearContext(w, b.agent_id, b.name))) },
-    { ...bind("seat.-"), run: () => ask2(`let ${b.name} go from ${wsName()} (the agent itself stays)`, () => did(data.unseat(b.seat_id, b.name))) },
+    { ...bind("seat.-"), run: () => unseatAsk(b) },
   ]
 }
 
