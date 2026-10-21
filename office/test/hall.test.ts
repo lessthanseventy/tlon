@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { afterEach, describe, expect, test } from "bun:test"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { roll, nextSeed, BORGES, loadHall, saveHall, hallSignature, applyOverrides, pushPile, dropPile, PILE_MAX, candidateOf, pass, maybe, bringBack, takenNames, toggleLock, emptyHall, seatedNames } from "../kit/hall"
@@ -70,7 +70,16 @@ describe("hall roll", () => {
 })
 
 describe("hall.json", () => {
-  const tmp = () => join(mkdtempSync(join(tmpdir(), "hall-")), "hall.json")
+  const made: string[] = []
+  const mk = () => {
+    const d = mkdtempSync(join(tmpdir(), "hall-"))
+    made.push(d)
+    return d
+  }
+  afterEach(() => {
+    for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true })
+  })
+  const tmp = () => join(mk(), "hall.json")
   test("round trip keeps seed, locks, overrides and the pile", () => {
     const p = tmp()
     const s = { seed: "hall:5", locks: { slots: ["eyes" as const] }, overrides: { name: "borges" }, pile: [{ seed: "hall:2", overrides: {} }] }
@@ -85,7 +94,7 @@ describe("hall.json", () => {
     expect(loadHall(p).seed).toBe("hall:1")
   })
   test("saveHall creates the directory", () => {
-    const p = join(mkdtempSync(join(tmpdir(), "hall-")), "a", "b", "hall.json")
+    const p = join(mk(), "a", "b", "hall.json")
     saveHall(p, { seed: "hall:1", locks: {}, overrides: {}, pile: [] })
     expect(loadHall(p).seed).toBe("hall:1")
   })

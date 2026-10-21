@@ -1,11 +1,19 @@
-import { expect, test } from "bun:test"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { afterEach, expect, test } from "bun:test"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { load, save } from "../kit/whimsy-file"
 import { DEFAULT, setDial, setPreset } from "../kit/whimsy"
 
-const dir = () => mkdtempSync(join(tmpdir(), "whimsy-"))
+const made: string[] = []
+const dir = () => {
+  const d = mkdtempSync(join(tmpdir(), "whimsy-"))
+  made.push(d)
+  return d
+}
+afterEach(() => {
+  for (const d of made.splice(0)) rmSync(d, { recursive: true, force: true })
+})
 
 test("a missing file is the defaults", () => {
   expect(load(join(dir(), "office.json"))).toEqual(DEFAULT)
