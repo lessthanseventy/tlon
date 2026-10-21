@@ -106,7 +106,7 @@ defmodule Server.Workline.ContinuationTest do
   end
 
   test "no nudge while the thread's smoke is building: QA waits on the build, not on the lead" do
-    {:ok, q} = Workline.open(%{title: "smoke it", slug: "smoking", stage: "plan"})
+    {:ok, q} = Workline.open(%{title: "smoke it", slug: "smoking", stage: "review"})
     job = Repo.insert!(Server.Jobs.Smoke.new(%{thread_id: q.id, ref: "work/smoking"}, state: "executing"))
 
     for _ <- 1..5, do: :ok = Continuation.run(q.id, artifacts: Missing)
@@ -114,6 +114,30 @@ defmodule Server.Workline.ContinuationTest do
     assert Repo.get!(Server.Thread, q.id).awaiting == nil
 
     job |> Ecto.Changeset.change(state: "completed") |> Repo.update!()
+    :ok = Continuation.run(q.id, artifacts: Missing)
+    assert [_] = continuations(q.id)
+  end
+
+  test "a building smoke does not silence the lead outside review" do
+    {:ok, q} = Workline.open(%{title: "smoke it", slug: "smoking-plan", stage: "plan"})
+    Repo.insert!(Server.Jobs.Smoke.new(%{thread_id: q.id, ref: "work/smoking-plan"}, state: "executing"))
+
+    :ok = Continuation.run(q.id, artifacts: Missing)
+    assert [_] = continuations(q.id)
+  end
+
+  test "a smoke job executing for over 20 minutes is stuck, not building: the nudge still posts" do
+    {:ok, q} = Workline.open(%{title: "smoke it", slug: "smoking-stale", stage: "review"})
+
+    %{thread_id: q.id, ref: "work/smoking-stale"}
+    |> Server.Jobs.Smoke.new(state: "executing")
+    |> Repo.insert!()
+    |> Ecto.Changeset.change(
+      attempted_at: DateTime.add(DateTime.utc_now(), -25 * 60),
+      inserted_at: DateTime.add(DateTime.utc_now(), -25 * 60)
+    )
+    |> Repo.update!()
+
     :ok = Continuation.run(q.id, artifacts: Missing)
     assert [_] = continuations(q.id)
   end

@@ -11,6 +11,8 @@ defmodule Server.Smoke do
 
   alias Server.Jobs.Smoke, as: Job
 
+  @building_minutes 20
+
   @ref ~r|\A[A-Za-z0-9](?:[A-Za-z0-9._/-]*[A-Za-z0-9._-])?\z|
   @name ~r/\A[a-z][a-z0-9_]*\z/
 
@@ -60,13 +62,15 @@ defmodule Server.Smoke do
   @doc """
   The thread's smoke job that is queued or running but not up yet (no url), or nil; with `ref`,
   only one of that ref. A start for the same ref returns it rather than stacking a second build.
+  A job queued over `@building_minutes` ago is a stuck build, not a building one.
   """
   @spec building(integer(), String.t() | nil) :: Oban.Job.t() | nil
   def building(thread_id, ref \\ nil) do
     query =
       from j in Oban.Job,
         where:
-          j.worker == "Server.Jobs.Smoke" and j.state in ["available", "scheduled", "executing", "retryable"] and
+          j.worker == "Server.Jobs.Smoke" and j.state in ["available", "scheduled", "executing"] and
+            j.inserted_at > ago(@building_minutes, "minute") and
             fragment("?->>'thread_id' = ?", j.args, ^to_string(thread_id)) and
             fragment("?->>'url' is null", j.meta),
         order_by: j.id,

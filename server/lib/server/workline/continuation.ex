@@ -46,7 +46,7 @@ defmodule Server.Workline.Continuation do
          {:nudge, why, say} <- nudge(thread, opts),
          false <- Attention.waiting?(thread_id),
          false <- verifying?(thread),
-         nil <- Server.Smoke.building(thread_id),
+         nil <- smoke_building(thread),
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),
          {:budget, true, _} <- {:budget, sent < max, {thread, why, sent, after_id}} do
@@ -146,6 +146,10 @@ defmodule Server.Workline.Continuation do
   defp verifying?(%Thread{stage: "review"} = thread), do: Server.Office.Needs.landing?(thread)
 
   defp verifying?(_thread), do: false
+
+  # QA runs smokes at review; at any other stage a lingering smoke job must not silence the lead.
+  defp smoke_building(%Thread{stage: "review", id: id}), do: Server.Smoke.building(id)
+  defp smoke_building(_thread), do: nil
 
   defp last_advance_id(thread_id) do
     Repo.one(
