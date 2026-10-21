@@ -640,6 +640,26 @@ test("a wake that arrived during a held submit survives the session ending: it w
   expect(sent.filter((d) => d.tool === "put_back_wakes")).toEqual([]);
 });
 
+test("a submit the host abandons at session.end does not stop the next conversation taking wakes", async ($, on) => {
+  const hold: { release?: () => void } = {};
+  const world: World = { ownClock: true, wakes: [["wake one"], ["wake two"]], submitHold: hold, submitted: [] };
+  const sent = engine(on, world);
+  const clock = mock.clock(on);
+  await $.session.start(START);
+
+  await clock.advance(3_000);
+  await settle();
+  await $.session.end({ reason: "clear", sessionId: "s1" });
+  await settle();
+  await clock.advance(3_000);
+  await settle();
+
+  expect(sent.filter((d) => d.tool === "take_wakes")).toHaveLength(2);
+  hold.release!();
+  await settle();
+  expect(world.submitted).toEqual(["wake two"]);
+});
+
 test("a subagent's turn.start declares no presence_thinking; the main turn's stands", async ($, on) => {
   const sent = engine(on);
 

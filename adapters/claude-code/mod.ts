@@ -568,6 +568,9 @@ export function register(on) {
   // A /clear, /resume or /branch is a new conversation: brief it and capture it from the start.
   on("session.end", async ($, e, next) => {
     running.clear();
+    // a submit the host abandons never settles: left counted, it would gate every later poll
+    pendingSubmits = 0;
+    submitting = Promise.resolve();
     if (thread) declare($, "presence_idle");
     briefed = "";
     captured = 0;
