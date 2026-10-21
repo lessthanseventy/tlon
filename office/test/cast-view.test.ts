@@ -30,8 +30,15 @@ const castFile = join(config, "tlon", "cast.json")
 mkdirSync(join(config, "tlon"), { recursive: true })
 writeFileSync(castFile, "{not json")
 const castNow = () => { try { return JSON.parse(readFileSync(castFile, "utf8")) } catch { return null } }
+// bo's look is someone's hand work: a reroll of ada's must leave it alone
+const looksFile = join(config, "tlon", "looks.json"), soulFile = join(config, "tlon", "souls", "ada.md")
+writeFileSync(looksFile, JSON.stringify({ bo: { hat: "beanie" } }))
+const looksNow = () => { try { return JSON.parse(readFileSync(looksFile, "utf8")) } catch { return null } }
+// the soul's editor runs in a tmux of the test's own, and stays up on the file without touching it
+const ownTmux = `tlon-office-cast-own-${process.pid}`
 afterAll(() => {
   tmux("kill-server")
+  Bun.spawnSync(["tmux", "-L", ownTmux, "kill-server"])
   rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${socket}`, { force: true })
   rmSync(state, { recursive: true, force: true })
   rmSync(config, { recursive: true, force: true })
@@ -49,7 +56,7 @@ const until = async (what: string, ok: () => boolean) => {
 test("` opens the cast: a row per seat, } the office tab, esc home", async () => {
   const office = join(import.meta.dir, "..")
   tmux("new-session", "-d", "-x", "150", "-y", "50",
-    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${config}' '${process.execPath}' tui/main.ts`)
+    `cd '${office}' && TLON_URL='http://127.0.0.1:${server.port}' OFFICE_GRAPHICS=blocks XDG_STATE_HOME='${state}' XDG_CONFIG_HOME='${config}' TLON_OFFICE_TMUX='${ownTmux}' EDITOR='tail -f' '${process.execPath}' tui/main.ts`)
   await until("the workspace in the header", () => screen().includes("Toy"))
   tmux("send-keys", "-t", "0", "-l", "`")
   await until("the cast", () => screen().includes("THE CAST"))
@@ -112,4 +119,25 @@ test("⏎ on grade steps it and keeps it in cast.json; y rerolls specialty from 
   await until("ada's specialty rerolled", () => ["office", "server"].includes(castNow()?.ada?.specialty))
   expect(castNow().ada.grade).toBe("senior")
   expect(castNow().bo).toBeUndefined()
+}, 40_000)
+
+test("y on look rolls ada a new one and saves it at once, bo's untouched", async () => {
+  await field("look")
+  keys("y")
+  await until("ada's look saved", () => !!looksNow()?.ada)
+  expect(looksNow().bo).toEqual({ hat: "beanie" })
+  await until("the cell says so", () => screen().includes("custom look"))
+}, 40_000)
+
+test("⏎ on soul makes souls/ada.md once from the blank skeleton, and never over what is there", async () => {
+  await field("soul")
+  keys("enter")
+  await until("ada's soul file", () => { try { return readFileSync(soulFile, "utf8").includes("## Wants") } catch { return false } })
+  writeFileSync(soulFile, "## Wants\nthe hand's own words\n")
+  keys("C-]")
+  await until("the cast again", () => screen().includes("THE CAST · people"))
+  keys("enter")
+  await Bun.sleep(600)
+  expect(readFileSync(soulFile, "utf8")).toBe("## Wants\nthe hand's own words\n")
+  keys("C-]")
 }, 40_000)
