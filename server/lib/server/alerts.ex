@@ -126,8 +126,11 @@ defmodule Server.Alerts do
   end
 
   # what nothing waits on can be put away on the server (`Office.Needs.dismiss/1`), so it leaves the
-  # office's inbox too, not only this surface
-  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(ask stalled quota),
+  # office's inbox too, not only this surface. Never an ask: a coworker waits on its answer, and one
+  # put away is a question nobody answers; the desktop's Later sets it aside instead
+  defp put_away(%{kind: "ask"}), do: []
+
+  defp put_away(%{kind: kind, level: level, key: key}) when level == "decide" or kind in ~w(stalled quota),
     do: [%{label: put_away_label(kind), method: "POST", path: "/api/office/needs/dismiss", body: %{key: key}}]
 
   defp put_away(_need), do: []
