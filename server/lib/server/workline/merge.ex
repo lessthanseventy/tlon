@@ -39,10 +39,12 @@ defmodule Server.Workline.Merge do
   end
 
   @doc """
-  Ready a merge train in `repo`: each `work/<slug>` of `slugs`, in order, rebased onto the one before
-  it (the first onto a freshly fetched `origin/main`), then the last, which holds them all, gated once.
-  `{:ok, %{from, cars: [%{slug, to, tree}]}}`, each car's tip and the tree the train put there, so a car
-  re-landed later onto a main that holds the cars before it is known to be the train's by its tree;
+  Ready a merge train in `repo`: each `work/<slug>` of `slugs`, in order, copied to `train/<slug>` and
+  rebased onto the one before it (the first onto a freshly fetched `origin/main`), then the last, which
+  holds them all, gated once (the gate is handed `train/<last>`). The `work/` branches are never moved —
+  a car that doesn't land must not carry the cars ahead of it — and the `train/` refs are gone after.
+  `{:ok, %{from, cars: [%{slug, to, tree}]}}`, each car's stacked tip and the tree the train put there,
+  so a car landed later onto a main that holds the cars before it is known to be the train's by its tree;
   `{:error, {slug, why}}` for a conflict, `{:error, {:gate, why}}` for a red gate. `opts` as `merge/3`.
   """
   def stack(repo, slugs, opts \\ []) do
@@ -52,12 +54,14 @@ defmodule Server.Workline.Merge do
     with {:ok, _} <- run(repo, ["fetch", "--quiet", "origin", "main"], "could not fetch origin"),
          {:ok, from} <- run(repo, ["rev-parse", "origin/main"], "origin has no main"),
          {:ok, cars} <- stack_cars(repo, slugs, rehash),
-         {:gate, {:ok, _}} <- {:gate, gate.(repo, "work/#{List.last(slugs)}")} do
+         {:gate, {:ok, _}} <- {:gate, gate.(repo, "train/#{List.last(slugs)}")} do
       {:ok, %{from: from, cars: cars}}
     else
       {:gate, {:error, why}} -> {:error, {:gate, why}}
       {:error, _} = error -> error
     end
+  after
+    Enum.each(slugs, &git(repo, ["branch", "-D", "--quiet", "train/#{&1}"]))
   end
 
   @doc "The tree `ref` points at in `repo`, or nil."
@@ -72,11 +76,13 @@ defmodule Server.Workline.Merge do
     slugs
     |> Enum.reduce_while({[], "origin/main"}, fn slug, {cars, onto} ->
       branch = "work/#{slug}"
+      car = "train/#{slug}"
 
       with {:ok, _} <- run(repo, ["rev-parse", "--verify", "--quiet", branch], "there is no branch #{branch}"),
-           {:ok, _} <- rebase(repo, branch, rehash, onto),
-           {:ok, to} <- run(repo, ["rev-parse", branch], "no #{branch}") do
-        {:cont, {cars ++ [%{slug: slug, to: to, tree: tree(repo, branch)}], branch}}
+           {:ok, _} <- run(repo, ["branch", "--force", car, branch], "could not copy #{branch} to #{car}"),
+           {:ok, _} <- rebase(repo, car, rehash, onto),
+           {:ok, to} <- run(repo, ["rev-parse", car], "no #{car}") do
+        {:cont, {cars ++ [%{slug: slug, to: to, tree: tree(repo, car)}], car}}
       else
         {:error, why} -> {:halt, {:error, {slug, why}}}
       end
@@ -113,7 +119,9 @@ defmodule Server.Workline.Merge do
     # one of them over its ignored copy
     _ = git(tree, ["clean", "-fdxq", "--", "server/tmp"])
 
-    case past_golden(tree, git(tree, ["rebase", "--quiet", onto])) do
+    # --no-update-refs: the machine's git config sets rebase.updateRefs, which would drag along every
+    # branch pointing into the rebased range — a train's work/<slug> beside its train/<slug> copy
+    case past_golden(tree, git(tree, ["rebase", "--quiet", "--no-update-refs", onto])) do
       {:ok, _} ->
         rehash_golden(tree, rehash)
 
