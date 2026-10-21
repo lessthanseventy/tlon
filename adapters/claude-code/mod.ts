@@ -78,6 +78,8 @@ let submitting: Promise<void> = Promise.resolve();
 // submits taken and not yet landed: while any is, the poll takes nothing, so the wakes behind it stay
 // on the server (durable) and at most one taken batch is ever held in memory
 let pendingSubmits = 0;
+// bumped at session.end: a submit from an earlier conversation settling late must not touch the count
+let submitGen = 0;
 // subagents whose turn started and has not ended: the session is busy while any runs, even after
 // its own turn ended
 const running = new Set<string>();
@@ -247,6 +249,7 @@ function registerNow($): Promise<void> {
 // deletes the server's row, so a wake whose submit fails is put back for the next poll.
 function submitWakes($, texts: string[]) {
   pendingSubmits++;
+  const gen = submitGen;
   submitting = submitting.then(async () => {
     try {
       const failed: string[] = [];
@@ -259,7 +262,7 @@ function submitWakes($, texts: string[]) {
       }
       if (failed.length) await call($, "put_back_wakes", { prompts: failed }).catch(() => {});
     } finally {
-      pendingSubmits--;
+      if (gen === submitGen) pendingSubmits--;
     }
   });
 }
@@ -570,6 +573,7 @@ export function register(on) {
     running.clear();
     // a submit the host abandons never settles: left counted, it would gate every later poll
     pendingSubmits = 0;
+    submitGen++;
     submitting = Promise.resolve();
     if (thread) declare($, "presence_idle");
     briefed = "";
