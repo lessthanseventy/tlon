@@ -129,6 +129,31 @@ defmodule Server.Jobs.SmokeTest do
     assert Enum.any?(bodies(t.id), &(&1 =~ "fixtures=."))
   end
 
+  describe "a smoke still building" do
+    setup %{thread: t} do
+      {:ok, job} = Smoke.start(t, nil, "qa1")
+      job |> Ecto.Changeset.change(state: "executing") |> Server.Repo.update!()
+      %{job: job}
+    end
+
+    test "drive and stop say it is building, with the job, not that no smoke is up", %{thread: t, job: job} do
+      assert {:error, "building since " <> _ = why} = Smoke.drive(t.id, ["/"])
+      assert why =~ "(job #{job.id})"
+      assert {:error, "building since " <> _} = Smoke.stop(t.id)
+    end
+
+    test "a start for the same ref returns the building job instead of a second build", %{thread: t, job: job} do
+      assert {:ok, %{id: id}} = Smoke.start(t, nil, "qa1")
+      assert id == job.id
+      assert Smoke.building(t.id).id == job.id
+    end
+
+    test "a start for another ref still queues", %{thread: t, job: job} do
+      assert {:ok, %{id: id}} = Smoke.start(t, "main", "qa1")
+      refute id == job.id
+    end
+  end
+
   test "a smoke that fails posts its last lines", %{thread: t} do
     File.write!(Smoke.script(), "#!/usr/bin/env bash\necho 'smoke FAILED: no build'\nexit 1\n")
     {:ok, _} = Smoke.start(t, nil)

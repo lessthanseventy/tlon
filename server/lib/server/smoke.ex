@@ -4,7 +4,8 @@ defmodule Server.Smoke do
   unix socket and a network namespace shared with the scratch node, which a seat's sandboxed Bash
   has neither of, so the seat asks and the service runs it (`Server.Jobs.Smoke`). The release
   script keeps its own one-smoke-per-commit lock; this module only finds the running one
-  (an executing `Jobs.Smoke` whose meta carries the url) and stops it.
+  (an executing `Jobs.Smoke` whose meta carries the url) and stops it. A smoke still building has
+  no url yet: `building/2` finds it, so drive and stop say so and a same-ref start returns it.
   """
   import Ecto.Query
 
@@ -39,13 +40,7 @@ defmodule Server.Smoke do
         {:error, "a smoke is already up for this thread: #{held(thread.id).meta["url"]}"}
 
       true ->
-        Oban.insert(
-          Job.new(
-            Map.reject(%{thread_id: thread.id, ref: ref, by: by, flags: flags, fixtures: fixtures}, fn {_k, v} ->
-              v in [nil, []]
-            end)
-          )
-        )
+        queue(thread.id, ref, %{by: by, flags: flags, fixtures: fixtures})
     end
   end
 
@@ -62,12 +57,30 @@ defmodule Server.Smoke do
     )
   end
 
+  @doc """
+  The thread's smoke job that is queued or running but not up yet (no url), or nil; with `ref`,
+  only one of that ref. A start for the same ref returns it rather than stacking a second build.
+  """
+  @spec building(integer(), String.t() | nil) :: Oban.Job.t() | nil
+  def building(thread_id, ref \\ nil) do
+    query =
+      from j in Oban.Job,
+        where:
+          j.worker == "Server.Jobs.Smoke" and j.state in ["available", "scheduled", "executing", "retryable"] and
+            fragment("?->>'thread_id' = ?", j.args, ^to_string(thread_id)) and
+            fragment("?->>'url' is null", j.meta),
+        order_by: j.id,
+        limit: 1
+
+    Server.Repo.one(if ref, do: where(query, [j], fragment("?->>'ref' = ?", j.args, ^ref)), else: query)
+  end
+
   @doc "Tear down the thread's held smoke: its script cleans up on TERM."
   @spec stop(integer()) :: :ok | {:error, String.t()}
   def stop(thread_id) do
     case held(thread_id) do
       nil ->
-        {:error, "no smoke is up for this thread"}
+        {:error, none(thread_id, "no smoke is up for this thread")}
 
       %{meta: %{"os_pid" => pid}} ->
         _ = System.cmd("kill", ["-TERM", to_string(pid)], stderr_to_stdout: true)
@@ -84,7 +97,7 @@ defmodule Server.Smoke do
   def drive(thread_id, keys) do
     case held(thread_id) do
       nil ->
-        {:error, "no smoke is up for this thread: start_smoke first"}
+        {:error, none(thread_id, "no smoke is up for this thread: start_smoke first")}
 
       %{meta: %{"url" => url} = meta} ->
         # the smoke's own build dir, so a TUI change drives the candidate's TUI (old holds: the checkout)
@@ -110,5 +123,28 @@ defmodule Server.Smoke do
   def main_root(from \\ Server.Profiles.tlon_root()) do
     {out, 0} = System.cmd("git", ["-C", from, "rev-parse", "--path-format=absolute", "--git-common-dir"])
     out |> String.trim() |> Path.dirname()
+  end
+
+  defp building_error(%Oban.Job{id: id} = job, fallback) do
+    since = Calendar.strftime(job.attempted_at || job.inserted_at, "%H:%M:%SZ")
+    "building since #{since} (job #{id}): #{fallback}"
+  end
+
+  defp none(thread_id, fallback) do
+    case building(thread_id) do
+      nil -> fallback
+      job -> building_error(job, "its url is posted on the thread when it is up")
+    end
+  end
+
+  defp queue(thread_id, ref, opts) do
+    case building(thread_id, ref) do
+      nil ->
+        args = Map.reject(Map.merge(opts, %{thread_id: thread_id, ref: ref}), fn {_k, v} -> v in [nil, []] end)
+        Oban.insert(Job.new(args))
+
+      job ->
+        {:ok, job}
+    end
   end
 end
