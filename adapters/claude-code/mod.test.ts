@@ -615,6 +615,28 @@ test("a main turn ending while a subagent still runs is not idle; the last subag
   expect(declares(sent).filter((d) => d.tool === "presence_idle")).toHaveLength(1);
 });
 
+test("a background subagent outliving the main turn gets a presence_doing refresh before the stale clock", async ($, on) => {
+  const sent = engine(on, { ownClock: true });
+  const clock = mock.clock(on);
+
+  await $.session.start(START);
+  await $.turn.start({ text: "go", turnId: "t1" });
+  await $.turn.start({ text: "bg", turnId: "s1", agentId: "sub-1" });
+  await $.turn.complete(TURN_END);
+  await settle();
+  expect(declares(sent).filter((d) => d.tool === "presence_idle")).toEqual([]);
+
+  for (let i = 0; i < 60; i++) {
+    await clock.advance(3_000);
+    await settle();
+  }
+  expect(declares(sent).filter((d) => d.tool === "presence_doing" && d.args.summary === "waiting on a background agent")).toHaveLength(1);
+
+  await $.turn.complete({ ...TURN_END, agentId: "sub-1" });
+  await settle();
+  expect(declares(sent).filter((d) => d.tool === "presence_idle")).toHaveLength(1);
+});
+
 test("a push is held for the server's push_branch; a status runs", async ($, on) => {
   engine(on);
   on("tool.check", () => ({ decision: "allow" }));
