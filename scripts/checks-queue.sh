@@ -4,8 +4,9 @@
 #
 # Every full check compiles everything and runs the whole server suite against the one test
 # database, so two at once slow the machine to a crawl and wipe each other's rows (tests that
-# fail only when another suite runs beside them). This takes a machine-wide lock first and waits
-# its turn, saying who holds it; the command runs once the lock is free and releases it on exit.
+# fail only when another suite runs beside them). This takes a ticket, waits for the lowest live one
+# (first come, first served), then takes the machine-wide lock, saying who holds it; the command
+# runs once the lock is free and releases it on exit.
 #
 #   scripts/checks-queue.sh <command…>        e.g. scripts/checks-queue.sh mise run check:all
 #
@@ -37,13 +38,53 @@ fi
 label="${CHECKS_LABEL:-${TLON_AUTHOR:-operator}${TLON_THREAD:+ on #$TLON_THREAD}: $* @ $(git rev-parse --short HEAD 2>/dev/null || echo '?')}"
 me="$label (pid $$) in $PWD since $(date +%H:%M:%S)"
 
-# the office's rack reads the holder and the waiters (Server.Office.Room.checks/0)
-if ! flock -n 9; then
-  echo "checks queue: waiting — $(cat "$holder" 2>/dev/null || echo 'another check is running')" >&2
-  mkdir -p "$dir/tlon-checks.wait" 2>/dev/null && echo "$me" >"$dir/tlon-checks.wait/$$" 2>/dev/null
-  trap 'rm -f "$dir/tlon-checks.wait/$$"' EXIT
+# FIFO: a ticket, then the lock only for the lowest live ticket. The lock (the kernel's flock) still
+# does the mutual exclusion; the tickets only decide who may try it, so a newcomer never beats a
+# waiter. The office's rack reads the holder and the waiters (Server.Office.Room.checks/0).
+wait_dir="$dir/tlon-checks.wait"
+seq_file="$dir/tlon-checks.seq"
+poll="${CHECKS_POLL:-0.5}"
+
+# alive <pid>: a running checks-queue.sh (the cmdline guard keeps a reused pid from holding the line)
+alive() { [ "$1" = "$$" ] || { [ -r "/proc/$1/cmdline" ] && tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null | grep -q 'checks-queue\.sh'; }; }
+
+# take_ticket: the next number, and the entry <10-digit ticket>-<pid> written under the same lock, so
+# no ticket is ever taken but invisible. Prints the entry's path; fails if the bookkeeping can't be written.
+take_ticket() {
+  mkdir -p "$wait_dir" || return 1
+  (
+    exec 8>>"$seq_file" || exit 1
+    flock 8 || exit 1
+    n="$(cat "$seq_file")"
+    n=$((10#${n:-0} + 1))
+    printf '%d\n' "$n" >"$seq_file" || exit 1
+    entry="$wait_dir/$(printf '%010d' "$n")-$$"
+    printf '%s\n' "$me" >"$entry" || exit 1
+    printf '%s' "$entry"
+  )
+}
+
+if entry="$(take_ticket 2>/dev/null)" && [ -n "$entry" ]; then
+  trap 'rm -f "$entry"' EXIT
+  told=0
+  while :; do
+    head=""
+    for f in "$wait_dir"/[0-9]*-[0-9]*; do # padded tickets: glob order is arrival order
+      [ -e "$f" ] || continue
+      if alive "${f##*-}"; then head="$f"; break; fi
+      rm -f "$f" # a dead waiter's ticket: whoever notices removes it
+    done
+    if [ "$head" = "$entry" ] && flock -n 9; then break; fi
+    if [ "$told" = 0 ]; then
+      echo "checks queue: waiting — $(cat "$holder" 2>/dev/null || echo 'another check is running')" >&2
+      told=1
+    fi
+    sleep "$poll"
+  done
+  rm -f "$entry"
+else
+  echo "checks queue: can't write $wait_dir or $seq_file — falling back to a plain lock, no queue order" >&2
   flock 9
-  rm -f "$dir/tlon-checks.wait/$$"
 fi
 
 echo "$label (pid $$) in $PWD since $(date +%H:%M:%S)" >"$holder" 2>/dev/null || true
