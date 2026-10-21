@@ -513,6 +513,7 @@ defmodule Server.WorklineLandingTest do
 
       assert_received {:stack, ["car-a", "car-b"]}
       refute_received {:stack, _}
+      assert_received {:merge, "car-a"}
       assert_received {:merge, "car-b"}
       assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
       assert %Thread{stage: "merged"} = Repo.get!(Thread, b.id)
@@ -541,6 +542,20 @@ defmodule Server.WorklineLandingTest do
 
       assert {:ok, _} = Workline.land_train(a, [b], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
 
+      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "review"} = Repo.get!(Thread, b.id)
+    end
+
+    test "a lead whose rebase onto main is not the tree the train gated lands alone, gated alone" do
+      a = queued!("drift-a")
+      b = queued!("drift-b")
+      Process.put({:tree, "drift-a"}, "main moved while the train was gated")
+
+      assert {:ok, _} = Workline.land_train(a, [b], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
+
+      assert_received {:merge, "drift-a"}
+      assert_received {:merge, "drift-a"}
+      refute_received {:merge, "drift-b"}
       assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
       assert %Thread{stage: "review"} = Repo.get!(Thread, b.id)
     end

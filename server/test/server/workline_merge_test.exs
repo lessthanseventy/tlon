@@ -301,17 +301,26 @@ defmodule Server.Workline.MergeTest do
 
       assert {:ok, %{from: ^upstream, cars: [first, second]}} = Merge.stack(repo, ["finder", "second"], gate: gate)
       assert :counters.get(gated, 1) == 1
-      assert_received {:gated, "work/second"}
-      assert subjects(git, "work/second") == ["work/second", "build", "theirs", "seed"]
-      assert first.to == sha(git, "work/finder") and second.to == sha(git, "work/second")
-      assert second.tree == Merge.tree(repo, "work/second")
+      assert_received {:gated, "train/second"}
+      assert subjects(git, second.to) == ["work/second", "build", "theirs", "seed"]
+      assert subjects(git, first.to) == ["build", "theirs", "seed"]
       assert first.tree != second.tree
     end
 
-    test "a red gate says so, and every car keeps its rebase", %{repo: repo, git: git} do
+    test "the train rides on scratch refs: every work/ branch is left as its review saw it", %{repo: repo, git: git} do
+      branch(git, repo, "work/second", "c.txt", "second\n")
+      before = {sha(git, "work/finder"), sha(git, "work/second")}
+
+      assert {:ok, _} = Merge.stack(repo, ["finder", "second"])
+      assert {sha(git, "work/finder"), sha(git, "work/second")} == before
+      assert {"", 0} = git.(["branch", "--list", "train/*"])
+    end
+
+    test "a red gate says so, and every car's branch is as it was", %{repo: repo, git: git} do
       branch(git, repo, "work/second", "c.txt", "second\n")
       assert {:error, {:gate, "red"}} = Merge.stack(repo, ["finder", "second"], gate: fn _, _ -> {:error, "red"} end)
-      assert "build" in subjects(git, "work/second")
+      refute "build" in subjects(git, "work/second")
+      assert {"", 0} = git.(["branch", "--list", "train/*"])
     end
 
     test "a car that conflicts with the one before it names itself", %{repo: repo, git: git} do

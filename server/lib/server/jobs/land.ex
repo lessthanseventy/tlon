@@ -86,22 +86,15 @@ defmodule Server.Jobs.Land do
   end
 
   @doc "The landing's gate: the full check on the rebased branch, in the workline's own repo."
-  def gate(thread, _repo, _branch) do
-    script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
+  def gate(thread, _repo, _branch), do: gate_on(thread, [])
 
-    case Server.worktree_for_thread(thread) do
-      {:ok, tree} ->
-        "bash"
-        |> System.cmd([script, to_string(thread.id), thread.slug, tree],
-          env: [{"WORKLINE_GATE", "1"}],
-          stderr_to_stdout: true
-        )
-        |> gate_result()
-
-      {:error, why} ->
-        {:error, "there is no checkout of it to gate (#{inspect(why)})."}
-    end
-  end
+  @doc """
+  A merge train's gate (`Server.Workline.land_train/3`): the same check on the stacked `ref`
+  (`train/<last>`, holding every car) in branch mode (`LAND_REF`), not on the last car's own branch.
+  Branch mode has no stray-path rule, which the stacked tip, carrying every car's `work/<slug>/`,
+  would always break; each car met it at its own verify.
+  """
+  def gate_train(thread, _repo, ref), do: gate_on(thread, [{"LAND_REF", ref}])
 
   @doc """
   A PR's landing gate: the same full check, by the same script in its branch mode (`LAND_REF`, the
@@ -139,6 +132,23 @@ defmodule Server.Jobs.Land do
     case reported(thread, attempt, max, fn -> queued.(thread, last: attempt >= max, auto: args["auto"] == true) end) do
       {:error, {:interrupted, why}} -> {:error, why}
       _ -> :ok
+    end
+  end
+
+  defp gate_on(thread, env) do
+    script = Path.join(Server.Profiles.tlon_root(), "scripts/workline-verify.sh")
+
+    case Server.worktree_for_thread(thread) do
+      {:ok, tree} ->
+        "bash"
+        |> System.cmd([script, to_string(thread.id), thread.slug, tree],
+          env: [{"WORKLINE_GATE", "1"} | env],
+          stderr_to_stdout: true
+        )
+        |> gate_result()
+
+      {:error, why} ->
+        {:error, "there is no checkout of it to gate (#{inspect(why)})."}
     end
   end
 end

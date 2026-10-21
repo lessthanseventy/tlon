@@ -506,9 +506,9 @@ defmodule Server.Workline do
   still at review, unawaited, open and reviewed at its head) are stacked in order, each rebased on the
   one before, and the last, which holds them all, is gated ONCE (`Merge.stack/3`); a red gate is run
   again before it is believed, since one flake would otherwise stop every car. Green, they land in
-  order: the first at its gated head; each after it is rebased onto the main the cars before it made
-  and lands without a gate of its own only if that rebase gives the tree the train gated there (a main
-  that moved some other way gives another, and that car waits for its own turn). Red twice, or a car
+  order: each is rebased onto the main the cars before it made and lands without a gate of its own
+  only if that rebase gives the tree the train gated there (a main that moved some other way gives
+  another: the lead then lands alone, gated alone, and a later car waits for its own turn). Red twice, or a car
   that won't stack: `lead` lands alone, gated alone, and every other car keeps its own turn, so the
   culprit is found and bounced by itself. Alone, it is `land_queued/2`. Opts as `land_queued/2`.
   """
@@ -2177,17 +2177,22 @@ defmodule Server.Workline do
   defp rideable?(%Thread{stage: "review", awaiting: nil, state: "open"} = t), do: reviewed_current(t) == :ok
   defp rideable?(_thread), do: false
 
-  defp ride([{lead, first} | rest], from, repo, merger, opts) do
+  defp ride([{lead, _} = first | rest], repo, merger, opts) do
     run = Keyword.get(opts, :run, &System.cmd/3)
-    {:ok, _} = landed(lead, %{repo: repo, from: from, to: first.to, gated: first.to}, run)
 
-    post_brief(
-      lead,
-      "🚃 landed in a merge train with #{Enum.map_join(rest, ", ", fn {t, _} -> "##{t.id}" end)}: one gate for all of them"
-    )
+    case ride_on(first, repo, merger, run) do
+      {:cont, :ok} ->
+        post_brief(
+          lead,
+          "🚃 landed in a merge train with #{Enum.map_join(rest, ", ", fn {t, _} -> "##{t.id}" end)}: one gate for all of them"
+        )
 
-    _ = Enum.reduce_while(rest, :ok, fn car, :ok -> ride_on(car, repo, merger, run) end)
-    {:ok, Repo.get!(Thread, lead.id)}
+        _ = Enum.reduce_while(rest, :ok, fn car, :ok -> ride_on(car, repo, merger, run) end)
+        {:ok, Repo.get!(Thread, lead.id)}
+
+      {:halt, :ok} ->
+        land_queued(lead, opts)
+    end
   end
 
   defp ride_on({thread, car}, repo, merger, run) do
@@ -2208,12 +2213,12 @@ defmodule Server.Workline do
   defp train([lead | _] = cars, opts) do
     merger = Keyword.get(opts, :merge, Server.Workline.Merge)
     repo = Git.root(lead)
-    gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(List.last(cars), &1, &2) end)
+    gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate_train(List.last(cars), &1, &2) end)
     slugs = Enum.map(cars, & &1.slug)
     stack = fn -> merger.stack(repo, slugs, gate: gate) end
 
     case with({:error, {:gate, _}} <- stack.(), do: stack.()) do
-      {:ok, %{from: from, cars: stacked}} -> ride(Enum.zip(cars, stacked), from, repo, merger, opts)
+      {:ok, %{cars: stacked}} -> ride(Enum.zip(cars, stacked), repo, merger, opts)
       {:error, _} -> land_queued(lead, opts)
     end
   end
