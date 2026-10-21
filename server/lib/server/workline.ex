@@ -348,8 +348,9 @@ defmodule Server.Workline do
     end
   end
 
-  # The review gate's approval joins the merge queue (`Server.Jobs.Land`, one landing at a time,
-  # each rebased onto main and gated there) — against the real repo; a test's stub merger lands
+  # The review gate's approval joins the merge queue (`Server.Jobs.Land`, one turn at a time, the
+  # landings queued behind it riding as a merge train on one gate: `land_train/3`) — against the
+  # real repo; a test's stub merger lands
   # inline, and `land: :queue | :now` says so outright.
   defp queue?(%Thread{stage: "review"}, checker, opts) do
     Keyword.get(opts, :land, if(checker == Git and not Keyword.has_key?(opts, :merge), do: :queue, else: :now)) ==
@@ -364,7 +365,7 @@ defmodule Server.Workline do
          {:ok, _job} <- Server.Jobs.enqueue(Server.Jobs.Land.new(%{thread_id: thread.id})) do
       post_brief(
         queued,
-        "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, one landing at a time"
+        "⧗ #{why} — in the merge queue: it lands once rebased onto main and green there, with any landings queued beside it on one gate"
       )
 
       {:ok, queued}
@@ -498,6 +499,38 @@ defmodule Server.Workline do
       ),
       :count
     )
+  end
+
+  @doc """
+  The merge queue's turn for `lead` with `others` queued behind it: a merge train. The cars (each
+  still at review, unawaited, open and reviewed at its head) are stacked in order, each rebased on the
+  one before, and the last, which holds them all, is gated ONCE (`Merge.stack/3`); a red gate is run
+  again before it is believed, since one flake would otherwise stop every car. Green, they land in
+  order: the first at its gated head; each after it is rebased onto the main the cars before it made
+  and lands without a gate of its own only if that rebase gives the tree the train gated there (a main
+  that moved some other way gives another, and that car waits for its own turn). Red twice, or a car
+  that won't stack: `lead` lands alone, gated alone, and every other car keeps its own turn, so the
+  culprit is found and bounced by itself. Alone, it is `land_queued/2`. Opts as `land_queued/2`.
+  """
+  def land_train(%Thread{} = lead, others, opts \\ []) do
+    cars = Enum.filter([lead | others], &rideable?/1)
+
+    if length(cars) < 2 or hd(cars).id != lead.id do
+      land_queued(lead, opts)
+    else
+      merger = Keyword.get(opts, :merge, Server.Workline.Merge)
+      repo = Git.root(lead)
+      gate = Keyword.get_lazy(opts, :gate, fn -> &Server.Jobs.Land.gate(List.last(cars), &1, &2) end)
+      slugs = Enum.map(cars, & &1.slug)
+
+      case with(
+             {:error, {:gate, _}} <- merger.stack(repo, slugs, gate: gate),
+             do: merger.stack(repo, slugs, gate: gate)
+           ) do
+        {:ok, %{from: from, cars: stacked}} -> ride(Enum.zip(cars, stacked), from, repo, merger, opts)
+        {:error, _} -> land_queued(lead, opts)
+      end
+    end
   end
 
   @doc """
@@ -2142,4 +2175,35 @@ defmodule Server.Workline do
     do: thread |> checker.check(Map.fetch!(@owed, thread.stage)) |> this_round(thread)
 
   defp follow_up_title(text), do: text |> String.split("\n", parts: 2) |> hd() |> String.trim()
+
+  defp rideable?(%Thread{stage: "review", awaiting: nil, state: "open"} = t), do: reviewed_current(t) == :ok
+  defp rideable?(_thread), do: false
+
+  defp ride([{lead, first} | rest], from, repo, merger, opts) do
+    run = Keyword.get(opts, :run, &System.cmd/3)
+    {:ok, _} = landed(lead, %{repo: repo, from: from, to: first.to, gated: first.to}, run)
+
+    post_brief(
+      lead,
+      "🚃 landed in a merge train with #{Enum.map_join(rest, ", ", fn {t, _} -> "##{t.id}" end)}: one gate for all of them"
+    )
+
+    Enum.reduce_while(rest, :ok, fn car, :ok -> ride_on(car, repo, merger, run) end)
+    {:ok, Repo.get!(Thread, lead.id)}
+  end
+
+  defp ride_on({thread, car}, repo, merger, run) do
+    certify = fn r, branch ->
+      if merger.tree(r, branch) == car.tree, do: {:ok, :train}, else: {:error, :moved}
+    end
+
+    case merger.merge(repo, thread.slug, gate: certify) do
+      {:ok, moved} ->
+        landed(thread, Map.merge(moved, %{repo: repo, gated: moved.to}), run)
+        {:cont, :ok}
+
+      {:error, _} ->
+        {:halt, :ok}
+    end
+  end
 end

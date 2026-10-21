@@ -470,4 +470,98 @@ defmodule Server.WorklineLandingTest do
       0 -> :ok
     end
   end
+
+  # a merge train's merger, answered from the test process: stack/3 green unless told otherwise,
+  # merge/3 running the certify gate it is handed, tree/2 the train's own unless told otherwise
+  defmodule Train do
+    @moduledoc false
+    def stack(_repo, slugs, _opts) do
+      send(self(), {:stack, slugs})
+
+      case Process.get(:stack_results, []) do
+        [r | rest] ->
+          Process.put(:stack_results, rest)
+          r
+
+        [] ->
+          {:ok, %{from: "m", cars: Enum.map(slugs, &%{slug: &1, to: "to-#{&1}", tree: "tree-#{&1}"})}}
+      end
+    end
+
+    def merge(repo, slug, opts) do
+      send(self(), {:merge, slug})
+
+      with {:ok, _} <- opts[:gate].(repo, "work/#{slug}"), do: {:ok, %{from: "m2", to: "re-#{slug}"}}
+    end
+
+    def tree(_repo, "work/" <> slug), do: Process.get({:tree, slug}, "tree-#{slug}")
+  end
+
+  defp queued!(slug) do
+    {:ok, thread} = Workline.open(%{title: slug, slug: slug, stage: "review"})
+    {:awaiting, parked} = Workline.advance(thread, artifacts: AllPresent)
+    {:ok, queued} = parked |> Thread.workline_stage_changeset(%{awaiting: nil}) |> Repo.update()
+    queued
+  end
+
+  describe "land_train/3" do
+    test "two queued worklines ride one gate and both land, the second certified by its tree" do
+      a = queued!("car-a")
+      b = queued!("car-b")
+
+      assert {:ok, _} = Workline.land_train(a, [b], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
+
+      assert_received {:stack, ["car-a", "car-b"]}
+      refute_received {:stack, _}
+      assert_received {:merge, "car-b"}
+      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "merged"} = Repo.get!(Thread, b.id)
+      assert Enum.any?(Server.Channel.thread_messages(Repo.get!(Thread, a.id)), &(&1.body =~ "merge train"))
+    end
+
+    test "a red train is run again before it is believed; red twice, the lead lands alone and the rest wait" do
+      a = queued!("red-a")
+      b = queued!("red-b")
+      Process.put(:stack_results, [{:error, {:gate, "red"}}, {:error, {:gate, "red"}}])
+
+      assert {:ok, _} = Workline.land_train(a, [b], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
+
+      assert_received {:stack, _}
+      assert_received {:stack, _}
+      assert_received {:merge, "red-a"}
+      refute_received {:merge, "red-b"}
+      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "review"} = Repo.get!(Thread, b.id)
+    end
+
+    test "a car whose rebase onto the new main is not the tree the train gated waits for its own turn" do
+      a = queued!("moved-a")
+      b = queued!("moved-b")
+      Process.put({:tree, "moved-b"}, "someone else's main under it")
+
+      assert {:ok, _} = Workline.land_train(a, [b], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
+
+      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+      assert %Thread{stage: "review"} = Repo.get!(Thread, b.id)
+    end
+
+    test "the landing job's companions: queued landings first come first, never a reland, never itself" do
+      a = queued!("job-a")
+      b = queued!("job-b")
+      c = queued!("job-c")
+      lead = %{thread_id: a.id} |> Server.Jobs.Land.new() |> Repo.insert!()
+      %{thread_id: c.id, reland: true} |> Server.Jobs.Land.new() |> Repo.insert!()
+      %{thread_id: b.id} |> Server.Jobs.Land.new() |> Repo.insert!()
+
+      assert [%Thread{id: id}] = Server.Jobs.Land.companions(a, lead.id)
+      assert id == b.id
+    end
+
+    test "alone, it is land_queued" do
+      a = queued!("solo")
+      assert {:ok, _} = Workline.land_train(a, [], merge: Train, gate: fn _, _ -> {:ok, :green} end, run: gh("OPEN"))
+      refute_received {:stack, _}
+      assert %Thread{stage: "merged"} = Repo.get!(Thread, a.id)
+    end
+  end
 end

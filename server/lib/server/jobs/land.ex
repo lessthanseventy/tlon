@@ -17,6 +17,8 @@ defmodule Server.Jobs.Land do
 
   import Ecto.Query
 
+  @train_cars 4
+
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"pr" => _} = args, attempt: attempt, max_attempts: max}) do
     case Server.PRLanding.land(args, last: attempt >= max) do
@@ -25,7 +27,7 @@ defmodule Server.Jobs.Land do
     end
   end
 
-  def perform(%Oban.Job{args: %{"thread_id" => tid} = args, attempt: attempt, max_attempts: max}) do
+  def perform(%Oban.Job{id: job_id, args: %{"thread_id" => tid} = args, attempt: attempt, max_attempts: max}) do
     # the lock only orders this read against a send-back (which moves the row under it): one in
     # flight is seen; it doesn't guard the landing, which send-back refuses once this job exists
     {:ok, thread} =
@@ -33,8 +35,34 @@ defmodule Server.Jobs.Land do
         Server.Repo.one(from t in Server.Thread, where: t.id == ^tid, lock: "FOR UPDATE")
       end)
 
-    queued = if args["reland"], do: &Server.Workline.reland_queued/2, else: &Server.Workline.land_queued/2
+    queued =
+      if args["reland"],
+        do: &Server.Workline.reland_queued/2,
+        else: &Server.Workline.land_train(&1, companions(&1, job_id), &2)
+
     if thread, do: land(thread, queued, args, attempt, max), else: :ok
+  end
+
+  @doc """
+  The worklines queued for landing behind job `job_id` that can ride `thread`'s merge train
+  (`Server.Workline.land_train/3`): first come first, at most #{@train_cars - 1}, in the same repo. A
+  reland or a PR's landing never rides. Each keeps its own job, which finds it landed and does nothing.
+  """
+  def companions(thread, job_id) do
+    repo = Server.Workline.Artifacts.Git.root(thread)
+
+    from(j in Oban.Job,
+      where:
+        j.worker == "Server.Jobs.Land" and j.id != ^job_id and j.state in ["available", "scheduled"] and
+          fragment("? \\? 'thread_id'", j.args) and not fragment("? \\? 'reland'", j.args),
+      order_by: [asc: j.id],
+      select: fragment("(? ->> 'thread_id')::int", j.args)
+    )
+    |> Server.Repo.all()
+    |> Enum.uniq()
+    |> Enum.map(&Server.Repo.get(Server.Thread, &1))
+    |> Enum.filter(&(&1 && &1.id != thread.id && Server.Workline.Artifacts.Git.root(&1) == repo))
+    |> Enum.take(@train_cars - 1)
   end
 
   @doc """
