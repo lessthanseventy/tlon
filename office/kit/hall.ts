@@ -89,8 +89,7 @@ export function roll(seed: string, o: { taken: readonly string[]; vocab: Vocab }
   const specialty = pick(o.vocab.specialties, "specialty")
 
   const pitch = pick(PITCHES, "pitch")(name, grade, archetype, specialty)
-  const soul = SOUL_SECTIONS.filter(h => h !== "Diary").map(h => `## ${h}\n`).join("\n")
-  return { seed, name, archetype, grade, specialty, look, pitch, soul, drawn: false }
+  return { seed, name, archetype, grade, specialty, look, pitch, soul: BLANK_SOUL, drawn: false }
 }
 
 /** what a hand or a pass stores about a candidate: the seed plus edits, never the rendered result */
@@ -114,6 +113,9 @@ function cleanLocks(raw: unknown): Locks {
   const slots = keep(r.slots, SLOTS), fields = keep(r.fields, FIELDS)
   return { ...(slots.length ? { slots } : {}), ...(fields.length ? { fields } : {}) }
 }
+
+/** a soul's headings with nothing under them: what a new seat's souls/<name>.md starts as (the diary is the seat's own to begin) */
+export const BLANK_SOUL = SOUL_SECTIONS.filter(h => h !== "Diary").map(h => `## ${h}\n`).join("\n")
 
 // Server.Soul's name check: the name becomes souls/<name>.md and a looks.json key
 export const SOUL_NAME = /^[a-z0-9][a-z0-9_-]*$/

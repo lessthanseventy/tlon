@@ -30,7 +30,7 @@ import { ROLE, useRoles, type Role } from "../kit/palette"
 import { lifeHeader, lifeRows } from "../kit/life"
 import { usageHeader } from "../kit/usage"
 import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
-import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
+import { BLANK_SOUL, bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
 import { castSignature, loadCast, saveCast, setTrait, type Cast } from "../kit/cast"
 import { CAST_FIELDS, castRows, nextTrait, rerollTrait } from "./cast"
@@ -1875,6 +1875,8 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         const f = CAST_FIELDS[castCol]
         if (f === "model") pickModel(b)
         else if (f === "voice") pickPersona(b)
+        else if (f === "look") open({ kind: "look", name: b.name, from: mode })
+        else if (f === "soul") openSoul(b.name)
         else if (f === "grade" || f === "specialty") {
           const vocab = f === "grade" ? hallVocab().grades : hallVocab().specialties
           castSet(setTrait(cast, b.name, f, nextTrait(vocab, cast[b.name]?.[f] ?? "unset"))); draw()
@@ -1882,6 +1884,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
       }
       const reroll = (b: Coworker) => {
         const f = CAST_FIELDS[castCol]
+        if (f === "look") { saveLook(b.name, { ...(overrideFor(b.name) ?? {}), ...rollLook(`${b.name}:${rolls++}`) }); roomChanged = true; draw() }
         if (f === "grade" || f === "specialty") { castSet(setTrait(cast, b.name, f, rerollTrait(`${b.name}:${castRolls++}`, f, hallVocab()))); draw() }
       }
       const rows: Row[] = castRows(seats, cast).map((r, i) => ({
@@ -2573,13 +2576,20 @@ async function openDump() {
     try { unsent = readFileSync(file, "utf8") } catch {}
     if (unsent?.trim() && unsent !== dumpSent.get(w)) { status = "sending what you wrote while the server was away"; syncDump(w) }
     else { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, dumpSent.get(w)!) }
-    // VISUAL/EDITOR is a shell command, as git reads it: flags work, and a path with spaces is quoted inside it
-    const edit = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; [ -n "$e" ] || { echo "no editor: set VISUAL or EDITOR"; read _; exit 1; }; eval "exec $e \\"\\$0\\""`
-    // a tmux server already up keeps its own env, so the editor this TUI was started with is handed over
-    const env = ["VISUAL", "EDITOR"].flatMap((k) => (process.env[k] ? ["-e", `${k}=${process.env[k]}`] : []))
-    tmux("new-session", "-d", "-s", session, "-n", "dump", ...env, "sh", "-c", edit, file)
+    tmux("new-session", "-d", "-s", session, "-n", "dump", ...EDITOR_ENV(), "sh", "-c", EDIT_SH, file)
   }
   zoomOn({ socket: OWN_TMUX, session, window: "dump" }, "the dump", () => syncDump(w))
+}
+// VISUAL/EDITOR is a shell command, as git reads it: flags work, and a path with spaces is quoted inside it
+const EDIT_SH = `e="\${VISUAL:-\${EDITOR:-}}"; [ -n "$e" ] || e="$(command -v nvim || command -v vi)"; [ -n "$e" ] || { echo "no editor: set VISUAL or EDITOR"; read _; exit 1; }; eval "exec $e \\"\\$0\\""`
+// a tmux server already up keeps its own env, so the editor this TUI was started with is handed over
+const EDITOR_ENV = () => ["VISUAL", "EDITOR"].flatMap((k) => (process.env[k] ? ["-e", `${k}=${process.env[k]}`] : []))
+/** a seat's soul in the operator's own editor, zoomed like the dump; the file starts blank when absent and is never overwritten */
+function openSoul(name: string) {
+  const file = join(SOULS, `${name}.md`), session = `soul-${name}`, tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", OWN_TMUX, ...a])
+  try { mkdirSync(SOULS, { recursive: true }); writeFileSync(file, BLANK_SOUL, { flag: "wx" }) } catch { /* theirs already: never overwritten */ }
+  if (tmux("has-session", "-t", `=${session}`).exitCode !== 0) tmux("new-session", "-d", "-s", session, "-n", "soul", ...EDITOR_ENV(), "sh", "-c", EDIT_SH, file)
+  zoomOn({ socket: OWN_TMUX, session, window: "soul" }, "the soul", () => { soulsSeen = "" })
 }
 /** the arcade's games: terminal games, played wherever the machine has installed them */
 const GAMES = [
