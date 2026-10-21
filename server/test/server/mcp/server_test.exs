@@ -1379,6 +1379,20 @@ defmodule Server.MCP.ServerTest do
     assert %{status: "done"} = Repo.get(Server.Ticket, ticket.id)
   end
 
+  test "finish with a blank abandoned on a workline that hasn't merged stays open and says why, not a crash" do
+    {:ok, ws} = Server.Workspaces.register(%{name: "BlankWhy"})
+    {:ok, w} = Server.Workline.open(%{title: "blank", slug: "blank-finish", stage: "build", workspace_id: ws.id})
+    {:ok, agent} = Staff.register_agent(%{name: "closer-b", mandate: "build", engine: "fresh"})
+    token = MCP.Tokens.mint(w, agent)
+    session = handshake(token)
+
+    r = call(token, session, 2, "finish", %{"summary" => "nothing to say", "abandoned" => "   "})
+    refute r["isError"]
+    assert decode_tool_json(r)["stays_open"] == true
+    assert decode_tool_json(r)["why"] =~ "superseded_by"
+    assert %Thread{state: "open"} = Repo.get(Thread, w.id)
+  end
+
   test "staff_child with a ticket_id moves that ticket into the thread it opens", %{token: token} do
     {:ok, _} = Staff.register_agent(%{name: "yu-machine", mandate: "plan", engine: "fresh"})
     {:ok, ws} = Server.Workspaces.register(%{name: "Ticketed"})

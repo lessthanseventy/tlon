@@ -446,6 +446,13 @@ defmodule Server.MCP.Tool.Finish do
       nil ->
         fail(frame, "this connection's thread is gone")
 
+      {:error, :why_closed} ->
+        ok(frame, %{
+          "stays_open" => true,
+          "why" =>
+            "this workline hasn't merged: say why it closes — superseded_by (the PR or commit that shipped its work) or abandoned (why it is dropped)"
+        })
+
       other ->
         reply(frame, other, & &1)
     end
