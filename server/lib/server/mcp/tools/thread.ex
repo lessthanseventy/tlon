@@ -395,7 +395,9 @@ defmodule Server.MCP.Tool.Finish do
   posted as your last word on the thread, then the thread closes: a child reports up to its
   manager, and the ticket it came from is marked done. Only your own thread — closing another is
   the manager's call. If you were wrong, the operator's next reply reopens it. A workline that
-  GitHub hasn't merged stays open (the summary is still posted): it closes itself when GitHub merges its PR.
+  GitHub hasn't merged stays open (the summary is still posted): it closes itself when GitHub merges its PR —
+  unless it is stood down on purpose: `superseded_by` (the PR or commit that shipped its work) or
+  `abandoned` (why it is dropped) closes it unmerged, as `close_thread` does.
   """
   use Server.MCP.Tool
 
@@ -403,6 +405,13 @@ defmodule Server.MCP.Tool.Finish do
 
   schema do
     field :summary, :string, required: true, description: "What was done and how it was verified"
+
+    field :superseded_by, :string,
+      description:
+        "Only for a workline that hasn't merged and whose work already shipped elsewhere: the PR or commit (e.g. \"PR #234\") — its ticket is done"
+
+    field :abandoned, :string,
+      description: "Only for a workline that hasn't merged and is dropped: why — its ticket goes back to the backlog"
   end
 
   @impl true
@@ -412,8 +421,7 @@ defmodule Server.MCP.Tool.Finish do
     with {:ok, _} <- Channel.post(%{thread_id: identity.thread_id, author: identity.agent, body: params[:summary]}),
          %Server.Thread{} = thread <- Channel.thread(identity.thread_id),
          false <- Channel.standing?(thread),
-         false <- unmerged_workline?(thread),
-         {:ok, closed} <- Channel.close_thread(thread) do
+         {:ok, closed} <- close(thread, params) do
       ok(frame, %{"closed" => closed.id})
     else
       {:tracked, tracked} ->
@@ -427,7 +435,8 @@ defmodule Server.MCP.Tool.Finish do
       :workline ->
         ok(frame, %{
           "stays_open" => true,
-          "why" => "a workline closes itself when GitHub merges its PR — not finish"
+          "why" =>
+            "a workline closes itself when GitHub merges its PR — to stand it down instead, finish with superseded_by (the PR or commit that shipped its work) or abandoned (why it is dropped)"
         })
 
       # the lobby holds every coworker's window: the summary is posted, the thread stays open
@@ -441,6 +450,18 @@ defmodule Server.MCP.Tool.Finish do
         reply(frame, other, & &1)
     end
   end
+
+  defp close(thread, params) do
+    case {unmerged_workline?(thread), why_closed(params)} do
+      {false, _} -> Channel.close_thread(thread)
+      {:workline, nil} -> :workline
+      {:workline, why} -> Channel.close_as(thread, why)
+    end
+  end
+
+  defp why_closed(%{superseded_by: ref}) when is_binary(ref), do: {:superseded, ref}
+  defp why_closed(%{abandoned: why}) when is_binary(why), do: {:abandoned, why}
+  defp why_closed(_params), do: nil
 
   defp unmerged_workline?(%Server.Thread{stage: stage}) when stage not in [nil, "merged"], do: :workline
   defp unmerged_workline?(%Server.Thread{stage: "merged", state: "open"}), do: :workline
