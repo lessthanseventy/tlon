@@ -4,6 +4,8 @@ defmodule Server.StaffingTest do
   # live tmux or harness is ever forked.
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Server.Channel
   alias Server.Staffing
   alias Server.Workspaces
@@ -170,10 +172,11 @@ defmodule Server.StaffingTest do
     refute Server.Repo.get!(Server.Session, kept.id).ended_at
   end
 
-  test "a session from before the tmux server started is ended, even mid-turn; one after it stays", %{ws: ws} do
+  test "a mid-turn session from before the tmux server whose window matches is ended, logged, and not told to carry on; one after it stays",
+       %{ws: ws} do
     here = staffed_thread(ws, "borges")
     other = staffed_thread(ws, "hronir")
-    dead = session!("borges", here.id, 30)
+    dead = session!("borges", here.id, 30, true)
     live = session!("hronir", other.id, 30)
     before_tmux = DateTime.utc_now() |> DateTime.add(-7_200) |> DateTime.truncate(:second)
     dead |> Ecto.Changeset.change(pane_ref: "%3", started_at: before_tmux) |> Server.Repo.update!()
@@ -195,10 +198,12 @@ defmodule Server.StaffingTest do
       end
     end)
 
-    assert :ok = Staffing.pass(ws.id)
+    log = capture_log(fn -> assert :ok = Staffing.pass(ws.id) end)
 
     assert Server.Repo.get!(Server.Session, dead.id).ended_at
     refute Server.Repo.get!(Server.Session, live.id).ended_at
+    refute Enum.any?(Channel.thread_messages(here), &(&1.body =~ "the machine restarted"))
+    assert log =~ "session #{dead.id}" and log =~ "thread #{here.id}" and log =~ "%3"
   end
 
   test "a mid-turn session from before the tmux server is ended and its coworker still told to carry on", %{ws: ws} do
