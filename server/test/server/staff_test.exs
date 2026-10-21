@@ -23,6 +23,12 @@ defmodule Server.StaffTest do
     :ok
   end
 
+  defp events(thread) do
+    import Ecto.Query
+
+    Repo.all(from e in Server.Event, where: e.thread_id == ^thread.id and e.kind == "handoff_opened")
+  end
+
   describe "register_agent/1 — the durable identity" do
     test "registers an agent that reads back as a durable row, full profile intact" do
       # Sandra: fat everything (aleph §3) — the whole five-axis profile round-trips.
@@ -120,6 +126,25 @@ defmodule Server.StaffTest do
       {:ok, _} = Staff.assign(thread, agent)
       {:ok, _} = Staff.assign(thread, other)
       assert Repo.get!(Thread, thread.id).agent_id == other.id
+    end
+
+    test "a lead change writes one handoff_opened event naming both leads", %{
+      thread: thread,
+      agent: agent
+    } do
+      {:ok, other} = Staff.register_agent(%{name: "Robert", mandate: "m", engine: "e"})
+
+      {:ok, t1} = Staff.assign(thread, agent)
+      assert events(thread) == []
+
+      {:ok, _} = Staff.assign(t1, other)
+      assert [%{detail: %{"from" => "Sandra", "to" => "Robert"}}] = events(thread)
+    end
+
+    test "re-seating the same lead writes nothing", %{thread: thread, agent: agent} do
+      {:ok, t1} = Staff.assign(thread, agent)
+      {:ok, _} = Staff.assign(t1, agent)
+      assert events(thread) == []
     end
 
     test "threads_for/1 returns an agent's threads, scoped to it", %{

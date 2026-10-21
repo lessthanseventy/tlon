@@ -88,6 +88,18 @@ defmodule Server.Office.RoomTest do
     assert is_binary(JSON.encode!(feed))
   end
 
+  test "activity: a handoff_opened row names the old lead as who", ctx do
+    {:ok, _} =
+      Dossier.record_event(%{
+        thread_id: ctx.t.id,
+        kind: "handoff_opened",
+        detail: %{"from" => "sandra", "to" => "robert"}
+      })
+
+    assert [%{kind: "handoff_opened", who: "sandra", thread_id: tid}] = Room.activity(ctx.ws.id)
+    assert tid == ctx.t.id
+  end
+
   test "triage: an issue a ticket took names the ticket and where it stands", ctx do
     {:ok, issue} = Dossier.raise_issue(%{thread_id: ctx.t.id, summary: "a flake"})
     {:ok, ticket} = Server.Tickets.file(%{workspace_id: ctx.ws.id, title: "fix the flake"})
