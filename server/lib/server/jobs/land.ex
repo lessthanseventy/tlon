@@ -53,12 +53,14 @@ defmodule Server.Jobs.Land do
 
     from(j in Oban.Job,
       where:
-        j.worker == "Server.Jobs.Land" and j.id != ^job_id and j.state in ["available", "scheduled"] and
+        j.worker == "Server.Jobs.Land" and j.state in ["available", "scheduled"] and
           fragment("? \\? 'thread_id'", j.args) and not fragment("? \\? 'reland'", j.args),
       order_by: [asc: j.id],
-      select: fragment("(? ->> 'thread_id')::int", j.args)
+      select: {j.id, fragment("(? ->> 'thread_id')::int", j.args)}
     )
     |> Server.Repo.all()
+    |> Enum.reject(fn {id, _} -> id == job_id end)
+    |> Enum.map(&elem(&1, 1))
     |> Enum.uniq()
     |> Enum.map(&Server.Repo.get(Server.Thread, &1))
     |> Enum.filter(&(&1 && &1.id != thread.id && Server.Workline.Artifacts.Git.root(&1) == repo))
