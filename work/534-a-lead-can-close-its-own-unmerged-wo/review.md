@@ -1,39 +1,31 @@
-# verdict: request_changes
+# verdict: approve
 
-One blocking bug: `finish` with a blank `abandoned`/`superseded_by` on an unmerged workline raises `FunctionClauseError`.
+Round 2. The round-1 blocking bug is fixed, test-first, and the rest of the change holds up on a full re-read.
 
-## the crash
+## round-1 finding — fixed
 
-`why_closed/1` guards on `is_binary(ref)` — `""` is binary, so `%{abandoned: ""}` yields `{:abandoned, ""}` (and likewise `superseded_by: ""`). `Channel.close_as/2` trims the text, finds it blank, and returns `{:error, :why_closed}`. That atom flows back through `close/2` into the `with`'s `else`, which has no `{:error, :why_closed} ->` clause, so it hits the catch-all:
+`finish` with a blank `abandoned`/`superseded_by` on an unmerged workline no longer crashes. The new `{:error, :why_closed} ->` clause in `Finish.execute`'s `else` returns `ok(frame, %{stays_open: true, why: …})`, so a blank reason keeps the thread open and names both fields instead of raising `FunctionClauseError` in `reply/3`.
 
-    other -> reply(frame, other, & &1)
+The fix is cleaner than the one I proposed: I suggested `fail(frame, …)` (which would set `isError`); the builder used `ok` + `stays_open`, which is consistent with the sibling `:workline ->` and lobby `true ->` clauses — a stays-open-with-guidance is the tool correctly refusing to close, not an error. Right call.
 
-`Server.MCP.Tool.reply/3` (tool.ex:115-117) only words `{:ok, _}`, `{:error, %Ecto.Changeset{}}` and `{:error, reason}` when `is_binary(reason)` — `{:error, :why_closed}` matches none, so it raises. The sibling `close_thread` tool handles `:why_closed` explicitly (coordination.ex:299-303); `Finish` doesn't.
+RED→GREEN test: `"finish with a blank abandoned … stays open and says why, not a crash"` sends `abandoned: "   "`, asserts `refute r["isError"]`, `stays_open == true`, `why =~ "superseded_by"`, and `state: "open"`. The whitespace path is genuine: `why_closed/1` admits `"   "` (`is_binary`), `close_as/2` trims it blank → `{:error, :why_closed}` → the new clause. Before the fix this raised, so the test was red.
 
-Reachable: `superseded_by`/`abandoned` are optional with no trim/length validation, and an agent that sends an empty or whitespace-only string for either stands the workline down into a crash instead of the stays-open guidance that `:workline ->` gives. RED: `finish` with `abandoned: ""` on a build-stage workline raises.
+## the rest of the change — sound
 
-## fix — one else-branch, mirrors close_thread
+`close/2` routes correctly:
+- `{false, _}` — not an unmerged workline → `close_thread/1` (unchanged behaviour).
+- `{:workline, nil}` — unmerged workline, no why → `:workline` (stays open, the existing guidance, now wording points at the two fields).
+- `{:workline, why}` — unmerged workline with a why → `Channel.close_as/2`, the same path `close_thread` uses.
 
-```diff
---- a/server/lib/server/mcp/tools/thread.ex
-+++ b/server/lib/server/mcp/tools/thread.ex
-@@ -447,6 +447,12 @@
-       nil ->
-         fail(frame, "this connection's thread is gone")
- 
-+      {:error, :why_closed} ->
-+        fail(
-+          frame,
-+          "this workline hasn't merged: say why it closes — superseded_by: the PR or commit that already shipped its work (its ticket is done), or abandoned: why it is dropped (its ticket goes back to the backlog)"
-+        )
-+
-       other ->
-         reply(frame, other, & &1)
-```
+`why_closed/1` precedence: `superseded_by` is matched before `abandoned`, so a caller passing both gets `:superseded` (ticket done) over `:abandoned` (ticket to backlog). Reasonable, and both fields are documented as optional workline-only.
 
-Add a RED test alongside the two new cases: `finish` with `abandoned: ""` (or whitespace) on a build-stage workline → no crash, stays open or a clean `isError` with the message.
+The merged-stage-open thread (`stage: "merged", state: "open"`) is `:workline` to `unmerged_workline?/1`, so it reaches `close_as/2` — but `close_as`'s guard `stage not in [nil, "merged"]` rejects a merged stage and falls to its catch-all `close_thread(thread)`. So merged work closes normally, the why ignored. Correct, and the `unmerged_workline?` merged clause is pre-existing (not introduced here).
 
-## non-blocking notes
+Tests cover the two happy paths (abandon → ticket `backlog`; superseded → ticket `done`) and the blank-why guard. Verify passed: `menard run check --in server` → 1964 tests, 0 failures.
 
-- `stage: "merged", state: "open"` workline + a why: `close_as`'s guard (`stage not in [nil, "merged"]`) treats a merged-stage thread as "any other thread", closing it normally and skipping `close_unmerged`'s ticket handling. Pre-existing `close_as` semantics, shared with `close_thread` — not introduced here, and merged work closing normally is right. No ticket.
-- #80 (abandon doesn't clear the ticket's `promoted` link, so `promoted_thread_id` stays set) is already tracked and was explicitly out of scope per pr.md. Left open there.
+## non-blocking notes (carried from round 1, not findings against this change)
+
+- Merged-stage + state-open workline closing normally through `close_as`'s catch-all is pre-existing `close_as` semantics shared with `close_thread` — not introduced here, and merged work closing normally is right. No ticket.
+- #80 (abandon doesn't clear the ticket's `promoted` link) is tracked elsewhere and was explicitly out of scope per pr.md. The abandon test here asserts `status: "backlog"` but not `promoted_thread_id`, consistent with that. Left open where it lives.
+
+No open non-blocking findings against this change — no follow_ups.
