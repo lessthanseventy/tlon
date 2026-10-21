@@ -175,6 +175,7 @@ defmodule Server.WorklineVerifyScriptTest do
       [ "$1" = run ] || exit 0
       echo "$(git rev-parse HEAD) $CHECKS_LABEL ${TLON_TEST_DATABASE:-}" >"$GATE_LOG"
       echo "$PWD" >"$GATE_LOG.cwd"
+      echo "$*" >"$GATE_LOG.args"
       [ -z "$GATE_NOISE" ] || { echo "the failing assertion, line 42"; seq 1 2000; }
       exit "${FAKE_GATE:-0}"
       """)
@@ -205,6 +206,14 @@ defmodule Server.WorklineVerifyScriptTest do
       assert {out, 0} = gate(ctx)
       assert File.read!(Path.join(ctx.tmp, "gate.log")) =~ "#{ctx.ref} PR #7 landing feature tlon_land_pr_7_feature"
       refute out =~ "could not record"
+    end
+
+    test "RUN_TASK names the mise task to run in place of the full check", ctx do
+      assert {_, 0} = gate(ctx)
+      assert File.read!(Path.join(ctx.tmp, "gate.log.args")) == "run check\n"
+
+      assert {_, 0} = gate(ctx, [{"RUN_TASK", "office:test"}])
+      assert File.read!(Path.join(ctx.tmp, "gate.log.args")) == "run office:test\n"
     end
 
     test "the checkout lives under the verify cache, never under TMPDIR (a seat's write root)", ctx do

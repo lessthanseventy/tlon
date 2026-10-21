@@ -164,6 +164,7 @@ defmodule Server.MCP.ServerTest do
                "submit_qa",
                "start_smoke",
                "drive_smoke",
+               "run_task",
                "stop_smoke",
                # the librarian's
                "supersede_fact",

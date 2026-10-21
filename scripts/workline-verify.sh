@@ -9,7 +9,7 @@
 #
 # A PR's landing gate (Server.Jobs.Land.gate_pr/4) is the same check in branch mode: WORKLINE_GATE=1,
 # thread id `-`, LAND_REF the rebased ref to check out instead of work/<slug>, no stray-path rule and no
-# evidence recorded.
+# evidence recorded. RUN_TASK there runs that mise task in place of `check` (Server.Jobs.RunTask).
 set -uo pipefail
 
 tid="${1:?usage: workline-verify.sh <thread-id> <slug> [checkout]}"
@@ -167,7 +167,9 @@ $fails
 }
 
 fail=0
-run_gate "mise run check" mise run check || fail=1
+# RUN_TASK (branch mode, `run_task`): another mise task in place of the full check
+task=check; [ -n "${LAND_REF:-}" ] && task="${RUN_TASK:-check}"
+run_gate "mise run $task" mise run "$task" || fail=1
 
 if [ -n "${WORKLINE_GATE:-}" ]; then
   [ "$fail" -eq 0 ] && exit 0
