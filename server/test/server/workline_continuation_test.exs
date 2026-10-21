@@ -105,6 +105,19 @@ defmodule Server.Workline.ContinuationTest do
     assert [_] = continuations(v.id)
   end
 
+  test "no nudge while the thread's smoke is building: QA waits on the build, not on the lead" do
+    {:ok, q} = Workline.open(%{title: "smoke it", slug: "smoking", stage: "plan"})
+    job = Repo.insert!(Server.Jobs.Smoke.new(%{thread_id: q.id, ref: "work/smoking"}, state: "executing"))
+
+    for _ <- 1..5, do: :ok = Continuation.run(q.id, artifacts: Missing)
+    assert continuations(q.id) == []
+    assert Repo.get!(Server.Thread, q.id).awaiting == nil
+
+    job |> Ecto.Changeset.change(state: "completed") |> Repo.update!()
+    :ok = Continuation.run(q.id, artifacts: Missing)
+    assert [_] = continuations(q.id)
+  end
+
   describe "escalation up a grade (roster design §3)" do
     setup do
       {:ok, ws} = Server.Workspaces.register(%{name: "Graded"})

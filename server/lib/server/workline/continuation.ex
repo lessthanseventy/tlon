@@ -12,7 +12,8 @@ defmodule Server.Workline.Continuation do
   and why, so it reaches them as something to decide rather than sitting quiet.
   Each continuation names the `stage_advanced` event it follows in its payload, so the count is a
   query, never a column. Silent on a plain thread, a merged one, one parked at a gate, one whose
-  artifact is there, one with a prompt open on the operator, and while the office is paused
+  artifact is there, one with a prompt open on the operator, one whose smoke is still building
+  (`Server.Smoke.building/2`), and while the office is paused
   (`Server.Pause`).
   """
 
@@ -45,6 +46,7 @@ defmodule Server.Workline.Continuation do
          {:nudge, why, say} <- nudge(thread, opts),
          false <- Attention.waiting?(thread_id),
          false <- verifying?(thread),
+         nil <- Server.Smoke.building(thread_id),
          after_id = last_advance_id(thread_id),
          sent = sent_since(thread_id, after_id),
          {:budget, true, _} <- {:budget, sent < max, {thread, why, sent, after_id}} do
