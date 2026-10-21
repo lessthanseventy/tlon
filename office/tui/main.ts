@@ -1870,15 +1870,26 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         return { title: `THE CAST · office · ${whimsyTitle(whim)}`, rows, actions: [tab, { ...bind("whimsy.0"), run: () => { setWhim(resetToPreset(whim)); draw() } }, back1] }
       }
       const seats = a.bench.map((b) => ({ name: b.name, archetype: b.archetype, model: b.model?.model ?? null, voice: b.persona?.voice ?? null, hasSoul: !!soulFor(b.name), hasLook: !!overrideFor(b.name) }))
+      const change = (b: Coworker) => {
+        const f = CAST_FIELDS[castCol]
+        if (f === "model") pickModel(b)
+        else if (f === "voice") pickPersona(b)
+      }
       const rows: Row[] = castRows(seats, cast).map((r, i) => ({
         segs: [plain(r.name.padEnd(14)), ...r.cells.slice(1).map((c, j) => i === sel && j + 1 === castCol ? key(`[${c.value}] `) : (c.editable ? plain : dim)(`${c.value}  `))],
-        ref: r.name,
+        ref: a.bench[i], open: () => change(a.bench[i]!),
       }))
+      const lit = rows[sel]?.ref as Coworker | undefined
       if (!rows.length) rows.push({ segs: [dim("nobody on the bench yet — hire from the hall (h)")] })
       const step = (d: number) => { castCol = (castCol + d + CAST_FIELDS.length) % CAST_FIELDS.length; draw() }
       return {
         title: `THE CAST · people · ${CAST_FIELDS[castCol]}`, rows,
-        actions: [tab, { ...bind("cast.left"), run: () => step(-1) }, { ...bind("cast.right"), run: () => step(1) }, back1],
+        actions: [
+          tab, { ...bind("cast.left"), run: () => step(-1) }, { ...bind("cast.right"), run: () => step(1) },
+          { ...bind("cast.enter"), run: () => rows[sel]?.open?.() },
+          ...(lit ? [{ ...bind("cast.-"), run: () => unseatAsk(lit) }] : []),
+          back1,
+        ],
       }
     }
     case "hall": {

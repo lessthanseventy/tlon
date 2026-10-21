@@ -282,6 +282,8 @@ export const KEYS = [
   { id: "cast.left", scope: "card:cast", key: "left", label: "the field before" },
   { id: "cast.right", scope: "card:cast", key: "right", label: "the field after" },
   { id: "cast.tab", scope: "card:cast", key: "}", label: "people / office", verb: "next group" },
+  { id: "cast.enter", scope: "card:cast", key: "enter", label: "change the lit field" },
+  { id: "cast.-", scope: "card:cast", key: "-", label: "let the lit seat go", verb: "remove" },
   // card:help
   { id: "help.esc", scope: "card:help", key: "esc", label: "back to …", verb: "back" },
   // the reader (full-screen thread); its card keys, threadActions, work there too
