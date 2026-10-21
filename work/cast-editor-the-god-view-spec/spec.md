@@ -36,7 +36,7 @@ Sandbox mode edits a toy cast only (`tui/sandbox.ts` world, `$TMPDIR/tlon-sandbo
 
 Grade/specialty: the seat has neither field today (they exist only on hall `Candidate`; `hallHire`
 posts just name + archetype). The operator was asked (#10659: server field / office file /
-read-only) and had not answered when this was written. **Assumption: office file** — it makes the
+read-only). **Decided (operator, #10680): office file** — it makes the
 ticket's "edit any in place" true with zero server work and is reversible (a later server slice
 moves the keys out of `cast.json`). If the answer is "server", slice 6 below becomes a server slice
 (migration + PATCH route + `hallHire` sending the fields).
