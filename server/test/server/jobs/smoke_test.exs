@@ -95,7 +95,12 @@ defmodule Server.Jobs.SmokeTest do
     dir = Path.join(System.tmp_dir!(), "smoke-dir-#{System.pid()}-#{System.unique_integer([:positive])}")
     File.mkdir_p!(Path.join(dir, "scripts"))
     drive = Path.join(dir, "scripts/office-drive.sh")
-    File.write!(drive, "#!/usr/bin/env bash\necho \"cwd=$PWD argv=$* yes=$MISE_YES url=$TLON_URL\"\n")
+
+    File.write!(
+      drive,
+      ~s(#!/usr/bin/env bash\necho "cwd=$PWD argv=$* yes=$MISE_YES url=$TLON_URL"\necho "wide=$OFFICE_WIDE text=$OFFICE_TEXT sandbox=$OFFICE_SANDBOX"\n)
+    )
+
     File.chmod!(drive, 0o755)
     on_exit(fn -> File.rm_rf(dir) end)
 
@@ -106,6 +111,10 @@ defmodule Server.Jobs.SmokeTest do
 
     assert {:ok, out} = Smoke.drive(t.id, ["/", "Enter"])
     assert out =~ "cwd=#{dir} argv=/ Enter yes=1 url=http://127.0.0.1:4999"
+    assert out =~ "wide= text= sandbox="
+
+    assert {:ok, out} = Smoke.drive(t.id, ["E"], wide: true, sandbox: true)
+    assert out =~ "wide=1 text=1 sandbox=1"
   end
 
   test "start carries fixtures into the job's args, and leaves them out when there are none", %{thread: t} do
