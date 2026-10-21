@@ -75,6 +75,16 @@ defmodule Server.Tmux do
 
   @not_up ~r/no server running|error connecting to|can't find session|no current session/
 
+  @doc "When the workspace's tmux server started (unix seconds), or nil when it can't be asked."
+  def server_started(id, opts \\ []) do
+    with {out, 0} <- run(id, ["display-message", "-p", "\#{start_time}"], opts),
+         {n, _} <- Integer.parse(String.trim(out)) do
+      n
+    else
+      _ -> nil
+    end
+  end
+
   @doc """
   The session's windows. No workspace is `[]`. A tmux server that is not up is `{:error, :not_up}`
   and one that can't be asked (a fault, the binary missing) is `{:error, why}` — never `[]`, which
