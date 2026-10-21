@@ -230,6 +230,39 @@ defmodule Server.WorklineVerifyScriptTest do
       assert {_, 0} = gate(ctx, [{"GATE_NOISE", "1"}])
       refute File.exists?(Path.join(ctx.repo, ".logs"))
     end
+
+    test "a verify already running holds the gate until it is done: a gate never passes on a run it didn't make", ctx do
+      lock = Path.join(ctx.repo, ".git/workline-verify-pr-7-feature.lock")
+      Port.open({:spawn_executable, System.find_executable("flock")}, [:binary, args: [lock, "sleep", "1"]])
+      Process.sleep(200)
+
+      assert {_, 0} = gate(ctx)
+      assert File.exists?(Path.join(ctx.tmp, "gate.log"))
+    end
+
+    test "its rebase onto main moves no branch, whatever rebase.updateRefs says", ctx do
+      {_, 0} =
+        System.cmd(
+          "sh",
+          [
+            "-c",
+            "git branch keep land/feature && echo m >m && git add m && git commit -qm m && git push -q origin main"
+          ],
+          cd: ctx.repo
+        )
+
+      before = ctx.ref
+
+      assert {_, 0} =
+               gate(ctx, [
+                 {"GIT_CONFIG_COUNT", "1"},
+                 {"GIT_CONFIG_KEY_0", "rebase.updateRefs"},
+                 {"GIT_CONFIG_VALUE_0", "true"}
+               ])
+
+      {after_keep, 0} = System.cmd("git", ["rev-parse", "keep"], cd: ctx.repo)
+      assert String.trim(after_keep) == before
+    end
   end
 
   # scripts/lib/seed-hex.sh, which every gate sources: `seed_hex_home <src> <dest>`

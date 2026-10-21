@@ -50,9 +50,14 @@ if [ ! -d "$tree" ]; then
 fi
 
 # One verifier per workline at a time: a duplicate dispatch (bus redelivery, a manual re-run
-# racing the auto one) exits quietly instead of double-running gates and double-advancing.
+# racing the auto one) exits quietly instead of double-running gates and double-advancing. A
+# landing gate waits its turn instead: its exit 0 is a green, and it must not pass on a run it didn't make.
 exec 9>"$root/.git/workline-verify-$slug.lock"
-flock -n 9 || { echo "verify already running for $slug — skipping"; exit 0; }
+if [ -n "${WORKLINE_GATE:-}" ]; then
+  flock 9
+else
+  flock -n 9 || { echo "verify already running for $slug — skipping"; exit 0; }
+fi
 
 # The repo the workline lives in is its worktree's — not always tlon's: a menard thread's is menard.
 repo="$(cd "$(git -C "$tree" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
@@ -78,7 +83,9 @@ git -C "$repo" worktree prune
 fresh="$(mktemp -d -p "$vroot" "XXXXXX")" && cd "$fresh" || exit 1
 trap 'git -C "$repo" worktree remove --force "$fresh" >/dev/null 2>&1; rm -rf "$fresh"; git -C "$repo" worktree prune' EXIT
 git -C "$repo" worktree add -q --detach "$fresh" "$ref" || exit 1
-if ! git -C "$fresh" rebase -q origin/main >/dev/null 2>&1; then
+# --no-update-refs: rebase.updateRefs (set on this machine) would move every branch pointing into
+# the range — a coworker's work/<slug> not checked out anywhere
+if ! git -C "$fresh" rebase -q --no-update-refs origin/main >/dev/null 2>&1; then
   git -C "$fresh" rebase --abort >/dev/null 2>&1
   note "$tid" "verify can't run: work/$slug does not rebase cleanly onto origin/main — rebase it onto origin/main and resolve the conflict, then ask for verify again" || true
   exit 1
