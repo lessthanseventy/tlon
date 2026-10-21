@@ -602,7 +602,7 @@ defmodule Server.Office.NeedsTest do
 
     test "the quiet window is the operator's quiet_workline_minutes knob", %{ws: ws} do
       _ = workline(ws, "build", 2)
-      path = Path.join(System.tmp_dir!(), "needs-quiet-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      path = Path.join(Path.expand("tmp"), "needs-quiet-#{System.pid()}-#{System.unique_integer([:positive])}.json")
       prior = Application.get_env(:server, :operator_config_path)
       Application.put_env(:server, :operator_config_path, path)
       on_exit(fn -> Application.put_env(:server, :operator_config_path, prior) end)
@@ -645,7 +645,7 @@ defmodule Server.Office.NeedsTest do
 
     test "under pencils down nothing is stalled: the operator stopped it", %{ws: ws} do
       _ = workline(ws, "build", 4)
-      path = Path.join(System.tmp_dir!(), "needs-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
+      path = Path.join(Path.expand("tmp"), "needs-pause-#{System.pid()}-#{System.unique_integer([:positive])}.json")
       File.write!(path, ~s({"pause": "pencils_down"}))
       prior = Application.get_env(:server, :operator_config_path)
       Application.put_env(:server, :operator_config_path, path)

@@ -23,8 +23,10 @@ if System.get_env("OLLAMA_API_KEY") in [nil, ""], do: System.put_env("OLLAMA_API
 
 # Every @tag :tmp_dir test leaves a git repo under tmp/, and each repo under a seat's write roots
 # costs bwrap mounts: a few suite runs took every seat past bwrap's 9000 arguments (#496). Gone
-# before the run (a killed run's) and after it.
+# before the run (a killed run's) and after it. Tests that need a scratch file write it here too,
+# not into System.tmp_dir!, so a run leaves nothing in the shared tmp dir (#560).
 File.rm_rf!(Path.expand("tmp"))
+File.mkdir_p!(Path.expand("tmp"))
 ExUnit.after_suite(fn _ -> File.rm_rf(Path.expand("tmp")) end)
 
 ExUnit.start()
