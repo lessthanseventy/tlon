@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -25,6 +25,11 @@ const server = Bun.serve({
 const socket = `tlon-office-cast-${process.pid}`
 const state = mkdtempSync(join(tmpdir(), "office-cast-")), config = mkdtempSync(join(tmpdir(), "office-cast-config-"))
 const tmux = (...a: string[]) => Bun.spawnSync(["tmux", "-L", socket, ...a])
+// a garbled cast.json at start reads as an empty cast
+const castFile = join(config, "tlon", "cast.json")
+mkdirSync(join(config, "tlon"), { recursive: true })
+writeFileSync(castFile, "{not json")
+const castNow = () => { try { return JSON.parse(readFileSync(castFile, "utf8")) } catch { return null } }
 afterAll(() => {
   tmux("kill-server")
   rmSync(`${process.env.TMUX_TMPDIR ?? "/tmp"}/tmux-${process.getuid!()}/${socket}`, { force: true })
@@ -94,4 +99,17 @@ test("- lets the lit seat go, after asking: n sends nothing, y the DELETE", asyn
   await until("the unseat ask again", () => screen().includes("(y/n)"))
   keys("y")
   await until("the DELETE", () => writes.includes("DELETE /api/seats/1"))
+}, 40_000)
+
+test("⏎ on grade steps it and keeps it in cast.json; y rerolls specialty from the hall's vocabulary", async () => {
+  await field("grade")
+  keys("enter")
+  await until("ada's grade written", () => castNow()?.ada?.grade === "junior")
+  keys("enter")
+  await until("the next grade", () => castNow()?.ada?.grade === "senior")
+  await field("specialty")
+  keys("y")
+  await until("ada's specialty rerolled", () => ["office", "server"].includes(castNow()?.ada?.specialty))
+  expect(castNow().ada.grade).toBe("senior")
+  expect(castNow().bo).toBeUndefined()
 }, 40_000)

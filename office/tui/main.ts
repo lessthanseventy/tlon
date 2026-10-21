@@ -32,8 +32,8 @@ import { usageHeader } from "../kit/usage"
 import { dialsOf, nextDial, nextPart, PARTS, SLOTS } from "../kit/parts"
 import { bringBack, candidateOf, dropPile, hallSignature, loadHall, maybe, pass, saveHall, seatedNames, takenNames, toggleLock, type Hall, type Vocab } from "../kit/hall"
 import { hallRows, stepRow } from "./hall"
-import { castSignature, loadCast, type Cast } from "../kit/cast"
-import { CAST_FIELDS, castRows } from "./cast"
+import { castSignature, loadCast, saveCast, setTrait, type Cast } from "../kit/cast"
+import { CAST_FIELDS, castRows, nextTrait, rerollTrait } from "./cast"
 import { adopt, back as storeBack, candidateOf as storeCandidate, loadStore, pass as storePass, rename, saveStore, shelve, storeNamesTaken, toggleLock as storeToggle, type Store } from "../kit/store"
 import { stepStoreRow, storeRows } from "./store"
 import { ACCESSORY, BODIES, HAIR_STYLES, HAIR_ROLES, lookOf, rollLook, OUTFIT, paints, shirtOf, SKIN_ROLES, type Accessory, type Look, type Outfit } from "../kit/sprites"
@@ -186,7 +186,8 @@ function followHall(): boolean {
 }
 let cast: Cast = loadCast(CAST), castSeen = castSignature(CAST)
 // the lit field of the cast view's lit row
-let castCol = 0
+let castCol = 0, castRolls = 0
+function castSet(c: Cast) { cast = c; saveCast(CAST, c); castSeen = castSignature(CAST) }
 
 function followCast(): boolean {
   const seen = castSignature(CAST)
@@ -1874,6 +1875,14 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         const f = CAST_FIELDS[castCol]
         if (f === "model") pickModel(b)
         else if (f === "voice") pickPersona(b)
+        else if (f === "grade" || f === "specialty") {
+          const vocab = f === "grade" ? hallVocab().grades : hallVocab().specialties
+          castSet(setTrait(cast, b.name, f, nextTrait(vocab, cast[b.name]?.[f] ?? "unset"))); draw()
+        }
+      }
+      const reroll = (b: Coworker) => {
+        const f = CAST_FIELDS[castCol]
+        if (f === "grade" || f === "specialty") { castSet(setTrait(cast, b.name, f, rerollTrait(`${b.name}:${castRolls++}`, f, hallVocab()))); draw() }
       }
       const rows: Row[] = castRows(seats, cast).map((r, i) => ({
         segs: [plain(r.name.padEnd(14)), ...r.cells.slice(1).map((c, j) => i === sel && j + 1 === castCol ? key(`[${c.value}] `) : (c.editable ? plain : dim)(`${c.value}  `))],
@@ -1887,7 +1896,7 @@ function detail(): { title: string; rows: Row[]; actions: Action[]; tint?: strin
         actions: [
           tab, { ...bind("cast.left"), run: () => step(-1) }, { ...bind("cast.right"), run: () => step(1) },
           { ...bind("cast.enter"), run: () => rows[sel]?.open?.() },
-          ...(lit ? [{ ...bind("cast.-"), run: () => unseatAsk(lit) }] : []),
+          ...(lit ? [{ ...bind("cast.y"), run: () => reroll(lit) }, { ...bind("cast.-"), run: () => unseatAsk(lit) }] : []),
           back1,
         ],
       }

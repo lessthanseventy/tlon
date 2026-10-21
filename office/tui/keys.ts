@@ -283,6 +283,7 @@ export const KEYS = [
   { id: "cast.right", scope: "card:cast", key: "right", label: "the field after" },
   { id: "cast.tab", scope: "card:cast", key: "}", label: "people / office", verb: "next group" },
   { id: "cast.enter", scope: "card:cast", key: "enter", label: "change the lit field" },
+  { id: "cast.y", scope: "card:cast", key: "y", label: "reroll the lit field", verb: "again" },
   { id: "cast.-", scope: "card:cast", key: "-", label: "let the lit seat go", verb: "remove" },
   // card:help
   { id: "help.esc", scope: "card:help", key: "esc", label: "back to …", verb: "back" },
