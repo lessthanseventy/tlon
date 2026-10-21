@@ -75,6 +75,19 @@ const field = async (name: string) => {
   await until(`the ${name} field lit`, () => screen().includes(`THE CAST · people · ${name}`))
 }
 
+test("the cast opened again after ctrl+] still lists the bench", async () => {
+  keys("-l", "`")
+  await until("the cast", () => screen().includes("THE CAST · people"))
+  keys("C-]")
+  await until("home", () => !screen().includes("THE CAST"))
+  keys("-l", "`")
+  await until("the cast again", () => screen().includes("THE CAST · people"))
+  expect(screen()).toContain("ada")
+  expect(screen()).toContain("bo")
+  expect(screen()).not.toContain("nobody on the bench")
+  keys("C-]")
+}, 40_000)
+
 test("⏎ on voice is the persona picker: its reroll asks, y posts it", async () => {
   keys("-l", "`")
   await until("the cast", () => screen().includes("THE CAST · people"))
